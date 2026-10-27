@@ -350,6 +350,24 @@
   },
   {
    "op": "create",
+   "parent": "IWebFlow:MainFlow",
+   "type": "OutSystems.Model.UI.Web.IEntry",
+   "name": "ContactsEntry",
+   "as": "$entry"
+  },
+  {
+   "op": "link",
+   "from": "$entry",
+   "to": "$lst"
+  },
+  {
+   "op": "set",
+   "target": "$entry",
+   "prop": "IsDefault",
+   "value": true
+  },
+  {
+   "op": "create",
    "parent": "$lst",
    "type": "IPreparation",
    "as": "$lprep"

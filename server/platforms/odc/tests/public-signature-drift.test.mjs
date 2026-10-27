@@ -2,18 +2,34 @@
 // compiling the kernel's Anvil.Core.OdcPublicSignature, so ODC3.Bridge.v<N>.dll carries no type of the kernel namespace
 // (docs/O11-BRIDGE-FINA.md 6.5). The class bodies stay equal, normalized only for namespace, class name, visibility and
 // whitespace. The same holds for the merge order's rule (MergeOrderCopy.cs, a copy of the kernel's MergeOrder.cs).
+// a11-b: the customers run ODC bridge v97 (f912cb7e), whose two copies PublicSignatureReader.cs and SecurityWarningsCopy.cs are
+// pinned to the kernel files it was built with (fixtures/bridge-v97/*.cs.txt, the blobs of f912cb7e and a10 5dc9ec51); the
+// kernel moved on and the drift is accepted, each change named below with why it gives no wrong answer to a v97 bridge:
+//   - OdcPublicSignature.cs, c38c53e0: + ReferenceServiceAPIMethod => "service-action". v97 lists every element it listed
+//     before, with the same kind, name and key, and the kernel's importer validates each selected element against its own
+//     read (a superset); a Service Action reference needs a newer bridge (v97 answers it as before: the element is missing).
+//   - SecurityWarnings.cs, 700a5c1f + 0a21afba (T12): the list grew. v97's is a subset, so it refuses nothing the kernel
+//     accepts; a T12 message it accepted after a merge is refused by the server (facade/security-after-merge.mjs,
+//     facade/tests/security-after-merge.test.mjs, merge-reconcile.mjs mergeState: the verdict lives in the merge evidence).
 import '../facade/tests/fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createHash } from 'node:crypto';
+
+// sha256 (first 16 hex) of the normalized code, comments dropped: the v97 one (blob c3eb65f4) and the T12 one (blob 8cd59353).
+const V97_SECURITY = '674490293711fbd7';
+const T12_SECURITY = '196f282ca8fdca93';
 
 const odc = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const repo = path.resolve(odc, '..', '..');
 const bridge = path.join(odc, 'studio', 'bridge');
 const kernelFile = path.join(repo, 'kernel', 'src', 'Anvil.Core.Odc', 'Adapters.ODC', 'OdcPublicSignature.cs');
 const copyFile = path.join(bridge, 'PublicSignatureReader.cs');
+const v97 = path.join(odc, 'tests', 'fixtures', 'bridge-v97');
+const v97KernelFile = path.join(v97, 'OdcPublicSignature.cs.txt');
 
 // {usings, namespace, declaration, body} of the one top-level class of a C# file; comments are dropped.
 function parts(text, name) {
@@ -30,8 +46,8 @@ function parts(text, name) {
   };
 }
 
-test('PublicSignatureReader (ODC bridge) is OdcPublicSignature (kernel) with only namespace, name and visibility changed', () => {
-  const kernel = parts(fs.readFileSync(kernelFile, 'utf8'), 'OdcPublicSignature');
+test('PublicSignatureReader (ODC bridge v97) is OdcPublicSignature (the kernel v97 was built with) with only namespace, name and visibility changed', () => {
+  const kernel = parts(fs.readFileSync(v97KernelFile, 'utf8'), 'OdcPublicSignature');
   const copy = parts(fs.readFileSync(copyFile, 'utf8'), 'PublicSignatureReader');
   assert.equal(kernel.namespace, 'Anvil.Core');
   assert.equal(kernel.visibility, 'public');
@@ -92,9 +108,9 @@ test('the ODC bridge compiles the copy and no file of the kernel; ReferenceComma
 // G-2 (C16, atritos 3): MergeDiagnostics.BlocksAfterMerge reads the kernel's list of security warnings. The bridge compiles
 // SecurityWarningsCopy.cs, the kernel's SecurityWarnings.cs with only the namespace dropped and the class internal, so the
 // bridge DLL carries no kernel type; Bridge.Tests compiles the same copy.
-test('SecurityWarningsCopy (ODC bridge) is SecurityWarnings (kernel) with only the namespace and the visibility changed', () => {
+test('SecurityWarningsCopy (ODC bridge v97) is SecurityWarnings (the kernel v97 was built with) with only the namespace and the visibility changed', () => {
   const code = file => fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, '').split(/\r?\n/).filter(line => !/^\s*\/\//.test(line)).join('\n');
-  const kernel = code(path.join(repo, 'kernel', 'src', 'Anvil.Core', 'Kernel', 'SecurityWarnings.cs'));
+  const kernel = code(path.join(v97, 'SecurityWarnings.cs.txt'));
   const copy = code(path.join(bridge, 'SecurityWarningsCopy.cs'));
   assert.match(kernel, /^namespace Anvil\.Core;$/m);
   assert.doesNotMatch(copy, /^namespace /m);
@@ -106,4 +122,23 @@ test('SecurityWarningsCopy (ODC bridge) is SecurityWarnings (kernel) with only t
   const tests = fs.readFileSync(path.join(bridge, 'tests', 'Bridge.Tests.csproj'), 'utf8');
   assert.match(tests, /SecurityWarningsCopy\.cs/);
   assert.doesNotMatch(tests, /Anvil\.Core[\\/]Kernel[\\/]SecurityWarnings\.cs/);
+});
+
+// The accepted drift between the kernel v97 was built with and today's kernel, exactly: a new change of either file fails
+// here until it is judged against the v97 bridge (and the bridge is rebuilt, or the change accepted here with its reason).
+test('accepted drift since v97: OdcPublicSignature gains only the Service Action kind', () => {
+  const now = parts(fs.readFileSync(kernelFile, 'utf8'), 'OdcPublicSignature');
+  const then = parts(fs.readFileSync(v97KernelFile, 'utf8'), 'OdcPublicSignature');
+  const added = ' "ReferenceServiceAPIMethod" => "service-action",';
+  assert.ok(now.body.includes(added));
+  assert.equal(now.body.replace(added, ''), then.body);
+  assert.deepEqual(now.usings, then.usings);
+});
+
+test('accepted drift since v97: SecurityWarnings is the T12 list, which the server applies after a v97 merge', () => {
+  const code = file => fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, '').split(/\r?\n/).filter(line => !/^\s*\/\//.test(line)).join('\n').replace(/\s+/g, ' ').trim();
+  const sha = text => createHash('sha256').update(text).digest('hex').slice(0, 16);
+  assert.equal(sha(code(path.join(v97, 'SecurityWarnings.cs.txt'))), V97_SECURITY, 'the v97 fixture is the file the bridge copied');
+  assert.equal(sha(code(path.join(repo, 'kernel', 'src', 'Anvil.Core', 'Kernel', 'SecurityWarnings.cs'))), T12_SECURITY,
+    'SecurityWarnings.cs changed after T12: judge it against bridge v97 (facade/security-after-merge.mjs) and update this pin');
 });

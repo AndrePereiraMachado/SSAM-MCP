@@ -26,9 +26,13 @@
 //   did not change (Delivery.Acquire, ProducerLedger): a round before the merge makes no server call when the workspace saw
 //   that version lately and no publication since; the merge observes every producer first (one lease) and a changed one
 //   answers PRODUCER_CHANGED with the same delivery as continuation. Each answer says it in producers/producersNote.
-// - a job made only of `set StyleSheet` on blocks or themes gets one deterministic touch of a block widget (C32): the
-//   published block CSS is regenerated only when a widget of the block changes. The answer says touch {target, op}.
-// - a refused job answers PREFLIGHT_REFUSED with every problem of every phase over the live module (primeira-certa A3:
+// - every block or screen whose stylesheet the delivery changes and none of whose widgets it changes gets one widget change
+//   that renders the same (C32, F1): the kernel chooses it on the candidate after every op of the job resolved
+//   (StyleSheetTouch.cs); the answer says touch {target, op} (touches, untouched). After a publication the changed
+//   stylesheets are read back from the environment when this SSAM runs on the person's machine: levels and served say
+//   what was proven; an older stylesheet served answers SERVED_STALE.
+// - a refused job answers PREFLIGHT_REFUSED (or the code of its lone coded apply failure, e.g. DELETE_HAS_CONSUMERS,
+//   which a multi-phase refusal keeps) with every problem of every phase over the live module (primeira-certa A3:
 //   the build applies the job to the capture; refusal-problems.mjs keeps phase, pointer, fix, patch, element, key,
 //   verifyRan and phases, grouped only to fit the answer); the kernel's own codes (VERIFY_UNAVAILABLE,
 //   MERGE_ROLLED_BACK, SIGNATURE_PREVIEW_REFUSED, ...) pass through; a delivery answers leftovers, screenRoles and
@@ -42,6 +46,9 @@
 //   plus differencesTotal) and the ssam_evidence continuation on the task's result.json.
 // - A28: a module held by a task of another SSAM root (MODULE_RESERVED_FOREIGN), or by a task this root does not have,
 //   continues with ssam_doctor {lane:"o11"}, never with resume or ssam_task.
+import { ANSWER_BUDGETS } from './context-budget.mjs';
+import { clipText } from './text-clip.mjs';
+import { appendJsonLine } from './correlation.mjs';
 import { wordsGiven } from './destructive-operations.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -58,12 +65,13 @@ import { readConnection } from './studio-session.mjs';
 import { trackTask, registerSsamTask, tasksDir } from './ssam-task.mjs';
 import { hostedContext, seamFields } from './executor.mjs';
 import { o11Studio, lastPublicationOf, readInventory } from './o11-studio.mjs';
-import { resolvePatchedJob, failedOpOf, jobShapeOf, PATCH_MAX_OPS, nextBasedOnOf, withNamedPatches, appliedJobIdentity } from './job-patch.mjs';
+import { resolvePatchedJob, failedOpOf, jobShapeOf, PATCH_MAX_OPS, nextBasedOnOf, withNamedPatches, appliedJobIdentity, patchJob, mergePartialJob, changeOnly, saveRefusalFixes, proposedPatch, explicitFixCall } from './job-patch.mjs';
+import { recordChainWrite, chainOrigin, problemSignature, sameSignature } from './authorization-context.mjs';
 import { resolveOpenModule } from './studio-module.mjs';
 import * as standingGrants from './standing-grants.mjs';
 import { prepareIntegrationJob } from './integration-documents.mjs';
 import { textFormRefusal, partReader } from './text-routes.mjs';
-import { CODE_JOB_TEXT, removedOf } from './ssam-code.mjs';
+import { CODE_JOB_TEXT, removedOf, grammarCard, exampleCall, exampleLogicTexts } from './ssam-code.mjs';
 import { taskWarnings, warningFields, producerHashWarningsOf } from './delivery-warnings.mjs';
 import { jobSummary } from './job-summary.mjs';
 import { mergeNormalizations } from './normalizations.mjs';
@@ -76,6 +84,8 @@ import { stallRecovery } from './studio-recovery.mjs';
 import { cleanStall } from './bridge-stall.mjs';
 // F5: what a delivery reused of its producer signatures, in every answer (producer-signatures.mjs).
 import { producerSignaturesOf } from './producer-signatures.mjs';
+// F1: the served proof of the stylesheets a delivery changed, after its publication.
+import { elementsOfKernel, jobWritesStyleSheets, proveServed, servedBaseline, servedRefusal, levelsOf, BUDGET_MS } from './served-proof.mjs';
 // fix/system-reference: one rule for a producer's name ((System) and System are one producer, bound as System).
 import { bindingKeyOf, listedKeyOf, slotKeyOf, captureEntryOf, sameProducer, producersNamed, o11UnknownProducer, separatorKeyProblems, producerTextsOf } from './producer-names.mjs';
 // fix/unpublished-library (family OF): the O11 lane's PRODUCER_SIGNATURE_MISSING of elements the producer's open model has
@@ -84,12 +94,14 @@ import { o11ProducerModel, unpublishedRefusal, parseElement, requestedElements, 
 // The prototype importer (docs/PROTOTIPO-NATIVO.md, lane surface): the capture before anything, the rebuild of 1.4.1, the
 // receipt and the seed after a clean publication.
 import { expandJobFile, capturePrototype, buildWithDegradation, buildProblems, journalTo, kernelPrototypeReport, findNativeDom,
-  measurePrototypeFidelity, prototypeReceipt, receiptWithSeed, PROTOTYPE_DELIVER_TEXT, withoutIdentityPatches, bindingCorrection, readJobDocument } from './prototype-op.mjs';
+  measurePrototypeFidelity, prototypeReceipt, receiptWithSeed, withoutIdentityPatches, bindingCorrection, readJobDocument } from './prototype-op.mjs';
 import { seedPrototypeData, o11DataWriter } from './prototype-seed.mjs';
+import { prototypeImportRefusal } from './prototype-disabled.mjs';
 import { prototypeAppUrl, prototypeScreenLinks } from './next-steps.mjs';
 // prazos B: a referenced producer open and unmodified in the same Studio is bound by a capture of its tab (no environment call).
 import { openProducerBindings } from './o11-open-producer.mjs';
 import { RESULT, resultIs } from './result-values.mjs';
+import { accessRestoreAfter, restoreScope, temporaryClose, temporaryRefusal } from './o11-access.mjs';
 
 const readOnly = { readOnlyHint: true, destructiveHint: false, openWorldHint: false };
 const mutating = { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false };
@@ -217,7 +229,7 @@ export function wroteText(state) {
 const SHELL = /\b(?:dotnet\s+(?:build|run|test)\b|python\b|run_job\.py|build(?:_odc)?\.py|anvil_worker\.py|(?:ssam|odc)(?:\.cmd)?\s+(?:connect|inspect|deliver|doctor|job|map|discover|attach|studio|download|inventory|access|data|publish|mcp)\b)|\.ps1\b/i;
 export function clean(text, limit = 400) {
   const kept = String(text ?? '').split(/(?<=[.;])\s+/).filter(s => !SHELL.test(s)).join(' ').trim();
-  return kept.length > limit ? kept.slice(0, limit - 1) + '…' : kept;
+  return clipText(kept, limit);
 }
 
 // ---- o11_inspect
@@ -305,10 +317,12 @@ const deliverSchema = z.object({
   job: z.union([z.string().min(1), ops, z.record(z.string(), z.unknown())]).optional()
     .describe('Absolute path of the job JSON, or the job itself (array of ops, or {ops} / {jobs}). With basedOn: a partial job, only the changed or new '
       + 'actions/entities/structures/ops (same name replaces, new name is added). Required unless resume, close or patch'),
-  patch: patchSchema.optional().describe('Instead of job: JSON Patch (add, remove, replace, test; at most 50) over the job of basedOn, or "verified" (every verified patch of its refusal: verifiedPatch.call), '
+  patch: patchSchema.optional().describe('Instead of job: JSON Patch (add, remove, replace, test; at most 500) over the job of basedOn, or "verified" (every verified patch of its refusal: verifiedPatch.call), '
     + 'paths /ops/<i>/... (/<i>/... for an array job) or by name: actions/<Action>/steps/<as>/...; the patched job is a new file'),
   basedOn: basedOnSchema.optional().describe('With patch or a partial job: {job, sha256} as an answer returned them (nextBasedOn), or {taskId} of a refused delivery'),
   autoPatch: z.boolean().optional().describe('false: offer verified repairs without applying them automatically.'),
+  // The correction loop's fix (R1): sent as a refusal's fixCall gives it, so it is listed without a text (the listing budget).
+  fix: z.literal('apply').optional(),
   checks: z.array(z.string().min(1).regex(/^[^,]+$/)).max(64).optional().describe('Element names that must exist after the merge'),
   until: z.enum(['apply', 'merge']).default('merge').describe('apply: validate on a fresh snapshot without merging, only when the person asks for it'),
   producers: z.union([z.literal('published'), z.record(z.string(), z.string().min(1))]).optional()
@@ -388,8 +402,14 @@ function resolveJob(input, lane) {
     ...(input.expectedEnvironment ? { expectedEnvironment: input.expectedEnvironment } : {}),
     ...(input.autoPatch === false ? { autoPatch: false } : {}),
     ...(input.until === 'apply' ? { until: 'apply' } : {}), ...(input.closePrevious ? { closePrevious: input.closePrevious } : {}), authorize: WORDS_MARKER },
-    why: 'The job file changed after that refusal: send it as it is now, or the whole corrected job; a patch applies only to the content the refusal named. authorize: the user\'s words in place of the marker.' } : undefined;
-  throw new Refusal(resolved.code, resolved.error, next, { ...(resolved.at != null ? { at: resolved.at } : {}), ...(resolved.candidates ? { candidates: resolved.candidates } : {}) });
+    why: 'The job file changed after that refusal: send it as it is now, or the whole corrected job; a patch applies only to the content the refusal named. authorize: the user\'s words in place of the marker.' }
+    // R1: a patch refused comes back mended by name (job-patch.mjs mendedFields); ready, the same call with it applies. The
+    // words are never inherited (T16): the marker in authorize.
+    : resolved.ready === true && Array.isArray(resolved.patchByName) ? { tool: 'o11_deliver', arguments: { module: input.module, patch: resolved.patchByName, basedOn: input.basedOn,
+      ...(input.job != null ? { job: input.job } : {}), ...(input.checks?.length ? { checks: input.checks } : {}), ...(input.until === 'apply' ? { until: 'apply' } : {}), authorize: WORDS_MARKER },
+      why: 'The same patch, mended where only one reading was possible (repaired) and written by name: it applies over basedOn. authorize: the user\'s words in place of the marker.' } : undefined;
+  throw new Refusal(resolved.code, resolved.error, next, { ...(resolved.at != null ? { at: resolved.at } : {}), ...(resolved.candidates ? { candidates: resolved.candidates } : {}),
+    ...(resolved.patchByName ? { patchByName: resolved.patchByName, ready: resolved.ready === true } : {}), ...(resolved.repaired ? { repaired: resolved.repaired } : {}) });
 }
 // Every refusal of a delivery that ran a job names that job, so the next call patches it (jobShape 'array': its patch
 // paths are /<i>/...), with nextBasedOn ready for basedOn and each patch of its problems also by name (patchByName); a
@@ -433,10 +453,10 @@ function patchInput(input, lane) {
   const module = input.module ?? state.module ?? null;
   const own = state.request?.JobPath ?? state.request?.jobPath ?? null;
   if (deliveryOutcome(state) === 'delivered' && (!state.module || moduleId(state.module) === moduleId(module)))
-    return basedOnDelivered({ ...input, module }, { module: state.module ?? module, at: state.updatedAt ?? null, taskId: id, delivered: { job: own } });
+    return basedOnDelivered({ ...input, module }, { module: state.module ?? module, at: state.updatedAt ?? null, taskId: id, delivered: { job: own } }, undefined, changeJobOf({ ...input, basedOn: { job: own, sha256: fileSha256(own) } }, lane));
   for (const hash of new Set([fileSha256(own), input.basedOn.sha256].filter(h => SHA.test(String(h ?? ''))).map(h => h.toLowerCase()))) {
     const recorded = deliveredBase(lane, { sha256: hash }, module);
-    if (recorded) return basedOnDelivered({ ...input, module }, recorded, hash);
+    if (recorded) return basedOnDelivered({ ...input, module }, recorded, hash, changeJobOf({ ...input, basedOn: { job: own, sha256: fileSha256(own) } }, lane));
   }
   return !input.module && state.module ? { ...input, module: state.module } : input;
 }
@@ -505,21 +525,53 @@ function deliveredBase(lane, basedOn, module) {
 // The refusal names the delivered job; the base it names may be that job or one it was corrected from (hash). The new job
 // keeps the call's other arguments (checks, producers, captureProducers, expectedEnvironment, until, closePrevious,
 // publish), as BASE_CHANGED and closeAndDeliver do.
-const basedOnDelivered = (input, record, hash = input.basedOn?.sha256) => refusal('BASED_ON_DELIVERED',
+// R1 (plano 24/10): when the change can be computed (changeJobOf: the partial job itself, or what the patch changed over
+// the delivered job), the new job is written and the call names it, ready; otherwise the marker stays.
+const basedOnDelivered = (input, record, hash = input.basedOn?.sha256, change = null) => refusal('BASED_ON_DELIVERED',
   (record.delivered?.sha256 && SHA.test(String(hash ?? '')) && String(hash).toLowerCase() !== record.delivered.sha256
     ? 'The job of basedOn was corrected into the job delivered to ' : 'The job of basedOn is already in ')
     + (record.module ?? input.module) + (record.at ? ' (delivered ' + record.at + ')' : '') + ': a patch or a partial job over it '
     + 'would apply all of that job again over the merged module. Nothing was sent; deliver a new job with only the change.',
-  { tool: 'o11_deliver', arguments: { module: input.module ?? record.module, job: NEW_JOB,
+  { tool: 'o11_deliver', arguments: { module: input.module ?? record.module, job: change?.job ?? NEW_JOB,
     ...(input.checks?.length ? { checks: input.checks } : {}), ...(input.producers ? { producers: input.producers } : {}),
     ...(input.captureProducers?.length ? { captureProducers: input.captureProducers } : {}),
     ...(input.expectedEnvironment ? { expectedEnvironment: input.expectedEnvironment } : {}),
     ...(input.autoPatch === false ? { autoPatch: false } : {}),
     ...(input.until === 'apply' ? { until: 'apply' } : {}), ...(input.closePrevious ? { closePrevious: input.closePrevious } : {}),
     ...(input.publish === true ? { publish: true } : {}), authorize: WORDS_MARKER },
-    why: 'A delivered job is already in the module: the next change is a new job with only that change, without basedOn, over the module as it is now (ssam_map reads the @keys of what was created). authorize: the user\'s words in place of the marker.' },
+    why: (change ? 'The job named here holds only the change (' + change.ops + ' op(s), computed from ' + change.from + ' and the delivered job): deliver it as a new job, without basedOn, over the module as it is now. '
+      : 'A delivered job is already in the module: the next change is a new job with only that change, without basedOn, over the module as it is now (ssam_map reads the @keys of what was created). ')
+      + 'authorize: the user\'s words in place of the marker (a new write).' },
   { delivered: { ...(record.delivered?.job ? { job: record.delivered.job } : {}), ...(record.delivered?.sha256 ? { sha256: record.delivered.sha256 } : {}),
-    module: record.module ?? null, at: record.at ?? null, ...(record.taskId ? { taskId: record.taskId } : {}) } });
+    module: record.module ?? null, at: record.at ?? null, ...(record.taskId ? { taskId: record.taskId } : {}) }, ...(change ? { change } : {}) });
+
+// The job with only the change a correction over a delivered job meant: the partial job alone, or the ops the patch (after
+// a partial job) changed over the job of basedOn (job-patch.mjs changeOnly), written to a new inline file. null when the
+// base is not the bytes named, the patch does not apply, or the change removes something (a removal is a delete op).
+function changeJobOf(input, lane) {
+  try {
+    const file = input.basedOn?.job;
+    if (typeof file !== 'string' || !isFile(file)) return null;
+    const bytes = fs.readFileSync(file);
+    if (SHA.test(String(input.basedOn.sha256 ?? '')) && sha256(bytes) !== String(input.basedOn.sha256).toLowerCase()) return null;
+    const base = JSON.parse(bytes.toString('utf8').replace(/^\uFEFF/, ''));
+    let partial = input.job;
+    if (typeof partial === 'string') partial = /^\s*[[{]/.test(partial) ? JSON.parse(partial) : JSON.parse(fs.readFileSync(partial, 'utf8').replace(/^\uFEFF/, ''));
+    let job;
+    if (partial != null && input.patch == null) job = Array.isArray(partial) ? { ops: partial } : partial;
+    else {
+      let changed = partial != null ? mergePartialJob(base, partial).job : base;
+      if (Array.isArray(input.patch)) changed = patchJob(changed, input.patch).job;
+      job = changeOnly(base, changed);
+    }
+    const ops = Array.isArray(job) ? job : job?.ops;
+    if (!Array.isArray(ops) || !ops.length) return null;
+    const out = path.join(lane.local, 'jobs', 'inline', randomUUID() + '.json');
+    fs.mkdirSync(path.dirname(out), { recursive: true });
+    fs.writeFileSync(out, JSON.stringify(job, null, 2) + '\n', { flag: 'wx' });
+    return { job: out, ops: ops.length, from: partial != null && input.patch == null ? 'the partial job' : 'the patch' };
+  } catch { return null; }
+}
 
 // The kernel's own checkpoint (DurableJson envelope {format, sha256, payload}); null when absent or unreadable.
 function readKernelTask(work, id) {
@@ -541,6 +593,9 @@ export function findKernelTask(work, { taskId, job, since = 0 }) {
 
 // delivered | uncertain (intent/unknown, or a merge applied without a validation result) | refused.
 export function deliveryOutcome(state) {
+  // The kernel decides the content verdict (Delivery.cs): MERGE_CONTENT_MISMATCH only for a difference that is not a known
+  // loss of the merge order; a lost default alone is the merge order's own refusal, with its repair job (below).
+  if (['MERGE_CONTENT_MISMATCH', 'MERGE_CONTENT_PREVIEW_REFUSED'].includes(state?.code)) return 'refused';
   if (state?.delivered === true) return 'delivered';
   if (['intent', 'unknown'].includes(state?.writeState)) return 'uncertain';
   if (['applied', 'unchanged'].includes(state?.writeState) && state?.validation?.newErrors == null) return 'uncertain';
@@ -679,6 +734,21 @@ const preflightRefusal = (source, base, code = 'PREFLIGHT_REFUSED', job = null) 
 // allowlisted Unused* warnings, at most 20 plus leftoversTotal) and screenRoles (html page screens, at most 20 plus
 // screenRolesTotal), and normalizations (what the kernel rewrote in the job instead of refusing it: count per rule and the
 // first entries; refusal-problems.mjs normalizationsOf). Absent when there is nothing to say.
+// Meta de 20/10/2026, item 19 (relatos fce137f4, 99aa7e64): the kernel's apply receipt names the flow layout engine and the
+// flows it laid out again (automaticLayouts), but the delivered answer dropped both, so a session could not tell which engine
+// placed the nodes of an action written as text. layout: the engine revision and one entry per flow laid out (none: the
+// shapes of the flows did not change, their manual positions stay).
+export function layoutOf(state) {
+  const apply = state?.apply;
+  if (!apply || typeof apply.flowLayoutEngine !== 'string') return {};
+  const automatic = (Array.isArray(apply.automaticLayouts) ? apply.automaticLayouts : []).map(l => ({
+    action: l.Action ?? l.action ?? null, nodes: l.Nodes ?? l.nodes ?? null, rows: l.Rows ?? l.rows ?? null, columns: l.Columns ?? l.columns ?? null,
+    moved: l.Moved ?? l.moved ?? null, separatedEnds: l.SeparatedEnds ?? l.separatedEnds ?? 0, ...(l.Refused ?? l.refused ? { refused: l.Refused ?? l.refused } : {}) }));
+  return { layout: { engine: apply.flowLayoutEngine, automatic,
+    note: automatic.length ? 'every flow whose shape changed was laid out again by this engine (manual positions of unchanged flows stay)'
+      : 'no flow changed its shape: positions stay as they were' } };
+}
+
 export function deliveryFields(state) {
   const validation = state?.apply?.validation ?? {};
   const leftovers = [
@@ -841,6 +911,12 @@ function o11Unpublished(state, { producerModels, input, job, holder }) {
 }
 
 // Every exit, including a blocked or refused delivery, discloses incomplete producer verification.
+// A content proof in a refusal: its verdict, counts and the first differences, each naming its element (MergeContentProof);
+// never its inputs (server paths) nor its coverage and omission lists, which the evidence call reads whole.
+const proofSummary = proof => ({ accepted: proof?.accepted === true, checked: proof?.checked ?? null, differencesTotal: (proof?.differences ?? []).length,
+  differences: (proof?.differences ?? []).slice(0, 20).map(d => ({ element: d?.element ?? d?.address ?? null, property: d?.property ?? null,
+    ...(d?.missing ? { missing: true } : {}), ...(d?.unexpected ? { unexpected: true } : {}),
+    ...(d?.expectedValue != null ? { expected: d.expectedValue } : {}), ...(d?.actualValue != null ? { actual: d.actualValue } : {}) })) });
 export function deliverOutcome(run, options) {
   const answer = deliverOutcomeCore(run, options);
   const state = run?.envelope?.data ?? findKernelTask(options.work, options);
@@ -885,7 +961,35 @@ function deliverOutcomeCore(run, { trackId, work, job, taskId, since, input = {}
   const added = referencesAddedOf(state);
   const wroteSaid = wroteText(state);
   const wrote = wroteSaid.length > 0;
-  if (outcome === 'delivered') { const fields = { ...deliveryFields(state), ...tab, ...signatures, ...settledUi }; return Object.keys(fields).length ? { ...DELIVERED, ...fields } : DELIVERED; }
+  if (state.code === 'MERGE_CONTENT_PREVIEW_REFUSED') return {
+    ok: false, outcome: 'refused', code: 'MERGE_CONTENT_PREVIEW_REFUSED', stage: 'merge-content-preview', taskId: state.taskId ?? taskId ?? null,
+    writeState: 'not-sent', merged: false,
+    error: 'The disposable native merge did not preserve the candidate. The live merge was not sent and nothing was published.' + (wrote ? ' ' + wroteSaid + '.' : ''),
+    mergeContentPreview: { accepted: false, hasConflicts: state.mergeContentPreview?.hasConflicts ?? null, newErrors: state.mergeContentPreview?.newErrors ?? null,
+      ...(state.mergeContentPreview?.contentProof ? { contentProof: proofSummary(state.mergeContentPreview.contentProof) } : {}) },
+    continuation: { tool: 'ssam_evidence', arguments: { file: resultFileOf(state, work), pointer: '/mergeContentPreview' },
+      why: 'Read the complete pre-merge proof. Correct the candidate or merge implementation before another attempt.' },
+    ...tab, ...signatures, ...added, ...settledUi
+  };
+  if (state.code === 'MERGE_CONTENT_MISMATCH') return {
+    ok: false, outcome: 'refused', code: 'MERGE_CONTENT_MISMATCH', stage: state.stage ?? 'checks', taskId: state.taskId ?? taskId ?? null,
+    ...(state.writeState === 'applied' ? { merged: true } : {}), writeState: state.writeState,
+    error: 'The post-merge snapshot differs from the validated candidate. Nothing was published; inspect the content proof before any further merge.',
+    ...(state.mergeOrder ? { mergeOrder: state.mergeOrder } : {}),
+    ...(state.contentProof ? { contentProof: proofSummary(state.contentProof) } : {}),
+    continuation: { tool: 'ssam_evidence', arguments: { file: resultFileOf(state, work), pointer: '/contentProof' },
+      why: 'Read the complete integrity proof and the task artifacts. Do not repeat the merge.' }, ...tab, ...signatures, ...settledUi };
+  if (outcome === 'delivered') {
+    const preview = state.mergeContentPreview;
+    // The verdicts and counts; the whole proofs (inputs, coverage, omissions) stay in the task's result (the evidence call).
+    const fields = { ...deliveryFields(state), ...layoutOf(state),
+      ...(state.contentProof ? { contentProof: { accepted: state.contentProof.accepted === true, checked: state.contentProof.checked ?? null,
+        differencesTotal: (state.contentProof.differences ?? []).length, evidence: { tool: 'ssam_evidence', arguments: { file: resultFileOf(state, work), pointer: '/contentProof' } } } } : {}),
+      ...(preview ? { mergeContentPreview: { accepted: preview.accepted === true, checked: preview.contentProof?.checked ?? null,
+        evidence: { tool: 'ssam_evidence', arguments: { file: resultFileOf(state, work), pointer: '/mergeContentPreview' } } } } : {}),
+      ...tab, ...signatures, ...settledUi };
+    return Object.keys(fields).length ? { ...DELIVERED, ...fields } : DELIVERED;
+  }
   const base = { stage: state.stage ?? null, taskId: state.taskId ?? taskId ?? null };
   // CX14 N7: every answer of a task with a settled Refresh References names it with Ctrl+Z (settledUi), these included.
   if (state.code === 'PREFLIGHT_REFUSED') return { ...preflightRefusal(state, base, 'PREFLIGHT_REFUSED', job ?? state.request?.JobPath ?? state.request?.jobPath), ...signatures, ...added, ...settledUi };
@@ -987,6 +1091,7 @@ function deliverOutcomeCore(run, { trackId, work, job, taskId, since, input = {}
   // elements the job uses) and whether the loaded bridge runs it. Never an OML for an Extension, never a person's click.
   const alignment = !sameJobAgain && state.alignment && typeof state.alignment === 'object' && Array.isArray(state.alignment.add) ? alignmentOf(state.alignment) : null;
   if (state.code === 'MERGE_ROLLED_BACK' && alignment) return { ok: false, outcome: 'refused', code: 'MERGE_ROLLED_BACK', ...base, failed: 'merge', error: clean(state.error ?? error, 900),
+    evidence: { tool: 'ssam_evidence', arguments: { file: resultFileOf(state, work) } },
     closed: true, ...(signatureChanges.length ? { signatureChanges } : {}), ...(state.merge?.stage ? { failedStage: state.merge.stage } : {}), sameJobAgain, alignment, ...dialogsOf(state),
     continuation: alignment.bridgeOffers && input.module
       ? { tool: 'o11_studio', arguments: { command: 'refresh-references', args: { module: input.module, producers: alignment.add.map(a => a.producer),
@@ -1000,6 +1105,7 @@ function deliverOutcomeCore(run, { trackId, work, job, taskId, since, input = {}
   // was applied when the Studio's Manage Dependencies changed the module.
   const ranAfter = typeof state.afterRollback?.command === 'string' ? state.afterRollback.command : 'Refresh References';
   if (state.code === 'MERGE_ROLLED_BACK') return { ok: false, outcome: 'refused', code: 'MERGE_ROLLED_BACK', ...base, failed: 'merge', error: clean(state.error ?? error, 600),
+    evidence: { tool: 'ssam_evidence', arguments: { file: resultFileOf(state, work) } },
     closed: true, ...(signatureChanges.length ? { signatureChanges } : {}), ...(state.merge?.stage ? { failedStage: state.merge.stage } : {}), sameJobAgain, ...dialogsOf(state),
     ...(input.module && job ? { continuation: { tool: 'o11_deliver', arguments: { module: input.module, job, authorize: WORDS_MARKER },
       why: (sameJobAgain ? 'The module now holds the signatures the merge needed: after the rollback the kernel ran the Studio\'s ' + ranAfter + ' of those producers'
@@ -1327,11 +1433,11 @@ function pendingContextFor(ctx,task,state) {
   return {lane:ctx.lane().name,root:ctx.root,record:ctx.connection(),bridge:ctx.bridge};
 }
 // One tracked task with its journal lines: `start` (with the sha256 of the words) before anything runs, `end` after.
-function tracked(ctx, lane, summary, words, fn) {
+function tracked(ctx, lane, summary, wordsSha256, fn) {
   const journal = entry => ctx.journal(lane.local, { tool: 'o11_deliver', ...entry });
   return trackTask({ tool: 'o11_deliver', summary, dir: ctx.tasks, now: ctx.now }, async task => {
     noteStudioHolder({taskId:task.id});
-    journal({ event: 'start', task: task.id, ...summary, wordsSha256: sha256(words) });
+    journal({ event: 'start', task: task.id, ...summary, wordsSha256 });
     let value = await fn(task);
     const pending=pendingByTask.get(task);pendingByTask.delete(task);
     if(pending) {
@@ -1387,7 +1493,7 @@ async function closeTask(input, words, ctx, lane) {
   if (refused) return refused;
   if (closeState(state) === 'closed') return CLOSED;
   if (!closesWithoutStudio(state)) await selected(ctx);
-  return tracked(ctx, lane, { module: state.module ?? null, close: id }, words, async () =>
+  return tracked(ctx, lane, { module: state.module ?? null, close: id }, sha256(words), async () =>
     closeOutcome(await ctx.runAnvil(closeArguments(id, input.close.reason, { work: lane.work, port: ctx.port() }), { timeoutMs: ctx.closeTimeoutMs }), id, lane.work));
 }
 
@@ -1418,33 +1524,18 @@ export function autoCaptures(jobFile, input = {}) {
   return referencedProducers(jobFile).filter(name => !taken.some(t => sameProducer(t, name))).map(name => captureEntryOf(name) ?? name);
 }
 
-// ---- C32: the published CSS of a block is regenerated only when a widget of the block changes, so a job made only of
-// `set StyleSheet` on blocks (or themes) gets one touch: the Style of one widget of the first block, rewritten so it
-// renders the same (`<Style> + ""`, or the suffix removed when a previous touch left it; an empty Style becomes `""`).
-const BLOCK_TARGET = /^I(?:Mobile|Web)?Block:[^/]+$/;
-const THEME_TARGET = /^I(?:Mobile|Web)?Theme:[^/]+$/;
-export function styleSheetOnly(document) {
-  const ops = Array.isArray(document) ? document : document && typeof document === 'object' && !document.jobs && Array.isArray(document.ops) ? document.ops : null;
-  if (!ops?.length) return null;
-  const targets = ops.map(op => op?.op === 'set' && op.prop === 'StyleSheet' && typeof op.target === 'string' ? op.target.trim() : null);
-  if (targets.some(t => t == null || !(BLOCK_TARGET.test(t) || THEME_TARGET.test(t)))) return null;
-  const blocks = [...new Set(targets.filter(t => BLOCK_TARGET.test(t)))];
-  return blocks.length ? { blocks } : null;
+// ---- C32, F1 (2026-10-22): the touch is the kernel's (StyleSheetTouch.cs), chosen on the candidate after every op of the
+// job resolved; the answer names it as C32 did: touch {target, op} (more than one: touches), and the elements no widget
+// change could reach (untouched, with the reason).
+export function touchOfKernel(styleSheets) {
+  const elements = elementsOfKernel(styleSheets);
+  const touches = elements.filter(e => e.touch?.key).map(e => ({ target: e.target + '/' + (e.touch.name || '@' + e.touch.key),
+    op: { op: 'set', target: '@' + e.touch.key, prop: 'Style', value: e.touch.value } }));
+  const untouched = elements.filter(e => !e.touch && e.untouched).map(e => ({ element: e.target, reason: e.untouched }));
+  if (!touches.length && !untouched.length) return {};
+  return { ...(touches.length ? { touch: touches.length === 1 ? touches[0] : { ...touches[0], touches } } : {}), ...(untouched.length ? { untouched } : {}) };
 }
-export const touchValue = style => {
-  const text = String(style ?? '').trim();
-  if (!text) return '""';
-  return text.endsWith(' + ""') ? text.slice(0, -5).trimEnd() || '""' : text + ' + ""';
-};
-// The widget the touch rewrites, from the reader's tree of the block: a container without Style first (nothing to keep),
-// then the first widget with a Style; never the block itself.
-export function touchWidget(tree) {
-  const nodes = [];
-  const walk = (node, depth) => { if (!node || typeof node !== 'object') return; if (depth > 0 && node.key) nodes.push(node); for (const child of node.children ?? []) walk(child, depth + 1); };
-  walk(tree, 0);
-  const styled = node => typeof node.properties?.Style === 'string' && node.properties.Style.trim() !== '';
-  return nodes.find(n => /Container/i.test(String(n.kind ?? '')) && !styled(n)) ?? nodes.find(styled) ?? null;
-}
+
 // The methods an exposed REST service has today, for the contract rule of rest-expose (REST_EXPOSE_CONTRACT_WORDS): one
 // read-only capture of the module and one read of the service; null when it cannot be read (the rule is then not judged).
 async function exposedMethods(service, module, ctx, lane) {
@@ -1462,32 +1553,6 @@ async function exposedMethods(service, module, ctx, lane) {
   } catch { return null; }
 }
 
-async function styleSheetTouch(resolved, input, ctx, lane) {
-  let document;
-  try { document = JSON.parse(fs.readFileSync(resolved.path, 'utf8').replace(/^﻿/, '')); } catch { return null; }
-  const only = styleSheetOnly(document);
-  if (!only) return null;
-  const block = only.blocks[0];
-  try {
-    const shot = await ctx.capture(input.module);
-    if (shot?.ok !== true || typeof shot.path !== 'string') return null;
-    const studioDir = ctx.connection()?.studioDir ?? lane.studioDir;
-    const answer = await ctx.read({ name: 'o11', root: ctx.root, lane: lane.name, cli: lane.cli },
-      inspectArguments({ path: block, properties: 'Style', depth: 12, max: 500, full: true, budget: 200000 }, shot.path, studioDir));
-    const widget = touchWidget((answer?.data ?? answer)?.tree);
-    if (!widget) return null;
-    const op = { op: 'set', target: '@' + widget.key, prop: 'Style', value: touchValue(widget.properties?.Style) };
-    const ops = [...(Array.isArray(document) ? document : document.ops), op];
-    const touched = Array.isArray(document) ? ops : { ...document, ops };
-    const file = path.join(lane.local, 'jobs', 'inline', randomUUID() + '.json');
-    fs.mkdirSync(path.dirname(file), { recursive: true });
-    const text = JSON.stringify(touched, null, 2);
-    fs.writeFileSync(file, text);
-    return { resolved: { ...resolved, path: file, sha256: sha256(text) },
-      touch: { target: block + '/' + (widget.name || '@' + widget.key), op } };
-  } catch { return null; } // no reader or no capture here: the job is delivered as written
-}
-
 // ---- C08: the publication after a clean merge (o11-publish.mjs createO11Publish; loaded on demand, it imports this file).
 const publishContinuation = module => ({ tool: 'o11_publish', arguments: { module, authorize: WORDS_MARKER },
   why: 'The delivery is already in the Studio; publish only the module (never repeat the delivery). authorize: the user\'s words in place of the marker.' });
@@ -1496,20 +1561,45 @@ export function publishField(value) {
   const outcome = value?.ok === true ? 'published' : value?.outcome === 'uncertain' ? 'uncertain' : value?.outcome === 'failed' || value?.code === 'PUBLISH_FAILED' ? 'failed' : 'refused';
   const messages = Array.isArray(value?.messages) ? [...value.messages].sort((a, b) => (b?.type === 'Error') - (a?.type === 'Error')).slice(0, 10) : null;
   return { requested: true, outcome, ...(value?.ok === true ? {} : { code: value?.code ?? 'PUBLISH_FAILED', error: clean(value?.error ?? 'The publication did not run.', 300) }),
+    ...(value?.diagnosis ? { diagnosis: value.diagnosis } : {}),
     ...(value?.version != null ? { version: value.version } : {}), ...(value?.lastPublication?.at ? { at: value.lastPublication.at } : {}),
     ...(messages?.length ? { messages } : {}), ...(Array.isArray(value?.dialogsSeen) && value.dialogsSeen.length ? { dialogsSeen: value.dialogsSeen } : {}),
     ...(Array.isArray(value?.consumers) ? { consumers: value.consumers } : {}) };
 }
-async function publishAfter(delivered, input, { words, authorization }, ctx, signal) {
+async function publishAfter(delivered, input, { words, authorization, job = null, kernelState = null }, ctx, signal) {
   const run = await ctx.publisher();
+  // F1: the stylesheets the delivery changed (the kernel's report) and, before the publication, what the environment
+  // serves for them (the baseline of their delta); only where this SSAM has a reader (the person's own machine).
+  const served = servedContext({ job, input, kernelState, ctx });
+  const baseline = served.elements.length && ctx.servedFetch
+    ? await servedBaseline(served.elements, { ...served.where, reader: ctx.servedFetch, deadline: served.deadline }).catch(() => new Map()) : new Map();
   // The same words cover the publication; a standing grant must cover publish itself (o11-publish looks it up).
   const value = await run({ module: input.module, ...(authorization?.source === 'standing-grant' ? {} : { authorize: words }),
     ...(input.expectedEnvironment ? { expectedEnvironment: input.expectedEnvironment.trim().toLowerCase() } : {}) }, { signal });
   const publish = publishField(value);
   const base = { ...delivered, ...(value?.lastPublication ? { lastPublication: value.lastPublication } : {}) };
-  if (value?.ok === true) return { ...base, ok: true, result: RESULT.deliveredAndPublished, publish };
-  return { ...base, ok: false, result: RESULT.delivered, code: publish.code ?? (publish.outcome === 'uncertain' ? 'PUBLISH_UNCERTAIN' : 'PUBLISH_FAILED'), failed: 'publish',
-    ...(publish.outcome === 'uncertain' ? { outcome: 'uncertain' } : {}), publish, continuation: publishContinuation(input.module) };
+  if (value?.ok !== true) return { ...base, ok: false, result: RESULT.delivered, code: publish.code ?? (publish.outcome === 'uncertain' ? 'PUBLISH_UNCERTAIN' : 'PUBLISH_FAILED'), failed: 'publish',
+    ...(publish.outcome === 'uncertain' ? { outcome: 'uncertain' } : {}), publish, levels: levelsOf({ built: true, validated: true, merged: true }), continuation: value?.continuation ?? publishContinuation(input.module) };
+  // F1: published is what the Studio and the server said; served is read back from the environment, per stylesheet.
+  let proof = null;
+  if (served.elements.length) {
+    try { proof = await proveServed(served.elements, { ...served.where, nonce: kernelState?.taskId ?? null, reader: ctx.servedFetch, baseline, deadline: served.deadline, owner: served.owner }); }
+    catch { proof = { schema: 'ssam-served-proof/1', served: 'unverified', elements: served.elements.map(e => ({ element: e.target, kind: e.kind, served: 'unverified', reason: 'SERVED_READ_FAILED' })) }; }
+  } else if (served.writes) proof = { schema: 'ssam-served-proof/1', served: 'unverified', elements: [], reason: 'SERVED_ELEMENTS_UNKNOWN' };
+  const answer = { ...base, ok: true, result: RESULT.deliveredAndPublished, publish, levels: levelsOf({ built: true, validated: true, merged: true, published: true, served: proof }),
+    ...(proof ? { served: proof } : {}) };
+  if (proof?.served !== false) return answer;
+  return { ...answer, ...servedRefusal(proof, { module: input.module, elements: served.elements }), result: RESULT.deliveredAndPublished };
+}
+// F1: the elements whose stylesheet the delivery changed (the kernel's report, any target form), where they are served
+// (the environment the delivery targets, the module's URL path, its theme) and the time budget of every read.
+function servedContext({ job, input, kernelState, ctx }) {
+  const elements = elementsOfKernel(kernelState?.apply?.styleSheets);
+  let writes = false;
+  try { writes = job ? jobWritesStyleSheets(JSON.parse(fs.readFileSync(job, 'utf8').replace(/^\uFEFF/, ''))) : false; } catch { writes = false; }
+  const environment = input.expectedEnvironment ?? kernelState?.environment ?? kernelState?.open?.environment ?? null;
+  return { elements, writes, where: { environment, module: input.module, theme: kernelState?.apply?.styleSheetsTheme ?? null },
+    deadline: Date.now() + (ctx.servedBudgetMs ?? BUDGET_MS), owner: String(ctx.env?.SSAM_EXPOSURE ?? 'owner').toLowerCase() !== 'licensee' };
 }
 
 // K1-g: after a publication, the tab the delivery opened (its kernel task's open answered alreadyOpen false) is closed
@@ -1539,6 +1629,35 @@ export function themeReferenced(jobFile, binding) {
     && (Array.isArray(op.elements) ? op.elements : []).some(e => THEME_ELEMENT.test(String(e))));
 }
 
+// T16 rule 9 (one refusal, never a chain): a call refused for its words is answered with the exact resend, every field of the
+// call as sent (basedOn, patch, publish, closePrevious, expectedEnvironment, ...) with the marker in authorize, so the words are
+// the only thing to add and no guard of the call (an expected environment) is dropped on the way. The whole answer fits the
+// refusal budget (review of e10ecacc): while it does not, the longest field (an inline job, a patch) is replaced by a
+// placeholder that says what to put back ("<the patch exactly as you sent it>"), never left out: replayed as it is, the
+// placeholder is refused (no schema takes it, no file has that name), so the resend is never silently incomplete. The words are
+// never inherited nor echoed: the server keeps only their sha256, and nothing here can tell that a base call was this user's.
+export const RESEND_BUDGET_BYTES = ANSWER_BUDGETS.refusal - 512;
+export const WORDS_REQUIRED_TEXT = 'o11_deliver needs the user\'s own words in authorize, verbatim (or a standing grant of this module for deliver).';
+const PUT_BACK = field => `<the ${field} exactly as you sent it>`;
+export function wordsResend(input = {}, { budget = RESEND_BUDGET_BYTES } = {}) {
+  const args = input.close ? { close: input.close } : input.resume ? { resume: input.resume }
+    : Object.fromEntries(Object.entries(input).filter(([k, v]) => v !== undefined && k !== 'authorize'));
+  args.authorize = WORDS_MARKER;
+  const placed = [];
+  const why = () => 'Ask the user to authorize this delivery and resend this same call with their exact words in authorize'
+    + (placed.length ? `, and replace ${placed.length > 1 ? 'each placeholder' : 'the placeholder'} ${placed.map(PUT_BACK).join(', ')} with that field exactly as you sent it` : '')
+    + '; every other field is the call as sent.';
+  const size = () => Buffer.byteLength(JSON.stringify(refusal('WORDS_REQUIRED', WORDS_REQUIRED_TEXT, { tool: 'o11_deliver', arguments: args, why: why() })), 'utf8');
+  while (size() > budget) {
+    const longest = Object.keys(args).filter(k => k !== 'authorize' && !placed.includes(k))
+      .map(k => [k, Buffer.byteLength(JSON.stringify(args[k]) ?? '', 'utf8')]).sort((a, b) => b[1] - a[1])[0];
+    if (!longest || longest[1] <= PUT_BACK(longest[0]).length + 2) break;
+    args[longest[0]] = PUT_BACK(longest[0]);
+    placed.push(longest[0]);
+  }
+  return { tool: 'o11_deliver', arguments: args, why: why() };
+}
+
 async function deliver(input, ctx, { signal } = {}) {
   const lane = ctx.lane();
   // The words: the user's, or a standing grant that covers this module for deliver (contract I6).
@@ -1546,17 +1665,167 @@ async function deliver(input, ctx, { signal } = {}) {
   const grantModule = input.module ?? taskModule;
   const resolvedWords = standingGrants.wordsFor({ authorize: input.authorize, lane: 'o11', module: grantModule, app: grantModule ? ctx.appOf(grantModule) : null, verb: 'deliver' },
     ctx.grants, { file: ctx.grantsFile });
-  const words = resolvedWords.words;
-  const authorization = resolvedWords.authorization ?? null;
+  let words = resolvedWords.words;
+  let authorization = resolvedWords.authorization ?? null;
+  let wordsSha256 = wordsGiven(words) ? sha256(words) : null;
   // Blank words, or a placeholder such as the continuation marker, are not the user's words.
-  if (!wordsGiven(words)) return refusal('WORDS_REQUIRED', // CX15 r7 (L-7): one predicate
-    'o11_deliver needs the user\'s own words in authorize, verbatim (or a standing grant of this module for deliver).',
-    { tool: 'o11_deliver', arguments: input.close ? { close: input.close } : input.resume ? { resume: input.resume } : { module: input.module }, why: 'Ask the user to authorize this delivery and pass their exact words in authorize.' });
-  const answer = await deliverWith(input, { words, authorization }, ctx, lane, signal);
+  // T16 (the candidate's rule, kept over the proto's R1 inheritance): the words are never inherited, a correction of a refused
+  // write too (patch, partial job, fix, resume): nothing here can tell that the base call was this user's.
+  if (!wordsGiven(words)) return refusal('WORDS_REQUIRED', WORDS_REQUIRED_TEXT, // CX15 r7 (L-7): one predicate
+    wordsResend(input));
+  let answer = await deliverWith(input, { words, authorization, wordsSha256 }, ctx, lane, signal);
+  answer = chained(answer, input, { authorization, wordsSha256 }, lane);
   return authorization && answer && typeof answer === 'object' ? { ...answer, authorization } : answer;
 }
 
-async function deliverWith(input, { words, authorization }, ctx, lane, signal) {
+// ---- R1 (plano 24/10): the correction loop has no friction of its own.
+// The write a correction names (basedOn {job}/{taskId}, or resume), on the same module and lane, refused (a resume: or
+// left uncertain) and recorded with the words (authorization-context.mjs correction-chain.jsonl, under the lane journal).
+const chainDir = lane => path.join(lane.local, 'journal');
+function chainBaseOf(input, lane, module) {
+  const base = input.resume ? { taskId: input.resume } : input.basedOn;
+  if (!base || typeof base !== 'object') return null;
+  const state = base.taskId ? findKernelTask(lane.work, { taskId: base.taskId }) : null;
+  const own = state?.request?.JobPath ?? state?.request?.jobPath ?? null;
+  return { sha256s: [base.sha256, fileSha256(own)], taskId: base.taskId ?? null, module: input.module ?? module ?? state?.module ?? null };
+}
+
+// The answer of a write, seen as a link of its chain: a refusal (or an uncertain write) that names its job is recorded with
+// its authorization, its problems and the patches they propose (fix:"apply" applies them); a correction refused with exactly
+// the problems of the refusal it corrects answers differently (repeatedAnswer). Nothing here changes a delivery.
+function chained(answer, input, { authorization, wordsSha256 }, lane) {
+  if (!answer || typeof answer !== 'object' || answer.ok !== false) return answer;
+  // An uncertain write never names its job (it is resumed, never corrected): the kernel task does, for its resume.
+  if (answer.outcome === 'uncertain' && TASK_ID.test(String(answer.taskId ?? '')) && !SHA.test(String(answer.jobSha256 ?? ''))) {
+    const state = findKernelTask(lane.work, { taskId: answer.taskId });
+    const own = state?.request?.JobPath ?? state?.request?.jobPath ?? null;
+    const hash = fileSha256(own);
+    if (hash && SHA.test(String(wordsSha256 ?? ''))) recordChainWrite(chainDir(lane), { lane: 'o11', tool: 'o11_deliver', module: answer.module ?? input.module ?? state?.module ?? null,
+      job: own, jobSha256: hash, taskId: answer.taskId, outcome: 'uncertain', authorization: { source: authorization?.source ?? 'words', wordsSha256 } });
+    return answer;
+  }
+  if (!SHA.test(String(answer.jobSha256 ?? ''))) return answer;
+  const module = answer.module ?? input.module ?? null;
+  const holder = Array.isArray(answer.problems) ? answer : Array.isArray(answer.refusal?.problems) ? answer.refusal : null;
+  const signature = problemSignature(holder?.problems);
+  let value = answer;
+  const correction = input.basedOn || input.fix;
+  if (correction && holder && signature.length) {
+    const previous = chainOrigin(chainDir(lane), { ...chainBaseOf(input, lane, module), lane: 'o11' });
+    if (previous && sameSignature(previous.problems, signature)) value = repeatedAnswer(value, holder);
+  }
+  // The call that applies them, with the marker in authorize: the words are never inherited (T16), no path to write.
+  // a12: hosted, the explicit patch (job-patch.mjs explicitFixCall): the gate refuses fix "apply" there.
+  if (holder && saveFixes(lane, answer, holder.problems, module) && answer.nextBasedOn && answer.outcome !== 'uncertain' && SHA.test(String(wordsSha256 ?? ''))) {
+    const fixCall = hostedContext()
+      ? explicitFixCall(fixesDir(lane), { tool: 'o11_deliver', basedOn: answer.nextBasedOn, file: answer.job, keep: { ...(module ? { module } : {}), authorize: WORDS_MARKER } })
+      : { tool: 'o11_deliver', arguments: { fix: 'apply', basedOn: answer.nextBasedOn, authorize: WORDS_MARKER },
+        why: 'Applies every certain patch of the problems above over this job and delivers it; authorize: the user\'s words in place of the marker. A choice and a problem without a patch need your own patch with the same basedOn.' };
+    if (fixCall) value = { ...value, fixCall };
+  }
+  if (SHA.test(String(wordsSha256 ?? '')) && module) recordChainWrite(chainDir(lane), { lane: 'o11', tool: 'o11_deliver', module, job: answer.job, jobSha256: answer.jobSha256,
+    taskId: answer.taskId, outcome: answer.outcome === 'uncertain' ? 'uncertain' : 'refused',
+    authorization: { source: authorization?.source ?? 'words', wordsSha256, ...(authorization?.source === 'inherited' ? { from: authorization.from } : {}) }, problems: signature });
+  return value;
+}
+
+// The patches a refusal proposed, kept by the job they patch under <lane.local>/jobs/fixes (job-patch.mjs saveRefusalFixes).
+const fixesDir = lane => path.join(lane.local, 'jobs', 'fixes');
+const saveFixes = (lane, answer, problems, module) => saveRefusalFixes(fixesDir(lane), { job: answer.job, jobSha256: answer.jobSha256, problems, module });
+
+// fix:"apply" with basedOn: the patches the refusal of that job proposed, and only those, applied over it (then the call's
+// own patch); one refusal with every one that does not apply, before anything is sent. -> {input, fixes} or a refusal.
+function fixInput(input, lane) {
+  if (input.resume || input.close) throw new Refusal('FIX_NEEDS_BASE', 'fix:"apply" corrects a refused job: give basedOn {job, sha256} (its nextBasedOn) without resume or close.');
+  if (!input.basedOn) throw new Refusal('FIX_NEEDS_BASE', 'fix:"apply" goes with basedOn {job, sha256}: the nextBasedOn of the refusal whose patches it applies.');
+  if (input.patch === 'verified' || input.job != null) throw new Refusal('FIX_ALONE', 'fix:"apply" applies the refusal\'s own patches; drop ' + (input.job != null ? 'job' : 'patch "verified"') + ' (a patch of yours may follow them).');
+  let file = input.basedOn.job, hash = input.basedOn.sha256;
+  if (input.basedOn.taskId) { const state = findKernelTask(lane.work, { taskId: input.basedOn.taskId }); file = state?.request?.JobPath ?? state?.request?.jobPath ?? null; hash = hash ?? fileSha256(file); }
+  const proposed = proposedPatch(fixesDir(lane), { file, sha256: hash });
+  const module = input.module ?? proposed.module ?? null;
+  if (!proposed.ok) {
+    const { ok: _ok, code, error, module: _module, patchByName, ...extra } = proposed;
+    const next = code === 'FIX_NOT_APPLIED'
+      ? { tool: 'o11_deliver', arguments: { ...(module ? { module } : {}), basedOn: input.basedOn, patch: [...patchByName, '<your fix of each one in notApplied>'], authorize: WORDS_MARKER },
+        why: 'The patches that apply, by name, then your own fix of each problem in notApplied, in one patch; authorize: the user\'s words in place of the marker (never inherited).' }
+      : code === 'BASE_CHANGED' ? null
+        : { tool: 'o11_deliver', arguments: { ...(module ? { module } : {}), basedOn: input.basedOn, patch: '<your patch: by name, e.g. actions/<Action>/steps/<as>/...>', authorize: WORDS_MARKER },
+          why: 'Correct the job yourself with a patch over the same basedOn.' };
+    return refusal(code, error, next, extra);
+  }
+  return { input: { ...input, ...(module && !input.module ? { module } : {}), patch: [...proposed.patch, ...(Array.isArray(input.patch) ? input.patch : [])] }, fixes: proposed.applied };
+}
+
+// R1 (plano 24/10): 152 consecutive refusals with the same code, 20 resends with exactly the same problems. A correction
+// refused with the multiset of code+pointer of the refusal it corrects keeps the code and says so differently: repeated,
+// the grammar card of the part, the nearest proven example, and per problem the refused line beside the accepted form.
+const OP_PART = { logic: 'logic', spec: 'ddl', ddl: 'ddl', html: 'html' };
+const clip = (value, max = 300) => { const t = typeof value === 'string' ? value : JSON.stringify(value) ?? ''; return t.length > max ? t.slice(0, max - 1) + '…' : t; };
+function pointerValue(document, pointer) {
+  if (typeof pointer !== 'string' || !pointer.startsWith('/')) return undefined;
+  let node = document;
+  for (const raw of pointer.split('/').slice(1)) {
+    const token = raw.replace(/~1/g, '/').replace(/~0/g, '~');
+    if (node === null || typeof node !== 'object' || !Object.hasOwn(node, token)) return undefined;
+    node = node[token];
+  }
+  return node;
+}
+const lineOf = (value, message) => {
+  if (typeof value !== 'string') return value === undefined ? null : clip(value, 300);
+  const n = Number(/\bline (\d+)/.exec(String(message ?? ''))?.[1]);
+  const lines = value.split(/\r?\n/);
+  return clip(Number.isInteger(n) && n >= 1 && n <= lines.length ? lines[n - 1] : lines.length > 1 ? lines.find(l => l.trim()) ?? value : value, 300);
+};
+function repeatedAnswer(value, holder) {
+  const document = typeof value.job === 'string' ? readJobDocument(value.job) : null;
+  const ops = Array.isArray(document) ? document : Array.isArray(document?.ops) ? document.ops : [];
+  const opOf = p => (Number.isInteger(p?.op) ? p.op : Array.isArray(p?.ops) && Number.isInteger(p.ops[0]) ? p.ops[0]
+    : Number(/^\/(?:ops\/)?(\d+)/.exec(String(p?.pointer ?? p?.pointers?.[0] ?? ''))?.[1]));
+  const parts = holder.problems.map(p => OP_PART[ops[opOf(p)]?.op]).filter(Boolean);
+  const part = parts[0] ?? null;
+  const lines = holder.problems.slice(0, 20).map(p => {
+    const pointer = p.pointer ?? p.pointers?.[0] ?? null;
+    const refused = lineOf(pointerValue(document, pointer), p.message);
+    let accepted = null;
+    if (Array.isArray(p.patch) && p.patch.length && document) { try { accepted = lineOf(pointerValue(patchJob(document, p.patch).job, pointer), p.message); } catch { accepted = null; } }
+    return { code: p.code ?? null, pointer, refused, accepted: accepted ?? (typeof p.fix === 'string' ? clip(p.fix, 300) : null) };
+  });
+  let card = null, example = null;
+  if (part) {
+    const { example: own, read: _read, write: _write, uses: _uses, exampleWithUi: _ui, exampleWithUiWhy: _why, ...rest } = grammarCard(part, 'o11').card;
+    card = rest;
+    if (part === 'logic') {
+      const refused = lines.map(l => l.refused).filter(Boolean).join('\n');
+      const kind = /client action|screen action/i.test(refused) ? /client action|screen action/i : /server action/i;
+      const texts = exampleLogicTexts('o11');
+      example = { why: 'the nearest proven logic text', text: texts.find(t => kind.test(t)) ?? texts[0] };
+    } else example = part === 'html' ? { why: 'the proven html example (a module with a UI flow)', call: exampleCall('o11') } : { why: 'the proven ddl example', text: own };
+  }
+  return { ...value, repeated: true,
+    said: 'This correction was refused with exactly the problems (code and pointer) of the refusal it corrects: the change did not reach them. Each refused line is beside its accepted form; '
+      + (card ? 'the grammar of the part and its proven example follow.' : hostedContext() ? 'fixCall sends the patches this refusal proposed as the patch.' : 'fix:"apply" applies the patches this refusal proposed.'),
+    lines, ...(card ? { grammarCard: card } : {}), ...(example ? { example } : {}) };
+}
+
+async function deliverWith(input, auth, ctx, lane, signal) {
+  let fixes = null; // fix:"apply": the patches of the refusal applied (fixesApplied)
+  if (input.fix != null) {
+    try {
+      const prepared = fixInput(input, lane);
+      if (prepared.ok === false) return prepared;
+      ({ input, fixes } = prepared);
+    } catch (error) {
+      if (error instanceof Refusal) return refusal(error.code, error.message, error.continuation ?? { tool: 'o11_deliver', arguments: input.module ? { module: input.module } : {}, why: 'Call again with the arguments fixed as the error says.' }, error.extra);
+      throw error;
+    }
+    const { fix: _fix, ...rest } = input; input = rest;
+  }
+  const answer = await deliverRun(input, auth, ctx, lane, signal);
+  return fixes && answer && typeof answer === 'object' ? { ...answer, fixesApplied: fixes } : answer;
+}
+
+async function deliverRun(input, { words, authorization, wordsSha256 = words ? sha256(words) : null }, ctx, lane, signal) {
   const until = input.until ?? 'merge';
   let resolved = null; // the job file this call runs {path, sha256}, named by its refusals
   try {
@@ -1581,7 +1850,7 @@ async function deliverWith(input, { words, authorization }, ctx, lane, signal) {
         input = checked;
         // G16: a job already delivered to this module, or one it was corrected from, is never a base (recordDelivered).
         const delivered = input.basedOn?.job ? deliveredBase(lane, input.basedOn, input.module) : null;
-        if (delivered) return basedOnDelivered(input, delivered, input.basedOn.sha256);
+        if (delivered) return basedOnDelivered(input, delivered, input.basedOn.sha256, changeJobOf(input, lane));
       }
       if (!input.module || (input.job == null && input.patch == null))
         throw new Refusal('MODULE_AND_JOB_REQUIRED', 'o11_deliver needs module and job, or module with patch and basedOn (or resume with the taskId of an earlier delivery).');
@@ -1606,8 +1875,17 @@ async function deliverWith(input, { words, authorization }, ctx, lane, signal) {
     if (!input.resume && resolved?.path) {
       let document = null;
       try { document = JSON.parse(fs.readFileSync(resolved.path, 'utf8').replace(/^\uFEFF/, '')); } catch { /* the kernel reports an unreadable job */ }
+      // The prototype import is turned off (prototype-disabled.mjs): refused here, before the Studio or the build is touched.
+      const disabled = prototypeImportRefusal(document, { lane: 'o11', module: input.module ?? null, readPart: partReader(resolved.path, fs, path) });
+      if (disabled) return withJob(disabled, resolved);
       const unwired = textFormRefusal(document, undefined, { readPart: partReader(resolved.path, fs, path) });
       if (unwired) return withJob(unwired, resolved);
+      // T12: a temporary access change holds only the writes whose before-state SSAM records (o11-access.mjs).
+      const temporary = temporaryRefusal(document, { scope: restoreScope(), environment: input.expectedEnvironment ?? null });
+      if (temporary) return withJob(temporary, resolved);
+      // {"temporary":{"close":"<id>"}}: the user keeps the screens as they are; answered here, nothing reaches the Studio.
+      const closed = temporaryClose(document, { local: lane.local, words, scope: restoreScope(), now: ctx.now });
+      if (closed) return withJob(closed, resolved);
     }
     // a patched or partial job names the job it corrects: the kernel's preflight refuses CSS the correction dropped
     // (CSS_RULES_DROPPED, apply --based-on)
@@ -1653,7 +1931,7 @@ async function deliverWith(input, { words, authorization }, ctx, lane, signal) {
     // Integration ops (rest, rest-expose, soap; docs/integracoes-rest-soap.md): their documents are pinned and the
     // destructive words checked (a standing grant never covers a delete) before anything is captured or sent.
     if (!input.resume) {
-      const prepared = await ctx.prepareIntegration(resolved.path, { lane: 'o11', words, grant: authorization?.source === 'standing-grant', localRoot: lane.local,
+      const prepared = await ctx.prepareIntegration(resolved.path, { lane: 'o11', words: words ?? '', grant: authorization?.source === 'standing-grant' || authorization?.source === 'inherited', localRoot: lane.local,
         exposed: service => exposedMethods(service, input.module, ctx, lane) });
       if (prepared?.ok === false) return withJob({ ...prepared, outcome: 'refused', stage: 'documents', failed: 'documents' }, resolved);
       if (prepared?.changed) resolved = { ...resolved, path: prepared.job, sha256: sha256(fs.readFileSync(prepared.job)) };
@@ -1688,24 +1966,18 @@ async function deliverWith(input, { words, authorization }, ctx, lane, signal) {
     if (autoCaptured.length) input = { ...input, captureProducers: [...(input.captureProducers ?? []), ...autoCaptured] };
     const fromStudio = open.fromStudio.map(p => p.producer);
     const runInput = fromStudio.length ? { ...input, producers: { ...(input.producers ?? {}), ...open.bound } } : input;
-    // C32: only StyleSheet sets on blocks: one touch of a block widget, in a new job file next to the inline jobs.
-    let touch = null;
-    if (!input.resume && until === 'merge') {
-      const touched = await styleSheetTouch(resolved, input, ctx, lane);
-      if (touched) { resolved = touched.resolved; touch = touched.touch; }
-    }
     const job = input.resume ? null : resolved.path;
     const jobSha256 = job ? resolved.sha256 : null;
     // The provenance of a patched job goes to the journal (and the task summary), never into the job file.
     const summary = { module: input.module ?? null, until, ...(job ? { job, jobSha256 } : {}), ...(input.resume ? { resume: input.resume } : {}),
       ...(input.closePrevious ? { closePrevious: input.closePrevious } : {}),
       ...(resolved?.basedOn ? { basedOn: resolved.basedOn, ...(input.patch ? { patchOps: input.patch.length } : {}), ...(resolved.partial ? { partial: resolved.partial } : {}) } : {}),
-      ...(autoCaptured.length ? { autoCaptured } : {}), ...(fromStudio.length ? { fromStudio } : {}), ...(touch ? { touch: touch.target } : {}),
+      ...(autoCaptured.length ? { autoCaptured } : {}), ...(fromStudio.length ? { fromStudio } : {}),
       ...(input.publish === true && until === 'merge' ? { publish: true } : {}) };
     let kernelState = null; // the kernel task of this delivery (its open answer decides the tab closed after a publication)
     // A prototype job names the model's own job (proto.original) in its answers: the patches of a refusal apply to it.
     const named = proto?.original ?? resolved;
-    let value = withJob(await tracked(ctx, lane, summary, words, async task => {
+    let value = withJob(await tracked(ctx, lane, summary, wordsSha256, async task => {
       if (until === 'apply') return applyOnly(input, job, ctx, task, proto);
       const port = ctx.port();
       if (closing) { // the new delivery runs only once the previous task is closed
@@ -1781,19 +2053,22 @@ async function deliverWith(input, { words, authorization }, ctx, lane, signal) {
     if (proto && value?.ok === false) value = withoutIdentityPatches(value, readJobDocument(proto.original?.path));
     if (until !== 'merge') return withJobDone(value, named, lane);
     const module = input.module ?? findKernelTask(lane.work, { taskId: input.resume })?.module ?? null;
-    if (touch) value = { ...value, touch };
+    // C32, F1: the kernel's touch of this delivery (and the elements none could reach).
+    if (value && typeof value === 'object' && kernelState?.apply?.styleSheets) value = { ...value, ...touchOfKernel(kernelState.apply.styleSheets) };
     if (input.publish === true) {
       // C08: only after a clean merge; otherwise the publication is skipped and the answer says so.
       if (value?.ok !== true) value = { ...value, publish: { requested: true, outcome: 'skipped' } };
       else {
         const begin = Date.now();
-        value = await publishAfter(value, { ...input, module }, { words, authorization }, ctx, signal);
+        value = await publishAfter(value, { ...input, module }, { words, authorization, job, kernelState }, ctx, signal);
         if (proto?.receipt) proto.receipt.timings.publishMs = Date.now() - begin;
         // The demo data of a prototype import (3.4): after a clean publication, into the empty entities the import marked,
         // with the words of this call, while the module is still open.
-        if (proto?.receipt && value?.ok === true) value = await prototypeSeedAfter(value, proto, { input, module, words, authorization, kernelState, ctx, lane });
+        // F1: the housekeeping of a completed publication runs whatever the served proof says.
+        const publishedNow = value?.publish?.outcome === 'published';
+        if (proto?.receipt && publishedNow) value = await prototypeSeedAfter(value, proto, { input, module, words, authorization, kernelState, ctx, lane });
         // K1-g: the tab this delivery opened is closed once the publication saved the module.
-        if (value?.ok === true) { const closedTab = await closeOpenedTab(module, kernelState, ctx); if (closedTab !== undefined) value = { ...value, closedTab }; }
+        if (publishedNow) { const closedTab = await closeOpenedTab(module, kernelState, ctx); if (closedTab !== undefined) value = { ...value, closedTab }; }
       }
     } else if (value?.ok === true && module) {
       const last = await ctx.lastPublication(module);
@@ -1805,6 +2080,9 @@ async function deliverWith(input, { words, authorization }, ctx, lane, signal) {
     if (resultIs(value?.result, 'delivered', 'deliveredAndPublished')) recordDelivered(lane,
       { ...named, path: value.nextBasedOn?.job ?? named?.path, sha256: value.nextBasedOn?.sha256 ?? named?.sha256 },
       { module, taskId: kernelState?.taskId, at: ctx.now().toISOString() });
+    // T12: the restore journal of a temporary access change, what this delivery put back, and the restores still pending.
+    value = accessRestoreAfter(value, { local: lane.local, module, job: readJobDocument(named?.path), kernelState, environment: input.expectedEnvironment ?? null,
+      scope: restoreScope(), now: ctx.now });
     return value;
   } catch (error) {
     if (error instanceof Refusal) return withJob(refusal(error.code, error.message, error.continuation
@@ -1817,7 +2095,7 @@ function appendJournal(now) {
   return (local, entry) => {
     const dir = path.join(local, 'journal');
     fs.mkdirSync(dir, { recursive: true });
-    fs.appendFileSync(path.join(dir, 'o11_deliver.jsonl'), JSON.stringify({ at: now().toISOString(), ...entry }) + '\n');
+    appendJsonLine(path.join(dir, 'o11_deliver.jsonl'), { at: now().toISOString(), ...entry });
   };
 }
 
@@ -1854,6 +2132,9 @@ export function registerO11Cycle(server, deps = {}) {
     root, env, now, connection,
     lane: () => o11LaneOf(laneName, { root, env }),
     read: deps.read ?? kernelReading,
+    // F1: the reader of served stylesheets: none unless the caller hands one (only the person's own SSAM, runStdio, does);
+    // without it every element is "unverified" (SERVED_READ_UNAVAILABLE). No request leaves a server built any other way.
+    servedFetch: typeof deps.servedFetch === 'function' ? deps.servedFetch : null, servedBudgetMs: deps.servedBudgetMs ?? null,
     readerCheck: deps.readerCheck ?? (deps.read ? null : readerMissing),
     runAnvil: deps.runAnvil ?? createAnvilRunner({ lane: laneName, root, env }),
     bridge: () => deps.bridge ?? o11Bridge(bridgeTarget({ lane: laneName, root, env })),
@@ -1937,7 +2218,7 @@ export function registerO11Cycle(server, deps = {}) {
       + 'publish:true publishes the same module right after a clean merge (the o11_publish flow, same words or grant): "delivered and published"; '
       + 'a failed publication answers result "delivered" with PUBLISH_FAILED|PUBLISH_UNCERTAIN and the o11_publish continuation, never a new delivery. '
       + 'Without publish nothing is published. Without authorize a standing grant (ssam_grant) of the module for deliver is used. Producers named by '
-      + 'reference ops are captured read-only by name. Blocks until the CLI ends; ssam_task reads the task meanwhile. ' + PROTOTYPE_DELIVER_TEXT + ' ' + CODE_JOB_TEXT,
+      + 'reference ops are captured read-only by name. Blocks until the CLI ends; ssam_task reads the task meanwhile. ' + CODE_JOB_TEXT,
     inputSchema: deliverSchema, annotations: mutating,
     // Lane wp: this handler splits its delivery in build and apply (o11-build-phase.mjs; studio-write-lock.mjs PHASES_META).
     _meta: { [PHASES_META]: true },

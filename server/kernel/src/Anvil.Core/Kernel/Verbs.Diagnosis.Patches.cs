@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Reflection;
 using System.Text.Json.Nodes;
 using Anvil.Core.Preflight;
 using OutSystems.Model;
@@ -109,6 +110,114 @@ public sealed partial class ModelSession
     }
 
     private static JsonArray ReplaceSource(string path, string value) => new(new JsonObject { ["op"] = "replace", ["path"] = path, ["value"] = value });
+
+    // ---- T16: what the base already tells about a create and a delete ------------------------------------------------------
+
+    /// <summary>T16 rule 1: the element a raw create collides with in the base. The direct child of the create's parent (as the
+    /// base has it) with the create's name and type (with or without the leading I); never a widget or a flow node (the Studio
+    /// names those freely, as the apply keeps its choice: Verbs.Create). Null when the parent is not of the base or none is there.
+    /// Its reference is the Type:Name that resolves to that very element, else its @key; <c>Rename</c> is the name the Studio would
+    /// give the newcomer (the name's stem followed by the first free number, as the apply observes it).</summary>
+    internal (IObjectSignature Existing, string Reference, string Parent, string Rename)? ExistingChild(string parent, string type, string name)
+    {
+        object owner;
+        try { owner = Resolve(parent); } catch { return null; }
+        if (owner is not IObjectSignature holder) return null;
+        var iface = type.StartsWith('I') ? type : 'I' + type;
+        var children = holder.Children.OfType<IObjectSignature>().Where(c => !c.WasDeleted).ToList();
+        var existing = children.FirstOrDefault(c => string.Equals(TypeResolver.Name(c), name, StringComparison.OrdinalIgnoreCase)
+            && c is not OutSystems.Model.UI.IWidget && c is not IFlowNode && (Implements(c, iface) || Implements(c, type)));
+        if (existing == null) return null;
+        // The parent as the job names it, then the child by its name (a Type:Name of a member of a screen may name another
+        // screen's); a top-level element by Type:Name; the key when neither resolves to this very element.
+        var reference = parent == "@espace" ? iface + ":" + TypeResolver.Name(existing) : parent + "/" + TypeResolver.Name(existing);
+        try { if (!ReferenceEquals(Resolve(reference), existing)) reference = "@" + existing.ObjectKey; }
+        catch { reference = "@" + existing.ObjectKey; }
+        var taken = children.Select(c => TypeResolver.Name(c)).OfType<string>().ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var stem = System.Text.RegularExpressions.Regex.Replace(name, @"\d+$", "");
+        var n = 2;
+        while (taken.Contains(stem + n)) n++;
+        return (existing, reference, Describe(holder), stem + n);
+    }
+
+    // The raw ops of a job: what a base element is to them is read from the op itself (target, parent, name).
+    private static readonly HashSet<string> RawOps = new(StringComparer.Ordinal)
+        { "create", "set", "link", "move", "delete", "rename", "replace", "duplicate", "get", "find", "dump", "usages", "layout", "reference" };
+
+    /// <summary>T16 rule 1 (review of e10ecacc, R2): whether the job may change what <paramref name="existing"/> is when the create
+    /// <paramref name="create"/> runs, so its collision is not certain from the base (the apply decides): an op of the job deletes,
+    /// renames, moves, replaces or duplicates the element or one of its ancestors (below the module), or sets the Name of one; a raw
+    /// create other than this one makes an element named like one of its ancestors (the parent deleted and made again, then named
+    /// by its name); a non-raw op (spec, ddl, logic, html, ...) declares the name of the element or of one of its ancestors (it may
+    /// rewrite or replace it). When unsure, never a base collision.</summary>
+    internal bool UnsureAfterJob(JsonArray ops, int create, IObjectSignature existing)
+    {
+        var chain = new List<IObjectSignature>();
+        for (var o = existing; o != null && o is not IESpace; o = o.Parent as IObjectSignature) chain.Add(o);
+        var names = chain.Select(o => TypeResolver.Name(o)).OfType<string>().Where(n => n.Length > 0).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var ancestors = chain.Skip(1).Select(o => TypeResolver.Name(o)).OfType<string>().Where(n => n.Length > 0).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        bool InChain(string? reference)
+        {
+            if (string.IsNullOrEmpty(reference) || reference.StartsWith('$')) return false;
+            try { return Resolve(reference) is { } o && chain.Any(c => ReferenceEquals(c, o)); }
+            catch { return false; }   // a name the base has not: nothing of the base element
+        }
+        var nonRaw = new JsonArray();
+        for (var j = 0; j < ops.Count; j++)
+        {
+            if (j == create || ops[j] is not JsonObject op) continue;
+            var kind = op["op"]?.ToString() ?? "";
+            if (!RawOps.Contains(kind)) { nonRaw.Add(op.DeepClone()); continue; }
+            switch (kind)
+            {
+                case "delete" or "rename" or "move" or "duplicate" when InChain(op["target"]?.ToString()): return true;
+                case "replace" when InChain(op["from"]?.ToString()) || InChain(op["to"]?.ToString()): return true;
+                case "set" when string.Equals(op["prop"]?.ToString(), "Name", StringComparison.OrdinalIgnoreCase) && InChain(op["target"]?.ToString()): return true;
+                case "create" when op["name"]?.ToString() is { Length: > 0 } made && ancestors.Contains(made): return true;
+            }
+        }
+        if (nonRaw.Count == 0) return false;
+        var (words, whole) = JobPreflight.JobWords(Preflight.DocumentNameRules.Declarations(nonRaw));
+        return names.Any(n => words.Contains(n) || whole.Contains(n));
+    }
+
+    /// <summary>T16 rule 5: the certain patch of a DELETE_HAS_CONSUMERS of a flow node, <c>reconnect:true</c>, when it cannot be
+    /// wrong: the target is a flow node with exactly one exit (Target), the op does not already reconnect, force or break, and
+    /// every use of the node or of anything inside it (each referer, none folded into another) is a connector of its own flow that
+    /// reaches it, which is what reconnect moves to its next node (review of e10ecacc, R3b: the condition of an If that loops back
+    /// to the node reads its output; that consumer is no connector). False otherwise: the author chooses.</summary>
+    internal bool ReconnectIsCertain(JsonObject delete)
+    {
+        if (delete["op"]?.ToString() != "delete" || delete["reconnect"] != null || delete["force"] != null || delete["breaks"] != null
+            || delete["target"]?.ToString() is not { Length: > 0 } target) return false;
+        object node;
+        try { node = Resolve(target); } catch { return false; }
+        if (node is not IFlowNode || node is not IObjectSignature signature || signature.Parent is not IObjectSignature flow) return false;
+        object? Get(PropertyInfo property, object owner) { try { return property.GetValue(owner); } catch { return null; } }
+        var exits = FlowTargets(node).Select(p => (p.Name, Value: Get(p, node))).Where(e => e.Value != null).ToArray();
+        if (exits.Length != 1 || exits[0].Name != "Target") return false;
+        // Every authored use of the node and of what is inside it, none folded into an outer one (DeleteConsumers keeps only the
+        // outermost, which hid an expression inside a node whose connector also reaches the target).
+        var uses = new List<ServiceStudio.Model.AbstractObject>();
+        var visiting = new HashSet<object>(ReferenceEqualityComparer.Instance);
+        foreach (var inner in new KernelModelReader().Walk(signature))
+        {
+            if (inner is not ServiceStudio.Model.AbstractObject ao || !ao.HasReferers) continue;
+            foreach (var r in ao.Referers)
+                if (r != null && !ReferenceEquals(r, signature) && !IsInside(r, signature))
+                    uses.AddRange(AuthoredUses(signature, r, PathOf(r), visiting).Select(u => u.Referer));
+        }
+        if (uses.Count == 0) return false;
+        // A connector of the flow whose own connector property, or that of the node holding it, reaches the deleted node.
+        bool Reaches(IObjectSignature o) => FlowTargets(o).Any(p => ReferenceEquals(Get(p, o), node));
+        foreach (var use in uses)
+        {
+            if (use is not IObjectSignature referer || !IsInside(referer, flow) || !Implements(referer, "IActionConnector") && !ShortType(referer).EndsWith("Connector", StringComparison.Ordinal))
+                return false;
+            if (!Reaches(referer) && !(referer.Parent is IObjectSignature holder && Reaches(holder))) return false;
+        }
+        return true;
+    }
 
     private static void RememberSourceEdits(JsonObject source, string opPointer, JsonArray edits, Dictionary<string, string> finalText)
     {

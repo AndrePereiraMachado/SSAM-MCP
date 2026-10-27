@@ -19,6 +19,15 @@
 
   <ItemGroup>
     <Reference Include="OutSystems.RuntimeCommon"><HintPath>$(SSDir)\OutSystems.RuntimeCommon.dll</HintPath><Private>false</Private></Reference>
+    <!-- The content-proof identity tests locate and change elements of a loaded module (MergeIdentityTests, MergeIdentitySweep): Model API types, bound at run time by StudioAssemblies. -->
+    <Reference Include="OutSystems.MetaModel"><HintPath>$(SSDir)\OutSystems.MetaModel.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="OutSystems.Model.V1"><HintPath>$(SSDir)\OutSystems.Model.V1.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="OutSystems.Model.Implementation"><HintPath>$(SSDir)\OutSystems.Model.Implementation.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="ServiceStudio.Framework"><HintPath>$(SSDir)\ServiceStudio.Framework.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="ServiceStudio.PluginAPI"><HintPath>$(SSDir)\ServiceStudio.PluginAPI.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="ServiceStudio.Common"><HintPath>$(SSDir)\ServiceStudio.Common.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="OutSystems.FrameworkExtensions"><HintPath>$(SSDir)\OutSystems.FrameworkExtensions.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="OutSystems.C5"><HintPath>$(SSDir)\OutSystems.C5.dll</HintPath><Private>false</Private></Reference>
     <!-- The Service Center bridge tests fake these Studio interfaces (ScOperations.cs). -->
     <Reference Include="OutSystems.Communication"><HintPath>$(SSDir)\OutSystems.Communication.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="OutSystems.Communication.Identity"><HintPath>$(SSDir)\OutSystems.Communication.Identity.dll</HintPath><Private>false</Private></Reference>
@@ -58,8 +67,15 @@
     <Compile Include="../../src/Anvil.Bridge/ScPrivateCookieExchange.cs" Link="Bridge/ScPrivateCookieExchange.cs" />
     <None Include="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
     <Compile Include="../Shared/ModelReadingTests.cs" Link="ModelReadingTests.cs" />
+    <Compile Include="../Shared/ReactiveClientRulesTests.cs" Link="ReactiveClientRulesTests.cs" />
+    <Compile Include="../Shared/ReactiveClientRulesReviewTests.cs" Link="ReactiveClientRulesReviewTests.cs" />
     <Compile Include="../Shared/PublicReferenceSurfaceTests.cs" Link="PublicReferenceSurfaceTests.cs" />
+    <Compile Include="../Shared/MergeIdentitySweep.cs" Link="MergeIdentitySweep.cs" />
+    <Compile Include="../Shared/ScreenHtmlRoundTripReport.cs" Link="ScreenHtmlRoundTripReport.cs" />
+    <Compile Include="../Shared/ScreenHtmlPropertyModelTests.cs" Link="ScreenHtmlPropertyModelTests.cs" />
+    <Compile Include="../Shared/GeneratedFlowCorpus.cs" Link="GeneratedFlowCorpus.cs" />
     <Compile Include="../Shared/PatchCertaintyTableTests.cs" Link="PatchCertaintyTableTests.cs" />
+    <Compile Include="../Shared/T16CreateCollisionSweepTests.cs" Link="T16CreateCollisionSweepTests.cs" />
     <Compile Include="../Shared/PatchCertaintyCorpusTests.cs" Link="PatchCertaintyCorpusTests.cs" />
     <Compile Include="../Shared/PatchCertaintyLiteralRevisionTests.cs" Link="PatchCertaintyLiteralRevisionTests.cs" />
     <Compile Include="../Shared/PatchCertaintyDeclaredNameTests.cs" Link="PatchCertaintyDeclaredNameTests.cs" />
@@ -70,8 +86,10 @@
     <Compile Include="../Shared/AutoPatchOptOutTests.cs" Link="AutoPatchOptOutTests.cs" />
     <Compile Include="../Shared/AutoPatchSourceRevisionTests.cs" Link="AutoPatchSourceRevisionTests.cs" />
     <Compile Include="../Shared/DataTableNativeCases.cs" Link="DataTableNativeCases.cs" />
+    <Compile Include="../Shared/PrototypeImportDisabledTests.cs" Link="PrototypeImportDisabledTests.cs" />
     <Compile Include="../Shared/ModuleIndexTests.cs" Link="ModuleIndexTests.cs" />
     <Compile Include="../Shared/ModuleDigestTests.cs" Link="ModuleDigestTests.cs" />
+    <Compile Include="../Shared/SecurityFidelityTests.cs" Link="SecurityFidelityTests.cs" />
     <Compile Include="../Shared/TextRoundTripTests.cs" Link="TextRoundTripTests.cs" />
     <Compile Include="../Shared/FlowEditTests.cs" Link="FlowEditTests.cs" />
     <Compile Include="../Shared/FlowTextNormalizeTests.cs" Link="FlowTextNormalizeTests.cs" />
@@ -81,13 +99,18 @@
     <Compile Include="../Shared/EntityActionsCorpusTests.cs" Link="EntityActionsCorpusTests.cs" />
     <Compile Include="../Shared/MergeBatteryCorpus.cs" Link="MergeBatteryCorpus.cs" />
     <Compile Include="../Shared/FlowApplyScenarios.cs" Link="FlowApplyScenarios.cs" />
+    <Compile Include="../Shared/FlowReadSelectiveScenarios.cs" Link="FlowReadSelectiveScenarios.cs" />
     <Compile Include="../Shared/ModuleRichIndexTests.cs" Link="ModuleRichIndexTests.cs" />
     <Compile Include="../Shared/ScreenHtmlTests.cs" Link="ScreenHtmlTests.cs" />
     <Compile Include="../Shared/ScreenHtmlCoverage.cs" Link="ScreenHtmlCoverage.cs" />
     <Compile Include="../Shared/ScreenHtmlEditTests.cs" Link="ScreenHtmlEditTests.cs" />
+    <Compile Include="../Shared/ScreenHtmlEditReviewTests.cs" Link="ScreenHtmlEditReviewTests.cs" />
     <Compile Include="../Shared/ScreenHtmlEditNamesTests.cs" Link="ScreenHtmlEditNamesTests.cs" />
     <Compile Include="../Shared/ScreenHtmlRebaseTests.cs" Link="ScreenHtmlRebaseTests.cs" />
+    <Compile Include="../Shared/HtmlCrossPlatformLifecycleTests.cs" Link="HtmlCrossPlatformLifecycleTests.cs" />
+    <Compile Include="../Shared/SwitchMergeIntegrityTests.cs" Link="SwitchMergeIntegrityTests.cs" />
     <Compile Include="../Shared/ScreenHtmlEditCorpus.cs" Link="ScreenHtmlEditCorpus.cs" />
+    <Compile Include="../Shared/StudioBornValuesKindsTests.cs" Link="StudioBornValuesKindsTests.cs" />
     <Compile Include="../Shared/ScreenHtmlFamilyCorpus.cs" Link="ScreenHtmlFamilyCorpus.cs" />
     <Compile Include="../Shared/ScreenRecreationCorpus.cs" Link="ScreenRecreationCorpus.cs" />
     <Compile Include="../Shared/ScreenGeneratorCorpus.cs" Link="ScreenGeneratorCorpus.cs" />
@@ -100,12 +123,17 @@
     <Compile Include="../Shared/AutomaticFlowLayoutTests.cs" Link="AutomaticFlowLayoutTests.cs" />
     <Compile Include="../Shared/DataContractIdentityScenarios.cs" Link="DataContractIdentityScenarios.cs" />
     <Compile Include="../Shared/QueryRulesScenarios.cs" Link="QueryRulesScenarios.cs" />
+    <Compile Include="../Shared/PagingRulesScenarios.cs" Link="PagingRulesScenarios.cs" />
+    <Compile Include="../Shared/PagingWiringScenarios.cs" Link="PagingWiringScenarios.cs" />
     <Compile Include="../Shared/RestConsumeScenarios.cs" Link="RestConsumeScenarios.cs" />
     <Compile Include="../Shared/RestConsumeAuthScenarios.cs" Link="RestConsumeAuthScenarios.cs" />
     <Compile Include="../Shared/FamiliasRevisaoScenarios.cs" Link="FamiliasRevisaoScenarios.cs" />
+    <Compile Include="../Shared/CompositionScenarios.cs" Link="CompositionScenarios.cs" />
   </ItemGroup>
   <ItemGroup>
     <Compile Include="../Shared/DdlStatementOrderTests.cs" Link="DdlStatementOrderTests.cs" />
+    <Compile Include="../Shared/DdlValuesTests.cs" Link="DdlValuesTests.cs" />
+    <Compile Include="../Shared/DdlValuesNativeTests.cs" Link="DdlValuesNativeTests.cs" />
   </ItemGroup>
   <ItemGroup>
     <Compile Include="../Shared/ActionNameCollisionTests.cs" Link="ActionNameCollisionTests.cs" />

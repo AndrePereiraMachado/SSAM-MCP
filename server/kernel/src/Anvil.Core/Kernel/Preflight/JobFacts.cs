@@ -49,7 +49,26 @@ public interface IBaseFacts
     /// <summary>motor2: the names of the data of a screen or block of the base (inputs, local variables, aggregates, data
     /// actions), by its logic owner (`IMobileScreen:Home`); null when the base does not have it.</summary>
     IReadOnlyCollection<string>? ScreenNames(string owner) => null;
+    /// <summary>T9: whether the element the target names runs in client-side code (a client action, a Reactive or Mobile screen
+    /// or block and what is in them), in server logic (false), or unknown (null).</summary>
+    bool? IsClientSide(string target) => null;
+    /// <summary>T9: the module's own CSS (themes, screens, blocks) and scripts (Scripts, JavaScript nodes), or null when the base
+    /// cannot read them (then no attribute is said unread).</summary>
+    IReadOnlyList<string>? StyleSheetsAndScripts => null;
+    /// <summary>R1: how an element of exactly this type (an element of the base that has it) answers a `set` of
+    /// <paramref name="prop"/>: whether it can write it, the apply's own refusal text and the writable names closest to it;
+    /// null when the base has no element of that type (unknown).</summary>
+    SettableFact? Settable(string type, string prop) => null;
+    /// <summary>R1: an element a reference op imports, as the producer the job binds has it (exists, Public, the names of its
+    /// kind there); null when the producer is not loaded here.</summary>
+    ProducerElementFact? ProducerElement(string producer, string element) => null;
 }
+
+/// <summary>An element of a producer as a reference op names it.</summary>
+public sealed record ProducerElementFact(bool Exists, bool Public, string? Why, IReadOnlyList<string> Names);
+
+/// <summary>A `set` of a property as an element of the base of that type answers it.</summary>
+public sealed record SettableFact(bool CanSet, string Refusal, IReadOnlyList<string> Writable, string? Alias);
 
 /// <summary>Where a raw expression lives: the aggregate (its name, sources, columns, client side), or no aggregate.</summary>
 public sealed record RawExpressionFact(string? Aggregate, IReadOnlyList<string> Sources, IReadOnlyList<string> Columns, bool Client);

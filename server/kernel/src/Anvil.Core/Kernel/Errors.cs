@@ -203,7 +203,9 @@ public static class ForwardRefs
     }
 
     /// <summary>Complemento da mensagem de erro do op `failedIndex`: onde o alvo e criado e os outros forward-refs do job.</summary>
-    public static string Explain(JsonArray ops, int failedIndex, string? failedName)
+    /// <param name="moved">F5: whether the kernel ran an op at another place than the job writes it (JobComposition): no advice
+    /// to move an op the kernel already placed.</param>
+    public static string Explain(JsonArray ops, int failedIndex, string? failedName, Func<int, bool>? moved = null)
     {
         var all = Find(ops);
         var mine = all.Where(f => f.UsedAt == failedIndex && (failedName == null || f.Reference.EndsWith(":" + failedName, StringComparison.OrdinalIgnoreCase) || f.Reference == "$" + failedName)).ToList();
@@ -211,7 +213,9 @@ public static class ForwardRefs
         if (mine.Count == 0 && others.Count == 0) return "";
         var parts = new List<string>();
         foreach (var f in mine)
-            parts.Add($"{f.Reference} does not exist yet at this point of the job: it is created at op #{f.CreatedAt} ({f.CreatedAs}). Create it before op #{failedIndex}, or move op #{failedIndex} after op #{f.CreatedAt}");
+            parts.Add(moved != null && (moved(failedIndex) || moved(f.CreatedAt))
+                ? $"{f.Reference} does not exist yet when op #{failedIndex} runs: it is created at op #{f.CreatedAt} ({f.CreatedAs}), which the kernel could not run first"
+                : $"{f.Reference} does not exist yet at this point of the job: it is created at op #{f.CreatedAt} ({f.CreatedAs}), and a raw op keeps its place in the job. Create it before op #{failedIndex}, or move op #{failedIndex} after op #{f.CreatedAt}");
         if (others.Count > 0)
             parts.Add("Also out of order: " + string.Join("; ", others.Select(f => $"{f.Reference} (created at op #{f.CreatedAt}, used at op #{f.UsedAt})")));
         return " | " + string.Join(". ", parts);

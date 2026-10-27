@@ -1,7 +1,8 @@
 # Aquisição de dependências ODC por assinatura pública
 
-Estado: implementação candidata, não ativada. A prova headless usa uma biblioteca sintética;
-a captura autenticada de OutSystemsUI e o merge num consumidor de laboratório ainda precisam de prova viva.
+Estado histórico da aquisição inicial abaixo. Em 22/10/2026 o leitor da assinatura pública passou a incluir
+Service Actions (`ReferenceServiceAPIMethod`); a captura usa o mesmo leitor compilado na bridge ODC, então só uma
+bridge construída a partir desta mudança as exporta. Essa mudança não publica nem faz merge no aplicativo vivo.
 
 ## Problema e caminho público
 
@@ -54,12 +55,20 @@ essa forma, e o importador O11 (`ReferenceRefresher.ImportSnapshot`) a recusa.
 - Seleção validada contra o conteúdo nativo da assinatura, além do envelope; importação repetida não duplica objetos.
 - O método nativo não recebe SignatureHash em SignatureInformation. Depois de importar e conferir os elementos,
   o adaptador conserva no ReferenceHash a identidade recebida do servidor, dentro da mesma transação descartável.
-- Parser de assinatura pública contempla blocos, structures, client/server actions e entities. A prova nativa desta
-  mudança cobre bloco, structure transitiva e client action. Não alegar prova de todos os tipos ou produtores.
+- Parser de assinatura pública contempla blocos, structures, client/server/service actions e entities.
+  Service Actions usam `ReferenceServiceAPIMethod` / `service-action`, selecionáveis por `ServiceAction`,
+  `IServiceAction` ou `IServiceActionSignature`; não são convertidas em Server Actions.
+  External Libraries continuam limitadas a server actions e structures. A prova inicial cobre bloco,
+  structure transitiva e client action; a de 22/10 (`OdcServiceActionReferenceTests`) cobre importação e chamada
+  de Service Action com estrutura de entrada/saída, recarga, repetição sem duplicação e rejeição de
+  identidade/revisão adulteradas.
 - Aquisição automática limitada a produtores nomeados nas ops do job raiz; jobs compostos e fontes `job:`
   continuam com sua resolução anterior. O CLI do kernel também aceita `--producer Nome=<arquivo.avsig>`.
 - Dependências que exigirem assinaturas adicionais de outros produtores não têm captura recursiva implementada.
-  Se o importador nativo recusar, preserve a recusa; não invente objetos nem silencie o Verify.
+  Importe primeiro as assinaturas dos donos dos tipos no mesmo candidato: o callback nativo reutiliza esses
+  bytes ao importar a action dependente, com guard de ambiente e revisão. A captura recursiva na rede
+  continua não implementada. Se faltar uma assinatura e o importador recusar, preserve a recusa;
+  não invente objetos nem silencie o Verify.
 - O tradutor HTML/CSS/JS e o fluxo controlado de spec não ganharam aquisição automática nesta mudança.
 - Bridge e cliente novos: `v31` (a prova candidata de 25/09 rodou com o nome `v31Dependencies`; na integração
   o protocolo virou `v31` porque o attach e o runtime assinado exigem versões `v<número>`), sem substituir DLL

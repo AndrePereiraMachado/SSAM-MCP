@@ -1,0 +1,14 @@
+[
+  {
+    "op": "create",
+    "parent": "@espace",
+    "type": "IRole",
+    "name": "PortOperator"
+  },
+  {
+    "op": "create",
+    "parent": "@espace",
+    "type": "IUserException",
+    "name": "PortRuleViolation"
+  }
+]

@@ -199,6 +199,23 @@ public class StaticChecksTests
         Assert.Equal("onclick=\"Save\"", problem["edit"]!["with"]!.ToString());
     }
 
+    // Meta de 20/10/2026, item 12 (live on SSAM_DumpProbe): without the module index, a navigate destination that names a
+    // screen the digest lists is known, and one the digest lacks is a warning (nothing judged the module), never an error.
+    [Fact]
+    public void WithoutTheIndexTheScreensOfTheDigestAreKnownAndAnAbsentNameIsAWarning()
+    {
+        var digest = new JsonObject { ["sections"] = new JsonArray(new JsonObject { ["id"] = "ui", ["blocks"] = new JsonArray(
+            new JsonObject { ["kind"] = "WebScreen", ["name"] = "Catalog" }, new JsonObject { ["kind"] = "WebBlock", ["name"] = "Card" }) }) };
+        var basis = new StaticBasis { Lane = "o11", Module = null, Fresh = false, Digest = digest };
+        var known = Run(basis, Ops(Html("<screen name=\"Edit\"><a onclick=\"Catalog\" os-onclick.Method=\"Navigate\">Back</a></screen>")));
+        Assert.Empty(known.Problems.Where(p => p["code"]!.ToString() == ScreenHtmlEdit.NameUnknown));
+        var absent = Run(basis, Ops(Html("<screen name=\"Edit\"><a onclick=\"Catalogg\" os-onclick.Method=\"Navigate\">Back</a></screen>")));
+        Assert.Empty(absent.Problems.Where(p => p["code"]!.ToString() == ScreenHtmlEdit.NameUnknown));
+        var problem = Assert.Single(absent.Warnings.Where(p => p["code"]!.ToString() == ScreenHtmlEdit.NameUnknown));
+        Assert.Equal("warning", problem["severity"]!.ToString());
+        Assert.Contains("Catalog", problem["candidates"]!.AsArray().Select(c => c!.ToString()));
+    }
+
     // ---- S6, S7 -------------------------------------------------------------------------------------------------------------
     [Fact]
     public void RolesComeFromTheModuleTheJobOrTheReferenceAndANewScreenNeedsANewName()
@@ -305,6 +322,35 @@ public class StaticChecksTests
         var theme = Index("App_Theme", root => root.Add(new("tf", "MobileFlow", "Common")).Add(new("tf.card", "MobileBlock", "TrailCard")));
         var withProducer = new StaticBasis { Lane = "o11", Module = Imports(), Fresh = true, Producers = [new ProducerBasis("App_Theme", "t.json", null, theme, null)] };
         Assert.Empty(Errors(Run(withProducer, Ops(Html("<screen name=\"Home\"><Block name=\"TrailCard\"/></screen>"))), ScreenHtmlEdit.NameUnknown));
+    }
+
+    // The live refusal of 20/10 (SSAM_DumpProbe): an element edit that inserted a block beside an untouched RangeSlider was
+    // refused for 'SelectedValue' in the RangeSlider's @OnChange (a parameter of the producer's event the index does not hold).
+    // The elements an edit does not write are the Studio's own text: never judged. The element the edit writes, and a new
+    // element, are.
+    [Fact]
+    public void ElementEditsJudgeOnlyTheElementsTheyWrite()
+    {
+        var folder = Path.Combine(Path.GetTempPath(), "ssam-static-" + Guid.NewGuid().ToString("N"));
+        try {
+            var store = new ModuleIndexStore(Path.Combine(folder, "store"), "o11", "kernel");
+            const string reading = "<screen name=\"Login\" actions=\"DoLogin\">\n<var k=\"w1\" name=\"Username\" type=\"Text\"/>\n<div k=\"w2\" id=\"Top\">\n <input k=\"w3\" bind=\"Username\" onchange=\"DoLogin(Value = SelectedValue)\"/>\n</div>\n<div k=\"w4\" id=\"Bottom\"/>\n</screen>\n";
+            var capture = new string('c', 64); var html = new string('d', 64);
+            var file = store.HtmlKeysPathOf(capture, html);
+            Directory.CreateDirectory(Path.GetDirectoryName(file)!);
+            File.WriteAllText(file, new JsonObject { ["schema"] = ScreenHtml.Schema, ["extractor"] = ScreenHtml.Extractor, ["lane"] = "o11", ["sourceSha256"] = capture, ["htmlSha256"] = html,
+                ["root"] = "Login", ["keys"] = new JsonObject { ["w1"] = "K1", ["w2"] = "K2", ["w3"] = "K3", ["w4"] = "K4" }, ["html"] = reading }.ToJsonString());
+            using var _ = ModuleIndexStore.Use(store);
+            string Edits(params string[] edits) => new JsonObject { ["op"] = "html", ["data"] = new JsonObject { ["screen"] = "Login",
+                ["basedOn"] = new JsonObject { ["capture"] = capture, ["html"] = html }, ["edits"] = new JsonArray(edits.Select(e => JsonNode.Parse(e)).ToArray()) } }.ToJsonString();
+            static bool Names(JsonObject p) => p["message"]!.ToString().Contains("'SelectedValue'", StringComparison.Ordinal);
+            var beside = Run(Basis(), Ops(Edits("""{"after":"w4","insert":"<div class=\"note\"/>"}""")));
+            Assert.DoesNotContain(Errors(beside, ScreenHtmlEdit.NameUnknown), Names);
+            var written = Run(Basis(), Ops(Edits("""{"set":"w3","attributes":{"class":"wide"}}""")));
+            Assert.Contains(Errors(written, ScreenHtmlEdit.NameUnknown), Names);
+            var created = Run(Basis(), Ops(Edits("""{"into":"w4","insert":"<input bind=\"Username\" onchange=\"DoLogin(Value = SelectedValue)\"/>"}""")));
+            Assert.Contains(Errors(created, ScreenHtmlEdit.NameUnknown), Names);
+        } finally { try { Directory.Delete(folder, true); } catch { /* a temporary folder */ } }
     }
 
     // A2: the whole document with screen and basedOn is the edit of that screen (ScreenHtmlEdit.IsEdit, the rule of the apply),

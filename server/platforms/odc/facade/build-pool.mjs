@@ -19,6 +19,10 @@
 // - A build inside the apply phase (the call already holds its Studio: a rebase) never queues: it runs at once in a
 //   private folder of its own, so a Studio is never held waiting behind other customers' builds.
 // - A slot folder that cannot be written keeps the pool in this process only (the Map below), never a refusal.
+// - Affinity (S9). The worker of a slot keeps the spare of the last models it applied to (R3, BaseModelCache, by the model
+//   hash). This process remembers which worker port last built or checked each model (rememberSlotModel); a build of that
+//   model tries the slot of that port first (run {prefer}). Only a free slot is preferred: affinity never makes a build
+//   wait, and fairness decides the turn as before.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -95,9 +99,10 @@ export function createBuildPool({ dir, size = buildWorkers(), queueMs = buildQue
     const started = Date.parse(r.startedAt);
     return Number.isFinite(started) ? now() - started > staleMs : Date.now() - lock.mtimeMs > staleMs;
   };
-  // Takes a free slot for customer: its index, or -1.
-  const takeSlot = customer => {
-    for (let i = 0; i < size; i++) {
+  // Takes a free slot for customer: its index, or -1. prefer: the slots to try first (affinity), never a wait of its own.
+  const takeSlot = (customer, prefer = []) => {
+    const order = [...new Set([...prefer.filter(i => Number.isInteger(i) && i >= 0 && i < size), ...Array.from({ length: size }, (_, i) => i)])];
+    for (const i of order) {
       if (held.has(i)) continue;
       const token = randomUUID();
       const record = { schema: SLOT_SCHEMA, pid: process.pid, startedAt: new Date(now()).toISOString(), customer: tagOf(customer), token };
@@ -128,11 +133,11 @@ export function createBuildPool({ dir, size = buildWorkers(), queueMs = buildQue
   // The waiter whose turn it is: fewest running, then least recently served, then arrival.
   const nextWaiter = () => waiting.slice().sort((a, b) => running(a.customer) - running(b.customer)
     || (served.get(a.customer) ?? -Infinity) - (served.get(b.customer) ?? -Infinity) || a.arrived - b.arrived)[0] ?? null;
-  async function run({ customer = 'local', signal, onQueued } = {}, fn) {
+  async function run({ customer = 'local', signal, onQueued, prefer = [] } = {}, fn) {
     const key = String(customer);
     const me = { customer: key, arrived: ++arrivals };
     const started = Date.now();
-    let index = waiting.length ? -1 : takeSlot(key);
+    let index = waiting.length ? -1 : takeSlot(key, prefer);
     let queue = null;
     if (index < 0) {
       waiting.push(me);
@@ -142,7 +147,7 @@ export function createBuildPool({ dir, size = buildWorkers(), queueMs = buildQue
         for (;;) {
           if (signal?.aborted) throw new BuildQueueRefused({ ok: false, code: CANCELLED_CODE, outcome: 'not-sent', error: 'The call was cancelled while it waited for a build worker; nothing ran.',
             position, waitedMs: Date.now() - started });
-          if (nextWaiter() === me) { index = takeSlot(key); if (index >= 0) break; }
+          if (nextWaiter() === me) { index = takeSlot(key, prefer); if (index >= 0) break; }
           const left = started + queueMs - Date.now();
           if (left <= 0) throw new BuildQueueRefused(buildQueueRefusal({ position, waitedMs: Date.now() - started, queueMs, size }));
           await new Promise(resolve => {
@@ -172,6 +177,23 @@ export function slotWorkerPort(base, index, { workspace } = {}) {
   return Number.isInteger(index) && index > 0 ? base + index * step : base;
 }
 
+// Affinity: model hash -> the worker port that last held it (newest first, a bounded memory of this process).
+const AFFINITY_ENTRIES = 64;
+const affinity = new Map();
+export function rememberSlotModel(model, { port } = {}) {
+  if (typeof model !== 'string' || !/^[a-f0-9]{64}$/i.test(model) || !Number.isInteger(Number(port))) return;
+  const key = model.toLowerCase();
+  affinity.delete(key); affinity.set(key, Number(port));
+  while (affinity.size > AFFINITY_ENTRIES) affinity.delete(affinity.keys().next().value);
+}
+export const slotModelPort = model => (typeof model === 'string' ? affinity.get(model.toLowerCase()) ?? null : null);
+// The slots whose worker port held the model (portOf(i): the port of slot i), for run {prefer}.
+export function preferredSlots(model, size, portOf) {
+  const port = slotModelPort(model);
+  if (port == null) return [];
+  return Array.from({ length: size }, (_, i) => i).filter(i => portOf(i) === port);
+}
+
 // One pool per folder and size in this process (every MCP server of the process shares it).
 const pools = new Map();
 export function sharedBuildPool({ root, env = process.env, dir } = {}) {
@@ -184,7 +206,7 @@ export function sharedBuildPool({ root, env = process.env, dir } = {}) {
 
 // A build of the current call: in the pool during the build phase (the wait goes to the call's phases), at once in a
 // private folder when the call already holds its Studio (a rebase inside the apply). fn(slot) -> value.
-export async function pooledBuild({ pool, customer, signal, privateDir } = {}, fn) {
+export async function pooledBuild({ pool, customer, signal, privateDir, prefer = [] } = {}, fn) {
   const phase = phaseOfCall();
   if (!pool || phase?.promoted) {
     const tmp = path.join(privateDir ?? pool?.dir ?? os.tmpdir(), 'apply-' + process.pid + '-' + randomUUID().slice(0, 8));
@@ -193,7 +215,7 @@ export async function pooledBuild({ pool, customer, signal, privateDir } = {}, f
     finally { try { fs.rmSync(tmp, { recursive: true, force: true }); } catch { /* best effort */ } }
   }
   const started = Date.now();
-  return pool.run({ customer, signal, onQueued: queue => notePhase({ buildQueue: queue }) }, async slot => {
+  return pool.run({ customer, signal, prefer, onQueued: queue => notePhase({ buildQueue: queue }) }, async slot => {
     notePhase({ poolWaitMs: Date.now() - started });
     return fn(slot);
   });

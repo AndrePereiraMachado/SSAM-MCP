@@ -1,6 +1,7 @@
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.RegularExpressions;
+using Anvil.Reading;
 namespace Anvil.Core;
 
 /// <summary>
@@ -220,7 +221,7 @@ public static class ElementWidgetMap
                 var key = attribute.ToLowerInvariant();
                 if (key is "id" or "class" || IsInlineScript(key) || LanguageAttributes.Contains(key)) continue;
                 if (key == "style") { if (value.Trim().Length > 0) properties.Add(("CustomStyle", value.Trim())); continue; }
-                extended.Add((key, Quote(value)));
+                extended.Add((key, Bound(value)));
             }
             if (classes.Count > 0) properties.Insert(0, ("Style", Quote(string.Join(" ", classes))));
             return new ElementMapping(language, null, languageName, properties, extended, classes, null, null);
@@ -292,7 +293,7 @@ public static class ElementWidgetMap
         if (widget == "IImage" && substituted == null)
         {
             var src = Attr("src").Trim();
-            if (Regex.IsMatch(src, @"^(?:https?:)?//|^data:", RegexOptions.IgnoreCase)) { properties.Add(("Type", "External")); properties.Add(("Url", Quote(src))); }
+            if (Regex.IsMatch(src, @"^(?:https?:)?//|^data:", RegexOptions.IgnoreCase)) { properties.Add(("Type", "External")); properties.Add(("Url", Bound(src))); }
             else properties.Add(("Type", "Static"));
         }
 
@@ -305,10 +306,10 @@ public static class ElementWidgetMap
             switch (Consumer(widget, widgetTag ?? tag, key, value))
             {
                 case "Enabled": properties.Add(("Enabled", "False")); continue;
-                case "Prompt": properties.Add(("Prompt", Quote(value))); continue;
+                case "Prompt": properties.Add(("Prompt", Bound(value))); continue;
                 case "MaxLength": if (int.TryParse(value, out _)) { properties.Add(("MaxLength", value)); continue; } break;
                 case "Mandatory": properties.Add(("Mandatory", "True")); continue;
-                case "DefaultValue": properties.Add(("DefaultValue", key is "checked" or "selected" ? "True" : Quote(value))); continue;
+                case "DefaultValue": properties.Add(("DefaultValue", key is "checked" or "selected" ? "True" : Bound(value))); continue;
                 case "InputType": continue; // the widget itself (IInput type, IsDefault of a submit button)
                 case "OnClick": continue;   // a route: the builder writes the destination
                 case "TargetWidget": properties.Add(("TargetWidget", value)); continue;
@@ -316,8 +317,9 @@ public static class ElementWidgetMap
                 case "RadioGroup": properties.Add(("RadioGroup", value)); continue;
                 case "Style": continue;
             }
-            // The extended property keeps the literal value; a value attribute of a substituted data keeps it too.
-            extended.Add((key, Quote(value)));
+            // The extended property keeps the literal value; a value attribute of a substituted data keeps it too; a value with
+            // bindings is their expression (T1, BindingText).
+            extended.Add((key, Bound(value)));
         }
         if (classes.Count > 0)
         {
@@ -334,4 +336,9 @@ public static class ElementWidgetMap
         => Map(new ElementRequest(platform, node.Tag, node.Attributes.Select(a => (a.Key, a.Value)).ToArray(), clickable, false, insideForm, node.Elements.Any()));
 
     private static string Quote(string value) => "\"" + value.Replace("\"", "\"\"") + "\"";
+
+    // T1: an attribute value of an expression property, by the one compile of a text with bindings (BindingText.Expression): {{ E }}
+    // is E, text with bindings their concatenation, a value without a binding its string literal. A malformed binding keeps its
+    // literal here; the html op that writes it refuses it (HTML_BINDING_INVALID), and LITERAL_BINDING_REMNANT after the apply.
+    private static string Bound(string value) => BindingText.Expression(value, out _) ?? Quote(value);
 }

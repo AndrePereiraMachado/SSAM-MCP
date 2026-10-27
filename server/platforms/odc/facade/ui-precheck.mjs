@@ -43,10 +43,12 @@
 // reference lines) names; without the digest, none. The kernel says which versions match.
 // The answer goes the way of every refusal (job-runner, o11-cycle withJob, the relay's reply, answer-size fitProblems);
 // nothing here cuts it.
+import { appendJsonLine } from './correlation.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { hostedContext } from './executor.mjs';
+import { STORE_GENERATION } from './store-generation.mjs';
 
 export const PRECHECK_CODE = 'PREFLIGHT_REFUSED';
 // The values of SSAM_UI_PRECHECK that turn the precheck off (CX16 r4: on by default again, check-job outside the worker queue).
@@ -129,7 +131,7 @@ export function moduleOfCapture(file) {
 
 // The index of a capture in the store: <sha>.<adapter>.json of module-map.mjs, and on ODC also <sha>.kernel.json.
 function storedIndex(map, lane, sha, env) {
-  const files = [map.indexFile(lane, sha, env), ...(lane === 'odc' ? [path.join(map.indexRoot(env), 'v1', 'odc', sha.toLowerCase() + '.kernel.json')] : [])];
+  const files = [map.indexFile(lane, sha, env), ...(lane === 'odc' ? [path.join(map.indexRoot(env), STORE_GENERATION, 'odc', sha.toLowerCase() + '.kernel.json')] : [])];
   return files.find(isFile) ?? null;
 }
 // The runner of check-job: the lane's (in a phased call the cycle's runner never takes the Studio for check-job).
@@ -254,7 +256,7 @@ function journalTo(local, entry) {
   try {
     const dir = path.join(local, 'journal');
     fs.mkdirSync(dir, { recursive: true });
-    fs.appendFileSync(path.join(dir, 'ui-precheck.jsonl'), JSON.stringify({ at: new Date().toISOString(), ...entry }) + '\n');
+    appendJsonLine(path.join(dir, 'ui-precheck.jsonl'), { at: new Date().toISOString(), ...entry });
   } catch { /* the journal never changes the answer */ }
 }
 const codesOf = list => { const counts = new Map(); for (const p of list) { const c = String(p?.code ?? 'unknown'); counts.set(c, (counts.get(c) ?? 0) + 1); } return [...counts].map(([c, n]) => c + ' ' + n).slice(0, 10); };

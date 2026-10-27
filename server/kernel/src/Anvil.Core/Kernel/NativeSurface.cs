@@ -13,11 +13,15 @@ namespace Anvil.Core;
 /// </summary>
 public static class NativeSurface
 {
-    public static JsonObject Describe(string typeName)
+    public static JsonObject Describe(string typeName) => Describe(typeName, ModelApiMetadata.Types);
+
+    /// <summary>The same answer with the candidates looked up by <paramref name="types"/> (NativeProbe: the assemblies of a
+    /// fresh process).</summary>
+    internal static JsonObject Describe(string typeName, Func<string, Type[]> types)
     {
         var runtime = StudioAdapter.Runtime;
         var wanted = typeName.Contains('.') ? typeName : (typeName.StartsWith('I') ? typeName : "I" + typeName);
-        var candidates = ModelApiMetadata.Types(wanted);
+        var candidates = types(wanted);
         var list = new JsonArray();
         foreach (var t in candidates.OrderBy(t => t.FullName, StringComparer.Ordinal)) list.Add(DescribeType(t));
         return new JsonObject

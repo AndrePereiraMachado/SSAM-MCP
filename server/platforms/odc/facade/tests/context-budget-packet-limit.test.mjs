@@ -11,6 +11,7 @@ import { createSsamServer } from '../ssam.mjs';
 import { INDEX_SCHEMA, identityKey, query } from '../discovery.mjs';
 import { discoverAll } from '../tool-routing.mjs';
 import { capabilitiesSection } from '../work-packet.mjs';
+import { PACKET_DEFAULT_BYTES } from '../context-budget.mjs';
 
 function restored(value,missing){
   let out=structuredClone(value);
@@ -50,7 +51,8 @@ function fixture(t, lane, count) {
 test('A6 packet recover and budget continuation preserve limit with app and nine or ten real matches',async t=>{
   for (const lane of ['o11','odc']) for(const count of [9,10]) {
     const {sources,digest,index}=fixture(t,lane,count);
-    const args={lane,intent:'widget',app:'Fixture.oml',packet:true,limit:12};
+    // An explicit 8 KB budget (below the default, PACKET_DEFAULT_BYTES) keeps the capabilities cut whose recovery is checked.
+    const args={lane,intent:'widget',app:'Fixture.oml',packet:true,limit:12,budgetBytes:8192};
     assert.equal(query(index,args).matches.filter(m=>m.via==='match').length,count);
     const engine=arguments_=>discoverAll({...arguments_,sources,digest,textRoutes:false,producerCache:null});
     const server=await createSsamServer({deps:{odcFacade:async()=>{
@@ -65,7 +67,8 @@ test('A6 packet recover and budget continuation preserve limit with app and nine
     const run=async arguments_=>{const response=await client.callTool({name:'ssam_discover',arguments:arguments_});return response.structuredContent??JSON.parse(response.content[0].text);};
     const packet=await run(args);
     assert.equal(packet.ok,true,JSON.stringify(packet));
-    const cuts=packet.cuts.filter(c=>c.section==='capabilities');
+    // R4: with an app the packet carries the scope and one combined cut (paths from the packet root).
+    const cuts=packet.cuts.filter(c=>c.section==='capabilities'||c.sections?.capabilities);
     assert.ok(cuts.length,'fixture must cut capabilities');
     const missing=[];
     for(const cut of cuts){
@@ -73,7 +76,7 @@ test('A6 packet recover and budget continuation preserve limit with app and nine
       assert.equal(cut.recover.arguments.app,args.app);
       const part=await run(cut.recover.arguments);
       assert.equal(part.ok,true,JSON.stringify(part));
-      missing.push(...part.missing);
+      missing.push(...part.missing.filter(c=>c.path.startsWith('/capabilities')).map(c=>({...c,path:c.path.slice('/capabilities'.length)})));
       assert.deepEqual(part,await run({...cut.recover.arguments,...args,expand:cut.recover.arguments.expand,budgetBytes:cut.recover.arguments.budgetBytes}));
       assert.equal((await run({...cut.recover.arguments,limit:8})).code,'PACKET_SOURCE_CHANGED','control: changing limit really changes the nine/ten-match section');
     }
@@ -90,5 +93,10 @@ test('A6 packet recover and budget continuation preserve limit with app and nine
     assert.deepEqual(retried,await run({...small.continuation.arguments,limit:12}));
     const complete=await run({...small.continuation.arguments,budgetBytes:28672});
     assert.equal(complete.capabilities.matched,count);
+    // Without budgetBytes the packet is served at the default, with the same limit.
+    const {budgetBytes:_explicit,...asked}=args;
+    const atDefault=await run(asked);
+    assert.equal(atDefault.ok,true); assert.equal(atDefault.size.budgetBytes,PACKET_DEFAULT_BYTES);
+    for(const cut of atDefault.cuts){assert.equal(cut.recover.arguments.limit,12);assert.equal(cut.recover.arguments.app,args.app);}
   }
 });

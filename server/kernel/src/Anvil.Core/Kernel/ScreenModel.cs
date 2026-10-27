@@ -12,6 +12,8 @@ public sealed partial class ModelSession
         // named record. Its public AttributeType is the actual selected entity (also used by Verify).
         if(property=="SourceEntity" && Implements(owner,"IComboBoxWidget"))
         {
+            if (owner.GetType().GetProperty("SourceAttributeRecord")?.GetValue(owner) is { } record)
+                return record is OutSystems.Model.Data.IServerEntitySignature ? record : null;
             var field=owner.GetType().GetProperty("SourceAttributeParent")?.GetValue(owner);
             return field?.GetType().GetProperty("AttributeType")?.GetValue(field);
         }

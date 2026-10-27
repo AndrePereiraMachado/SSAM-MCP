@@ -218,9 +218,10 @@ public sealed partial class ModelSession
     }
 
     /// <summary>The refusal of an apply with failures. One failure keeps its own exception when it is coded (its code and
-    /// problems, e.g. DELETE_HAS_CONSUMERS, with phase "apply" added); otherwise, and with several, PREFLIGHT_REFUSED with
-    /// every problem. The message keeps each failure's own text (`op #i (verb name): ...`), the first failure is the inner
-    /// exception (the error text keeps the type of its root).</summary>
+    /// problems, e.g. DELETE_HAS_CONSUMERS, with phase "apply" added), and keeps its code in the single refusal when other
+    /// phases add problems to it (JobRunner.Diagnosis); otherwise, and with several, PREFLIGHT_REFUSED with every problem.
+    /// The message keeps each failure's own text (`op #i (verb name): ...`), the first failure is the inner exception (the
+    /// error text keeps the type of its root).</summary>
     private static Exception ApplyRefusal(List<ApplyFailure> failures, List<(int Op, int Because, string Uses)> skipped, string? opsPointer)
     {
         var problems = new List<JsonObject>();

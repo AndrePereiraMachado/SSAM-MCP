@@ -42,6 +42,39 @@ public sealed class FlowEditTests
         Assert.Equal(read.Item.Canon(), diff.Expected.Canon());
     }
 
+    // Two cases of a Switch trade their targets: the changed connectors are disconnected first, and after every case is
+    // linked the conditions are moved back to the text's order (the priority of the cases); a value change moves nothing.
+    [Fact]
+    public void ReconnectingSwitchCasesRestoresDeclaredPriorityAfterLinks()
+    {
+        var text = "server action Choose\n  in Value: Integer\n  out Result: Integer\n  switch: @choose\n    case Value>0:\n      assign Result = 1 @first\n      end @end1\n    case Value>10:\n      assign Result = 2 @second\n      end @end2\n    otherwise:\n      assign Result = 3 @third\n      end @end3\n";
+        var baseline = ModuleFlow.Read(text);
+        baseline.Key = "ChooseKey";
+        var cases = baseline.Items.Single(i => i.Kind == "SwitchNode").Items.Where(i => i.Role == "case").ToArray();
+        cases[0].Key = "Condition1"; cases[1].Key = "Condition2";
+        var read = ModuleFlow.Print(baseline);
+        var edited = read.Text.Replace("assign Result = 1", "assign Result = 9");
+        var valuesOnly = FlowDiff.Compute(baseline, read.Keys, ModuleFlow.Read(edited), read.Text);
+        Assert.Empty(valuesOnly.Problems);
+        Assert.DoesNotContain(valuesOnly.Ops, o => o["op"]?.ToString() == "move");
+        var a = read.Text.Split('\n').Single(l => l.Contains("assign Result = 1"));
+        var b = read.Text.Split('\n').Single(l => l.Contains("assign Result = 2"));
+        edited = read.Text.Replace(a, "__branch__").Replace(b, a).Replace("__branch__", b);
+        var diff = FlowDiff.Compute(baseline, read.Keys, ModuleFlow.Read(edited), read.Text);
+        Assert.Empty(diff.Problems);
+        var unset = diff.Ops.Where(o => o["op"]?.ToString() == "set" && o["prop"]?.ToString() == "Target" && o["value"] == null).Select(o => o["target"]!.ToString()).ToArray();
+        Assert.Equal(["@Condition1", "@Condition2"], unset);
+        var moves = diff.Ops.Where(o => o["op"]?.ToString() == "move").ToArray();
+        Assert.Equal(2, moves.Length);
+        Assert.Equal("@Condition1", moves[0]["target"]!.ToString());
+        Assert.True(moves[0]["first"]!.GetValue<bool>());
+        Assert.Equal("@Condition2", moves[1]["target"]!.ToString());
+        Assert.Equal("@Condition1", moves[1]["after"]!.ToString());
+        var lastCaseLink = diff.Ops.FindLastIndex(o => o["op"]?.ToString() == "link" && o["from"]?.ToString() is "@Condition1" or "@Condition2");
+        Assert.True(diff.Ops.IndexOf(moves[0]) > lastCaseLink);
+        Assert.True(diff.Ops.FindIndex(o => o["op"]?.ToString() == "set" && o["value"] == null) < diff.Ops.FindIndex(o => o["op"]?.ToString() == "link"));
+    }
+
     [Fact]
     public void AnExpressionIsOneSetOfThatValue()
     {

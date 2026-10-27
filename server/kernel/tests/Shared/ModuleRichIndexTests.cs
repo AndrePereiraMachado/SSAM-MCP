@@ -172,7 +172,7 @@ public sealed class ModuleRichIndexTests
                 first = cache.Read(Ensure());
                 Assert.True(first["rich"]!["built"]!.GetValue<bool>()); Assert.Equal(1, loads);
                 Assert.Equal(store.RichPathOf(sha), first["rich"]!["path"]!.ToString());
-                Assert.EndsWith(".kernel.rich.json", store.RichPathOf(sha)); Assert.Contains(Path.Combine("v1", "o11", sha.ToLowerInvariant() + "."), store.RichPathOf(sha));
+                Assert.EndsWith(".kernel.rich.json", store.RichPathOf(sha)); Assert.Contains(Path.Combine(ModuleIndexStore.Generation, "o11", sha.ToLowerInvariant() + "."), store.RichPathOf(sha));
                 Assert.True(first["rich"]!["bytes"]!.GetValue<long>() > 0);
                 Assert.Equal(15, first["rich"]!["counts"]!["elements"]!.GetValue<int>());
                 Assert.True(first["timings"]!["richMs"]!.GetValue<double>() >= 0);

@@ -5,8 +5,9 @@ using Xunit;
 namespace Anvil.Tests;
 
 /// <summary>The worker's base cache without a Studio: a fake model per load, real files for the key. What must hold is
-/// what makes a spare safe to hand out (take-once, never returned, any change of bytes/time/runtime misses) and what
-/// keeps it bounded (entries, bytes, idle expiry, memory, cancellation).</summary>
+/// what makes a spare safe to hand out (take-once, never returned, any change of the model or the runtime misses; R3: the
+/// same model in another file or with another time is the same module) and what keeps it bounded (entries, bytes, idle
+/// expiry, memory, cancellation).</summary>
 public sealed class BaseModelCacheTests : IDisposable
 {
     private sealed class Model
@@ -89,15 +90,16 @@ public sealed class BaseModelCacheTests : IDisposable
     }
 
     [Fact]
-    public void AnMtimeOnlyChangeMisses()
+    public void AnMtimeOnlyChangeIsTheSameModel()
     {
+        // R3: the key is the model read from the bytes, never the file's stamps.
         var cache = Cache(); var a = Base("a");
         Take(cache, a); cache.Idle(CancellationToken.None);
         File.SetLastWriteTimeUtc(a, File.GetLastWriteTimeUtc(a).AddMinutes(1));
         var taken = Take(cache, a);
-        Assert.Null(taken.Model);
-        Assert.Equal("changed", taken.Receipt["evicted"]!.GetValue<string>());
-        Assert.Single(released);
+        Assert.NotNull(taken.Model);
+        Assert.True(taken.Receipt["hit"]!.GetValue<bool>());
+        Assert.Empty(released);
     }
 
     [Fact]
@@ -113,7 +115,7 @@ public sealed class BaseModelCacheTests : IDisposable
     [Fact]
     public void TheLeastRecentlyUsedBaseGoesBeyondTheEntryLimit()
     {
-        var cache = Cache(); var a = Base("a", fill: 1); var b = Base("b", fill: 2); var c = Base("c", fill: 3);
+        var cache = Cache(BaseCacheOptions.Default with { Entries = 2 }); var a = Base("a", fill: 1); var b = Base("b", fill: 2); var c = Base("c", fill: 3);
         Take(cache, a); Take(cache, b); cache.Idle(CancellationToken.None);
         Assert.Equal(2, cache.Held);
         Take(cache, c); cache.Idle(CancellationToken.None);
@@ -140,11 +142,14 @@ public sealed class BaseModelCacheTests : IDisposable
     }
 
     [Fact]
-    public void SparesExpireAfterTwentyIdleMinutes()
+    public void SparesExpireAfterThirtyIdleMinutes()
     {
         var cache = Cache(); var a = Base("a");
         Take(cache, a); cache.Idle(CancellationToken.None);
-        now = now.AddMinutes(21);
+        now = now.AddMinutes(29);
+        cache.Idle(CancellationToken.None);
+        Assert.Equal(1, cache.Held);
+        now = now.AddMinutes(2);
         cache.Idle(CancellationToken.None);
         Assert.Equal(0, cache.Held);
         Assert.Single(released);
@@ -175,7 +180,7 @@ public sealed class BaseModelCacheTests : IDisposable
     [Fact]
     public void ARequestForTheBaseBeingPreparedWaitsAndAnyOtherCancels()
     {
-        var cache = Cache(); var a = Base("a"); var b = Base("b");
+        var cache = Cache(); var a = Base("a"); var b = Base("b", fill: 2);   // another model (R3: a copy of the same bytes waits too)
         var job = Path.Combine(dir, "job.json");
         File.WriteAllText(job, new JsonObject { ["ops"] = new JsonArray() }.ToJsonString());
         var verdicts = new List<bool>();
@@ -236,6 +241,8 @@ public sealed class BaseModelCacheTests : IDisposable
         Assert.Equal(BaseCacheOptions.Default, BaseCacheOptions.FromEnvironment(_ => null));
         var tuned = BaseCacheOptions.FromEnvironment(name => name switch { "ANVIL_BASE_CACHE_ENTRIES" => "3", "ANVIL_BASE_CACHE_MB" => "512", _ => null })!;
         Assert.Equal(3, tuned.Entries); Assert.Equal(512L << 20, tuned.Bytes);
-        Assert.Equal(TimeSpan.FromMinutes(20), tuned.Expiry);
+        Assert.Equal(TimeSpan.FromMinutes(30), tuned.Expiry);
+        Assert.Equal(3, BaseCacheOptions.Default.Entries);
+        Assert.Equal(TimeSpan.FromMinutes(5), BaseCacheOptions.FromEnvironment(name => name == "ANVIL_BASE_CACHE_IDLE_MINUTES" ? "5" : null)!.Expiry);
     }
 }

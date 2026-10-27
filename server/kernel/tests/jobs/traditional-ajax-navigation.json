@@ -1,0 +1,9 @@
+{
+  "description": "Traditional interaction methods: state-only Ajax Submit with a persistent refresh region, deliberate full Submit and direct Navigate. Native merge proof in TraditionalAjaxTests.",
+  "base": "traditional-ui.oml",
+  "expectValid": true,
+  "ops": [
+    {"op":"html","data":{"html":"<screen name=\"AjaxAudit\" actions=\"Toggle\"><var name=\"Shown\" type=\"Boolean\"/><div id=\"Result\"><div if=\"Shown\">Visible</div><div else>Hidden</div></div><button id=\"ToggleLink\" onclick=\"Toggle\" method=\"Ajax\" validation=\"None\">Toggle</button><a id=\"SubmitLink\" onclick=\"Toggle\" method=\"Submit\" validation=\"None\">Full submit</a><a id=\"NavigationLink\" onclick=\"AjaxAudit\" method=\"Navigate\" validation=\"None\">Navigate</a></screen>"}},
+    {"op":"logic","data":{"flow":"action AjaxAudit.Toggle\n  assign Shown = not Shown\n  node AjaxRefreshNode()\n    @{WidgetOrWebBlock=&\"Result\"}\n  end\n"}}
+  ]
+}

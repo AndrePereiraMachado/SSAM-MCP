@@ -511,7 +511,8 @@ usage: anvil-odc <command> [--flags]
     private static object Native(string[] args)
     {
         StudioAssembliesOdc.Bind(null);
-        return NativeSurface.Describe(Need(args, "--type"));
+        // `--types A,B,...` (the proto line's L3a): the discovery probes in one process, each type as its own `--type` (NativeProbe).
+        return Opt(args, "--types") is { } types ? NativeProbe.DescribeMany(NativeProbe.Names(types)) : NativeSurface.Describe(Need(args, "--type"));
     }
 
     private static object VerifyCatalogCmd(string[] args)

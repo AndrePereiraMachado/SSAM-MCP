@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json.Nodes;
+using Anvil.Reading;
 namespace Anvil.Core;
 
 /// <summary>Ops to apply, the compilation report and, when the page carries a stylesheet, the CSS scoped to the page root.</summary>
@@ -53,7 +54,7 @@ public sealed record HtmlJob(int Op, IReadOnlyList<HtmlJobAction> Actions)
                 try { item = Anvil.Reading.ModuleFlow.Read(text); } catch (FormatException) { continue; }
                 if (item.Key.Length > 0 || item.Owner.Length == 0 || !Anvil.Reading.FlowOwners.Owned(item.Kind)) continue;
                 static UiParam Param(Anvil.Reading.FlowItem p) => new(p.Name, p.Prop("DataType") ?? "Text", p.Role == "in" && p.Prop("IsMandatory") != "False", p.Prop("DefaultValue"), null);
-                actions.Add(new(item.Name, item.Kind == "DataAction" ? "data" : "screen", item.Owner,
+                actions.Add(new(item.Name, item.Kind switch { "DataAction" => "data", "Preparation" => "preparation", _ => "screen" }, item.Owner,
                     item.Items.Where(p => p.Role == "in").Select(Param).ToArray(), item.Items.Where(p => p.Role == "out").Select(Param).ToArray(), i, Flow: true));
             }
         }
@@ -87,7 +88,7 @@ public static class HtmlExpander
         ["var"] = ["name", "type", "default"],
         ["derived"] = ["name", "type", "source", "output", "max", "sum"],
         ["source"] = ["entity", "action", "as", "where", "sort", "max", "args", "outputs", "state", "paging"],
-        ["paging"] = ["offset", "size", "total"],
+        ["paging"] = ["offset", "size", "total", "offsetInput", "sizeInput"],
         ["search"] = ["key", "field", "label", "variable"],
         ["filter"] = ["key", "field", "from", "label", "variable"],
         ["script"] = ["name", "inputs", "outputs", "code"],
@@ -130,7 +131,6 @@ public static class HtmlExpander
     internal const string KindTag = "HTML_KIND_TAG";
     internal const string ControlDead = "HTML_CONTROL_DEAD";
     internal const string ContentEmpty = "HTML_CONTENT_EMPTY";
-    internal const string CallOrder = "HTML_CALL_ORDER";
     internal const string CallOtherScreen = "HTML_CALL_OTHER_SCREEN";
     internal const string ReferenceUnresolved = "HTML_REFERENCE_UNRESOLVED";
     internal const string IdDuplicate = "HTML_ID_DUPLICATE";
@@ -176,6 +176,8 @@ public static class HtmlExpander
         ["extendedAttributes"] = "any other attribute (tabindex, name, min, max, step, minlength, form, aria-*, data-* ...) is an IExtendedProperty with its literal value; disabled is Enabled = False on a control; inline JavaScript (on*) is refused: bind the element instead",
         ["names"] = "a data-av key in PascalCase (fv.284 -> Fv284; a key repeated on N elements is the same binding on each: Fv284, Fv284_2 ...); an element without data-av takes its id (header-search -> header_search); otherwise none",
         ["call"] = "a server, service or client action of the module or declared by a logic op before this op, or a screen action of this screen declared by a logic op of the same job (the page creates it first, the logic op fills its body)",
+        ["paging"] = "action source: {offset:screenVariable,size:1..100,total:integerOutput,offsetInput:'StartIndex',sizeInput:'MaxRecords'}. Input names may be overridden and must be integer inputs of the source action. Refresh passes the real offset and size. An advancing counter alone is not proof; browser acceptance requires expected records for first/next/last.",
+        ["state"] = "action source: state:{assign:{screenVariable:sourceOutput}} applies screen state in a typed OnAfterFetch screen action only after FetchSucceeded. Output name collisions are renamed and references rewritten. Derived values share that handler; failure preserves previous screen state.",
         ["stylesheet"] = new JsonArray(StylesheetModes.Select(m => (JsonNode)m).ToArray()),
         ["css"] = "scoped under the page root class; @import statements go to the top of the theme (cssImportsHoisted); #id selectors are refused (OutSystems reserves the id attribute)",
         ["layout"] = new JsonArray("theme", "blank"),
@@ -353,6 +355,8 @@ public static class HtmlExpander
         private readonly List<SourceInfo> sources = [];
         private readonly Dictionary<string, (string Offset, int Size, string Total)> paging = new(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, string> scriptNames = new(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, string> sourceOutputNames = new(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, (string Action, string Tail, string End)> stateHandlers = new(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, (string Alias, HtmlJobAction Action)> shells = new(StringComparer.OrdinalIgnoreCase);
         private readonly Stack<ListScope> listScopes = new();
         private readonly Stack<HtmlNode> clickables = new();
@@ -899,6 +903,16 @@ public static class HtmlExpander
         {
             if (source["where"] != null || source["sort"] != null || source["max"] != null) throw Error("action source takes args, not where/sort/max");
             var action = Required(source, "action"); var reference = Ref("IServerAction:" + action, "IServiceAction:" + action);
+            if (source["paging"] is JsonObject pagingSyntax)
+            {
+                Keys(pagingSyntax, "paging"); Required(pagingSyntax, "offset"); Required(pagingSyntax, "total");
+                if ((pagingSyntax["size"]?.GetValue<int>() ?? 20) is < 1 or > 100) throw Error("paging.size must be between 1 and 100");
+                if (pagingSyntax["offsetInput"]?.ToString() is { } startName && startName == pagingSyntax["sizeInput"]?.ToString())
+                    throw Error("paging offsetInput and sizeInput must differ");
+            }
+            else if (source["paging"] != null) throw Error("source.paging must be an object");
+            if (source["state"] is JsonObject stateSyntax && (stateSyntax["assign"] is not JsonObject { Count: > 0 } || stateSyntax.Any(p => p.Key != "assign")))
+                throw Error("state object requires only a nonempty assign: {screenVariable: sourceOutput}");
             var signature = Contract(reference);
             if (signature == null)
             {
@@ -916,8 +930,14 @@ public static class HtmlExpander
                 Keys(page, "paging"); var offset = Required(page, "offset"); var size = page["size"]?.GetValue<int>() ?? 20; var total = Required(page, "total");
                 if (size < 1 || size > 100) throw Error("paging.size must be between 1 and 100");
                 if (!wanted.Contains(total) || !signature.Outputs.Any(o => o.Name == total && o.Type is "Integer" or "Long Integer")) throw Error("paging.total must name an exposed integer output");
-                if (args.ContainsKey("StartIndex") || args.ContainsKey("MaxRecords")) throw Error("paging owns StartIndex/MaxRecords; omit these args");
-                Variable(offset, "Integer", "0"); args["StartIndex"] = offset; args["MaxRecords"] = size.ToString();
+                var offsetInput = page["offsetInput"]?.GetValue<string>() ?? "StartIndex";
+                var sizeInput = page["sizeInput"]?.GetValue<string>() ?? "MaxRecords";
+                foreach (var input in new[] { offsetInput, sizeInput })
+                    if (!signature.Inputs.Any(p => p.Name == input && p.Type is "Integer" or "Long Integer"))
+                        throw Error($"paging input '{input}' must name an Integer or Long Integer input of {action}");
+                if (offsetInput == sizeInput) throw Error("paging offsetInput and sizeInput must differ");
+                if (args.ContainsKey(offsetInput) || args.ContainsKey(sizeInput)) throw Error($"paging owns {offsetInput}/{sizeInput}; omit these args");
+                Variable(offset, "Integer", "0"); args[offsetInput] = offset; args[sizeInput] = size.ToString();
                 paging.Add(asName, (offset, size, asName + "." + total));
             }
             else if (source["paging"] != null) throw Error("source.paging must be an object");
@@ -925,7 +945,11 @@ public static class HtmlExpander
             Create(Root, "IDataAction", asName, alias); Add("delete", ("target", alias + "/Out1"));
             var lists = new Dictionary<string, (string, string, IReadOnlyList<UiParam>)>(StringComparer.OrdinalIgnoreCase);
             var assignments = new Dictionary<string, string>();
-            var state = source["state"]?.GetValue<bool>() ?? false;
+            var stateMap = (source["state"] as JsonObject)?["assign"] as JsonObject;
+            if (source["state"] is JsonObject stateObject && (stateMap == null || stateObject.Any(p => p.Key != "assign")))
+                throw Error("state object requires only assign: {screenVariable: sourceOutput}");
+            var state = source["state"] is JsonObject || source["state"]?.GetValue<bool>() == true;
+            var outputNames = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             if (state)
             {
                 if (signature.Outputs.Any(o => o.Name == "FetchSucceeded")) throw Error("state reserves the FetchSucceeded output");
@@ -935,9 +959,18 @@ public static class HtmlExpander
             foreach (var outputName in wanted)
             {
                 var output = signature.Outputs.FirstOrDefault(o => o.Name.Equals(outputName, StringComparison.OrdinalIgnoreCase)) ?? throw Error($"{action} has no output '{outputName}'; available: {string.Join(", ", signature.Outputs.Select(o => o.Name))}");
-                var node = Create(alias, "IOutputParameter", output.Name); Set(node, "DataType", output.Type);
-                assignments[output.Name] = "ReadSource." + output.Name;
-                if (output.Type.EndsWith(" List", StringComparison.Ordinal)) lists[output.Name] = (asName + "." + output.Name, asName + "." + output.Name + ".Current", signature.OutputFields.GetValueOrDefault(output.Name) ?? []);
+                var nativeName = output.Name;
+                if (variables.ContainsKey(nativeName) || stateMap?.ContainsKey(nativeName) == true)
+                {
+                    nativeName = "Fetched" + output.Name;
+                    for (var suffix = 2; variables.ContainsKey(nativeName) || signature.Outputs.Any(o => o.Name == nativeName) || outputNames.ContainsValue(nativeName); suffix++)
+                        nativeName = "Fetched" + output.Name + suffix;
+                }
+                outputNames.Add(output.Name, nativeName);
+                if (nativeName != output.Name) sourceOutputNames[asName + "." + output.Name] = asName + "." + nativeName;
+                var node = Create(alias, "IOutputParameter", nativeName); Set(node, "DataType", output.Type);
+                assignments[nativeName] = "ReadSource." + output.Name;
+                if (output.Type.EndsWith(" List", StringComparison.Ordinal)) lists[output.Name] = (asName + "." + nativeName, asName + "." + nativeName + ".Current", signature.OutputFields.GetValueOrDefault(output.Name) ?? []);
             }
             var start = Create(alias, "IStartNode"); var call = Create(alias, "IExecuteServerActionNode", "ReadSource"); Set(call, "Action", reference);
             foreach (var arg in args) Set(call + "/" + arg.Key, "Value", arg.Value!.GetValue<string>());
@@ -950,6 +983,33 @@ public static class HtmlExpander
                 var failure = Assign(alias, new Dictionary<string, string> { ["FetchSucceeded"] = "False" });
                 var failureEnd = Create(alias, "IEndNode");
                 Link(handler, failure); Link(failure, failureEnd); Add("layout", ("target", alias));
+            }
+            if (paging.TryGetValue(asName, out var pagingState))
+            {
+                var totalName = pagingState.Total[(asName.Length + 1)..];
+                paging[asName] = (pagingState.Offset, pagingState.Size, asName + "." + outputNames[totalName]);
+            }
+            if (stateMap != null)
+            {
+                var applyValues = new Dictionary<string, string>();
+                foreach (var assignment in stateMap)
+                {
+                    var outputName = assignment.Value?.GetValue<string>() ?? throw Error("state.assign values name source outputs");
+                    var output = signature.Outputs.FirstOrDefault(o => o.Name == outputName);
+                    if (output == null || !outputNames.ContainsKey(outputName)) throw Error($"state.assign '{assignment.Key}' names an output not exposed: {outputName}");
+                    Variable(assignment.Key, output.Type);
+                    applyValues.Add(assignment.Key, asName + "." + outputNames[outputName]);
+                }
+                var handlerName = "Apply" + asName;
+                for (var suffix = 2; variables.ContainsKey(handlerName) || job?.Actions.Any(a => a.Name == handlerName && OwnsThisScreen(a)) == true; suffix++) handlerName = "Apply" + asName + suffix;
+                var handler = Create(Root, "IScreenAction", handlerName);
+                var begin = Create(handler, "IStartNode"); var ready = Create(handler, "IIfNode");
+                Set(ready, "Condition", asName + ".FetchSucceeded"); Link(begin, ready);
+                var apply = Assign(handler, applyValues); var done = Create(handler, "IEndNode");
+                Add("link", ("from", ready), ("connector", "TrueTarget"), ("to", apply));
+                Add("link", ("from", ready), ("connector", "FalseTarget"), ("to", done)); Link(apply, done);
+                Set(alias + "/OnAfterFetch", "Destination", handler); Add("layout", ("target", handler));
+                stateHandlers[alias] = (handler, apply, done);
             }
             sources.Add(new SourceInfo(asName, alias, false, null, lists));
         }
@@ -971,9 +1031,18 @@ public static class HtmlExpander
                 var value = scope.Current + "." + found.Name;
                 if (!handlers.TryGetValue(source.Alias, out var handler))
                 {
-                    var newAction = Create(Root, "IScreenAction", "Derive" + derivedName);
-                    handler = (newAction, Create(newAction, "IStartNode"));
-                    Set(source.Alias + "/OnAfterFetch", "Destination", newAction);
+                    if (stateHandlers.TryGetValue(source.Alias, out var stateHandler))
+                    {
+                        // Compose the graph before applying it: do not emit a temporary tail->End edge and then rewire it.
+                        ops.RemoveAll(o => o["op"]?.ToString() == "link" && o["from"]?.ToString() == stateHandler.Tail && o["to"]?.ToString() == stateHandler.End);
+                        handler = (stateHandler.Action, stateHandler.Tail);
+                    }
+                    else
+                    {
+                        var newAction = Create(Root, "IScreenAction", "Derive" + derivedName);
+                        handler = (newAction, Create(newAction, "IStartNode"));
+                        Set(source.Alias + "/OnAfterFetch", "Destination", newAction);
+                    }
                 }
                 var action = handler.Action;
                 var reset = Assign(action, new Dictionary<string, string> { [derivedName] = "0" });
@@ -993,9 +1062,11 @@ public static class HtmlExpander
                 }
                 handlers[source.Alias] = (action, loop);
             }
-            foreach (var handler in handlers.Values)
+            foreach (var entry in handlers)
             {
-                var end = Create(handler.Action, "IEndNode"); Link(handler.Tail, end); Add("layout", ("target", handler.Action));
+                var handler = entry.Value;
+                var end = stateHandlers.TryGetValue(entry.Key, out var stateHandler) ? stateHandler.End : Create(handler.Action, "IEndNode");
+                Link(handler.Tail, end); Add("layout", ("target", handler.Action));
             }
         }
 
@@ -1052,7 +1123,7 @@ public static class HtmlExpander
 
         private void Widget(HtmlNode node, string parent)
         {
-            if (node.IsText) { var text = HtmlNode.CollapseSpaces(node.Text); if (text.Length > 0) Expression(parent, Quote(text)); return; }
+            if (node.IsText) { var text = HtmlNode.CollapseSpaces(node.Text); if (text.Length > 0) Expression(parent, Bound(text, node, "the text")); return; }
             var tag = node.Tag;
             if (Ignored.Contains(tag)) return;
             if (Transparent.Contains(tag)) { Children(node, parent); return; }
@@ -1271,7 +1342,7 @@ public static class HtmlExpander
             var variable = binding!["variable"]!.ToString();
             var alias = Create(parent, "IInput", NameFor(node)); Set(alias, "Variable", variable);
             var label = binding["label"]?.GetValue<string>() ?? node.Attribute("placeholder");
-            if (label != null) Set(alias, "Prompt", Quote(label));
+            if (label != null) Set(alias, "Prompt", Bound(label, node, "placeholder"));
             if (node.Attribute("maxlength") is { } max) Set(alias, "MaxLength", int.Parse(max));
             if (node.Attribute("required") != null) Set(alias, "Mandatory", "True");
             Attributes(node, alias, hasStyle: true, hasVisible: false, binding, widget: "IInput");
@@ -1329,7 +1400,7 @@ public static class HtmlExpander
             var alias = Create(parent, "IDropdown", widgetName); Set(alias, "List", aggName + ".List");
             Set(alias, "Values", from + ".Id"); Set(alias, "Labels", from + ".Label"); Set(alias, "Variable", variable);
             var empty = binding["label"]?.GetValue<string>() ?? node.Elements.FirstOrDefault(o => o.Tag == "option" && (o.Attribute("value") ?? "").Length == 0)?.InnerText() ?? "All";
-            Set(alias, "EmptyValue", Quote(empty));
+            Set(alias, "EmptyValue", Bound(empty, node, "the empty option"));
             foreach (var option in node.Elements) if (option.Tag != "option") Record(Error($"{option.Where}: only <option> is allowed inside <select>"));
             Attributes(node, alias, hasStyle: true, hasVisible: false, binding, widget: "IDropdown");
             Set(alias + "/OnChange", "Destination", RefreshAction(widgetName + "Changed", ConsumersOf(variable), resetPaging: true, consumers: true));
@@ -1478,15 +1549,13 @@ public static class HtmlExpander
                         $"declare {callName} with owner IMobileScreen:{name}, or as a client action (kind client, no owner)", pointer);
                 if (declared.FirstOrDefault(a => a.Kind is not ("screen" or "data" or "preparation" or "rest")) is { } moduleAction)
                 {
-                    if (moduleAction.Op > (job?.Op ?? int.MaxValue))
-                        throw new PageException(CallOrder, $"html: {node.Where}: \"{callName}\" is declared by the logic op #{moduleAction.Op}, after this html op (#{job!.Op}): the page compiles before it exists",
-                            $"move the logic op #{moduleAction.Op} before the html op #{job.Op} (the patch)", pointer, null,
-                            new JsonArray(new JsonObject { ["op"] = "move", ["from"] = "/" + moduleAction.Op, ["path"] = "/" + job.Op }));
+                    // F5: wherever the logic op is in the job, the kernel runs it before this page (JobComposition): the page
+                    // takes the declaration (its kind and inputs) and the apply binds the action the logic op created.
                     action = (moduleAction.Kind switch { "client" => "IClientAction:", "service" => "IServiceAction:", _ => "IServerAction:" }) + moduleAction.Name;
                     inputs = moduleAction.Inputs;
                     if (names && tryRef([action]) == null)
-                        throw new PageException(ReferenceUnresolved, $"html: {name}: reference not found: {action} (declared by the logic op #{moduleAction.Op}, which did not apply)",
-                            $"fix the logic op #{moduleAction.Op}; this op runs with it", pointer);
+                        throw new PageException(ReferenceUnresolved, $"html: {name}: reference not found: {action} (declared by the logic op #{moduleAction.Op}, which had not applied when this page compiled: it failed, or the kernel could not run it first)",
+                            $"fix the logic op #{moduleAction.Op} if it failed; else declare {callName} in a logic op that declares nothing of this page's screen, with no raw op between it and this page (the kernel then runs it first)", pointer);
                 }
                 else action = Ref("IServerAction:" + callName, "IServiceAction:" + callName, "IClientAction:" + callName);
             }
@@ -1533,7 +1602,12 @@ public static class HtmlExpander
                 return;
             }
             var text = node.InnerText(); if (text.Length == 0) throw new PageException(ContentEmpty, $"html: {node.Where}: a <label> needs text", "give the label its text, or put the control it names inside it");
-            var alias = Create(parent, "ILabel", NameFor(node)); Set(alias + "/#ITextWidget", "Text", text);
+            var alias = Create(parent, "ILabel", NameFor(node));
+            // T1: the caption is a literal: its text, a binding of a constant folded into it; a binding that names something is the
+            // label's Expression (its own caption goes), never the braces as text (BindingText).
+            if (!ScreenHtml.HoldsBraces(text)) Set(alias + "/#ITextWidget", "Text", text);
+            else if (BindingText.Literal(text) is { } folded) Set(alias + "/#ITextWidget", "Text", folded);
+            else { Add("delete", ("target", alias + "/#ITextWidget")); Expression(alias, Bound(text, node, "the text")); }
             Attributes(node, alias, hasStyle: true, hasVisible: false, null, widget: "ILabel");
             if (node.Attribute("for") is { } target) labels.Add((alias, target, node));
         }
@@ -1586,7 +1660,7 @@ public static class HtmlExpander
             if (substitutedClass != null) staticClass = staticClass == null ? substitutedClass : staticClass + " " + substitutedClass;
             if (dynamicClass != null || staticClass != null)
             {
-                var value = dynamicClass == null ? Quote(staticClass!) : staticClass == null ? dynamicClass : Quote(staticClass + " ") + " + " + dynamicClass;
+                var value = dynamicClass == null ? Bound(staticClass!, node, "class") : staticClass == null ? dynamicClass : Bound(staticClass + " ", node, "class") + " + " + dynamicClass;
                 if (hasStyle) Set(alias, styleProperty, value); else Extended(alias, "class", value);
             }
             if (dynamicStyle != null || node.Attribute("style") != null)
@@ -1602,13 +1676,13 @@ public static class HtmlExpander
             foreach (var (attribute, value) in node.Attributes)
             {
                 if (attribute is "data-av" or "class" or "style") continue;
-                if (attribute.StartsWith("aria-", StringComparison.Ordinal) || attribute.StartsWith("data-", StringComparison.Ordinal)) { Extended(alias, attribute, Quote(value)); continue; }
+                if (attribute.StartsWith("aria-", StringComparison.Ordinal) || attribute.StartsWith("data-", StringComparison.Ordinal)) { Extended(alias, attribute, Bound(value, node, attribute)); continue; }
                 if (ElementWidgetMap.IsInlineScript(attribute)) continue; // reported by the validation
                 if (!ElementWidgetMap.LegacyAttributes.Contains(attribute))
                 {
                     // H4: what the closed list refused is carried; disabled is the native Enabled of a control.
                     if (attribute == "disabled" && ElementWidgetMap.HasEnabled(widget)) { Set(alias, "Enabled", "False"); disabledToEnabled++; continue; }
-                    Extended(alias, attribute, Quote(value));
+                    Extended(alias, attribute, Bound(value, node, attribute));
                     extendedAttributes[attribute] = extendedAttributes.GetValueOrDefault(attribute) + 1;
                     continue;
                 }
@@ -1618,14 +1692,14 @@ public static class HtmlExpander
                         if (kind == "visible" || visibleBound.Contains(node)) break; // the binding decides visibility
                         if (hasVisible) Set(alias, "Visible", "False"); else Extended(alias, "hidden", Quote("hidden"));
                         break;
-                    case "placeholder": if (node.Tag != "input") Extended(alias, attribute, Quote(value)); break;
-                    case "for": if (node.Tag != "label" || keepFor) Extended(alias, attribute, Quote(value)); break;
-                    case "type": if (node.Tag is not ("input" or "button")) Extended(alias, attribute, Quote(value)); break;
-                    case "href": if (node.Tag != "a") Extended(alias, attribute, Quote(value)); break;
-                    case "required": case "maxlength": if (node.Tag != "input") Extended(alias, attribute, Quote(value)); break;
-                    case "value": if (node.Tag != "option") Extended(alias, attribute, Quote(value)); break;
+                    case "placeholder": if (node.Tag != "input") Extended(alias, attribute, Bound(value, node, attribute)); break;
+                    case "for": if (node.Tag != "label" || keepFor) Extended(alias, attribute, Bound(value, node, attribute)); break;
+                    case "type": if (node.Tag is not ("input" or "button")) Extended(alias, attribute, Bound(value, node, attribute)); break;
+                    case "href": if (node.Tag != "a") Extended(alias, attribute, Bound(value, node, attribute)); break;
+                    case "required": case "maxlength": if (node.Tag != "input") Extended(alias, attribute, Bound(value, node, attribute)); break;
+                    case "value": if (node.Tag != "option") Extended(alias, attribute, Bound(value, node, attribute)); break;
                     case "id": idAliases[value] = alias; break; // reserved by OutSystems (InvalidHTMLAttribute_Id): the name of the widget (H13), and the target of labels
-                    default: Extended(alias, attribute, Quote(value)); break;
+                    default: Extended(alias, attribute, Bound(value, node, attribute)); break;
                 }
             }
             // kind visible never reaches the widget's Visible property: Container wraps the element in a native If.
@@ -1689,6 +1763,9 @@ public static class HtmlExpander
         }
         private void Set(string target, string prop, object value)
         {
+            if (value is string original && prop is "Value" or "Condition" or "Visible" or "Enabled" or "DefaultValue" or "RecordList")
+                value = System.Text.RegularExpressions.Regex.Replace(original, "\"(?:\"\"|[^\"])*\"|(?<![\\w.])[A-Za-z_][A-Za-z0-9_]*\\.[A-Za-z_][A-Za-z0-9_]*(?![\\w])",
+                    m => sourceOutputNames.TryGetValue(m.Value, out var mapped) ? mapped : m.Value);
             if (value is string expression && prop is "Value" or "Condition" or "Visible" or "Enabled" or "DefaultValue")
                 value = System.Text.RegularExpressions.Regex.Replace(expression, "\"(?:\"\"|[^\"])*\"|(?<![\\w.])[A-Za-z_][A-Za-z0-9_]*(?=\\s*\\()",
                     m => scriptNames.TryGetValue(m.Value, out var mapped) ? mapped : m.Value);
@@ -1700,6 +1777,12 @@ public static class HtmlExpander
             Add("create", ("parent", parent), ("type", type), ("name", nodeName), ("as", alias)); return alias;
         }
         private void Expression(string parent, string text) { var e = Create(parent, "IExpression"); Set(e, "Value", text); }
+
+        // T1: a text or an attribute value that takes an expression, by the one compile of a text with bindings
+        // (BindingText.Expression): {{ E }} is E, text with bindings their concatenation, a value without one its string literal.
+        private static string Bound(string value, HtmlNode node, string what) => BindingText.Expression(value, out var fault)
+            ?? throw new PageException(BindingInvalid, $"html: {node.Where}: {what} \"{value}\": {fault}",
+                "a binding is {{ expression }} (text around it is joined: \"Total {{ N }}\"); a literal brace is written &#123; in <text>, or split in an expression", "/html");
         private void Where(string alias, string text) => Add("create", ("parent", alias), ("type", "IFilter"), ("args", new JsonObject { ["condition"] = text }));
         private string Assign(string action, IReadOnlyDictionary<string, string> values)
         {

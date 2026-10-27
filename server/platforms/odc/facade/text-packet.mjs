@@ -17,6 +17,7 @@
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { classifyTextRoute, WIRED } from './text-routes.mjs';
+import { traditionalText } from './traditional-text.mjs';
 import { ENTITY_ACTIONS_CARD, ENTITY_ACTIONS_OP, offered } from './generators.mjs';
 
 export const TEXT_PACKET_SCHEMA = 'ssam-packet-text/1';
@@ -42,7 +43,7 @@ const ORDER = ['ssam-ddl/1', 'ssam-html/1', 'ssam-flow/1'];
 const COVERED = {
   'ssam-ddl/1': id => /^data\.(entity|static|structure|client-entity|client-variable|setting)$/.test(id) || id === 'session-variable',
   'ssam-flow/1': id => /^logic\.(flow|server-action|service-action|client-action|screen-action|data-action|aggregate|sql|exception|variable|expression|native-nodes|edit|preparation)$/.test(id),
-  'ssam-html/1': id => /^ui\./.test(id) && !/^ui\.(traditional-|prototype-import|script-resource|theme-css|email-popover)/.test(id),
+  'ssam-html/1': id => /^ui\./.test(id) && !/^ui\.(traditional-|script-resource|theme-css|email-popover)/.test(id),
 };
 export const coveredBy = (forms, id) => forms.find(f => COVERED[f]?.(String(id))) ?? null;
 
@@ -61,7 +62,7 @@ const GRAMMAR = {
   'ssam-flow/1': () => [
     '/// <description>\nserver action <Name> [public] [function]   (service action / client action <Name>; action <Screen>.<Name>: screen or block action; data action <Screen>.<Name>); no @key: a new action',
     '  in <Name>[?]: <Type> [= <default>]   ("?": optional)  |  out <Name>: <Type>  |  local <Name>: <Type>',
-    '  <Node> = aggregate FROM <A>, <B>, <C> JOIN Inner <A>~<B> ON <condition> | Left <B>~<C> ON <condition> WHERE (<condition>) [AND (<condition>)] [SORT <Entity>.<Attr> desc] MAX <n> START <s>   (Inner: Only With; Left: With or Without; Full: With; SQL-style JOIN is normalized when unambiguous)',
+    '  <Node> = aggregate FROM <A>, <B>, <C> JOIN Inner <A>~<B> ON <condition> | Left <B>~<C> ON <condition> WHERE (<condition>) [AND (<condition>)] [SORT <Entity>.<Attr> desc] MAX <n>   (Inner: Only With; Left: With or Without; Full: With; SQL-style JOIN is normalized when unambiguous; an action pages by SQL OFFSET @Skip ROWS FETCH NEXT @Take ROWS ONLY, never START: LOGIC_START_SERVER_IGNORED)',
     '  <Node> = <Action>(<Param>=<value>, ...)   (an action of another module: <Producer>.<Action>(...); a list action: (System).ListAppend(List=L, Element=E))',
     '  assign <Var> = <value>   |   assign  # <label>\n    <Var> = <value>\n    <Var.Field> = <value>',
     '  if <condition>:  # <question>\n    <true branch, indented>\n  <the false branch continues below>',
@@ -141,7 +142,7 @@ function namedElement(found, intent, form) {
   return names.filter(n => words.has(String(n).toLowerCase()));
 }
 
-function readOf(form, { lane, found, intent, creating, has }) {
+function readOf(form, { lane, found, intent, creating, has, readings = [] }) {
   const target = found?.ok !== false && found?.file ? found.file : '<Module or capture.oml>';
   const sha = found?.ok !== false && found?.sourceSha256 ? { expectedSourceSha256: found.sourceSha256 } : {};
   const view = form === 'ssam-ddl/1' ? 'ddl' : form === 'ssam-flow/1' ? 'flow' : 'html';
@@ -153,17 +154,29 @@ function readOf(form, { lane, found, intent, creating, has }) {
   const count = { 'ssam-ddl/1': has?.data, 'ssam-flow/1': has?.actions, 'ssam-html/1': has?.screens }[form];
   if (creating && has && count === 0)
     return { read: null, why: (has.name ?? 'the module') + ' has no ' + what + ': write the text from scratch, no read, no @key and no basedOn' };
-  if (creating) return { read: null, why: 'a creation needs no read: a text without @key is new; the module section names what the texts can reference', toChange: call };
+  const kind = form === 'ssam-flow/1' ? 'flow' : form === 'ssam-html/1' ? 'html' : null;
+  if (kind === 'html' && readings.some(r => r.kind === 'html')) return { read: null, why: 'read with this packet: scope.owner holds the screen with its k (when it fits; else needsReading gives the read) and call holds its basedOn', toChange: call };
+  if (creating) return { read: null, why: 'a creation needs no read: a text without @key is new; scope names what the texts can reference', toChange: call };
+  if (kind && readings.some(r => r.kind === kind)) return { read: null, why: 'read with this packet: scope.owner holds the text (when it fits; else needsReading gives the read) and call holds its basedOn', toChange: call };
   return { read: call, why: 'read once, edit in context: the text with an @key or @id on every element and the basedOn of the delivery' };
 }
 
-// The op of a form in the delivery call, as a creation writes it or as an edit of the read does.
-function opOf(form, { creating, found }) {
+// The op of a form in the delivery call, as a creation writes it or as an edit of the read does. R4 (2026-10-24, the lab:
+// the capture sha256 was sent where the flow's textSha goes): with the readings of the owner (module-map.mjs ownerReadings)
+// every basedOn is the value itself, in its place; without them the placeholder says which value and of which read.
+export const FLOW_BASED_ON = '<action.textSha of ssam_map view flow: 16 hex, never the capture sourceSha256>';
+export const HTML_BASED_ON = '<htmlSha256 of ssam_map view html>';
+function opOf(form, { creating, found, readings = [] }) {
   const sha = found?.ok !== false && found?.sourceSha256 ? found.sourceSha256 : '<sourceSha256 of the read>';
   if (form === 'ssam-ddl/1') return { op: 'spec', data: creating ? { ddl: '<the new statements, without -- @key>' } : { basedOn: sha, ddl: '<only the statements that change, as read, with their -- @key; new ones without a key>' } };
-  if (form === 'ssam-flow/1') return { op: 'logic', data: { flow: creating ? ['<one ssam-flow/1 text per action, its header without @key>'] : [{ text: '<the text read, edited, with its @ids>', basedOn: '<textSha of the read>' }] } };
-  return creating ? { op: 'html', data: { html: '<screen name="<Screen>">...</screen>' } }
-    : { op: 'html', data: { screen: '<Screen>', basedOn: { capture: sha, html: '<htmlSha256 of the read>' }, edit: ['<the changed element, whole, with its k>'] } };
+  const flows = readings.filter(r => r.kind === 'flow');
+  if (form === 'ssam-flow/1') return { op: 'logic', data: { flow: creating ? ['<one ssam-flow/1 text per action, its header without @key>']
+    : flows.length ? flows.map(r => ({ text: '<scope.owner text of ' + r.name + ', edited, every line with its @id>', basedOn: r.textSha }))
+      : [{ text: '<the text read, edited, with its @ids>', basedOn: FLOW_BASED_ON }] } };
+  // An existing screen read with the packet is edited by k, even when the rest of the change creates (a new attribute shown).
+  const html = readings.find(r => r.kind === 'html');
+  return creating && !html ? { op: 'html', data: { html: '<screen name="<Screen>">...</screen>' } }
+    : { op: 'html', data: { screen: html?.screen ?? '<Screen>', basedOn: html?.basedOn ?? { capture: sha, html: HTML_BASED_ON }, edit: ['<the changed element, whole, with its k (scope.owner.widgets)>'] } };
 }
 
 /**
@@ -172,7 +185,9 @@ function opOf(form, { creating, found }) {
  * index), route (classifyTextRoute's answer, computed when absent)}.
  * Returns {value, covers (forms), levels (smaller forms of value, richest first)}.
  */
-export function packetTextSection({ lane, intent, found = null, slice = () => undefined, route = classifyTextRoute(intent), examples = textExamples() } = {}) {
+export function packetTextSection({ lane, intent, found = null, readings = [], slice = () => undefined, route = classifyTextRoute(intent), examples = textExamples(), kinds = null } = {}) {
+  const traditional = traditionalText({ lane, intent, found, route, wired: WIRED['ui.screen-html'], kinds });
+  if (traditional !== undefined) return traditional;
   if (!route) return null;
   const primary = FORM_OF[route.id];
   if (!primary || WIRED[route.id] !== true) return null;
@@ -188,10 +203,14 @@ export function packetTextSection({ lane, intent, found = null, slice = () => un
   // Each form of the job: its read, grammar, contract slice, example and rules.
   const parts = {};
   const ops = [];
+  const editing = [];
   for (const form of forms) {
     const own = form === primary;
-    const make = own ? creating : true; // a companion form (data the actions carry) is a creation
-    const { read, why, toChange } = readOf(form, { lane, found, intent, creating: make, has });
+    // A companion form is a creation (the data the actions carry), except the edit of an existing screen the change shows
+    // something in (route.also ui.screen-html-edit).
+    const make = own ? creating : !(form === 'ssam-html/1' && (route.also ?? []).includes('ui.screen-html-edit'));
+    if (!make) editing.push(form);
+    const { read, why, toChange } = readOf(form, { lane, found, intent, creating: make, has, readings });
     const ex = examples?.examples?.[form] ?? null;
     const exampleText = ex ? (ex[lane] ?? ex.text ?? null) : null;
     const node = slice(POINTER_OF[form]);
@@ -203,7 +222,7 @@ export function packetTextSection({ lane, intent, found = null, slice = () => un
       rules: rulesOf(form),
     };
     if (form === 'ssam-flow/1' && make) ops.push({ op: 'create', parent: '@espace', type: 'IUserException', name: '<each user exception the texts raise and the module lacks>' });
-    ops.push(opOf(form, { creating: make, found }));
+    ops.push(opOf(form, { creating: make, found, readings }));
   }
   // Data statements first, then the exceptions, the screen document and the action texts (one job takes them in order).
   const rank = op => (op.op === 'spec' ? 0 : op.op === 'create' ? 1 : op.op === 'html' ? 2 : 3);
@@ -220,7 +239,7 @@ export function packetTextSection({ lane, intent, found = null, slice = () => un
       : { tool: 'studio_deliver', arguments: { feature: '<Feature>', module: name, job: { ops: [{ op: 'screen', data: { generate: { entities: ['<Entity>', '<Entity2>'] } } }] }, owners: ['<Owner>'], changes: ['<Change>'] } },
   } : null;
   const value = {
-    schema: TEXT_PACKET_SCHEMA, id: route.id, forms, creating,
+    schema: TEXT_PACKET_SCHEMA, id: route.id, forms, creating, ...(creating && editing.length ? { editing } : {}),
     use: 'Write this change in its text form' + (forms.length > 1 ? 's' : '') + ' (' + forms.join(' + ') + '): every op of call goes into the ONE job of next.deliver, the JSON ops only for what no text covers; '
       + (creating ? 'a creation needs no read' : 'read once, then deliver'),
     ...(standard ? { standard } : {}),

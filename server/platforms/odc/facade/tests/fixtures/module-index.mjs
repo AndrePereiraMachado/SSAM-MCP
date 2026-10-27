@@ -1,9 +1,11 @@
 // A synthetic module index (ssam-module-index/1) as the C# writer lays it out: rows sorted by key (ordinal),
 // parentRow as a row index (or -2 - i for ancestors[i]), roles and types by index, `answers` with every name the node
 // answers to.
+import { EXTRACTOR } from '../../module-map.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
+import { STORE_GENERATION } from '../../store-generation.mjs';
 
 export const TYPES = {
   ESpace: ['IESpace', 'OutSystems.Model.IESpace'], MobileFlow: ['IMobileFlow'], MobileScreen: ['IMobileScreen', 'IWebScreen', 'OutSystems.Model.UI.Mobile.IMobileScreen'],
@@ -51,14 +53,14 @@ export function moduleIndex({ lane = 'odc', sourceSha256, nodes = NODES, ancesto
   const rows = sorted.map(([key, kind, name, parent, role, dataType]) => [key, kinds.indexOf(kind), name, null, null, parentRef(parent),
     ROLE_NAMES.indexOf(role), dataType ?? null, sorted.filter(n => n[3] === key).length]);
   const count = field => Object.fromEntries([...new Set(sorted.map(field))].map(v => [v, sorted.filter(n => field(n) === v).length]));
-  return { schema: 'ssam-module-index/1', extractor: 1, lane, adapter: lane === 'odc' ? 'builder' : 'kernel', sourceSha256, sourceBytes: 42,
+  return { schema: 'ssam-module-index/1', extractor: EXTRACTOR, lane, adapter: lane === 'odc' ? 'builder' : 'kernel', sourceSha256, sourceBytes: 42,
     createdAt: '2026-09-30T00:00:00Z', module: { name: 'Quotes', key: 'R0000000000000000000000', kind: 'ESpace' }, complete: true, readErrors: 0, errorSamples: [],
     counts: { elements: rows.length, byKind: count(n => n[1]), byRole: count(n => n[4]) }, roles: ROLE_NAMES,
     types: kinds.map(kind => ({ kind, answers: TYPES[kind], nameProperty: true })), rows,
     ancestors: ancestors.map(([key, kind, name, parent]) => [key, kinds.indexOf(kind), name, parentRef(parent)]), ...overrides };
 }
 export function storeFile(root, lane, sourceSha256) {
-  return path.join(root, 'v1', lane, sourceSha256 + '.' + (lane === 'odc' ? 'builder' : 'kernel') + '.json');
+  return path.join(root, STORE_GENERATION, lane, sourceSha256 + '.' + (lane === 'odc' ? 'builder' : 'kernel') + '.json');
 }
 export function writeIndex(root, lane, sourceSha256, index = moduleIndex({ lane, sourceSha256 })) {
   const file = storeFile(root, lane, sourceSha256);

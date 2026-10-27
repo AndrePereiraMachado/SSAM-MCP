@@ -161,7 +161,7 @@ public sealed class Pa3KhHtmlTests
     public void ADynamicClassIsAnExpressionOnTheStyleOrOnTheClassAttribute()
     {
         var div = Ops("<div class='chip {{ If(Selected, \"on\", \"off\") }}'></div>");
-        Assert.Contains(div, o => o["prop"]?.ToString() == "Style" && o["value"]?.ToString() == "\"chip \" + (If(Selected, \"on\", \"off\"))");
+        Assert.Contains(div, o => o["prop"]?.ToString() == "Style" && o["value"]?.ToString() == "\"chip \" + If(Selected, \"on\", \"off\")");
         var span = Ops("<span class='{{ If(Selected, \"badge on\", \"badge\") }}'>{{ ItemCount }}</span>");
         Assert.Contains(span, o => Is(o, "IAdvancedHtml"));
         Assert.Contains(span, o => o["prop"]?.ToString() == "Property" && o["value"]?.ToString() == "class");

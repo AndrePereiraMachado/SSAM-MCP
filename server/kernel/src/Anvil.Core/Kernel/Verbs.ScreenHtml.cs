@@ -82,6 +82,21 @@ public sealed partial class ModelSession
                 elementNote["names"] = new JsonObject { ["cleared"] = new JsonArray(cleared),
                     ["note"] = "\"id\": null removes the name: written id=\"\" (an element whose text leaves its id out keeps the name it has)" };
         }
+        if (data.ContainsKey("css"))
+        {
+            try
+            {
+                if (data["css"] is not JsonValue cssValue || !cssValue.TryGetValue<string>(out var css))
+                    throw new FormatException("data.css must be a string");
+                // After the page's <style> (the edit's, else the reading's), as the document form writes it.
+                edits = ScreenHtmlEdit.WithCss(edits, css, reading.Html);
+            }
+            catch (FormatException ex)
+            {
+                throw new KernelRefusalException(ScreenHtmlEdit.Invalid, ex.Message,
+                    new JsonArray(JobPreflight.Problem(null, "/css", ScreenHtmlEdit.Invalid, "error", ex.Message, "send data.css as CSS text without a closing style tag; it follows the page's <style> in its style sheet")));
+            }
+        }
         try { return HtmlEditPlanned(module, reading, data, basedOn!, baseHtml!, edits, pointer, notes, elementNote); }
         catch (KernelRefusalException refusal) when (elementEdits != null) { throw ForElementEdits(refusal, reading, editOf, baseKeys); }
     }
@@ -220,6 +235,10 @@ public sealed partial class ModelSession
             var problem = JobPreflight.Problem(null, p["pointer"]?.ToString(), p["code"]!.ToString(), "error", p["message"]!.ToString(), p["fix"]?.ToString(),
                 HtmlFormPatch(p["patch"]));
             if (p["k"] is JsonValue k) problem["k"] = k.DeepClone();
+            // F2: what a refusal of a property says of it (the element's kind, the property and its attribute, expected and actual,
+            // the one next call; the Verify's differences one by one).
+            foreach (var field in new[] { "kind", "property", "attribute", "expected", "actual", "next", "differences" })
+                if (p[field] is { } value) problem[field] = value.DeepClone();
             return (JsonNode)JobPreflight.PublicProblem(problem);
         }).ToArray());
         var code = result.Problems.Select(p => p["code"]!.ToString()).Distinct().Count() == 1 ? result.Problems[0]["code"]!.ToString() : "HTML_EDIT_REFUSED";
@@ -286,6 +305,31 @@ public sealed partial class ModelSession
             });
     }
 
+    /// <summary>Where an element k of an older reading is in the current text when the platform's move gave it a new key: the one
+    /// element of the current text with the same tag and the same name (id), or, without a name, the one with the same text
+    /// (without k); null when there is none or more than one.</summary>
+    internal static (string K, string Parent)? MovedSince(string baseHtml, string k, string currentHtml)
+    {
+        try {
+            var before = ScreenHtmlText.Elements(ScreenHtml.Parse(baseHtml)).Select(x => x.Node).ToList();
+            var old = before.FirstOrDefault(n => n.Get("k") == k);
+            if (old == null) return null;
+            // One element of that signature in the reading too: a twin is never taken for the element.
+            bool Same(ScreenHtml.Node n, string? name, string whole) => n.Tag == old.Tag && (name != null ? n.Get("id") == name : ScreenHtmlText.WithoutKeys(ScreenHtmlText.Write(n)) == whole);
+            var current = ScreenHtml.Parse(currentHtml);
+            var parents = ScreenHtmlText.Parents(current);
+            var id = old.Get("id");
+            var text = ScreenHtmlText.WithoutKeys(ScreenHtmlText.Write(old));
+            if (before.Count(n => n.Get("k") != null && Same(n, id, text)) != 1) return null;
+            var hits = ScreenHtmlText.Elements(current).Select(x => x.Node).Where(n => n.Get("k") != null && Same(n, id, text)).ToList();
+            if (hits.Count != 1) return null;
+            var up = parents.GetValueOrDefault(hits[0]);
+            while (up != null && up.Get("k") == null && parents.ContainsKey(up)) up = parents[up];
+            var parent = up == null ? "the root" : up.Get("k") is { } pk ? "k=\"" + pk + "\" (<" + up.Tag + (up.Get("class") is { } c ? " class=\"" + c + "\"" : "") + ">)" : "<" + up.Tag + ">";
+            return (hits[0].Get("k")!, parent);
+        } catch (FormatException) { return null; }
+    }
+
     /// <summary>The rebase of an edit written on an older reading (Rebase, free of the session for its tests): the three-way merge
     /// with that reading's text when it is kept; else, or when the merge cannot lay the edit over it (ScreenHtmlMerge.Result.Why),
     /// only an edit of elements (the edit form) moves onto the current text, each k through the ObjectKey it named, the sent
@@ -306,10 +350,17 @@ public sealed partial class ModelSession
             var merged = ScreenHtmlMerge.ThreeWay(baseHtml, baseKeys, reading.Html, currentKeys, edits);
             if (merged.Missing.Count > 0) {
                 var problems = merged.Missing.Select(k => {
+                    // F2: an element the platform's move gave a new key since that reading is the same element (its tag, its name, or
+                    // its whole text): it was moved, and the problem says where it is now, never that it was removed.
+                    var moved = MovedSince(baseHtml, k, reading.Html);
                     var problem = JobPreflight.Problem(null, pointer, ScreenHtmlEdit.KeyForeign, "error",
-                        $"k=\"{k}\" of the reading {html[..Math.Min(12, html.Length)]} was changed by the edit and removed from {reading.Root} since that reading",
-                        "write the edit on the screen's current text (current.text of this problem)");
+                        moved is { } now
+                            ? $"k=\"{k}\" of the reading {html[..Math.Min(12, html.Length)]} was moved since that reading (the platform's move gives a moved element a new key): it is k=\"{now.K}\" now, inside {now.Parent}"
+                            : $"k=\"{k}\" of the reading {html[..Math.Min(12, html.Length)]} was changed by the edit and removed from {reading.Root} since that reading",
+                        moved is { } there ? $"write the edit on the screen's current text, with k=\"{there.K}\" for that element (current.text of this problem)"
+                            : "write the edit on the screen's current text (current.text of this problem)");
                     problem["k"] = k;
+                    if (moved is { } to) { problem["movedTo"] = to.K; problem["movedInto"] = to.Parent; }
                     problem["current"] = new JsonObject { ["html"] = reading.HtmlSha256, ["text"] = reading.Html };
                     return (JsonNode)JobPreflight.PublicProblem(problem);
                 }).ToArray();
@@ -467,7 +518,7 @@ public sealed partial class ModelSession
             return alias;
         }
 
-        public IObjectSignature Create(IObjectSignature parent, string kind, IObjectSignature? block)
+        public IObjectSignature Create(IObjectSignature parent, string kind, IObjectSignature? block, string? name = null)
         {
             if (kind == "Event") {
                 // An HTML event of an element (onfocus, onblur...): the element's own factory, as the prototype importer builds it.
@@ -478,7 +529,18 @@ public sealed partial class ModelSession
                 return made;
             }
             var alias = "$ssam.html." + (++next).ToString(System.Globalization.CultureInfo.InvariantCulture);
-            var op = new JsonObject { ["op"] = "create", ["parent"] = Alias(parent), ["type"] = "I" + kind, ["as"] = alias };
+            var type = "I" + kind;
+            for (IObjectSignature? owner = parent; owner != null; owner = owner.Parent as IObjectSignature)
+                if (Implements(owner, "IWebScreen") || Implements(owner, "IWebBlock") || Implements(owner,"IMobileScreen") || Implements(owner,"IMobileBlock")) {
+                    // An O11 Reactive/Mobile screen also exposes the shared web interface: its own interface decides first.
+                    var mobile = Implements(owner,"IMobileScreen") || Implements(owner,"IMobileBlock");
+                    var web = !mobile && (Implements(owner,"IWebScreen") || Implements(owner,"IWebBlock"));
+                    if (kind is "TextWidget" or "IfWidget") type = "OutSystems.Model.UI." + (web ? "Web" : "Mobile") + ".Widgets.I" + kind;
+                    else if (kind is "Form" or "Label") type = "ServiceStudio.Plugin." + (web ? "Widgets" : "NRWidgets") + ".I" + kind;
+                    break;
+                }
+            var op = new JsonObject { ["op"] = "create", ["parent"] = Alias(parent), ["type"] = type, ["as"] = alias };
+            if (name != null) op["name"] = name;
             if (block != null) { op["source"] = Alias(block); op["empty"] = true; }
             session.ApplyOne(op);
             var created = (IObjectSignature)session.Resolve(alias);
@@ -491,7 +553,11 @@ public sealed partial class ModelSession
             JsonNode? written = value.Type switch {
                 'b' => JsonValue.Create(value.Text == "True"),
                 '?' => null,
-                'r' => value.Target != null && property != "DataType" ? JsonValue.Create(Alias(value.Target)) : JsonValue.Create(value.Name ?? value.Text),
+                // A reference the plan resolved is written as that object, a type too: by its name the platform's type parser
+                // takes the first element of that name, which is another one when a producer has a homonym (a local structure
+                // and a producer's of the same name; receipts 092b8162, 645face7, 82bf05af of 18-22/10). A type outside the walk
+                // (Text List, an Identifier) has no object here and is written by its name.
+                'r' => value.Target != null ? JsonValue.Create(Alias(value.Target)) : JsonValue.Create(value.Name ?? value.Text),
                 'l' => new JsonArray((value.Targets ?? []).Select(t => (JsonNode)JsonValue.Create(Alias(t))!)
                     .Concat((value.Name ?? "").Split('\n', StringSplitOptions.RemoveEmptyEntries).Select(n => (JsonNode)JsonValue.Create(n)!)).ToArray()),
                 _ => JsonValue.Create(value.Text),

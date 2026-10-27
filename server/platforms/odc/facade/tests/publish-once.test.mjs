@@ -34,12 +34,15 @@ async function publisher(t, initial = {}) {
     switch (request.method) {
       case 'bridge_manifest': return ok({ capabilities: ['dialogs:dependencies_auto', 'merge_from_oml:module_key', 'refresh_references'] });
       case 'open_module':
+        if (state.crossEnvironment && p.environment !== HOST) return fail('multiple edited tabs named Consumer');
         if (state.dialog) return ok({ name: p.name, opened: false, blockedBy: [references] });
         state.active = p.name;
         return ok({ name: p.name, opened: true, alreadyOpen: true, selected: true, ...(state.outdated ? { referencesOutdated: true } : {}) });
       case 'answer_dependencies_dialog': { const seen = state.dialog ? [answered] : []; state.dialog = false; return ok({ answered: seen, count: seen.length }); }
-      case 'list_open_modules': return ok({ modules: [{ name: state.active, key: 'k-' + state.active, hasESpace: true, environment: HOST, pendingDialogs: [] }] });
-      case 'get_active_module': return ok({ name: state.active, key: 'k-' + state.active, environment: HOST, pendingDialogs: [] });
+      case 'list_open_modules': return ok({ modules: [
+        ...(state.crossEnvironment ? [{ name: state.active, key: 'k-' + state.active, hasESpace: true, environment: 'personal.example.com', pendingDialogs: [] }] : []),
+        { name: state.active, key: 'k-' + state.active, hasESpace: true, environment: HOST, pendingDialogs: [] }] });
+      case 'get_active_module': return ok({ name: state.active, key: 'k-' + state.active, environment: state.crossEnvironment ? 'personal.example.com' : HOST, pendingDialogs: [] });
       case 'refresh_references':
         if (state.refreshError) return fail(state.refreshError);
         return ok({ module: state.active, changed: true, refreshed: ['Producer'], upToDate: ['Other'] });
@@ -83,6 +86,16 @@ test('publish-once: failed refresh refuses with a continuation and never publish
   assert.equal(value.ok, false); assert.ok(value.code); assert.ok(value.continuation?.tool);
   assert.match(value.error, /nothing was published/i);
   assert.equal(h.sent('refresh_references').length, 1); assert.equal(h.sent('publish').length, 0);
+});
+
+test('publish and refresh keep the requested environment when another window has the same module name and key', async t => {
+  const h = await publisher(t, { crossEnvironment: true });
+  const result = await h.run(input({ refreshReferences: true, expectedEnvironment: HOST }));
+  assert.equal(result.result, 'published', JSON.stringify(result));
+  for (const method of ['open_module', 'refresh_references', 'publish']) {
+    assert.ok(h.sent(method).length > 0);
+    for (const request of h.sent(method)) assert.equal(request.params.environment, HOST, method);
+  }
 });
 
 test('publish-once: an older bridge refuses BRIDGE_OUTDATED without publishing', async t => {

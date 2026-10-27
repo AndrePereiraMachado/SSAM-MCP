@@ -29,7 +29,7 @@ public static class ScreenRecreationProof
             var previous = baseline;
             var first = ScreenHtml.Module((OutSystems.Model.IObjectSignature)espace, reader);
             var moduleName = first.ModuleName;
-            var roots = first.Roots.Where(r => r.Kind == "MobileScreen" || blocks && r.Kind == "MobileBlock")
+            var roots = first.Roots.Where(r => r.Kind is "MobileScreen" or "WebScreen" || blocks && r.Kind is "MobileBlock" or "WebBlock")
                 .Where(r => target == null || string.Equals(r.Name, target, StringComparison.OrdinalIgnoreCase)).ToList();
             foreach (var (name, kind, _) in roots)
             {

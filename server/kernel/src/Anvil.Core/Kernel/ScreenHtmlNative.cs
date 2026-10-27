@@ -90,6 +90,7 @@ internal static class ScreenHtmlNative
         var defined = Anvil.Core.ScreenDocument.CssClasses(sheet);
         if (sheet?.Contains(IconBase, StringComparison.Ordinal) == true) defined.Add(IconBase);
         var context = new Context(top) { Images = images, Records = records };
+        NormalizeListAliases(top, edited, outcome);
         var converted = new List<ScreenHtml.Node>();
         Walk(top, edited, readOf, isReference, defined, outcome, context, converted);
         // Integration 24-1 familias (review): a rule that styles the inside of an svg (.icon path { stroke: red }, svg circle) in
@@ -103,6 +104,55 @@ internal static class ScreenHtmlNative
                     "paint the svg itself (fill/stroke on the <svg> or its shapes, or color on its element for an icon in currentColor), and remove the rule for its inside"));
         }
         return outcome;
+    }
+
+    // An edit may introduce a List alias after the job-level document normalizer has run.
+    // Keep the same AliasRow and expression lexer as that normalizer, without recreating keyed nodes.
+    private static void NormalizeListAliases(ScreenHtml.Node top, Func<ScreenHtml.Node, bool> edited, Outcome outcome)
+    {
+        string Rename(string value, Dictionary<string, (string Row, Func<string, string> Member)> scope)
+        {
+            foreach (var (alias, row) in scope)
+                value = Anvil.Core.Preflight.HtmlText.Apply(value, Anvil.Core.Preflight.HtmlText.RenameRow(value, 0, value.Length, alias, row.Row, row.Member));
+            return value;
+        }
+        string Bindings(string value, Dictionary<string, (string Row, Func<string, string> Member)> scope)
+        {
+            if (ScreenHtml.Bindings(value, out _) is not { } parts) return value;
+            return string.Concat(parts.Select(p => p.Expression ? "{{ " + Rename(p.Text, scope) + " }}" : p.Text));
+        }
+        void Walk(ScreenHtml.Node node, Dictionary<string, (string Row, Func<string, string> Member)> outer, bool parentEdited)
+        {
+            if (node.Tag is "text" or "style" or "script" or "os-opaque") return;
+            if (node.IsText) { if (parentEdited && outer.Count > 0) node.Text = Bindings(node.Text!, outer); return; }
+            var scope = outer;
+            if (node.Get("list") is { } source && node.Get("as") is { } alias && edited(node))
+            {
+                var row = Anvil.Core.ScreenDocument.AliasRow(Rename(source, outer), top);
+                if (row.Certain)
+                {
+                    scope = new(outer, StringComparer.OrdinalIgnoreCase) { [alias] = (row.Row, row.Member) };
+                    node.Attributes.RemoveAll(a => a.Key == "as");
+                    outcome.Normalized.Add(new JsonObject { ["code"] = Anvil.Core.Preflight.HtmlDocumentRules.ListAlias, ["alias"] = alias, ["row"] = row.Row });
+                }
+            }
+            if (edited(node) && scope.Count > 0)
+                for (var i = 0; i < node.Attributes.Count; i++)
+                {
+                    var (key, value) = node.Attributes[i]; var rewritten = value;
+                    if (value.Contains("{{", StringComparison.Ordinal)) rewritten = Bindings(value, scope);
+                    else if (key.StartsWith("on", StringComparison.Ordinal) || key.StartsWith("html:on", StringComparison.Ordinal) || key.StartsWith('@'))
+                    {
+                        if (Anvil.Core.Preflight.HtmlText.CallArguments(value) is { } args)
+                            rewritten = Anvil.Core.Preflight.HtmlText.Apply(value, args.SelectMany(a => scope.SelectMany(s => Anvil.Core.Preflight.HtmlText.RenameRow(value, a.ValueStart, a.ValueEnd, s.Key, s.Value.Row, s.Value.Member))));
+                    }
+                    else if (key is "if" or "list" or "bind" or "show" or "options" or "value" or "enabled" or "mandatory" || key.StartsWith("os-", StringComparison.Ordinal) || key.StartsWith(':'))
+                        rewritten = Rename(value, key == "list" ? outer : scope);
+                    if (rewritten != value) node.Attributes[i] = new(key, rewritten);
+                }
+            foreach (var child in node.Children) Walk(child, scope, edited(node));
+        }
+        Walk(top, new(StringComparer.OrdinalIgnoreCase), false);
     }
 
     public const string SvgInnerCss = "HTML_SVG_INNER_CSS", SvgUseExternal = "HTML_SVG_USE", SvgUseInlined = "SVG_USE_INLINED";
@@ -156,6 +206,12 @@ internal static class ScreenHtmlNative
 
     private static void Attributes(ScreenHtml.Node node, ScreenHtml.Node? read, Func<string, bool> isReference, Outcome outcome, Context context)
     {
+        if (node.Get("required") == "" && Fresh(node, read, "required"))
+        {
+            var at = node.Attributes.FindIndex(a => a.Key == "required");
+            node.Attributes[at] = new("required", "True");
+            Note(outcome, "HTML_BOOLEAN_ATTRIBUTE", node, "required", "", "True", "an empty HTML boolean attribute means True, never an empty native expression");
+        }
         if (node.Tag == "img") Image(node, read, isReference, outcome, context);
         var kind = ScreenHtmlTables.KindOf(node, out _);
         // style with a binding where style is the Custom Style (a text): the attribute style takes the expression.

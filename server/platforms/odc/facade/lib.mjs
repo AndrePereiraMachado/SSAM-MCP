@@ -3,6 +3,8 @@
 // Every Studio call goes through the executor seam (executor.mjs): locally today's pipe and .NET client, hosted the
 // customer's agent. Hosted, the data of this module (tenants.json, snapshots, journal, lab, requests and receipts) is the
 // customer's <ws>/odc; the code locations (bridge client, builder, studio/, portal/runtime) stay where they are.
+import { appendJsonLine } from './correlation.mjs';
+import { judgeMergeAnswer, publishSecurityRefusal } from './security-after-merge.mjs';
 import { execFile } from 'node:child_process';
 import { createCredentialPrompt } from '../portal/runtime/credential-prompt.mjs';
 import { promisify } from 'node:util';
@@ -14,7 +16,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { agentJoin } from './agent-paths.mjs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { deliverKernel, publishAuthorization, publishDelivered, studioSteps, withMergeCode, withoutStack } from './kernel-delivery.mjs';
+import { deliverKernel, publishAuthorization, publishDelivered, studioSteps, withMergeCode, withoutStack, staleRevisionNext } from './kernel-delivery.mjs';
 import { resolveApplicationUrls, withAppLinks, appUrlCapability, derivedStageOrigin } from './app-urls.mjs';
 import { signedRuntime } from './signed-runtime.mjs';
 import { readLocalSettings, withLocalTenant } from './local-settings.mjs';
@@ -70,7 +72,7 @@ export function journal(entry) {
     module: entry.module ?? null, module_key: null, base_sha256: null, candidate_sha256: null, studio_pid: null, attempt: null,
     outcome: entry.outcome, gate: entry.gate ?? 'none', evidence_dir: entry.evidence ?? null, note: entry.note ?? null, source: 'live', feature: entry.feature ?? null,
     ...(entry.file ? { file: entry.file } : {}), ...(entry.sourceSha256 ? { source_sha256: entry.sourceSha256 } : {}), ...(entry.failed ? { failed: entry.failed } : {}) };
-  try { fs.mkdirSync(path.dirname(paths.journal), { recursive: true }); fs.appendFileSync(paths.journal, JSON.stringify(line) + '\n'); } catch { /* the journal never blocks a command */ }
+  try { fs.mkdirSync(path.dirname(paths.journal), { recursive: true }); appendJsonLine(paths.journal, line); } catch { /* the journal never blocks a command */ }
 }
 
 // SSAM_ODC_OFFLINE=1: no Studio process, vault entry or prompt is ever touched (tests and dry runs while the user's
@@ -173,9 +175,29 @@ export function flightRegistry(executor = currentExecutor()) {
   return registry;
 }
 const UNTRACKED = new Set(['status', 'publish-log', 'auth-status', 'dismiss-dialog']);
+const MERGE_COMMANDS = new Set(['merge', 'reconcile-merge']);
+// The evidence directory and module of a manifest argument (its evidenceDir, else <manifest folder>/evidence); {} when unreadable.
+export function manifestFacts(manifest) {
+  if (typeof manifest !== 'string' || !manifest) return {};
+  try {
+    const context = hostedContext();
+    const file = manifest.startsWith('ws:') && context ? path.resolve(context.workspace, ...manifest.slice(3).split(/[\\/]+/).filter(Boolean)) : path.resolve(dataPath(), manifest);
+    const document = readJson(file);
+    const declared = document?.evidenceDir ?? document?.EvidenceDir;
+    return { evidence: typeof declared === 'string' && declared ? path.resolve(path.dirname(file), declared) : path.join(path.dirname(file), 'evidence'),
+      module: typeof document?.module === 'string' ? document.module : null };
+  } catch { return {}; }
+}
 export async function studio(args, pid, { prefetch = true, connectMs } = {}) {
   // CX15 r5 (N-2): hashed before anything keeps the line (inFlight, which studio_status shows while the bridge is busy).
   args = bridgeArgsWithoutWords(args);
+  // a11-b: a manifest whose merge brought a new security warning is never published by SSAM (studio_publish {manifest},
+  // studio_command publish, studio_deliver publish:true): refused before the bridge, whose v97 gate accepts its receipt.
+  if (args[0] === 'publish') {
+    const { evidence, module } = manifestFacts(args[1]);
+    const blocked = publishSecurityRefusal(evidence, { module });
+    if (blocked) return blocked;
+  }
   let targetPid = await studioPid(pid);
   let value, refused = null, requested = null;
   const flights = flightRegistry();
@@ -200,6 +222,10 @@ export async function studio(args, pid, { prefetch = true, connectMs } = {}) {
     value = await send(targetPid);
   }
   if (refused) return refused;
+  // a11-b: the new live messages after a merge are judged again with the kernel's security list (security-after-merge.mjs),
+  // from the answer and the merge's evidence, and the verdict is recorded there: a bridge built with an older list (v97)
+  // accepted some as warnings.
+  if (MERGE_COMMANDS.has(args[0])) value = judgeMergeAnswer(value, { evidence: manifestFacts(args[1]).evidence });
   // The answer says which open module the name reached.
   if (requested && value && typeof value === 'object' && !Array.isArray(value)) value = { ...value, requestedModule: requested };
   if (prefetch && ['snapshot', 'latest'].includes(args[0]) && value?.ok === true && typeof value.path === 'string') warmIndex(value.path);
@@ -303,10 +329,38 @@ export async function attach(pid, { call = client, findPid = studioPid, dll: fou
   const result = await call(target, hosted ? ['attach'] : ['attach', dll.path]);
   let status = null;
   await pollWithBackoff(async () => {
-    status = await call(target, ['status', 'brief']).catch(error => ({ error: error.message }));
+    status = await call(target, ['status', 'brief']).catch(error => ({ error: error.message, ...(error?.code ? { code: error.code } : {}) }));
     return status?.ok === true || result?.ok !== true;
   }, { deadlineMs: 15000, sleep, now });
-  return { ...result, pid: target, ...(dll ? { dll: dll.path, version: dll.version } : {}), status };
+  // Hosted, the agent attaches the bridge of its own package: no DLL of this server is named (servidor line).
+  const identity = { pid: target, ...(dll ? { dll: dll.path, version: dll.version } : {}), status };
+  // Attached means a status round trip on the pipe, never the hook's own word: the startup hook also "succeeds" on a
+  // Studio where this DLL is already loaded and its command server is gone or hung (2026-10-22: attached:true, then
+  // BRIDGE_NOT_ATTACHED on every command). Without the round trip the answer says why and what to call next.
+  if (result?.ok !== true) return { ...result, ...identity, ok: false, attached: false };
+  if (status?.ok === true) return { ...result, ...identity, ok: true, attached: true };
+  return { ...identity, ok: false, attached: false, hookApplied: true, ...silentBridge(target, dll?.version ?? null, status) };
+}
+// Why a bridge whose hook ran does not answer, from the status attempt's own error code (odc-pipe.mjs PipeError).
+export function silentBridge(pid, version, status) {
+  const code = status?.code;
+  const cause = code === 'BRIDGE_BUSY' || code === 'PIPE_BUSY' ? 'pipe-busy'
+    : code === 'PIPE_REPLY_TIMEOUT' || code === 'PIPE_TRANSPORT' ? 'bridge-hung'
+    : code === 'BRIDGE_NOT_ATTACHED' || code === 'PIPE_ABSENT' || code === 'PIPE_CONNECT_TIMEOUT' ? 'pipe-absent' : 'status-refused';
+  // Hosted (no DLL of this server is named), version is null and the texts name the bridge without it.
+  const pipeName = version ? `${version}-${pid}` : `of ODC Studio ${pid}`;
+  const head = `The startup hook ran but the bridge ${version ? version + ' ' : ''}of ODC Studio ${pid} did not answer status within 15 s`;
+  const error = cause === 'pipe-busy'
+    ? `${head}: its pipe exists but stays busy, a command is still running there. Never repeat a write: studio_status reads the delivery in flight from its evidence; attach again once it ended.`
+    : cause === 'bridge-hung'
+    ? `${head}: its pipe accepted the connection but never answered, so the bridge is loaded and hung. Nothing was sent to any module. studio_status reads the delivery in flight from its evidence; if it stays silent, close and reopen the ODC Studio (publish or keep its changes first), then ssam_connect.`
+    : cause === 'pipe-absent' && flightRegistry().has(pid)
+    ? `${head}: no pipe ${pipeName} exists while this process still waits for its '${flightRegistry().get(pid).command}' (since ${flightRegistry().get(pid).since}); a bridge serves no pipe while it runs a command. Never repeat it: studio_status reads it from its evidence.`
+    : cause === 'pipe-absent'
+    ? `${head}: no pipe ${pipeName} exists. Either a command sent by another process still runs there (the bridge serves no pipe meanwhile: studio_status reads the last delivery from its evidence), or this DLL is already loaded and its command server is gone (a loaded DLL is never replaced, so the hook cannot start it again). Nothing was sent to any module. When no delivery is in flight, close and reopen the ODC Studio (publish or keep its changes first) and call ssam_connect, or attach a newer bridge version.`
+    : `${head}: ${String(status?.error ?? 'status was refused').slice(0, 300)}`;
+  return { code: 'BRIDGE_SILENT', cause, error,
+    continuation: { tool: 'studio_status', arguments: { pid }, why: 'read what the Studio and the last delivery say before anything else; never repeat a merge or a publish on a silent bridge' } };
 }
 // O DLL do builder e compilado a mao e chamado daqui. Quando alguem muda studio\**\*.cs e nao recompila, este
 // processo corre o codigo VELHO e nada o denuncia -- na sessao de 17/09 isso aparece como 190 minutos, com o
@@ -584,6 +638,7 @@ export async function deliver({ feature, module, until = 'merge', pid, producer,
     const published = await publishDelivered({ manifest, module, words: authorization.words, pid }, { studio: studioCall });
     Object.assign(answer, { authorization: authorization.authorization, ...published });
     if (published.publish.outcome === 'published') return done(true, { ...answer, result: RESULT.deliveredAndPublished });
+    if (published.publish.outcome === 'stale') return done(false, { ...answer, failed: 'publish', code: published.publish.code, error: published.publish.error, continuation: staleRevisionNext(manifest) });
     return done(false, { ...answer, failed: 'publish', code: published.publish.outcome === 'uncertain' ? 'PUBLISH_UNCERTAIN' : 'PUBLISH_FAILED',
       ...(published.publish.outcome === 'uncertain' ? { outcome: 'uncertain' } : {}), error: published.publish.error ?? 'The publication did not succeed.',
       continuation: { tool: 'studio_publish', arguments: { manifest, ...(Number.isInteger(pid) ? { pid } : {}) }, why: 'Merged; publish this manifest again after the fix the publication names. Never repeat the delivery.' } });
@@ -689,9 +744,15 @@ export function recordConnectedTenants(hosts) {
   }
   return { written, kept };
 }
-// Local construction with an explicit origin/tenant, otherwise the target's live Studio context.
+// Local construction with an explicit origin/tenant, otherwise the live context of the Studio of the lane (both Studios
+// without lane, app-urls.mjs resolveApplicationUrls). The O11 module kind (Traditional Web: <Screen>.aspx) comes from the
+// digest the store already holds for that module (module-map.mjs storedModuleKind).
 export function appUrl(input) {
-  return resolveApplicationUrls(input, { config: tenants(), status: async pid => client(await studioPid(pid), ['status']) });
+  return resolveApplicationUrls(input, { config: tenants(), status: async pid => client(await studioPid(pid), ['status']),
+    // Read only and cheap: the open modules of the Service Studio (never a dialog answered), and the module kind from a digest
+    // the store already holds (never a capture per call).
+    o11Status: async () => (await import('./o11-studio.mjs')).o11OpenModules(),
+    o11ModuleKind: async app => (await import('./module-map.mjs')).storedModuleKind('o11', app) });
 }
 export function tenantOf(host) {
   const all = tenants();

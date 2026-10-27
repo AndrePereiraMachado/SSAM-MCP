@@ -28,7 +28,7 @@ export const VERB_FIELDS = Object.freeze({
   o11_studio: Object.freeze({ field: 'command', default: null, values: Object.freeze(['status', 'wait', 'open-module', 'close-module', 'snapshot', 'errors', 'publish-log', 'windows', 'dismiss-dialog', 'login', 'refresh-references']) }),
   o11_access: Object.freeze({ field: 'action', default: null, values: Object.freeze(['plan', 'apply', 'verify', 'users']) }),
   studio_create_app: Object.freeze({ field: 'action', default: 'create', values: Object.freeze(['templates', 'create']) }),
-  ssam_friction: Object.freeze({ field: 'view', default: 'issues', values: Object.freeze(['issues', 'task', 'report']) }),
+  ssam_friction: Object.freeze({ field: 'view', default: 'issues', values: Object.freeze(['issues', 'task', 'timeline', 'reports', 'report', 'delivery-kpi']) }),
 });
 // The calls whose ok answer is a creation (deliv "criado"): any op of studio_create, these ops of the others.
 export const CREATE_OPS = Object.freeze({ studio_create: null, studio_create_app: Object.freeze(['create']),

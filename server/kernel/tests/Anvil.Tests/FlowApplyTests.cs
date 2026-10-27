@@ -9,6 +9,17 @@ public sealed class FlowApplyTests
 {
     private const string Fixture = "blank-service.oml";
     [Fact] public void PaginationSqlAndExceptionHandlersReadBackExactly() => Run(FlowApplyScenarios.PaginationSqlAndExceptionHandlersReadBackExactly);
+    [Fact] public void RecordTypeIndexIsSharedWithinLogicAndRenewedAfterDataChanges() => Run(FlowApplyScenarios.RecordTypeIndexIsSharedWithinLogicAndRenewedAfterDataChanges);
+    [Fact] public void ToleratedShapesApplyAndReadBackAsTheCanonicalText() => Run(FlowApplyScenarios.ToleratedShapesApplyAndReadBackAsTheCanonicalText);
+    [Fact] public void SwappingDecisionTargetsKeepsEveryNodeIdentity() => Run(FlowApplyScenarios.SwappingDecisionTargetsKeepsEveryNodeIdentity);
+    [Fact] public void MovingNestedLoopToSequencePreservesNodesAndDetachesOldEdges() => Run(FlowApplyScenarios.MovingNestedLoopToSequencePreservesNodesAndDetachesOldEdges);
+    [Fact] public void SameNamedUiCallsBindToTheirOwnerAcrossCreateReloadEditAndMerge() => RunReactive((dir, fixture, lane) =>
+        FlowApplyScenarios.SameNamedUiCallsBindToTheirOwnerAcrossCreateReloadEditAndMerge(dir, fixture, lane, (host, basis, candidate, merged) => {
+            var probe = Anvil.Core.MergeProbe.ThreeWay(host, File.ReadAllBytes(basis), File.ReadAllBytes(candidate), merged);
+            Assert.False(probe.HasConflicts); Assert.Equal(0, probe.Errors);
+        }));
+    [Fact] public void LifecycleDestinationIgnoresSameNamedEntityFields() => RunReactive(FlowApplyScenarios.LifecycleDestinationIgnoresSameNamedEntityFields);
+    [Fact] public void NewlyCreatedDataSourcesReplaceStaleOwnerLookup() => RunReactive(FlowApplyScenarios.NewlyCreatedDataSourcesReplaceStaleOwnerLookup);
 
     private static string Scratch()
     {
@@ -57,10 +68,10 @@ public sealed class FlowApplyTests
     [Fact] public void TheActionsAnEventOrARefreshNamesAreWrittenFirst() => RunReactive(FlowApplyScenarios.TheActionsAnEventOrARefreshNamesAreWrittenFirst);
 
     [Fact]
-    public void ATraditionalOwnerIsNotWrittenByText()
+    public void ATraditionalOwnerRejectsDataActions()
     {
         if (!PacoteBPolicyTests.StudioAvailable()) return;
-        FlowApplyScenarios.ATraditionalOwnerIsNotWrittenByText(Scratch(), "traditional-ui.oml", "o11");
+        FlowApplyScenarios.ATraditionalOwnerRejectsDataActions(Scratch(), "traditional-ui.oml", "o11");
     }
     [Fact] public void TheRulesBringCheckedPatchesThatWriteTheJob() => Run(FlowApplyScenarios.TheRulesBringCheckedPatchesThatWriteTheJob);
     [Fact] public void TheRowsOfAnAggregateAreT1AndTheRefusalBringsTheVerifyOfTheRest() => Run(FlowApplyScenarios.TheRowsOfAnAggregateAreT1AndTheRefusalBringsTheVerifyOfTheRest);

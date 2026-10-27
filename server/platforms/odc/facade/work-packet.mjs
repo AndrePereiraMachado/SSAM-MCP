@@ -6,6 +6,10 @@ import { createHash } from 'node:crypto';
 // in one call any agent makes: this packet. It is deterministic (the same intent, lane, capture and sources give the same
 // bytes: no timings, cache states or dates), fits budgetBytes (default PACKET_DEFAULT_BYTES)
 // and has a declared order with declared cuts:
+//   scope         (right after module, R4 2026-10-24) the names this change may use, each with its @key, from the same
+//                 digest (packet-scope.mjs): the owner the change edits (its signature, names, text and basedOn when its
+//                 reading came with the packet), every basedOn with the field it goes in, the groups by relevance and the
+//                 rest in next, labelled; with it needsReading says whether one read must come before the delivery
 //   module        the elements of the capture the intent names, from its module digest (ssam-digest/1, ModuleDigest.cs and
 //                 module-digest.mjs): entities, static entities, structures and the signature of each action; the body of
 //                 an action, and a screen, named exactly; nothing named: the overview, in digest order
@@ -41,14 +45,16 @@ import { techInEnglish } from './search-aliases.mjs';
 import { generatorFor, generatorCall, generatorCard } from './generators.mjs';
 import { isScreenIntent, screenWords } from './osui-catalog.mjs';
 import { functionNames } from './builtin-functions.mjs';
-import { coveredBy } from './text-packet.mjs';
+import { coveredBy, FLOW_BASED_ON, HTML_BASED_ON } from './text-packet.mjs';
 import { fitComponents } from './environment-components.mjs';
 import { planSize, PLAN_MIN_ITEMS } from './code-plan.mjs';
 import { hostedContext } from './executor.mjs';
 import { codeServedHosted } from './hosted/served.mjs';
+import { osuiAppTypes, APP_KINDS } from './app-kinds.mjs';
+import { packetScope, readingNeed, SCOPE_GROUPS } from './packet-scope.mjs';
 
 export const PACKET_SCHEMA = 'ssam-packet/1';
-export const PACKET_ORDER = ['module', 'text', 'environment', 'capabilities', 'example', 'rules', 'next'];
+export const PACKET_ORDER = ['module', 'scope', 'text', 'environment', 'capabilities', 'example', 'rules', 'next'];
 // The most of the budget the text section takes (its richest level that fits), and the environment section.
 export const TEXT_SHARE = 0.4;
 export const ENVIRONMENT_SHARE = 0.16;
@@ -57,10 +63,25 @@ import { PACKET_MAX_BYTES, PACKET_DEFAULT_BYTES, RECOVERY_PART_BYTES } from './c
 export const PACKET_BUDGET = PACKET_MAX_BYTES;
 // The share of the room each section starts with; without a module its share goes to the others in proportion.
 export const SHARES = { module: 0.44, capabilities: 0.26, example: 0.17, rules: 0.13 };
+// The scope (R4) is sized before the shares, like text: at most SCOPE_SHARE of the budget (EDIT_SCOPE_SHARE with the
+// reading of the element the change edits: its text is what the delivery is written from); its floor (the owner, every
+// basedOn and next) stays while a module was read.
+export const SCOPE_SHARE = 0.3;
+export const EDIT_SCOPE_SHARE = 0.45;
 // Room kept for the cuts and the size field, whatever the sections hold.
 const CUTS_ROOM = 1600;
-const ORDER_RULE = 'sections in this order; each takes its share of the room and passes what it leaves to the next; inside a section the most relevant items come first and the rest is named in cuts with the call that returns it';
-const WORK_RULE = 'Work from this packet: it holds what this task needs from the module, the contracts, a proven example and the team rules. Do not read docs, guides or the whole module again; for a part named in cuts, make the call it gives.';
+// The precision of the scope's regain (workPacket fit): the scope's room is found to within these bytes.
+const SCOPE_STEP = 64;
+// What the next step needs is in the first answer (F4 review): the capabilities section keeps at least the room of its first
+// direct match in its shortest form (id, title, operation and the expand that opens it) whatever the shares and the shrinking
+// leave it, the other sections yielding first; only when even that does not fit is the floor given up (never a refusal).
+const capabilitiesFloor = input => {
+  const first = (input.matches ?? []).find(m => m.via === 'match');
+  return first ? bytes({ matched: 1, items: [{ id: first.id, title: first.title, operation: clip(first.route?.operation ?? '', 300) || null, expand: first.id + ':contract+example' }] }) + 160 : 0;
+};
+const ORDER_RULE = 'sections in this order, the most relevant first; what the room left out is named in cuts with the call that returns it';
+// R4 (2026-10-24): the rounds of the work in one line (18 reads before an accepted delivery, p50, 11..24/10/2026).
+export const WORK_RULE = 'Rounds: this packet, ONE read only if needsReading is true (read, readingWhy), then ONE delivery with every change. Do not read docs, guides or the module again; a part named in cuts comes by its call.';
 // 2026-10-12 (production test): the packet described the mechanics of one delivery and its example was one step of a chain
 // of jobs, so the session delivered one action per call (three deliveries and a rewrite of the batch: about 2 minutes).
 export const BATCH_RULE = 'ALL the changes of this request for this module go in ONE job and ONE call (user exceptions, site properties or settings, structures, entities and every action together, in any order: the actions may call each other); separate jobs only for different modules, never one job per action or per step; a refusal brings every problem of the whole job at once';
@@ -170,12 +191,14 @@ export function namedCapabilities(digest, intent) {
   return out;
 }
 const GROUPS = ['entities', 'staticEntities', 'structures', 'actions', 'bodies', 'screens'];
-export function moduleSection(found, intent, cap, { lane, screens = false } = {}) {
+export function moduleSection(found, intent, cap, { lane, screens = false, scoped = false } = {}) {
   if (!found) return { value: { none: true, note: 'no app given: pass app (a capture .oml or an open module name) for the elements of the module' }, cut: null };
   if (found.ok === false) return { value: { ok: false, target: found.target ?? null, error: clip(found.error ?? found.code ?? 'the module could not be read', 400),
     read: { tool: 'ssam_map', arguments: { lane, target: found.target ?? '<capture.oml or Module>', view: 'digest' } } }, cut: null };
   const d = found.digest;
-  const { words, selection, items } = moduleItems(d, intent, { screens });
+  const { words, selection, items: all } = moduleItems(d, intent, { screens });
+  // With the scope, the groups it names (entities, static entities, structures, signatures) are not written twice.
+  const items = scoped ? all.filter(x => x.group === 'bodies' || x.group === 'screens') : all;
   const read = { tool: 'ssam_map', arguments: { lane, target: found.file, view: 'digest', expectedSourceSha256: found.sourceSha256 } };
   const value = { name: d.module.name, kind: d.module.kind ?? null, key: d.module.key, file: found.file, sourceSha256: found.sourceSha256,
     elements: d.elements ?? null, actionsTotal: (d.actions ?? []).length,
@@ -342,6 +365,7 @@ const TOPIC_WORDS = {
   security: 'role roles permissao permissoes autorizacao seguranca security anonimo anonymous',
   agent: 'agente agentes subagente subagentes agent agents subagent subagents paralelo parallel',
   merge: 'merge oml omls ponte bridge',
+  traditional: 'traditional tradicional tradicionais webresponsive',
 };
 const TOPIC_OF_WORD = new Map();
 for (const [t, list] of Object.entries(TOPIC_WORDS)) for (const w of list.split(' ')) TOPIC_OF_WORD.set(w, [...(TOPIC_OF_WORD.get(w) ?? []), t]);
@@ -361,7 +385,12 @@ export const LESSON_TOPICS = [
   ['odc (client) and o11 (server): list action lambda', ['list', 'logic']], ['o11: an entity with', ['data']], ['o11: never redeclare', ['logic', 'publish']],
   ['direct oml merge', ['merge']], ['jobs in a file', ['job']], ['subagents', ['agent']], ['facade change', []], ['several agents', ['agent']],
   ['expectedmessages', ['job']], ['scope rule', ['job']], ['all generated code follows', []],
+  ['traditional official components', ['traditional', 'ui']], ['traditional web interaction', ['traditional', 'ui']],
+  ['o11 reactive/mobile: role checks', ['security']],
 ];
+// A lesson with the topic traditional is for a Traditional request only (its words, or the kind of its module): it never
+// takes the room of another kind's rules (integ/proto-traditional review M3).
+const ONLY_FOR = ['traditional'];
 const RULES_MAX = 16;
 export const PADROES_TOPICS = {
   L1: ['logic'], L2: ['logic'], L3: ['logic'], L4: ['logic'], L5: ['logic', 'ui'], L6: ['logic', 'integration'], L7: ['logic', 'data'],
@@ -410,6 +439,7 @@ const RULE_CHARS = 1400, RULE_TEXT_CHARS = 360;
 export function rulesSection(input, cap, { lane, read = guideText } = {}) {
   const { intent = '', matches = [], categories = new Map() } = input;
   const topics = intentTopics(intent, matches, categories);
+  if ((input.kind?.for ?? []).includes('o11-traditional') && !topics.includes('traditional')) topics.push('traditional');
   // F2 (review english-junction): the Portuguese technique words in English, the language of the rules (search-aliases.mjs).
   const tech = [...new Set(plain(intent).filter(w => TECH.has(w)).map(techInEnglish))];
   const all = { tool: 'ssam_reference', arguments: { lane, kind: 'rules', query: 'all' } };
@@ -417,7 +447,7 @@ export function rulesSection(input, cap, { lane, read = guideText } = {}) {
   let units; try { units = ruleUnits(read); } catch (error) { return { value: { error: clip(error.message, 300), all, padroes }, cut: null }; }
   // A shared topic weighs more the fewer rules have it (1 + ln(rules / rules with the topic)): "exception" or "naming"
   // says more about a rule than "logic", which most rules share. A technique word the rule holds adds 3.
-  const lanes = units.filter(u => !u.lane || u.lane === lane);
+  const lanes = units.filter(u => (!u.lane || u.lane === lane) && (u.topics ?? []).every(t => !ONLY_FOR.includes(t) || topics.includes(t)));
   const df = new Map(); for (const u of lanes) for (const t of u.topics ?? []) df.set(t, (df.get(t) ?? 0) + 1);
   const weight = t => 1 + Math.log(lanes.length / (df.get(t) ?? lanes.length));
   const scored = lanes.map((u, order) => {
@@ -449,13 +479,48 @@ function codeOfRoute(route, lane, name) {
   const named = call => (call?.arguments && typeof call.arguments === 'object'
     ? { ...call, arguments: Object.fromEntries(Object.entries(call.arguments).map(([k, v]) => [k, (k === 'module' || k === 'target') && typeof v === 'string' && v.startsWith('<') && name !== '<Module>' ? name : v])) } : call);
   return { id: route.id, form: route.form, part: CODE_PART[route.id],
-    grammar: { tool: 'ssam_code', arguments: { lane, action: 'grammar', part: CODE_PART[route.id] }, why: 'the syntax and a from-scratch example (an empty module starts here)' },
+    grammar: { tool: 'ssam_code', arguments: { lane, action: 'grammar', part: CODE_PART[route.id] }, why: 'syntax and a from-scratch example' },
     read: named(route.code.read), write: named(route.code.write) };
 }
 
 // `expand`: the expand, detail or type of the same call (2026-10-11): the packet carries its own contract slices, so the
 // parts asked by name are its next call, never dropped in silence.
-export function nextSection({ lane, intent = '', module = null, operations = null, expand = null, textForms = [], textRoute = null }) {
+// R4 (2026-10-24): the basedOn of the ssam_code write in its place, with its value when the packet read the owner (the
+// textSha of each flow, the {capture, html} of a screen, the capture sha256 of the data text); a creation carries none.
+function basedOnIn(write, { creating, readings = [], module = null }) {
+  if (!write?.arguments || write.tool !== 'ssam_code') return write;
+  const a = { ...write.arguments };
+  const sha = module?.ok !== false && module?.sourceSha256 ? module.sourceSha256 : null;
+  const html = readings.find(r => r.kind === 'html');
+  if (a.part === 'html' && html) { a.basedOn = html.basedOn; a.element = html.screen; a.text = '<only the changed elements, each whole with its k (scope.owner.widgets); a new one without k>'; }
+  else if (creating) {
+    delete a.basedOn;
+    if (a.part === 'logic') a.text = '<the new ssam-flow/1 texts, each header without @key>';
+    if (a.part === 'ddl') a.text = '<the new ssam-ddl/1 statements, without -- @key>';
+  } else if (a.part === 'logic') {
+    const flows = readings.filter(r => r.kind === 'flow');
+    a.basedOn = flows.length ? (flows.length === 1 ? flows[0].textSha : flows.map(r => r.textSha)) : FLOW_BASED_ON;
+    if (flows.length) a.text = flows.length === 1 ? '<scope.owner text, edited, every line with its @id>' : flows.map(r => '<the text of ' + r.name + ', edited>');
+  } else if (a.part === 'html') {
+    a.basedOn = { capture: sha ?? '<sourceSha256 of the read>', html: HTML_BASED_ON };
+  } else if (a.part === 'ddl' && sha) a.basedOn = sha;
+  return { ...write, arguments: a };
+}
+// R4: the other text forms of the change ride in the same ssam_code write (also), each with its basedOn in its place: the
+// data a new action carries, the edit of the existing screen a new attribute is shown in.
+const PART_OF_FORM = { 'ssam-ddl/1': 'ddl', 'ssam-flow/1': 'logic', 'ssam-html/1': 'html' };
+function withCompanions(write, text, { readings = [], module = null }) {
+  if (!write?.arguments || write.tool !== 'ssam_code' || !Array.isArray(text?.forms) || text.forms.length < 2) return write;
+  const primary = write.arguments.part;
+  const also = text.forms.filter(f => PART_OF_FORM[f] && PART_OF_FORM[f] !== primary).map(f => {
+    const part = PART_OF_FORM[f];
+    const edit = (text.editing ?? []).includes(f) || (!text.creating && f !== 'ssam-ddl/1');
+    const one = basedOnIn({ tool: 'ssam_code', arguments: { part, text: '<the ' + f + ' text of this change>' } }, { creating: !edit, readings, module }).arguments;
+    return Object.fromEntries(Object.entries(one).filter(([k]) => ['part', 'text', 'basedOn', 'element'].includes(k)));
+  });
+  return also.length ? { ...write, arguments: { ...write.arguments, also } } : write;
+}
+export function nextSection({ lane, intent = '', module = null, operations = null, expand = null, textForms = [], textRoute = null, text = null, readings = [] }) {
   const name = module?.ok !== false && module?.digest?.module?.name ? module.digest.module.name : '<Module>';
   // With a text section the ops are those of text.call (the text forms) and the JSON ops of what no text covers.
   const ops = textForms.length ? ['<the ops of text.call, in its order>', '<JSON ops only for what no text form covers>'] : ['<ops written from this packet>'];
@@ -468,19 +533,20 @@ export function nextSection({ lane, intent = '', module = null, operations = nul
   // tool, with no plan and no code card (the text forms are read with ssam_map views). a8: ssam_code is served hosted, so a
   // hosted packet is the local one; the switch is its class in hosted/tools.json (hosted/served.mjs).
   const hosted = hostedContext() !== null && !codeServedHosted();
-  const code = hosted ? null : codeOfRoute(textRoute, lane, name);
+  const routed = hosted ? null : codeOfRoute(textRoute, lane, name);
+  const code = routed ? { ...routed, write: withCompanions(basedOnIn(routed.write, { creating: text?.value ? text.value.creating === true : false, readings, module }), text?.value, { readings, module }) } : null;
   // A generator writes the whole family the intent asks for (a REST API from its URLs, the standard actions of the entities;
   // 2026-10-13): its one op is the job and its card next.generator, the same way for each (generators.mjs generatorFor).
   const generator = generatorFor(intent);
   const deliver = generator ? generatorCall(generator, lane, name) : code ? code.write : json;
-  const summary = 'without errors it answers "delivered" with a summary of what it created (each action with its inputs and outputs): no map of the module after it';
+  const summary = '"delivered" brings a summary of what it created (each action with its inputs and outputs): no map after it';
   // Six or more elements written by hand are split by ssam_code plan; a generator writes its whole family in one op, so a
   // generated intent never asks for a plan.
   const planned = generator || hosted ? 0 : planSize(intent, module?.digest);
   return { work: WORK_RULE,
     ...(generator ? { generator: { ...generatorCard(generator, lane, name), why: generator.why } } : {}),
     ...(planned >= PLAN_MIN_ITEMS ? { plan: { tool: 'ssam_code', arguments: { lane, action: 'plan', module: name, items: '<one per element: kind, name, intent, signature>' }, why: `${planned} elements: ssam_code splits them into parallel batches with prompts, context and checks; launch what it returns, then send its final write` } } : {}),
-    deliver: { ...deliver, batch: BATCH_RULE, ...(hosted ? {} : { parallel: PARALLEL_RULE }), why: generator ? `one call: the ${generator.op} op is the job (put the other changes of this module in the same job); ${summary}` : code ? `one call: ssam_code writes the ${code.form} text through ${json.tool} (it captures the live module, validates and merges; ${summary})` : `one call: it captures the live module, validates and merges; ${summary}` },
+    deliver: { ...deliver, batch: BATCH_RULE, ...(!hosted && planned >= PLAN_MIN_ITEMS ? { parallel: PARALLEL_RULE } : {}), why: generator ? `one call: the ${generator.op} op is the job (put the other changes of this module in the same job); ${summary}` : code ? `one call: ssam_code writes the ${code.form} text through ${json.tool} (it captures the live module, validates and merges; ${summary})` : `one call: it captures the live module, validates and merges; ${summary}` },
     ...(code ? { code: { id: code.id, form: code.form, part: code.part, grammar: code.grammar, read: code.read, json: { tool: json.tool, why: 'the JSON ops, for what the code forms do not write' } } } : {}),
     fix: { how: 'a refusal comes once with every problem of every phase (problems[]: phase, pointer, fix, patch when certain, also by name in patchByName) and names its job in nextBasedOn {job, sha256}: correct all of them in one call with patch (paths by name: actions/<Action>/steps/<as>/...) + basedOn, or with only the changed actions as a partial job + basedOn; never resend the whole job' + (lane === 'o11' ? '; on O11 also closePrevious with the refused taskId' : ''),
       arguments: { patch: ['<the patches returned (patchByName) plus your fixes>'], basedOn: { job: '<nextBasedOn.job>', sha256: '<nextBasedOn.sha256>' } } },
@@ -528,16 +594,61 @@ export function packetMissing(full, kept, path = '') {
 }
 export function packetRecovery(spec) {
   if (!String(spec ?? '').startsWith('packet:')) return null;
-  const m = /^packet:(module|text|environment|capabilities|example|rules):(\d+):([a-f0-9]{64}):(\d+):(\d+)$/.exec(spec);
+  const m = /^packet:(all|module|scope|text|environment|capabilities|example|rules):(\d+):([a-f0-9]{16}):(\d+):(\d+)$/.exec(spec);
   if (!m || ![m[2], m[4], m[5]].every(n => Number.isSafeInteger(Number(n))) || Number(m[2]) < 1 || Number(m[2]) > PACKET_MAX_BYTES || Number(m[5]) < 1) return { invalid: true };
   return { section: m[1], budgetBytes: Number(m[2]), sha256: m[3], offset: Number(m[4]), count: Number(m[5]) };
 }
 const sectionHash = (input, section, full, missing) => createHash('sha256').update(JSON.stringify({ basis: input.basis ?? null,
-  source: input.module?.sourceSha256 ?? null, section, full, missing })).digest('hex');
+  source: input.module?.sourceSha256 ?? null, section, full, missing })).digest('hex').slice(0, 16);
 const measured = value => {
   for (let i = 0; i < 8; i++) { const n = bytes(value); if (value.size.bytes === n) break; value.size.bytes = n; }
   return value;
 };
+// The uiCatalog hint of a packet (integ/proto-traditional): the osui:<appType> expand of the kinds the packet is for.
+// Only a UI request: its text route is a UI form, or its first direct match is a UI capability, or (nothing matched) its
+// words build a screen (isScreenIntent, the rule of the OutSystems UI section); a logic, data, integration or operation
+// packet never carries it.
+function uiCatalogOf(lane, input) {
+  const textId = input.text?.value?.id ?? null;
+  const direct = (input.matches ?? []).filter(m => m?.via === 'match').map(m => String(m.id));
+  // Nothing matched: a screen request, or one in a language the catalog does not read (no word in the Latin script).
+  const unread = !/[A-Za-zÀ-ɏ]{3,}/.test(String(input.intent ?? ''));
+  const ui = textId ? textId.startsWith('ui.') : direct.length ? direct[0].startsWith('ui.') : isScreenIntent(input.intent ?? '', []) || unread;
+  if (!ui) return null;
+  const kinds = input.kind?.for?.length ? input.kind.for : APP_KINDS[lane] ?? [];
+  const types = osuiAppTypes(kinds);
+  return types.length ? { uiCatalog: { tool: 'ssam_discover', arguments: { lane, expand: types.map(t => 'osui:' + t).join(',') }, rule: 'Interpret the original language; select the captured app type.' } } : null;
+}
+// The options of the scope: the relevance of every name (moduleItems, screens included), the forms of the text route and
+// whether the change only creates, the owner readings, a screen edit.
+// The relevance of every name of the module for the intent (moduleItems, screens included): name -> score.
+export function packetRank(found, intent) {
+  const d = found?.ok !== false ? found?.digest : null;
+  const rank = new Map();
+  if (d) for (const x of moduleItems(d, intent, { screens: true }).items) if (x.group !== 'bodies') rank.set(x.name, Math.max(rank.get(x.name) ?? 0, x.score));
+  return rank;
+}
+function scopeOptions(input, intent, lane) {
+  const rank = packetRank(input.module, intent);
+  const text = input.text?.value ?? null;
+  const readings = input.readings ?? [];
+  // The forms of the change: the text route's, plus the form of every element read with the packet (it will be edited).
+  const forms = [...new Set([...(text?.forms ?? []), ...(readings.some(r => r.kind === 'flow') ? ['ssam-flow/1'] : []), ...(readings.some(r => r.kind === 'html') ? ['ssam-html/1'] : [])])];
+  return { lane, intent, rank, readings, forms, creating: text ? text.creating === true : true,
+    screenEdit: text?.id === 'ui.screen-html-edit' };
+}
+// needsReading, its why and the read (R4): from the scope as served.
+function needOf(scope, options, input) {
+  if (!scope && input.scope === true && input.module && input.module.ok !== false) return { needsReading: true, readingWhy: 'the scope did not fit this budget: ask again with budgetBytes ' + PACKET_MAX_BYTES, read: { tool: 'ssam_discover', arguments: { lane: input.lane, intent: input.intent, app: input.app, packet: true, budgetBytes: PACKET_MAX_BYTES } } };
+  if (!scope) {
+    const edit = !options.creating && options.forms.some(f => f === 'ssam-flow/1' || f === 'ssam-html/1' || f === 'ssam-ddl/1');
+    return edit && !input.app ? { needsReading: true, readingWhy: 'a change of existing elements: ask this packet again with app (the module) for its names, text and basedOn',
+      read: { tool: 'ssam_discover', arguments: { lane: input.lane, intent: input.intent, app: '<Module or capture.oml>', packet: true } } }
+      : { needsReading: false, readingWhy: input.module?.ok === false ? 'module.error' : 'no module', read: undefined };
+  }
+  const need = readingNeed(scope, options);
+  return { needsReading: need.needsReading, readingWhy: need.why, read: need.read ?? undefined };
+}
 export function workPacket(input, { budgetBytes = PACKET_DEFAULT_BYTES, read = guideText, recover = null } = {}) {
   budgetBytes = Math.min(recover?.budgetBytes ?? budgetBytes, PACKET_MAX_BYTES);
   const { lane, intent } = input;
@@ -553,20 +664,41 @@ export function workPacket(input, { budgetBytes = PACKET_DEFAULT_BYTES, read = g
     ? { ...(components ?? { ok: true }), producers } : components;
   const next = nextSection(input);
   const screens = isScreenIntent(intent, input.matches ?? []);
+  // The scope (packet-scope.mjs): the relevance of each name is the module section's (moduleItems), the forms and the
+  // creation are the text route's, the readings are the owner's (discovery.mjs ownerReadings).
+  const scopeInput = scopeOptions(input, intent, lane);
+  // R4: the scope comes with the public entry (discovery.mjs passes scope:true); then the module section keeps the bodies and
+  // screens and leaves the entities, structures and signatures to the scope, which names them with their keys and types.
+  const scoped = input.scope === true && !!input.module && input.module.ok !== false;
+  const scopeOf = cap => (scoped ? packetScope(input.module, scopeInput, cap) : null);
   const build = {
-    module: cap => moduleSection(input.module ?? null, intent, cap, { lane, screens }),
+    module: cap => moduleSection(input.module ?? null, intent, cap, { lane, screens, scoped }),
     capabilities: cap => capabilitiesSection(input, cap, { lane, screens: screenWords(intent).length > 0 }),
     example: cap => exampleSection(input, cap, { lane }),
     rules: cap => rulesSection(input, cap, { lane, read }),
   };
   // Compare the JSON values the MCP client actually receives (undefined is absent).
   const json = value => JSON.parse(JSON.stringify(value));
-  const full = json({ module: build.module(Infinity).value, text: input.text?.value ?? null, environment: environmentFull,
-    capabilities: build.capabilities(Infinity).value, example: build.example(Infinity).value, rules: build.rules(Infinity).value });
-  const envelope = { ok: true, schemaVersion: PACKET_SCHEMA, lane, intent, ...(input.app ? { app: input.app } : {}), basis: input.basis ?? null,
-    packet: { order: PACKET_ORDER, rule: ORDER_RULE }, module: null, text, environment, capabilities: null, example: null, rules: null, next, cuts: [],
-    size: { bytes: 0, budgetBytes, status: 'reduced' } };
+  // Fill or omit (family F4, 2026-10-22: a first packet of ~8 KB came with several sections null and a list of calls to
+  // fetch them): a section is in the packet with what fits of it, or it is not in the packet at all; never null. A section
+  // with nothing to say for this request (no text form, no environment need) is not a section of it and has no cut; one the
+  // budget leaves no room for is left out and its cut is the call that returns it whole. Without a module read (no app, or a
+  // capture that could not be read) the module section is its one-line note, always whole. The scope (R4) is a section of a
+  // packet with a module read only, by the same rule.
   const withModule = !!input.module && input.module.ok !== false;
+  const full = json({ module: build.module(Infinity).value, ...(scoped ? { scope: scopeOf(Infinity) } : {}), ...(input.text?.value ? { text: input.text.value } : {}),
+    ...(environmentFull ? { environment: environmentFull } : {}),
+    capabilities: build.capabilities(Infinity).value, example: build.example(Infinity).value, rules: build.rules(Infinity).value });
+  const order = PACKET_ORDER.filter(id => id === 'next' || id in full);
+  // The scope's room: its share of the budget, before the shares of the other sections (like text).
+  const scopeCap = Math.floor(budgetBytes * ((input.readings ?? []).length ? EDIT_SCOPE_SHARE : SCOPE_SHARE));
+  const scope = scopeOf(scopeCap);
+  const envelope = { ok: true, schemaVersion: PACKET_SCHEMA, lane, intent, ...(input.kind ? { kind: input.kind } : {}), ...(input.app ? { app: input.app } : {}), basis: input.basis ?? null,
+    ...needOf(full.scope, scopeInput, input),
+    packet: { order, rule: ORDER_RULE },
+    module: withModule ? null : full.module, ...(scope ? { scope } : {}), ...(text ? { text } : {}), ...(environment ? { environment } : {}),
+    capabilities: null, example: null, rules: null, next, cuts: [],
+    size: { bytes: 0, budgetBytes, status: 'reduced' } };
   const shares = withModule ? SHARES : Object.fromEntries(Object.entries(SHARES).filter(([k]) => k !== 'module').map(([k, v]) => [k, v / (1 - SHARES.module)]));
   const sectionChanges = out => Object.fromEntries(Object.keys(full).map(section => [section, packetMissing(full[section], out[section])]));
   // Each cut is one bounded unit. Its call returns exactly that unit, without
@@ -583,44 +715,105 @@ export function workPacket(input, { budgetBytes = PACKET_DEFAULT_BYTES, read = g
   const leftOf = (section, kept) => {
     const whole = full[section];
     if (section === 'module') return Object.fromEntries(GROUPS.map(g => [g, (whole?.[g]?.length ?? 0) - (kept?.[g]?.length ?? 0)]).filter(([, n]) => n > 0));
+    if (section === 'scope') return Object.fromEntries(['owner', ...SCOPE_GROUPS].map(g => [g, g === 'owner' ? (JSON.stringify(whole?.owner) !== JSON.stringify(kept?.owner) ? 1 : 0)
+      : Object.keys(whole?.[g] ?? {}).length - Object.keys(kept?.[g] ?? {}).length]).filter(([, n]) => n > 0));
     if (section === 'example') return { ops: (whole?.ops?.length ?? 0) - (kept?.ops?.length ?? 0) };
     if (section === 'rules') return { rules: Math.max(0, (whole?.items?.length ?? 0) - (kept?.items?.length ?? 0)) };
     if (section === 'capabilities' && JSON.stringify(whole?.functions) !== JSON.stringify(kept?.functions)) return { functions: 'signatures' };
     return {};
   };
-  const cutsOf = (changes, out) => Object.entries(changes).flatMap(([section, missing]) => chunksOf(missing).map(({ offset, items }) => ({
+  // R4: with the scope (the public entry) every section's missing changes go in ONE stream, their paths from the packet root
+  // (/<section>/...), cut in parts of at most RECOVERY_PART_BYTES: one call returns what the room left out (at the default
+  // budget the per-section cuts were 2.1-2.8 KB of the 8 KB, one call each).
+  const streamOf = changes => Object.entries(changes).flatMap(([section, missing]) => missing.map(c => ({ ...c, path: '/' + pointerToken(section) + c.path })));
+  const recoverCall = expand => ({ tool: 'ssam_discover', arguments: { lane, intent, ...(input.app ? { app: input.app } : {}), ...(input.limit != null ? { limit: input.limit } : {}),
+    packet: true, expand, budgetBytes: PACKET_MAX_BYTES } });
+  const cutsOf = (changes, out) => scoped ? (() => {
+    const stream = streamOf(changes);
+    const hash = sectionHash(input, 'all', full, stream);
+    return chunksOf(stream).map(({ offset, items }) => {
+      const sections = [...new Set(items.map(c => c.path.split('/')[1]))];
+      return { section: 'all', sections: Object.fromEntries(sections.map(id => [id, leftOf(id, out[id])])), left: { changes: items.length },
+        recover: recoverCall(`packet:all:${budgetBytes}:${hash}:${offset}:${items.length}`) };
+    });
+  })() : Object.entries(changes).flatMap(([section, missing]) => chunksOf(missing).map(({ offset, items }) => ({
     section, left: { ...leftOf(section, out[section]), changes: items.length }, recover: { tool: 'ssam_discover', arguments: { lane, intent, ...(input.app ? { app: input.app } : {}), ...(input.limit != null ? { limit: input.limit } : {}),
       packet: true, expand: `packet:${section}:${budgetBytes}:${sectionHash(input, section, full[section], missing)}:${offset}:${items.length}`, budgetBytes: PACKET_MAX_BYTES } } })));
   const room = budgetBytes - bytes(envelope) - CUTS_ROOM;
+  let floor = capabilitiesFloor(input);
   const assemble = shrink => {
     const out = structuredClone(envelope); let carry = 0;
     for (const id of ['module', 'capabilities', 'example', 'rules']) {
-      const cap = Math.max(0, Math.floor(Math.max(0, room) * (shares[id] ?? 0)) + carry - (shrink[id] ?? 0));
-      out[id] = cap === 0 ? null : json(build[id](cap).value);
+      if (id === 'module' && !withModule) continue;
+      const share = Math.max(0, Math.floor(Math.max(0, room) * (shares[id] ?? 0)) + carry - (shrink[id] ?? 0));
+      const cap = id === 'capabilities' && floor ? Math.max(share, floor) : share;
+      const value = cap === 0 ? null : json(build[id](cap).value);
+      if (value == null) { delete out[id]; carry = cap; continue; }
+      out[id] = value;
       carry = Math.max(0, cap - bytes(out[id]));
     }
+    Object.assign(out, needOf(out.scope, scopeInput, input));
     const changes = sectionChanges(out);
     out.cuts = cutsOf(changes, out);
+    // Neither the capabilities nor the text route fit: said in the packet, with the first call to make (never silent).
+    if (!('capabilities' in out) && !out.text) out.packet = { ...out.packet, note: 'at this budget only next fits: make the capabilities cut first (cuts[].section), or ask again with a larger budgetBytes' };
     out.size.status = out.cuts.length ? 'reduced' : 'within';
     return measured(out);
   };
-  const shrink = {}; let packet = assemble(shrink);
-  for (let round = 0; packet.size.bytes > budgetBytes && round < 32; round++) {
-    const id = ['rules', 'example', 'capabilities', 'module'][round % 4];
-    shrink[id] = (shrink[id] ?? 0) + packet.size.bytes - budgetBytes + 64;
+  const optional = { scope: envelope.scope, environment: envelope.environment, text: envelope.text };
+  // The room the scope in the envelope was built with (scopeCap, half of it after the halve step, 0 at its floor).
+  let shrink = {}; let packet; let scopeAt = scopeCap;
+  const fit = () => {
+    shrink = {}; scopeAt = scopeCap; for (const [id, v] of Object.entries(optional)) if (v != null) envelope[id] = v;
     packet = assemble(shrink);
-  }
-  // Even a large text/environment section is optional; the full next/envelope are
-  // reserved. Null is explicit, with the exact missing value in its own cut.
-  for (const id of ['environment', 'text']) if (packet.size.bytes > budgetBytes && envelope[id] !== null) {
-    envelope[id] = null; packet = assemble(shrink);
-  }
+    for (let round = 0; packet.size.bytes > budgetBytes && round < 32; round++) {
+      const id = ['rules', 'example', 'capabilities', 'module'][round % 4];
+      shrink[id] = (shrink[id] ?? 0) + packet.size.bytes - budgetBytes + 64;
+      packet = assemble(shrink);
+    }
+    // Even a large text/environment section is optional; the full next/envelope are reserved; a section left out is absent,
+    // with the exact missing value in its own cut. The scope first gives up what is not its floor (half its room, then the
+    // floor alone: the owner, every basedOn, next); with the reading of the element the change edits, its text in the scope
+    // outranks the text section's grammar and example.
+    const halve = ['scope', () => scopeOf(scopeAt = Math.floor(scopeCap / 2))], noText = ['text', () => undefined];
+    const steps = [['environment', () => undefined], ...((input.readings ?? []).length ? [noText, halve] : [halve, noText]), ['scope', () => scopeOf(scopeAt = 0)]];
+    let stepped = false;
+    for (const [id, smaller] of steps) if (packet.size.bytes > budgetBytes && envelope[id] != null) {
+      const value = smaller();
+      if (value == null) delete envelope[id]; else envelope[id] = value;
+      packet = assemble(shrink); stepped = true;
+    }
+    // What the steps freed comes back: the scope up to its room, then the richest text level that fits (R4: at the default
+    // budget the steps left 1-2 KB unused beside a scope at its floor and no text).
+    const tryEnvelope = (id, value) => { const had = id in envelope, was = envelope[id]; envelope[id] = value; const again = assemble(shrink);
+      if (again.size.bytes <= budgetBytes) { packet = again; return true; } if (had) envelope[id] = was; else delete envelope[id]; return false; };
+    if (stepped && packet.size.bytes <= budgetBytes) {
+      // The scope takes the largest room up to its share that the packet still has (by bisection, to SCOPE_STEP bytes): with
+      // the capabilities floor of F4 beside it, the fixed steps of R4 (1, 3/4, 1/2, 0.35 of its room) left up to a quarter of
+      // that room unused while the scope gave up the names the change uses (an 8 KB packet: the lean owner, an entity's
+      // attributes, an action's signature).
+      if (scoped && !tryEnvelope('scope', scopeOf(scopeCap))) {
+        let lo = scopeAt, hi = scopeCap;
+        while (hi - lo > SCOPE_STEP) { const mid = Math.floor((lo + hi) / 2); if (tryEnvelope('scope', scopeOf(mid))) lo = mid; else hi = mid; }
+      }
+      if (!('text' in envelope)) for (const level of textLevels.filter(l => bytes(l) <= budgetBytes * TEXT_SHARE)) if (tryEnvelope('text', level)) break;
+    }
+  };
+  fit();
+  if (packet.size.bytes > budgetBytes && floor) { floor = 0; fit(); }
   for (const id of ['module', 'capabilities', 'example', 'rules']) {
     const left = budgetBytes - packet.size.bytes - 64;
     if (left < 256 || !packet.cuts.some(c => c.section === id)) continue;
     const tried = { ...shrink, [id]: (shrink[id] ?? 0) - left };
     const again = assemble(tried);
     if (again.size.bytes <= budgetBytes) { Object.assign(shrink, tried); packet = again; }
+  }
+  if (recover?.section === 'all') {
+    const stream = streamOf(sectionChanges(packet));
+    const sha256 = sectionHash(input, 'all', full, stream);
+    if (!scoped || sha256 !== recover.sha256) return { ok: false, code: 'PACKET_SOURCE_CHANGED', section: 'all', error: 'the packet source changed; start a new packet for this intent and app' };
+    if (recover.offset + recover.count > stream.length) return { ok: false, code: 'PACKET_RECOVERY_INVALID', section: 'all', error: 'the recovery range is outside this packet' };
+    return { ok: true, schemaVersion: 'ssam-packet-part/1', section: 'all', sourceSha256: sha256, paths: 'from the packet root (/<section>/...)', missing: stream.slice(recover.offset, recover.offset + recover.count) };
   }
   if (recover) {
     const changes = sectionChanges(packet)[recover.section];
@@ -641,6 +834,17 @@ export function workPacket(input, { budgetBytes = PACKET_DEFAULT_BYTES, read = g
     const error = 'next and the packet envelope must stay whole; request budgetBytes at least minimalBytes';
     if (bytes({ ...answer, error }) <= budgetBytes) answer.error = error;
     return answer;
+  }
+  // The OutSystems UI catalog of the request's app kinds (F4: the kind section's kinds with a UI layer; unknown: every UI
+  // kind of the lane), for a UI or unclassified request (uiCatalogOf): the expand that lists its patterns and, on
+  // Traditional, the OutSystemsUIWeb and RichWidgets blocks and actions. A library kind has no UI catalog. It takes only
+  // the room the assembled packet left: it never displaces a section (integ/proto-traditional review M3).
+  const ui = uiCatalogOf(lane, input);
+  if (ui) {
+    const withUi = {};
+    for (const [k, v] of Object.entries(packet)) { withUi[k] = v; if (k === 'packet') Object.assign(withUi, ui); }
+    withUi.size = { ...packet.size };
+    if (measured(withUi).size.bytes <= budgetBytes) return withUi;
   }
   return packet;
 }

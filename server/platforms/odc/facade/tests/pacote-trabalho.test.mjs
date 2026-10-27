@@ -81,9 +81,11 @@ test('the same input gives the same bytes, inside the ceiling and inside every s
     assert.ok(bytes(a) <= budgetBytes, `${bytes(a)} > ${budgetBytes}`);
     assert.equal(a.size.bytes, bytes(a), 'size.bytes is the size returned');
     assert.equal(a.size.budgetBytes, budgetBytes);
-    assert.deepEqual(a.packet.order, PACKET_ORDER);
+    // Fill or omit (F4): the order names the sections of this packet in PACKET_ORDER; those present come in it, none null.
+    assert.deepEqual(a.packet.order, PACKET_ORDER.filter(k => a.packet.order.includes(k)));
     const keys = Object.keys(a).filter(k => PACKET_ORDER.includes(k));
-    assert.deepEqual(keys, PACKET_ORDER, 'sections in the declared order');
+    assert.deepEqual(keys, a.packet.order.filter(k => keys.includes(k)), 'sections in the declared order');
+    for (const k of keys) assert.notEqual(a[k], null, k + ' is never null');
     for (const cut of a.cuts) assert.ok(cut.section && cut.recover?.tool, JSON.stringify(cut));
     assert.equal(a.size.status, a.cuts.length ? 'reduced' : 'within');
   }

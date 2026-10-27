@@ -60,9 +60,11 @@ class FakeExecutor {
 const agent = { connected: () => true, protocolError() {},
   info: () => ({ connected: true, credential: true, agentVersion: '0.3.1', kernel: { odc: '1.7.28', odcBridge: 'v97', o11: '11.55.92' },
     compatible: { odc: { ok: true }, o11: { ok: true } } }) };
-function customer() {
-  const tokenId = 'tok_' + randomUUID().replace(/-/g, '').slice(0, 12);
-  const workspace = path.join(root, 'customers', tokenId);
+// restartOf: a restart of the same customer keeps its token (F7: a hosted reader reads only its own caller's records); its
+// copy of the workspace goes in its own folder.
+function customer(restartOf = null) {
+  const tokenId = restartOf ?? 'tok_' + randomUUID().replace(/-/g, '').slice(0, 12);
+  const workspace = restartOf ? path.join(root, 'restart-' + randomUUID().slice(0, 8), 'customers', tokenId) : path.join(root, 'customers', tokenId);
   prepareWorkspace(workspace);
   const executor = new FakeExecutor({ relay: RELAY, record: { ok: true, lane: 'o11', anvilLane: LANE, pid: PID, startedUtc: '2026-10-15T10:00:00.0000000Z',
     studioVersion: '11.55.92', port: RELAY, authorityDir: path.join(workspace, 'state', 'relay-authority'), connectedAt: '2026-10-15T10:00:05.000Z', hosted: true } });
@@ -120,7 +122,7 @@ test('CT-1 a restart with the same pid: the running record of the previous serve
   const id = first.task.id;
   const live = await until(() => within(A, () => readTask(id)));
   assert.equal(live.state, 'running'); assert.equal(live.pid, process.pid); assert.equal(live.orphaned, undefined);
-  const after = customer(), viaDoctor = customer();
+  const after = customer(A.tokenId), viaDoctor = customer(A.tokenId);
   copyTasks(await tasksOf(A), await tasksOf(after)); copyTasks(await tasksOf(A), await tasksOf(viaDoctor));
   const s = await hostedServer(after, { deps: { callDeadlineMs: 200 } });
   const d = await hostedServer(viaDoctor, { deps: { callDeadlineMs: 200 } });

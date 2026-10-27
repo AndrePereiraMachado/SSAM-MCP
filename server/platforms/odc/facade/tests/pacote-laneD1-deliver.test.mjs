@@ -11,7 +11,7 @@ import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { McpServer, InMemoryTransport } from '@modelcontextprotocol/server';
 import { Client } from '@modelcontextprotocol/client';
-import { registerO11Cycle, WORDS_MARKER, autoCaptures, styleSheetOnly, touchValue, touchWidget, deliveryFields, publishField, preflightProblems } from '../o11-cycle.mjs';
+import { registerO11Cycle, WORDS_MARKER, autoCaptures, deliveryFields, publishField, preflightProblems } from '../o11-cycle.mjs';
 import { addGrant } from '../standing-grants.mjs';
 import { fakeAnvil } from './fixtures/fake-anvil.mjs';
 import envelopes from './fixtures/o11-cycle-envelopes.json' with { type: 'json' };
@@ -147,36 +147,39 @@ test('every producer a reference op names is captured read-only, unless bound or
   assert.deepEqual(autoCaptures(job, { captureProducers: ['Primitives=Other'] }), ['System=(System)', 'Bound']);
 });
 
-// ---- C32: the StyleSheet touch
-test('a job made only of set StyleSheet on a block gets one deterministic touch of a block widget; any other job none', async t => {
-  const tree = { kind: 'MobileBlock', name: 'SalemCat', key: 'blk', children: [{ kind: 'Container', name: 'CatWrap', key: 'w1', properties: { Style: '"op-cat-wrap " + Size' }, children: [
-    { kind: 'Container', name: 'Inner', key: 'w2', properties: {} }] }] };
-  const captured = [];
-  const s = setup(t, { extra: { capture: async module => { captured.push(module); return { ok: true, path: path.join(os.tmpdir(), 'capture.oml'), sha256: 'ab'.repeat(32) }; },
-    read: async () => ({ ok: true, data: { tree } }), readerCheck: null } });
+test('deliver publish:true preserves a failed publication diagnostic instead of suggesting another publication', async t => {
+  const continuation = { tool: 'o11_service_center_read', arguments: { action: 'logs', kind: 'error', source: 'CompilerService' }, why: 'Read the server error before repair.' };
+  const diagnosis = { code: 'COMPILER_ESPACE_DUMP', causeKnown: false };
+  const s = setup(t, { publish: { ok: false, code: 'PUBLISH_FAILED', outcome: 'failed', diagnosis, continuation } });
+  const value = await (await serve(t, s.deps))({ module: 'Orders', job: s.job('dump.json', { ops: [{ op: 'get', target: 'X:Y' }] }), publish: true, authorize: WORDS });
+  assert.equal(value.code, 'PUBLISH_FAILED');
+  assert.equal(value.result, 'delivered');
+  assert.deepEqual(value.continuation, continuation);
+  assert.deepEqual(value.publish.diagnosis, diagnosis);
+  assert.equal(s.published.length, 1);
+});
+
+// ---- C32: the StyleSheet touch (F1 round 2: the kernel's, chosen on the candidate after every op resolved)
+test('the answer names the kernel\'s touch of the delivery and the elements none reached; the job given is delivered as written', async t => {
+  const data = structuredClone(envelopes.delivered.data);
+  data.apply.styleSheets = [
+    { key: 'blk', kind: 'block', name: 'SalemCat', flow: 'Common', flavor: 'reactive', baseStyleSheet: '', styleSheet: '.a{color:red}',
+      touch: { key: 'w2', name: 'Inner', prop: 'Style', value: '""', from: '' }, reason: null },
+    { key: 'thm', kind: 'theme', name: 'Main', flow: null, flavor: 'reactive', baseStyleSheet: '', styleSheet: '.t{x:y}', touch: null, reason: 'a theme has no widget to change' }];
+  const s = setup(t, { handlers: { deliver: () => ({ ...envelopes.delivered, data }) } });
   const call = await serve(t, s.deps);
   const only = s.job('i.json', { ops: [{ op: 'set', target: 'IMobileBlock:SalemCat', prop: 'StyleSheet', value: '.a{color:red}' }] });
   const value = await call({ module: 'OfficePetMobile', job: only, authorize: WORDS });
   assert.equal(value.ok, true, JSON.stringify(value));
   assert.deepEqual(value.touch, { target: 'IMobileBlock:SalemCat/Inner', op: { op: 'set', target: '@w2', prop: 'Style', value: '""' } });
+  assert.deepEqual(value.untouched, [{ element: 'IMobileTheme:Main', reason: 'a theme has no widget to change' }]);
   const delivered = s.runAnvil.calls[0].args[s.runAnvil.calls[0].args.indexOf('--job') + 1];
-  assert.notEqual(delivered, only, 'the touch goes in a new job file');
-  assert.deepEqual(JSON.parse(fs.readFileSync(delivered, 'utf8')).ops.at(-1), value.touch.op);
-  assert.equal(JSON.parse(fs.readFileSync(only, 'utf8')).ops.length, 1, 'the job given is never changed');
-  assert.deepEqual(captured, ['OfficePetMobile']);
-  // A job with any other op is delivered as written, without a capture.
-  const mixed = s.job('j.json', { ops: [{ op: 'set', target: 'IMobileBlock:SalemCat', prop: 'StyleSheet', value: '.a{}' }, { op: 'set', target: 'IMobileBlock:SalemCat', prop: 'Description', value: 'x' }] });
-  const plain = await call({ module: 'OfficePetMobile', job: mixed, authorize: WORDS });
-  assert.equal(plain.touch, undefined); assert.equal(captured.length, 1);
-  // Pure rules: only blocks/themes, themes alone need no touch, the value renders the same and toggles back.
-  assert.equal(styleSheetOnly({ ops: [{ op: 'set', target: 'ITheme:App', prop: 'StyleSheet', value: '' }] }), null);
-  assert.deepEqual(styleSheetOnly([{ op: 'set', target: 'ITheme:App', prop: 'StyleSheet' }, { op: 'set', target: 'IWebBlock:B', prop: 'StyleSheet' }]), { blocks: ['IWebBlock:B'] });
-  assert.equal(styleSheetOnly({ jobs: ['job:x'] }), null);
-  assert.equal(touchValue('"a " + Size'), '"a " + Size + ""'); assert.equal(touchValue('"a " + Size + ""'), '"a " + Size'); assert.equal(touchValue(''), '""');
-  assert.equal(touchWidget({ kind: 'Block', key: 'b', children: [{ kind: 'Container', key: 'c', properties: { Style: '"x"' } }] }).key, 'c');
+  assert.equal(delivered, only, 'the facade adds no op: the kernel touches on the candidate');
+  // A delivery whose kernel reports no stylesheet: no touch field.
+  const plain = await (await serve(t, setup(t).deps))({ module: 'OfficePetMobile', job: s.job('k.json', { ops: [{ op: 'set', target: 'IMobileBlock:SalemCat', prop: 'Description', value: 'x' }] }), authorize: WORDS });
+  assert.equal(plain.touch, undefined); assert.equal(plain.untouched, undefined);
 });
 
-// ---- Section 3.2 and kernel codes
 test('a delivery answers leftovers and screenRoles from the apply; the kernel codes pass through', async t => {
   const data = structuredClone(envelopes.delivered.data);
   data.apply.validation = { matched: [{ id: 'UnusedVariable', element: 'Orders/SaveOrder', why: 'kept for the next screen', preexisting: false, count: 1 }],

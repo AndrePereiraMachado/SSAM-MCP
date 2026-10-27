@@ -1,7 +1,7 @@
 // fix/unpublished-library round 2 (review C:\t\revisoes\unpublished-lib, findings A1-A5; probes R1-R6 and O1-O2 of
 // review\probes): PRODUCER_NOT_PUBLISHED only when publishing the producer is what the job needs. Each case ends in ONE
 // truthful refusal, and following its continuation never loops:
-//  A1 an element of a kind the ODC published signature cannot hold (a service action) is never "not published";
+//  A1 an element of a kind the ODC published signature cannot hold (a role) is never "not published";
 //  A2 only a module open in an ODC Studio is the open model (this pid, or another Studio that lists it, and then the
 //     publication goes there); a module capture of the capture folder is a data hint, never a studio_publish;
 //  A3 a closed O11 producer (its published OML, read by the REAL moduleDigest) is never the open model, and the O11 reader
@@ -22,18 +22,18 @@ import { createHash } from 'node:crypto';
 import { deliverKernel, applyKernel, requiredFlowLayoutEngine, referenceSnapshot } from '../kernel-delivery.mjs';
 import { odcProducerModel } from '../producer-publication.mjs';
 import { moduleDigest, digestFile, readCapture } from '../module-map.mjs';
-import { DIGEST_SECTIONS } from '../module-digest.mjs';
+import { DIGEST_EXTRACTOR, DIGEST_SECTIONS } from '../module-digest.mjs';
 import * as cycle from '../o11-cycle.mjs';
 
 const sha = b => createHash('sha256').update(b).digest('hex');
 const HOST = 'fixture.test';
 const CONSUMER = 'QuoteApp';
 const MARKER = "<the user's own words>";
-const ODC_KINDS = ['structure', 'block', 'client-action', 'action', 'entity'];
+const ODC_KINDS = ['structure', 'block', 'client-action', 'action', 'entity', 'service-action'];
 // The job's type -> the envelope kind (NativeReferenceKinds.ForType, then the ODC "block"), ordinal.
 const KIND = { ServerAction: 'action', IServerAction: 'action', ServiceAction: 'service-action', ClientAction: 'client-action', Structure: 'structure', IMobileBlock: 'block', IBlock: 'block', Role: 'role' };
 // The model's element -> its module digest entry (ModuleDigest.cs): actions in the action index, blocks in the ui section.
-const DIGEST = { action: 'ServerAction', 'service-action': 'ServiceAction', 'client-action': 'ClientAction' };
+const DIGEST = { action: 'ServerAction', 'service-action': 'ServiceAction', 'client-action': 'ClientAction', role: 'Role' };
 const text = value => JSON.stringify(value);
 
 // libraries: {Name: {open: [{kind, name, flow?}] (the live open model, all public), rev, published: [{kind, name}] (its last
@@ -166,25 +166,55 @@ function world(t, { libraries, references = [] }) {
 }
 const publishes = r => { const tools = []; for (let s = r.continuation; s; s = s.then) tools.push(s.tool); return tools.includes('studio_publish'); };
 
+test('published service actions work alone and alongside server actions without asking for publication', async t => {
+  for (const mixed of [false, true]) {
+    const elements = [{ kind: 'service-action', name: 'Rate' }, ...(mixed ? [{ kind: 'action', name: 'Helper' }] : [])];
+    const w = world(t, { libraries: { RatingApp: { open: elements, published: elements, rev: 9 } } });
+    const r = await deliverKernel(w.input(w.job([['RatingApp', ['ServiceAction:Rate', ...(mixed ? ['ServerAction:Helper'] : [])]]])), w.deps);
+    assert.equal(r.ok, true, text(r));
+    assert.ok(!publishes(r));
+    assert.ok(!w.calls.includes('snapshot RatingApp'), 'published service action needs no open-model fallback');
+  }
+});
+
+test('reference snapshot exports a producer whose only public element is a service action', async t => {
+  const elements = [{ kind: 'service-action', name: 'Rate' }];
+  const w = world(t, { libraries: { RatingApp: { open: elements, published: elements, rev: 9 } } });
+  const output = path.join(w.root, 'service.avsig');
+  const r = await referenceSnapshot({ module: CONSUMER, producer: 'RatingApp', output },
+    { studio: w.deps.studio, captureDir: w.captures, producerDigest: w.deps.producerDigest });
+  assert.equal(r.ok, true, text(r));
+  assert.equal(r.consumerUnchanged, true);
+  assert.deepEqual(JSON.parse(fs.readFileSync(output, 'utf8')).Elements.map(e => [e.Kind, e.Name]), [['service-action', 'Rate']]);
+});
+
+test('an unpublished service action follows the publication guard and delivers the same job afterwards', async t => {
+  const w = world(t, { libraries: { RatingApp: { open: [{ kind: 'service-action', name: 'Rate' }], published: [], rev: 1 } } });
+  const r = await deliverKernel(w.input(w.job([['RatingApp', ['ServiceAction:Rate']]])), w.deps);
+  assert.equal(r.code, 'PRODUCER_NOT_PUBLISHED', text(r));
+  assert.ok(publishes(r));
+  assert.deepEqual((await w.follow(r)).codes, ['PRODUCER_NOT_PUBLISHED', 'delivered']);
+});
+
 // ---- A1: a kind the ODC published signature cannot hold ------------------------------------------------------------
 
-test('A1 / R1: a public SERVICE ACTION (a kind the ODC signature never exports) is never PRODUCER_NOT_PUBLISHED: ONE kernel refusal, no publication', async t => {
-  const w = world(t, { libraries: { FloodServices: { open: [{ kind: 'action', name: 'GetNcipDetails' }, { kind: 'service-action', name: 'GetRates' }],
-    published: [{ kind: 'action', name: 'GetNcipDetails' }, { kind: 'service-action', name: 'GetRates' }], rev: 4 } } });
-  const r = await deliverKernel(w.input(w.job([['FloodServices', ['ServerAction:GetNcipDetails', 'ServiceAction:GetRates']]])), w.deps);
+test('A1 / R1: a public ROLE (a kind the ODC signature never exports) is never PRODUCER_NOT_PUBLISHED: ONE kernel refusal, no publication', async t => {
+  const w = world(t, { libraries: { RatesLibrary: { open: [{ kind: 'action', name: 'GetDetails' }, { kind: 'role', name: 'GetRates' }],
+    published: [{ kind: 'action', name: 'GetDetails' }, { kind: 'role', name: 'GetRates' }], rev: 4 } } });
+  const r = await deliverKernel(w.input(w.job([['RatesLibrary', ['ServerAction:GetDetails', 'Role:GetRates']]])), w.deps);
   assert.equal(r.ok, false);
   assert.notEqual(r.code, 'PRODUCER_NOT_PUBLISHED', text({ code: r.code, error: r.error }));
   assert.ok(r.problems.some(p => p.code === 'REFERENCE_ELEMENT_MISSING' && p.pointer === '/ops/0/elements/1' && /Unsupported element kind/.test(p.message)), text(r.problems));
-  assert.ok(!publishes(r), 'no studio_publish: publishing never adds a service action to the signature');
+  assert.ok(!publishes(r), 'no studio_publish: publishing never adds a role to the signature');
   assert.ok(!/the job is right/.test(text(r)));
-  assert.ok(!w.calls.includes('snapshot FloodServices'), 'the open model is not even read: ' + w.calls.join(' | '));
+  assert.ok(!w.calls.includes('snapshot RatesLibrary'), 'the open model is not even read: ' + w.calls.join(' | '));
   const followed = await w.follow(r);
   assert.ok(followed.codes.length <= 2 && !followed.tools.includes('studio_publish'), 'no loop: ' + text(followed));
 });
 
-test('A1 / R2 (studio_deliver, form A): a library whose only public elements are service actions: ONE refusal that says the kind cannot be held, no publication', async t => {
-  const w = world(t, { libraries: { RatingApp: { open: [{ kind: 'service-action', name: 'Rate' }], published: [{ kind: 'service-action', name: 'Rate' }], rev: 9 } } });
-  const r = await deliverKernel(w.input(w.job([['RatingApp', ['ServiceAction:Rate']]])), w.deps);
+test('A1 / R2 (studio_deliver, form A): a library whose only public elements are roles: ONE refusal that says the kind cannot be held, no publication', async t => {
+  const w = world(t, { libraries: { RatingApp: { open: [{ kind: 'role', name: 'Rate' }], published: [{ kind: 'role', name: 'Rate' }], rev: 9 } } });
+  const r = await deliverKernel(w.input(w.job([['RatingApp', ['Role:Rate']]])), w.deps);
   assert.equal(r.ok, false);
   assert.notEqual(r.code, 'PRODUCER_NOT_PUBLISHED', text({ code: r.code, error: r.error }));
   assert.equal(r.problems.length, 1, text(r.problems));
@@ -196,30 +226,30 @@ test('A1 / R2 (studio_deliver, form A): a library whose only public elements are
   assert.ok(!w.calls.includes('apply'), 'nothing built');
 });
 
-test('A1 / R2 (studio_reference_snapshot): a published revision that exports nothing while the open model has only service actions keeps the bridge\'s refusal, no publication', async t => {
-  const w = world(t, { libraries: { RatingApp: { open: [{ kind: 'service-action', name: 'Rate' }], published: [{ kind: 'service-action', name: 'Rate' }], rev: 9 } } });
+test('A1 / R2 (studio_reference_snapshot): a published revision that exports nothing while the open model has only roles keeps the bridge\'s refusal, no publication', async t => {
+  const w = world(t, { libraries: { RatingApp: { open: [{ kind: 'role', name: 'Rate' }], published: [{ kind: 'role', name: 'Rate' }], rev: 9 } } });
   const output = path.join(w.root, 'x', 'RatingApp.avsig');
   const r = await referenceSnapshot({ module: CONSUMER, producer: 'RatingApp', output }, { studio: w.deps.studio, captureDir: w.captures, producerDigest: w.deps.producerDigest });
   assert.equal(r.ok, false);
   assert.notEqual(r.code, 'PRODUCER_NOT_PUBLISHED', text(r));
   assert.match(r.error, /no supported public elements/);
-  assert.match(r.error, /ServiceAction:Rate/);
+  assert.match(r.error, /Role:Rate/);
   assert.match(r.error, /publishing does not change that/);
   assert.equal(r.continuation, undefined);
   assert.equal(r.openModel.exportablePublic, 0);
 });
 
 test('A1 (control): form A with an ACTION in the open model, open in the same Studio: still PRODUCER_NOT_PUBLISHED, publish then delivered', async t => {
-  const w = world(t, { libraries: { FloodServices: { open: [{ kind: 'action', name: 'GetQuotes' }, { kind: 'service-action', name: 'Rate' }], published: [{ kind: 'service-action', name: 'Rate' }], rev: 1 } } });
-  const r = await deliverKernel(w.input(w.job([['FloodServices', ['ServerAction:GetQuotes']]])), w.deps);
+  const w = world(t, { libraries: { RatesLibrary: { open: [{ kind: 'action', name: 'GetQuotes' }, { kind: 'role', name: 'Rate' }], published: [{ kind: 'role', name: 'Rate' }], rev: 1 } } });
+  const r = await deliverKernel(w.input(w.job([['RatesLibrary', ['ServerAction:GetQuotes']]])), w.deps);
   assert.equal(r.code, 'PRODUCER_NOT_PUBLISHED', text({ code: r.code, error: r.error }));
   assert.deepEqual((await w.follow(r)).codes, ['PRODUCER_NOT_PUBLISHED', 'delivered']);
 });
 
-test('A1: one refusal names both an unpublished action and a service action of the same library, and proposes no publication (the job must change too)', async t => {
-  const w = world(t, { libraries: { FloodServices: { open: [{ kind: 'action', name: 'GetNcipDetails' }, { kind: 'action', name: 'GetQuotes' }, { kind: 'service-action', name: 'GetRates' }],
-    published: [{ kind: 'action', name: 'GetNcipDetails' }], rev: 2 } } });
-  const r = await deliverKernel(w.input(w.job([['FloodServices', ['ServerAction:GetQuotes', 'ServiceAction:GetRates']]])), w.deps);
+test('A1: one refusal names both an unpublished action and a role of the same library, and proposes no publication (the job must change too)', async t => {
+  const w = world(t, { libraries: { RatesLibrary: { open: [{ kind: 'action', name: 'GetDetails' }, { kind: 'action', name: 'GetQuotes' }, { kind: 'role', name: 'GetRates' }],
+    published: [{ kind: 'action', name: 'GetDetails' }], rev: 2 } } });
+  const r = await deliverKernel(w.input(w.job([['RatesLibrary', ['ServerAction:GetQuotes', 'Role:GetRates']]])), w.deps);
   assert.equal(r.ok, false);
   assert.deepEqual(r.problems.map(p => [p.code, p.pointer]), [['PRODUCER_NOT_PUBLISHED', '/ops/0/elements/0'], ['REFERENCE_ELEMENT_MISSING', '/ops/0/elements/1']], text(r.problems));
   assert.ok(!publishes(r), 'publishing alone would not deliver this job: no chain proposed');
@@ -385,7 +415,7 @@ test('A3 / O1: a CLOSED producer read by the REAL moduleDigest (captureO11 answe
   const { root, job } = o11Job(t, 'IServerAction:GetQuotes');
   const oml = path.join(root, 'FloodServices_CS-published-v7.oml'); fs.writeFileSync(oml, 'synthetic published OML of FloodServices_CS v7');
   const raw = readCapture(oml, 'o11').rawSha256;
-  const digest = { schema: 'ssam-digest/1', extractor: 3, lane: 'o11', adapter: 'kernel', sourceSha256: raw, sourceBytes: 1, createdAt: '2026-10-16T00:00:00Z',
+  const digest = { schema: 'ssam-digest/1', extractor: DIGEST_EXTRACTOR, lane: 'o11', adapter: 'kernel', sourceSha256: raw, sourceBytes: 1, createdAt: '2026-10-16T00:00:00Z',
     module: { name: 'FloodServices_CS', key: 'kFS', kind: 'eSpace' }, elements: 1, notRendered: 0, clipped: 0, readErrors: 0,
     sections: DIGEST_SECTIONS.map(id => ({ id, title: id, count: 0, blocks: [] })),
     actions: [{ key: 'kGetQuotes', kind: 'ServerAction', name: 'GetQuotes', section: 'actions', public: true, function: false, in: '', out: '', calls: [], calledBy: [] }] };

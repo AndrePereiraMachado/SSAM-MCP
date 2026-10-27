@@ -72,13 +72,16 @@ public static partial class JobRunner
     /// <summary>The refusal of a job with problems in any phase: the Verify of the candidate as applied (never saved), its
     /// blocking messages mapped to the job, and the union of every phase. One phase alone keeps the refusal tools already
     /// read: a lone apply failure its own exception (DELETE_HAS_CONSUMERS keeps its code), a lone database-upgrade refusal
-    /// its text.</summary>
+    /// its text. The Verify of this model (the candidate of a job that failed somewhere) only adds what is certain and the
+    /// job's own; with it, a lone coded apply failure still keeps its code.</summary>
     private static Exception Diagnosis(ModelSession session, ServiceStudio.Model.ESpace espace, IReadOnlyList<MessageInfo> before, JsonArray ops,
         JsonObject? preflight, BaseCheck baseCheck, List<string> upgrade, IReadOnlyList<ExpectedMessage> expected, bool expectedValid, string? opsPointer,
         Action<string>? log)
     {
         var preflightInvalid = preflight?["valid"]?.GetValue<bool>() == false;
         var kept = session.Kept;
+        // T16 rule 5: the certain patch of a delete refused for its consumers, read on this model (the target is still there).
+        if (kept != null) ReconnectPatches(session, kept, ops, opsPointer);
         // The envelope reports phases executed; each problem's phase still reports where that problem was found.
         var phases = new List<string>();
         if (preflight != null) phases.Add("preflight");
@@ -105,18 +108,30 @@ public static partial class JobRunner
                 var delta = MessageDelta.Compute(before, after);
                 var footprint = session.Footprint();
                 var judged = footprint.Footprint with { AnonymousIntent = session.AnonymousIntentOf(footprint.Footprint) };
-                var policy = MessageExpectations.Evaluate(delta.New, expected, delta.Preexisting, judged);
-                if (expectedValid) verify = session.VerifyProblems(policy.Unexpected, ops, opsPointer, MessageExpectations.Lane, VerifyHints.TryRead());
-                var unmapped = policy.Diagnostics().Where(m => m.StartsWith("Ambiguous ", StringComparison.Ordinal)
-                    || m.StartsWith("Missing ", StringComparison.Ordinal)).ToList();
-                foreach (var message in policy.Unexpected)
-                    if (!verify.Any(p => p["severity"]?.ToString() != "warning" && p["code"]?.ToString() == message.Id
-                        && (p["key"] == null || p["key"]?.ToString() == message.Key || p["key"]?.ToString() == message.OwnerKey
-                            || p["element"]?.ToString() == message.Path))) unmapped.Add(message.ToString());
-                var isValid = ModelHost.Describe(espace, 0, after).IsValid;
-                if (isValid != expectedValid && !verify.Any(p => p["severity"]?.ToString() != "warning"))
-                    unmapped.Add($"expectValid={expectedValid}, but Verify isValid={isValid}");
-                var contract = session.DataContract();
+                var policy = MessageExpectations.Evaluate(delta.New, expected, delta.Preexisting, judged, delta.Fixed);
+                var halfBuilt = new List<MessageInfo>();
+                var mapped = session.VerifyProblems(policy.Unexpected, ops, opsPointer, MessageExpectations.Lane, VerifyHints.TryRead(), halfBuilt, expected.Count > 0);
+                if (expectedValid) verify = mapped;
+                // 9cb0f8e8 (every verdict reaches the author): a blocking message no mapped problem says, and a write the module did
+                // not keep, join the refusal. This model is the candidate of a job that failed somewhere, so only what is certain
+                // and the job's own: never what a failed op left half-built (a call without its connector: that failure again),
+                // never a write of a failed op. The job's expectations of its final module (expectValid, the expected messages
+                // missing or matched twice) are judged here only when no failure can have made their verdict (ExpectationsHold);
+                // otherwise on the complete candidate, once the failures are fixed.
+                var unmapped = new List<string>();
+                if (ExpectationsHold(session, kept, halfBuilt))
+                {
+                    unmapped.AddRange(policy.Diagnostics().Where(m => m.StartsWith("Ambiguous ", StringComparison.Ordinal) || m.StartsWith("Missing ", StringComparison.Ordinal)));
+                    var isValid = ModelHost.Describe(espace, 0, after).IsValid;
+                    if (isValid != expectedValid && !verify.Any(p => p["severity"]?.ToString() != "warning"))
+                        unmapped.Add($"expectValid={expectedValid}, but Verify isValid={isValid}");
+                }
+                if (expectedValid)
+                    foreach (var message in policy.Unexpected)
+                        if (!halfBuilt.Contains(message) && !verify.Any(p => p["severity"]?.ToString() != "warning" && p["code"]?.ToString() == message.Id
+                            && (p["key"] == null || p["key"]?.ToString() == message.Key || p["key"]?.ToString() == message.OwnerKey
+                                || p["element"]?.ToString() == message.Path))) unmapped.Add(message.ToString());
+                var contract = session.DataContract(ofAppliedOps: true);
                 if (contract["accepted"]?.GetValue<bool>() != true)
                     unmapped.Add("dataContract: " + contract["differences"]!.ToJsonString());
                 if (unmapped.Count > 0)
@@ -191,6 +206,8 @@ public static partial class JobRunner
         // Familias: the cascade of a failed part of the job (a name it declares, not found elsewhere) leaves the problems; its
         // root says blocks: N.
         var problems = FoldCascade(united, ops, opsPointer);
+        // T16 rule 1: what a collision's create and its dependents found under the other name is conditional on that choice.
+        problems = ConditionalOnChoice(problems);
         string? foldedLine = null;
         if (problems.Count < united.Count)
         {
@@ -215,12 +232,33 @@ public static partial class JobRunner
         if (foldedLine != null) lines.Add(foldedLine);
         var warnings = new JsonArray((preflight?["warnings"] as JsonArray ?? new JsonArray()).Select(w => w?.DeepClone())
             .Concat((kept?.Warnings ?? []).Select(w => (JsonNode?)w)).Concat(verifyNotes.Select(w => (JsonNode?)JobPreflight.PublicProblem(w))).ToArray());
+        // The Verify of this model may add problems to the refusal of the job's own failure, never replace its code: a lone coded
+        // apply failure (DELETE_HAS_CONSUMERS, CONSUMERS_CHANGED, a refused data text) keeps it, with every problem.
+        var primary = !preflightInvalid && baseCheck.Problems.Count == 0 && upgrade.Count == 0 && kept?.Refusal is { } lone
+            && Errors.FindCoded(lone)?.Code is { Length: > 0 } code && code != JobPreflightException.PreflightRefused ? code : null;
         return new JobPreflightException(string.Join(Environment.NewLine, lines), new JsonArray(problems.Select(p => (JsonNode)JobPreflight.PublicProblem(p)).ToArray()), warnings)
         {
+            Code = primary ?? JobPreflightException.PreflightRefused,
             VerifyRan = verifyFailed == null,
             VerifyReason = verifyReason,
             Phases = phases,
         };
+    }
+
+    // The failures of an op that names nothing of the module: it wrote nothing, and the job as sent never applies it.
+    private static readonly HashSet<string> NamesNothing = new(StringComparer.Ordinal) { "REFERENCE_UNRESOLVED", "CHILD_NOT_FOUND" };
+
+    /// <summary>Whether the job's expectations of its final module (expectValid, its expected messages) are judged on this model
+    /// as on the module without the failed ops: no op failed or was left out (the model is the whole job), or every failure is
+    /// of an op that names nothing of the module (an unresolved reference or child) and no message is on what a failed op left
+    /// half-built. A refused op (a delete with consumers) may be the very change the expectation is about: never judged then.</summary>
+    private static bool ExpectationsHold(ModelSession session, ModelSession.KeptApply? kept, IReadOnlyCollection<MessageInfo> halfBuilt)
+    {
+        if (halfBuilt.Count > 0 || session.SkipOps is { Count: > 0 }) return false;
+        if (kept == null) return true;
+        if (kept.Warnings.Any(w => w["code"]?.ToString() == "APPLY_SKIPPED")) return false;
+        var failures = kept.Problems.Where(p => p["severity"]?.ToString() != "warning").ToList();
+        return failures.Count > 0 && failures.All(p => NamesNothing.Contains(p["code"]?.ToString() ?? ""));
     }
 
     private static readonly Regex VerifyPath = new(@" @ (?<path>.+?)\s*$", RegexOptions.Compiled);

@@ -212,7 +212,29 @@ async function session(args, { locate, present, opener, running, registry, profi
     throw new AuthRequired('STUDIO_BRIDGE_OUTDATED', 'The connected Studio runs a bridge without the Service Center verbs; reconnect a new bridge version.',
       { continuation: connectStudio('reconnect after the Studio loads the new bridge') });
   if (args.action === 'session-sign-in') {
-    if (bridge) {
+    // Explicit vault sign-in prepares the private profile even while a Studio is
+    // open. Use its identity only to constrain the selector; never log it out or
+    // mistake a Studio API session for an authenticated Service Center session.
+    // Without a private profile store (an injected caller, the hosted server's first lock) session=vault is refused here,
+    // before any read of this machine's vault and before any prompt: the vault and the prompt belong to the person's PC.
+    if (args.session === 'vault' && !profiles)
+      throw new AuthRequired('VAULT_UNAVAILABLE', 'session=vault selects a stored profile of the own machine of the person, and this SSAM has no private profile store: nothing was read and no prompt was opened.'
+        + (bridge ? ' The connected Studio answers sign-in without session=vault.' : ''),
+        { continuation: bridge ? { tool: 'o11_service_center_session', arguments: { action: 'sign-in', host }, why: 'sign in with the connected Studio session' } : connectStudio('sign in with a connected Studio') });
+    if (args.session === 'vault' && profiles) {
+      const info = bridge ? await bridge.session(host) : null;
+      const studio = info?.studio ?? info;
+      const principal = studio?.signedIn === true ? studio.user ?? null : null;
+      const selected = await profiles.resolve({ lane: 'o11', host, principal }, {
+        interactive: args.auth_prompt !== 'never',
+        ...(args.credential_target ? { target: args.credential_target } : {})
+      });
+      if (!selected.ok) throw new AuthRequired(selected.code, selected.reason ?? 'Choose a credential in the private Windows form.',
+        { auth: { path: 'profiles', host, candidateCount: selected.candidateCount, resumable: selected.resumable === true } });
+      return { ok: true, host, stored: true, authenticated: false,
+        auth: { path: 'vault', host, user: selected.principal, target: selected.target, source: selected.source } };
+    }
+    if (bridge && args.session !== 'vault') {
       const info = await bridge.session(host);
       const studio = info?.studio && typeof info.studio === 'object' && !Array.isArray(info.studio) ? info.studio : info;
       if (studio.signedIn === true) return { ok: true, host, already: true, auth: { path: 'studio', host, user: studio.user ?? null } };
@@ -221,7 +243,7 @@ async function session(args, { locate, present, opener, running, registry, profi
     if (hostedContext())
       throw new AuthRequired('STUDIO_NOT_CONNECTED', 'No Service Studio of the user is connected to SSAM; the user opens it and ssam_connect {lane:"o11"} connects it.',
         { continuation: connectStudio('connect the user\'s Service Studio; in hosted mode it is the only path') });
-    if (await running())
+    if (args.session !== 'vault' && await running())
       throw new AuthRequired('STUDIO_NOT_CONNECTED', 'A Service Studio is open but not connected to SSAM; run ssam_connect {lane:"o11"}.',
         { continuation: connectStudio('connect the open Service Studio') });
     if (profiles) {

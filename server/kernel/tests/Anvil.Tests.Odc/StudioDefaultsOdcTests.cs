@@ -64,6 +64,24 @@ public class StudioDefaultsOdcTests(ITestOutputHelper output)
         Assert.Equal("", studio.DefaultOf("Icon", "Icon", 't'));
     }
 
+    // Review of 3ab12209, finding 6: recipe 6 tried the 19 Traditional-only widget kinds of O11 in every ODC page too (about
+    // 3,000 refused creates per context). ODC has no Traditional Web runtime: no measurement tries one, the Reactive kinds stay.
+    [Fact]
+    public void AnOdcMeasurementTriesNoTraditionalOnlyKind()
+    {
+        if (!StudioAvailable()) { output.WriteLine("WARNING: no ODC Studio: skipped."); return; }
+        var host = new ModelHost(Work());
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        var measured = host.MeasureBorn(File.ReadAllBytes(Fixture));
+        output.WriteLine("measured in " + sw.ElapsedMilliseconds + " ms, " + measured.Born.Count + " kinds born, " + measured.Log.Count + " log lines, "
+            + measured.Log.Count(l => l.StartsWith("create ", StringComparison.Ordinal)) + " refused creates");
+        var tried = measured.Log.Select(l => Regex.Match(l, @"^(?:create (?<k>\w+) under |not created(?: in a popup)?: (?<k>\w+)$)")).Where(m => m.Success).Select(m => m.Groups["k"].Value).ToList();
+        var wrong = tried.Where(ScreenHtmlTables.TraditionalOnly.Contains).Distinct().Order(StringComparer.Ordinal).ToList();
+        Assert.True(wrong.Count == 0, "Traditional-only kinds tried: " + string.Join(", ", wrong));
+        Assert.DoesNotContain(measured.Born.Keys, k => ScreenHtmlTables.TraditionalOnly.Contains(k.Split('@')[0]));
+        foreach (var kind in new[] { "Container", "Button", "Link", "Input", "MobileBlockInstanceWidget", "TableRecords" }) Assert.True(measured.Born.ContainsKey(kind), kind + " not measured");
+    }
+
     [Fact]
     public void EachModuleIsMeasuredInItsOwnContextWhateverWasMeasuredFirst()
     {

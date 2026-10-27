@@ -6,7 +6,8 @@ namespace Anvil.Core;
 /// What the kernel applied that the author did not write (atritos 3, section 5.1): each deterministic rule that changes a
 /// value instead of refusing it records the change here, and the apply result carries it in its own field, only when it
 /// has entries: iconConversions, expressionRewrites, nameTruncations, indexNoOps ([{path, from, to}]), notes ([{code,
-/// message}]) and anonymousExposure ([{screen, actions}]), read from the verdicts of the message policy.
+/// message}]) and anonymousExposure ([{screen, actions}]), read from the verdicts of the message policy; accessChanges and
+/// accessRestore (T12, Verbs.Access.cs) when the job changed who may open an existing screen.
 /// </summary>
 public sealed partial class ModelSession
 {
@@ -53,6 +54,9 @@ public sealed partial class ModelSession
                 ["actions"] = new JsonArray(g.Select(v => LastLevel(v.Path)).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).Select(a => (JsonNode)a).ToArray()) })
             .ToArray();
         if (exposure.Length > 0) fields["anonymousExposure"] = new JsonArray(exposure);
+        // T12: who may open an existing screen, before and after this job, and the ops that put it back (Verbs.Access.cs).
+        var (accessChanges, accessRestore) = AccessChanges(footprint);
+        if (accessChanges.Count > 0) { fields["accessChanges"] = accessChanges; fields["accessRestore"] = new JsonObject { ["ops"] = accessRestore }; }
         return fields;
     }
 

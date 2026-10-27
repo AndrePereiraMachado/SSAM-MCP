@@ -1,0 +1,265 @@
+{
+  "version": 1,
+  "about": "Falhas conhecidas do portão (scripts/gate/run-gate.mjs). Cada entrada: suite (build|facade|o11|odc), match (glob com * e ? sobre o id do teste), kind (ambiente|preexistente|regressao), reason, since (AAAA-MM-DD). Só uma pessoa acrescenta entradas; o portão lista as novas em report.json/unknown e as corrigidas em 'Corrigidas'. Linha de base: 0388bd65; 'preexistente' quer dizer que também falha em 3e461d02 (base anterior ao lote 1) ou está na lista do dono de 24/10.",
+  "entries": [
+    {
+      "suite": "facade",
+      "match": "platforms/odc/facade/tests/manifest-inspect.test.mjs :: real headless builder, kernel and MCP: inspection and candidate preparation*",
+      "kind": "preexistente",
+      "reason": "ENOENT do bridge.key em <perfil de teste><usuário>AppDataLocalAnvilauthority: o perfil isolado copia a chave para <perfil>/authority e a leitura procura no LOCALAPPDATA do perfil. Falha igual em 3e461d02; em 0388bd65 ficava escondida pelo builder ODC quebrado.",
+      "since": "2026-10-25"
+    },
+    {
+      "suite": "facade",
+      "match": "platforms/odc/facade/tests/lanes.test.mjs :: ssam_map answers O11 and ODC captures from their module index through the ssam MCP",
+      "kind": "ambiente",
+      "reason": "Instável sob carga: falhou ('reading index' de undefined) nas rodadas do portão de 0388bd65 e d4cf05a6, inclusive na repetição a sós com outras suítes rodando, e passa a sós sem carga em 25/10 e em 3e461d02.",
+      "since": "2026-10-25"
+    },
+    {
+      "suite": "o11",
+      "match": "Anvil.Tests.ScreenCoverageTests.EveryMatrixRowHasNativeVerifyReloadMergeAndIndependentProof(name: \"*-ui-osui-*\"*",
+      "kind": "ambiente",
+      "reason": "Fixtures kernel/tests/fixtures/outsystems-ui.oml e outsystems-ui-web.oml ausentes nesta máquina (producer OML not found).",
+      "since": "2026-10-24"
+    },
+    {
+      "suite": "o11",
+      "match": "Anvil.Tests.SurfaceTests.VerifyIdsAndHintsMatchTheInstalledPublicCatalog",
+      "kind": "ambiente",
+      "reason": "catalog/verify-messages-11.55.93.json ausente para o Service Studio instalado (11.55.93).",
+      "since": "2026-10-24"
+    },
+    {
+      "suite": "o11",
+      "match": "Anvil.Tests.FunctionCatalogTests.CatalogInRepoMatchesTheStudio",
+      "kind": "ambiente",
+      "reason": "catalog/functions-11.55.93.json ausente para o Service Studio instalado.",
+      "since": "2026-10-24"
+    },
+    {
+      "suite": "odc",
+      "match": "Anvil.Tests.Odc.OdcJobTests.TheVerifyIdManifestIsTheInstalledOdcCatalog",
+      "kind": "ambiente",
+      "reason": "catalog/odc/verify-messages-1.7.29.10953.json ausente para o ODC Studio instalado.",
+      "since": "2026-10-24"
+    },
+    {
+      "suite": "o11",
+      "match": "Anvil.Tests.JobTests.JobAppliesAndVerifies(jobName: \"screen-generate*-reactive\")",
+      "kind": "ambiente",
+      "reason": "Lista do dono: FilterBar HTML_INVALID em screen generate (PlaceholderWidget.StyleClasses 'Condition is true') com o OutSystems UI desta máquina.",
+      "since": "2026-10-24"
+    },
+    {
+      "suite": "o11",
+      "match": "Anvil.Tests.Pa3KlFootprintTests.TheFootprintOfTheScopesEqualsTheFullSweep(jobName: \"screen-generate*-reactive\")",
+      "kind": "ambiente",
+      "reason": "Mesma causa: FilterBar HTML_INVALID em screen generate.",
+      "since": "2026-10-24"
+    },
+    {
+      "suite": "o11",
+      "match": "Anvil.Tests.ScreenGeneratorTests.The*",
+      "kind": "ambiente",
+      "reason": "Mesma causa: FilterBar HTML_INVALID em screen generate (TheModulesActions... e TheProofJob...).",
+      "since": "2026-10-24"
+    },
+    {
+      "suite": "odc",
+      "match": "Anvil.Tests.Odc.OdcJobTests.JobAppliesAndVerifies(jobName: \"screen-generate\")",
+      "kind": "ambiente",
+      "reason": "Mesma causa: FilterBar HTML_INVALID em screen generate (ODC).",
+      "since": "2026-10-24"
+    },
+    {
+      "suite": "odc",
+      "match": "Anvil.Tests.Odc.ScreenGeneratorOdcTests.TheOdcProofJobCompilesWithoutNewMessagesIsAFixedPointAndTheSecondRunIsNoChange",
+      "kind": "ambiente",
+      "reason": "Mesma causa: FilterBar HTML_INVALID em screen generate (ODC).",
+      "since": "2026-10-24"
+    },
+    {
+      "suite": "o11",
+      "match": "Anvil.Tests.TraditionalHtmlControlsTests.DataControlsCreateReadEditAndMergeWithTheirHandlers(*)",
+      "kind": "ambiente",
+      "reason": "Lista do dono: unresolved reference 'User' (o módulo Users desta máquina não é o do fixture).",
+      "since": "2026-10-24"
+    },
+    {
+      "suite": "o11",
+      "match": "Anvil.Tests.GuideTests.EveryJobMentionedInTheGuideExists",
+      "kind": "preexistente",
+      "reason": "kernel/AGENTS.md cita os jobs 'unique' e 'session-20261012-static', que não existem em tests/jobs (lista do dono).",
+      "since": "2026-10-24"
+    },
+    {
+      "suite": "o11",
+      "match": "Anvil.Tests.CSharpDataEffectsTests.CSharpCrudAndQueriesVerifyAndReloadWithPhysicalPresenceAndLogicalRecords(fixture: \"ColdQueryProjection\"*",
+      "kind": "preexistente",
+      "reason": "FLOW_FOREACH_LIST_ACTION recusa o For Each que só mapeia em lista do fixture ColdQueryProjection (lista do dono).",
+      "since": "2026-10-24"
+    },
+    {
+      "suite": "o11",
+      "match": "Anvil.Tests.CurrentHintTests.InvalidMemberShowsActualCurrentFields(job: \"aggregate-group-list-scope\"*",
+      "kind": "preexistente",
+      "reason": "AGGREGATE_SORT_NOT_ATTRIBUTE chega antes da dica esperada (lista do dono).",
+      "since": "2026-10-24"
+    },
+    {
+      "suite": "o11",
+      "match": "Anvil.Tests.NegativeJobTests.JobFailsWithTheTeachingMessage(jobName: \"logic-duplicate-action\")",
+      "kind": "preexistente",
+      "reason": "A recusa é NAME_COLLISION com outro texto que o esperado pelo job negativo (lista do dono).",
+      "since": "2026-10-24"
+    },
+    {
+      "suite": "o11",
+      "match": "Anvil.Tests.CheckJobStaticTests.CheckJobSaysWhetherTheApplyPathCanStillAddProblems",
+      "kind": "preexistente",
+      "reason": "InvalidOperationException 'The node must be of type JsonObject'; falha igual em 3e461d02.",
+      "since": "2026-10-24"
+    },
+    {
+      "suite": "o11",
+      "match": "Anvil.Tests.ScreenRecreationTests.EveryRealScreenOfTheO11CorpusIsCompiledAgainByTheDocumentFormAndComesBackTheSame",
+      "kind": "preexistente",
+      "reason": "HTML_NAME_UNKNOWN em onclick=@<key>.#PreviousScreen (módulos de clientes, Haiku_UI-live, OfficePetMobile); falha igual em 3e461d02.",
+      "since": "2026-10-24"
+    },
+    {
+      "suite": "o11",
+      "match": "Anvil.Tests.TextRoundTripDataBackNativeTests.TheRequestOfTheTranscriptGoesInOneReadAndOneDeliver",
+      "kind": "preexistente",
+      "reason": "DDL_NOT_CONVERGED em Schedule = \"When Published\" do timer InicializarCategorias; falha igual em 3e461d02.",
+      "since": "2026-10-24"
+    },
+    {
+      "suite": "odc",
+      "match": "Anvil.Tests.Odc.ScreenRecreationOdcTests.EveryRealScreenOfTheOdcCorpusIsCompiledAgainByTheDocumentFormAndComesBackTheSame",
+      "kind": "preexistente",
+      "reason": "HTML_NAME_AMBIGUOUS em onclick=BackofficeDefaults (a Reactive app); falha igual em 3e461d02.",
+      "since": "2026-10-24"
+    },
+    {
+      "suite": "facade",
+      "match": "tests/setup-dev.test.mjs :: *.mcp.json*",
+      "kind": "ambiente",
+      "reason": "Num worktree de desenvolvimento o .mcp.json é o do configure-mcp (ssam-dev-<pasta>, caminhos desta pasta), não o versionado.",
+      "since": "2026-10-24"
+    },
+    {
+      "suite": "facade",
+      "match": "tests/setup-dev.test.mjs :: with SSAM_NODE and SSAM_ROOT set, the .mcp.json servers follow them",
+      "kind": "ambiente",
+      "reason": "Mesma causa: .mcp.json do worktree.",
+      "since": "2026-10-24"
+    },
+    {
+      "suite": "facade",
+      "match": "tests/workspace.test.mjs :: one repository with both original HEAD commits reachable",
+      "kind": "ambiente",
+      "reason": "O worktree não tem o ref refs/remotes/source-anvil/imported-head.",
+      "since": "2026-10-24"
+    },
+    {
+      "suite": "facade",
+      "match": "platforms/odc/facade/tests/prototype-render-farmavirtual.test.mjs :: 12. FarmaVirtual capture <= 5 s*",
+      "kind": "ambiente",
+      "reason": "Limite de tempo (<= 5 s com pool 8) estoura com a máquina carregada por outras suítes (11-14 s); também falha em 3e461d02 (6 s).",
+      "since": "2026-10-24"
+    },
+    {
+      "suite": "facade",
+      "match": "platforms/odc/facade/tests/context-budget-listing.test.mjs :: B2 every app listing meets its computed limit; no schema keyword changes; hooks=true",
+      "kind": "preexistente",
+      "reason": "Lista do dono (B2 listing hooks=true); falha igual em 3e461d02.",
+      "since": "2026-10-24"
+    },
+    {
+      "suite": "facade",
+      "match": "platforms/odc/facade/tests/discover-asked.test.mjs :: *",
+      "kind": "preexistente",
+      "reason": "Lista do dono (discover-asked call 40; também call 15); falham igual em 3e461d02.",
+      "since": "2026-10-24"
+    },
+    {
+      "suite": "facade",
+      "match": "platforms/odc/facade/tests/discover-tools.test.mjs :: the hint leads with the model change only for a model change, and never hides discover() guidance",
+      "kind": "preexistente",
+      "reason": "Lista do dono (discover-tools model part); falha igual em 3e461d02.",
+      "since": "2026-10-24"
+    },
+    {
+      "suite": "facade",
+      "match": "platforms/odc/facade/tests/english-only-rules-search.test.mjs :: rules search: each of the 18 Portuguese queries*",
+      "kind": "preexistente",
+      "reason": "Lista do dono (english-only rules find); falha igual em 3e461d02.",
+      "since": "2026-10-24"
+    },
+    {
+      "suite": "facade",
+      "match": "platforms/odc/facade/tests/english-only-search-family.test.mjs :: example find*",
+      "kind": "preexistente",
+      "reason": "Lista do dono (english-only example find); falha igual em 3e461d02.",
+      "since": "2026-10-24"
+    },
+    {
+      "suite": "facade",
+      "match": "platforms/odc/facade/tests/pa3-fa-guidance.test.mjs :: guidance: each Portuguese intent of the seven rules*",
+      "kind": "preexistente",
+      "reason": "RULES_SECTION_NOT_FOUND para 'protótipo aprovado', mesma família da busca de regras em português; falha igual em 3e461d02.",
+      "since": "2026-10-24"
+    },
+    {
+      "suite": "facade",
+      "match": "platforms/odc/facade/tests/profile-isolation-guard.test.mjs :: every node test file imports the profile isolation first",
+      "kind": "preexistente",
+      "reason": "Lista do dono: migration-temporal-runtime, migration-upload-runtime e portal log-screen-contract não importam o perfil isolado primeiro.",
+      "since": "2026-10-24"
+    },
+    {
+      "suite": "facade",
+      "match": "platforms/odc/facade/tests/catalog-a-actions.test.mjs :: lane differences answer with the declared status*",
+      "kind": "preexistente",
+      "reason": "Status declarado das diferenças entre faixas diverge do esperado; falha igual em 3e461d02.",
+      "since": "2026-10-24"
+    },
+    {
+      "suite": "facade",
+      "match": "platforms/odc/facade/tests/catalog-b-ui.test.mjs :: O11: the same intent is read with the same vocabulary*",
+      "kind": "preexistente",
+      "reason": "Um intent de evento genérico puxa o contexto Traditional; falha igual em 3e461d02.",
+      "since": "2026-10-24"
+    },
+    {
+      "suite": "facade",
+      "match": "platforms/odc/facade/tests/html-edits.test.mjs :: past the limit, the changed texts of one list are one replace of that list*",
+      "kind": "preexistente",
+      "reason": "Contagem 51 contra 49 esperados; falha igual em 3e461d02.",
+      "since": "2026-10-24"
+    },
+    {
+      "suite": "facade",
+      "match": "platforms/odc/facade/tests/reading.test.mjs :: ODC reading pages real model objects and resolves exact identities without changing the file",
+      "kind": "preexistente",
+      "reason": "Falha em 3e461d02 (asserção) e em 0388bd65 (Request timed out, com o builder quebrado).",
+      "since": "2026-10-24"
+    },
+    {
+      "suite": "facade",
+      "match": "platforms/odc/facade/tests/ssam-integration.test.mjs :: a busy Studio on a server of one lane names a continuation that server serves",
+      "kind": "preexistente",
+      "reason": "'no O11 lane, no ssam_task'; falha igual em 3e461d02.",
+      "since": "2026-10-24"
+    },
+    {
+      "suite": "facade",
+      "match": "platforms/odc/tests/continuations.test.mjs :: guides: one ssam://guide resource per topic, in MCP terms only",
+      "kind": "preexistente",
+      "reason": "A lista de guias ganhou 'session'; falha igual em 3e461d02.",
+      "since": "2026-10-24"
+    }
+  ]
+}

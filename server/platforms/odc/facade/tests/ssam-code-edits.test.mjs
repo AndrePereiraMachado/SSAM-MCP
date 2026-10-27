@@ -15,6 +15,13 @@ import { flowReadingFile } from '../module-map.mjs';
 import { createSsamServer } from '../ssam.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
+test('Preparation edits preserve its owned native header and do not allow deleting it', () => {
+  const source = 'preparation Home.Preparation @screenKey.#Preparation\n  assign Message = "Initial" @n1\n  end @n2\n';
+  const result = applyFlowEdits(source, [{ replace: '@n1', with: 'assign Message = "Edited"' }]);
+  assert.deepEqual(result.problems, []);
+  assert.equal(result.text, source.replace('"Initial"', '"Edited"'));
+  assert.ok(applyFlowEdits(source, [{ delete: '@screenKey.#Preparation' }]).problems.length);
+});
 const workspace = path.resolve(here, '../../../..');
 const fixtureRoot = path.join(workspace, 'kernel/tests/fixtures');
 const readJson = file => JSON.parse(fs.readFileSync(file, 'utf8'));

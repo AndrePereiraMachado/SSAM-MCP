@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using Anvil.Reading;
 using OutSystems.Model;
 namespace Anvil.Core;
 
@@ -8,6 +9,7 @@ namespace Anvil.Core;
 /// <see cref="Ids"/>: each authored id and the alias of its widget; <see cref="Created"/>: the widget names the ops give.</summary>
 public sealed record HtmlVisualFragment(List<JsonObject> Ops, JsonObject Report, string? ScopedCss, string? ScopeClass)
 {
+    public IReadOnlyList<(string Alias, string Tag, int Line)> RowGroups { get; init; } = [];
     public IReadOnlyDictionary<string, string> Ids { get; init; } = new Dictionary<string, string>();
     public IReadOnlyCollection<string> Created { get; init; } = [];
     /// <summary>The widgets the fragment creates without class whose type the Studio gives a class (ScreenVisual.DecisionFor):
@@ -37,6 +39,12 @@ public sealed record HtmlVisualScope(
     public static HtmlVisualScope Empty { get; } = new([], Map(), Map(), Map(), _ => null);
     public static Dictionary<string, string> Map() => new(StringComparer.OrdinalIgnoreCase);
     public bool Accepts(string type, string property) => Supports?.Invoke(type, property) ?? Known(type, property);
+    internal static JsonObject? Property(string type, string property)
+    {
+        vocabulary ??= ScreenSpecification.Vocabulary;
+        return (vocabulary["mobile:" + type]?["properties"] as JsonObject)?
+            .FirstOrDefault(p => p.Key.Equals(property, StringComparison.OrdinalIgnoreCase)).Value as JsonObject;
+    }
 
     /// <summary>The screens a link or a button may navigate to (onclick or href naming a screen): name -> reference.</summary>
     public IReadOnlyDictionary<string, string>? Screens { get; init; }
@@ -84,10 +92,9 @@ public static class HtmlVisual
     };
     // Attributes the syntax spends on the widget itself; everything else becomes an extended property with its literal value.
     private static readonly HashSet<string> Reserved = new(StringComparer.Ordinal)
-    { "class", "id", "icon", "weight", "bind", "placeholder", "type", "options", "value", "label", "onclick", "for", "src", "list", "as", "if", "else", "name", "href", "filename" };
+    { "class", "id", "icon", "weight", "bind", "content", "placeholder", "type", "options", "value", "label", "onclick", "onchange", "for", "src", "list", "as", "if", "else", "name", "href", "filename", "show" };
     // Widgets the model gives no extended properties: an attribute they cannot carry is an error, not a silent drop.
     private static readonly HashSet<string> NoAttributes = new(StringComparer.Ordinal) { "IIfWidget", "IMobileBlockInstanceWidget" };
-    private static readonly Regex Interpolation = new(@"\{\{(.*?)\}\}", RegexOptions.Singleline);
     private static readonly Regex WidgetNameShape = new("^[A-Za-z][A-Za-z0-9_]*$");
     // onclick="Name" or onclick="Name(arg, ...)": an action or a screen, with its arguments in the order of its inputs.
     private static readonly Regex CallShape = new(@"^\s*([A-Za-z_][A-Za-z0-9_]*)\s*(?:\((.*)\))?\s*;?\s*$", RegexOptions.Singleline);
@@ -111,27 +118,35 @@ public static class HtmlVisual
             ["div"] = Row("IContainer", "class -> Style, id -> Name"),
             ["(html element)"] = Row("IAdvancedHtml", "Tag = the tag, class -> extended property; any tag of the platform's HTML Element (api --op html, platformTags), tables too; br: an empty Container"),
             ["form"] = Row("IForm", "class -> Style; children are its content"),
+            ["popup"] = Row("IPopup", "show -> ShowPopup; children are native popup content; events inside use Fade"),
+            ["radio-group"] = Row("IRadioGroup", "bind -> Variable; radio-button value -> Value; onchange names an action"),
+            ["radio-button"] = Row("IRadioButton", "value -> Value; children are its caption"),
+            ["placeholder"] = Row("IPlaceholderWidget", "name -> Name; native block placeholder"),
+            ["list-item"] = Row("IListItem", "native list item with authored children"),
+            ["expr"] = Row("IExpression", "value is an OutSystems expression"),
+            ["text"] = Row("ITextWidget", "children are explicit literal text, including literal braces"),
             ["(literal text)"] = Row("ITextWidget", "no class of its own; a space next to an inline element stays"),
-            ["{{ expression }}"] = Row("IExpression", "OutSystems, copied as written (never JavaScript)"),
+            ["{{ expression }}"] = Row("IExpression", "OutSystems, copied as written (never JavaScript); a binding of a constant ({{ \"Search\" }}) is folded into the text around it"),
             ["i"] = Row("IIcon", "icon = the icon name; weight where the icon has one (ODC: mandatory; the O11 icon has none, as its reading writes it)"),
             ["input"] = Row("IInput", "bind names an existing variable, placeholder -> Prompt, type " + string.Join("|", InputTypes.Keys)
                 + "; the bound data type decides the InputType"),
             ["input[type=checkbox]"] = Row("ICheckbox", "bind names an existing variable"),
             ["textarea"] = Row("ITextArea", "bind names an existing variable"),
-            ["select"] = Row("IDropdown", "bind -> Variable, options -> List, value -> Values, label -> Labels; value and label read the element of options by its attributes (Item.Id for an aggregate over Item, Id for a list of records), never options.Current"),
+            ["select"] = Row("IDropdown", "bind -> Variable, options -> List, value -> Values, label -> Labels, empty -> EmptyValue; value and label read the element of options by its attributes (Item.Id for an aggregate over Item, Id for a list of records), never options.Current"),
             ["button"] = Row("IButton", "onclick (or href): an action or screen, Name(args) or :Input passes inputs; children are its content; empty with aria-label/title"),
             ["a"] = Row("ILink", "as button"),
             ["label"] = Row("ILabel", "for -> TargetWidget (an input id of the fragment); with child elements: an HTML Element label with them"),
             ["img"] = Row("IImage", "src: module image, URL or {{ }}"),
             ["div[list]"] = Row("IList", "Source = list; as is mandatory and names the row inside {{ }}"),
+            ["(html element)[list]"] = Row("IList", "Source = list; Tag preserves the element; as names the row inside {{ }}"),
             ["div[if]"] = Row("IIfWidget", "children: True branch; a <div else> right after: False branch"),
             ["Block"] = Row("IMobileBlockInstanceWidget", "name = an existing block, inputs by :Name, handlers by @Event=\"Action\" or, as the reading writes them, @Event=\"Action(Input = expression)\", children by <slot name>"),
             ["ButtonGroup"] = Row("IButtonGroup", "bind -> Variable; each <ButtonGroupItem value> an IButtonGroupItem, its text an Expression; also written <button-group> and <button-group-item>"),
             ["switch"] = Row(ElementWidgetMap.LanguageElements["switch"].Widget, "bind names an existing Boolean variable"),
-            ["upload"] = Row(ElementWidgetMap.LanguageElements["upload"].Widget, "bind -> FileContent (a Binary Data variable), filename -> FileName"),
+            ["upload"] = Row(ElementWidgetMap.LanguageElements["upload"].Widget, "content or bind -> FileContent (a Binary Data variable), filename -> FileName; accept -> Accept; no enabled or disabled (no Upload has Enabled, in either lane)"),
             ["style"] = Row("(theme)", "scoped under the root class; light-dark() expanded, @keyframes kept, @import to the top"),
         },
-        ["attributes"] = "any other attribute: an IExtendedProperty, {{ }} makes an expression",
+        ["attributes"] = "enabled/disabled, required/mandatory, maxlength and empty use native properties; onchange names a native action; unsupported os-* is refused; any other attribute: an IExtendedProperty, {{ }} makes an expression",
         ["names"] = "id: name, alias $id; else Tag1, Tag2; Block none",
         ["rejected"] = new JsonArray("script", "an <i> without weight where the icon has one (ODC)", "a name that does not exist in the module", "a tag outside this table", "color-mix()"),
     };
@@ -184,7 +199,7 @@ public static class HtmlVisual
     private static readonly HashSet<string> CompiledTags = new(StringComparer.Ordinal)
     { "div", "i", "img", "input", "textarea", "select", "button", "a", "label", "block", "slot", "style", "br", "buttongroup", "buttongroupitem", "form",
       // the rows of the language with no HTML tag of their own (ElementWidgetMap.LanguageElements, the one table)
-      "switch", "upload", "button-group", "button-group-item" };
+      "switch", "upload", "popup", "button-group", "button-group-item", "radio-group", "radio-button", "placeholder", "expr", "text", "list-item" };
 
     /// <summary>A tag outside the platform list that the one table replaces by a div (main in ODC, search, menuitem, a custom
     /// element, a dialog) or a span (data, picture in ODC): the element keeps its class ssam-tag-&lt;tag&gt;.</summary>
@@ -269,11 +284,12 @@ public static class HtmlVisual
         private readonly Stack<ListScope> listScopes = new();
         private readonly List<string> bound = [], called = [], blocks = [], images = [], screens = [];
         private readonly List<FragmentProblem> problems = [];
-        private readonly Dictionary<HtmlNode, Target?> targets = [];
+        private readonly Dictionary<(HtmlNode Node, string Event), Target?> targets = [];
         private readonly JsonArray adjusted = [], implicitArguments = [], canvasSelectors = [];
         private readonly List<string> importsHoisted = [];
         private readonly List<(string Alias, string Type, int Line)> unclassed = [];
-        private int counter, lightDark;
+        private readonly List<(string Alias, string Tag, int Line)> rowGroups = [];
+        private int counter, lightDark, popupDepth;
 
         private void Record(InvalidOperationException error)
         {
@@ -324,6 +340,7 @@ public static class HtmlVisual
                 Ids = new Dictionary<string, string>(idAliases, StringComparer.Ordinal),
                 Created = widgetNames.ToArray(),
                 Unclassed = unclassed.ToArray(),
+                RowGroups = rowGroups.ToArray(),
             };
         }
 
@@ -393,7 +410,8 @@ public static class HtmlVisual
                             if (!External(src)) images.Add(Find(resolve.Images, src, "image", child));
                         });
                         break;
-                    case "input": case "textarea": case "select": case "buttongroup": case "button-group": case "switch": case "upload": Check(() => Bind(child)); break;
+                    case "input": case "textarea": case "select": case "buttongroup": case "button-group": case "switch": case "upload": case "radio-group": Check(() => Bind(child)); break;
+                    case "popup": Check(() => Required(child, "show")); break;
                     case "buttongroupitem": case "button-group-item":
                         if (parentTag is not ("buttongroup" or "button-group")) Record(Error($"{child.Where}: <ButtonGroupItem> only belongs directly inside a <ButtonGroup>"));
                         Check(() => Required(child, "value"));
@@ -408,6 +426,22 @@ public static class HtmlVisual
                             Record(Error($"{child.Where}: a list needs as=\"<row>\", the name its children use inside {{{{ }}}}"));
                         break;
                 }
+                if (child.Attribute("list") != null && tag != "div") Check(() => {
+                    if (!Elements.Contains(tag) && !Substituted(tag)) throw Error($"{child.Where}: list requires a container or HTML element, not a native control", TagNotAllowed);
+                    ValidateList(child);
+                });
+                if (child.Attribute("onchange") != null)
+                {
+                    if (tag is "input" or "textarea" or "select" or "switch" or "buttongroup" or "button-group" or "radio-group")
+                        Check(() => Destination(child, "onchange"));
+                    else Record(Error($"{child.Where}: onchange requires a native control", TagNotAllowed));
+                }
+                if (child.Attribute("onclick") != null && tag is not ("a" or "button"))
+                    Record(Error($"{child.Where}: onclick in a fragment requires an a or button; the event cannot be discarded", "HTML_NATIVE_PROPERTY_UNSUPPORTED"));
+                if (child.Attribute("placeholder") != null && tag is not ("input" or "textarea"))
+                    Record(Error($"{child.Where}: placeholder requires an input or textarea", "HTML_NATIVE_PROPERTY_UNSUPPORTED"));
+                if (child.Attribute("show") != null && tag != "popup")
+                    Record(Error($"{child.Where}: show requires a popup", "HTML_NATIVE_PROPERTY_UNSUPPORTED"));
                 Validate(child, tag);
             }
         }
@@ -420,13 +454,14 @@ public static class HtmlVisual
         /// :Input attributes. None (no onclick, href "#") is a control without destination: the job may set it with a later op,
         /// and the Verify judges what stays unset. Problems are recorded, never thrown, so every problem of the element comes
         /// out together.</summary>
-        private Target? Destination(HtmlNode node)
+        private Target? Destination(HtmlNode node, string eventAttribute = "onclick")
         {
-            if (targets.TryGetValue(node, out var known)) return known;
+            var targetKey = (node, eventAttribute);
+            if (targets.TryGetValue(targetKey, out var known)) return known;
             Target? target = null;
             var named = node.Attributes.Where(a => a.Key.StartsWith(':')).Select(a => (Name: a.Key[1..], a.Value)).ToList();
-            var onclick = node.Attribute("onclick");
-            var href = node.Tag == "a" ? node.Attribute("href")?.Trim() : null;
+            var onclick = node.Attribute(eventAttribute);
+            var href = eventAttribute == "onclick" && node.Tag == "a" ? node.Attribute("href")?.Trim() : null;
             // "#", "" and javascript: are a prototype's placeholder for "goes nowhere yet"; a URL stays an attribute.
             var hrefTarget = href is { Length: > 0 } && href != "#" && !href.StartsWith("javascript:", StringComparison.OrdinalIgnoreCase) && !UrlShape.IsMatch(href)
                 && !href.StartsWith("mailto:", StringComparison.OrdinalIgnoreCase) && !href.StartsWith("tel:", StringComparison.OrdinalIgnoreCase) ? href : null;
@@ -470,7 +505,13 @@ public static class HtmlVisual
                 }
                 if (reference != null) target = new Target(name, reference, isScreen, positional, named);
             }
-            targets[node] = target;
+            // An onchange (the proto line's M01/M03: the native OnChange of an input) runs an action, never a screen.
+            if (eventAttribute == "onchange" && target?.Screen == true)
+            {
+                Record(Error($"{node.Where}: onchange requires an action, not screen {target.Name}", TagNotAllowed));
+                target = null;
+            }
+            targets[targetKey] = target;
             return target;
         }
 
@@ -571,7 +612,7 @@ public static class HtmlVisual
         /// <summary>bind names a variable of the module, or a field of the row when the element sits inside a list.</summary>
         private void Bind(HtmlNode node)
         {
-            var target = Required(node, "bind");
+            var target = node.Tag == "upload" && node.Attribute("content") is { Length: > 0 } content ? content : Required(node, "bind");
             if (!names || target.Contains('.')) { bound.Add(target); return; } // a dotted name is a row field: the list alias is resolved when the expression is written
             if (!resolve.Variables.Contains(target, StringComparer.OrdinalIgnoreCase))
                 throw Error($"{node.Where}: bind=\"{target}\" does not name a variable of the module; variables: {Join(resolve.Variables)}");
@@ -638,6 +679,7 @@ public static class HtmlVisual
 
         private string Widget(HtmlNode node, string parent)
         {
+            if (node.Attribute("list") != null && node.Tag != "div" && (Elements.Contains(node.Tag) || Substituted(node.Tag))) return ListWidget(node, parent);
             switch (node.Tag)
             {
                 case "slot": throw Error($"{node.Where}: <slot> only belongs directly inside a <Block>");
@@ -646,7 +688,12 @@ public static class HtmlVisual
                 case "i": return Icon(node, parent);
                 case "img": return Image(node, parent);
                 case "input": return InputWidget(node, parent);
-                case "textarea": return Simple(node, parent, "ITextArea", a => Set(a, "Variable", Expression(Required(node, "bind"), node)));
+                case "textarea": return Simple(node, parent, "ITextArea", a =>
+                {
+                    Set(a, "Variable", Expression(Required(node, "bind"), node));
+                    // T1: the placeholder of a text area is its Prompt, as an input's (it was reserved and dropped without a word).
+                    if (node.Attribute("placeholder") is { Length: > 0 } prompt) Set(a, "Prompt", Bound(prompt, node, "placeholder"));
+                });
                 case "select": return Select(node, parent);
                 case "button": return Clickable(node, parent, "IButton");
                 case "a": return Clickable(node, parent, "ILink");
@@ -655,9 +702,36 @@ public static class HtmlVisual
                 case "buttongroup": case "button-group": return ButtonGroup(node, parent);
                 case "buttongroupitem": case "button-group-item": throw Error($"{node.Where}: <ButtonGroupItem> only belongs directly inside a <ButtonGroup>");
                 case "switch": return Simple(node, parent, ElementWidgetMap.LanguageElements["switch"].Widget, a => Set(a, "Variable", Expression(Required(node, "bind"), node)));
+                case "expr": return Simple(node, parent, "IExpression", a => Set(a, "Value", Expression(Required(node, "value"), node)));
+                case "text":
+                    var literal = Create(parent, "ITextWidget", node);
+                    Set(literal, "Text", string.Concat(node.Children.Select(c => c.Text)));
+                    Attributes(node, literal, "ITextWidget");
+                    return literal;
+                case "radio-group":
+                    var group = Create(parent, "IRadioGroup", node);
+                    ops[^1]["empty"] = true;
+                    Set(group, "Variable", Expression(Required(node, "bind"), node));
+                    Attributes(node, group, "IRadioGroup");
+                    if (node.Attribute("onchange") != null) Navigate(node, group, Destination(node, "onchange"), "OnChange");
+                    Children(node, group);
+                    return group;
+                case "radio-button":
+                    var radio = Create(parent, "IRadioButton", node);
+                    ops[^1]["empty"] = true;
+                    Set(radio, "Value", Expression(Required(node, "value"), node));
+                    Attributes(node, radio, "IRadioButton");
+                    Children(node, radio);
+                    return radio;
+                case "placeholder": case "list-item":
+                    var nativeContainer = Create(parent, node.Tag == "placeholder" ? "IPlaceholderWidget" : "IListItem", node);
+                    if (node.Tag == "placeholder") Set(nativeContainer, "Name", Required(node, "name"));
+                    Attributes(node, nativeContainer, node.Tag == "placeholder" ? "IPlaceholderWidget" : "IListItem");
+                    Children(node, nativeContainer);
+                    return nativeContainer;
                 case "upload": return Simple(node, parent, ElementWidgetMap.LanguageElements["upload"].Widget, a =>
                 {
-                    Set(a, "FileContent", Expression(Required(node, "bind"), node));
+                    Set(a, "FileContent", Expression(node.Attribute("content") ?? Required(node, "bind"), node));
                     if (node.Attribute("filename") is { Length: > 0 } fileName) Set(a, "FileName", Expression(fileName, node));
                 });
                 case "form":
@@ -665,6 +739,14 @@ public static class HtmlVisual
                     Attributes(node, form, "IForm");
                     Children(node, form);
                     return form;
+                case "popup":
+                    var popup = Create(parent, "IPopup", node);
+                    Set(popup, "ShowPopup", ScreenHtml.HoldsBraces(Required(node, "show")) ? Bound(Required(node, "show"), node, "show") : Expression(Required(node, "show"), node));
+                    Attributes(node, popup, "IPopup");
+                    popupDepth++;
+                    try { Children(node, popup); }
+                    finally { popupDepth--; }
+                    return popup;
             }
             if (Substituted(node.Tag))
             {
@@ -692,15 +774,7 @@ public static class HtmlVisual
             if (list is { Length: > 0 } && condition != null) throw Error($"{node.Where}: a <div> is a list or an if, not both");
             if (list is { Length: > 0 })
             {
-                var row = node.Attribute("as") is { Length: > 0 } given ? given : throw Error($"{node.Where}: a list needs as=\"<row>\", the name its children use inside {{{{ }}}}");
-                var alias = Create(parent, "IList", node);
-                var source = Expression(list, node);
-                Set(alias, "Source", source);
-                Attributes(node, alias, "IList");
-                listScopes.Push(new ListScope(row, source));
-                try { Children(node, alias); }
-                finally { listScopes.Pop(); }
-                return alias;
+                return ListWidget(node, parent);
             }
             if (condition != null)
             {
@@ -717,21 +791,43 @@ public static class HtmlVisual
             return container;
         }
 
+        private static void ValidateList(HtmlNode node)
+        {
+            if (node.Attribute("list") is not { Length: > 0 }) throw Error($"{node.Where}: a list needs its Source");
+            if (node.Attribute("as") is not { Length: > 0 }) throw Error($"{node.Where}: a list needs as=\"<row>\", the name its children use inside {{{{ }}}}");
+            if (node.Attribute("if") != null) throw Error($"{node.Where}: a list and an if need separate elements");
+        }
+
+        private string ListWidget(HtmlNode node, string parent)
+        {
+            ValidateList(node);
+            var source = Expression(Required(node, "list"), node);
+            var alias = Create(parent, "IList", node);
+            Set(alias, "Source", source);
+            if (node.Tag != "div") Set(alias, "Tag", node.Tag);
+            if (ScreenVisual.RowGroupTags.Contains(node.Tag)) rowGroups.Add((alias, node.Tag, node.Line));
+            Attributes(node, alias, "IList");
+            listScopes.Push(new ListScope(Required(node, "as"), source));
+            try { Children(node, alias); }
+            finally { listScopes.Pop(); }
+            return alias;
+        }
+
         /// <summary>Literal text is a Text widget scoped by the class of the element around it; {{ }} is an Expression whose
         /// text is OutSystems, copied as written.</summary>
         private void Text(HtmlNode node, string parent, string? scope, bool afterInline = false, bool beforeInline = false)
         {
-            var last = 0; var afterExpression = afterInline;
-            foreach (Match match in Interpolation.Matches(node.Text))
+            // T1: the one compile of a text with bindings (BindingText.Runs): a binding of a constant is folded into the text
+            // around it ({{ "Search" }} is the text Search), any other binding is an Expression with the list scope.
+            var runs = RunsOf(node.Text, node, Scoped);
+            for (var r = 0; r < runs.Count; r++)
             {
-                Literal(node.Text[last..match.Index], parent, scope, keepLeading: afterExpression, keepTrailing: true);
-                var expression = match.Groups[1].Value.Trim();
-                if (expression.Length == 0) throw Error($"{node.Where}: {{{{ }}}} needs an OutSystems expression");
-                Set(Create(parent, "IExpression", null), "Value", Expression(expression, node));
-                last = match.Index + match.Length; afterExpression = true;
+                var run = runs[r];
+                if (run.Expression) { Set(Create(parent, "IExpression", null), "Value", run.Text); continue; }
+                Literal(run.Text, parent, scope, keepLeading: r == 0 ? afterInline : true, keepTrailing: r == runs.Count - 1 ? beforeInline : true);
             }
-            Literal(node.Text[last..], parent, scope, keepLeading: afterExpression, keepTrailing: beforeInline);
         }
+
 
         private static readonly HashSet<string> InlineTags = new(StringComparer.Ordinal)
         { "span", "strong", "em", "small", "code", "a", "i", "label", "img" };
@@ -778,7 +874,7 @@ public static class HtmlVisual
             if (External(src))
             {
                 Set(alias, "Type", "External");
-                Set(alias, "Url", src.Contains("{{", StringComparison.Ordinal) ? AttributeExpression(src.Trim(), node) : Quote(src.Trim()));
+                Set(alias, "Url", Bound(src.Trim(), node, "src"));
             }
             else Set(alias, "Image", Known(resolve.Images, src));
             Attributes(node, alias, "IImage");
@@ -811,7 +907,7 @@ public static class HtmlVisual
             {
                 Set(alias, "Variable", Expression(bind, node));
                 Set(alias, "InputType", inputType);
-                if (node.Attribute("placeholder") is { Length: > 0 } prompt) Set(alias, "Prompt", Quote(prompt));
+                if (node.Attribute("placeholder") is { Length: > 0 } prompt) Set(alias, "Prompt", Bound(prompt, node, "placeholder"));
             });
         }
 
@@ -854,6 +950,7 @@ public static class HtmlVisual
             var alias = Create(parent, type, node);
             properties(alias);
             Attributes(node, alias, type);
+            if (node.Attribute("onchange") != null) Navigate(node, alias, Destination(node, "onchange"), "OnChange");
             return alias;
         }
 
@@ -863,7 +960,10 @@ public static class HtmlVisual
         /// Expression with the list scope (the Cardapio buttons printed "{{ Restaurantes.Current.Nome }}").</summary>
         private string Clickable(HtmlNode node, string parent, string type)
         {
-            var text = node.InnerText();
+            var written = node.InnerText();
+            // T1: a caption whose bindings are all constants is the literal caption ({{ "Save" }} is Save); one that names something
+            // is the control's content, compiled (BindingText).
+            var text = ScreenHtml.HoldsBraces(written) && BindingText.Literal(written) is { } folded ? folded : written;
             // H5 (the one table): a control with no visible content is named by its aria-label or title (a CSS switch).
             if (text.Length == 0 && !node.Elements.Any() && !ElementWidgetMap.Labelled(node.Attributes.Select(a => (a.Key, a.Value))))
                 throw Error($"{node.Where}: a <{node.SourceTag}> needs text, {{{{ expression }}}}, an <i> icon, child elements, an aria-label or a title");
@@ -872,7 +972,7 @@ public static class HtmlVisual
             // The one table: a submit button is never type=submit; it is the default button and carries ssam-submit.
             var submit = type == "IButton" && (node.Attribute("type") ?? "").Equals("submit", StringComparison.OrdinalIgnoreCase);
             if (submit) Set(alias, "IsDefault", true);
-            if (text.Length == 0 || node.Elements.Any(e => e.Tag != "i") || node.Children.Any(child => child.IsText && Interpolation.IsMatch(child.Text)))
+            if (text.Length == 0 || node.Elements.Any(e => e.Tag != "i") || ScreenHtml.HoldsBraces(text))
             {
                 // Dynamic content uses the same compiler as other widgets: it keeps literal spacing, native expressions,
                 // list aliases, child elements and the authored order of the icons.
@@ -881,7 +981,7 @@ public static class HtmlVisual
                 Attributes(node, alias, type, submit ? "ssam-submit" : null);
                 // A control with no visible text (an icon) says what it does to a screen reader by its title.
                 if (text.Length == 0 && node.Attribute("title") is { Length: > 0 } title && node.Attribute("aria-label") == null)
-                    Extended(node, alias, type, "aria-label", Quote(title));
+                    Extended(node, alias, type, "aria-label", Bound(title, node, "title"));
                 Children(node, alias);
                 return alias;
             }
@@ -907,10 +1007,12 @@ public static class HtmlVisual
         /// mandatory input left out is REQUIRED_ARGUMENT; when the author named only the action or the screen, a mandatory input
         /// takes the variable of the same name in scope (the wiring of a block event, reported in implicitArguments), and one
         /// without such a variable is left to a later op of the job and to the Verify.</summary>
-        private void Navigate(HtmlNode node, string alias, Target? target)
+        private void Navigate(HtmlNode node, string alias, Target? target, string eventName = "OnClick")
         {
             if (target == null) return;
-            Set(alias + "/OnClick", "Destination", target.Reference);
+            alias += "/" + eventName;
+            Set(alias, "Destination", target.Reference);
+            if (popupDepth > 0) Set(alias, "Transition", "Fade");
             if (!names) return;
             var contract = resolve.Contract(target.Reference);
             if (contract == null)
@@ -923,7 +1025,7 @@ public static class HtmlVisual
                 foreach (var (name, value) in target.Named)
                 {
                     if (value.Contains("{{", StringComparison.Ordinal)) Record(Error($"{node.Where}: {{{{ }}}} does not nest inside an attribute; write the expression directly"));
-                    else Set(alias + "/OnClick/" + name, "Value", Scoped(value));
+                    else Set(alias + "/" + name, "Value", Scoped(value));
                 }
                 return;
             }
@@ -958,7 +1060,7 @@ public static class HtmlVisual
                 }
             }
             foreach (var input in inputs)
-                if (given.TryGetValue(input.Name, out var value)) Set(alias + "/OnClick/" + input.Name, "Value", value);
+                if (given.TryGetValue(input.Name, out var value)) Set(alias + "/" + input.Name, "Value", value);
         }
 
         /// <summary>A label with text is a Label. A label around other elements is an HTML Element of tag label (in the list of
@@ -972,7 +1074,16 @@ public static class HtmlVisual
                 var text = node.InnerText();
                 if (text.Length == 0) throw Error($"{node.Where}: a <label> needs text");
                 var alias = Create(parent, "ILabel", node);
-                Set(alias + "/#ITextWidget", "Text", text);
+                // T1: the caption of a label is a literal: its text, a binding of a constant folded into it ({{ "Search" }} is
+                // Search); a binding that names something makes the label's content its runs, Text and Expression children
+                // (the label's own caption goes, as a button's does). Never the braces as text (BindingText).
+                if (!ScreenHtml.HoldsBraces(text)) Set(alias + "/#ITextWidget", "Text", text);
+                else if (BindingText.Literal(text) is { } folded) Set(alias + "/#ITextWidget", "Text", folded);
+                else
+                {
+                    Add("delete", ("target", alias + "/#ITextWidget"));
+                    Children(node, alias);
+                }
                 Attributes(node, alias, "ILabel");
                 if (node.Attribute("for") is { Length: > 0 } target) labels.Add((alias, target, node));
                 return alias;
@@ -980,7 +1091,7 @@ public static class HtmlVisual
             var wrapper = Create(parent, "IAdvancedHtml", node);
             Set(wrapper, "Tag", "label");
             Attributes(node, wrapper, "IAdvancedHtml");
-            if (node.Attribute("for") is { Length: > 0 } wrapped) Extended(node, wrapper, "IAdvancedHtml", "for", Quote(wrapped));
+            if (node.Attribute("for") is { Length: > 0 } wrapped) Extended(node, wrapper, "IAdvancedHtml", "for", Bound(wrapped, node, "for"));
             Children(node, wrapper + "/Content");
             return wrapper;
         }
@@ -993,6 +1104,7 @@ public static class HtmlVisual
             ops[^1]["empty"] = true;
             Set(alias, "Variable", Expression(Required(node, "bind"), node));
             Attributes(node, alias, "IButtonGroup");
+            if (node.Attribute("onchange") != null) Navigate(node, alias, Destination(node, "onchange"), "OnChange");
             foreach (var child in node.Children)
             {
                 try
@@ -1021,21 +1133,13 @@ public static class HtmlVisual
         /// <summary>The caption of a button group item: literal text is a quoted Expression, {{ }} the expression as written.</summary>
         private void Caption(HtmlNode text, string parent)
         {
-            var last = 0;
-            void LiteralPart(string part)
+            // T1: the one compile of a text with bindings (BindingText.Runs); each run is an Expression of the item's caption.
+            foreach (var run in RunsOf(text.Text, text, Scoped))
             {
-                var value = HtmlNode.CollapseSpaces(part);
+                if (run.Expression) { Set(Create(parent, "IExpression", null), "Value", run.Text); continue; }
+                var value = HtmlNode.CollapseSpaces(run.Text);
                 if (value.Length > 0) Set(Create(parent, "IExpression", null), "Value", Quote(value));
             }
-            foreach (Match match in Interpolation.Matches(text.Text))
-            {
-                LiteralPart(text.Text[last..match.Index]);
-                var expression = match.Groups[1].Value.Trim();
-                if (expression.Length == 0) throw Error($"{text.Where}: {{{{ }}}} needs an OutSystems expression");
-                Set(Create(parent, "IExpression", null), "Value", Expression(expression, text));
-                last = match.Index + match.Length;
-            }
-            LiteralPart(text.Text[last..]);
         }
 
         private string Block(HtmlNode node, string parent)
@@ -1096,7 +1200,7 @@ public static class HtmlVisual
             {
                 // class="chip {{ If(Selected, "on", "") }}" is a dynamic Style: the literal parts quoted, the {{ }} parts as written.
                 var value = HtmlNode.CollapseSpaces(css);
-                var expression = value.Contains("{{", StringComparison.Ordinal) ? AttributeExpression(value, node) : Quote(value);
+                var expression = Bound(value, node, "class");
                 if (resolve.Accepts(type, "Style")) Set(alias, "Style", expression);
                 else Extended(node, alias, type, "class", expression);
             }
@@ -1110,6 +1214,9 @@ public static class HtmlVisual
             foreach (var (attribute, value) in node.Attributes)
             {
                 if (Reserved.Contains(attribute) || attribute.StartsWith(':') || attribute.StartsWith('@')) continue;
+                if (NativeProperty(node, alias, type, attribute, value)) continue;
+                if (attribute.StartsWith("os-", StringComparison.OrdinalIgnoreCase))
+                    throw Error($"{node.Where}: {attribute} has no supported native property on {type}; it cannot become an inert HTML attribute", "HTML_NATIVE_PROPERTY_UNSUPPORTED");
                 // Inline JavaScript never becomes an attribute (the one table): onclick is the syntax of a destination.
                 if (ElementWidgetMap.IsInlineScript(attribute))
                     throw Error($"{node.Where}: attribute '{attribute}' is inline JavaScript, which is not compiled; logic is native", TagNotAllowed, "remove it; a link or a button names its action with onclick=\"Action\"");
@@ -1117,12 +1224,55 @@ public static class HtmlVisual
                 // a fragment goes into a screen that exists, where the op marks nothing.
                 if (ScreenVisual.MarkerOf(attribute) != null)
                     throw Error($"{node.Where}: " + ScreenVisual.ReservedMarkerMessage(attribute, value, false, false), ScreenVisual.ReservedMarker, "remove " + attribute + "; a fragment carries no marker of the engine");
-                Extended(node, alias, type, attribute, value.Contains("{{", StringComparison.Ordinal) ? AttributeExpression(value, node) : Quote(value));
+                Extended(node, alias, type, attribute, Bound(value, node, attribute));
             }
             // An href that is a URL (not a screen) stays the attribute the author wrote.
             if (node.Tag == "a" && node.Attribute("href")?.Trim() is { Length: > 0 } href && (UrlShape.IsMatch(href)
                 || href.StartsWith("mailto:", StringComparison.OrdinalIgnoreCase) || href.StartsWith("tel:", StringComparison.OrdinalIgnoreCase)))
-                Extended(node, alias, type, "href", Quote(href));
+                Extended(node, alias, type, "href", Bound(href, node, "href"));
+        }
+
+        private bool NativeProperty(HtmlNode node, string alias, string type, string attribute, string value)
+        {
+            var explicitNative = attribute.StartsWith("os-", StringComparison.OrdinalIgnoreCase);
+            var name = explicitNative ? attribute[3..].ToLowerInvariant() : attribute;
+            var property = name switch {
+                "enabled" or "disabled" => "Enabled",
+                "mandatory" or "required" => "Mandatory",
+                "maxlength" => "MaxLength",
+                "empty" or "emptyvalue" => "EmptyValue",
+                _ => null,
+            };
+            if (property == null)
+            {
+                var native = ScreenHtmlTables.Named.GetValueOrDefault(type[1..]);
+                property = explicitNative ? ScreenSpecification.Shape("mobile", type)["properties"]?.AsObject()
+                    .Select(p => p.Key).FirstOrDefault(p => p.Equals(attribute[3..], StringComparison.OrdinalIgnoreCase))
+                    : native?.FirstOrDefault(p => p.Value == attribute).Key;
+                if (type == "IUpload" && attribute == "accept") property = "Accept";
+            }
+            if (property == null) return false;
+            if (!resolve.Accepts(type, property)) throw Error($"{node.Where}: {attribute} is not supported by {type}", "HTML_NATIVE_PROPERTY_UNSUPPORTED");
+            var propertyKind = HtmlVisualScope.Property(type, property)?["kind"]?.ToString();
+            if (propertyKind != "expression")
+            {
+                if (ScreenHtml.HoldsBraces(value))
+                {
+                    // T1 (BindingText, the one compile): a malformed binding is HTML_BINDING_INVALID; a constant binding folds into
+                    // the literal; any other binding cannot be the value of a literal property.
+                    if (BindingText.Expression(value, out var fault, Scoped) == null) throw Error($"{node.Where}: {attribute}=\"{Clip(value)}\": {fault}", ScreenDocument.BindingInvalid, BindingFix);
+                    value = BindingText.Literal(value) ?? throw Error($"{node.Where}: {attribute} is a native literal property, not an expression", ScreenDocument.BindingLiteral);
+                }
+                Set(alias, property, value);
+                return true;
+            }
+            string expression;
+            if (name == "disabled") expression = value.Length == 0 ? "False" : "not (" + (ScreenHtml.HoldsBraces(value) ? Bound(value, node, attribute) : Expression(value, node)) + ")";
+            else if (name == "required") expression = value.Length == 0 ? "True" : ScreenHtml.HoldsBraces(value) ? Bound(value, node, attribute) : Expression(value, node);
+            else if (property == "EmptyValue") expression = explicitNative && !ScreenHtml.HoldsBraces(value) ? Expression(value, node) : Bound(value, node, attribute);
+            else expression = ScreenHtml.HoldsBraces(value) ? Bound(value, node, attribute) : Expression(value, node);
+            Set(alias, property, expression);
+            return true;
         }
 
         /// <param name="value">The OutSystems expression of the attribute (a quoted literal or an expression).</param>
@@ -1133,23 +1283,24 @@ public static class HtmlVisual
             Set(ep, "Property", property); Set(ep, "Value", value);
         }
 
-        /// <summary>An attribute value with {{ }}: an OutSystems expression that concatenates the literal parts (quoted) and the
-        /// expressions (as written, with the list scope). A value that is one {{ }} alone is that expression.</summary>
-        private string AttributeExpression(string value, HtmlNode node)
+        /// <summary>T1: the value of an attribute that takes an expression, by the one compile of a text with bindings
+        /// (BindingText.Expression): {{ E }} is E with the list scope, text with bindings their concatenation (the literal parts
+        /// quoted), a value without a binding its string literal. A malformed binding is HTML_BINDING_INVALID, named.</summary>
+        private string Bound(string value, HtmlNode node, string attribute)
         {
-            var parts = new List<(string Text, bool Literal)>();
-            var last = 0;
-            foreach (Match match in Interpolation.Matches(value))
-            {
-                if (match.Index > last) parts.Add((value[last..match.Index], true));
-                var expression = match.Groups[1].Value.Trim();
-                if (expression.Length == 0) throw Error($"{node.Where}: {{{{ }}}} needs an OutSystems expression");
-                parts.Add((Scoped(expression), false));
-                last = match.Index + match.Length;
-            }
-            if (last < value.Length) parts.Add((value[last..], true));
-            if (parts.Count == 1 && !parts[0].Literal) return parts[0].Text;
-            return string.Join(" + ", parts.Select(p => p.Literal ? Quote(p.Text) : "(" + p.Text + ")"));
+            if (BindingText.Expression(value, out var fault, Scoped) is { } expression) return expression;
+            throw Error($"{node.Where}: {attribute}=\"{Clip(value)}\": {fault}", ScreenDocument.BindingInvalid, BindingFix);
+        }
+
+        private const string BindingFix = "a binding is {{ expression }} (text around it is joined: \"Total {{ N }}\"); a literal brace is written &#123; in <text>, or split in an expression ({{ \"{\" + \"{\" }})";
+        private static string Clip(string text) => text.Length <= 80 ? text : text[..77] + "...";
+
+        /// <summary>T1: the runs of a text with bindings (BindingText.Runs): literal text, each constant binding folded into it,
+        /// and expressions with the list scope. A malformed binding is HTML_BINDING_INVALID, named.</summary>
+        private static List<BindingText.Run> RunsOf(string text, HtmlNode node, Func<string, string> scoped)
+        {
+            if (BindingText.Runs(text, out var fault, scoped) is { } runs) return runs;
+            throw Error($"{node.Where}: the text \"{Clip(HtmlNode.CollapseSpaces(text))}\": {fault}", ScreenDocument.BindingInvalid, BindingFix);
         }
 
         // ---- stylesheet -----------------------------------------------------------------------------------------------
@@ -1322,6 +1473,28 @@ public sealed partial class ModelSession
             if (ScreenVisual.CountStudioClass(classes, studio, line) is { } note) normalized.Add(note);
         }
         if (normalized.Count > 0) report["normalized"] = normalized;
+        if (fragment.RowGroups.Count > 0)
+        {
+            var owner = parent;
+            while (owner.Parent is IObjectSignature up && !Implements(owner, "IMobileScreen") && !Implements(owner, "IMobileBlock")) owner = up;
+            var reachable = RootThemeOf(owner).Reachable;
+            foreach (var (list, tag, line) in fragment.RowGroups)
+            {
+                void Mark(string property, string expression)
+                {
+                    var marker = "$fragmentRows" + Guid.NewGuid().ToString("N");
+                    ApplyOne(new JsonObject { ["op"] = "create", ["parent"] = list, ["type"] = "IExtendedProperty", ["as"] = marker });
+                    ApplyOne(new JsonObject { ["op"] = "set", ["target"] = marker, ["prop"] = "Property", ["value"] = property });
+                    ApplyOne(new JsonObject { ["op"] = "set", ["target"] = marker, ["prop"] = "Value", ["value"] = expression });
+                }
+                Mark("disable-virtualization", "True");
+                if (reachable) Mark(ScreenVisual.RowsMarker, "\"1\"");
+                normalized.Add(new JsonObject { ["code"] = ScreenVisual.ListRendersAllRows, ["element"] = "List", ["line"] = line, ["tag"] = tag,
+                    ["rowsMarker"] = reachable, ["note"] = "Native table/list rows keep their layout; the same runtime rule as document creation." });
+            }
+            foreach (var layout in InstallNativeLayouts(owner)) normalized.Add(layout);
+            report["normalized"] = normalized;
+        }
         if (aliases.Count > 0) report["aliases"] = aliases;
         if (parentRef != authoredParent) report["parentAuthored"] = authoredParent;
         // The block of the theme is keyed by the screen or block that receives the fragment and the class of its stylesheet

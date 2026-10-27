@@ -13,6 +13,7 @@ import { fileURLToPath } from 'node:url';
 import { moduleMap, parseMapArguments, flowFile, flowReadingFile } from '../module-map.mjs';
 import { FLOW_EXTRACTOR, FLOW_PAGE_SCHEMA, FLOW_INDEX_SCHEMA, FLOW_NOTE, FLOW_READING_SCHEMA, flowPages, findActions, textSha } from '../module-flow.mjs';
 import { writeCapture } from './fixtures/module-index.mjs';
+import { STORE_GENERATION } from '../store-generation.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const kernelSource = path.join(here, '..', '..', '..', '..', 'kernel', 'src', 'Anvil.Core', 'Kernel', 'ModuleFlow.cs');
@@ -39,7 +40,7 @@ function flowOf({ lane = 'odc', sourceSha256, large = false }) {
       action('Broken', 'A4', 'ServerAction', 1, { fixedPoint: false, problems: ['not printed: something'] })] };
 }
 function writeFlow(store, lane, sha256, flow = flowOf({ lane, sourceSha256: sha256 })) {
-  const file = path.join(store, 'v1', lane, sha256 + '.kernel.flow.json');
+  const file = path.join(store, STORE_GENERATION, lane, sha256 + '.kernel.flow.json');
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, typeof flow === 'string' ? flow : JSON.stringify(flow));
   return file;
@@ -50,7 +51,7 @@ test('the flow constants are the C# ones and the store sits beside the digest, k
   assert.equal(Number(source.match(/public const int Extractor = (\d+);/)[1]), FLOW_EXTRACTOR);
   const env = { ...process.env, SSAM_MODULE_INDEX_ROOT: path.join(os.tmpdir(), 'store') };
   for (const lane of ['odc', 'o11'])
-    assert.equal(flowFile(lane, 'A'.repeat(64), env), path.join(env.SSAM_MODULE_INDEX_ROOT, 'v1', lane, 'a'.repeat(64) + '.kernel.flow.json'));
+    assert.equal(flowFile(lane, 'A'.repeat(64), env), path.join(env.SSAM_MODULE_INDEX_ROOT, STORE_GENERATION, lane, 'a'.repeat(64) + '.kernel.flow.json'));
 });
 
 test('one action by its name, its key or its full path, whole, from the store without any reader; the ids only on request', async t => {
@@ -121,6 +122,29 @@ test('a long action comes in pages inside the budget, nothing dropped, each cont
   assert.equal(cut.join('').replace(/ …\(this line continues on page \d+\)\n…\(line continued from page \d+\) /g, ''), 'a\n' + long + '\nb\n');
 });
 
+test('flow pages keep every line across a cold-cache first page, warm continuations and detail metadata', async t => {
+  const c = setup(t);
+  const flow = flowOf({ lane: 'o11', sourceSha256: c.sha256, large: true });
+  const first = await moduleMap({ lane: 'o11', target: c.file, view: 'flow', element: 'GetQuote', budgetBytes: 9000, includeDetail: true }, {
+    env: c.env, read: async () => {
+      writeFlow(c.store, 'o11', c.sha256, flow);
+      return { ok: true, flow: { path: flowFile('o11', c.sha256, c.env), built: true }, cache: { loads: 1, generation: 123456789 } };
+    } });
+  assert.equal(first.ok, true, JSON.stringify(first));
+  assert.equal(first.cache.flow, 'ensured');
+  const pages = [first];
+  while (pages.at(-1).continuations.next) {
+    const next = pages.at(-1).continuations.next.arguments;
+    assert.equal(next.includeDetail, true);
+    const page = await moduleMap(next, { env: c.env, read: noReader });
+    assert.equal(page.ok, true, JSON.stringify(page));
+    assert.equal(page.pages, first.pages);
+    assert.ok(bytes(page) <= 9000);
+    pages.push(page);
+  }
+  assert.equal(pages.map(p => p.text).join(''), flow.actions[0].text);
+});
+
 test('a miss asks the lane kernel reader for {"flow":"ensure"} and serves what it wrote; another capture or version is a miss', async t => {
   const c = setup(t);
   const requests = [];
@@ -131,7 +155,8 @@ test('a miss asks the lane kernel reader for {"flow":"ensure"} and serves what i
   };
   const page = await moduleMap({ lane: 'odc', target: c.file, view: 'flow', element: 'GetQuote' }, { env: c.env, read });
   assert.equal(page.ok, true, page.error); assert.equal(page.cache.flow, 'ensured'); assert.equal(page.cache.built, true);
-  assert.deepEqual(requests, [{ file: c.file, flow: 'ensure', expectedSourceSha256: c.sha256 }]);
+  // S10: the request names the element (a reader of before reads it as {"flow":"ensure"}, as this one does).
+  assert.deepEqual(requests, [{ file: c.file, flow: 'ensure', flowElements: ['GetQuote'], expectedSourceSha256: c.sha256 }]);
   // A stored file of another extractor or another capture is never served.
   writeFlow(c.store, 'odc', c.sha256, { ...flowOf({ lane: 'odc', sourceSha256: c.sha256 }), extractor: FLOW_EXTRACTOR + 1 });
   const stale = await moduleMap({ lane: 'odc', target: c.file, view: 'flow', element: 'GetQuote' }, { env: c.env, read: async () => ({ ok: true, flow: { path: 'nowhere', built: true } }) });

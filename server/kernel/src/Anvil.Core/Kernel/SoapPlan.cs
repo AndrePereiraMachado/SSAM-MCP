@@ -62,7 +62,7 @@ public static class SoapPlan
             + "The client name defaults to the service name (letters, digits, _; at most 50). The Studio's own importer runs on a copy of the module through o11_deliver "
             + "(bridge integration_import, the full WSDL with only the requested methods to import); existing methods are skipped, refresh imports them again, remove "
             + "deletes them and the structures no remaining method uses (breaks names their consumers). The candidate is checked before the merge: each method once, "
-            + "the exact WSDL types (SOAP_CONTRACT_TYPE_MISMATCH), TrueChange delta 0. ssam_job/o11_job without the Studio: INTEGRATION_IMPORT_NEEDS_STUDIO.",
+            + "the WSDL type bindings (SOAP_CONTRACT_TYPE_MISMATCH; xsd:decimal also accepts the native O11 lexical Text representation), TrueChange delta 0. ssam_job/o11_job without the Studio: INTEGRATION_IMPORT_NEEDS_STUDIO.",
         ["codes"] = new JsonArray(new[] { "WSDL_REQUIRED", "UNSAFE_WSDL_XML", "INVALID_WSDL_XML", "INVALID_WSDL_ROOT", "WSDL_HAS_NO_SOAP_PORTS", "SERVICE_NOT_FOUND", "PORT_NOT_FOUND",
             "BINDING_NOT_FOUND", "SOAP_VERSION_NOT_FOUND", "SOAP_METHOD_NOT_FOUND", "AMBIGUOUS_SOAP_PORT", "SOAP_METHODS_REQUIRED", "WSDL_TOO_LARGE", "SOAP_CLIENT_PORT_MISMATCH",
             "SOAP_CONTRACT_TYPE_MISMATCH", "SOAP_LANE_UNSUPPORTED", "DOCUMENT_SHA256_MISMATCH", "DOCUMENT_NOT_PINNED", "INTEGRATION_IMPORT_NEEDS_BRIDGE", "INTEGRATION_IMPORT_NEEDS_STUDIO",

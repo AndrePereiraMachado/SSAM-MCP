@@ -26,6 +26,29 @@ const odcCli = fs.existsSync(odc.cli); const o11Cli = fs.existsSync(o11.cli);
 const sourcesOf = lane => (lane === 'odc' ? odc : o11);
 const cliSkip = lane => (lane === 'odc' ? !odcCli && 'anvil-odc.dll not built' : !o11Cli && 'anvil.dll not built');
 
+test('Traditional exposes RichWidgets blocks and action contracts without leaking into Reactive or ODC',()=>{
+ // Above counts each library with public actions names them and the call for one contract; counts (the smallest form,
+ // the one a tight page keeps) has their number only.
+ const section=osuiSection({lane:'o11',appTypes:['o11-traditional']},'lines');
+ const withActions=section.libraries.filter(l=>l.actions);
+ assert.deepEqual(withActions.map(l=>l.library),['OutSystemsUIWeb 1.12.8','RichWidgets (version not recorded)']);
+ for(const library of withActions)
+  assert.deepEqual(library.actionLookup,{tool:'ssam_discover',arguments:{lane:'o11',expand:'osui:o11-traditional/actions:<Action>'}});
+ const counts=osuiSection({lane:'o11',appTypes:['o11-traditional']},'counts').libraries;
+ assert.deepEqual(counts.filter(l=>l.actions!==undefined).map(l=>typeof l.actions),['number','number']);
+ assert.ok(counts.every(l=>l.actionLookup===undefined));
+ const traditional=osuiExpansion('o11','o11-traditional');
+ assert.deepEqual(traditional.libraries.map(l=>l.producer),['OutSystemsUIWeb','RichWidgets']);
+ const rich=traditional.libraries.find(l=>l.producer==='RichWidgets');
+ assert.ok(rich.patterns.some(p=>p.name==='List_Navigation'));
+ assert.equal(rich.evidence.native,'not recorded');
+ assert.equal(rich.evidence.browser,'not recorded by this catalog');
+ const action=osuiExpansion('o11','o11-traditional/actions:Feedback_Message');
+ assert.ok(action.libraries[0].actions[0].inputs.some(i=>i.Name==='MessageText'));
+ for(const [lane,type] of [['o11','o11-reactive'],['o11','o11-mobile'],['odc','odc-reactive'],['odc','odc-mobile']])
+  assert.ok(osuiExpansion(lane,type).libraries.every(l=>!['RichWidgets','OutSystemsUIWeb'].includes(l.producer)));
+});
+
 test('the catalog is what the generator gives from the hashed sources (no hand edits, no stale source)', () => {
   const fresh = buildCatalog();
   assert.deepEqual(catalog, JSON.parse(JSON.stringify(fresh)), 'catalog.json is stale: node platforms/odc/facade/outsystems-ui/generate.mjs');
@@ -58,12 +81,12 @@ test('every app type of both lanes has its library, and the lists are complete a
 });
 
 test('every pattern has the library\'s own one line (or says it has none), a library category, typed inputs and the reference it needs', () => {
-  const o11Sources = { 'o11-outsystemsui': readJson('kernel/catalog/ui/OutSystemsUI-2.28.1.json'), 'o11-outsystemsuiweb': readJson('kernel/catalog/ui/OutSystemsUIWeb-1.12.8.json') };
+  const o11Sources = { 'o11-outsystemsui': readJson('kernel/catalog/ui/OutSystemsUI-2.28.1.json'), 'o11-outsystemsuiweb': readJson('kernel/catalog/ui/OutSystemsUIWeb-1.12.8.json'), 'o11-richwidgets': readJson('kernel/catalog/ui/RichWidgets-unversioned.json') };
   const extract = readJson('platforms/odc/facade/outsystems-ui/odc-outsystemsui-signatures.json');
   const squash = s => String(s ?? '').replace(/\s+/g, ' ').trim();
   for (const l of catalog.libraries) {
     assert.match(l.element, /^I(Mobile|Web)Block:<Name>$/); assert.match(l.instance, /BlockInstanceWidget/); assert.match(l.reference, /"op":"reference"/);
-    assert.equal(l.key, l.id === 'o11-outsystemsuiweb' ? 'ftsuvongDUa8WwDHf790vg' : 'Kn_hixxDWEm4lMd7mIpycQ', 'the producer key of the source');
+    assert.equal(l.key, o11Sources[l.id]?.Key ?? extract.reference.key, 'the producer key of the source');
     for (const p of l.patterns) {
       assert.ok(l.categories.includes(p.category), `${l.id} ${p.name}`);
       assert.ok(!/^DEPRECATED_/.test(p.name) && p.category !== 'Private', `${l.id} ${p.name}`);
@@ -77,7 +100,7 @@ test('every pattern has the library\'s own one line (or says it has none), a lib
   }
   // The ones the library leaves without a description are named, not filled in.
   assert.deepEqual(lib('o11-outsystemsuiweb').counts.descriptionMissing.sort(), ['LayoutEmail', 'Website_Section']);
-  assert.deepEqual(catalog.libraries.flatMap(l => l.patterns.filter(p => p.descriptionMissing).map(p => l.id + ':' + p.name)).sort(), ['o11-outsystemsuiweb:LayoutEmail', 'o11-outsystemsuiweb:Website_Section']);
+  assert.deepEqual(catalog.libraries.filter(l=>l.id!=='o11-richwidgets').flatMap(l => l.patterns.filter(p => p.descriptionMissing).map(p => l.id + ':' + p.name)).sort(), ['o11-outsystemsuiweb:LayoutEmail', 'o11-outsystemsuiweb:Website_Section']);
   const tabs = lib('odc-outsystemsui').patterns.find(p => p.name === 'Tabs');
   assert.deepEqual(tabs.placeholders.map(x => x.name), ['Header', 'Content']);
   assert.deepEqual(tabs.events.find(e => e.name === 'OnTabChange').params, ['TabsId: Text', 'ActiveTab: Integer (optional)']);
@@ -105,7 +128,10 @@ test('screen-building intents get the section; refactors, logic and data do not'
 test('the section groups app types by library, each level smaller than the one before; expansions answer category, pattern and app type', () => {
   const all = { lane: 'o11', appTypes: APP_TYPES.o11, from: 'lane' };
   const s = osuiSection(all, 'lines');
+  // Every type of the lane (kind unknown): one library per type, as before the Traditional port; RichWidgets and the public
+  // actions come only for a Traditional-only request (the first test of this file).
   assert.deepEqual(s.libraries.map(l => [l.library, l.appTypes]), [['OutSystemsUI 2.28.1', ['o11-reactive', 'o11-mobile']], ['OutSystemsUIWeb 1.12.8', ['o11-traditional']]]);
+  assert.ok(s.libraries.every(l => l.actions === undefined));
   assert.ok(s.libraries[0].categories.Navigation.some(x => x.startsWith('Tabs: ')));
   const sizes = ['lines', 'names', 'counts'].map(level => bytes(osuiSection(all, level)));
   assert.ok(sizes[0] > sizes[1] && sizes[1] > sizes[2], sizes.join(' > '));
@@ -167,7 +193,7 @@ test('o11: with a capture the app type comes from the module (Traditional -> Out
     const a = await discover({ lane: 'o11', intent: 'criar uma tela de pedidos com tabs', app: path.join(root, 'kernel', 'tests', 'fixtures', fixture + '.oml'), sources: o11, inspect: laneInspect('o11'), map: laneMap('o11'), budgetBytes: 120000 });
     assert.equal(a.context?.ok, true, fixture);
     assert.deepEqual(a.outsystemsUi.appTypes, types, fixture); assert.equal(a.outsystemsUi.appTypeFrom, 'capture');
-    assert.deepEqual(a.outsystemsUi.libraries.map(l => l.library), [library]);
+    assert.deepEqual(a.outsystemsUi.libraries.map(l => l.library), fixture==='traditional-ui' ? [library,'RichWidgets (version not recorded)'] : [library]);
   }
 });
 
@@ -179,7 +205,7 @@ for (const lane of ['odc', 'o11']) {
     const sources = sourcesOf(lane);
     // This assertion asks for the full library lines; the first-answer default is
     // deliberately compact and its counts form is covered by the budget tests.
-    const a = await discoverAll({ lane, intent: SCREEN[lane], sources, budgetBytes: 40960 });
+    const a = await discoverAll({ lane, intent: SCREEN[lane], sources, budgetBytes: 120000 });
     assert.ok(a.outsystemsUi, JSON.stringify(a.size));
     assert.equal(a.outsystemsUi.lane, lane); assert.deepEqual(a.outsystemsUi.appTypes, APP_TYPES[lane]); assert.equal(a.outsystemsUi.level, 'lines');
     assert.ok(a.outsystemsUi.libraries.every(l => l.patterns > 0 && Object.keys(l.categories).length > 0));
@@ -187,7 +213,7 @@ for (const lane of ['odc', 'o11']) {
     if (lane === 'o11') {
       const t = await discover({ lane, intent: 'criar uma tela Traditional de pedidos com tabs', sources, budgetBytes: 120000 });
       assert.deepEqual(t.outsystemsUi.appTypes, ['o11-traditional']); assert.equal(t.outsystemsUi.appTypeFrom, 'intent');
-      assert.deepEqual(t.outsystemsUi.libraries.map(l => l.library), ['OutSystemsUIWeb 1.12.8']);
+      assert.deepEqual(t.outsystemsUi.libraries.map(l => l.library), ['OutSystemsUIWeb 1.12.8','RichWidgets (version not recorded)']);
     }
     for (const intent of NON_SCREEN) {
       const n = await discoverAll({ lane, intent, sources });

@@ -8,7 +8,7 @@ import { randomUUID } from 'node:crypto';
 import * as z from 'zod/v4';
 import { McpServer, InMemoryTransport } from '@modelcontextprotocol/server';
 import { Client } from '@modelcontextprotocol/client';
-import { createCallDeadline, callDeadlineMs } from '../call-deadline.mjs';
+import { createCallDeadline, callDeadlineMs, waitsLong, waitsForWrite } from '../call-deadline.mjs';
 import { createSsamServer } from '../ssam.mjs';
 import { trackTask, readTask, tasksDir, mergeTask } from '../ssam-task.mjs';
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -34,9 +34,52 @@ for (const factor of [0.5,1.5,3.4,9.5]) test(`one deadline, factor ${factor}, ex
   assert.equal(fs.existsSync(tasksDir(root)),factor>1);
   if (waits.length) assert.deepEqual(await run(value(waits[0]).continuation.arguments),expected);
 });
-test('environment deadline is capped and clamps below minimum', () => {
-  assert.equal(callDeadlineMs({}),25000); assert.equal(callDeadlineMs({SSAM_CALL_DEADLINE_MS:'500'}),1000);
-  assert.equal(callDeadlineMs({SSAM_CALL_DEADLINE_MS:'90000'}),25000); assert.equal(callDeadlineMs({SSAM_CALL_DEADLINE_MS:'bad'}),25000);
+// Hand-off de 25 s (plano 24/10): deliveries, publications and ssam_code write wait SSAM_CALL_DEADLINE_MS (default 50 s,
+// 1 s to 10 min); every other tool keeps 25 s, whatever the environment says.
+test('the deadline is per tool: write tools take the environment (default 50 s, clamped), the others 25 s', () => {
+  assert.equal(callDeadlineMs({}),25000); assert.equal(callDeadlineMs({SSAM_CALL_DEADLINE_MS:'500'}),25000);
+  for (const tool of ['o11_deliver','studio_deliver','o11_publish','studio_publish']) {
+    assert.equal(callDeadlineMs({},{tool}),50000); assert.equal(callDeadlineMs({SSAM_CALL_DEADLINE_MS:'500'},{tool}),1000);
+    assert.equal(callDeadlineMs({SSAM_CALL_DEADLINE_MS:'90000'},{tool}),90000); assert.equal(callDeadlineMs({SSAM_CALL_DEADLINE_MS:'9000000'},{tool}),600000);
+    assert.equal(callDeadlineMs({SSAM_CALL_DEADLINE_MS:'bad'},{tool}),50000);
+  }
+  assert.equal(callDeadlineMs({},{tool:'ssam_code',args:{action:'write'}}),50000); assert.equal(callDeadlineMs({},{tool:'ssam_code',args:{action:'read'}}),25000);
+  assert.equal(callDeadlineMs({SSAM_CALL_DEADLINE_MS:'90000'},{tool:'ssam_discover'}),25000);
+  assert.equal(callDeadlineMs({SSAM_CALL_DEADLINE_MS:'90000'},{tool:'ssam_reference'}),25000);
+});
+// S14: the long reads (ssam_map, o11_inspect, studio_inspect, o11_environment) wait as the writes do; they stay reads.
+test('the long reads take the long deadline and are not writes', () => {
+  for (const tool of ['ssam_map','o11_inspect','studio_inspect','o11_environment']) {
+    assert.equal(callDeadlineMs({},{tool}),50000); assert.equal(callDeadlineMs({SSAM_CALL_DEADLINE_MS:'90000'},{tool}),90000);
+    assert.equal(callDeadlineMs({SSAM_CALL_DEADLINE_MS:'500'},{tool}),1000); assert.equal(waitsLong(tool),true); assert.equal(waitsForWrite(tool),false);
+  }
+  for (const tool of ['ssam_discover','ssam_reference','ssam_evidence','ssam_task','studio_status','ssam_doctor']) assert.equal(waitsLong(tool),false);
+});
+test('a write tool waits its own deadline in the first call and in every continuation; a read keeps the short one', async t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cx12-deadline-')); t.after(() => fs.rmSync(root, {recursive:true, force:true}));
+  const deadline = createCallDeadline({root, writeTimeoutMs:400, timeoutMs:100});
+  let calls=0;
+  const deliver = deadline.wrap('o11_deliver', async () => { calls++; await sleep(600); return text({ok:true,result:'delivered'}); });
+  let began = performance.now(); const first = await deliver({module:'M'}); const waited = performance.now()-began;
+  assert.equal(value(first).state,'running'); assert.ok(waited >= 350 && waited <= 550, `first wait ${waited}`);
+  assert.match(value(first).continuation.why, /waits up to 1 s/);
+  began = performance.now(); const final = await deliver(value(first).continuation.arguments);
+  assert.deepEqual(value(final),{ok:true,result:'delivered'}); assert.equal(calls,1);
+  assert.equal(readTask(value(first).task.id,{dir:tasksDir(root)}).deadlineMs,400, 'the record keeps the wait for a continuation after a restart');
+  const read = deadline.wrap('ssam_reference', async () => { await sleep(300); return text({ok:true}); });
+  began = performance.now(); const short = await read({query:'M'}); assert.equal(value(short).state,'running'); assert.ok(performance.now()-began < 300);
+  await finish(read, short);
+  // S14: a long read waits the long deadline (here 400 ms) and ends in the first call, never recorded as a write
+  const map = deadline.wrap('ssam_map', async () => { await sleep(250); return text({ok:true,view:'flow'}); });
+  assert.deepEqual(value(await map({target:'M'})),{ok:true,view:'flow'});
+  const slowMap = deadline.wrap('ssam_map', async () => { await sleep(600); return text({ok:true,view:'digest'}); });
+  began = performance.now(); const longWait = await slowMap({target:'N'}); const mapWaited = performance.now()-began;
+  assert.equal(value(longWait).state,'running'); assert.ok(mapWaited >= 350 && mapWaited <= 550, `map wait ${mapWaited}`);
+  assert.equal(readTask(value(longWait).task.id,{dir:tasksDir(root)}).isWrite,false);
+  assert.deepEqual(value(await slowMap(value(longWait).continuation.arguments)),{ok:true,view:'digest'});
+  // ssam_code waits long only for write
+  const code = deadline.wrap('ssam_code', async () => { await sleep(250); return text({ok:true}); });
+  assert.deepEqual(value(await code({action:'write',lane:'o11'})),{ok:true}); assert.equal(value(await code({action:'read',lane:'o11'})).state,'running');
 });
 test('joins running calls, resumes undelivered final, then allows a fresh operation', async t => {
   const {deadline}=setup(t); let calls=0;
@@ -53,7 +96,12 @@ test('continuations refuse all extras, unknown ids, mismatches and orphaned writ
   const {root,deadline}=setup(t);
   const run=deadline.wrap('o11_publish',async () => { await sleep(400); return text({ok:true}); });
   const first=await run({module:'M',lane:'o11'}), id=value(first).task.id;
-  const bad=value(await run({continueTask:id,module:'M',extra:1})); assert.equal(bad.code,'INPUT_INVALID'); assert.equal(bad.violations.length,2);
+  // R1: module equal to the original call's is ignored; only the unknown field is refused.
+  const bad=value(await run({continueTask:id,module:'M',extra:1})); assert.equal(bad.code,'INPUT_INVALID'); assert.deepEqual(bad.violations.map(v=>v.path),['/extra']);
+  // Goal list of 2026-10-20, item 10: the original arguments repeated exactly beside continueTask are the same continuation (the
+  // announced schema keeps its required fields, so a model repeats them); any other extra is still refused above.
+  const repeated=value(await run({continueTask:id,module:'M',lane:'o11'})); assert.notEqual(repeated.code,'INPUT_INVALID'); assert.ok(repeated.ok===true||repeated.state==='running',JSON.stringify(repeated));
+  const changed=value(await run({continueTask:id,module:'N',lane:'o11'})); assert.equal(changed.code,'INPUT_INVALID'); assert.match(changed.violations[0].message,/Differs from the original call/);
   assert.equal(value(await run({continueTask:randomUUID()})).code,'TASK_NOT_FOUND');
   const other=deadline.wrap('studio_status',()=>{throw Error('never')}); assert.equal(value(await other({continueTask:id})).code,'TASK_TOOL_MISMATCH');
   const orphan=randomUUID(); mergeTask(tasksDir(root),{id:orphan,tool:'o11_publish',state:'running',pid:2147483646,isWrite:true,call:{lane:'o11'}});
@@ -223,4 +271,21 @@ test('trackers in another directory keep it and link their own id before the mat
   assert.equal(external.length,1);assert.notEqual(external[0].id,parent);assert.equal(external[0].callTask,parent);
   const own=readTask(parent,{dir});assert.equal(own.result.taskId,'b'.repeat(32));assert.equal(own.callTask,undefined);
   assert.equal(fs.readdirSync(dir).filter(n=>n.endsWith('.json')).length,1);
+});
+// R1 (plano 24/10): INPUT_INVALID 29 in 11-24/10, many of them action/lane repeated inside continueTask. action, lane,
+// module and until equal to the original call's, and authorize, are ignored and said; nothing else changes.
+test('a continuation ignores action, module, until and authorize repeated from the original call, with normalizations', async t => {
+  const {root,deadline}=setup(t);
+  const run=deadline.wrap('ssam_code',async () => { await sleep(300); return text({ok:true,result:'delivered',normalizations:[{rule:'own',at:'/x',note:'kept'}]}); });
+  const first=await run({lane:'o11',action:'write',module:'M',until:'merge',part:'ddl',text:'x'}), id=value(first).task.id;
+  assert.equal(value(first).state,'running');
+  const answer=await finish(run,await run({continueTask:id,lane:'o11',action:'write',module:'M',until:'merge',authorize:'sim, pode'}));
+  assert.equal(value(answer).result,'delivered');
+  assert.deepEqual(value(answer).normalizations.map(n=>n.at),['/x','/action','/module','/until','/authorize']);
+  assert.equal(JSON.parse(answer.content[0].text).normalizations.length,5);
+  assert.doesNotMatch(JSON.stringify(readTask(id,{dir:tasksDir(root)})),/sim, pode/, 'the words are never kept');
+  // a different action is still a mistake
+  const other=await run({lane:'o11',action:'write',module:'M',part:'ddl',text:'y'});
+  assert.equal(value(await run({continueTask:value(other).task.id,action:'read'})).code,'INPUT_INVALID');
+  await finish(run,other);
 });

@@ -20,6 +20,9 @@ public static class PatchCertainty
         ["LIST_ITEM_QUALIFIED"] = new(false, "Qualifying a list item uses a name or stem heuristic and requires the author's choice."),
         ["FLOW_TEXT_READING"] = new(false, "The flow has two possible readings; the author chooses whether the branch continues or ends."),
         ["OWNER_RULE_REWRITE"] = new(false, "A structural rewrite to satisfy an owner's rule requires the author's choice."),
+        ["CREATE_USES_EXISTING"] = new(false, "The parent already has an element of this type and name, so the create never keeps its name; the patch uses that element, and the later ops of the job then write into it: the author chooses between that and another name."),
+        ["DELETE_RECONNECTS"] = new(false, "The node has exactly one exit and only the connectors of its own flow reach it, so reconnect:true removes the step and keeps the flow whole; a delete is the author's own decision, so the patch is offered and never applied for them."),
+        ["SECURITY_ACCEPTANCE"] = new(false, "Accepting a security warning as it is is the user's decision: replace why with the user's own words, or apply the fix the problem names instead."),
     });
     public const string UnknownReason = "The patch has no recognized certainty rule; the author must choose the correction.";
 

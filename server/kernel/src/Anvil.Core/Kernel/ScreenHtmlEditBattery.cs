@@ -30,6 +30,8 @@ public static class ScreenHtmlEditBattery
         // Widgets the edits may touch: with a k, not data, not opaque nor inside an opaque (a table's cells excepted is not worth it).
         var widgets = ScreenHtmlText.Elements(top).Select(x => x.Node).Where(n => n != top && n.Get("k") != null && IsWidget(n) && !InsideOpaque(n, parents)).ToList();
         var random = new Random(seed ^ StableHash(reading.RootKey));
+        // A Traditional Web page holds no HTML Element (the html writer refuses a new one there): its new children are widgets.
+        var traditional = reading.RootKind is "WebScreen" or "WebBlock";
         foreach (var kind in Kinds) {
             var candidates = kind switch {
                 "class" => widgets.Where(n => n.Get("class") is { Length: > 0 } c && !c.Contains("{{", StringComparison.Ordinal)).ToList(),
@@ -53,7 +55,7 @@ public static class ScreenHtmlEditBattery
             while (candidates.Count > 0 && taken < perKind) {
                 var node = candidates[random.Next(candidates.Count)];
                 candidates.Remove(node);
-                var made = Make(kind, tree, node, parents, actions, random);
+                var made = Make(kind, tree, node, parents, actions, random, traditional);
                 if (made == null) continue;
                 edits.Add(made);
                 taken++;
@@ -62,7 +64,7 @@ public static class ScreenHtmlEditBattery
         return edits;
     }
 
-    private static Edit? Make(string kind, ScreenHtml.Node tree, ScreenHtml.Node original, Dictionary<ScreenHtml.Node, ScreenHtml.Node> parents, List<string> actions, Random random)
+    private static Edit? Make(string kind, ScreenHtml.Node tree, ScreenHtml.Node original, Dictionary<ScreenHtml.Node, ScreenHtml.Node> parents, List<string> actions, Random random, bool traditional = false)
     {
         // The edit runs on a copy of the whole text: the same node in the copy, its parents there.
         var copy = ScreenHtmlText.Clone(tree);
@@ -115,6 +117,7 @@ public static class ScreenHtmlEditBattery
                 var variant = random.Next(4);
                 // An input never goes inside a link, a button or a label (the platform refuses interactive content there).
                 bool InsideInteractive() { for (var p = node; p != null; p = copyParents.TryGetValue(p, out var up) ? up : null) if (p.Tag is "a" or "button" or "label") return true; return false; }
+                if (traditional && variant == 1) variant = 0;
                 if (variant == 3 && (texts.Count == 0 || node.Tag is "p" or "span" or "h1" or "h2" or "h3" or "h4" or "h5" or "h6" || InsideInteractive())) variant = 2;
                 var added = variant switch {
                     0 => Element("div", [new("class", "ssam-c2-new")], "{{ \"c2\" }}"),

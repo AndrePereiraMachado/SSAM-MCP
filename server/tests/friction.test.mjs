@@ -38,6 +38,16 @@ test('successful transport is not semantic success and result wrappers are decod
   assert.equal(outcomeOf({result:{structuredContent:{ok:false,error:'request timed out'}}}).outcome,'timeout');
   assert.equal(outcomeOf({ok:true},{interrupted:true}).outcome,'uncertain');
 });
+test('the 25 s hand-off of a long call is a continuation, not an unobserved result',()=>{
+  // call-deadline.mjs running(): no ok, the work goes on, the continuation call records the end (goal list of 2026-10-20, item 1).
+  const handOff={state:'running',task:{id:'0123456789abcdef',tool:'o11_deliver',elapsedMs:25002},continuation:{tool:'o11_deliver',arguments:{continueTask:'0123456789abcdef',lane:'o11'},why:'…'}};
+  assert.deepEqual([outcomeOf(handOff).outcome,outcomeOf(handOff).code],['success','CONTINUED']);
+  const wrapped=outcomeOf({content:[{type:'text',text:JSON.stringify(handOff)}],structuredContent:handOff});
+  assert.deepEqual([wrapped.outcome,wrapped.code],['success','CONTINUED']);
+  // A running answer that names no continuation is still unobserved; a continuation that ended in failure is a failure.
+  assert.equal(outcomeOf({state:'running',task:{id:'x'}}).code,'RESULT_UNOBSERVED');
+  assert.equal(outcomeOf({ok:false,code:'PREFLIGHT_REFUSED',task:{id:'x'},continuation:{tool:'o11_deliver',arguments:{continueTask:'x'}}}).code,'PREFLIGHT_REFUSED');
+});
 test('incomplete starts, corrupt and partial files are visible; completion is idempotent',t=>{
   const {store,directory}=setup(t);begin(store);
   const op=begin(store);op.finish({ok:true});op.finish(fixture);

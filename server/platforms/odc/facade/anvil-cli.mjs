@@ -11,6 +11,7 @@ import { o11LaneOf } from './o11-lane.mjs';
 import { connectionEnvironment, readConnection } from './studio-session.mjs';
 import { hostedSpawnEnv, usesWorkspace } from './executor.mjs';
 import { kernelStart } from './quality-meter.mjs';
+import { withTraceArgs } from './correlation.mjs';
 
 const tail = (text, lines = 10) => String(text ?? '').trim().split(/\r?\n/).filter(Boolean).slice(-lines);
 
@@ -27,6 +28,8 @@ export function laneEnvironment({ lane = o11Lane.lane, root = anvilRoot, env = p
 export function createAnvilRunner({ lane = o11Lane.lane, root = anvilRoot, env = process.env, environment = laneEnvironment, execFileFn = execFile, dotnet = 'dotnet' } = {}) {
   return function runAnvil(args, { input, timeoutMs = 900000, cwd = root, cli } = {}) {
     const assembly = cli ?? o11LaneOf(lane, { root, env }).cli;
+    // F7: a kernel delivery records the session and the call it runs for (task.json trace).
+    args = withTraceArgs(args);
     const argv = [assembly, ...args.map(String)];
     // Hosted: the closed environment, with the customer's relay as the bridge port (executor.mjs hostedSpawnEnv).
     const odcCli = /anvil-odc\.dll$/i.test(assembly);

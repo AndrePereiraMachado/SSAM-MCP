@@ -105,10 +105,41 @@ public sealed partial class ScreenHtmlModule<T> where T : class
             var p = parent[i];
             root[i] = role[i] is "screen" or "block" && role[i] != "reference" ? i : p >= 0 && role[i] != "reference" ? root[p] : -1;
         }
+        same = SameTypes(n);
         LoadMs = sw.Elapsed.TotalMilliseconds;
         LoadDetail = "nodes " + n + " walk " + Math.Round(walkMs) + " ms, names " + Math.Round(LoadMs - walkMs) + " ms";
     }
     public string LoadDetail { get; } = "";
+
+    // One type, one name. A list type is the list of its element: ODC Studio 1.7.29 (model 13.1451) adds to a module it loads the
+    // list types of its new system records (Agent*) beside the ones the module keeps, so a module that had a Text List has two
+    // list types named Text List, both the list of Text. Two list types of one name and one element are one type: a reference
+    // to either is the fact of one of them (the smallest key, whatever the order of the load) and the name answers with it.
+    // List types of one name whose elements differ stay two types (the name is ambiguous). Every other node is itself.
+    private readonly int[] same;
+    private int[] SameTypes(int n)
+    {
+        var one = new int[n];
+        var lists = new Dictionary<object, Dictionary<string, List<int>>>(ReferenceEqualityComparer.Instance);
+        for (var i = 0; i < n; i++) {
+            one[i] = i;
+            if (display[i].Length == 0 || !r.IsKind(nodes[i], "ListType") || ElementOf(nodes[i]) is not { } element) continue;
+            if (!lists.TryGetValue(element, out var named)) lists[element] = named = new(StringComparer.Ordinal);
+            if (!named.TryGetValue(display[i], out var members)) named[display[i]] = members = [];
+            members.Add(i);
+        }
+        foreach (var members in lists.Values.SelectMany(named => named.Values).Where(m => m.Count > 1)) {
+            var first = members.MinBy(i => key[i], StringComparer.Ordinal);
+            foreach (var i in members) one[i] = first;
+        }
+        return one;
+    }
+
+    private object? ElementOf(T node)
+    {
+        try { return r.PropertyOf(node, "ElementType")?.Invoke(); }
+        catch (Exception error) when (error is not OutOfMemoryException) { return null; }
+    }
 
     // By kind, name and key: the Model API gives a flow's screens and blocks in another order on each load.
     private IEnumerable<int> RootIndexes() => Enumerable.Range(0, nodes.Count).Where(i => role[i] is "screen" or "block" && root[i] == i)
@@ -251,7 +282,7 @@ public sealed partial class ScreenHtmlModule<T> where T : class
 
     private string IdOf(T target)
     {
-        if (at.TryGetValue(target, out var i)) return id[i];
+        if (at.TryGetValue(target, out var i)) return id[same[i]];
         var k = r.KindOf(target); var name = r.DisplayOf(target);
         // Inside the body of an action of the module (not walked): its own key keeps it apart from a namesake in another
         // body. Anything else outside the walk (basic types, system elements) is its kind and name.
@@ -279,7 +310,7 @@ public sealed partial class ScreenHtmlModule<T> where T : class
     // action). The first non-empty tier answers.
     private bool TopLevel(int i) => parent[i] >= 0 && (parent[parent[i]] < 0 || role[parent[i]] == "flow" || kind[parent[i]] == "Reference");
     private int Tier(int i, int scopeRoot) => root[i] == scopeRoot && i != scopeRoot ? 0 : root[i] < 0 && TopLevel(i) ? 1 : root[i] < 0 ? 2 : 3;
-    private List<string> Candidates(string name, string? ofKind, string? owner, Scope scope, bool destinations = false)
+    private List<string> Candidates(string name, string? ofKind, string? owner, Scope scope, bool destinations = false, bool blocks = false)
     {
         var tiers = new List<string>[5] { [], [], [], [], [] };
         if (byName.TryGetValue(name, out var list))
@@ -287,13 +318,37 @@ public sealed partial class ScreenHtmlModule<T> where T : class
                 if (ofKind != null && kind[i] != ofKind) continue;
                 if (owner != null && (parent[i] < 0 || !string.Equals(display[parent[i]], owner, StringComparison.OrdinalIgnoreCase))) continue;
                 if (destinations && !IsDestinationKind(kind[i], role[i])) continue;
+                if (blocks && !IsBlockKind(kind[i])) continue;
                 var tier = Tier(i, scope.Root);
-                tiers[tier].Add(id[i]);
+                // two list types of one type answer once (SameTypes)
+                if (!tiers[tier].Contains(id[same[i]])) tiers[tier].Add(id[same[i]]);
             }
         if (owner == null && outsideByName.TryGetValue(name, out var others))
             foreach (var o in others)
-                if (scope.Outside.Contains(o) && (ofKind == null || outside[o].Kind == ofKind) && (!destinations || IsDestinationKind(outside[o].Kind, null))) tiers[4].Add(o);
+                if (scope.Outside.Contains(o) && (ofKind == null || outside[o].Kind == ofKind) && (!destinations || IsDestinationKind(outside[o].Kind, null)) && (!blocks || IsBlockKind(outside[o].Kind))) tiers[4].Add(o);
         return tiers.FirstOrDefault(t => t.Count > 0) ?? [];
+    }
+
+    private static bool IsBlockKind(string kindName) => kindName is "WebBlock" or "MobileBlock" or "WebBlockSignature" or "MobileBlockSignature";
+    private string KindOfId(string target) => byId.TryGetValue(target, out var i) ? kind[i] : outside.TryGetValue(target, out var o) ? o.Kind : "";
+
+    // The source block of a new <Block name="…">: the name as any reference when that names a block; else among the blocks
+    // only. A folder of the producer named like its block (OutSystemsUIWeb: the folder Modal beside References, the block
+    // Modal under its flow) was the one hit at the nearest tier, and the platform refused "IFolderSignature, not
+    // IWebBlockSignature" (793ca579, live on 20/10).
+    internal bool TryResolveBlock(string form, Scope scope, out string target)
+    {
+        if (TryResolve(form, scope, out target) && IsBlockKind(KindOfId(target))) return true;
+        target = "";
+        if (form.Length == 0 || form[0] == '@') return false;
+        string? ofKind = null; var rest = form;
+        var colon = form.IndexOf(':');
+        if (colon > 0) { ofKind = form[..colon]; rest = form[(colon + 1)..]; }
+        string? owner = null; var dot = rest.LastIndexOf('.');
+        if (dot > 0) { owner = rest[..dot]; rest = rest[(dot + 1)..]; }
+        var hits = Candidates(rest, ofKind, owner, scope, blocks: true);
+        if (hits.Count != 1) return false;
+        target = hits[0]; return true;
     }
 
     // What an event can name: an action or a screen (in the walk by role, outside it by kind).
@@ -342,7 +397,11 @@ public sealed partial class ScreenHtmlModule<T> where T : class
     {
         target = "";
         if (form.Length == 0) return false;
-        if (form[0] == '@') { target = form[1..]; return byId.ContainsKey(target) || outside.ContainsKey(target); }
+        if (form[0] == '@') {
+            target = form[1..];
+            if (byId.TryGetValue(target, out var keyed)) { target = id[same[keyed]]; return true; }
+            return outside.ContainsKey(target);
+        }
         string? ofKind = null; var rest = form;
         var colon = form.IndexOf(':');
         if (colon > 0) { ofKind = form[..colon]; rest = form[(colon + 1)..]; }
@@ -361,7 +420,7 @@ public sealed partial class ScreenHtmlModule<T> where T : class
     internal string NameOf(string target, Scope scope)
     {
         string name, k; string? owner = null;
-        if (byId.TryGetValue(target, out var i)) { name = display[i]; k = kind[i]; if (parent[i] >= 0) owner = display[parent[i]]; }
+        if (byId.TryGetValue(target, out var i)) { i = same[i]; target = id[i]; name = display[i]; k = kind[i]; if (parent[i] >= 0) owner = display[parent[i]]; }
         else if (outside.TryGetValue(target, out var o)) { name = o.Name; k = o.Kind; }
         else return "@" + target;
         if (SafeName(name)) {
@@ -587,7 +646,7 @@ public sealed partial class ScreenHtmlModule<T> where T : class
                 Html.Append(' ');
                 if (value == null) Html.Append(name); else Html.Append(ScreenHtml.Attribute(name, value()));
             }
-            if (node.Content != null) { Html.Append('>').Append(ScreenHtml.Escape(node.Content, true)).Append("</").Append(node.Tag).Append(">\n"); return; }
+            if (node.Content != null) { Html.Append('>').Append(ScreenHtml.EscapeLiteral(node.Content)).Append("</").Append(node.Tag).Append(">\n"); return; }
             if (node.Children.Count == 0) { Html.Append("/>\n"); return; }
             // One plain run (a text or {{ expression }}) is written inline: <a k="w3" onclick="Save">Save</a>.
             if (node.Children is [string run] && !run.StartsWith('<')) { Html.Append('>').Append(run).Append("</").Append(node.Tag).Append(">\n"); return; }
@@ -645,7 +704,7 @@ public sealed partial class ScreenHtmlModule<T> where T : class
         {
             var kd = m.kind[i];
             if (m.role[i] != "widget") { WriteData(i, parentNode, parentChildren); return; }
-            if (ScreenHtml.OpaqueKinds.Contains(kd) || !ScreenHtml.WidgetTags.ContainsKey(kd) && kd is not ("List" or "AdvancedHtml")) { Opaque(i, parentId, parentNode, parentChildren); return; }
+            if (ScreenHtml.OpaqueKinds.Contains(kd) || ScreenHtmlTables.TraditionalOnly.Contains(kd) && m.kind[Scope.Root] is not ("WebScreen" or "WebBlock") || !ScreenHtml.WidgetTags.ContainsKey(kd) && kd is not ("List" or "AdvancedHtml")) { Opaque(i, parentId, parentNode, parentChildren); return; }
             WidgetCount++;
             var shape = new Shape { Kind = kd, Node = i };
             var facts = Facts(i, shape, out var pointers);
@@ -656,7 +715,7 @@ public sealed partial class ScreenHtmlModule<T> where T : class
             var carriers = children.Any(c => m.kind[c] is "ExtendedProperty" or "Argument" || m.role[c] is "widget" or "event");
             // A run: a text or an expression with nothing else of its own is one line of its parent.
             if (kd == "TextWidget" && !carriers && own.All(f => f.Name == "Text")) { Run(i, parentId, parentNode, parentChildren, textFact.Text ?? "", false); return; }
-            if (kd == "Expression" && !carriers && own.All(f => f.Name == "Value")) { Run(i, parentId, parentNode, parentChildren, own.FirstOrDefault().Text ?? "", true); return; }
+            if (kd is "Expression" or "ExpressionWidget" && !carriers && own.All(f => f.Name == "Value")) { Run(i, parentId, parentNode, parentChildren, own.FirstOrDefault().Text ?? "", true); return; }
             var k = Next(); ElementCount++;
             Keys.Add(new(k, m.key[i]));
             parentChildren.Add("k:" + k);
@@ -667,7 +726,8 @@ public sealed partial class ScreenHtmlModule<T> where T : class
             switch (kd) {
                 case "AdvancedHtml": {
                     var simple = SimpleTag(tagText) && (!ScreenHtml.VoidTags.Contains(tagText) || !children.Any(c => m.role[c] == "widget"));
-                    if (simple && !ScreenHtml.ReservedTags.Contains(tagText)) node.Tag = tagText;
+                    var reserved = ScreenHtml.ReservedTags.Contains(tagText) || m.kind[Scope.Root] is "WebScreen" or "WebBlock" && ScreenHtml.TraditionalTags.Contains(tagText);
+                    if (simple && !reserved) node.Tag = tagText;
                     else if (simple) { node.Tag = tagText; node.Attrs.Add(("html", null)); }
                     else { node.Tag = "html-element"; node.Attrs.Add(("tag", Const(tagText))); }
                     element.Facts["p:Tag"] = "t:" + tagText;
@@ -755,7 +815,7 @@ public sealed partial class ScreenHtmlModule<T> where T : class
                 parentNode.Children.Add("{{ " + ScreenHtml.Escape(value, true) + " }}");
             } else {
                 parentChildren.Add("t:" + value);
-                parentNode.Children.Add(ScreenHtml.PlainRun(value) ? ScreenHtml.Escape(value, true) : "<text>" + ScreenHtml.Escape(value, true) + "</text>");
+                parentNode.Children.Add(ScreenHtml.PlainRun(value) ? ScreenHtml.Escape(value, true) : "<text>" + ScreenHtml.EscapeLiteral(value) + "</text>");
             }
         }
 
@@ -1197,7 +1257,17 @@ public sealed partial class ScreenHtmlModule<T> where T : class
             return string.Equals(ownName, name, StringComparison.OrdinalIgnoreCase) ? own : "?" + name;
         }
 
-        private static string KindOf(ScreenHtml.Node node, out string tagText) => ScreenHtmlTables.KindOf(node, out tagText);
+        private string KindOf(ScreenHtml.Node node, out string tagText)
+        {
+            var kind = ScreenHtmlTables.KindOf(node, out tagText);
+            if (m.kind[scope.Root] is not ("WebScreen" or "WebBlock")) return kind;
+            return node.Tag switch {
+                "table" => "TableWidget", "table-records" => "TableRecordsWidget", "list-records" => "ListRecordsWidget",
+                "tr" => "RowWidget", "td" => "CellWidget", "password-input" => "InputPasswordWidget",
+                "checkbox-input" => "CheckBoxWidget", "radio-input" => "RadioButtonWidget", "edit-record" => "EditRecordWidget", "show-record" => "ShowRecordWidget",
+                _ => ScreenHtmlTables.TraditionalKind(kind)
+            };
+        }
 
         private void DecodeAttributes(ScreenHtml.Node node, ScreenHtmlCanon.Element element, Shape shape, ScreenHtmlModuleMode mode, string kd)
         {
@@ -1212,6 +1282,13 @@ public sealed partial class ScreenHtmlModule<T> where T : class
                 if (name.StartsWith("os-", StringComparison.Ordinal) && EventProperty(name[3..], shape, element, value)) continue;
                 if (EventAttribute(name, value, shape, element)) continue;
                 string? property = reverse.TryGetValue(name, out var p) ? p : name.StartsWith("os-", StringComparison.Ordinal) ? name[3..] : null;
+                // Some Traditional controls (the legacy selector) expose Style, not StyleClasses.
+                // Mirror the writer's actual property choice instead of inventing a change on readback.
+                if (name == "class" && property == "StyleClasses" && !shape.Types.ContainsKey("StyleClasses") && shape.Types.ContainsKey("Style")) property = "Style";
+                // The Traditional custom Form has no class property: the native setter stores
+                // it as an extended attribute. Do not invent a Style fact that cannot read back.
+                if (name == "class" && kd == "Form" && m.kind[scope.Root] is "WebScreen" or "WebBlock"
+                    && !shape.Types.ContainsKey("Style") && !shape.Types.ContainsKey("StyleClasses")) property = null;
                 if (property != null) {
                     var type = TypeOf(shape, property);
                     element.Facts["p:" + property] = type + ":" + Decode(shape, property, type, value, name);
@@ -1237,6 +1314,7 @@ public sealed partial class ScreenHtmlModule<T> where T : class
             // Any expression attribute with a binding is the binding's expression ("Buscar {{ X }}" is "Buscar " + X; {{ x }} is x),
             // as class is; the reading writes an expression with braces of its own whole ({{ text }}), so it reads back exactly.
             'e' when ScreenHtml.HoldsBraces(value) => Sugared(attribute.Length > 0 ? attribute : "os-" + property, value),
+            'r' when property == "SourceBlock" => m.TryResolveBlock(value, scope, out var block) ? block : "?" + value,
             'r' => m.TryResolve(value, scope, out var target) ? target : "?" + value,
             'l' => string.Join("\n", value.Split(", ").Select(v => m.TryResolve(v, scope, out var t) ? t : "?" + v).Order(StringComparer.Ordinal)),
             'v' when shape.Kind == "Input" && property == "InputType" => ScreenHtmlTables.InputTypeIn(value),
@@ -1316,7 +1394,8 @@ internal static class ScreenHtmlTables
         ["Switch"] = Map("Variable", "bind", "Mandatory", "required", "Enabled", "enabled"),
         ["RadioGroup"] = Map("Variable", "bind", "Mandatory", "required", "Enabled", "enabled"),
         ["ButtonGroup"] = Map("Variable", "bind", "Mandatory", "required", "Enabled", "enabled"),
-        ["Upload"] = Map("FileContent", "content", "FileName", "filename", "Mandatory", "required", "Enabled", "enabled"),
+        // No Upload has Enabled (neither Service Studio 11 nor ODC Studio): enabled is no attribute of an <upload>.
+        ["Upload"] = Map("FileContent", "content", "FileName", "filename", "Mandatory", "required"),
         ["RadioButton"] = Map("Value", "value", "Enabled", "enabled"),
         ["ButtonGroupItem"] = Map("Value", "value", "Enabled", "enabled"),
         ["Dropdown"] = Map("Variable", "bind", "List", "options", "Values", "value", "Labels", "label", "EmptyValue", "empty", "Mandatory", "required", "Enabled", "enabled"),
@@ -1333,6 +1412,15 @@ internal static class ScreenHtmlTables
         ["PlaceholderWidget"] = Map("Name", "name", "StyleClasses", "class"),
         ["Expression"] = Map("Value", "value", "Example", "example"),
         ["TextWidget"] = Map("StyleClasses", "class"),
+        ["WebBlockInstanceWidget"] = Map("SourceBlock", "name"),
+        ["InputWidget"] = Map("Variable", "bind", "MaxLength", "maxlength", "Mandatory", "required", "Enabled", "enabled"),
+        ["InputPasswordWidget"] = Map("Variable", "bind", "MaxLength", "maxlength", "Mandatory", "required", "Enabled", "enabled"),
+        ["CheckBoxWidget"] = Map("Variable", "bind", "Mandatory", "required", "Enabled", "enabled"),
+        ["RadioButtonWidget"] = Map("Variable", "bind", "Value", "value", "Enabled", "enabled"),
+        ["ComboBoxWidget"] = Map("Variable", "bind", "SourceRecordList", "options", "Enabled", "enabled"),
+        ["ExpressionWidget"] = Map("Value", "value", "Example", "example"),
+        ["TableRecordsWidget"] = Map("SourceRecordList", "source", "LineCount", "line-count"),
+        ["ListRecordsWidget"] = Map("SourceRecordList", "source", "LineCount", "line-count"),
     };
     public static readonly Dictionary<string, string> CommonNamed = Map("Name", "id", "Style", "class", "CustomStyle", "style");
     public static readonly Dictionary<string, string> DataNamed = Map("Name", "name", "DataType", "type", "DefaultValue", "default",
@@ -1343,12 +1431,32 @@ internal static class ScreenHtmlTables
     // of the edit: their name is never written, and a text that changes it is HTML_NAME_FIXED.
     public static bool FixedName(string kind) => kind is "PlaceholderContentWidget" or "IfBranchWidget" or "Content";
 
+    static ScreenHtmlTables()
+    {
+        foreach (var kind in TraditionalOnly) {
+            if (!Named.TryGetValue(kind, out var map)) Named[kind] = map = new(StringComparer.Ordinal);
+            map["StyleClasses"] = "class";
+        }
+    }
+
     private static Dictionary<string, string> Map(params string[] pairs)
     {
         var map = new Dictionary<string, string>(StringComparer.Ordinal);
         for (var i = 0; i < pairs.Length; i += 2) map[pairs[i]] = pairs[i + 1];
         return map;
     }
+
+    internal static string TraditionalKind(string kind) => kind switch {
+        "Container" => "ContainerWidget", "Link" => "LinkWidget", "Button" => "ButtonWidget",
+        "Input" => "InputWidget", "Checkbox" => "CheckBoxWidget", "Dropdown" => "ComboBoxWidget",
+        "Expression" => "ExpressionWidget", "MobileBlockInstanceWidget" => "WebBlockInstanceWidget",
+        "Image" => "ImageWidget", "Upload" => "InputFilenameWidget", _ => kind
+    };
+    internal static readonly HashSet<string> TraditionalOnly = new(StringComparer.Ordinal) {
+        "WebBlockInstanceWidget", "ContainerWidget", "LinkWidget", "ButtonWidget", "ExpressionWidget", "InputWidget",
+        "InputPasswordWidget", "CheckBoxWidget", "RadioButtonWidget", "ComboBoxWidget", "ImageWidget", "ListRecordsWidget", "TableRecordsWidget",
+        "TableWidget", "RowWidget", "CellWidget", "UploadWidget", "InputFilenameWidget", "EditRecordWidget", "ShowRecordWidget"
+    };
 
     // The attribute of a property: named for the kind, then for every widget (data elements: their own names), else os-.
     // The class of an element is StyleClasses when the kind names it, else Style; the other one stays os-Style. An HTML
@@ -1395,7 +1503,7 @@ internal static class ScreenHtmlTables
         // The rows of the language with no HTML tag of their own (switch, upload, button-group, button-group-item, i) are the
         // rows of ElementWidgetMap.LanguageElements too (this file is also compiled by the ODC builder, without that table: a
         // test holds the two equal).
-        foreach (var (kd, tag) in ScreenHtml.WidgetTags) if (tag == node.Tag && kd is not ("Checkbox" or "IfWidget" or "Input") && !ScreenHtml.ShapeKinds.Contains(kd)) return kd;
+        foreach (var (kd, tag) in ScreenHtml.WidgetTags) if (tag == node.Tag && kd is not ("Checkbox" or "IfWidget" or "Input") && !ScreenHtml.ShapeKinds.Contains(kd) && !TraditionalOnly.Contains(kd)) return kd;
         return "AdvancedHtml";
     }
 

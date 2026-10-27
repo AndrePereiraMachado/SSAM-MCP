@@ -55,30 +55,116 @@ public static class ThemeCss
     /// <item>C35: um seletor do autor que comeca por <c>#reactContainer</c> vira <c>:is(#reactContainer, body)</c>, na metade
     /// do autor: o canvas do Studio nao tem #reactContainer e os blocos ficavam sem estilo la.</item>
     /// </list></summary>
-    public static void Recompute(WebStyleSheet sheet)
+    public static void Recompute(WebStyleSheet sheet) => Settle(sheet);
+
+    /// <summary>T18: the one tail of every stylesheet write, on both lanes and for a theme, a screen or a block (the set verb, the
+    /// html op's theme blocks, the css op, the native widgets' CSS, the prototype importer): the author CSS through the one
+    /// normalization (<see cref="CssPipeline.Normalize"/>), which never changes what the CSS selects nor the cascade (an @import
+    /// after a rule, which the browser ignores, goes up keeping the order of the imports; nothing crosses an @layer), then, in a
+    /// theme with Theme Editor CSS, the effective StyleSheet composed again with the author's @import statements before the Theme
+    /// Editor block. <paramref name="canvas"/>: the write is the author's own CSS on a reactive element; only then, and only in a
+    /// theme with Theme Editor CSS (where the platform's composition did it before), a <c>#reactContainer X</c> descendant
+    /// selector also selects in the Studio canvas. What changed is reported by <see cref="Changed"/> (<c>cssImportsHoisted</c>,
+    /// <c>cssImportsMerged</c>, <c>cssImportsKept</c>, <c>cssRewrites</c>, <c>cssStages</c>).</summary>
+    public static void Settle(WebStyleSheet sheet, bool canvas = false)
     {
-        var generated = sheet.GeneratedEffectiveValue ?? "";
-        if (generated.Length == 0) { Changes.Remove(sheet); return; }
-        var author = sheet.UserEffectiveValue ?? "";
-        var (canvas, selectors) = CssCompat.CanvasSelectors(author);
-        if (selectors.Count > 0) { sheet.UserEffectiveValue = canvas; author = canvas; }
-        var (imports, rest) = CssCompat.Imports(author);
-        sheet.SetCssSource(imports.Count == 0 ? generated + "\r\n" + author
-            : string.Join("\r\n", imports.Select(x => x.Statement)) + "\r\n" + generated + "\r\n" + rest);
+        var split = IsSplit(sheet);
+        var author = Author(sheet);
+        var outcome = CssPipeline.Normalize(author, new CssPipeline.Context(split ? "/UserStyleSheet" : "/StyleSheet"), canvas && split);
+        if (outcome.Changed)
+        {
+            if (split) sheet.UserEffectiveValue = outcome.Css; else sheet.EffectiveValue = outcome.Css;
+            author = outcome.Css;
+        }
         var change = new JsonObject();
-        if (imports.Count > 0)
-            change["cssImportsHoisted"] = new JsonArray(imports.Select(x => (JsonNode)new JsonObject
+        var half = split ? "UserStyleSheet" : "StyleSheet";
+        var hoisted = outcome.ImportsHoisted.Select(x => (JsonNode)new JsonObject
+        {
+            ["path"] = "/" + half, ["from"] = $"{x.Statement} (line {x.Line} of {half}, after a rule: the browser ignored it)", ["to"] = $"before the first rule of {half}",
+        }).ToList();
+        if (split)
+        {
+            var generated = sheet.GeneratedEffectiveValue ?? "";
+            var (imports, rest) = CssCompat.Imports(author);
+            sheet.SetCssSource(imports.Count == 0 ? generated + "\r\n" + author
+                : string.Join("\r\n", imports.Select(x => x.Statement)) + "\r\n" + generated + "\r\n" + rest);
+            hoisted = imports.Select(x => (JsonNode)new JsonObject
             {
                 ["path"] = "/StyleSheet", ["from"] = $"{x.Statement} (line {x.Line} of UserStyleSheet, after the Theme Editor CSS)",
                 ["to"] = "the top of the effective StyleSheet, before the Theme Editor CSS",
-            }).ToArray());
-        if (selectors.Count > 0)
-            change["cssRewrites"] = new JsonArray(selectors.Select(x => (JsonNode)new JsonObject
+            }).ToList();
+        }
+        if (hoisted.Count > 0) change["cssImportsHoisted"] = new JsonArray(hoisted.ToArray());
+        if (outcome.ImportsMerged > 0) change["cssImportsMerged"] = outcome.ImportsMerged;
+        if (outcome.ImportsKept != null) change["cssImportsKept"] = outcome.ImportsKept;
+        if (outcome.CanvasRewrites.Count > 0)
+            change["cssRewrites"] = new JsonArray(outcome.CanvasRewrites.Select(x => (JsonNode)new JsonObject
             {
-                ["path"] = $"/UserStyleSheet (line {x.Line})", ["from"] = x.From, ["to"] = x.To,
+                ["path"] = $"/{half} (line {x.Line})", ["from"] = x.From, ["to"] = x.To,
             }).ToArray());
-        Changes.AddOrUpdate(sheet, change);
+        if (outcome.StageChanges.Count > 0) change["cssStages"] = new JsonArray(outcome.StageChanges.Select(c => (JsonNode)c.DeepClone()).ToArray());
+        if (change.Count == 0) Changes.Remove(sheet); else Changes.AddOrUpdate(sheet, change);
     }
+
+    /// <summary>Whether an element is reactive (O11 Reactive and Mobile, ODC): an O11 mobile element implements the web interface too.</summary>
+    public static bool Reactive(object? target)
+    {
+        if (target == null) return false;
+        var names = target.GetType().GetInterfaces().Select(i => i.Name).ToHashSet(StringComparer.Ordinal);
+        return names.Overlaps(["IMobileTheme", "IMobileScreen", "IMobileBlock"]) || !names.Overlaps(["IWebTheme", "IWebScreen", "IWebBlock"]);
+    }
+
+    /// <summary>The <c>basedOn</c> of a css op: the sha256 (lowercase hex, UTF-8) of the author CSS as the get shows it
+    /// (UserStyleSheet in a theme with Theme Editor CSS, StyleSheet otherwise).</summary>
+    public static string Sha256(string css) => Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(css ?? ""))).ToLowerInvariant();
+
+    /// <summary>Whether <paramref name="basedOn"/> names this author CSS: its sha256 as stored, or with its line breaks read as
+    /// \n (the Model API may store \r\n).</summary>
+    public static bool Matches(string? basedOn, string css)
+    {
+        if (string.IsNullOrWhiteSpace(basedOn)) return false;
+        var wanted = basedOn.Trim().ToLowerInvariant();
+        return wanted == Sha256(css) || wanted == Sha256((css ?? "").Replace("\r\n", "\n"));
+    }
+
+    /// <summary>The author CSS of any element with a stylesheet (theme, screen or block), or null when it has none.</summary>
+    public static string? AuthorOf(object target)
+    {
+        if (Of(target) is { } sheet) return Author(sheet);
+        // A signature of another module (a reference) or a type whose getter the platform does not support has none.
+        try { return StyleSheetProperty(target)?.GetValue(target) as string; }
+        catch (Exception) { return null; }
+    }
+
+    /// <summary>The basedOn of the element's author CSS now (what a css op later in the same job names), or null.</summary>
+    public static string? BasedOn(object? target) => target != null && AuthorOf(target) is { } css ? Sha256(css) : null;
+
+    /// <summary>Writes the author CSS of an element through the one path (<see cref="WriteAuthor"/>); an element whose stylesheet
+    /// the kernel cannot reach as a WebStyleSheet gets the same normalization through its Model API property.</summary>
+    public static void Write(object target, string css)
+    {
+        if (Of(target) is { } sheet) { WriteAuthor(sheet, css, canvas: Reactive(target)); return; }
+        var property = StyleSheetProperty(target) ?? throw new InvalidOperationException("the element has no stylesheet of its own (a theme, a screen or a block has one)");
+        property.SetValue(target, CssPipeline.Normalize(css, new CssPipeline.Context("/StyleSheet")).Css);
+    }
+
+    /// <summary>T18: the refusal of a write that brings an absolute url to an OutSystems environment host the element's CSS did
+    /// not have (an existing one is never refused): every such url at once, with the patch that writes them without the host
+    /// when the job holds the whole text at <paramref name="pointer"/> (<paramref name="sent"/>). Null when the write brings none.</summary>
+    public static KernelRefusalException? Introduced(string? before, string after, string where, string? pointer = null, string? sent = null)
+    {
+        var added = CssPipeline.Introduced(before ?? "", after ?? "", new CssPipeline.Context(where)).Where(f => f.Severity == "error").ToList();
+        if (added.Count == 0) return null;
+        var message = $"{where}: {CssPipeline.Summary(CssPipeline.EnvUrl, added)}; the CSS the element had keeps its own urls";
+        var fixedText = sent != null ? CssPipeline.WithoutHosts(sent, added) : null;
+        var problem = JobPreflight.Problem(null, pointer, CssPipeline.EnvUrl, "error", message, added[0].Fix,
+            pointer != null && fixedText != null && fixedText != sent ? new JsonArray(new JsonObject { ["op"] = "replace", ["path"] = pointer, ["value"] = fixedText }) : null);
+        problem["offenders"] = new JsonArray(added.Select(f => (JsonNode)new JsonObject { ["line"] = f.Line, ["url"] = f.Subject }).ToArray());
+        return new KernelRefusalException(CssPipeline.EnvUrl, message, new JsonArray(JobPreflight.PublicProblem(problem)));
+    }
+    private static System.Reflection.PropertyInfo? StyleSheetProperty(object target) =>
+        target.GetType().GetInterfaces().Prepend(target.GetType()).SelectMany(t => t.GetProperties())
+            .FirstOrDefault(p => p.Name == "StyleSheet" && p.PropertyType == typeof(string) && p.GetIndexParameters().Length == 0 && p.CanRead);
 
     /// <summary>O CSS do autor: a metade que a interface do Studio mostra e que o <c>ITheme.StyleSheet</c> escreve.
     /// Quando nao ha CSS gerado, autor e efetiva sao o mesmo texto.</summary>
@@ -88,10 +174,13 @@ public static class ThemeCss
     /// escrever pelo <c>ITheme.StyleSheet</c> obriga a plataforma a recortar o bloco gerado do texto recebido, e um
     /// recorte que falhe (fim de linha diferente, texto gerado alterado entretanto) duplica o bloco gerado dentro do
     /// CSS do autor.</summary>
-    public static void WriteAuthor(WebStyleSheet sheet, string css)
+    public static void WriteAuthor(WebStyleSheet sheet, string css) => WriteAuthor(sheet, css, canvas: false);
+
+    /// <summary><paramref name="canvas"/>: the text is the author's own CSS of a reactive element (see <see cref="Settle"/>).</summary>
+    public static void WriteAuthor(WebStyleSheet sheet, string css, bool canvas)
     {
-        if (IsSplit(sheet)) { sheet.UserEffectiveValue = css; Recompute(sheet); }
-        else sheet.EffectiveValue = css;
+        if (IsSplit(sheet)) sheet.UserEffectiveValue = css; else sheet.EffectiveValue = css;
+        Settle(sheet, canvas);
     }
 
     /// <summary>Grava o CSS do autor TAL COMO VEIO, sem <c>CodeFormat</c>: o desvio explicito e exclusivo do importador de
@@ -101,7 +190,8 @@ public static class ThemeCss
     /// recomposicao mudou.</summary>
     public static JsonObject WriteVerbatim(WebStyleSheet sheet, string css)
     {
-        WriteAuthor(sheet, css);
+        // The one path, without the canvas rewrite: the importer's CSS is verbatim by construction (its @import statements first).
+        WriteAuthor(sheet, css, canvas: false);
         var author = Author(sheet);
         var effective = sheet.EffectiveValue ?? "";
         var (first, statement) = ImportsFirst(effective);

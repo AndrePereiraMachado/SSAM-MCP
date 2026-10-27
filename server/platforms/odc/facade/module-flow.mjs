@@ -14,7 +14,7 @@ import fs from 'node:fs';
 
 export const FLOW_SCHEMA = 'ssam-flow/1';
 // ModuleFlow.Extractor (C#): a stored flow of another version is a miss.
-export const FLOW_EXTRACTOR = 7;
+export const FLOW_EXTRACTOR = 9;
 export const FLOW_ADAPTER = 'kernel';
 export const FLOW_PAGE_SCHEMA = 'ssam-flow-page/1';
 export const FLOW_INDEX_SCHEMA = 'ssam-flow-index/1';
@@ -36,6 +36,33 @@ export function wellFormedFlow(f, lane) {
     || !f.module || !str(f.module.name) || !str(f.module.key) || !f.notWritten || typeof f.notWritten !== 'object' || !Array.isArray(f.actions)) return false;
   return f.actions.every(a => a && str(a.key) && str(a.kind) && str(a.name) && str(a.text) && typeof a.fixedPoint === 'boolean'
     && Number.isInteger(a.nodes) && Number.isInteger(a.digestBytes) && a.ids && typeof a.ids === 'object' && Array.isArray(a.problems) && a.problems.every(str));
+}
+
+// S10 (24/10/2026): the reading of some actions only (C# ModuleFlow.BuildSelected, request {"flowElements":[...]}), served
+// while the capture has no stored flow: the requested actions built as Build builds them (same text, ids and textSha), the
+// others not built, every action named in catalog (key, kind, name). Never written as the module's flow file; answers that
+// serve it say partial:true and what was not built.
+export const FLOW_SELECTION_SCHEMA = 'ssam-flow-selection/1';
+export function validFlowSelection(f, lane, sha256, elements) {
+  if (f?.schema !== FLOW_SELECTION_SCHEMA || f.partial !== true || !wellFormedFlow({ ...f, schema: FLOW_SCHEMA }, lane)) return false;
+  const s = f.scope, catalog = f.catalog;
+  if (f.sourceSha256.toLowerCase() !== sha256.toLowerCase() || s?.completeModule !== false || !Array.isArray(catalog)
+    || s.availableActions !== catalog.length || s.builtActions !== f.actions.length || JSON.stringify(s.requested) !== JSON.stringify(elements)) return false;
+  const keys = new Map(catalog.map(a => [a?.key, a]));
+  return catalog.every(a => str(a?.key) && str(a.kind) && str(a.name)) && keys.size === catalog.length
+    && new Set(f.actions.map(a => a.key)).size === f.actions.length
+    && f.actions.every(a => keys.get(a.key)?.kind === a.kind && keys.get(a.key)?.name === a.name);
+}
+// The flow a selection serves when every element names, among ALL the actions of the capture (its catalog, by the same
+// findActions), one action that was built; else null (the caller builds the whole flow, and a miss or an ambiguity is
+// answered from it exactly as before).
+export function selectionFlow(selection, elements) {
+  const built = new Set(selection.actions.map(a => a.key));
+  for (const element of elements) {
+    const { matches } = findActions({ actions: selection.catalog }, element);
+    if (matches.length !== 1 || !built.has(matches[0].key)) return null;
+  }
+  return selection;
 }
 
 // The last two parsed flows; the file is content-addressed, the stamp only tells a rewritten file from the parsed one.
@@ -85,8 +112,11 @@ const jsonBytes = text => Buffer.byteLength(JSON.stringify(text), 'utf8') - 2;
 
 // The text of one action in pages of at most room JSON bytes, cut between lines; a line longer than a page is cut at
 // characters, each piece saying where it goes on. Nothing is dropped; the same text and room always give the same pages.
+// The smallest room for the text of a page: a line longer than the room is cut with its continuation markers (about 90
+// bytes), so a smaller room could not carry a part of it.
+export const FLOW_PAGE_MIN = 256;
 export function flowPages(text, room) {
-  if (room < 500) throw new Error('budgetBytes leaves no room for a page of the action text');
+  if (room < FLOW_PAGE_MIN) throw new Error('budgetBytes leaves no room for a page of the action text');
   if (jsonBytes(text) <= room) return [text];
   const pages = [[]]; let used = 0;
   const push = line => { pages.at(-1).push(line); used += jsonBytes(line + '\n'); };

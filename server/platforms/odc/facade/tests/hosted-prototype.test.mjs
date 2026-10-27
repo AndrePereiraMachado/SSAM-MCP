@@ -43,12 +43,12 @@ const refusedAsPrototype = (result, name) => {
   const value = result.structuredContent;
   assert.equal(result.isError, true, name);
   assert.equal(value.code, 'HOSTED_UNAVAILABLE', name + ': ' + JSON.stringify(value).slice(0, 300));
-  assert.equal(value.cause, 'PROTOTYPE_SOURCE_LOCAL', name);
+  assert.equal(value.cause, 'PROTOTYPE_IMPORT_DISABLED', name);
   assert.equal(value.policy, 'HOSTED_PROTOTYPE_OP', name + ': the answer names the switch');
   assert.equal(value.outcome, 'not-sent');
-  assert.match(value.error, /only in local use for now/, name + ': English');
+  assert.match(value.error, /The prototype import is turned off/, name + ': English');
   assert.deepEqual(portuguese(value.error), [], name + ': English only, no pt-BR half (owner rule of 2026-10-15)');
-  assert.equal(value.continuation.tool, 'ssam_discover');
+  assert.deepEqual([value.continuation.tool, value.continuation.arguments.action, value.continuation.arguments.part], ['ssam_code', 'grammar', 'html'], name + ': the next call is the html grammar');
   assert.ok(!JSON.stringify(value.continuation).includes('"prototype"'), 'the continuation never leads back to the prototype op');
 };
 

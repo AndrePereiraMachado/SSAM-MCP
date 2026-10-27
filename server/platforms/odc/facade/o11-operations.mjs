@@ -1,7 +1,7 @@
 // Public, typed inputs; never arbitrary HTTP paths, credentials or shell fragments.
 // Service Center tools, answered in this process by service-center/ (the port of kernel\scripts\o11_service_center.py,
 // same arguments and the same JSON): native headless HTTP or a compatible private credential profile.
-// Missing authentication refuses without a prompt or window. No Python is spawned for them.
+// Explicit vault sign-in can open the private credential form. No Python is spawned for them.
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
@@ -52,7 +52,7 @@ const flags = { captureModuleSelection: 'capture-module-selection', includeSyste
 const scheduleKeys = ['recurrence', 'at', 'every', 'timeout'];
 const auth = ['host', 'credentialTarget', 'session', 'authPrompt'];
 const allowed = {
-  session: ['action', 'host', 'surface', 'session', 'credentialTarget'],
+  session: ['action', ...auth, 'surface'],
   read: ['action', 'eventAuth', 'includeSystem', 'applications', 'applicationId', 'applicationLimit', 'applicationSource', 'applicationOffset', 'applicationBatchSize', 'expectedSelectionSha256', 'ownerParallelism', 'moduleOffset', 'moduleBatchSize', 'moduleSelectionId', 'captureModuleSelection', 'expectedModuleSelectionSha256', ...auth, 'moduleId', 'name', 'kind', 'limit', 'maxPages', 'moduleLimit', 'application', 'module', 'message', 'source', 'server', 'since',
     'until', 'errorId', 'requestKey', 'operationId', 'applicationKey', 'extensionKey', 'logicalDatabase', 'moduleKey', 'elementKey', 'solution', 'publishId', 'lastMessageId', 'asyncOperationId',
     'applyId', 'process', 'processKey', 'processId', 'activityId', 'stackContains', 'logType', 'logAction', 'timer', 'path', 'export', 'reveal', 'integration', 'integrationKind'],
@@ -246,7 +246,8 @@ export function registerO11Operations(server, fromJsonSchema, deps = {}) {
   const tool = (name, kind, actions, title, description, annotations) => server.registerTool(name, {
     title, description, annotations,
     inputSchema: fromJsonSchema({ type: 'object', required: ['action'], additionalProperties: false,
-      properties: { action: { type: 'string', enum: actions }, ...Object.fromEntries(allowed[kind].filter(k => k !== 'action').map(k => [k, properties[k]])) } }),
+      properties: { action: { type: 'string', enum: actions }, ...Object.fromEntries(allowed[kind].filter(k => k !== 'action').map(k => [k,
+        kind === 'session' && k === 'authPrompt' ? { type: 'string', enum: ['auto', 'never'] } : properties[k]])) } }),
   }, async (input, ctx) => {
     let value, publication = false;
     try {
@@ -280,11 +281,10 @@ export function registerO11Operations(server, fromJsonSchema, deps = {}) {
       recordPublicationEnded({ dir: signatureCache(), environment: input.host || '*', module: '*', publicationId: input.operationId });
   }
   tool('o11_service_center_session', 'session', sessionActions, 'O11 Service Center session: which login a call uses',
-    'status: the connected Studio identity, saved credential availability and selected transport. sign-in checks existing authentication. '
-    + 'web-sign-in checks the native headless HTTP session. Without a Studio, sign-in uses the stored profile of the host and, only with nothing stored, '
-    + 'the private Windows prompt (the user types there, never in chat). No command opens a Studio dialog or a browser window. '
-    + 'A missing session or unsupported headless SSO returns a refusal. close releases the owned transport without clearing shared cookies. '
-    + 'No credential passes through arguments or answers.',
+    'status: Studio identity, saved credentials, transport. sign-in: existing authentication; session=vault: a stored profile, or the private '
+    + 'Windows form even with Studio open (authPrompt never refuses; no SC proof). web-sign-in: native headless HTTP session. '
+    + 'No Studio: the stored profile of the host, else the private Windows prompt (the user types there, never in chat). No Studio dialog or '
+    + 'browser. No session or no headless SSO: refused. close frees the owned transport, keeping shared cookies. No credential in arguments or answers.',
     { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true });
   tool('o11_service_center_read', 'read', reads, 'Read O11 Service Center: factory, logs, BPT, integrations, connections, solutions',
     'lifetime-capabilities: checks the observed User Management upgrade gate after SSO; does not provision an account. lifetime-web-status: read-only protected LifeTime page check through private headless SSO, requires session=vault; does not provision or validate a service-account API token. timer-events: bounded PerformanceMonitoring TimerExecuted GET, requires session=vault, since/until UTC up to one hour and limit 1..100; uses eventAuth=basic (default) or explicit service-token from the same-host LifeTime vault entry; no fallback or token provisioning. Empty events do not prove monitoring enabled or timer completion. Other reads authenticated by the connected Studio (SSO included): Studio API reads (applications, application details/dependencies, modules, extensions, '

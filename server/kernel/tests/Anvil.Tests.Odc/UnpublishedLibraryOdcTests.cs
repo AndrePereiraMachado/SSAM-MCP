@@ -26,22 +26,22 @@ public sealed class UnpublishedLibraryOdcTests
     }
 
     /// <summary>Round 2 (review C:\t\revisoes\unpublished-lib, A1): a kind the ODC published signature cannot hold (a service
-    /// action, a role: NativeReferenceSnapshot.Select "Unsupported element kind") is never fixed by publishing the producer,
+    /// role: NativeReferenceSnapshot.Select "Unsupported element kind") is never fixed by publishing the producer,
     /// which never adds that kind. The refusal stays REFERENCE_ELEMENT_MISSING on that element; its fix says the kind cannot be
     /// referenced through the signature and what it holds.</summary>
     [Fact]
     public void AKindTheOdcSignatureCannotHoldIsNeverFixedByPublishing()
     {
-        var reference = new JsonObject { ["op"] = "reference", ["producer"] = "FloodServices", ["elements"] = new JsonArray("ServerAction:GetNcipDetails", "ServiceAction:GetRates") };
-        var problems = JobRunner.ReferenceProblems(new ArgumentException("Unsupported element kind for this frozen producer signature: ServiceAction:GetRates"), reference, 0, "/ops");
+        var reference = new JsonObject { ["op"] = "reference", ["producer"] = "RatesLibrary", ["elements"] = new JsonArray("ServerAction:GetDetails", "Role:Manager") };
+        var problems = JobRunner.ReferenceProblems(new ArgumentException("Unsupported element kind for this frozen producer signature: Role:Manager"), reference, 0, "/ops");
         var problem = Assert.Single(problems)!.AsObject();
         Assert.Equal("REFERENCE_ELEMENT_MISSING", problem["code"]!.GetValue<string>());
         Assert.Equal("/ops/0/elements/1", problem["pointer"]!.GetValue<string>());
         var fix = problem["fix"]!.GetValue<string>();
-        Assert.Contains("the kind of ServiceAction:GetRates cannot be referenced through the signature of producer FloodServices", fix);
-        Assert.Contains("server actions, client actions, structures, entities and blocks", fix);
-        Assert.Contains("publishing FloodServices does not change this", fix);
-        Assert.DoesNotContain("publish FloodServices first", fix);
+        Assert.Contains("the kind of Role:Manager cannot be referenced through the signature of producer RatesLibrary", fix);
+        Assert.Contains("server actions, client actions, service actions, structures, entities and blocks", fix);
+        Assert.Contains("publishing RatesLibrary does not change this", fix);
+        Assert.DoesNotContain("publish RatesLibrary first", fix);
         Assert.DoesNotContain("remove it", fix, StringComparison.OrdinalIgnoreCase);
     }
 }

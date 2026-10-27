@@ -13,6 +13,29 @@ public sealed class FlowApplyOdcTests
     [Fact] public void JsonMappingValuesKeepTheirRelativeScope() => Run(FlowApplyScenarios.JsonMappingValuesKeepTheirRelativeScope);
     private const string Fixture = "tests/fixtures/odc/blank-mobile.oml";
     [Fact] public void PaginationSqlAndExceptionHandlersReadBackExactly() => Run(FlowApplyScenarios.PaginationSqlAndExceptionHandlersReadBackExactly);
+    [Fact] public void RecordTypeIndexIsSharedWithinLogicAndRenewedAfterDataChanges() => Run(FlowApplyScenarios.RecordTypeIndexIsSharedWithinLogicAndRenewedAfterDataChanges);
+    [Fact] public void ToleratedShapesApplyAndReadBackAsTheCanonicalText() => Run(FlowApplyScenarios.ToleratedShapesApplyAndReadBackAsTheCanonicalText);
+    [Fact] public void SwappingDecisionTargetsKeepsEveryNodeIdentity() => Run(FlowApplyScenarios.SwappingDecisionTargetsKeepsEveryNodeIdentity);
+    [Fact] public void MovingNestedLoopToSequencePreservesNodesAndDetachesOldEdges() => Run(FlowApplyScenarios.MovingNestedLoopToSequencePreservesNodesAndDetachesOldEdges);
+    [Fact] public void SameNamedUiCallsBindToTheirOwnerAcrossCreateReloadEditAndMerge() => RunReactive((dir, fixture, lane) =>
+        FlowApplyScenarios.SameNamedUiCallsBindToTheirOwnerAcrossCreateReloadEditAndMerge(dir, fixture, lane, MergeUiOwners));
+    [Fact] public void LifecycleDestinationIgnoresSameNamedEntityFields() => RunReactive(FlowApplyScenarios.LifecycleDestinationIgnoresSameNamedEntityFields);
+    [Fact] public void NewlyCreatedDataSourcesReplaceStaleOwnerLookup() => RunReactive(FlowApplyScenarios.NewlyCreatedDataSourcesReplaceStaleOwnerLookup);
+
+    // The ODC merge of the scene: the candidate merged over its base by the native MatchTree, as a delivery merges it.
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private static void MergeUiOwners(ModelHost host, string basis, string candidate, string merged)
+    {
+        using var local = host.Load(File.ReadAllBytes(basis));
+        using var original = host.Load(File.ReadAllBytes(basis));
+        using var foreign = host.Load(File.ReadAllBytes(candidate));
+        ((OutSystems.Model.IESpace)local).TransactionsManager.ExecuteTransaction("test: UI owner merge", (_, _) => {
+            using var tree = new OutSystems.Model.Merge.MatchTree(local, foreign, original, false, true);
+            Assert.False(tree.HasConflicts); tree.Merge(); return true;
+        });
+        Assert.True(ModelHost.Describe(local, 0).IsValid);
+        File.WriteAllBytes(merged, host.Save(local));
+    }
 
     private static string FindRoot()
     {

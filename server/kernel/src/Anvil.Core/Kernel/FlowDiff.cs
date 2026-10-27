@@ -151,6 +151,12 @@ public sealed partial class FlowDiff
 
     private void Run(FlowItem edited)
     {
+        if (edited.Kind == "Preparation") {
+            if (edited.Name != "Preparation")
+                Problem("FLOW_PREPARATION_NAME", "Preparation has the fixed native name Preparation", null, "use preparation <Owner>.Preparation");
+            if (edited.Items.Any(i => i.Role is "in" or "out"))
+                Problem("FLOW_PREPARATION_PARAMETERS", "Preparation uses its owner's inputs and variables; it has no input or output parameters", null, "declare inputs on the screen, block or email");
+        }
         if (baseline != null) {
             foreach (var item in baseline.Items.Where(i => FlowItem.Keyed(i.Role))) {
                 baseByKey[item.Key] = item; ownerOf[item.Key] = baseline;
@@ -609,6 +615,26 @@ public sealed partial class FlowDiff
             Values(node, old, Ref(node.Key));
         }
         Events(edited, baseline, actionRef);
+        // 3b. The connectors of an If, a For Each or a Switch that change are disconnected before any is linked again: a legal
+        // final graph can pass through an illegal one ("Cannot change the target node": the new body of a For Each still its
+        // old exit). Every node keeps its key; a connector that does not change is not touched.
+        foreach (var old in oldNodes.Values) {
+            if (old.Kind is not ("IfNode" or "ForEachNode" or "SwitchNode") || newNodes.FirstOrDefault(n => n.Key == old.Key) is not { } now) continue;
+            foreach (var edge in old.Edges.Where(e => e.Key != "Attached" && e.Value.Length > 0)) {
+                if (now.Edges.GetValueOrDefault(edge.Key, "") == edge.Value) continue;
+                Op("set", ("target", Ref(old.Key)), ("prop", edge.Key))["value"] = null;
+                Touched.Add(old.Key);
+            }
+            if (old.Kind != "SwitchNode") continue;
+            var previous = old.Items.Where(i => i.Role == "case").ToList();
+            var wanted = now.Items.Where(i => i.Role == "case").ToList();
+            for (var i = 0; i < previous.Count; i++) {
+                var to = previous[i].Edges.GetValueOrDefault("Target", "");
+                if (to.Length == 0 || i < wanted.Count && wanted[i].Edges.GetValueOrDefault("Target", "") == to) continue;
+                Op("set", ("target", Ref(previous[i].Key)), ("prop", "Target"))["value"] = null;
+                Touched.Add(old.Key);
+            }
+        }
         // 4. Parts: arguments by name, every other part group replaced when it changed.
         foreach (var node in newNodes) Parts(node, oldNodes.GetValueOrDefault(node.Key));
         // 5. Connectors.
@@ -684,7 +710,7 @@ public sealed partial class FlowDiff
     private static string ActionType(string kind, bool web) => kind switch {
         "ServerAction" => "IServerAction", "ServiceAction" => "IServiceAction", "ClientAction" => "IClientAction",
         "ScreenAction" => web ? "OutSystems.Model.UI.Web.IScreenAction" : "OutSystems.Model.UI.Mobile.IScreenAction",
-        "DataAction" => "IDataAction",
+        "DataAction" => "IDataAction", "Preparation" => "IPreparation",
         _ => throw new InvalidOperationException("a new " + kind + " is not created by a text without key")
     };
 
@@ -883,17 +909,27 @@ public sealed partial class FlowDiff
             Op("create", ("parent", target), ("type", "IAssignment"), ("as", alias));
             PartValues(part, alias);
         });
+        var conditionOrder = new List<string>();
+        var reconnectsConditions = old == null || !now.Items.Where(p => p.Role == "case").Select(p => p.Edges.GetValueOrDefault("Target"))
+            .SequenceEqual(old.Items.Where(p => p.Role == "case").Select(p => p.Edges.GetValueOrDefault("Target")));
         Pair("case", true, (was, part, at) => {
+            conditionOrder.Add(at);
             Values(part, was, at);
             if (part.Edges.GetValueOrDefault("Target", "") != was.Edges.GetValueOrDefault("Target", "") && part.Edges.GetValueOrDefault("Target") is { Length: > 0 } to)
                 Op("link", ("from", at), ("to", Ref(to)));
         }, part => {
             var alias = PartAlias();
+            conditionOrder.Add(alias);
             Op("create", ("parent", target), ("type", "ISwitchCondition"), ("as", alias));
             PartValues(part, alias);
             // A condition's order follows its connector: linked at once, in the text's order.
             if (part.Edges.GetValueOrDefault("Target") is { Length: > 0 } to) Op("link", ("from", alias), ("to", Ref(to)));
         });
+        // Linking a condition again can move it in the native sequence: the text's order (the priority of the cases) is
+        // restored after every case is linked, the ones whose target did not change too.
+        for (var i = 0; reconnectsConditions && conditionOrder.Count > 1 && i < conditionOrder.Count; i++)
+            if (i == 0) Op("move", ("target", conditionOrder[i]), ("first", true));
+            else Op("move", ("target", conditionOrder[i]), ("after", conditionOrder[i - 1]));
         if (now.Kind == "AggregateNode") {
             var sourcesChanged = !changed && Unordered(now, "source") != Unordered(old!, "source");
             // Joins name sources: when the sources change, the old joins go first and the text's joins are written after them.

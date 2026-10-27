@@ -9,7 +9,7 @@ import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { McpServer, InMemoryTransport } from '@modelcontextprotocol/server';
 import { Client } from '@modelcontextprotocol/client';
-import { registerO11Cycle, clean, deliveryOutcome, deliverOutcome, inspectArguments, closeState, WORDS_MARKER } from '../o11-cycle.mjs';
+import { registerO11Cycle, clean, deliveryOutcome, deliverOutcome, inspectArguments, closeState, WORDS_MARKER, layoutOf } from '../o11-cycle.mjs';
 import { kernelReading } from '../kernel-reading.mjs';
 import { o11Bridge } from '../o11-bridge.mjs';
 import { fakeAnvil } from './fixtures/fake-anvil.mjs';
@@ -74,16 +74,17 @@ test('the three tools are exposed with the distribution schema', async t => {
   assert.equal(inspect.additionalProperties, false);
   assert.equal(tools.o11_inspect.annotations.readOnlyHint, true);
   const deliver = tools.o11_deliver.inputSchema;
-  assert.deepEqual(Object.keys(deliver.properties).sort(), ['authorize', 'autoPatch', 'basedOn', 'captureProducers', 'checks', 'close', 'closePrevious', 'expectedEnvironment', 'job',
+  assert.deepEqual(Object.keys(deliver.properties).sort(), ['authorize', 'autoPatch', 'basedOn', 'captureProducers', 'checks', 'close', 'closePrevious', 'expectedEnvironment', 'fix', 'job',
     'module', 'patch', 'producers', 'publish', 'resume', 'until']);
-  // A written patch (at most 50), or "verified" (every verified patch of the refusal of that job).
+  // A written patch (at most 500 since 20/10/2026, meta item 4), or "verified" (every verified patch of the refusal of that job).
   const patch = deliver.properties.patch.anyOf.find(x => x.type === 'array');
   assert.ok(deliver.properties.patch.anyOf.some(x => x.const === 'verified' || x.enum?.includes('verified')));
-  assert.equal(patch.maxItems, 50);
+  assert.equal(patch.maxItems, 500);
   assert.deepEqual(patch.items.properties.op.enum, ['add', 'remove', 'replace', 'test']);
   assert.equal(patch.items.additionalProperties, false);
   assert.deepEqual(patch.items.required, ['op', 'path'], 'remove takes no value');
   assert.equal(deliver.properties.basedOn.anyOf.length, 2);
+  assert.equal(deliver.properties.fix.const ?? deliver.properties.fix.enum?.[0], 'apply');
   assert.deepEqual(Object.keys(deliver.properties.close.properties).sort(), ['reason', 'taskId']);
   // authorize: the user's words, or absent when a standing grant covers the module (contract I6).
   assert.ok(!(deliver.required ?? []).includes('authorize'));
@@ -93,7 +94,8 @@ test('the three tools are exposed with the distribution schema', async t => {
   assert.equal(deliver.additionalProperties, false);
   assert.equal(tools.o11_deliver.annotations.readOnlyHint, false); assert.equal(tools.o11_deliver.annotations.destructiveHint, true);
   // ssam_task {id, close}: close is a write (C15), so the tool is not read-only.
-  assert.deepEqual(Object.keys(tools.ssam_task.inputSchema.properties), ['id', 'stop', 'close']);
+  // F7: session widens the listing of this session ("all" or a correlationId).
+  assert.deepEqual(Object.keys(tools.ssam_task.inputSchema.properties), ['id', 'stop', 'close', 'session']);
   assert.equal(tools.ssam_task.annotations.readOnlyHint, false);
   for (const tool of Object.values(tools)) assert.doesNotMatch(tool.description, SHELL);
 });
@@ -706,10 +708,13 @@ test('refused, then corrected with a patch in one call: deliver gets a new file 
   assert.deepEqual(start.basedOn, { job: box.job, sha256: sha256(original) }); assert.equal(start.patchOps, 2);
   assert.equal(start.wordsSha256, sha256(WORDS)); assert.ok(!JSON.stringify(lines).includes(WORDS));
   // a second attempt on the same base after that delivery (G16, entrega-respostas.test.mjs): the corrected job is in the
-  // module, so its base is refused before anything runs; no file is written and the base stays intact
+  // module, so its base is refused before anything runs and the base stays intact. R1 (plano 24/10): the call names the new
+  // job with only what the patch changed (computed over the job of basedOn), written beside the inline jobs, ready.
   const again = (await call('o11_deliver', { module: 'Orders', patch: RENAME, basedOn: { job: box.job, sha256: sha256(original) }, authorize: WORDS })).structuredContent;
   assert.equal(again.code, 'BASED_ON_DELIVERED'); assert.equal(again.delivered.job, first);
-  assert.equal(box.runAnvil.calls.length, 2); assert.equal(fs.readdirSync(INLINE(box)).length, 1);
+  assert.equal(box.runAnvil.calls.length, 2); assert.equal(fs.readdirSync(INLINE(box)).length, 2);
+  assert.equal(again.change.ops, 1); assert.equal(again.continuation.arguments.job, again.change.job); assert.equal(again.continuation.arguments.basedOn, undefined);
+  assert.deepEqual(readJson(again.change.job), { ops: [{ op: 'get', target: 'ServerAction:SaveOrder2' }] });
   assert.ok(fs.readFileSync(box.job).equals(original));
 });
 
@@ -800,4 +805,162 @@ test('a delivered integration job answers its integration reports, at most 10 pl
   assert.deepEqual(value.integration, integration.slice(0, 10)); assert.equal(value.integrationTotal, 12);
   // A job without integration ops answers no integration field.
   assert.equal(deliverOutcome({ envelope: { data: { delivered: true } } }, { trackId: 't', work: os.tmpdir(), job: null }).integration, undefined);
+});
+
+// Meta de 20/10/2026, item 19: the delivered answer names the flow layout engine of the kernel's apply and the flows it laid
+// out again (live: ProbeLayout of SSAM_DumpProbe, 6 nodes in 5 rows and 2 columns, anvil-d4d8ece); without the receipt field
+// there is no layout block; without changed flows, the note says the positions stay.
+test('layout: the delivered answer carries the engine and the flows laid out again', () => {
+  const laid = layoutOf({ apply: { flowLayoutEngine: 'anvil-d4d8ece', automaticLayouts: [{ Action: 'ProbeLayout', Nodes: 6, Rows: 5, Columns: 2, Moved: 6, SeparatedEnds: 1, Refused: null, EngineRevision: 'anvil-d4d8ece' }] } });
+  assert.equal(laid.layout.engine, 'anvil-d4d8ece');
+  assert.deepEqual(laid.layout.automatic, [{ action: 'ProbeLayout', nodes: 6, rows: 5, columns: 2, moved: 6, separatedEnds: 1 }]);
+  assert.match(laid.layout.note, /laid out again/);
+  const kept = layoutOf({ apply: { flowLayoutEngine: 'anvil-d4d8ece', automaticLayouts: [] } });
+  assert.deepEqual(kept.layout.automatic, []);
+  assert.match(kept.layout.note, /positions stay/);
+  assert.deepEqual(layoutOf({ apply: { accepted: true } }), {});
+  assert.deepEqual(layoutOf({}), {});
+});
+
+// ---- R1 (plan of 2026-10-24, "the correction loop has no friction of its own"): 11-24/10, PATCH_INVALID 13 and
+// PATCH_PATH_FORBIDDEN 9 answered dry, 152 consecutive refusals with the same code. fix:"apply" applies the refusal's own
+// certain patches; a refused patch comes back mended by name; a correction refused with the same problems answers
+// differently. Under the candidate's T16 rule (integ/proto-into-product): the words are never inherited, a correction of a
+// refused write too (13 WORDS_REQUIRED on a patch or a resume stay WORDS_REQUIRED), and a choice is never applied for the
+// author; every continuation carries the words marker for the user's own words.
+const KERNEL_ID = 'a1a2a3a4a5a6a7a8a9a0b1b2b3b4b5b6';
+const refusedWith = (problems, taskId = KERNEL_ID) => ({ ok: false, command: 'deliver', data: { taskId, module: 'Orders', delivered: false, writeState: 'not-sent', stage: 'preflight',
+  error: 'op #0 [NAME_UNKNOWN]: the job names what the module has not', problems } });
+const TARGET_PROBLEM = { phase: 'preflight', op: 0, pointer: '/ops/0/target', code: 'NAME_UNKNOWN', severity: 'error', message: 'no ServerAction:SaveOrder in Orders',
+  fix: 'name the action the module has: SaveOrder2', patch: [{ op: 'replace', path: '/ops/0/target', value: 'ServerAction:SaveOrder2' }], patchCertain: true };
+const delivers = box => box.runAnvil.calls.filter(c => c.args[0] === 'deliver' && c.args[1] === '--module').length;
+
+test('R1 chain: an authorized write refused with certain patches names the fix call, which takes the user\'s words: two deliveries in all', async t => {
+  const box = setup(t, { handlers: { deliver: queue(refusedWith([TARGET_PROBLEM]), envelopes.delivered) } });
+  const { call, close } = await serve(box.deps); t.after(close);
+  const refused = (await call('o11_deliver', { module: 'Orders', job: box.job, authorize: WORDS })).structuredContent;
+  assert.equal(refused.ok, false); assert.equal(refused.problems[0].code, 'NAME_UNKNOWN'); assert.ok(refused.nextBasedOn);
+  // the refusal names the one call that applies its certain patches, with the words marker (never inherited), no path to write
+  assert.deepEqual(refused.fixCall.arguments, { fix: 'apply', basedOn: refused.nextBasedOn, authorize: WORDS_MARKER });
+  const marker = (await call(refused.fixCall.tool, refused.fixCall.arguments)).structuredContent;
+  assert.equal(marker.code, 'WORDS_REQUIRED', 'the marker is no words'); assert.equal(delivers(box), 1);
+  const fixed = await call(refused.fixCall.tool, { ...refused.fixCall.arguments, authorize: WORDS });
+  const value = fixed.structuredContent;
+  assert.equal(value.result, 'delivered', fixed.content[0].text);
+  assert.notEqual(value.authorization?.source, 'inherited');
+  assert.deepEqual(value.fixesApplied, [{ code: 'NAME_UNKNOWN', pointer: '/ops/0/target', ops: 1 }]);
+  assert.equal(delivers(box), 2, 'exactly two delivery calls: the refused one and the fixed one');
+  assert.deepEqual(readJson(jobUsed(box.runAnvil.calls[1])), { ops: [{ op: 'get', target: 'ServerAction:SaveOrder2' }] }, 'only the proposed patch applied');
+  assert.deepEqual(box.runAnvil.calls[1].args.slice(0, 3), ['deliver', '--module', 'Orders'], 'the module of the refused write');
+  // the journal keeps the words by their sha256 only
+  const lines = fs.readFileSync(path.join(box.local, 'journal', 'o11_deliver.jsonl'), 'utf8').trim().split('\n').map(l => JSON.parse(l));
+  assert.equal(lines.filter(l => l.event === 'start')[1].wordsSha256, sha256(WORDS));
+  for (const file of fs.readdirSync(path.join(box.local, 'journal'))) assert.ok(!fs.readFileSync(path.join(box.local, 'journal', file), 'utf8').includes(WORDS), file + ' never keeps the words');
+});
+
+test('R1 never inherited (T16): a patch, a partial job, a new write, another module, publish and an unknown origin all need the words, after a restart too', async t => {
+  const box = setup(t, { handlers: { deliver: queue(refusedWith([TARGET_PROBLEM]), envelopes.delivered, refusedWith([TARGET_PROBLEM], 'b1b2b3b4b5b6b7b8b9b0c1c2c3c4c5c6'), envelopes.delivered) } });
+  let served = await serve(box.deps);
+  const refused = (await served.call('o11_deliver', { module: 'Orders', job: box.job, authorize: WORDS })).structuredContent;
+  await served.close();
+  served = await serve(box.deps); t.after(served.close);
+  const { call } = served;
+  const words = async args => (await call('o11_deliver', args)).structuredContent;
+  const unwritten = path.join(box.base, 'jobs', 'never-delivered.json');
+  fs.writeFileSync(unwritten, JSON.stringify({ ops: [{ op: 'get', target: 'ServerAction:SaveOrder' }, { op: 'get', target: 'ServerAction:Other' }] }));
+  for (const [args, why] of [
+    [{ module: 'Orders', patch: RENAME, basedOn: refused.nextBasedOn }, 'a patch of the chain'],
+    [{ module: 'Orders', job: { ops: [{ op: 'get', target: 'ServerAction:X' }] } }, 'a new write'],
+    [{ module: 'Billing', patch: RENAME, basedOn: refused.nextBasedOn }, 'another module'],
+    [{ module: 'Orders', patch: RENAME, basedOn: refused.nextBasedOn, publish: true }, 'publish'],
+    [{ module: 'Orders', patch: RENAME, basedOn: { job: unwritten, sha256: sha256(fs.readFileSync(unwritten)) } }, 'an origin no write with words ran'],
+  ]) {
+    const answer = await words(args);
+    assert.equal(answer.code, 'WORDS_REQUIRED', why + ': ' + JSON.stringify(answer));
+    assert.equal(answer.continuation?.arguments?.authorize, WORDS_MARKER, why + ': the resend asks for the words');
+  }
+  assert.equal(delivers(box), 1, 'none of them ran');
+  const patched = await words({ module: 'Orders', patch: RENAME, basedOn: refused.nextBasedOn, authorize: WORDS });
+  assert.equal(patched.result, 'delivered', JSON.stringify(patched)); assert.notEqual(patched.authorization?.source, 'inherited');
+  // a partial job of a second chain needs the words too
+  const second = await words({ module: 'Orders', job: { ops: [{ op: 'get', target: 'ServerAction:Other' }] }, authorize: WORDS });
+  assert.equal(second.ok, false);
+  const partialJob = { ops: [{ op: 'set', target: 'ServerAction:Other', prop: 'Description', value: 'x' }] };
+  assert.equal((await words({ module: 'Orders', job: partialJob, basedOn: second.nextBasedOn })).code, 'WORDS_REQUIRED');
+  const partial = await words({ module: 'Orders', job: partialJob, basedOn: second.nextBasedOn, authorize: WORDS });
+  assert.equal(partial.result, 'delivered', JSON.stringify(partial));
+});
+
+test('R1 fix:"apply": a proposed patch that does not apply is refused once with the ones that do, before anything is sent; a choice is never applied', async t => {
+  const broken = { ...TARGET_PROBLEM, code: 'OTHER', pointer: '/ops/5/target', patch: [{ op: 'replace', path: '/ops/5/target', value: 'x' }] };
+  const choice = { ...TARGET_PROBLEM, code: 'CREATE_USES_EXISTING', pointer: '/ops/0/name', patch: [{ op: 'replace', path: '/ops/0/name', value: 'Existing' }], patchCertain: false };
+  const box = setup(t, { handlers: { deliver: queue(refusedWith([TARGET_PROBLEM, broken, choice])) } });
+  const { call, close } = await serve(box.deps); t.after(close);
+  const refused = (await call('o11_deliver', { module: 'Orders', job: box.job, authorize: WORDS })).structuredContent;
+  const answer = (await call('o11_deliver', { fix: 'apply', basedOn: refused.nextBasedOn, authorize: WORDS })).structuredContent;
+  assert.equal(answer.code, 'FIX_NOT_APPLIED'); assert.deepEqual(answer.notApplied.map(n => n.code), ['OTHER']);
+  assert.deepEqual(answer.fixesApplicable.map(n => n.code), ['NAME_UNKNOWN'], 'the choice is not among the patches applied for the author');
+  assert.deepEqual(answer.continuation.arguments.patch[0], { op: 'replace', path: '/ops/0/target', value: 'ServerAction:SaveOrder2' });
+  assert.equal(answer.continuation.arguments.authorize, WORDS_MARKER, 'a correction asks for the words (never inherited)');
+  assert.equal(delivers(box), 1);
+  // a job no refusal proposed patches for
+  const other = path.join(box.base, 'jobs', 'other.json'); fs.writeFileSync(other, JSON.stringify({ ops: [{ op: 'get', target: 'ServerAction:Other' }] }));
+  const none = (await call('o11_deliver', { module: 'Orders', fix: 'apply', basedOn: { job: other, sha256: sha256(fs.readFileSync(other)) }, authorize: WORDS })).structuredContent;
+  assert.equal(none.code, 'FIX_NONE');
+});
+
+test('R1 a refused patch comes back mended by name with the ready call, never dry', async t => {
+  const box = setup(t, { handlers: { deliver: queue(refusedWith([TARGET_PROBLEM]), envelopes.delivered) } });
+  const { call, close } = await serve(box.deps); t.after(close);
+  const refused = (await call('o11_deliver', { module: 'Orders', job: box.job, authorize: WORDS })).structuredContent;
+  // (a verb outside add/remove/replace/test, or an extra key, is refused by the tool's schema before this; job-patch.mjs mends it for the other paths)
+  const bad = (await call('o11_deliver', { module: 'Orders', patch: [{ op: 'replace', path: '/0/target', value: 'ServerAction:SaveOrder3' }, { op: 'replace', path: '/ops/0/description', value: 'x' }], basedOn: refused.nextBasedOn, authorize: WORDS })).structuredContent;
+  assert.equal(bad.code, 'PATCH_INVALID'); assert.equal(bad.ready, true);
+  assert.deepEqual(bad.repaired.map(r => r.why), ['replace of a key that is not there is add']);
+  assert.equal(bad.continuation.tool, 'o11_deliver'); assert.deepEqual(bad.continuation.arguments.patch, bad.patchByName);
+  assert.equal(bad.continuation.arguments.authorize, WORDS_MARKER, 'the ready call asks for the words (never inherited)');
+  const done = (await call('o11_deliver', { ...bad.continuation.arguments, authorize: WORDS })).structuredContent;
+  assert.equal(done.result, 'delivered', JSON.stringify(done));
+  assert.deepEqual(readJson(jobUsed(box.runAnvil.calls.at(-1))), { ops: [{ op: 'get', target: 'ServerAction:SaveOrder3', description: 'x' }] });
+  assert.ok(done.normalizations.some(n => n.rule === 'patch-path'), 'the re-rooted path is said');
+});
+
+test('R1 the same problems again: the second refusal says repeated, with the grammar card, the nearest example and the lines; a different refusal does not', async t => {
+  const logic = { ops: [{ op: 'logic', data: { actions: [{ name: 'Pedido_Save', steps: [{ as: 's', assign: { X: 'Y' } }] }] } }] };
+  const problem = { phase: 'preflight', op: 0, pointer: '/ops/0/data/actions/0/steps/0/assign/X', code: 'EXPR_UNKNOWN_IDENTIFIER', severity: 'error', message: "can't identify 'Y'",
+    fix: 'write 1', patch: [{ op: 'replace', path: '/ops/0/data/actions/0/steps/0/assign/X', value: '1' }] };
+  const other = { ...problem, code: 'TYPE_MISMATCH', pointer: '/ops/0/data/actions/0/name', patch: undefined };
+  const box = setup(t, { handlers: { deliver: queue(refusedWith([problem]), refusedWith([problem]), refusedWith([other]), refusedWith([other])) } });
+  const { call, close } = await serve(box.deps); t.after(close);
+  const first = (await call('o11_deliver', { module: 'Orders', job: logic, authorize: WORDS })).structuredContent;
+  assert.equal(first.repeated, undefined);
+  const again = (await call('o11_deliver', { module: 'Orders', patch: [{ op: 'replace', path: 'actions/Pedido_Save/steps/s/as', value: 't' }], basedOn: first.nextBasedOn, authorize: WORDS })).structuredContent;
+  assert.equal(again.code, first.code); assert.equal(again.repeated, true);
+  assert.equal(again.grammarCard.part, 'logic'); assert.ok(again.grammarCard.rules.length); assert.equal(again.grammarCard.example, undefined);
+  assert.match(again.example.text, /server action/);
+  assert.deepEqual(again.lines, [{ code: 'EXPR_UNKNOWN_IDENTIFIER', pointer: '/ops/0/data/actions/0/steps/0/assign/X', refused: 'Y', accepted: '1' }]);
+  assert.notDeepEqual(again, first, 'two equal refusals in a row answer differently');
+  const different = (await call('o11_deliver', { module: 'Orders', patch: [{ op: 'replace', path: 'actions/Pedido_Save/steps/t/as', value: 'u' }], basedOn: again.nextBasedOn, authorize: WORDS })).structuredContent;
+  assert.equal(different.repeated, undefined, 'a refusal with other problems is a refusal as always');
+  // a new write (no basedOn) with the same problems as an earlier one is not a repeat of a correction
+  const fresh = (await call('o11_deliver', { module: 'Orders', job: logic, authorize: WORDS })).structuredContent;
+  assert.equal(fresh.repeated, undefined);
+});
+
+test('R1 resume (T16): an uncertain write is resumed with the user\'s words; without them, or for another task, WORDS_REQUIRED', async t => {
+  const UNCERTAIN = envelopes.uncertain.data.taskId;
+  let box;
+  const replies = [() => { writeKernelTask(box.work, UNCERTAIN, { request: { Module: 'Orders', JobPath: box.job }, writeState: 'unknown', stage: 'merge' }); return envelopes.uncertain; }, () => envelopes.delivered];
+  box = setup(t, { handlers: { deliver: () => replies.shift()() } });
+  const { call, close } = await serve(box.deps); t.after(close);
+  const unknown = (await call('o11_deliver', { module: 'Orders', job: box.job, authorize: WORDS })).structuredContent;
+  assert.equal(unknown.outcome, 'uncertain');
+  const other = (await call('o11_deliver', { resume: 'f'.repeat(32) })).structuredContent;
+  assert.equal(other.code, 'WORDS_REQUIRED');
+  const bare = (await call('o11_deliver', { ...unknown.continuation.arguments, authorize: undefined })).structuredContent;
+  assert.equal(bare.code, 'WORDS_REQUIRED', 'never inherited');
+  const resumed = (await call('o11_deliver', { ...unknown.continuation.arguments, authorize: WORDS })).structuredContent;
+  assert.equal(resumed.result, 'delivered', JSON.stringify(resumed));
+  assert.notEqual(resumed.authorization?.source, 'inherited');
+  assert.deepEqual(box.runAnvil.calls.at(-1).args.slice(0, 3), ['deliver', '--resume', UNCERTAIN]);
 });

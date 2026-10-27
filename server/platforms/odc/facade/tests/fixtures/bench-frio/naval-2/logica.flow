@@ -1,0 +1,3065 @@
+/// ssam-rule-map:{"CheckGetUserId":"Rule_Authenticated_6ab694","GetNvInspectionForUpdate":"Rule_LoadI_fetch_0a9d14","SetI":"Rule_LoadI_record_cde031","CheckICreatedBy":"Rule_LoadI_scope0_29169e","CheckIVersion":"Rule_LoadI_version_740330","Checknot":"Rule_checkReady_298383","TransitionApproveAllowedState":"Rule_transitionApprove_allowed_7ff178","TransitionApproveChangeStateValues":"Rule_transitionApprove_change_values_b657e1","TransitionApproveChangeStatePersist":"Rule_transitionApprove_change_persist_87265c"}
+server action ApproveNvInspectionPlan
+  in IId: NvInspection Identifier
+  in IVersion: Long Integer
+  local I: NvInspection
+  if not (GetUserId() <> NullIdentifier()):  # CheckGetUserId
+    raise NvRuleViolation("Authentication required")
+  GetNvInspectionForUpdate = GetNvInspectionForUpdate(Id=IId)
+  assign  # SetI
+    I = GetNvInspectionForUpdate.Record.NvInspection
+  if not (I.CreatedBy = GetUserId()):  # CheckICreatedBy
+    raise NvRuleViolation("Record outside requested scope")
+  if not (I.Version = IVersion):  # CheckIVersion
+    raise NvRuleViolation("Record changed; reload before editing")
+  if not (not I.Closed and I.Limit > 0 and I.DueOn >= CurrDate()):  # Checknot
+    raise NvRuleViolation("checkReady")
+  if not ((I.StateId = Entities.NvInspectionState.Draft)):  # TransitionApproveAllowedState
+    raise NvRuleViolation("transitionApprove: state transition not allowed")
+  assign  # TransitionApproveChangeStateValues
+    I.StateId = Entities.NvInspectionState.Scheduled
+    I.UpdatedOn = CurrDateTime()
+    I.Version = I.Version + 1
+  TransitionApproveChangeStatePersist = UpdateNvInspection(Source=I)
+  end
+
+/// ssam-rule-map:{"CheckGetUserId":"Rule_Authenticated_6ab694","ValidateScoreValue":"Rule_ValidateParameterScoreValue_4664b3","GetNvInspectionForUpdate":"Rule_LoadI_fetch_0a9d14","SetI":"Rule_LoadI_record_cde031","CheckICreatedBy":"Rule_LoadI_scope0_29169e","CheckIVersion":"Rule_LoadI_version_740330","CheckScoreValue":"Rule_checkScore_b88519","TransitionReviewAllowedState":"Rule_transitionReview_allowed_afd6f4","TransitionReviewChangeStateValues":"Rule_transitionReview_change_values_eede97","TransitionReviewChangeStatePersist":"Rule_transitionReview_change_persist_9a92a5"}
+server action ReviewNvInspection
+  in ScoreValue: Decimal
+  in IId: NvInspection Identifier
+  in IVersion: Long Integer
+  local I: NvInspection
+  if not (GetUserId() <> NullIdentifier()):  # CheckGetUserId
+    raise NvRuleViolation("Authentication required")
+  if not ((ScoreValue >= 0) and (ScoreValue <= 1000)):  # ValidateScoreValue
+    raise NvRuleViolation("Invalid ScoreValue")
+  GetNvInspectionForUpdate = GetNvInspectionForUpdate(Id=IId)
+  assign  # SetI
+    I = GetNvInspectionForUpdate.Record.NvInspection
+  if not (I.CreatedBy = GetUserId()):  # CheckICreatedBy
+    raise NvRuleViolation("Record outside requested scope")
+  if not (I.Version = IVersion):  # CheckIVersion
+    raise NvRuleViolation("Record changed; reload before editing")
+  if not (ScoreValue <= I.Limit):  # CheckScoreValue
+    raise NvRuleViolation("checkScore")
+  if not ((I.StateId = Entities.NvInspectionState.Scheduled)):  # TransitionReviewAllowedState
+    raise NvRuleViolation("transitionReview: state transition not allowed")
+  assign  # TransitionReviewChangeStateValues
+    I.Score = ScoreValue
+    I.StateId = Entities.NvInspectionState.Reviewed
+    I.UpdatedOn = CurrDateTime()
+    I.Version = I.Version + 1
+  TransitionReviewChangeStatePersist = UpdateNvInspection(Source=I)
+  end
+
+/// ssam-rule-map:{"CheckGetUserId":"Rule_Authenticated_6ab694","ValidateNote":"Rule_ValidateParameterNote_55075f","GetNvInspectionForUpdate":"Rule_LoadI_fetch_0a9d14","SetI":"Rule_LoadI_record_cde031","CheckICreatedBy":"Rule_LoadI_scope0_29169e","CheckIVersion":"Rule_LoadI_version_740330","CheckIScore":"Rule_checkPassed_b8d6f5","TransitionArchiveAllowedState":"Rule_transitionArchive_allowed_1b8dc3","TransitionArchiveChangeStateValues":"Rule_transitionArchive_change_values_639569","TransitionArchiveChangeStatePersist":"Rule_transitionArchive_change_persist_5f5518","SetDecision":"Rule_createDecision_reset_caa0de","SetDecisionParentId":"Rule_createDecision_values_0b035a","CreateNvInspectionDecision":"Rule_createDecision_persist_72b848","SetDecisionId":"Rule_createDecision_identity_5aff2d"}
+server action ArchiveNvInspection
+  in Note: Text
+  in IId: NvInspection Identifier
+  in IVersion: Long Integer
+  local I: NvInspection
+  local Decision: NvInspectionDecision
+  local WorkflowEmpty2: NvInspectionDecision
+  if not (GetUserId() <> NullIdentifier()):  # CheckGetUserId
+    raise NvRuleViolation("Authentication required")
+  if not ((Trim(Note) <> "") and (Length(Note) >= 5) and (Length(Note) <= 500)):  # ValidateNote
+    raise NvRuleViolation("Invalid Note")
+  GetNvInspectionForUpdate = GetNvInspectionForUpdate(Id=IId)
+  assign  # SetI
+    I = GetNvInspectionForUpdate.Record.NvInspection
+  if not (I.CreatedBy = GetUserId()):  # CheckICreatedBy
+    raise NvRuleViolation("Record outside requested scope")
+  if not (I.Version = IVersion):  # CheckIVersion
+    raise NvRuleViolation("Record changed; reload before editing")
+  if not (I.Score >= I.Limit):  # CheckIScore
+    raise NvRuleViolation("checkPassed")
+  if not ((I.StateId = Entities.NvInspectionState.Reviewed)):  # TransitionArchiveAllowedState
+    raise NvRuleViolation("transitionArchive: state transition not allowed")
+  assign  # TransitionArchiveChangeStateValues
+    I.Closed = True
+    I.StateId = Entities.NvInspectionState.Closed
+    I.UpdatedOn = CurrDateTime()
+    I.Version = I.Version + 1
+  TransitionArchiveChangeStatePersist = UpdateNvInspection(Source=I)
+  assign  # SetDecision
+    Decision = WorkflowEmpty2
+  assign  # SetDecisionParentId
+    Decision.ParentId = I.Id
+    Decision.Reason = Note
+    Decision.Approved = True
+    Decision.DecidedOn = CurrDateTime()
+    Decision.UpdatedOn = CurrDateTime()
+    Decision.CreatedOn = CurrDateTime()
+    Decision.Version = 1
+  CreateNvInspectionDecision = CreateNvInspectionDecision(Source=Decision)
+  assign  # SetDecisionId
+    Decision.Id = CreateNvInspectionDecision.Id
+  end
+
+/// ssam-rule-map:{"CheckGetUserId":"Rule_Authenticated_6ab694","GetNvInspection":"Rule_LoadI_fetch_0a9d14","SetI":"Rule_LoadI_record_cde031","CheckICreatedBy":"Rule_LoadI_scope0_29169e","GetNvInspectionAssignment":"Rule_QueryEffortRows_query_5e39f6","CheckGetNvInspectionAssignmentCount":"Rule_QueryEffortRows_complete_cb3d47","SetEffortRows":"Rule_QueryEffortRows_list_977060","SetHours":"Rule_SummarizeEffort_seed_8e749c","ForEachEffortRows":"Rule_SummarizeEffort_each_4a97c2","SetHours2":"Rule_SummarizeEffort_each_SummarizeEffo_72caf6","SetHours3":"Rule_ReturnEffort_dc629b"}
+server action EstimateNvInspectionEffort
+  in IId: NvInspection Identifier
+  out Hours: Decimal
+  out Overdue: Long Integer
+  local I: NvInspection
+  local EffortRows: NvInspectionAssignment List
+  if not (GetUserId() <> NullIdentifier()):  # CheckGetUserId
+    raise NvRuleViolation("Authentication required")
+  GetNvInspection = GetNvInspection(Id=IId)
+  assign  # SetI
+    I = GetNvInspection.Record.NvInspection
+  if not (I.CreatedBy = GetUserId()):  # CheckICreatedBy
+    raise NvRuleViolation("Record outside requested scope")
+  GetNvInspectionAssignment = aggregate FROM NvInspectionAssignment WHERE (NvInspectionAssignment.ParentId = I.Id) MAX 200
+  if not (GetNvInspectionAssignment.Count <= 200):  # CheckGetNvInspectionAssignmentCount
+    raise NvRuleViolation("Result exceeds declared limit")
+  assign  # SetEffortRows
+    EffortRows = GetNvInspectionAssignment.List
+  assign  # SetHours
+    Hours = 0
+    Overdue = 0
+  foreach EffortRows:  # ForEachEffortRows @ruleNew1
+    assign  # SetHours2
+      Hours = Hours + (EffortRows.Current.Hours)
+      Overdue = Overdue + If(EffortRows.Current.DueOn < CurrDate(), 1, 0)
+    next
+  assign  # SetHours3
+    Hours = Hours
+    Overdue = Overdue
+  end
+
+/// ssam-rule-map:{"CheckGetUserId":"Rule_Authenticated_6ab694","GetNvInspection":"Rule_LoadI_fetch_0a9d14","SetI":"Rule_LoadI_record_cde031","CheckICreatedBy":"Rule_LoadI_scope0_29169e","GetNvInspectionEvidence":"Rule_QueryEvidenceRows_query_9e7298","CheckGetNvInspectionEvidenceCount":"Rule_QueryEvidenceRows_complete_4ec8f5","SetEvidenceRows":"Rule_QueryEvidenceRows_list_6da22b","SetFiles":"Rule_SummarizeEvidence_seed_e35c64","ForEachEvidenceRows":"Rule_SummarizeEvidence_each_5bb0fb","SetFiles2":"Rule_SummarizeEvidence_each_SummarizeEv_5feaf6","SetFiles3":"Rule_ReturnEvidence_4b8e6f"}
+server action ReviewNvInspectionEvidence
+  in IId: NvInspection Identifier
+  out Files: Long Integer
+  out Named: Long Integer
+  local I: NvInspection
+  local EvidenceRows: NvInspectionEvidence List
+  if not (GetUserId() <> NullIdentifier()):  # CheckGetUserId
+    raise NvRuleViolation("Authentication required")
+  GetNvInspection = GetNvInspection(Id=IId)
+  assign  # SetI
+    I = GetNvInspection.Record.NvInspection
+  if not (I.CreatedBy = GetUserId()):  # CheckICreatedBy
+    raise NvRuleViolation("Record outside requested scope")
+  GetNvInspectionEvidence = aggregate FROM NvInspectionEvidence WHERE (NvInspectionEvidence.ParentId = I.Id) MAX 200
+  if not (GetNvInspectionEvidence.Count <= 200):  # CheckGetNvInspectionEvidenceCount
+    raise NvRuleViolation("Result exceeds declared limit")
+  assign  # SetEvidenceRows
+    EvidenceRows = GetNvInspectionEvidence.List
+  assign  # SetFiles
+    Files = 0
+    Named = 0
+  foreach EvidenceRows:  # ForEachEvidenceRows @ruleNew1
+    assign  # SetFiles2
+      Files = Files + 1
+      Named = Named + If(Length(Trim(EvidenceRows.Current.FileName)) > 0, 1, 0)
+    next
+  assign  # SetFiles3
+    Files = Files
+    Named = Named
+  end
+
+/// ssam-rule-map:{"CheckGetUserId":"Rule_Authenticated_6ab694","GetNvSurveyForUpdate":"Rule_LoadS_fetch_1b918b","SetS":"Rule_LoadS_record_6ce382","CheckSCreatedBy":"Rule_LoadS_scope0_753217","CheckSVersion":"Rule_LoadS_version_aa9303","CheckSDueOn":"Rule_checkLead_858e14","TransitionApproveAllowedState":"Rule_transitionApprove_allowed_7ff178","TransitionApproveChangeStateValues":"Rule_transitionApprove_change_values_b657e1","TransitionApproveChangeStatePersist":"Rule_transitionApprove_change_persist_87265c"}
+server action ApproveNvSurveyPlan
+  in SId: NvSurvey Identifier
+  in SVersion: Long Integer
+  local S: NvSurvey
+  if not (GetUserId() <> NullIdentifier()):  # CheckGetUserId
+    raise NvRuleViolation("Authentication required")
+  GetNvSurveyForUpdate = GetNvSurveyForUpdate(Id=SId)
+  assign  # SetS
+    S = GetNvSurveyForUpdate.Record.NvSurvey
+  if not (S.CreatedBy = GetUserId()):  # CheckSCreatedBy
+    raise NvRuleViolation("Record outside requested scope")
+  if not (S.Version = SVersion):  # CheckSVersion
+    raise NvRuleViolation("Record changed; reload before editing")
+  if not (S.DueOn >= DateTimeToDate(AddDays(CurrDate(),3))):  # CheckSDueOn
+    raise NvRuleViolation("checkLead")
+  if not ((S.StateId = Entities.NvSurveyState.Draft)):  # TransitionApproveAllowedState
+    raise NvRuleViolation("transitionApprove: state transition not allowed")
+  assign  # TransitionApproveChangeStateValues
+    S.StateId = Entities.NvSurveyState.Scheduled
+    S.UpdatedOn = CurrDateTime()
+    S.Version = S.Version + 1
+  TransitionApproveChangeStatePersist = UpdateNvSurvey(Source=S)
+  end
+
+/// ssam-rule-map:{"CheckGetUserId":"Rule_Authenticated_6ab694","ValidateScoreValue":"Rule_ValidateParameterScoreValue_4664b3","GetNvSurveyForUpdate":"Rule_LoadS_fetch_1b918b","SetS":"Rule_LoadS_record_6ce382","CheckSCreatedBy":"Rule_LoadS_scope0_753217","CheckSVersion":"Rule_LoadS_version_aa9303","CheckSLimit":"Rule_checkSampling_bbf1ad","TransitionReviewAllowedState":"Rule_transitionReview_allowed_afd6f4","TransitionReviewChangeStateValues":"Rule_transitionReview_change_values_eede97","TransitionReviewChangeStatePersist":"Rule_transitionReview_change_persist_9a92a5"}
+server action ReviewNvSurvey
+  in ScoreValue: Decimal
+  in SId: NvSurvey Identifier
+  in SVersion: Long Integer
+  local S: NvSurvey
+  if not (GetUserId() <> NullIdentifier()):  # CheckGetUserId
+    raise NvRuleViolation("Authentication required")
+  if not ((ScoreValue >= 0) and (ScoreValue <= 1000)):  # ValidateScoreValue
+    raise NvRuleViolation("Invalid ScoreValue")
+  GetNvSurveyForUpdate = GetNvSurveyForUpdate(Id=SId)
+  assign  # SetS
+    S = GetNvSurveyForUpdate.Record.NvSurvey
+  if not (S.CreatedBy = GetUserId()):  # CheckSCreatedBy
+    raise NvRuleViolation("Record outside requested scope")
+  if not (S.Version = SVersion):  # CheckSVersion
+    raise NvRuleViolation("Record changed; reload before editing")
+  if not (S.Limit > 0 and ScoreValue <= S.Limit):  # CheckSLimit
+    raise NvRuleViolation("checkSampling")
+  if not ((S.StateId = Entities.NvSurveyState.Scheduled)):  # TransitionReviewAllowedState
+    raise NvRuleViolation("transitionReview: state transition not allowed")
+  assign  # TransitionReviewChangeStateValues
+    S.Score = ScoreValue
+    S.StateId = Entities.NvSurveyState.Reviewed
+    S.UpdatedOn = CurrDateTime()
+    S.Version = S.Version + 1
+  TransitionReviewChangeStatePersist = UpdateNvSurvey(Source=S)
+  end
+
+/// ssam-rule-map:{"CheckGetUserId":"Rule_Authenticated_6ab694","ValidateNote":"Rule_ValidateParameterNote_55075f","GetNvSurveyForUpdate":"Rule_LoadS_fetch_1b918b","SetS":"Rule_LoadS_record_6ce382","CheckSCreatedBy":"Rule_LoadS_scope0_753217","CheckSVersion":"Rule_LoadS_version_aa9303","CheckSScore":"Rule_checkCoverage_a7e6f2","TransitionArchiveAllowedState":"Rule_transitionArchive_allowed_1b8dc3","TransitionArchiveChangeStateValues":"Rule_transitionArchive_change_values_639569","TransitionArchiveChangeStatePersist":"Rule_transitionArchive_change_persist_5f5518","SetDecision":"Rule_createDecision_reset_caa0de","SetDecisionParentId":"Rule_createDecision_values_0b035a","CreateNvSurveyDecision":"Rule_createDecision_persist_72b848","SetDecisionId":"Rule_createDecision_identity_5aff2d"}
+server action ArchiveNvSurvey
+  in Note: Text
+  in SId: NvSurvey Identifier
+  in SVersion: Long Integer
+  local S: NvSurvey
+  local Decision: NvSurveyDecision
+  local WorkflowEmpty2: NvSurveyDecision
+  if not (GetUserId() <> NullIdentifier()):  # CheckGetUserId
+    raise NvRuleViolation("Authentication required")
+  if not ((Trim(Note) <> "") and (Length(Note) >= 5) and (Length(Note) <= 500)):  # ValidateNote
+    raise NvRuleViolation("Invalid Note")
+  GetNvSurveyForUpdate = GetNvSurveyForUpdate(Id=SId)
+  assign  # SetS
+    S = GetNvSurveyForUpdate.Record.NvSurvey
+  if not (S.CreatedBy = GetUserId()):  # CheckSCreatedBy
+    raise NvRuleViolation("Record outside requested scope")
+  if not (S.Version = SVersion):  # CheckSVersion
+    raise NvRuleViolation("Record changed; reload before editing")
+  if not (S.Score >= S.Limit*0.9):  # CheckSScore
+    raise NvRuleViolation("checkCoverage")
+  if not ((S.StateId = Entities.NvSurveyState.Reviewed)):  # TransitionArchiveAllowedState
+    raise NvRuleViolation("transitionArchive: state transition not allowed")
+  assign  # TransitionArchiveChangeStateValues
+    S.Closed = True
+    S.StateId = Entities.NvSurveyState.Closed
+    S.UpdatedOn = CurrDateTime()
+    S.Version = S.Version + 1
+  TransitionArchiveChangeStatePersist = UpdateNvSurvey(Source=S)
+  assign  # SetDecision
+    Decision = WorkflowEmpty2
+  assign  # SetDecisionParentId
+    Decision.ParentId = S.Id
+    Decision.Reason = Note
+    Decision.Approved = True
+    Decision.DecidedOn = CurrDateTime()
+    Decision.UpdatedOn = CurrDateTime()
+    Decision.CreatedOn = CurrDateTime()
+    Decision.Version = 1
+  CreateNvSurveyDecision = CreateNvSurveyDecision(Source=Decision)
+  assign  # SetDecisionId
+    Decision.Id = CreateNvSurveyDecision.Id
+  end
+
+/// ssam-rule-map:{"CheckGetUserId":"Rule_Authenticated_6ab694","GetNvSurvey":"Rule_LoadS_fetch_1b918b","SetS":"Rule_LoadS_record_6ce382","CheckSCreatedBy":"Rule_LoadS_scope0_753217","GetNvSurveyAssignment":"Rule_QueryEffortRows_query_5e39f6","CheckGetNvSurveyAssignmentCount":"Rule_QueryEffortRows_complete_cb3d47","SetEffortRows":"Rule_QueryEffortRows_list_977060","SetFutureHours":"Rule_SummarizeEffort_seed_8e749c","ForEachEffortRows":"Rule_SummarizeEffort_each_4a97c2","SetFutureHours2":"Rule_SummarizeEffort_each_SummarizeEffo_72caf6","SetFutureHours3":"Rule_ReturnEffort_dc629b"}
+server action EstimateNvSurveyEffort
+  in SId: NvSurvey Identifier
+  out FutureHours: Decimal
+  out Assignments: Long Integer
+  local S: NvSurvey
+  local EffortRows: NvSurveyAssignment List
+  if not (GetUserId() <> NullIdentifier()):  # CheckGetUserId
+    raise NvRuleViolation("Authentication required")
+  GetNvSurvey = GetNvSurvey(Id=SId)
+  assign  # SetS
+    S = GetNvSurvey.Record.NvSurvey
+  if not (S.CreatedBy = GetUserId()):  # CheckSCreatedBy
+    raise NvRuleViolation("Record outside requested scope")
+  GetNvSurveyAssignment = aggregate FROM NvSurveyAssignment WHERE (NvSurveyAssignment.ParentId = S.Id) MAX 200
+  if not (GetNvSurveyAssignment.Count <= 200):  # CheckGetNvSurveyAssignmentCount
+    raise NvRuleViolation("Result exceeds declared limit")
+  assign  # SetEffortRows
+    EffortRows = GetNvSurveyAssignment.List
+  assign  # SetFutureHours
+    FutureHours = 0
+    Assignments = 0
+  foreach EffortRows:  # ForEachEffortRows @ruleNew1
+    assign  # SetFutureHours2
+      FutureHours = FutureHours + (If(EffortRows.Current.DueOn >= CurrDate(),EffortRows.Current.Hours,0))
+      Assignments = Assignments + 1
+    next
+  assign  # SetFutureHours3
+    FutureHours = FutureHours
+    Assignments = Assignments
+  end
+
+/// ssam-rule-map:{"CheckGetUserId":"Rule_Authenticated_6ab694","GetNvSurvey":"Rule_LoadS_fetch_1b918b","SetS":"Rule_LoadS_record_6ce382","CheckSCreatedBy":"Rule_LoadS_scope0_753217","GetNvSurveyDecision":"Rule_QueryDecisionsRows_query_c9ef9f","CheckGetNvSurveyDecisionCount":"Rule_QueryDecisionsRows_complete_d25b33","SetDecisionsRows":"Rule_QueryDecisionsRows_list_3858aa","SetApproved":"Rule_SummarizeDecisions_seed_1b0be7","ForEachDecisionsRows":"Rule_SummarizeDecisions_each_673983","SetApproved2":"Rule_SummarizeDecisions_each_SummarizeD_001011","SetApproved3":"Rule_ReturnDecisions_d988d5"}
+server action ReviewNvSurveyDecisions
+  in SId: NvSurvey Identifier
+  out Approved: Long Integer
+  out Rejected: Long Integer
+  local S: NvSurvey
+  local DecisionsRows: NvSurveyDecision List
+  if not (GetUserId() <> NullIdentifier()):  # CheckGetUserId
+    raise NvRuleViolation("Authentication required")
+  GetNvSurvey = GetNvSurvey(Id=SId)
+  assign  # SetS
+    S = GetNvSurvey.Record.NvSurvey
+  if not (S.CreatedBy = GetUserId()):  # CheckSCreatedBy
+    raise NvRuleViolation("Record outside requested scope")
+  GetNvSurveyDecision = aggregate FROM NvSurveyDecision WHERE (NvSurveyDecision.ParentId = S.Id) MAX 100
+  if not (GetNvSurveyDecision.Count <= 100):  # CheckGetNvSurveyDecisionCount
+    raise NvRuleViolation("Result exceeds declared limit")
+  assign  # SetDecisionsRows
+    DecisionsRows = GetNvSurveyDecision.List
+  assign  # SetApproved
+    Approved = 0
+    Rejected = 0
+  foreach DecisionsRows:  # ForEachDecisionsRows @ruleNew1
+    assign  # SetApproved2
+      Approved = Approved + If(DecisionsRows.Current.Approved, 1, 0)
+      Rejected = Rejected + If(not DecisionsRows.Current.Approved, 1, 0)
+    next
+  assign  # SetApproved3
+    Approved = Approved
+    Rejected = Rejected
+  end
+
+/// ssam-rule-map:{"CheckGetUserId":"Rule_Authenticated_6ab694","GetNvCertificationForUpdate":"Rule_LoadC_fetch_e1b659","SetC":"Rule_LoadC_record_8a1990","CheckCCreatedBy":"Rule_LoadC_scope0_da3cb1","CheckCVersion":"Rule_LoadC_version_0eeb8c","CheckCDueOn":"Rule_checkEligible_e94b49","TransitionStartAllowedState":"Rule_transitionStart_allowed_f925e6","TransitionStartChangeStateValues":"Rule_transitionStart_change_values_c8305d","TransitionStartChangeStatePersist":"Rule_transitionStart_change_persist_824312"}
+server action StartNvCertificationReview
+  in CId: NvCertification Identifier
+  in CVersion: Long Integer
+  local C: NvCertification
+  if not (GetUserId() <> NullIdentifier()):  # CheckGetUserId
+    raise NvRuleViolation("Authentication required")
+  GetNvCertificationForUpdate = GetNvCertificationForUpdate(Id=CId)
+  assign  # SetC
+    C = GetNvCertificationForUpdate.Record.NvCertification
+  if not (C.CreatedBy = GetUserId()):  # CheckCCreatedBy
+    raise NvRuleViolation("Record outside requested scope")
+  if not (C.Version = CVersion):  # CheckCVersion
+    raise NvRuleViolation("Record changed; reload before editing")
+  if not (C.DueOn >= CurrDate() and not C.Closed):  # CheckCDueOn
+    raise NvRuleViolation("checkEligible")
+  if not ((C.StateId = Entities.NvCertificationState.Draft) or (C.StateId = Entities.NvCertificationState.Scheduled)):  # TransitionStartAllowedState
+    raise NvRuleViolation("transitionStart: state transition not allowed")
+  assign  # TransitionStartChangeStateValues
+    C.StateId = Entities.NvCertificationState.Reviewed
+    C.UpdatedOn = CurrDateTime()
+    C.Version = C.Version + 1
+  TransitionStartChangeStatePersist = UpdateNvCertification(Source=C)
+  end
+
+/// ssam-rule-map:{"CheckGetUserId":"Rule_Authenticated_6ab694","ValidateNote":"Rule_ValidateParameterNote_55075f","GetNvCertificationForUpdate":"Rule_LoadC_fetch_e1b659","SetC":"Rule_LoadC_record_8a1990","CheckCCreatedBy":"Rule_LoadC_scope0_da3cb1","CheckCVersion":"Rule_LoadC_version_0eeb8c","CheckCScore":"Rule_checkMissing_6a7e61","TransitionRejectAllowedState":"Rule_transitionReject_allowed_8011a2","TransitionRejectChangeStateValues":"Rule_transitionReject_change_values_64bfda","TransitionRejectChangeStatePersist":"Rule_transitionReject_change_persist_5271c2","SetDecision":"Rule_createDecision_reset_caa0de","SetDecisionParentId":"Rule_createDecision_values_0b035a","CreateNvCertificationDecision":"Rule_createDecision_persist_72b848","SetDecisionId":"Rule_createDecision_identity_5aff2d"}
+server action RejectNvCertificationReview
+  in Note: Text
+  in CId: NvCertification Identifier
+  in CVersion: Long Integer
+  local C: NvCertification
+  local Decision: NvCertificationDecision
+  local WorkflowEmpty2: NvCertificationDecision
+  if not (GetUserId() <> NullIdentifier()):  # CheckGetUserId
+    raise NvRuleViolation("Authentication required")
+  if not ((Trim(Note) <> "") and (Length(Note) >= 5) and (Length(Note) <= 500)):  # ValidateNote
+    raise NvRuleViolation("Invalid Note")
+  GetNvCertificationForUpdate = GetNvCertificationForUpdate(Id=CId)
+  assign  # SetC
+    C = GetNvCertificationForUpdate.Record.NvCertification
+  if not (C.CreatedBy = GetUserId()):  # CheckCCreatedBy
+    raise NvRuleViolation("Record outside requested scope")
+  if not (C.Version = CVersion):  # CheckCVersion
+    raise NvRuleViolation("Record changed; reload before editing")
+  if not (C.Score < 90):  # CheckCScore
+    raise NvRuleViolation("checkMissing")
+  if not ((C.StateId = Entities.NvCertificationState.Reviewed)):  # TransitionRejectAllowedState
+    raise NvRuleViolation("transitionReject: state transition not allowed")
+  assign  # TransitionRejectChangeStateValues
+    C.Closed = False
+    C.StateId = Entities.NvCertificationState.Scheduled
+    C.UpdatedOn = CurrDateTime()
+    C.Version = C.Version + 1
+  TransitionRejectChangeStatePersist = UpdateNvCertification(Source=C)
+  assign  # SetDecision
+    Decision = WorkflowEmpty2
+  assign  # SetDecisionParentId
+    Decision.ParentId = C.Id
+    Decision.Reason = Note
+    Decision.Approved = False
+    Decision.DecidedOn = CurrDateTime()
+    Decision.UpdatedOn = CurrDateTime()
+    Decision.CreatedOn = CurrDateTime()
+    Decision.Version = 1
+  CreateNvCertificationDecision = CreateNvCertificationDecision(Source=Decision)
+  assign  # SetDecisionId
+    Decision.Id = CreateNvCertificationDecision.Id
+  end
+
+/// ssam-rule-map:{"CheckGetUserId":"Rule_Authenticated_6ab694","ValidateNote":"Rule_ValidateParameterNote_55075f","GetNvCertificationForUpdate":"Rule_LoadC_fetch_e1b659","SetC":"Rule_LoadC_record_8a1990","CheckCCreatedBy":"Rule_LoadC_scope0_da3cb1","CheckCVersion":"Rule_LoadC_version_0eeb8c","CheckCScore":"Rule_checkPassing_58fb50","TransitionSealAllowedState":"Rule_transitionSeal_allowed_aa64e3","TransitionSealChangeStateValues":"Rule_transitionSeal_change_values_21d0d5","TransitionSealChangeStatePersist":"Rule_transitionSeal_change_persist_166a75","SetDecision":"Rule_createDecision_reset_caa0de","SetDecisionParentId":"Rule_createDecision_values_0b035a","CreateNvCertificationDecision":"Rule_createDecision_persist_72b848","SetDecisionId":"Rule_createDecision_identity_5aff2d"}
+server action SealNvCertification
+  in Note: Text
+  in CId: NvCertification Identifier
+  in CVersion: Long Integer
+  local C: NvCertification
+  local Decision: NvCertificationDecision
+  local WorkflowEmpty2: NvCertificationDecision
+  if not (GetUserId() <> NullIdentifier()):  # CheckGetUserId
+    raise NvRuleViolation("Authentication required")
+  if not ((Trim(Note) <> "") and (Length(Note) >= 5) and (Length(Note) <= 500)):  # ValidateNote
+    raise NvRuleViolation("Invalid Note")
+  GetNvCertificationForUpdate = GetNvCertificationForUpdate(Id=CId)
+  assign  # SetC
+    C = GetNvCertificationForUpdate.Record.NvCertification
+  if not (C.CreatedBy = GetUserId()):  # CheckCCreatedBy
+    raise NvRuleViolation("Record outside requested scope")
+  if not (C.Version = CVersion):  # CheckCVersion
+    raise NvRuleViolation("Record changed; reload before editing")
+  if not (C.Score >= 95 and C.DueOn >= CurrDate()):  # CheckCScore
+    raise NvRuleViolation("checkPassing")
+  if not ((C.StateId = Entities.NvCertificationState.Reviewed)):  # TransitionSealAllowedState
+    raise NvRuleViolation("transitionSeal: state transition not allowed")
+  assign  # TransitionSealChangeStateValues
+    C.Closed = True
+    C.StateId = Entities.NvCertificationState.Closed
+    C.UpdatedOn = CurrDateTime()
+    C.Version = C.Version + 1
+  TransitionSealChangeStatePersist = UpdateNvCertification(Source=C)
+  assign  # SetDecision
+    Decision = WorkflowEmpty2
+  assign  # SetDecisionParentId
+    Decision.ParentId = C.Id
+    Decision.Reason = Note
+    Decision.Approved = True
+    Decision.DecidedOn = CurrDateTime()
+    Decision.UpdatedOn = CurrDateTime()
+    Decision.CreatedOn = CurrDateTime()
+    Decision.Version = 1
+  CreateNvCertificationDecision = CreateNvCertificationDecision(Source=Decision)
+  assign  # SetDecisionId
+    Decision.Id = CreateNvCertificationDecision.Id
+  end
+
+/// ssam-rule-map:{"CheckGetUserId":"Rule_Authenticated_6ab694","GetNvCertification":"Rule_LoadC_fetch_e1b659","SetC":"Rule_LoadC_record_8a1990","CheckCCreatedBy":"Rule_LoadC_scope0_da3cb1","GetNvCertificationAssignment":"Rule_QueryBudgetRows_query_938015","CheckGetNvCertificationAssignmentCount":"Rule_QueryBudgetRows_complete_528d73","SetBudgetRows":"Rule_QueryBudgetRows_list_91a983","SetCost":"Rule_SummarizeBudget_seed_a1c33b","ForEachBudgetRows":"Rule_SummarizeBudget_each_90bc02","SetCost2":"Rule_SummarizeBudget_each_SummarizeBudg_f227a2","SetCost3":"Rule_ReturnBudget_26a1e1"}
+server action BudgetNvCertificationEffort
+  in CId: NvCertification Identifier
+  out Cost: Decimal
+  out People: Long Integer
+  local C: NvCertification
+  local BudgetRows: NvCertificationAssignment List
+  if not (GetUserId() <> NullIdentifier()):  # CheckGetUserId
+    raise NvRuleViolation("Authentication required")
+  GetNvCertification = GetNvCertification(Id=CId)
+  assign  # SetC
+    C = GetNvCertification.Record.NvCertification
+  if not (C.CreatedBy = GetUserId()):  # CheckCCreatedBy
+    raise NvRuleViolation("Record outside requested scope")
+  GetNvCertificationAssignment = aggregate FROM NvCertificationAssignment WHERE (NvCertificationAssignment.ParentId = C.Id) MAX 120
+  if not (GetNvCertificationAssignment.Count <= 120):  # CheckGetNvCertificationAssignmentCount
+    raise NvRuleViolation("Result exceeds declared limit")
+  assign  # SetBudgetRows
+    BudgetRows = GetNvCertificationAssignment.List
+  assign  # SetCost
+    Cost = 0
+    People = 0
+  foreach BudgetRows:  # ForEachBudgetRows @ruleNew1
+    assign  # SetCost2
+      Cost = Cost + (BudgetRows.Current.Hours*120)
+      People = People + 1
+    next
+  assign  # SetCost3
+    Cost = Cost
+    People = People
+  end
+
+/// ssam-rule-map:{"CheckGetUserId":"Rule_Authenticated_6ab694","GetNvCertification":"Rule_LoadC_fetch_e1b659","SetC":"Rule_LoadC_record_8a1990","CheckCCreatedBy":"Rule_LoadC_scope0_da3cb1","GetNvCertificationEvidence":"Rule_QueryFilesRows_query_0e3908","CheckGetNvCertificationEvidenceCount":"Rule_QueryFilesRows_complete_9a0239","SetFilesRows":"Rule_QueryFilesRows_list_c4b673","SetComplete":"Rule_SummarizeFiles_seed_fecbe5","ForEachFilesRows":"Rule_SummarizeFiles_each_fbe041","SetComplete2":"Rule_SummarizeFiles_each_SummarizeFiles_e37b57","SetComplete3":"Rule_ReturnFiles_47d965"}
+server action InspectNvCertificationFiles
+  in CId: NvCertification Identifier
+  out Complete: Long Integer
+  out Count: Long Integer
+  local C: NvCertification
+  local FilesRows: NvCertificationEvidence List
+  if not (GetUserId() <> NullIdentifier()):  # CheckGetUserId
+    raise NvRuleViolation("Authentication required")
+  GetNvCertification = GetNvCertification(Id=CId)
+  assign  # SetC
+    C = GetNvCertification.Record.NvCertification
+  if not (C.CreatedBy = GetUserId()):  # CheckCCreatedBy
+    raise NvRuleViolation("Record outside requested scope")
+  GetNvCertificationEvidence = aggregate FROM NvCertificationEvidence WHERE (NvCertificationEvidence.ParentId = C.Id) MAX 200
+  if not (GetNvCertificationEvidence.Count <= 200):  # CheckGetNvCertificationEvidenceCount
+    raise NvRuleViolation("Result exceeds declared limit")
+  assign  # SetFilesRows
+    FilesRows = GetNvCertificationEvidence.List
+  assign  # SetComplete
+    Complete = 0
+    Count = 0
+  foreach FilesRows:  # ForEachFilesRows @ruleNew1
+    assign  # SetComplete2
+      Complete = Complete + If(Length(Trim(FilesRows.Current.Digest)) > 0, 1, 0)
+      Count = Count + 1
+    next
+  assign  # SetComplete3
+    Complete = Complete
+    Count = Count
+  end
+
+/// ssam-rule-map:{"CheckGetUserId":"Rule_Authenticated_6ab694","GetNvAuditForUpdate":"Rule_LoadA_fetch_82b9d4","SetA":"Rule_LoadA_record_1b477a","CheckACreatedBy":"Rule_LoadA_scope0_bb502b","CheckAVersion":"Rule_LoadA_version_f1370d","CheckADueOn":"Rule_checkDeadline_c9fa0e","TransitionStartAllowedState":"Rule_transitionStart_allowed_f925e6","TransitionStartChangeStateValues":"Rule_transitionStart_change_values_c8305d","TransitionStartChangeStatePersist":"Rule_transitionStart_change_persist_824312"}
+server action StartNvAuditReview
+  in AId: NvAudit Identifier
+  in AVersion: Long Integer
+  local A: NvAudit
+  if not (GetUserId() <> NullIdentifier()):  # CheckGetUserId
+    raise NvRuleViolation("Authentication required")
+  GetNvAuditForUpdate = GetNvAuditForUpdate(Id=AId)
+  assign  # SetA
+    A = GetNvAuditForUpdate.Record.NvAudit
+  if not (A.CreatedBy = GetUserId()):  # CheckACreatedBy
+    raise NvRuleViolation("Record outside requested scope")
+  if not (A.Version = AVersion):  # CheckAVersion
+    raise NvRuleViolation("Record changed; reload before editing")
+  if not (A.DueOn >= CurrDate() and A.Limit > 0):  # CheckADueOn
+    raise NvRuleViolation("checkDeadline")
+  if not ((A.StateId = Entities.NvAuditState.Scheduled)):  # TransitionStartAllowedState
+    raise NvRuleViolation("transitionStart: state transition not allowed")
+  assign  # TransitionStartChangeStateValues
+    A.StateId = Entities.NvAuditState.Reviewed
+    A.UpdatedOn = CurrDateTime()
+    A.Version = A.Version + 1
+  TransitionStartChangeStatePersist = UpdateNvAudit(Source=A)
+  end
+
+/// ssam-rule-map:{"CheckGetUserId":"Rule_Authenticated_6ab694","ValidateNote":"Rule_ValidateParameterNote_55075f","GetNvAuditForUpdate":"Rule_LoadA_fetch_82b9d4","SetA":"Rule_LoadA_record_1b477a","CheckACreatedBy":"Rule_LoadA_scope0_bb502b","CheckAVersion":"Rule_LoadA_version_f1370d","CheckAScore":"Rule_checkDeficit_c6ba94","TransitionReturnAllowedState":"Rule_transitionReturn_allowed_2c88c8","TransitionReturnChangeStateValues":"Rule_transitionReturn_change_values_8a71fe","TransitionReturnChangeStatePersist":"Rule_transitionReturn_change_persist_ff2ffe","SetDecision":"Rule_createDecision_reset_caa0de","SetDecisionParentId":"Rule_createDecision_values_0b035a","CreateNvAuditDecision":"Rule_createDecision_persist_72b848","SetDecisionId":"Rule_createDecision_identity_5aff2d"}
+server action ReturnNvAuditForCorrections
+  in Note: Text
+  in AId: NvAudit Identifier
+  in AVersion: Long Integer
+  local A: NvAudit
+  local Decision: NvAuditDecision
+  local WorkflowEmpty2: NvAuditDecision
+  if not (GetUserId() <> NullIdentifier()):  # CheckGetUserId
+    raise NvRuleViolation("Authentication required")
+  if not ((Trim(Note) <> "") and (Length(Note) >= 5) and (Length(Note) <= 500)):  # ValidateNote
+    raise NvRuleViolation("Invalid Note")
+  GetNvAuditForUpdate = GetNvAuditForUpdate(Id=AId)
+  assign  # SetA
+    A = GetNvAuditForUpdate.Record.NvAudit
+  if not (A.CreatedBy = GetUserId()):  # CheckACreatedBy
+    raise NvRuleViolation("Record outside requested scope")
+  if not (A.Version = AVersion):  # CheckAVersion
+    raise NvRuleViolation("Record changed; reload before editing")
+  if not (A.Score < A.Limit):  # CheckAScore
+    raise NvRuleViolation("checkDeficit")
+  if not ((A.StateId = Entities.NvAuditState.Reviewed)):  # TransitionReturnAllowedState
+    raise NvRuleViolation("transitionReturn: state transition not allowed")
+  assign  # TransitionReturnChangeStateValues
+    A.StateId = Entities.NvAuditState.Scheduled
+    A.UpdatedOn = CurrDateTime()
+    A.Version = A.Version + 1
+  TransitionReturnChangeStatePersist = UpdateNvAudit(Source=A)
+  assign  # SetDecision
+    Decision = WorkflowEmpty2
+  assign  # SetDecisionParentId
+    Decision.ParentId = A.Id
+    Decision.Reason = Note
+    Decision.Approved = False
+    Decision.DecidedOn = CurrDateTime()
+    Decision.UpdatedOn = CurrDateTime()
+    Decision.CreatedOn = CurrDateTime()
+    Decision.Version = 1
+  CreateNvAuditDecision = CreateNvAuditDecision(Source=Decision)
+  assign  # SetDecisionId
+    Decision.Id = CreateNvAuditDecision.Id
+  end
+
+/// ssam-rule-map:{"CheckGetUserId":"Rule_Authenticated_6ab694","ValidateNote":"Rule_ValidateParameterNote_55075f","GetNvAuditForUpdate":"Rule_LoadA_fetch_82b9d4","SetA":"Rule_LoadA_record_1b477a","CheckACreatedBy":"Rule_LoadA_scope0_bb502b","CheckAVersion":"Rule_LoadA_version_f1370d","CheckAScore":"Rule_checkFullScore_c9e45b","TransitionSealAllowedState":"Rule_transitionSeal_allowed_aa64e3","TransitionSealChangeStateValues":"Rule_transitionSeal_change_values_21d0d5","TransitionSealChangeStatePersist":"Rule_transitionSeal_change_persist_166a75","SetDecision":"Rule_createDecision_reset_caa0de","SetDecisionParentId":"Rule_createDecision_values_0b035a","CreateNvAuditDecision":"Rule_createDecision_persist_72b848","SetDecisionId":"Rule_createDecision_identity_5aff2d"}
+server action SealNvAudit
+  in Note: Text
+  in AId: NvAudit Identifier
+  in AVersion: Long Integer
+  local A: NvAudit
+  local Decision: NvAuditDecision
+  local WorkflowEmpty2: NvAuditDecision
+  if not (GetUserId() <> NullIdentifier()):  # CheckGetUserId
+    raise NvRuleViolation("Authentication required")
+  if not ((Trim(Note) <> "") and (Length(Note) >= 5) and (Length(Note) <= 500)):  # ValidateNote
+    raise NvRuleViolation("Invalid Note")
+  GetNvAuditForUpdate = GetNvAuditForUpdate(Id=AId)
+  assign  # SetA
+    A = GetNvAuditForUpdate.Record.NvAudit
+  if not (A.CreatedBy = GetUserId()):  # CheckACreatedBy
+    raise NvRuleViolation("Record outside requested scope")
+  if not (A.Version = AVersion):  # CheckAVersion
+    raise NvRuleViolation("Record changed; reload before editing")
+  if not (A.Score=A.Limit and A.Limit > 0):  # CheckAScore
+    raise NvRuleViolation("checkFullScore")
+  if not ((A.StateId = Entities.NvAuditState.Reviewed)):  # TransitionSealAllowedState
+    raise NvRuleViolation("transitionSeal: state transition not allowed")
+  assign  # TransitionSealChangeStateValues
+    A.Closed = True
+    A.StateId = Entities.NvAuditState.Closed
+    A.UpdatedOn = CurrDateTime()
+    A.Version = A.Version + 1
+  TransitionSealChangeStatePersist = UpdateNvAudit(Source=A)
+  assign  # SetDecision
+    Decision = WorkflowEmpty2
+  assign  # SetDecisionParentId
+    Decision.ParentId = A.Id
+    Decision.Reason = Note
+    Decision.Approved = True
+    Decision.DecidedOn = CurrDateTime()
+    Decision.UpdatedOn = CurrDateTime()
+    Decision.CreatedOn = CurrDateTime()
+    Decision.Version = 1
+  CreateNvAuditDecision = CreateNvAuditDecision(Source=Decision)
+  assign  # SetDecisionId
+    Decision.Id = CreateNvAuditDecision.Id
+  end
+
+/// ssam-rule-map:{"CheckGetUserId":"Rule_Authenticated_6ab694","GetNvAudit":"Rule_LoadA_fetch_82b9d4","SetA":"Rule_LoadA_record_1b477a","CheckACreatedBy":"Rule_LoadA_scope0_bb502b","GetNvAuditAssignment":"Rule_QueryAssignmentCostRows_query_d5eed9","CheckGetNvAuditAssignmentCount":"Rule_QueryAssignmentCostRows_complete_36684a","SetAssignmentCostRows":"Rule_QueryAssignmentCostRows_list_c10459","SetCost":"Rule_SummarizeAssignmentCost_seed_92fdd4","ForEachAssignmentCostRows":"Rule_SummarizeAssignmentCost_each_955ca0","SetCost2":"Rule_SummarizeAssignmentCost_each_Summa_a32b2c","SetCost3":"Rule_ReturnAssignmentCost_461867"}
+server action CostNvAuditAssignments
+  in AId: NvAudit Identifier
+  out Cost: Decimal
+  out LateHours: Decimal
+  local A: NvAudit
+  local AssignmentCostRows: NvAuditAssignment List
+  if not (GetUserId() <> NullIdentifier()):  # CheckGetUserId
+    raise NvRuleViolation("Authentication required")
+  GetNvAudit = GetNvAudit(Id=AId)
+  assign  # SetA
+    A = GetNvAudit.Record.NvAudit
+  if not (A.CreatedBy = GetUserId()):  # CheckACreatedBy
+    raise NvRuleViolation("Record outside requested scope")
+  GetNvAuditAssignment = aggregate FROM NvAuditAssignment WHERE (NvAuditAssignment.ParentId = A.Id) MAX 300
+  if not (GetNvAuditAssignment.Count <= 300):  # CheckGetNvAuditAssignmentCount
+    raise NvRuleViolation("Result exceeds declared limit")
+  assign  # SetAssignmentCostRows
+    AssignmentCostRows = GetNvAuditAssignment.List
+  assign  # SetCost
+    Cost = 0
+    LateHours = 0
+  foreach AssignmentCostRows:  # ForEachAssignmentCostRows @ruleNew1
+    assign  # SetCost2
+      Cost = Cost + (AssignmentCostRows.Current.Hours*150)
+      LateHours = LateHours + (If(AssignmentCostRows.Current.DueOn < CurrDate(),AssignmentCostRows.Current.Hours,0))
+    next
+  assign  # SetCost3
+    Cost = Cost
+    LateHours = LateHours
+  end
+
+/// ssam-rule-map:{"CheckGetUserId":"Rule_Authenticated_6ab694","GetNvAudit":"Rule_LoadA_fetch_82b9d4","SetA":"Rule_LoadA_record_1b477a","CheckACreatedBy":"Rule_LoadA_scope0_bb502b","GetNvAuditEvidence":"Rule_QueryQualityRows_query_194ea3","CheckGetNvAuditEvidenceCount":"Rule_QueryQualityRows_complete_83ffb3","SetQualityRows":"Rule_QueryQualityRows_list_855cab","SetMissingDigest":"Rule_SummarizeQuality_seed_3024e9","ForEachQualityRows":"Rule_SummarizeQuality_each_95ec4a","SetMissingDigest2":"Rule_SummarizeQuality_each_SummarizeQua_590640","SetMissingDigest3":"Rule_ReturnQuality_247198"}
+server action CheckNvAuditEvidenceQuality
+  in AId: NvAudit Identifier
+  out MissingDigest: Long Integer
+  out Total: Long Integer
+  local A: NvAudit
+  local QualityRows: NvAuditEvidence List
+  if not (GetUserId() <> NullIdentifier()):  # CheckGetUserId
+    raise NvRuleViolation("Authentication required")
+  GetNvAudit = GetNvAudit(Id=AId)
+  assign  # SetA
+    A = GetNvAudit.Record.NvAudit
+  if not (A.CreatedBy = GetUserId()):  # CheckACreatedBy
+    raise NvRuleViolation("Record outside requested scope")
+  GetNvAuditEvidence = aggregate FROM NvAuditEvidence WHERE (NvAuditEvidence.ParentId = A.Id) MAX 400
+  if not (GetNvAuditEvidence.Count <= 400):  # CheckGetNvAuditEvidenceCount
+    raise NvRuleViolation("Result exceeds declared limit")
+  assign  # SetQualityRows
+    QualityRows = GetNvAuditEvidence.List
+  assign  # SetMissingDigest
+    MissingDigest = 0
+    Total = 0
+  foreach QualityRows:  # ForEachQualityRows @ruleNew1
+    assign  # SetMissingDigest2
+      MissingDigest = MissingDigest + If(Length(Trim(QualityRows.Current.Digest)) = 0, 1, 0)
+      Total = Total + 1
+    next
+  assign  # SetMissingDigest3
+    MissingDigest = MissingDigest
+    Total = Total
+  end
+
+/// ssam-rule-map:{"CheckGetUserId":"Rule_Authenticated_6ab694","ValidateAmount":"Rule_ValidateParameterAmount_7570ef","GetNvClaimForUpdate":"Rule_LoadCl_fetch_4bfdec","SetCl":"Rule_LoadCl_record_ac048c","CheckClCreatedBy":"Rule_LoadCl_scope0_9984e5","CheckClVersion":"Rule_LoadCl_version_228c25","CheckAmount":"Rule_checkAssessment_769788","TransitionAssessAllowedState":"Rule_transitionAssess_allowed_31a423","TransitionAssessChangeStateValues":"Rule_transitionAssess_change_values_791707","TransitionAssessChangeStatePersist":"Rule_transitionAssess_change_persist_c07d94"}
+server action AssessNvClaim
+  in Amount: Decimal
+  in ClId: NvClaim Identifier
+  in ClVersion: Long Integer
+  local Cl: NvClaim
+  if not (GetUserId() <> NullIdentifier()):  # CheckGetUserId
+    raise NvRuleViolation("Authentication required")
+  if not ((Amount <= 1000000) and (Amount > 0)):  # ValidateAmount
+    raise NvRuleViolation("Invalid Amount")
+  GetNvClaimForUpdate = GetNvClaimForUpdate(Id=ClId)
+  assign  # SetCl
+    Cl = GetNvClaimForUpdate.Record.NvClaim
+  if not (Cl.CreatedBy = GetUserId()):  # CheckClCreatedBy
+    raise NvRuleViolation("Record outside requested scope")
+  if not (Cl.Version = ClVersion):  # CheckClVersion
+    raise NvRuleViolation("Record changed; reload before editing")
+  if not (Amount >= Cl.Paid and Amount <= Cl.Ceiling):  # CheckAmount
+    raise NvRuleViolation("checkAssessment")
+  if not ((Cl.StateId = Entities.NvClaimState.Open)):  # TransitionAssessAllowedState
+    raise NvRuleViolation("transitionAssess: state transition not allowed")
+  assign  # TransitionAssessChangeStateValues
+    Cl.Amount = Amount
+    Cl.StateId = Entities.NvClaimState.Assessed
+    Cl.UpdatedOn = CurrDateTime()
+    Cl.Version = Cl.Version + 1
+  TransitionAssessChangeStatePersist = UpdateNvClaim(Source=Cl)
+  end
+
+/// ssam-rule-map:{"CheckGetUserId":"Rule_Authenticated_6ab694","GetNvClaimForUpdate":"Rule_LoadCl_fetch_4bfdec","SetCl":"Rule_LoadCl_record_ac048c","CheckClCreatedBy":"Rule_LoadCl_scope0_9984e5","CheckClVersion":"Rule_LoadCl_version_228c25","Checknot":"Rule_checkUncontested_ef8c70","TransitionApproveAllowedState":"Rule_transitionApprove_allowed_7ff178","TransitionApproveChangeStateValues":"Rule_transitionApprove_change_values_b657e1","TransitionApproveChangeStatePersist":"Rule_transitionApprove_change_persist_87265c"}
+server action ApproveNvClaim
+  in ClId: NvClaim Identifier
+  in ClVersion: Long Integer
+  local Cl: NvClaim
+  if not (GetUserId() <> NullIdentifier()):  # CheckGetUserId
+    raise NvRuleViolation("Authentication required")
+  GetNvClaimForUpdate = GetNvClaimForUpdate(Id=ClId)
+  assign  # SetCl
+    Cl = GetNvClaimForUpdate.Record.NvClaim
+  if not (Cl.CreatedBy = GetUserId()):  # CheckClCreatedBy
+    raise NvRuleViolation("Record outside requested scope")
+  if not (Cl.Version = ClVersion):  # CheckClVersion
+    raise NvRuleViolation("Record changed; reload before editing")
+  if not (not Cl.Disputed and Cl.Amount <= Cl.Ceiling):  # Checknot
+    raise NvRuleViolation("checkUncontested")
+  if not ((Cl.StateId = Entities.NvClaimState.Assessed)):  # TransitionApproveAllowedState
+    raise NvRuleViolation("transitionApprove: state transition not allowed")
+  assign  # TransitionApproveChangeStateValues
+    Cl.StateId = Entities.NvClaimState.Approved
+    Cl.UpdatedOn = CurrDateTime()
+    Cl.Version = Cl.Version + 1
+  TransitionApproveChangeStatePersist = UpdateNvClaim(Source=Cl)
+  end
+
+/// ssam-rule-map:{"CheckGetUserId":"Rule_Authenticated_6ab694","GetNvClaimForUpdate":"Rule_LoadCl_fetch_4bfdec","SetCl":"Rule_LoadCl_record_ac048c","CheckClCreatedBy":"Rule_LoadCl_scope0_9984e5","CheckClVersion":"Rule_LoadCl_version_228c25","Checknot":"Rule_checkPaid_a76064","TransitionCloseAllowedState":"Rule_transitionClose_allowed_269b23","TransitionCloseChangeStateValues":"Rule_transitionClose_change_values_3bff3b","TransitionCloseChangeStatePersist":"Rule_transitionClose_change_persist_42dc7f","SetHistory":"Rule_createHistory_reset_c7ffd8","SetHistoryParentId":"Rule_createHistory_values_778e70","CreateNvClaimHistory":"Rule_createHistory_persist_c2d9c5","SetHistoryId":"Rule_createHistory_identity_f92501"}
+server action CloseNvClaim
+  in ClId: NvClaim Identifier
+  in ClVersion: Long Integer
+  local Cl: NvClaim
+  local History: NvClaimHistory
+  local WorkflowEmpty2: NvClaimHistory
+  if not (GetUserId() <> NullIdentifier()):  # CheckGetUserId
+    raise NvRuleViolation("Authentication required")
+  GetNvClaimForUpdate = GetNvClaimForUpdate(Id=ClId)
+  assign  # SetCl
+    Cl = GetNvClaimForUpdate.Record.NvClaim
+  if not (Cl.CreatedBy = GetUserId()):  # CheckClCreatedBy
+    raise NvRuleViolation("Record outside requested scope")
+  if not (Cl.Version = ClVersion):  # CheckClVersion
+    raise NvRuleViolation("Record changed; reload before editing")
+  if not (not Cl.Disputed and Cl.Paid=Cl.Amount):  # Checknot
+    raise NvRuleViolation("checkPaid")
+  if not ((Cl.StateId = Entities.NvClaimState.Approved)):  # TransitionCloseAllowedState
+    raise NvRuleViolation("transitionClose: state transition not allowed")
+  assign  # TransitionCloseChangeStateValues
+    Cl.StateId = Entities.NvClaimState.Settled
+    Cl.UpdatedOn = CurrDateTime()
+    Cl.Version = Cl.Version + 1
+  TransitionCloseChangeStatePersist = UpdateNvClaim(Source=Cl)
+  assign  # SetHistory
+    History = WorkflowEmpty2
+  assign  # SetHistoryParentId
+    History.ParentId = Cl.Id
+    History.Previous = 3
+    History.Next = 4
+    History.ChangedOn = CurrDateTime()
+    History.UpdatedOn = CurrDateTime()
+    History.CreatedOn = CurrDateTime()
+    History.Version = 1
+  CreateNvClaimHistory = CreateNvClaimHistory(Source=History)
+  assign  # SetHistoryId
+    History.Id = CreateNvClaimHistory.Id
+  end
+
+/// ssam-rule-map:{"CheckGetUserId":"Rule_Authenticated_6ab694","GetNvClaim":"Rule_LoadCl_fetch_4bfdec","SetCl":"Rule_LoadCl_record_ac048c","CheckClCreatedBy":"Rule_LoadCl_scope0_9984e5","GetNvClaimCharge":"Rule_QueryTaxRows_query_e85b8d","CheckGetNvClaimChargeCount":"Rule_QueryTaxRows_complete_82f927","SetTaxRows":"Rule_QueryTaxRows_list_db214b","SetTax":"Rule_SummarizeTax_seed_623e87","ForEachTaxRows":"Rule_SummarizeTax_each_9548ec","SetTax2":"Rule_SummarizeTax_each_SummarizeTax_ste_7cbfee","SetTax3":"Rule_ReturnTax_785c65"}
+server action ForecastNvClaimTax
+  in ClId: NvClaim Identifier
+  out Tax: Decimal
+  out Upcoming: Decimal
+  local Cl: NvClaim
+  local TaxRows: NvClaimCharge List
+  if not (GetUserId() <> NullIdentifier()):  # CheckGetUserId
+    raise NvRuleViolation("Authentication required")
+  GetNvClaim = GetNvClaim(Id=ClId)
+  assign  # SetCl
+    Cl = GetNvClaim.Record.NvClaim
+  if not (Cl.CreatedBy = GetUserId()):  # CheckClCreatedBy
+    raise NvRuleViolation("Record outside requested scope")
+  GetNvClaimCharge = aggregate FROM NvClaimCharge WHERE (NvClaimCharge.ParentId = Cl.Id) MAX 300
+  if not (GetNvClaimCharge.Count <= 300):  # CheckGetNvClaimChargeCount
+    raise NvRuleViolation("Result exceeds declared limit")
+  assign  # SetTaxRows
+    TaxRows = GetNvClaimCharge.List
+  assign  # SetTax
+    Tax = 0
+    Upcoming = 0
+  foreach TaxRows:  # ForEachTaxRows @ruleNew1
+    assign  # SetTax2
+      Tax = Tax + (TaxRows.Current.Tax)
+      Upcoming = Upcoming + (If(TaxRows.Current.DueOn >= CurrDate(),TaxRows.Current.Net+TaxRows.Current.Tax,0))
+    next
+  assign  # SetTax3
+    Tax = Tax
+    Upcoming = Upcoming
+  end
+
+/// ssam-rule-map:{"CheckGetUserId":"Rule_Authenticated_6ab694","GetNvClaim":"Rule_LoadCl_fetch_4bfdec","SetCl":"Rule_LoadCl_record_ac048c","CheckClCreatedBy":"Rule_LoadCl_scope0_9984e5","GetNvClaimReview":"Rule_QueryConsensusRows_query_17437e","CheckGetNvClaimReviewCount":"Rule_QueryConsensusRows_complete_797c1a","SetConsensusRows":"Rule_QueryConsensusRows_list_19ac67","SetApprovals":"Rule_SummarizeConsensus_seed_c699d5","ForEachConsensusRows":"Rule_SummarizeConsensus_each_7b2487","SetApprovals2":"Rule_SummarizeConsensus_each_SummarizeC_edaabe","SetApprovals3":"Rule_ReturnConsensus_ecd14f"}
+server action ReviewNvClaimConsensus
+  in ClId: NvClaim Identifier
+  out Approvals: Long Integer
+  out Refusals: Long Integer
+  local Cl: NvClaim
+  local ConsensusRows: NvClaimReview List
+  if not (GetUserId() <> NullIdentifier()):  # CheckGetUserId
+    raise NvRuleViolation("Authentication required")
+  GetNvClaim = GetNvClaim(Id=ClId)
+  assign  # SetCl
+    Cl = GetNvClaim.Record.NvClaim
+  if not (Cl.CreatedBy = GetUserId()):  # CheckClCreatedBy
+    raise NvRuleViolation("Record outside requested scope")
+  GetNvClaimReview = aggregate FROM NvClaimReview WHERE (NvClaimReview.ParentId = Cl.Id) MAX 100
+  if not (GetNvClaimReview.Count <= 100):  # CheckGetNvClaimReviewCount
+    raise NvRuleViolation("Result exceeds declared limit")
+  assign  # SetConsensusRows
+    ConsensusRows = GetNvClaimReview.List
+  assign  # SetApprovals
+    Approvals = 0
+    Refusals = 0
+  foreach ConsensusRows:  # ForEachConsensusRows @ruleNew1
+    assign  # SetApprovals2
+      Approvals = Approvals + If(ConsensusRows.Current.Accepted, 1, 0)
+      Refusals = Refusals + If(not ConsensusRows.Current.Accepted, 1, 0)
+    next
+  assign  # SetApprovals3
+    Approvals = Approvals
+    Refusals = Refusals
+  end
+
+/// ssam-rule-map:{"CheckGetUserId":"Rule_Authenticated_6ab694","ValidateAmount":"Rule_ValidateParameterAmount_7570ef","GetNvRefundForUpdate":"Rule_LoadRf_fetch_7143d9","SetRf":"Rule_LoadRf_record_cd0f23","CheckRfCreatedBy":"Rule_LoadRf_scope0_048490","CheckRfVersion":"Rule_LoadRf_version_6edba4","CheckAmount":"Rule_checkCeiling_1457fd","TransitionAssessAllowedState":"Rule_transitionAssess_allowed_31a423","TransitionAssessChangeStateValues":"Rule_transitionAssess_change_values_791707","TransitionAssessChangeStatePersist":"Rule_transitionAssess_change_persist_c07d94"}
+server action AssessNvRefund
+  in Amount: Decimal
+  in RfId: NvRefund Identifier
+  in RfVersion: Long Integer
+  local Rf: NvRefund
+  if not (GetUserId() <> NullIdentifier()):  # CheckGetUserId
+    raise NvRuleViolation("Authentication required")
+  if not ((Amount <= 1000000) and (Amount > 0)):  # ValidateAmount
+    raise NvRuleViolation("Invalid Amount")
+  GetNvRefundForUpdate = GetNvRefundForUpdate(Id=RfId)
+  assign  # SetRf
+    Rf = GetNvRefundForUpdate.Record.NvRefund
+  if not (Rf.CreatedBy = GetUserId()):  # CheckRfCreatedBy
+    raise NvRuleViolation("Record outside requested scope")
+  if not (Rf.Version = RfVersion):  # CheckRfVersion
+    raise NvRuleViolation("Record changed; reload before editing")
+  if not (Amount <= Rf.Ceiling and Rf.Paid=0):  # CheckAmount
+    raise NvRuleViolation("checkCeiling")
+  if not ((Rf.StateId = Entities.NvRefundState.Open)):  # TransitionAssessAllowedState
+    raise NvRuleViolation("transitionAssess: state transition not allowed")
+  assign  # TransitionAssessChangeStateValues
+    Rf.Amount = Amount
+    Rf.StateId = Entities.NvRefundState.Assessed
+    Rf.UpdatedOn = CurrDateTime()
+    Rf.Version = Rf.Version + 1
+  TransitionAssessChangeStatePersist = UpdateNvRefund(Source=Rf)
+  end
+
+/// ssam-rule-map:{"CheckGetUserId":"Rule_Authenticated_6ab694","GetNvRefundForUpdate":"Rule_LoadRf_fetch_7143d9","SetRf":"Rule_LoadRf_record_cd0f23","CheckRfCreatedBy":"Rule_LoadRf_scope0_048490","CheckRfVersion":"Rule_LoadRf_version_6edba4","Checknot":"Rule_checkClean_397d46","TransitionApproveAllowedState":"Rule_transitionApprove_allowed_7ff178","TransitionApproveChangeStateValues":"Rule_transitionApprove_change_values_b657e1","TransitionApproveChangeStatePersist":"Rule_transitionApprove_change_persist_87265c"}
+server action ApproveNvRefund
+  in RfId: NvRefund Identifier
+  in RfVersion: Long Integer
+  local Rf: NvRefund
+  if not (GetUserId() <> NullIdentifier()):  # CheckGetUserId
+    raise NvRuleViolation("Authentication required")
+  GetNvRefundForUpdate = GetNvRefundForUpdate(Id=RfId)
+  assign  # SetRf
+    Rf = GetNvRefundForUpdate.Record.NvRefund
+  if not (Rf.CreatedBy = GetUserId()):  # CheckRfCreatedBy
+    raise NvRuleViolation("Record outside requested scope")
+  if not (Rf.Version = RfVersion):  # CheckRfVersion
+    raise NvRuleViolation("Record changed; reload before editing")
+  if not (not Rf.Disputed and Rf.Amount > 0):  # Checknot
+    raise NvRuleViolation("checkClean")
+  if not ((Rf.StateId = Entities.NvRefundState.Assessed)):  # TransitionApproveAllowedState
+    raise NvRuleViolation("transitionApprove: state transition not allowed")
+  assign  # TransitionApproveChangeStateValues
+    Rf.StateId = Entities.NvRefundState.Approved
+    Rf.UpdatedOn = CurrDateTime()
+    Rf.Version = Rf.Version + 1
+  TransitionApproveChangeStatePersist = UpdateNvRefund(Source=Rf)
+  end
+
+/// ssam-rule-map:{"CheckGetUserId":"Rule_Authenticated_6ab694","GetNvRefundForUpdate":"Rule_LoadRf_fetch_7143d9","SetRf":"Rule_LoadRf_record_cd0f23","CheckRfCreatedBy":"Rule_LoadRf_scope0_048490","CheckRfVersion":"Rule_LoadRf_version_6edba4","CheckRfPaid":"Rule_checkRefunded_e35abd","TransitionCloseAllowedState":"Rule_transitionClose_allowed_269b23","TransitionCloseChangeStateValues":"Rule_transitionClose_change_values_3bff3b","TransitionCloseChangeStatePersist":"Rule_transitionClose_change_persist_42dc7f","SetHistory":"Rule_createHistory_reset_c7ffd8","SetHistoryParentId":"Rule_createHistory_values_778e70","CreateNvRefundHistory":"Rule_createHistory_persist_c2d9c5","SetHistoryId":"Rule_createHistory_identity_f92501"}
+server action CloseNvRefund
+  in RfId: NvRefund Identifier
+  in RfVersion: Long Integer
+  local Rf: NvRefund
+  local History: NvRefundHistory
+  local WorkflowEmpty2: NvRefundHistory
+  if not (GetUserId() <> NullIdentifier()):  # CheckGetUserId
+    raise NvRuleViolation("Authentication required")
+  GetNvRefundForUpdate = GetNvRefundForUpdate(Id=RfId)
+  assign  # SetRf
+    Rf = GetNvRefundForUpdate.Record.NvRefund
+  if not (Rf.CreatedBy = GetUserId()):  # CheckRfCreatedBy
+    raise NvRuleViolation("Record outside requested scope")
+  if not (Rf.Version = RfVersion):  # CheckRfVersion
+    raise NvRuleViolation("Record changed; reload before editing")
+  if not (Rf.Paid=Rf.Amount and not Rf.Disputed):  # CheckRfPaid
+    raise NvRuleViolation("checkRefunded")
+  if not ((Rf.StateId = Entities.NvRefundState.Approved)):  # TransitionCloseAllowedState
+    raise NvRuleViolation("transitionClose: state transition not allowed")
+  assign  # TransitionCloseChangeStateValues
+    Rf.StateId = Entities.NvRefundState.Settled
+    Rf.UpdatedOn = CurrDateTime()
+    Rf.Version = Rf.Version + 1
+  TransitionCloseChangeStatePersist = UpdateNvRefund(Source=Rf)
+  assign  # SetHistory
+    History = WorkflowEmpty2
+  assign  # SetHistoryParentId
+    History.ParentId = Rf.Id
+    History.Previous = 3
+    History.Next = 4
+    History.ChangedOn = CurrDateTime()
+    History.UpdatedOn = CurrDateTime()
+    History.CreatedOn = CurrDateTime()
+    History.Version = 1
+  CreateNvRefundHistory = CreateNvRefundHistory(Source=History)
+  assign  # SetHistoryId
+    History.Id = CreateNvRefundHistory.Id
+  end
+
+/// ssam-rule-map:{"CheckGetUserId":"Rule_Authenticated_6ab694","GetNvRefund":"Rule_LoadRf_fetch_7143d9","SetRf":"Rule_LoadRf_record_cd0f23","CheckRfCreatedBy":"Rule_LoadRf_scope0_048490","GetNvRefundCharge":"Rule_QueryRefundsRows_query_7f96f2","CheckGetNvRefundChargeCount":"Rule_QueryRefundsRows_complete_e2b904","SetRefundsRows":"Rule_QueryRefundsRows_list_133eb5","SetDue":"Rule_SummarizeRefunds_seed_d5d132","ForEachRefundsRows":"Rule_SummarizeRefunds_each_4ee62d","SetDue2":"Rule_SummarizeRefunds_each_SummarizeRef_b823c2","SetDue3":"Rule_ReturnRefunds_412f2b"}
+server action ForecastNvRefundDue
+  in RfId: NvRefund Identifier
+  out Due: Decimal
+  out Tax: Decimal
+  local Rf: NvRefund
+  local RefundsRows: NvRefundCharge List
+  if not (GetUserId() <> NullIdentifier()):  # CheckGetUserId
+    raise NvRuleViolation("Authentication required")
+  GetNvRefund = GetNvRefund(Id=RfId)
+  assign  # SetRf
+    Rf = GetNvRefund.Record.NvRefund
+  if not (Rf.CreatedBy = GetUserId()):  # CheckRfCreatedBy
+    raise NvRuleViolation("Record outside requested scope")
+  GetNvRefundCharge = aggregate FROM NvRefundCharge WHERE (NvRefundCharge.ParentId = Rf.Id) MAX 200
+  if not (GetNvRefundCharge.Count <= 200):  # CheckGetNvRefundChargeCount
+    raise NvRuleViolation("Result exceeds declared limit")
+  assign  # SetRefundsRows
+    RefundsRows = GetNvRefundCharge.List
+  assign  # SetDue
+    Due = 0
+    Tax = 0
+  foreach RefundsRows:  # ForEachRefundsRows @ruleNew1
+    assign  # SetDue2
+      Due = Due + (If(RefundsRows.Current.DueOn <= CurrDate(),RefundsRows.Current.Net,0))
+      Tax = Tax + (RefundsRows.Current.Tax)
+    next
+  assign  # SetDue3
+    Due = Due
+    Tax = Tax
+  end
+
+/// ssam-rule-map:{"CheckGetUserId":"Rule_Authenticated_6ab694","GetNvRefund":"Rule_LoadRf_fetch_7143d9","SetRf":"Rule_LoadRf_record_cd0f23","CheckRfCreatedBy":"Rule_LoadRf_scope0_048490","GetNvRefundReview":"Rule_QueryEvidenceRows_query_9e7298","CheckGetNvRefundReviewCount":"Rule_QueryEvidenceRows_complete_4ec8f5","SetEvidenceRows":"Rule_QueryEvidenceRows_list_6da22b","SetDocumented":"Rule_SummarizeEvidence_seed_e35c64","ForEachEvidenceRows":"Rule_SummarizeEvidence_each_5bb0fb","SetDocumented2":"Rule_SummarizeEvidence_each_SummarizeEv_5feaf6","SetDocumented3":"Rule_ReturnEvidence_4b8e6f"}
+server action ReviewNvRefundEvidence
+  in RfId: NvRefund Identifier
+  out Documented: Long Integer
+  out Accepted: Long Integer
+  local Rf: NvRefund
+  local EvidenceRows: NvRefundReview List
+  if not (GetUserId() <> NullIdentifier()):  # CheckGetUserId
+    raise NvRuleViolation("Authentication required")
+  GetNvRefund = GetNvRefund(Id=RfId)
+  assign  # SetRf
+    Rf = GetNvRefund.Record.NvRefund
+  if not (Rf.CreatedBy = GetUserId()):  # CheckRfCreatedBy
+    raise NvRuleViolation("Record outside requested scope")
+  GetNvRefundReview = aggregate FROM NvRefundReview WHERE (NvRefundReview.ParentId = Rf.Id) MAX 100
+  if not (GetNvRefundReview.Count <= 100):  # CheckGetNvRefundReviewCount
+    raise NvRuleViolation("Result exceeds declared limit")
+  assign  # SetEvidenceRows
+    EvidenceRows = GetNvRefundReview.List
+  assign  # SetDocumented
+    Documented = 0
+    Accepted = 0
+  foreach EvidenceRows:  # ForEachEvidenceRows @ruleNew1
+    assign  # SetDocumented2
+      Documented = Documented + If(Length(Trim(EvidenceRows.Current.Notes)) >= 10, 1, 0)
+      Accepted = Accepted + If(EvidenceRows.Current.Accepted, 1, 0)
+    next
+  assign  # SetDocumented3
+    Documented = Documented
+    Accepted = Accepted
+  end
+
+/// ssam-rule-map:{"CheckGetUserId":"Rule_Authenticated_6ab694","ValidateAmount":"Rule_ValidateParameterAmount_7570ef","GetNvPenaltyForUpdate":"Rule_LoadPn_fetch_a48a2f","SetPn":"Rule_LoadPn_record_b0a0ed","CheckPnCreatedBy":"Rule_LoadPn_scope0_7e1e8f","CheckPnVersion":"Rule_LoadPn_version_bf281f","CheckPnPaid":"Rule_checkPenalty_e55d63","TransitionAssessAllowedState":"Rule_transitionAssess_allowed_31a423","TransitionAssessChangeStateValues":"Rule_transitionAssess_change_values_791707","TransitionAssessChangeStatePersist":"Rule_transitionAssess_change_persist_c07d94"}
+server action AssessNvPenalty
+  in Amount: Decimal
+  in PnId: NvPenalty Identifier
+  in PnVersion: Long Integer
+  local Pn: NvPenalty
+  if not (GetUserId() <> NullIdentifier()):  # CheckGetUserId
+    raise NvRuleViolation("Authentication required")
+  if not ((Amount <= 1000000) and (Amount > 0)):  # ValidateAmount
+    raise NvRuleViolation("Invalid Amount")
+  GetNvPenaltyForUpdate = GetNvPenaltyForUpdate(Id=PnId)
+  assign  # SetPn
+    Pn = GetNvPenaltyForUpdate.Record.NvPenalty
+  if not (Pn.CreatedBy = GetUserId()):  # CheckPnCreatedBy
+    raise NvRuleViolation("Record outside requested scope")
+  if not (Pn.Version = PnVersion):  # CheckPnVersion
+    raise NvRuleViolation("Record changed; reload before editing")
+  if not (Pn.Paid=0 and Amount <= Pn.Ceiling):  # CheckPnPaid
+    raise NvRuleViolation("checkPenalty")
+  if not ((Pn.StateId = Entities.NvPenaltyState.Open)):  # TransitionAssessAllowedState
+    raise NvRuleViolation("transitionAssess: state transition not allowed")
+  assign  # TransitionAssessChangeStateValues
+    Pn.Amount = Amount
+    Pn.StateId = Entities.NvPenaltyState.Assessed
+    Pn.UpdatedOn = CurrDateTime()
+    Pn.Version = Pn.Version + 1
+  TransitionAssessChangeStatePersist = UpdateNvPenalty(Source=Pn)
+  end
+
+/// ssam-rule-map:{"CheckGetUserId":"Rule_Authenticated_6ab694","GetNvPenaltyForUpdate":"Rule_LoadPn_fetch_a48a2f","SetPn":"Rule_LoadPn_record_b0a0ed","CheckPnCreatedBy":"Rule_LoadPn_scope0_7e1e8f","CheckPnVersion":"Rule_LoadPn_version_bf281f","Checknot":"Rule_checkAppealResolved_069f5b","TransitionApproveAllowedState":"Rule_transitionApprove_allowed_7ff178","TransitionApproveChangeStateValues":"Rule_transitionApprove_change_values_b657e1","TransitionApproveChangeStatePersist":"Rule_transitionApprove_change_persist_87265c"}
+server action ApproveNvPenalty
+  in PnId: NvPenalty Identifier
+  in PnVersion: Long Integer
+  local Pn: NvPenalty
+  if not (GetUserId() <> NullIdentifier()):  # CheckGetUserId
+    raise NvRuleViolation("Authentication required")
+  GetNvPenaltyForUpdate = GetNvPenaltyForUpdate(Id=PnId)
+  assign  # SetPn
+    Pn = GetNvPenaltyForUpdate.Record.NvPenalty
+  if not (Pn.CreatedBy = GetUserId()):  # CheckPnCreatedBy
+    raise NvRuleViolation("Record outside requested scope")
+  if not (Pn.Version = PnVersion):  # CheckPnVersion
+    raise NvRuleViolation("Record changed; reload before editing")
+  if not (not Pn.Disputed and Pn.Amount <= Pn.Ceiling):  # Checknot
+    raise NvRuleViolation("checkAppealResolved")
+  if not ((Pn.StateId = Entities.NvPenaltyState.Assessed)):  # TransitionApproveAllowedState
+    raise NvRuleViolation("transitionApprove: state transition not allowed")
+  assign  # TransitionApproveChangeStateValues
+    Pn.StateId = Entities.NvPenaltyState.Approved
+    Pn.UpdatedOn = CurrDateTime()
+    Pn.Version = Pn.Version + 1
+  TransitionApproveChangeStatePersist = UpdateNvPenalty(Source=Pn)
+  end
+
+/// ssam-rule-map:{"CheckGetUserId":"Rule_Authenticated_6ab694","GetNvPenaltyForUpdate":"Rule_LoadPn_fetch_a48a2f","SetPn":"Rule_LoadPn_record_b0a0ed","CheckPnCreatedBy":"Rule_LoadPn_scope0_7e1e8f","CheckPnVersion":"Rule_LoadPn_version_bf281f","CheckPnPaid":"Rule_checkCollected_de397c","TransitionCloseAllowedState":"Rule_transitionClose_allowed_269b23","TransitionCloseChangeStateValues":"Rule_transitionClose_change_values_3bff3b","TransitionCloseChangeStatePersist":"Rule_transitionClose_change_persist_42dc7f","SetHistory":"Rule_createHistory_reset_c7ffd8","SetHistoryParentId":"Rule_createHistory_values_778e70","CreateNvPenaltyHistory":"Rule_createHistory_persist_c2d9c5","SetHistoryId":"Rule_createHistory_identity_f92501"}
+server action CloseNvPenalty
+  in PnId: NvPenalty Identifier
+  in PnVersion: Long Integer
+  local Pn: NvPenalty
+  local History: NvPenaltyHistory
+  local WorkflowEmpty2: NvPenaltyHistory
+  if not (GetUserId() <> NullIdentifier()):  # CheckGetUserId
+    raise NvRuleViolation("Authentication required")
+  GetNvPenaltyForUpdate = GetNvPenaltyForUpdate(Id=PnId)
+  assign  # SetPn
+    Pn = GetNvPenaltyForUpdate.Record.NvPenalty
+  if not (Pn.CreatedBy = GetUserId()):  # CheckPnCreatedBy
+    raise NvRuleViolation("Record outside requested scope")
+  if not (Pn.Version = PnVersion):  # CheckPnVersion
+    raise NvRuleViolation("Record changed; reload before editing")
+  if not (Pn.Paid=Pn.Amount and not Pn.Disputed):  # CheckPnPaid
+    raise NvRuleViolation("checkCollected")
+  if not ((Pn.StateId = Entities.NvPenaltyState.Approved)):  # TransitionCloseAllowedState
+    raise NvRuleViolation("transitionClose: state transition not allowed")
+  assign  # TransitionCloseChangeStateValues
+    Pn.StateId = Entities.NvPenaltyState.Settled
+    Pn.UpdatedOn = CurrDateTime()
+    Pn.Version = Pn.Version + 1
+  TransitionCloseChangeStatePersist = UpdateNvPenalty(Source=Pn)
+  assign  # SetHistory
+    History = WorkflowEmpty2
+  assign  # SetHistoryParentId
+    History.ParentId = Pn.Id
+    History.Previous = 3
+    History.Next = 4
+    History.ChangedOn = CurrDateTime()
+    History.UpdatedOn = CurrDateTime()
+    History.CreatedOn = CurrDateTime()
+    History.Version = 1
+  CreateNvPenaltyHistory = CreateNvPenaltyHistory(Source=History)
+  assign  # SetHistoryId
+    History.Id = CreateNvPenaltyHistory.Id
+  end
+
+/// ssam-rule-map:{"CheckGetUserId":"Rule_Authenticated_6ab694","GetNvPenalty":"Rule_LoadPn_fetch_a48a2f","SetPn":"Rule_LoadPn_record_b0a0ed","CheckPnCreatedBy":"Rule_LoadPn_scope0_7e1e8f","GetNvPenaltyCharge":"Rule_QueryInterestRows_query_364df9","CheckGetNvPenaltyChargeCount":"Rule_QueryInterestRows_complete_51507c","SetInterestRows":"Rule_QueryInterestRows_list_9f3902","SetInterest":"Rule_SummarizeInterest_seed_fe81d4","ForEachInterestRows":"Rule_SummarizeInterest_each_7a8d28","SetInterest2":"Rule_SummarizeInterest_each_SummarizeIn_e701de","SetInterest3":"Rule_ReturnInterest_282738"}
+server action ForecastNvPenaltyInterest
+  in PnId: NvPenalty Identifier
+  out Interest: Decimal
+  out Principal: Decimal
+  local Pn: NvPenalty
+  local InterestRows: NvPenaltyCharge List
+  if not (GetUserId() <> NullIdentifier()):  # CheckGetUserId
+    raise NvRuleViolation("Authentication required")
+  GetNvPenalty = GetNvPenalty(Id=PnId)
+  assign  # SetPn
+    Pn = GetNvPenalty.Record.NvPenalty
+  if not (Pn.CreatedBy = GetUserId()):  # CheckPnCreatedBy
+    raise NvRuleViolation("Record outside requested scope")
+  GetNvPenaltyCharge = aggregate FROM NvPenaltyCharge WHERE (NvPenaltyCharge.ParentId = Pn.Id) MAX 200
+  if not (GetNvPenaltyCharge.Count <= 200):  # CheckGetNvPenaltyChargeCount
+    raise NvRuleViolation("Result exceeds declared limit")
+  assign  # SetInterestRows
+    InterestRows = GetNvPenaltyCharge.List
+  assign  # SetInterest
+    Interest = 0
+    Principal = 0
+  foreach InterestRows:  # ForEachInterestRows @ruleNew1
+    assign  # SetInterest2
+      Interest = Interest + (If(InterestRows.Current.DueOn < CurrDate(),InterestRows.Current.Net*0.02,0))
+      Principal = Principal + (InterestRows.Current.Net)
+    next
+  assign  # SetInterest3
+    Interest = Interest
+    Principal = Principal
+  end
+
+/// ssam-rule-map:{"CheckGetUserId":"Rule_Authenticated_6ab694","GetNvPenalty":"Rule_LoadPn_fetch_a48a2f","SetPn":"Rule_LoadPn_record_b0a0ed","CheckPnCreatedBy":"Rule_LoadPn_scope0_7e1e8f","GetNvPenaltyAllocation":"Rule_QueryCollectionsRows_query_3d1678","CheckGetNvPenaltyAllocationCount":"Rule_QueryCollectionsRows_complete_a1cff7","SetCollectionsRows":"Rule_QueryCollectionsRows_list_f0bd1e","SetPaid":"Rule_SummarizeCollections_seed_38e87d","ForEachCollectionsRows":"Rule_SummarizeCollections_each_625931","SetPaid2":"Rule_SummarizeCollections_each_Summariz_9bed70","SetPaid3":"Rule_ReturnCollections_3865e7"}
+server action ReviewNvPenaltyCollections
+  in PnId: NvPenalty Identifier
+  out Paid: Decimal
+  out Receipts: Long Integer
+  local Pn: NvPenalty
+  local CollectionsRows: NvPenaltyAllocation List
+  if not (GetUserId() <> NullIdentifier()):  # CheckGetUserId
+    raise NvRuleViolation("Authentication required")
+  GetNvPenalty = GetNvPenalty(Id=PnId)
+  assign  # SetPn
+    Pn = GetNvPenalty.Record.NvPenalty
+  if not (Pn.CreatedBy = GetUserId()):  # CheckPnCreatedBy
+    raise NvRuleViolation("Record outside requested scope")
+  GetNvPenaltyAllocation = aggregate FROM NvPenaltyAllocation WHERE (NvPenaltyAllocation.ParentId = Pn.Id) MAX 200
+  if not (GetNvPenaltyAllocation.Count <= 200):  # CheckGetNvPenaltyAllocationCount
+    raise NvRuleViolation("Result exceeds declared limit")
+  assign  # SetCollectionsRows
+    CollectionsRows = GetNvPenaltyAllocation.List
+  assign  # SetPaid
+    Paid = 0
+    Receipts = 0
+  foreach CollectionsRows:  # ForEachCollectionsRows @ruleNew1
+    assign  # SetPaid2
+      Paid = Paid + (CollectionsRows.Current.Value)
+      Receipts = Receipts + 1
+    next
+  assign  # SetPaid3
+    Paid = Paid
+    Receipts = Receipts
+  end
+
+/// ssam-rule-map:{"CheckGetUserId":"Rule_Authenticated_6ab694","ValidateAmount":"Rule_ValidateParameterAmount_7570ef","GetNvRebateForUpdate":"Rule_LoadRb_fetch_548c35","SetRb":"Rule_LoadRb_record_7d6fea","CheckRbCreatedBy":"Rule_LoadRb_scope0_c6baf8","CheckRbVersion":"Rule_LoadRb_version_518597","CheckRbPaid":"Rule_checkDiscount_8c88e9","TransitionAssessAllowedState":"Rule_transitionAssess_allowed_31a423","TransitionAssessChangeStateValues":"Rule_transitionAssess_change_values_791707","TransitionAssessChangeStatePersist":"Rule_transitionAssess_change_persist_c07d94"}
+server action AssessNvRebate
+  in Amount: Decimal
+  in RbId: NvRebate Identifier
+  in RbVersion: Long Integer
+  local Rb: NvRebate
+  if not (GetUserId() <> NullIdentifier()):  # CheckGetUserId
+    raise NvRuleViolation("Authentication required")
+  if not ((Amount <= 1000000) and (Amount > 0)):  # ValidateAmount
+    raise NvRuleViolation("Invalid Amount")
+  GetNvRebateForUpdate = GetNvRebateForUpdate(Id=RbId)
+  assign  # SetRb
+    Rb = GetNvRebateForUpdate.Record.NvRebate
+  if not (Rb.CreatedBy = GetUserId()):  # CheckRbCreatedBy
+    raise NvRuleViolation("Record outside requested scope")
+  if not (Rb.Version = RbVersion):  # CheckRbVersion
+    raise NvRuleViolation("Record changed; reload before editing")
+  if not (Rb.Paid=0 and Amount <= Rb.Ceiling):  # CheckRbPaid
+    raise NvRuleViolation("checkDiscount")
+  if not ((Rb.StateId = Entities.NvRebateState.Open)):  # TransitionAssessAllowedState
+    raise NvRuleViolation("transitionAssess: state transition not allowed")
+  assign  # TransitionAssessChangeStateValues
+    Rb.Amount = Amount
+    Rb.StateId = Entities.NvRebateState.Assessed
+    Rb.UpdatedOn = CurrDateTime()
+    Rb.Version = Rb.Version + 1
+  TransitionAssessChangeStatePersist = UpdateNvRebate(Source=Rb)
+  end
+
+/// ssam-rule-map:{"CheckGetUserId":"Rule_Authenticated_6ab694","GetNvRebateForUpdate":"Rule_LoadRb_fetch_548c35","SetRb":"Rule_LoadRb_record_7d6fea","CheckRbCreatedBy":"Rule_LoadRb_scope0_c6baf8","CheckRbVersion":"Rule_LoadRb_version_518597","Checknot":"Rule_checkEligibility_ad648e","TransitionApproveAllowedState":"Rule_transitionApprove_allowed_7ff178","TransitionApproveChangeStateValues":"Rule_transitionApprove_change_values_b657e1","TransitionApproveChangeStatePersist":"Rule_transitionApprove_change_persist_87265c"}
+server action ApproveNvRebate
+  in RbId: NvRebate Identifier
+  in RbVersion: Long Integer
+  local Rb: NvRebate
+  if not (GetUserId() <> NullIdentifier()):  # CheckGetUserId
+    raise NvRuleViolation("Authentication required")
+  GetNvRebateForUpdate = GetNvRebateForUpdate(Id=RbId)
+  assign  # SetRb
+    Rb = GetNvRebateForUpdate.Record.NvRebate
+  if not (Rb.CreatedBy = GetUserId()):  # CheckRbCreatedBy
+    raise NvRuleViolation("Record outside requested scope")
+  if not (Rb.Version = RbVersion):  # CheckRbVersion
+    raise NvRuleViolation("Record changed; reload before editing")
+  if not (not Rb.Disputed and Rb.Amount > 0):  # Checknot
+    raise NvRuleViolation("checkEligibility")
+  if not ((Rb.StateId = Entities.NvRebateState.Assessed)):  # TransitionApproveAllowedState
+    raise NvRuleViolation("transitionApprove: state transition not allowed")
+  assign  # TransitionApproveChangeStateValues
+    Rb.StateId = Entities.NvRebateState.Approved
+    Rb.UpdatedOn = CurrDateTime()
+    Rb.Version = Rb.Version + 1
+  TransitionApproveChangeStatePersist = UpdateNvRebate(Source=Rb)
+  end
+
+/// ssam-rule-map:{"CheckGetUserId":"Rule_Authenticated_6ab694","GetNvRebateForUpdate":"Rule_LoadRb_fetch_548c35","SetRb":"Rule_LoadRb_record_7d6fea","CheckRbCreatedBy":"Rule_LoadRb_scope0_c6baf8","CheckRbVersion":"Rule_LoadRb_version_518597","CheckRbPaid":"Rule_checkCredited_95dc90","TransitionCloseAllowedState":"Rule_transitionClose_allowed_269b23","TransitionCloseChangeStateValues":"Rule_transitionClose_change_values_3bff3b","TransitionCloseChangeStatePersist":"Rule_transitionClose_change_persist_42dc7f","SetHistory":"Rule_createHistory_reset_c7ffd8","SetHistoryParentId":"Rule_createHistory_values_778e70","CreateNvRebateHistory":"Rule_createHistory_persist_c2d9c5","SetHistoryId":"Rule_createHistory_identity_f92501"}
+server action CloseNvRebate
+  in RbId: NvRebate Identifier
+  in RbVersion: Long Integer
+  local Rb: NvRebate
+  local History: NvRebateHistory
+  local WorkflowEmpty2: NvRebateHistory
+  if not (GetUserId() <> NullIdentifier()):  # CheckGetUserId
+    raise NvRuleViolation("Authentication required")
+  GetNvRebateForUpdate = GetNvRebateForUpdate(Id=RbId)
+  assign  # SetRb
+    Rb = GetNvRebateForUpdate.Record.NvRebate
+  if not (Rb.CreatedBy = GetUserId()):  # CheckRbCreatedBy
+    raise NvRuleViolation("Record outside requested scope")
+  if not (Rb.Version = RbVersion):  # CheckRbVersion
+    raise NvRuleViolation("Record changed; reload before editing")
+  if not (Rb.Paid=Rb.Amount and not Rb.Disputed):  # CheckRbPaid
+    raise NvRuleViolation("checkCredited")
+  if not ((Rb.StateId = Entities.NvRebateState.Approved)):  # TransitionCloseAllowedState
+    raise NvRuleViolation("transitionClose: state transition not allowed")
+  assign  # TransitionCloseChangeStateValues
+    Rb.StateId = Entities.NvRebateState.Settled
+    Rb.UpdatedOn = CurrDateTime()
+    Rb.Version = Rb.Version + 1
+  TransitionCloseChangeStatePersist = UpdateNvRebate(Source=Rb)
+  assign  # SetHistory
+    History = WorkflowEmpty2
+  assign  # SetHistoryParentId
+    History.ParentId = Rb.Id
+    History.Previous = 3
+    History.Next = 4
+    History.ChangedOn = CurrDateTime()
+    History.UpdatedOn = CurrDateTime()
+    History.CreatedOn = CurrDateTime()
+    History.Version = 1
+  CreateNvRebateHistory = CreateNvRebateHistory(Source=History)
+  assign  # SetHistoryId
+    History.Id = CreateNvRebateHistory.Id
+  end
+
+/// ssam-rule-map:{"CheckGetUserId":"Rule_Authenticated_6ab694","GetNvRebate":"Rule_LoadRb_fetch_548c35","SetRb":"Rule_LoadRb_record_7d6fea","CheckRbCreatedBy":"Rule_LoadRb_scope0_c6baf8","GetNvRebateCharge":"Rule_QueryCreditsRows_query_53e203","CheckGetNvRebateChargeCount":"Rule_QueryCreditsRows_complete_5aebb4","SetCreditsRows":"Rule_QueryCreditsRows_list_451319","SetNet":"Rule_SummarizeCredits_seed_c02853","ForEachCreditsRows":"Rule_SummarizeCredits_each_aa89d1","SetNet2":"Rule_SummarizeCredits_each_SummarizeCre_e08cdc","SetNet3":"Rule_ReturnCredits_5c6088"}
+server action ForecastNvRebateCredits
+  in RbId: NvRebate Identifier
+  out Net: Decimal
+  out AfterTax: Decimal
+  local Rb: NvRebate
+  local CreditsRows: NvRebateCharge List
+  if not (GetUserId() <> NullIdentifier()):  # CheckGetUserId
+    raise NvRuleViolation("Authentication required")
+  GetNvRebate = GetNvRebate(Id=RbId)
+  assign  # SetRb
+    Rb = GetNvRebate.Record.NvRebate
+  if not (Rb.CreatedBy = GetUserId()):  # CheckRbCreatedBy
+    raise NvRuleViolation("Record outside requested scope")
+  GetNvRebateCharge = aggregate FROM NvRebateCharge WHERE (NvRebateCharge.ParentId = Rb.Id) MAX 200
+  if not (GetNvRebateCharge.Count <= 200):  # CheckGetNvRebateChargeCount
+    raise NvRuleViolation("Result exceeds declared limit")
+  assign  # SetCreditsRows
+    CreditsRows = GetNvRebateCharge.List
+  assign  # SetNet
+    Net = 0
+    AfterTax = 0
+  foreach CreditsRows:  # ForEachCreditsRows @ruleNew1
+    assign  # SetNet2
+      Net = Net + (CreditsRows.Current.Net)
+      AfterTax = AfterTax + (CreditsRows.Current.Net-CreditsRows.Current.Tax)
+    next
+  assign  # SetNet3
+    Net = Net
+    AfterTax = AfterTax
+  end
+
+/// ssam-rule-map:{"CheckGetUserId":"Rule_Authenticated_6ab694","GetNvRebate":"Rule_LoadRb_fetch_548c35","SetRb":"Rule_LoadRb_record_7d6fea","CheckRbCreatedBy":"Rule_LoadRb_scope0_c6baf8","GetNvRebateReview":"Rule_QueryDecisionsRows_query_c9ef9f","CheckGetNvRebateReviewCount":"Rule_QueryDecisionsRows_complete_d25b33","SetDecisionsRows":"Rule_QueryDecisionsRows_list_3858aa","SetAccepted":"Rule_SummarizeDecisions_seed_1b0be7","ForEachDecisionsRows":"Rule_SummarizeDecisions_each_673983","SetAccepted2":"Rule_SummarizeDecisions_each_SummarizeD_001011","SetAccepted3":"Rule_ReturnDecisions_d988d5"}
+server action ReviewNvRebateDecisions
+  in RbId: NvRebate Identifier
+  out Accepted: Long Integer
+  out NeedsNotes: Long Integer
+  local Rb: NvRebate
+  local DecisionsRows: NvRebateReview List
+  if not (GetUserId() <> NullIdentifier()):  # CheckGetUserId
+    raise NvRuleViolation("Authentication required")
+  GetNvRebate = GetNvRebate(Id=RbId)
+  assign  # SetRb
+    Rb = GetNvRebate.Record.NvRebate
+  if not (Rb.CreatedBy = GetUserId()):  # CheckRbCreatedBy
+    raise NvRuleViolation("Record outside requested scope")
+  GetNvRebateReview = aggregate FROM NvRebateReview WHERE (NvRebateReview.ParentId = Rb.Id) MAX 100
+  if not (GetNvRebateReview.Count <= 100):  # CheckGetNvRebateReviewCount
+    raise NvRuleViolation("Result exceeds declared limit")
+  assign  # SetDecisionsRows
+    DecisionsRows = GetNvRebateReview.List
+  assign  # SetAccepted
+    Accepted = 0
+    NeedsNotes = 0
+  foreach DecisionsRows:  # ForEachDecisionsRows @ruleNew1
+    assign  # SetAccepted2
+      Accepted = Accepted + If(DecisionsRows.Current.Accepted, 1, 0)
+      NeedsNotes = NeedsNotes + If(not DecisionsRows.Current.Accepted and Length(Trim(DecisionsRows.Current.Notes)) < 10, 1, 0)
+    next
+  assign  # SetAccepted3
+    Accepted = Accepted
+    NeedsNotes = NeedsNotes
+  end
+
+/// ssam-rule-map:{"CheckGetUserId":"Rule_Authenticated_6ab694","GetNvProvisionForUpdate":"Rule_LoadPr_fetch_1bb977","SetPr":"Rule_LoadPr_record_218021","CheckPrCreatedBy":"Rule_LoadPr_scope0_140f2d","CheckPrVersion":"Rule_LoadPr_version_b891b0","CheckPrValidUntil":"Rule_checkExpired_412d6d","TransitionQuarantineAllowedState":"Rule_transitionQuarantine_allowed_62e445","TransitionQuarantineChangeStateValues":"Rule_transitionQuarantin_0feb7d958ed9_e2d33c","TransitionQuarantineChangeStatePersist":"Rule_transitionQuarantin_d372c77b54d2_5873bd"}
+server action QuarantineNvProvision
+  in PrId: NvProvision Identifier
+  in PrVersion: Long Integer
+  local Pr: NvProvision
+  if not (GetUserId() <> NullIdentifier()):  # CheckGetUserId
+    raise NvRuleViolation("Authentication required")
+  GetNvProvisionForUpdate = GetNvProvisionForUpdate(Id=PrId)
+  assign  # SetPr
+    Pr = GetNvProvisionForUpdate.Record.NvProvision
+  if not (Pr.CreatedBy = GetUserId()):  # CheckPrCreatedBy
+    raise NvRuleViolation("Record outside requested scope")
+  if not (Pr.Version = PrVersion):  # CheckPrVersion
+    raise NvRuleViolation("Record changed; reload before editing")
+  if not (Pr.ValidUntil < CurrDate() and Pr.Reserved=0):  # CheckPrValidUntil
+    raise NvRuleViolation("checkExpired")
+  if not ((Pr.StateId = Entities.NvProvisionState.Available)):  # TransitionQuarantineAllowedState
+    raise NvRuleViolation("transitionQuarantine: state transition not allowed")
+  assign  # TransitionQuarantineChangeStateValues
+    Pr.StateId = Entities.NvProvisionState.Expired
+    Pr.UpdatedOn = CurrDateTime()
+    Pr.Version = Pr.Version + 1
+  TransitionQuarantineChangeStatePersist = UpdateNvProvision(Source=Pr)
+  end
+
+/// ssam-rule-map:{"CheckGetUserId":"Rule_Authenticated_6ab694","ValidateQty":"Rule_ValidateParameterQty_89cddf","ValidateNote":"Rule_ValidateParameterNote_55075f","GetNvProvisionForUpdate":"Rule_LoadPr_fetch_1bb977","SetPr":"Rule_LoadPr_record_218021","CheckPrCreatedBy":"Rule_LoadPr_scope0_140f2d","CheckPrVersion":"Rule_LoadPr_version_b891b0","CheckPrStateId":"Rule_checkQuarantine_14f464","SetPrQuantity":"Rule_updateWriteOff_values_7e54db","UpdateNvProvision":"Rule_updateWriteOff_persist_ea91d3","SetMovement":"Rule_createMovement_reset_f5aa15","SetMovementParentId":"Rule_createMovement_values_c88bef","CreateNvProvisionMovement":"Rule_createMovement_persist_479191","SetMovementId":"Rule_createMovement_identity_35626f"}
+server action WriteOffNvProvision
+  in Qty: Decimal
+  in Note: Text
+  in PrId: NvProvision Identifier
+  in PrVersion: Long Integer
+  local Pr: NvProvision
+  local Movement: NvProvisionMovement
+  local WorkflowEmpty2: NvProvisionMovement
+  if not (GetUserId() <> NullIdentifier()):  # CheckGetUserId
+    raise NvRuleViolation("Authentication required")
+  if not ((Qty <= 10000) and (Qty > 0)):  # ValidateQty
+    raise NvRuleViolation("Invalid Qty")
+  if not ((Trim(Note) <> "") and (Length(Note) >= 5) and (Length(Note) <= 500)):  # ValidateNote
+    raise NvRuleViolation("Invalid Note")
+  GetNvProvisionForUpdate = GetNvProvisionForUpdate(Id=PrId)
+  assign  # SetPr
+    Pr = GetNvProvisionForUpdate.Record.NvProvision
+  if not (Pr.CreatedBy = GetUserId()):  # CheckPrCreatedBy
+    raise NvRuleViolation("Record outside requested scope")
+  if not (Pr.Version = PrVersion):  # CheckPrVersion
+    raise NvRuleViolation("Record changed; reload before editing")
+  if not (Pr.StateId=Entities.NvProvisionState.Expired and Pr.Reserved=0 and Qty <= Pr.Quantity):  # CheckPrStateId
+    raise NvRuleViolation("checkQuarantine")
+  assign  # SetPrQuantity
+    Pr.Quantity = Pr.Quantity-Qty
+    Pr.UpdatedOn = CurrDateTime()
+    Pr.Version = Pr.Version + 1
+  UpdateNvProvision = UpdateNvProvision(Source=Pr)
+  assign  # SetMovement
+    Movement = WorkflowEmpty2
+  assign  # SetMovementParentId
+    Movement.ParentId = Pr.Id
+    Movement.Delta = 0-Qty
+    Movement.Reason = Note
+    Movement.OccurredOn = CurrDateTime()
+    Movement.UpdatedOn = CurrDateTime()
+    Movement.CreatedOn = CurrDateTime()
+    Movement.Version = 1
+  CreateNvProvisionMovement = CreateNvProvisionMovement(Source=Movement)
+  assign  # SetMovementId
+    Movement.Id = CreateNvProvisionMovement.Id
+  end
+
+/// ssam-rule-map:{"CheckGetUserId":"Rule_Authenticated_6ab694","ValidateAmount":"Rule_ValidateParameterAmount_7570ef","GetNvProvisionForUpdate":"Rule_LoadPr_fetch_1bb977","SetPr":"Rule_LoadPr_record_218021","CheckPrCreatedBy":"Rule_LoadPr_scope0_140f2d","CheckPrVersion":"Rule_LoadPr_version_b891b0","CheckPrQuantity":"Rule_checkPositiveStock_4074e3","SetPrUnitCost":"Rule_updateRevalue_values_e30012","UpdateNvProvision":"Rule_updateRevalue_persist_405262","SetValuation":"Rule_createValuation_reset_4117cd","SetValuationParentId":"Rule_createValuation_values_952028","CreateNvProvisionValuation":"Rule_createValuation_persist_b713eb","SetValuationId":"Rule_createValuation_identity_d903dc"}
+server action RevalueNvProvision
+  in Amount: Decimal
+  in PrId: NvProvision Identifier
+  in PrVersion: Long Integer
+  local Pr: NvProvision
+  local Valuation: NvProvisionValuation
+  local WorkflowEmpty2: NvProvisionValuation
+  if not (GetUserId() <> NullIdentifier()):  # CheckGetUserId
+    raise NvRuleViolation("Authentication required")
+  if not ((Amount <= 1000000) and (Amount > 0)):  # ValidateAmount
+    raise NvRuleViolation("Invalid Amount")
+  GetNvProvisionForUpdate = GetNvProvisionForUpdate(Id=PrId)
+  assign  # SetPr
+    Pr = GetNvProvisionForUpdate.Record.NvProvision
+  if not (Pr.CreatedBy = GetUserId()):  # CheckPrCreatedBy
+    raise NvRuleViolation("Record outside requested scope")
+  if not (Pr.Version = PrVersion):  # CheckPrVersion
+    raise NvRuleViolation("Record changed; reload before editing")
+  if not (Pr.Quantity > 0 and Amount <= Pr.UnitCost*2):  # CheckPrQuantity
+    raise NvRuleViolation("checkPositiveStock")
+  assign  # SetPrUnitCost
+    Pr.UnitCost = Amount
+    Pr.UpdatedOn = CurrDateTime()
+    Pr.Version = Pr.Version + 1
+  UpdateNvProvision = UpdateNvProvision(Source=Pr)
+  assign  # SetValuation
+    Valuation = WorkflowEmpty2
+  assign  # SetValuationParentId
+    Valuation.ParentId = Pr.Id
+    Valuation.UnitPrice = Amount
+    Valuation.Currency = "BRL"
+    Valuation.EffectiveOn = CurrDate()
+    Valuation.UpdatedOn = CurrDateTime()
+    Valuation.CreatedOn = CurrDateTime()
+    Valuation.Version = 1
+  CreateNvProvisionValuation = CreateNvProvisionValuation(Source=Valuation)
+  assign  # SetValuationId
+    Valuation.Id = CreateNvProvisionValuation.Id
+  end
+
+/// ssam-rule-map:{"CheckGetUserId":"Rule_Authenticated_6ab694","GetNvProvision":"Rule_LoadPr_fetch_1bb977","SetPr":"Rule_LoadPr_record_218021","CheckPrCreatedBy":"Rule_LoadPr_scope0_140f2d","GetNvProvisionLot":"Rule_QueryExpiryRows_query_ce79c1","CheckGetNvProvisionLotCount":"Rule_QueryExpiryRows_complete_ae6e81","SetExpiryRows":"Rule_QueryExpiryRows_list_fd66a3","SetExpiredUnits":"Rule_SummarizeExpiry_seed_8af23d","ForEachExpiryRows":"Rule_SummarizeExpiry_each_0f39bf","SetExpiredUnits2":"Rule_SummarizeExpiry_each_SummarizeExpi_c01389","SetExpiredUnits3":"Rule_ReturnExpiry_1f724e"}
+server action ForecastNvProvisionLoss
+  in PrId: NvProvision Identifier
+  out ExpiredUnits: Decimal
+  out ValidLots: Long Integer
+  local Pr: NvProvision
+  local ExpiryRows: NvProvisionLot List
+  if not (GetUserId() <> NullIdentifier()):  # CheckGetUserId
+    raise NvRuleViolation("Authentication required")
+  GetNvProvision = GetNvProvision(Id=PrId)
+  assign  # SetPr
+    Pr = GetNvProvision.Record.NvProvision
+  if not (Pr.CreatedBy = GetUserId()):  # CheckPrCreatedBy
+    raise NvRuleViolation("Record outside requested scope")
+  GetNvProvisionLot = aggregate FROM NvProvisionLot WHERE (NvProvisionLot.ParentId = Pr.Id) MAX 500
+  if not (GetNvProvisionLot.Count <= 500):  # CheckGetNvProvisionLotCount
+    raise NvRuleViolation("Result exceeds declared limit")
+  assign  # SetExpiryRows
+    ExpiryRows = GetNvProvisionLot.List
+  assign  # SetExpiredUnits
+    ExpiredUnits = 0
+    ValidLots = 0
+  foreach ExpiryRows:  # ForEachExpiryRows @ruleNew1
+    assign  # SetExpiredUnits2
+      ExpiredUnits = ExpiredUnits + (If(ExpiryRows.Current.Expiry < CurrDate(),ExpiryRows.Current.Units,0))
+      ValidLots = ValidLots + If(ExpiryRows.Current.Expiry >= CurrDate(), 1, 0)
+    next
+  assign  # SetExpiredUnits3
+    ExpiredUnits = ExpiredUnits
+    ValidLots = ValidLots
+  end
+
+/// ssam-rule-map:{"CheckGetUserId":"Rule_Authenticated_6ab694","GetNvProvision":"Rule_LoadPr_fetch_1bb977","SetPr":"Rule_LoadPr_record_218021","CheckPrCreatedBy":"Rule_LoadPr_scope0_140f2d","GetNvProvisionReservation":"Rule_QueryHoldsRows_query_a57c2c","CheckGetNvProvisionReservationCount":"Rule_QueryHoldsRows_complete_b42ae9","SetHoldsRows":"Rule_QueryHoldsRows_list_8a4925","SetOverdue":"Rule_SummarizeHolds_seed_fe6063","ForEachHoldsRows":"Rule_SummarizeHolds_each_140908","SetOverdue2":"Rule_SummarizeHolds_each_SummarizeHolds_07260a","SetOverdue3":"Rule_ReturnHolds_cf5dee"}
+server action ReviewNvProvisionReservations
+  in PrId: NvProvision Identifier
+  out Overdue: Decimal
+  out Released: Long Integer
+  local Pr: NvProvision
+  local HoldsRows: NvProvisionReservation List
+  if not (GetUserId() <> NullIdentifier()):  # CheckGetUserId
+    raise NvRuleViolation("Authentication required")
+  GetNvProvision = GetNvProvision(Id=PrId)
+  assign  # SetPr
+    Pr = GetNvProvision.Record.NvProvision
+  if not (Pr.CreatedBy = GetUserId()):  # CheckPrCreatedBy
+    raise NvRuleViolation("Record outside requested scope")
+  GetNvProvisionReservation = aggregate FROM NvProvisionReservation WHERE (NvProvisionReservation.ParentId = Pr.Id) MAX 500
+  if not (GetNvProvisionReservation.Count <= 500):  # CheckGetNvProvisionReservationCount
+    raise NvRuleViolation("Result exceeds declared limit")
+  assign  # SetHoldsRows
+    HoldsRows = GetNvProvisionReservation.List
+  assign  # SetOverdue
+    Overdue = 0
+    Released = 0
+  foreach HoldsRows:  # ForEachHoldsRows @ruleNew1
+    assign  # SetOverdue2
+      Overdue = Overdue + (If(not HoldsRows.Current.Released and HoldsRows.Current.ReleaseOn < CurrDate(),HoldsRows.Current.Units,0))
+      Released = Released + If(HoldsRows.Current.Released, 1, 0)
+    next
+  assign  # SetOverdue3
+    Overdue = Overdue
+    Released = Released
+  end
+
+/// ssam-rule-map:{"CheckGetUserId":"Rule_Authenticated_6ab694","GetNvSpareForUpdate":"Rule_LoadSp_fetch_063496","SetSp":"Rule_LoadSp_record_59e09c","CheckSpCreatedBy":"Rule_LoadSp_scope0_a93267","CheckSpVersion":"Rule_LoadSp_version_007b44","CheckSpQuantity":"Rule_checkInventory_129c96","TransitionHoldAllowedState":"Rule_transitionHold_allowed_b964e6","TransitionHoldChangeStateValues":"Rule_transitionHold_change_values_d8bee2","TransitionHoldChangeStatePersist":"Rule_transitionHold_change_persist_ea5568"}
+server action HoldNvSpareStock
+  in SpId: NvSpare Identifier
+  in SpVersion: Long Integer
+  local Sp: NvSpare
+  if not (GetUserId() <> NullIdentifier()):  # CheckGetUserId
+    raise NvRuleViolation("Authentication required")
+  GetNvSpareForUpdate = GetNvSpareForUpdate(Id=SpId)
+  assign  # SetSp
+    Sp = GetNvSpareForUpdate.Record.NvSpare
+  if not (Sp.CreatedBy = GetUserId()):  # CheckSpCreatedBy
+    raise NvRuleViolation("Record outside requested scope")
+  if not (Sp.Version = SpVersion):  # CheckSpVersion
+    raise NvRuleViolation("Record changed; reload before editing")
+  if not (Sp.Quantity > 0 and Sp.Reserved > 0):  # CheckSpQuantity
+    raise NvRuleViolation("checkInventory")
+  if not ((Sp.StateId = Entities.NvSpareState.Available)):  # TransitionHoldAllowedState
+    raise NvRuleViolation("transitionHold: state transition not allowed")
+  assign  # TransitionHoldChangeStateValues
+    Sp.StateId = Entities.NvSpareState.Held
+    Sp.UpdatedOn = CurrDateTime()
+    Sp.Version = Sp.Version + 1
+  TransitionHoldChangeStatePersist = UpdateNvSpare(Source=Sp)
+  end
+
+/// ssam-rule-map:{"CheckGetUserId":"Rule_Authenticated_6ab694","GetNvSpareForUpdate":"Rule_LoadSp_fetch_063496","SetSp":"Rule_LoadSp_record_59e09c","CheckSpCreatedBy":"Rule_LoadSp_scope0_a93267","CheckSpVersion":"Rule_LoadSp_version_007b44","CheckSpReserved":"Rule_checkNoHolds_0ceada","TransitionReleaseAllowedState":"Rule_transitionRelease_allowed_90646a","TransitionReleaseChangeStateValues":"Rule_transitionRelease_change_values_79b715","TransitionReleaseChangeStatePersist":"Rule_transitionRelease_change_persist_57420e"}
+server action UnholdNvSpareStock
+  in SpId: NvSpare Identifier
+  in SpVersion: Long Integer
+  local Sp: NvSpare
+  if not (GetUserId() <> NullIdentifier()):  # CheckGetUserId
+    raise NvRuleViolation("Authentication required")
+  GetNvSpareForUpdate = GetNvSpareForUpdate(Id=SpId)
+  assign  # SetSp
+    Sp = GetNvSpareForUpdate.Record.NvSpare
+  if not (Sp.CreatedBy = GetUserId()):  # CheckSpCreatedBy
+    raise NvRuleViolation("Record outside requested scope")
+  if not (Sp.Version = SpVersion):  # CheckSpVersion
+    raise NvRuleViolation("Record changed; reload before editing")
+  if not (Sp.Reserved=0 and Sp.ValidUntil >= CurrDate()):  # CheckSpReserved
+    raise NvRuleViolation("checkNoHolds")
+  if not ((Sp.StateId = Entities.NvSpareState.Held)):  # TransitionReleaseAllowedState
+    raise NvRuleViolation("transitionRelease: state transition not allowed")
+  assign  # TransitionReleaseChangeStateValues
+    Sp.StateId = Entities.NvSpareState.Available
+    Sp.UpdatedOn = CurrDateTime()
+    Sp.Version = Sp.Version + 1
+  TransitionReleaseChangeStatePersist = UpdateNvSpare(Source=Sp)
+  end
+
+/// ssam-rule-map:{"CheckGetUserId":"Rule_Authenticated_6ab694","ValidateAmount":"Rule_ValidateParameterAmount_7570ef","GetNvSpareForUpdate":"Rule_LoadSp_fetch_063496","SetSp":"Rule_LoadSp_record_59e09c","CheckSpCreatedBy":"Rule_LoadSp_scope0_a93267","CheckSpVersion":"Rule_LoadSp_version_007b44","CheckAmount":"Rule_checkVendorPrice_48b772","SetSpUnitCost":"Rule_updatePrice_values_e52bd5","UpdateNvSpare":"Rule_updatePrice_persist_240fe9","SetValuation":"Rule_createValuation_reset_4117cd","SetValuationParentId":"Rule_createValuation_values_952028","CreateNvSpareValuation":"Rule_createValuation_persist_b713eb","SetValuationId":"Rule_createValuation_identity_d903dc"}
+server action RevalueNvSpare
+  in Amount: Decimal
+  in SpId: NvSpare Identifier
+  in SpVersion: Long Integer
+  local Sp: NvSpare
+  local Valuation: NvSpareValuation
+  local WorkflowEmpty2: NvSpareValuation
+  if not (GetUserId() <> NullIdentifier()):  # CheckGetUserId
+    raise NvRuleViolation("Authentication required")
+  if not ((Amount <= 1000000) and (Amount > 0)):  # ValidateAmount
+    raise NvRuleViolation("Invalid Amount")
+  GetNvSpareForUpdate = GetNvSpareForUpdate(Id=SpId)
+  assign  # SetSp
+    Sp = GetNvSpareForUpdate.Record.NvSpare
+  if not (Sp.CreatedBy = GetUserId()):  # CheckSpCreatedBy
+    raise NvRuleViolation("Record outside requested scope")
+  if not (Sp.Version = SpVersion):  # CheckSpVersion
+    raise NvRuleViolation("Record changed; reload before editing")
+  if not (Amount <= Sp.UnitCost*1.2 and Sp.Quantity > 0):  # CheckAmount
+    raise NvRuleViolation("checkVendorPrice")
+  assign  # SetSpUnitCost
+    Sp.UnitCost = Amount
+    Sp.UpdatedOn = CurrDateTime()
+    Sp.Version = Sp.Version + 1
+  UpdateNvSpare = UpdateNvSpare(Source=Sp)
+  assign  # SetValuation
+    Valuation = WorkflowEmpty2
+  assign  # SetValuationParentId
+    Valuation.ParentId = Sp.Id
+    Valuation.UnitPrice = Amount
+    Valuation.Currency = "BRL"
+    Valuation.EffectiveOn = CurrDate()
+    Valuation.UpdatedOn = CurrDateTime()
+    Valuation.CreatedOn = CurrDateTime()
+    Valuation.Version = 1
+  CreateNvSpareValuation = CreateNvSpareValuation(Source=Valuation)
+  assign  # SetValuationId
+    Valuation.Id = CreateNvSpareValuation.Id
+  end
+
+/// ssam-rule-map:{"CheckGetUserId":"Rule_Authenticated_6ab694","GetNvSpare":"Rule_LoadSp_fetch_063496","SetSp":"Rule_LoadSp_record_59e09c","CheckSpCreatedBy":"Rule_LoadSp_scope0_a93267","GetNvSpareReservation":"Rule_QueryReserveRows_query_347a10","CheckGetNvSpareReservationCount":"Rule_QueryReserveRows_complete_4a98a9","SetReserveRows":"Rule_QueryReserveRows_list_48a980","SetCurrent":"Rule_SummarizeReserve_seed_a91e4d","ForEachReserveRows":"Rule_SummarizeReserve_each_5aa09a","SetCurrent2":"Rule_SummarizeReserve_each_SummarizeRes_6ff67e","SetCurrent3":"Rule_ReturnReserve_a2f30c"}
+server action ForecastNvSpareReserve
+  in SpId: NvSpare Identifier
+  out Current: Decimal
+  out Expired: Long Integer
+  local Sp: NvSpare
+  local ReserveRows: NvSpareReservation List
+  if not (GetUserId() <> NullIdentifier()):  # CheckGetUserId
+    raise NvRuleViolation("Authentication required")
+  GetNvSpare = GetNvSpare(Id=SpId)
+  assign  # SetSp
+    Sp = GetNvSpare.Record.NvSpare
+  if not (Sp.CreatedBy = GetUserId()):  # CheckSpCreatedBy
+    raise NvRuleViolation("Record outside requested scope")
+  GetNvSpareReservation = aggregate FROM NvSpareReservation WHERE (NvSpareReservation.ParentId = Sp.Id) MAX 400
+  if not (GetNvSpareReservation.Count <= 400):  # CheckGetNvSpareReservationCount
+    raise NvRuleViolation("Result exceeds declared limit")
+  assign  # SetReserveRows
+    ReserveRows = GetNvSpareReservation.List
+  assign  # SetCurrent
+    Current = 0
+    Expired = 0
+  foreach ReserveRows:  # ForEachReserveRows @ruleNew1
+    assign  # SetCurrent2
+      Current = Current + (If(ReserveRows.Current.Released,0,ReserveRows.Current.Units))
+      Expired = Expired + If(not ReserveRows.Current.Released and ReserveRows.Current.ReleaseOn < CurrDate(), 1, 0)
+    next
+  assign  # SetCurrent3
+    Current = Current
+    Expired = Expired
+  end
+
+/// ssam-rule-map:{"CheckGetUserId":"Rule_Authenticated_6ab694","GetNvSpare":"Rule_LoadSp_fetch_063496","SetSp":"Rule_LoadSp_record_59e09c","CheckSpCreatedBy":"Rule_LoadSp_scope0_a93267","GetNvSpareMovement":"Rule_QueryFlowRows_query_fa5ca1","CheckGetNvSpareMovementCount":"Rule_QueryFlowRows_complete_839098","SetFlowRows":"Rule_QueryFlowRows_list_9d0d1e","SetReceipts":"Rule_SummarizeFlow_seed_ab39f2","ForEachFlowRows":"Rule_SummarizeFlow_each_87c66c","SetReceipts2":"Rule_SummarizeFlow_each_SummarizeFlow_s_1f9c62","SetReceipts3":"Rule_ReturnFlow_6974eb"}
+server action ReviewNvSpareMovements
+  in SpId: NvSpare Identifier
+  out Receipts: Decimal
+  out Issues: Decimal
+  local Sp: NvSpare
+  local FlowRows: NvSpareMovement List
+  if not (GetUserId() <> NullIdentifier()):  # CheckGetUserId
+    raise NvRuleViolation("Authentication required")
+  GetNvSpare = GetNvSpare(Id=SpId)
+  assign  # SetSp
+    Sp = GetNvSpare.Record.NvSpare
+  if not (Sp.CreatedBy = GetUserId()):  # CheckSpCreatedBy
+    raise NvRuleViolation("Record outside requested scope")
+  GetNvSpareMovement = aggregate FROM NvSpareMovement WHERE (NvSpareMovement.ParentId = Sp.Id) MAX 500
+  if not (GetNvSpareMovement.Count <= 500):  # CheckGetNvSpareMovementCount
+    raise NvRuleViolation("Result exceeds declared limit")
+  assign  # SetFlowRows
+    FlowRows = GetNvSpareMovement.List
+  assign  # SetReceipts
+    Receipts = 0
+    Issues = 0
+  foreach FlowRows:  # ForEachFlowRows @ruleNew1
+    assign  # SetReceipts2
+      Receipts = Receipts + (If(FlowRows.Current.Delta > 0,FlowRows.Current.Delta,0))
+      Issues = Issues + (If(FlowRows.Current.Delta < 0,0-FlowRows.Current.Delta,0))
+    next
+  assign  # SetReceipts3
+    Receipts = Receipts
+    Issues = Issues
+  end
+
+/// ssam-rule-map:{"CheckGetUserId":"Rule_Authenticated_6ab694","GetNvFuelForUpdate":"Rule_LoadFu_fetch_57c546","SetFu":"Rule_LoadFu_record_00b863","CheckFuCreatedBy":"Rule_LoadFu_scope0_07301d","CheckFuVersion":"Rule_LoadFu_version_f9a005","CheckFuQuantity":"Rule_checkEmpty_faaef4","TransitionExhaustAllowedState":"Rule_transitionExhaust_allowed_24cb75","TransitionExhaustChangeStateValues":"Rule_transitionExhaust_change_values_71f287","TransitionExhaustChangeStatePersist":"Rule_transitionExhaust_change_persist_2e4444"}
+server action MarkNvFuelExhausted
+  in FuId: NvFuel Identifier
+  in FuVersion: Long Integer
+  local Fu: NvFuel
+  if not (GetUserId() <> NullIdentifier()):  # CheckGetUserId
+    raise NvRuleViolation("Authentication required")
+  GetNvFuelForUpdate = GetNvFuelForUpdate(Id=FuId)
+  assign  # SetFu
+    Fu = GetNvFuelForUpdate.Record.NvFuel
+  if not (Fu.CreatedBy = GetUserId()):  # CheckFuCreatedBy
+    raise NvRuleViolation("Record outside requested scope")
+  if not (Fu.Version = FuVersion):  # CheckFuVersion
+    raise NvRuleViolation("Record changed; reload before editing")
+  if not (Fu.Quantity=0 and Fu.Reserved=0):  # CheckFuQuantity
+    raise NvRuleViolation("checkEmpty")
+  if not ((Fu.StateId = Entities.NvFuelState.Available) or (Fu.StateId = Entities.NvFuelState.Held)):  # TransitionExhaustAllowedState
+    raise NvRuleViolation("transitionExhaust: state transition not allowed")
+  assign  # TransitionExhaustChangeStateValues
+    Fu.StateId = Entities.NvFuelState.Exhausted
+    Fu.UpdatedOn = CurrDateTime()
+    Fu.Version = Fu.Version + 1
+  TransitionExhaustChangeStatePersist = UpdateNvFuel(Source=Fu)
+  end
+
+/// ssam-rule-map:{"CheckGetUserId":"Rule_Authenticated_6ab694","GetNvFuelForUpdate":"Rule_LoadFu_fetch_57c546","SetFu":"Rule_LoadFu_record_00b863","CheckFuCreatedBy":"Rule_LoadFu_scope0_07301d","CheckFuVersion":"Rule_LoadFu_version_f9a005","CheckFuQuantity":"Rule_checkReplenished_f7e9b7","TransitionReactivateAllowedState":"Rule_transitionReactivate_allowed_2cbd00","TransitionReactivateChangeStateValues":"Rule_transitionReactivat_03d9f491c85c_09275a","TransitionReactivateChangeStatePersist":"Rule_transitionReactivat_44107d066643_3555af"}
+server action ReactivateNvFuel
+  in FuId: NvFuel Identifier
+  in FuVersion: Long Integer
+  local Fu: NvFuel
+  if not (GetUserId() <> NullIdentifier()):  # CheckGetUserId
+    raise NvRuleViolation("Authentication required")
+  GetNvFuelForUpdate = GetNvFuelForUpdate(Id=FuId)
+  assign  # SetFu
+    Fu = GetNvFuelForUpdate.Record.NvFuel
+  if not (Fu.CreatedBy = GetUserId()):  # CheckFuCreatedBy
+    raise NvRuleViolation("Record outside requested scope")
+  if not (Fu.Version = FuVersion):  # CheckFuVersion
+    raise NvRuleViolation("Record changed; reload before editing")
+  if not (Fu.Quantity >= Fu.Capacity*0.2 and Fu.ValidUntil >= CurrDate()):  # CheckFuQuantity
+    raise NvRuleViolation("checkReplenished")
+  if not ((Fu.StateId = Entities.NvFuelState.Exhausted)):  # TransitionReactivateAllowedState
+    raise NvRuleViolation("transitionReactivate: state transition not allowed")
+  assign  # TransitionReactivateChangeStateValues
+    Fu.StateId = Entities.NvFuelState.Available
+    Fu.UpdatedOn = CurrDateTime()
+    Fu.Version = Fu.Version + 1
+  TransitionReactivateChangeStatePersist = UpdateNvFuel(Source=Fu)
+  end
+
+/// ssam-rule-map:{"CheckGetUserId":"Rule_Authenticated_6ab694","ValidateQty":"Rule_ValidateParameterQty_89cddf","ValidateNote":"Rule_ValidateParameterNote_55075f","GetNvFuelForUpdate":"Rule_LoadFu_fetch_57c546","SetFu":"Rule_LoadFu_record_00b863","CheckFuCreatedBy":"Rule_LoadFu_scope0_07301d","CheckFuVersion":"Rule_LoadFu_version_f9a005","CheckQty":"Rule_checkLoss_84360b","SetFuQuantity":"Rule_updateLoss_values_e41a5d","UpdateNvFuel":"Rule_updateLoss_persist_df7aba","SetMovement":"Rule_createMovement_reset_f5aa15","SetMovementParentId":"Rule_createMovement_values_c88bef","CreateNvFuelMovement":"Rule_createMovement_persist_479191","SetMovementId":"Rule_createMovement_identity_35626f"}
+server action AdjustNvFuelLoss
+  in Qty: Decimal
+  in Note: Text
+  in FuId: NvFuel Identifier
+  in FuVersion: Long Integer
+  local Fu: NvFuel
+  local Movement: NvFuelMovement
+  local WorkflowEmpty2: NvFuelMovement
+  if not (GetUserId() <> NullIdentifier()):  # CheckGetUserId
+    raise NvRuleViolation("Authentication required")
+  if not ((Qty <= 10000) and (Qty > 0)):  # ValidateQty
+    raise NvRuleViolation("Invalid Qty")
+  if not ((Trim(Note) <> "") and (Length(Note) >= 5) and (Length(Note) <= 500)):  # ValidateNote
+    raise NvRuleViolation("Invalid Note")
+  GetNvFuelForUpdate = GetNvFuelForUpdate(Id=FuId)
+  assign  # SetFu
+    Fu = GetNvFuelForUpdate.Record.NvFuel
+  if not (Fu.CreatedBy = GetUserId()):  # CheckFuCreatedBy
+    raise NvRuleViolation("Record outside requested scope")
+  if not (Fu.Version = FuVersion):  # CheckFuVersion
+    raise NvRuleViolation("Record changed; reload before editing")
+  if not (Qty <= Fu.Quantity-Fu.Reserved and Qty <= Fu.Quantity*0.01):  # CheckQty
+    raise NvRuleViolation("checkLoss")
+  assign  # SetFuQuantity
+    Fu.Quantity = Fu.Quantity-Qty
+    Fu.UpdatedOn = CurrDateTime()
+    Fu.Version = Fu.Version + 1
+  UpdateNvFuel = UpdateNvFuel(Source=Fu)
+  assign  # SetMovement
+    Movement = WorkflowEmpty2
+  assign  # SetMovementParentId
+    Movement.ParentId = Fu.Id
+    Movement.Delta = 0-Qty
+    Movement.Reason = Note
+    Movement.OccurredOn = CurrDateTime()
+    Movement.UpdatedOn = CurrDateTime()
+    Movement.CreatedOn = CurrDateTime()
+    Movement.Version = 1
+  CreateNvFuelMovement = CreateNvFuelMovement(Source=Movement)
+  assign  # SetMovementId
+    Movement.Id = CreateNvFuelMovement.Id
+  end
+
+/// ssam-rule-map:{"CheckGetUserId":"Rule_Authenticated_6ab694","GetNvFuel":"Rule_LoadFu_fetch_57c546","SetFu":"Rule_LoadFu_record_00b863","CheckFuCreatedBy":"Rule_LoadFu_scope0_07301d","GetNvFuelLot":"Rule_QueryLotsRows_query_4dc699","CheckGetNvFuelLotCount":"Rule_QueryLotsRows_complete_acd1ac","SetLotsRows":"Rule_QueryLotsRows_list_7faa0d","SetExpiring":"Rule_SummarizeLots_seed_bf4647","ForEachLotsRows":"Rule_SummarizeLots_each_23f9f0","SetExpiring2":"Rule_SummarizeLots_each_SummarizeLots_s_ccc6a7","SetExpiring3":"Rule_ReturnLots_922bf9"}
+server action ForecastNvFuelExpiry
+  in FuId: NvFuel Identifier
+  out Expiring: Decimal
+  out Batches: Long Integer
+  local Fu: NvFuel
+  local LotsRows: NvFuelLot List
+  if not (GetUserId() <> NullIdentifier()):  # CheckGetUserId
+    raise NvRuleViolation("Authentication required")
+  GetNvFuel = GetNvFuel(Id=FuId)
+  assign  # SetFu
+    Fu = GetNvFuel.Record.NvFuel
+  if not (Fu.CreatedBy = GetUserId()):  # CheckFuCreatedBy
+    raise NvRuleViolation("Record outside requested scope")
+  GetNvFuelLot = aggregate FROM NvFuelLot WHERE (NvFuelLot.ParentId = Fu.Id) MAX 300
+  if not (GetNvFuelLot.Count <= 300):  # CheckGetNvFuelLotCount
+    raise NvRuleViolation("Result exceeds declared limit")
+  assign  # SetLotsRows
+    LotsRows = GetNvFuelLot.List
+  assign  # SetExpiring
+    Expiring = 0
+    Batches = 0
+  foreach LotsRows:  # ForEachLotsRows @ruleNew1
+    assign  # SetExpiring2
+      Expiring = Expiring + (If(LotsRows.Current.Expiry <= DateTimeToDate(AddDays(CurrDate(),7)),LotsRows.Current.Units,0))
+      Batches = Batches + 1
+    next
+  assign  # SetExpiring3
+    Expiring = Expiring
+    Batches = Batches
+  end
+
+/// ssam-rule-map:{"CheckGetUserId":"Rule_Authenticated_6ab694","GetNvFuel":"Rule_LoadFu_fetch_57c546","SetFu":"Rule_LoadFu_record_00b863","CheckFuCreatedBy":"Rule_LoadFu_scope0_07301d","GetNvFuelValuation":"Rule_QueryPricesRows_query_218ec3","CheckGetNvFuelValuationCount":"Rule_QueryPricesRows_complete_7cf759","SetPricesRows":"Rule_QueryPricesRows_list_35224c","SetPriceSum":"Rule_SummarizePrices_seed_fc6493","ForEachPricesRows":"Rule_SummarizePrices_each_fbb143","SetPriceSum2":"Rule_SummarizePrices_each_SummarizePric_3ecd95","SetPriceSum3":"Rule_ReturnPrices_4c8fd3"}
+server action ReviewNvFuelValuations
+  in FuId: NvFuel Identifier
+  out PriceSum: Decimal
+  out CurrentPrices: Long Integer
+  local Fu: NvFuel
+  local PricesRows: NvFuelValuation List
+  if not (GetUserId() <> NullIdentifier()):  # CheckGetUserId
+    raise NvRuleViolation("Authentication required")
+  GetNvFuel = GetNvFuel(Id=FuId)
+  assign  # SetFu
+    Fu = GetNvFuel.Record.NvFuel
+  if not (Fu.CreatedBy = GetUserId()):  # CheckFuCreatedBy
+    raise NvRuleViolation("Record outside requested scope")
+  GetNvFuelValuation = aggregate FROM NvFuelValuation WHERE (NvFuelValuation.ParentId = Fu.Id) MAX 200
+  if not (GetNvFuelValuation.Count <= 200):  # CheckGetNvFuelValuationCount
+    raise NvRuleViolation("Result exceeds declared limit")
+  assign  # SetPricesRows
+    PricesRows = GetNvFuelValuation.List
+  assign  # SetPriceSum
+    PriceSum = 0
+    CurrentPrices = 0
+  foreach PricesRows:  # ForEachPricesRows @ruleNew1
+    assign  # SetPriceSum2
+      PriceSum = PriceSum + (PricesRows.Current.UnitPrice)
+      CurrentPrices = CurrentPrices + If(PricesRows.Current.EffectiveOn <= CurrDate(), 1, 0)
+    next
+  assign  # SetPriceSum3
+    PriceSum = PriceSum
+    CurrentPrices = CurrentPrices
+  end
+
+/// ssam-rule-map:{"CheckGetUserId":"Rule_Authenticated_6ab694","GetNvCargoForUpdate":"Rule_LoadCa_fetch_50aae3","SetCa":"Rule_LoadCa_record_25b37b","CheckCaCreatedBy":"Rule_LoadCa_scope0_d09dfa","CheckCaVersion":"Rule_LoadCa_version_b06794","CheckCaReserved":"Rule_checkReserved_76e4ad","TransitionHoldAllowedState":"Rule_transitionHold_allowed_b964e6","TransitionHoldChangeStateValues":"Rule_transitionHold_change_values_d8bee2","TransitionHoldChangeStatePersist":"Rule_transitionHold_change_persist_ea5568"}
+server action HoldNvCargoStock
+  in CaId: NvCargo Identifier
+  in CaVersion: Long Integer
+  local Ca: NvCargo
+  if not (GetUserId() <> NullIdentifier()):  # CheckGetUserId
+    raise NvRuleViolation("Authentication required")
+  GetNvCargoForUpdate = GetNvCargoForUpdate(Id=CaId)
+  assign  # SetCa
+    Ca = GetNvCargoForUpdate.Record.NvCargo
+  if not (Ca.CreatedBy = GetUserId()):  # CheckCaCreatedBy
+    raise NvRuleViolation("Record outside requested scope")
+  if not (Ca.Version = CaVersion):  # CheckCaVersion
+    raise NvRuleViolation("Record changed; reload before editing")
+  if not (Ca.Reserved > 0 and Ca.Quantity >= Ca.Reserved):  # CheckCaReserved
+    raise NvRuleViolation("checkReserved")
+  if not ((Ca.StateId = Entities.NvCargoState.Available)):  # TransitionHoldAllowedState
+    raise NvRuleViolation("transitionHold: state transition not allowed")
+  assign  # TransitionHoldChangeStateValues
+    Ca.StateId = Entities.NvCargoState.Held
+    Ca.UpdatedOn = CurrDateTime()
+    Ca.Version = Ca.Version + 1
+  TransitionHoldChangeStatePersist = UpdateNvCargo(Source=Ca)
+  end
+
+/// ssam-rule-map:{"CheckGetUserId":"Rule_Authenticated_6ab694","GetNvCargoForUpdate":"Rule_LoadCa_fetch_50aae3","SetCa":"Rule_LoadCa_record_25b37b","CheckCaCreatedBy":"Rule_LoadCa_scope0_d09dfa","CheckCaVersion":"Rule_LoadCa_version_b06794","CheckCaValidUntil":"Rule_checkExpiry_e2a1f4","TransitionExpireAllowedState":"Rule_transitionExpire_allowed_45fcfa","TransitionExpireChangeStateValues":"Rule_transitionExpire_change_values_73e31c","TransitionExpireChangeStatePersist":"Rule_transitionExpire_change_persist_e0bd12"}
+server action ExpireNvCargo
+  in CaId: NvCargo Identifier
+  in CaVersion: Long Integer
+  local Ca: NvCargo
+  if not (GetUserId() <> NullIdentifier()):  # CheckGetUserId
+    raise NvRuleViolation("Authentication required")
+  GetNvCargoForUpdate = GetNvCargoForUpdate(Id=CaId)
+  assign  # SetCa
+    Ca = GetNvCargoForUpdate.Record.NvCargo
+  if not (Ca.CreatedBy = GetUserId()):  # CheckCaCreatedBy
+    raise NvRuleViolation("Record outside requested scope")
+  if not (Ca.Version = CaVersion):  # CheckCaVersion
+    raise NvRuleViolation("Record changed; reload before editing")
+  if not (Ca.ValidUntil < CurrDate() and Ca.Reserved=0):  # CheckCaValidUntil
+    raise NvRuleViolation("checkExpiry")
+  if not ((Ca.StateId = Entities.NvCargoState.Available)):  # TransitionExpireAllowedState
+    raise NvRuleViolation("transitionExpire: state transition not allowed")
+  assign  # TransitionExpireChangeStateValues
+    Ca.StateId = Entities.NvCargoState.Expired
+    Ca.UpdatedOn = CurrDateTime()
+    Ca.Version = Ca.Version + 1
+  TransitionExpireChangeStatePersist = UpdateNvCargo(Source=Ca)
+  end
+
+/// ssam-rule-map:{"CheckGetUserId":"Rule_Authenticated_6ab694","ValidateQty":"Rule_ValidateParameterQty_89cddf","ValidateNote":"Rule_ValidateParameterNote_55075f","GetNvCargoForUpdate":"Rule_LoadCa_fetch_50aae3","SetCa":"Rule_LoadCa_record_25b37b","CheckCaCreatedBy":"Rule_LoadCa_scope0_d09dfa","CheckCaVersion":"Rule_LoadCa_version_b06794","CheckQty":"Rule_checkDamage_65ee7b","SetCaQuantity":"Rule_updateDamage_values_5fc854","UpdateNvCargo":"Rule_updateDamage_persist_a04123","SetMovement":"Rule_createMovement_reset_f5aa15","SetMovementParentId":"Rule_createMovement_values_c88bef","CreateNvCargoMovement":"Rule_createMovement_persist_479191","SetMovementId":"Rule_createMovement_identity_35626f"}
+server action RepackNvCargo
+  in Qty: Decimal
+  in Note: Text
+  in CaId: NvCargo Identifier
+  in CaVersion: Long Integer
+  local Ca: NvCargo
+  local Movement: NvCargoMovement
+  local WorkflowEmpty2: NvCargoMovement
+  if not (GetUserId() <> NullIdentifier()):  # CheckGetUserId
+    raise NvRuleViolation("Authentication required")
+  if not ((Qty <= 10000) and (Qty > 0)):  # ValidateQty
+    raise NvRuleViolation("Invalid Qty")
+  if not ((Trim(Note) <> "") and (Length(Note) >= 5) and (Length(Note) <= 500)):  # ValidateNote
+    raise NvRuleViolation("Invalid Note")
+  GetNvCargoForUpdate = GetNvCargoForUpdate(Id=CaId)
+  assign  # SetCa
+    Ca = GetNvCargoForUpdate.Record.NvCargo
+  if not (Ca.CreatedBy = GetUserId()):  # CheckCaCreatedBy
+    raise NvRuleViolation("Record outside requested scope")
+  if not (Ca.Version = CaVersion):  # CheckCaVersion
+    raise NvRuleViolation("Record changed; reload before editing")
+  if not (Qty <= Ca.Quantity-Ca.Reserved and Qty <= Ca.Quantity*0.05):  # CheckQty
+    raise NvRuleViolation("checkDamage")
+  assign  # SetCaQuantity
+    Ca.Quantity = Ca.Quantity-Qty
+    Ca.UpdatedOn = CurrDateTime()
+    Ca.Version = Ca.Version + 1
+  UpdateNvCargo = UpdateNvCargo(Source=Ca)
+  assign  # SetMovement
+    Movement = WorkflowEmpty2
+  assign  # SetMovementParentId
+    Movement.ParentId = Ca.Id
+    Movement.Delta = 0-Qty
+    Movement.Reason = Note
+    Movement.OccurredOn = CurrDateTime()
+    Movement.UpdatedOn = CurrDateTime()
+    Movement.CreatedOn = CurrDateTime()
+    Movement.Version = 1
+  CreateNvCargoMovement = CreateNvCargoMovement(Source=Movement)
+  assign  # SetMovementId
+    Movement.Id = CreateNvCargoMovement.Id
+  end
+
+/// ssam-rule-map:{"CheckGetUserId":"Rule_Authenticated_6ab694","GetNvCargo":"Rule_LoadCa_fetch_50aae3","SetCa":"Rule_LoadCa_record_25b37b","CheckCaCreatedBy":"Rule_LoadCa_scope0_d09dfa","GetNvCargoLot":"Rule_QueryExposureRows_query_1a70e8","CheckGetNvCargoLotCount":"Rule_QueryExposureRows_complete_d94e1b","SetExposureRows":"Rule_QueryExposureRows_list_07bf78","SetUnits":"Rule_SummarizeExposure_seed_a52d73","ForEachExposureRows":"Rule_SummarizeExposure_each_cc689d","SetUnits2":"Rule_SummarizeExposure_each_SummarizeEx_87452c","SetUnits3":"Rule_ReturnExposure_c943f9"}
+server action ForecastNvCargoExposure
+  in CaId: NvCargo Identifier
+  out Units: Decimal
+  out Expired: Long Integer
+  local Ca: NvCargo
+  local ExposureRows: NvCargoLot List
+  if not (GetUserId() <> NullIdentifier()):  # CheckGetUserId
+    raise NvRuleViolation("Authentication required")
+  GetNvCargo = GetNvCargo(Id=CaId)
+  assign  # SetCa
+    Ca = GetNvCargo.Record.NvCargo
+  if not (Ca.CreatedBy = GetUserId()):  # CheckCaCreatedBy
+    raise NvRuleViolation("Record outside requested scope")
+  GetNvCargoLot = aggregate FROM NvCargoLot WHERE (NvCargoLot.ParentId = Ca.Id) MAX 400
+  if not (GetNvCargoLot.Count <= 400):  # CheckGetNvCargoLotCount
+    raise NvRuleViolation("Result exceeds declared limit")
+  assign  # SetExposureRows
+    ExposureRows = GetNvCargoLot.List
+  assign  # SetUnits
+    Units = 0
+    Expired = 0
+  foreach ExposureRows:  # ForEachExposureRows @ruleNew1
+    assign  # SetUnits2
+      Units = Units + (ExposureRows.Current.Units)
+      Expired = Expired + If(ExposureRows.Current.Expiry < CurrDate(), 1, 0)
+    next
+  assign  # SetUnits3
+    Units = Units
+    Expired = Expired
+  end
+
+/// ssam-rule-map:{"CheckGetUserId":"Rule_Authenticated_6ab694","GetNvCargo":"Rule_LoadCa_fetch_50aae3","SetCa":"Rule_LoadCa_record_25b37b","CheckCaCreatedBy":"Rule_LoadCa_scope0_d09dfa","GetNvCargoReservation":"Rule_QueryCommitmentsRows_query_b60d23","CheckGetNvCargoReservationCount":"Rule_QueryCommitmentsRows_complete_cb8e81","SetCommitmentsRows":"Rule_QueryCommitmentsRows_list_2e9635","SetFuture":"Rule_SummarizeCommitments_seed_50ee0e","ForEachCommitmentsRows":"Rule_SummarizeCommitments_each_4d2b45","SetFuture2":"Rule_SummarizeCommitments_each_Summariz_de36f9","SetFuture3":"Rule_ReturnCommitments_e58fd4"}
+server action ReviewNvCargoReservations
+  in CaId: NvCargo Identifier
+  out Future: Decimal
+  out ReleasedUnits: Decimal
+  local Ca: NvCargo
+  local CommitmentsRows: NvCargoReservation List
+  if not (GetUserId() <> NullIdentifier()):  # CheckGetUserId
+    raise NvRuleViolation("Authentication required")
+  GetNvCargo = GetNvCargo(Id=CaId)
+  assign  # SetCa
+    Ca = GetNvCargo.Record.NvCargo
+  if not (Ca.CreatedBy = GetUserId()):  # CheckCaCreatedBy
+    raise NvRuleViolation("Record outside requested scope")
+  GetNvCargoReservation = aggregate FROM NvCargoReservation WHERE (NvCargoReservation.ParentId = Ca.Id) MAX 400
+  if not (GetNvCargoReservation.Count <= 400):  # CheckGetNvCargoReservationCount
+    raise NvRuleViolation("Result exceeds declared limit")
+  assign  # SetCommitmentsRows
+    CommitmentsRows = GetNvCargoReservation.List
+  assign  # SetFuture
+    Future = 0
+    ReleasedUnits = 0
+  foreach CommitmentsRows:  # ForEachCommitmentsRows @ruleNew1
+    assign  # SetFuture2
+      Future = Future + (If(not CommitmentsRows.Current.Released and CommitmentsRows.Current.ReleaseOn >= CurrDate(),CommitmentsRows.Current.Units,0))
+      ReleasedUnits = ReleasedUnits + (If(CommitmentsRows.Current.Released,CommitmentsRows.Current.Units,0))
+    next
+  assign  # SetFuture3
+    Future = Future
+    ReleasedUnits = ReleasedUnits
+  end
+
+/// ssam-rule-map:{"CheckGetUserId":"Rule_Authenticated_6ab694","GetNvTrainingForUpdate":"Rule_LoadTr_fetch_26d9ec","SetTr":"Rule_LoadTr_record_0456e6","CheckTrCreatedBy":"Rule_LoadTr_scope0_414f28","CheckTrVersion":"Rule_LoadTr_version_f0225a","CheckTrHours":"Rule_checkPlan_86decb","TransitionApproveAllowedState":"Rule_transitionApprove_allowed_7ff178","TransitionApproveChangeStateValues":"Rule_transitionApprove_change_values_b657e1","TransitionApproveChangeStatePersist":"Rule_transitionApprove_change_persist_87265c"}
+server action ApproveNvTraining
+  in TrId: NvTraining Identifier
+  in TrVersion: Long Integer
+  local Tr: NvTraining
+  if not (GetUserId() <> NullIdentifier()):  # CheckGetUserId
+    raise NvRuleViolation("Authentication required")
+  GetNvTrainingForUpdate = GetNvTrainingForUpdate(Id=TrId)
+  assign  # SetTr
+    Tr = GetNvTrainingForUpdate.Record.NvTraining
+  if not (Tr.CreatedBy = GetUserId()):  # CheckTrCreatedBy
+    raise NvRuleViolation("Record outside requested scope")
+  if not (Tr.Version = TrVersion):  # CheckTrVersion
+    raise NvRuleViolation("Record changed; reload before editing")
+  if not (Tr.Hours > 0 and Tr.Hours <= Tr.Quota):  # CheckTrHours
+    raise NvRuleViolation("checkPlan")
+  if not ((Tr.StateId = Entities.NvTrainingState.Requested)):  # TransitionApproveAllowedState
+    raise NvRuleViolation("transitionApprove: state transition not allowed")
+  assign  # TransitionApproveChangeStateValues
+    Tr.StateId = Entities.NvTrainingState.Planned
+    Tr.UpdatedOn = CurrDateTime()
+    Tr.Version = Tr.Version + 1
+  TransitionApproveChangeStatePersist = UpdateNvTraining(Source=Tr)
+  end
+
+/// ssam-rule-map:{"CheckGetUserId":"Rule_Authenticated_6ab694","GetNvTrainingForUpdate":"Rule_LoadTr_fetch_26d9ec","SetTr":"Rule_LoadTr_record_0456e6","CheckTrCreatedBy":"Rule_LoadTr_scope0_414f28","CheckTrVersion":"Rule_LoadTr_version_f0225a","CheckTrDeadline":"Rule_checkDeadline_c9fa0e","TransitionBeginAllowedState":"Rule_transitionBegin_allowed_aa5972","TransitionBeginChangeStateValues":"Rule_transitionBegin_change_values_7915bc","TransitionBeginChangeStatePersist":"Rule_transitionBegin_change_persist_a70dab"}
+server action BeginNvTraining
+  in TrId: NvTraining Identifier
+  in TrVersion: Long Integer
+  local Tr: NvTraining
+  if not (GetUserId() <> NullIdentifier()):  # CheckGetUserId
+    raise NvRuleViolation("Authentication required")
+  GetNvTrainingForUpdate = GetNvTrainingForUpdate(Id=TrId)
+  assign  # SetTr
+    Tr = GetNvTrainingForUpdate.Record.NvTraining
+  if not (Tr.CreatedBy = GetUserId()):  # CheckTrCreatedBy
+    raise NvRuleViolation("Record outside requested scope")
+  if not (Tr.Version = TrVersion):  # CheckTrVersion
+    raise NvRuleViolation("Record changed; reload before editing")
+  if not (Tr.Deadline >= CurrDate() and Tr.Completed=0):  # CheckTrDeadline
+    raise NvRuleViolation("checkDeadline")
+  if not ((Tr.StateId = Entities.NvTrainingState.Planned)):  # TransitionBeginAllowedState
+    raise NvRuleViolation("transitionBegin: state transition not allowed")
+  assign  # TransitionBeginChangeStateValues
+    Tr.StateId = Entities.NvTrainingState.Active
+    Tr.UpdatedOn = CurrDateTime()
+    Tr.Version = Tr.Version + 1
+  TransitionBeginChangeStatePersist = UpdateNvTraining(Source=Tr)
+  end
+
+/// ssam-rule-map:{"CheckGetUserId":"Rule_Authenticated_6ab694","GetNvTrainingForUpdate":"Rule_LoadTr_fetch_26d9ec","SetTr":"Rule_LoadTr_record_0456e6","CheckTrCreatedBy":"Rule_LoadTr_scope0_414f28","CheckTrVersion":"Rule_LoadTr_version_f0225a","CheckTrCompleted":"Rule_checkCompleted_df598a","TransitionFinishAllowedState":"Rule_transitionFinish_allowed_0a6ddb","TransitionFinishChangeStateValues":"Rule_transitionFinish_change_values_e492d4","TransitionFinishChangeStatePersist":"Rule_transitionFinish_change_persist_1b2a75"}
+server action FinishNvTraining
+  in TrId: NvTraining Identifier
+  in TrVersion: Long Integer
+  local Tr: NvTraining
+  if not (GetUserId() <> NullIdentifier()):  # CheckGetUserId
+    raise NvRuleViolation("Authentication required")
+  GetNvTrainingForUpdate = GetNvTrainingForUpdate(Id=TrId)
+  assign  # SetTr
+    Tr = GetNvTrainingForUpdate.Record.NvTraining
+  if not (Tr.CreatedBy = GetUserId()):  # CheckTrCreatedBy
+    raise NvRuleViolation("Record outside requested scope")
+  if not (Tr.Version = TrVersion):  # CheckTrVersion
+    raise NvRuleViolation("Record changed; reload before editing")
+  if not (Tr.Completed >= Tr.Hours and Tr.Hours > 0):  # CheckTrCompleted
+    raise NvRuleViolation("checkCompleted")
+  if not ((Tr.StateId = Entities.NvTrainingState.Active)):  # TransitionFinishAllowedState
+    raise NvRuleViolation("transitionFinish: state transition not allowed")
+  assign  # TransitionFinishChangeStateValues
+    Tr.StateId = Entities.NvTrainingState.Finished
+    Tr.UpdatedOn = CurrDateTime()
+    Tr.Version = Tr.Version + 1
+  TransitionFinishChangeStatePersist = UpdateNvTraining(Source=Tr)
+  end
+
+/// ssam-rule-map:{"CheckGetUserId":"Rule_Authenticated_6ab694","GetNvTraining":"Rule_LoadTr_fetch_26d9ec","SetTr":"Rule_LoadTr_record_0456e6","CheckTrCreatedBy":"Rule_LoadTr_scope0_414f28","GetNvTrainingSession":"Rule_QuerySeatsRows_query_c27141","CheckGetNvTrainingSessionCount":"Rule_QuerySeatsRows_complete_8cf88b","SetSeatsRows":"Rule_QuerySeatsRows_list_880721","SetCapacity":"Rule_SummarizeSeats_seed_aab426","ForEachSeatsRows":"Rule_SummarizeSeats_each_2b2db3","SetCapacity2":"Rule_SummarizeSeats_each_SummarizeSeats_75fd21","SetCapacity3":"Rule_ReturnSeats_ada0d7"}
+server action ForecastNvTrainingSeats
+  in TrId: NvTraining Identifier
+  out Capacity: Decimal
+  out Sessions: Long Integer
+  local Tr: NvTraining
+  local SeatsRows: NvTrainingSession List
+  if not (GetUserId() <> NullIdentifier()):  # CheckGetUserId
+    raise NvRuleViolation("Authentication required")
+  GetNvTraining = GetNvTraining(Id=TrId)
+  assign  # SetTr
+    Tr = GetNvTraining.Record.NvTraining
+  if not (Tr.CreatedBy = GetUserId()):  # CheckTrCreatedBy
+    raise NvRuleViolation("Record outside requested scope")
+  GetNvTrainingSession = aggregate FROM NvTrainingSession WHERE (NvTrainingSession.ParentId = Tr.Id) MAX 300
+  if not (GetNvTrainingSession.Count <= 300):  # CheckGetNvTrainingSessionCount
+    raise NvRuleViolation("Result exceeds declared limit")
+  assign  # SetSeatsRows
+    SeatsRows = GetNvTrainingSession.List
+  assign  # SetCapacity
+    Capacity = 0
+    Sessions = 0
+  foreach SeatsRows:  # ForEachSeatsRows @ruleNew1
+    assign  # SetCapacity2
+      Capacity = Capacity + (SeatsRows.Current.Capacity)
+      Sessions = Sessions + 1
+    next
+  assign  # SetCapacity3
+    Capacity = Capacity
+    Sessions = Sessions
+  end
+
+/// ssam-rule-map:{"CheckGetUserId":"Rule_Authenticated_6ab694","GetNvTraining":"Rule_LoadTr_fetch_26d9ec","SetTr":"Rule_LoadTr_record_0456e6","CheckTrCreatedBy":"Rule_LoadTr_scope0_414f28","GetNvTrainingAssessment":"Rule_QueryOutcomesRows_query_36dd52","CheckGetNvTrainingAssessmentCount":"Rule_QueryOutcomesRows_complete_5c6352","SetOutcomesRows":"Rule_QueryOutcomesRows_list_b408bb","SetPoints":"Rule_SummarizeOutcomes_seed_fbd459","ForEachOutcomesRows":"Rule_SummarizeOutcomes_each_70c3ec","SetPoints2":"Rule_SummarizeOutcomes_each_SummarizeOu_677278","SetPoints3":"Rule_ReturnOutcomes_9c8f65"}
+server action ReviewNvTrainingOutcomes
+  in TrId: NvTraining Identifier
+  out Points: Decimal
+  out Passing: Long Integer
+  local Tr: NvTraining
+  local OutcomesRows: NvTrainingAssessment List
+  if not (GetUserId() <> NullIdentifier()):  # CheckGetUserId
+    raise NvRuleViolation("Authentication required")
+  GetNvTraining = GetNvTraining(Id=TrId)
+  assign  # SetTr
+    Tr = GetNvTraining.Record.NvTraining
+  if not (Tr.CreatedBy = GetUserId()):  # CheckTrCreatedBy
+    raise NvRuleViolation("Record outside requested scope")
+  GetNvTrainingAssessment = aggregate FROM NvTrainingAssessment WHERE (NvTrainingAssessment.ParentId = Tr.Id) MAX 400
+  if not (GetNvTrainingAssessment.Count <= 400):  # CheckGetNvTrainingAssessmentCount
+    raise NvRuleViolation("Result exceeds declared limit")
+  assign  # SetOutcomesRows
+    OutcomesRows = GetNvTrainingAssessment.List
+  assign  # SetPoints
+    Points = 0
+    Passing = 0
+  foreach OutcomesRows:  # ForEachOutcomesRows @ruleNew1
+    assign  # SetPoints2
+      Points = Points + (OutcomesRows.Current.Points)
+      Passing = Passing + If(OutcomesRows.Current.Passed, 1, 0)
+    next
+  assign  # SetPoints3
+    Points = Points
+    Passing = Passing
+  end
+
+/// ssam-rule-map:{"CheckGetUserId":"Rule_Authenticated_6ab694","GetNvShiftForUpdate":"Rule_LoadSh_fetch_a450dc","SetSh":"Rule_LoadSh_record_89f072","CheckShCreatedBy":"Rule_LoadSh_scope0_7d2206","CheckShVersion":"Rule_LoadSh_version_2b6a7e","CheckShHours":"Rule_checkDuration_b069c6","TransitionApproveAllowedState":"Rule_transitionApprove_allowed_7ff178","TransitionApproveChangeStateValues":"Rule_transitionApprove_change_values_b657e1","TransitionApproveChangeStatePersist":"Rule_transitionApprove_change_persist_87265c"}
+server action ApproveNvShift
+  in ShId: NvShift Identifier
+  in ShVersion: Long Integer
+  local Sh: NvShift
+  if not (GetUserId() <> NullIdentifier()):  # CheckGetUserId
+    raise NvRuleViolation("Authentication required")
+  GetNvShiftForUpdate = GetNvShiftForUpdate(Id=ShId)
+  assign  # SetSh
+    Sh = GetNvShiftForUpdate.Record.NvShift
+  if not (Sh.CreatedBy = GetUserId()):  # CheckShCreatedBy
+    raise NvRuleViolation("Record outside requested scope")
+  if not (Sh.Version = ShVersion):  # CheckShVersion
+    raise NvRuleViolation("Record changed; reload before editing")
+  if not (Sh.Hours >= 4 and Sh.Hours <= 12):  # CheckShHours
+    raise NvRuleViolation("checkDuration")
+  if not ((Sh.StateId = Entities.NvShiftState.Requested)):  # TransitionApproveAllowedState
+    raise NvRuleViolation("transitionApprove: state transition not allowed")
+  assign  # TransitionApproveChangeStateValues
+    Sh.StateId = Entities.NvShiftState.Planned
+    Sh.UpdatedOn = CurrDateTime()
+    Sh.Version = Sh.Version + 1
+  TransitionApproveChangeStatePersist = UpdateNvShift(Source=Sh)
+  end
+
+/// ssam-rule-map:{"CheckGetUserId":"Rule_Authenticated_6ab694","GetNvShiftForUpdate":"Rule_LoadSh_fetch_a450dc","SetSh":"Rule_LoadSh_record_89f072","CheckShCreatedBy":"Rule_LoadSh_scope0_7d2206","CheckShVersion":"Rule_LoadSh_version_2b6a7e","CheckShDeadline":"Rule_checkReady_298383","TransitionStartAllowedState":"Rule_transitionStart_allowed_f925e6","TransitionStartChangeStateValues":"Rule_transitionStart_change_values_c8305d","TransitionStartChangeStatePersist":"Rule_transitionStart_change_persist_824312"}
+server action StartNvShift
+  in ShId: NvShift Identifier
+  in ShVersion: Long Integer
+  local Sh: NvShift
+  if not (GetUserId() <> NullIdentifier()):  # CheckGetUserId
+    raise NvRuleViolation("Authentication required")
+  GetNvShiftForUpdate = GetNvShiftForUpdate(Id=ShId)
+  assign  # SetSh
+    Sh = GetNvShiftForUpdate.Record.NvShift
+  if not (Sh.CreatedBy = GetUserId()):  # CheckShCreatedBy
+    raise NvRuleViolation("Record outside requested scope")
+  if not (Sh.Version = ShVersion):  # CheckShVersion
+    raise NvRuleViolation("Record changed; reload before editing")
+  if not (Sh.Deadline >= CurrDate() and Sh.Completed=0):  # CheckShDeadline
+    raise NvRuleViolation("checkReady")
+  if not ((Sh.StateId = Entities.NvShiftState.Planned)):  # TransitionStartAllowedState
+    raise NvRuleViolation("transitionStart: state transition not allowed")
+  assign  # TransitionStartChangeStateValues
+    Sh.StateId = Entities.NvShiftState.Active
+    Sh.UpdatedOn = CurrDateTime()
+    Sh.Version = Sh.Version + 1
+  TransitionStartChangeStatePersist = UpdateNvShift(Source=Sh)
+  end
+
+/// ssam-rule-map:{"CheckGetUserId":"Rule_Authenticated_6ab694","GetNvShiftForUpdate":"Rule_LoadSh_fetch_a450dc","SetSh":"Rule_LoadSh_record_89f072","CheckShCreatedBy":"Rule_LoadSh_scope0_7d2206","CheckShVersion":"Rule_LoadSh_version_2b6a7e","CheckShCompleted":"Rule_checkTime_2bd82c","TransitionFinishAllowedState":"Rule_transitionFinish_allowed_0a6ddb","TransitionFinishChangeStateValues":"Rule_transitionFinish_change_values_e492d4","TransitionFinishChangeStatePersist":"Rule_transitionFinish_change_persist_1b2a75"}
+server action FinishNvShift
+  in ShId: NvShift Identifier
+  in ShVersion: Long Integer
+  local Sh: NvShift
+  if not (GetUserId() <> NullIdentifier()):  # CheckGetUserId
+    raise NvRuleViolation("Authentication required")
+  GetNvShiftForUpdate = GetNvShiftForUpdate(Id=ShId)
+  assign  # SetSh
+    Sh = GetNvShiftForUpdate.Record.NvShift
+  if not (Sh.CreatedBy = GetUserId()):  # CheckShCreatedBy
+    raise NvRuleViolation("Record outside requested scope")
+  if not (Sh.Version = ShVersion):  # CheckShVersion
+    raise NvRuleViolation("Record changed; reload before editing")
+  if not (Sh.Completed=Sh.Hours and Sh.Hours > 0):  # CheckShCompleted
+    raise NvRuleViolation("checkTime")
+  if not ((Sh.StateId = Entities.NvShiftState.Active)):  # TransitionFinishAllowedState
+    raise NvRuleViolation("transitionFinish: state transition not allowed")
+  assign  # TransitionFinishChangeStateValues
+    Sh.StateId = Entities.NvShiftState.Finished
+    Sh.UpdatedOn = CurrDateTime()
+    Sh.Version = Sh.Version + 1
+  TransitionFinishChangeStatePersist = UpdateNvShift(Source=Sh)
+  end
+
+/// ssam-rule-map:{"CheckGetUserId":"Rule_Authenticated_6ab694","GetNvShift":"Rule_LoadSh_fetch_a450dc","SetSh":"Rule_LoadSh_record_89f072","CheckShCreatedBy":"Rule_LoadSh_scope0_7d2206","GetNvShiftParticipant":"Rule_QueryCoverageRows_query_f69fe2","CheckGetNvShiftParticipantCount":"Rule_QueryCoverageRows_complete_2e6e04","SetCoverageRows":"Rule_QueryCoverageRows_list_33a275","SetConfirmed":"Rule_SummarizeCoverage_seed_d194ec","ForEachCoverageRows":"Rule_SummarizeCoverage_each_9297ab","SetConfirmed2":"Rule_SummarizeCoverage_each_SummarizeCo_fb2beb","SetConfirmed3":"Rule_ReturnCoverage_bfdf91"}
+server action ForecastNvShiftCoverage
+  in ShId: NvShift Identifier
+  out Confirmed: Long Integer
+  out Pending: Long Integer
+  local Sh: NvShift
+  local CoverageRows: NvShiftParticipant List
+  if not (GetUserId() <> NullIdentifier()):  # CheckGetUserId
+    raise NvRuleViolation("Authentication required")
+  GetNvShift = GetNvShift(Id=ShId)
+  assign  # SetSh
+    Sh = GetNvShift.Record.NvShift
+  if not (Sh.CreatedBy = GetUserId()):  # CheckShCreatedBy
+    raise NvRuleViolation("Record outside requested scope")
+  GetNvShiftParticipant = aggregate FROM NvShiftParticipant WHERE (NvShiftParticipant.ParentId = Sh.Id) MAX 500
+  if not (GetNvShiftParticipant.Count <= 500):  # CheckGetNvShiftParticipantCount
+    raise NvRuleViolation("Result exceeds declared limit")
+  assign  # SetCoverageRows
+    CoverageRows = GetNvShiftParticipant.List
+  assign  # SetConfirmed
+    Confirmed = 0
+    Pending = 0
+  foreach CoverageRows:  # ForEachCoverageRows @ruleNew1
+    assign  # SetConfirmed2
+      Confirmed = Confirmed + If(CoverageRows.Current.Confirmed, 1, 0)
+      Pending = Pending + If(not CoverageRows.Current.Confirmed, 1, 0)
+    next
+  assign  # SetConfirmed3
+    Confirmed = Confirmed
+    Pending = Pending
+  end
+
+/// ssam-rule-map:{"CheckGetUserId":"Rule_Authenticated_6ab694","GetNvShift":"Rule_LoadSh_fetch_a450dc","SetSh":"Rule_LoadSh_record_89f072","CheckShCreatedBy":"Rule_LoadSh_scope0_7d2206","GetNvShiftAssessment":"Rule_QueryResultsRows_query_891c66","CheckGetNvShiftAssessmentCount":"Rule_QueryResultsRows_complete_fae405","SetResultsRows":"Rule_QueryResultsRows_list_98aa36","SetPoints":"Rule_SummarizeResults_seed_96f70c","ForEachResultsRows":"Rule_SummarizeResults_each_563d46","SetPoints2":"Rule_SummarizeResults_each_SummarizeRes_55fc2b","SetPoints3":"Rule_ReturnResults_5560a5"}
+server action ReviewNvShiftResults
+  in ShId: NvShift Identifier
+  out Points: Decimal
+  out Failures: Long Integer
+  local Sh: NvShift
+  local ResultsRows: NvShiftAssessment List
+  if not (GetUserId() <> NullIdentifier()):  # CheckGetUserId
+    raise NvRuleViolation("Authentication required")
+  GetNvShift = GetNvShift(Id=ShId)
+  assign  # SetSh
+    Sh = GetNvShift.Record.NvShift
+  if not (Sh.CreatedBy = GetUserId()):  # CheckShCreatedBy
+    raise NvRuleViolation("Record outside requested scope")
+  GetNvShiftAssessment = aggregate FROM NvShiftAssessment WHERE (NvShiftAssessment.ParentId = Sh.Id) MAX 300
+  if not (GetNvShiftAssessment.Count <= 300):  # CheckGetNvShiftAssessmentCount
+    raise NvRuleViolation("Result exceeds declared limit")
+  assign  # SetResultsRows
+    ResultsRows = GetNvShiftAssessment.List
+  assign  # SetPoints
+    Points = 0
+    Failures = 0
+  foreach ResultsRows:  # ForEachResultsRows @ruleNew1
+    assign  # SetPoints2
+      Points = Points + (ResultsRows.Current.Points)
+      Failures = Failures + If(not ResultsRows.Current.Passed, 1, 0)
+    next
+  assign  # SetPoints3
+    Points = Points
+    Failures = Failures
+  end
+
+/// ssam-rule-map:{"CheckGetUserId":"Rule_Authenticated_6ab694","GetNvCredentialForUpdate":"Rule_LoadCr_fetch_96de4c","SetCr":"Rule_LoadCr_record_eabf5e","CheckCrCreatedBy":"Rule_LoadCr_scope0_0b7754","CheckCrVersion":"Rule_LoadCr_version_37420b","CheckCrHours":"Rule_checkRequirement_451427","TransitionApproveAllowedState":"Rule_transitionApprove_allowed_7ff178","TransitionApproveChangeStateValues":"Rule_transitionApprove_change_values_b657e1","TransitionApproveChangeStatePersist":"Rule_transitionApprove_change_persist_87265c"}
+server action ApproveNvCredential
+  in CrId: NvCredential Identifier
+  in CrVersion: Long Integer
+  local Cr: NvCredential
+  if not (GetUserId() <> NullIdentifier()):  # CheckGetUserId
+    raise NvRuleViolation("Authentication required")
+  GetNvCredentialForUpdate = GetNvCredentialForUpdate(Id=CrId)
+  assign  # SetCr
+    Cr = GetNvCredentialForUpdate.Record.NvCredential
+  if not (Cr.CreatedBy = GetUserId()):  # CheckCrCreatedBy
+    raise NvRuleViolation("Record outside requested scope")
+  if not (Cr.Version = CrVersion):  # CheckCrVersion
+    raise NvRuleViolation("Record changed; reload before editing")
+  if not (Cr.Hours > 0 and Cr.Hours <= Cr.Quota):  # CheckCrHours
+    raise NvRuleViolation("checkRequirement")
+  if not ((Cr.StateId = Entities.NvCredentialState.Requested)):  # TransitionApproveAllowedState
+    raise NvRuleViolation("transitionApprove: state transition not allowed")
+  assign  # TransitionApproveChangeStateValues
+    Cr.StateId = Entities.NvCredentialState.Planned
+    Cr.UpdatedOn = CurrDateTime()
+    Cr.Version = Cr.Version + 1
+  TransitionApproveChangeStatePersist = UpdateNvCredential(Source=Cr)
+  end
+
+/// ssam-rule-map:{"CheckGetUserId":"Rule_Authenticated_6ab694","GetNvCredentialForUpdate":"Rule_LoadCr_fetch_96de4c","SetCr":"Rule_LoadCr_record_eabf5e","CheckCrCreatedBy":"Rule_LoadCr_scope0_0b7754","CheckCrVersion":"Rule_LoadCr_version_37420b","CheckCrDeadline":"Rule_checkValidity_7a7eca","TransitionStartAllowedState":"Rule_transitionStart_allowed_f925e6","TransitionStartChangeStateValues":"Rule_transitionStart_change_values_c8305d","TransitionStartChangeStatePersist":"Rule_transitionStart_change_persist_824312"}
+server action StartNvCredential
+  in CrId: NvCredential Identifier
+  in CrVersion: Long Integer
+  local Cr: NvCredential
+  if not (GetUserId() <> NullIdentifier()):  # CheckGetUserId
+    raise NvRuleViolation("Authentication required")
+  GetNvCredentialForUpdate = GetNvCredentialForUpdate(Id=CrId)
+  assign  # SetCr
+    Cr = GetNvCredentialForUpdate.Record.NvCredential
+  if not (Cr.CreatedBy = GetUserId()):  # CheckCrCreatedBy
+    raise NvRuleViolation("Record outside requested scope")
+  if not (Cr.Version = CrVersion):  # CheckCrVersion
+    raise NvRuleViolation("Record changed; reload before editing")
+  if not (Cr.Deadline >= CurrDate() and Cr.Completed < Cr.Hours):  # CheckCrDeadline
+    raise NvRuleViolation("checkValidity")
+  if not ((Cr.StateId = Entities.NvCredentialState.Planned)):  # TransitionStartAllowedState
+    raise NvRuleViolation("transitionStart: state transition not allowed")
+  assign  # TransitionStartChangeStateValues
+    Cr.StateId = Entities.NvCredentialState.Active
+    Cr.UpdatedOn = CurrDateTime()
+    Cr.Version = Cr.Version + 1
+  TransitionStartChangeStatePersist = UpdateNvCredential(Source=Cr)
+  end
+
+/// ssam-rule-map:{"CheckGetUserId":"Rule_Authenticated_6ab694","GetNvCredentialForUpdate":"Rule_LoadCr_fetch_96de4c","SetCr":"Rule_LoadCr_record_eabf5e","CheckCrCreatedBy":"Rule_LoadCr_scope0_0b7754","CheckCrVersion":"Rule_LoadCr_version_37420b","CheckCrCompleted":"Rule_checkQualification_885868","TransitionFinishAllowedState":"Rule_transitionFinish_allowed_0a6ddb","TransitionFinishChangeStateValues":"Rule_transitionFinish_change_values_e492d4","TransitionFinishChangeStatePersist":"Rule_transitionFinish_change_persist_1b2a75"}
+server action FinishNvCredential
+  in CrId: NvCredential Identifier
+  in CrVersion: Long Integer
+  local Cr: NvCredential
+  if not (GetUserId() <> NullIdentifier()):  # CheckGetUserId
+    raise NvRuleViolation("Authentication required")
+  GetNvCredentialForUpdate = GetNvCredentialForUpdate(Id=CrId)
+  assign  # SetCr
+    Cr = GetNvCredentialForUpdate.Record.NvCredential
+  if not (Cr.CreatedBy = GetUserId()):  # CheckCrCreatedBy
+    raise NvRuleViolation("Record outside requested scope")
+  if not (Cr.Version = CrVersion):  # CheckCrVersion
+    raise NvRuleViolation("Record changed; reload before editing")
+  if not (Cr.Completed >= Cr.Hours and Cr.Deadline >= CurrDate()):  # CheckCrCompleted
+    raise NvRuleViolation("checkQualification")
+  if not ((Cr.StateId = Entities.NvCredentialState.Active)):  # TransitionFinishAllowedState
+    raise NvRuleViolation("transitionFinish: state transition not allowed")
+  assign  # TransitionFinishChangeStateValues
+    Cr.StateId = Entities.NvCredentialState.Finished
+    Cr.UpdatedOn = CurrDateTime()
+    Cr.Version = Cr.Version + 1
+  TransitionFinishChangeStatePersist = UpdateNvCredential(Source=Cr)
+  end
+
+/// ssam-rule-map:{"CheckGetUserId":"Rule_Authenticated_6ab694","GetNvCredential":"Rule_LoadCr_fetch_96de4c","SetCr":"Rule_LoadCr_record_eabf5e","CheckCrCreatedBy":"Rule_LoadCr_scope0_0b7754","GetNvCredentialAttendance":"Rule_QueryAttendanceRows_query_a3ef61","CheckGetNvCredentialAttendanceCount":"Rule_QueryAttendanceRows_complete_dd705b","SetAttendanceRows":"Rule_QueryAttendanceRows_list_a5fb4c","SetHours":"Rule_SummarizeAttendance_seed_553ee6","ForEachAttendanceRows":"Rule_SummarizeAttendance_each_159213","SetHours2":"Rule_SummarizeAttendance_each_Summarize_a2fd93","SetHours3":"Rule_ReturnAttendance_635c20"}
+server action ForecastNvCredentialAttendance
+  in CrId: NvCredential Identifier
+  out Hours: Decimal
+  out Excused: Long Integer
+  local Cr: NvCredential
+  local AttendanceRows: NvCredentialAttendance List
+  if not (GetUserId() <> NullIdentifier()):  # CheckGetUserId
+    raise NvRuleViolation("Authentication required")
+  GetNvCredential = GetNvCredential(Id=CrId)
+  assign  # SetCr
+    Cr = GetNvCredential.Record.NvCredential
+  if not (Cr.CreatedBy = GetUserId()):  # CheckCrCreatedBy
+    raise NvRuleViolation("Record outside requested scope")
+  GetNvCredentialAttendance = aggregate FROM NvCredentialAttendance WHERE (NvCredentialAttendance.ParentId = Cr.Id) MAX 400
+  if not (GetNvCredentialAttendance.Count <= 400):  # CheckGetNvCredentialAttendanceCount
+    raise NvRuleViolation("Result exceeds declared limit")
+  assign  # SetAttendanceRows
+    AttendanceRows = GetNvCredentialAttendance.List
+  assign  # SetHours
+    Hours = 0
+    Excused = 0
+  foreach AttendanceRows:  # ForEachAttendanceRows @ruleNew1
+    assign  # SetHours2
+      Hours = Hours + (AttendanceRows.Current.Minutes/60)
+      Excused = Excused + If(AttendanceRows.Current.Excused, 1, 0)
+    next
+  assign  # SetHours3
+    Hours = Hours
+    Excused = Excused
+  end
+
+/// ssam-rule-map:{"CheckGetUserId":"Rule_Authenticated_6ab694","GetNvCredential":"Rule_LoadCr_fetch_96de4c","SetCr":"Rule_LoadCr_record_eabf5e","CheckCrCreatedBy":"Rule_LoadCr_scope0_0b7754","GetNvCredentialParticipant":"Rule_QueryApplicantsRows_query_8818e3","CheckGetNvCredentialParticipantCount":"Rule_QueryApplicantsRows_complete_c750be","SetApplicantsRows":"Rule_QueryApplicantsRows_list_8e3093","SetConfirmed":"Rule_SummarizeApplicants_seed_e59651","ForEachApplicantsRows":"Rule_SummarizeApplicants_each_9d70a9","SetConfirmed2":"Rule_SummarizeApplicants_each_Summarize_4f3eee","SetConfirmed3":"Rule_ReturnApplicants_252b03"}
+server action ReviewNvCredentialApplicants
+  in CrId: NvCredential Identifier
+  out Confirmed: Long Integer
+  out Candidates: Long Integer
+  local Cr: NvCredential
+  local ApplicantsRows: NvCredentialParticipant List
+  if not (GetUserId() <> NullIdentifier()):  # CheckGetUserId
+    raise NvRuleViolation("Authentication required")
+  GetNvCredential = GetNvCredential(Id=CrId)
+  assign  # SetCr
+    Cr = GetNvCredential.Record.NvCredential
+  if not (Cr.CreatedBy = GetUserId()):  # CheckCrCreatedBy
+    raise NvRuleViolation("Record outside requested scope")
+  GetNvCredentialParticipant = aggregate FROM NvCredentialParticipant WHERE (NvCredentialParticipant.ParentId = Cr.Id) MAX 400
+  if not (GetNvCredentialParticipant.Count <= 400):  # CheckGetNvCredentialParticipantCount
+    raise NvRuleViolation("Result exceeds declared limit")
+  assign  # SetApplicantsRows
+    ApplicantsRows = GetNvCredentialParticipant.List
+  assign  # SetConfirmed
+    Confirmed = 0
+    Candidates = 0
+  foreach ApplicantsRows:  # ForEachApplicantsRows @ruleNew1
+    assign  # SetConfirmed2
+      Confirmed = Confirmed + If(ApplicantsRows.Current.Confirmed, 1, 0)
+      Candidates = Candidates + 1
+    next
+  assign  # SetConfirmed3
+    Confirmed = Confirmed
+    Candidates = Candidates
+  end
+
+/// ssam-rule-map:{"CheckGetUserId":"Rule_Authenticated_6ab694","GetNvLeaveForUpdate":"Rule_LoadLe_fetch_b616d8","SetLe":"Rule_LoadLe_record_83101e","CheckLeCreatedBy":"Rule_LoadLe_scope0_bf1c7d","CheckLeVersion":"Rule_LoadLe_version_5c208d","CheckLeHours":"Rule_checkEntitlement_d3ec23","TransitionApproveAllowedState":"Rule_transitionApprove_allowed_7ff178","TransitionApproveChangeStateValues":"Rule_transitionApprove_change_values_b657e1","TransitionApproveChangeStatePersist":"Rule_transitionApprove_change_persist_87265c"}
+server action ApproveNvLeave
+  in LeId: NvLeave Identifier
+  in LeVersion: Long Integer
+  local Le: NvLeave
+  if not (GetUserId() <> NullIdentifier()):  # CheckGetUserId
+    raise NvRuleViolation("Authentication required")
+  GetNvLeaveForUpdate = GetNvLeaveForUpdate(Id=LeId)
+  assign  # SetLe
+    Le = GetNvLeaveForUpdate.Record.NvLeave
+  if not (Le.CreatedBy = GetUserId()):  # CheckLeCreatedBy
+    raise NvRuleViolation("Record outside requested scope")
+  if not (Le.Version = LeVersion):  # CheckLeVersion
+    raise NvRuleViolation("Record changed; reload before editing")
+  if not (Le.Hours >= 8 and Le.Hours <= Le.Quota):  # CheckLeHours
+    raise NvRuleViolation("checkEntitlement")
+  if not ((Le.StateId = Entities.NvLeaveState.Requested)):  # TransitionApproveAllowedState
+    raise NvRuleViolation("transitionApprove: state transition not allowed")
+  assign  # TransitionApproveChangeStateValues
+    Le.StateId = Entities.NvLeaveState.Planned
+    Le.UpdatedOn = CurrDateTime()
+    Le.Version = Le.Version + 1
+  TransitionApproveChangeStatePersist = UpdateNvLeave(Source=Le)
+  end
+
+/// ssam-rule-map:{"CheckGetUserId":"Rule_Authenticated_6ab694","GetNvLeaveForUpdate":"Rule_LoadLe_fetch_b616d8","SetLe":"Rule_LoadLe_record_83101e","CheckLeCreatedBy":"Rule_LoadLe_scope0_bf1c7d","CheckLeVersion":"Rule_LoadLe_version_5c208d","CheckLeDeadline":"Rule_checkStart_e9be42","TransitionBeginAllowedState":"Rule_transitionBegin_allowed_aa5972","TransitionBeginChangeStateValues":"Rule_transitionBegin_change_values_7915bc","TransitionBeginChangeStatePersist":"Rule_transitionBegin_change_persist_a70dab"}
+server action BeginNvLeave
+  in LeId: NvLeave Identifier
+  in LeVersion: Long Integer
+  local Le: NvLeave
+  if not (GetUserId() <> NullIdentifier()):  # CheckGetUserId
+    raise NvRuleViolation("Authentication required")
+  GetNvLeaveForUpdate = GetNvLeaveForUpdate(Id=LeId)
+  assign  # SetLe
+    Le = GetNvLeaveForUpdate.Record.NvLeave
+  if not (Le.CreatedBy = GetUserId()):  # CheckLeCreatedBy
+    raise NvRuleViolation("Record outside requested scope")
+  if not (Le.Version = LeVersion):  # CheckLeVersion
+    raise NvRuleViolation("Record changed; reload before editing")
+  if not (Le.Deadline <= CurrDate() and Le.Completed=0):  # CheckLeDeadline
+    raise NvRuleViolation("checkStart")
+  if not ((Le.StateId = Entities.NvLeaveState.Planned)):  # TransitionBeginAllowedState
+    raise NvRuleViolation("transitionBegin: state transition not allowed")
+  assign  # TransitionBeginChangeStateValues
+    Le.StateId = Entities.NvLeaveState.Active
+    Le.UpdatedOn = CurrDateTime()
+    Le.Version = Le.Version + 1
+  TransitionBeginChangeStatePersist = UpdateNvLeave(Source=Le)
+  end
+
+/// ssam-rule-map:{"CheckGetUserId":"Rule_Authenticated_6ab694","GetNvLeaveForUpdate":"Rule_LoadLe_fetch_b616d8","SetLe":"Rule_LoadLe_record_83101e","CheckLeCreatedBy":"Rule_LoadLe_scope0_bf1c7d","CheckLeVersion":"Rule_LoadLe_version_5c208d","CheckLeCompleted":"Rule_checkConsumed_30fa65","TransitionFinishAllowedState":"Rule_transitionFinish_allowed_0a6ddb","TransitionFinishChangeStateValues":"Rule_transitionFinish_change_values_e492d4","TransitionFinishChangeStatePersist":"Rule_transitionFinish_change_persist_1b2a75"}
+server action FinishNvLeave
+  in LeId: NvLeave Identifier
+  in LeVersion: Long Integer
+  local Le: NvLeave
+  if not (GetUserId() <> NullIdentifier()):  # CheckGetUserId
+    raise NvRuleViolation("Authentication required")
+  GetNvLeaveForUpdate = GetNvLeaveForUpdate(Id=LeId)
+  assign  # SetLe
+    Le = GetNvLeaveForUpdate.Record.NvLeave
+  if not (Le.CreatedBy = GetUserId()):  # CheckLeCreatedBy
+    raise NvRuleViolation("Record outside requested scope")
+  if not (Le.Version = LeVersion):  # CheckLeVersion
+    raise NvRuleViolation("Record changed; reload before editing")
+  if not (Le.Completed=Le.Hours and Le.Hours > 0):  # CheckLeCompleted
+    raise NvRuleViolation("checkConsumed")
+  if not ((Le.StateId = Entities.NvLeaveState.Active)):  # TransitionFinishAllowedState
+    raise NvRuleViolation("transitionFinish: state transition not allowed")
+  assign  # TransitionFinishChangeStateValues
+    Le.StateId = Entities.NvLeaveState.Finished
+    Le.UpdatedOn = CurrDateTime()
+    Le.Version = Le.Version + 1
+  TransitionFinishChangeStatePersist = UpdateNvLeave(Source=Le)
+  end
+
+/// ssam-rule-map:{"CheckGetUserId":"Rule_Authenticated_6ab694","GetNvLeave":"Rule_LoadLe_fetch_b616d8","SetLe":"Rule_LoadLe_record_83101e","CheckLeCreatedBy":"Rule_LoadLe_scope0_bf1c7d","GetNvLeaveParticipant":"Rule_QueryApprovalsRows_query_3131ca","CheckGetNvLeaveParticipantCount":"Rule_QueryApprovalsRows_complete_0f5a34","SetApprovalsRows":"Rule_QueryApprovalsRows_list_7ef373","SetApproved":"Rule_SummarizeApprovals_seed_e5b4de","ForEachApprovalsRows":"Rule_SummarizeApprovals_each_c546f5","SetApproved2":"Rule_SummarizeApprovals_each_SummarizeA_33a280","SetApproved3":"Rule_ReturnApprovals_a6c7de"}
+server action ForecastNvLeaveApprovals
+  in LeId: NvLeave Identifier
+  out Approved: Long Integer
+  out Awaiting: Long Integer
+  local Le: NvLeave
+  local ApprovalsRows: NvLeaveParticipant List
+  if not (GetUserId() <> NullIdentifier()):  # CheckGetUserId
+    raise NvRuleViolation("Authentication required")
+  GetNvLeave = GetNvLeave(Id=LeId)
+  assign  # SetLe
+    Le = GetNvLeave.Record.NvLeave
+  if not (Le.CreatedBy = GetUserId()):  # CheckLeCreatedBy
+    raise NvRuleViolation("Record outside requested scope")
+  GetNvLeaveParticipant = aggregate FROM NvLeaveParticipant WHERE (NvLeaveParticipant.ParentId = Le.Id) MAX 300
+  if not (GetNvLeaveParticipant.Count <= 300):  # CheckGetNvLeaveParticipantCount
+    raise NvRuleViolation("Result exceeds declared limit")
+  assign  # SetApprovalsRows
+    ApprovalsRows = GetNvLeaveParticipant.List
+  assign  # SetApproved
+    Approved = 0
+    Awaiting = 0
+  foreach ApprovalsRows:  # ForEachApprovalsRows @ruleNew1
+    assign  # SetApproved2
+      Approved = Approved + If(ApprovalsRows.Current.Confirmed, 1, 0)
+      Awaiting = Awaiting + If(not ApprovalsRows.Current.Confirmed, 1, 0)
+    next
+  assign  # SetApproved3
+    Approved = Approved
+    Awaiting = Awaiting
+  end
+
+/// ssam-rule-map:{"CheckGetUserId":"Rule_Authenticated_6ab694","GetNvLeave":"Rule_LoadLe_fetch_b616d8","SetLe":"Rule_LoadLe_record_83101e","CheckLeCreatedBy":"Rule_LoadLe_scope0_bf1c7d","GetNvLeaveAttendance":"Rule_QueryAbsenceRows_query_168397","CheckGetNvLeaveAttendanceCount":"Rule_QueryAbsenceRows_complete_c9422f","SetAbsenceRows":"Rule_QueryAbsenceRows_list_fe56db","SetExcusedMinutes":"Rule_SummarizeAbsence_seed_9b956c","ForEachAbsenceRows":"Rule_SummarizeAbsence_each_86a0e5","SetExcusedMinutes2":"Rule_SummarizeAbsence_each_SummarizeAbs_b448b2","SetExcusedMinutes3":"Rule_ReturnAbsence_c76705"}
+server action ReviewNvLeaveAttendance
+  in LeId: NvLeave Identifier
+  out ExcusedMinutes: Decimal
+  out UnexcusedMinutes: Decimal
+  local Le: NvLeave
+  local AbsenceRows: NvLeaveAttendance List
+  if not (GetUserId() <> NullIdentifier()):  # CheckGetUserId
+    raise NvRuleViolation("Authentication required")
+  GetNvLeave = GetNvLeave(Id=LeId)
+  assign  # SetLe
+    Le = GetNvLeave.Record.NvLeave
+  if not (Le.CreatedBy = GetUserId()):  # CheckLeCreatedBy
+    raise NvRuleViolation("Record outside requested scope")
+  GetNvLeaveAttendance = aggregate FROM NvLeaveAttendance WHERE (NvLeaveAttendance.ParentId = Le.Id) MAX 300
+  if not (GetNvLeaveAttendance.Count <= 300):  # CheckGetNvLeaveAttendanceCount
+    raise NvRuleViolation("Result exceeds declared limit")
+  assign  # SetAbsenceRows
+    AbsenceRows = GetNvLeaveAttendance.List
+  assign  # SetExcusedMinutes
+    ExcusedMinutes = 0
+    UnexcusedMinutes = 0
+  foreach AbsenceRows:  # ForEachAbsenceRows @ruleNew1
+    assign  # SetExcusedMinutes2
+      ExcusedMinutes = ExcusedMinutes + (If(AbsenceRows.Current.Excused,AbsenceRows.Current.Minutes,0))
+      UnexcusedMinutes = UnexcusedMinutes + (If(AbsenceRows.Current.Excused,0,AbsenceRows.Current.Minutes))
+    next
+  assign  # SetExcusedMinutes3
+    ExcusedMinutes = ExcusedMinutes
+    UnexcusedMinutes = UnexcusedMinutes
+  end
+
+/// ssam-rule-map:{"CheckGetUserId":"Rule_Authenticated_6ab694","GetNvVoyageForUpdate":"Rule_LoadV_fetch_bf4397","SetV":"Rule_LoadV_record_dd84b9","CheckVCreatedBy":"Rule_LoadV_scope0_b5ed85","CheckVVersion":"Rule_LoadV_version_865612","CheckVCurrentLoad":"Rule_checkManifest_bf513d","TransitionReadyAllowedState":"Rule_transitionReady_allowed_47f7c2","TransitionReadyChangeStateValues":"Rule_transitionReady_change_values_24b1a1","TransitionReadyChangeStatePersist":"Rule_transitionReady_change_persist_13d646"}
+server action ReadyNvVoyage
+  in VId: NvVoyage Identifier
+  in VVersion: Long Integer
+  local V: NvVoyage
+  if not (GetUserId() <> NullIdentifier()):  # CheckGetUserId
+    raise NvRuleViolation("Authentication required")
+  GetNvVoyageForUpdate = GetNvVoyageForUpdate(Id=VId)
+  assign  # SetV
+    V = GetNvVoyageForUpdate.Record.NvVoyage
+  if not (V.CreatedBy = GetUserId()):  # CheckVCreatedBy
+    raise NvRuleViolation("Record outside requested scope")
+  if not (V.Version = VVersion):  # CheckVVersion
+    raise NvRuleViolation("Record changed; reload before editing")
+  if not (V.CurrentLoad > 0 and V.CurrentLoad <= V.MaxLoad and V.Distance > 0):  # CheckVCurrentLoad
+    raise NvRuleViolation("checkManifest")
+  if not ((V.StateId = Entities.NvVoyageState.Planned)):  # TransitionReadyAllowedState
+    raise NvRuleViolation("transitionReady: state transition not allowed")
+  assign  # TransitionReadyChangeStateValues
+    V.StateId = Entities.NvVoyageState.Ready
+    V.UpdatedOn = CurrDateTime()
+    V.Version = V.Version + 1
+  TransitionReadyChangeStatePersist = UpdateNvVoyage(Source=V)
+  end
+
+/// ssam-rule-map:{"CheckGetUserId":"Rule_Authenticated_6ab694","GetNvVoyageForUpdate":"Rule_LoadV_fetch_bf4397","SetV":"Rule_LoadV_record_dd84b9","CheckVCreatedBy":"Rule_LoadV_scope0_b5ed85","CheckVVersion":"Rule_LoadV_version_865612","CheckVDeparture":"Rule_checkDeparture_0b3e74","TransitionDepartAllowedState":"Rule_transitionDepart_allowed_c7c1f4","TransitionDepartChangeStateValues":"Rule_transitionDepart_change_values_632a26","TransitionDepartChangeStatePersist":"Rule_transitionDepart_change_persist_a7e0bb"}
+server action DepartNvVoyage
+  in VId: NvVoyage Identifier
+  in VVersion: Long Integer
+  local V: NvVoyage
+  if not (GetUserId() <> NullIdentifier()):  # CheckGetUserId
+    raise NvRuleViolation("Authentication required")
+  GetNvVoyageForUpdate = GetNvVoyageForUpdate(Id=VId)
+  assign  # SetV
+    V = GetNvVoyageForUpdate.Record.NvVoyage
+  if not (V.CreatedBy = GetUserId()):  # CheckVCreatedBy
+    raise NvRuleViolation("Record outside requested scope")
+  if not (V.Version = VVersion):  # CheckVVersion
+    raise NvRuleViolation("Record changed; reload before editing")
+  if not (V.Departure <= CurrDate() and V.Completed=0):  # CheckVDeparture
+    raise NvRuleViolation("checkDeparture")
+  if not ((V.StateId = Entities.NvVoyageState.Ready)):  # TransitionDepartAllowedState
+    raise NvRuleViolation("transitionDepart: state transition not allowed")
+  assign  # TransitionDepartChangeStateValues
+    V.StateId = Entities.NvVoyageState.Underway
+    V.UpdatedOn = CurrDateTime()
+    V.Version = V.Version + 1
+  TransitionDepartChangeStatePersist = UpdateNvVoyage(Source=V)
+  end
+
+/// ssam-rule-map:{"CheckGetUserId":"Rule_Authenticated_6ab694","GetNvVoyageForUpdate":"Rule_LoadV_fetch_bf4397","SetV":"Rule_LoadV_record_dd84b9","CheckVCreatedBy":"Rule_LoadV_scope0_b5ed85","CheckVVersion":"Rule_LoadV_version_865612","CheckVCompleted":"Rule_checkArrived_0b90a6","TransitionCompleteAllowedState":"Rule_transitionComplete_allowed_9d101f","TransitionCompleteChangeStateValues":"Rule_transitionComplete_change_values_19e218","TransitionCompleteChangeStatePersist":"Rule_transitionComplete__c6feaffd88ce_73762b"}
+server action CompleteNvVoyage
+  in VId: NvVoyage Identifier
+  in VVersion: Long Integer
+  local V: NvVoyage
+  if not (GetUserId() <> NullIdentifier()):  # CheckGetUserId
+    raise NvRuleViolation("Authentication required")
+  GetNvVoyageForUpdate = GetNvVoyageForUpdate(Id=VId)
+  assign  # SetV
+    V = GetNvVoyageForUpdate.Record.NvVoyage
+  if not (V.CreatedBy = GetUserId()):  # CheckVCreatedBy
+    raise NvRuleViolation("Record outside requested scope")
+  if not (V.Version = VVersion):  # CheckVVersion
+    raise NvRuleViolation("Record changed; reload before editing")
+  if not (V.Completed >= V.Distance and V.CurrentLoad=0):  # CheckVCompleted
+    raise NvRuleViolation("checkArrived")
+  if not ((V.StateId = Entities.NvVoyageState.Underway)):  # TransitionCompleteAllowedState
+    raise NvRuleViolation("transitionComplete: state transition not allowed")
+  assign  # TransitionCompleteChangeStateValues
+    V.StateId = Entities.NvVoyageState.Completed
+    V.UpdatedOn = CurrDateTime()
+    V.Version = V.Version + 1
+  TransitionCompleteChangeStatePersist = UpdateNvVoyage(Source=V)
+  end
+
+/// ssam-rule-map:{"CheckGetUserId":"Rule_Authenticated_6ab694","GetNvVoyage":"Rule_LoadV_fetch_bf4397","SetV":"Rule_LoadV_record_dd84b9","CheckVCreatedBy":"Rule_LoadV_scope0_b5ed85","GetNvVoyagePassenger":"Rule_QueryManifestRows_query_e033f5","CheckGetNvVoyagePassengerCount":"Rule_QueryManifestRows_complete_2c185f","SetManifestRows":"Rule_QueryManifestRows_list_2e25f3","SetWeight":"Rule_SummarizeManifest_seed_9d3299","ForEachManifestRows":"Rule_SummarizeManifest_each_a6c52e","SetWeight2":"Rule_SummarizeManifest_each_SummarizeMa_362d38","SetWeight3":"Rule_ReturnManifest_74df61"}
+server action ForecastNvVoyageManifest
+  in VId: NvVoyage Identifier
+  out Weight: Decimal
+  out Passengers: Long Integer
+  local V: NvVoyage
+  local ManifestRows: NvVoyagePassenger List
+  if not (GetUserId() <> NullIdentifier()):  # CheckGetUserId
+    raise NvRuleViolation("Authentication required")
+  GetNvVoyage = GetNvVoyage(Id=VId)
+  assign  # SetV
+    V = GetNvVoyage.Record.NvVoyage
+  if not (V.CreatedBy = GetUserId()):  # CheckVCreatedBy
+    raise NvRuleViolation("Record outside requested scope")
+  GetNvVoyagePassenger = aggregate FROM NvVoyagePassenger WHERE (NvVoyagePassenger.ParentId = V.Id) MAX 1000
+  if not (GetNvVoyagePassenger.Count <= 1000):  # CheckGetNvVoyagePassengerCount
+    raise NvRuleViolation("Result exceeds declared limit")
+  assign  # SetManifestRows
+    ManifestRows = GetNvVoyagePassenger.List
+  assign  # SetWeight
+    Weight = 0
+    Passengers = 0
+  foreach ManifestRows:  # ForEachManifestRows @ruleNew1
+    assign  # SetWeight2
+      Weight = Weight + (ManifestRows.Current.Weight)
+      Passengers = Passengers + 1
+    next
+  assign  # SetWeight3
+    Weight = Weight
+    Passengers = Passengers
+  end
+
+/// ssam-rule-map:{"CheckGetUserId":"Rule_Authenticated_6ab694","GetNvVoyage":"Rule_LoadV_fetch_bf4397","SetV":"Rule_LoadV_record_dd84b9","CheckVCreatedBy":"Rule_LoadV_scope0_b5ed85","GetNvVoyageIncident":"Rule_QueryIncidentsRows_query_1f1b45","CheckGetNvVoyageIncidentCount":"Rule_QueryIncidentsRows_complete_7fdeba","SetIncidentsRows":"Rule_QueryIncidentsRows_list_c368d8","SetOpen":"Rule_SummarizeIncidents_seed_705355","ForEachIncidentsRows":"Rule_SummarizeIncidents_each_605bb5","SetOpen2":"Rule_SummarizeIncidents_each_SummarizeI_5fd159","SetOpen3":"Rule_ReturnIncidents_87d8c8"}
+server action ReviewNvVoyageIncidents
+  in VId: NvVoyage Identifier
+  out Open: Long Integer
+  out Severity: Decimal
+  local V: NvVoyage
+  local IncidentsRows: NvVoyageIncident List
+  if not (GetUserId() <> NullIdentifier()):  # CheckGetUserId
+    raise NvRuleViolation("Authentication required")
+  GetNvVoyage = GetNvVoyage(Id=VId)
+  assign  # SetV
+    V = GetNvVoyage.Record.NvVoyage
+  if not (V.CreatedBy = GetUserId()):  # CheckVCreatedBy
+    raise NvRuleViolation("Record outside requested scope")
+  GetNvVoyageIncident = aggregate FROM NvVoyageIncident WHERE (NvVoyageIncident.ParentId = V.Id) MAX 300
+  if not (GetNvVoyageIncident.Count <= 300):  # CheckGetNvVoyageIncidentCount
+    raise NvRuleViolation("Result exceeds declared limit")
+  assign  # SetIncidentsRows
+    IncidentsRows = GetNvVoyageIncident.List
+  assign  # SetOpen
+    Open = 0
+    Severity = 0
+  foreach IncidentsRows:  # ForEachIncidentsRows @ruleNew1
+    assign  # SetOpen2
+      Open = Open + If(not IncidentsRows.Current.IsClosed, 1, 0)
+      Severity = Severity + (If(IncidentsRows.Current.IsClosed,0,IncidentsRows.Current.Severity))
+    next
+  assign  # SetOpen3
+    Open = Open
+    Severity = Severity
+  end
+
+/// ssam-rule-map:{"CheckGetUserId":"Rule_Authenticated_6ab694","GetNvDockingForUpdate":"Rule_LoadD_fetch_33c3ba","SetD":"Rule_LoadD_record_0df18c","CheckDCreatedBy":"Rule_LoadD_scope0_505f36","CheckDVersion":"Rule_LoadD_version_89b1fa","CheckDDistance":"Rule_checkApproach_014753","TransitionReadyAllowedState":"Rule_transitionReady_allowed_47f7c2","TransitionReadyChangeStateValues":"Rule_transitionReady_change_values_24b1a1","TransitionReadyChangeStatePersist":"Rule_transitionReady_change_persist_13d646"}
+server action ReadyNvDocking
+  in DId: NvDocking Identifier
+  in DVersion: Long Integer
+  local D: NvDocking
+  if not (GetUserId() <> NullIdentifier()):  # CheckGetUserId
+    raise NvRuleViolation("Authentication required")
+  GetNvDockingForUpdate = GetNvDockingForUpdate(Id=DId)
+  assign  # SetD
+    D = GetNvDockingForUpdate.Record.NvDocking
+  if not (D.CreatedBy = GetUserId()):  # CheckDCreatedBy
+    raise NvRuleViolation("Record outside requested scope")
+  if not (D.Version = DVersion):  # CheckDVersion
+    raise NvRuleViolation("Record changed; reload before editing")
+  if not (D.Distance > 0 and D.CurrentLoad <= D.MaxLoad*0.9):  # CheckDDistance
+    raise NvRuleViolation("checkApproach")
+  if not ((D.StateId = Entities.NvDockingState.Planned)):  # TransitionReadyAllowedState
+    raise NvRuleViolation("transitionReady: state transition not allowed")
+  assign  # TransitionReadyChangeStateValues
+    D.StateId = Entities.NvDockingState.Ready
+    D.UpdatedOn = CurrDateTime()
+    D.Version = D.Version + 1
+  TransitionReadyChangeStatePersist = UpdateNvDocking(Source=D)
+  end
+
+/// ssam-rule-map:{"CheckGetUserId":"Rule_Authenticated_6ab694","GetNvDockingForUpdate":"Rule_LoadD_fetch_33c3ba","SetD":"Rule_LoadD_record_0df18c","CheckDCreatedBy":"Rule_LoadD_scope0_505f36","CheckDVersion":"Rule_LoadD_version_89b1fa","CheckDDeparture":"Rule_checkWindow_ec31c0","TransitionBeginAllowedState":"Rule_transitionBegin_allowed_aa5972","TransitionBeginChangeStateValues":"Rule_transitionBegin_change_values_7915bc","TransitionBeginChangeStatePersist":"Rule_transitionBegin_change_persist_a70dab"}
+server action BeginNvDocking
+  in DId: NvDocking Identifier
+  in DVersion: Long Integer
+  local D: NvDocking
+  if not (GetUserId() <> NullIdentifier()):  # CheckGetUserId
+    raise NvRuleViolation("Authentication required")
+  GetNvDockingForUpdate = GetNvDockingForUpdate(Id=DId)
+  assign  # SetD
+    D = GetNvDockingForUpdate.Record.NvDocking
+  if not (D.CreatedBy = GetUserId()):  # CheckDCreatedBy
+    raise NvRuleViolation("Record outside requested scope")
+  if not (D.Version = DVersion):  # CheckDVersion
+    raise NvRuleViolation("Record changed; reload before editing")
+  if not (D.Departure <= CurrDate() and D.Completed=0):  # CheckDDeparture
+    raise NvRuleViolation("checkWindow")
+  if not ((D.StateId = Entities.NvDockingState.Ready)):  # TransitionBeginAllowedState
+    raise NvRuleViolation("transitionBegin: state transition not allowed")
+  assign  # TransitionBeginChangeStateValues
+    D.StateId = Entities.NvDockingState.Underway
+    D.UpdatedOn = CurrDateTime()
+    D.Version = D.Version + 1
+  TransitionBeginChangeStatePersist = UpdateNvDocking(Source=D)
+  end
+
+/// ssam-rule-map:{"CheckGetUserId":"Rule_Authenticated_6ab694","GetNvDockingForUpdate":"Rule_LoadD_fetch_33c3ba","SetD":"Rule_LoadD_record_0df18c","CheckDCreatedBy":"Rule_LoadD_scope0_505f36","CheckDVersion":"Rule_LoadD_version_89b1fa","CheckDCompleted":"Rule_checkBerth_a64594","TransitionCompleteAllowedState":"Rule_transitionComplete_allowed_9d101f","TransitionCompleteChangeStateValues":"Rule_transitionComplete_change_values_19e218","TransitionCompleteChangeStatePersist":"Rule_transitionComplete__c6feaffd88ce_73762b"}
+server action CompleteNvDocking
+  in DId: NvDocking Identifier
+  in DVersion: Long Integer
+  local D: NvDocking
+  if not (GetUserId() <> NullIdentifier()):  # CheckGetUserId
+    raise NvRuleViolation("Authentication required")
+  GetNvDockingForUpdate = GetNvDockingForUpdate(Id=DId)
+  assign  # SetD
+    D = GetNvDockingForUpdate.Record.NvDocking
+  if not (D.CreatedBy = GetUserId()):  # CheckDCreatedBy
+    raise NvRuleViolation("Record outside requested scope")
+  if not (D.Version = DVersion):  # CheckDVersion
+    raise NvRuleViolation("Record changed; reload before editing")
+  if not (D.Completed=D.Distance and D.CurrentLoad=0):  # CheckDCompleted
+    raise NvRuleViolation("checkBerth")
+  if not ((D.StateId = Entities.NvDockingState.Underway)):  # TransitionCompleteAllowedState
+    raise NvRuleViolation("transitionComplete: state transition not allowed")
+  assign  # TransitionCompleteChangeStateValues
+    D.StateId = Entities.NvDockingState.Completed
+    D.UpdatedOn = CurrDateTime()
+    D.Version = D.Version + 1
+  TransitionCompleteChangeStatePersist = UpdateNvDocking(Source=D)
+  end
+
+/// ssam-rule-map:{"CheckGetUserId":"Rule_Authenticated_6ab694","GetNvDocking":"Rule_LoadD_fetch_33c3ba","SetD":"Rule_LoadD_record_0df18c","CheckDCreatedBy":"Rule_LoadD_scope0_505f36","GetNvDockingLeg":"Rule_QueryRouteRows_query_eb0374","CheckGetNvDockingLegCount":"Rule_QueryRouteRows_complete_af6613","SetRouteRows":"Rule_QueryRouteRows_list_402809","SetDistance":"Rule_SummarizeRoute_seed_f48c31","ForEachRouteRows":"Rule_SummarizeRoute_each_8abcd9","SetDistance2":"Rule_SummarizeRoute_each_SummarizeRoute_966565","SetDistance3":"Rule_ReturnRoute_2a8e77"}
+server action ForecastNvDockingRoute
+  in DId: NvDocking Identifier
+  out Distance: Decimal
+  out Legs: Long Integer
+  local D: NvDocking
+  local RouteRows: NvDockingLeg List
+  if not (GetUserId() <> NullIdentifier()):  # CheckGetUserId
+    raise NvRuleViolation("Authentication required")
+  GetNvDocking = GetNvDocking(Id=DId)
+  assign  # SetD
+    D = GetNvDocking.Record.NvDocking
+  if not (D.CreatedBy = GetUserId()):  # CheckDCreatedBy
+    raise NvRuleViolation("Record outside requested scope")
+  GetNvDockingLeg = aggregate FROM NvDockingLeg WHERE (NvDockingLeg.ParentId = D.Id) MAX 200
+  if not (GetNvDockingLeg.Count <= 200):  # CheckGetNvDockingLegCount
+    raise NvRuleViolation("Result exceeds declared limit")
+  assign  # SetRouteRows
+    RouteRows = GetNvDockingLeg.List
+  assign  # SetDistance
+    Distance = 0
+    Legs = 0
+  foreach RouteRows:  # ForEachRouteRows @ruleNew1
+    assign  # SetDistance2
+      Distance = Distance + (RouteRows.Current.Distance)
+      Legs = Legs + 1
+    next
+  assign  # SetDistance3
+    Distance = Distance
+    Legs = Legs
+  end
+
+/// ssam-rule-map:{"CheckGetUserId":"Rule_Authenticated_6ab694","GetNvDocking":"Rule_LoadD_fetch_33c3ba","SetD":"Rule_LoadD_record_0df18c","CheckDCreatedBy":"Rule_LoadD_scope0_505f36","GetNvDockingIncident":"Rule_QuerySafetyRows_query_90ae8c","CheckGetNvDockingIncidentCount":"Rule_QuerySafetyRows_complete_361ba0","SetSafetyRows":"Rule_QuerySafetyRows_list_3e7c25","SetCritical":"Rule_SummarizeSafety_seed_c85834","ForEachSafetyRows":"Rule_SummarizeSafety_each_1f9294","SetCritical2":"Rule_SummarizeSafety_each_SummarizeSafe_2f4e45","SetCritical3":"Rule_ReturnSafety_b266d9"}
+server action ReviewNvDockingIncidents
+  in DId: NvDocking Identifier
+  out Critical: Long Integer
+  out Closed: Long Integer
+  local D: NvDocking
+  local SafetyRows: NvDockingIncident List
+  if not (GetUserId() <> NullIdentifier()):  # CheckGetUserId
+    raise NvRuleViolation("Authentication required")
+  GetNvDocking = GetNvDocking(Id=DId)
+  assign  # SetD
+    D = GetNvDocking.Record.NvDocking
+  if not (D.CreatedBy = GetUserId()):  # CheckDCreatedBy
+    raise NvRuleViolation("Record outside requested scope")
+  GetNvDockingIncident = aggregate FROM NvDockingIncident WHERE (NvDockingIncident.ParentId = D.Id) MAX 300
+  if not (GetNvDockingIncident.Count <= 300):  # CheckGetNvDockingIncidentCount
+    raise NvRuleViolation("Result exceeds declared limit")
+  assign  # SetSafetyRows
+    SafetyRows = GetNvDockingIncident.List
+  assign  # SetCritical
+    Critical = 0
+    Closed = 0
+  foreach SafetyRows:  # ForEachSafetyRows @ruleNew1
+    assign  # SetCritical2
+      Critical = Critical + If(not SafetyRows.Current.IsClosed and SafetyRows.Current.Severity >= 4, 1, 0)
+      Closed = Closed + If(SafetyRows.Current.IsClosed, 1, 0)
+    next
+  assign  # SetCritical3
+    Critical = Critical
+    Closed = Closed
+  end
+
+/// ssam-rule-map:{"CheckGetUserId":"Rule_Authenticated_6ab694","GetNvTowForUpdate":"Rule_LoadT_fetch_a4663a","SetT":"Rule_LoadT_record_dbd58a","CheckTCreatedBy":"Rule_LoadT_scope0_5440d0","CheckTVersion":"Rule_LoadT_version_1e5520","CheckTCurrentLoad":"Rule_checkAttachment_f8d2e9","TransitionReadyAllowedState":"Rule_transitionReady_allowed_47f7c2","TransitionReadyChangeStateValues":"Rule_transitionReady_change_values_24b1a1","TransitionReadyChangeStatePersist":"Rule_transitionReady_change_persist_13d646"}
+server action ReadyNvTow
+  in TId: NvTow Identifier
+  in TVersion: Long Integer
+  local T: NvTow
+  if not (GetUserId() <> NullIdentifier()):  # CheckGetUserId
+    raise NvRuleViolation("Authentication required")
+  GetNvTowForUpdate = GetNvTowForUpdate(Id=TId)
+  assign  # SetT
+    T = GetNvTowForUpdate.Record.NvTow
+  if not (T.CreatedBy = GetUserId()):  # CheckTCreatedBy
+    raise NvRuleViolation("Record outside requested scope")
+  if not (T.Version = TVersion):  # CheckTVersion
+    raise NvRuleViolation("Record changed; reload before editing")
+  if not (T.CurrentLoad > 0 and T.CurrentLoad <= T.MaxLoad):  # CheckTCurrentLoad
+    raise NvRuleViolation("checkAttachment")
+  if not ((T.StateId = Entities.NvTowState.Planned)):  # TransitionReadyAllowedState
+    raise NvRuleViolation("transitionReady: state transition not allowed")
+  assign  # TransitionReadyChangeStateValues
+    T.StateId = Entities.NvTowState.Ready
+    T.UpdatedOn = CurrDateTime()
+    T.Version = T.Version + 1
+  TransitionReadyChangeStatePersist = UpdateNvTow(Source=T)
+  end
+
+/// ssam-rule-map:{"CheckGetUserId":"Rule_Authenticated_6ab694","GetNvTowForUpdate":"Rule_LoadT_fetch_a4663a","SetT":"Rule_LoadT_record_dbd58a","CheckTCreatedBy":"Rule_LoadT_scope0_5440d0","CheckTVersion":"Rule_LoadT_version_1e5520","CheckTDeparture":"Rule_checkSchedule_501859","TransitionBeginAllowedState":"Rule_transitionBegin_allowed_aa5972","TransitionBeginChangeStateValues":"Rule_transitionBegin_change_values_7915bc","TransitionBeginChangeStatePersist":"Rule_transitionBegin_change_persist_a70dab"}
+server action BeginNvTow
+  in TId: NvTow Identifier
+  in TVersion: Long Integer
+  local T: NvTow
+  if not (GetUserId() <> NullIdentifier()):  # CheckGetUserId
+    raise NvRuleViolation("Authentication required")
+  GetNvTowForUpdate = GetNvTowForUpdate(Id=TId)
+  assign  # SetT
+    T = GetNvTowForUpdate.Record.NvTow
+  if not (T.CreatedBy = GetUserId()):  # CheckTCreatedBy
+    raise NvRuleViolation("Record outside requested scope")
+  if not (T.Version = TVersion):  # CheckTVersion
+    raise NvRuleViolation("Record changed; reload before editing")
+  if not (T.Departure <= CurrDate() and T.Distance > 0):  # CheckTDeparture
+    raise NvRuleViolation("checkSchedule")
+  if not ((T.StateId = Entities.NvTowState.Ready)):  # TransitionBeginAllowedState
+    raise NvRuleViolation("transitionBegin: state transition not allowed")
+  assign  # TransitionBeginChangeStateValues
+    T.StateId = Entities.NvTowState.Underway
+    T.UpdatedOn = CurrDateTime()
+    T.Version = T.Version + 1
+  TransitionBeginChangeStatePersist = UpdateNvTow(Source=T)
+  end
+
+/// ssam-rule-map:{"CheckGetUserId":"Rule_Authenticated_6ab694","GetNvTowForUpdate":"Rule_LoadT_fetch_a4663a","SetT":"Rule_LoadT_record_dbd58a","CheckTCreatedBy":"Rule_LoadT_scope0_5440d0","CheckTVersion":"Rule_LoadT_version_1e5520","CheckTCompleted":"Rule_checkReleased_b62ff6","TransitionCompleteAllowedState":"Rule_transitionComplete_allowed_9d101f","TransitionCompleteChangeStateValues":"Rule_transitionComplete_change_values_19e218","TransitionCompleteChangeStatePersist":"Rule_transitionComplete__c6feaffd88ce_73762b"}
+server action CompleteNvTow
+  in TId: NvTow Identifier
+  in TVersion: Long Integer
+  local T: NvTow
+  if not (GetUserId() <> NullIdentifier()):  # CheckGetUserId
+    raise NvRuleViolation("Authentication required")
+  GetNvTowForUpdate = GetNvTowForUpdate(Id=TId)
+  assign  # SetT
+    T = GetNvTowForUpdate.Record.NvTow
+  if not (T.CreatedBy = GetUserId()):  # CheckTCreatedBy
+    raise NvRuleViolation("Record outside requested scope")
+  if not (T.Version = TVersion):  # CheckTVersion
+    raise NvRuleViolation("Record changed; reload before editing")
+  if not (T.Completed >= T.Distance and T.CurrentLoad=0):  # CheckTCompleted
+    raise NvRuleViolation("checkReleased")
+  if not ((T.StateId = Entities.NvTowState.Underway)):  # TransitionCompleteAllowedState
+    raise NvRuleViolation("transitionComplete: state transition not allowed")
+  assign  # TransitionCompleteChangeStateValues
+    T.StateId = Entities.NvTowState.Completed
+    T.UpdatedOn = CurrDateTime()
+    T.Version = T.Version + 1
+  TransitionCompleteChangeStatePersist = UpdateNvTow(Source=T)
+  end
+
+/// ssam-rule-map:{"CheckGetUserId":"Rule_Authenticated_6ab694","GetNvTow":"Rule_LoadT_fetch_a4663a","SetT":"Rule_LoadT_record_dbd58a","CheckTCreatedBy":"Rule_LoadT_scope0_5440d0","GetNvTowLeg":"Rule_QueryStagesRows_query_182baf","CheckGetNvTowLegCount":"Rule_QueryStagesRows_complete_d1db4e","SetStagesRows":"Rule_QueryStagesRows_list_101493","SetDistance":"Rule_SummarizeStages_seed_2306bc","ForEachStagesRows":"Rule_SummarizeStages_each_3a0386","SetDistance2":"Rule_SummarizeStages_each_SummarizeStag_ae53d4","SetDistance3":"Rule_ReturnStages_f054af"}
+server action ForecastNvTowStages
+  in TId: NvTow Identifier
+  out Distance: Decimal
+  out Stages: Long Integer
+  local T: NvTow
+  local StagesRows: NvTowLeg List
+  if not (GetUserId() <> NullIdentifier()):  # CheckGetUserId
+    raise NvRuleViolation("Authentication required")
+  GetNvTow = GetNvTow(Id=TId)
+  assign  # SetT
+    T = GetNvTow.Record.NvTow
+  if not (T.CreatedBy = GetUserId()):  # CheckTCreatedBy
+    raise NvRuleViolation("Record outside requested scope")
+  GetNvTowLeg = aggregate FROM NvTowLeg WHERE (NvTowLeg.ParentId = T.Id) MAX 200
+  if not (GetNvTowLeg.Count <= 200):  # CheckGetNvTowLegCount
+    raise NvRuleViolation("Result exceeds declared limit")
+  assign  # SetStagesRows
+    StagesRows = GetNvTowLeg.List
+  assign  # SetDistance
+    Distance = 0
+    Stages = 0
+  foreach StagesRows:  # ForEachStagesRows @ruleNew1
+    assign  # SetDistance2
+      Distance = Distance + (StagesRows.Current.Distance)
+      Stages = Stages + 1
+    next
+  assign  # SetDistance3
+    Distance = Distance
+    Stages = Stages
+  end
+
+/// ssam-rule-map:{"CheckGetUserId":"Rule_Authenticated_6ab694","GetNvTow":"Rule_LoadT_fetch_a4663a","SetT":"Rule_LoadT_record_dbd58a","CheckTCreatedBy":"Rule_LoadT_scope0_5440d0","GetNvTowCheckpoint":"Rule_QueryCheckpointsRows_query_30a74e","CheckGetNvTowCheckpointCount":"Rule_QueryCheckpointsRows_complete_7b6273","SetCheckpointsRows":"Rule_QueryCheckpointsRows_list_8d7a63","SetConfirmed":"Rule_SummarizeCheckpoints_seed_16f1e9","ForEachCheckpointsRows":"Rule_SummarizeCheckpoints_each_4b49e6","SetConfirmed2":"Rule_SummarizeCheckpoints_each_Summariz_6ea159","SetConfirmed3":"Rule_ReturnCheckpoints_b32ece"}
+server action ReviewNvTowCheckpoints
+  in TId: NvTow Identifier
+  out Confirmed: Long Integer
+  out Pending: Long Integer
+  local T: NvTow
+  local CheckpointsRows: NvTowCheckpoint List
+  if not (GetUserId() <> NullIdentifier()):  # CheckGetUserId
+    raise NvRuleViolation("Authentication required")
+  GetNvTow = GetNvTow(Id=TId)
+  assign  # SetT
+    T = GetNvTow.Record.NvTow
+  if not (T.CreatedBy = GetUserId()):  # CheckTCreatedBy
+    raise NvRuleViolation("Record outside requested scope")
+  GetNvTowCheckpoint = aggregate FROM NvTowCheckpoint WHERE (NvTowCheckpoint.ParentId = T.Id) MAX 300
+  if not (GetNvTowCheckpoint.Count <= 300):  # CheckGetNvTowCheckpointCount
+    raise NvRuleViolation("Result exceeds declared limit")
+  assign  # SetCheckpointsRows
+    CheckpointsRows = GetNvTowCheckpoint.List
+  assign  # SetConfirmed
+    Confirmed = 0
+    Pending = 0
+  foreach CheckpointsRows:  # ForEachCheckpointsRows @ruleNew1
+    assign  # SetConfirmed2
+      Confirmed = Confirmed + If(CheckpointsRows.Current.Confirmed, 1, 0)
+      Pending = Pending + If(not CheckpointsRows.Current.Confirmed, 1, 0)
+    next
+  assign  # SetConfirmed3
+    Confirmed = Confirmed
+    Pending = Pending
+  end
+
+/// ssam-rule-map:{"CheckGetUserId":"Rule_Authenticated_6ab694","GetNvTransferForUpdate":"Rule_LoadX_fetch_66e6ec","SetX":"Rule_LoadX_record_4f07a4","CheckXCreatedBy":"Rule_LoadX_scope0_deecf1","CheckXVersion":"Rule_LoadX_version_88c8e4","CheckXCurrentLoad":"Rule_checkCapacity_1ffeaa","TransitionReadyAllowedState":"Rule_transitionReady_allowed_47f7c2","TransitionReadyChangeStateValues":"Rule_transitionReady_change_values_24b1a1","TransitionReadyChangeStatePersist":"Rule_transitionReady_change_persist_13d646"}
+server action ReadyNvTransfer
+  in XId: NvTransfer Identifier
+  in XVersion: Long Integer
+  local X: NvTransfer
+  if not (GetUserId() <> NullIdentifier()):  # CheckGetUserId
+    raise NvRuleViolation("Authentication required")
+  GetNvTransferForUpdate = GetNvTransferForUpdate(Id=XId)
+  assign  # SetX
+    X = GetNvTransferForUpdate.Record.NvTransfer
+  if not (X.CreatedBy = GetUserId()):  # CheckXCreatedBy
+    raise NvRuleViolation("Record outside requested scope")
+  if not (X.Version = XVersion):  # CheckXVersion
+    raise NvRuleViolation("Record changed; reload before editing")
+  if not (X.CurrentLoad > 0 and X.CurrentLoad <= X.MaxLoad and X.Distance > 0):  # CheckXCurrentLoad
+    raise NvRuleViolation("checkCapacity")
+  if not ((X.StateId = Entities.NvTransferState.Planned)):  # TransitionReadyAllowedState
+    raise NvRuleViolation("transitionReady: state transition not allowed")
+  assign  # TransitionReadyChangeStateValues
+    X.StateId = Entities.NvTransferState.Ready
+    X.UpdatedOn = CurrDateTime()
+    X.Version = X.Version + 1
+  TransitionReadyChangeStatePersist = UpdateNvTransfer(Source=X)
+  end
+
+/// ssam-rule-map:{"CheckGetUserId":"Rule_Authenticated_6ab694","GetNvTransferForUpdate":"Rule_LoadX_fetch_66e6ec","SetX":"Rule_LoadX_record_4f07a4","CheckXCreatedBy":"Rule_LoadX_scope0_deecf1","CheckXVersion":"Rule_LoadX_version_88c8e4","CheckXDeparture":"Rule_checkSchedule_501859","TransitionBeginAllowedState":"Rule_transitionBegin_allowed_aa5972","TransitionBeginChangeStateValues":"Rule_transitionBegin_change_values_7915bc","TransitionBeginChangeStatePersist":"Rule_transitionBegin_change_persist_a70dab"}
+server action BeginNvTransfer
+  in XId: NvTransfer Identifier
+  in XVersion: Long Integer
+  local X: NvTransfer
+  if not (GetUserId() <> NullIdentifier()):  # CheckGetUserId
+    raise NvRuleViolation("Authentication required")
+  GetNvTransferForUpdate = GetNvTransferForUpdate(Id=XId)
+  assign  # SetX
+    X = GetNvTransferForUpdate.Record.NvTransfer
+  if not (X.CreatedBy = GetUserId()):  # CheckXCreatedBy
+    raise NvRuleViolation("Record outside requested scope")
+  if not (X.Version = XVersion):  # CheckXVersion
+    raise NvRuleViolation("Record changed; reload before editing")
+  if not (X.Departure <= CurrDate() and X.Completed=0):  # CheckXDeparture
+    raise NvRuleViolation("checkSchedule")
+  if not ((X.StateId = Entities.NvTransferState.Ready)):  # TransitionBeginAllowedState
+    raise NvRuleViolation("transitionBegin: state transition not allowed")
+  assign  # TransitionBeginChangeStateValues
+    X.StateId = Entities.NvTransferState.Underway
+    X.UpdatedOn = CurrDateTime()
+    X.Version = X.Version + 1
+  TransitionBeginChangeStatePersist = UpdateNvTransfer(Source=X)
+  end
+
+/// ssam-rule-map:{"CheckGetUserId":"Rule_Authenticated_6ab694","GetNvTransferForUpdate":"Rule_LoadX_fetch_66e6ec","SetX":"Rule_LoadX_record_4f07a4","CheckXCreatedBy":"Rule_LoadX_scope0_deecf1","CheckXVersion":"Rule_LoadX_version_88c8e4","CheckXCompleted":"Rule_checkDelivery_8d9981","TransitionCompleteAllowedState":"Rule_transitionComplete_allowed_9d101f","TransitionCompleteChangeStateValues":"Rule_transitionComplete_change_values_19e218","TransitionCompleteChangeStatePersist":"Rule_transitionComplete__c6feaffd88ce_73762b"}
+server action CompleteNvTransfer
+  in XId: NvTransfer Identifier
+  in XVersion: Long Integer
+  local X: NvTransfer
+  if not (GetUserId() <> NullIdentifier()):  # CheckGetUserId
+    raise NvRuleViolation("Authentication required")
+  GetNvTransferForUpdate = GetNvTransferForUpdate(Id=XId)
+  assign  # SetX
+    X = GetNvTransferForUpdate.Record.NvTransfer
+  if not (X.CreatedBy = GetUserId()):  # CheckXCreatedBy
+    raise NvRuleViolation("Record outside requested scope")
+  if not (X.Version = XVersion):  # CheckXVersion
+    raise NvRuleViolation("Record changed; reload before editing")
+  if not (X.Completed >= X.Distance and X.CurrentLoad=0):  # CheckXCompleted
+    raise NvRuleViolation("checkDelivery")
+  if not ((X.StateId = Entities.NvTransferState.Underway)):  # TransitionCompleteAllowedState
+    raise NvRuleViolation("transitionComplete: state transition not allowed")
+  assign  # TransitionCompleteChangeStateValues
+    X.StateId = Entities.NvTransferState.Completed
+    X.UpdatedOn = CurrDateTime()
+    X.Version = X.Version + 1
+  TransitionCompleteChangeStatePersist = UpdateNvTransfer(Source=X)
+  end
+
+/// ssam-rule-map:{"CheckGetUserId":"Rule_Authenticated_6ab694","GetNvTransfer":"Rule_LoadX_fetch_66e6ec","SetX":"Rule_LoadX_record_4f07a4","CheckXCreatedBy":"Rule_LoadX_scope0_deecf1","GetNvTransferLeg":"Rule_QueryRouteRows_query_eb0374","CheckGetNvTransferLegCount":"Rule_QueryRouteRows_complete_af6613","SetRouteRows":"Rule_QueryRouteRows_list_402809","SetDistance":"Rule_SummarizeRoute_seed_f48c31","ForEachRouteRows":"Rule_SummarizeRoute_each_8abcd9","SetDistance2":"Rule_SummarizeRoute_each_SummarizeRoute_966565","SetDistance3":"Rule_ReturnRoute_2a8e77"}
+server action ForecastNvTransferRoute
+  in XId: NvTransfer Identifier
+  out Distance: Decimal
+  out Stops: Long Integer
+  local X: NvTransfer
+  local RouteRows: NvTransferLeg List
+  if not (GetUserId() <> NullIdentifier()):  # CheckGetUserId
+    raise NvRuleViolation("Authentication required")
+  GetNvTransfer = GetNvTransfer(Id=XId)
+  assign  # SetX
+    X = GetNvTransfer.Record.NvTransfer
+  if not (X.CreatedBy = GetUserId()):  # CheckXCreatedBy
+    raise NvRuleViolation("Record outside requested scope")
+  GetNvTransferLeg = aggregate FROM NvTransferLeg WHERE (NvTransferLeg.ParentId = X.Id) MAX 300
+  if not (GetNvTransferLeg.Count <= 300):  # CheckGetNvTransferLegCount
+    raise NvRuleViolation("Result exceeds declared limit")
+  assign  # SetRouteRows
+    RouteRows = GetNvTransferLeg.List
+  assign  # SetDistance
+    Distance = 0
+    Stops = 0
+  foreach RouteRows:  # ForEachRouteRows @ruleNew1
+    assign  # SetDistance2
+      Distance = Distance + (RouteRows.Current.Distance)
+      Stops = Stops + 1
+    next
+  assign  # SetDistance3
+    Distance = Distance
+    Stops = Stops
+  end
+
+/// ssam-rule-map:{"CheckGetUserId":"Rule_Authenticated_6ab694","GetNvTransfer":"Rule_LoadX_fetch_66e6ec","SetX":"Rule_LoadX_record_4f07a4","CheckXCreatedBy":"Rule_LoadX_scope0_deecf1","GetNvTransferIncident":"Rule_QuerySafetyRows_query_90ae8c","CheckGetNvTransferIncidentCount":"Rule_QuerySafetyRows_complete_361ba0","SetSafetyRows":"Rule_QuerySafetyRows_list_3e7c25","SetOpen":"Rule_SummarizeSafety_seed_c85834","ForEachSafetyRows":"Rule_SummarizeSafety_each_1f9294","SetOpen2":"Rule_SummarizeSafety_each_SummarizeSafe_2f4e45","SetOpen3":"Rule_ReturnSafety_b266d9"}
+server action ReviewNvTransferSafety
+  in XId: NvTransfer Identifier
+  out Open: Long Integer
+  out Severity: Decimal
+  local X: NvTransfer
+  local SafetyRows: NvTransferIncident List
+  if not (GetUserId() <> NullIdentifier()):  # CheckGetUserId
+    raise NvRuleViolation("Authentication required")
+  GetNvTransfer = GetNvTransfer(Id=XId)
+  assign  # SetX
+    X = GetNvTransfer.Record.NvTransfer
+  if not (X.CreatedBy = GetUserId()):  # CheckXCreatedBy
+    raise NvRuleViolation("Record outside requested scope")
+  GetNvTransferIncident = aggregate FROM NvTransferIncident WHERE (NvTransferIncident.ParentId = X.Id) MAX 300
+  if not (GetNvTransferIncident.Count <= 300):  # CheckGetNvTransferIncidentCount
+    raise NvRuleViolation("Result exceeds declared limit")
+  assign  # SetSafetyRows
+    SafetyRows = GetNvTransferIncident.List
+  assign  # SetOpen
+    Open = 0
+    Severity = 0
+  foreach SafetyRows:  # ForEachSafetyRows @ruleNew1
+    assign  # SetOpen2
+      Open = Open + If(not SafetyRows.Current.IsClosed, 1, 0)
+      Severity = Severity + (If(SafetyRows.Current.IsClosed,0,SafetyRows.Current.Severity*2))
+    next
+  assign  # SetOpen3
+    Open = Open
+    Severity = Severity
+  end

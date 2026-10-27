@@ -68,7 +68,8 @@ test('a report without its fields refuses with every problem; an unknown field i
 });
 
 test('the tool lists the report view and its kinds; it is no longer read-only', () => {
-  assert.deepEqual(frictionTool.inputSchema.properties.view.enum, ['issues', 'task', 'report']);
+  // F7: timeline is the per-session cost view; reports (the port of the proto's Traditional) and delivery-kpi (R0).
+  assert.deepEqual(frictionTool.inputSchema.properties.view.enum, ['issues', 'task', 'timeline', 'reports', 'report', 'delivery-kpi']);
   assert.deepEqual(frictionTool.inputSchema.properties.kind.enum, REPORT_KINDS);
   for (const key of ['tool', 'intent', 'attempted', 'workaround', 'cost', 'summary', 'taskId']) assert.ok(frictionTool.inputSchema.properties[key], key);
   assert.equal(frictionTool.annotations.readOnlyHint, false);

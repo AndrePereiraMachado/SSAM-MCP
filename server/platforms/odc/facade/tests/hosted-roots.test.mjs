@@ -498,7 +498,9 @@ test('every data path of the facade lands in the workspace; code locations stay'
     // ssam_task registered on its own reads the customer's tasks; the O11 reads journal in the customer's o11/reading.
     const tasks = collector(); registerSsamTask(tasks);
     // marco-a6: ssam_task also lists the customer's CX15 destructive operations (none here).
-    assert.deepEqual(await result(tasks.tools, 'ssam_task', {}), { ok: true, tasks: [], destructive: [] });
+    // F7: the listing also names the session it lists (correlation.mjs sessionScope).
+    const { session, ...listed } = await result(tasks.tools, 'ssam_task', {});
+    assert.deepEqual(listed, { ok: true, tasks: [], destructive: [] }); assert.match(session, /^[0-9a-f-]{36}$/);
     await assert.rejects(kernelReading({ root: anvilRoot }, ['--bogus']), /Unknown reading argument/);
     assert.ok(fs.existsSync(path.join(ws, 'o11', 'reading', 'operations.jsonl')));
     // Code locations never move.

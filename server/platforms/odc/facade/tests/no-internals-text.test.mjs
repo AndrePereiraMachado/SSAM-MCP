@@ -112,7 +112,7 @@ test('live: the texts of the review\'s table, as a licensee is served them, keep
   try {
     const recipe = strings(await s.call('ssam_reference', { lane: 'o11', kind: 'recipe', query: { find: 'entity' } })).find(t => t.startsWith('| Reference to another module'));
     assert.ok(recipe, 'the recipe row is served');
-    assert.match(recipe, /o11_job \{job:"<job\.json>", captureProducers:\["<Nome>"\]\} captures the server signature/);
+    assert.match(recipe, /o11_job \{job:"<job\.json>", captureProducers:\["<Name>"\]\} captures the server signature/);
     assert.ok(balanced(recipe), recipe);
     const listing = (await s.client.listTools()).tools.find(t => t.name === 'ssam_debug').description;
     const definition = (await s.call('ssam_reference', { lane: 'o11', kind: 'tool', query: 'ssam_debug' })).definition.description;

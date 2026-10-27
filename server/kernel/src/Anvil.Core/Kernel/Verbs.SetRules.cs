@@ -21,6 +21,7 @@ public sealed partial class ModelSession
     /// <summary>Whether SetCore has a way to write <paramref name="prop"/> on <paramref name="target"/> (the same branches).</summary>
     internal bool CanSet(object target, string prop)
     {
+        if (prop == "SpecialOptions" && TraditionalWidgetMetadata.Combo(target.GetType())) return true;
         if (target is ServiceStudio.Model.EntityIndex && prop == "Unique") return true;
         var pi = FindProperty(target, prop);
         if (pi != null && (pi.CanWrite || prop == "Roles")) return true;
@@ -74,7 +75,7 @@ public sealed partial class ModelSession
         var extended = Create(new JsonObject { ["op"] = "create", ["parent"] = path, ["type"] = "IExtendedProperty" });
         var created = Resolve("@" + extended["key"]);
         SetCore(created, new JsonObject { ["op"] = "set", ["target"] = "@" + extended["key"], ["prop"] = "Property", ["value"] = "class" });
-        SetCore(created, new JsonObject { ["op"] = "set", ["target"] = "@" + extended["key"], ["prop"] = "Value", ["value"] = value });
+        SetCore(created, new JsonObject { ["op"] = "set", ["target"] = "@" + extended["key"], ["prop"] = "Value", ["value"] = "\"" + value.Replace("\"", "\"\"") + "\"" });
         Note("SET_PROPERTY_MAPPED", $"{path}: {ShortType(target)} has no Style; the classes became its extended property class, as an html class attribute does");
         return (op, new JsonObject { ["set"] = "Style", ["via"] = "extended property class" });
     }

@@ -27,13 +27,13 @@ public sealed record DigestSection(string Id, string Title, int Count, IReadOnly
 // same text (no clock, top-level elements ordered by name then key, flows in connector order, members in model order).
 // Nothing is cut silently: a clipped text says how many characters it left out (an expression also names the @key that
 // holds it whole), and the coverage section counts every element and names each kind that was not rendered.
-// Stored beside the module index (ModuleIndexStore.SaveDigest): <sha256>.<adapter>.digest.json, valid only for the same
+// Stored beside the module index (ModuleIndexStore.SaveDigest): <sha256>.<adapter>.digest.e<Extractor>.json, valid only for the same
 // schema, Extractor, lane, adapter and sha256; the facade pages it (module-map.mjs, ssam_map view:"digest").
 public sealed class ModuleDigest
 {
     public const string Schema = "ssam-digest/1";
     // The version of what Build writes: a stored digest of another version is a miss. Raise it on every change of the text.
-    public const int Extractor = 3;
+    public const int Extractor = 4;
     public static readonly string[] SectionIds = ["module", "entities", "structures", "variables", "roles", "exceptions",
         "actions", "timers", "integrations", "ui", "coverage"];
 
@@ -544,15 +544,12 @@ internal sealed class DigestWriter<T>(T root, ModelReader<T> reader, string lane
         var label = reader.IsKind(screen, "MobileBlock") || reader.IsKind(screen, "WebBlock") ? "block " : kind.Contains("Email", StringComparison.Ordinal) ? "email " : "screen ";
         var text = new StringBuilder(label).Append(flowName).Append('/').Append(reader.DisplayOf(screen)).Append(Key(screen));
         Flags(text, screen, ("Public", "public"), ("AnonymousAccess", "anonymous"));
-        if (Raw(screen, "Roles") is System.Collections.IEnumerable roles and not string) {
-            // A set: the Model API gives it in a different order on each load.
-            var names = roles.OfType<T>().Select(reader.DisplayOf).Order(StringComparer.Ordinal).ToList();
-            if (names.Count > 0) text.Append(" roles=").Append(string.Join(",", names));
-        }
+        var noRole = label == "screen " && Access(text, screen);
         if (Expr(screen, "Title") is { Length: > 0 } title) text.Append(" title=").Append(title);
         if (Expr(screen, "Subject") is { Length: > 0 } subject) text.Append(" subject=").Append(subject);
         AppendDescription(text, screen);
         Signature(text, screen, "  ");
+        if (noRole) text.Append("\n  ").Append(NoRoleScreen);
         foreach (var property in Lifecycle)
             if (Ref(screen, property) is { } handler) {
                 Cover(handler);
@@ -582,6 +579,30 @@ internal sealed class DigestWriter<T>(T root, ModelReader<T> reader, string lane
         if (named.Count > 0) text.Append("\n  named containers:").Append(string.Concat(named.Chunk(8).Select(c => "\n    " + string.Join(", ", c))));
         foreach (var child in children.Where(c => reader.KindOf(c) == "UILifeCycleEvent")) Cover(child);
         return text.ToString();
+    }
+
+    /// <summary>T12: the line an O11 screen without any role carries: the platform lets no user open it.</summary>
+    public const string NoRoleScreen = "NO_ROLE_SCREEN: no role can open this screen, so no user can; another account will not help (give it a role, such as Registered, to open it)";
+
+    /// <summary>T12 (Traditional migration, call 222): who may open the screen, always, so an access question is answered from
+    /// the read and never by asking the user to switch accounts. ` access=everyone|authenticated|roles|none roles=a,b` (roles=""
+    /// when it has none). ODC (the screen has AnonymousAccess): everyone when it is on, else the app roles, else any
+    /// authenticated user (the platform's own warning words it so). O11: Roles holds the system roles too: Anonymous is
+    /// everyone, Registered any authenticated user, other roles only theirs, and no role at all lets no user in. True for an
+    /// O11 screen without a role.</summary>
+    private bool Access(StringBuilder text, T screen)
+    {
+        // A set: the Model API gives it in a different order on each load.
+        var names = Raw(screen, "Roles") is System.Collections.IEnumerable roles and not string
+            ? roles.OfType<T>().Select(reader.DisplayOf).Order(StringComparer.Ordinal).ToList() : [];
+        var anonymous = Raw(screen, "AnonymousAccess");
+        string access;
+        if (anonymous is bool open) access = open ? "everyone" : names.Count > 0 ? "roles" : "authenticated";
+        else if (names.Contains("Anonymous", StringComparer.OrdinalIgnoreCase)) access = "everyone";
+        else if (names.Contains("Registered", StringComparer.OrdinalIgnoreCase)) access = "authenticated";
+        else access = names.Count > 0 ? "roles" : "none";
+        text.Append(" access=").Append(access).Append(" roles=").Append(names.Count > 0 ? string.Join(",", names) : "\"\"");
+        return access == "none";
     }
 
     private DigestSection Coverage()

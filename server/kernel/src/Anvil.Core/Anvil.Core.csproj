@@ -15,6 +15,8 @@
 
   <ItemGroup>
     <EmbeddedResource Include="Kernel/ScreenVocabulary.json" />
+    <EmbeddedResource Include="Kernel/TemporalRuntime.js" LogicalName="Anvil.Core.Kernel.TemporalRuntime.js" />
+    <EmbeddedResource Include="Kernel/UploadValidationRuntime.js" LogicalName="Anvil.Core.Kernel.UploadValidationRuntime.js" />
     <EmbeddedResource Include="Kernel/OutSystemsUiClasses.txt" LogicalName="Anvil.Core.Kernel.OutSystemsUiClasses.txt" />
     <None Include="../../licenses/Esprima-3.0.6.txt" Link="licenses/Esprima-3.0.6.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Reference Include="OutSystems.Communication"><HintPath>$(SSDir)\OutSystems.Communication.dll</HintPath><Private>false</Private></Reference>

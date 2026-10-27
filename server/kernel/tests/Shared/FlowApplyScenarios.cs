@@ -16,6 +16,310 @@ namespace Anvil.Tests;
 /// </summary>
 public static class FlowApplyScenarios
 {
+    // ---- calls and caches of one op (lab/batch-speed, R5) ----------------------------------------------------------------
+
+    // A screen or block action calls the action of its own owner: two blocks with a Reset each, created, saved, reloaded,
+    // merged and edited, never cross; a call of a name only another owner has is FLOW_NAME_UNKNOWN.
+    public static void SameNamedUiCallsBindToTheirOwnerAcrossCreateReloadEditAndMerge(string dir, string fixture, string lane, Action<ModelHost, string, string, string> merge)
+    {
+        var root = JobRunner.RepoRoot(Path.GetDirectoryName(typeof(FlowApplyScenarios).Assembly.Location)!)!;
+        var host = new ModelHost(Path.Combine(dir, "work"));
+        fixture = Path.IsPathRooted(fixture) ? fixture : Path.Combine(root, fixture.StartsWith("tests/") ? fixture : Path.Combine("tests", "fixtures", fixture));
+        string Apply(string name, string basis, string job)
+        {
+            var source = Path.Combine(dir, name + ".json"); File.WriteAllText(source, job);
+            var target = Path.Combine(dir, name + ".oml");
+            var result = JsonSerializer.SerializeToNode(JobRunner.Run(host, basis, source, target))!;
+            Assert.True(result["accepted"]!.GetValue<bool>(), result.ToJsonString()); return target;
+        }
+        var original = """
+        {"ops":[{"op":"html","data":{"html":"<block name=\"OtherPanel\" actions=\"Run,Reset\"><var name=\"Value\" type=\"Integer\"/><button onclick=\"Run\">Run</button></block>"}},
+        {"op":"logic","data":{"flow":["action OtherPanel.Reset\n  in Amount: Integer\n  assign Value = Amount\n  end\n","action OtherPanel.Run\n  Reset(Amount=99)\n  end\n"]}}]}
+        """;
+        var basis = Apply("ui-owner-base", fixture, original);
+        var job = """
+        {"ops":[{"op":"html","data":{"html":"<block name=\"LocalPanel\" actions=\"RunA,RunB,Reset\"><var name=\"Value\" type=\"Integer\"/><button onclick=\"RunA\">A</button><button onclick=\"RunB\">B</button></block>"}},
+        {"op":"logic","data":{"flow":["action LocalPanel.RunA\n  Reset(Amount=11)\n  end\n","action LocalPanel.RunB\n  Reset(Amount=13)\n  end\n","action LocalPanel.Reset\n  in Amount: Integer\n  assign Value = Value+Amount\n  end\n"]}}]}
+        """;
+        var candidate = Apply("ui-owner-create", basis, job);
+        void Bound(string path, string a = "11")
+        {
+            var model = typeof(ModelHost).GetMethod("Load", [typeof(string)])!.Invoke(host, [path])!;
+            try {
+                var session = (ModelSession)Activator.CreateInstance(typeof(ModelSession), model)!;
+                var wanted = session.Get(session.Resolve("IMobileBlock:LocalPanel/Reset"))["key"]!.ToString();
+                foreach (var (caller, amount) in new[] { ("RunA", a), ("RunB", "13") }) {
+                    var call = session.Get(session.Resolve("IMobileBlock:LocalPanel/" + caller + "/Reset"));
+                    Assert.Equal("@" + wanted, call["properties"]!["Action"]!.ToString());
+                    var arg = session.Get(session.Resolve("IMobileBlock:LocalPanel/" + caller + "/Reset/Amount"));
+                    Assert.Equal(amount, arg["properties"]!["Value"]!.ToString());
+                }
+                var other = session.Get(session.Resolve("IMobileBlock:OtherPanel/Reset"))["key"]!.ToString();
+                Assert.NotEqual(wanted, other);
+                Assert.Equal("@" + other, session.Get(session.Resolve("IMobileBlock:OtherPanel/Run/Reset"))["properties"]!["Action"]!.ToString());
+            } finally { typeof(ModelHost).GetMethod("Release")!.Invoke(null, [model]); }
+        }
+        Bound(candidate);
+        var merged = Path.Combine(dir, "merged.oml");
+        merge(host, basis, candidate, merged); Bound(merged);
+        List<FlowEntry> Flows(string path)
+        {
+            var bytes = File.ReadAllBytes(path);
+            return host.BuildFlow(bytes, Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes)).ToLowerInvariant(), lane).Actions.ToList();
+        }
+        var beforeFlows = Flows(merged);
+        var current = beforeFlows.Single(f => f.Name.EndsWith("/LocalPanel/RunA"));
+        var changed = System.Text.RegularExpressions.Regex.Replace(current.Text, @"Amount\s*=\s*11", "Amount=17");
+        Assert.NotEqual(current.Text, changed);
+        var edit = new JsonObject { ["ops"] = new JsonArray(new JsonObject { ["op"] = "logic", ["data"] = new JsonObject {
+            ["flow"] = changed, ["basedOn"] = current.TextSha } }) };
+        var edited = Apply("ui-owner-edit", merged, edit.ToJsonString());
+        Bound(edited, "17");
+        var afterFlows = Flows(edited).ToDictionary(f => f.Key);
+        foreach (var flow in beforeFlows.Where(f => !f.Name.EndsWith("/LocalPanel/RunA")))
+            Assert.Equal(flow.Text, afterFlows[flow.Key].Text);
+        var foreignOnly = """{"ops":[{"op":"html","data":{"html":"<block name=\"ForeignOnly\" actions=\"Run\"><button onclick=\"Run\">Run</button></block>"}},{"op":"logic","data":{"flow":"action ForeignOnly.Run\n  Reset(Amount=1)\n  end\n"}}]}""";
+        var refused = Assert.ThrowsAny<Exception>(() => Apply("ui-owner-refused", edited, foreignOnly));
+        Assert.Equal("FLOW_NAME_UNKNOWN", (Errors.FindCoded(refused) as KernelRefusalException)?.Code);
+    }
+
+    // The entities and structures a logic-text op names are indexed once for the op, and again for an op after a data op
+    // (which adds a record the next texts map).
+    public static void RecordTypeIndexIsSharedWithinLogicAndRenewedAfterDataChanges(string dir, string fixture, string lane)
+    {
+        var initial = "type IxSource = { Code: Text(40); Quantity: Integer; }\ntype IxTarget = { Code: Text(40); Total: Integer; }";
+        string Map(string name, string source, string code, string count) => $"server action {name}\n  in Rows: {source} List\n  out Result: IxTarget List\n  assign Result = Rows mapTo {{ Code: {code}, Total: {count} }}\n  end\n";
+        var a = Map("IxFirst", "IxSource", "Code", "Quantity+1");
+        var b = Map("IxSecond", "IxSource", "ToUpper(Code)", "Quantity*2");
+        var c = Map("IxLaterMap", "IxLater", "Label", "Count+3");
+        JsonObject Ddl(string text) => new() { ["op"] = "spec", ["data"] = new JsonObject { ["ddl"] = text } };
+        using var metrics = NativePerformanceCapture.Begin();
+        var result = Run(dir, "ix-types", $$$"""{"base":"{{{fixture}}}","ops":[{{{Ddl(initial).ToJsonString()}}},{{{Texts(a, b)}}},{{{Ddl("type IxLater = { Label: Text(40); Count: Integer; }").ToJsonString()}}},{{{Texts(c)}}}]}""");
+        Assert.True(result["accepted"]!.GetValue<bool>(), result.ToJsonString());
+        var phases = metrics.Snapshot().Phases;
+        Assert.True(phases.TryGetValue("flow.types.recordIndex", out var index));
+        Assert.Equal(2, index!.Calls);
+        Assert.False(phases.ContainsKey("flow.types.nameIndex"));
+        foreach (var (name, text) in new[] { ("IxFirst", a), ("IxSecond", b), ("IxLaterMap", c) })
+            Assert.Equal(text, Bare(Read(dir, "ix-types", lane, name).Text));
+    }
+
+    // ---- the tolerated shapes of a text (R1, FlowTolerance) ---------------------------------------------------------------
+
+    // A job whose texts are written in the shapes a model writes (one space a level, `assign X=v`, `Result=Action(P = v)`,
+    // `else:`, a declaration among the steps, a label after one space, a mapping without spaces after its commas) is
+    // normalized, each shape listed, and applied: no FLOW_NOT_EXACT; the saved module reads back (FlowExtract) as the canonical
+    // text, and that text sent again writes nothing.
+    public static void ToleratedShapesApplyAndReadBackAsTheCanonicalText(string dir, string fixture, string lane)
+    {
+        var ddl = new JsonObject { ["op"] = "spec", ["data"] = new JsonObject { ["ddl"] = "type TolSource = { Code: Text(40); Quantity: Integer; }\ntype TolTarget = { Code: Text(40); Total: Integer; }" } };
+        var twice = "server action TolTwice\n in N: Integer\n out R: Integer\n assign R=N*2\n end\n";
+        var use = "server action TolUse\n  in Rows: TolSource List\n  in A: Integer\n  assign Total=0\n  out Total: Integer\n  out Copy: TolTarget List\n"
+            + "  if A > 0:\n    Saved=TolTwice(N = A)\n    assign Total=Saved.R\n  else:\n    assign Total = 1 # none\n  assign Copy = Rows mapTo { Code: Code,Total: Quantity+1 }\n  end\n";
+        var result = Run(dir, "tolerated", $$$"""{"base":"{{{fixture}}}","ops":[{{{ddl.ToJsonString()}}},{{{Texts(twice, use)}}}]}""");
+        Assert.True(result["accepted"]!.GetValue<bool>(), result.ToJsonString());
+        var rules = (result["normalizations"] as JsonArray ?? []).OfType<JsonObject>().Select(n => n["rule"]!.ToString()).ToHashSet();
+        foreach (var rule in new[] { FlowTolerance.IndentUnit, FlowTolerance.AssignSpacing, FlowTolerance.ResultSpacing, FlowTolerance.ArgumentSpacing,
+                     FlowTolerance.Else, FlowTolerance.DeclarationOrder, FlowTextEdit.LabelSpacing })
+            Assert.Contains(rule, rules);
+        Assert.Equal("server action TolTwice\n  in N: Integer\n  out R: Integer\n  assign R = N*2\n  end\n", Bare(Read(dir, "tolerated", lane, "TolTwice").Text));
+        var read = Read(dir, "tolerated", lane, "TolUse");
+        var bare = Bare(read.Text);
+        foreach (var line in new[] { "  out Total: Integer\n  out Copy: TolTarget List\n  assign Total = 0\n", "    Saved = TolTwice(N=A)\n", "    assign Total = Saved.R\n",
+                     "  assign Total = 1  # none\n", "  assign Copy = Rows mapTo { Code: Code, Total: Quantity+1 }\n" })
+            Assert.Contains(line, bare);
+        Assert.DoesNotContain("else", bare);
+        var again = Run(dir, "tolerated-again", "{\"ops\":[" + Flow((read.Text, read.TextSha)) + "]}", Path.Combine(dir, "tolerated.oml"));
+        Assert.True(again["accepted"]!.GetValue<bool>(), again.ToJsonString());
+        Assert.Equal(read.Text, Read(dir, "tolerated-again", lane, "TolUse").Text);
+    }
+
+    // ---- the general language of ssam-flow/1 (R7, FlowGeneral) ---------------------------------------------------------
+
+    private const string GeneralData = """
+        {"op":"spec","data":{"entities":[
+          {"name":"GxOrder","attributes":[{"name":"Code","type":"Text","length":40},{"name":"Total","type":"Decimal"},{"name":"Status","type":"Integer"}]}],
+          "structures":[{"name":"GxRow","attributes":[{"name":"Code","type":"Text","length":40},{"name":"Total","type":"Decimal"}]}]}}
+        """;
+    private const string GeneralException = """{"op":"create","parent":"@espace","type":"IUserException","name":"GxRejected"}""";
+
+    // The texts as a model writes them in the general language (let, require, return, the joins of If, For Each and Switch,
+    // a copy, the parameters of a sql) go through a real job: each form is listed in normalizations, the saved module reads
+    // back (FlowExtract) as the expanded text, and that text sent again writes nothing.
+    public static void GeneralFormsApplyAndReadBackAsTheExpandedText(string dir, string fixture, string lane)
+    {
+        string L(params string[] lines) => string.Join("\n", lines) + "\n";
+        var texts = new[] {
+            L("server action GxPrice", "  in Total: Decimal", "  in Rate: Decimal", "  out Price: Decimal", "  out Label: Text",
+                "  require Total >= 0 and Rate > 0 else GxRejected(\"invalid\")", "  let Gross = Total * (1 + Rate)", "  let Name = \"P\" + DecimalToText(Gross)",
+                "  if Gross > 1000:", "    return Price = 1000, Label = \"capped\"", "  return Price = Gross, Label = Name"),
+            L("server action GxCount", "  in Rows: GxRow List", "  in Minimum: Decimal", "  in Source: GxRow", "  out Count: Integer", "  out Copy: GxRow", "  let Seen = 0",
+                "  foreach Rows:", "    if Rows.Current.Total >= Minimum:", "      assign Seen = Seen + 1", "  if Seen = 0:", "    assign Seen = -1",
+                "  Totals = sql -> GxRow max 1", "    | SELECT {GxOrder}.[Code], {GxOrder}.[Total] FROM {GxOrder} WHERE {GxOrder}.[Total] >= @Minimum",
+                "  assign Copy = { ...Source, Total: Source.Total + Minimum }", "  return Count = Seen"),
+            L("server action GxGrade", "  in Score: Integer", "  out Grade: Text", "  let Bonus = 5", "  switch:", "    case Score + Bonus >= 90:", "      assign Grade = \"A\"",
+                "    case Score + Bonus >= 70:", "      return Grade = \"B\"", "    otherwise:", "      assign Grade = \"C\"", "  assign Grade = Grade + \"!\"", "  return"),
+        };
+        var result = Run(dir, "general", $$$"""{"base":"{{{fixture}}}","ops":[{{{GeneralData}}},{{{GeneralException}}},{{{Texts(texts)}}}]}""");
+        Assert.True(result["accepted"]!.GetValue<bool>(), result.ToJsonString());
+        var rules = (result["normalizations"] as JsonArray ?? []).OfType<JsonObject>().Select(n => n["rule"]!.ToString()).ToHashSet();
+        foreach (var rule in new[] { FlowGeneral.Let, FlowGeneral.Require, FlowGeneral.Return, FlowGeneral.Join, FlowGeneral.Copy, FlowGeneral.SqlBind })
+            Assert.Contains(rule, rules);
+        var reads = new List<(string Text, string TextSha)>();
+        foreach (var (name, text) in new[] { "GxPrice", "GxCount", "GxGrade" }.Zip(texts)) {
+            var read = Read(dir, "general", lane, name);
+            // The module reads back as the expanded text: the same action (graph, values, declarations) as its normalization.
+            var expanded = ModuleFlow.Read(FlowTextNormalizer.Normalize(text).Text);
+            var written = ModuleFlow.Read(read.Text);
+            Assert.Equal(Bare(ModuleFlow.Print(expanded).Text).Replace("\r\n", "\n"), Bare(read.Text));
+            Assert.DoesNotContain("let ", read.Text);
+            Assert.Equal(expanded.Items.Count(i => i.Role == "node"), written.Items.Count(i => i.Role == "node"));
+            reads.Add((read.Text, read.TextSha));
+        }
+        Assert.Contains("    in Minimum: Decimal = Minimum\n", Bare(Read(dir, "general", lane, "GxCount").Text));
+        var again = Run(dir, "general-again", "{\"ops\":[" + Flow(reads.ToArray()) + "]}", Path.Combine(dir, "general.oml"));
+        Assert.True(again["accepted"]!.GetValue<bool>(), again.ToJsonString());
+        foreach (var (name, read) in new[] { "GxPrice", "GxCount", "GxGrade" }.Zip(reads)) Assert.Equal(read.Text, Read(dir, "general-again", lane, name).Text);
+    }
+
+    // Part 2 of the general language through a real job: a contract with a binding above the action that uses it, the record
+    // operations (load ... locked, update, insert, delete: the entity actions), a bind under a sql node and a copy (two
+    // assigns); the module reads back as the expanded text and that text sent again writes nothing.
+    public static void RecordsContractsAndBindsApplyAndReadBackAsTheExpandedText(string dir, string fixture, string lane)
+    {
+        string L(params string[] lines) => string.Join("\n", lines) + "\n";
+        var texts = new[] {
+            L("contract GxOwned:", "  in OrderId: GxOrder Identifier", "  load Order: GxOrder by OrderId locked", "  require Order.Status > 0 else GxRejected(\"closed\")",
+                "binding Floor: Decimal = 0", "", "server action GxPay", "  use GxOwned", "  in Amount: Decimal", "  out Total: Decimal", "  out Others: Integer",
+                "  update Order {Total=Order.Total+Amount, Status=Order.Status+1}", "  Rows = sql -> GxRow max 10", "    bind Code: Text = Order.Code",
+                "    | SELECT {GxOrder}.[Code], {GxOrder}.[Total] FROM {GxOrder} WHERE {GxOrder}.[Code] <> @Code AND {GxOrder}.[Total] > @Floor",
+                "  return Total = Order.Total, Others = Rows.List.Length"),
+            L("server action GxOpen", "  in Code: Text", "  in Source: GxRow", "  out Id: GxOrder Identifier", "  insert N: GxOrder {Code=Code, Total=Source.Total, Status=1}",
+                "  let Copy = { ...Source, Total: Source.Total * 2 }", "  require Copy.Total > 0 else GxRejected(\"empty\")", "  load Again: GxOrder by N.Id locked", "  delete Again",
+                "  return Id = N.Id"),
+        };
+        var result = Run(dir, "general-records", $$$"""{"base":"{{{fixture}}}","ops":[{{{GeneralData}}},{{{GeneralException}}},{{{Texts(texts)}}}]}""");
+        Assert.True(result["accepted"]!.GetValue<bool>(), result.ToJsonString());
+        var rules = (result["normalizations"] as JsonArray ?? []).OfType<JsonObject>().Select(n => n["rule"]!.ToString()).ToHashSet();
+        foreach (var rule in new[] { FlowGeneral.Contract, FlowGeneral.Record, FlowGeneral.SqlBind, FlowGeneral.Copy, FlowGeneral.Let })
+            Assert.Contains(rule, rules);
+        var reads = new List<(string Text, string TextSha)>();
+        foreach (var (name, text) in new[] { "GxPay", "GxOpen" }.Zip(texts)) {
+            var read = Read(dir, "general-records", lane, name);
+            Assert.Equal(Bare(ModuleFlow.Print(ModuleFlow.Read(FlowTextNormalizer.Normalize(text).Text)).Text).Replace("\r\n", "\n"), Bare(read.Text));
+            reads.Add((read.Text, read.TextSha));
+        }
+        var pay = Bare(reads[0].Text);
+        foreach (var line in new[] { "  in OrderId: GxOrder Identifier\n", "GetGxOrderForUpdate(Id=OrderId)", "UpdateGxOrder(Source=Order)", "    in Code: Text = Order.Code\n", "    in Floor: Decimal = 0\n" })
+            Assert.Contains(line, pay);
+        foreach (var line in new[] { "CreateGxOrder(Source=N)", "DeleteGxOrder(Id=Again.Id)", "  assign Copy = Source\n" }) Assert.Contains(line, Bare(reads[1].Text));
+        var again = Run(dir, "general-records-again", "{\"ops\":[" + Flow(reads.ToArray()) + "]}", Path.Combine(dir, "general-records.oml"));
+        Assert.True(again["accepted"]!.GetValue<bool>(), again.ToJsonString());
+        foreach (var (name, read) in new[] { "GxPay", "GxOpen" }.Zip(reads)) Assert.Equal(read.Text, Read(dir, "general-records-again", lane, name).Text);
+    }
+
+    // The forms that need the module or the whole op (a context, a projection mapTo { * }, a let typed by an attribute or by
+    // the output of an action of the op) expand through FlowTextNormalizer.NormalizeAll with the schema of the job's own
+    // records; the texts they give apply and read back as written, the context an input of the actions that read it and of
+    // their callers.
+    public static void ContextProjectionAndTypedLetsApplyThroughTheOp(string dir, string fixture, string lane)
+    {
+        string L(params string[] lines) => string.Join("\n", lines) + "\n";
+        var schema = FlowSchema.Of(new Dictionary<string, IReadOnlyList<(string Name, string Type)>> {
+            ["GxRow"] = [("Code", "Text"), ("Total", "Decimal")],
+            ["GxOrder"] = [("Id", "GxOrder Identifier"), ("Code", "Text"), ("Total", "Decimal"), ("Status", "Integer")],
+        });
+        var authored = new[] {
+            L("context Tenant: Integer", "", "server action GxTenantTotal", "  in Rows: GxRow List", "  out Doubled: GxOrder List", "  out Total: Decimal",
+                "  require Tenant > 0 and not Rows.Empty else GxRejected(\"no tenant\")", "  let First = Rows.Current.Total", "  let Count = Rows.Length",
+                "  assign Doubled = Rows mapTo { *, Total: Total * 2, Status: 1, Id: NullIdentifier() }", "  return Total = First * Count"),
+            L("server action GxTenantRun", "  in Rows: GxRow List", "  out Total: Decimal", "  Inner = GxTenantTotal(Rows)", "  let Result = Inner.Total", "  return Total = Result"),
+        };
+        var normalized = FlowTextNormalizer.NormalizeAll(authored, schema);
+        foreach (var n in normalized) Assert.Contains(n.Edits, e => e.Rule.StartsWith("FLOW_GENERAL_", StringComparison.Ordinal));
+        Assert.Contains("  assign Doubled = Rows mapTo { Id: NullIdentifier(), Code: Code, Total: Total * 2, Status: 1 }\n", normalized[0].Text);
+        Assert.Contains("  local First: Decimal\n", normalized[0].Text);
+        Assert.Contains("  in Tenant: Integer\n", normalized[1].Text);
+        Assert.Contains("  Inner = GxTenantTotal(Rows, Tenant)\n", normalized[1].Text);
+        Assert.Contains("  local Result: Decimal\n", normalized[1].Text);
+        var texts = normalized.Select(n => n.Text.TrimStart('\n')).ToArray();
+        var result = Run(dir, "general-op", $$$"""{"base":"{{{fixture}}}","ops":[{{{GeneralData}}},{{{GeneralException}}},{{{Texts(texts)}}}]}""");
+        Assert.True(result["accepted"]!.GetValue<bool>(), result.ToJsonString());
+        foreach (var (name, text) in new[] { "GxTenantTotal", "GxTenantRun" }.Zip(texts))
+            Assert.Equal(Bare(ModuleFlow.Print(ModuleFlow.Read(text)).Text).Replace("\r\n", "\n"), Bare(Read(dir, "general-op", lane, name).Text));
+    }
+
+    // ---- connectors of If, Switch and For Each changed by an edit (lab/batch-speed, R5) ----------------------------------
+
+    // The branches of an If and two cases of a Switch trade their targets: every node keeps its key, the connectors change
+    // (each changed one is disconnected before it is linked again) and the Switch keeps the order of its conditions.
+    public static void SwappingDecisionTargetsKeepsEveryNodeIdentity(string dir, string fixture, string lane)
+    {
+        var sources = new[] {
+            "server action SwapIf\n  in Choice: Integer\n  out Total: Integer\n  if Choice=1:\n    assign Total = 10\n    end\n  assign Total = 20\n  end\n",
+            "server action SwapSwitch\n  in Choice: Integer\n  out Total: Integer\n  switch:\n    case Choice=1:\n      assign Total = 10\n      end\n    case Choice=2:\n      assign Total = 20\n      end\n    otherwise:\n      assign Total = 30\n      end\n"
+        };
+        var initial = new JsonObject { ["base"] = fixture, ["ops"] = new JsonArray(new JsonObject { ["op"] = "logic", ["data"] = new JsonObject { ["flow"] = new JsonArray(sources.Select(s => (JsonNode)JsonValue.Create(s)!).ToArray()) } }) };
+        Assert.True(Run(dir, "decisions-original", initial.ToJsonString())["accepted"]!.GetValue<bool>());
+        var reads = new[] { "SwapIf", "SwapSwitch" }.Select(n => Read(dir, "decisions-original", lane, n)).ToArray();
+        var edits = reads.Select(r => {
+            var a = Line(r.Text, "assign Total = 10"); var b = Line(r.Text, "assign Total = 20");
+            static string Indent(string line) => line[..(line.Length - line.TrimStart().Length)];
+            return (r.Text.Replace(a, "__SWAP_BRANCH__").Replace(b, Indent(b) + a.TrimStart()).Replace("__SWAP_BRANCH__", Indent(a) + b.TrimStart()), r.TextSha);
+        }).ToArray();
+        var changed = Run(dir, "decisions-swapped", "{\"ops\":[" + Flow(edits) + "]}", Path.Combine(dir, "decisions-original.oml"));
+        Assert.True(changed["accepted"]!.GetValue<bool>(), changed.ToJsonString());
+        foreach (var old in reads) {
+            var after = Read(dir, "decisions-swapped", lane, old.Name);
+            Assert.Equal(old.Ids.Values.Order(), after.Ids.Values.Order());
+            Assert.True(after.Text.IndexOf("assign Total = 20", StringComparison.Ordinal) < after.Text.IndexOf("assign Total = 10", StringComparison.Ordinal), after.Text);
+        }
+        var swapped = Read(dir, "decisions-swapped", lane, "SwapSwitch").Text;
+        Assert.True(swapped.IndexOf("case Choice=1:", StringComparison.Ordinal) < swapped.IndexOf("case Choice=2:", StringComparison.Ordinal), swapped);
+    }
+
+    // A For Each nested in another moves out to follow it: its nodes keep their keys, the old connectors are detached (the
+    // new body is not reached through the old exit), and the text read again is a fixed point.
+    public static void MovingNestedLoopToSequencePreservesNodesAndDetachesOldEdges(string dir, string fixture, string lane)
+    {
+        var text = """
+        server action ReorganizeLoops
+          in Rows: Integer List
+          in Other: Integer List
+          out Total: Integer
+          foreach Rows:
+            assign Total = 0
+            foreach Other:
+              if Other.Current>0:
+                assign Total = Total+1
+            if Total=0:
+              assign Total = 2
+          assign Total = 3
+          end
+        """;
+        var initial = new JsonObject { ["base"] = fixture, ["ops"] = new JsonArray(new JsonObject { ["op"] = "logic", ["data"] = new JsonObject { ["flow"] = new JsonArray(text) } }) };
+        var first = Run(dir, "loop-original", initial.ToJsonString()); Assert.True(first["accepted"]!.GetValue<bool>(), first.ToJsonString());
+        var read = Read(dir, "loop-original", lane, "ReorganizeLoops");
+        var lines = read.Text.Split('\n');
+        var header = string.Join('\n', lines.TakeWhile(l => !l.TrimStart().StartsWith("foreach Rows:")));
+        string At(string content, int spaces) => new string(' ', spaces) + Line(read.Text, content).TrimStart();
+        var edited = header + "\n" + string.Join('\n', new[] {
+            At("foreach Rows:", 2), At("assign Total = 0", 4), "    next",
+            At("foreach Other:", 2), At("if Total=0:", 4), At("assign Total = 2", 6), "      next",
+            At("assign Total = Total+1", 4), "    next", At("assign Total = 3", 2), At("end @", 2) }) + "\n";
+        var changed = Run(dir, "loop-reordered", "{\"ops\":[" + Flow((edited, read.TextSha)) + "]}", Path.Combine(dir, "loop-original.oml"));
+        Assert.True(changed["accepted"]!.GetValue<bool>(), changed.ToJsonString());
+        var after = Read(dir, "loop-reordered", lane, "ReorganizeLoops");
+        var removed = Line(read.Text, "if Other.Current>0:").Split('@').Last().Trim();
+        foreach (var id in read.Ids.Where(p => p.Key != removed)) Assert.Contains(id.Value, after.Ids.Values);
+        Assert.Equal(2, after.Text.Split('\n').Count(l => l.StartsWith("  foreach ")));
+        Assert.DoesNotContain("    foreach ", after.Text);
+        Assert.Contains("if Total=0:", after.Text);
+        var unchanged = Run(dir, "loop-fixed-point", "{\"ops\":[" + Flow((after.Text, after.TextSha)) + "]}", Path.Combine(dir, "loop-reordered.oml"));
+        Assert.True(unchanged["accepted"]!.GetValue<bool>(), unchanged.ToJsonString());
+        Assert.Equal(after.Text, Read(dir, "loop-fixed-point", lane, "ReorganizeLoops").Text);
+    }
+
     private const string Spec = """
         {"op":"spec","data":{"entities":[{"name":"FaOrder","attributes":[{"name":"Title","type":"Text","length":50},{"name":"Qty","type":"Integer"}]}]}}
         """;
@@ -53,7 +357,7 @@ public static class FlowApplyScenarios
         var bytes = File.ReadAllBytes(Path.Combine(dir, name + ".oml"));
         var sha = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes)).ToLowerInvariant();
         var flow = new ModelHost(Path.Combine(dir, "work")).BuildFlow(bytes, sha, lane);
-        var entry = flow.Actions.Single(a => a.Name == action);
+        var entry = flow.Actions.Single(a => a.Name == action || action.Contains('/') && a.Name.EndsWith('/' + action, StringComparison.Ordinal));
         Assert.True(entry.FixedPoint, string.Join("\n", entry.Problems));
         return entry;
     }
@@ -469,14 +773,13 @@ public static class FlowApplyScenarios
         Assert.Equal(ReadOwned(dir, "fd-job", lane, "FaCart", "FaAdd").Key, receipts[0]!["key"]!.ToString());
     }
 
-    // A Traditional screen or block holds screen actions the text edits but does not create (decision 7 of the plan): the
-    // text is refused with the owner's kind, nothing is written.
-    public static void ATraditionalOwnerIsNotWrittenByText(string dir, string fixture, string lane)
+    // Traditional has server screen actions, but does not have Reactive data actions.
+    public static void ATraditionalOwnerRejectsDataActions(string dir, string fixture, string lane)
     {
-        var problems = Refused(dir, "ft-traditional", $$$"""{"base":"{{{fixture}}}","ops":[{{{Texts("action ApplicationTitle.FaClick\n  end\n")}}}]}""");
+        var problems = Refused(dir, "ft-traditional", $$$"""{"base":"{{{fixture}}}","ops":[{{{Texts("data action ApplicationTitle.FaClick\n  end\n")}}}]}""");
         var problem = Assert.Single(problems)!;
         Assert.Equal("FLOW_OWNER_KIND", problem["code"]!.ToString());
-        Assert.Contains("Traditional", problem["message"]!.ToString());
+        Assert.Contains("ApplicationTitle", problem["message"]!.ToString());
     }
 
     // The examples of the work packet's text section (platforms/odc/facade/text-examples.json, read by text-packet.mjs): what
@@ -708,6 +1011,41 @@ public static class FlowApplyScenarios
         Assert.True(result["accepted"]!.GetValue<bool>(), result["policyMessages"]?.ToJsonString() + result["details"]);
         foreach (var (action, text) in new[] { ("FaLoad", load), ("FaOnLoaded", handler), ("FaReload", reload), ("FaLoad5", load5) })
             Assert.Equal(text, Bare(ReadOwned(dir, "fe-new", lane, "FaShop", action).Text));
+    }
+
+    // A lifecycle event goes to an action of its owner: an entity attribute named like the handler (FaCollision.Loaded) and
+    // a same-named handler of another screen are no Destination.
+    public static void LifecycleDestinationIgnoresSameNamedEntityFields(string dir, string fixture, string lane)
+    {
+        var ddl = new JsonObject { ["op"] = "spec", ["data"] = new JsonObject { ["ddl"] = "create entity FaCollision (Id Long Integer identifier auto required, Loaded Text(40));" } };
+        var handler = "action FaShop.Loaded\n  assign Picked = Picked + 1\n  end\n";
+        var other = handler.Replace("FaShop", "FaOther");
+        var first = Run(dir, "lc-base", $$$"""{"base":"{{{fixture}}}",{{{NoRole(lane)}}},"ops":[{{{Spec}}},{{{ddl.ToJsonString()}}},{{{Html(Shop)}}},{{{Html(Shop.Replace("FaShop", "FaOther"))}}},{{{Texts(other)}}}]}""");
+        Assert.True(first["accepted"]!.GetValue<bool>(), first.ToJsonString());
+        var load = "data action FaShop.Initial\n  on AfterFetch -> Loaded()\n  out Total: Integer\n  assign Total = 1\n  end\n";
+        var result = Run(dir, "lc-new", $$$"""{"ops":[{{{Texts(load, handler)}}}]}""", Path.Combine(dir, "lc-base.oml"));
+        Assert.True(result["accepted"]!.GetValue<bool>(), result.ToJsonString());
+        Assert.Equal(load, Bare(ReadOwned(dir, "lc-new", lane, "FaShop", "Initial").Text));
+        Assert.Equal(handler, Bare(ReadOwned(dir, "lc-new", lane, "FaShop", "Loaded").Text));
+        Assert.Equal(other, Bare(ReadOwned(dir, "lc-new", lane, "FaOther", "Loaded").Text));
+    }
+
+    // Two old owners make a stale name index visibly ambiguous: the new owner refreshes its own LoadRows, whatever the order
+    // of the texts.
+    public static void NewlyCreatedDataSourcesReplaceStaleOwnerLookup(string dir, string fixture, string lane)
+    {
+        var oldA = Shop.Replace("FaShop", "FaOldA");
+        var oldB = Shop.Replace("FaShop", "FaOldB");
+        var loadA = "data action FaOldA.LoadRows\n  out Total: Integer\n  assign Total = 1\n  end\n";
+        var loadB = loadA.Replace("FaOldA", "FaOldB");
+        Run(dir, "cache-base", $$$"""{"base":"{{{fixture}}}",{{{NoRole(lane)}}},"ops":[{{{Spec}}},{{{Html(oldA)}}},{{{Html(oldB)}}},{{{Texts(loadA, loadB)}}}]}""");
+        var screen = Shop.Replace("FaShop", "FaNew");
+        var warm = "action FaOldA.Warm\n  refresh LoadRows\n  end\n";
+        var reload = "action FaNew.ReloadRows\n  refresh LoadRows\n  end\n";
+        var load = loadA.Replace("FaOldA", "FaNew");
+        var result = Run(dir, "cache-new", $$$"""{ {{{NoRole(lane)}}},"ops":[{{{Html(screen)}}},{{{Texts(warm, reload, load)}}}]}""", Path.Combine(dir, "cache-base.oml"));
+        Assert.True(result["accepted"]!.GetValue<bool>(), result.ToJsonString());
+        Assert.Equal(reload, Bare(ReadOwned(dir, "cache-new", lane, "FaNew", "ReloadRows").Text));
     }
 
     // A parameter or local renamed onto the name of an attribute of the source of a mapping that names it would be read as
@@ -1624,8 +1962,15 @@ public static class FlowApplyScenarios
               in PageSize?: Integer = 50
               out Rows: CxRow List
               out Total: Integer
-              Page = aggregate FROM CxCustomer, CxEntry JOIN Inner CxEntry~CxCustomer ON CxEntry.CustomerId = CxCustomer.Id WHERE (CxEntry.CustomerId = CustomerId) SORT CxEntry.Id desc MAX PageSize START StartIndex
-              (System).ListAppendAll(List=Rows, SourceList=Page.List mapTo { Title: CxEntry.Title, Customer: CxCustomer.Name })
+              out LatestTitle: Text
+              Page = sql -> CxEntry, CxCustomer max If(PageSize <= 0, 50, PageSize)
+                in Customer: CxCustomer Identifier = CustomerId
+                in Skip: Integer = Max(0, StartIndex)
+                in Take: Integer = If(PageSize <= 0, 50, PageSize)
+                | SELECT {CxEntry}.*, {CxCustomer}.* FROM {CxEntry} INNER JOIN {CxCustomer} ON {CxCustomer}.[Id] = {CxEntry}.[CustomerId] WHERE {CxEntry}.[CustomerId] = @Customer ORDER BY {CxEntry}.[Id] DESC OFFSET @Skip ROWS FETCH NEXT @Take ROWS ONLY
+              (System).ListAppendAll(List=Rows, SourceList=Page.List mapTo { Title: List.Title, Customer: List_2.Name })
+              Latest = aggregate FROM CxCustomer, CxEntry JOIN Inner CxEntry~CxCustomer ON CxEntry.CustomerId = CxCustomer.Id WHERE (CxEntry.CustomerId = CustomerId) SORT CxEntry.Id desc MAX 1
+              assign LatestTitle = If(Latest.List.Empty, "", Latest.List.Current.CxEntry.Title)
               Totals = sql -> CxTotal max 1
                 in Customer: CxCustomer Identifier = CustomerId
                 in Minimum: Decimal = 0
@@ -1643,7 +1988,9 @@ public static class FlowApplyScenarios
         authored = authored
             .Replace("on exception All Exceptions:\n", "on exception All Exceptions:\n    @{Name=\"AllExceptions\"}\n")
             .Replace("on exception CxQueryFailed abort log:\n", "on exception CxQueryFailed abort log:\n    @{Name=\"CxQueryFailed\"}\n");
-        if (lane == "odc") authored = authored.Replace("START StartIndex\n", "START StartIndex\n    @{MasterSource=&\"CxCustomer\"}\n");
+        // T3: a server action pages by SQL OFFSET/FETCH (START on its aggregate is refused, LOGIC_START_SERVER_IGNORED); the
+        // two-source aggregate stays for the join and, on ODC, its derived join root.
+        if (lane == "odc") authored = authored.Replace("SORT CxEntry.Id desc MAX 1\n", "SORT CxEntry.Id desc MAX 1\n    @{MasterSource=&\"CxCustomer\"}\n");
         const string Legacy = "server action CxLegacySql\n  out Total: Integer\n  Totals = sql -> CxTotal max 1\n    | SELECT COUNT(*), SUM({CxEntry}.[Amount]) FROM {CxEntry}\n  assign Total = Totals.List.Current.List.Count\n  end\n";
         const string TypedMapping = "server action CxSqlMappedRows\n  out Rows: CxRow List\n  Totals = sql -> CxTotal max 1\n    | SELECT 1, 2\n  assign Rows = Totals.List mapTo { Title: IntegerToText(CxTotal.Count), Customer: IntegerToText(CxTotal.Count) }\n  Wrapped = sql -> CxTotal max 1\n    | SELECT 3, 4\n  (System).ListAppendAll(List=Rows, SourceList=((Wrapped.List)) mapTo { Title: IntegerToText(CxTotal.Count), Customer: IntegerToText(CxTotal.Count) })\n  end\n";
         const string LegacyMapping = "server action CxSqlLegacyMappedRows\n  out Rows: CxRow List\n  Totals = sql -> CxTotal max 1\n    | SELECT 1, 2\n  assign Rows = Totals.List mapTo { Title: IntegerToText(List.Count), Customer: \"CxTotal.Count\" }\n  end\n";

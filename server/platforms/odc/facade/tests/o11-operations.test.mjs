@@ -127,6 +127,9 @@ test('MCP schemas: session, read and write tools with their own arguments', () =
   const write = entries.get('o11_service_center_write');
   assert.deepEqual(session.inputSchema.properties.action.enum, ['status', 'sign-in', 'web-sign-in', 'close']);
   assert.deepEqual(session.inputSchema.properties.surface.enum, ['service-center', 'lifetime']);
+  assert.deepEqual(session.inputSchema.properties.authPrompt.enum, ['auto', 'never']);
+  assert.deepEqual(serviceCenterArguments({ action: 'sign-in', host: 'h.test', session: 'vault', authPrompt: 'never' }, 'session'),
+    ['session-sign-in', '--host=h.test', '--session=vault', '--auth-prompt=never']);
   assert.equal(read.annotations.readOnlyHint, true);
   for (const tool of [read, session]) for (const forbidden of ['words', 'execute', 'valueFile', 'valueVault', 'confirmHost']) assert.ok(!tool.inputSchema.properties[forbidden], forbidden);
   // No default: an absent execute is not false (a delete with words executes; execute:false only plans).

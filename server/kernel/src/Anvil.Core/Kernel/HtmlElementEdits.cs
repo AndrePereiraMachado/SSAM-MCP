@@ -470,8 +470,12 @@ public static class HtmlElementEdits
                 var root = roots[0];
                 if (root.Tag is "screen" or "block") { Bad("with is an element of the page, not a <" + root.Tag + ">", "replace / with the whole document", e); return; }
                 var rootK = root.Get("k");
-                if (rootK == null) root.Attributes.Insert(0, new("k", k));
-                else if (rootK != k) {
+                // The target written inside a root without k: the root is new and wraps it (an If around a keyed container,
+                // the live refusal 3ce977a2 of 20/10); the element keeps its k under the new parent. Otherwise the root is the
+                // element, and inherits its k.
+                var wraps = rootK == null && ScreenHtmlText.Elements(root).Any(x => !ReferenceEquals(x.Node, root) && x.Node.Get("k") == k);
+                if (rootK == null && !wraps) root.Attributes.Insert(0, new("k", k));
+                else if (rootK != null && rootK != k) {
                     problems.Add(Problem(At(edit), b.ByK.ContainsKey(rootK) ? ScreenHtmlEdit.KeyTwice : ScreenHtmlEdit.Invalid,
                         "replace keeps the element: the root of with has k=\"" + rootK + "\", the target is " + k + (b.ByK.ContainsKey(rootK) ? " (another element of the reading)" : ""),
                         "drop the k of the root of with (it is " + k + "), or move the element with {move}", Line(b, e)));

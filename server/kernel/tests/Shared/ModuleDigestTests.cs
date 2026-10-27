@@ -190,6 +190,39 @@ public sealed class ModuleDigestTests
         Assert.Contains("widget style and attributes 1", coverage); Assert.Contains("built-in and derived types", coverage);
     }
 
+    // T12 (Traditional migration, call 222): the agent asked the user to switch accounts before it read the screen Roles; the
+    // digest printed roles only when some were set. Every screen now prints its access and its roles (roles="" when it has
+    // none), and an O11 screen without any role says that no user can open it, so another account cannot help. ODC decides
+    // everyone by AnonymousAccess and keeps app roles in Roles.
+    [Fact]
+    public void EveryScreenPrintsItsAccessAndItsRolesEvenWhenItHasNone()
+    {
+        keys = 0;
+        var root = N("ESpace", "Portal").Set("ESpaceType", "Web");
+        var flow = root.Add(N("WebFlow", "MainFlow", "UIFlow"));
+        Node Role(string name) => N("Role", name, "Role");
+        void Screen(string name, params Node[] roles) => flow.Add(N("WebScreen", name, "WebScreen")).Set("Roles", roles.ToList());
+        Screen("Closed"); Screen("Members", Role("Registered")); Screen("Open", Role("Registered"), Role("Anonymous")); Screen("Managers", Role("Manager"));
+        flow.Add(N("MobileScreen", "OdcOpen", "MobileScreen")).Set("AnonymousAccess", true).Set("Roles", new List<Node>());
+        flow.Add(N("MobileScreen", "OdcAny", "MobileScreen")).Set("AnonymousAccess", false).Set("Roles", new List<Node>());
+        flow.Add(N("MobileScreen", "OdcApp", "MobileScreen")).Set("AnonymousAccess", false).Set("Roles", new List<Node> { Role("PortalUser") });
+        flow.Add(N("WebBlock", "Header", "WebBlock"));
+        var digest = ModuleDigest.Build(root, new Reader(), "o11", "AB12", 1);
+        string Block(string name) => digest.Section("ui").Blocks.Single(b => b.StartsWith(name + " @", StringComparison.Ordinal) || b.Contains("/" + name + " @", StringComparison.Ordinal));
+        string Head(string name) => Block(name).Split('\n')[0];
+        Assert.EndsWith(" access=none roles=\"\"", Head("Closed"));
+        Assert.Contains("\n  NO_ROLE_SCREEN: no role can open this screen, so no user can; another account will not help", Block("Closed"));
+        Assert.EndsWith(" access=authenticated roles=Registered", Head("Members"));
+        Assert.EndsWith(" access=everyone roles=Anonymous,Registered", Head("Open"));
+        Assert.EndsWith(" access=roles roles=Manager", Head("Managers"));
+        Assert.EndsWith(" access=everyone roles=\"\"", Head("OdcOpen"));
+        Assert.EndsWith(" access=authenticated roles=\"\"", Head("OdcAny"));
+        Assert.EndsWith(" access=roles roles=PortalUser", Head("OdcApp"));
+        Assert.Single(digest.Section("ui").Blocks, b => b.Contains("NO_ROLE_SCREEN", StringComparison.Ordinal));
+        // A block has no access of its own.
+        Assert.DoesNotContain("access=", Head("Header"));
+    }
+
     // G13 (FarmaVirtual, 10/10/2026): after the merge the digest (calls 114-119) named the screen's widgets without their
     // @key, and the named containers the job had mounted (MountFvEditNome, Fv416, UiState4) not at all; ten ssam_map {name}
     // calls (120-128, 132) followed. Every named widget's @key is in the digest: on its line, or, for a named widget the tree
@@ -286,7 +319,7 @@ public sealed class ModuleDigestTests
                 Assert.True(first["digest"]!["built"]!.GetValue<bool>()); Assert.Equal(1, loads);
                 var sha = first["sourceSha256"]!.ToString();
                 Assert.Equal(store.DigestPathOf(sha), first["digest"]!["path"]!.ToString());
-                Assert.EndsWith(".kernel.digest.json", store.DigestPathOf(sha)); Assert.Contains(Path.Combine("v1", "o11", sha.ToLowerInvariant() + "."), store.DigestPathOf(sha));
+                Assert.EndsWith(".kernel.digest.e" + ModuleDigest.Extractor + ".json", store.DigestPathOf(sha)); Assert.Contains(Path.Combine(ModuleIndexStore.Generation, "o11", sha.ToLowerInvariant() + "."), store.DigestPathOf(sha));
                 Assert.Equal(ModuleDigest.Extractor, first["digest"]!["extractor"]!.GetValue<int>());
                 Assert.True(first["digest"]!["bytes"]!.GetValue<int>() > 0);
                 Assert.Throws<ArgumentException>(() => cache.Read(new JsonObject { ["file"] = capture, ["digest"] = "rebuild" }));

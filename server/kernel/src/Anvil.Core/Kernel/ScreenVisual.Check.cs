@@ -47,7 +47,11 @@ public static partial class ScreenVisual
     /// <summary>What the check reads: the author's DOM (with each element's document node), the predicted runtime DOM and the
     /// map from an author element to its runtime element, the CSS of the page, the document text (for the patches).</summary>
     public sealed record CheckInput(string Root, DomNode Author, IReadOnlyDictionary<DomNode, ScreenHtml.Node> AuthorNodes, Prediction Predicted,
-        IReadOnlyDictionary<DomNode, DomNode> Counterparts, IReadOnlyList<Sheet> Sheets, string Platform, string Document);
+        IReadOnlyDictionary<DomNode, DomNode> Counterparts, IReadOnlyList<Sheet> Sheets, string Platform, string Document)
+    {
+        /// <summary>T18: the token rules of the installed base of the page's themes (BaseRuleKeys): their copies are no news.</summary>
+        public IReadOnlySet<string> BaseRules { get; init; } = new HashSet<string>();
+    }
 
     // OutSystems UI 2.28.1 (the theme of the fixture outsystems-ui.oml, read headless, 2026-10-15): the custom properties of :root.
     private const string OutSystemsUiTokenNames = "border-radius-circle border-radius-none border-radius-rounded border-radius-soft border-size-l border-size-m border-size-none border-size-s bottom-bar-size color-background-body color-background-login color-blue color-blue-dark color-blue-darker color-blue-darkest color-blue-light color-blue-lighter color-blue-lightest color-cyan color-cyan-dark color-cyan-darker color-cyan-darkest color-cyan-light color-cyan-lighter color-cyan-lightest color-error color-error-light color-focus-inner color-focus-outer color-grape color-grape-dark color-grape-darker color-grape-darkest color-grape-light color-grape-lighter color-grape-lightest color-green color-green-dark color-green-darker color-green-darkest color-green-light color-green-lighter color-green-lightest color-indigo color-indigo-dark color-indigo-darker color-indigo-darkest color-indigo-light color-indigo-lighter color-indigo-lightest color-info color-info-light color-lime color-lime-dark color-lime-darker color-lime-darkest color-lime-light color-lime-lighter color-lime-lightest color-neutral-0 color-neutral-1 color-neutral-10 color-neutral-2 color-neutral-3 color-neutral-4 color-neutral-5 color-neutral-6 color-neutral-7 color-neutral-8 color-neutral-9 color-orange color-orange-dark color-orange-darker color-orange-darkest color-orange-light color-orange-lighter color-orange-lightest color-pink color-pink-dark color-pink-darker color-pink-darkest color-pink-light color-pink-lighter color-pink-lightest color-primary color-primary-hover color-primary-lightest color-primary-selected color-red color-red-dark color-red-darker color-red-darkest color-red-light color-red-lighter color-red-lightest color-secondary color-success color-success-light color-teal color-teal-dark color-teal-darker color-teal-darkest color-teal-light color-teal-lighter color-teal-lightest color-violet color-violet-dark color-violet-darker color-violet-darkest color-violet-light color-violet-lighter color-violet-lightest color-warning color-warning-light color-yellow color-yellow-dark color-yellow-darker color-yellow-darkest color-yellow-light color-yellow-lighter color-yellow-lightest font-bold font-light font-regular font-semi-bold font-size-base font-size-display font-size-h1 font-size-h2 font-size-h3 font-size-h4 font-size-h5 font-size-h6 font-size-label font-size-s font-size-xs footer-height header-color header-size header-size-content layer-above layer-below layer-global-auto layer-global-elevated layer-global-instant-interaction layer-global-navigation layer-global-negative layer-global-off-canvas layer-global-screen layer-local-tier-1 layer-local-tier-2 layer-local-tier-3 layer-local-tier-4 layer-local-tier-5 layer-system-scale os-safe-area-bottom os-safe-area-left os-safe-area-right os-safe-area-top osui-bottom-sheet-layer osui-menu-layer osui-notification-layer osui-popup-layer osui-sidebar-layer overlay-background shadow-l shadow-m shadow-none shadow-s shadow-xl shadow-xs side-menu-size space-base space-l space-m space-none space-s space-xl space-xs space-xxl";
@@ -80,6 +84,37 @@ public static partial class ScreenVisual
     private static readonly IReadOnlySet<string> ItemProperties = Set("flex flex-grow flex-shrink flex-basis align-self justify-self order grid-column grid-row grid-area width min-width max-width");
 
     private static readonly HashSet<string> InlineTags = new(StringComparer.Ordinal) { "span", "strong", "b", "em", "i", "small", "a", "code", "abbr", "mark", "sub", "sup", "s", "u", "label", "time", "cite", "q" };
+
+    /// <summary>T18: the rules of an installed base stylesheet (the Theme Editor half of a theme, as installed) that declare
+    /// OutSystems UI tokens, by <see cref="CssStylesheet.SharedRuleKey"/>: a copy of one of them in an author sheet is the base's
+    /// own scoping, never news. Pure: the caller keeps the set for its own page (CheckInput.BaseRules), no state is shared.</summary>
+    public static IReadOnlySet<string> BaseRuleKeys(IEnumerable<string> baseSheets)
+    {
+        var keys = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var css in baseSheets.Where(c => !string.IsNullOrEmpty(c)))
+            try
+            {
+                foreach (var (rule, _) in Parsed(css))
+                    if (rule.Declarations.Any(d => OutSystemsUiTokens.Contains(d.Property))) keys.Add(CssStylesheet.SharedRuleKey(RuleSource(css, rule)));
+            }
+            catch (Exception) { /* a base the parser cannot read exempts nothing */ }
+        return keys;
+    }
+    // The device and platform classes OutSystems UI puts on body: tokens under them are responsive or platform overrides.
+    private static readonly HashSet<string> BodyStateClasses = new(StringComparer.Ordinal)
+    { "phone", "tablet", "desktop", "landscape", "portrait", "is-rtl", "ios", "android", "windows", "osx", "linux", "has-accessible-features", "is-safari", "is-firefox", "is-edge", "is-chrome" };
+
+    /// <summary>T18: a token rule whose scope is the base's own (byte-equal to a rule of the installed OutSystems UI base), the
+    /// whole page (body, #reactContainer, *: every widget inherits it, :root would change nothing) or a state OutSystems UI puts on
+    /// body (a device or platform class: :root would make the override unconditional).</summary>
+    public static bool TokenScopeIsIntended(CssRule rule, string ruleText, IReadOnlySet<string>? baseRules = null)
+    {
+        if (baseRules is { Count: > 0 } && baseRules.Contains(CssStylesheet.SharedRuleKey(ruleText))) return true;
+        return CssStylesheet.SplitSelectors(rule.Selector).Select(s => Regex.Replace(s.Trim(), @"\s+", " ")).All(s =>
+            s is "body" or "html body" or ":root body" or "*" or "#reactContainer" or ":is(#reactContainer, body)" or ":is(#reactContainer,body)"
+            || Regex.Match(s, @"^(?:html\s*)?(?:body)?((?:\.[A-Za-z_-][\w-]*)+)$") is { Success: true } m
+               && m.Groups[1].Value.Split('.', StringSplitOptions.RemoveEmptyEntries).All(BodyStateClasses.Contains));
+    }
 
     /// <summary>The check of one page: every finding by family.</summary>
     public static List<Finding> Check(CheckInput input)
@@ -197,9 +232,12 @@ public static partial class ScreenVisual
                     break;
                 }
             }
-            // F5: a token of OutSystems UI declared in a selector that is not :root/html.
+            // F5: a token of OutSystems UI declared in a selector that is not :root/html. T18: not for a rule of the installed
+            // OutSystems UI base (byte-equal), nor where :root would change nothing (a selector every widget is inside: body) or
+            // would change the meaning (a device or platform class OutSystems UI puts on body: .phone, .tablet, .is-rtl...).
             var tokens = rule.Declarations.Where(d => OutSystemsUiTokens.Contains(d.Property) && !rootTokens.Contains(d.Property + ":" + d.Value.Trim())).ToList();
-            if (tokens.Count > 0 && rule.EnclosingRules.Count == 0 && !CssStylesheet.SplitSelectors(rule.Selector).Select(s => s.Trim()).All(s => s is ":root" or "html"))
+            if (tokens.Count > 0 && rule.EnclosingRules.Count == 0 && !CssStylesheet.SplitSelectors(rule.Selector).Select(s => s.Trim()).All(s => s is ":root" or "html")
+                && !TokenScopeIsIntended(rule, ruleText, input.BaseRules))
             {
                 var declarations = string.Join(";", tokens.Select(d => d.Property + ":" + d.Value.Trim()));
                 Add(new Finding(ThemeTokenScoped, input.Root, rule.Line, rule.Selector, ":root",

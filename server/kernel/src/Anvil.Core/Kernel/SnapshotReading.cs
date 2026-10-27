@@ -17,6 +17,10 @@ public interface IReadSnapshot : IDisposable
     IReadOnlyList<(string Name, string Kind, string Key)> HtmlRoots();
     DataDdl BuildDdl(string lane, string sourceSha256, long sourceBytes);
     ModuleFlow BuildFlow(string lane, string sourceSha256, long sourceBytes);
+    // S10: some actions by selectors (ModuleFlow.BuildSelected, ssam-flow-selection/1) and contracts without bodies
+    // (ModuleFlow.BuildSignatures, ssam-action-signatures/1). Partial answers: never stored as the module's flow.
+    JsonObject BuildFlowSelection(string lane, string adapter, string sourceSha256, long sourceBytes, IReadOnlyList<string> selectors);
+    JsonObject BuildSignatures(string lane, string sourceSha256, long sourceBytes, IReadOnlyList<string> selectors);
 }
 
 // Owned exclusively by a read process. Never share these native objects with a write worker.
@@ -38,6 +42,10 @@ public sealed class ReadSnapshot<T>(T root, ModelReader<T> reader, string name, 
         DataDdl.Build(root, reader, lane, sourceSha256, sourceBytes);
     public ModuleFlow BuildFlow(string lane, string sourceSha256, long sourceBytes) =>
         ModuleFlow.Build(root, reader, lane, sourceSha256, sourceBytes);
+    public JsonObject BuildFlowSelection(string lane, string adapter, string sourceSha256, long sourceBytes, IReadOnlyList<string> selectors) =>
+        ModuleFlow.BuildSelected(root, reader, lane, adapter, sourceSha256, sourceBytes, selectors);
+    public JsonObject BuildSignatures(string lane, string sourceSha256, long sourceBytes, IReadOnlyList<string> selectors) =>
+        ModuleFlow.BuildSignatures(root, reader, lane, sourceSha256, sourceBytes, selectors);
     public JsonObject Read(string? path, ReadingOptions options, string[]? select, string file)
     {
         options.Validate();
@@ -98,6 +106,8 @@ public sealed class SnapshotReadCache(Func<byte[], IReadSnapshot> load, ModuleIn
         if (request["rich"] is { } richMode) return EnsureRich(richMode.GetValue<string>(), bytes, actual, total);
         if (request["html"] is { } htmlTarget) return ReadHtml(htmlTarget.GetValue<string>(), request["keys"]?.GetValue<bool>() == true, bytes, actual, total);
         if (request["ddl"] is { } ddlMode) return EnsureDdl(ddlMode.GetValue<string>(), bytes, actual, total);
+        if (request["signatureElements"] is { } signatureElements) return ReadFlowSelection(Selectors(signatureElements, "signatureElements"), bytes, actual, total, signaturesOnly: true);
+        if (request["flowElements"] is { } flowElements) return ReadFlowSelection(Selectors(flowElements, "flowElements"), bytes, actual, total);
         if (request["flow"] is { } flowMode) return EnsureFlow(flowMode.GetValue<string>(), bytes, actual, total);
         var cold = request["cold"]?.GetValue<bool>() == true;
         var modelHit = snapshot != null && hash == actual && !cold;
@@ -199,6 +209,43 @@ public sealed class SnapshotReadCache(Func<byte[], IReadSnapshot> load, ModuleIn
         return new JsonObject { ["ok"] = true, ["sourceSha256"] = actual, ["flow"] = flow.Answer(indexes.FlowPathOf(actual), built),
             ["cache"] = new JsonObject { ["loads"] = loads },
             ["timings"] = new JsonObject { ["loadMs"] = loadMs, ["flowMs"] = buildMs, ["serverMs"] = total.Elapsed.TotalMilliseconds } };
+    }
+
+    private static string[] Selectors(JsonNode node, string field)
+    {
+        string[]? selectors;
+        try { selectors = node.Deserialize<string[]>(); } catch (JsonException) { selectors = null; }
+        if (selectors is not { Length: >= 1 and <= ModuleFlow.MaxSelectors } || selectors.Any(string.IsNullOrWhiteSpace))
+            throw new ArgumentException(field + " must be a list of 1 to " + ModuleFlow.MaxSelectors + " non-empty selectors");
+        return selectors;
+    }
+
+    // {"flowElements":[...]}: the actions those selectors may name (ModuleFlow.BuildSelected), the rest of the module not
+    // built; the capture's stored flow answers instead when there is one ({"flow":"ensure"}'s answer). {"signatureElements":
+    // [...]}: their contracts without bodies (ModuleFlow.BuildSignatures). Neither is ever stored as the module's flow: the
+    // answer is memoized beside the loaded capture under its own key (a complete signature answer only).
+    private JsonObject ReadFlowSelection(string[] selectors, byte[] bytes, string actual, Stopwatch total, bool signaturesOnly = false)
+    {
+        if (indexes == null) throw new InvalidOperationException("No module index store: set SSAM_MODULE_INDEX_ROOT or run the reader inside an SSAM workspace");
+        if (!signaturesOnly && File.Exists(indexes.FlowPathOf(actual)) && indexes.LoadFlow(actual) != null) return EnsureFlow("ensure", bytes, actual, total);
+        var phase = total.Elapsed.TotalMilliseconds;
+        if (snapshot == null || hash != actual) { Dispose(); snapshot = load(bytes); hash = actual; loads++; }
+        var loadMs = total.Elapsed.TotalMilliseconds - phase; phase = total.Elapsed.TotalMilliseconds;
+        var queryKey = (signaturesOnly ? "flow-signatures:" : "flow-selection:") + JsonSerializer.Serialize(selectors);
+        var hit = answers.TryGetValue(queryKey, out var memo);
+        var result = hit ? memo!.DeepClone().AsObject()
+            : signaturesOnly ? snapshot.BuildSignatures(indexes.Lane, actual, bytes.Length, selectors)
+            : snapshot.BuildFlowSelection(indexes.Lane, indexes.Adapter, actual, bytes.Length, selectors);
+        if (!hit && (!signaturesOnly || result["complete"]?.GetValue<bool>() == true)) {
+            var size = System.Text.Encoding.UTF8.GetByteCount(result.ToJsonString());
+            if (size <= 4 * 1024 * 1024) {
+                if (answers.Count >= 128 || answerBytes + size > 16 * 1024 * 1024) { answers.Clear(); answerBytes = 0; }
+                answers[queryKey] = result.DeepClone().AsObject(); answerBytes += size;
+            }
+        }
+        return new JsonObject { ["ok"] = true, ["sourceSha256"] = actual, [signaturesOnly ? "flowSignatures" : "flowSelection"] = result,
+            ["cache"] = new JsonObject { ["loads"] = loads, ["queryHit"] = hit },
+            ["timings"] = new JsonObject { ["loadMs"] = loadMs, ["flowMs"] = total.Elapsed.TotalMilliseconds - phase, ["serverMs"] = total.Elapsed.TotalMilliseconds } };
     }
 
     // {"rich":"ensure"}: the capture's rich index (ModuleRichIndex) is stored beside its index, built from the model (loaded

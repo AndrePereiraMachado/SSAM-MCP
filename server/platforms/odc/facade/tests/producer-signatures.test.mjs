@@ -167,10 +167,11 @@ test('F6: the packet lists the cached signatures the intent needs, with the refe
   const input = { lane: 'o11', intent: 'crie as actions', basis: null, matches: [], unavailable: [], categories: new Map(), slices: () => ({}), module: null, producers: section };
   const a = workPacket(input), b = workPacket(input);
   assert.equal(JSON.stringify(a), JSON.stringify(b));
-  assert.deepEqual(Object.keys(a).filter(k => PACKET_ORDER.includes(k)), PACKET_ORDER);
+  const keys = Object.keys(a).filter(k => PACKET_ORDER.includes(k));
+  assert.deepEqual(keys, PACKET_ORDER.filter(k => keys.includes(k)), 'the present sections in the declared order (fill or omit, F4)');
   assert.deepEqual(a.environment.producers, section);
   assert.doesNotMatch(JSON.stringify(a), /storedAtUtc|observedAtUtc|"cache"/);
-  assert.equal(workPacket({ ...input, producers: null }).environment, null, 'no producers: the section as before');
+  assert.equal(workPacket({ ...input, producers: null }).environment, undefined, 'no producers: no environment section (never null)');
 });
 
 // ---- the ODC lane (kernel-delivery.mjs): the reference snapshot of a producer reused for the build, acquired again before

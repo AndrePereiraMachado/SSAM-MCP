@@ -89,7 +89,7 @@ test('repairs in separate jobs never become a verified patch against the consume
   const jobFile = path.join(dir, 'consumer.json');
   const job = { ops: [{ op: 'create', name: 'Original' }] };
   fs.writeFileSync(jobFile, JSON.stringify(job));
-  const rootProblem = { ...problem, sourceJob: undefined, patch: [{ op: 'replace', path: '/ops/0/name', value: 'RootCorrected' }] };
+  const rootProblem = { ...problem, sourceJob: undefined, patch: [{ op: 'replace', path: '/ops/0/name', value: 'RootCorrected' }], patchCertain: true };
   const sourceProblem = { ...problem, sourceJob: { ...sourceJob, job: path.join(dir, 'source.json') },
     patch: [{ op: 'replace', path: '/ops/0/name', value: 'SourceCorrected' }] };
   const projected = refusalFields([rootProblem, sourceProblem], {}, { jobFile, job });

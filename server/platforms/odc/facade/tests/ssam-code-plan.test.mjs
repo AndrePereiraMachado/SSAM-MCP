@@ -294,6 +294,9 @@ async function checks(plan, deps) {
   for (const batch of plan.batches) serial.push(await codeCheck(batch.check.arguments, deps));
   return { parallelMs, serialMs: Date.now() - serialStart, parallel, serial };
 }
+// An unknown call: CALL_UNKNOWN from the scope phase (proto R1, integ/proto-into-product fec07d8f/ae867f10), which refuses
+// the op before it is built, or FLOW_NAME_UNKNOWN from the apply when no scope ran.
+const UNKNOWN_CALL = new Set(['CALL_UNKNOWN', 'FLOW_NAME_UNKNOWN']);
 function actionItems(texts) {
   const qualified = text => { const h = headerOf(text); return h.owner ? `${h.owner}.${h.name}` : h.name; };
   const names = texts.map(qualified);
@@ -311,7 +314,7 @@ for (const lane of ['o11', 'odc']) test(`P3 ${lane} only a cross-batch stub reso
   const input = { lane, module: 'Neutral', base, files: [file] };
   const withStub = await codeCheck({ ...input, stubs: [stub] }, deps), without = await codeCheck(input, deps);
   assert.equal(withStub.ok, true, JSON.stringify(withStub));
-  assert.ok(without.problems.some(p => p.code === 'FLOW_NAME_UNKNOWN' && p.origin?.file === file), JSON.stringify(without));
+  assert.ok(without.problems.some(p => UNKNOWN_CALL.has(p.code) && p.origin?.file === file), JSON.stringify(without));
 });
 
 test('P4 Tickets: accepted texts, 3–4 batches, checks and exact final job', { skip: gate('o11'), timeout: 900000 }, async t => {
@@ -343,10 +346,10 @@ test('P4 Tickets: accepted texts, 3–4 batches, checks and exact final job', { 
     measurements: read(path.join(plan.dir, 'plan.json')).measurements, finalEqual: true, forcedControl: { N: constrained.batches.length, batches: crossingBatches.map(batch => batch.id), withStubs: forcedWith, withoutStubs: forcedWithout } });
   assert.ok(measured.parallel.every(result => result.ok), JSON.stringify(measured.parallel));
   assert.ok(measured.serial.every(result => result.ok), JSON.stringify(measured.serial));
-  if (crossing) assert.ok(controls.some(result => result.problems?.some(p => p.code === 'FLOW_NAME_UNKNOWN')), JSON.stringify(controls));
+  if (crossing) assert.ok(controls.some(result => result.problems?.some(p => UNKNOWN_CALL.has(p.code))), JSON.stringify(controls));
   else assert.ok(controls.every(result => result.ok), JSON.stringify(controls));
   assert.ok(forcedWith.length > 0 && forcedWith.every(result => result.ok), JSON.stringify(forcedWith));
-  assert.ok(forcedWithout.some(result => result.problems?.some(p => p.code === 'FLOW_NAME_UNKNOWN')), JSON.stringify(forcedWithout));
+  assert.ok(forcedWithout.some(result => result.problems?.some(p => UNKNOWN_CALL.has(p.code))), JSON.stringify(forcedWithout));
   assert.ok(!/EBUSY/.test(JSON.stringify(measured)));
 });
 

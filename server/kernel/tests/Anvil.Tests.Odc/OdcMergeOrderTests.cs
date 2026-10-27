@@ -129,8 +129,19 @@ public class OdcMergeOrderTests
             .Where(o => o is AbstractObject a && a.Name == attribute && a.GetParent()?.Name == "Trail").Select(o => o.DefaultValue?.GetText() ?? "").Single();
 
         // The plan on files, as `anvil-odc merge-order` writes it: the deferred default and the first-pass candidate.
+        var unsafePreview = NativeMergePreview.Check(host, File.ReadAllBytes(basePath), File.ReadAllBytes(candidatePath), null,
+            candidatePath, Path.Combine(dir, "unsafe-single-pass.oml"));
+        File.WriteAllText(Path.Combine(dir, "unsafe-single-pass-proof.json"), unsafePreview.ToJsonString());
+        Assert.False(unsafePreview["accepted"]!.GetValue<bool>());
+        Assert.Contains(unsafePreview["contentProof"]!["differences"]!.AsArray(), d =>
+            d!["address"]!.ToString().EndsWith("[DefaultValue]", StringComparison.Ordinal)
+            && d["property"]!.ToString() == "$expression" && d["missing"]!.GetValue<bool>());
         var firstPassPath = Path.Combine(dir, "first-pass.oml");
         var plan = new MergePlanner(_ => host).Plan(basePath, candidatePath, firstPassPath);
+        File.WriteAllText(Path.Combine(dir, "content-plan.json"), plan.ToJsonString());
+        Assert.True(plan["contentPreviewSupported"]!.GetValue<bool>());
+        Assert.True(plan["contentPreview"]!["accepted"]!.GetValue<bool>(), plan["contentPreview"]!["contentProof"]!["differences"]!.ToJsonString());
+        Assert.True(plan["contentPreview"]!["contentProof"]!["accepted"]!.GetValue<bool>());
         var deferred = MergeOrder.FromJson(plan["deferred"]!.AsArray());
         Assert.Equal(["Trail.DifficultyId = Entities.Difficulty.Easy"], deferred.Select(d => d.Element + " = " + d.Value));
         Assert.Equal(firstPassPath, plan["firstPass"]!.ToString());

@@ -20,6 +20,7 @@ import * as z from 'zod/v4';
 import { anvilRoot, odcRoot, workspaceRoot } from './workspace.mjs';
 import { usesWorkspace, workspacePath } from './executor.mjs';
 import { ssamPathRoots } from './evidence-roots.mjs';
+import { sessionScope, inScope, scopeNote } from './correlation.mjs';
 
 export const DEFAULT_BUDGET = 2000;
 const MIN_BUDGET = 400, MAX_BUDGET = EXPANSION_DEFAULT_BYTES, DEFAULT_MAX = 50, MAX_ITEMS = 1000, PAGE_TARGET = 10;
@@ -40,6 +41,13 @@ export function evidenceRoots({ anvil = anvilRoot, odc = odcRoot, workspace = wo
 
 // ---- secrets
 const SECRET_KEY = /password|passwd|passphrase|^pwd$|^pass$|token|secret|authori[sz]ation|^authorize$|^words$|cookie|api[-_]?key|private[-_]?key|credential|^bearer$|session[-_]?(?:id|key)$/i;
+// Every key the rule names is a secret, whatever else it says (csrfTokenValue, apiTokens, PortalTokenCache...). The one
+// exception: a counter of tokens (InputTokens, OutputTokens, TokenLimit, tokenCount, max_tokens: the usage metrics of an
+// o11_data read come as texts, reports 1c11796d and 67ffe9af) whose value is a plain number; any other value under such a
+// key is redacted as before.
+const TOKEN_COUNTER = /tokens$|tokens?[_-]?(?:count|limit|usage|used|budget|spent|total|max|min|reserved|per|rate)$|^max[_-]?tokens$/i;
+const COUNT_VALUE = /^-?\d{1,15}(?:\.\d{1,6})?$/;
+const isSecret = (key, v) => SECRET_KEY.test(key) && !(TOKEN_COUNTER.test(key) && !/secret|password|credential|cookie|authori|api[-_]?key|private/i.test(key) && typeof v === 'string' && COUNT_VALUE.test(v.trim()));
 const SECRET_TEXT = /\b(?:Bearer|Basic)\s+[A-Za-z0-9._~+/=-]{12,}|\beyJ[\w-]{8,}\.[\w-]{8,}\.[\w-]{8,}/;
 const SECRET_FILE = /credential|secret|password|token|cookie|vault|\.key\./i;
 // Replaces secret values in place (the parsed document is ours) and counts them. A text, object or array under a
@@ -51,7 +59,7 @@ export function redact(root) {
     if (value !== null && typeof value === 'object') {
       for (const key of Object.keys(value)) {
         const v = value[key];
-        if (SECRET_KEY.test(key) && ((typeof v === 'string' && v !== '') || (v !== null && typeof v === 'object'))) { value[key] = REDACTED; count++; }
+        if (isSecret(key, v) && ((typeof v === 'string' && v !== '') || (v !== null && typeof v === 'object'))) { value[key] = REDACTED; count++; }
         else value[key] = visit(v);
       }
       return value;
@@ -342,6 +350,8 @@ export function createEvidenceReader({ roots = evidenceRoots(), maxBytes = MAX_F
     try { doc = presented(loaded, located.real); }
     catch { return refusal('READ_FAILED', 'the file could not be read as the answer it holds', again({ file: '<an evidence path>' }, 'another evidence path')); }
 
+    const scope = sessionScope(input.session);
+    if (!scope.ok) return refusal(scope.code, scope.error, again({ file: input.file }, 'the same reading for this session'));
     const baseKeys = parsePath(input.pointer);
     const base = resolve(doc, baseKeys);
     if (!base.found) {
@@ -377,11 +387,25 @@ export function createEvidenceReader({ roots = evidenceRoots(), maxBytes = MAX_F
       return fit({ values, ...(missing.length ? { missing } : {}), ...(input.fields ? { fieldsMerged: merged } : {}) });
     }
 
+    // F7: a record of another caller is never read on a hosted server (the reader's caller key, whatever the session option).
+    // A record without a caller key (a kernel task.json) is confined by the host's workspace roots, as before.
+    if (scope.callerKey && isObject(doc) && typeof doc.callerKey === 'string' && doc.callerKey !== scope.callerKey)
+      return refusal('EVIDENCE_NOT_FOUND', 'no evidence of this caller at this path; nothing was read', again({ file: '<a path an SSAM tool returned in this session>' }, 'a path of this session'));
     // Rows: deep = every object below the pointer (depth = object levels); an array its items; an object its entries.
     const listing = input.deep || clauses.length || malformed.length || input.fields || input.groupBy || input.offset !== undefined || input.max !== undefined || input.table;
     let rows;
     if (input.deep) rows = nodesBelow(base.value, input.depth ?? Infinity);
-    else if (Array.isArray(base.value)) rows = base.value.map((value, i) => ({ ref: { key: i }, value }));
+    else if (Array.isArray(base.value)) {
+      rows = base.value.map((value, i) => ({ ref: { key: i }, value }));
+      // F7: the rows of a journal that names sessions (correlationId) are this session's by default; session "all" or a
+      // correlationId widens it (the caller's own when hosted). A file whose rows name no session is not session evidence.
+      if (rows.some(r => isObject(r.value) && typeof r.value.correlationId === 'string')) {
+        const kept = rows.filter(r => isObject(r.value) && inScope(r.value, scope));
+        const others = rows.filter(r => !scope.callerKey || (isObject(r.value) && r.value.callerKey === scope.callerKey)).length - kept.length;
+        Object.assign(meta, scopeNote(scope, others));
+        rows = kept;
+      }
+    }
     else if (isObject(base.value) && listing) rows = Object.keys(base.value).map(k => ({ ref: { key: k }, value: base.value[k] }));
     else if (malformed.length) return filterInvalid(malformed, []);
     else return valueAnswer(base.value, { ...input, baseKeys: base.keys }, budget, meta);
@@ -587,6 +611,7 @@ export function registerSsamEvidence(server, deps = {}) {
       max: z.number().int().min(0).max(MAX_ITEMS).optional().describe('Items per page (default 50; 0 = only the total)'),
       table: z.boolean().optional().describe('The rows as one table {columns, rows:[[cell,...]]}: every row that fits budgetBytes (max up to 1000), columns = fields or the keys of the rows'),
       budgetBytes: z.number().int().min(MIN_BUDGET).max(MAX_BUDGET).optional().describe('Answer size limit (default 2000)'),
+      session: z.string().optional().describe('Rows: this session; "all"/a correlationId'),
     }).strict(),
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   }, async input => {

@@ -14,6 +14,7 @@ import { GENERATORS, generatorCard, ENTITY_ACTIONS_OP, ENTITY_ACTIONS_CARD, enti
 import fs from 'node:fs';
 import path from 'node:path';
 import { loadFlowReading, expandEditPart } from './flow-edits.mjs';
+import { extendDraftSchema, isDraftCall } from './code-draft-schema.mjs';
 
 export const CODE_TOOL = 'ssam_code';
 export const CODE_PARTS = ['ddl', 'logic', 'html'];
@@ -114,8 +115,12 @@ server action ListCustomerVisits
   in MaxRecords?: Integer = 50
   out Rows: VisitRow List
   out Total: Integer
-  GetPage = aggregate FROM Customer, Visit JOIN Inner Visit~Customer ON Visit.CustomerId = Customer.Id WHERE (Visit.CustomerId = CustomerId) SORT Visit.CreatedOn desc MAX MaxRecords START StartIndex
-  (System).ListAppendAll(List=Rows, SourceList=GetPage.List mapTo { VisitTitle: Visit.VisitTitle, CustomerName: Customer.CustomerName })
+  GetPage = sql -> Customer, Visit max MaxRecords
+    in TheCustomer: Customer Identifier = CustomerId
+    in Skip: Integer = StartIndex
+    in Take: Integer = If(MaxRecords <= 0, 50, MaxRecords)
+    | SELECT {Customer}.*, {Visit}.* FROM {Visit} INNER JOIN {Customer} ON {Customer}.[Id] = {Visit}.[CustomerId] WHERE {Visit}.[CustomerId] = @TheCustomer ORDER BY {Visit}.[CreatedOn] DESC, {Visit}.[Id] OFFSET @Skip ROWS FETCH NEXT @Take ROWS ONLY
+  (System).ListAppendAll(List=Rows, SourceList=GetPage.List mapTo { VisitTitle: List_2.VisitTitle, CustomerName: List.CustomerName })
   GetTotal = sql -> VisitTotals max 1
     in TheCustomer: Customer Identifier = CustomerId
     in Minimum: Decimal = 0
@@ -186,14 +191,14 @@ export const CODE_FORMS_EXACT = {
     'assign, several': 'assign\n    TheVisit = GetVisit.List.Current.Visit\n    TheVisit.IsDone = True',
     'branch end': 'if GetVisit.List.Empty:  # Visit exists?\n    raise VisitNotFound("Visit not found")',
     'screen action': 'action Visits.OpenSummary\n  assign ShowSummary = True\n  end',
-    pagination: 'MAX MaxRecords START StartIndex',
+    pagination: 'OFFSET @Skip ROWS FETCH NEXT @Take ROWS ONLY',
     join: 'FROM Customer, Visit JOIN Inner Visit~Customer ON Visit.CustomerId = Customer.Id',
     'sql parameter': 'in TheCustomer: Customer Identifier = CustomerId',
     'sql typed parameter': 'in Minimum: Decimal = 0',
     'sql result': 'GetTotal = sql -> VisitTotals max 1',
     'exception handler': 'on exception VisitNotFound abort log:',
     'exception handler without flags': 'on exception All Exceptions:',
-    'list append mapping': '(System).ListAppendAll(List=Rows, SourceList=GetPage.List mapTo { VisitTitle: Visit.VisitTitle, CustomerName: Customer.CustomerName })',
+    'list append mapping': '(System).ListAppendAll(List=Rows, SourceList=GetPage.List mapTo { VisitTitle: List_2.VisitTitle, CustomerName: List.CustomerName })',
     'list assignment mapping': 'assign Rows = GetVisits.List mapTo { VisitTitle: Visit.VisitTitle, CustomerName: Customer.CustomerName }',
   },
   html: {
@@ -244,11 +249,11 @@ const RULES = {
     'basedOn: the sourceSha256 of the read; required when a statement carries a -- @key (new statements need no read).',
   ],
   logic: [
-    'Header: server action N | service action N | client action N | action <Screen>.N (screen/block action) | data action <Screen>.N; then public/function and, when read, the @key of the action.',
+    'Header: server action N | service action N | client action N | action <Screen>.N (screen/block action) | data action <Screen>.N | preparation <TraditionalOwner>.Preparation; when read, keep the action @key. Preparation has a fixed name, no input/output parameters, and belongs only to Traditional screens, blocks or emails. public/function apply only to module actions.',
     'One text (or file) may hold several actions: each starts with its /// description and header at column 0, a blank line between; ssam_code splits them.',
     'Then in P[?]: Type [= default], out P: Type, local L: Type; then the flow from Start, in connector order, indented 2 spaces.',
     'Nodes: X = Action(P=v, Q) (call; a module or system action: (System).ListAppend); assign X = v on one line, or the word assign alone and then one X = v per line indented 2 spaces deeper than assign (a line at the depth of assign is the next node: "expected \'(\'"); X = aggregate FROM E [JOIN ...] WHERE (cond) [SORT a desc] [MAX n]; if cond: (true branch indented 2 deeper, false branch continues below); foreach L: ... next; switch: case cond: ... otherwise: ...; raise Exc("message"); message Type: expr; navigate Screen(args); refresh Source; X = sql -> Out max n | SELECT ...; end.',
-    'Pagination: an aggregate ends with MAX n START s, for example ' + CODE_FORMS_EXACT.logic.pagination + '.',
+    'Pagination: a screen pages its own screen aggregate (html <aggregate max="MaxRecords" os-StartIndex="StartIndex">; the Pagination block: StartIndex and MaxRecords the same variables, TotalCount = <Aggregate>.Count, OnNavigate assigns StartIndex = NewStartIndex then refresh <Aggregate>). A server action pages by SQL: ORDER BY a total order, then ' + CODE_FORMS_EXACT.logic.pagination + ' with in Skip: Integer = StartIndex and in Take: Integer = If(MaxRecords <= 0, 50, MaxRecords) (FETCH NEXT 0 is an error), the total from COUNT(*) OVER() of the same query; its row names the outputs List, List_2, ... in the order of sql -> (mapTo { Title: List_2.Title }). START on an aggregate of a server, service, data or client action is refused (LOGIC_START_SERVER_IGNORED): the Studio hides it there and the runtime ignores it, so every page would show the first rows.',
     'JOIN: FROM A, B, C JOIN Inner A~B ON cond | Left B~C ON cond. Inner = Only With, Left = With or Without, Full = With. SQL-style JOIN input is normalized when its left source is unambiguous; conditions stay literal.',
     'SQL parameters: under X = sql -> Structure max n, write one in P: Type = value per line, then | SELECT ... on the following line. Types include Entity Identifier. Example: ' + CODE_FORMS_EXACT.logic['sql parameter'] + '.',
     'Exception handlers follow the main flow: on exception Exception [abort] [log]: then an indented branch. abort (Abort Transaction) and log (Log Error) are optional; the reader orders handlers by exception name. Example: ' + CODE_FORMS_EXACT.logic['exception handler'] + '.',
@@ -301,7 +306,19 @@ export function grammarCard(part, lane = 'odc') {
         + (offers.length ? ' A generator (' + offers.join('; ') + ') writes a whole family in one op: never write by hand what it writes.' : '') };
   }
   const example = part === 'ddl' ? EXAMPLE_DDL : part === 'logic' ? exampleLogicTexts(lane) : EXAMPLE_HTML;
-  const card = { part, form: CODE_FORMS[part], rules: rulesOf(part), slots: SLOTS[part], example,
+  // R7: the general language the kernel expands into the forms of the grammar (FlowGeneral), one example each.
+  const general = part === 'logic' ? {
+    why: 'shorter lines the kernel expands into the forms above, each listed in normalizations; the action reads back expanded',
+    let: 'let Total = Price * Quantity  (the local, of the type the value has with certainty; else let Total: Decimal = ...)',
+    require: 'require Quantity > 0 else VisitNotFound("No quantity")  (if not (...) and raise; also else return, end or -> @id)',
+    return: 'return Total = Price * Quantity, IsDone = True  (assigns the outputs, then end)',
+    join: 'in a text with let, require or return a branch of if, switch or foreach without end or -> @id goes on after its block',
+    copy: 'assign Copy = { ...TheVisit, IsDone: True }  (assign Copy = TheVisit, then an assign of Copy.IsDone = True)',
+    sqlBind: '| SELECT ... WHERE {Visit}.[CustomerId] = @CustomerId  (no in line: the input or local of that name; else bind CustomerId = value under the node)',
+    record: 'load V: Visit by VisitId locked / update V {IsDone=True} / insert N: Visit {VisitTitle="New"} / delete V  (the entity actions; update and delete need the record loaded locked or inserted in the branch)',
+    contract: 'contract Owned: above the action in the same text (its in/load/require lines one level in), then use Owned in the action  (its lines in place, the declarations first)',
+  } : null;
+  const card = { part, form: CODE_FORMS[part], rules: rulesOf(part), slots: SLOTS[part], example, ...(general ? { general } : {}),
     // The exact forms (each one is in an example the tests apply and read back on both lanes).
     forms: CODE_FORMS_EXACT[part],
     ...(part === 'ddl' ? { exampleWithUi: EXAMPLE_DDL_UI_EXTRA, exampleWithUiWhy: 'what a module with a UI flow adds: a client variable with its default (a service module has none)' } : {}),
@@ -563,14 +580,14 @@ const lines = t => String(t ?? '');
 const textList = text => (Array.isArray(text) ? text : [text]).map(lines);
 
 // The header of an action text: {name, owner (the screen of a screen or data action, else null), key (null when new)}.
-const HEADER = /^[ \t]*(server action|service action|client action|data action|action)[ \t]+((?:[\w/]+\.)?)([A-Za-z_]\w*)([^\n]*)$/m;
+const HEADER = /^[ \t]*(server action|service action|client action|data action|action|preparation)[ \t]+((?:[\w/]+\.)?)([A-Za-z_]\w*)([^\n]*)$/m;
 export function headerOf(text) {
   const m = HEADER.exec(lines(text));
   if (!m) return null;
   const owner = m[2] ? m[2].slice(0, -1).split('/').pop() : null;
   const last = m[4].trim().split(/\s+/).filter(Boolean).at(-1) ?? '';
   const key = last.startsWith('@') && !/^@[a-z]\d+$/.test(last) && last !== '@start' ? last.slice(1) : null;
-  return { kind: m[1], owner: /^(action|data action)$/.test(m[1]) ? owner : null, name: m[3], key };
+  return { kind: m[1], owner: /^(action|data action|preparation)$/.test(m[1]) ? owner : null, name: m[3], key };
 }
 
 // A changed action is sent whole: the read numbers the parameters (@p), locals (@l) and nodes (@n) of an action from 1 in
@@ -658,7 +675,7 @@ export function namesOf(part, text) {
   const found = part === 'ddl'
     ? [...all.matchAll(/^\s*(?:create (?:static )?entity|type|site property|setting|client variable|session variable|timer|drop (?:entity|static entity|type|site property|setting|client variable|timer))\s+([A-Za-z_][\w]*)/gm)].map(m => m[1])
     : part === 'logic'
-      ? [...all.matchAll(/^(?:server action|service action|client action|data action|action)\s+(?:[\w/]+\.)?([A-Za-z_][\w]*)/gm)].map(m => m[1])
+      ? [...all.matchAll(/^(?:server action|service action|client action|data action|action|preparation)\s+(?:[\w/]+\.)?([A-Za-z_][\w]*)/gm)].map(m => m[1])
       : [...all.matchAll(/<(?:screen|block)\s[^>]*?name="([^"]+)"/g)].map(m => m[1]);
   return [...new Set(found)];
 }
@@ -762,7 +779,7 @@ export function splitDocuments(text) {
 }
 
 // Only column-zero headers start an action. The description (including blank lines before the header) belongs below.
-const ACTION_HEAD = /^(?:server action|service action|client action|data action|action)[ \t]+\S/;
+const ACTION_HEAD = /^(?:server action|service action|client action|data action|action|preparation)[ \t]+\S/;
 export function splitActions(text, { preserveWhitespace = false } = {}) {
   const source = lines(text).replace(/\r\n/g, '\n');
   const ls = source.split('\n');
@@ -913,7 +930,10 @@ export function writeCall(input, { readJob = readJobFile, readReading = loadFlow
   // A correction of a refused write: patch (and/or a partial job) over basedOn {job, sha256} of the refusal.
   const jobBase = isJobBase(input.basedOn) ? input.basedOn : null;
   const hasEdits = input.edits != null || Array.isArray(input.also) && input.also.some(p => p?.edits != null);
-  if (input.patch != null && !hasEdits) {
+  // R1 (loop-correcao): fix "apply" over the nextBasedOn of a refused write: the delivery applies the refusal's own patches.
+  if (input.fix === 'apply' && !jobBase) return refuse('fix "apply" goes with basedOn {job, sha256}: the nextBasedOn of the refused write');
+  if (input.fix === 'apply' && lane === 'o11') return { tool, arguments: { module, ...options, fix: 'apply', basedOn: jobBase, ...(Array.isArray(input.patch) ? { patch: input.patch } : {}) } };
+  if ((input.patch != null || input.fix === 'apply') && !hasEdits) {
     if (input.files != null) return refuse('files cannot be used with patch: a correction is patch + basedOn', { problems: [{ at: 'files', error: 'files cannot be used with patch' }] });
     if (!jobBase) return refuse('patch goes with basedOn {job, sha256} (the nextBasedOn of the refused write) or {taskId}');
     if (lane === 'o11') return { tool, arguments: { module, ...options, patch: input.patch, basedOn: jobBase, ...(options.until == null ? { until: 'merge' } : {}) } };
@@ -925,7 +945,7 @@ export function writeCall(input, { readJob = readJobFile, readReading = loadFlow
     if (!owners.length || !changes.length) return refuse('a correction on odc needs owners and changes: give them as the refused write had them (owners: [the screens, actions and entities written], changes: [what changes]); the job of basedOn could not be read');
     const parts = [...new Set(base.map(p => p.part))];
     return { tool, arguments: { module, feature: options.feature ?? 'ssam_code ' + (canonicalPart(input.part) ?? (parts.join('+') || 'code')) + ' (correction)', owners, changes,
-      ...Object.fromEntries(Object.entries(options).filter(([k]) => !['feature', 'owners', 'changes'].includes(k))), patch: input.patch, basedOn: jobBase } };
+      ...Object.fromEntries(Object.entries(options).filter(([k]) => !['feature', 'owners', 'changes'].includes(k))), ...(input.patch != null ? { patch: input.patch } : {}), ...(input.fix === 'apply' ? { fix: 'apply' } : {}), basedOn: jobBase } };
   }
   const problems = [];
   if (input.patch != null && hasEdits) problems.push({ at: 'patch', error: 'patch and edits cannot be combined: correct the refused job with patch, or edit a read action with its textSha' });
@@ -1178,7 +1198,7 @@ function writtenElements(input) {
 
 // write (feat/ssam-code-hosted): the deps of writeCall a server gives each write ({readReading, readJob}, or a function of
 // the call that returns them): the read of an action an edit expands and the job file a correction reads.
-export function registerSsamCode(server, { fromJsonSchema, map, deliver, check, plan, lanes = ['o11', 'odc'], write = null } = {}) {
+export function registerSsamCode(server, { fromJsonSchema, map, deliver, check, plan, lanes = ['o11', 'odc'], write = null, drafts = {} } = {}) {
   const reply = value => ({ content: [{ type: 'text', text: JSON.stringify(value) }], structuredContent: value, ...(value && value.ok === false ? { isError: true } : {}) });
   // The lists of a write carry the person's code: no limit of this tool cuts them (the delivery takes any number of texts
   // and ops in one job); the bounds below only keep a runaway call out.
@@ -1210,7 +1230,9 @@ export function registerSsamCode(server, { fromJsonSchema, map, deliver, check, 
       removes: { anyOf: [{ type: 'boolean' }, { type: 'array', items: { type: 'string' } }] } } },
       description: 'write: other parts in the same delivery (part taken from the form of the text when left out); ssam_code orders them as the delivery needs: the data first, new blocks and screens, then the actions (a new screen action before the change of its screen) and the screen edits.' },
     ops: { type: 'array', maxItems: CODE_OPS_MAX, items: { type: 'object' }, description: 'write: raw job ops before the code (e.g. {"op":"create","parent":"@espace","type":"IRole","name":"X"}); alone (no text) they are the job.' },
-    patch: { anyOf: [{ type: 'array', maxItems: 50, items: { type: 'object' } }, { type: 'string', enum: ['verified'] }], description: 'write: JSON Patch over the job of basedOn {job, sha256}, as a refusal returned it; or "verified": every verified patch of that refusal (its verifiedPatch.call).' },
+    patch: { anyOf: [{ type: 'array', maxItems: 500, items: { type: 'object' } }, { type: 'string', enum: ['verified'] }], description: 'write: JSON Patch over the job of basedOn {job, sha256}, as a refusal returned it; or "verified": every verified patch of that refusal (its verifiedPatch.call).' },
+    // fix (R1): sent as a refusal's fixCall gives it; listed without a text (the listing budget).
+    fix: { type: 'string', const: 'apply' },
     publish: { type: 'boolean', description: 'write: true also publishes after a clean merge, with authorize or the standing grant.' },
     authorize: { type: 'string', description: 'write: the user\'s own words, verbatim.' },
     until: { type: 'string', enum: ['apply', 'snapshot', 'build', 'check-base', 'preview', 'merge'], description: 'write: stop before the merge, only when the person asks (o11: apply; odc: snapshot, build, check-base, preview).' },
@@ -1228,12 +1250,15 @@ export function registerSsamCode(server, { fromJsonSchema, map, deliver, check, 
     expectedSourceSha256: { type: 'string', description: 'read: refuse if the capture differs from this hash.' },
     keys: { type: 'boolean', description: 'read html: also the k -> ObjectKey table inline.' },
   } };
+  extendDraftSchema(schema); // R2 (code-draft-schema.mjs): actions draft and part, and the draft parameter
   server.registerTool(CODE_TOOL, {
     title: CODE_TOOL, description: CODE_DESCRIPTION, inputSchema: fromJsonSchema(schema),
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
   }, async (input = {}, ctx) => {
     try {
       const lane = input.lane === 'o11' ? 'o11' : 'odc';
+      // R2 (code-draft.mjs): a draft opened, its status, a part added, or the write of a draft (one delivery).
+      if (isDraftCall(input)) return reply(await (await import('./code-draft.mjs')).draftAction({ ...input, lane }, ctx, { deliver, check, ...drafts }));
       if ((input.stubs != null && input.action !== 'check') || (['items', 'shared', 'workers'].some(k => input[k] != null) && input.action !== 'plan')) return reply({ ok: false, code: 'INPUT_INVALID', error: 'stubs is only allowed for check; items, shared and workers are only allowed for plan' });
       if (input.action === 'check') return reply(await check({ ...input, lane }));
       if (input.base != null) return reply({ ok: false, code: 'INPUT_INVALID', error: 'base is only allowed for check' });

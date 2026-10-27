@@ -1,0 +1,70 @@
+{
+  "fixture": "blank-service",
+  "features": [
+    "aggregate-start-index-ignored",
+    "service"
+  ],
+  "note": "T3 native battery: the Studio shows Start Index only on a screen aggregate over server entities (AbstractDataSet.PropertyIsUserVisible, O11 11.55 and ODC 1.7.29) and the O11 runtime ignored it on a published server action; START on an aggregate of an action flow is refused",
+  "unsupported": "LOGIC_START_SERVER_IGNORED",
+  "contract": {
+    "data": {
+      "entities": [
+        {
+          "name": "CoverageRow",
+          "public": true,
+          "attributes": [
+            {
+              "name": "Value",
+              "type": "Integer"
+            }
+          ]
+        }
+      ]
+    },
+    "logic": {
+      "actions": [
+        {
+          "name": "CoveragePage",
+          "kind": "service",
+          "public": true,
+          "inputs": [
+            {
+              "name": "StartIndex",
+              "type": "Integer"
+            },
+            {
+              "name": "MaxRecords",
+              "type": "Integer"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "Total",
+              "type": "Long Integer"
+            }
+          ],
+          "steps": [
+            {
+              "get": "CoverageRow",
+              "as": "Page",
+              "sort": [
+                "CoverageRow.Value"
+              ],
+              "max": "MaxRecords",
+              "start": "StartIndex"
+            },
+            {
+              "assign": {
+                "Total": "Page.Count"
+              },
+              "as": "Count"
+            }
+          ],
+          "access": {
+            "authenticated": true
+          }
+        }
+      ]
+    }
+  }
+}

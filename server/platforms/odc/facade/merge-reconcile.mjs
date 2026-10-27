@@ -18,6 +18,7 @@
 //     merges, publishes or rewrites a receipt the bridge wrote; every refusal names the exact next call.
 import fs from 'node:fs';
 import path from 'node:path';
+import { evidenceSecurity, securityRefusal } from './security-after-merge.mjs';
 
 export const PROOF_SCHEMA = 'ssam-merge-content-proof/1';
 export const RECONCILIATION_SCHEMA = 'ssam-merge-reconciliation/1';
@@ -30,9 +31,14 @@ const same = (a, b) => typeof a === 'string' && typeof b === 'string' && a.lengt
 const withPid = (args, pid) => ({ ...args, ...(Number.isInteger(pid) ? { pid } : {}) });
 
 // The state of a merge from its evidence directory: {clean, outcome, receipt, reconciliation}. outcome: strict |
-// normalized | reconciled (clean), not-strict | incomplete | uncertain (not clean).
+// normalized | reconciled (clean), not-strict | incomplete | uncertain | security (not clean).
+// a11-b: a merge whose evidence holds a new security warning (the bridge's new-messages.json or receipt warnings, judged with
+// the kernel's list, or the server's verdict: security-after-merge.mjs) is security whatever its receipt says: a bridge v97
+// writes a strict receipt for it. Never clean, never reconcilable: its content may equal the candidate, warning included.
 export function mergeState(evidence) {
   const receipt = readJsonOrNull(path.join(evidence, 'receipt.json'));
+  const blocking = evidenceSecurity(evidence);
+  if (blocking.length) return { clean: false, outcome: 'security', receipt, blocking };
   if (receipt?.ok === true && receipt.merged === true) {
     if (receipt.strictlyEqual === true) return { clean: true, outcome: 'strict', receipt };
     if (receipt.equivalence === 'normalized') return { clean: true, outcome: 'normalized', receipt };
@@ -47,7 +53,7 @@ export function mergeState(evidence) {
 }
 
 // Whether the SSAM may try to prove a merge that is not clean: never one with known losses (its repair continues).
-export const reconcilable = state => !!state && state.clean !== true && state.outcome !== 'incomplete';
+export const reconcilable = state => !!state && state.clean !== true && state.outcome !== 'incomplete' && state.outcome !== 'security';
 
 // The one explicit operation (MCP): studio_publish {module, reconcile:true}. It captures, proves and records; it never
 // publishes. studio_publish {module} runs the same reconciliation by itself before publishing.
@@ -89,6 +95,9 @@ export async function reconcileMerge({ merge, module, pid } = {}, { studio, prov
   const state = mergeState(merge.evidence);
   if (state.clean) return { ok: true, reconciled: false, outcome: state.outcome, receipt: path.join(merge.evidence, 'receipt.json'), ...(state.reconciliationFile ? { reconciliation: { file: state.reconciliationFile } } : {}) };
   const correction = why => (typeof next === 'function' ? next(why) : null) ?? { tool: 'studio_status', arguments: withPid({ view: 'brief' }, pid), why };
+  if (state.outcome === 'security')
+    return { ...securityRefusal(state.blocking, { module }), executed: false,
+      continuation: { tool: 'studio_status', arguments: withPid({ view: 'brief' }, pid), why: 'the module stays merged and unpublished; a new delivery whose job fixes the warning comes next' } };
   if (state.outcome === 'incomplete')
     return refusal('RECONCILE_NOT_APPLICABLE', 'The merge of ' + module + ' kept known losses (incomplete-receipt.json); its repair job is the next delivery, never a reconciliation.',
       { tool: 'ssam_evidence', arguments: { file: path.join(merge.evidence, 'incomplete-receipt.json') }, why: 'the losses and the repair job of this merge' });

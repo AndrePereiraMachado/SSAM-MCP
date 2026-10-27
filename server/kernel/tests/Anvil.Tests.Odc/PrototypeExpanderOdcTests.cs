@@ -90,27 +90,6 @@ public class PrototypeExpanderOdcTests(ITestOutputHelper output)
     /// <summary>A capture planned on ODC with this class's fakes (ScreenHtmlDataTableOdcTests: FarmaVirtual's tables with spans).</summary>
     internal static PrototypePlan PlanCapture(string capture) => Plan(capture, "odc");
 
-    /// <summary>A capture built headless over a copy of the ODC Reactive fixture with this class's fakes, as the minimal capture is
-    /// (ScreenHtmlDataTableOdcTests, round 6 of fix/data-table), or with <paramref name="seams"/>: the job's result;
-    /// <paramref name="candidate"/> the saved module.</summary>
-    internal static JsonObject BuildCapture(string capture, string dir, out string candidate, PrototypeExpander.Seams? seams = null)
-    {
-        Directory.CreateDirectory(dir);
-        var job = Path.Combine(dir, "job.json");
-        File.WriteAllText(job, new JsonObject
-        {
-            ["description"] = "prototype compile lane, ODC", ["expectValid"] = true,
-            ["ops"] = new JsonArray(new JsonObject { ["op"] = "prototype", ["data"] = new JsonObject { ["source"] = "C:\\fixture\\minimal", ["capture"] = capture } }),
-        }.ToJsonString());
-        var baseOml = Path.Combine(dir, "base.oml");
-        File.Copy(Path.Combine(Root, "tests", "fixtures", "odc", "insurance-reactive-r8.oml"), baseOml, true);
-        var host = new ModelHost(dir);
-        var outPath = candidate = Path.Combine(dir, "candidate.oml");
-        var result = PrototypeExpander.WithSeams(seams ?? Seams, () => JsonSerializer.SerializeToNode(JobRunner.Run(host, baseOml, job, outPath))!.AsObject());
-        File.WriteAllText(Path.Combine(dir, "result.json"), result.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
-        return result;
-    }
-
     private static PrototypePlan Plan(string capture, string platform)
     {
         var problems = new List<PrototypeCapture.Problem>();
@@ -210,47 +189,6 @@ public class PrototypeExpanderOdcTests(ITestOutputHelper output)
         // the image URL of the CSS follows each platform's rule over the module name (3.6)
         Assert.All(odc.AssetUrls.Values, u => Assert.StartsWith("/Haiku_UI/img/Haiku_UI.", u));
         output.WriteLine($"{a.Count} widgets on both platforms, {substituted} substituted on ODC");
-    }
-
-    [Fact]
-    public void TheMinimalCaptureAppliesHeadlessOnTheOdcReactiveFixtureWithoutVerifyErrors()
-    {
-        if (!StudioAvailable()) return;
-        ApplyOdc();
-    }
-
-    [MethodImpl(MethodImplOptions.NoInlining)]
-    private void ApplyOdc()
-    {
-        var dir = Path.Combine(Work, "minimal-" + Guid.NewGuid().ToString("N")[..8]);
-        Directory.CreateDirectory(dir);
-        // a private copy of the bundles: the kernel writes prototype-dom.json beside the capture
-        foreach (var file in Directory.GetFiles(Fixtures, "*", SearchOption.AllDirectories))
-        {
-            var target = Path.Combine(dir, "bundle", Path.GetRelativePath(Fixtures, file));
-            Directory.CreateDirectory(Path.GetDirectoryName(target)!);
-            File.Copy(file, target, true);
-        }
-        var capture = Path.Combine(dir, "bundle", "minimal.capture.json");
-        var job = Path.Combine(dir, "job.json");
-        File.WriteAllText(job, new JsonObject
-        {
-            ["description"] = "prototype compile lane, ODC", ["expectValid"] = true,
-            ["ops"] = new JsonArray(new JsonObject { ["op"] = "prototype", ["data"] = new JsonObject { ["source"] = "C:\\fixture\\minimal", ["capture"] = capture } }),
-        }.ToJsonString());
-        var baseOml = Path.Combine(dir, "base.oml");
-        File.Copy(Path.Combine(Root, "tests", "fixtures", "odc", "insurance-reactive-r8.oml"), baseOml, true);
-        var host = new ModelHost(dir);
-        var result = PrototypeExpander.WithSeams(Seams, () => JsonSerializer.SerializeToNode(JobRunner.Run(host, baseOml, job, Path.Combine(dir, "candidate.oml")))!.AsObject());
-        var errors = (result["details"] as JsonArray ?? []).Select(d => d!.ToString()).Where(d => d.StartsWith("Error", StringComparison.Ordinal)).ToList();
-        File.WriteAllText(Path.Combine(Work, "odc-apply-result.json"), result.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
-        Assert.True(result["isValid"]!.GetValue<bool>() && result["accepted"]!.GetValue<bool>(), string.Join(" | ", errors.Take(10)) + " " + result["policyMessages"]?.ToJsonString());
-        Assert.Empty(errors);
-        var report = result["results"]!.AsArray().OfType<JsonObject>().Single(r => r["op"]?.ToString() == "prototype")["result"]!["prototype"]!;
-        Assert.Empty(report["builder"]!["problems"]!.AsArray());
-        var dom = JsonNode.Parse(File.ReadAllText(report["nativeDom"]!["path"]!.ToString()))!;
-        Assert.Equal("odc", dom["platform"]!.ToString());
-        output.WriteLine($"ODC apply {result["timings"]?["sessionApplyMs"]} ms, {report["builder"]!["widgets"]} widgets, {result["messages"]} messages");
     }
 
     [Fact]

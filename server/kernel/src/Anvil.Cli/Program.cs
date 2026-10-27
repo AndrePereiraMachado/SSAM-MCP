@@ -253,7 +253,7 @@ public static class Program
             BaseModelCache.Enable(Log);
             // Read on the dispatch thread after each command and idle step; ping serves the last copy.
             JsonObject Metrics() => new() { ["loadedModules"] = RetainedModules(ModelHost.LoadedModules().Count), ["cachedModules"] = BaseModelCache.Held,
-                ["baseCache"] = BaseModelCache.Stats() };
+                ["baseCache"] = BaseModelCache.Stats(), ["referenceInventory"] = ReferenceInventoryCache.Stats() };
             using var server = new Anvil.Core.Hosting.WorkerServer(port, argv =>
             {
                 var sw = Stopwatch.StartNew(); var command = argv[0];
@@ -908,7 +908,12 @@ public static class Program
         if (Opt(args, "--op") is { } op)
         {
             // `native` reflecte os assemblies do Studio carregados: precisa da instalacao ligada (Main salta o Bind para `api`).
-            if (op == "native") { StudioAssemblies.Bind(Opt(args, "--ss-dir") ?? Opt(args, "--studio-dir")); return NativeSurface.Describe(Need(args, "--type")); }
+            // `--types A,B,...`: the discovery probes in one process, each type as its own `--type` (NativeProbe).
+            if (op == "native")
+            {
+                StudioAssemblies.Bind(Opt(args, "--ss-dir") ?? Opt(args, "--studio-dir"));
+                return Opt(args, "--types") is { } types ? NativeProbe.DescribeMany(NativeProbe.Names(types)) : NativeSurface.Describe(Need(args, "--type"));
+            }
             return CommandSurface.Schema(op);
         }
         var path = Opt(args, "--catalog") ?? Directory.GetFiles(Path.Combine(RepoRoot(), "catalog"), "model-api-*.json").OrderByDescending(f => f).First();
@@ -1037,13 +1042,15 @@ public static class Program
         var port = int.TryParse(Opt(args, "--port"), out var p) ? p
             : Environment.GetEnvironmentVariable("ANVIL_LANE") == "ss5" ? 4536 : 4516;
         var work = Path.GetFullPath(Opt(args, "--work") ?? (Environment.GetEnvironmentVariable("ANVIL_LANE") == "ss5" ? ".local/lane-ss5/work" : ".local/work"));
+        // F7: the session and call this delivery runs for (the facade's kernel runner adds them); task.json records them.
+        var trace = Anvil.Core.Delivery.DeliveryTrace.FromArgs(args);
         if (Opt(args, "--close") is { } closedId)
         {
             if (args.Any(a => a is "--job" or "--spec" or "--module" or "--resume" or "--producer" or "--capture-producer")) throw new ArgumentException("Close uses the original task and cannot replace its request");
             var original = Anvil.Core.Delivery.DeliveryTask.ResumeRequest(work, closedId);
             if(original.BridgePort != null && original.BridgePort != port) throw new ArgumentException("Close must use the task's original Studio lane");
             Anvil.Core.Delivery.DeliverArguments.RequireRecordedEnvironment(args, original);
-            return Anvil.Core.Delivery.DeliveryTask.CloseKnownFailure(work, closedId, Need(args, "--reason"), new BridgeClient(port));
+            return Anvil.Core.Delivery.DeliveryTask.CloseKnownFailure(work, closedId, Need(args, "--reason"), new BridgeClient(port), trace);
         }
         Anvil.Core.Delivery.DeliveryRequest request;
         if (Opt(args, "--resume") is { } id)
@@ -1073,7 +1080,7 @@ public static class Program
         var prebuilt = request.Specification == null && Opt(args, "--resume") == null ? Opt(args, "--prebuilt") : null;
         // The build phase captured the module's tab by key in this call: the open skips the references check (OpeningOwnTab).
         if (prebuilt != null && File.Exists(prebuilt)) request = request with { SkipOpenReferencesCheck = true };
-        return RunDelivery(request, port, prebuilt);
+        return RunDelivery(request with { Trace = trace }, port, prebuilt);
     }
 
     /// <summary>The one delivery path: `deliver` and `access apply --execute` both end here.</summary>

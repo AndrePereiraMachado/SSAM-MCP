@@ -26,6 +26,8 @@
 // Pure but for refusalFields with options.jobFile (writes <job>.verified-patch.json, verified-patch.mjs).
 import { headerOf, namesOf } from './ssam-code.mjs';
 import { patchUnion, writeVerifiedPatch, patchConflicts, CONFLICT_NOTE } from './verified-patch.mjs';
+import { clipText } from './text-clip.mjs';
+import { hostedContext } from './executor.mjs';
 export { patchUnion };
 
 export const PROBLEMS_BUDGET = 30000;
@@ -33,7 +35,9 @@ export const PROBLEMS_BUDGET = 30000;
 // text (20 KB each) cut the session's first refusal to one problem of five. The fit may leave a patch out, never a problem
 // for a patch; with options.jobFile the union goes beside the job (verified-patch.mjs) and the answer says verifiedPatch.
 const bytes = value => Buffer.byteLength(JSON.stringify(value), 'utf8');
-const clip = (text, max) => { const s = String(text ?? ''); return s.length > max ? s.slice(0, max - 3) + '...' : s; };
+const clip = (text, max) => clipText(text, max, '...');
+// The template of each shaped problem's message, read on the message before problemOf cut it (fitProblems groups by it).
+const templates = new WeakMap();
 const isObject = v => v !== null && typeof v === 'object' && !Array.isArray(v);
 const SOURCE_PATCH_OMITTED = 'The patch belongs to the source job, whose own hash-bound basedOn is not offered here; correct that source job before retrying the consumer.';
 
@@ -98,6 +102,13 @@ export function problemOf(p, limit = 600) {
     ...(typeof p.element === 'string' && p.element ? { element: clip(p.element, 300) } : {}), ...(typeof p.key === 'string' && p.key ? { key: p.key } : {}),
     // PROTOTYPE_BINDING_REQUIRED: what the item is and whether its patch was built offline (unresolved ones carry no patch)
     ...(isObject(p.binding) ? { binding: p.binding } : {}),
+    // T16 rule 1: a create the base has, its two ways out and what its dependents find under each (conditional, never a problem
+    // of its own), and a dependent's problem found under both (the job's own).
+    ...(Array.isArray(p.conditional) && p.conditional.length ? { conditional: p.conditional } : {}),
+    ...(Array.isArray(p.dependents) && p.dependents.length ? { dependents: p.dependents } : {}),
+    ...(typeof p.existing === 'string' ? { existing: p.existing } : {}), ...(typeof p.freeName === 'string' ? { freeName: p.freeName } : {}),
+    ...(typeof p.existingName === 'string' ? { existingName: p.existingName } : {}), ...(typeof p.existingKind === 'string' ? { existingKind: p.existingKind } : {}),
+    ...(p.bothChoices === true ? { bothChoices: true } : {}),
     // A summary of a cascade (summarizeCascade) keeps what it counts.
     ...(Number.isInteger(p.blocks) ? { blocks: p.blocks } : {}), ...(Number.isInteger(p.count) && p.cascade ? { count: p.count } : {}),
     ...(p.cascade ? { cascade: true, ops: p.ops, codes: p.codes, because: p.because, ...(Number.isInteger(p.patchesLeftOut) ? { patchesLeftOut: p.patchesLeftOut } : {}) } : {}),
@@ -261,6 +272,19 @@ export function summarizeCascade(problems, job = null) {
 export const moldOf = fix => String(fix ?? '').replace(/'[^']*'|"[^"]*"|`[^`]*`/g, '_').replace(/\b[\w$]*[.:/][\w.$:/]+\b/g, '_')
   .replace(/\b[a-z]*[A-Z][\w]*\b/g, '_').replace(/\d+/g, '#').replace(/\s+/g, ' ').trim();
 
+// T16 rule 3: the template of a message, its mold without what only tells two members apart where they are: a file path, the
+// frame of a stack a kernel text may end with ("at Anvil.X.Y in File.cs:line 12"), a fragment of code in parentheses (the
+// "(assign X = Y + 1 @n3)" of a logic rule), a node's @id, an html tag and the kind of the element a message names (screen,
+// block, action...). Review of e10ecacc: read on the message before it is cut (templates), else a long message's cut point split
+// its group.
+const KIND_WORDS = /\b(?:(?:server|client|service|data|screen) action|action|static entity|entity|structure|ui flow|flow|screen|block)\b/gi;
+export const templateOf = message => moldOf(String(message ?? '').replace(/\s+at\s+[\w.`<>]+(?:\s+in\s+.*)?$/, '')
+  .replace(/[A-Za-z]:\\[^\s'"]*|\\\\[^\s'"]+/g, '_')
+  .replace(/<\/?[A-Za-z][\w-]*(?:\s[^<>]*)?>/g, '<_>')
+  .replace(/\([^()]*(?:@[A-Za-z]*\d+|=)[^()]*\)/g, '(_)')
+  .replace(/@[A-Za-z]{0,3}\d+\b/g, '@_')
+  .replace(KIND_WORDS, 'element'));
+
 // The places a member's message names ("line 12 col 416"), for a group whose members differ only there.
 const placeOf = message => /\bline (\d+)(?: col(?:umn)? (\d+))?/.exec(String(message ?? '')) ?? null;
 
@@ -268,7 +292,7 @@ export function fitProblems(list, { budget = PROBLEMS_BUDGET, limit = 600, job =
   // The output policy already has the complete shaped problems. It groups them without
   // clipping messages, collapsing cascades again, or discarding a group to meet a budget.
   const all = preserveAll ? (Array.isArray(list) ? list : []).map(p => isObject(p) ? structuredClone(p) : problemOf(p, Number.MAX_SAFE_INTEGER))
-    : summarizeCascade((Array.isArray(list) ? list : []).map(p => problemOf(p, limit)), job);
+    : summarizeCascade((Array.isArray(list) ? list : []).map(p => { const shaped = problemOf(p, limit); if (isObject(p)) templates.set(shaped, templateOf(p.message)); return shaped; }), job);
   if (!alwaysGroup && measured(all) <= budget) return { problems: all };
   // Identical problems, grouped: same code, phase, severity and mold of fix. A problem of the facade's own input check
   // ({at, error, lines?}: ssam_code write) has no code: only the same error text groups those (integration marco-a2: the
@@ -277,7 +301,9 @@ export function fitProblems(list, { budget = PROBLEMS_BUDGET, limit = 600, job =
   for (const p of all) {
     const source = isObject(p.sourceJob) ? JSON.stringify([p.sourceJob.role, p.sourceJob.spec, p.sourceJob.job]) : '';
     // (E1: the part of the module a problem carries is part of the key: two screens with their own current text are two problems)
-    const key = [p.code, p.phase ?? '', p.severity, moldOf(p.fix), p.code == null ? String(p.error ?? p.message ?? '') : '',
+    // T16 rule 3: the template of the message is part of the key too (two causes under one code and one generic fix are two
+    // groups, each with its own ops, lines and fix: an unknown name and a stray tag never hide behind each other).
+    const key = [p.code, p.phase ?? '', p.severity, moldOf(p.fix), templates.get(p) ?? templateOf(p.message), p.code == null ? String(p.error ?? p.message ?? '') : '',
       p.patchRule ?? '', p.patchCertain ?? '', p.patchChoice ?? '', source, documentKey(p)].join('\u0001');
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(p);
@@ -296,7 +322,8 @@ export function fitProblems(list, { budget = PROBLEMS_BUDGET, limit = 600, job =
       message: first.message, ...(first.code == null && first.error != null ? { error: first.error } : {}), fix: first.fix, ops: [...new Set(members.map(m => m.op).filter(Number.isInteger))],
       pointers: [...new Set(members.flatMap(m => m.pointers ?? ([m.pointer ?? m.at ?? m.part ?? m.key ?? m.element].filter(v => v != null))))], ...(places.length > 1 ? { lines: places } : {}), ...(blocks ? { blocks } : {}), ...(patch.length ? { patch } : {}),
       items: members.map(m => ({ pointer: m.pointer ?? m.at, ...(m.message !== first.message ? { message: m.message } : {}), ...(m.fix !== first.fix ? { fix: m.fix } : {}),
-        ...(m.element ? { element: m.element } : {}), ...(m.key ? { key: m.key } : {}), ...(typeof m.k === 'string' && m.k ? { k: m.k } : {}) })),
+        ...(m.element ? { element: m.element } : {}), ...(m.key ? { key: m.key } : {}), ...(typeof m.k === 'string' && m.k ? { k: m.k } : {}),
+        ...(Array.isArray(m.conditional) && m.conditional.length ? { conditional: m.conditional } : {}) })),
       // (E1: the members share the part of the module they carry, the key above holds it; the details are the first member's, as
       // its message, and each member's k is under items)
       ...continuationOf(first) };
@@ -309,7 +336,10 @@ export function fitProblems(list, { budget = PROBLEMS_BUDGET, limit = 600, job =
   const lean = grouped.map(g => (g.items ? (({ items, ...rest }) => rest)(g) : g));
   if (measured(lean) <= budget) return { problems: lean, grouped: true };
   // Then the patch of the biggest groups (each says so: the pointers and the fix stay), then their pointers past 20.
-  for (const g of [...lean].filter(g => g.count && g.patch).sort((a, b) => bytes(b.patch) - bytes(a.patch))) {
+  // a12: hosted, a certain patch is never dropped here: it is sent explicitly (the gate refuses patch "verified" and fix
+  // "apply"); the answer's fit keeps the whole in the kept answer, read back with ssam_evidence.
+  const droppable = p => p.patch && !(p.patchCertain === true && hostedContext());
+  for (const g of [...lean].filter(g => g.count && droppable(g)).sort((a, b) => bytes(b.patch) - bytes(a.patch))) {
     if (measured(lean) <= budget) break;
     delete g.patch; g.patchOmitted = true;
   }
@@ -318,7 +348,7 @@ export function fitProblems(list, { budget = PROBLEMS_BUDGET, limit = 600, job =
   if (measured(lean) <= budget) return { problems: lean, grouped: true };
   // Then the patch of single problems, the biggest first (patchOmitted; the union of every patch stays beside the job):
   // a problem is never cut for the size of its patch.
-  for (const p of [...lean].filter(p => !p.count && p.patch).sort((a, b) => bytes(b.patch) - bytes(a.patch))) {
+  for (const p of [...lean].filter(p => !p.count && droppable(p)).sort((a, b) => bytes(b.patch) - bytes(a.patch))) {
     if (measured(lean) <= budget) break;
     delete p.patch; p.patchOmitted = true;
   }
@@ -408,7 +438,7 @@ export function refusalFields(problems, source, options) {
     if (!byOrigin.has(origin)) byOrigin.set(origin, []);
     byOrigin.get(origin).push(p);
   }
-  const conflicts = new Map([...byOrigin].map(([origin, members]) => [origin, new Set(patchConflicts(patchUnion(members)).map(c => c.path))]));
+  const conflicts = new Map([...byOrigin].map(([origin, members]) => [origin, new Set(patchConflicts(patchUnion(members, { all: true })).map(c => c.path))]));
   if ([...conflicts.values()].some(paths => paths.size)) {
     problems = problems.map(p => (isObject(p) && Array.isArray(p.patch)
       && p.patch.some(op => isObject(op) && conflicts.get(originOf(p))?.has(op.path))

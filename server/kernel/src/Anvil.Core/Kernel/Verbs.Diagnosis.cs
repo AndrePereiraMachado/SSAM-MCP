@@ -41,6 +41,8 @@ public sealed partial class ModelSession
     private readonly Dictionary<object, int> _failedAnchors = new(ReferenceEqualityComparer.Instance);
     // The op that created each object (a later set of one property moves its anchor, never its creator).
     private readonly Dictionary<object, int> _creators = new(ReferenceEqualityComparer.Instance);
+    // The top-level ops that failed (or were skipped) in this apply: what they wrote is half-built, never a finding of its own.
+    private readonly HashSet<int> _failedOps = [];
     private readonly List<(object Target, int? Previous, bool Created)> _anchorJournal = [];
 
     private void Anchor(object? o, bool created = false)
@@ -70,12 +72,14 @@ public sealed partial class ModelSession
     }
 
     /// <summary>Starts the anchors of one op (Apply, per top-level op).</summary>
-    private void BeginAnchors(int op) { _anchorOp = op; _anchorJournal.Clear(); }
+    private void BeginAnchors(int op) { _anchorOp = op; _anchorJournal.Clear(); _assertionJournal.Clear(); }
 
     /// <summary>Ends the anchors of one op: a failed op gives back what it touched to the op before, and what it created
     /// becomes a failed anchor.</summary>
     private void EndAnchors(bool failed)
     {
+        if (failed && _anchorOp is { } failedOp) _failedOps.Add(failedOp);
+        EndAssertions(failed);
         if (failed && _anchorOp is { } op)
             for (var k = _anchorJournal.Count - 1; k >= 0; k--)
             {
@@ -317,10 +321,14 @@ public sealed partial class ModelSession
     /// job lets it be (the action of a logic op and, when its text is in the job, the expression; the value of the set that
     /// wrote the property; the string of another op that holds the expression of the property the message names), the
     /// Verify id as the code, a fix, and the patch when the fix is certain (an unknown function one built-in certainly
-    /// means). A message whose element no op of the job wrote keeps op and pointer null, with the element's path.</summary>
-    public List<JsonObject> VerifyProblems(IReadOnlyList<MessageInfo> blocking, JsonArray ops, string? opsPointer, string lane, IReadOnlyDictionary<string, VerifyHint>? hints)
+    /// means). A message whose element no op of the job wrote keeps op and pointer null, with the element's path. A message on
+    /// what a failed op left half-built is that failure again: no problem, added to <paramref name="halfBuilt"/> when given.</summary>
+    public List<JsonObject> VerifyProblems(IReadOnlyList<MessageInfo> blocking, JsonArray ops, string? opsPointer, string lane, IReadOnlyDictionary<string, VerifyHint>? hints,
+        ICollection<MessageInfo>? halfBuilt = null, bool expectationsListed = true)
     {
         var problems = new List<JsonObject>();
+        // T12: the acceptances of this refusal; a job without expectedMessages gets them all in one list patch.
+        var acceptances = new List<(JsonObject Problem, string Id, string Element)>();
         var patchSources = new Dictionary<int, JsonObject>();
         var patchedText = new Dictionary<string, string>(StringComparer.Ordinal);
         if (blocking.Count == 0) return problems;
@@ -354,7 +362,7 @@ public sealed partial class ModelSession
                 if (_anchors.TryGetValue(screen, out var s)) op = s;
                 else if (_failedAnchors.TryGetValue(screen, out var f)) failed = f;
             // What a failed op left half-built: its failure is already a problem of the apply.
-            if (failed is { } failedOp) { omitted.Add(failedOp); continue; }
+            if (failed is { } failedOp) { omitted.Add(failedOp); halfBuilt?.Add(m); continue; }
             // The property the message is about, when a set of this job wrote it, is that set's (the anchor of the widget is
             // the last op that touched it: the Values of a Dropdown pointed at the set of its Labels, or nowhere). The Verify
             // may name it by its model name, not the one the set used (the StyleClasses of a Text is its Style): then the set
@@ -395,6 +403,10 @@ public sealed partial class ModelSession
             if (modelPatch is { } edit && patchSource != null && sourcePointer != null)
                 RememberSourceEdits(patchSource, sourcePointer, edit.Patch, patchedText);
             var patch = modelPatch ?? (inner != null && pointer != null && Text(source, inner) is { } text ? CertainPatch(m, pointer, text, actionNames) : null);
+            // T12: a blocking security warning answers its fix and, as the patch of an {ops} job, its acceptance with the
+            // user's own words (SECURITY_ACCEPTANCE is never certain: nothing applies it by itself).
+            var accepts = patch == null && opsPointer == "/ops" && SecurityWarnings.Fix(m.Id, m.Detail) != null;
+            if (accepts) patch = (SecurityWarnings.Fix(m.Id, m.Detail)!, SecurityAcceptance.Patch(m.Id, m.Path), SecurityAcceptance.PatchRule);
             var message = $"{m.Type} {m.Id}: {VerifyHints.OneLine(m.Detail, 400)} @ {m.Path}";
             var problem = JobPreflight.Problem(op, pointer, m.Id, "error", message, patch?.Fix ?? Fix(m, owner, action, source, lane, hints), patch?.Patch, kind ?? "verify", patch?.PatchRule);
             if (m.Id == "ArgumentRequiredExpression" && modelPatch != null && RequiredArgumentFocus(owner, source) is { } focus) {
@@ -402,11 +414,19 @@ public sealed partial class ModelSession
                 problem["patchFocus"] = new JsonObject { ["argument"] = focus.Argument, ["node"] = focus.Node, ["callee"] = focus.Callee };
             }
             problem["phase"] = "verify";
+            if (accepts) acceptances.Add((problem, m.Id, SecurityAcceptance.ElementOf(m.Path)));
             problem["element"] = m.Path;
             if (m.OwnerKey != null) problem["key"] = m.OwnerKey;
             // a message on an element a prototype op generated names its capture k (1.4.1: the facade degrades that item)
             if (PrototypeOrigin(owner) is { } origin) { problem["k"] = origin.K; problem["widgetKey"] = origin.Key; }
             problems.Add(problem);
+        }
+        // T12: without expectedMessages in the job, "/expectedMessages/-" has no parent: every acceptance carries the same
+        // patch that adds the member with all of them (one entry per id and element, count when several messages share it).
+        if (!expectationsListed && acceptances.Count > 0)
+        {
+            var entries = acceptances.GroupBy(a => (a.Id, a.Element)).Select(g => SecurityAcceptance.Entry(g.Key.Id, g.Key.Element, g.Count())).ToList();
+            foreach (var (problem, _, _) in acceptances) problem["patch"] = SecurityAcceptance.ListPatch(entries);
         }
         // Several Verify messages can repair the same HTML or flow item. Each problem carries the complete combined edit,
         // so applying every offered patch is order-independent and cannot discard another correction.
@@ -654,6 +674,9 @@ public sealed partial class ModelSession
     private static string Fix(MessageInfo m, IObjectSignature? owner, JsonObject? action, JsonObject? source, string lane, IReadOnlyDictionary<string, VerifyHint>? hints)
     {
         var text = m.Detail + " " + m.Path;
+        // T12: a security warning names its fix and its acceptance, never the generic hint of its id (the O11 bucket
+        // CustomObjectWarning answered "the fix is in the message text").
+        if (SecurityWarnings.Fix(m.Id, m.Detail) is { } security) return security;
         switch (m.Id)
         {
             case "ExpressionUnknownObject" or "InvalidVariable_UnknownObjInVar" when action != null:

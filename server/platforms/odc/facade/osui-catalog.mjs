@@ -96,39 +96,58 @@ export function namedPatterns(lane, intent, appTypes = null, catalog = loadOsuiC
 }
 
 // ---- the section, at a level: lines (name + one line per pattern), names (names per category), counts.
-function librariesFor(catalog, lane, appTypes) {
+// The extra libraries of an app type (Traditional: RichWidgets beside OutSystemsUIWeb) and the public actions of a library
+// come only for a request of those app types alone (a known Traditional kind, osui:o11-traditional, the actions
+// selector): a request for every type of the lane (kind unknown) keeps the one library per type it had before, so the
+// Traditional additions never take room from the answers of other kinds (integ/proto-traditional review M3, L1).
+const traditionalOnly = (catalog, types) => types.length > 0 && types.every(t => Array.isArray(catalog.appTypes[t]?.libraries));
+function librariesFor(catalog, lane, appTypes, { extras = null } = {}) {
   const wanted = (appTypes?.length ? appTypes : APP_TYPES[lane] ?? []).filter(t => catalog.appTypes[t]?.lane === lane);
+  const more = extras ?? traditionalOnly(catalog, wanted);
   const groups = [];
   for (const t of wanted) {
-    const id = catalog.appTypes[t].library;
-    const g = groups.find(x => x.id === id);
-    if (g) g.appTypes.push(t); else groups.push({ id, appTypes: [t], library: catalog.libraries.find(l => l.id === id) });
+    for (const id of (more ? catalog.appTypes[t].libraries : null) ?? [catalog.appTypes[t].library]) {
+      const g = groups.find(x => x.id === id);
+      if (g) g.appTypes.push(t); else groups.push({ id, appTypes: [t], library: catalog.libraries.find(l => l.id === id), extras: more });
+    }
   }
   return groups.filter(g => g.library);
 }
-const libraryLabel = l => `${l.name} ${l.version ?? 'revision ' + l.revision}`;
+const libraryLabel = l => `${l.name} ${l.version ?? (l.revision != null ? 'revision ' + l.revision : '(version not recorded)')}`;
 export function osuiSection(request, level = 'lines', catalog = loadOsuiCatalog()) {
   const { lane, appTypes, from } = request;
   const groups = librariesFor(catalog, lane, appTypes);
-  const libraries = groups.map(({ library: l, appTypes: types }) => {
+  const libraries = groups.map(({ library: l, appTypes: types, extras }) => {
     const categories = {};
     for (const p of l.patterns) {
       if (level === 'counts') { categories[p.category] = (categories[p.category] ?? 0) + 1; continue; }
       (categories[p.category] ??= []).push(level === 'lines' ? (p.line ? `${p.name}: ${p.line}` : `${p.name}: (no description in the library)`) : p.name);
     }
     if (level === 'names') for (const k of Object.keys(categories)) categories[k] = categories[k].join(', ');
-    return { library: libraryLabel(l), appTypes: types, element: l.element, patterns: l.patterns.length, categories };
+    return { library: libraryLabel(l), appTypes: types, element: l.element, patterns: l.patterns.length, categories,
+      // The public actions of the library (Traditional: RichWidgets, OutSystemsUIWeb): above counts their names and the call for
+      // one contract; the counts level, the smallest form a full page keeps, their number only.
+      ...(extras && l.actions?.length ? level === 'counts' ? { actions: l.actions.length } : {actions:l.actions.map(a=>a.name),
+        actionLookup:{tool:'ssam_discover',arguments:{lane,expand:'osui:'+types[0]+'/actions:<Action>'}}} : {}) };
   });
   // The patterns the intent named stay at every level (one line each above counts): they are what was asked.
   const named = (request.named ?? []).map(n => (level === 'counts' ? { pattern: n.pattern, via: n.via, expand: n.expand } : { pattern: n.pattern, category: n.category, line: n.line, via: n.via, expand: n.expand }));
   return {
     ...(level === 'counts' ? {} : { why: 'screen-building intent: compose the screen from these OutSystems UI patterns (library blocks) before custom containers, CSS or JavaScript' }),
-    lane, appTypes: groups.flatMap(g => g.appTypes), appTypeFrom: from, level, ...(named.length ? { named } : {}), libraries,
+    lane, appTypes: [...new Set(groups.flatMap(g => g.appTypes))], appTypeFrom: from, level, ...(named.length ? { named } : {}), libraries,
     expand: `ssam_discover {lane:"${lane}", expand:"osui:<Category>,osui:<Pattern>"}: description, inputs, events, placeholders, instance op` + (level === 'lines' ? '' : '; osui:<appType> lists every pattern with one line'),
   };
 }
 
 // ---- expansion: osui:<Category> | osui:<Pattern> | osui:<appType> | osui:<appType>/<Category|Pattern>
+// T3: the data-source step of a paging pattern (an input StartIndex and an event with NewStartIndex), SSAM's own rule (the
+// generated catalog keeps only the library's texts): the kernel refuses a wiring that does not page (PAGINATION_SOURCE_UNBOUND).
+export const PAGING_WIRING = 'Wire the data source, or the delivery is refused (PAGINATION_SOURCE_UNBOUND): StartIndex reads screen state the OnNavigate handler assigns (StartIndex, or (CurrentPage - 1) * MaxRecords); '
+  + 'the list\'s screen aggregate has Start Index = StartIndex and Max. Records = MaxRecords (a server action pages by an SQL with OFFSET @Skip ROWS FETCH NEXT @Take ROWS ONLY, '
+  + 'never by START on its aggregate: LOGIC_START_SERVER_IGNORED); TotalCount = <Aggregate>.Count of that same aggregate (or a variable filled from it); the list\'s Source is <Aggregate>.List (or a list the handler appends the page to); '
+  + 'the OnNavigate handler has the input NewStartIndex (bound to the event\'s NewStartIndex), assigns StartIndex = NewStartIndex and then refreshes <Aggregate>.';
+export const isPagingPattern = p => (p.inputs ?? []).some(i => i.name === 'StartIndex') && (p.events ?? []).some(e => (e.params ?? []).some(x => String(x).startsWith('NewStartIndex')));
+const withWiring = p => (isPagingPattern(p) ? { ...p, wiring: PAGING_WIRING } : p);
 function brief(p) { return { name: p.name, category: p.category, line: p.line ?? null, ...(p.descriptionMissing ? { descriptionMissing: true } : {}), inputs: (p.inputs ?? []).map(i => `${i.name}: ${i.type}${i.mandatory ? ' (mandatory)' : ''}`), events: (p.events ?? []).map(e => `${e.name}(${(e.params ?? []).join(', ')})${e.mandatory ? ' (mandatory)' : ''}`), placeholders: (p.placeholders ?? []).map(x => x.name), ...(p.docs ? { docs: p.docs } : {}) }; }
 const bytesOf = value => Buffer.byteLength(JSON.stringify(value), 'utf8');
 export function osuiExpansion(lane, selector, { capBytes = 1 << 20, catalog = loadOsuiCatalog() } = {}) {
@@ -138,8 +157,18 @@ export function osuiExpansion(lane, selector, { capBytes = 1 << 20, catalog = lo
   const appType = typeHead ? typeHead.toLowerCase() : null;
   const term = slash > 0 ? raw.slice(slash + 1) : (appType ? '' : raw);
   if (appType && catalog.appTypes[appType]?.lane !== lane) return { error: `unknown app type '${typeHead}' on lane ${lane}`, known: APP_TYPES[lane] };
-  const groups = librariesFor(catalog, lane, appType ? [appType] : null);
   const key = term.toLowerCase();
+  const groups = librariesFor(catalog, lane, appType ? [appType] : null, key.startsWith('actions:') ? { extras: true } : {});
+  if (key.startsWith('actions:')) {
+    const name=term.slice('actions:'.length).toLowerCase();
+    const libraries=groups.map(({library:l,appTypes})=>({library:libraryLabel(l),appTypes,producer:l.producer,source:l.source,
+      actions:(l.actions??[]).filter(a=>!name||a.name.toLowerCase()===name),
+      implementation:'Use the exact input/output contract and the flow grammar of this app type. Verify the installed producer before composing the action with its widget in the same delivery.'})).filter(l=>l.actions.length);
+    if(!libraries.length)return {error:'No catalogued action '+term,known:{appTypes:APP_TYPES[lane]}};
+    const result={lane,selector:raw,level:'full',libraries};
+    if(bytesOf(result)<=capBytes)return result;
+    return {lane,selector:raw,level:'names',note:'Reduced by byte budget; ask actions:<exact name> for the contract.',libraries:libraries.map(l=>({...l,actions:l.actions.map(a=>a.name)}))};
+  }
   const pick = wanted => { const out = []; for (const g of groups) { const l = g.library; const patterns = !wanted ? l.patterns : l.patterns.filter(p => p.category.toLowerCase() === wanted || p.name.toLowerCase() === wanted); if (patterns.length) out.push({ g, l, patterns }); } return out; };
   let found = pick(key);
   // A word of the catalog's synonyms ("deck", "slider") answers the pattern it stands for.
@@ -148,12 +177,12 @@ export function osuiExpansion(lane, selector, { capBytes = 1 << 20, catalog = lo
   if (!found.length) return { error: `no OutSystems UI category or pattern '${term || raw}' on lane ${lane}`, known: { categories: [...new Set(groups.flatMap(g => g.library.categories))], appTypes: APP_TYPES[lane] } };
   // The richest form that fits the cap: whole entries, then one line + names of inputs/events/placeholders, then one
   // line each, then names.
-  const forms = [['full', p => p], ['brief', brief], ['lines', p => `${p.name} [${p.category}]: ${p.line ?? '(no description in the library)'}`], ['names', p => p.name]];
+  const forms = [['full', withWiring], ['brief', p => (isPagingPattern(p) ? { ...brief(p), wiring: PAGING_WIRING } : brief(p))], ['lines', p => `${p.name} [${p.category}]: ${p.line ?? '(no description in the library)'}`], ['names', p => p.name]];
   for (const [level, shape] of forms) {
     const whole = level === 'full' || level === 'brief';
     const libraries = found.map(({ g, l, patterns }) => ({ library: libraryLabel(l), appTypes: g.appTypes, producer: l.producer, element: l.element,
       ...(whole ? { key: l.key, instance: l.instance, reference: l.reference, source: l.source } : {}),
-      ...(whole && l.certified ? { certified: `every pattern below is instanced on the fixtures ${l.certified.fixtures.join(', ')} (${l.certified.by})` } : {}),
+      ...(whole ? { evidence:{native:l.certified?.fixtures?.length ? {fixtures:l.certified.fixtures,notCertified:l.certified.notCertified,source:l.certified.by} : 'not recorded',browser:'not recorded by this catalog',taskBehavior:'catalog contracts only; requires implementation and verification'},note:l.note } : {}),
       ...(whole && l.capturedFrom ? { capturedFrom: l.capturedFrom } : {}), patterns: patterns.map(shape) }));
     const out = { lane, selector: raw, ...(synonym ? { synonym: { word: key, pattern: synonym } } : {}), level, libraries };
     if (level !== 'full') out.note = `reduced to ${level} by the byte budget: ask for one pattern (osui:<Pattern>) for the whole entry`;

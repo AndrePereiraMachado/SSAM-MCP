@@ -10,11 +10,12 @@
 //   ops         how many ops the job has
 // Pure: no I/O, no clock. A composite job ({jobs: [...]}) names its parts only. The whole summary stays under MAX_BYTES:
 // over it, the action lines lose their parameters (names only), then the lists are cut and say how many were left out.
+import { clipText } from './text-clip.mjs';
 const MAX_BYTES = 4096;
 const MAX_LIST = 60;
 const LINE = 300;
 const bytes = v => Buffer.byteLength(JSON.stringify(v), 'utf8');
-const clip = (s, n = LINE) => (s.length > n ? s.slice(0, n - 1) + '…' : s);
+const clip = (s, n = LINE) => clipText(s, n);
 const ACTION_TYPES = new Map([['IServerAction', 'server'], ['IServiceAction', 'service'], ['IClientAction', 'client'], ['IScreenAction', 'screen'],
   ['IDataAction', 'data'], ['IPreparation', 'preparation']]);
 const ENTITY_GROUPS = new Map([['IServerEntity', 'entities'], ['IEntity', 'entities'], ['IStaticEntity', 'staticEntities'], ['IStructure', 'structures'],

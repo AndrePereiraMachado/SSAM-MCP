@@ -21,6 +21,7 @@
 import { addNextSteps } from './next-steps.mjs';
 import { isCode, refusalCode } from './refusal-codes.mjs';
 import { RESULT, resultIs, resultValue } from './result-values.mjs';
+import { screenCalls } from './prototype-disabled.mjs';
 
 export const NOT_BUILT_WHY ='component not built: the integrator/user builds it';
 const DIALOG_WHY = 'closes only a window with an owner, by its title; a web dialog (recovery, Manage Dependencies): ask the person to answer it in the Studio and repeat';
@@ -206,13 +207,11 @@ function commandFor(group, head, opts) {
       case 'job': return { spec: { positional: 1 }, build: a => ({ tool: 'ssam_job', arguments: { lane: one(a.flags, 'lane') ?? lane, job: a.positionals[0] ?? '<job.json>' } }) };
       case 'map': return { spec: { positional: 1, bool: new Set(['detail']) }, build: a => ({ tool: 'ssam_map', arguments: { lane: one(a.flags, 'lane') ?? lane,
         target: a.positionals[0] ?? '<capture.oml>', ...argsFrom(a.flags, { skip: ['lane'], rename: { budget: 'budgetBytes', detail: 'includeDetail' } }) } }) };
-      // The CLI rehearsal of the prototype import: the model makes the one MCP call of the import (docs/PROTOTIPO-NATIVO.md 1.1).
+      // The former CLI rehearsal of the prototype import: the import is turned off (prototype-disabled.mjs), so the line
+      // becomes the first call of the supported path for screens, the html op through ssam_code.
       case 'prototype': return { spec: { positional: 1, bool: new Set(['dry']) }, build: a => {
-        const l = one(a.flags, 'lane') ?? lane;
-        const job = { ops: [{ op: 'prototype', data: { source: a.positionals[0] ?? '<prototype folder>' } }] };
-        const module = typeof one(a.flags, 'module') === 'string' ? one(a.flags, 'module') : '<open module>';
-        return l === 'odc' ? { tool: 'studio_deliver', arguments: { module, job, publish: true, authorize: "<the user's own words>" } }
-          : { tool: 'o11_deliver', arguments: { module, job, publish: true, authorize: "<the user's own words>" } };
+        const call = screenCalls(one(a.flags, 'lane') ?? lane, typeof one(a.flags, 'module') === 'string' ? one(a.flags, 'module') : null).grammar;
+        return { tool: call.tool, arguments: call.arguments, why: call.why };
       } };
       default: return null;
     }
@@ -319,12 +318,14 @@ function validationErrors(v) {
 }
 // What a refused job delivery is corrected from (the job, its hash, the op that failed, the job it was patched from, the
 // basedOn of the next call, what a partial job merged): kept as given, top level first, else from the raw refusal.
-const CORRECTION = ['job', 'jobSha256', 'jobShape', 'failedOp', 'basedOn', 'nextBasedOn', 'partial', 'patchByNameOmitted', 'verifiedPatch'];
+const CORRECTION = ['job', 'jobSha256', 'jobShape', 'failedOp', 'basedOn', 'nextBasedOn', 'partial', 'patchByNameOmitted', 'verifiedPatch',
+  // R1 (24/10/2026): the ready fix call of a refusal with patches; R6: the diff of the merge content proof (MERGE_CONTENT_LOSS).
+  'fixCall', 'differences'];
 // What a delivered job keeps for the next call (lane "patch por nome"): the basedOn of the job it used and what a partial
 // job merged.
 // summary (job-summary.mjs, 2026-10-12): what the delivered job created or changed, so no map of the module follows it;
 // normalizations (kernel JobNormalizer, 2026-10-12): what the kernel rewrote in the job instead of refusing it, never silent.
-const NEXT = ['nextBasedOn', 'partial', 'summary', 'normalizations', 'patchesApplied', 'patchedJob', 'autoPatch', 'sourceBuilds', 'sourceJob'];
+const NEXT = ['nextBasedOn', 'partial', 'summary', 'normalizations', 'patchesApplied', 'patchedJob', 'autoPatch', 'sourceBuilds', 'sourceJob', 'fixesApplied'];
 // The shared fields of a deliver/publish answer (contract of the 2026-10-05 package, section 3.2): kept exactly on a
 // success. `result` "entregue e publicado" says the publish ran in the same call; `publish` carries its outcome;
 // `lastPublication`, `leftovers` (what the job declared to pass the gate) and `screenRoles` (who can open each screen the
@@ -390,7 +391,7 @@ export function compactDelivery(tool, args, value) {
       // the phases; the patches go back with patch + basedOn.
       ...(Array.isArray(problems) && problems.length ? { problems } : {}),
       ...Object.fromEntries(['problemsTotal', 'grouped', 'verifyRan', 'verifyReason', 'phases', 'normalizations', 'patchesApplied', 'patchedJob', 'autoPatch', 'sourceBuilds', 'sourceJob'].filter(key => value[key] != null).map(key => [key, value[key]])),
-      ...correction, ...prototypeFields(value),
+      ...correction, ...(value.code === 'MERGE_CONTENT_LOSS' && value.summary != null ? { summary: value.summary } : {}), ...prototypeFields(value),
       // A module name that reached no open module (or several): the open modules are the fix.
       ...(Array.isArray(value.openModules) ? { openModules: value.openModules } : {}), ...(Array.isArray(value.candidates) ? { candidates: value.candidates } : {}),
       // fix/unpublished-library: what each producer's published revision lacks, what its open model says, and the sequence.

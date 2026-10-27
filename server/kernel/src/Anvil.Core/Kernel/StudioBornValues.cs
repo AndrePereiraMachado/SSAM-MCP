@@ -39,8 +39,30 @@ internal static class StudioBornValues
     /// <summary>The version of the recipe (part of the Studio identity a measurement is kept under): raise it on every change of
     /// what is created or how. 3: in a fresh UI flow with the theme of the context, never in the first flow of the module. 4: the
     /// native Table and its cells (the element table reads them, ScreenHtml.WidgetTags); a kind may be created in the rows of a
-    /// Table created before it (a header cell in its HeaderRow).</summary>
-    public const int Recipe = 4;
+    /// Table created before it (a header cell in its HeaderRow). 6: the Traditional Web widgets of the element table and a Web
+    /// block instance too (the proto line's 5), beside the native Table of 4. 7: the widget kinds by the runtime of the page
+    /// (<see cref="WidgetKinds"/>; the review of 3ab12209: 6 tried the 19 Traditional-only kinds in every Reactive, Mobile and
+    /// ODC page, about 3,000 refused creates per context): a Traditional Web page (WebScreen, WebBlock) measures the Traditional
+    /// kinds and the kinds the writer creates as they are there, never a Reactive kind the writer writes as its Traditional
+    /// counterpart; any other page never a Traditional-only kind; the block instance of the runtime only. 8: every create and
+    /// set of one measurement in a single native command of the disposable copy (the proto line's 6, batch lab 2026-10-19: 171
+    /// commands became 2 on blank-service), its values compared with one command per probe (HotModuleBornValuesTests), over the
+    /// kinds by runtime of 7.</summary>
+    public const int Recipe = 8;
+
+    /// <summary>The widget kinds a measurement creates in a page of this runtime (<paramref name="traditional"/>: a WebScreen
+    /// or WebBlock), the kinds the html writer can create there (ScreenHtmlModule: under a Traditional root a kind is written as
+    /// ScreenHtmlTables.TraditionalKind of it, the Traditional-only kinds only there). The block instance and the placeholder
+    /// are measured apart (a block instance needs its block). Ordinal order.</summary>
+    internal static List<string> WidgetKinds(bool traditional) =>
+        ScreenHtml.WidgetTags.Keys.Concat(["List", "AdvancedHtml"])
+            .Where(k => k is not ("MobileBlockInstanceWidget" or "WebBlockInstanceWidget" or "PlaceholderWidget"))
+            .Where(k => traditional ? ScreenHtmlTables.TraditionalKind(k) == k : !ScreenHtmlTables.TraditionalOnly.Contains(k))
+            .Distinct().Order(StringComparer.Ordinal).ToList();
+
+    /// <summary>Whether a page (a screen or a block) is of the Traditional Web runtime: the reading's own rule (its Traditional
+    /// rows only under a WebScreen or WebBlock root).</summary>
+    internal static bool IsTraditionalPage(string kind) => kind is "WebScreen" or "WebBlock";
 
     internal sealed record Measured(
         SortedDictionary<string, SortedDictionary<string, string>> Born,
@@ -56,6 +78,26 @@ internal static class StudioBornValues
         public readonly ModelSession Session = new(disposable);
         public readonly List<string> Log = [];
         private int count;
+        private bool batched;
+
+        /// <summary>A native change of the measurement: inside <see cref="Batch{T}"/> it joins the batch's one command, else it
+        /// is a command of its own. Every native change of a probe goes through here (a nested command of its own would lose
+        /// what a custom event factory creates).</summary>
+        public void Mutate(string label, Action work)
+        {
+            if (batched) work(); else Session.Mutate(label, work);
+        }
+
+        /// <summary>Runs <paramref name="work"/> as one native command of the disposable module.</summary>
+        public T Batch<T>(Func<T> work)
+        {
+            T result = default!;
+            Session.Mutate("measure widget defaults", () => {
+                batched = true;
+                try { result = work(); } finally { batched = false; }
+            });
+            return result;
+        }
 
         public string Role(IObjectSignature n) => ModuleIndex.Roles[ModuleIndex.RoleOf(Reader.KindOf(n), new HashSet<string>(Reader.KindNamesOf(n), StringComparer.Ordinal))];
 
@@ -64,7 +106,7 @@ internal static class StudioBornValues
             var at = (++count).ToString(CultureInfo.InvariantCulture);
             IObjectSignature? made = null;
             try {
-                Session.Mutate("measure " + kind, () => {
+                Mutate("measure " + kind, () => {
                     Session.Register("$born.p" + at, parent);
                     var op = new JsonObject { ["op"] = "create", ["parent"] = "$born.p" + at, ["type"] = "I" + kind, ["as"] = "$born.n" + at };
                     if (source != null) { Session.Register("$born.s" + at, source); op["source"] = "$born.s" + at; op["empty"] = true; }
@@ -79,14 +121,14 @@ internal static class StudioBornValues
         /// <summary>Sets a property in one command; false (and logged) when the Studio refuses.</summary>
         public bool Set(IObjectSignature target, string property, object? value)
         {
-            try { Session.Mutate("measure " + property, () => PrototypeBuilder.SetProperty(target, property, value)); return true; }
+            try { Mutate("measure " + property, () => PrototypeBuilder.SetProperty(target, property, value)); return true; }
             catch (Exception error) { Log.Add("set " + property + " of " + Reader.KindOf(target) + ": " + error.GetBaseException().Message); return false; }
         }
 
         /// <summary>The same through a property of the Model API (an interface's: the value is of its type).</summary>
         public bool Set(IObjectSignature target, System.Reflection.PropertyInfo property, object? value)
         {
-            try { Session.Mutate("measure " + property.Name, () => property.SetValue(target, value)); return true; }
+            try { Mutate("measure " + property.Name, () => property.SetValue(target, value)); return true; }
             catch (Exception error) { Log.Add("set " + property.Name + " of " + Reader.KindOf(target) + ": " + error.GetBaseException().Message); return false; }
         }
 
@@ -107,6 +149,12 @@ internal static class StudioBornValues
     /// every element they were born with (Born), and the role of each kind in the module index (Roles: widget, event,
     /// variable...). The module of <paramref name="maker"/> is changed: the caller loads it for this and releases it after.</summary>
     public static Measured Measure(Creator maker, IObjectSignature flow)
+        => Individually.Value ? MeasureCore(maker, flow) : maker.Batch(() => MeasureCore(maker, flow));
+
+    /// <summary>One native command per probe (the recipe before 6), for the test that compares the two.</summary>
+    internal static readonly AsyncLocal<bool> Individually = new();
+
+    private static Measured MeasureCore(Creator maker, IObjectSignature flow)
     {
         var r = maker.Reader;
         var born = new SortedDictionary<string, SortedDictionary<string, string>>(StringComparer.Ordinal);
@@ -139,7 +187,7 @@ internal static class StudioBornValues
         void Destination(IObjectSignature evt)
         {
             try {
-                maker.Session.Mutate("measure destination", () => PrototypeBuilder.SetProperty(evt, "Destination", action));
+                maker.Mutate("measure destination", () => PrototypeBuilder.SetProperty(evt, "Destination", action));
             } catch (Exception error) { log.Add("destination of " + r.KindOf(evt) + ": " + error.GetBaseException().Message); }
         }
         void Record(IObjectSignature node, string suffix, bool withBorn = true)
@@ -170,9 +218,11 @@ internal static class StudioBornValues
             foreach (var kind in new[] { "InputParameter", "BlockEvent", "PlaceholderWidget" })
                 if (Make(block, kind) is { } part) Record(part, "");
         } else log.Add("not created: a block (" + string.Join(", ", blockKinds) + ")");
-        var page = Make(host, "Container") ?? host;
-        var widgetKinds = ScreenHtml.WidgetTags.Keys.Where(k => k is not ("MobileBlockInstanceWidget" or "PlaceholderWidget")).Concat(["List", "AdvancedHtml"])
-            .Distinct().Order(StringComparer.Ordinal).ToList();
+        // The runtime of the page: the widget kinds the writer creates there (recipe 7).
+        var traditional = IsTraditionalPage(r.KindOf(host));
+        // The page's container (a Traditional Web page takes no Reactive Container: its widgets go in the page, as in recipe 6).
+        var page = traditional ? host : Make(host, "Container") ?? host;
+        var widgetKinds = WidgetKinds(traditional);
         // Each kind under the first parent that takes it: the page's container, the screen, then what was created before it
         // (a radio button in its group, a list item in its list) and the rows of a Table (a header cell in its HeaderRow, a row
         // cell in its Row).
@@ -192,7 +242,7 @@ internal static class StudioBornValues
         for (var pass = 0; pass < 3 && pending.Count > 0; pass++)
             pending = pending.Where(kind => !Place(kind, parents, "")).ToList();
         foreach (var kind in pending) log.Add("not created: " + kind);
-        if (block != null && !ReferenceEquals(block, host) && Make(page, "MobileBlockInstanceWidget", block) is { } instance) Record(instance, "");
+        if (block != null && !ReferenceEquals(block, host) && Make(page, traditional ? "WebBlockInstanceWidget" : "MobileBlockInstanceWidget", block) is { } instance) Record(instance, "");
         // The parts of an aggregate: two sources (two fresh entities), then a join, a filter and a sort.
         if (parents.FirstOrDefault(p => r.KindOf(p) == "ScreenAggregate") is { } aggregate) {
             var sources = 0;
@@ -204,7 +254,7 @@ internal static class StudioBornValues
         if (parents.FirstOrDefault(p => r.KindOf(p) == "AdvancedHtml") is { } html) {
             IObjectSignature? htmlEvent = null;
             try {
-                maker.Session.Mutate("measure Event", () => {
+                maker.Mutate("measure Event", () => {
                     var create = PrototypeBuilder.FindMethod(html, "CreateEvent") ?? throw new InvalidOperationException("no CreateEvent");
                     htmlEvent = create.Invoke(html, create.GetParameters().Select(p => p.HasDefaultValue ? p.DefaultValue : null).ToArray()) as IObjectSignature;
                     if (htmlEvent != null) PrototypeBuilder.SetProperty(htmlEvent, "Event", "onfocus");
@@ -246,14 +296,16 @@ public sealed partial class ModelHost
     /// the UI flow named <paramref name="flow"/> (null: a new UI flow of the module), measured as StudioDefaults measures it (a
     /// fresh flow with the theme of the context, in a disposable copy), never kept. The tests of both lanes read it without the
     /// Studio's types.</summary>
-    internal StudioBornValues.Measured MeasureBorn(byte[] oml, string? flow = null)
+    internal StudioBornValues.Measured MeasureBorn(byte[] oml, string? flow = null, bool batch = true)
     {
         var espace = Load(oml);
+        var individually = StudioBornValues.Individually.Value;
+        StudioBornValues.Individually.Value = !batch;
         try {
             var (_, measured, why) = StudioDefaults.MeasureContext(espace, FlowNamed(espace, flow));
             return measured ?? throw new InvalidOperationException(why);
         }
-        finally { Release(espace); }
+        finally { StudioBornValues.Individually.Value = individually; Release(espace); }
     }
 
     /// <summary>What a fresh element is born with in the module's own UI flow named <paramref name="flow"/> (not a fresh one),

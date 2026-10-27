@@ -9,6 +9,7 @@ Sem shell, `python`, `dotnet`, `.ps1`, `.\ssam` ou `.\odc`: a CLI e os scripts s
 - Comece por `ssam_doctor`. `ssam_connect` (sem lane) anexa os Studios já abertos. Nunca feche, salve, publique ou reabra para conectar.
 - Todo pedido começa por `ssam_discover {intent, lane}`: `tools` traz ferramenta, verbo e argumentos; `matches`, contrato e exemplo.
 - Agente ou subagente começa a tarefa por `ssam_discover {intent, lane, app, packet:true}`: elementos do módulo, contrato, exemplo provado, regras do time e próximo passo, num pacote só. Trabalhe a partir dele, sem reler docs.
+  `scope` traz os nomes que a mudança pode usar, com `@key`, e o texto do elemento editado; `scope.basedOn` diz que valor vai em que campo (flow: `textSha`, nunca o `sourceSha256`). Leia com `ssam_map` só se `needsReading` for true, pela chamada em `read`.
   Para dados, lógica ou telas o pacote traz `text`: a leitura (ou por que não precisa), a chamada pronta com as formas de texto (ssam-ddl/1, ssam-flow/1, ssam-html/1), a gramática, um exemplo provado e as regras do dono. Escreva o texto, não o JSON.
   PDF, Excel, e-mail, arquivos, imagens: `environment` traz as extensões e componentes Forge instalados com as actions e assinaturas (no O11 também direto: `ssam_discover {lane:"o11", intent:"o que tenho no ambiente para gerar PDF"}`).
 - Ler um app: `ssam_map {lane, target, view:"digest"}` uma vez, todas as páginas de que a tarefa precisa (`continuations.next`; a página 1 traz entidades, estruturas, a assinatura de toda action e `contents`). Trabalhe no contexto.

@@ -1,5 +1,83 @@
 # HTML do SSAM (`ssam-html/1`): a leitura e a edição de telas e blocos
 
+Atualização de 19/10/2026: o Traditional possui criação e edição nativas; as tabelas históricas
+abaixo que o classificam como D2/opaco não descrevem a cobertura atual. A matriz atual e seus
+limites estão nos testes `Traditional*Tests` e `HtmlCrossPlatformLifecycleTests` do kernel.
+Para um campo que filtra ou recalcula ao mudar, use `<input bind="Query" onchange="ApplyFilter"/>`
+(ou `textarea`) e declare a screen action no mesmo job. No Traditional isso liga o `OnChange`
+nativo à action; em Reactive/Mobile/ODC usa o modelo de eventos da respectiva plataforma.
+Não transforme o handler em JavaScript textual. Navegação e Ajax/Submit de botões/links
+Traditional continuam diferenciados pelo destino e pelo atributo `method`.
+Para reestruturar uma tela lida, mantenha o `k` dos componentes e os bindings/eventos completos;
+mover um componente para fora de um wrapper removido preserva seus consumidores. Apagar de fato
+um componente ainda utilizado continua sendo recusado. ODC não herda a role `Registered` do O11:
+use as permissões que existem no módulo alvo.
+
+Controles Traditional: `input type="checkbox|password|radio"` aceita `bind`, `onchange` e
+`enabled`; radio usa `value` como expressão OutSystems. A leitura usa `checkbox-input`,
+`password-input` e `radio-input`, também aceitos na criação. `form record="Row" editable="True"`
+liga o formulário a uma variável de registro. A classe do Form Traditional é um atributo estendido
+(a leitura mostra `ext:class`); preserve `Form` ao acrescentar uma classe sua. O tema aplica largura
+de grid por padrão: para formulário largo, use CSS limitado à classe do formulário e confira no navegador.
+O seletor legado usa `select bind="Person"`
+com `source-entity="IEntitySignature:User"`, `source-attribute="IEntitySignature:User/Name"`
+e `required="False"`; esse contrato não tem OnChange, então a aplicação da seleção precisa
+de uma ação explícita. Atualizar a UI em Ajax exige atualizar o estado e executar Ajax Refresh
+no container persistente de resultado; apenas ligar o evento não atualiza o HTML servido.
+
+Dados iniciais Traditional podem ser implementados por texto no mesmo job do HTML:
+`preparation MinhaTela.Preparation`, seguido de queries, chamadas e atribuições e `end`.
+O nome `Preparation` é fixo, sem parâmetros de entrada/saída próprios; usa os inputs e
+variáveis do dono. Leia com `ssam_map {view:"flow", element:"MainFlow/MinhaTela/Preparation"}`
+e edite o texto inteiro com `basedOn: textSha`, preservando seus `@ids`. Para criar, omita
+os ids e coloque o HTML que cria o dono antes do fluxo. Ajax não executa Preparation
+novamente: a ação do evento atualiza os dados e depois faz Ajax Refresh. Reactive/Mobile
+O11 e ODC usam seus ciclos de vida e Data Actions, não Preparation.
+
+Listas de registros Traditional podem ser criadas com `list-records` e `table-records`,
+usando `id`, `source`, `line-count` e `start-index`. A tabela declara `slot name="HeaderRow"`
+e `slot name="DataRow"`, contendo células `td`; a lista recebe conteúdo diretamente.
+Para `Rows` do tipo estrutura List, use `Records.List.Current.Caption` dentro da tabela,
+sem inserir novamente o nome da estrutura. Comandos por linha passam o identificador ou
+valor corrente em argumentos nomeados. A fonte precisa ser consultada/atribuída na
+Preparation e nas actions Ajax pertinentes. Use RichWidgets.List_Navigation para a
+paginação e atualize o container que inclui tabela e pager. Se a consulta já pagina os
+dados, mantenha o start-index visual em zero para não aplicar o deslocamento duas vezes.
+
+Recriação Traditional a partir da leitura (20/10/2026): o criador aceita a leitura como está, com os `k`
+(aceitos em todo elemento, nunca escritos), e devolve `keys` (k da leitura -> chave do que criou). Escolha
+outro nome para o dono e envie também seus fluxos de actions/Preparation sem ids, com o novo dono, no
+mesmo job. Aceita a forma canônica `text`/`expr`, `BasicType:Text`, `label for="Input"`, propriedades
+nativas `os-*` também na raiz (`os-HTTPSecurity`, `os-IsFrequentDestination`; `os-Targets` é derivado
+dos conectores e ignorado), o título como a leitura o imprime (`title='"Login"'`), destinos
+qualificados (`onclick="ScreenAction:Login"` quando a tela e a action têm o mesmo nome), blocos
+referenciados (`WebBlockSignature:Icon`), atributos estendidos impressos sem prefixo (`OSTagName="h1"`
+numa expressão vira `IExtendedProperty`) e as duas linhas `tr` de table-records. Um documento com `Block`
+na raiz traz o próprio shell; um sem filho visual (tela de redirecionamento) fica sem layout; conteúdo solto
+vai para o `MainContent` do layout do tema. Runs de texto e `div if` sem `id` ficam sem nome, como a leitura
+mostra. `os-Type` de listas é conferido contra o binding, por ser derivado. Chaves literais dentro de `text`
+não viram expressões. As dependências precisam existir no módulo alvo; isso não copia entidades, ações de
+servidor ou módulos referenciados.
+
+Na prova B1 (`ScreenRecreationProof`, `anvil html-recreate --verify`, agora também sobre `WebScreen`/`WebBlock`),
+`<os-opaque k>` e qualquer `<os-<Kind> k>` (o conector de UI flow de uma tela) são movidos do original pela
+plataforma, a Preparation acompanha as actions e os consumidores da raiz (destinos, Entry) são reapontados.
+`TraditionalRecreationTests`: as cinco telas de `traditional-ui.oml` voltam iguais, sem erro novo de Verify.
+Num documento novo, sem leitura, widget opaco continua recusado explicitamente.
+
+Formulários Traditional conservam atributos `ext:` como atributos nativos, com texto
+literal ou expressões `{{ ... }}`. No seletor, a propriedade SourceAttribute da leitura
+é resolvida dentro de SourceEntity, evitando selecionar um campo homônimo de outra entidade.
+`div if/else` representa diretamente os ramos nativos, sem acrescentar um container;
+o `id` do `div if` nomeia o If. Uma classe visual pede um container dentro do ramo verdadeiro.
+A constante canônica `os-Visible="True"` conserva um controle sempre visível; condições
+novas continuam usando `div if/else`.
+
+Em Reactive/Mobile, os marcadores `data-ssam-*` pertencem ao motor de layout. Ao recriar
+um documento, retire esses marcadores junto dos `k`: eles serão recalculados para o novo
+dono. Em edição com identidades, mantenha a leitura; ao mover um componente retido para
+o topo da tela, o editor recalcula o marcador de página e registra `HTML_MARKER_DECIDED`.
+
 Etapas C1, C2 e B1 do plano "Texto do SSAM" (`C:\Users\andre\SSAM-analises\html-do-ssam\PLANO.md`, seções 1, 2, 3 e
 8): a **ida** de tela para HTML (C1), a **volta** (C2) e a **criação** pela forma documento (B1). Uma tela ou bloco de
 uma captura vira um documento HTML que carrega a **fonte**, nunca o estado que o runtime mostraria; o modelo devolve só os
@@ -103,7 +181,7 @@ contexto do fluxo novo é conferido com o pedido, fato a fato; se a cópia não 
 módulo lê sempre o mesmo texto, e o primeiro fluxo ou módulo medido nunca decide por outro contexto. A medida fica por
 identidade do Studio (plataforma, versão, receita e SHA-256 de cada assembly
 `OutSystems.*`/`ServiceStudio*` da pasta do Studio e das subpastas, plugins incluídos) e contexto, por usuário em
-`%USERPROFILE%\.ssam-hybrid\studio-defaults\<plataforma>\studio-defaults.<identidade>.<contexto>.json`
+`%USERPROFILE%\.ssam-hybrid\studio-defaults\<plataforma>\studio-defaults.s<esquema>-r<receita>.<identidade>.<contexto>.json`
 (`SSAM_STUDIO_DEFAULTS_ROOT` troca a raiz): um Studio que se atualiza é medido de novo na primeira leitura de tela de cada
 contexto (segundos, uma vez). O job mede os contextos dos fluxos da base (e de um fluxo novo) antes do comando; um fluxo a
 que o job dá um tema próprio (o do importador de protótipo) é medido quando a primeira página dele é escrita. O hash de um
@@ -157,7 +235,7 @@ pronta em `continuations.edit`.
 Recusas, todas numa resposta, antes de escrever (`HTML_EDIT_INVALID`, `HTML_EDIT_NO_KEY`, `HTML_KEY_FOREIGN`,
 `HTML_EDIT_OVERLAP`, `HTML_KEY_TWICE`, `HTML_OPAQUE_TOUCHED`, `HTML_VISIBLE`, `HTML_SCRIPT`, `HTML_FOREACH`, `HTML_JSON`,
 `HTML_NAME_UNKNOWN`, `HTML_NAME_TAKEN`, `HTML_DELETE_IN_USE`, `HTML_SLOT_UNKNOWN`, `HTML_ACTIONS_LISTED`, `HTML_DATA_NEW`,
-`HTML_KIND_CHANGED`, `HTML_BASE_CHANGED`, `HTML_NAME_FIXED`):
+`HTML_KIND_CHANGED`, `HTML_BASE_CHANGED`, `HTML_NAME_FIXED`, `HTML_PROPERTY_NOT_KEPT`, `HTML_PROPERTY_VALUE`, `HTML_PROPERTY_UNKNOWN`, `HTML_VALUE_EMPTY`):
 
 - **Uma recusa só, com todos os problemas** (bloqueio B3 da conferência de 12/10/2026; a rodada do patch da revisão de
   12/10/2026, docs/TEXTO-LOGICA.md: quando a recusa é por uma regra do dono, a edição com o patch aplicado roda numa cópia
@@ -204,12 +282,82 @@ Recusas, todas numa resposta, antes de escrever (`HTML_EDIT_INVALID`, `HTML_EDIT
   Mover um nome (o elemento A sem `id`, o elemento B com o nome de A) é recusado uma vez, com o motivo (A guarda o nome
   porque o texto não escreve `id` nele: tirar o `id` não diz que A larga o nome; a sessão de 18/10/2026 tirou os `id` de todos
   os elementos que editou) e o patch conferido que escreve `id=""` em A; a outra saída, outro `id` em B, vem no `fix`.
+  texto da lógica, no mesmo job.
+- **O que a plataforma recusaria depois do build, o plano diz antes de escrever (L3d, 24/10/2026; os `HTML_EDIT_NOT_APPLIED`
+  de 11 a 24/10).** Julgado num objeto do modelo do mesmo tipo (o próprio elemento; senão outro do mesmo tipo no módulo; senão
+  o que o create acabou de fazer, antes de escrever os fatos dele) pela regra do próprio escritor (`ModelSession.CanSet`: uma
+  propriedade de uma interface do Model API da classe, um `Set<X>`/`From<X>(texto)`, e o `Style` onde o widget guarda as
+  classes), e pelos defaults medidos do Studio. Só o que a edição escreve de novo é julgado:
+  - `HTML_PROPERTY_UNKNOWN`: um atributo de uma propriedade que o tipo não tem nesta faixa (`enabled` de um `<upload>`,
+    `os-Widht`), com o que o tipo escreve no `fix` e o patch que tira o atributo (ou o troca pelo nome que ele certamente quer);
+    `class` num If da leitura (o If não mostra elemento próprio: o `fix` põe a classe num contêiner dentro dele); um atributo
+    num elemento que não guarda extended property (`id` de um `os-ActionConnector` Traditional).
+  - `HTML_VALUE_EMPTY`: `os-GridColumns=""`, `enabled=""` (o número, a opção ou o booleano vazio a plataforma recusa; a
+    expressão vazia não é expressão e a tela volta sem o atributo). O patch tira o atributo (o default do Studio); o `fix`
+    diz o valor da leitura. `if`, `list`, `bind`, `options` e `content` não entram (fazem o elemento ser o que é).
+  - `HTML_NAME_UNKNOWN` de um `<Block name>` novo que não nomeia bloco do módulo nem das referências (ou nomeia vários): o
+    bloco que ele certamente quer vem no patch; um bloco de um produtor ainda não referenciado pede o op `reference` no mesmo
+    job; um de vários se nomeia `Dono.Nome`, `Tipo:Nome` ou `@chave`.
+  - `HTML_PROPERTY_UNKNOWN` de uma propriedade que a leitura nunca escreve (`os-DesignMode` de um If: a tela nunca voltaria
+    como a edição), com o patch que a tira.
+  - `HTML_NAME_UNKNOWN` de um evento cujo nome resolve para o que um evento não roda (`onclick="Login"` achava a server ou
+    client action `Login` de uma referência antes da tela `Login`): o patch escreve a tela ou a screen action desse nome como a
+    leitura escreve (`onclick="MobileScreen:Login"`).
+  - `HTML_NAME_UNKNOWN` de um argumento `:Nome` que não é input do bloco (julgado na instância, em outra instância do mesmo
+    bloco no módulo ou na que o create fez): os inputs no `fix`, o slot quando o nome é um placeholder do bloco
+    (`<slot name="Title">`), o input que ele certamente quer quando há um.
+  - `HTML_EDIT_INVALID` de um `<var>` ou `<input>` novo dentro de um elemento: é da tela (ou do bloco), filho do `<screen>`
+    (`{"into":"/","insert":"<var .../>","at":"first"}`).
+  - Normalizados também: os inputs e as variáveis da raiz na ordem da leitura, inputs antes, e um novo depois dos do seu
+    tipo, onde a plataforma o cria (`DATA_ORDER`: um `<var>` novo antes dos inputs de um bloco voltava como input; antes das
+    variáveis da tela, a conferência o comparava com a primeira delas, "p:DataType is ..., the edit says ..."); o texto literal de um `<upload filename>` novo como a expressão do seu
+    literal (`UPLOAD_TEXT_EXPRESSION`: a plataforma o troca por uma expressão quando FileName é escrito). Na conferência, um
+    nome de expressão escrito em outra caixa é a mesma expressão (`NAME_CASE`: `Entities.ValuesType.DateTime` volta
+    `...Datetime`); um literal de texto guarda a caixa.
+  - Um elemento movido para outro pai cujos filhos também mudam (um filho novo dentro dele) é ordenado pelos objetos que o
+    move da plataforma deu à subárvore (antes, "k=\"w19\" holds a widget the edit does not write").
+  - Normalizados como na forma documento, listados em `normalized`: a `class` de um If novo vai para um contêiner do que ele
+    mostra (`IF_CLASS_MOVED`, onde o If não tem Style: O11 e ODC), o `weight` de um `<i>` onde o Icon não tem Weight
+    (`ICON_WEIGHT_DROPPED`, O11; o `<i>` da leitura também, que nunca o escreve).
+  - Um `<var type>` novo nasce com o tipo escrito (ele era lido como widget e o plano "voltava" um `Type` derivado que não tem
+    setter; relatos e2891d6b e e21fa130). O tipo é escrito como o objeto que o plano resolveu, nunca pelo nome (pelo nome o
+    parser de tipos da plataforma toma o primeiro elemento com ele); um tipo fora do módulo lido (`Text List`, um
+    `Identifier`) segue pelo nome.
+  - `enabled`, `disabled` e `required` num widget cujo tipo não tem a propriedade (nenhum Upload tem Enabled, em nenhuma
+    faixa) são `HTML_PROPERTY_UNKNOWN` com o patch que os tira, nunca um atributo HTML que nada faz.
+  - "Widget does not support name changing" (relato 6bd23d43): um widget novo recebe o nome no create e um slot nunca é
+    nomeado (20/10); nenhum tipo das fixtures (O11 Reactive e Traditional, ODC) recusa renomear um widget da leitura. Se um
+    recusar, o `fix` mantém o nome lido ou recria o widget com o nome (sem `k`), só quando nada fora da tela o usa.
 
 **Conferência:** depois de escrever, a tela é lida de novo e comparada com o texto editado, elemento por elemento: tipo,
 fatos, filhos e a ObjectKey de tudo o que a edição manteve (inclusive as linhas de texto). Se não for o texto editado, nada
 fica (`HTML_EDIT_NOT_APPLIED`). As únicas normalizações aceitas são listadas em `normalized`: o CSS só reformatado e o nome
 que a plataforma dá a um input novo quando a edição não escreveu `id`, o nome que um elemento com `k` já tinha quando a edição não escreveu `id` (ele guarda o nome que tem; nada é renomeado sem o texto pedir) e o nome que o Studio dá a um slot escrito com `os-Name=""`. A resposta traz o `next` (o `htmlSha256` da tela
 depois da edição) para a próxima edição.
+
+**One property model (F2, 2026-10-22):** the reading, the edit and the conference share one property model per element,
+derived from the native model of its concrete type (`ScreenHtmlModule.PropertiesOf`, `Kernel/ScreenHtmlProperties.cs`): the
+properties the Model API lists that are facts of the page (not `notFacts`, not bookkeeping, not a part written as children
+or events), their type of fact, whether the Model API lets them be set, the members of their enumeration, and the installed
+Studio's default where the element sits. The type of fact and the writability of a property are its declared type's, the
+same on every node of a kind. Values compare by their EFFECTIVE value: an absent property is its default, a default written
+explicitly is the same as leaving it out (nothing is written, so an element never set keeps no value), the type letter the
+decoder guessed does not matter (`maxlength="51"` on an input whose MaxLength was null), and a class is its list of class
+names (the F1 stylesheet touch, a trailing space or `+ ""`, changes no class). Refused before anything is written, with `k`, `kind`, `property`,
+`attribute`, `expected`, `actual` and one `next`: a property the page does not keep (`HTML_PROPERTY_NOT_KEPT`: editor state
+such as `os-DesignMode`, a value the platform derives, a property without a setter, one the kind does not have) and a value
+its property does not take (`HTML_PROPERTY_VALUE`: a member outside the enumeration, with the certain member in `next`).
+A keyed widget moved into another container goes through the platform's move (the Studio's drag: consumers follow it, the
+moved object gets a new ObjectKey, said in `keyChanged`); the edit then settles the moved element, everything that moved
+with it and every element whose properties it wrote to the edit's effective values (the platform's move and some setters
+reset a Width or a MarginLeft), never writing a reference back (the move rewires it). A conference refusal lists every
+difference in `differences` (element, attribute, expected as the edit wrote it, actual as the module read again prints it),
+and `next` is the edit with the values the platform kept, only when each is one an edit may write. A stale edit of an element
+the platform's move gave a new key since its reading is `HTML_KEY_FOREIGN` saying it was moved and where it is now (its tag
+and name, or its whole text, unique in both readings), never that it was removed. Measured by the sweep and left out of
+it: `os-MarginTop` is kept by the platform inside the element's inline style (`style=` gets `margin-top`), one value under
+two attributes, refused by the conference with both named. The generated sweep (`ModelHost.HtmlRoundTripSweep`, `ScreenHtmlRoundTripTests` and
+`ScreenHtmlRoundTripOdcTests`) derives every case from this model.
 
 **Base e merge de 3 vias (plano 3.4):** se a tela mudou desde a leitura do `basedOn` (outra captura), a edição é juntada em
 3 vias: base = o texto da leitura do `basedOn` (guardado com a tabela de chaves), local = a tela agora, estrangeira = a base
@@ -252,7 +400,7 @@ escrita, conferência). No `ssam_code`: `{action:"write", part:"html", element:"
 |---|---|---|
 | `{find:"<texto exato>", with:"<texto>"}` | leitura e texto de job | troca a única ocorrência; `with:""` apaga o trecho; sobre a leitura, os `k` do `with` são os do trecho (na mesma ordem; em outra, só com cada elemento que muda de lugar levando o seu próprio texto) |
 | `{set:"w17", attributes:{"class":"a b","os-Width":null}}` | leitura | só a tag de abertura; `null` remove; `"id": null` tira o nome (escreve `id=""`, dito em `normalizations[].names`; o elemento cujo texto só deixa o `id` de fora guarda o nome); nunca `k`; filhos intactos |
-| `{replace:"w17", with:"<div …>…</div>"}` | leitura | o elemento inteiro (um If com o seu `<div else>`); raiz sem `k` herda `w17` |
+| `{replace:"w17", with:"<div …>…</div>"}` | leitura | o elemento inteiro (um If com o seu `<div else>`); raiz sem `k` herda `w17`; raiz sem `k` com `w17` dentro é um envoltório novo (um If em volta do elemento: `w17` muda de pai e fica com o seu `k`) |
 | `{delete:"w17"}` | leitura | o elemento (e o seu else) |
 | `{after:"w17", insert:"…"}` / `{before:"w17", insert:"…"}` | leitura | elementos novos (sem `k`) como irmãos |
 | `{into:"w5"`, `"w5/Content"`, `"w23.true"`, `"w23.false"` ou `"/", insert:"…", at:"first"\|"last"}` | leitura | filhos novos (padrão `last`); um slot ou um else que a leitura não escreve é criado |
@@ -517,7 +665,7 @@ a regra das ligações é uma só, `ScreenHtml.Run`/`Unsugar`, a mesma da forma 
   `}}` fora das suas strings e chaves (`{{ { A: { B: 1 }} }}` é um record). O mesmo vale para um atributo (`class="a {{ X }}"`).
   Duas ligações coladas no começo (`{{ 1 }}{{ 2 }} itens`, `{{ Horas }}{{ Minutos }} h`) começam com o texto vazio
   (`"" + 1 + 2 + " itens"`): sem ele o `+` somaria os dois números e a página mostraria `3 itens`, não `12 itens`.
-  `{{` que não fecha, `}}` sem `{{` e `{{ }}` sem expressão: `HTML_BINDING_INVALID`; chaves literais vão em `<text>`. Nos
+  `{{` que não fecha, `}}` sem `{{` e `{{ }}` sem expressão: `HTML_BINDING_INVALID`; chaves literais vão em `<text>` (T1: a lone brace pair only; a pair the page must show is split in an expression, and `LITERAL_BINDING_REMNANT` refuses a literal that holds one, see "T1" below). Nos
   atributos, o preflight confere os mesmos valores que a compilação escreve como texto com ligações: `class` e toda propriedade
   estendida (`ext:<nome>`, ou um atributo que a tabela do tipo não nomeia e que não é evento `on…`, argumento `:`, handler `@`,
   `html:` ou `os-`). A regra é uma só, `ScreenDocument.ExtendedName`, usada pelo preflight e pela compilação, e o problema é o
@@ -539,6 +687,39 @@ O job do dono reaplicado (`FolhaPonto_UI-20261012135850`, `FolhaPonto_CS-2026101
 caracteres e `{{ "Hoje · " + FormatDateTime(ResumoAtual.Dia.Data,"dd/MM/yyyy") }}`; `Espelho` com as 3 linhas como Expression
 e o aviso das 50 classes, todas só na folha de `BaterPonto`, com o patch do tema; com o patch, o CSS vai para o tema
 `FolhaPonto_UI` e nenhuma classe fica sem regra. As 13 raízes do módulo lidas de novo no ponto fixo (0 diferenças).
+
+### T1: a text value never carries binding syntax or raw markup
+
+The owner saw literal `{{ "Search" }}` on labels, placeholders, counters and popup titles of a migrated module: the fragment
+form wrote a label's text and a placeholder as literals with their braces, and the reading printed the stored literal as
+`<text>{{ "Search" }}</text>`, which reads as an expression. The rule is one, for every html write path (the fragment op, the
+screen or block document, the edit form and its `edits[]`, the page form) and both lanes; code: `Kernel/BindingText.cs`,
+`Kernel/Verbs.LiteralBindings.cs`.
+
+- **One compile.** In a text node or an attribute value, `{{ E }}` is the OutSystems expression E (`ScreenHtml.Bindings`: a binding
+  closes at the first `}}` outside its strings and its own braces). An expression-typed property (Prompt, Style Classes, an
+  extended property, a Url, a Value) takes E, text with bindings their concatenation with the literal parts quoted, plain text its
+  string literal (`BindingText.Expression`). A literal-typed slot (the Text of a Text widget, the caption of a Label, a Button or a
+  Link) takes a literal: a binding of a constant (a string, a number, True, False) is folded into the text around it
+  (`{{ "Search" }}` is Search); a binding that names something makes the child text Text runs and Expression children
+  (`BindingText.Runs`); a literal property refuses it (`HTML_BINDING_LITERAL`). `{{` that never closes, a stray `}}` and `{{ }}`
+  are `HTML_BINDING_INVALID`, named, in every form.
+- **The invariant after the apply, whatever op wrote it.** `LITERAL_BINDING_REMNANT` (blocking, one problem per occurrence, all in
+  the one refusal): no literal-typed value of a page element the job created or wrote holds `{{ ... }}` once its HTML entities are
+  decoded, and no string literal of an expression it wrote holds one (a Prompt `"{{ ""Search"" }}"`). Each problem names the
+  element (path and key), its kind, the property and its attribute, expected and actual, and one next call (the text or the
+  expression the binding stands for). A remnant the module already had is not this delivery's: only what the job created, and the
+  properties a set wrote, are judged. The edit form refuses the same before anything is written, with the element's `k`.
+  `HTML_IN_EXPRESSION`: an Expression of a Reactive or ODC page whose value is a constant holding markup shows the tags as text (a
+  Traditional Expression with Escape Content No copied as it is); the fix is the markup written as the page's own elements.
+- **Literal braces.** A literal never holds the brace pair of a binding. A lone brace pair goes in `<text>` (`<text>Use
+  &#123;&#123;</text>`); a pair the page must show is written so that no single text literal holds it, in an expression
+  (`{{ "{" + "{ name }" + "}" }}`).
+- **The reading.** A literal that holds `{{` or `}}` is written in `<text>` with every brace as its character reference
+  (`<text>&#123;&#123; "Status" &#125;&#125;</text>`), so a literal and an expression never print the same; the parser decodes it, so
+  read, write, read is the identity (extractor 10). An expression whose text holds a brace pair is written whole, as before
+  (`placeholder='{{ "{{ ""Search"" }}" }}'`): written again unchanged it is kept, changed it is refused with the expression it stands
+  for.
 
 ### O HTML que tem uma leitura nativa (famílias da sessão do dono de 12/10/2026)
 
@@ -821,3 +1002,36 @@ Testes: `ScreenGeneratorTests` (planejador sem Studio; com o Studio, os jobs de 
 renderização offline da lista pelo renderer do importador: tabela, linhas, paginação, nenhum card),
 `ScreenGeneratorOdcTests`, `ScreenGeneratorCorpus` (as duas faixas sobre o corpus deste plano, com
 `SSAM_GEN_SCREEN_CORPUS=1`), `platforms/odc/facade/tests/gen-screen-card.test.mjs`.
+
+## Regressões de migração — 23/10/2026
+
+Fragmentos compartilham a análise de bindings e chamadas com o documento, ligam `onchange`, preservam listas em elementos HTML, suportam `<popup show="...">` nativo e recusam propriedades `os-*` sem suporte. Raízes, entradas, placeholders e assinaturas de actions dos documentos são preparados antes dos corpos; duas telas podem navegar entre si no mesmo job, em qualquer ordem.
+
+Adaptadores v1 em documentos completos são expandidos antes da compilação. Geram widgets nativos e suas actions no mesmo job:
+
+```html
+<migration-popup id="Editor" show="EditorOpen" save="TrySave()"
+                 success="Success" valid="EditForm.Valid" refresh="LoadItems">
+  <form id="EditForm">
+    <input bind="Description" required=""/>
+    <button data-popup-cancel="Editor">Cancelar</button>
+    <button data-popup-save="Editor">Salvar</button>
+  </form>
+</migration-popup>
+<button data-popup-open="Editor">Editar</button>
+<migration-upload id="Attachment" content="FileContent" filename="FileName"
+                  max-bytes="1048576" extensions=".pdf,.png"/>
+<migration-download id="Download" content="FileContent" filename="FileName"/>
+<migration-pager id="Pages" offset="Offset" total="LoadItems.Total"
+                 size="25" source="LoadItems"/>
+<migration-time id="Due" value="DateTimeToText(DueAt)"
+                semantics="client-local" format="dd/MM/yyyy HH:mm"/>
+```
+
+`migration-form` requer `submit="Action()"` e exatamente um botão `data-form-submit="<id>"`; valida o Form nativo antes de chamar a action. `migration-tabs` usa `active` e filhos `tab value label`; `migration-accordion` usa filhos `item value label`. Painéis inativos não participam do layout. Para upload limitado, os nomes padrão de estado são `<id>Valid` e `<id>Error`; podem ser declarados por `valid` e `error`. A regra de submissão deve incluir a validade do upload se ele estiver fora do Form. O filtro de extensão do cliente não substitui a validação de arquivos no servidor.
+
+Na forma de página com `source`, a paginação aceita `offsetInput`/`sizeInput` e verifica as assinaturas dos parâmetros. `state:{assign:{VariavelDaTela:Saida}}` aplica os dados somente no OnAfterFetch bem-sucedido; cálculos `derived` compartilham esse handler. Colisões de saídas ganham nomes distintos e referências atualizadas.
+
+Semântica temporal é explícita: `date` mantém a data civil; `client-local` mantém os componentes locais, inclusive quando o transporte O11 contém `Z`; `instant` exige um offset no valor e `zone` IANA explícito. Capturas podem declarar `temporal` e `timeZone` em campos DateTime. Não deduzir a semântica apenas de um sufixo `Z`.
+
+`ssam_preview {action:"compare"}` compara duas abas existentes do Chrome isolado; `action:"accept"` verifica inventário, estados exigidos, hashes dos arquivos e revisões dos assets JavaScript carregados. Paginação exige IDs/textos de registros esperados e prova de transição. Tabelas exigem 0/1/muitos registros. Isso verifica apenas os componentes e cenários declarados; não certifica automaticamente o backend ou toda a aplicação. Contratos, evidências e limites estão em [Correções de migração P0](proofs/2026-10-23-migration-p0-fixes.md).

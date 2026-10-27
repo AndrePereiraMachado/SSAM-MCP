@@ -190,7 +190,22 @@ public sealed class PrototypeCapture
             var fields = Objects(c["fields"]);
             if (!fields.Any(f => f["name"]?.ToString() == (c["key"]?.ToString() ?? "Id"))) Bad(at + "/key", $"collection {name}: the key {c["key"] ?? "Id"} is not a field");
             foreach (var (f, j) in fields.Select((f, j) => (f, j)))
+            {
                 if (f["type"]?.ToString() is not ("Integer" or "Decimal" or "Boolean" or "DateTime" or "Text")) Bad($"{at}/fields/{j}/type", "type must be Integer|Decimal|Boolean|DateTime|Text");
+                if (f["temporal"] is { } temporal)
+                {
+                    var semantics = temporal.ToString();
+                    if (f["type"]?.ToString() != "DateTime" || semantics is not ("date" or "client-local" or "instant"))
+                        Bad($"{at}/fields/{j}/temporal", "temporal requires DateTime with date, client-local or instant semantics");
+                    if (semantics == "instant")
+                        try { TimeZoneInfo.FindSystemTimeZoneById(f["timeZone"]?.ToString() ?? ""); }
+                        catch (Exception) { Bad($"{at}/fields/{j}/timeZone", "instant requires an installed explicit display timezone"); }
+                    foreach (var row in Objects(c["rows"]))
+                        if (row[f["name"]!.ToString()] is { } value)
+                            try { TemporalContract.NativeLiteral(value.ToString(), semantics, f["timeZone"]?.ToString()); }
+                            catch (ArgumentException e) { Bad($"{at}/fields/{j}/temporal", e.Message); }
+                }
+            }
         }
         foreach (var c in Collections)
             foreach (var (r, j) in Objects(c["references"]).Select((r, j) => (r, j)))

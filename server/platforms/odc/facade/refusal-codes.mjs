@@ -27,7 +27,7 @@ export const PROTOTYPE_CODES = Object.freeze(['PROTOTYPE_SOURCE_INVALID', 'PROTO
 // with counts) that no refusal carries. The css guard of StyleSheetRules answers CSS_RULES_DROPPED (a patched job that lost
 // rules of its stylesheet) and warns CSS_VAR_UNDEFINED.
 export const HTML_CODES = Object.freeze(['HTML_INVALID', 'HTML_ARGUMENT_INVALID', 'HTML_ATTRIBUTE_SCRIPT', 'HTML_BINDING_INVALID',
-  'HTML_BINDING_ORPHAN', 'HTML_CALL_ORDER', 'HTML_CALL_OTHER_SCREEN', 'HTML_CONTENT_EMPTY', 'HTML_CONTROL_DEAD', 'HTML_CSS_ID_SELECTOR',
+  'HTML_BINDING_ORPHAN', 'HTML_CALL_OTHER_SCREEN', 'HTML_CONTENT_EMPTY', 'HTML_CONTROL_DEAD', 'HTML_CSS_ID_SELECTOR',
   'HTML_CSS_INVALID', 'HTML_ID_DUPLICATE', 'HTML_KEY_UNBOUND', 'HTML_KIND_TAG', 'HTML_LIST_TEMPLATE', 'HTML_REFERENCE_UNRESOLVED',
   'HTML_TAG_NOT_ALLOWED', 'CSS_RULES_DROPPED']);
 export const HTML_WARNING_CODES = Object.freeze(['CSS_IMPORT_HOISTED', 'CSS_REWRITTEN', 'CSS_VAR_UNDEFINED', 'HTML_ATTRIBUTE_EXTENDED',
@@ -43,7 +43,9 @@ export const isDebugTool = tool => typeof tool === 'string' && /^(?:ssam_debug(?
 export const TEXT_RULES = Object.freeze([
   // A text that names a prototype code keeps it (a relayed refusal of the importer that lost its object); a capture engine
   // that is not in the release is an SSAM defect of the bundle.
-  [/\b(PROTOTYPE_(?:SOURCE_INVALID|RENDER_FAILED|AMBIGUOUS|NAME_COLLISION|IR_INVALID))\b/, m => m[1]],
+  [/\b(PROTOTYPE_(?:IMPORT_DISABLED|SOURCE_INVALID|RENDER_FAILED|AMBIGUOUS|NAME_COLLISION|IR_INVALID))\b/, m => m[1]],
+  // The prototype import is turned off (prototype-disabled.mjs; the kernel's PrototypeImport.cs says the same words).
+  [/\bThe prototype import is turned off\b/, 'PROTOTYPE_IMPORT_DISABLED'],
   [/\bprototype[\\/](?:capture|fidelity)\.mjs\b/, 'PROTOTYPE_IR_INVALID'],
   // A text that names a refusal code of the html op or of the css loss guard keeps it (only the refusals: a warning code
   // in a text never makes it a failure).
@@ -75,6 +77,11 @@ export const TEXT_RULES = Object.freeze([
   // the paths that tell them apart.
   [/\bUnresolved(?: or ambiguous)? key in this (?:snapshot|capture)\b/, 'KEY_UNRESOLVED'],
   [/\bAmbiguous key in this (?:snapshot|capture)\b/, 'KEY_AMBIGUOUS'],
+  // Goal list of 2026-10-20, item 2: the kernel's screen lookup of view "html" (ScreenHtmlModule) and a capture whose bytes moved
+  // under expectedSourceSha256 (module-map.mjs CHANGED) were 184 SSAM_MAP_FAILED in the queue of 11..20/10/2026.
+  [/\bNo screen or block named '/, 'ELEMENT_NOT_FOUND'],
+  [/\bAmbiguous screen or block '/, 'AMBIGUOUS_ELEMENT'],
+  [/\bSnapshot content changed: expectedSourceSha256 does not match\b/, 'CAPTURE_CHANGED'],
   [/\b(?:timed out|TimeoutException|ETIMEDOUT)\b/, 'TIMEOUT'],
   [/\b(?:SharpZipBaseException|Illegal rep length code)\b/, 'FILE_UNREADABLE'],
   [/\b(?:ENOENT|FileNotFoundException|DirectoryNotFoundException)\b|\bno such file or directory\b/, 'FILE_NOT_FOUND'],
@@ -135,6 +142,24 @@ function textsOf(value, texts = []) {
   } else if (typeof value === 'string') out.push(value);
   return out;
 }
+
+// The codes of the content proof of a merge (R6; kernel MergeContentProof, its canonical identity in the class remarks).
+// Each answers with the code it was given, never through this table; listed so every reader knows the shape:
+//   MERGE_CONTENT_LOSS            ODC: the disposable native merge did not preserve the candidate. Nothing was merged.
+//                                 differences: at most 20 {element, path, candidate, merged} (path "(element)" with
+//                                 "present"/"absent" for an element on one side only); summary {elements, differences,
+//                                 ignoredByCanon} (ignoredByCanon: differences that were only the merge's own keys);
+//                                 the error names the first five with both values; continuation: ssam_evidence of the proof.
+//   MERGE_CONTENT_PREVIEW_REFUSED O11, the same refusal: mergeContentPreview.contentProof carries differences (at most 20,
+//                                 each with element, path, candidate, merged), firstDifferences and summary.
+//   MERGE_CONTENT_MISMATCH        O11: the merge ran and the module read back differs from the candidate (same shape, merged).
+//   EQUIVALENCE_UNCERTAIN         ODC: the merge ran and the Studio's own gate (native-equivalence.txt) found divergences it
+//                                 could not reconcile. Each divergence is {element, kind, property, local, candidate}; one
+//                                 the gate could not compare as authored content (a property the Studio does not show, a
+//                                 screen's "Screen Content" summary) carries why. Emitted only by that gate (outcome
+//                                 uncertain, gate equivalence); a content proof that compared everything answers
+//                                 MERGE_CONTENT_LOSS or delivers, never this.
+export const MERGE_PROOF_CODES = Object.freeze(['MERGE_CONTENT_LOSS', 'MERGE_CONTENT_PREVIEW_REFUSED', 'MERGE_CONTENT_MISMATCH', 'EQUIVALENCE_UNCERTAIN']);
 
 // The code of a refusal without one: a refusal with the problems of a job (PREFLIGHT_REFUSED), the text rules over its
 // texts, then its step, then the tool (when given).

@@ -33,7 +33,9 @@ public static class StyleSheetNormalizer
             {
                 if (css.IndexOf("color-mix", StringComparison.OrdinalIgnoreCase) < 0 && css.IndexOf("light-dark", StringComparison.OrdinalIgnoreCase) < 0) continue;
                 var others = sheets.Where(s => s.Pointer != pointer).Select(s => s.Css).ToList();
-                var raw = pointer.EndsWith("/value", StringComparison.Ordinal);
+                // A set StyleSheet and the append of a css op land as written (T18: one normalization for both).
+                var appended = pointer.EndsWith("/append", StringComparison.Ordinal);
+                var raw = pointer.EndsWith("/value", StringComparison.Ordinal) || appended;
                 var at = prefix == null ? null : prefix + pointer["/ops".Length..];
                 // light-dark first (a `set StyleSheet`; the html op expands its own css): a custom property written
                 // light-dark(...) is then defined twice, light and dark, and a color-mix that reads it keeps both.
@@ -50,7 +52,8 @@ public static class StyleSheetNormalizer
                 foreach (var r in rendered)
                     done.Add(JobNormalizer.Entry(Rule, at, r.From, r.To, r.Line > 0 ? $"{place}line {r.Line} col {r.Column}: the theme does not render {r.From[..r.From.IndexOf('(')]}(); {r.Why}" : $"the theme does not render light-dark(); {r.Why}"));
                 if (ops[op] is not JsonObject holder) continue;
-                if (raw) holder["value"] = written;
+                if (appended) { if (holder["edits"]?[int.Parse(pointer.Split('/')[^2])] is JsonObject edit) edit["append"] = written; }
+                else if (raw) holder["value"] = written;
                 else if (holder["data"] is JsonObject data) data["css"] = written;
             }
             catch { /* a normalization never refuses: the checks judge what stays */ }

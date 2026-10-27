@@ -27,8 +27,9 @@ namespace Anvil.Core;
 /// one of the module's flows (the Model API gives them in another order on each load): the same module, read again, always
 /// reads the same text, and whichever flow or module is measured first answers the same for its context.
 /// Kept in memory and per user (SSAM_STUDIO_DEFAULTS_ROOT, else %USERPROFILE%\.ssam-hybrid\studio-defaults:
-/// &lt;root&gt;\&lt;platform&gt;\studio-defaults.&lt;identity&gt;.&lt;context&gt;.json, one file per Studio and context, shared by every
-/// workspace and process of the user). The identity is the platform, the IDE version, the measuring recipe and the SHA-256 of
+/// &lt;root&gt;\&lt;platform&gt;\studio-defaults.s&lt;schema&gt;-r&lt;recipe&gt;.&lt;identity&gt;.&lt;context&gt;.json, one file per kernel generation,
+/// Studio and context, shared by every workspace and process of the user; <see cref="Generation"/>). The identity is the
+/// platform, the IDE version, the measuring recipe and the SHA-256 of
 /// every assembly of the Studio folder and its subfolders (OutSystems.* and ServiceStudio*, the plugins included): a Studio that
 /// updates itself is another identity, measured again on its first reading of a screen. A process whose loaded Studio
 /// assemblies are no longer the ones on disk (a resident process that outlived an update) measures for itself and keeps
@@ -300,7 +301,14 @@ internal static class StudioDefaults
         return ScreenDefaults.FromBorn(json["identity"]!.GetValue<string>(), born, roles, context);
     }
 
-    private static string? CacheFile(string id, string context) => CacheDir() is { } dir ? Path.Combine(dir, "studio-defaults." + id + "." + context + ".json") : null;
+    /// <summary>The versions in the name of a kept file: the schema of the file and the measuring recipe
+    /// (<see cref="StudioBornValues.Recipe"/>), so two kernel releases that share one root never read or overwrite each other's
+    /// measurement of one Studio and context (as ModuleIndexStore.Generation does for the module index).</summary>
+    internal static string Generation => "s" + Schema[(Schema.LastIndexOf('/') + 1)..] + "-r" + StudioBornValues.Recipe.ToString(CultureInfo.InvariantCulture);
+
+    internal static string CacheFileName(string generation, string id, string context) => "studio-defaults." + generation + "." + id + "." + context + ".json";
+
+    private static string? CacheFile(string id, string context) => CacheDir() is { } dir ? Path.Combine(dir, CacheFileName(Generation, id, context)) : null;
 
     // SSAM_STUDIO_DEFAULTS_ROOT (absolute), else <profile>\.ssam-hybrid\studio-defaults; one folder per platform. Null without
     // either (nothing is kept on disk: each process measures once per context).

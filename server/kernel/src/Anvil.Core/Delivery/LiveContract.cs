@@ -48,7 +48,7 @@ public static class LiveContract
             {
                 entry["verdict"] = "unexpected";
                 entry["reason"] = judgedUnexpected ? "unexpected-in-apply"
-                    : !message.IsError && SecurityWarnings.Ids.Contains(message.Id) ? "security:" + message.Id : "not-foreseen-by-apply";
+                    : !message.IsError && SecurityWarnings.SecurityIdOf(message.Id, message.Detail) is { } security ? "security:" + security : "not-foreseen-by-apply";
                 unexpected.Add(entry);
             }
         }

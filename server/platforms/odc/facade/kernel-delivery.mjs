@@ -1,3 +1,5 @@
+import { stamped } from './correlation.mjs';
+import { judgeMergeAnswer, SECURITY_CODE } from './security-after-merge.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
@@ -18,6 +20,8 @@ import { appliedJobIdentity, jobIdentity, nextBasedOnOf } from './job-patch.mjs'
 import { hasPrototypeOps, expandJobFile, capturePrototype, buildWithDegradation, buildProblems, journalTo, kernelPrototypeReport, findNativeDom,
   measurePrototypeFidelity, prototypeReceipt, receiptWithSeed, bindingCorrection, readJobDocument } from './prototype-op.mjs';
 import { seedPrototypeData, odcDataWriter } from './prototype-seed.mjs';
+import { prototypeImportRefusal } from './prototype-disabled.mjs';
+import { partReader } from './text-routes.mjs';
 import { prototypeAppUrl, prototypeScreenLinks } from './next-steps.mjs';
 import { kernelStart } from './quality-meter.mjs';
 import { removedOf } from './ssam-code.mjs';
@@ -254,11 +258,109 @@ export async function planMergeOrderKernel({ base, candidate, output }, deps = {
   }
   if (envelope?.ok !== true || !isObject(envelope.data) || !Array.isArray(envelope.data.deferred)) return { ok: false, error: withoutStack(envelope?.error) ?? 'merge-order refused' };
   const data = envelope.data;
-  const plan = { ok: true, deferred: data.deferred, firstPass: typeof data.firstPass === 'string' ? data.firstPass : null, firstPassSha256: data.firstPassSha256 ?? null, rule: data.rule ?? null };
+  const plan = { ok: true, deferred: data.deferred, firstPass: typeof data.firstPass === 'string' ? data.firstPass : null, firstPassSha256: data.firstPassSha256 ?? null, rule: data.rule ?? null,
+    contentPreviewSupported: data.contentPreviewSupported === true, contentPreview: data.contentPreview ?? null };
   if (plan.deferred.length && (!plan.firstPass || !fs.existsSync(plan.firstPass))) return { ok: false, error: 'merge-order deferred defaults without a first-pass candidate' };
   if (plan.firstPass && plan.firstPassSha256 && sha256(fs.readFileSync(plan.firstPass)) !== String(plan.firstPassSha256).toLowerCase())
     return { ok: false, error: 'the first-pass candidate changed on disk after merge-order' };
-  return plan;
+  return reproveContentPreview(plan, deps);
+}
+
+// The content-proof engine installed beside the kernel (kernel/.local/lane-odc/content-proof: anvil-odc content-proof
+// built from a fix of MergeContentProof, its stamp content-proof.json names the source commit), used until the kernel
+// itself carries that fix: the consumer's copy of a producer reference, which the native merge recreates with keys of its
+// own, is the producer's element there, so an unchanged call to a newly referenced producer action is no loss.
+export const contentProofEngine = () => path.join(anvilRoot, '.local', 'lane-odc', 'content-proof', 'anvil-odc.dll');
+
+// A disposable preview refused ONLY by its content proof (no conflict, no new error) is proven again on the same two
+// files: accepted only when the proof accepts with the sha256 of both files the kernel's proof named, and both files are
+// unchanged on disk. Anything else keeps the kernel's refusal; the answer says which engine decided.
+// R6: the engine is the kernel's own ODC CLI (`content-proof --expected <candidate> --actual <merged>`, the corrected
+// MergeContentProof; its worker when it advertises content-proof, else cold), and the side engine above only when that
+// CLI does not have the verb (an older build answers "unknown command").
+const runCold = (deps, dll, argv) => (deps.exec ?? exec)('dotnet', [dll, ...argv], { cwd: path.dirname(dll), windowsHide: true, maxBuffer: 64 * 1024 * 1024 })
+  .then(r => ({ ...r, exitCode: 0 })).catch(e => ({ stdout: e.stdout ?? '', stderr: e.stderr ?? e.message, exitCode: e.code ?? 1 }));
+const envelopeOf = response => { try { return JSON.parse(String(response.stdout).replace(/^﻿/, '')); } catch { return null; } };
+async function kernelContentProof(argv, deps) {
+  const cli = deps.cli ?? kernelCli();
+  if (!fs.existsSync(cli)) return null;
+  const onWorker = await (deps.runOnWorker ?? runOnWorker)(argv, { ...(deps.worker !== undefined ? { worker: deps.worker } : {}), needs: ['content-proof'] });
+  if (onWorker.used && !onWorker.unknown) return { envelope: onWorker.envelope, source: { engine: 'kernel-cli', engineSource: cli, via: 'worker' } };
+  const response = await runCold(deps, cli, argv);
+  if (response.exitCode !== 0 && /unknown command:\s*content-proof/.test(String(response.stderr ?? ''))) return null;
+  return { envelope: envelopeOf(response), stderr: response.stderr, source: { engine: 'kernel-cli', engineSource: cli, via: 'cold' } };
+}
+export async function reproveContentPreview(plan, deps = {}) {
+  const preview = plan?.contentPreview; const proof = preview?.contentProof;
+  if (!isObject(preview) || preview.accepted !== false || preview.hasConflicts !== false || (preview.newErrors ?? 0) !== 0 || proof?.accepted !== false) return plan;
+  const engine = deps.proofCli ?? contentProofEngine();
+  const expected = proof.inputs?.expected; const actual = proof.inputs?.actual;
+  if (typeof expected?.path !== 'string' || typeof actual?.path !== 'string') return plan;
+  const cliPresent = fs.existsSync(deps.cli ?? kernelCli());
+  if (!cliPresent && !fs.existsSync(engine)) return plan;
+  const unchanged = file => { try { return sha256(fs.readFileSync(file.path)) === String(file.sha256).toLowerCase(); } catch { return false; } };
+  const note = reproof => ({ ...plan, contentPreview: { ...preview, reproof } });
+  if (!unchanged(expected) || !unchanged(actual)) return note({ accepted: false, error: 'the candidate or the preview changed on disk after merge-order' });
+  const argv = ['content-proof', '--expected', expected.path, '--actual', actual.path];
+  let ran = await kernelContentProof(argv, deps);
+  if (!ran) {
+    if (!fs.existsSync(engine)) return plan;
+    let stamp = null; try { stamp = JSON.parse(fs.readFileSync(path.join(path.dirname(engine), 'content-proof.json'), 'utf8')); } catch { stamp = null; }
+    const response = await runCold(deps, engine, argv);
+    ran = { envelope: envelopeOf(response), stderr: response.stderr, source: { engine: stamp?.commit ?? null, engineSource: stamp?.branch ?? null, rule: stamp?.rule ?? null } };
+  }
+  const { envelope } = ran;
+  const again = isObject(envelope?.data) ? envelope.data : null;
+  const bound = again?.schema === 'ssam-merge-content-proof/1' && Array.isArray(again.differences)
+    && String(again.inputs?.expected?.sha256).toLowerCase() === String(expected.sha256).toLowerCase()
+    && String(again.inputs?.actual?.sha256).toLowerCase() === String(actual.sha256).toLowerCase();
+  const reproof = { engine: ran.source.engine ?? null, engineSource: ran.source.engineSource ?? null, rule: ran.source.rule ?? again?.canon?.rule ?? null,
+    ...(ran.source.via ? { via: ran.source.via } : {}), accepted: bound && again.accepted === true && again.differences.length === 0,
+    checked: again?.checked ?? null, differences: bound ? again.differences.length : null, kernelDifferences: Array.isArray(proof.differences) ? proof.differences.length : null,
+    ...(bound ? {} : { error: clipLine(envelope?.error ?? ran.stderr ?? 'the engine gave no proof of these two files') }) };
+  if (!reproof.accepted) return { ...plan, contentPreview: { ...preview, ...(bound ? { contentProof: again } : {}), reproof } };
+  return { ...plan, contentPreview: { ...preview, accepted: true, contentProof: again, reproof } };
+}
+
+// The refusal of a preview that did not preserve the candidate (MERGE_CONTENT_LOSS), R6: the diff itself, never only its
+// count. differences: at most 20 {element, path, candidate, merged} (path "(element)" for an element on one side only, with
+// "present"/"absent"; else the differing property with both readable values), the kernel's firstDifferences when the
+// proof has them, else built here from its differences (an older engine). summary: {elements, differences, ignoredByCanon}
+// (ignoredByCanon: the differences the proof's canonical identity explained, the merge's own keys; null from an older
+// engine). The whole proof stays in the evidence file; the continuation points at it.
+export const CONTENT_LOSS_DIFFERENCES = 20;
+const shortValue = value => { const text = String(value ?? 'absent').replace(/\s+/g, ' '); return text.length > 80 ? text.slice(0, 77) + '...' : text; };
+export function contentLossRefusal(preview, evidenceFile) {
+  const proof = preview?.contentProof;
+  const all = Array.isArray(proof?.differences) ? proof.differences : [];
+  // An older engine's side: absent when that side has no value, its readable value, else "present" (a value it hashed).
+  const side = (present, readable, raw) => present === false ? 'absent' : readable ?? raw ?? 'present';
+  const differences = (Array.isArray(proof?.firstDifferences) ? proof.firstDifferences
+    : all.map(d => ({ element: d?.element || d?.address || d?.objectKey || 'unknown element', path: d?.path ?? d?.property ?? null,
+      candidate: d?.candidate ?? side(d?.unexpected !== true, d?.expectedValue, d?.expected), merged: d?.merged ?? side(d?.missing !== true, d?.actualValue, d?.actual) })))
+    .slice(0, CONTENT_LOSS_DIFFERENCES).map(d => ({ element: d?.element ?? null, path: d?.path ?? null, candidate: d?.candidate ?? null, merged: d?.merged ?? null }));
+  const elements = proof?.summary?.elements ?? new Set(all.map(d => String(d?.element || d?.address || d?.objectKey || ''))).size;
+  const summary = { elements, differences: proof?.summary?.differences ?? all.length, ignoredByCanon: proof?.summary?.ignoredByCanon ?? null,
+    ...(proof?.summary?.missingElements != null ? { missingElements: proof.summary.missingElements, unexpectedElements: proof.summary.unexpectedElements } : {}) };
+  // In words: an element on one side only says which; a property with a value on either side says both; else its name.
+  const bare = value => value == null || value === 'present' || value === 'absent';
+  const named = differences.slice(0, 5).map(d => d.path === '(element)' ? d.element + (d.merged === 'absent' ? ' missing in the merged module' : ' not in the candidate')
+    : d.element + ' ' + d.path + (bare(d.candidate) && bare(d.merged) ? '' : ': ' + shortValue(d.candidate) + ' -> ' + shortValue(d.merged)));
+  const why = preview?.hasConflicts === true ? 'the native merge has conflicts' : (preview?.newErrors ?? 0) > 0 ? preview.newErrors + ' new error(s) after the native merge'
+    : summary.differences + ' difference(s) between the candidate and the merged module in ' + summary.elements + ' element(s)'
+      + (summary.ignoredByCanon ? ' (' + summary.ignoredByCanon + ' more were only the merge\'s own keys)' : '') + ': ' + named.join('; ')
+      + (summary.differences > named.length ? '; the first ' + differences.length + ' are in differences' : '');
+  const contentPreview = { path: preview?.path ?? null, sha256: preview?.sha256 ?? null, accepted: false, isValid: preview?.isValid ?? null, newErrors: preview?.newErrors ?? null,
+    hasConflicts: preview?.hasConflicts ?? null, checked: proof?.checked ?? null, differencesTotal: summary.differences,
+    // The proof's own entries as before (property, missing/unexpected, readable values), for readers of contentPreview.
+    differences: all.slice(0, 10).map(d => ({ element: d?.element ?? d?.address ?? null, property: d?.property ?? null, missing: d?.missing ?? null, unexpected: d?.unexpected ?? null,
+      ...(d?.expectedValue != null ? { expectedValue: d.expectedValue } : d?.expected != null ? { expected: d.expected } : {}),
+      ...(d?.actualValue != null ? { actualValue: d.actualValue } : d?.actual != null ? { actual: d.actual } : {}) })),
+    ...(proof?.canon ? { canon: { reboundTotal: proof.canon.reboundTotal ?? null } } : {}),
+    ...(preview?.reproof ? { reproof: preview.reproof } : {}), evidence: evidenceFile };
+  return { error: 'The ODC native merge preview did not preserve the candidate: ' + why + '. Nothing was merged.', contentPreview, differences, summary,
+    continuation: { tool: 'ssam_evidence', arguments: { file: evidenceFile, pointer: '/contentPreview/contentProof/differences' },
+      why: 'every element and property the disposable merge did not preserve, with both values (the first ' + differences.length + ' are in differences); correct the job so the candidate keeps them, and deliver again (nothing was merged)' } };
 }
 
 // The SSAM content proof of two models (anvil-odc content-proof: MergeContentProof, the comparison the disposable merge
@@ -519,7 +621,11 @@ export function divergencesOf(dump, max = 50) {
     if (property) {
       let text = property[1];
       while (i + 1 < lines.length && !NODE_LINE.test(lines[i + 1]) && !PROPERTY_LINE.test(lines[i + 1]) && !CONNECTOR_LINE.test(lines[i + 1])) text += '\n' + lines[++i].replace(/\r$/, '');
-      stack.at(-1)?.properties.push(text.replace(/ \[[A-Za-z]+(?:, [A-Za-z]+)*\]$/, ''));
+      // R6: the flags of a property are its own suffixes ("[ChangedInLocal] [Not Visible]"): a property can differ while its
+      // owner is [None], and visibility is a flag, never part of the value.
+      const metadata = text.match(/(?: \[[A-Za-z]+(?:(?:, | )[A-Za-z]+)*\])+$/)?.[0] ?? '';
+      const flags = [...metadata.matchAll(/\[([^\]]+)\]/g)].flatMap(m => m[1].split(', '));
+      stack.at(-1)?.properties.push({ text: metadata ? text.slice(0, -metadata.length) : text, flags });
       continue;
     }
     const node = NODE_LINE.exec(lines[i]);
@@ -531,27 +637,42 @@ export function divergencesOf(dump, max = 50) {
   }
   const elementOf = n => { const names = []; for (let x = n; x && x.parent; x = x.parent) if (x.kind !== 'Folder') names.unshift(x.name); return names.join('/'); };
   const out = [];
-  for (const n of nodes.filter(x => x.flags.some(f => OWN_FLAGS.has(f)))) {
+  const own = flags => flags.some(f => OWN_FLAGS.has(f));
+  for (const n of nodes.filter(x => own(x.flags) || x.properties.some(p => own(p.flags)))) {
     const kind = n.kind.startsWith('Object ') ? n.kind.slice(7) : n.kind, element = elementOf(n);
     if (!n.properties.length) {
       const local = n.flags.includes('AddedToLocal') || n.flags.includes('RemovedFromForeign') ? 'present'
         : n.flags.includes('RemovedFromLocal') || n.flags.includes('AddedToForeign') ? 'absent' : [...n.flags].sort().join(', ');
       out.push({ element, kind, property: null, local, candidate: local === 'present' ? 'absent' : local === 'absent' ? 'present' : local });
     }
-    for (const body of n.properties) {
+    // A property of an owner that differs itself, or a property flagged on its own line.
+    for (const { text: body, flags } of n.properties.filter(p => own(n.flags) || own(p.flags))) {
       const open = body.indexOf('[');
       const name = open > 0 ? body.slice(0, open) : body;
       const separator = '] / ' + name + '[';
       const at = open > 0 ? body.indexOf(separator, open) : -1;
-      out.push(at > 0 && body.endsWith(']')
+      const entry = at > 0 && body.endsWith(']')
         ? { element, kind, property: name.trim(), local: clip(body.slice(open + 1, at)), candidate: clip(body.slice(at + separator.length, -1)) }
-        : { element, kind, property: name.trim(), local: clip(open > 0 ? body.slice(open + 1).replace(/\]$/, '') : null), candidate: null });
+        : { element, kind, property: name.trim(), local: clip(open > 0 ? body.slice(open + 1).replace(/\]$/, '') : null), candidate: null };
+      out.push({ ...entry, ...(flags.includes('Not Visible') ? { visible: false } : {}), ...uncomparedWhy(entry, flags) });
     }
     if (out.length >= max) break;
   }
   return out.slice(0, max);
 }
-const divergenceLine = d => d.element + ' (' + d.kind + '): ' + (d.property == null ? `element ${d.local} in the module, ${d.candidate} in the candidate` : `${d.property} local '${d.local}' / candidate '${d.candidate}'`);
+// R6, EQUIVALENCE_UNCERTAIN: what the native gate could not compare, and why, beside each divergence it reported. A
+// property the Studio does not show is platform metadata, not authored content; a screen's "Screen Content" is the gate's
+// summary of the screen's children (no value of its own: the children are listed one by one). Every other divergence is a
+// native property that differs from the candidate, with no why: it is a difference, not something left uncompared.
+function uncomparedWhy(entry, flags) {
+  if (flags.includes('Not Visible'))
+    return { why: 'native metadata the Studio does not show (not authored content); the native gate cannot tell it from content' };
+  if (entry.property === 'Screen Content' && flags.includes('DifferenceInLocalChildren'))
+    return { why: 'the native gate\'s summary of the screen\'s children, not a value of its own: the children that differ are listed one by one' };
+  return {};
+}
+const divergenceLine = d => d.element + ' (' + d.kind + '): ' + (d.property == null ? `element ${d.local} in the module, ${d.candidate} in the candidate` : `${d.property} local '${d.local}' / candidate '${d.candidate}'`)
+  + (d.why ? ' (not compared: ' + d.why + ')' : '');
 function evidenceDirOf(manifest) {
   try { const m = JSON.parse(fs.readFileSync(manifest, 'utf8').replace(/^\uFEFF/, '')); return m.evidenceDir ?? m.EvidenceDir ?? path.join(path.dirname(manifest), 'evidence'); }
   catch { return manifest ? path.join(path.dirname(manifest), 'evidence') : null; }
@@ -582,10 +703,92 @@ export function lastPublicationFrom(lastPublish, { source = 'publish-log', by = 
 const publishMessages = log => (Array.isArray(log?.messages) ? log.messages : [])
   .map(m => ({ type: m.type, text: m.text, ...(m.element?.name ? { element: m.element.name } : {}), ...(m.stage ? { stage: m.stage } : {}) }))
   .sort((a, b) => (a.type === 'Error' ? 0 : 1) - (b.type === 'Error' ? 0 : 1)).slice(0, 10);
-// PublishOutcome (section 3) from the answer of studio_publish (publishWithLog).
-export function publishOutcomeOf(value) {
-  if (isObject(value) && value.ok === true) return { requested: true, outcome: 'published',
-    ...(value.published?.revision != null ? { version: value.published.revision } : {}), ...(value.completedAt ? { at: String(value.completedAt) } : {}) };
+// F1: the one next call of a published revision that is not the delivered module: the bridge's publish receipt, when it
+// is there and holds the published revision (else the Studio's own state of the module).
+export function staleRevisionNext(manifest) {
+  const evidence = evidenceDirOf(manifest);
+  const receipt = evidence ? path.join(evidence, 'publish-receipt.json') : null;
+  let published = false;
+  try { published = isObject(JSON.parse(fs.readFileSync(receipt, 'utf8').replace(/^\uFEFF/, '')).published); } catch { published = false; }
+  const why = 'The server holds the revision the delivery started from (a change confined to a stylesheet is not taken by a publication): '
+    + 'deliver one widget change of the same element with publish:true. Never repeat the publication alone.';
+  return published ? { tool: 'ssam_evidence', arguments: { file: receipt, pointer: '/published' }, why }
+    : { tool: 'studio_status', arguments: {}, why };
+}
+// F1 round 2 (H3): what the bridge's evidence of a publication says, read only (nothing of the bridge changes): the
+// sha256 of the bytes sent (before-publish.oml), the base the merge started from (preview.json baseSha256) and the native
+// comparison of the open module with the downloaded revision (open-vs-published.txt). {sentSha256, baseSha256, dump}.
+export function publishEvidence(manifest) {
+  const evidence = manifest ? evidenceDirOf(manifest) : null;
+  if (!evidence) return {};
+  const out = {};
+  try { out.sentSha256 = createHash('sha256').update(fs.readFileSync(path.join(evidence, 'before-publish.oml'))).digest('hex'); } catch { /* an older bridge */ }
+  try { out.baseSha256 = String(JSON.parse(fs.readFileSync(path.join(evidence, 'preview.json'), 'utf8').replace(/^\uFEFF/, '')).baseSha256 ?? '').toLowerCase() || undefined; } catch { /* none */ }
+  try { out.dump = fs.readFileSync(path.join(evidence, 'open-vs-published.txt'), 'utf8'); } catch { /* none */ }
+  return out;
+}
+// The differences of a native comparison dump (`+-- (Object Kind) Name [flags]`, `>> Property[local] / Property[foreign] [flags]`):
+// each leaf with its property or object, and whether it lies inside a reference. Editor state (a block expanded in the
+// editor, the display mode of a popup's widgets) is no difference of content; the "content has changed" summaries of a
+// screen or block follow their children. null when there is no dump.
+const EDITOR_STATE = new Set(['ExpandedInWebEditor', 'Widgets Display mode']);
+const SUMMARY = /^(Screen|Block|Popup|Widget)?\s*Content$/i;
+const FLAGS = /\[([A-Za-z, ]+)\]\s*$/;
+export function dumpDifferences(dump) {
+  if (typeof dump !== 'string' || !dump.trim()) return null;
+  const stack = []; const leaves = [];
+  for (const line of dump.split(/\r?\n/)) {
+    const flags = FLAGS.exec(line)?.[1]?.split(',').map(f => f.trim()) ?? [];
+    const own = flags.filter(f => !/^DifferenceIn(Local|Foreign)?(Children|MergeUnit)$/.test(f) && f !== 'DifferenceInLocalMergeUnit' && f !== 'DifferenceInForeignMergeUnit');
+    const object = /^([|\s]*)\+--\s+\((?:Object\s+)?([^)]+)\)\s+(.*?)\s*(\[[^\]]*\])?\s*$/.exec(line);
+    if (object) {
+      const depth = object[1].length;
+      while (stack.length && stack.at(-1).depth >= depth) stack.pop();
+      stack.push({ depth, kind: object[2].trim(), name: object[3].trim() });
+      // An element added, removed or in conflict is a difference of its own; a changed one is told by its property lines.
+      const editor = object[2].trim() === 'CustomProperty' && EDITOR_STATE.has(object[3].trim());
+      if (!editor && /Added|Removed|Conflict/.test(own.join(','))) leaves.push({ path: stack.map(s => s.name).join('/'), property: null, reference: stack.some(s => /Reference/i.test(s.kind)) });
+      continue;
+    }
+    const property = /^[|\s]*>>\s*([^\[]+)\[/.exec(line);
+    // A property line shows a difference (a long value spans lines: its flags close the last one).
+    if (property) {
+      const name = property[1].trim();
+      if (EDITOR_STATE.has(name) || SUMMARY.test(name)) continue;
+      leaves.push({ path: stack.map(s => s.name).join('/'), property: name, reference: stack.some(s => /Reference/i.test(s.kind)) });
+    }
+  }
+  return leaves;
+}
+// F1 (2026-10-22), round 2 (H3): what a completed publication proves about the revision the server holds.
+//   true: the downloaded revision is the bytes sent (before-publish.oml), whatever the open module became meanwhile; or the
+//         bridge's comparison says equal; or its differences are editor state only, or all inside references;
+//   false: the server holds the revision the merge started from (the base), while the bytes sent were another;
+//   'unverified': the comparison shows content differences with no way to tell them from an edit made during the publication;
+//   null: no comparison in the receipt (an older bridge, a failed download): nothing beyond the completed publication.
+export function publishedRevisionProof(published, evidence = {}) {
+  if (!isObject(published) || published.error) return { proven: null, reason: 'the published revision was not downloaded and compared' };
+  const sha = String(published.sha256 ?? '').toLowerCase(), sent = String(evidence.sentSha256 ?? '').toLowerCase(), base = String(evidence.baseSha256 ?? '').toLowerCase();
+  if (sha && sent && sha === sent) return { proven: true, by: 'sent' };
+  if (sha && base && sha === base && sent !== base) return { proven: false, reason: 'is the revision the delivery started from' };
+  if (published.strictlyEqual === true) return { proven: true };
+  if (typeof published.strictlyEqual !== 'boolean') return { proven: null, reason: 'the published revision was not compared with the open module' };
+  const leaves = dumpDifferences(evidence.dump);
+  if (leaves && leaves.length === 0) return { proven: true, equivalence: 'editor-state' };
+  if (leaves && leaves.every(l => l.reference)) return { proven: true, equivalence: 'references' };
+  return { proven: 'unverified', reason: 'differs from the open module in ' + (leaves?.length ? leaves.slice(0, 3).map(l => l.path + (l.property ? ' ' + l.property : '')).join('; ') : 'its content')
+    + ', which an edit during the publication could also explain' };
+}
+// PublishOutcome (section 3) from the answer of studio_publish (publishWithLog), with the bridge's evidence when known.
+export function publishOutcomeOf(value, evidence = {}) {
+  if (isObject(value) && value.ok === true) {
+    const proof = publishedRevisionProof(value.published, evidence);
+    const where = { ...(value.published?.revision != null ? { version: value.published.revision } : {}), ...(value.completedAt ? { at: String(value.completedAt) } : {}) };
+    if (proof.proven === false) return { requested: true, outcome: 'stale', code: 'PUBLISHED_REVISION_DIFFERS', ...where,
+      ...(value.published?.sha256 ? { publishedSha256: String(value.published.sha256).toLowerCase() } : {}),
+      error: 'The publication completed, but revision ' + (value.published?.revision ?? '?') + ' the server holds ' + proof.reason + ': the delivered change is not published. Nothing was repeated.' };
+    return { requested: true, outcome: 'published', ...where, ...(proof.proven === 'unverified' ? { revisionProof: 'unverified', revisionNote: proof.reason } : {}) };
+  }
   if (!isObject(value)) return { requested: true, outcome: 'uncertain', code: 'PUBLISH_UNCERTAIN', error: 'The publication answered nothing readable.' };
   const messages = publishMessages(value.publishLog);
   if (value.code === 'PUBLISH_RUNNING' || value.outcome === 'uncertain')
@@ -607,7 +810,7 @@ export async function publishDelivered({ manifest, module, words, pid, minutes =
   let value;
   try { value = await publishWithLog({ manifest, wait: true, minutes, pid }, { studio, moduleOf: () => module }); }
   catch (error) { return { publish: { requested: true, outcome: 'uncertain', code: 'PUBLISH_UNCERTAIN', error: 'Publication result unknown (' + error.message + '): read publish-log and publish-status; never republish blindly.' } }; }
-  const publish = publishOutcomeOf(value);
+  const publish = publishOutcomeOf(value, publishEvidence(manifest));
   const lastPublication = publish.outcome === 'published'
     ? { at: publish.at ?? null, status: 'succeeded', version: publish.version ?? null, author: null, by: 'ssam', source: 'publish-result' }
     : lastPublicationFrom(value?.publishLog, { source: 'publish-log', by: 'ssam' });
@@ -850,6 +1053,9 @@ export function withMergeCode(value) {
   if (/conflicts with the open module/.test(value.error)) return { ...value, code: 'MERGE_CONFLICT' };
   if (/differs from the captured base/.test(value.error)) return { ...value, code: 'BASE_DRIFT' };
   if (/Authenticated author mismatch/.test(value.error)) return { ...value, code: 'AUTHOR_MISMATCH' };
+  // Bridge v98 (BridgeServe.cs JobNotStartedException): the tab never ran the queued merge within its bound; abandoned, it
+  // never runs later, and nothing was merged.
+  if (/^MERGE_NOT_STARTED:/.test(value.error)) return { ...value, code: 'MERGE_NOT_STARTED' };
   return value;
 }
 
@@ -889,6 +1095,13 @@ export async function deliverKernel(input, deps) {
   if (!fs.statSync(job).isFile()) throw new Error('Job must be a file: ' + job);
   const readJob = file => JSON.parse(fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, ''));
   let jobDocument = readJob(job);
+  // The prototype import is turned off (prototype-disabled.mjs): ONE refusal before any capture, build or Studio command.
+  const disabled = prototypeImportRefusal(jobDocument, { lane: 'odc', module, readPart: partReader(job, fs, path) });
+  if (disabled) {
+    const { ok: _ok, ...fields } = disabled;
+    return { ok: false, source: 'kernel-job', module, feature, job, until, steps: [], merged: false, publishInvoked: false, ...fields, failed: 'prototype',
+      ...(publish === true ? { publish: { requested: true, outcome: 'skipped' } } : {}) };
+  }
   // fix/a5-lows (B10): with the job's producer names, a binding name with / or \ binds only the ops that write exactly that
   // text (producer-names.mjs separatorKeyProblems): "..\System" never binds the op "(System)". ONE refusal with every problem.
   const given = producerBindings(input.producers, { names: producerTextsOf(jobDocument) });
@@ -944,6 +1157,9 @@ export async function deliverKernel(input, deps) {
     const begin = Date.now();
     let value = await fn();
     if (step === 'merge') value = withMergeCode(value);
+    // a11-b: any merge answer with merged:true is judged with the kernel's security list, from the answer and the merge's
+    // evidence (lib.mjs studio already did for a real bridge; the verdict is recorded in the evidence either way).
+    if (step === 'merge') value = judgeMergeAnswer(value, { evidence: report.manifest ? evidenceDirOf(report.manifest) : null });
     report.steps.push({ step, ...extra, seconds: (Date.now() - begin) / 1000, ok: value.ok === true, ...(value.cached ? { cached: true } : {}) });
     if (value.ok !== true) {
       refuse(step, value);
@@ -953,9 +1169,22 @@ export async function deliverKernel(input, deps) {
         report.continuation = { tool: 'studio_deliver', arguments: { feature, module, job, owners, changes, ...(Number.isInteger(pid) ? { pid } : {}),
           ...(publish === true ? { publish: true, ...(typeof authorize === 'string' && authorize.trim() ? { authorize } : {}) } : {}) },
           why: 'The open module changed after the capture; nothing was merged. The same delivery again builds on the module as it is now.' };
+      if (step === 'merge' && value.code === 'MERGE_NOT_STARTED' && !report.continuation)
+        report.continuation = { tool: 'studio_status', arguments: Number.isInteger(pid) ? { pid } : {},
+          why: 'The Studio did not run the merge (its tab was not idle); the bridge abandoned it, so it never runs later and nothing was merged. Read what keeps the Studio busy, then the same studio_deliver again.' };
       // A merge the bridge proved equal but for known losses (merge order: defaults the Studio removed, delete rules it
       // forced to Ignore, properties it normalizes) is merged and not uncertain: the answer carries each element with its
       // repair, declaration or normalization.
+      // a11-b: a merge that brought a new security warning: merged, never reconciled, never published, and its own code (not
+      // MERGE_UNCERTAIN); known losses it also kept are named, but their repair is no way out of the warning.
+      if (step === 'merge' && value.code === SECURITY_CODE) {
+        report.merged = true; report.equivalence = 'security';
+        if (Array.isArray(value.blocking)) report.blocking = value.blocking.slice(0, 20);
+        if (Array.isArray(value.fixes)) report.fixes = value.fixes;
+        report.continuation = { tool: 'studio_status', arguments: Number.isInteger(pid) ? { pid } : {},
+          why: 'The merge is in the open module with a new security warning and nothing was published. Fix the warning with a new delivery whose job changes what the message names; never repeat this delivery.' };
+        return null;
+      }
       if (step === 'merge' && value.outcome === 'incomplete' && value.merged === true) {
         report.merged = true;
         report.code ??= 'MERGE_INCOMPLETE';
@@ -977,18 +1206,44 @@ export async function deliverKernel(input, deps) {
   };
   // An uncertain merge names each divergence (element, property, local, candidate): the bridge's own list, or the dump.
   const nameDivergences = () => {
-    if (report.outcome !== 'uncertain' || report.divergences || !report.manifest) return;
+    if (report.outcome !== 'uncertain' || report.divergences?.length || !report.manifest) return;
     try {
       const evidence = evidenceDirOf(report.manifest);
       const file = evidence && path.join(evidence, 'native-equivalence.txt');
       if (file && fs.existsSync(file)) { const found = divergencesOf(fs.readFileSync(file, 'utf8')); if (found.length) report.divergences = found; }
     } catch { /* the answer stays as it is */ }
-    if (report.divergences?.length && !/\n.+ \(.+\): /.test(report.error ?? '')) report.error = withoutStack(report.error) + '\n' + report.divergences.slice(0, 20).map(divergenceLine).join('\n');
+    if (report.divergences?.length && !/\n.+ \(.+\): /.test(report.error ?? '')) {
+      // R6: what the native gate could not compare is said apart from what differs.
+      const uncompared = report.divergences.filter(d => d.why).length;
+      const head = uncompared === 0 ? '' : uncompared === report.divergences.length
+        ? `\nThe native gate could not compare any of these ${uncompared} divergence(s) as authored content (each says why); none of them is a value the candidate set.`
+        : `\n${uncompared} of these ${report.divergences.length} divergence(s) could not be compared as authored content (each says why); the others are differences.`;
+      report.error = withoutStack(report.error) + head + '\n' + report.divergences.slice(0, 20).map(divergenceLine).join('\n');
+    }
   };
   // C16 G-3: an uncertain merge that ran is integrated in the open module. The bridge says so (merged:true, bridges with
   // merge:normalized), or the evidence does (merge-started.json and native-return.json: CompareAndMerge returned, for the
   // v39 bridge and older). Then the answer keeps merged:true, and its continuation is a read of this delivery's evidence,
   // never the same delivery: "já integrado; não repita".
+  // A merge whose answer never came (the pipe's reply deadline, past the bridge's own): an explicit, recorded outcome,
+  // MERGE_TIMEOUT, with what the evidence says (did the bridge start CompareAndMerge? did it return?) and the next call.
+  // The delivery is never repeated from here: a merge the Studio queued may still run when its tab becomes idle.
+  const mergeTimedOut = error => {
+    if (error?.code !== 'PIPE_REPLY_TIMEOUT') return;
+    let evidence = null;
+    try { evidence = report.manifest ? evidenceDirOf(report.manifest) : null; } catch { evidence = null; }
+    const read = name => { try { return evidence ? readJob(path.join(evidence, name)) : null; } catch { return null; } };
+    const started = read('merge-started.json'), returned = read('native-return.json');
+    report.code = 'MERGE_TIMEOUT';
+    report.timeout = { mergeStarted: !!started, ...(started?.at ? { startedAt: started.at } : {}), nativeReturned: !!returned,
+      ...(evidence ? { evidence } : {}), journal: path.join(root, 'journal', 'operations.jsonl') };
+    report.error = (started
+      ? 'The bridge started the native merge at ' + started.at + (returned ? ' and it returned' : ' and it had not returned')
+      : 'The merge had not started in the Studio (no merge-started.json): the Studio queued it until its tab is idle, and it may still run later')
+      + ' when the answer deadline passed. ' + report.error;
+    report.continuation = { tool: 'studio_status', arguments: Number.isInteger(pid) ? { pid } : {},
+      why: 'Read the Studio and this delivery\'s evidence first (merge-started.json, native-return.json, receipt.json, late-result.json). Never repeat this delivery while its merge may still run; once the evidence shows it ran, studio_publish {module, reconcile:true} proves its content.' };
+  };
   const mergedHonestly = () => {
     let ran = report.refusal?.merged === true || report.merge?.merged === true || report.merged === true;
     if (!ran && report.manifest) {
@@ -1008,6 +1263,8 @@ export async function deliverKernel(input, deps) {
   // uncertain and already integrated, with the reconciliation's code and differences.
   const reconciledAfterMerge = async () => {
     if (typeof reconcile !== 'function' || report.merged !== true || !report.manifest) return false;
+    // a11-b: never a refusal of the bridge's validation gate (errors or security warnings after the merge) nor a security verdict.
+    if (report.gate === 'candidate_validation' || report.code === SECURITY_CODE || Array.isArray(report.refusal?.blocking)) return false;
     const evidence = evidenceDirOf(report.manifest);
     let document = null, started = null;
     try { document = readJob(report.manifest); started = readJob(path.join(evidence, 'merge-started.json')); } catch { return false; }
@@ -1587,19 +1844,52 @@ export async function deliverKernel(input, deps) {
       capped(report, 'integration', Array.isArray(applied.integration) ? applied.integration : [], 10);
       if (applied.entityActions) report.entityActions = applied.entityActions;
       // The merge order (planMergeOrderKernel): a candidate with defaults the Studio drops when the merge creates their
-      // elements goes in two merges of this call; the bridge never receives a merge whose own plan is not empty. A plan
-      // that cannot be computed keeps the single merge of before, and says so.
+      // elements goes in two merges of this call; the bridge never receives a merge whose own plan is not empty.
+      // The disposable native merge (NativeMergePreview, the kernel's merge-order) proves the candidate survives the merge
+      // before the live one: a preview that ran and lost content is refused here, naming what differs, and nothing is merged.
+      // A preview that could not run (no plan, an older kernel) keeps the single merge of before and says so: the content
+      // proof after the merge (merge-reconcile.mjs) still decides, never a dead end (fix/merge-reconcile).
       let deliverable = applied.candidate, manifestDir = path.join(output, 'delivery');
       if (planOrder && until === 'merge') {
         let plan;
         try { plan = await planOrder({ base: snapshot.path, candidate: applied.candidate, output }); }
         catch (error) { plan = { ok: false, error: withoutStack(error.message) }; }
+        report.contentPreview = plan?.contentPreview ?? null;
+        const planFile = path.join(output, 'merge-order.json');
+        try { fs.writeFileSync(planFile, JSON.stringify(plan ?? null, null, 2)); } catch { /* evidence only */ }
+        if (plan?.ok === true && plan.contentPreview?.accepted === false) {
+          const preview = plan.contentPreview;
+          const differences = Array.isArray(preview.contentProof?.differences) ? preview.contentProof.differences : [];
+          const elements = [...new Set(differences.map(d => d?.element ?? d?.address).filter(e => typeof e === 'string'))];
+          // What the disposable merge refused for: its conflicts, the new errors it brought (by their text), or content it
+          // did not keep (by element). Only the last is a content loss.
+          const newErrors = (Array.isArray(preview.messages?.new) ? preview.messages.new : [])
+            .filter(m => String(m?.type ?? '').includes('Error')).map(m => [m.id, m.path].filter(Boolean).join(' at ')).filter(Boolean);
+          const code = preview.hasConflicts === true ? 'MERGE_PREVIEW_CONFLICT' : (preview.newErrors ?? 0) > 0 ? 'MERGE_PREVIEW_ERRORS' : 'MERGE_CONTENT_LOSS';
+          // The elements the native merge marks as in conflict (the ODC preview names them; it never reports a conflict as lost).
+          const conflicts = (Array.isArray(preview.conflicts) ? preview.conflicts : []).map(c => (typeof c === 'string' ? c : c?.element ?? c?.path ?? null)).filter(Boolean);
+          const named = code === 'MERGE_PREVIEW_ERRORS' ? newErrors : code === 'MERGE_PREVIEW_CONFLICT' && conflicts.length ? conflicts : elements;
+          const what = code === 'MERGE_PREVIEW_CONFLICT' ? 'The disposable native merge of the candidate has conflicts with the module'
+            : code === 'MERGE_PREVIEW_ERRORS' ? 'The disposable native merge of the candidate brings ' + preview.newErrors + ' new error(s)'
+            : 'The disposable native merge of the candidate did not preserve it';
+          report.mergeOrder = { passes: 0, refused: code === 'MERGE_CONTENT_LOSS' ? 'the disposable native merge did not preserve the candidate' : what.toLowerCase() };
+          // The answer carries a summary; the whole proof (every value read) stays in merge-order.json.
+          report.contentPreview = { accepted: false, path: preview.path ?? null, sha256: preview.sha256 ?? null,
+            newErrors: preview.newErrors ?? null, hasConflicts: preview.hasConflicts ?? null, ...(newErrors.length ? { errors: newErrors.slice(0, 10) } : {}), ...(conflicts.length ? { conflicts: conflicts.slice(0, 20) } : {}),
+            elements: elements.slice(0, 20), differences: differences.slice(0, 20), differencesTotal: differences.length, evidence: planFile };
+          report.continuation ??= { tool: 'ssam_evidence', arguments: { file: planFile, pointer: '/contentPreview' },
+            why: 'Read the whole proof of the disposable merge: each difference names its element. Correct the candidate before another delivery.' };
+          return { ok: false, code,
+            error: what + (named.length ? ': ' + named.slice(0, 8).join(', ') + (named.length > 8 ? ', ...' : '') : '')
+              + '. Nothing was merged in the Studio or published.', contentPreview: report.contentPreview, continuation: report.continuation };
+        }
+        if (plan?.ok !== true) report.mergeOrder = { passes: 1, skipped: plan?.error ?? 'merge-order gave no plan' };
+        else if (plan.contentPreviewSupported !== true) report.mergeOrder = { passes: 1, skipped: 'the kernel ran no disposable native merge' };
         if (plan?.ok === true && Array.isArray(plan.deferred) && plan.deferred.length && plan.firstPass) {
           order = { deferred: plan.deferred, firstPass: plan.firstPass };
           report.mergeOrder = { passes: 2, deferred: plan.deferred.map(d => d.element) };
-          try { fs.writeFileSync(path.join(output, 'merge-order.json'), JSON.stringify(plan, null, 2)); } catch { /* evidence only */ }
           deliverable = plan.firstPass; manifestDir = path.join(output, 'delivery-first-pass');
-        } else if (plan?.ok !== true) report.mergeOrder = { passes: 1, skipped: plan?.error ?? 'merge-order gave no plan' };
+        }
       }
       const prepared = withManifestCode(await prepareManifest({ base: snapshot.path, candidate: deliverable, output: manifestDir, feature, owners, changes }));
       return prepared?.ok === false ? { ...prepared, code: prepared.code ?? 'CANDIDATE_REFUSED', ...(report.cache?.hit ? { cached: true } : {}) } : { ...prepared, ...(report.cache?.hit ? { cached: true } : {}) };
@@ -1726,6 +2016,13 @@ export async function deliverKernel(input, deps) {
       if (until === step) report.ok = true;
     }
     if (report.ok && report.result === RESULT.delivered) {
+      // L3b (spare pós-merge): the module after the merge (the bridge's afterSnapshot) is what the next delivery captures:
+      // recorded as a known snapshot and its spare asked of the ODC worker under its author (odc-build-phase.mjs
+      // afterOdcMerge), in the background. It never waits, fails or changes the delivery.
+      if (report.merge?.afterSnapshot) {
+        const after = deps.afterMerge ?? (async args => (await import('./odc-build-phase.mjs')).afterOdcMerge(args));
+        Promise.resolve().then(() => after({ merge: report.merge, snapshot, module })).catch(() => {});
+      }
       // What the job created or changed (job-summary.mjs), so no map of the module follows the delivery.
       try { const summary = jobSummary(jobDocument); if (summary) report.summary = summary; } catch { /* a summary never changes the delivery */ }
       if (publish === true) {
@@ -1745,10 +2042,12 @@ export async function deliverKernel(input, deps) {
         else {
           // Delivered; the publication did not end well. Never repeat the delivery: the continuation is the publication only.
           report.ok = false; report.failed = 'publish'; report.publishInvoked = report.publish.outcome !== 'refused';
-          report.code = report.publish.outcome === 'uncertain' ? 'PUBLISH_UNCERTAIN' : 'PUBLISH_FAILED';
+          report.code = report.publish.outcome === 'stale' ? report.publish.code : report.publish.outcome === 'uncertain' ? 'PUBLISH_UNCERTAIN' : 'PUBLISH_FAILED';
           if (report.publish.outcome === 'uncertain') report.outcome = 'uncertain';
           report.error = report.publish.error ?? 'The publication did not succeed.';
-          report.continuation = { tool: 'studio_publish', arguments: { manifest: report.manifest, ...(Number.isInteger(pid) ? { pid } : {}) },
+          // F1: the revision the server holds is not the delivered module: the receipt of the publication names what differs.
+          if (report.publish.outcome === 'stale') report.continuation = staleRevisionNext(report.manifest);
+          else report.continuation = { tool: 'studio_publish', arguments: { manifest: report.manifest, ...(Number.isInteger(pid) ? { pid } : {}) },
             why: report.publish.outcome === 'uncertain' ? 'Merged; the publication result is unknown: read publish-log first and publish again only if it did not run. Never repeat the delivery.'
               : 'Merged; fix what the publication names, then publish this manifest again. Never repeat the delivery.' };
         }
@@ -1783,7 +2082,7 @@ export async function deliverKernel(input, deps) {
     return report;
   } catch (error) {
     report.failed = stage; report.error = withoutStack(error.message);
-    if (stage === 'merge') { report.outcome = 'uncertain'; report.code = 'MERGE_UNCERTAIN'; mergedHonestly(); }
+    if (stage === 'merge') { report.outcome = 'uncertain'; report.code = 'MERGE_UNCERTAIN'; mergeTimedOut(error); mergedHonestly(); }
     if (order && stage !== 'publish' && report.mergeOrder?.firstPass) secondPassFailed();
     else if (order && stage === 'merge') { report.mergeOrder.failedPass = 1; report.error = 'Merge order pass 1 of 2 (the candidate without its deferred defaults): ' + report.error; }
     if (stage === 'publish') { report.outcome = 'uncertain'; report.code = 'PUBLISH_UNCERTAIN'; report.ok = false; }
@@ -1791,7 +2090,8 @@ export async function deliverKernel(input, deps) {
   } finally {
     report.totalSeconds = (Date.now() - started) / 1000;
     if (claimed) {
-      try { fs.writeFileSync(path.join(output, 'deliver-result.json'), JSON.stringify(report, null, 2)); }
+      // F7: the receipt names the session and the call of the delivery (the answer itself is unchanged).
+      try { fs.writeFileSync(path.join(output, 'deliver-result.json'), JSON.stringify(stamped(report), null, 2)); }
       catch (error) { report.receiptError = error.message; }
     }
     journal({ start: new Date(started).toISOString(), tool: 'facade', command: 'deliver-job', module, feature,

@@ -16,7 +16,42 @@ export const digest = value => createHash('sha256').update(value).digest('hex');
 // tool: the operation (debug_<x> becomes a code only in the debugger's own operations, refusal-codes.mjs isDebugTool).
 const REFUSALS = await import(pathToFileURL(path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'platforms', 'odc', 'facade', 'refusal-codes.mjs')).href).catch(() => null);
 export const codeOfText = (text, tool = null) => REFUSALS?.codeFromText?.(text, { tool }) ?? null;
+// The delivery KPI (R0, friction-kpi.mjs), loaded the same way: a copied launcher without it records as before and answers
+// the view as unavailable.
+const KPI = await import('./friction-kpi.mjs').catch(() => null);
+// F7 (traceability per session): the one rule of the session option and the caller key (platforms/odc/facade/correlation.mjs).
+// A copied launcher without the facade reads every session, as before.
+export const CORRELATION = await import(pathToFileURL(path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'platforms', 'odc', 'facade', 'correlation.mjs')).href).catch(() => null);
 const id = value => typeof value === 'string' && /^[a-f0-9-]{36}$/i.test(value) ? value.toLowerCase() : null;
+const CALLER_KEY = /^c-[a-f0-9]{24}$/;
+// The hosted caller of this process (SSAM_EXPOSURE=licensee): its key, never the caller id; null for the owner.
+export function callerKeyOf(env = process.env) {
+  if (!CORRELATION || typeof env.SSAM_EXPOSURE !== 'string' || env.SSAM_EXPOSURE.trim() !== 'licensee') return null;
+  return CORRELATION.callerKey(env.SSAM_EXPOSURE_CALLER || 'local');
+}
+// The scope of a friction read: the session option of the call (absent: the caller's session; "all"; a correlation id),
+// and the caller key when hosted. {ok:false, code, error} for an option it does not know.
+export function frictionScope(option, { sessionId, callerKey = null } = {}) {
+  if (!CORRELATION) return { ok: true, mode: 'all', id: null, callerKey };
+  const scope = CORRELATION.sessionScope(option, { correlationId: sessionKey(sessionId), callerKey });
+  return scope;
+}
+const inFrictionScope = (event, scope) => !scope || (CORRELATION ? CORRELATION.inScope({ correlationId: event.sessionId, callerKey: event.callerKey ?? null }, scope) : true);
+// The ids of the records the call created, from the documented fields of its answer (never its content): the kernel delivery
+// task (taskId, 32 hex), the facade task (task.id, a continuation's continueTask, joinedTask, resumedFrom) and the time the
+// call waited in a Studio write queue (queue.waitedMs).
+export function linksOf(input) {
+  const values = []; const add = (value, depth = 0) => {
+    if (!value || typeof value !== 'object' || depth > 4) return;
+    values.push(value);
+    for (const key of ['result', 'structuredContent']) add(value[key], depth + 1);
+    for (const block of (Array.isArray(value.content) ? value.content.slice(0, 4) : [])) if (block?.type === 'text' && typeof block.text === 'string') { try { add(JSON.parse(block.text), depth + 1); } catch { /* text */ } }
+  }; add(input);
+  const kernel = values.map(v => v.taskId ?? v.kernelTask?.id).find(v => typeof v === 'string' && /^[a-f0-9]{32}$/i.test(v));
+  const facade = values.flatMap(v => [v.task?.id, v.continuation?.arguments?.continueTask, v.joinedTask, v.resumedFrom]).map(id).find(Boolean);
+  const wait = values.map(v => v.queue?.waitedMs).find(v => Number.isFinite(v) && v >= 0);
+  return { ...(kernel ? { kernelTaskId: kernel.toLowerCase() } : {}), ...(facade ? { facadeTaskId: facade } : {}), ...(wait !== undefined ? { waitMs: Math.round(wait) } : {}) };
+}
 // C33 (atritos 3): the session of an MCP transport that serves several (the hosted server's mcp-session-id) keys its
 // operations; a UUID stays as it is, any other id becomes a UUID-shaped digest (never the id itself).
 export function sessionKey(value) {
@@ -32,7 +67,7 @@ export const taskRef = value => typeof value === 'string' && value.length ? 'tas
 const allowed = new Set(('help version doctor inspect diagnostics delivery-status check-delivery deliver manifest build job apply publish create ' +
   'snapshot preview merge check-base authorize attach data data-insert data-update data-delete open close status assets ' +
   'context propose continue tenants apis search describe read write debug app app-url api check-job refresh-references ' +
-  'grant warm discover map connect evidence reference task studio environment wait latest consumers command dismiss-dialog ' +
+  'grant warm discover map connect evidence reference task studio environment wait latest consumers command dismiss-dialog code ' +
   'create-app debug-run debug-invoke service-center-read service-center-write service-center-session portal-read portal-write portal-login portal-capabilities access dependencies').split(' '));
 export function operationName(value) {
   const name = String(value ?? '').replace(/^(ssam_|studio_|odc_|o11_|hybrid_)/, '').replaceAll('_', '-');
@@ -50,10 +85,9 @@ const codeName = value => (typeof value === 'string' && CODE.test(value) && valu
 const STEP_OF_CODE = [[/^PREFLIGHT_/, 'preflight'], [/^PUBLISH_/, 'publish'], [/^VERIFY_/, 'verify'], [/^VALIDATION_/, 'validation'], [/^MERGE_/, 'merge'], [/^DATA_/, 'data'], [/^DEBUG_/, 'debug']];
 const stepOfCode = code => (code ? STEP_OF_CODE.find(([pattern]) => pattern.test(code))?.[1] ?? null : null);
 
-// Only inspect documented wrapper fields; do not walk arbitrary model/record properties. tool: the operation's name
-// (operationName), for the text rules bound to some tools.
-export function outcomeOf(input, transport = {}, { tool = null } = {}) {
-  // plain: the text blocks that are not JSON (an SDK "Input validation error ..." answer); only classified, never stored.
+// Only inspect documented wrapper fields; do not walk arbitrary model/record properties.
+// plain: the text blocks that are not JSON (an SDK "Input validation error ..." answer); only classified, never stored.
+function answerValues(input) {
   const values = [], plain = []; const add = (value, depth = 0) => {
     if (!value || typeof value !== 'object' || depth > 4) return;
     values.push(value);
@@ -66,6 +100,60 @@ export function outcomeOf(input, transport = {}, { tool = null } = {}) {
       }
     }
   }; add(input);
+  return { values, plain };
+}
+
+// ---- the chain identity of a delivery (frente R0, 24/10/2026): which tool, lane and module a delivery call names, the
+// job, job hash and task it corrects (basedOn, closePrevious) or continues (continueTask), and from its answer the task,
+// the job it used (nextBasedOn), its stage and the codes and phases of its problems. Only these fields, each checked
+// against its shape: never an argument's text, a message, a path (a job path is kept as its digest) or the authorize words.
+export const DELIVERY_TOOLS = ['o11_deliver', 'studio_deliver', 'ssam_code', 'o11_publish', 'studio_publish'];
+const CODE_ACTIONS = ['write', 'check', 'plan'];
+const TOKEN = /^[A-Za-z0-9][A-Za-z0-9-]{7,63}$/;
+const token = value => (typeof value === 'string' && TOKEN.test(value) ? value : null);
+const sha = value => (typeof value === 'string' && /^[a-f0-9]{64}$/i.test(value) ? value.toLowerCase() : null);
+const MODULE = /^[\p{L}\p{N}_][\p{L}\p{N}_ .-]{0,127}$/u;
+const moduleOf = value => (typeof value === 'string' && MODULE.test(value.trim()) && !/\.(oml|oap|json)$/i.test(value.trim()) ? value.trim() : null);
+export const jobRef = value => (typeof value === 'string' && value.trim() && value.length <= 1024 ? 'job-' + digest('job:' + value.trim().replaceAll('\\', '/').toLowerCase()).slice(0, 32) : null);
+const phaseName = value => (typeof value === 'string' && /^[a-z][a-z-]{1,31}$/.test(value) ? value : null);
+const compact = value => Object.fromEntries(Object.entries(value).filter(([, v]) => v !== null && v !== undefined && v !== false));
+// The call's side: null for a call that is not a delivery (ssam_code read or grammar included).
+export function deliveryOfCall(tool, args) {
+  if (!DELIVERY_TOOLS.includes(tool)) return null;
+  const input = args && typeof args === 'object' && !Array.isArray(args) ? args : {};
+  const action = tool === 'ssam_code' ? (CODE_ACTIONS.includes(input.action) ? input.action : null) : null;
+  // A continuation carries only continueTask (and lane): it is recorded, its hand-off says which call it continues.
+  if (tool === 'ssam_code' && !action && !token(input.continueTask)) return null;
+  const basedOn = input.basedOn && typeof input.basedOn === 'object' && !Array.isArray(input.basedOn) ? input.basedOn : {};
+  return compact({ tool, action, module: moduleOf(input.module) ?? moduleOf(input.target),
+    basedOnJob: jobRef(basedOn.job), basedOnSha256: sha(basedOn.sha256), basedOnTaskId: token(basedOn.taskId),
+    continueTask: token(input.continueTask), closePrevious: token(input.closePrevious) });
+}
+const CALL_FIELDS = { tool: v => (DELIVERY_TOOLS.includes(v) ? v : null), action: v => (CODE_ACTIONS.includes(v) ? v : null), module: moduleOf,
+  basedOnJob: v => (/^job-[a-f0-9]{32}$/.test(v ?? '') ? v : null), basedOnSha256: sha, basedOnTaskId: token, continueTask: token, closePrevious: token };
+const checked = (value, fields) => (value && typeof value === 'object' && !Array.isArray(value) ? compact(Object.fromEntries(Object.entries(fields).map(([k, check]) => [k, check(value[k])]))) : null);
+const PROBLEMS_KEPT = 40, PROBLEM_CODE = /^[A-Za-z][A-Za-z0-9_]{1,79}$/;
+// The answer's side, from the same documented wrapper fields outcomeOf reads.
+export function deliveryOfAnswer(input) {
+  const { values } = answerValues(input);
+  const first = pick => values.map(pick).find(v => v !== null && v !== undefined) ?? null;
+  const counts = new Map(); let total = 0;
+  // The first list only: an answer comes as structuredContent and as its JSON text, the same problems twice.
+  const list = values.flatMap(v => [v.problems, v.preflight?.problems]).find(l => Array.isArray(l) && l.length) ?? [];
+  for (const p of list.slice(0, 1000)) {
+    // A problem's code is an identifier of the kernel or the platform: FLOW_SYNTAX, ExpressionUnknownObject, RequiredPropertyValue_Property.
+    const code = typeof p?.code === 'string' && PROBLEM_CODE.test(p.code) ? p.code : null; if (!code) continue;
+    total++; const key = code + '|' + (phaseName(p.phase) ?? '');
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  const problems = [...counts].slice(0, PROBLEMS_KEPT).map(([key, count]) => { const [code, phase] = key.split('|'); return compact({ code, phase: phase || null, count }); });
+  return compact({ taskId: first(v => token(v.taskId) ?? token(v.task?.id)), nextJob: first(v => jobRef(v.nextBasedOn?.job)), nextSha256: first(v => sha(v.nextBasedOn?.sha256)),
+    stage: first(v => phaseName(v.stage)), result: first(v => phaseName(v.result)), ...(total ? { problems, problemCount: total } : {}) });
+}
+
+// tool: the operation's name (operationName), for the text rules bound to some tools.
+export function outcomeOf(input, transport = {}, { tool = null } = {}) {
+  const { values, plain } = answerValues(input);
   const transportFailed = (typeof transport.exitCode === 'number' && transport.exitCode !== 0) || transport.protocolError === true || transport.transportError === true;
   const failureValue = v => v.ok === false || v.isError === true || v.isValid === false || (typeof v.exitCode === 'number' && v.exitCode !== 0);
   // Informational/help text mentioning a timeout is not an execution failure.
@@ -76,7 +164,11 @@ export function outcomeOf(input, transport = {}, { tool = null } = {}) {
   const interrupted = transport.interrupted === true;
   const declaredUncertain = values.some(v => v.outcome === 'uncertain');
   const equivalenceUncertain = declaredUncertain && values.some(v => v.gate === 'equivalence');
-  const semanticKnown = values.some(v => typeof v.ok === 'boolean' || typeof v.isError === 'boolean' || typeof v.isValid === 'boolean');
+  // The 25 s hand-off of a long call ({state:'running', task:{id}, continuation:{arguments:{continueTask}}}, call-deadline.mjs
+  // running()) carries no ok: it is a known outcome, the work goes on and the continuation's own operation records its end.
+  // 315 of the 388 RESULT_UNOBSERVED of 11..20/10/2026 lasted 25.0 s (levantamento de 19/10, item 1 da meta).
+  const continued = values.some(v => v.state === 'running' && typeof v.task?.id === 'string' && typeof v.continuation?.arguments?.continueTask === 'string');
+  const semanticKnown = continued || values.some(v => typeof v.ok === 'boolean' || typeof v.isError === 'boolean' || typeof v.isValid === 'boolean');
   const packageId = values.map(v => v.packageId).find(v => typeof v === 'string' && /^readonly-[a-f0-9]{16,64}$/.test(v));
   // The code the answer itself states (top level first, then a JSON-RPC style {error:{code}}), only for a failure or an
   // uncertainty: 89 of 89 o11/job failures used to be recorded as OPERATION_FAILED with no step (C44).
@@ -89,6 +181,7 @@ export function outcomeOf(input, transport = {}, { tool = null } = {}) {
     : timeout ? (explicit ?? 'TIMEOUT')
     : transport.transportError ? 'TRANSPORT_FAILED'
     : failed ? (explicit ?? classified() ?? 'OPERATION_FAILED')
+    : continued ? 'CONTINUED'
     : semanticKnown ? 'OK' : 'RESULT_UNOBSERVED';
   const failing = interrupted || declaredUncertain || timeout || failed;
   const knownCauseKinds = new Set(['authentication', 'http', 'soap', 'transport', 'protocol']);
@@ -115,7 +208,7 @@ export function frictionDirectory({ root, directory, env = process.env } = {}) {
 // without its .complete mark is read as it is (health.indexComplete false), never rebuilt from the operation files; the
 // CLI and a direct store rebuild it. Every read the relay makes is bounded by what it names (UI-Mockup, 2026-10-11: one
 // report that read 37,666 operation files stopped a session's MCP for 8 min 11 s).
-export function createStore({ root, directory, env = process.env, warning = code => process.stderr.write(`[ssam-friction] ${code}; operation result is unchanged.\n`), clock = () => Date.now(), rebuild = true } = {}) {
+export function createStore({ root, directory, env = process.env, warning = code => process.stderr.write(`[ssam-friction] ${code}; operation result is unchanged.\n`), clock = () => Date.now(), rebuild = true, receipts } = {}) {
   const dir = frictionDirectory({ root, directory, env });
   let losses = 0;
   const warn = code => { losses++; try { warning(code); } catch {} };
@@ -156,10 +249,14 @@ export function createStore({ root, directory, env = process.env, warning = code
   const indexDir = runtimeDir(indexRoot,env.SSAM_BACKEND_NAME), indexMark = path.join(indexDir, '.complete');
   const indexFiles = () => runtimeDirectories(indexRoot).flatMap(folder=>{try{return fs.readdirSync(folder).filter(n=>n.endsWith('.jsonl')).map(n=>path.join(folder,n));}catch{return [];}});
   const indexDay = iso => (typeof iso === 'string' && /^\d{4}-\d{2}-\d{2}/.test(iso) ? iso.slice(0, 10).replace(/-/g, '') : 'undated');
-  const INDEX_FIELDS = ['startedAt', 'operation', 'lane', 'profile', 'taskRef', 'sessionId', 'interface'];
-  const END_FIELDS = ['endedAt', 'outcome', 'code', 'step', 'signal'];
+  // F7: callerKey (hosted) scopes a line; the end line names the records the call created and its times (timeline).
+  const INDEX_FIELDS = ['startedAt', 'operation', 'lane', 'profile', 'taskRef', 'sessionId', 'interface', 'callerKey', 'facadeTaskId'];
+  const END_FIELDS = ['endedAt', 'outcome', 'code', 'step', 'signal', 'durationMs', 'waitMs', 'kernelTaskId'];
+  // R0: a delivery call's line also carries its chain identity (delivery, the start's fields on both lines and the answer's
+  // on the end), so the delivery KPI reads the index only; no other line grows.
   const indexLine = (event, end) => Object.fromEntries([['k', end ? 'e' : 's'], ['id', event.operationId],
-    ...INDEX_FIELDS.map(k => [k, event[k] ?? null]), ...(end ? END_FIELDS.map(k => [k, event[k] ?? null]) : [])]);
+    ...INDEX_FIELDS.map(k => [k, event[k] ?? null]), ...(end ? END_FIELDS.map(k => [k, event[k] ?? null]) : []),
+    ...(event.delivery ? [['delivery', event.delivery]] : [])]);
   let markKnown = false, baseChecked = false;
   // quiet: the mark of an empty store (a folder that cannot be written loses the operation records too, and they warn).
   function markIndex(operations, quiet = false) {
@@ -266,8 +363,15 @@ export function createStore({ root, directory, env = process.env, warning = code
     ensureIndexBase();
     const receiptKey = meta.interface === 'receipt-import' && /^[a-f0-9]{64}$/.test(meta.receiptSha256 ?? '') ? meta.receiptSha256 : null;
     const stable = receiptKey ? digest('receipt:' + receiptKey) : null;
-    const operationId = stable ? `${stable.slice(0,8)}-${stable.slice(8,12)}-${stable.slice(12,16)}-${stable.slice(16,20)}-${stable.slice(20,32)}` : randomUUID(), start = performance.now();
-    let event = { schema: 'ssam-friction-operation/1', operationId, sessionId: sessionKey(meta.sessionId), pid: process.pid,
+    // F7: an MCP call is named by its session and its request id (correlation.mjs operationIdOf), the id the server child
+    // derives for the same call; a request id the session reused (a protocol error) gets a new id below.
+    const derived = !stable && meta.interface === 'mcp' ? CORRELATION?.operationIdOf?.(sessionKey(meta.sessionId), meta.requestId) ?? null : null;
+    let operationId = stable ? `${stable.slice(0,8)}-${stable.slice(8,12)}-${stable.slice(12,16)}-${stable.slice(16,20)}-${stable.slice(20,32)}` : derived ?? randomUUID(); const start = performance.now();
+    if (derived && fs.existsSync(path.join(dir, 'operations', derived + '.start.json'))) operationId = randomUUID();
+    // F7: correlationId is the session (the same id the child stamps on every record of the call); callerKey when hosted.
+    const correlationId = sessionKey(meta.sessionId);
+    let event = { schema: 'ssam-friction-operation/1', operationId, sessionId: correlationId, correlationId, pid: process.pid,
+      ...(CALLER_KEY.test(meta.callerKey ?? '') ? { callerKey: meta.callerKey } : {}), ...(id(meta.facadeTaskId) ? { facadeTaskId: id(meta.facadeTaskId) } : {}),
       taskRef: taskRef(meta.taskId), correlation: taskRef(meta.taskId) ? meta.correlationSource === 'client-thread-environment' ? 'client-thread-environment' : 'explicit-task' : 'absent',
       interface: ['cli','mcp','receipt-import','api'].includes(meta.interface) ? meta.interface : 'unknown',
       operation: operationName(meta.operation), lane: laneName(meta.lane),
@@ -277,6 +381,9 @@ export function createStore({ root, directory, env = process.env, warning = code
       selectedPackageSha256: /^[a-f0-9]{64}$/.test(meta.selectedPackageSha256 ?? '') ? meta.selectedPackageSha256 : null,
       versionScope: meta.profile === 'selected-readonly' ? 'selected-descriptor; admission remains owned by package router' : 'facade-source-fingerprint; native-binary identity not observed',
       startedAt: new Date(clock()).toISOString() };
+    // The chain identity of a delivery call (deliveryOfCall), re-checked field by field: a caller adds only the known ones.
+    const delivery = checked(meta.delivery, CALL_FIELDS);
+    if (delivery?.tool) event.delivery = delivery;
     const recorded = write('operations', operationId + '.start', event, true); let done = false;
     if (recorded === 'existing') {
       try { event = JSON.parse(fs.readFileSync(path.join(dir,'operations',operationId+'.start.json'),'utf8')); }
@@ -287,9 +394,10 @@ export function createStore({ root, directory, env = process.env, warning = code
       const result = outcomeOf(value, transport, { tool: event.operation });
       const evidence = transport.evidence && /^[a-f0-9]{64}$/.test(transport.evidence.sha256 ?? '')
         ? { sha256: transport.evidence.sha256, kind: 'receipt', locatorSha256: /^[a-f0-9]{64}$/.test(transport.evidence.locatorSha256 ?? '') ? transport.evidence.locatorSha256 : null } : null;
-      const end = { ...event, ...result, lane: result.lane === 'unknown' ? event.lane : result.lane,
+      const end = { ...event, ...result, ...linksOf(value), ...(event.facadeTaskId ? { facadeTaskId: event.facadeTaskId } : {}), lane: result.lane === 'unknown' ? event.lane : result.lane,
         endedAt: new Date(clock()).toISOString(), durationMs: Math.round((performance.now() - start) * 1000) / 1000,
         durationSource: 'observer-monotonic', startRecorded: !!recorded, evidence,
+        ...(event.delivery ? { delivery: { ...event.delivery, ...deliveryOfAnswer(value) } } : {}),
         ...(Number.isFinite(transport.receiptDurationMs) && transport.receiptDurationMs >= 0 ? { receiptDurationMs: transport.receiptDurationMs } : {}) };
       if (Number.isFinite(meta.slowThresholdMs) && meta.slowThresholdMs > 0 && end.durationMs > meta.slowThresholdMs && end.outcome === 'success') end.signal = 'SLOW_OPERATION';
       if (write('operations', operationId + '.end', end, true) === true) appendIndex(end, true);
@@ -312,11 +420,15 @@ export function createStore({ root, directory, env = process.env, warning = code
   // C33: from the index; each group says its counts, times, last step and the ids of its two last operations (the
   // operations themselves: snapshot() or task()). The state is read only for the issues of the page. source:'scan'
   // computes the same from the operation files (the proof that the index equals the scan).
-  function issues({ taskId, offset = 0, limit = 50, max, source = 'index' } = {}) {
+  // F7: scope (frictionScope) keeps the operations of one session ("all": every session; hosted: the caller's only); none
+  // (the CLI, a direct store) reads every operation, as before.
+  function issues({ taskId, offset = 0, limit = 50, max, source = 'index', scope = null } = {}) {
     if (Number.isInteger(max)) limit = max;
     const data = source === 'scan' ? snapshot() : indexed(), groups = new Map(); const wanted = taskRef(taskId);
+    let excluded = 0;
     for (const event of data.operations) {
       if (!['failure','timeout','uncertain','incomplete'].includes(event.outcome) && !event.signal) continue;
+      if (!inFrictionScope(event, scope)) { if (!scope?.callerKey || event.callerKey === scope.callerKey) excluded++; continue; }
       const key = issueKey(event);
       let group = groups.get(key);
       if (!group) groups.set(key, group = { id:key, operation:event.operation, lane:event.lane, profile:event.profile, code:event.signal ?? event.code, kind:event.signal ? 'signal' : event.outcome,
@@ -333,15 +445,15 @@ export function createStore({ root, directory, env = process.env, warning = code
       const recurrence = state.status === 'verified' && lastEnded && lastEnded > state.updatedAt;
       return { ...issue, state: recurrence ? { ...state, status: 'new', reopened: true } : state };
     });
-    const manual = reports({ taskId, limit: REPORTS_SHOWN });
-    return { ok: true, issues:page, total:matching.length, offset, limit, health:data.health,
-      ...(manual.total ? { reports: manual.reports, reportsTotal: manual.total } : {}),
+    const manual = reports({ taskId, limit: REPORTS_SHOWN, scope });
+    return { ok: true, ...(scope && CORRELATION ? CORRELATION.scopeNote(scope, excluded) : {}), issues:page, total:matching.length, offset, limit, health:data.health,
+      ...(manual.total ? { reports: manual.reports, reportsTotal: manual.total, ...(manual.continuation ? { reportsContinuation: manual.continuation } : {}) } : {}),
       notificationDelivery:'queue-only; no notification consumer is installed' };
   }
   // ---- manual reports (A31): a gap, defect or slowness the session saw without a failed call (it fell back to native
   // verbs, used a workaround, waited). One immutable record per report under reports/, linked to the last operations of
   // the same MCP session (their ids, codes and receipt hashes). Never arguments or answers; the user's words only in summary.
-  function report(input = {}, { sessionId, profile } = {}) {
+  function report(input = {}, { sessionId, profile, callerKey = null } = {}) {
     const problems = reportProblems(input);
     if (problems.length) return { ok: false, code: 'REPORT_INVALID', error: 'Invalid friction report: ' + problems.join('; '), problems,
       accepted: { kind: REPORT_KINDS, required: ['kind', 'tool', 'intent', 'attempted'], optional: ['workaround', 'cost', 'summary', 'taskId'], maxLength: REPORT_FIELDS } };
@@ -350,23 +462,32 @@ export function createStore({ root, directory, env = process.env, warning = code
     const recent = session ? sessionTail(session, REPORT_LINKED).map(e => {
       const evidence = e.endedAt ? operation(e.operationId)?.evidence : null;
       return { operationId: e.operationId, operation: e.operation, lane: e.lane, outcome: e.outcome, code: e.code ?? null, step: e.step ?? null, startedAt: e.startedAt,
+        ...(e.kernelTaskId ? { kernelTaskId: e.kernelTaskId } : {}), ...(e.facadeTaskId ? { facadeTaskId: e.facadeTaskId } : {}),
         ...(evidence?.sha256 ? { receiptSha256: evidence.sha256 } : {}) };
     }) : [];
     const reportId = randomUUID();
     const text = key => (input[key] === undefined || input[key] === null ? undefined : String(input[key]).trim());
+    // F7: the report names its session (correlationId) and, hosted, its caller key: reports() of another session never lists it.
     const record = { schema: 'ssam-friction-report/1', reportId, kind: input.kind, tool: text('tool'), intent: text('intent'), attempted: text('attempted'),
       ...Object.fromEntries(['workaround', 'cost', 'summary'].filter(k => text(k)).map(k => [k, text(k)])),
-      taskRef: taskRef(input.taskId), sessionId: session, profile: profile === 'selected-readonly' ? 'selected-readonly' : 'operational',
+      taskRef: taskRef(input.taskId), sessionId: session, ...(session ? { correlationId: session } : {}), ...(CALLER_KEY.test(callerKey ?? '') ? { callerKey } : {}),
+      profile: profile === 'selected-readonly' ? 'selected-readonly' : 'operational',
       reportedAt: new Date(clock()).toISOString(), recent };
     const written = write('reports', reportId, record, true);
     if (written !== true) return { ok: false, code: 'REPORT_NOT_RECORDED', error: 'The report could not be written to the local friction queue', directory: dir };
     return { ok: true, recorded: true, reportId, kind: record.kind, file: path.join(dir, 'reports', reportId + '.json'), linkedOperations: recent.length };
   }
-  function reports({ taskId, offset = 0, limit = 50 } = {}) {
-    const all = records('reports'); const wanted = taskRef(taskId);
-    const items = all.items.filter(r => r?.schema === 'ssam-friction-report/1' && typeof r.reportedAt === 'string' && (!wanted || r.taskRef === wanted))
+  // F7: a report matches a task id by its taskRef, by the session it names, or by an operation it links (operationId, its
+  // kernel or facade task); scope keeps the reports of one session (hosted: of the caller).
+  function reports({ taskId, offset = 0, limit = 50, scope = null } = {}) {
+    const all = records('reports'); const wanted = taskRef(taskId); const key = typeof taskId === 'string' ? taskId.toLowerCase() : null;
+    const linked = r => r.taskRef === wanted || r.sessionId === key || (Array.isArray(r.recent) && r.recent.some(o => [o?.operationId, o?.kernelTaskId, o?.facadeTaskId].includes(key)));
+    const items = all.items.filter(r => r?.schema === 'ssam-friction-report/1' && typeof r.reportedAt === 'string' && (!wanted || linked(r)) && inFrictionScope(r, scope))
       .sort((a, b) => b.reportedAt.localeCompare(a.reportedAt) || String(a.reportId).localeCompare(String(b.reportId)));
-    return { reports: items.slice(offset, offset + limit), total: items.length, damaged: all.damaged };
+    const next = offset + limit < items.length ? offset + limit : null;
+    return { ok: true, reports: items.slice(offset, offset + limit), total: items.length, offset, limit, next,
+      damaged: all.damaged, partial: all.partial,
+      ...(next === null ? {} : { continuation: { tool: 'ssam_friction', arguments: { view: 'reports', ...(taskId ? { taskId } : {}), offset: next, limit }, why: 'Read the next page of manual reports.' } }) };
   }
   function stateOf(issueId) {
     const all = records('states/' + issueId);
@@ -409,10 +530,14 @@ export function createStore({ root, directory, env = process.env, warning = code
     if (persisted.status === 'conflict') throw Error('Concurrent state changes; manual reconciliation required');
     return {ok:true,issueId,state:persisted};
   }
-  function task({taskId,offset=0,limit=100} = {}) {
+  // F7: the id names a task in any of its forms: the explicit task id (taskRef), the operationId of the call, the kernel
+  // delivery task or the facade task the call created, or a session's correlationId (its operations). Hosted: the caller's only.
+  const matchesTask = (e, taskId) => { const key = String(taskId).toLowerCase();
+    return e.taskRef === taskRef(taskId) || e.operationId === key || e.kernelTaskId === key || e.facadeTaskId === key || e.sessionId === key; };
+  function task({taskId,offset=0,limit=100,scope=null} = {}) {
     if (!taskId) throw Error('Explicit task ID required; unrelated calls cannot be treated as one task');
     // The task's operations from the index, each read from its own file (never a listing of the operations folder).
-    const data = indexed(), events = data.operations.filter(e=>e.taskRef===taskRef(taskId)).map(e=>operation(e.operationId)??e);
+    const data = indexed(), events = data.operations.filter(e=>matchesTask(e,taskId) && (!scope?.callerKey || e.callerKey===scope.callerKey)).map(e=>operation(e.operationId)??e);
     const live = events.filter(e=>e.interface!=='receipt-import');
     const intervals = live.filter(e=>e.endedAt).map(e=>[Date.parse(e.startedAt),Date.parse(e.endedAt)]).sort((a,b)=>a[0]-b[0]);
     let coveredMs = 0, end = -Infinity;
@@ -420,14 +545,44 @@ export function createStore({ root, directory, env = process.env, warning = code
     const observedSpanMs = intervals.length ? intervals.reduce((maximum,i)=>Math.max(maximum,i[1]),-Infinity) - live.reduce((minimum,e)=>Math.min(minimum,Date.parse(e.startedAt)),Infinity) : null;
     const manual = reports({ taskId, limit: REPORTS_SHOWN });
     return {ok:true,taskRef:taskRef(taskId),operationCount:events.length,incomplete:events.filter(e=>!e.endedAt).length,
-      ...(manual.total ? { reports: manual.reports, reportsTotal: manual.total } : {}),
+      ...(manual.total ? { reports: manual.reports, reportsTotal: manual.total, ...(manual.continuation ? { reportsContinuation: manual.continuation } : {}) } : {}),
       toolDurationSumMs:live.reduce((sum,e)=>sum+(e.durationMs??0),0),toolCoveredWallMs:coveredMs,observedSpanMs,
       importedReceiptDurationsMs:events.filter(e=>e.interface==='receipt-import').map(e=>e.receiptDurationMs??null),
       intervalOutsideCompletedToolsMs:observedSpanMs===null?null:Math.max(0,observedSpanMs-coveredMs),
       intervalMeaning:'Observed interval only; not reasoning time or complete task duration. Overlapping tool durations are unioned.',
       operations:events.slice(offset,offset+limit),offset,limit,omittedOperations:Math.max(0,events.length-Math.min(limit,events.length-offset)),health:data.health};
   }
-  return {begin,snapshot,issues,task,transition,report,reports,directory:dir,warn};
+  // R0: the delivery KPI (friction-kpi.mjs) of this queue's index and, when the root has them, of the kernel's receipts.
+  // Read only, whatever rebuild says: it never rebuilds the index nor reads the operation files.
+  function deliveryKpi({ since, until, lane } = {}) {
+    if (!KPI) throw Error('Invalid delivery-kpi: this launcher has no facade/friction-kpi.mjs');
+    return KPI.kpiView({ queueDirectory: dir, receiptsDirectory: receipts === undefined ? (root ? path.join(root, 'kernel', '.local', 'work', 'deliver') : null) : receipts, since, until, lane });
+  }
+  // F7: the timeline of one session (scope; default the caller's): each operation with its start and end, its tool time
+  // (the observer's monotonic duration), the time it waited in a Studio write queue (from its answer) and the gap since the
+  // previous operation ended (time outside every tool: the client's reasoning, the user, or a call of another server); the
+  // totals add up without guessing. Index only, newest page last.
+  function timeline({ scope = null, offset = 0, limit = 100 } = {}) {
+    const data = indexed();
+    const ops = data.operations.filter(e => inFrictionScope(e, scope));
+    let previousEnd = null, coveredEnd = -Infinity, covered = 0;
+    const rows = ops.map(e => {
+      const start = Date.parse(e.startedAt), end = e.endedAt ? Date.parse(e.endedAt) : null;
+      const toolMs = Number.isFinite(e.durationMs) ? Math.round(e.durationMs) : end !== null ? end - start : null;
+      const gapMs = previousEnd === null ? null : Math.max(0, start - previousEnd);
+      if (end !== null) { covered += Math.max(0, end - Math.max(start, coveredEnd)); coveredEnd = Math.max(coveredEnd, end); previousEnd = Math.max(previousEnd ?? end, end); }
+      return { operationId: e.operationId, operation: e.operation, lane: e.lane, startedAt: e.startedAt, endedAt: e.endedAt ?? null, toolMs,
+        waitMs: Number.isFinite(e.waitMs) ? e.waitMs : 0, gapMs, outcome: e.outcome, ...(e.code && e.code !== 'OK' ? { code: e.code } : {}),
+        ...(e.kernelTaskId ? { kernelTaskId: e.kernelTaskId } : {}), ...(e.facadeTaskId ? { facadeTaskId: e.facadeTaskId } : {}) };
+    });
+    const sum = key => rows.reduce((total, r) => total + (Number.isFinite(r[key]) ? r[key] : 0), 0);
+    const span = rows.length ? (previousEnd ?? Date.parse(rows.at(-1).startedAt)) - Date.parse(rows[0].startedAt) : 0;
+    return { ok: true, ...(scope && CORRELATION ? CORRELATION.scopeNote(scope, 0) : {}),
+      totals: { operations: rows.length, incomplete: rows.filter(r => !r.endedAt).length, toolMs: sum('toolMs'), toolCoveredMs: covered, waitMs: sum('waitMs'), gapMs: sum('gapMs'), spanMs: span },
+      meaning: 'toolMs: inside SSAM (waitMs of it in a Studio write queue); gapMs: between operations, outside every SSAM tool (reasoning, the user, other servers); overlapping tools are unioned in toolCoveredMs.',
+      operations: rows.slice(offset, offset + limit), offset, limit, health: data.health };
+  }
+  return {begin,snapshot,issues,task,timeline,transition,report,reports,deliveryKpi,directory:dir,warn};
 }
 
 // The manual report (A31): kind and its fields, each a short text. The limits keep a record small (the queue reads

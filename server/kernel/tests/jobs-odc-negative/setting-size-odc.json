@@ -1,0 +1,17 @@
+{
+ "description": "ODC (L3c, scope phase): a setting of the data text written with a size. An ODC setting has no Length nor Decimals (ISiteProperty writes DataType, DefaultValue, IsSecret...), so the compile's set Length was refused at apply (DDL_APPLY_FAILED, labs 17 and 258, an API contracts library and a reconciliation app). The scope phase refuses it before the first op with the patch that drops the size. Runs in OdcJobTests.JobFailsWithTheTeachingMessageInTheOdcLane.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectError": [
+  "[ODC_SETTING_SIZE]",
+  "line 1 WfCovApiBaseUrl (Length 250)",
+  "an ODC setting has no Length or Decimals"
+ ],
+ "ops": [
+  {
+   "op": "spec",
+   "data": {
+    "ddl": "setting WfCovApiBaseUrl: Text(250) = \"https://example.test\"\n"
+   }
+  }
+ ]
+}

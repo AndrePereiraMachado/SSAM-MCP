@@ -87,6 +87,22 @@ confere a closure das DLLs. Não há resolução automática de NuGet. Intername
 - Comandos nativos fora do launcher não são cobertos. Fila não é notificação.
 - Resultado incerto continua proibindo repetir escrita sem reconciliar recibos. O registro não corrige a causa.
 
+## Rastreabilidade por sessão (F7)
+
+- Uma `correlationId` por sessão (processo MCP, sessão hospedada ou processo CLI) e uma `operationId` por chamada, em
+  todo registro da chamada: operação de fricção, tarefa da fachada, tarefa do kernel (`task.json`: `correlationId`,
+  `trace`, `traces`), recibo ODC (`deliver-result.json`), diários JSONL, diário de restauração de acesso (T12) e relato.
+  Regra única: `platforms/odc/facade/correlation.mjs`.
+- O launcher passa `SSAM_CORRELATION_ID` ao filho (e `SSAM_OPERATION_ID` à CLI). No MCP a `operationId` é derivada da
+  sessão e do id JSON-RPC (`operationIdOf`), dos dois lados, sem mudar os bytes da requisição.
+- Toda linha JSONL da fachada sai por `appendJsonLine`; o teste `tests/f7-traceability.test.mjs` recusa outro
+  `appendFileSync`. O runner do kernel acrescenta `--correlation-id`/`--call-id` só ao `deliver`.
+- `ssam_task`, `ssam_friction` e `ssam_evidence` (linhas de diário) leem a sessão por padrão; `session:"all"` ou uma
+  `correlationId` amplia. Hospedado (`SSAM_EXPOSURE=licensee`), `callerKey` (digest do chamador) restringe sempre.
+- A mesma `operationId` (ou a `taskId` do kernel) acha a entrega em `ssam_task {id}`, `ssam_friction {view:"task"}`,
+  na tarefa do kernel e nos relatos. `ssam_friction {view:"timeline"}`: início, fim, `toolMs`, `waitMs` (fila do Studio)
+  e `gapMs` (fora das ferramentas) por operação, com totais.
+
 ## Pacotes e versões
 
 - Versão funcional liberada: `docs/USAR-VERSAO-FUNCIONAL.md` (MCP `ssam-functional`, pacote `readonly-2d8facfa2c136a73`).

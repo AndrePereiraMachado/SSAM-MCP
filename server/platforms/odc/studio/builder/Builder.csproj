@@ -54,6 +54,8 @@
     <Compile Include="..\..\..\..\kernel\src\Anvil.Core\Kernel\FlowPrint.cs" Link="shared\FlowPrint.cs" />
     <Compile Include="..\..\..\..\kernel\src\Anvil.Core\Kernel\FlowParse.cs" Link="shared\FlowParse.cs" />
     <Compile Include="..\..\..\..\kernel\src\Anvil.Core\Kernel\FlowTextNormalize.cs" Link="shared\FlowTextNormalize.cs" />
+    <Compile Include="..\..\..\..\kernel\src\Anvil.Core\Kernel\FlowGeneral.cs" Link="shared\FlowGeneral.cs" />
+    <Compile Include="..\..\..\..\kernel\src\Anvil.Core\Kernel\FlowSignatureRead.cs" Link="shared\FlowSignatureRead.cs" />
     <Compile Include="..\..\..\..\kernel\src\Anvil.Core\Kernel\AggregateSortRule.cs" Link="shared\AggregateSortRule.cs" />
     <Compile Include="..\..\..\..\kernel\src\Anvil.Core\Kernel\KernelLane.cs" Link="shared\KernelLane.cs" />
     <Compile Include="..\..\..\..\kernel\src\Anvil.Core\Hosting\SnapshotReadServer.cs" Link="shared\SnapshotReadServer.cs" />

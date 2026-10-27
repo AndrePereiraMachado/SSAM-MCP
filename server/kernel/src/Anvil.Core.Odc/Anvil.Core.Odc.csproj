@@ -5,7 +5,8 @@
     StudioAdapter discovers OdcRuntime as the only IStudioRuntime. The DLLs of the ODC Studio are referenced from
     the installation (Private=false) and resolved at runtime by StudioAssembliesOdc.Bind; none is copied.
     Excluded kernel files: MergeProbe.cs and ReferenceSignatureMerge.cs (headless 3-way merge over the SS11
-    MatchTree; in ODC the merge is the bridge's native CompareAndMerge, WS2) and Delivery/CSharpRuntimeDelivery.cs
+    MatchTree; ODC has its own disposable preview in Adapters.ODC/NativeMergePreview.cs and the live bridge's
+    native CompareAndMerge) and Delivery/CSharpRuntimeDelivery.cs
     (Service Center session and C# extensions: O11-only).
   -->
   <PropertyGroup>
@@ -27,6 +28,8 @@
     <Compile Include="../Anvil.Core/Properties/**/*.cs" />
     <Compile Include="Adapters.ODC/**/*.cs" />
     <EmbeddedResource Include="../Anvil.Core/Kernel/ScreenVocabulary.json" LogicalName="Anvil.Core.Kernel.ScreenVocabulary.json" />
+    <EmbeddedResource Include="../Anvil.Core/Kernel/TemporalRuntime.js" LogicalName="Anvil.Core.Kernel.TemporalRuntime.js" />
+    <EmbeddedResource Include="../Anvil.Core/Kernel/UploadValidationRuntime.js" LogicalName="Anvil.Core.Kernel.UploadValidationRuntime.js" />
     <EmbeddedResource Include="../Anvil.Core/Kernel/OutSystemsUiClasses.txt" LogicalName="Anvil.Core.Kernel.OutSystemsUiClasses.txt" />
   </ItemGroup>
 

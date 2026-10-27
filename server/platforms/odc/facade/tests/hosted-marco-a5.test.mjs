@@ -109,7 +109,7 @@ test('the handler map ssam_code writes through keeps the gated handler: a job it
     assert.equal(value.code, 'PATH_OUTSIDE_WORKSPACE', JSON.stringify(value).slice(0, 400));
     const proto = await sb.call('ssam_code', { lane: 'o11', action: 'write', module: 'M', ops: [{ op: 'prototype', data: { source: 'ws:inbox/p' } }], authorize: 'test' });
     assert.equal(proto.code, 'HOSTED_UNAVAILABLE', JSON.stringify(proto).slice(0, 400));
-    assert.equal(proto.cause, 'PROTOTYPE_SOURCE_LOCAL');
+    assert.equal(proto.cause, 'PROTOTYPE_IMPORT_DISABLED');
   } finally { await sb.close(); }
   assert.deepEqual(spawned, [], 'no kernel process ran for a refused job');
 });

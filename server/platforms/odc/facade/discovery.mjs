@@ -18,15 +18,17 @@ import { readConnection } from './studio-session.mjs';
 import { registryInstallLocation } from './studio-locate.mjs';
 import { composeCatalog, applySupersedes, rewriteAliases, keywordProblems, synonymProblems, FRAGMENTS_DIR, STOP, normalize, derived, stem, words, tokens, fold, folded } from './catalog.mjs';
 import { isScreenIntent, appTypesFromKinds, appTypesFromIntent, osuiSection, osuiExpansion, osuiCatalogAvailable, namedPatterns, APP_TYPES } from './osui-catalog.mjs';
-import { textRouteSection, sectionLevels } from './text-routes.mjs';
+import { textRouteSection, sectionLevels, classifyTextRoute, sectionOf } from './text-routes.mjs';
 import { generatorOfJob, generatorShown } from './generators.mjs';
+import { indexForKinds, indexForLane, kindReading, kindsFromFlows, kindOfModuleType, capabilityKinds, kindLabel, nativeTypesNamed, nativePath, osuiAppTypes, textRouteOffered, KIND_LAYER, APP_KINDS as LANE_KINDS } from './app-kinds.mjs';
+import { storeFile, readStored, writeStored, shared as sharedBuild } from './discovery-index-store.mjs';
 
 const run = promisify(execFile);
 const here = path.dirname(fileURLToPath(import.meta.url));
 export const DISCOVERY_SCHEMA = 'ssam-discovery/4';
 export const INDEX_SCHEMA = 'ssam-discovery-index/3';
 const DESCRIPTOR_FILE = path.join(here, 'discovery-capabilities.json');
-const API_OPS = ['agent', 'verbs', 'spec', 'logic', 'screen', 'html', 'html-visual', 'rest', 'rest-consume', 'rest-expose', 'soap', 'entity-actions'];
+const API_OPS = ['agent', 'verbs', 'spec', 'logic', 'screen', 'html', 'html-visual', 'rest', 'rest-consume', 'rest-expose', 'soap', 'entity-actions', 'css'];
 import { EXPANSION_DEFAULT_BYTES, budgetCeiling, maxAnswerBytes } from './context-budget.mjs';
 export const DEFAULT_BUDGET_BYTES = EXPANSION_DEFAULT_BYTES;
 export const EXPAND_PARTS = ['contract', 'example', 'evidence', 'bindings', 'native', 'operations'];
@@ -282,31 +284,39 @@ function canonicalize(list, synonyms, derivedTokens = null, { genitive = new Set
 // the index names and whose assemblies it hashes (W3): one folder, even for a copy of sources with another studioDir.
 // sources.dotnet: the host (tests).
 const cliEnv = sources => ({ ...(sources.env ?? process.env), ...(sources.studioDir ? { [sources.lane === 'odc' ? 'ANVIL_ODC_STUDIO_DIR' : 'ANVIL_STUDIO_DIR']: sources.studioDir } : {}) });
-const cli = (sources, args, maxBuffer = 16 * 1024 * 1024) => run(sources.dotnet ?? 'dotnet', [sources.cli, ...args],
-  { windowsHide: true, maxBuffer, cwd: sources.kernel, env: cliEnv(sources) });
-async function apiSchemas(sources) {
-  const contracts = {}; const timings = {};
-  for (const op of API_OPS) {
-    const started = performance.now();
-    try {
-      const { stdout } = await cli(sources, ['api', '--op', op]);
-      const envelope = JSON.parse(stdout);
-      contracts[op] = envelope.ok ? envelope.data : { error: envelope.error };
-    } catch (error) {
-      // An older CLI build lacks `verbs`: record the absence instead of inventing the table.
-      contracts[op] = { error: String(error.stderr || error.message).split(/\r?\n/).find(Boolean) };
+// signal: the index build's (a cancelled warm-up stops its CLI processes).
+const cli = (sources, args, maxBuffer = 16 * 1024 * 1024, { signal = null } = {}) => run(sources.dotnet ?? 'dotnet', [sources.cli, ...args],
+  { windowsHide: true, maxBuffer, cwd: sources.kernel, env: cliEnv(sources), ...(signal ? { signal } : {}) });
+// The contract of every op, API_OPS_AT_ONCE CLI processes at a time (each a cold CLI of 150 to 300 ms that binds no Studio);
+// the contracts and timings keep the order of API_OPS. `failed`: the ops whose CLI did not run (not an answer of the CLI).
+const API_OPS_AT_ONCE = 4;
+async function apiSchemas(sources, { signal = null } = {}) {
+  const read = {}; const failed = []; const queue = [...API_OPS];
+  await Promise.all(Array.from({ length: API_OPS_AT_ONCE }, async () => {
+    while (queue.length && !signal?.aborted) {
+      const op = queue.shift(); const started = performance.now();
+      try {
+        const { stdout } = await cli(sources, ['api', '--op', op], undefined, { signal });
+        const envelope = JSON.parse(stdout);
+        read[op] = { contract: envelope.ok ? envelope.data : { error: envelope.error } };
+      } catch (error) {
+        // An older CLI build lacks `verbs`: record the absence instead of inventing the table.
+        read[op] = { contract: { error: String(error.stderr || error.message).split(/\r?\n/).find(Boolean) } }; failed.push(op);
+      }
+      read[op].ms = Math.round(performance.now() - started);
     }
-    timings[op] = Math.round(performance.now() - started);
-  }
-  return { contracts, timings };
+  }));
+  const contracts = {}; const timings = {};
+  for (const op of API_OPS) if (read[op]) { contracts[op] = read[op].contract; timings[op] = read[op].ms; }
+  return { contracts, timings, failed };
 }
 // The lane CLI binds the installed Studio for `verify-catalog` and reports platform, IDE version and the count of
 // Verify definitions read from its DLL: the identity of the native side, measured, not copied from a doc.
-export async function studioIdentity(sources) {
+export async function studioIdentity(sources, { signal = null } = {}) {
   const dlls = {};
   for (const name of sources.modelDlls) { const file = path.join(sources.studioDir, name); if (exists(file)) dlls[name] = sha256(fs.readFileSync(file)).slice(0, 16); }
   try {
-    const { stdout } = await cli(sources, ['verify-catalog'], 32 * 1024 * 1024);
+    const { stdout } = await cli(sources, ['verify-catalog'], 32 * 1024 * 1024, { signal });
     const data = JSON.parse(stdout).data ?? {};
     return { platform: data.platform ?? null, ideVersion: data.ideVersion ?? null, verifyDefinitions: data.count ?? null, dir: sources.studioDir, modelDlls: dlls };
   } catch (error) { return { error: String(error.stderr || error.message).split(/\r?\n/).find(Boolean), dir: sources.studioDir, modelDlls: dlls }; }
@@ -485,6 +495,8 @@ function loadJobs(sources) {
 // fixtureSha256 null), the kernel DLL, the Studio version and the hash of every Studio assembly the stamped process
 // had loaded. Anything undetermined on the current side, absent in the stamp, or different, keeps the result
 // historical with the reason. Not covered (and not claimed): producers (O11 `reference` ops) and files outside these.
+// The most assemblies a mismatch list names one per line; above it, one line with the count and the first ones.
+export const ASSEMBLY_LINES = 3;
 export function classifyExecutions(jobs, current) {
   const byName = new Map(jobs.map(j => [j.name, j]));
   const memo = new Map();
@@ -509,10 +521,19 @@ export function classifyExecutions(jobs, current) {
       }
       if (!p.nativeAssemblies || typeof p.nativeAssemblies !== 'object') mismatches.push('nativeAssemblies: absent from the stamp (older stamp schema)');
       else if (!current.assemblyHash) mismatches.push('nativeAssemblies: current Studio directory undetermined');
-      else for (const [name, stamped] of Object.entries(p.nativeAssemblies)) {
-        const now = current.assemblyHash(name);
-        if (now == null) mismatches.push(`nativeAssemblies: ${name} not found in the current Studio directory`);
-        else if (now !== String(stamped).toLowerCase()) mismatches.push(`nativeAssemblies: ${name} differs`);
+      else {
+        // The Studio's assemblies are the environment's, the same for every proof of the lane: more than ASSEMBLY_LINES of
+        // them go in one line with their count and the first names (2026-10-24: hundreds of "X.dll differs" per proof made
+        // the evidence of one capability 92 KB, which pushed its contract out of the expansion).
+        const differ = [], absent = [];
+        for (const [name, stamped] of Object.entries(p.nativeAssemblies)) {
+          const now = current.assemblyHash(name);
+          if (now == null) absent.push(name); else if (now !== String(stamped).toLowerCase()) differ.push(name);
+        }
+        const lines = (list, one, many) => (list.length <= ASSEMBLY_LINES ? list.map(one) : [many(list)]);
+        mismatches.push(...lines(absent, name => `nativeAssemblies: ${name} not found in the current Studio directory`,
+          list => `nativeAssemblies: ${list.length} not found in the current Studio directory (${list.slice(0, ASSEMBLY_LINES).join(', ')}, …)`));
+        mismatches.push(...lines(differ, name => `nativeAssemblies: ${name} differs`, list => `nativeAssemblies: ${list.length} differ (${list.slice(0, ASSEMBLY_LINES).join(', ')}, …)`));
       }
       if (p.baseKind == null || p.base == null) mismatches.push('base: absent from the stamp (older stamp schema)');
       else if (p.base !== (job.base ?? 'tests/fixtures/blank-service.oml')) mismatches.push(`base: stamped '${p.base}' vs declared '${job.base}'`);
@@ -695,8 +716,10 @@ export function pruneBrokenPointers(descriptor, sourcesOf) {
 // inputs (descriptor, builder, CLI DLLs, NAO-DA). Detection limit: a file replaced by other bytes with the same size
 // and mtime is not seen until `--rebuild`. The index itself records content hashes of the model DLLs, the fixture and
 // the native index at build time, so the identity in every answer is exact for the moment the index was built.
-// The builder is this file and catalog.mjs (composition, the keyword contract and the tokenization the build checks).
-const builderSource = Buffer.concat([fs.readFileSync(fileURLToPath(import.meta.url)), fs.readFileSync(path.join(here, 'catalog.mjs'))]);
+// The builder is this file, catalog.mjs (composition, the keyword contract and the tokenization the build checks), and the
+// modules whose code writes into the index: generators.mjs (the generator of each job), limit-values.mjs (the NAO-DA
+// types and verdicts) and discovery-index-store.mjs (what is served from disk).
+const builderSource = Buffer.concat([fileURLToPath(import.meta.url), ...['catalog.mjs', 'generators.mjs', 'limit-values.mjs', 'discovery-index-store.mjs'].map(f => path.join(here, f))].map(f => fs.readFileSync(f)));
 function listStamps(dir, pattern) {
   if (!exists(dir)) return ['absent:' + dir];
   try { return fs.readdirSync(dir).filter(f => pattern.test(f)).sort().map(f => f + ':' + stamp(path.join(dir, f))); } catch { return ['unreadable:' + dir]; }
@@ -716,7 +739,33 @@ export function identityKey(sources, descriptorBytes, sharedBytes = Buffer.alloc
   parts.push(exists(sources.naoDa) ? sha256(fs.readFileSync(sources.naoDa)) : 'no-naoda');
   return sha256(parts.join('\n')).slice(0, 24);
 }
-export async function buildIndex(lane, { sources = laneSources(lane), descriptorFile = sources.descriptor, rebuild = false, persist = true } = {}) {
+// ---- the CLI's side of the index, persisted on its own (extract-<key>.json in the lane cache): the contract of every op
+// (`api --op`) and the Studio identity (`verify-catalog`). They depend only on the CLI, the kernel DLL and the Studio
+// runtime the CLI binds (as the native probes, nativeCacheKey), never on the catalog or this file: a release of the facade
+// or the catalog rebuilds the index from them without a CLI process (13 of them, about 3 s). Kept only when every CLI
+// process ran; an answer of the CLI (an older build without an op) is kept like any answer.
+export const EXTRACT_SCHEMA = 'ssam-discovery-extract/1';
+export function extractKey(sources) {
+  const parts = ['extract/1', sources.lane, API_OPS.join(','), ...(sources.modelDlls ?? [])];
+  for (const file of [sources.cli, sources.kernelDll]) parts.push(exists(file) ? sha256(fs.readFileSync(file)) : 'absent:' + file);
+  parts.push(studioFolder(sources.studioDir), ...listStamps(sources.studioDir, /\.(dll|exe|json)$/i));
+  return sha256(parts.join('\n')).slice(0, 24);
+}
+async function cliExtraction(sources, { signal = null } = {}) {
+  const key = extractKey(sources); const file = sources.cacheDir ? storeFile(sources.cacheDir, 'extract', key) : null;
+  const stored = file ? readStored(file, { key, schema: EXTRACT_SCHEMA }) : { value: null };
+  if (stored.value) return { contracts: stored.value.contracts, timings: stored.value.timings, studio: stored.value.studio, cache: 'hit' };
+  const [{ contracts, timings, failed }, studio] = await Promise.all([apiSchemas(sources, { signal }), studioIdentity(sources, { signal })]);
+  signal?.throwIfAborted();
+  if (file && !failed.length && !studio.error) writeStored(file, JSON.stringify({ schemaVersion: EXTRACT_SCHEMA, key, lane: sources.lane, contracts, timings, studio }));
+  return { contracts, timings, studio, cache: stored.note ? 'rebuilt: ' + stored.note : 'built' };
+}
+// The index of a lane by its identity (identityKey): read from index-<key>.json when the file holds that identity, else
+// built (once per process: the warm-up and a discover that need the same index wait for the same build), written
+// atomically under .local and served as the stored text reads back, so a built index and a loaded one answer alike. A file
+// that cannot be served (another identity, torn, unreadable) is rebuilt and named in cache.note. signal: a caller that may
+// give up (the warm-up); the build stops only when every caller waiting for it did.
+export async function buildIndex(lane, { sources = laneSources(lane), descriptorFile = sources.descriptor, rebuild = false, persist = true, signal = null } = {}) {
   const started = performance.now();
   if (!exists(descriptorFile)) throw new Error('No discovery descriptor for lane ' + lane + ' (' + path.basename(descriptorFile) + '): this lane is not covered; nothing is inferred');
   const descriptorBytes = fs.readFileSync(descriptorFile);
@@ -726,10 +775,27 @@ export async function buildIndex(lane, { sources = laneSources(lane), descriptor
   // build like a pointer that does not resolve.
   const catalog = composeCatalog({ shared: sharedFile, sharedBytes: sharedFileBytes, fragmentsDir: sources.fragments ?? FRAGMENTS_DIR });
   if (catalog.problems.length) throw new Error('discovery catalog fragments do not compose:\n' + catalog.problems.join('\n'));
-  const shared = catalog.shared; const sharedBytes = catalog.fragments.length ? catalog.bytes : sharedFileBytes;
+  const sharedBytes = catalog.fragments.length ? catalog.bytes : sharedFileBytes;
   const key = identityKey(sources, descriptorBytes, sharedBytes);
-  const cached = path.join(sources.cacheDir, 'index-' + key + '.json');
-  if (!rebuild && exists(cached)) { try { const index = readJson(cached); if (index.schemaVersion === INDEX_SCHEMA) return { index, cache: { hit: true, file: cached }, buildMs: Math.round(performance.now() - started) }; } catch { /* rebuild */ } }
+  const cached = storeFile(sources.cacheDir, 'index', key);
+  let note = null;
+  if (!rebuild) {
+    const stored = readStored(cached, { key, schema: INDEX_SCHEMA });
+    if (stored.value) return { index: stored.value, cache: { hit: true, file: cached }, buildMs: Math.round(performance.now() - started) };
+    note = stored.note ?? null;
+  }
+  const { promise, joined } = sharedBuild(cached + (persist ? '' : '#unpersisted'), own => produceIndex(lane, { sources, descriptorFile, persist, signal: own, key, cached, descriptorBytes, sharedFileBytes, sharedFile, catalog }), { signal });
+  const built = await promise;
+  // note: why the stored file was not served (the answer says it); unpersisted: why this build was not written (only here).
+  return { index: JSON.parse(built.text), cache: { hit: false, file: cached, ...(joined ? { joined: true } : {}), ...(built.extraction ? { extraction: built.extraction } : {}), ...(note ? { note } : {}), ...(built.note ? { unpersisted: built.note } : {}) },
+    buildMs: joined ? Math.round(performance.now() - started) : built.buildMs };
+}
+// A build that finds every CLI answer on disk is CPU only (about a second): it gives the event loop a turn between its
+// stages, so the server answers (a doctor) while the warm-up builds, and a cancelled build stops at the next stage.
+const turn = signal => new Promise(resolve => setImmediate(resolve)).then(() => signal?.throwIfAborted());
+async function produceIndex(lane, { sources, descriptorFile, persist, signal, key, cached, descriptorBytes, sharedFileBytes, sharedFile, catalog }) {
+  const started = performance.now();
+  const shared = catalog.shared; const sharedBytes = catalog.fragments.length ? catalog.bytes : sharedFileBytes;
   if (!exists(sources.cli)) throw new Error('The ' + lane + ' kernel CLI is not built (' + sources.cli + '; the index extracts its contracts from it): the integrator or the user builds it; ssam_doctor {lane:"' + lane + '"} reports the state.');
   const laneDescriptor = JSON.parse(descriptorBytes.toString('utf8').replace(/^\uFEFF/, ''));
   if (laneDescriptor.lane !== lane) throw new Error('Descriptor ' + path.basename(descriptorFile) + ' targets lane ' + laneDescriptor.lane + ', not ' + lane);
@@ -747,14 +813,15 @@ export async function buildIndex(lane, { sources = laneSources(lane), descriptor
   const laneSynonyms = descriptor.synonyms ?? {}; const sharedSynonyms = shared?.synonyms ?? {};
   descriptor.synonyms = Object.fromEntries([...new Set([...Object.keys(sharedSynonyms), ...Object.keys(laneSynonyms)])]
     .map(key => [key, [...new Set([...(laneSynonyms[key] ?? []), ...(sharedSynonyms[key] ?? [])])]]));
-  const { contracts, timings } = await apiSchemas(sources);
   // Types the kernel synthesizes over native classes (EntityIndex on O11) have no Model API interface: they are not
   // probed in the runtime; the answer says so (provenance kernel).
   const synthesized = new Set(sharedProjected.flatMap(c => (c.elements ?? []).filter(e => e.runtime === 'kernel' && e.native).map(e => e.native)));
   const nativeTypes = [...new Set(sharedProjected.flatMap(c => c.native ?? []))].filter(t => !synthesized.has(t));
-  const native = await nativeRuntime(sources, nativeTypes);
+  // The CLI's side (contracts, Studio identity: cliExtraction) and the native probes read the CLI at the same time.
+  const [{ contracts, timings, studio, cache: extraction }, native] = await Promise.all([cliExtraction(sources, { signal }), nativeRuntime(sources, nativeTypes, { signal })]);
+  signal?.throwIfAborted();
   for (const t of synthesized) native[t] = { found: true, provenance: 'kernel', note: 'no Model API interface on this lane: the kernel synthesizes the type over the native class (EntityIndexes.cs); the ledger names it by the class' };
-  const studio = await studioIdentity(sources);
+  await turn(signal);
   const fixture = fixtureIdentity(sources);
   // The current identity, hashed on demand and only for what a stamp names (memoized): the Studio assemblies the
   // stamped runs had loaded, and the fixture each job declares as base.
@@ -773,8 +840,13 @@ export async function buildIndex(lane, { sources = laneSources(lane), descriptor
     assemblyHash: exists(sources.studioDir) ? name => { if (!/^[A-Za-z0-9_.+\-/\\ ]+\.dll$/i.test(name)) return null; const direct = path.join(sources.studioDir, name); if (exists(direct)) return hashFile(direct); const found = name.includes('/') || name.includes('\\') ? null : findByName(name); return found ? hashFile(found) : null; } : null,
     baseHash: spec => { if (typeof spec !== 'string' || !spec.endsWith('.oml')) return null; const candidates = path.isAbsolute(spec) ? [spec] : [path.join(sources.kernel, spec), path.join(sources.kernel, 'tests', 'fixtures', spec)]; const fixtures = path.join(sources.kernel, 'tests', 'fixtures') + path.sep; const found = candidates.map(c => path.resolve(c)).find(c => c.toLowerCase().startsWith(fixtures.toLowerCase()) && exists(c)); return found ? hashFile(found) : null; },
   };
-  const jobs = classifyExecutions(loadJobs(sources), current); const negatives = loadNegatives(sources); const limits = loadLimits(sources);
+  const loaded = loadJobs(sources); await turn(signal);
+  // The Studio assemblies the stamps name, hashed one per turn (the same memo classifyExecutions reads): hashing them
+  // inside the classification held the event loop for about a second.
+  if (current.assemblyHash) for (const name of new Set(loaded.flatMap(j => Object.keys(j.executed?.provenance?.nativeAssemblies ?? {})))) { current.assemblyHash(name); await turn(signal); }
+  const jobs = classifyExecutions(loaded, current); await turn(signal); const negatives = loadNegatives(sources); const limits = loadLimits(sources);
   studio.assemblies = Object.fromEntries([...hashed].filter(([f]) => f.toLowerCase().startsWith(sources.studioDir.toLowerCase())).map(([f, h]) => [path.basename(f), h ? h.slice(0, 16) : null]));
+  await turn(signal);
   const { problems, dropped } = pruneBrokenPointers(descriptor, { contracts, jobs, negatives, nativeRuntime: native });
   if (problems.length) throw new Error('discovery descriptor does not match the extracted sources:\n' + problems.join('\n'));
   if (dropped.length) {
@@ -813,8 +885,12 @@ export async function buildIndex(lane, { sources = laneSources(lane), descriptor
     ...(dropped.length ? { dropped } : {}),
   };
   index.buildMs = Math.round(performance.now() - started);
-  if (persist) { try { fs.mkdirSync(sources.cacheDir, { recursive: true }); fs.writeFileSync(cached, JSON.stringify(index)); } catch { /* the cache never blocks an answer */ } }
-  return { index, cache: { hit: false, file: cached }, buildMs: index.buildMs };
+  // Every caller reads the index back from this text, as a later call reads it from the file: the same answers.
+  await turn(signal);
+  const text = JSON.stringify(index);
+  // The cache never blocks an answer: a write that fails or is refused (outside .local) is only named.
+  const written = persist ? writeStored(cached, text) : { written: false };
+  return { text, buildMs: index.buildMs, extraction, ...(written.note ? { note: written.note } : {}) };
 }
 
 // ---- shared capabilities: one definition serves both lanes; the lane sees only its own projection.
@@ -858,18 +934,21 @@ export function projectShared(shared, lane) {
 }
 // The contract of each native type as loaded in the Studio this lane binds (`api --op native --type`), memoized in
 // the index: writable properties and bases of the INSTALLED version, which the older reflection index may not have.
-// Each probe is one CLI process (~0.7 s); a catalog with hundreds of native types made every rebuild take minutes
-// (catalog M2, 2026-09-23: 75 ODC types 63 s, 126 O11 types 85 s). A probe depends only on the CLI, the kernel DLL
-// and the Studio runtime it binds (its folder and its files), so its answer is kept per type under that identity
-// (native-<key>.json in the lane cache) and a rebuild probes only the types it has not seen; the misses run a few at
-// a time.
+// A probe per CLI process made every rebuild take minutes (catalog M2, 2026-09-23: 75 ODC types 63 s, 126 O11 types
+// 85 s; S11, 2026-10-24: 45-60 s for the first discover after a kernel release). A probe depends only on the CLI, the
+// kernel DLL and the Studio runtime it binds (its folder and its files), so its answer is kept per type under that
+// identity (native-<key>.json in the lane cache) and a rebuild probes only the types it has not seen. The misses go to
+// ONE CLI process (`--types A,B,...`, NativeProbe.cs: each type answers as its own `--type` process would); a type
+// the batch did not answer (it failed there, the CLI has no `--types`, the process failed) runs in a process of its
+// own, a few at a time, and fails or answers exactly as before. SSAM_DISCOVERY_NATIVE_BATCH=0: the process-per-type
+// path alone.
 export function nativeCacheKey(sources) {
   const parts = ['native/1'];
   for (const file of [sources.cli, sources.kernelDll]) parts.push(exists(file) ? sha256(fs.readFileSync(file)) : 'absent:' + file);
   parts.push(studioFolder(sources.studioDir), ...listStamps(sources.studioDir, /\.(dll|exe|json)$/i));
   return sha256(parts.join('\n')).slice(0, 24);
 }
-async function nativeRuntime(sources, types, { concurrency = Number(process.env.SSAM_DISCOVERY_NATIVE_CONCURRENCY ?? 3) || 1 } = {}) {
+async function nativeRuntime(sources, types, { concurrency = Number(process.env.SSAM_DISCOVERY_NATIVE_CONCURRENCY ?? 3) || 1, batch = process.env.SSAM_DISCOVERY_NATIVE_BATCH !== '0', signal = null } = {}) {
   const cacheFile = sources.cacheDir ? path.join(sources.cacheDir, 'native-' + nativeCacheKey(sources) + '.json') : null;
   let cache = {};
   if (cacheFile && exists(cacheFile)) { try { cache = readJson(cacheFile); } catch { cache = {}; } }
@@ -877,18 +956,46 @@ async function nativeRuntime(sources, types, { concurrency = Number(process.env.
   for (const type of types) { if (cache[type] && !cache[type].error) out[type] = cache[type]; else missing.push(type); }
   const probe = async type => {
     try {
-      const { stdout } = await cli(sources, ['api', '--op', 'native', '--type', type]);
-      const envelope = JSON.parse(stdout); const d = envelope.ok ? envelope.data : null;
-      const hit = d?.candidates?.find(c => c.fullName === type) ?? null;
-      out[type] = hit ? { found: true, platform: d.platform, ideVersion: d.ideVersion, assembly: hit.assembly, bases: hit.bases, writable: hit.writable, properties: hit.properties.length, methods: hit.methods }
-        : { found: false, platform: d?.platform ?? null, ideVersion: d?.ideVersion ?? null, candidates: (d?.candidates ?? []).map(c => c.fullName), error: envelope.error ?? null };
+      const { stdout } = await cli(sources, ['api', '--op', 'native', '--type', type], undefined, { signal });
+      out[type] = nativeEntry(type, JSON.parse(stdout));
     } catch (error) { out[type] = { found: false, error: String(error.stderr || error.message).split(/\r?\n/).find(Boolean) }; }
   };
-  const queue = [...missing];
-  await Promise.all(Array.from({ length: Math.max(1, Math.min(concurrency, queue.length)) }, async () => { while (queue.length) await probe(queue.shift()); }));
+  const batched = batch ? await nativeBatch(sources, missing, { signal }) : {};
+  for (const [type, envelope] of Object.entries(batched)) out[type] = nativeEntry(type, envelope);
+  const queue = missing.filter(t => !Object.hasOwn(batched, t));
+  await Promise.all(Array.from({ length: Math.max(1, Math.min(concurrency, queue.length)) }, async () => { while (queue.length && !signal?.aborted) await probe(queue.shift()); }));
   // A probe that failed to run (error) is not kept: it is retried on the next build instead of being remembered.
-  if (cacheFile && missing.length) { try { fs.mkdirSync(sources.cacheDir, { recursive: true }); fs.writeFileSync(cacheFile, JSON.stringify({ ...cache, ...Object.fromEntries(missing.filter(t => !out[t].error || out[t].found === false && out[t].platform).map(t => [t, out[t]])) })); } catch { /* the cache never blocks a build */ } }
+  // A cancelled build leaves the types it did not reach out. The write is atomic (discovery-index-store.mjs): a reader never
+  // sees half a file. The cache never blocks a build.
+  if (cacheFile && missing.length) writeStored(cacheFile, JSON.stringify({ ...cache, ...Object.fromEntries(missing.filter(t => out[t] && (!out[t].error || out[t].found === false && out[t].platform)).map(t => [t, out[t]])) }));
   return Object.defineProperty(out, '_probe', { value: { cached: types.length - missing.length, probed: missing.length, cacheFile }, enumerable: false });
+}
+// One probe's envelope (a process of its own, or its entry in a batch) as the index keeps it.
+function nativeEntry(type, envelope) {
+  const d = envelope.ok ? envelope.data : null;
+  const hit = d?.candidates?.find(c => c.fullName === type) ?? null;
+  return hit ? { found: true, platform: d.platform, ideVersion: d.ideVersion, assembly: hit.assembly, bases: hit.bases, writable: hit.writable, properties: hit.properties.length, methods: hit.methods }
+    : { found: false, platform: d?.platform ?? null, ideVersion: d?.ideVersion ?? null, candidates: (d?.candidates ?? []).map(c => c.fullName), error: envelope.error ?? null };
+}
+// The batch probe: the envelope of each type it answered ok; none when the CLI has no `--types` (an older build) or the
+// process failed. A type the batch answered with an error is left out too: its own process records the error as the
+// process-per-type path always did (the stderr line or the exit), not the batch's wording. The list is split so that no command line nears the
+// Windows limit (32 767 characters).
+const NATIVE_BATCH_CHARS = 24000;
+export async function nativeBatch(sources, types, { signal = null } = {}) {
+  const chunks = [];
+  for (const type of types) { const last = chunks.at(-1); if (last && last.join(',').length + type.length + 1 <= NATIVE_BATCH_CHARS) last.push(type); else chunks.push([type]); }
+  const answered = {};
+  for (const chunk of chunks) {
+    if (signal?.aborted) break;
+    try {
+      const { stdout } = await cli(sources, ['api', '--op', 'native', '--types', chunk.join(',')], 256 * 1024 * 1024, { signal });
+      const results = JSON.parse(stdout)?.data?.results;
+      if (!results || typeof results !== 'object') break;
+      for (const type of chunk) if (results[type]?.ok === true) answered[type] = results[type];
+    } catch { break; }
+  }
+  return answered;
 }
 const OP_VERBS = { read: ['get', 'dump', 'find'], usages: ['usages'], create: ['create', 'spec'], set: ['set', 'link'], rename: ['rename', 'set'], replace: ['replace'], move: ['move'], duplicate: ['duplicate'], delete: ['delete'] };
 const OP_PRIORITY = ['replace', 'delete', 'rename', 'move', 'duplicate', 'set', 'usages', 'read', 'create'];
@@ -1039,6 +1146,12 @@ export function laneDigest(lane, sources = laneSources(lane)) {
   if (!['odc', 'o11'].includes(lane)) return null;
   const reader = lane === 'o11' ? { entry: { cli: sources.cli, root: sources.kernel, lane: sources.o11Lane.name }, ssDir: sources.studioDir } : {};
   return async target => (await import('./module-map.mjs')).moduleDigest({ lane, target }, { reader });
+}
+// The readings of the elements a change edits, for the packet's scope (module-map.mjs ownerReadings): the same lane reader.
+export function laneOwner(lane, sources = laneSources(lane)) {
+  if (!['odc', 'o11'].includes(lane)) return null;
+  const reader = lane === 'o11' ? { entry: { cli: sources.cli, root: sources.kernel, lane: sources.o11Lane.name }, ssDir: sources.studioDir } : {};
+  return async request => (await import('./module-map.mjs')).ownerReadings({ ...request, lane }, { reader });
 }
 
 // ---- matching
@@ -1270,7 +1383,11 @@ export function closure(capabilities, seeds) {
 // themselves). dependency: the closure of `depends` of the direct matches, kept because the job cannot run without
 // them. alternative: capabilities the intent touched only through operation words, or the descriptor alternatives
 // of a direct match: listed compactly with the reason and the exact expansion, never with contracts or examples.
-export function query(index, { intent = '', limit = 8 } = {}) {
+// `view` (app-kinds.mjs indexForKinds): the index as the request's app kind sees it. The ranking, the direct threshold and
+// the family demotion are computed over the whole lane (index) and only then is what the view does not offer left out, so a
+// weak match is never promoted to direct because a stronger match of another kind was removed (F4 review, finding 4); the
+// matches, their proofs, the closure, the alternatives and the related jobs are the view's.
+export function query(index, { intent = '', limit = 8, view = null } = {}) {
   const { list: raw, genitive, gap } = intentTokens(intent);
   const derivedTokens = new Set(normalize(intent).split(/[^a-z0-9_]+/).filter(w => w.length > 1 && !STOP.has(w) && derived(w)).map(stem));
   // The owners of single-word keywords (A-005): the plain keywords of the index and, for this intent only, the anchored
@@ -1325,10 +1442,14 @@ export function query(index, { intent = '', limit = 8 } = {}) {
   if (eligible.some(namesFamily)) for (const x of eligible) if (isFamily(x.c) && !namesFamily(x)) demoted.set(x.c.id, 'named through a generic element word only (attribute/record/value); the intent names another family');
   eligible = eligible.filter(x => !demoted.has(x.c.id));
   const top = eligible[0]?.score ?? 0;
-  const selected = eligible.filter(x => x.score >= Math.max(2, top * 0.34)).slice(0, limit).map(x => ({ ...x, via: 'match' }));
+  const pool = view ?? index;
+  const own = view ? new Map(view.capabilities.map(c => [c.id, c])) : null;
+  const inView = x => !own || own.has(x.c.id);
+  const asView = x => (own ? { ...x, c: own.get(x.c.id) } : x);
+  const selected = eligible.filter(x => x.score >= Math.max(2, top * 0.34)).slice(0, limit).filter(inView).map(x => ({ ...asView(x), via: 'match' }));
   const selectedIds = new Set(selected.map(x => x.c.id));
-  const operationOnly = scored.filter(x => !selectedIds.has(x.c.id) && x.score >= 3).map(x => ({ ...x, reason: demoted.get(x.c.id) ?? (x.elementHits > 0 ? 'below the direct threshold' : 'operation words only: no element of this capability is named in the intent') }));
-  const { chosen, order, cycles, invalid } = closure(index.capabilities, selected);
+  const operationOnly = scored.filter(x => !selectedIds.has(x.c.id) && x.score >= 3).filter(inView).map(asView).map(x => ({ ...x, reason: demoted.get(x.c.id) ?? (x.elementHits > 0 ? 'below the direct threshold' : 'operation words only: no element of this capability is named in the intent') }));
+  const { chosen, order, cycles, invalid } = closure(pool.capabilities, selected);
   const contracts = {};
   // Direct matches carry their summary, limits and notes, and their contract slices whole (up to the per-slice cap);
   // dependencies are brief (id, route, proofs, pointers) with compact slices. `--expand <id>:...` opens any of them.
@@ -1359,7 +1480,7 @@ export function query(index, { intent = '', limit = 8 } = {}) {
   // first, at most four), each with its reason and the expansion that opens it whole.
   const alternatives = [];
   for (const x of [...chosen.values()].filter(x => x.via === 'match')) for (const alt of x.c.alternatives ?? []) {
-    const c = index.capabilities.find(k => k.id === alt.id);
+    const c = pool.capabilities.find(k => k.id === alt.id);
     if (c && !chosen.has(alt.id) && !alternatives.some(a => a.id === alt.id)) alternatives.push({ id: alt.id, title: c.title, via: 'alternative', score: scored.find(s => s.c.id === alt.id)?.score ?? 0, why: scored.find(s => s.c.id === alt.id)?.why ?? [], level: levelOf(index, c), reason: `alternative of ${x.c.id}: ${alt.when}`, route: { kind: c.route?.kind ?? null }, expand: alt.id });
   }
   for (const x of operationOnly) { if (alternatives.length >= 4) break; if (chosen.has(x.c.id) || alternatives.some(a => a.id === x.c.id)) continue; alternatives.push({ id: x.c.id, title: x.c.title, via: 'alternative', score: x.score, why: x.why, level: levelOf(index, x.c), reason: x.reason, route: { kind: x.c.route?.kind ?? null }, expand: x.c.id }); }
@@ -1370,7 +1491,7 @@ export function query(index, { intent = '', limit = 8 } = {}) {
     .map(x => ({ id: x.u.id, why: x.hits, reason: x.u.reason, evidence: x.u.evidence ?? null, negative: (x.u.negative?.[index.lane] ?? []), alternative: x.u.alternative ?? null }));
   const cited = new Set(matches.flatMap(m => (m.proofs ?? []).map(p => p.job)));
   // A suite job of a pending generator is its proof: never listed unasked (the generator gate; named, it is listed).
-  const relatedJobs = index.jobs.filter(j => !cited.has(j.name) && generatorShown(j.generator, intent)).map(j => ({ j, ...scoreJob(j, terms, index.lane) })).filter(x => x.score > 1).sort((a, b) => b.score - a.score).slice(0, 3)
+  const relatedJobs = pool.jobs.filter(j => !cited.has(j.name) && generatorShown(j.generator, intent)).map(j => ({ j, ...scoreJob(j, terms, index.lane) })).filter(x => x.score > 1).sort((a, b) => b.score - a.score).slice(0, 3)
     .map(x => ({ job: x.j.name, why: x.why, description: x.j.description.slice(0, 120), level: jobLevel(x.j) }));
   const covered = new Set(matches.flatMap(m => m.why).concat(unavailable.flatMap(u => u.why)).flatMap(whyWords));
   const unmatched = raw.filter(t => ![...from.get(t) ?? []].some(c => c.split(' ').every(part => covered.has(part))));
@@ -1402,8 +1523,10 @@ export function query(index, { intent = '', limit = 8 } = {}) {
   }
   bindings.sort((a, b) => a.rank - b.rank || tier.get(a) - tier.get(b));
   const bindingsTotal = bindings.length; bindings.length = Math.min(bindings.length, 12);
+  // The whole lane's direct ranking (before the view): what the kind left out is read from it (kindSection).
+  const ranked = eligible.filter(x => x.score >= Math.max(2, top * 0.34)).slice(0, limit).map(x => ({ id: x.c.id, score: x.score }));
   return { terms, matches, contracts, routes: Object.fromEntries([...new Set(matches.map(m => m.route.kind))].filter(Boolean).map(k => [k, index.routes?.[k] ?? null])),
-    order, cycles, invalidDependencies: invalid, decisions, recommended, unavailable, relatedJobs, unmatched, bindings, bindingsTotal };
+    order, cycles, invalidDependencies: invalid, decisions, recommended, unavailable, relatedJobs, unmatched, bindings, bindingsTotal, ranked };
 }
 // A capability as a direct match of the work packet when the module holds the element the intent names exactly (W1): the
 // fields of a direct match of query() that the packet reads.
@@ -1592,6 +1715,15 @@ export async function applicationContext(index, sources, { app, matches, terms, 
 // result is returned (size.status 'insufficient'): never an answer above the budget with a note.
 const OMITTED_PART = { examples: 'example', 'examples.all': 'example', contracts: 'contract', bindings: 'bindings', 'bindings.all': 'bindings', 'matches.operations': 'operations', 'matches.operations.focused': 'operations', 'matches.native': 'native', 'matches.limits': 'evidence', 'matches.notes': 'evidence', 'matches.summary': 'evidence', 'matches.direct.minimal': 'evidence' };
 // The stages in their fixed order, [name, reduce(answer) in place, recover(answer) -> continuation text].
+const PROOFS_KEPT = 2;
+const STATUS_PROOFS = 4;
+const proofJob = p => (typeof p === 'string' ? p : p?.job ?? null);
+// The jobs the operations of a match cite as the proof of a role (operations[op].roles[role].proofs).
+function citedProofs(m) {
+  const out = new Set();
+  for (const o of Object.values(m.operations ?? {})) for (const r of Object.values(o?.roles ?? {})) for (const p of r?.proofs ?? []) { const j = proofJob(p); if (j) out.add(j); }
+  return out;
+}
 function budgetStages() {
   const direct = a => (a.matches ?? []).filter(m => m.via === 'match').map(m => m.id);
   // Under budget, a shared match keeps whole only the operations the intent named; when it named none, every operation
@@ -1606,6 +1738,26 @@ function budgetStages() {
     // A. derived or duplicated text
     // Recoveries name ssam_discover arguments (expand, detail, budgetBytes), never CLI flags.
     ['matches.notes', a => a.matches?.forEach(m => { delete m.notes; }), a => `expand ${direct(a).map(id => id + ':evidence').join(',')}`],
+    // The proof list of a match grows with the stamped results of the suites (every job of the capability, each with its
+    // level): its first PROOFS_KEPT and the count go before any dependency, example or contract is touched (2026-10-24:
+    // with a few hundred results the composite answer cut contracts and examples while the proof lists stayed whole).
+    // The proofs the status of the match stands on stay: when the status is proven current, the first STATUS_PROOFS at that
+    // level (the level is its best proofs'), and always every one an operation cites for a role (its role's proofs). What goes, counted in proofsOmitted, is
+    // the rest beyond the first PROOFS_KEPT: below that level (historical or suite-only proofs, the ones an accumulated
+    // results folder adds) and the further ones at it.
+    ['matches.proofs', a => a.matches?.forEach(m => {
+      if (!Array.isArray(m.proofs) || m.proofs.length <= PROOFS_KEPT) return;
+      const cited = citedProofs(m);
+      let atLevel = 0;
+      const keep = m.proofs.filter((p, i) => {
+        const standing = m.level === 'C-executed-current' && p?.level === m.level;
+        const level = standing && atLevel < STATUS_PROOFS;
+        if (standing) atLevel++;
+        return i < PROOFS_KEPT || cited.has(proofJob(p)) || level;
+      });
+      if (keep.length < m.proofs.length) { m.proofsOmitted = (m.proofsOmitted ?? 0) + m.proofs.length - keep.length; m.proofs = keep; }
+    }),
+      a => `expand ${direct(a).map(id => id + ':evidence').join(',')}`],
     ['relatedJobs', a => { a.relatedJobs = []; }, () => 'query with a narrower intent'],
     ['evidenceRule', a => { const rule = a.matches?.find(m => m.evidenceRule)?.evidenceRule; if (rule) { a.evidenceRule = rule; a.matches.forEach(m => { delete m.evidenceRule; }); } }, () => 'answer.evidenceRule, stated once'],
     ['identity', a => { const i = a.identity; if (i && !i.reduced) a.identity = { lane: i.lane, index: i.index, cli: i.cli, kernel: i.kernel, studio: i.studio ? { platform: i.studio.platform, ideVersion: i.studio.ideVersion } : null, fixture: i.fixture ?? null, descriptor: i.descriptor ?? null, jobs: i.jobs ? { results: i.jobs.results, current: i.jobs.current, historical: i.jobs.historical } : null, modelApi: i.modelApi ?? null, warnings: i.warnings?.length ?? 0, reduced: 'keyStrategy, nativeRuntime, shared detail and the warning texts omitted by budget' }; }, () => 'raise budgetBytes to read the whole identity (warnings, key strategy, native runtime)'],
@@ -1617,7 +1769,9 @@ function budgetStages() {
     ['context.elements', a => { a.context?.reads?.forEach(r => { if (r.elements && r.elements.length > 8) { r.elements = r.elements.slice(0, 8).map(e => e.name ?? e); r.elementsShown = 8; r.continuation = r.continuation ?? { kind: r.kind }; } }); }, () => 'context.reads[].continuation'],
     ['context.signatures', a => { if (a.context?.signatures?.length > 3) { a.context.omittedSignatures = [...a.context.signatures.slice(3).map(s => ({ name: s.name, kind: s.kind, reference: s.reference, continuation: s.continuation })), ...(a.context.omittedSignatures ?? [])]; a.context.signatures = a.context.signatures.slice(0, 3); } }, () => 'context.omittedSignatures[].continuation'],
     // C. lower tiers: alternatives to a line, dependencies to what makes them runnable
-    ['matches.alternatives', a => { if (a.matches) a.matches = a.matches.map(m => (m.via === 'alternative' ? { id: m.id, via: 'alternative', reason: m.reason, expand: m.expand } : m)); }, () => 'expand <id> opens an alternative whole'],
+    // Every compact form keeps the match's level (as the dependencies' and the direct matches' minimal forms do): the
+    // level is part of every match, whatever the budget cut around it.
+    ['matches.alternatives', a => { if (a.matches) a.matches = a.matches.map(m => (m.via === 'alternative' ? { id: m.id, via: 'alternative', level: m.level, reason: m.reason, expand: m.expand } : m)); }, () => 'expand <id> opens an alternative whole'],
     ['matches.dependencies', a => { if (a.matches) a.matches = a.matches.map(m => (m.via === 'dependency' ? { id: m.id, title: m.title, via: 'dependency', level: m.level, route: m.route, ...(m.requiredBy ? { requiredBy: m.requiredBy } : {}), ...(m.conditions ? { conditions: m.conditions } : {}), expand: `${m.id}:contract+example+evidence` } : m)); }, () => 'expand <id>:contract+example+evidence for any dependency; composition.order lists the ids'],
     // D. direct matches: what the intent did not ask, first
     // The rules between roles of the direct matches are ordered first (query), so the six kept are those. The pair a
@@ -1650,7 +1804,7 @@ function budgetStages() {
     ['matches.operations.focused', a => a.matches?.forEach(m => { if (m.via !== 'match' || !m.operations) return; for (const [op, o] of Object.entries(m.operations)) m.operations[op] = { summary: o.summary?.text ?? o.summary ?? null, roles: compactRoles(o.roles) }; if (m.native) m.native = m.native.map(n => n.native); }), () => 'continuation.omitted[].expand (operations+native)'],
     // What survives of validation is the delivery call (it validates inside itself), never the optional headless proof.
     ['envelope', a => { if (a.validation) a.validation = { deliver: a.validation.deliver ?? null }; delete a.routes; delete a.lexical; delete a.terms; if (a.coverage) a.coverage = { lane: a.coverage.lane, laneSpecific: a.coverage.laneSpecific, ...(a.coverage.shared ? { shared: a.coverage.shared } : { sharedCount: a.coverage.sharedCount }) }; if (a.continuation) delete a.continuation.expand; if (a.unavailable?.length) a.unavailable = a.unavailable.map(u => ({ id: u.id, ...(u.alternative ? { alternative: u.alternative } : {}) })); }, () => 'raise budgetBytes to read validation, routes, lexical, coverage.note, continuation.expand and the reasons of unavailable entries'],
-    ['matches.direct.minimal', a => a.matches?.forEach(m => { if (m.via !== 'match') return; for (const k of ['category', 'why', 'proofs', 'depends', 'context', 'contract', 'negative', 'lanes', 'native', 'shared', 'score', 'summary', 'title']) delete m[k]; m.expand = `${m.id}:contract+example+evidence+operations+native+bindings`; }), () => 'continuation.omitted[].expand'],
+    ['matches.direct.minimal', a => a.matches?.forEach(m => { if (m.via !== 'match') return; for (const k of ['category', 'why', 'proofs', 'proofsOmitted', 'depends', 'context', 'contract', 'negative', 'lanes', 'native', 'shared', 'score', 'summary', 'title']) delete m[k]; m.expand = `${m.id}:contract+example+evidence+operations+native+bindings`; }), () => 'continuation.omitted[].expand'],
     // F. what the call asked by name (expand, detail, type) is the last thing cut, after the model part of an intent is at
     // its minimal (2026-10-11): the example to four ops, the proofs to two, the bindings to eight. An answer whose
     // expansions are the parts asked beside an intent (fitAsked) skips it: there each part is whole, reduced and named, or
@@ -1693,6 +1847,10 @@ export function applyBudget(answer, budgetBytes, { keepExpansions = false } = {}
       truncated.push(entry); answer.size.status = 'reduced'; refreshOmitted();
     }
   }
+  // The proof lists cut first (matches.proofs) are gone whole once the direct matches are at their minimal: that note is
+  // subsumed and leaves, so the minimal answer is the one it was before the stage existed (catalog-a: 12005..12148 at 12000).
+  const subsumed = truncated.findIndex(t => t.section === 'matches.proofs');
+  if (subsumed >= 0 && truncated.some(t => t.section === 'matches.direct.minimal')) { truncated.splice(subsumed, 1); refreshOmitted(); }
   // The last check is on the returned bytes: above the budget after every stage, the explicit insufficient result.
   if (measure() > budgetBytes) return insufficientAnswer(answer, budgetBytes, truncated);
   return answer;
@@ -1747,12 +1905,103 @@ function insufficientAnswer(answer, budgetBytes, truncated) {
 // counts per category, and last a size.truncated note with the expansion. A model answer that did not fit
 // (`insufficient`) gets nothing. Never a stage that touches matches (their notes and evidenceRule stay as the model
 // budget left them).
+// The app kind of a request (app-kinds.mjs, family F4): the module the packet read (its module type), else the flows of
+// the capture (O11: one probe per flow kind on the module map of the same bytes; the Mobile flows decide first), else the
+// kind words of the intent (kindReading: only a kind that qualifies what is built, or a migration's target); null when
+// nothing says. A migration names its target in the words ("migrate this Traditional screen to Reactive"): the target
+// governs the recipes and the capture's (or the other named) kind is its source, read with the source's own capabilities.
+export async function requestKinds({ lane, intent, app = null, found = null, map = null, kinds = null }) {
+  if (Array.isArray(kinds) && kinds.length) return { kinds, from: 'caller' };
+  const reading = kindReading(lane, intent);
+  const moduleType = found?.ok ? found.digest?.module?.kind ?? null : null;
+  let captured = null;
+  const fromModule = kindOfModuleType(lane, moduleType);
+  if (fromModule) captured = { kinds: [fromModule], from: 'module', moduleType };
+  else if (app && map && lane === 'o11' && !found) {
+    const counts = {};
+    for (const [kind, key] of [['WebFlow', 'web'], ['MobileFlow', 'mobile']]) {
+      const r = await safeInspect(map, { target: app, kind, max: 1 });
+      if (!r.ok) { captured = null; break; }
+      counts[key] = r.count ?? r.entries?.length ?? 0;
+      if (key === 'mobile') { const k = kindsFromFlows(lane, counts); if (k.length) captured = { kinds: k, from: 'capture' }; }
+    }
+  }
+  const target = reading.migration ? reading.kinds : [];
+  if (captured && target.length && !target.some(k => captured.kinds.includes(k)))
+    return { kinds: target, from: 'intent', migration: true, source: { kinds: captured.kinds, from: captured.from } };
+  if (captured) return captured;
+  if (!reading.kinds.length) return null;
+  return { kinds: reading.kinds, from: 'intent', ...(reading.migration && reading.source.length ? { migration: true, source: { kinds: reading.source, from: 'intent' } } : {}) };
+}
+// The kind section of an answer, compact: the kinds the answer is for, where that came from, and the direct matches of the
+// whole lane's ranking the kind does not offer (each with the kinds it was proven on). When the need the words name best is
+// left out, it says plainly that no proven recipe exists for the kind and gives one native call, unless a capability of
+// the kind's own UI layer is among the direct matches (then that one is the kind's recipe, named in `instead`). The native
+// call: the kind's own UI capability the words reached, else the native contract of a type of the kind's layer the intent
+// names, else the catalog; a library has no UI layer at all. A migration also names its source and the source's
+// capabilities the words reached, to read it.
+export function kindSection(scope, baseIndex, view, q, intent) {
+  if (!scope) return null;
+  const decl = id => capabilityKinds(baseIndex, id);
+  const offered = new Set(view.capabilities.map(c => c.id));
+  const ranked = q.ranked ?? [];
+  const excluded = ranked.filter(r => !offered.has(r.id)).map(r => ({ id: r.id, provenOn: decl(r.id)?.provenOn ?? [] })).slice(0, 6);
+  // Unknown kind: only what is proven on no kind of the lane is left out, and named so.
+  if (scope.from === 'lane') return excluded.length ? { from: 'lane', unproven: excluded.map(x => x.id), why: `proven on no app kind of lane ${baseIndex.lane}: not offered as a recipe` } : null;
+  const section = { for: scope.kinds, from: scope.from, ...(scope.moduleType ? { moduleType: scope.moduleType } : {}), ...(excluded.length ? { excluded } : {}) };
+  const direct = q.matches.filter(m => m.via === 'match').map(m => m.id);
+  const ownLayer = id => decl(id)?.scope === 'ui' && scope.kinds.some(k => decl(id)?.offered.includes(k) && KIND_LAYER[k]);
+  if (excluded.length && ranked[0] && !offered.has(ranked[0].id)) {
+    const own = direct.filter(ownLayer);
+    const label = scope.kinds.map(kindLabel).join(' / ');
+    const left = excluded.map(x => x.id + (x.provenOn.length ? ' (proven on ' + x.provenOn.join(', ') + ')' : ' (unproven)')).join('; ');
+    if (own.length) section.instead = { recipe: own[0], why: `${left} ${excluded.length > 1 ? 'are' : 'is'} not offered for ${label}; ${own[0]} is its ${label} recipe` };
+    else {
+      section.noRecipe = `no proven recipe for ${label}: ${left} ${excluded.length > 1 ? 'are' : 'is'} not offered for it`;
+      const reached = q.matches.filter(m => m.via !== 'dependency' && ownLayer(m.id)).map(m => m.id).slice(0, 3);
+      section.native = nativePath(baseIndex.lane, scope.kinds, nativeTypesNamed(view, scope.kinds, intent), reached, view);
+    }
+  }
+  if (scope.source) {
+    const read = ranked.map(r => r.id).filter(id => !offered.has(id) && scope.source.kinds.some(k => decl(id)?.offered.includes(k))).slice(0, 4);
+    section.source = { for: scope.source.kinds, from: scope.source.from, ...(read.length ? { read } : {}), why: 'the migration\'s source: read it with these (their read operations) or ssam_map {view:"html"|"flow"}; the recipes above are the target\'s' };
+  }
+  return section;
+}
+// The kind section of a work packet: the shortest form (ids, the note and the one native call), so that it never takes the
+// room of the module or the rules (F4 review, finding 7).
+export function packetKind(section) {
+  if (!section) return null;
+  if (section.from === 'lane') return null;
+  return { for: section.for, from: section.from, ...(section.excluded ? { excluded: section.excluded.map(x => x.id) } : {}),
+    ...(section.noRecipe ? { noRecipe: 'no proven recipe for ' + section.for.map(kindLabel).join(' / '), native: section.native.call } : {}),
+    ...(section.instead ? { instead: section.instead.recipe } : {}), ...(section.source ? { source: section.source.for, ...(section.source.read ? { read: section.source.read } : {}) } : {}) };
+}
+// The kind section of an answer reduced to what an insufficient or reduced answer keeps: the kinds, the source and the note.
+export function compactKind(section) {
+  if (!section) return null;
+  if (section.from === 'lane') return section;
+  return { for: section.for, from: section.from, ...(section.excluded ? { excluded: section.excluded.map(x => x.id) } : {}), ...(section.noRecipe ? { noRecipe: section.noRecipe, native: section.native } : {}), ...(section.instead ? { instead: section.instead } : {}), ...(section.source ? { source: { for: section.source.for, ...(section.source.read ? { read: section.source.read } : {}) } } : {}) };
+}
+export function noRecipeHint(kind) { return `${kind.noRecipe[0].toUpperCase()}${kind.noRecipe.slice(1)}. Native path: ${kind.native.call.tool} ${JSON.stringify(kind.native.call.arguments)} (${kind.native.why}).`; }
+// Places the kind section right after intent (the first thing read).
+function withKind(answer, section) {
+  if (!section) return answer;
+  const out = {};
+  for (const [k, v] of Object.entries(answer)) { out[k] = v; if (k === 'intent') out.kind = section; }
+  if (!('kind' in out)) out.kind = section;
+  return out;
+}
+
 const OSUI_YIELDS = ['relatedJobs', 'identity', 'notes', 'coverage.shared'];
 const OSUI_RECOVER = lane => `ssam_discover {lane:"${lane}", expand:"osui:<Category>,osui:<Pattern>"} (osui:<appType> lists every pattern of an app type with one line each)`;
-export async function outsystemsUiRequest({ lane, intent: written, matches, context = null, app = null, map = null }) {
+export async function outsystemsUiRequest({ lane, intent: written, matches, context = null, app = null, map = null, kinds = null }) {
   const intent = withoutPaths(written); // a folder named mobile/ or a page.html says nothing of the screen asked
   if (!isScreenIntent(intent, matches) || !osuiCatalogAvailable()) return null;
-  const request = await outsystemsUiAppTypes({ lane, intent, context, app, map });
+  // A known kind decides the app types (a library has none: no section); else the capture, the words or the lane.
+  const known = kinds?.kinds?.length ? osuiAppTypes(kinds.kinds) : null;
+  if (known && !known.length) return null;
+  const request = known ? { lane, appTypes: known, from: kinds.from } : await outsystemsUiAppTypes({ lane, intent, context, app, map });
   // The patterns the intent names (own name or a catalog synonym: deck -> StackedCards, slider -> RangeSlider).
   const named = namedPatterns(lane, intent, request.appTypes);
   return named.length ? { ...request, named } : request;
@@ -2126,6 +2375,11 @@ function atEntry(fitAt, { budgetBytes, ceilingBytes, sections = null }) {
   const first = fitAt(budgetBytes);
   const floorOf = B => (sections ? sections.floor(B) : 0);
   const lost = a => !!sections && sections.lost(a);
+  // At the entry a section of the request left out, even with its word in size.truncated, is a reason to refit: the C07
+  // contract keeps provenExample, steps and values at the default budget (2026-10-24: with the stamped results of every
+  // suite the matches grew 1.8 KB and values left with a word, which the silence check let through). Without a ceiling the
+  // word is enough (declareLost below).
+  const short = a => !!sections && (sections.missing ?? sections.lost)(a);
   const capped = (B, cap, options = {}) => fitAt(B, cap < B ? { ...options, model: cap } : options);
   // Without a ceiling (a caller that budgets the answer itself: the reruns of discoverAll, the work packet, tests) the
   // model part stays as the budget gave it, but a section is never lost without a word (INT-3 of the CX11 integration: at
@@ -2135,9 +2389,11 @@ function atEntry(fitAt, { budgetBytes, ceilingBytes, sections = null }) {
   if (ceilingBytes == null) return lost(first.answer) ? declareLost(first.answer, sections.which?.(first.answer) ?? []) : first.answer;
   let need = neededBytes(first);
   if (need == null || need <= budgetBytes) {
-    if (!lost(first.answer)) return first.answer;
+    if (!short(first.answer)) return first.answer;
     const within = capped(budgetBytes, budgetBytes - floorOf(budgetBytes));
-    if (neededBytes(within) == null && !lost(within.answer)) return within.answer;
+    if (neededBytes(within) == null && !short(within.answer)) return within.answer;
+    // The refit could not keep them either: the first answer, with every left-out section named, unless it lost one in silence.
+    if (!lost(first.answer) && neededBytes(within) == null) return first.answer;
     // The model part does not fit under the budget less the floor: it stays as the budget gave it, the floor above it.
     need = budgetBytes;
   }
@@ -2388,12 +2644,14 @@ export function exactDiscoveryCalls(answer, input = {}) {
   return answer;
 }
 
-async function discoverCore({ lane = 'odc', intent = '', app = null, detail = null, expand = null, type = null, limit = 8, rebuild = false, budgetBytes = DEFAULT_BUDGET_BYTES, ceilingBytes = null, inspect = null, map = null, sources = laneSources(lane), descriptorFile = sources.descriptor, outsystemsUi = true, packet = false, digest = null, operations = null, textRoutes = true, components = null, producerCache = undefined } = {}) {
+async function discoverCore({ lane = 'odc', intent = '', app = null, detail = null, expand = null, type = null, limit = 8, rebuild = false, budgetBytes = DEFAULT_BUDGET_BYTES, ceilingBytes = null, inspect = null, map = null, sources = laneSources(lane), descriptorFile = sources.descriptor, outsystemsUi = true, packet = false, digest = null, operations = null, textRoutes = true, components = null, producerCache = undefined, kinds = null, kindFilter = true, owner = undefined } = {}) {
   // ceilingBytes: the entry's answer ceiling (discoverAll; atEntry): a budget below the minimal answer is raised to it, and
   // a minimal above the ceiling answers in pages. Without it the budget is the hard limit it always was (engine, tests).
   const started = performance.now();
   const built = await buildIndex(lane, { sources, descriptorFile, rebuild });
-  const index = built.index;
+  // `index` becomes the view of the request's app kind below (app-kinds.mjs indexForKinds); `baseIndex` stays whole.
+  const baseIndex = built.index;
+  let index = baseIndex;
   const identity = { lane, index: index.key, builtAt: index.builtAt, cli: index.identity.cli.sha256, kernel: index.identity.cli.kernelSha256, studio: { platform: index.identity.studio.platform, ideVersion: index.identity.studio.ideVersion, verifyDefinitions: index.identity.studio.verifyDefinitions, assembliesCompared: Object.keys(index.identity.studio.assemblies ?? {}).length },
     fixture: index.identity.fixture?.sha256 ?? null, descriptor: index.identity.descriptor.sha256, jobs: index.identity.jobs, modelApi: index.identity.modelApi?.version ?? null, cache: built.cache.hit ? 'reused' : 'rebuilt', keyStrategy: index.identity.keyStrategy, warnings: [] };
   identity.nativeRuntime = index.identity.nativeRuntime ?? null;
@@ -2407,14 +2665,15 @@ async function discoverCore({ lane = 'odc', intent = '', app = null, detail = nu
   if (index.identity.studio?.error) identity.warnings.push('Studio identity could not be measured: ' + index.identity.studio.error);
   if (index.identity.fixture?.available === false) identity.warnings.push('lane fixture not found: proof levels refer to the suite directory only');
   if (index.identity.fixture?.warning) identity.warnings.push(index.identity.fixture.warning);
+  // A stored index that could not be served (torn, another identity) was rebuilt: said, never silent.
+  if (built.cache.note) identity.warnings.push('discovery index: ' + built.cache.note);
   // Capabilities that left the index because a pointer into the sources broke (A10): named in every answer, never silent.
   const dropNote = index.dropped?.length ? { dropped: index.dropped.slice(0, 8), ...(index.dropped.length > 8 ? { droppedTotal: index.dropped.length } : {}) } : {};
   if (index.identity.jobs.results === 0) identity.warnings.push('no job result on this machine: every proof is C-suite (run the lane suite to obtain executed levels)');
   else if (index.identity.jobs.current === 0) identity.warnings.push(`job results exist (${index.identity.jobs.results}) but none matches the current job/fixture/kernel/Studio combination: they are historical; rerun the lane suite for current proofs`);
   // `--detail <id>` is the single-capability form of `--expand`; `--type` adds the native metadata of one interface.
   const expandSpec = [expand, detail ? `${detail}:contract+example+evidence+bindings` : null, type ? `native:${type}` : null].filter(Boolean).join(',');
-  const packetPart = packet && String(expand ?? '').startsWith('packet:') ? expand : null;
-  const parsed = expandSpec && !packetPart ? parseExpand(expandSpec) : null;
+  const parsed = expandSpec && !(packet && String(expand ?? '').startsWith('packet:')) ? parseExpand(expandSpec) : null;
   if (parsed && !intent.trim()) {
     const { requests, problems: parseProblems } = parsed;
     if (parseProblems.length) return { ok: false, schemaVersion: DISCOVERY_SCHEMA, lane, error: 'invalid expand: ' + parseProblems.join('; '), identity };
@@ -2459,7 +2718,24 @@ async function discoverCore({ lane = 'odc', intent = '', app = null, detail = nu
   if (!intent.trim()) return { ok: false, schemaVersion: DISCOVERY_SCHEMA, lane, error: 'intent is required (or expand "<id>:<parts>" / detail "<capability>")', categories: [...new Set(index.capabilities.map(c => c.category))], capabilities: index.capabilities.map(c => ({ id: c.id, title: c.title, ...(c.shared ? { shared: true } : {}) })), coverage, identity };
   // The words the matchers read: the intent without its paths, URLs and file names (withoutPaths); the answer echoes it whole.
   const said = withoutPaths(intent);
-  const q = query(index, { intent: said, limit });
+  // The app kind is a hard filter (family F4): the packet reads its module first (the module type is the kind), an answer
+  // with a capture probes its flows, else the kind words of the intent; the matching, examples and proofs below see only
+  // what is offered for that kind. Unknown: the whole lane, as before.
+  const packetPart = packet && String(expand ?? '').startsWith('packet:') ? expand : null;
+  let found = null;
+  if (packet && app) { const reader = digest ?? laneDigest(lane, sources); found = reader ? await reader(app) : { ok: false, target: app, error: 'no module digest reader on lane ' + lane }; }
+  // kindFilter:false (the tool router's classification of the words of a step, tool-routing.mjs applyModelRule): whether
+  // the words are a model change never depends on the kind; only which recipe does.
+  const known = kindFilter ? await requestKinds({ lane, intent: said, app, found, map: packet ? null : map, kinds }) : null;
+  // Unknown kind: the lane's view, where a capability proven on no kind of the lane is not offered either (the same answer
+  // with or without a kind word: ui.dropdown-search on O11, ui.html-page on ODC).
+  const scope = known ?? (kindFilter ? { kinds: LANE_KINDS[lane] ?? [], from: 'lane' } : null);
+  if (scope) index = known ? indexForKinds(baseIndex, scope.kinds) : indexForLane(baseIndex);
+  const q = query(baseIndex, { intent: said, limit, view: scope ? index : null });
+  const kind = scope ? kindSection(scope, baseIndex, index, q, said) : null;
+  // The text route of the intent, when its form is offered for the kind (ssam-html/1 is the client layer only), with the
+  // forms it carries along filtered the same way.
+  const textRouteOf = () => { const r = classifyTextRoute(intent); if (!r || !textRouteOffered(r.id, known?.kinds)) return null; return { ...r, also: (r.also ?? []).filter(id => textRouteOffered(id, known?.kinds)) }; };
   // Example excerpts for the direct matches (the first ops of the best proof job for the capability's verbs), so the
   // shape of a valid op is in the same answer as its contract.
   const examples = {};
@@ -2475,8 +2751,6 @@ async function discoverCore({ lane = 'odc', intent = '', app = null, detail = nu
     const { workPacket, PACKET_BUDGET, namedCapabilities, packetRecovery } = await import('./work-packet.mjs');
     const recover = packetPart ? packetRecovery(packetPart) : null;
     if (recover?.invalid) return { ok: false, code: 'PACKET_RECOVERY_INVALID', error: 'invalid packet section recovery' };
-    let found = null;
-    if (app) { const reader = digest ?? laneDigest(lane, sources); found = reader ? await reader(app) : { ok: false, target: app, error: 'no module digest reader on lane ' + lane }; }
     // The capabilities of the elements the intent names exactly in the module come first; the proven example is chosen
     // again with them.
     const named = found?.ok ? namedCapabilities(found.digest, intent).filter(n => !q.matches.some(m => m.id === n.id && m.via === 'match')) : [];
@@ -2496,21 +2770,35 @@ async function discoverCore({ lane = 'odc', intent = '', app = null, detail = nu
     // The text route of the packet (text-packet.mjs): the read and delivery of the text forms the intent writes, their
     // grammar, contract slices and proven examples, over the module the packet read (the owner's re-test of 2026-10-12).
     const { packetTextSection } = await import('./text-packet.mjs');
-    const text = textRoutes ? packetTextSection({ lane, intent, found, slice: pointer => contractNode(index, pointer) }) : null;
+    const draft = textRoutes ? packetTextSection({ lane, intent, found, slice: pointer => contractNode(index, pointer), route: textRouteOf(), kinds: known?.kinds ?? [] }) : null;
+    // R4 (2026-10-24): the element the change edits is read with the packet (its flow text, @ids and textSha, or its
+    // ssam-html/1 with k and basedOn), so the delivery needs no read of its own; a digest given by the caller (tests) reads
+    // no owner unless an owner reader is given too.
+    const { ownerTargets } = await import('./packet-scope.mjs');
+    const { packetRank } = await import('./work-packet.mjs');
+    // Without a text route (a JSON op: an exception, a timer...) the actions the intent names exactly are still read: the
+    // change raises or calls there.
+    const targets = !found?.ok ? [] : draft?.value ? ownerTargets(found, packetRank(found, intent), { forms: draft.value.forms ?? [], creating: draft.value.creating === true, screenEdit: draft.value.id === 'ui.screen-html-edit' })
+      : ownerTargets(found, packetRank(found, intent), { forms: ['ssam-flow/1'], creating: true });
+    const ownerReader = owner === undefined ? (digest ? null : laneOwner(lane, sources)) : owner;
+    const owned = targets.length && ownerReader ? await ownerReader({ file: found.file, sourceSha256: found.sourceSha256, targets }) : null;
+    const readings = owned?.readings ?? [];
+    const text = readings.length ? packetTextSection({ lane, intent, found, readings, slice: pointer => contractNode(index, pointer), route: textRouteOf(), kinds: known?.kinds ?? [] }) : draft;
     // What the environment offers for a need the platform lacks (pdf, excel, email, files, images...), named by the intent
     // (environment-components.mjs): one answer in place of the producers, list, inspect, extension read and capture calls.
     const { componentNeeds, laneComponents } = await import('./environment-components.mjs');
     const needs = lane === 'o11' ? componentNeeds(intent) : [];
     const environment = needs.length ? await (components ?? (x => laneComponents(x, { root: anvilRoot, digest: laneDigest(lane, sources) })))({ lane, intent, needs }) : null;
     // A data, action or screen intent carries its text route: next.deliver is the ssam_code write (work-packet.mjs).
-    const textRoute = textRoutes ? textRouteSection(intent, lane, { slice: () => undefined }) : null;
+    const routeOfText = textRoutes ? textRouteOf() : null;
+    const textRoute = routeOfText ? sectionOf(routeOfText, lane, { slice: () => undefined }) : null;
     // F6 (producer-signatures.mjs packetProducers): the producer signatures this workspace already captured that the intent
     // needs (named, or of the module's app), with the reference op ready; o11_deliver reuses them while the version stays.
     const { packetProducers } = await import('./producer-signatures.mjs');
     // servidor/fase4-25: hosted, no producer cache of the server is read (the O11 cache is off hosted: no .local above ws:o11/work).
     const producers = lane === 'o11' && !(await import('./executor.mjs')).hostedContext() ? packetProducers(producerCache === undefined ? path.join(anvilRoot, '.local', 'producer-cache') : producerCache,
       { intent: said, module: found?.ok ? found.digest?.module?.name ?? null : null }) : null;
-    return workPacket({ lane, intent, app, limit, basis: { index: index.key }, matches, unavailable: q.unavailable, functions, text, environment, textRoute, producers,
+    return workPacket({ lane, intent, app, limit, basis: { index: index.key }, kind: packetKind(kind), scope: true, readings, matches, unavailable: q.unavailable, functions, text, environment, textRoute, producers,
       categories: new Map(index.capabilities.map(c => [c.id, c.category])),
       slices: (pointers, form) => contractSlice(index, pointers, { full: form === 'full', capBytes: 3072 }),
       steps: steps ? { kinds: steps.kinds, shape: steps.shape, grammar: steps.grammar } : null,
@@ -2539,7 +2827,7 @@ async function discoverCore({ lane = 'odc', intent = '', app = null, detail = nu
     const { expansions, problems } = await expandAnswer(index, sources, { requests: parsed.requests, app, inspect, lane, osuiCap: Math.max(1024, Math.floor(budgetBytes / 4)) });
     return { expansions, units: expansionUnits(parsed.requests, expansions), rejected: [...parsed.rejected, ...problems.map(p => ({ expand: p.request, why: p.error }))] };
   })() : null;
-  const answer = { ok: true, schemaVersion: DISCOVERY_SCHEMA, lane, intent, ...dropNote, identity, terms: q.terms,
+  const answer = { ok: true, schemaVersion: DISCOVERY_SCHEMA, lane, intent, ...(kind && kind.from !== 'lane' ? { kind } : {}), ...dropNote, identity, terms: q.terms,
     matches: q.matches, contracts: q.contracts, examples, ...(asked ? { expansions: {}, expansionsReduced: undefined, expansionsOmitted: undefined, continuations: undefined } : {}),
     bindings: q.bindings, bindingsTotal: q.bindingsTotal, routes: q.routes,
     composition: { order: q.order, decisions: q.decisions, recommended: q.recommended, cycles: q.cycles, invalidDependencies: q.invalidDependencies },
@@ -2561,12 +2849,13 @@ async function discoverCore({ lane = 'odc', intent = '', app = null, detail = nu
     answer.continuation.omitted.push({ id: m.id, parts: missing, expand: `${m.id}:${missing.join('+')}` });
   }
   const directCount = q.matches.filter(m => m.via === 'match').length; const alternativeIds = q.matches.filter(m => m.via === 'alternative').map(m => m.id);
-  if (directCount === 0 && q.unavailable.length === 0) answer.hint = (alternativeIds.length
+  if (kind?.noRecipe) answer.hint = noRecipeHint(kind);
+  else if (directCount === 0 && q.unavailable.length === 0) answer.hint = (alternativeIds.length
     ? `No capability is named by an element word of the intent; the operation words touched ${alternativeIds.join(', ')} (listed as alternatives): name the element (entity, attribute, index, static entity, record, structure, screen, action...) or open one with detail <id>.`
     : 'Nothing in the ' + lane + ' index matched these words: ' + (q.unmatched.join(', ') || intent) + '. Try other words, or list capabilities with an empty intent.') + (coverage.laneSpecific === 0 ? ` This lane covers only the shared capabilities ${coverage.shared.join(', ')}; capabilities of another lane are not inherited.` : '');
   // The model part is budgeted first, under the byte floor of the OutSystems UI section when there is one (osuiFloor),
   // and never changes for the section itself (fitOutsystemsUi).
-  const osui = outsystemsUi ? await outsystemsUiRequest({ lane, intent, matches: q.matches, context, app, map }) : null;
+  const osui = outsystemsUi ? await outsystemsUiRequest({ lane, intent, matches: q.matches, context, app, map, kinds: known }) : null;
   // The C07 sections take the room the model part and the OutSystems UI section left (fitC07); the grammar of the steps
   // the intent names keeps a floor in that room (fitWithSteps).
   // The parts asked (fitAsked) are placed whole or reduced and named: stage F never cuts them (keepExpansions).
@@ -2590,7 +2879,8 @@ async function discoverCore({ lane = 'odc', intent = '', app = null, detail = nu
   // takes the floor of the C07 extras (sectionsFloor: the forms by reference and their note), and its refit takes the route's
   // floor out of the cap (the model part, then the OutSystems UI section above it); the answer keeps the budget it was given
   // (size.budgetBytes), never the route's room. Without the cap the route fits as the text plan measured it.
-  const route = textRoutes ? textRouteSection(intent, lane, { slice: pointer => contractNode(index, pointer) }) : null;
+  const routeOfIntent = textRoutes ? textRouteOf() : null;
+  const route = routeOfIntent ? sectionOf(routeOfIntent, lane, { slice: pointer => contractNode(index, pointer), capture: context?.ok ? { file: context.file, sourceSha256: context.sourceSha256 } : null }) : null;
   const fitRouted = !route ? fitModel : (room, cap = null) => {
     if (cap == null || cap >= room) return fitTextRoute(fitModel(room), route, room, fitModel);
     const top = room - (proven || steps || values ? sectionsFloor({ extras }, room).c07 : 0);
@@ -2599,8 +2889,23 @@ async function discoverCore({ lane = 'odc', intent = '', app = null, detail = nu
   };
   const fit = (B, cap = null) => fitWithSteps(room => fitRouted(room, cap), extras, B);
   const fitAt = (B, { page = false, model = null } = {}) => (asked ? fitAsked(answer, asked, b => fit(b, model), { budgetBytes: B, lane, pageBytes: page ? ceilingBytes : null }) : { answer: fit(B, model), minimalBytes: null });
-  const sections = osui || proven || steps || values ? { floor: B => sectionsFloor({ osui, extras }, B).bytes, lost: a => silentlyLost(a, { osui, extras }).length > 0, which: a => silentlyLost(a, { osui, extras }) } : null;
-  return atEntry(fitAt, { budgetBytes, ceilingBytes, sections });
+  const sections = osui || proven || steps || values ? { floor: B => sectionsFloor({ osui, extras }, B).bytes, lost: a => silentlyLost(a, { osui, extras }).length > 0, which: a => silentlyLost(a, { osui, extras }),
+    missing: a => silentlyLost(a, { osui, extras }).length > 0 || ['provenExample', 'steps', 'values'].some(k => extras?.[k] != null && a?.ok !== false && a?.size?.status !== 'insufficient' && a?.[k] == null) } : null;
+  return keepKind(await atEntry(fitAt, { budgetBytes, ceilingBytes, sections }), kind);
+}
+// An answer the budget reduced to its minimal (insufficient, or rebuilt without the section) keeps the kind section in its
+// compact form, the "no proven recipe" note with it; the size is measured again.
+// The capabilities proven on no kind of the lane that an answer of unknown kind left out ride on the answer under this symbol
+// (never serialized): the tool router counts them as model words (tool-routing.mjs), the answer's bytes stay those of the
+// lane's view.
+export const UNPROVEN = Symbol('ssam.unproven');
+function keepKind(answer, kind) {
+  if (kind?.from === 'lane') { if (answer && typeof answer === 'object') answer[UNPROVEN] = kind.unproven; return answer; }
+  if (!kind || !answer || typeof answer !== 'object' || answer.ok === false && !answer.size || 'kind' in answer) return answer;
+  const out = withKind(answer, compactKind(kind));
+  if (kind.noRecipe && !out.hint) out.hint = noRecipeHint(kind);
+  if (out.size && typeof out.size.bytes === 'number') { out.size = { ...out.size, bytes: 0 }; for (let i = 0, m = bytes(out); i < 6 && out.size.bytes !== m; i++) { out.size.bytes = m; m = bytes(out); } }
+  return out;
 }
 
 // The section out of an answer, for the tools of a mixed request (tool-routing.mjs discoverAll): it comes back after them,
@@ -2674,9 +2979,9 @@ function fitTextRouteInto(answer, section, budgetBytes, refit, declared = budget
   for (let n = Math.min(1, levels.length - 1); n < levels.length; n++) {
     if (first && first.n <= n) break; // the first answer already holds this level
     const floor = bytes({ textRoute: levels[n] }) + 160;
-    // Only the whole answer (32 KB and more) reserves a floor; a smaller budget is the caller's choice for the rest (the
+    // Only the whole answer (the engine budget, the answer ceiling) reserves a floor; a smaller budget is the caller's choice for the rest (the
     // tools of a mixed request, the sections a test pins at 8 or 12 KB): the section then takes only what is left.
-    if (!refit || floor > budgetBytes / 4 || budgetBytes < 32768) continue;
+    if (!refit || floor > budgetBytes / 4 || budgetBytes < DEFAULT_BUDGET_BYTES) continue;
     const model = refit(budgetBytes - floor);
     if (!model?.size || model.size.status === 'insufficient') continue;
     if (n < levels.length - 1 && lost(model).length) continue;
@@ -2807,11 +3112,11 @@ function keepFocusedFirst(indexes, focused, max, first = new Set()) {
 // Native metadata (A) for one type from the reflection index of the lane: declared members plus the bases.
 export function nativeType(sources, index, name) {
   const dir = sources.modelApiDir; if (!exists(dir)) return { available: false };
-  const wanted = name.replace(/^I?/, 'I');
+  const full = name.includes('.') ? name : null; const wanted = full ? full.split('.').at(-1) : name.replace(/^I?/, 'I');
   if (index.lane === 'odc') {
     for (const file of fs.readdirSync(dir).filter(f => /^OutSystems\..*\.json$/.test(f))) {
       let list; try { list = readJson(path.join(dir, file)); } catch { continue; }
-      const hit = list.find(t => t.name === wanted || t.name === name);
+      const hit = list.find(t => (full ? `${t.namespace}.${t.name}` === full : t.name === wanted || t.name === name));
       if (hit) {
         const bases = []; const seen = new Set();
         const resolveBase = b => { if (seen.has(b)) return; seen.add(b); const base = list.find(t => t.name === b); if (base) { bases.push({ name: base.name, members: base.members.filter(m => m.kind === 'property').map(m => m.signature) }); for (const bb of base.bases ?? []) resolveBase(bb); } };
@@ -2823,9 +3128,12 @@ export function nativeType(sources, index, name) {
   }
   const catalog = fs.readdirSync(dir).filter(f => /^model-api-.*\.json$/.test(f)).sort().at(-1); if (!catalog) return { available: false };
   const doc = readJson(path.join(dir, catalog));
-  const hit = (doc.Interfaces ?? []).find(i => i.Name === wanted || i.Name.split('.').at(-1) === wanted || i.Name.split('.').at(-1) === name);
+  const hit = (doc.Interfaces ?? []).find(i => (full ? i.Name === full : i.Name === wanted || i.Name.split('.').at(-1) === wanted || i.Name.split('.').at(-1) === name));
   if (!hit) return { available: true, provenance: 'A', notFound: name };
-  return { available: true, provenance: 'A', source: catalog, type: hit.Name, bases: hit.Bases, properties: hit.Properties?.map(p => (p.CanWrite ? '*' : '') + p.Name + ': ' + p.Type.split('.').at(-1)), creates: (doc.Creatables ?? []).filter(c => c.Parent === hit.Name).map(c => c.Type.split('.').at(-1)) };
+  // A short name of several types (IForm: the Reactive NRWidgets.IForm and the Traditional Plugin.Widgets.IForm) says so,
+  // with every full name to ask by (F4 review: the Traditional module got the Reactive contract).
+  const same = full ? [] : (doc.Interfaces ?? []).filter(i => i.Name !== hit.Name && i.Name.split('.').at(-1) === hit.Name.split('.').at(-1)).map(i => i.Name);
+  return { available: true, provenance: 'A', source: catalog, type: hit.Name, ...(same.length ? { ambiguous: { also: same, note: 'the short name names several types: ask by the full name (type: "<full name>")' } } : {}), bases: hit.Bases, properties: hit.Properties?.map(p => (p.CanWrite ? '*' : '') + p.Name + ': ' + p.Type.split('.').at(-1)), creates: (doc.Creatables ?? []).filter(c => c.Parent === hit.Name).map(c => c.Type.split('.').at(-1)) };
 }
 
 // ---- CLI argument parsing shared by odc.mjs / ssam.mjs

@@ -45,7 +45,8 @@ function fixture(t, { deferred = DEFERRED, refuse = {}, planner } = {}) {
     },
     mergeOrder: planner ?? (async ({ base, candidate, output }) => {
       calls.push('merge-order');
-      return { ok: true, deferred, firstPass: deferred.length ? path.join(output, 'merge-order-first-pass.oml') : null, plannedFrom: { base, candidate } };
+      return { ok: true, deferred, firstPass: deferred.length ? path.join(output, 'merge-order-first-pass.oml') : null, plannedFrom: { base, candidate },
+        contentPreviewSupported: true, contentPreview: { accepted: true } };
     }),
     publishStep: async ({ manifest }) => { calls.push('publish'); published.push(manifest); return { publish: { requested: true, outcome: 'published' } }; },
     grants: null,
@@ -99,6 +100,59 @@ test('a plan the kernel cannot compute keeps the single merge of before and says
   assert.equal(f.merges.length, 1);
   assert.equal(result.mergeOrder.passes, 1);
   assert.match(result.mergeOrder.skipped, /merge-order/);
+});
+
+// The disposable native merge (NativeMergePreview): a preview the kernel did not run keeps the single merge of before (the
+// content proof after the merge still decides); a preview that ran and lost content refuses before the Studio, naming
+// the element, with the whole proof one call away.
+test('a kernel without the disposable native merge keeps the single merge of before and says so', async t => {
+  const f = fixture(t, { planner: async () => ({ ok: true, deferred: [], contentPreviewSupported: false, contentPreview: null }) });
+  const result = await deliverKernel(f.input, f.deps);
+  assert.equal(result.ok, true, result.error);
+  assert.equal(f.merges.length, 1);
+  assert.equal(result.mergeOrder.passes, 1);
+  assert.match(result.mergeOrder.skipped, /disposable native merge/);
+});
+
+test('a disposable native merge that lost content prevents merge and publication and names the element', async t => {
+  const preview = { accepted: false, path: 'preview.oml', sha256: 'P', newErrors: 0, hasConflicts: false,
+    contentProof: { accepted: false, differences: [{ element: 'ServerAction:Save/ExecuteServerActionNode:Load', property: 'api:Action', missing: true }] } };
+  const f = fixture(t, { planner: async () => ({ ok: true, deferred: [], contentPreviewSupported: true, contentPreview: preview }) });
+  const result = await deliverKernel({ ...f.input, publish: true, authorize: 'pode publicar o Fixture' }, f.deps);
+  assert.equal(result.ok, false);
+  assert.equal(result.code, 'MERGE_CONTENT_LOSS');
+  assert.match(result.error, /ServerAction:Save\/ExecuteServerActionNode:Load/);
+  assert.equal(result.contentPreview.differencesTotal, 1);
+  assert.equal(result.contentPreview.differences[0].property, 'api:Action');
+  assert.equal(result.continuation.tool, 'ssam_evidence');
+  assert.equal(result.continuation.arguments.pointer, '/contentPreview');
+  assert.equal(f.merges.length, 0); assert.equal(f.manifests.length, 0); assert.equal(f.published.length, 0);
+  assert.equal(result.publish.outcome, 'skipped');
+});
+
+// A preview refused for its conflicts or for the new errors it brings is not a content loss (review of integ/proto-traditional,
+// L6): its own code, naming the errors, and nothing merged or published either.
+test('a disposable native merge with conflicts or new errors refuses with its own code, never MERGE_CONTENT_LOSS', async t => {
+  const cases = [
+    { preview: { accepted: false, path: 'preview.oml', sha256: 'P', newErrors: 0, hasConflicts: true, contentProof: { accepted: true, differences: [] } },
+      code: 'MERGE_PREVIEW_CONFLICT', named: /conflicts/ },
+    // The ODC preview on a conflict: no difference, the elements in conflict named.
+    { preview: { accepted: false, path: 'preview.oml', sha256: 'P', newErrors: 0, hasConflicts: true, conflicts: ['Database/ProbeItem', 'Database/ProbeItem.Description'],
+      contentProof: { accepted: false, conflict: true, differences: [] } },
+      code: 'MERGE_PREVIEW_CONFLICT', named: /conflicts with the module: Database\/ProbeItem, Database\/ProbeItem\.Description/ },
+    { preview: { accepted: false, path: 'preview.oml', sha256: 'P', newErrors: 1, hasConflicts: false, contentProof: { accepted: true, differences: [] },
+      messages: { new: [{ id: 'UnknownReference', type: 'Error', key: 'k', path: 'ServerAction:Save', detail: 'd' }, { id: 'UnusedVariable', type: 'Warning', key: 'w', path: 'ServerAction:Save', detail: 'd' }], fixed: [], preexisting: [] } },
+      code: 'MERGE_PREVIEW_ERRORS', named: /UnknownReference at ServerAction:Save/ },
+  ];
+  for (const c of cases) {
+    const f = fixture(t, { planner: async () => ({ ok: true, deferred: [], contentPreviewSupported: true, contentPreview: c.preview }) });
+    const result = await deliverKernel({ ...f.input, publish: true, authorize: 'pode publicar o Fixture' }, f.deps);
+    assert.equal(result.ok, false);
+    assert.equal(result.code, c.code);
+    assert.match(result.error, c.named);
+    assert.doesNotMatch(result.error, /did not preserve/);
+    assert.equal(f.merges.length, 0); assert.equal(f.published.length, 0);
+  }
 });
 
 test('publication follows pass 2 only, with the full candidate\'s manifest', async t => {

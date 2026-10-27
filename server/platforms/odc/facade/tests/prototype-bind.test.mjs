@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { dataProblems, bindProblems, bindingCorrection, prototypeReceipt, PROTOTYPE_CODES, BIND_KEYS, PROTOTYPE_DELIVER_TEXT } from '../prototype-op.mjs';
+import { dataProblems, bindProblems, bindingCorrection, prototypeReceipt, PROTOTYPE_CODES, BIND_KEYS } from '../prototype-op.mjs';
 import { PROTOTYPE_CODES as REGISTERED } from '../refusal-codes.mjs';
 import { referencedProducers, autoCaptures } from '../o11-cycle.mjs';
 import { runJob } from '../job-runner.mjs';
@@ -38,10 +38,9 @@ test('bind is a key of the op and its shape is closed at every level, each probl
   assert.ok(problems.every(p => p.code === 'INPUT_INVALID'));
 });
 
-test('PROTOTYPE_BINDING_REQUIRED is registered, and the delivery text names data.bind', () => {
+test('PROTOTYPE_BINDING_REQUIRED is registered', () => {
   assert.ok(PROTOTYPE_CODES.includes('PROTOTYPE_BINDING_REQUIRED'));
   assert.deepEqual([...REGISTERED].sort(), [...PROTOTYPE_CODES].sort());
-  assert.match(PROTOTYPE_DELIVER_TEXT, /data\.bind \{producer:"<Module>"\}/);
 });
 
 test('the delivery captures the producer data.bind names, as it does a reference op\'s (C27)', t => {
@@ -70,22 +69,6 @@ test('the proposals are one strict patch (add /ops/<i>/data/bind, parents presen
   assert.equal(correctedJob.ops[0].data.capture, undefined, 'what the facade wrote never reaches the corrected call');
   assert.deepEqual(correctedJob.ops[0].data.bind, patch[0].value);
   assert.deepEqual(bindingCorrection([proposals[3]], job), {}, 'nothing to offer without a validated proposal');
-});
-
-test('ssam_job: the kernel\'s PROTOTYPE_BINDING_REQUIRED comes back with every problem, the strict patch and the corrected call', async t => {
-  const dir = tmp(t); const source = farmaFolder(dir);
-  const root = path.join(dir, 'anvil'); fs.mkdirSync(root, { recursive: true });
-  const runAnvil = fakeAnvil({ apply: () => ({ ok: false, command: 'apply', code: 'PROTOTYPE_BINDING_REQUIRED', error: 'prototype: data.bind needs bindings', problems: proposals }) });
-  const job = path.join(dir, 'job.json'); fs.writeFileSync(job, JSON.stringify({ ops: [{ op: 'prototype', data: { source, bind: { producer: 'FolhaPonto_CS' } } }] }));
-  const value = await runJob({ lane: 'o11', job, producers: { FolhaPonto_CS: path.join(dir, 'cs.oml') } }, { root, env: { ANVIL_WORKER: '0' }, runAnvil, worker: null, o11Lane: 'ss4', capturePrototype: fakeCapture(), measureFidelity: fakeMeasure(),
-    prepareIntegrationJob: async () => ({ ok: true }) });
-  assert.equal(value.ok, false);
-  assert.equal(value.code, 'PROTOTYPE_BINDING_REQUIRED');
-  assert.equal(value.problems.length, 4);
-  assert.deepEqual(value.problems[3].binding, { kind: 'event', validated: false, unresolved: true });
-  assert.equal(value.patch[0].path, '/ops/0/data/bind');
-  assert.deepEqual(Object.keys(value.correctedJob.ops[0].data.bind), ['producer', 'screens', 'lists', 'events']);
-  assert.ok(runAnvil.calls[0].args.includes('--producer'), 'the producer binding reaches the kernel');
 });
 
 test('the receipt counts the calls a binding compiled and carries data.bound', () => {

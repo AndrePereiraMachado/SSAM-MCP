@@ -100,6 +100,137 @@ public sealed class VelEntregaEnvironmentNetworkTests
         }
     }
 
+    // Goal list of 2026-10-20, item 5 (report 81809b7e): the users lookup answered HTTP 500 and the kernel said the environment
+    // was unreachable. An answer of the server, however bad, is ENVIRONMENT_SERVER_ERROR with its status, never repeated.
+    private const string ServerFive = "environment_session: CommunicationException: An error occurred while sending the request. <- "
+        + "WebException: The remote server returned an error: (500) Internal Server Error.";
+    // A 503 was this example until the review of 3ab12209 (9b): a 503 is a gateway answer now (GatewayAnswers below).
+    private const string ServerStatus = "environment_session: HttpRequestException: Response status code does not indicate success: 501 (Not Implemented). (http Unknown)";
+
+    [Fact]
+    public void AnAnswerOfTheServerIsAServerErrorWithItsStatusNeverTheNetwork()
+    {
+        Assert.False(EnvironmentNetwork.IsUnreachable(ServerFive));
+        Assert.False(EnvironmentNetwork.IsUnreachable(ServerStatus));
+        Assert.True(EnvironmentNetwork.IsServerAnswer(ServerFive));
+        Assert.True(EnvironmentNetwork.IsServerAnswer(ServerStatus));
+        Assert.Equal(500, EnvironmentNetwork.HttpStatusOf(ServerFive));
+        Assert.Equal(501, EnvironmentNetwork.HttpStatusOf(ServerStatus));
+        // The bridge's own wording, live on 20/10 (users-read of o11_access): ENVIRONMENT_UNREACHABLE before this line.
+        const string bridgeWording = "environment_session: CommunicationException: Http Error Code: 500 - Internal Server Error. <- InternalServerErrorException: Http Error Code: 500 - Internal Server Error.";
+        Assert.True(EnvironmentNetwork.IsServerAnswer(bridgeWording));
+        Assert.Equal(500, EnvironmentNetwork.HttpStatusOf(bridgeWording));
+        Assert.False(EnvironmentNetwork.IsUnreachable(bridgeWording));
+        Assert.Null(EnvironmentNetwork.HttpStatusOf(Plain));
+        Assert.False(EnvironmentNetwork.IsServerAnswer(NeverOpened));
+        Assert.False(EnvironmentNetwork.IsServerAnswer(AfterSend));
+        Assert.False(EnvironmentNetwork.MayRepeat("modules", ServerFive));
+        var bridge = new Flaky { Failures = { [UserDirectory.Operation] = new Queue<string>([ServerFive]) } };
+        using var session = new ConnectedEnvironment(bridge, "lab.example", null, true);
+        var error = Assert.Throws<EnvironmentServerErrorException>(() => session.Call<JsonArray>(UserDirectory.Operation));
+        Assert.Equal("ENVIRONMENT_SERVER_ERROR", error.Code);
+        Assert.Equal(500, error.HttpStatus);
+        Assert.False(error.Write);
+        Assert.Single(bridge.Operations, o => o == UserDirectory.Operation);
+        Assert.Empty(session.RepeatedReads);
+        var envelope = Errors.Envelope(UserDirectory.Operation, error, 1);
+        Assert.Equal("ENVIRONMENT_SERVER_ERROR", envelope["code"]!.ToString());
+        Assert.Contains("HTTP 500", envelope["error"]!.ToString());
+        Assert.Contains("lab.example", envelope["error"]!.ToString());
+        // A write the server answered with a failure: its outcome is unknown, said so, and never repeated.
+        var writes = new Flaky { Failures = { ["publish-start"] = new Queue<string>([ServerFive]) } };
+        using var writer = new ConnectedEnvironment(writes, "lab.example", null, false);
+        var failed = Assert.Throws<EnvironmentServerErrorException>(() => writer.Call<PublishOutcome>("publish-start", new { oml = new byte[] { 1 } }));
+        Assert.True(failed.Write);
+        Assert.Contains("outcome on the server is unknown", failed.Message);
+        Assert.Single(writes.Operations, o => o == "publish-start");
+    }
+
+    // Review of 3ab12209, 9b: a proxy or gateway between the Studio's PC and the environment answered (407, 502, 503, 504) in
+    // the shapes the Studio's HTTP clients write a status (WCF's "(NNN) Reason", HttpClient's "Response status code ... NNN",
+    // a status line). It is the path, not the environment: classified as a network failure, so a repeatable read is asked once
+    // more and a read that still fails is ENVIRONMENT_UNREACHABLE, never ENVIRONMENT_SERVER_ERROR. A 500 stays the server's;
+    // a refused authentication (UserAuthenticationError) is the server's whatever its status and is never asked again.
+    public static TheoryData<int, string> GatewayAnswers()
+    {
+        var data = new TheoryData<int, string>();
+        foreach (var (status, reason) in new[] { (407, "Proxy Authentication Required"), (502, "Bad Gateway"), (503, "Service Unavailable"), (504, "Gateway Timeout") }) {
+            data.Add(status, "environment_session: CommunicationException: An error occurred while sending the request. <- WebException: The remote server returned an error: (" + status + ") " + reason + ".");
+            data.Add(status, "environment_session: HttpRequestException: Response status code does not indicate success: " + status + " (" + reason + "). (http Unknown)");
+            data.Add(status, "environment_session: CommunicationException: The HTTP request was forbidden: HTTP/1.1 " + status + " " + reason);
+        }
+        return data;
+    }
+
+    [Theory]
+    [MemberData(nameof(GatewayAnswers))]
+    public void AProxyOrGatewayAnswerIsRetryableNeverAServerError(int status, string failure)
+    {
+        Assert.Equal(status, EnvironmentNetwork.HttpStatusOf(failure));
+        Assert.False(EnvironmentNetwork.IsServerAnswer(failure), failure);
+        Assert.True(EnvironmentNetwork.IsUnreachable(failure), failure);
+        Assert.True(EnvironmentNetwork.MayRepeat("modules", failure), failure);
+        // publish-check moves the server's cursor: a gateway answer never proves the request did not leave the PC.
+        Assert.False(EnvironmentNetwork.MayRepeat(EnvironmentNetwork.PublishCheck, failure));
+        foreach (var write in ConnectedEnvironment.WriteOperations) Assert.False(EnvironmentNetwork.MayRepeat(write, failure));
+        // A read asked once more, then answered.
+        var once = new Flaky { Failures = { ["modules"] = new Queue<string>([failure]) }, Value = new JsonArray() };
+        using (var session = new ConnectedEnvironment(once, "lab.example", null, true)) {
+            Assert.Empty(session.Call<JsonArray>("modules"));
+            Assert.Equal(new[] { "modules" }, session.RepeatedReads);
+        }
+        Assert.Equal(2, once.Operations.Count(o => o == "modules"));
+        // A read that meets the gateway twice: ENVIRONMENT_UNREACHABLE, repeated, never ENVIRONMENT_SERVER_ERROR.
+        var twice = new Flaky { Failures = { ["templates"] = new Queue<string>([failure, failure]) } };
+        using var again = new ConnectedEnvironment(twice, "lab.example", null, true);
+        var error = Assert.Throws<EnvironmentUnreachableException>(() => again.Call<TemplateSummary[]>("templates"));
+        Assert.Equal(EnvironmentNetwork.UnreachableCode, error.Code);
+        Assert.True(error.Repeated);
+        // A write never: one request.
+        var writes = new Flaky { Failures = { ["publish-start"] = new Queue<string>([failure]) } };
+        using var writer = new ConnectedEnvironment(writes, "lab.example", null, false);
+        Assert.ThrowsAny<Exception>(() => writer.Call<PublishOutcome>("publish-start", new { oml = new byte[] { 1 } }));
+        Assert.Single(writes.Operations, o => o == "publish-start");
+    }
+
+    [Fact]
+    public void AServerErrorAndARefusedAuthenticationAreNeverRetried()
+    {
+        // A 500 (and a 500 beside a gateway status) is the server's.
+        const string five = "environment_session: HttpRequestException: Response status code does not indicate success: 500 (Internal Server Error). (http Unknown)";
+        const string mixed = "environment_session: CommunicationException: The remote server returned an error: (502) Bad Gateway. <- WebException: The remote server returned an error: (500) Internal Server Error.";
+        foreach (var failure in new[] { five, mixed }) {
+            Assert.True(EnvironmentNetwork.IsServerAnswer(failure), failure);
+            Assert.False(EnvironmentNetwork.IsUnreachable(failure), failure);
+            Assert.False(EnvironmentNetwork.MayRepeat("modules", failure), failure);
+        }
+        // A refused authentication, alone or with a proxy's 407: the server's answer, asked once, ENVIRONMENT_SERVER_ERROR.
+        const string auth = "environment_session: HttpRequestException: The proxy tunnel request to proxy 'http://proxy.example:8080/' failed with status code '407'. (http UserAuthenticationError)";
+        const string authPlain = "environment_session: CommunicationException: An error occurred while sending the request. <- HttpRequestException: Authentication failed. (http UserAuthenticationError)";
+        foreach (var failure in new[] { auth, authPlain }) {
+            Assert.True(EnvironmentNetwork.IsServerAnswer(failure), failure);
+            Assert.False(EnvironmentNetwork.IsUnreachable(failure), failure);
+            Assert.False(EnvironmentNetwork.MayRepeat("modules", failure), failure);
+            var bridge = new Flaky { Failures = { ["modules"] = new Queue<string>([failure]) }, Value = new JsonArray() };
+            using var session = new ConnectedEnvironment(bridge, "lab.example", null, true);
+            var error = Assert.Throws<EnvironmentServerErrorException>(() => session.Call<JsonArray>("modules"));
+            Assert.Equal(EnvironmentNetwork.ServerErrorCode, error.Code);
+            Assert.Single(bridge.Operations, o => o == "modules");
+            Assert.Empty(session.RepeatedReads);
+        }
+        // A SOAP fault is the server's whatever status it names.
+        const string fault = "environment_session: FaultException: The server was unable to process the request (503) Service Unavailable";
+        Assert.True(EnvironmentNetwork.IsServerAnswer(fault));
+        Assert.False(EnvironmentNetwork.MayRepeat("modules", fault));
+        // A read that met a gateway and then the server's own failure: ENVIRONMENT_SERVER_ERROR, asked twice.
+        var path = "environment_session: HttpRequestException: Response status code does not indicate success: 502 (Bad Gateway). (http Unknown)";
+        var bridgeThenServer = new Flaky { Failures = { ["modules"] = new Queue<string>([path, five]) } };
+        using var both = new ConnectedEnvironment(bridgeThenServer, "lab.example", null, true);
+        var server = Assert.Throws<EnvironmentServerErrorException>(() => both.Call<JsonArray>("modules"));
+        Assert.Equal(500, server.HttpStatus);
+        Assert.Equal(2, bridgeThenServer.Operations.Count(o => o == "modules"));
+    }
+
     [Fact]
     public void ARefusalOfTheServerIsNotRepeated()
     {

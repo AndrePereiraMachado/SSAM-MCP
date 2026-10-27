@@ -137,6 +137,11 @@ public class DeliveryIntegrationImportTests
                 ops.Add(new JsonObject { ["op"] = "create", ["parent"] = "$m", ["type"] = "ISOAPActionOutput", ["name"] = "AddResult", ["as"] = "$out" });
                 ops.Add(new JsonObject { ["op"] = "set", ["target"] = "$out", ["prop"] = "OriginalType", ["value"] = "s:int" });
                 ops.Add(new JsonObject { ["op"] = "set", ["target"] = "$out", ["prop"] = "DataType", ["value"] = "Text" });
+                // The occurrences and original name the importer always writes: without them Verify refuses the client too, and
+                // since the single refusal (9cb0f8e8) that verdict joins the contract problem in one PREFLIGHT_REFUSED.
+                ops.Add(new JsonObject { ["op"] = "set", ["target"] = "$out", ["prop"] = "OriginalName", ["value"] = "AddResult" });
+                ops.Add(new JsonObject { ["op"] = "set", ["target"] = "$out", ["prop"] = "MinOccurrencies", ["value"] = "1" });
+                ops.Add(new JsonObject { ["op"] = "set", ["target"] = "$out", ["prop"] = "MaxOccurrencies", ["value"] = "1" });
             }
             File.WriteAllText(job, new JsonObject { ["expectValid"] = false, ["ops"] = ops }.ToJsonString());
             var output = parameters["out_path"]!.ToString();

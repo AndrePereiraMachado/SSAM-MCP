@@ -158,6 +158,7 @@ test('policy: the prototype, generator and verified patch refusals are English, 
     crud: generatorUnavailable('studio_deliver', 'odc', 'gen-crud'), unreadable: generatorUnavailable('ssam_job', 'odc', 'unreadable'),
     verified: verifiedPatchUnavailable('ssam_job', 'odc', { lane: 'odc', basedOn: 'ws:jobs/a.json', patch: 'verified' }),
     verifiedQuery: verifiedPatchUnavailable('ssam_reference', 'odc', { kind: 'check-job', query: { basedOn: 'ws:jobs/a.json', patch: 'verified' } }, '/query/patch'),
+    fixApply: verifiedPatchUnavailable('o11_deliver', 'o11', { module: 'M', basedOn: { job: 'ws:o11/jobs/a.json', sha256: 'a'.repeat(64) }, fix: 'apply' }, '/fix'),
   };
   for (const [name, answer] of Object.entries(answers)) assert.equal(answer.code, 'HOSTED_UNAVAILABLE', name);
   assert.deepEqual(findings(answers), []);

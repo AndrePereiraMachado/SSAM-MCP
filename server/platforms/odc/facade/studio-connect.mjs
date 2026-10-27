@@ -460,13 +460,22 @@ async function connectOdcStudios(odc, { pid, onlyLane }) {
   const entries = await Promise.all(processes.map(async p => {
     const entry = { lane: 'odc', pid: p.pid, target: p.pid === target, attached: false, alreadyAttached: false, tenant: null, account: null };
     let probe = await odc.probe(p.pid).catch(error => ({ attached: false, error: message(error) }));
-    if (probe.attached) { entry.alreadyAttached = true; entry.attached = true; if (probe.busy) entry.busy = true; }
+    // A pipe that took the probe but never answered is a loaded, hung bridge: not attached, and never attached again (a
+    // loaded DLL is never replaced, so a second hook cannot revive it).
+    if (probe.attached && !probe.busy && probe.reply == null) {
+      entry.code = 'BRIDGE_SILENT';
+      entry.error = ('The ODC bridge of Studio ' + p.pid + ' accepted the connection but did not answer: it is loaded and hung. '
+        + 'studio_status reads the delivery in flight from its evidence; if it stays silent, close and reopen the ODC Studio, then ssam_connect. '
+        + (probe.error ? '(' + probe.error + ')' : '')).slice(0, 400);
+    } else if (probe.attached) { entry.alreadyAttached = true; entry.attached = true; if (probe.busy) entry.busy = true; }
     else {
       // Every ODC Studio has its own pipe: each one not attached yet is attached, the target or not.
       try {
         const result = await odc.attach(p.pid);
-        entry.attached = result?.ok === true && result?.status?.ok !== false;
-        if (!entry.attached) entry.error = String(result?.error ?? result?.status?.error ?? 'attach not confirmed').slice(0, 400);
+        // Attached only on the bridge's own status answer (lib.mjs attach), never on the hook's word.
+        entry.attached = result?.ok === true && result?.status?.ok === true;
+        if (!entry.attached && result?.code) entry.code = result.code;
+        if (!entry.attached) entry.error = String(result?.ok === true ? result?.status?.error ?? 'attach not confirmed: no status answer' : result?.error ?? result?.status?.error ?? 'attach not confirmed').slice(0, 400);
         if (result?.version) entry.bridge = result.version;
       } catch (error) { entry.error = message(error); }
       if (entry.attached) probe = await odc.probe(p.pid).catch(() => ({ attached: true, reply: null }));

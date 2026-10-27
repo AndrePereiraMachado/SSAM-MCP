@@ -105,11 +105,121 @@ internal sealed partial class MethodCompiler
             else Assign(steps, result.Text, StorageDefault(resultType));
             steps.Add(new JsonObject { ["if"] = "not " + query + ".List.Empty", ["then"] = present }); return result;
         }
-        var list = EmptyList(Type(op.Type!), steps); var body = new JsonArray();
+        var list = EmptyList(Type(op.Type!), steps); var body = new JsonArray(); var declared = variables.Count;
         var item = Coerce(ReadQueryRow(relation.Row, query + ".List.Current.List", body, op, identities), list.Type.Element!, false, body, op);
+        // The team rule T1/T2 (FLOW_FOREACH_LIST_ACTION): a loop that only maps the rows of the query into the list is a List
+        // action, never a new For Each. When the body only reads columns of the row into the item, the rows are appended with
+        // one mapping and the locals the body built them in go with it.
+        if (!list.Type.IsArenaReference && MappedRows(query + ".List", item, body) is { } mapping)
+        {
+            while (variables.Count > declared) variables.RemoveAt(declared);
+            steps.Add(new JsonObject { ["call"] = "ListAppendAll", ["as"] = "AvAppend" + (++calls), ["args"] = new JsonObject { ["List"] = list.Text, ["SourceList"] = mapping } });
+            return list;
+        }
         if (list.Type.IsArenaReference) AppendReferenceList(list, item, body);
         else body.Add(new JsonObject { ["call"] = "ListAppend", ["as"] = "AvAppend" + (++calls), ["args"] = new JsonObject { ["List"] = list.Text, ["Element"] = item.Text } });
         steps.Add(new JsonObject { ["foreach"] = query + ".List", ["do"] = body }); return list;
+    }
+    private static readonly System.Text.RegularExpressions.Regex RowPath = new(@"^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*$", System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+    private static readonly System.Text.RegularExpressions.Regex RowColumn = new(@"^(?<row>.*)\.Av(?<kind>C|Has)(?<n>[0-9]+)$", System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+    private static readonly System.Text.RegularExpressions.Regex TempName = new(@"^AvTemp[0-9]+$", System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+
+    /// <summary>The mapping of the rows of a query into the list a materialization appends them to (ListAppendAll's SourceList,
+    /// "Source mapTo { Field: value, ... }"), when the loop body only copies columns of the current row: the value appended as
+    /// it is (a list of values: { Value: column }), or a record (or the presence wrapper of a value) whose attributes each take
+    /// one column, in the order of the record's attributes. A member the body builds in a local of its own (a nullable
+    /// member's presence wrapper, a record inside the record) and then assigns whole maps through it (Member.HasValue,
+    /// Member.Value; Inner.Code). A Value the body sets only under its presence maps its column whole: the query returns that
+    /// column NULL when the presence is false, read as the type's default, where the loop kept the previous row's value, which
+    /// nothing reads (the presence says there is none). Anything else in the body (a computed value, a check that raises, a
+    /// call, a reference) is no mapping: null, and the materialization keeps its For Each.</summary>
+    private string? MappedRows(string source, SourceValue item, JsonArray body)
+    {
+        var current = source + ".Current.";
+        // A column of the current row, relative to the item as a mapping reads it. Only columns: a value the body computes
+        // (a conversion, a literal) is no copy the proofs have seen in a mapping, and keeps the For Each.
+        string? Read(string? expression) => expression != null && expression.StartsWith(current, StringComparison.Ordinal)
+            && RowPath.IsMatch(expression[current.Length..]) ? expression[current.Length..] : null;
+        var type = item.Type;
+        if (Attributes(type) == null) return body.Count == 0 && Plain(type) && Read(item.Text) is { } value ? source + " mapTo { Value: " + value + " }" : null;
+        if (body.Count == 0) return null;
+        // What the body builds: the item, and the locals it fills from the row before assigning them whole to a member.
+        var root = new Dictionary<string, object>(StringComparer.Ordinal);
+        var pending = new Dictionary<string, Dictionary<string, object>>(StringComparer.Ordinal);
+        Dictionary<string, object>? Builder(string name, bool create)
+        {
+            if (name == item.Text) return root;
+            if (!TempName.IsMatch(name)) return null;
+            if (pending.TryGetValue(name, out var existing)) return existing;
+            return create ? pending[name] = new(StringComparer.Ordinal) : null;
+        }
+        foreach (var step in body)
+        {
+            if (step is JsonObject { Count: 1 } one && one["assign"] is JsonObject assign)
+            {
+                foreach (var (target, value) in assign)
+                {
+                    var dot = target.LastIndexOf('.');
+                    if (dot <= 0 || Builder(target[..dot], create: true) is not { } builder) return null;
+                    var field = target[(dot + 1)..]; var text = value?.ToString();
+                    if (builder.ContainsKey(field)) return null;
+                    if (text != null && pending.TryGetValue(text, out var member) && !ReferenceEquals(member, builder)) { pending.Remove(text); builder[field] = member; }
+                    else if (Read(text) is { } column) builder[field] = column;
+                    else return null;
+                }
+                continue;
+            }
+            // A presence wrapper's Value, set only when the row has it (HasValue, assigned before from the paired column).
+            if (step is JsonObject { Count: 2 } test && Read(test["if"]?.ToString()) is { } presence
+                && test["then"] is JsonArray { Count: 1 } then && then[0] is JsonObject { Count: 1 } inner
+                && inner["assign"] is JsonObject { Count: 1 } payload && payload.Single() is var (key, read)
+                && key.EndsWith(".Value", StringComparison.Ordinal) && Builder(key[..^".Value".Length], create: false) is { } wrapper
+                && wrapper.TryGetValue("HasValue", out var has) && has as string == presence && !wrapper.ContainsKey("Value")
+                && Read(read?.ToString()) is { } valueColumn && Paired(presence, valueColumn))
+            {
+                wrapper["Value"] = valueColumn;
+                continue;
+            }
+            return null;
+        }
+        var fields = new List<string>();
+        if (pending.Count > 0 || root.Count == 0 || !Emit(root, type, "", fields)) return null;
+        return source + " mapTo { " + string.Join(", ", fields) + " }";
+
+        // The attributes in the order of the record (recursively for a member built in a local of its own).
+        bool Emit(Dictionary<string, object> built, ValueType of, string prefix, List<string> output)
+        {
+            if (Attributes(of) is not { } attributes || built.Keys.Any(k => !attributes.Any(a => a.Name == k))) return false;
+            if (of.Nullable && !built.ContainsKey("HasValue")) return false;
+            foreach (var (name, memberType) in attributes)
+            {
+                if (!built.TryGetValue(name, out var value)) continue;
+                if (value is string column) output.Add(prefix + name + ": " + column);
+                else if (memberType == null || !Emit((Dictionary<string, object>)value, memberType, prefix + name + ".", output)) return false;
+            }
+            return true;
+        }
+        // The presence column of a value and the value's column, as ReadQueryRow reads them (row.AvHasN, row.AvCN).
+        static bool Paired(string presence, string value) =>
+            RowColumn.Match(presence) is { Success: true } p && RowColumn.Match(value) is { Success: true } v
+            && p.Groups["kind"].Value == "Has" && v.Groups["kind"].Value == "C" && p.Groups["n"].Value == v.Groups["n"].Value && p.Groups["row"].Value == v.Groups["row"].Value;
+        static bool Plain(ValueType of) => !(of.IsList || of.IsArenaReference || of.IsExceptionReference || of.IsReadOnlyListReference);
+    }
+
+    /// <summary>The attributes of a record a mapping writes, in the order the data model declares them, each with its type:
+    /// a presence wrapper (HasValue, Value), a structure (its data members), an entity's transport record (its properties).
+    /// Null for anything else (a value, an identity, a list, a reference).</summary>
+    private IReadOnlyList<(string Name, ValueType? Type)>? Attributes(ValueType of)
+    {
+        if (of.IsList || of.IsArenaReference || of.IsExceptionReference || of.IsReadOnlyListReference) return null;
+        if (of.Nullable) return [("HasValue", null), ("Value", of with { Nullable = false })];
+        if (of.IsIdentity) return null;
+        return of.Declaration switch
+        {
+            { Kind: DataKind.Structure } structure => SourceMember.Data(structure.Symbol).Select(m => (structure.Properties[m.Symbol], (ValueType?)Type(m.Type))).ToList(),
+            { Kind: DataKind.Entity } entity => DataModel.Properties(entity.Symbol).Select(p => (entity.Properties[p], (ValueType?)Type(p.Type))).ToList(),
+            _ => null,
+        };
     }
     private SourceValue ReadQueryRow(SqlShape shape, string row, JsonArray steps, IOperation location,
         IReadOnlyDictionary<object, QueryIdentityCache>? identities = null)

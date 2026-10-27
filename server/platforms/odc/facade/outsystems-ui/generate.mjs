@@ -26,6 +26,7 @@ const EXTRACT_SCHEMA = 'ssam-osui-odc-signatures/1';
 const SOURCES = {
   o11Ui: 'kernel/catalog/ui/OutSystemsUI-2.28.1.json',
   o11Web: 'kernel/catalog/ui/OutSystemsUIWeb-1.12.8.json',
+  o11Rich: 'kernel/catalog/ui/RichWidgets-unversioned.json',
   inventory: 'kernel/docs/mapa/screen-osui-inventory.json',
   odc: 'platforms/odc/facade/outsystems-ui/odc-outsystemsui-signatures.json',
 };
@@ -92,7 +93,10 @@ function o11Library(id, file, json, inventory, fixtureNames, extra) {
   })));
   const notCertified = patterns.filter(p => !fixtureNames.every(f => certified.get(p.name)?.has(f))).map(p => p.name);
   return { id, name: json.Name, producer: json.Name, key: json.Key, version: json.Version, runtime: json.Blocks[0]?.Runtime ?? null, source: file,
-    ...extra, certified: { by: SOURCES.inventory, fixtures: fixtureNames, notCertified }, patterns };
+    ...extra, certified: fixtureNames.length ? { by: SOURCES.inventory, fixtures: fixtureNames, notCertified } : null,
+    // The public actions only of the Traditional libraries (RichWidgets, OutSystemsUIWeb: their feedback, paging and popup
+    // actions are part of a Traditional recipe); the Reactive OutSystemsUI section keeps the size it had.
+    ...(['o11-outsystemsuiweb', 'o11-richwidgets'].includes(id) ? { actions: (json.Actions ?? []).filter(a=>a.Public).map(a=>({name:a.Name,description:a.Description,inputs:a.Inputs,outputs:a.Outputs})) } : {}), patterns };
 }
 
 function odcLibrary(extract) {
@@ -122,6 +126,11 @@ export function buildCatalog() {
       element: 'IWebBlock:<Name>',
       instance: '{"op":"create","parent":"<placeholder or container>","type":"IWebBlockInstanceWidget","name":"<Name>1","source":"IWebBlock:<Name>","empty":true}; inputs `set $b/<Input> Value`, placeholders `$b/<Placeholder>` (osui-web-patterns.json)',
       reference: 'the Traditional template references OutSystemsUIWeb; a block the module lacks: {"op":"reference","producer":"OutSystemsUIWeb","elements":["IWebBlock:<Name>"]} with the producer bound' }),
+    o11Library('o11-richwidgets', SOURCES.o11Rich, json.o11Rich, json.inventory, [], {
+      element:'IWebBlock:<Name>',
+      instance:'{"op":"create","parent":"<placeholder or container>","type":"IWebBlockInstanceWidget","name":"<Name>1","source":"IWebBlock:<Name>","empty":true}; bind inputs and OnNotify from the actual contract; compose behavior in the same delivery',
+      reference:'{"op":"reference","producer":"RichWidgets","elements":["IWebBlock:<Name>"]}; bind the published producer; read action contracts for paging, sorting, feedback and popup lifecycle',
+      note:'Legacy Traditional components. Inspect deprecation/device restrictions; catalog presence is not native or browser proof.' }),
   ];
   for (const lib of libraries) {
     lib.categories = [...new Set(lib.patterns.map(p => p.category))];
@@ -137,7 +146,7 @@ export function buildCatalog() {
       'odc-mobile': { lane: 'odc', library: 'odc-outsystemsui', label: 'ODC Mobile app', note: 'ODC has one OutSystemsUI library for Reactive and Mobile apps; the repository has no ODC Mobile capture that references it (blank-mobile.oml references only (System)), so this list is the revision referenced by the Reactive fixture' },
       'o11-reactive': { lane: 'o11', library: 'o11-outsystemsui', label: 'O11 Reactive Web app' },
       'o11-mobile': { lane: 'o11', library: 'o11-outsystemsui', label: 'O11 Mobile app', note: 'the same OutSystemsUI module as Reactive (Runtime Reactive/Mobile); every pattern is certified on the mobile-ui fixture too' },
-      'o11-traditional': { lane: 'o11', library: 'o11-outsystemsuiweb', label: 'O11 Traditional Web app' },
+      'o11-traditional': { lane: 'o11', library: 'o11-outsystemsuiweb', libraries:['o11-outsystemsuiweb','o11-richwidgets'], label: 'O11 Traditional Web app' },
     },
     // Words people use for a pattern whose library name they do not say (2026-10-05 package, C07): "a deck of cards",
     // "swipe cards" -> StackedCards; "a slider", "a range" -> RangeSlider. Each target is a pattern of every library that has
@@ -146,7 +155,6 @@ export function buildCatalog() {
     absent: [
       { library: 'OutSystems UI Mobile (legacy O11 Mobile UI library)', note: 'no capture in the repository; the O11 mobile-ui fixture uses OutSystemsUI' },
       { library: 'Layout blocks of Reactive/Mobile/ODC apps (LayoutTopMenu, LayoutSideMenu...)', note: 'they live in the app template\'s own Common flow, not in OutSystemsUI; read them in the module (ssam_map kind MobileBlock)' },
-      { library: 'RichWidgets (Traditional)', note: 'a separate library (kernel/catalog/ui/RichWidgets-unversioned.json), not part of OutSystems UI' },
     ],
     libraries,
   };

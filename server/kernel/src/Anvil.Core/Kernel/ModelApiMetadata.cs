@@ -26,6 +26,17 @@ internal static class ModelApiMetadata
         var assemblies = AppDomain.CurrentDomain.GetAssemblies();
         var key = (name, assemblies.Length);
         if (Candidates.TryGetValue(key, out var cached)) return cached;
+        var result = Types(name, assemblies);
+        // Misses are not retained; plugin dependencies may have failed to load on this attempt.
+        if (result.Length > 0) Candidates.TryAdd(key, result);
+        return result;
+    }
+
+    /// <summary>The interfaces named <paramref name="name"/> among <paramref name="assemblies"/> (the Model API first),
+    /// else in the Studio's model plugins, uncached. NativeProbe passes the assemblies of a fresh `api --op native`
+    /// process, so a type it answers late in a batch is looked up as a process of its own would.</summary>
+    internal static Type[] Types(string name, IReadOnlyCollection<Assembly> assemblies)
+    {
         var api = typeof(IESpace).Assembly;
         bool Match(Type t) => t.IsInterface && (t.Name == name || t.FullName == name);
         var found = PublicTypes(api).Where(Match).ToList();
@@ -50,10 +61,7 @@ internal static class ModelApiMetadata
                 }
                 catch { }
         }
-        var result = found.Distinct().ToArray();
-        // Misses are not retained; plugin dependencies may have failed to load on this attempt.
-        if (result.Length > 0) Candidates.TryAdd(key, result);
-        return result;
+        return found.Distinct().ToArray();
     }
 
     private static string? aggregateColumnType;
@@ -69,11 +77,13 @@ internal static class ModelApiMetadata
 
     public static MethodInfo[] Methods(Type type) => MethodsByType.GetOrAdd(type, t =>
         t.GetInterfaces().Where(IsModelApi).SelectMany(i => i.GetMethods().Select(m => (Interface: i, Method: m)))
-            .DistinctBy(x => x.Interface.FullName + "|" + x.Method.ToString()).Select(x => x.Method).ToArray());
+            .DistinctBy(x => x.Interface.FullName + "|" + x.Method.ToString()).Select(x => x.Method)
+            .Concat(TraditionalWidgetMetadata.Methods(t)).ToArray());
 
     public static PropertyInfo[] Properties(Type type) => PropertiesByType.GetOrAdd(type, t =>
         t.GetInterfaces().Where(IsModelApi).SelectMany(i => i.GetProperties().Select(p => (Interface: i, Property: p)))
-            .DistinctBy(x => x.Interface.FullName + "|" + x.Property.Name).Select(x => x.Property).ToArray());
+            .DistinctBy(x => x.Interface.FullName + "|" + x.Property.Name).Select(x => x.Property)
+            .Concat(TraditionalWidgetMetadata.Properties(t)).ToArray());
 
     private static bool IsModelApi(Type type) => type.Namespace != null &&
         (type.Namespace.StartsWith("OutSystems.Model", StringComparison.Ordinal) || type.Namespace.StartsWith("ServiceStudio.Plugin", StringComparison.Ordinal));

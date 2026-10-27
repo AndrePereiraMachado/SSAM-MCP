@@ -38,6 +38,7 @@ internal static class FlowRules
         ["NodesWithinCycle"] = "derived from the connectors", ["ConcreteParameterType"] = "derived from the argument",
         ["SourceOperation"] = "aggregate operation tree", ["AttributesInPreview"] = "aggregate editor preview" };
     private static readonly Dictionary<string, Dictionary<string, string>> UnwrittenByKind = new(StringComparer.Ordinal) {
+        ["ScreenAction"] = new() { ["IsCalledByAjax"] = "derived from incoming Traditional event methods" },
         ["InputParameter"] = new() { ["Type"] = "derived from DataType" }, ["OutputParameter"] = new() { ["Type"] = "derived from DataType" },
         ["LocalVariable"] = new() { ["Type"] = "derived from DataType" }, ["SQLInputParameter"] = new() { ["Type"] = "derived from DataType" },
         ["AggregateNode"] = new() { ["Type"] = "derived output type", ["RootOperation"] = "aggregate operation tree" },
@@ -87,11 +88,13 @@ internal static class FlowRules
 // Reads one action of a loaded module into the canonical model. Every element below the action is claimed (as the action,
 // a parameter, a node, a part, a value carrier or structure); an element nobody claims, a child of a kind the reader does
 // not know and a property read error are problems of that action, so nothing is left out silently.
-internal sealed class FlowExtractor<T>(ModelReader<T> reader, T root) where T : class
+internal sealed partial class FlowExtractor<T>(ModelReader<T> reader, T root) where T : class
 {
     private readonly HashSet<T> claimed = new(ReferenceEqualityComparer.Instance);
     private List<string> problems = [];
     private bool clientFlow;
+    // The screen or block (or flow) of the action being read: a call of a screen action of another owner is not its text.
+    private T? actionOwner;
     // The node being read: a problem found while reading it is that node's (it becomes opaque), not the action's.
     private T? scope;
     private readonly Dictionary<T, List<string>> nodeProblems = new(ReferenceEqualityComparer.Instance);
@@ -108,9 +111,13 @@ internal sealed class FlowExtractor<T>(ModelReader<T> reader, T root) where T : 
     public FlowItem Action(T action, out List<string> found)
     {
         claimed.Clear(); problems = []; nodeProblems.Clear(); scope = null;
+        actionOwner = reader.ParentOf(action);
         // The kind of call a name two actions share reads as by default in this flow (ModelSession.Callee's rule).
         clientFlow = reader.IsKind(action, "IClientAction") || reader.IsKind(action, "OutSystems.Model.UI.Mobile.IScreenAction");
         var item = new FlowItem("action", reader.KindOf(action), reader.KeyOf(action), reader.DisplayOf(action));
+        // Preparation has no editable Name property; its native identity is owned
+        // by the screen/block/email and its source spelling is fixed.
+        if (item.Kind == "Preparation") item.Name = "Preparation";
         // A screen, block or data action names its owner in the header (FlowOwners.Text).
         if (FlowOwners.Owned(item.Kind) && reader.ParentOf(action) is { } holder && !ReferenceEquals(holder, root)) item.Owner = FlowOwners.Text(reader, root, holder);
         claimed.Add(action);
@@ -445,6 +452,11 @@ internal sealed class FlowExtractor<T>(ModelReader<T> reader, T root) where T : 
                 // The owner above an element is structure, but an Execute node's Action naming its own action is a recursive call.
                 var recursive = property == "Action" && FlowRules.NodeKind(reader.KindOf(node)) == "Execute";
                 if (ReferenceEquals(target, node) || ReferenceEquals(target, root) || !recursive && ReferenceEquals(reader.ParentOf(node), target) || Below(target, node)) return null;
+                // A screen action is called only by the actions of its own screen or block: the name would resolve to the
+                // caller's own action, so the node is opaque rather than a text that writes another call.
+                if (recursive && (reader.IsKind(target, "OutSystems.Model.UI.Mobile.IScreenAction") || reader.IsKind(target, "OutSystems.Model.UI.Web.IScreenAction"))
+                    && !ReferenceEquals(reader.ParentOf(target), actionOwner))
+                    Problem("local UI call targets another owner: @" + reader.KeyOf(target));
                 return new('r', property == "Action" ? Callee(target) : Named(target));
             case string text: return text.Length > 0 ? new('t', text) : null;
             case bool flag: return new('v', flag ? "True" : "False");

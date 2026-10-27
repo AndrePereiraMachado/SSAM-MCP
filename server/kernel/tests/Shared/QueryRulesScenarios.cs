@@ -11,7 +11,7 @@ namespace Anvil.Tests;
 /// applies a real job to the lane's blank fixture through JobRunner (spec + logic, no Studio window): an Aggregate or a
 /// SQL in a ForEach and an aggregate in a `while` cycle (an If back-edge) are refused with the op, the loop, the query and
 /// the fix; `allowQueryInLoop` with a why is accepted and recorded; a loop the job did not create or change is a HIGH
-/// warning; two related aggregates used together are a HIGH warning with the merged aggregate; unrelated ones are not.
+/// warning; related aggregates used together require semantic review without a replacement query; unrelated ones do not.
 /// </summary>
 public static class QueryRulesScenarios
 {
@@ -144,12 +144,37 @@ public static class QueryRulesScenarios
         Assert.Equal("high", warning["severity"]!.GetValue<string>());
         Assert.Equal(new[] { "GetOrder", "GetOrderLines" }, warning["aggregates"]!.AsArray().Select(a => a!.GetValue<string>()).Order());
         Assert.Contains("QrLine.OrderId -> QrOrder", warning["relations"]!.AsArray().Select(r => r!.GetValue<string>()));
-        var suggestion = warning["suggestion"]!;
-        Assert.Equal("QrOrder", suggestion["get"]!.GetValue<string>());
-        Assert.Equal("QrLine", suggestion["sources"]![0]!.GetValue<string>());
-        Assert.Equal("QrLine.OrderId = QrOrder.Id", suggestion["joins"]![0]!["condition"]!.GetValue<string>());
-        Assert.Contains("QrOrder.Id = OrderId", suggestion["where"]!.AsArray().Select(w => w!.GetValue<string>()));
+        Assert.Null(warning["suggestion"]);
+        Assert.Equal("requires-semantic-review", warning["decision"]!.GetValue<string>());
+        Assert.Contains("authorization", warning["fix"]!.GetValue<string>());
         Assert.Equal(1, warning["op"]!.GetValue<int>());
+    }
+
+    public static void ConsolidationNeverRewritesIndependentPagesOrInterveningReads(string dir, string fixture)
+    {
+        foreach (var variant in new[] { "pages", "intervening-call", "dependent-filter" })
+        {
+            // Independent pages by their sizes and orders: a Start Index on an aggregate of a server action is refused since T3
+            // (LOGIC_START_SERVER_IGNORED: the runtime ignores it there).
+            var first = variant == "pages" ? "\"max\":5,\"sort\":\"QrLine.Qty\"," : "";
+            var second = variant == "pages" ? "\"max\":20,\"sort\":\"QrLine.Id\"," : "";
+            var middle = variant == "intervening-call" ? "{\"call\":\"ReadWithLock\",\"args\":{\"IsBloquear\":\"True\"}}," : "";
+            var filter = variant == "dependent-filter" ? "QrLine.Qty > Before.Count" : "QrLine.Qty > 0";
+            var job = $$$"""
+                {"base":"{{{fixture}}}","ops":[{{{Spec}}},{"op":"logic","data":{"actions":[
+                {"name":"ReadWithLock","inputs":[{"name":"IsBloquear","type":"Boolean"}],"steps":[]},
+                {"name":"Reads","outputs":[{"name":"Total","type":"Long Integer"}],"steps":[
+                {"get":"QrLine","as":"Before",{{{first}}}"where":"QrLine.Qty >= 0"},
+                {{{middle}}}{"get":"QrLine","as":"After",{{{second}}}"where":"{{{filter}}}"},
+                {"assign":{"Total":"Before.Count + After.Count"}}]}]}}]}
+                """;
+            var result = Run(dir, "qr-consolidation-" + variant, job);
+            Assert.True(result["accepted"]!.GetValue<bool>(), result.ToJsonString());
+            var warning = Assert.Single(High(result), w => w!["code"]!.GetValue<string>() == AggregateConsolidationRule.Code)!;
+            Assert.Null(warning["suggestion"]);
+            Assert.Equal("requires-semantic-review", warning["decision"]!.GetValue<string>());
+            Assert.DoesNotContain("one query would do", warning["message"]!.GetValue<string>());
+        }
     }
 
     public static void UnrelatedAggregatesAreNotAWarning(string dir, string fixture)

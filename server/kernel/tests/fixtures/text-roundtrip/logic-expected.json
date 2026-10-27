@@ -2,12 +2,12 @@
  "about": "TextRoundTripCorpus (kernel/tests/Shared/TextRoundTripTests.cs): the fixed point of ssam-flow/1 over corpus.json, per lane. The O11 and ODC numbers add up to the plan's table 6.5 (C:\\Users\\andre\\SSAM-analises\\html-do-ssam\\PLANO.md): 5,240 actions, 50,305 nodes, every node kind, and every authored value the digest of 16d95076 lost (counted). Sizes: structure = the text without its descriptions (///), comments and continuation lines (|) against the whole digest of the same actions; median = the median per action of the whole text against the digest's text of that action.",
  "lanes": {
   "o11": {
-   "actions": 4439,
-   "nodes": 43129,
+   "actions": 4445,
+   "nodes": 43153,
    "nodeKinds": {
-    "AggregateNode": 1248, "AjaxRefreshNode": 1, "AssignNode": 12174, "CommentNode": 639, "DestinationNode": 302, "DownloadNode": 30, "EndNode": 5948,
-    "ExceptionHandlerNode": 692, "Execute": 11241, "ForEachNode": 996, "IfNode": 3324, "JSONDeserializeNode": 104, "JSONSerializeNode": 111,
-    "JavaScriptNode": 289, "MessageNode": 84, "RaiseExceptionNode": 706, "RefreshDataNode": 421, "SQLNode": 91, "StartNode": 4439, "SwitchNode": 58,
+    "AggregateNode": 1248, "AjaxRefreshNode": 1, "AssignNode": 12175, "CommentNode": 639, "DestinationNode": 306, "DownloadNode": 30, "EndNode": 5953,
+    "ExceptionHandlerNode": 692, "Execute": 11246, "ForEachNode": 996, "IfNode": 3327, "JSONDeserializeNode": 104, "JSONSerializeNode": 111,
+    "JavaScriptNode": 289, "MessageNode": 84, "RaiseExceptionNode": 706, "RefreshDataNode": 421, "SQLNode": 91, "StartNode": 4445, "SwitchNode": 58,
     "TriggerNode": 231
    },
    "counted": {

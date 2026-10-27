@@ -171,7 +171,7 @@ export async function codePlan(input = {}, deps = {}) {
     if (item.signature != null && typeof item.signature !== 'string') problem(`items/${i}/signature`, 'signature is text');
     if (typeof item.signature === 'string' && item.signature.trim() && item.kind !== 'data') {
       const signature = signatureOf(item.signature);
-      const target = item.kind === 'action' ? signature.match(/^(?:server action|service action|client action|data action|action)\s+(\S+)/)?.[1]
+      const target = item.kind === 'action' ? signature.match(/^(?:server action|service action|client action|data action|action|preparation)\s+(\S+)/)?.[1]
         : signature.match(new RegExp(`^<${item.kind}\\b[^>]*\\bname\\s*=\\s*["']([^"']+)["']`))?.[1];
       if (target !== item.name) problem(`items/${i}/signature`, `signature must declare ${item.kind} ${item.name}`);
     }

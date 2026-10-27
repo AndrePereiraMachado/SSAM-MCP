@@ -83,13 +83,35 @@ export function findCapture(local, { moduleKey, model } = {}) {
 
 // After a delivery: its own snapshot (the module before the merge, and still the module when nothing was merged) and the
 // delivered snapshot (after the merge, taken for the data proof) of the kernel's task state. Never throws.
+// L3b: answers what was recorded, {base, delivered} each {path, model, moduleKey} or null: the delivered capture is the
+// module now, the one the worker prepares next (its spare).
 export function rememberDelivery(local, state, { now = new Date() } = {}) {
-  if (!state || typeof state !== 'object') return;
+  const recorded = { base: null, delivered: null };
+  if (!state || typeof state !== 'object') return recorded;
   const key = typeof state.moduleKey === 'string' ? state.moduleKey : null;
-  for (const [snapshot, source] of [[state.snapshot, 'deliver-base'], [state.deliveredSnapshot, 'delivered']]) {
+  for (const [snapshot, source, slot] of [[state.snapshot, 'deliver-base', 'base'], [state.deliveredSnapshot, 'delivered', 'delivered']]) {
     if (!snapshot || typeof snapshot.path !== 'string') continue;
     const moduleKey = typeof snapshot.key === 'string' && snapshot.key ? snapshot.key : key;
     if (key && moduleKey !== key) continue;
-    rememberCapture(local, { moduleKey, module: typeof snapshot.name === 'string' ? snapshot.name : state.module ?? null, file: snapshot.path, source, now });
+    const model = rememberCapture(local, { moduleKey, module: typeof snapshot.name === 'string' ? snapshot.name : state.module ?? null, file: snapshot.path, source, now });
+    if (model) recorded[slot] = { path: path.resolve(snapshot.path), model, moduleKey };
   }
+  return recorded;
+}
+
+// L3b (pré-aquecimento): the newest known capture of each module, newest module first, at most `limit`, whose file still
+// exists; `moduleKeys` (the tabs open in the Studio, in their order) narrows and orders it. Rows {path, model, moduleKey,
+// module, at}. The model is the one recorded (the worker reads the file again before loading it). Never throws.
+export function recentCaptures(local, { limit = 3, moduleKeys = null } = {}) {
+  try {
+    if (typeof local !== 'string' || !local) return [];
+    const modules = readIndex(local).modules;
+    const newest = moduleKey => (Array.isArray(modules[moduleKey]) ? modules[moduleKey] : [])
+      .find(row => typeof row?.path === 'string' && isModelSha(row.model) && isFile(row.path));
+    const keys = Array.isArray(moduleKeys) ? moduleKeys.filter(k => typeof k === 'string' && k) : Object.keys(modules);
+    const rows = keys.map(moduleKey => ({ moduleKey, row: newest(moduleKey) })).filter(r => r.row)
+      .map(({ moduleKey, row }) => ({ path: row.path, model: row.model, moduleKey, module: row.module ?? null, at: row.at ?? null }));
+    if (!Array.isArray(moduleKeys)) rows.sort((a, b) => String(b.at ?? '').localeCompare(String(a.at ?? '')));
+    return rows.slice(0, Math.max(0, limit));
+  } catch { return []; }
 }

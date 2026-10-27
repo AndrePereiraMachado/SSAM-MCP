@@ -9,8 +9,10 @@ namespace Anvil.Tests;
 internal static class FrameworkRuntimeFixture
 {
     internal static FrozenFrameworkDependencies? For(ModelHost host,string basis,JsonObject source,string root)
+        =>For(host,basis,CSharpCompiler.Compile(SourceBundle.From(source["csharpSource"]!)),root);
+    /// <summary>The same fixture for a compilation already made (the reference-graph compilation of a source, for one).</summary>
+    internal static FrozenFrameworkDependencies? For(ModelHost host,string basis,CompilationResult compiled,string root)
     {
-        var compiled=CSharpCompiler.Compile(SourceBundle.From(source["csharpSource"]!));
         if(compiled.RequiredIntrinsics is not {Count:>0})return null;
         var fixture=compiled.RequiredIntrinsics.Any(r=>r.Reference==FrameworkIntrinsic.Trim.Reference)
             ? "unicode-text-primitives.avsig"

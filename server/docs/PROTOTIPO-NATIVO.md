@@ -1,5 +1,10 @@
 # Protótipo → telas nativas em uma chamada (contrato)
 
+> **Desligado em 2026-10-22 (decisão do dono, branch `fix/prototype-off`).** O op `prototype` é recusado antes de qualquer
+> trabalho com `PROTOTYPE_IMPORT_DISABLED` (facade `prototype-disabled.mjs`, kernel `Kernel/Prototype/PrototypeImport.cs`),
+> nas duas faixas, no CLI e no MCP; nenhuma superfície o oferece mais. Telas: o op `html` por `ssam_code` (parte `html`).
+> O código abaixo continua compilado porque o op `html` partilha o builder, a tabela de dados, o render e os defaults.
+
 Base: `integracao/liberacao23-20261010` = `cd7e4f11`. Branch deste contrato: `feat/prototipo-nativo-contrato`.
 Este documento é o contrato das 5 lanes que constroem o importador. **Revisão 2 (2026-10-10):** aplica os 11 pontos
 obrigatórios e os 22 recomendados da crítica, ou os refuta com evidência; o registro ponto a ponto está na seção 10.

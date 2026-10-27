@@ -17,6 +17,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Client } from '@modelcontextprotocol/client';
 import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
+import { WRITE_DEADLINE_MS } from '../call-deadline.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const server = path.join(here, 'fixtures', 'long-delivery-server.mjs');
@@ -46,8 +47,10 @@ test('a 3-minute delivery over stdio: one call past the 25 s deadline; a client 
   const long = client.callTool({ name: 'o11_deliver', arguments: { module: 'Long' } }, { timeout: 2 * DELIVERY_MS }).then(result => ({ result, at: Date.now() - started }));
   const givenUp = client.callTool({ name: 'o11_deliver', arguments: { module: 'GiveUp' } }).then(() => ({ answered: true }), error => ({ error, at: Date.now() - started }));
 
-  // 30 s after the start, past the server's deadline, neither call has answered and ssam_task lists both as running
-  await sleep(30000);
+  // Past the server's deadline of a delivery, neither call has answered and ssam_task lists both as running. A delivery
+  // waits WRITE_DEADLINE_MS (50 s, the per-tool deadline of the merged proto line, 92dc826d/bc9f8fb3) before it is kept as a
+  // task that runs to its end; the SDK's default timeout (60 s) is later.
+  await sleep(WRITE_DEADLINE_MS + 5000);
   const listed = value(await client.callTool({ name: 'ssam_task', arguments: {} }));
   const running = listed.tasks.filter(task => task.tool === 'o11_deliver' && task.state === 'running');
   assert.equal(running.length, 2, JSON.stringify(listed.tasks).slice(0, 600));

@@ -24,6 +24,7 @@ import { EventEmitter } from 'node:events';
 import { createRequire, syncBuiltinESMExports } from 'node:module';
 import { promisify } from 'node:util';
 import { randomUUID } from 'node:crypto';
+import { callerKey } from '../correlation.mjs';
 
 const require = createRequire(import.meta.url);
 const cp = require('node:child_process');
@@ -176,7 +177,8 @@ test('A3: ssam_doctor {task} and the ssam_task of an ODC-only hosted server read
   const id = randomUUID();
   const shared = path.join(anvilRoot, '.local', 'tasks');
   const before = listing(shared);
-  within(a, () => mergeTask(tasksDir(), { id, tool: 'o11_deliver', pid: process.pid, startedAt: new Date().toISOString(), state: 'uncertain', isWrite: true, call: { lane: 'o11' } }));
+  // F7: a hosted call stamps its caller on the record (correlation.mjs traceFields); a reader sees only its own caller's.
+  within(a, () => mergeTask(tasksDir(), { id, tool: 'o11_deliver', pid: process.pid, startedAt: new Date().toISOString(), state: 'uncertain', isWrite: true, call: { lane: 'o11' }, correlationId: randomUUID(), callerKey: callerKey(a.tokenId) }));
   assert.ok(fs.existsSync(path.join(a.workspace, 'o11', 'tasks')), 'the record is in A\'s workspace');
   const sa = await hostedServer(a), sb = await hostedServer(b);
   const oa = await hostedServer(a, { o11: false }), ob = await hostedServer(b, { o11: false });

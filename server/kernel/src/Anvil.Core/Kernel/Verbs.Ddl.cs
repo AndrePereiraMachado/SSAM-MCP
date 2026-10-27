@@ -22,6 +22,11 @@ public sealed partial class ModelSession
         _ = SpecExpander.DdlCreation(data);
         var lane = MessageExpectations.Lane;
         var edit = SpecExpander.DdlParse(text);
+        // The plural a NEW entity's text leaves out is the platform's (its own naming of the label), not the reader's English
+        // fallback: "AdvApontamentoHoras" stays itself, never renamed or re-pluralized. An explicit LabelPlural and every
+        // statement with a key stay as written (DDL_NATIVE_PLURAL, round 2).
+        var nativePlurals = edit.Elements.Where(e => e.Key.Length == 0 && DdlRules.IsEntityKind(e.Kind) && !e.Props.ContainsKey("LabelPlural"))
+            .Select(e => (e.Kind, e.Name)).ToHashSet();
         var prefix = "$ddl" + _applyIndex;
         var rounds = new JsonArray();
         DdlCompilation? first = null;
@@ -31,15 +36,17 @@ public sealed partial class ModelSession
         List<DdlProblem> conventionProblems = [];
         for (var round = 1; ; round++)
         {
-            var built = DataDdl.Build((IObjectSignature)_espace, new KernelModelReader(), lane, "", 0);
+            DataDdl built;
+            using (NativePerformanceCapture.Measure("ddl.build")) built = DataDdl.Build((IObjectSignature)_espace, new KernelModelReader(), lane, "", 0);
             var current = DdlParser.Parse(built.Text);
             if (round == 1)
             {
                 foreach (var element in current.All()) if (element.Key.Length > 0) known.Add(element.Key);
+                _ddlSamples = current.All().Where(e => e.Key.Length > 0).GroupBy(e => e.Kind, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.First().Key, StringComparer.Ordinal);
                 // What the platform fills by itself (the identifier, a static entity's identifier, label and order values, a
                 // required value), given its one meaning in the text itself, against the module now, before anything is
                 // compiled: every round compiles the same text, so no round clears what another wrote (DdlConventions).
-                var conventions = DdlConventions.Apply(edit, current);
+                var conventions = DdlConventions.Apply(edit, current, DataTextPropertyType);
                 foreach (var note in conventions.Notes) Note(note.Code, note.Message);
                 conventionProblems = conventions.Problems;
                 // Statements with keys were written on a read (basedOn): merged three ways with it, so what the Studio changed since
@@ -53,10 +60,19 @@ public sealed partial class ModelSession
                 // The elements the first round created, by their place and name in the module now: their keys.
                 var lost = KeyCreated(first!.Created, current, known);
                 if (lost.Count > 0)
-                    throw SpecExpander.DdlRefusal("DDL_NOT_CONVERGED", lost.Select(e => new DdlProblem(e.Line, "DDL_NOT_CONVERGED",
-                        $"{e.Name} was created and the module has no {e.Name} there now (the platform named it otherwise)", "give it another name")).ToList());
+                    throw SpecExpander.DdlRefusal("DDL_NOT_CONVERGED", lost.Select(l => Renamed(l.Element, l.Became, text)).ToList());
+                if (round == 2)
+                    foreach (var element in edit.Elements.Where(e => nativePlurals.Contains((e.Kind, e.Name))))
+                        if (current.Elements.FirstOrDefault(e => e.Key == element.Key) is { } actual
+                            && new DdlParsedContext(actual).Effective("LabelPlural") is var value
+                            && !DdlRules.Same(new DdlParsedContext(element).Effective("LabelPlural"), value)) {
+                            element.Props["LabelPlural"] = value;
+                            Note("DDL_NATIVE_PLURAL", element.Name + ": the plural the text leaves out is the platform's (" + value + ")");
+                        }
             }
-            var compiled = DdlCompiler.Compile(round == 1 ? edit : WithoutDrops(edit), current, lane, prefix + "r" + round, text, first?.Created.Concat(first.Retyped));
+            DdlCompilation compiled;
+            using (NativePerformanceCapture.Measure("ddl.compile"))
+                compiled = DdlCompiler.Compile(round == 1 ? edit : WithoutDrops(edit), current, lane, prefix + "r" + round, text, first?.Created.Concat(first.Retyped), DataTextPropertyType);
             if (round == 1 && conventionProblems.Count > 0)
                 throw SpecExpander.DdlRefusal("DDL_INVALID", conventionProblems.Concat(compiled.Problems).OrderBy(p => p.Line).ToList());
             if (compiled.Problems.Count > 0) throw SpecExpander.DdlRefusal(round == 1 ? "DDL_INVALID" : "DDL_NOT_CONVERGED", compiled.Problems);
@@ -64,7 +80,7 @@ public sealed partial class ModelSession
             if (round == 3)
                 throw SpecExpander.DdlRefusal("DDL_NOT_CONVERGED", compiled.Steps.Select(s => new DdlProblem(s.Line, "DDL_NOT_CONVERGED",
                     $"{s.What}: the module keeps another value after two rounds ({DdlDescribe(s.Op)})", "write the value the module keeps, or change it in the Studio")).ToList());
-            RunDdl(compiled);
+            using (NativePerformanceCapture.Measure("ddl.run")) RunDdl(compiled);
             first ??= compiled;
             var summary = compiled.Summary();
             summary["round"] = round;
@@ -77,6 +93,7 @@ public sealed partial class ModelSession
             if (created.Key.Length > 0) keys[(created.Parent != null ? created.Parent.Name + "." : "") + created.Name] = created.Key;
         // The basedOn of a next edit: the module's data text as this op leaves it, kept in the store (an edit of it that arrives
         // after the Studio changed the module is merged three ways with it).
+        using var keeping = NativePerformanceCapture.Measure("ddl.keepReading");
         var next = KeepsDdlReadings ? KeepDdlReading(DataDdl.Build((IObjectSignature)_espace, new KernelModelReader(), lane, "", 0)) : null;
         return new JsonObject {
             ["ddl"] = first?.Summary() ?? new JsonObject { ["ops"] = 0 }, ["rounds"] = rounds,
@@ -276,23 +293,78 @@ public sealed partial class ModelSession
 
     /// <summary>The keys of what the first round created, found in the module's text now by their place and name (a top-level
     /// element by kind and name among the new ones, a part by its parent's key and its name); the ones not found.</summary>
-    private static List<DdlElement> KeyCreated(List<DdlElement> created, DdlDocument current, HashSet<string> known)
+    private static List<(DdlElement Element, DdlElement? Became)> KeyCreated(List<DdlElement> created, DdlDocument current, HashSet<string> known)
     {
-        var lost = new List<DdlElement>();
+        var lost = new List<(DdlElement, DdlElement?)>();
         foreach (var element in created.OrderBy(e => e.Parent == null ? 0 : 1))
         {
             if (element.Key.Length > 0) continue;
             IEnumerable<DdlElement> candidates;
             if (element.Parent == null) candidates = current.Elements.Where(e => !known.Contains(e.Key));
             else if (element.Parent.Key.Length > 0 && current.All().FirstOrDefault(e => e.Key == element.Parent.Key) is { } parent) candidates = parent.Children;
-            else { lost.Add(element); continue; }
-            var match = candidates.FirstOrDefault(c => (c.Kind == element.Kind || c.Kind is "Record" or "StaticEntityRecord" && element.Kind is "Record" or "StaticEntityRecord")
-                && c.Name == element.Name && !known.Contains(c.Key));
-            if (match == null) { lost.Add(element); continue; }
+            else { lost.Add((element, null)); continue; }
+            var sameKind = candidates.Where(c => (c.Kind == element.Kind || c.Kind is "Record" or "StaticEntityRecord" && element.Kind is "Record" or "StaticEntityRecord") && !known.Contains(c.Key)).ToList();
+            var match = sameKind.FirstOrDefault(c => c.Name == element.Name);
+            if (match == null)
+            {
+                // Goal list of 2026-10-20, item 8 (report 875d39c3): what the platform made of it, when it can be told: the one new
+                // element of that kind there, or the one whose name is the start of the name sent (a name cut to the length
+                // the platform keeps: an index of 32 to 36 characters came back shorter).
+                var became = sameKind.Count == 1 ? sameKind[0]
+                    : sameKind.FirstOrDefault(c => c.Name.Length > 0 && element.Name.StartsWith(c.Name, StringComparison.Ordinal))
+                    ?? sameKind.FirstOrDefault(c => c.Name.Length > 0 && c.Name.StartsWith(element.Name, StringComparison.Ordinal));
+                lost.Add((element, became)); continue;
+            }
             element.Key = match.Key;
             known.Add(match.Key);
         }
         return lost;
+    }
+
+    /// <summary>The type the set verb converts <paramref name="property"/> of a data text element to (FindProperty on the element):
+    /// the way back compares the text's value with the module's in that stored form, and reads its flags by it (DdlValues). A
+    /// kept element by its key; a new one by an element of the same kind of the module's own data text (the concrete class
+    /// can write another type than its interface declares: ODC's IEntityAttribute.IsAutoNumber is a Boolean, the attribute
+    /// writes AutoNumber). Null when there is none: then only the text's own words count, never a guessed type.</summary>
+    public Type? DataTextPropertyType(DdlElement element, string property)
+    {
+        if (TypeByKey(element.Key, property) is { } kept) return kept;
+        return element.Key.Length == 0 && _ddlSamples != null && _ddlSamples.TryGetValue(element.Kind, out var sample) ? TypeByKey(sample, property) : null;
+    }
+
+    private Type? TypeByKey(string key, string property)
+    {
+        if (key.Length == 0) return null;
+        try { return Resolve("@" + key) is { } target ? FindProperty(target, property)?.PropertyType : null; }
+        catch (Exception error) when (error is KeyNotFoundException or InvalidOperationException or ArgumentException) { return null; }
+    }
+
+    // One element of each kind of the module's data text (its key), read at the first round of a data text op.
+    private Dictionary<string, string>? _ddlSamples;
+
+    /// <summary>The problem of a created element the module has no element of that name for: what the platform named it
+    /// instead, when it can be told, and the length a cut name proves the platform keeps.</summary>
+    /// <summary>The same problem with the corrected value a patch of /ddl can carry: the statements with the cut name written as
+    /// the platform kept it (the bare name was the whole patch value on 20/10, and the corrected op was DDL_SYNTAX).</summary>
+    internal static DdlProblem Renamed(DdlElement element, DdlElement? became, string text)
+    {
+        var problem = Renamed(element, became);
+        return problem.Corrected == null ? problem : problem with { Corrected = RenamedText(text, element.Name, problem.Corrected) };
+    }
+
+    internal static string RenamedText(string text, string from, string to) =>
+        System.Text.RegularExpressions.Regex.Replace(text, @"(?<![A-Za-z0-9_])" + System.Text.RegularExpressions.Regex.Escape(from) + @"(?![A-Za-z0-9_])", to.Replace("$", "$$"));
+
+    internal static DdlProblem Renamed(DdlElement element, DdlElement? became)
+    {
+        if (became == null)
+            return new DdlProblem(element.Line, "DDL_NOT_CONVERGED", $"{element.Name} was created and the module has no {element.Name} there now (the platform named it otherwise)", "give it another name");
+        var cut = element.Name.StartsWith(became.Name, StringComparison.Ordinal) && became.Name.Length < element.Name.Length;
+        return new DdlProblem(element.Line, "DDL_NOT_CONVERGED",
+            $"{element.Name} was created and the module has no {element.Name} there now: the platform named it {became.Name}"
+            + (cut ? $" ({became.Name.Length} characters; the name sent has {element.Name.Length}: the platform keeps at most {became.Name.Length} for a {element.Kind})" : ""),
+            cut ? $"give it a name of at most {became.Name.Length} characters, or write {became.Name} in the text" : $"write {became.Name} in the text, or give it another name",
+            cut ? became.Name : null);
     }
 
     private static DdlDocument WithoutDrops(DdlDocument edit)

@@ -10,6 +10,7 @@
 // `uncertain` and never repeated here: the continuation is a read (inventory). delete-app is not a CLI verb here: it is
 // the Service Center delete engine (two calls since CX15: the preview, then the token and the owner's words; its own
 // receipts and operation record).
+import { appendJsonLine } from './correlation.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
@@ -498,7 +499,7 @@ export function registerO11Environment(server, deps = {}) {
   const journalFile = () => path.join(lane().local, 'journal', 'o11_environment.jsonl');
   const journal = entry => {
     fs.mkdirSync(path.dirname(journalFile()), { recursive: true });
-    fs.appendFileSync(journalFile(), JSON.stringify({ at: now().toISOString(), tool: 'o11_environment', ...entry }) + '\n');
+    appendJsonLine(journalFile(), { at: now().toISOString(), tool: 'o11_environment', ...entry });
   };
   // delete-app is a thin route to the Service Center delete engine (service-center/delete.mjs), the same two calls as
   // o11_service_center_write delete (CX15): without confirmationToken the preview (the server's simulation, the modules

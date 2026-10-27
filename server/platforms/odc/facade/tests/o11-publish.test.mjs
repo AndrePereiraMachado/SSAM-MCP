@@ -185,7 +185,7 @@ test('the Studio on another environment: refused before TrueChange and publish',
   assert.equal(h.sent('open_module')[0].params.environment, 'prod.example.com');
   assert.equal(h.events[0], 'assertSelected');
   assert.deepEqual(h.events.slice(1,4).sort(), ['bridge_manifest', 'ping', 'windows']);
-  assert.deepEqual(h.events.slice(4), ['open_module', 'get_active_module']);
+  assert.deepEqual(h.events.slice(4), ['open_module', 'get_active_module', 'list_open_modules']);
 });
 
 test('a pending dialog in the Studio: refused with the wait for the person', async t => {
@@ -295,6 +295,24 @@ test('a server message that quotes a pre-start sentence is still a failed public
   const h = await harness(t, { publish: fail(FAILED_TEXT + ' compile error: Requested module identity is no longer active; nothing was executed', { data: { publishLog: ORDERS_LOG } }) });
   const value = await h.call({ module: 'Orders', authorize: WORDS });
   assert.equal(value.code, 'PUBLISH_FAILED'); assert.equal(value.outcome, 'failed');
+});
+
+test('ESpace.Dump keeps the failed receipt and routes to server diagnostics, never a guessed entry repair', async t => {
+  const log = { ...ORDERS_LOG, messages: [{ type: 'Error', stage: 'compile', text: 'Internal Error: Invalid compiler output.',
+    detail: 'Condition is false\n at OutSystems.HubEdition.Compiler.ESpace.Dump()' }] };
+  const h = await harness(t, { publish: fail(FAILED_TEXT, { data: { publishLog: log } }) });
+  const value = await h.call({ module: 'Orders', authorize: WORDS });
+  assert.equal(value.code, 'PUBLISH_FAILED');
+  assert.equal(value.diagnosis?.code, 'COMPILER_ESPACE_DUMP');
+  assert.equal(value.diagnosis.causeKnown, false);
+  assert.equal(value.continuation.tool, 'o11_service_center_read');
+  assert.equal(value.continuation.arguments.action, 'logs');
+  assert.equal(value.continuation.arguments.module, undefined, 'compiler service errors can have no module attribution');
+  assert.match(value.continuation.why, /preserve|Preserve/);
+  assert.doesNotMatch(value.continuation.why, /Fix it.*publish again/);
+  assert.equal(h.sent('publish').length, 1);
+  const warning = withPublishLog({ ok: false }, { ...log, messages: [{ ...log.messages[0], type: 'Warning' }] }, 'Orders');
+  assert.equal(warning.diagnosis, undefined, 'a quoted warning is not an ESpace.Dump failure');
 });
 
 test('withPublishLog: errors are never cut, warnings fill the limit, a log not found changes nothing', () => {

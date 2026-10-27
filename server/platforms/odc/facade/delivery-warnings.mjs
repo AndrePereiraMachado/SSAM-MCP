@@ -5,6 +5,7 @@
 // kernel task already carries the whole list (result.warnings, Delivery.cs); the ODC kernel apply
 // carries its verdicts, read here with the same curated hints (kernel/catalog/verify-hints-*.json). Pure, except the cached
 // read of the hint catalog.
+import { clipText } from './text-clip.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { anvilRoot } from './workspace.mjs';
@@ -17,7 +18,7 @@ export const UNUSED_FIX = 'Remove the element or use it.';
 const isObject = v => v !== null && typeof v === 'object' && !Array.isArray(v);
 const oneLine = (text, limit = 200) => {
   const line = String(text ?? '').split(/\s+/).filter(Boolean).join(' ');
-  return line.length > limit ? line.slice(0, limit - 1) + '…' : line;
+  return clipText(line, limit);
 };
 
 // Machine text inside a warning is cut to its head with its original size, so the sentence around it is read

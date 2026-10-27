@@ -12,7 +12,9 @@ namespace Anvil.Core;
 /// Per server entity of the module that has an identifier:
 /// <list type="bullet">
 /// <item>Get{E}List: one aggregate (joins to the entities its references name, filters by its references, indexed texts and
-/// dates, a search over its label and indexed texts, the owner and the active attribute), sort, Max Records/Start Index paging,
+/// dates, a search over its label and indexed texts, the owner and the active attribute), sort, paging by an SQL with OFFSET and
+/// FETCH NEXT (T3: the runtime ignores START on a server aggregate, the Studio hides it there), the total by an aggregate of the
+/// same sources, joins and filters,
 /// the page (a {E}ListItem structure that mirrors the aggregate's record) and the total;</item>
 /// <item>Get{E}ById: the record, NotFound, the owner check;</item>
 /// <item>Save{E}: existence and owner checks, required fields, text lengths, references that must exist, unique keys, then
@@ -421,7 +423,9 @@ public static class EntityActionsExpander
             var kept = new JsonObject
             {
                 ["name"] = generated.Name, ["entity"] = generated.Entity, ["role"] = generated.Role,
-                ["why"] = existing.Kind == generated.Kind
+                ["why"] = existing.Kind == generated.Kind && generated.Role == "list" && existing.Text != null && Regex.IsMatch(existing.Text, @"^\s*\w+ = aggregate .* START \S", RegexOptions.Multiline)
+                    ? $"the module has {generated.Name} in the earlier generated form, which pages by START on a server aggregate (the runtime ignores it there, LOGIC_START_SERVER_IGNORED: every page shows the first rows): kept as it is; adopt the generated text with the edit below"
+                    : existing.Kind == generated.Kind
                     ? $"the module has a {Label(existing.Kind)} {generated.Name} that reads otherwise than the generated one: kept as it is"
                     : $"{generated.Name} is the name of {Article(Label(existing.Kind))} of the module (or of a screen, block or reference in its scope): kept, the {Label(generated.Kind)} is not generated",
                 ["generated"] = generated.Text,
@@ -445,6 +449,9 @@ public static class EntityActionsExpander
             // The sources: the entity and, per reference, the entity it names (a second reference to the same entity is <R>2).
             var sources = new List<(string Alias, string Entity)> { (e.Name, e.Name) };
             var joinTexts = new List<string>();
+            // T3: the page is an SQL with OFFSET (the runtime ignores START on a server aggregate; the Studio hides it there);
+            // the same joins and filters in SQL form, every value a parameter, so no dialect writes a literal.
+            var sqlJoins = new List<string>(); var sqlWhere = new List<string>(); var sqlParams = new List<(string Name, string Type, string Value)>();
             if (joins)
                 foreach (var a in e.Attributes.Where(a => a.References != null && a.Name != e.IdentifierName))
                 {
@@ -462,6 +469,10 @@ public static class EntityActionsExpander
                     sources.Add((alias, target));
                     var inner = a.Mandatory && !string.Equals(a.DeleteRule, "Ignore", StringComparison.OrdinalIgnoreCase);
                     joinTexts.Add((inner ? "Inner " : "Left ") + e.Name + "~" + alias + " ON " + alias + "." + r.IdentifierName + " = " + e.Name + "." + a.Name);
+                    var lookup = "(SELECT {" + target + "}.* FROM {" + target + "} WHERE {" + target + "}.[" + r.IdentifierName + "] = {" + e.Name + "}.[" + a.Name + "]) " + alias;
+                    sqlJoins.Add(alias == target
+                        ? (inner ? "INNER JOIN {" : "LEFT JOIN {") + target + "} ON {" + target + "}.[" + r.IdentifierName + "] = {" + e.Name + "}.[" + a.Name + "]"
+                        : model.Lane == "odc" ? (inner ? "JOIN LATERAL " : "LEFT JOIN LATERAL ") + lookup + " ON TRUE" : (inner ? "CROSS APPLY " : "OUTER APPLY ") + lookup);
                 }
             // The structure of a row: the aggregate's record (each source, by its name).
             var attributes = sources.Select(x => (x.Alias, x.Entity)).ToList();
@@ -486,12 +497,14 @@ public static class EntityActionsExpander
                     var input = Input(a.Name);
                     inputs.Add((input, a.Type, false, null, t.FilterReference(e.Name, a.References)));
                     filters.Add($"{input} = NullIdentifier() or {e.Name}.{a.Name} = {input}");
+                    SqlFilter(input, a.Type, $"If({input} = NullIdentifier(), 1, 0)", $"{{{e.Name}}}.[{a.Name}] = @{input}");
                 }
                 else if ((named != null && named.Contains(a.Name) || indexed.Contains(a.Name)) && TextLike(a.Type))
                 {
                     var input = Input(a.Name);
                     inputs.Add((input, "Text", false, null, t.FilterText(e.Name, a.Name)));
                     filters.Add($"{input} = \"\" or {e.Name}.{a.Name} = {input}");
+                    SqlFilter(input, "Text", $"If({input} = \"\", 1, 0)", $"{{{e.Name}}}.[{a.Name}] = @{input}");
                 }
                 else if ((named != null && named.Contains(a.Name) || indexed.Contains(a.Name)) && a.Type is "Date" or "Date Time")
                 {
@@ -500,6 +513,8 @@ public static class EntityActionsExpander
                     inputs.Add((to, a.Type, false, null, t.FilterTo(e.Name, a.Name)));
                     filters.Add($"{from} = NullDate() or {e.Name}.{a.Name} >= {from}");
                     filters.Add($"{to} = NullDate() or {e.Name}.{a.Name} <= {to}");
+                    SqlFilter(from, a.Type, $"If({from} = NullDate(), 1, 0)", $"{{{e.Name}}}.[{a.Name}] >= @{from}");
+                    SqlFilter(to, a.Type, $"If({to} = NullDate(), 1, 0)", $"{{{e.Name}}}.[{a.Name}] <= @{to}");
                 }
             }
             var searched = new List<string>();
@@ -514,13 +529,30 @@ public static class EntityActionsExpander
             {
                 inputs.Add(("SearchText", "Text", false, null, t.Search(e.Name, searched)));
                 filters.Add("Trim(SearchText) = \"\"" + string.Concat(searched.Select(a => $" or {e.Name}.{a} like \"%\" + Trim(SearchText) + \"%\"")));
+                sqlParams.Add(("NoSearchText", "Integer", "If(Trim(SearchText) = \"\", 1, 0)"));
+                sqlParams.Add(("SearchPattern", "Text", "\"%\" + ToLower(Trim(SearchText)) + \"%\""));
+                sqlWhere.Add("(@NoSearchText = 1" + string.Concat(searched.Select(a => $" OR LOWER({{{e.Name}}}.[{a}]) LIKE @SearchPattern")) + ")");
             }
             if (s.Active != null)
             {
                 inputs.Add(("IsInactiveIncluded", "Boolean", false, null, t.IncludeInactive(e.Name)));
                 filters.Add($"IsInactiveIncluded or {e.Name}.{s.Active.Name}");
+                sqlParams.Add(("InactiveIncluded", "Integer", "If(IsInactiveIncluded, 1, 0)"));
+                sqlParams.Add(("ActiveValue", "Boolean", "True"));
+                sqlWhere.Add($"(@InactiveIncluded = 1 OR {{{e.Name}}}.[{s.Active.Name}] = @ActiveValue)");
             }
-            if (s.Owner != null) filters.Add($"{e.Name}.{s.Owner.Name} = GetUserId()");
+            if (s.Owner != null)
+            {
+                filters.Add($"{e.Name}.{s.Owner.Name} = GetUserId()");
+                sqlParams.Add(("SignedInUser", s.Owner.Type, "GetUserId()"));
+                sqlWhere.Add($"({{{e.Name}}}.[{s.Owner.Name}] = @SignedInUser)");
+            }
+            void SqlFilter(string input, string type, string off, string condition)
+            {
+                sqlParams.Add((input, type, input));
+                sqlParams.Add(("No" + input, "Integer", off));
+                sqlWhere.Add($"(@No{input} = 1 OR {condition})");
+            }
             if (paging)
             {
                 inputs.Add(("StartIndex", "Integer", false, null, t.StartIndex()));
@@ -538,21 +570,93 @@ public static class EntityActionsExpander
             if (filters.Count > 0) query.Append(" WHERE ").Append(string.Join(" AND ", filters.Select(f => "(" + f + ")").Order(StringComparer.Ordinal)));
             query.Append(" SORT ").Append(sort);
             query.Append(" MAX ").Append(paging ? "MaxRecords" : pageSize.ToString(System.Globalization.CultureInfo.InvariantCulture));
-            if (paging) query.Append(" START StartIndex");
             var w = new FlowWriter();
             w.Header("server action", name, s.Public, t.ListPurpose(e.Name, filters.Count > 0, sources.Count > 1, s.Owner != null));
             foreach (var p in inputs) w.Input(p.Name, p.Type, p.Mandatory, p.Default, p.Description);
             foreach (var p in outputs) w.Output(p.Name, p.Type, p.Description);
-            w.Node(1, aggregate + " = " + query, t.PageAggregate(e.Name));
+            var total = aggregate + ".Count";
+            if (!paging) w.Node(1, aggregate + " = " + query, t.PageAggregate(e.Name));
+            else
+            {
+                // The page: ORDER BY the sort and the identifier (a total order, so pages never overlap), OFFSET/FETCH (SQL Server
+                // 2012+, Oracle 12c+, PostgreSQL); the total: COUNT(*) OVER() of the same query (the window counts before OFFSET),
+                // so the total and the rows never disagree, whatever the collation. Skip is never negative and Take never 0 (FETCH
+                // NEXT 0 is an error on SQL Server, 10744).
+                var size = $"If(MaxRecords <= 0, {pageSize.ToString(System.Globalization.CultureInfo.InvariantCulture)}, MaxRecords)";
+                var counted = CountStructure(s.Exposed, name);
+                w.Node(1, aggregate + " = sql -> " + string.Join(", ", sources.Select(x => x.Entity)) + ", " + counted + " max " + size, t.PageAggregate(e.Name));
+                foreach (var (pn, pt, pv) in sqlParams) w.Line(2, $"in {pn}: {pt} = {pv}");
+                w.Line(2, "in Skip: Integer = Max(0, StartIndex)");
+                w.Line(2, "in Take: Integer = " + size);
+                w.Line(2, "| SELECT " + string.Join(", ", sources.Select(x => x.Alias == x.Entity ? "{" + x.Entity + "}.*" : x.Alias + ".*")) + ", COUNT(*) OVER()");
+                w.Line(2, "| FROM {" + e.Name + "}");
+                foreach (var j in sqlJoins.Order(StringComparer.Ordinal)) w.Line(2, "| " + j);
+                if (sqlWhere.Count > 0) w.Line(2, "| WHERE " + string.Join(" AND ", sqlWhere.Order(StringComparer.Ordinal)));
+                w.Line(2, "| ORDER BY " + SqlSort(e, sort));
+                w.Line(2, "| OFFSET @Skip ROWS FETCH NEXT @Take ROWS ONLY");
+                total = $"If({aggregate}.List.Empty, 0, {aggregate}.List.Current.List_{sources.Count + 1}.{CountAttribute})";
+            }
             // The page is the aggregate's list: O11 converts it to the row structure by itself (same names); ODC keeps that
             // conversion as a mapping of every row field from the source of the same name, which the text writes as it reads.
-            var page = model.Lane == "odc" ? aggregate + ".List mapTo { " + string.Join(", ", sources.Select(x => x.Alias + ": " + x.Alias)) + " }" : aggregate + ".List";
-            w.Assign(1, t.ReturnPage(), ("List", page), ("TotalCount", aggregate + ".Count"));
+            var page = paging
+                ? aggregate + ".List mapTo { " + string.Join(", ", sources.Select((x, i) => x.Alias + ": List" + (i == 0 ? "" : "_" + (i + 1).ToString(System.Globalization.CultureInfo.InvariantCulture)))) + " }"
+                : model.Lane == "odc" ? aggregate + ".List mapTo { " + string.Join(", ", sources.Select(x => x.Alias + ": " + x.Alias)) + " }" : aggregate + ".List";
+            w.Assign(1, t.ReturnPage(), ("List", page), ("TotalCount", total));
             w.End(1);
             return (w.Text(), new Signature(inputs, outputs, t.ListPurpose(e.Name, filters.Count > 0, sources.Count > 1, s.Owner != null)));
         }
 
         private static bool TextLike(string type) => type is "Text" or "Email" or "Phone Number";
+
+        private const string CountAttribute = "Total";
+        private string? countStructure;
+
+        /// <summary>The structure the page's COUNT(*) OVER() fills (one attribute, Total: Long Integer): PagedRowCount, created once
+        /// per module when missing, reused when the module has it with that shape; another element of that name moves it to
+        /// PagedRowCount2, 3, ... Public when a public list uses it.</summary>
+        private string CountStructure(bool isPublic, string action)
+        {
+            if (countStructure != null)
+            {
+                if (isPublic && plan.Ops.OfType<JsonObject>().LastOrDefault(o => o["data"]?["structures"]?[0]?["name"]?.ToString() == countStructure) is { } created
+                    && created["data"]!["structures"]![0]!["public"]?.GetValue<bool>() == false) created["data"]!["structures"]![0]!["public"] = true;
+                return countStructure;
+            }
+            for (var n = 1; ; n++)
+            {
+                var name = "PagedRowCount" + (n == 1 ? "" : n.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                var existing = model.Structures.FirstOrDefault(x => string.Equals(x.Name, name, StringComparison.OrdinalIgnoreCase));
+                if (existing.Name != null)
+                {
+                    if (existing.Attributes.Count == 1 && string.Equals(existing.Attributes[0].Attribute, CountAttribute, StringComparison.OrdinalIgnoreCase)
+                        && string.Equals(existing.Attributes[0].Type, "Long Integer", StringComparison.OrdinalIgnoreCase))
+                    {
+                        plan.Structures.Add(new JsonObject { ["name"] = existing.Name, ["created"] = false });
+                        return countStructure = existing.Name;
+                    }
+                    continue;
+                }
+                if (model.TopElement(name) != null || !taken.Add(name)) continue;
+                var spec = new JsonObject
+                {
+                    ["name"] = name, ["public"] = isPublic, ["description"] = t.CountItem(),
+                    ["attributes"] = new JsonArray(new JsonObject { ["name"] = CountAttribute, ["type"] = "Long Integer", ["description"] = t.CountItemTotal() }),
+                };
+                plan.Ops.Add(new JsonObject { ["op"] = "spec", ["data"] = new JsonObject { ["structures"] = new JsonArray(spec) } });
+                plan.Structures.Add(new JsonObject { ["name"] = name, ["created"] = true, ["public"] = isPublic });
+                return countStructure = name;
+            }
+        }
+
+        /// <summary>The ORDER BY of the SQL page: the aggregate's sort ("E.Attr [desc]"), then the identifier, so the order is
+        /// total and two pages never share a row.</summary>
+        private static string SqlSort(Entity e, string sort)
+        {
+            var desc = sort.EndsWith(" desc", StringComparison.Ordinal);
+            var attribute = (desc ? sort[..^5] : sort)[(e.Name.Length + 1)..];
+            var order = "{" + e.Name + "}.[" + attribute + "]" + (desc ? " DESC" : "");
+            return e.IdentifierName == null || attribute == e.IdentifierName ? order : order + ", {" + e.Name + "}.[" + e.IdentifierName + "]";
+        }
         private static bool Searchable(Attribute a) => a.Length is null or <= 2000;
 
         private string Sort(Entity e)
@@ -907,8 +1011,10 @@ public static class EntityActionsExpander
         public string FilterTo(string e, string a) => L($"Only {e} records whose {a} is on or before this value; empty for no upper bound.", $"Só registros de {e} com {a} até este valor; vazio para sem limite superior.");
         public string Search(string e, IReadOnlyList<string> attributes) => L($"Text searched in {Join(attributes)} of {e}; empty for no search.", $"Texto procurado em {Join(attributes)} de {e}; vazio para não procurar.");
         public string IncludeInactive(string e) => L($"True to list inactive {e} records too; by default only the active ones.", $"Verdadeiro para listar também os registros inativos de {e}; por padrão só os ativos.");
-        public string StartIndex() => L("Zero-based index of the first row of the page, applied in the aggregate.", "Índice (a partir de zero) da primeira linha da página, aplicado no aggregate.");
-        public string MaxRecords() => L("Rows per page, applied as the aggregate's Max Records.", "Linhas por página, aplicadas como o Max Records do aggregate.");
+        public string StartIndex() => L("Zero-based index of the first row of the page, applied as the OFFSET of the page query.", "Índice (a partir de zero) da primeira linha da página, aplicado como o OFFSET da consulta da página.");
+        public string MaxRecords() => L("Rows per page, applied as the FETCH NEXT of the page query.", "Linhas por página, aplicadas como o FETCH NEXT da consulta da página.");
+        public string CountItem() => L("The total of a page query: how many rows its filters select, counted by the same query (COUNT(*) OVER()).", "O total de uma consulta paginada: quantas linhas os filtros dela selecionam, contadas pela mesma consulta (COUNT(*) OVER()).");
+        public string CountItemTotal() => L("How many rows the filters select, before the page is cut.", "Quantas linhas os filtros selecionam, antes do corte da página.");
         public string ListOutput(string e, IReadOnlyList<string> joined) => L($"The rows of the page: each {e}" + (joined.Count > 0 ? $" with {Join(joined)}" : "") + ", already filtered and sorted.",
             $"As linhas da página: cada {e}" + (joined.Count > 0 ? $" com {Join(joined)}" : "") + ", já filtradas e ordenadas.");
         public string TotalCount(string e) => L($"How many {e} records match the filters, for the pager.", $"Quantos registros de {e} atendem aos filtros, para o paginador.");

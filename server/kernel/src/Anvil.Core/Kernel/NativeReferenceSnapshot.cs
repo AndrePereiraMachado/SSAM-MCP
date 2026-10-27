@@ -66,7 +66,7 @@ public sealed record NativeReferenceSnapshot
     private static readonly string[] AttestedKinds = NativeReferenceKinds.All.Select(f => f.Kind).ToArray();
     /// <summary>Element kinds of the ODC public module signature, as OdcPublicSignature reads them ("block" = mobile block).</summary>
     private const string OdcBlockKind = "block";
-    private static readonly string[] OdcPublicKinds = ["action", "entity", "structure", OdcBlockKind, "client-action"];
+    private static readonly string[] OdcPublicKinds = ["action", "entity", "structure", OdcBlockKind, "client-action", "service-action"];
     /// <summary>Element kinds of an ODC External Library signature: its server actions and structures.</summary>
     private static readonly string[] OdcExternalLibraryKinds = ["action", "structure"];
     /// <summary>The ODC model's ReferenceKind.ExternalLibrary, compared by NAME: Kernel/** also compiles against the O11

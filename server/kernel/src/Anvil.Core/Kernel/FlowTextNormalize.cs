@@ -84,17 +84,65 @@ public static class FlowTextNormalizer
     public sealed record Normalized(string Text, IReadOnlyList<FlowTextEdit> Edits);
 
     /// <summary>The text with its certain normalizations and the edits made (none: the same text).</summary>
-    public static Normalized Normalize(string text)
+    public static Normalized Normalize(string text) => Normalize(text, null);
+
+    /// <summary>The same, the general forms (FlowGeneral, R7) expanded first with what the schema knows of the module.</summary>
+    public static Normalized Normalize(string text, IFlowSchema? schema)
+    {
+        var general = General(text, schema);
+        if (general == null) return Plain(text, false);
+        var rest = Plain(general.Text, general.Structured);
+        if (rest.Edits.Count == 0 && !Parses(general.Text)) return new(text, []);
+        return new(rest.Text, [.. general.Edits, .. rest.Edits]);
+    }
+
+    /// <summary>The texts of one op (data.flow), a context at the top of one reaching every action of the op that reads it
+    /// (FLOW_GENERAL_CONTEXT), each text then normalized on its own.</summary>
+    public static List<Normalized> NormalizeAll(IReadOnlyList<string> texts, IFlowSchema? schema = null)
+    {
+        // As one text: the tolerated shapes of each first (whole lines), the general forms of all together, then the rest of
+        // each. A text whose forms refuse goes on its own (its refusal names them); the others keep what the op gives them.
+        var shaped = texts.Select(t => { var (tolerated, _) = FlowTolerance.Of(t); return (Tolerated: tolerated, Text: tolerated.Count == 0 ? t : FlowTextEdit.Apply(t, tolerated)); }).ToList();
+        var (expanded, _) = FlowGeneral.ExpandAll(shaped.Select(s => s.Text).ToList(), schema);
+        return expanded.Select((e, i) => {
+            if (e.Problems.Count > 0 || e.Edits.Count == 0) return Normalize(texts[i], schema);
+            var rest = Plain(e.Text, e.Structured);
+            return rest.Edits.Count == 0 && !Parses(e.Text) ? new Normalized(texts[i], []) : new Normalized(rest.Text, [.. shaped[i].Tolerated, .. e.Edits, .. rest.Edits]);
+        }).ToList();
+    }
+
+    // The tolerated shapes (whole lines, the numbering of the text kept) and the general forms expanded on them: the text,
+    // its edits (of the text as given) and whether its branches read as a structured language's. Null when the text writes
+    // no general form, or one of them refuses (the text goes as written; the refusal names it).
+    private sealed record Expanded(string Text, IReadOnlyList<FlowTextEdit> Edits, bool Structured);
+
+    private static Expanded? General(string text, IFlowSchema? schema)
+    {
+        if (!FlowGeneral.Uses(text) && !text.Contains(" = sql -> ", StringComparison.Ordinal)) return null;
+        try {
+            var (tolerated, _) = FlowTolerance.Of(text);
+            var shaped = tolerated.Count == 0 ? text : FlowTextEdit.Apply(text, tolerated);
+            var expansion = FlowGeneral.Expand(shaped, schema);
+            if (expansion.Problems.Count > 0 || expansion.Edits.Count == 0) return null;
+            return new(expansion.Text, [.. tolerated, .. expansion.Edits], expansion.Structured);
+        } catch (Exception) { return null; }
+    }
+
+    // The normalizations of a text without general forms (or after them): the structure, then the steps on a text that parses.
+    private static Normalized Plain(string text, bool structured)
     {
         var current = text;
         var done = new List<FlowTextEdit>();
         // The structure (fall-through, labels, slips), only when the edited text parses whole: a text with another error
         // goes as written, and the refusal names every error of it.
         if (!Parses(current)) {
-            var edits = FlowParser.Edits(current);
-            if (edits.Count > 0) {
-                var edited = FlowTextEdit.Apply(current, edits);
-                if (Parses(edited)) { done.AddRange(edits); current = edited; }
+            if (structured && Joined(current) is { } joined && Parses(joined.Text)) { done.AddRange(joined.Edits); current = joined.Text; }
+            else {
+                var edits = FlowParser.Edits(current);
+                if (edits.Count > 0) {
+                    var edited = FlowTextEdit.Apply(current, edits);
+                    if (Parses(edited)) { done.AddRange(edits); current = edited; }
+                }
             }
             if (!Parses(current)) return new(text, []);
         }
@@ -102,6 +150,26 @@ public static class FlowTextNormalizer
         Step(ref current, done, MappingValues);
         Step(ref current, done, SortDirections);
         return new(current, done);
+    }
+
+    // FLOW_GENERAL_JOIN: in a text of the general language a branch that ends without a terminator goes on to the step after
+    // its block, the reading FlowParser.Lenient names first of the two it has (Ambiguities); one at a time, the lenient pass
+    // read again on the text it gives, then its certain edits.
+    private static (string Text, List<FlowTextEdit> Edits)? Joined(string text)
+    {
+        var current = text;
+        var done = new List<FlowTextEdit>();
+        for (var round = 0; round < 64; round++) {
+            var (certain, open) = FlowParser.Lenient(current);
+            var step = open.Count > 0
+                ? open[0].Through.Select(e => e with { Rule = FlowGeneral.Join, Message = "line " + open[0].Line + ": in a text of the general language " + e.Message.Replace("line " + e.Line + ", ", "") }).ToList()
+                : certain;
+            if (step.Count == 0) break;
+            current = FlowTextEdit.Apply(current, step);
+            done.AddRange(step);
+            if (open.Count == 0) break;
+        }
+        return done.Count == 0 ? null : (current, done);
     }
 
     private static bool Parses(string text)
@@ -118,6 +186,7 @@ public static class FlowTextNormalizer
     {
         var before = SyntaxErrors(text);
         if (before.Count == 0) return null;
+        if (FlowGeneral.Uses(text)) return GeneralCorrected(text, before);
         var edits = FlowParser.Edits(text);
         if (edits.Count == 0) return null;
         var edited = FlowTextEdit.Apply(text, edits);
@@ -126,6 +195,25 @@ public static class FlowTextNormalizer
         var lines = edits.Select(e => e.Line).ToHashSet();
         var removed = before.Count(e => LineOf(e) is { } n && lines.Contains(n));
         return removed > 0 && after.Count == before.Count - removed ? new(edited, edits, lines) : null;
+    }
+
+    // A text of the general language with another error (one of its forms that refuses, or a line of the grammar): the
+    // tolerated shapes and the forms that expand, verified the same way. The lines are those of the forms (an added line
+    // counts for the line whose form wrote it).
+    private static Partial? GeneralCorrected(string text, List<string> before)
+    {
+        try {
+            var (tolerated, _) = FlowTolerance.Of(text);
+            var shaped = tolerated.Count == 0 ? text : FlowTextEdit.Apply(text, tolerated);
+            List<FlowTextEdit> edits = [.. tolerated, .. FlowGeneral.Expand(shaped).Certain];
+            if (edits.Count == 0) return null;
+            var edited = FlowTextEdit.Apply(text, edits);
+            var after = SyntaxErrors(edited);
+            if (after.Count == 0) return null;
+            var lines = edits.Select(e => e.Insert ? LineOf(e.Message) ?? e.Line : e.Line).ToHashSet();
+            var removed = before.Count(e => LineOf(e) is { } n && lines.Contains(n));
+            return removed > 0 && after.Count == before.Count - removed ? new(edited, edits, lines) : null;
+        } catch (Exception) { return null; }
     }
 
     /// <summary>The line an error of the parse names ("line 12: ..."), if any.</summary>
@@ -310,6 +398,8 @@ public static class FlowTextNormalizer
     public static List<Readings> Ambiguities(string text)
     {
         var found = new List<Readings>();
+        // A text of the general language has one reading of them: the structured one (FLOW_GENERAL_JOIN).
+        if (FlowGeneral.Uses(text)) return found;
         var before = SyntaxErrors(text);
         if (before.Count == 0) return found;
         var (certain, ambiguous) = FlowParser.Lenient(text);

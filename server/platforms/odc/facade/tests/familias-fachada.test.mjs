@@ -27,6 +27,7 @@ import { createSsamServer } from '../ssam.mjs';
 import { moduleMap } from '../module-map.mjs';
 import { DDL_EXTRACTOR } from '../module-ddl.mjs';
 import { writeCapture } from './fixtures/module-index.mjs';
+import { STORE_GENERATION } from '../store-generation.mjs';
 
 const tmp = t => { const dir = fs.mkdtempSync(path.join(isolatedProfile, 'familias-')); t.after(() => fs.rmSync(dir, { recursive: true, force: true })); return dir; };
 const valueOf = r => r.structuredContent ?? JSON.parse(r.content[0].text);
@@ -211,7 +212,7 @@ test('call shape: a read budget below the smallest page of the data text is read
   const ddl = { schema: 'ssam-ddl/1', extractor: DDL_EXTRACTOR, lane: 'o11', adapter: 'kernel', sourceSha256: capture.sha256, sourceBytes: 42, createdAt: '2026-10-12T00:00:00Z',
     module: { name: 'App', key: 'R0' }, elements: 2, blocks: [{ key: 'E1', kind: 'ServerEntity', name: 'Visit', section: 'entities', elements: 2,
       text: 'create entity Visit ( -- @E1\n  Id Long Integer identifier auto required -- @E1a\n);' }] };
-  const file = path.join(store, 'v1', 'o11', capture.sha256 + '.kernel.ddl.json');
+  const file = path.join(store, STORE_GENERATION, 'o11', capture.sha256 + '.kernel.ddl.json');
   fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, JSON.stringify(ddl));
   const noReader = async () => { throw new Error('the store serves'); };
   const page = await moduleMap({ lane: 'o11', target: capture.file, view: 'ddl', budgetBytes: 2000 }, { env, read: noReader });

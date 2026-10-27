@@ -32,7 +32,10 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createHash } from 'node:crypto';
 import { anvilRoot, workspaceRoot } from '../workspace.mjs';
+import { proposedPatch, namedPatch } from '../job-patch.mjs';
+import { readVerifiedPatch } from '../verified-patch.mjs';
 import { scrubDiscover, scrubEvidence, thirdPartyJobs } from './evidence.mjs';
 import { agentReadable, agentSegments, insideVisible } from './mirror.mjs';
 import { agentPath, outsideWorkspaceRefusal, isAgentMachinePath } from '../agent-paths.mjs';
@@ -44,6 +47,7 @@ import { causeOf, studioIdentity, studioRefusal, studioWarningOf } from '../stud
 import { destructiveUnavailable, hostedDestructive, hostedDestructiveFiles } from './destructive.mjs';
 import { withStudioScope } from './studio-scope.mjs';
 import { withoutWordEchoes } from '../destructive-operations.mjs';
+import { PROTOTYPE_DISABLED_FIX, PROTOTYPE_DISABLED_MESSAGE, screenCalls } from '../prototype-disabled.mjs';
 
 // The catalog is hosted/served.mjs's, the one switch the session texts read too (a8 review, M1).
 export { TOOLS_FILE } from './served.mjs';
@@ -234,12 +238,12 @@ export const PROTOTYPE_TOOLS = JOB_TOOLS;
 // follows the job FILES a call reaches (the job, the job of basedOn, every composite part and job:<name> target, read
 // strictly inside the customer's workspace; one it cannot read whole fails closed): confineJobs below.
 export { namesPrototype };
+// Since 2026-10-22 the prototype import is turned off on every lane and surface (prototype-disabled.mjs): the gate answers
+// with the same text and next call as the local refusal PROTOTYPE_IMPORT_DISABLED, so no answer points at a local import.
 export function prototypeUnavailable(name, lane) {
-  return { ok: false, code: 'HOSTED_UNAVAILABLE', cause: 'PROTOTYPE_SOURCE_LOCAL', policy: 'HOSTED_PROTOTYPE_OP', tool: name, outcome: 'not-sent',
-    error: 'The prototype import (op "prototype") is available only in local use for now: on a hosted server its source folder and the capture '
-      + 'of its JavaScript would run on the server machine. Nothing ran.',
-    continuation: { tool: 'ssam_discover', arguments: { intent: 'port an approved prototype screen 1:1 with the html op and its style in the theme', lane: lane === 'odc' ? 'odc' : 'o11' },
-      why: 'Builds the same screens with the ops this server runs (html op plus its <style>), without the prototype op; or import the prototype with an SSAM installed on the user\'s own machine.' } };
+  const calls = screenCalls(lane === 'odc' ? 'odc' : 'o11');
+  return { ok: false, code: 'HOSTED_UNAVAILABLE', cause: 'PROTOTYPE_IMPORT_DISABLED', policy: 'HOSTED_PROTOTYPE_OP', tool: name, outcome: 'not-sent',
+    error: PROTOTYPE_DISABLED_MESSAGE + ' ' + PROTOTYPE_DISABLED_FIX, continuation: calls.grammar, nextCalls: [calls.write, calls.read, calls.discover] };
 }
 
 // ---- servidor/fase4-25 (D2 of C:\t\vps-a5\PLANO.md, 3.2-E): the generator ops pending their blind test
@@ -268,15 +272,63 @@ export function generatorUnavailable(name, lane, generator) {
 // the job of basedOn, a file the client can write (agent:inbox brings it to <ws>/inbox); the gate would have to read that file
 // as the handler does and check the job it makes. Today it is refused at the gate, in the four job tools and in ssam_reference
 // check-job: the same call with the JSON Patch operations themselves is checked like every patch (confineJobs).
-export function verifiedPatchUnavailable(name, lane, args, at = '/patch') {
-  const holder = at === '/query/patch' ? args?.query : args;
-  const { patch: _patch, ...rest } = holder ?? {};
-  const callArgs = at === '/query/patch' ? { ...args, query: rest } : rest;
+// a11: fix "apply" (at /fix) is refused by this same rule: it applies the patches a refusal kept on the server for the job of
+// basedOn. The continuation drops patch and fix (either form): the explicit patch carries the refusal's operations, then the
+// call's own.
+// a12: the continuation carries that patch, by name, when this customer's own files hold it (customerPatchOf): sent
+// explicitly, the gate checks it like any patch (confineJobs).
+export function verifiedPatchUnavailable(name, lane, args, at = '/patch', { workspace = null } = {}) {
+  const inQuery = at.startsWith('/query/');
+  const fix = at.endsWith('/fix');
+  const holder = inQuery ? args?.query : args;
+  const { patch: _patch, fix: _fix, ...rest } = holder ?? {};
+  const found = customerPatchOf(workspace, holder, fix);
+  const patchKey = inQuery ? 'query.patch' : 'patch';
+  if (found) {
+    const withPatch = { ...rest, patch: found };
+    return { ok: false, code: 'HOSTED_UNAVAILABLE', cause: 'VERIFIED_PATCH_LOCAL', policy: 'HOSTED_VERIFIED_PATCH', tool: name, pointer: at, outcome: 'not-sent',
+      error: (fix ? 'fix "apply" is available only in local use for now: on a hosted server ' : 'patch "verified" is available only in local use for now: on a hosted server ')
+        + 'the patch is sent explicitly, so the gate checks the job it makes. Nothing ran.',
+      continuation: { tool: name, arguments: inQuery ? { ...args, query: withPatch } : withPatch,
+        why: 'The same call with the patches that refusal proposed, by name, as the explicit patch: the gate checks the job it makes over basedOn, and the handler applies it.' } };
+  }
+  const callArgs = inQuery ? { ...args, query: rest } : rest;
   return { ok: false, code: 'HOSTED_UNAVAILABLE', cause: 'VERIFIED_PATCH_LOCAL', policy: 'HOSTED_VERIFIED_PATCH', tool: name, pointer: at, outcome: 'not-sent',
-    error: 'patch "verified" is available only in local use for now: on a hosted server the gate does not read the verified patches kept beside '
+    error: (fix ? 'fix "apply" is available only in local use for now: on a hosted server the gate does not read the patches a refusal kept for '
+      : 'patch "verified" is available only in local use for now: on a hosted server the gate does not read the verified patches kept beside ')
       + 'the job of basedOn, so it cannot check the job they make. Nothing ran.',
-    continuation: { tool: name, arguments: callArgs, add: { [at === '/query/patch' ? 'query.patch' : 'patch']: 'the JSON Patch operations themselves: the patch of each problem of that refusal (at most 50), or a partial job as job' },
+    continuation: { tool: name, arguments: callArgs, add: { [patchKey]: 'the JSON Patch operations themselves: the patch of each problem of that refusal (at most 500)'
+      + (fix ? ', then your own' : '') + ', or a partial job as job' },
       why: 'The same call with the explicit patch: the gate checks the job it makes over basedOn, and the handler applies it.' } };
+}
+
+// The patch a refused form would apply, read from this customer's own files only: the job of basedOn {job, sha256} given as
+// ws:<rel> or as an absolute path inside the workspace, its bytes still those of sha256; patch "verified" its
+// <job>.verified-patch.json, fix (any value) the patches the refusal of that job kept in the workspace's lanes
+// (<ws>/o11/jobs/fixes, <ws>/odc/.local/jobs/fixes), then the call's own patch. -> [ops, by name where unique] or null.
+const SHA256_HEX = /^[0-9a-f]{64}$/i;
+function customerPatchOf(workspace, holder, fix) {
+  try {
+    const base = holder?.basedOn;
+    if (typeof workspace !== 'string' || !workspace || !isPlainObject(base) || typeof base.job !== 'string' || !SHA256_HEX.test(String(base.sha256 ?? ''))) return null;
+    const file = base.job.startsWith('ws:') ? path.join(workspace, ...base.job.slice(3).split('/')) : path.isAbsolute(base.job) ? base.job : null;
+    if (!file) return null;
+    const root = fs.realpathSync(workspace), real = fs.realpathSync(file);
+    const rel = path.relative(root, real);
+    if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) return null;
+    if (fix) {
+      for (const dir of [path.join(root, 'o11', 'jobs', 'fixes'), path.join(root, 'odc', '.local', 'jobs', 'fixes')]) {
+        const proposed = proposedPatch(dir, { file: real, sha256: base.sha256 });
+        if (proposed.ok && proposed.patch.length) return [...proposed.patchByName, ...(Array.isArray(holder.patch) ? holder.patch : [])];
+      }
+      return null;
+    }
+    const bytes = fs.readFileSync(real);
+    if (createHash('sha256').update(bytes).digest('hex') !== String(base.sha256).toLowerCase()) return null;
+    const verified = readVerifiedPatch(real, base.sha256);
+    if (!verified.ok) return null;
+    return namedPatch(JSON.parse(bytes.toString('utf8').replace(/^﻿/, '')), verified.patch) ?? verified.patch;
+  } catch { return null; }
 }
 
 // ---- T2 (CX15 review): deleting
@@ -455,13 +507,13 @@ async function jobInputs(value, lane, context, agentRoot, budget, depth = 0) {
   return value;
 }
 // The checks of the gate that come before the agent and any path, in their order: an unavailable tool, T2 deleting (on the
-// arguments it runs and on the ones sent), an invalid job text, the prototype op, a pending generator, patch "verified" (the
-// job tools' and ssam_code write's), a lane outside the token, a lane the image refused. -> {refusal} | {args, lane, need}
+// arguments it runs and on the ones sent), an invalid job text, the prototype op, a pending generator, patch "verified" and
+// fix "apply" (the job tools' and ssam_code write's), a lane outside the token, a lane the image refused. -> {refusal} | {args, lane, need}
 // (args: the job texts parsed). a8 phase 6: ONE function, which wrapHostedTool answers with and the call deadline's inputs
 // read (refusedBeforePaths): a check the gate gains is never missing from the deadline. The ssam_code merge proved the copy
 // of these checks fell behind (its prototype, generator and patch "verified" checks: the deadline listed the agent's files of
 // a call the gate then refused).
-export function refusalBeforeAgent(name, args, { entry, config = null, raw = args, hasArgs = true, lanes = [], kernelRefused = null,
+export function refusalBeforeAgent(name, args, { entry, config = null, raw = args, hasArgs = true, lanes = [], kernelRefused = null, workspace = null,
   prototypeOp = HOSTED_PROTOTYPE_OP, generatorOps = HOSTED_GENERATOR_OPS, destructive = HOSTED_DESTRUCTIVE } = {}) {
   if (!entry || entry.class === 'unavailable') return { refusal: unavailable(name, entry, config) };
   // T2: a call that deletes, read on the arguments it runs and on the ones sent, before anything else of the call.
@@ -484,9 +536,9 @@ export function refusalBeforeAgent(name, args, { entry, config = null, raw = arg
   }
   // servidor/fase4-25 (finding A1): patch "verified" reads its operations from a file the gate never reads; refused here,
   // before the agent, any file brought from it and any capture (the explicit patch is checked: confineJobs).
-  if (hasArgs) { const at = namesVerifiedPatch(name, args); if (at) return { refusal: verifiedPatchUnavailable(name, lane, args, at) }; }
-  // a8: ssam_code write {patch:"verified", basedOn} hands that patch to the delivery; refused here, with its own continuation.
-  if (hasArgs && name === CODE_TOOL && typeof args.patch === 'string' && args.patch.trim().toLowerCase() === 'verified') return { refusal: verifiedPatchUnavailable(name, lane, args, '/patch') };
+  // a8: ssam_code write {patch:"verified", basedOn} hands that patch to the delivery, with its own continuation. a11: fix
+  // "apply" is the same family (job-paths.mjs UNREAD_PATCH_FORMS), in the job tools and in ssam_code.
+  if (hasArgs) { const form = namesVerifiedPatch(name, args); if (form) return { refusal: verifiedPatchUnavailable(name, lane, args, form.at, { workspace }) }; }
   if (LANED.has(lane) && !lanes.includes(lane)) return { refusal: laneDisabled(lane) };
   const need = agentNeed(entry.agent, args);
   // O.6.1: a lane the image refused at start is off for every tool but the state reports, before the agent and any path.
@@ -751,7 +803,7 @@ export function wrapHostedTool(name, config, handler, { context, link = context?
     let args = hasArgs ? effectiveArgs(argsOf, params[0] ?? {}) : {};
     // a8 phase 6: the checks before the agent and any path are ONE function (refusalBeforeAgent), the one the call deadline's
     // inputs read too (refusedBeforePaths).
-    const early = refusalBeforeAgent(name, args, { entry, config, raw: params[0], hasArgs, lanes, kernelRefused, prototypeOp, generatorOps, destructive });
+    const early = refusalBeforeAgent(name, args, { entry, config, raw: params[0], hasArgs, lanes, kernelRefused, prototypeOp, generatorOps, destructive, workspace: context?.workspace ?? null });
     if (early.refusal) return refusal(early.refusal);
     args = early.args;
     const { lane, need } = early;

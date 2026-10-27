@@ -402,9 +402,16 @@ public sealed class JobNormalizerTests
         var (normalizedJob, result) = Analyze(FlowJob(call, aggregate, spaced, lower, upper).ToJsonString());
         Assert.DoesNotContain(Normalizations(result), n => n["rule"]!.GetValue<string>() == Anvil.Reading.FlowTextEdit.AssignmentIndent);
         var syntax = Problems(result, "FLOW_SYNTAX");
-        for (var i = 0; i < 3; i++)
-            Assert.Contains(syntax, p => p["pointer"]!.GetValue<string>() == "/ops/0/data/flow/" + i && p["message"]!.GetValue<string>().StartsWith("logic: line 6: ", StringComparison.Ordinal));
+        // R5 (parser tolerante, 24/10/2026): `Created = CreateRec (Source=P)` and `(Source = P)` after an assign block are the
+        // call node `CreateRec(Source=P)` with one reading (FLOW_ARGUMENT_SPACING), never an assignment of the block above;
+        // the aggregate with `WHER` still refuses at line 6 without a patch.
+        Assert.Contains(syntax, p => p["pointer"]!.GetValue<string>() == "/ops/0/data/flow/1" && p["message"]!.GetValue<string>().StartsWith("logic: line 6: ", StringComparison.Ordinal));
         Assert.All(syntax, p => Assert.Null(p["patch"]));
+        var spacing = Normalizations(result, "FLOW_ARGUMENT_SPACING");
+        foreach (var i in new[] { 0, 2 }) {
+            Assert.DoesNotContain(syntax, p => p["pointer"]!.GetValue<string>() == "/ops/0/data/flow/" + i);
+            Assert.Contains(spacing, n => n["path"]!.GetValue<string>() == "/ops/0/data/flow/" + i);
+        }
         // CX3: keyword casing has one reading and is now explicitly normalized; the malformed cases above still refuse.
         var shapes = Normalizations(result, Anvil.Reading.FlowTextEdit.AggregateSqlShape);
         Assert.Equal(2, shapes.Length);

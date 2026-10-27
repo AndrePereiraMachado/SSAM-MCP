@@ -82,7 +82,7 @@ public sealed record ExpectationResult(
     public IEnumerable<string> Diagnostics()
     {
         foreach (var m in Unexpected) yield return $"Unexpected {m.Id} @ {m.Path}: fix it or declare it in expectedMessages with why "
-            + $"({{\"id\":\"{m.Id}\",\"element\":\"{Suffix(m.Path)}\",\"why\":\"...\"}}; \"count\":n or \"all\":true covers several).";
+            + $"({{\"id\":\"{m.Id}\",\"element\":\"{Suffix(m.Path)}\",\"why\":\"<why it is intended{(SecurityWarnings.IsSecurity(m.Id, m.Detail) ? "; for a security warning, the user's own words" : "")}>\"}}; \"count\":n or \"all\":true covers several).";
         foreach (var e in MissingExpected) yield return $"Missing expected message {e.Id} @ {e.Element}: remove the stale expectation or restore the intended scenario ({e.Why}).";
         foreach (var e in Ambiguous) yield return $"Ambiguous expected message {e.Expected.Id} @ {e.Expected.Element}: {e.Candidates.Count} messages match; use a longer unique suffix, "
             + $"or \"count\":{e.Candidates.Count} / \"all\":true to cover them. Candidates: {string.Join(" | ", e.Candidates.Select(m => m.Path))}";
@@ -166,6 +166,11 @@ public static class MessageExpectations
             throw new EntryProblem("all", $"expectedMessages '{id}': all must be true or false (\"all\":true)", "\"all\": true");
         // N3: with all:true the element is optional and covers every message of that id (lab 11: {id, all:true, why}).
         var element = all && Text("element") == null ? "" : Required("element");
+        // T12: a security warning is accepted only with the user's own words; a blank why, a placeholder or an ellipsis is
+        // none. A generic bucket (CustomObjectWarning) may carry a security warning (by its title), so it takes words too.
+        if (SecurityWarnings.MayBeSecurity(id) && SecurityAcceptance.IsPlaceholder(Text("why")))
+            throw new EntryProblem("why", $"expectedMessages '{id}' may declare a security warning, and its why '{Text("why") ?? ""}' is not the user's own words",
+                $"ask the user whether to accept '{id}' as it is and write the user's own words in why; otherwise fix the warning and remove this entry");
         var why = Required("why");
         int? count = null;
         if (obj.ContainsKey("count"))
@@ -204,8 +209,17 @@ public static class MessageExpectations
     /// expectation they satisfy counts as satisfied). <paramref name="footprint"/>: what the job created and changed; without
     /// it, no Unused* allowlist and the anonymous-access warning stays tolerated everywhere (the old contract).</summary>
     public static ExpectationResult Evaluate(IReadOnlyList<MessageInfo> fresh, IReadOnlyList<ExpectedMessage> expected,
-        IReadOnlyList<MessageInfo>? preexisting, JobFootprint? footprint)
+        IReadOnlyList<MessageInfo>? preexisting, JobFootprint? footprint) => Evaluate(fresh, expected, preexisting, footprint, null);
+
+    /// <summary>T12: <paramref name="gone"/> holds the messages the base had and the module no longer has (MessageDelta.Fixed).
+    /// A replace recreates the nodes of an action under new keys, so a security warning the base already had comes back as
+    /// "new": a new security message with the same id, path and text as one that went away in this job is the same warning
+    /// (verdict tolerated, reason security-preexisting), one for one; the job did not introduce it.</summary>
+    public static ExpectationResult Evaluate(IReadOnlyList<MessageInfo> fresh, IReadOnlyList<ExpectedMessage> expected,
+        IReadOnlyList<MessageInfo>? preexisting, JobFootprint? footprint, IReadOnlyList<MessageInfo>? gone)
     {
+        var moved = (gone ?? []).Where(m => m.Type == "Warning" && SecurityWarnings.IsSecurity(m.Id, m.Detail))
+            .GroupBy(SameWarning, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.Count(), StringComparer.Ordinal);
         var consumed = new Dictionary<string, ExpectedMessage>(StringComparer.Ordinal);
         var ambiguous = new List<AmbiguousExpectation>();
         var unused = new List<ExpectedMessage>();
@@ -244,6 +258,11 @@ public static class MessageExpectations
             if (consumed.TryGetValue(m.Key, out var expectation)) { verdicts.Add(Verdict(m, "matched", expectation, null)); continue; }
             // A03: a new error always blocks (the Studio refuses to publish it).
             if (m.IsError) { unexpected.Add(m); verdicts.Add(Verdict(m, "unexpected", null, null)); continue; }
+            if (SecurityWarnings.IsSecurity(m.Id, m.Detail) && moved.TryGetValue(SameWarning(m), out var left) && left > 0)
+            {
+                moved[SameWarning(m)] = left - 1;
+                tolerated.Add(m); verdicts.Add(Verdict(m, "tolerated", null, SecurityPreexistingReason)); continue;
+            }
             if (IsAnonymousAccessWarning(m))
             {
                 // C08 (atritos 3): a screen the job declares open to anonymous users (set AnonymousAccess true, Roles with
@@ -260,8 +279,9 @@ public static class MessageExpectations
                 else { tolerated.Add(m); verdicts.Add(Verdict(m, "tolerated", null, "anonymous-outside-footprint")); }
                 continue;
             }
-            // A03: the explicit SECURITY list blocks whenever new, unless the job declares it with why.
-            if (SecurityWarnings.Ids.Contains(m.Id)) { unexpected.Add(m); verdicts.Add(Verdict(m, "unexpected", null, "security:" + m.Id)); continue; }
+            // A03: the explicit SECURITY list blocks whenever new, unless the job declares it with why; a generic bucket
+            // (CustomObjectWarning) by its title (T12: the O11 ORDER BY expand inline came as nonblocking).
+            if (SecurityWarnings.SecurityIdOf(m.Id, m.Detail) is { } security) { unexpected.Add(m); verdicts.Add(Verdict(m, "unexpected", null, "security:" + security)); continue; }
             if (Allowlist(m, footprint) is { } reason) { allowlisted.Add(m); verdicts.Add(Verdict(m, "allowlisted", null, reason)); continue; }
             // A03: every other new warning is returned, never refused, and never needs expectedMessages.
             nonBlocking.Add(m); verdicts.Add(Verdict(m, "nonblocking", null, NonBlockingReason));
@@ -271,6 +291,10 @@ public static class MessageExpectations
             Tolerated = tolerated, Allowlisted = allowlisted, NonBlocking = nonBlocking, UnusedExpectations = unused, Matched = matched, Verdicts = verdicts
         };
     }
+
+    /// <summary>T12: the reason of a security warning the base already had and a replace recreated (see Evaluate).</summary>
+    public const string SecurityPreexistingReason = "security-preexisting";
+    private static string SameWarning(MessageInfo m) => m.Id + "" + m.Path + "" + m.Detail;
 
     /// <summary>The verdict and reason of a warning that blocks nothing (A03, I3).</summary>
     public const string NonBlockingVerdict = "nonblocking";

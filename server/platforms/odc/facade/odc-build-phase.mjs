@@ -12,19 +12,21 @@
 // - check: the job preflight of the kernel delivery (C31 of lane mb) when kernel-delivery.mjs has it.
 // phasedDeliver: the delivery, rebuilt once in the same call when the merge proves the open module changed after the
 // capture (BASE_DRIFT, nothing merged): the second build captures the module as it is now (phases.rebased).
+import fs from 'node:fs';
 import path from 'node:path';
+import { createHash } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import * as kernelDelivery from './kernel-delivery.mjs';
 import { phaseOfCall, phaseGuard, studioMoment, notePhase, StudioTurnRefused, queueWaitMs } from './studio-write-lock.mjs';
 import { pooledBuild, sharedBuildPool, BuildQueueRefused, slotWorkerPort } from './build-pool.mjs';
-import fs from 'node:fs';
 import { workspaceRoot } from './workspace.mjs';
 import { hostedContext } from './executor.mjs';
 
 // reference-producers (fix/system-reference): the listing a delivery reads once when the session offers no producer of the job's name.
 export const BUILD_STUDIO_READS = new Set(['snapshot', 'reference-snapshot', 'reference-producers']);
 const busy = error => error?.code === 'BRIDGE_BUSY' && error?.sent !== true;
+const isFile = file => { try { return fs.statSync(file).isFile(); } catch { return false; } };
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 // The studio(args, pid) of a phased call (see the header). A refused turn answers its refusal as the step's value.
@@ -86,6 +88,34 @@ export function phasedDeliveryDeps({ root, studio, prepareManifest, env = proces
       ...Object.fromEntries(['capturePrototype', 'measureFidelity', 'prototypeWriter', 'expandPrototype'].filter(k => typeof prototype?.[k] === 'function').map(k => [k, prototype[k]])),
     },
   };
+}
+
+// L3b (spare pós-merge, the ODC side of o11-build-phase.mjs afterApply): the ODC delivery does not run through the kernel's
+// Delivery.cs; its merge is the bridge's, whose receipt carries the module after the merge (afterSnapshot: SaveToMemoryStream
+// of the live module, what the bridge's snapshot writes, with its sha256 and developerId). It is recorded as a known capture
+// of the module, next to the delivery's own snapshot, under the bridge's name <module>-<sha256>.oml with the same sidecar
+// (source "after-merge"), and the lane's ODC worker is asked to prepare its spare for that author (anvil-worker.mjs
+// warmSpares, the worker's `warm`), with the capture's content identity, the one the next apply keys the spare by. Nothing
+// merged, no afterSnapshot or a delivery capture that is not a file: nothing. Never throws; deps (tests): warmSpares,
+// contentOf, now. -> {known, sha256, contentSha256, warm} | null.
+export async function afterOdcMerge({ merge, snapshot, module } = {}, deps = {}) {
+  try {
+    const after = typeof merge?.afterSnapshot === 'string' ? merge.afterSnapshot : null;
+    const name = String(merge?.module ?? module ?? '');
+    if (merge?.merged !== true || !after || !isFile(after) || typeof snapshot?.path !== 'string' || !path.isAbsolute(snapshot.path)) return null;
+    if (!name || /[\\/]|\.\./.test(name)) return null;
+    const sha256 = /^[0-9a-f]{64}$/i.test(String(merge.sha256 ?? '')) ? String(merge.sha256) : createHash('sha256').update(fs.readFileSync(after)).digest('hex').toUpperCase();
+    const known = path.join(path.dirname(snapshot.path), name + '-' + sha256 + '.oml');
+    const developerId = typeof merge.developerId === 'string' && merge.developerId ? merge.developerId : snapshot.developerId ?? null;
+    if (!isFile(known)) fs.copyFileSync(after, known);   // the same name is the same bytes (a capture of the bridge, kept as it is)
+    const contentSha256 = await (deps.contentOf ?? kernelDelivery.baseContentSha256)({ path: known, sha256 });
+    if (!isFile(known + '.json')) fs.writeFileSync(known + '.json', JSON.stringify({ ok: true, module: name, moduleKey: snapshot.moduleKey ?? null, sha256, path: known,
+      capturedAt: (deps.now?.() ?? new Date()).toISOString(), developerId, host: snapshot.host ?? null, ...(snapshot.kind ? { kind: snapshot.kind } : {}),
+      ...(contentSha256 ? { contentSha256 } : {}), source: 'after-merge' }, null, 2));
+    const warmSpares = deps.warmSpares ?? (await import('./anvil-worker.mjs')).warmSpares;
+    const warm = await warmSpares('odc', { captures: [{ path: known, ...(contentSha256 ? { contentSha256 } : {}), supersedes: path.resolve(snapshot.path) }], developerId }, deps.options ?? {});
+    return { known, sha256, contentSha256, warm };
+  } catch { return null; }
 }
 
 // The delivery of one call (lib.mjs deliver), rebuilt once on BASE_DRIFT (see the header); the build and the receipt go

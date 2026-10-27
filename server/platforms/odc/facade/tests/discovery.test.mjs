@@ -664,7 +664,7 @@ test('the budget reduces sections in a fixed order, declares each reduction with
   assert.deepEqual(untouched.size.truncated, []); assert.equal(untouched.size.status, 'within');
   // Stages in order (phase 3): derived text, context, lower tiers, the parts of a direct match the intent did not ask
   // for (bindings, examples, contracts, limits, summary), then their removal, then the envelope and the minimal match.
-  const ORDER = ['matches.notes', 'relatedJobs', 'evidenceRule', 'identity', 'notes', 'context.reuse', 'context.elements', 'context.signatures', 'matches.alternatives', 'matches.dependencies', 'bindings', 'matches.operations', 'examples', 'matches.limits', 'contracts', 'matches.summary', 'bindings.all', 'examples.all', 'contracts.all', 'expansions', 'matches.alternatives.drop', 'matches.operations.focused', 'envelope', 'matches.direct.minimal'];
+  const ORDER = ['matches.notes', 'matches.proofs', 'relatedJobs', 'evidenceRule', 'identity', 'notes', 'context.reuse', 'context.elements', 'context.signatures', 'matches.alternatives', 'matches.dependencies', 'bindings', 'matches.operations', 'examples', 'matches.limits', 'contracts', 'matches.summary', 'bindings.all', 'examples.all', 'contracts.all', 'expansions', 'matches.alternatives.drop', 'matches.operations.focused', 'envelope', 'matches.direct.minimal'];
   const reduced = applyBudget(big(), 3200);
   const sections = reduced.size.truncated.map(t => t.section);
   assert.deepEqual(sections, ORDER.filter(s => sections.includes(s)), 'fixed order: ' + sections.join(','));
@@ -720,8 +720,8 @@ test('the ODC index is built from the kernel CLI and the job suite, classifies r
     const first = await buildIndex('odc', { sources: isolated, rebuild: true });
     const index = first.index;
     assert.equal(index.schemaVersion, INDEX_SCHEMA);
-    for (const op of ['agent', 'verbs', 'spec', 'logic', 'screen', 'html', 'html-visual', 'rest', 'rest-consume', 'rest-expose', 'soap', 'entity-actions']) assert.ok(index.contracts[op] && !index.contracts[op].error, op);
-    assert.deepEqual(Object.keys(index.contracts.verbs.verbs).sort(), ['agent', 'create', 'delete', 'dump', 'duplicate', 'entity-actions', 'find', 'get', 'html', 'layout', 'link', 'logic', 'move', 'prototype', 'reference', 'rename', 'replace', 'rest', 'rest-consume', 'rest-expose', 'screen', 'set', 'soap', 'spec', 'usages']);
+    for (const op of ['agent', 'verbs', 'spec', 'logic', 'screen', 'html', 'html-visual', 'rest', 'rest-consume', 'rest-expose', 'soap', 'entity-actions', 'css']) assert.ok(index.contracts[op] && !index.contracts[op].error, op);
+    assert.deepEqual(Object.keys(index.contracts.verbs.verbs).sort(), ['agent', 'create', 'css', 'delete', 'dump', 'duplicate', 'entity-actions', 'find', 'get', 'html', 'layout', 'link', 'logic', 'move', 'prototype', 'reference', 'rename', 'replace', 'rest', 'rest-consume', 'rest-expose', 'screen', 'set', 'soap', 'spec', 'usages']);
     assert.ok(index.jobs.length >= 67, 'jobs: ' + index.jobs.length);
     assert.ok(index.jobs.every(j => typeof j.description === 'string' && j.opCount > 0 && /^[0-9a-f]{64}$/.test(j.sha256) && Array.isArray(j.bindings)));
     for (const j of index.jobs.filter(j => j.executed)) {
@@ -856,6 +856,14 @@ test('answers respect the byte budget, keep contracts and examples of a composit
   const tight = await discover({ lane: 'odc', intent: 'formulário com dropdown pesquisável, carregar dados e salvar', sources, budgetBytes: 8192 });
   assert.ok(tight.size.truncated.length >= 4 && tight.size.truncated.every(t => t.recover), JSON.stringify(tight.size.truncated));
   assert.ok(wireBytes(tight, { budgetBytes: 8192 }) <= 8192 && ['reduced', 'insufficient'].includes(tight.size.status), 'hard budget: ' + tight.size.bytes + ' ' + tight.size.status);
+  // a11: every match a reduction keeps keeps its level, the compact alternative too, at every budget (a checkout whose lane
+  // holds the suite's current results reached the compact form at the default budget, and lost the level there).
+  const whole = await discover({ lane: 'odc', intent: 'formulário com dropdown pesquisável, carregar dados e salvar', sources, budgetBytes: 1048576 });
+  assert.ok(whole.matches.some(m => m.via === 'alternative'), 'the intent has alternatives');
+  for (let budget = Buffer.byteLength(JSON.stringify(whole), 'utf8'); budget > 4096; budget -= 256) {
+    const reduced = applyBudget(structuredClone(whole), budget);
+    assert.ok((reduced.matches ?? []).every(m => LEVELS.includes(m.level)), budget + ': ' + JSON.stringify((reduced.matches ?? []).filter(m => !LEVELS.includes(m.level))));
+  }
 });
 
 // ---- application context through the real reader over the fixture (read-only; never contacts the Studio)

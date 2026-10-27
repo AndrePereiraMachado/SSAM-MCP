@@ -57,7 +57,7 @@ async function answeredOrNamed(a, args, label) {
 }
 
 test('expand and detail beside an intent are answered: every part asked is whole in expansions, or reduced and named in expansionsReduced, or named in expansionsOmitted, with the exact call that returns it whole (calls 15, 20, 34, 47, 49, 59, 67, 84, 106, 142, 149)', { skip, timeout: 600000 }, async () => {
-  let reducedSeen = 0;
+  let reducedSeen = 0, omittedSeen = 0;
   for (const [i, args] of Object.entries(CALLS)) {
     const a = await discover({ lane: 'o11', ...args, sources: o11 });
     const label = `call ${i}`;
@@ -66,11 +66,15 @@ test('expand and detail beside an intent are answered: every part asked is whole
     assert.ok(wireBytes(a, args) <= args.budgetBytes && a.size.bytes === bytes(a), `${label}: ${bytes(a)} bytes within ${args.budgetBytes}`);
     await answeredOrNamed(a, args, label);
     reducedSeen += a.expansionsReduced?.length ?? 0;
+    omittedSeen += a.expansionsOmitted?.length ?? 0;
     // Stage F never cuts a part asked in silence (review of 2026-10-11: calls 49, 59, 106 and 142 lost ops, bindings and
     // proofs that counted as answered).
     assert.ok(!(a.size.truncated ?? []).some(t => t.section === 'expansions'), `${label}: stage F`);
   }
-  assert.ok(reducedSeen > 0, 'some part was reduced at these budgets, and named');
+  // Some part does not fit whole at these budgets and is named: reduced (expansionsReduced) or omitted with its call
+  // (expansionsOmitted). Which of the two depends on the room the model part leaves (2026-10-24: with the proof lists cut
+  // first, call 106 keeps its provenExample and omits the bindings it asked, named, where it used to keep 8 of 22).
+  assert.ok(reducedSeen + omittedSeen > 0, 'some part did not fit whole at these budgets, and was named');
   // An answer too small even for the model part names each part asked with an expand that parses (review of 2026-10-11:
   // stage F's bindingsOmitted marker became a "part" and the continuation was refused).
   for (const budgetBytes of [3000, 4096, 6000, 8000]) {

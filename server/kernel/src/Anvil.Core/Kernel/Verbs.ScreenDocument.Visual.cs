@@ -264,8 +264,10 @@ public sealed partial class ModelSession
                 var sheets = new List<ScreenVisual.Sheet>();
                 if (ownSheet is { Length: > 0 } own) sheets.Add(new(own, "page"));
                 // Review 3, M7: the themes the page shows, read now (with the theme part this compile wrote).
-                foreach (var theme in s.RootThemeOf(root).Css) if (theme.Length > 0) sheets.Add(new(theme, "theme"));
-                var findings = ScreenVisual.Check(new ScreenVisual.CheckInput(TypeResolver.Name(root) ?? top.Get("name") ?? "", authorRoot, authorNodes, prediction, counterparts, sheets, platform, source));
+                var shown = s.RootThemeOf(root);
+                foreach (var theme in shown.Css) if (theme.Length > 0) sheets.Add(new(theme, "theme"));
+                var findings = ScreenVisual.Check(new ScreenVisual.CheckInput(TypeResolver.Name(root) ?? top.Get("name") ?? "", authorRoot, authorNodes, prediction, counterparts, sheets, platform, source)
+                    { BaseRules = ScreenVisual.BaseRuleKeys(shown.Base) });
                 return (findings, prediction, watch.ElapsedMilliseconds);
             }
             catch (Exception error) { s.Note("HTML_VISUAL_CHECK", $"the visual check of {TypeResolver.Name(root)} could not run: {Unwrap(error)}"); return null; }
@@ -320,9 +322,12 @@ public sealed partial class ModelSession
             var roots = suggestion["roots"]!.AsObject();
             roots[root] = (roots[root]?.GetValue<int>() ?? 0) + items.Count;
             var examples = suggestion["examples"]!.AsArray();
+            // T18: a rule of a theme names the op of this job that carries it and its real line there (carriedBy).
             foreach (var f in items.Where(f => examples.Count < 5))
                 examples.Add(new JsonObject { ["root"] = f.Root, ["line"] = f.Line, ["kind"] = f.Kind, ["subject"] = f.Subject, ["right"] = f.Right, ["why"] = f.Why,
-                    ["candidates"] = f.Candidates.Count > 0 ? new JsonArray(f.Candidates.Select(c => (JsonNode)c).ToArray()) : null });
+                    ["candidates"] = f.Candidates.Count > 0 ? new JsonArray(f.Candidates.Select(c => (JsonNode)c).ToArray()) : null,
+                    ["carriedBy"] = f.Sheet == "theme" && f.RuleText != null && StyleSheetHolding(f.RuleText) is { } carrier
+                        ? new JsonObject { ["op"] = carrier.Op, ["pointer"] = carrier.Pointer, ["line"] = carrier.Line } : null });
             // Every finding by its kind and subject (the examples show five with their why).
             var subjects = suggestion["subjects"]!.AsArray();
             foreach (var f in items.Where(_ => subjects.Count < 30)) subjects.Add(f.Kind + ": " + (f.Subject.Length > 90 ? f.Subject[..90] + "…" : f.Subject) + (f.Code is ScreenVisual.TextJoined or ScreenVisual.ListNotLayoutContainer ? $" ({f.Root}:{f.Line})" : ""));
@@ -365,7 +370,20 @@ public sealed partial class ModelSession
             var tokens = rule.FirstOrDefault(f => f.Code == ScreenVisual.ThemeTokenScoped);
             foreach (var append in rule.Where(f => f.Append != null && f.Code == ScreenVisual.SelectorMissesRuntime).Select(f => f.Append!).Distinct(StringComparer.Ordinal)) written += "\n" + append;
             var (index, html) = group.Key.Sheet == "page" && op is int own && _applyOps?[own]?["data"]?["html"]?.ToString() is { } page && page.Contains(text, StringComparison.Ordinal) ? (own, page) : OpHolding(text);
-            if (index == null) { yield return new JsonObject { ["where"] = "the module theme (an earlier delivery)", ["find"] = text, ["replace"] = written }; continue; }
+            if (index == null)
+            {
+                // T18: the op of this job that carries the rule in a stylesheet text (a set StyleSheet, a css append): the patch
+                // edits that text; the module theme of an earlier delivery gets the css op that changes the cascade. Never a
+                // patch that rewrites a rule into itself.
+                if (StyleSheetHolding(text) is { } carrier)
+                {
+                    var carried = tokens != null ? text + "\n" + tokens.Append : written;
+                    if (carried != text) yield return new JsonObject { ["op"] = carrier.Op, ["path"] = carrier.Pointer, ["line"] = carrier.Line, ["find"] = text, ["replace"] = carried };
+                }
+                else if (tokens != null) yield return new JsonObject { ["where"] = "the module theme (an earlier delivery)", ["css"] = new JsonObject { ["edits"] = new JsonArray(new JsonObject { ["append"] = tokens.Append }) } };
+                else if (written != text) yield return new JsonObject { ["where"] = "the module theme (an earlier delivery)", ["find"] = text, ["replace"] = written };
+                continue;
+            }
             if (tokens != null)
             {
                 // F5: the declarations again in :root, as a named theme part of the document that declares them (nothing removed).
@@ -396,6 +414,18 @@ public sealed partial class ModelSession
         var count = 0;
         for (var i = text.IndexOf(part, StringComparison.Ordinal); i >= 0; i = text.IndexOf(part, i + 1, StringComparison.Ordinal)) count++;
         return count;
+    }
+
+    // T18: the op of this job whose stylesheet text (a set StyleSheet value, a css append) holds a rule once, with the pointer
+    // of that text and the line of the rule in it.
+    private (int Op, string Pointer, int Line)? StyleSheetHolding(string text)
+    {
+        if (_applyOps == null) return null;
+        foreach (var (op, pointer, css) in PreflightRules.StyleSheetRules.Stylesheets(_applyOps))
+            if (pointer.EndsWith("/value", StringComparison.Ordinal) || pointer.EndsWith("/append", StringComparison.Ordinal))
+                if (css.IndexOf(text, StringComparison.Ordinal) is var at and >= 0 && css.IndexOf(text, at + 1, StringComparison.Ordinal) < 0)
+                    return (op, pointer, CssPipeline.LineAt(css, at));
+        return null;
     }
 
     // The op of this job whose html holds a text once (a theme part another document sent), with its html.
@@ -468,6 +498,7 @@ public sealed partial class ModelSession
             var name = TypeResolver.Name(shown);
             var where = fromFlow != null ? $"the theme of the flow {TypeResolver.Name(flow!)}" : "the module's default theme";
             var chain = new List<string>();
+            var generatedHalves = new List<string>();
             var seen = new HashSet<string>(StringComparer.Ordinal);
             object? local = null;
             for (var at = shown; at != null && seen.Add(at.ObjectKey?.ToString() ?? ""); )
@@ -477,10 +508,12 @@ public sealed partial class ModelSession
                 local ??= theme;
                 var sheet = ThemeCss.Of(theme);
                 chain.Insert(0, (sheet != null ? ThemeCss.Author(sheet) : theme.StyleSheet) ?? "");
+                // T18: the Theme Editor half is the installed base: its token rules are the base's own (HTML_THEME_TOKEN_SCOPED).
+                if (sheet != null && ThemeCss.IsSplit(sheet)) generatedHalves.Insert(0, sheet.GeneratedEffectiveValue ?? "");
                 at = PrototypeBuilder.Prop(theme, "BaseTheme") as IObjectSignature;
             }
             return local != null
-                ? new ScreenVisual.PageTheme(name, true, null, chain) { Key = shown.ObjectKey?.ToString() }
+                ? new ScreenVisual.PageTheme(name, true, null, chain) { Key = shown.ObjectKey?.ToString(), Base = generatedHalves }
                 : new ScreenVisual.PageTheme(name, false, $"{name} ({where}), a theme of another module: the html op never writes it, so no rule of the native layout block reaches the page", chain) { Key = shown.ObjectKey?.ToString() };
         }
         catch (Exception error) { return new ScreenVisual.PageTheme(null, false, "the theme the page shows could not be read: " + Unwrap(error), []); }

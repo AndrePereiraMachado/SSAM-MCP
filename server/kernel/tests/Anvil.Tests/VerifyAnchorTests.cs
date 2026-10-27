@@ -342,7 +342,7 @@ public sealed class VerifyAnchorTests(ITestOutputHelper output)
         var hints = VerifyHints.Read(JobRunner.RepoRoot(Directory.GetCurrentDirectory())!);
         Assert.Equal(169, hints.Count);
         Assert.Empty(hints.Values.Where(h => Placeholder.IsMatch(h.Hint)).Select(h => $"{h.Id}: {h.Hint}"));
-        Assert.Contains("Ligar", hints["RequiredConnector_Out"].Hint);
+        Assert.Contains("Connect", hints["RequiredConnector_Out"].Hint);
     }
 
     /// <summary>Every fix of a refusal says the advice inline: the item scope of a Dropdown's Values and Labels (call 99 said
@@ -388,28 +388,47 @@ public sealed class VerifyAnchorTests(ITestOutputHelper output)
     public void TheFixOfAnUnknownNameNamesWhatHoldsTheElementAndAWrongTypeIsNoItemScope()
     {
         if (!PacoteBPolicyTests.StudioAvailable()) return;
-        var job = Job(Probe("Value", "True") + """
+        const string screenOps = """
             ,{"op":"create","parent":"IContainer:ProbeB","type":"IExpression","name":"ProbeScreenExpr","as":"$s"},
-             {"op":"set","target":"$s","prop":"Value","value":"ProbeNoScreenName"},
-             {"op":"create","parent":"IMobileFlow:MainFlow","type":"IMobileBlock","name":"ProbeCard","as":"$card"},
+             {"op":"set","target":"$s","prop":"Value","value":"ProbeNoScreenName"}
+            """;
+        var job = Job(Probe("Value", "True") + screenOps + """
+            ,{"op":"create","parent":"IMobileFlow:MainFlow","type":"IMobileBlock","name":"ProbeCard","as":"$card"},
              {"op":"create","parent":"$card","type":"IExpression","name":"ProbeBlockExpr","as":"$e"},
              {"op":"set","target":"$e","prop":"Value","value":"ProbeNoBlockName"}
             """);
+        // R1 (fase scope, 24/10/2026): the unknown name of the block the job creates is refused by the scope phase before the
+        // Verify (the run throws; the problem keeps the pointer and the fix the Verify anchor used to give). The screen's
+        // unknown name and the wrong type are Verify verdicts: read from the same job without the block ops.
         var (error, result) = Run(Scratch("holders"), "holders", job);
-        Assert.True(error == null, error?.ToString());
-        var problems = result!["problems"]!.AsArray().OfType<JsonObject>().ToList();
+        var problems = ProblemsOf(error, result);
         Show(problems);
-        var screen = Assert.Single(problems, p => p["message"]!.GetValue<string>().Contains("'ProbeNoScreenName'"));
-        Assert.Equal("/ops/8/value", screen["pointer"]?.GetValue<string>());
-        Assert.Contains("of its screen", screen["fix"]!.GetValue<string>());
         var block = Assert.Single(problems, p => p["message"]!.GetValue<string>().Contains("'ProbeNoBlockName'"));
         Assert.Equal("/ops/11/value", block["pointer"]?.GetValue<string>());
         Assert.Contains("of its block", block["fix"]!.GetValue<string>());
         Assert.DoesNotContain("screen", block["fix"]!.GetValue<string>());
-        var typed = Assert.Single(problems, p => p["code"]!.GetValue<string>() == "CustomObjectError");
+        if (error != null) Assert.Equal("scope", block["phase"]?.GetValue<string>());
+        var verified = error == null ? problems : ProblemsOf(Run(Scratch("holders-verify"), "holders-verify", Job(Probe("Value", "True") + screenOps)));
+        Show(verified);
+        var screen = Assert.Single(verified, p => p["message"]!.GetValue<string>().Contains("'ProbeNoScreenName'"));
+        Assert.Equal("/ops/8/value", screen["pointer"]?.GetValue<string>());
+        Assert.Contains("of its screen", screen["fix"]!.GetValue<string>());
+        var typed = Assert.Single(verified, p => p["code"]!.GetValue<string>() == "CustomObjectError");
         Assert.Equal("/ops/6/value", typed["pointer"]?.GetValue<string>());
         Assert.DoesNotContain("'None'", typed["message"]!.GetValue<string>());
         Assert.DoesNotContain("per element of its List", typed["fix"]!.GetValue<string>());
+    }
+
+    /// <summary>The problems of a run: the result's when the apply ran, else those of the coded refusal (the scope phase stops
+    /// the job before its first op and throws a JobPreflightException with every problem of preflight, base and scope).</summary>
+    private static List<JsonObject> ProblemsOf((Exception? Error, JsonObject? Result) run) => ProblemsOf(run.Error, run.Result);
+
+    private static List<JsonObject> ProblemsOf(Exception? error, JsonObject? result)
+    {
+        if (error == null) return result!["problems"]!.AsArray().OfType<JsonObject>().ToList();
+        var coded = Errors.FindCoded(error);
+        Assert.True(coded != null, error.ToString());
+        return (coded!.Problems ?? new JsonArray()).OfType<JsonObject>().ToList();
     }
 
     // ---- fixtures -----------------------------------------------------------------------------------------------------------

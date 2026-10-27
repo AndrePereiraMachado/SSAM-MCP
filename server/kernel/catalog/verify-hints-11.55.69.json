@@ -1,847 +1,847 @@
 [
   {
     "id": "Verify_OK",
-    "hint": "Nada a corrigir.",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Nothing to fix.",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "Verify_Warnings",
-    "hint": "Resumo global: ver cada warning individual.",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Overall summary: see each individual warning.",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "Verify_Errors",
-    "hint": "Resumo global: corrigir cada erro individual antes do publish.",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Overall summary: fix each individual error before publish.",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "Verify_ErrorsAndWarnings",
-    "hint": "Resumo global: corrigir cada erro individual antes do publish.",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Overall summary: fix each individual error before publish.",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "HiddenWarnings",
-    "hint": "Mostrar warnings escondidos (menu de contexto do TrueChange).",
+    "hint": "Show hidden warnings (TrueChange context menu).",
     "origin": "quick-fix ShowHiddenWarnings"
   },
   {
     "id": "Reminder",
-    "hint": "Abrir o elemento (duplo clique na mensagem) e corrigir no local.",
+    "hint": "Open the element (double-click the message) and fix it in place.",
     "origin": "quick-fix GoToDefinitionFromMessage"
   },
   {
     "id": "UnusedCustomStructure",
-    "hint": "Apagar o elemento nao usado (quick-fix Delete do TrueChange) ou passar a usa-lo.",
+    "hint": "Delete the unused element (TrueChange Delete quick-fix) or start using it.",
     "origin": "quick-fix DeleteUnusedElement"
   },
   {
     "id": "UnusedElement",
-    "hint": "Apagar o elemento nao usado (quick-fix Delete do TrueChange) ou passar a usa-lo.",
+    "hint": "Delete the unused element (TrueChange Delete quick-fix) or start using it.",
     "origin": "quick-fix DeleteUnusedElement"
   },
   {
     "id": "UnusedArgument",
-    "hint": "Apagar o argumento que ja nao tem parametro correspondente (ou recriar o parametro).",
+    "hint": "Delete the argument that no longer has a matching parameter (or recreate the parameter).",
     "origin": "quick-fix DeleteAllSimilarUnusedArgumentsFromInputParametersConsumer"
   },
   {
     "id": "UnusedReferenceParameterArgument",
-    "hint": "Apagar o argumento orfao (parametro deixou de existir na referencia) ou refrescar a referencia.",
+    "hint": "Delete the orphan argument (its parameter no longer exists in the reference) or refresh the reference.",
     "origin": "quick-fix DeleteAllSimilarUnusedReferenceParameterArgumentsFromConsumer"
   },
   {
     "id": "UnusedEventHandler",
-    "hint": "Apagar o handler do evento que ja nao existe no Block.",
+    "hint": "Delete the handler of the event that no longer exists in the Block.",
     "origin": "quick-fix DeleteAllSimilarUnusedCustomEventHandlersFromCustomEventsConsumer"
   },
   {
     "id": "UnusedPlaceholderArgument",
-    "hint": "Apagar o conteudo do placeholder que ja nao existe no Block, ou recriar o placeholder.",
+    "hint": "Delete the content of the placeholder that no longer exists in the Block, or recreate the placeholder.",
     "origin": "quick-fix DeleteAllSimilarUnusedPlaceholderArgumentsFromWebBlockInstance"
   },
   {
     "id": "UnusedOnNotify",
-    "hint": "Apagar o elemento nao usado (quick-fix Delete do TrueChange) ou passar a usa-lo.",
+    "hint": "Delete the unused element (TrueChange Delete quick-fix) or start using it.",
     "origin": "quick-fix DeleteUnusedElement"
   },
   {
     "id": "UnusedLink",
-    "hint": "Apagar o elemento nao usado (quick-fix Delete do TrueChange) ou passar a usa-lo.",
+    "hint": "Delete the unused element (TrueChange Delete quick-fix) or start using it.",
     "origin": "quick-fix DeleteUnusedElement"
   },
   {
     "id": "UnusedOutcomeLink",
-    "hint": "Apagar o elemento nao usado (quick-fix Delete do TrueChange) ou passar a usa-lo.",
+    "hint": "Delete the unused element (TrueChange Delete quick-fix) or start using it.",
     "origin": "quick-fix DeleteUnusedElement"
   },
   {
     "id": "UnusedOnSkip",
-    "hint": "Apagar o elemento nao usado (quick-fix Delete do TrueChange) ou passar a usa-lo.",
+    "hint": "Delete the unused element (TrueChange Delete quick-fix) or start using it.",
     "origin": "quick-fix DeleteUnusedElement"
   },
   {
     "id": "UnusedScreenData",
-    "hint": "Apagar o elemento nao usado (quick-fix Delete do TrueChange) ou passar a usa-lo.",
+    "hint": "Delete the unused element (TrueChange Delete quick-fix) or start using it.",
     "origin": "quick-fix DeleteUnusedElement"
   },
   {
     "id": "UnusedAction",
-    "hint": "Apagar a screen/client action nao usada ou liga-la a um evento (OnClick, OnInitialize...).",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Delete the unused screen/client action or bind it to an event (OnClick, OnInitialize...).",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "UnusedUserAction",
-    "hint": "Apagar a action nao usada ou passar a chama-la / marca-la Public.",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Delete the unused action, or start calling it / mark it Public.",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "UnusedResource",
-    "hint": "Apagar o elemento nao usado (quick-fix Delete do TrueChange) ou passar a usa-lo.",
+    "hint": "Delete the unused element (TrueChange Delete quick-fix) or start using it.",
     "origin": "quick-fix DeleteUnusedElement"
   },
   {
     "id": "InvalidFlow_MalformedAction",
-    "hint": "Garantir um unico caminho ate ao no da mensagem: remover conectores duplicados/ambiguos que chegam a ele.",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Ensure a single path to the node the message names: remove the duplicate/ambiguous connectors that reach it.",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "InvalidFlow_NoStart",
-    "hint": "Adicionar um no Start ao fluxo (action/preparation/callback) e liga-lo ao primeiro no.",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Add a Start node to the flow (action/preparation/callback) and connect it to the first node.",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "InvalidFlow_TooManyNodes",
-    "hint": "Deixar no fluxo apenas um no do tipo que a mensagem cita (ex.: um so Start).",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Keep only one node of the type the message names in the flow (e.g. a single Start).",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "RequiredConnector_In",
-    "hint": "Ligar um conector de entrada ao no da mensagem (ou apagar o no solto).",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Connect an incoming connector to the node the message names (or delete the loose node).",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "RequiredConnector_Out",
-    "hint": "Ligar a saida do no da mensagem ao proximo no (End, Assign, ...).",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Connect the output of the node the message names to the next node (End, Assign, ...).",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "InvalidFlow_NoOtherwise",
-    "hint": "Adicionar a saida Otherwise ao Switch/Decision.",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Add the Otherwise branch to the Switch/Decision.",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "InvalidErrorHandler_MultiHandler",
-    "hint": "Manter um so Exception Handler por tipo de excecao no fluxo (apagar o duplicado).",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Keep a single Exception Handler per exception type in the flow (delete the duplicate).",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "Entity_SuggestPartialUpdateBehavior",
-    "hint": "Na Entity com Binary Data/Text grande: Update Behavior = Changed Attributes.",
+    "hint": "On the Entity with large Binary Data/Text: Update Behavior = Changed Attributes.",
     "origin": "quick-fix SetUpdateBehaviorToChangedAttributes"
   },
   {
     "id": "Entity_SuggestPartialUpdateBehavior_Many",
-    "hint": "Na Entity com Binary Data/Text grande: Update Behavior = Changed Attributes.",
+    "hint": "On the Entity with large Binary Data/Text: Update Behavior = Changed Attributes.",
     "origin": "quick-fix SetUpdateBehaviorToChangedAttributes"
   },
   {
     "id": "Entity_SuggestPartialUpdateBehavior_Text",
-    "hint": "Na Entity com Binary Data/Text grande: Update Behavior = Changed Attributes.",
+    "hint": "On the Entity with large Binary Data/Text: Update Behavior = Changed Attributes.",
     "origin": "quick-fix SetUpdateBehaviorToChangedAttributes"
   },
   {
     "id": "ConsecutiveServerInteractions",
-    "hint": "Agrupar as chamadas a Server Actions numa unica Server Action chamada pela Client Action.",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Group the Server Action calls into a single Server Action called by the Client Action.",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "ImageTooBig",
-    "hint": "Reduzir o tamanho (bytes) da imagem ou usar Resource/CDN.",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Reduce the image size (bytes) or use a Resource/CDN.",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "EntityActionInsideLoop",
-    "hint": "Tirar o Create/Update/Delete de dentro do ciclo (usar SQL/bulk) ou aceitar a sugestao.",
+    "hint": "Move the Create/Update/Delete out of the loop (use SQL/bulk) or accept the suggestion.",
     "origin": "quick-fix FixEntityActionInsideLoop"
   },
   {
     "id": "EntityActionClientSide",
-    "hint": "Nao chamar Create/Update/Delete da Entity numa Client Action; mover para Server Action com validacao.",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Do not call the Entity's Create/Update/Delete in a Client Action; move it to a Server Action with validation.",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "InvalidEntity_OnlyAuto",
-    "hint": "Adicionar pelo menos um atributo alem do Id autonumber a Entity.",
+    "hint": "Add at least one attribute besides the autonumber Id to the Entity.",
     "origin": "quick-fix AddAnotherEntityAttribute"
   },
   {
     "id": "InvalidEntity_OneAttr",
-    "hint": "Adicionar pelo menos um atributo a Entity (alem do Id).",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Add at least one attribute to the Entity (besides the Id).",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "InvalidEntity_DifferentTenantIds",
-    "hint": "Alinhar Show Tenant Identifier da Entity referenciada com o valor no produtor (refrescar a referencia).",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Align the referenced Entity's Show Tenant Identifier with the value in the producer (refresh the reference).",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "InvalidEntity_IdType",
-    "hint": "Quebrar a dependencia circular: o Id da Entity nao pode ser (transitivamente) o seu proprio identificador.",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Break the circular dependency: the Entity's Id cannot be (transitively) its own identifier.",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "InvalidAttribute_BadReferenceToSyntheticEntity",
-    "hint": "Definir a Delete Rule da referencia (Ignore/Protect) no atributo FK.",
+    "hint": "Set the reference's Delete Rule (Ignore/Protect) on the FK attribute.",
     "origin": "quick-fix SetDeleteRuleForSyntheticEntityReference"
   },
   {
     "id": "InvalidAttribute_SameNameInJSON",
-    "hint": "Dar Name in JSON unico a cada atributo da Structure.",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Give each Structure attribute a unique Name in JSON.",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "InvalidPropertyValue_Units",
-    "hint": "Definir Units (px/%/em) coerentes com o valor da largura/altura.",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Set Units (px/%/em) consistent with the width/height value.",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "InvalidGridUnitsOutsideGrid",
-    "hint": "Abrir o elemento (duplo clique na mensagem) e corrigir no local.",
+    "hint": "Open the element (double-click the message) and fix it in place.",
     "origin": "quick-fix GoToDefinitionFromMessage"
   },
   {
     "id": "GridSingleDimensionOverflow",
-    "hint": "Abrir o elemento (duplo clique na mensagem) e corrigir no local.",
+    "hint": "Open the element (double-click the message) and fix it in place.",
     "origin": "quick-fix GoToDefinitionFromMessage"
   },
   {
     "id": "GridDimensionsOverflow",
-    "hint": "Abrir o elemento (duplo clique na mensagem) e corrigir no local.",
+    "hint": "Open the element (double-click the message) and fix it in place.",
     "origin": "quick-fix GoToDefinitionFromMessage"
   },
   {
     "id": "ExpressionRequiredExpression",
-    "hint": "Preencher a expressao obrigatoria (Value/Condition/Assign).",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Fill in the required expression (Value/Condition/Assign).",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "ArgumentRequiredExpression",
-    "hint": "Preencher o argumento obrigatorio, ou marcar o Input Parameter como Is Mandatory=No.",
+    "hint": "Fill in the required argument, or set the Input Parameter to Is Mandatory=No.",
     "origin": "quick-fix SetParameterOptionalFromInputParametersConsumer"
   },
   {
     "id": "EventHandlerRequiredAction",
-    "hint": "Definir o Handler do evento obrigatorio, ou tornar o evento do Block opcional (Is Mandatory=No).",
+    "hint": "Set the Handler of the mandatory event, or make the Block's event optional (Is Mandatory=No).",
     "origin": "quick-fix SetCustomEventOptionalFromCustomEventsConsumer"
   },
   {
     "id": "RequiredPropertyValue_Property",
-    "hint": "Preencher a propriedade obrigatoria (quick-fix cria implementacao por omissao, ex.: Destination/Handler).",
+    "hint": "Fill in the required property (the quick-fix creates a default implementation, e.g. Destination/Handler).",
     "origin": "quick-fix CreateDefaultImplementationFromRequiredPropertyValue_Property"
   },
   {
     "id": "RequiredPropertyValue_PropertyIn",
-    "hint": "Preencher a propriedade obrigatoria que a mensagem cita, no elemento do caminho.",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Fill in the required property the message names, on the element at the given path.",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "RequiredPropertyValue_PropertyIn_WithPrevious",
-    "hint": "Preencher a propriedade obrigatoria (ou apagar o elemento que a exige).",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Fill in the required property (or delete the element that requires it).",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "InvalidOptionalPropertyValue_PropertyIn_WithPrevious",
-    "hint": "Limpar o valor da propriedade opcional que ficou invalido.",
+    "hint": "Clear the value of the optional property that has become invalid.",
     "origin": "quick-fix DeleteInvalidOptionalPropertyValue"
   },
   {
     "id": "InvalidVariable_UnknownVar",
-    "hint": "Criar a variavel/parametro referenciado ou corrigir o nome na expressao/propriedade.",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Create the referenced variable/parameter or fix the name in the expression/property.",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "InvalidVariable_UnknownVarIn",
-    "hint": "Criar a variavel/parametro referenciado ou corrigir o nome que a mensagem cita.",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Create the referenced variable/parameter or fix the name the message quotes.",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "InvalidVariable_UnknownObjInVar",
-    "hint": "Corrigir a referencia ao objeto que a mensagem cita (foi apagado/renomeado) na variavel.",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Fix the reference to the object the message names (it was deleted/renamed) in the variable.",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "ExpressionInvalidExpressionType",
-    "hint": "Converter o valor para o Data Type esperado (ex.: IntegerToText, TextToIdentifier).",
+    "hint": "Convert the value to the expected Data Type (e.g. IntegerToText, TextToIdentifier).",
     "origin": "quick-fix FixIncompatibleDataTypesInIdentifier"
   },
   {
     "id": "ParserExpressionOverflow",
-    "hint": "Encurtar a expressao (partir em variaveis locais / action).",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Shorten the expression (split it into local variables / an action).",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "ParserOutputOverflow",
-    "hint": "Encurtar a expressao (partir em variaveis locais / action).",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Shorten the expression (split it into local variables / an action).",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "ParserOverflow",
-    "hint": "Encurtar o literal Text (mover para Site Property/Resource).",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Shorten the Text literal (move it to a Site Property/Resource).",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "ParserUnexpectedElement",
-    "hint": "Corrigir a sintaxe da expressao junto do elemento que a mensagem cita.",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Fix the expression syntax near the element the message names.",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "ExpressionDateOverflow",
-    "hint": "Usar uma Date valida (#YYYY-MM-DD#) dentro do intervalo suportado.",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Use a valid Date (#YYYY-MM-DD#) within the supported range.",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "ExpressionDecimalOverflow",
-    "hint": "Reduzir o valor Decimal ao intervalo suportado.",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Reduce the Decimal value to the supported range.",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "ExpressionDivisionByZero",
-    "hint": "Remover a divisao por zero (proteger com If ou divisor != 0).",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Remove the division by zero (guard it with an If or divisor != 0).",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "OperatorIncompatibleTypes",
-    "hint": "Converter um dos operandos (IntegerToText, TextToDecimal, ...) para tipos compativeis.",
+    "hint": "Convert one of the operands (IntegerToText, TextToDecimal, ...) to compatible types.",
     "origin": "quick-fix FixIncompatibleDataTypesInBinaryOperator"
   },
   {
     "id": "ExpressionBinaryComparisonInDatabase",
-    "hint": "Nao comparar Binary Data em filtros de Aggregate; comparar outro atributo.",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Do not compare Binary Data in Aggregate filters; compare another attribute.",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "ExpressionIntegerOverflow",
-    "hint": "Usar Long Integer ou reduzir o valor.",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Use Long Integer or reduce the value.",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "ExpressionLongIntegerOverflow",
-    "hint": "Reduzir o valor ao intervalo de Long Integer.",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Reduce the value to the Long Integer range.",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "ExpressionTimeOverflow",
-    "hint": "Usar um Time valido (#HH:MM:SS#).",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Use a valid Time (#HH:MM:SS#).",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "ExpressionUnknownFunction",
-    "hint": "Corrigir o nome da funcao que a mensagem cita (uma built-in deste Studio, uma action do modulo ou de uma dependencia marcada como Function) ou marcar a action como Function e adicionar a dependencia.",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Fix the name of the function the message names (a built-in of this Studio, an action of the module or of a dependency marked as Function) or mark the action as Function and add the dependency.",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "ExpressionWrongNumberArguments",
-    "hint": "Passar o numero correto de argumentos a funcao que a mensagem cita.",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Pass the correct number of arguments to the function the message names.",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "ExpressionInvalidParameter",
-    "hint": "Remover o argumento a mais na chamada da funcao (ou criar o parametro).",
+    "hint": "Remove the extra argument from the function call (or create the parameter).",
     "origin": "quick-fix DeleteUnexpectedArgumentFromCallFunctionExpressionElement"
   },
   {
     "id": "ExpressionInvalidOptionalParameter",
-    "hint": "Passar o argumento em falta, ou tornar o parametro opcional (Is Mandatory=No).",
+    "hint": "Pass the missing argument, or make the parameter optional (Is Mandatory=No).",
     "origin": "quick-fix SetParameterOptionalFromArgumentExpressionElement"
   },
   {
     "id": "ExpressionDuplicateParameter",
-    "hint": "Remover o argumento repetido que a mensagem cita na chamada da funcao.",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Remove the repeated argument the message names from the function call.",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "InvalidPropertyValue_InvalidNull",
-    "hint": "Definir Null Value com o mesmo Data Type da variavel do widget.",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Set Null Value with the same Data Type as the widget's variable.",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "ExpressionShouldBeEscaped",
-    "hint": "Ligar Escape Content = Yes na Expression (ou garantir que o HTML e seguro).",
+    "hint": "Set Escape Content = Yes on the Expression (or make sure the HTML is safe).",
     "origin": "quick-fix ExpressionEscapeContent"
   },
   {
     "id": "InvalidCSSStyle",
-    "hint": "Corrigir o nome da classe CSS que a mensagem cita na propriedade Style Classes.",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Fix the name of the CSS class the message names in the Style Classes property.",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "InvalidPropertyValue_UnsupportedJSNodeInputVariableType",
-    "hint": "Usar um tipo basico/estrutura suportado no input do no JavaScript.",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Use a supported basic type/structure for the JavaScript node's input.",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "InvalidPropertyValue_UnsupportedJSNodeOutputVariableType",
-    "hint": "Usar um tipo suportado no output do no JavaScript.",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Use a supported type for the JavaScript node's output.",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "InvalidPropertyValue_UnsupportedOutputVariableType",
-    "hint": "Trocar o Data Type do output para um tipo suportado.",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Change the output's Data Type to a supported type.",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "ExpressionUnknownAttribute",
-    "hint": "Corrigir o nome do atributo/record que a mensagem cita (renomeado ou apagado) na expressao.",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Fix the name of the attribute/record the message names (renamed or deleted) in the expression.",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "SitePropertyDefaultValueTooLarge",
-    "hint": "Encurtar o Default Value da Site Property ao numero de caracteres que a mensagem da.",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Shorten the Site Property's Default Value to the number of characters the message gives.",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "MaxLengthWarn",
-    "hint": "Encurtar a mensagem SMS para <= 160 caracteres ou remover Phone Slot.",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Shorten the SMS message to <= 160 characters or remove the Phone Slot.",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "InvalidSMSComPat_BadText",
-    "hint": "Corrigir o simbolo de Site Property no padrao do SMS Command.",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Fix the Site Property symbol in the SMS Command pattern.",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "InvalidSMSComPat_BadSyntax",
-    "hint": "Corrigir a sintaxe do padrao do SMS Command.",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Fix the syntax of the SMS Command pattern.",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "InvalidSMSComPat_BadRegExp",
-    "hint": "Corrigir a expressao regular do SMS Command.",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Fix the regular expression of the SMS Command.",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "UserActionWontBeCached_NonSerializableParameters",
-    "hint": "Remover parametros nao serializaveis (Binary/objectos) ou desligar Cache in Minutes.",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Remove non-serializable parameters (Binary/objects) or turn off Cache in Minutes.",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "InvalidEntityActionInActionFlow_Cache",
-    "hint": "Nao usar Entity Actions numa action com Cache in Minutes (ou remover o cache).",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Do not use Entity Actions in an action with Cache in Minutes (or remove the cache).",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "InvalidFunction_UnsupportedLocalStorage",
-    "hint": "Desligar Function = Yes na action (funcoes nao podem ter Execute Action / Local Storage).",
+    "hint": "Turn off Function = Yes on the action (functions cannot have Execute Action / Local Storage).",
     "origin": "quick-fix UnsetAsFunction"
   },
   {
     "id": "InvalidFunction_UnsupportedExecuteAction",
-    "hint": "Desligar Function = Yes na action (funcoes nao podem ter Execute Action / Local Storage).",
+    "hint": "Turn off Function = Yes on the action (functions cannot have Execute Action / Local Storage).",
     "origin": "quick-fix UnsetAsFunction"
   },
   {
     "id": "InvalidSQL_NoSpaces",
-    "hint": "Separar os parametros @Param com espacos no SQL.",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Separate the @Param parameters with spaces in the SQL.",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "InvalidSQL_ReservedPrefix",
-    "hint": "Renomear o nome que a mensagem cita: e prefixo reservado no SQL.",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Rename the name the message quotes: it is a reserved prefix in SQL.",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "InvalidSQL_UnknownAttribute",
-    "hint": "Corrigir o nome do atributo que a mensagem cita no SQL (ou usar {Entity}.[Attr]).",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Fix the name of the attribute the message names in the SQL (or use {Entity}.[Attr]).",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "SQL_TenantId_wo_show_tenant_id",
-    "hint": "Ligar Show Tenant Identifier = Yes na Entity que a mensagem cita antes de usar TenantId no SQL.",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Set Show Tenant Identifier = Yes on the Entity the message names before using TenantId in the SQL.",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "InvalidSQL_UnknownEntity",
-    "hint": "Corrigir a Entity que a mensagem cita no SQL: usar {EntityName} e adicionar a dependencia.",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Fix the Entity the message names in the SQL: use {EntityName} and add the dependency.",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "InvalidSQL_UnknownParam",
-    "hint": "Criar o parametro que a mensagem cita no SQL node ou corrigir o nome no texto SQL.",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Create the parameter the message names in the SQL node or fix the name in the SQL text.",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "MaxRecordsMismatch",
-    "hint": "Alinhar o Max Records do Aggregate com o do widget de lista/tabela.",
+    "hint": "Align the Aggregate's Max Records with that of the list/table widget.",
     "origin": "quick-fix FixMaxRecordsMismatch"
   },
   {
     "id": "InputMandatoryMismatch",
-    "hint": "Alinhar Mandatory do Input com Is Mandatory do atributo de origem.",
+    "hint": "Align the Input's Mandatory with the source attribute's Is Mandatory.",
     "origin": "quick-fix FixInputMandatory"
   },
   {
     "id": "InputMaxLengthMismatch_Input",
-    "hint": "Alinhar Max. Length do Input com o Length do atributo Text.",
+    "hint": "Align the Input's Max. Length with the Text attribute's Length.",
     "origin": "quick-fix FixInputMaxLength"
   },
   {
     "id": "InputMaxLengthMismatch_InputPass",
-    "hint": "Alinhar Max. Length do Input com o Length do atributo Text.",
+    "hint": "Align the Input's Max. Length with the Text attribute's Length.",
     "origin": "quick-fix FixInputMaxLength"
   },
   {
     "id": "InvalidPropertySelection_SpecialSpecified",
-    "hint": "Definir Special List no Combo Box ou limpar Special Variable.",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Set Special List on the Combo Box or clear Special Variable.",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "RedundantWithWithout",
-    "hint": "Remover a condicao With/Without redundante do Join/Filter.",
+    "hint": "Remove the redundant With/Without condition from the Join/Filter.",
     "origin": "quick-fix FixRedundantWithWithout"
   },
   {
     "id": "ForEachMismatch",
-    "hint": "Alinhar o For Each com o Max Records do widget/aggregate (Start Index/Max Records).",
+    "hint": "Align the For Each with the Max Records of the widget/aggregate (Start Index/Max Records).",
     "origin": "quick-fix FixForEachMismatch"
   },
   {
     "id": "AmbiguousRelationsQuery",
-    "hint": "Escolher explicitamente a condicao de Join entre as duas Entities que a mensagem cita (ha mais de uma FK).",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Explicitly choose the Join condition between the two Entities the message names (there is more than one FK).",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "CrossJoinQuery",
-    "hint": "Adicionar condicao de Join/filtro sobre a Entity que a mensagem cita para evitar cross join.",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Add a Join/filter condition on the Entity the message names to avoid a cross join.",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "UnsubmitableInputs_NoLinks",
-    "hint": "Adicionar um Button/Link com Method Submit/Ajax que envie os inputs.",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Add a Button/Link with Method Submit/Ajax that submits the inputs.",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "InvalidRecursiveContent",
-    "hint": "Abrir o elemento (duplo clique na mensagem) e corrigir no local.",
+    "hint": "Open the element (double-click the message) and fix it in place.",
     "origin": "quick-fix GoToDefinitionFromMessage"
   },
   {
     "id": "InvalidDestination_Link",
-    "hint": "Mudar o Method do botao/link para Ajax Submit (ou Submit consoante a necessidade).",
+    "hint": "Change the button/link Method to Ajax Submit (or Submit, as needed).",
     "origin": "quick-fix SetMethodToAjax"
   },
   {
     "id": "MissingWidgetContent",
-    "hint": "Colocar conteudo dentro do widget da mensagem ou apaga-lo.",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Put content inside the widget the message names or delete it.",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "MissingContent",
-    "hint": "Colocar conteudo no elemento da mensagem ou apaga-lo.",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Put content in the element the message names or delete it.",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "InputIteratedWrongVariable",
-    "hint": "Ligar a Variable do Input a <List>.Current.<Attr> da List/Table que o contem.",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Bind the Input's Variable to <List>.Current.<Attr> of the List/Table that contains it.",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "ReferenceParameterArgumentIteratedWrongVariable",
-    "hint": "Ligar o argumento do Block a <List>.Current.<Attr> da List/Table que o contem.",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Bind the Block argument to <List>.Current.<Attr> of the List/Table that contains it.",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "ScreenActionOutputsIgnored",
-    "hint": "Remover outputs da screen action ou chama-la de outro sitio que os consuma.",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Remove the screen action's outputs or call it from another place that consumes them.",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "InvalidWebBlockInEmail_Widgets",
-    "hint": "Remover do Block widgets nao suportados em Email (inputs, botoes) ou usar outro Block.",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Remove the widgets unsupported in Email (inputs, buttons) from the Block or use another Block.",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "InvalidPublic_ThemeImageNotPublic",
-    "hint": "Marcar como Public o Theme base / Image / Block usado pelo Theme publico.",
+    "hint": "Mark as Public the base Theme / Image / Block used by the public Theme.",
     "origin": "quick-fix SetAsPublic"
   },
   {
     "id": "InvalidPublic_ThemeWebBlockNotPublic",
-    "hint": "Marcar como Public o Theme base / Image / Block usado pelo Theme publico.",
+    "hint": "Mark as Public the base Theme / Image / Block used by the public Theme.",
     "origin": "quick-fix SetAsPublic"
   },
   {
     "id": "InvalidPublic_ThemeOnExceptionNotPublic",
-    "hint": "Marcar como Public o elemento que a mensagem cita, usado pelo Theme publico.",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Mark as Public the element the message names, used by the public Theme.",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "InvalidPublic_ThemeBaseThemeNotPublic",
-    "hint": "Marcar como Public o Theme base / Image / Block usado pelo Theme publico.",
+    "hint": "Mark as Public the base Theme / Image / Block used by the public Theme.",
     "origin": "quick-fix SetAsPublic"
   },
   {
     "id": "InvalidRefecenceInSystemESpace",
-    "hint": "Remover a referencia que a mensagem cita (nao permitida dentro do modulo que ela nomeia).",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Remove the reference the message names (not allowed inside the module it names).",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "InvalidPublicNRBlock",
-    "hint": "Abrir o objeto e tornar publicos os elementos de que depende, ou tornar o Block nao-publico.",
+    "hint": "Open the object and make the elements it depends on public, or make the Block non-public.",
     "origin": "quick-fix GoToObject"
   },
   {
     "id": "ParserExpectedElement",
-    "hint": "Corrigir a sintaxe da expressao: escrever o que a mensagem diz esperado no lugar do que ela cita.",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Fix the expression syntax: write what the message says is expected in place of what it quotes.",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "ParserUnterminatedStringLiteral",
-    "hint": "Fechar as aspas do literal Text na expressao.",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Close the quotes of the Text literal in the expression.",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "ParserFunctionsOverflow",
-    "hint": "Reduzir o aninhamento de funcoes (usar variaveis intermedias).",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Reduce function nesting (use intermediate variables).",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "UnlinkedOutcome",
-    "hint": "Ligar o outcome do Decision/Human Activity com um conector ate a proxima atividade.",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Connect the Decision/Human Activity outcome with a connector to the next activity.",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "InvalidProcessEntity",
-    "hint": "Na Entity usada pelo Process/Activity, ligar Expose Process Events = Yes.",
+    "hint": "On the Entity used by the Process/Activity, set Expose Process Events = Yes.",
     "origin": "quick-fix ExposeProcessEvents"
   },
   {
     "id": "InvalidActivityEntity",
-    "hint": "Na Entity usada pelo Process/Activity, ligar Expose Process Events = Yes.",
+    "hint": "On the Entity used by the Process/Activity, set Expose Process Events = Yes.",
     "origin": "quick-fix ExposeProcessEvents"
   },
   {
     "id": "ProcessMissingInboxDetail",
-    "hint": "Preencher a propriedade Process Detail do Process (texto mostrado no Taskbox).",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Fill in the Process Detail property of the Process (text shown in the Taskbox).",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "ParentOfPublicActivityMustBePublic",
-    "hint": "Marcar o Process que a mensagem cita como Public ou a atividade como nao publica.",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Mark the Process the message names as Public, or the activity as non-public.",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "InvalidEntityIndex_LongText",
-    "hint": "Retirar do index o atributo Text mais longo que o limite da mensagem (ou reduzir o Length).",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Remove from the index the Text attribute longer than the limit in the message (or reduce the Length).",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "InvalidEntityIndex_NoBinary",
-    "hint": "Retirar o atributo Binary Data do index.",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Remove the Binary Data attribute from the index.",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "RepeatedLocale",
-    "hint": "Remover/alterar o Locale duplicado no Multilingual.",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Remove/change the duplicate Locale in Multilingual.",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "DisconnectedDestination",
-    "hint": "Ligar a Screen destino: torna-la Frequent Destination ou ligar um conector a partir da tela de origem no UI Flow.",
+    "hint": "Connect the destination Screen: make it a Frequent Destination or connect a connector from the source screen in the UI Flow.",
     "origin": "quick-fix ConnectDestinations"
   },
   {
     "id": "InvalidPublic_BlockLinkParameterType",
-    "hint": "Nao passar o parametro que a mensagem cita (ex.: Record/List) em links a partir de Blocks publicos; usar Id.",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Do not pass the parameter the message names (e.g. Record/List) in links from public Blocks; use an Id.",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "InvalidParameter_InEmailLink",
-    "hint": "Nao passar o parametro que a mensagem cita em links de Email; usar identificadores/basicos.",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Do not pass the parameter the message names in Email links; use identifiers/basic types.",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "IgnoredAjaxRefresh",
-    "hint": "Mudar o Method do botao/link para Ajax Submit (ou Submit consoante a necessidade).",
+    "hint": "Change the button/link Method to Ajax Submit (or Submit, as needed).",
     "origin": "quick-fix SetMethodToAjax"
   },
   {
     "id": "IgnoredInputFilenameContent",
-    "hint": "Mudar o Method do botao/link para Submit.",
+    "hint": "Change the button/link Method to Submit.",
     "origin": "quick-fix SetMethodToSubmit"
   },
   {
     "id": "AssertFailure_WebReference",
-    "hint": "Passar o nome exato de um SOAP Web Service consumido no modulo.",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Pass the exact name of a SOAP Web Service consumed in the module.",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "AssertWarning_WebReference",
-    "hint": "Usar um literal com o nome do Web Service para o Verify validar.",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Use a literal with the Web Service name so that Verify can validate it.",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "AssertWarning_WebService",
-    "hint": "Usar um literal com o nome do Web Service para o Verify validar.",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Use a literal with the Web Service name so that Verify can validate it.",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "ValidationsRequired",
-    "hint": "Abrir o elemento (duplo clique na mensagem) e corrigir no local.",
+    "hint": "Open the element (double-click the message) and fix it in place.",
     "origin": "quick-fix GoToDefinitionFromMessage"
   },
   {
     "id": "EmptyTask",
-    "hint": "Abrir o elemento (duplo clique na mensagem) e corrigir no local.",
+    "hint": "Open the element (double-click the message) and fix it in place.",
     "origin": "quick-fix GoToDefinitionFromMessage"
   },
   {
     "id": "DescriptionMissing",
-    "hint": "Preencher Description do Tutorial que a mensagem cita.",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Fill in the Description of the Tutorial the message names.",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "RecursiveTutorialBlocks",
-    "hint": "Quebrar o ciclo de Tutorial Blocks que a mensagem lista.",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Break the Tutorial Blocks cycle the message lists.",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "RecursiveThemeHierarchy",
-    "hint": "Quebrar o ciclo de Base Theme que a mensagem lista.",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Break the Base Theme cycle the message lists.",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "InvalidMenu",
-    "hint": "Escolher um Block valido para Menu do Theme (com placeholder/estrutura esperada).",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Choose a valid Block for the Theme's Menu (with the expected placeholder/structure).",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "NoErrorHandlingInFlow",
-    "hint": "Abrir o elemento (duplo clique na mensagem) e corrigir no local.",
+    "hint": "Open the element (double-click the message) and fix it in place.",
     "origin": "quick-fix GoToDefinitionFromMessage"
   },
   {
     "id": "InvalidGroup_NoAttributeReference",
-    "hint": "Remover o Group By que ja nao referencia atributo valido (ou renomear o atributo).",
+    "hint": "Remove the Group By that no longer references a valid attribute (or rename the attribute).",
     "origin": "quick-fix RemoveGroupByAttribute"
   },
   {
     "id": "InvalidGroup_NoAttributeReference_SameName",
-    "hint": "Remover o Group By que ja nao referencia atributo valido (ou renomear o atributo).",
+    "hint": "Remove the Group By that no longer references a valid attribute (or rename the attribute).",
     "origin": "quick-fix RemoveGroupByAttribute"
   },
   {
     "id": "InvalidDataSet_NoEntity",
-    "hint": "Adicionar pelo menos uma Entity/Structure como Source do Aggregate.",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Add at least one Entity/Structure as a Source of the Aggregate.",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "InvalidDataSet_InvalidExecutionContext",
-    "hint": "Mover o Aggregate que a mensagem cita para um contexto suportado (ex.: Data Action/Server Action).",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Move the Aggregate the message names to a supported context (e.g. Data Action/Server Action).",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "InvalidAggregateError",
-    "hint": "Remover o Sort duplicado no Aggregate.",
+    "hint": "Remove the duplicate Sort in the Aggregate.",
     "origin": "quick-fix DeleteRepeatedSortElement"
   },
   {
     "id": "InvalidDataAction_OutputMustBeSet",
-    "hint": "Atribuir (Assign) todos os outputs da Data Action antes do End.",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Assign all outputs of the Data Action before the End.",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "CustomObjectError",
-    "hint": "Erro de plugin/objeto custom (widget como Dropdown): a mensagem diz o que falta; um tipo exigido em vez de 'None' vem de uma expressao sem tipo (nome desconhecido) na mesma propriedade.",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Plugin/custom object error (a widget such as Dropdown): the message says what is missing; a required type reported instead of 'None' comes from an untyped expression (unknown name) in the same property.",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "CustomObjectWarning",
-    "hint": "Warning de plugin/objeto custom: a correcao esta no texto da mensagem.",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Plugin/custom object warning: the fix is in the message text.",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "JavascriptNode_UnknownParam",
-    "hint": "Criar o parametro que a mensagem cita no no JavaScript ou corrigir o nome no codigo ($parameters.X).",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Create the parameter the message names in the JavaScript node or fix the name in the code ($parameters.X).",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "JavascriptNode_EmptyJs",
-    "hint": "Escrever codigo no no JavaScript da mensagem ou apaga-lo.",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Write code in the JavaScript node the message names or delete it.",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "JavascriptNode_SyntaxErrors",
-    "hint": "Corrigir a sintaxe do JavaScript no no da mensagem.",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Fix the JavaScript syntax in the node the message names.",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "LightweightExpression_UnknownObj",
-    "hint": "Corrigir a referencia ao objeto que a mensagem cita (apagado/renomeado) no elemento que ela nomeia.",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Fix the reference to the object the message quotes (deleted/renamed) in the element it names.",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "LightweightExpression_ResourceNotDeployed",
-    "hint": "Definir Deploy Action do Resource que a mensagem cita (Deploy to Target Directory) ou nao o referenciar.",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Set the Deploy Action of the Resource the message names (Deploy to Target Directory) or stop referencing it.",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "ESpaceConfiguration_SyntaxErrors",
-    "hint": "Corrigir o JSON de Extensibility Configurations do modulo.",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Fix the module's Extensibility Configurations JSON.",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "InvalidRecursiveScript",
-    "hint": "Quebrar a dependencia circular entre os Scripts que a mensagem lista.",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Break the circular dependency between the Scripts the message lists.",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "Script_SyntaxErrors",
-    "hint": "Corrigir a sintaxe do Script que a mensagem cita.",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Fix the syntax of the Script the message names.",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "SQLInjection",
-    "hint": "Desligar Expand Inline no parametro SQL (ou sanitizar com EncodeSql/BuildSafe_InClauseIntegerList).",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Turn off Expand Inline on the SQL parameter (or sanitize with EncodeSql/BuildSafe_InClauseIntegerList).",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "OpenRedirectNR",
-    "hint": "Validar/whitelist do URL antes do redirect (nao redirecionar para input de tela).",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Validate/whitelist the URL before the redirect (do not redirect to screen input).",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "ModelFeature_InDevelopmentFeature",
-    "hint": "Funcionalidade em desenvolvimento: aceitar limitacoes ou nao usar a funcionalidade que a mensagem cita.",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Feature in development: accept the limitations or do not use the feature the message names.",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "ModelFeature_TechnicalPreview",
-    "hint": "Technical Preview: aceitar limitacoes ou nao usar a funcionalidade que a mensagem cita.",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Technical Preview: accept the limitations or do not use the feature the message names.",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "ModelFeature_RemovedFeature",
-    "hint": "Remover o uso da funcionalidade que a mensagem cita (nao suportada nesta versao).",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Remove the use of the feature the message names (not supported in this version).",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "ModelFeature_RemovedFeature_ModelFeature_TraditionalWeb",
-    "hint": "Modulo Traditional Web nao suportado nesta versao (ODC): migrar/abrir no Service Studio 11.",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Traditional Web module not supported in this version (ODC): migrate it/open it in Service Studio 11.",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "RepeatedMetadata",
-    "hint": "Remover a entrada de metadata duplicada (MetadataName + ManagedBy).",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Remove the duplicate metadata entry (MetadataName + ManagedBy).",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "ModelFeature_TraditionalWeb_Removed",
-    "hint": "Modulo Traditional Web nao suportado nesta versao (ODC): migrar/abrir no Service Studio 11.",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Traditional Web module not supported in this version (ODC): migrate it/open it in Service Studio 11.",
+    "origin": "curated (message text + verifier code)"
   },
   {
     "id": "StaticEntityAmbiguousRecord",
-    "hint": "Renomear o Identifier do registo da Static Entity para diferir de outro nao so por maiusculas/acentos.",
-    "origin": "curada (texto da mensagem + codigo do verificador)"
+    "hint": "Rename the Identifier of the Static Entity record so it differs from another one by more than just case/accents.",
+    "origin": "curated (message text + verifier code)"
   }
 ]

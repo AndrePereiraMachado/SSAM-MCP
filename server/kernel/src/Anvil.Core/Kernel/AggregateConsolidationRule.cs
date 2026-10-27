@@ -50,13 +50,13 @@ internal sealed record AggregateShape(IObjectSignature Node, string Name, IReadO
 }
 
 /// <summary>
-/// AGGREGATES_MERGEABLE (decisao do dono, 2026-10-09): no mesmo fluxo de action ou na mesma tela/bloco (busca de dados),
-/// dois ou mais Aggregates cujas fontes sao entidades ligadas por um atributo de referencia (FK), ou a mesma entidade, e
-/// cujos resultados sao usados juntos (lidos por expressoes do mesmo fluxo, inclusive o filtro de um pelo outro, ou ligados
-/// na mesma arvore de widgets) sao um aviso HIGH (highWarnings, primeiro no recibo; A03: nunca bloqueia). O aviso nomeia os
-/// aggregates, a relacao (Entidade.Atributo -> Entidade) e sugere UM aggregate (fontes + join + filtros somados) como trecho
-/// de ops. A mesma entidade com filtros diferentes conta (um aggregate + filtro no cliente, ou um SQL); em telas diferentes
-/// nao (o grupo e o dono do aggregate). So os grupos com um aggregate que o job criou ou mudou sao lidos.
+/// AGGREGATES_MERGEABLE (owner's decision, 2026-10-09): in the same action flow or the same screen/block (data fetching),
+/// two or more Aggregates whose sources are entities linked by a reference attribute (FK), or the same entity, and whose
+/// results are used together (read by expressions of the same flow, including the filter of one by the other, or bound in
+/// the same widget tree) are a HIGH warning (highWarnings, first in the receipt; A03: it never blocks). The warning names the
+/// aggregates and the relation (Entity.Attribute -> Entity) as candidates for review. Related sources do not prove
+/// equivalence: locks, authorization, dependencies, paging and cardinality need a semantic analysis. It emits no
+/// replacement operations and removes no filters. Only the groups with an aggregate the job created or changed are read.
 /// </summary>
 public static class AggregateConsolidationRule
 {
@@ -156,68 +156,19 @@ public sealed partial class ModelSession
             var names = string.Join(", ", members.Select(m => m.Name));
             var touched = members.FirstOrDefault(Touched) ?? members[0];
             var op = OriginOp(touched.Node, ops);
-            var suggestion = sameEntity ? SameEntitySuggestion(members) : JoinSuggestion(members, links);
             Report("highWarnings", new JsonObject
             {
                 ["code"] = AggregateConsolidationRule.Code, ["severity"] = "high", ["op"] = op,
                 ["message"] = sameEntity
-                    ? $"{names} in '{ownerName}' read the same entity {members[0].Entities[0].Name} with different filters and are used together: one query would do"
-                    : $"{names} in '{ownerName}' read related entities ({string.Join("; ", relations)}) and are used together: one aggregate with a join would do",
-                ["fix"] = sameEntity
-                    ? "fetch once (one aggregate with the filters combined by `or`, or one SQL) and split it with ListFilter in the client; keep separate aggregates only in different screens"
-                    : "replace them with the single aggregate of `suggestion` (sources + join + the filters of each) and read its columns where each one was read",
+                    ? $"{names} in '{ownerName}' read the same entity {members[0].Entities[0].Name}; consolidation requires semantic review"
+                    : $"{names} in '{ownerName}' read related entities ({string.Join("; ", relations)}); consolidation requires semantic review",
+                ["decision"] = "requires-semantic-review",
+                ["fix"] = "Keep the queries unchanged unless equivalence is proved for authorization, transaction/lock boundaries, intervening writes and calls, dependent filters, ordering, independent pagination and counts, and join cardinality. Do not combine filters with OR, remove dependent filters, or replace paginated collections with a join based on this warning alone.",
                 ["owner"] = ownerName,
                 ["aggregates"] = new JsonArray(members.Select(m => (JsonNode)m.Name).ToArray()),
                 ["relations"] = new JsonArray(relations.Select(r => (JsonNode)r).ToArray()),
-                ["suggestion"] = suggestion,
             });
         }
     }
 
-    private static JsonObject JoinSuggestion(List<AggregateShape> members, List<(AggregateShape A, AggregateShape B, AggregateShape.Link? Link)> links)
-    {
-        // The main source is the parent side: an entity the references point to and that points to none of the others.
-        var related = links.Where(l => l.Link != null).Select(l => l.Link!).ToList();
-        var main = related.Select(l => l.Target).FirstOrDefault(t => related.All(l => l.Owner != t)) ?? members[0].Entities[0].Name;
-        var sources = new List<string>();
-        var joins = new JsonArray();
-        // Each link joins one source already in the aggregate (the main one first) to one that is not yet: repeat until none joins.
-        var pending = related.ToList();
-        for (var progress = true; progress && pending.Count > 0;)
-        {
-            progress = false;
-            foreach (var link in pending.ToList())
-            {
-                bool In(string entity) => entity == main || sources.Contains(entity);
-                if (In(link.Owner) && In(link.Target)) { pending.Remove(link); progress = true; continue; }
-                if (!In(link.Owner) && !In(link.Target)) continue;
-                var other = In(link.Owner) ? link.Target : link.Owner;
-                var left = other == link.Owner ? link.Target : link.Owner;
-                sources.Add(other);
-                joins.Add(new JsonObject { ["left"] = left, ["right"] = other, ["kind"] = "With or Without", ["condition"] = link.Condition });
-                pending.Remove(link); progress = true;
-            }
-        }
-        var names = members.Select(m => m.Name).ToList();
-        // A filter that reads another member's output is the join itself: it goes away.
-        var where = members.SelectMany(m => m.Filters.Where(f => !names.Any(n => !n.Equals(m.Name, StringComparison.OrdinalIgnoreCase)
-            && Regex.IsMatch(f, @"(?<![\w.])" + Regex.Escape(n) + @"\.", RegexOptions.IgnoreCase)))).Distinct().Select(f => (JsonNode)f).ToArray();
-        return new JsonObject
-        {
-            ["get"] = main, ["as"] = "Get" + main + string.Concat(sources.Select(s => "With" + s)),
-            ["sources"] = new JsonArray(sources.Select(s => (JsonNode)s).ToArray()), ["joins"] = joins, ["where"] = new JsonArray(where),
-        };
-    }
-
-    private static JsonObject SameEntitySuggestion(List<AggregateShape> members)
-    {
-        var entity = members[0].Entities[0].Name;
-        var filters = members.Select(m => m.Filters.Count == 0 ? "True" : string.Join(" and ", m.Filters.Select(f => "(" + f + ")"))).ToList();
-        return new JsonObject
-        {
-            ["get"] = entity, ["as"] = "Get" + entity + "s",
-            ["where"] = filters.Any(f => f == "True") ? new JsonArray() : new JsonArray((JsonNode)string.Join(" or ", filters.Select(f => "(" + f + ")"))),
-            ["split"] = new JsonArray(members.Select((m, i) => (JsonNode)$"{m.Name}: ListFilter(Get{entity}s.List, {filters[i]})").ToArray()),
-        };
-    }
 }

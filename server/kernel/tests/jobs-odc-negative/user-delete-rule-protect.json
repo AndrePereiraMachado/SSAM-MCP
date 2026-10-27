@@ -1,0 +1,17 @@
+{
+ "description": "ODC (L3c, scope phase): an attribute of the data text that references the system entity User with on delete Protect. ODC keeps only Ignore on a reference to the system or another app; the apply refused it after the build (ODC_DELETE_RULE_FORCED, the cold bench, Naval corpus: 36 such references). The scope phase refuses it before the first op, one problem for the text with one patch that writes every line Ignore. Without the references clause the kernel writes Ignore (ODC_DELETE_RULE_IGNORE). Runs in OdcJobTests.JobFailsWithTheTeachingMessageInTheOdcLane.",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectError": [
+  "[ODC_DELETE_RULE_FORCED]",
+  "line 3 WfCovHub.Owner (Protect)",
+  "ODC keeps only Ignore there"
+ ],
+ "ops": [
+  {
+   "op": "spec",
+   "data": {
+    "ddl": "create entity WfCovHub (\n  Id Long Integer identifier auto required,\n  Owner User Identifier required references User on delete Protect\n);\n"
+   }
+  }
+ ]
+}

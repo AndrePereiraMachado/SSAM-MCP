@@ -101,7 +101,10 @@
       }
     },
     {
-      "op": "logic", "allowForEach": { "why": "proof job written before the owner's rules judged the JSON form of the logic op (T1/T2, 2026-10-12); kept as the regression it already proves" },
+      "op": "logic",
+      "allowForEach": {
+        "why": "proof job written before the owner's rules judged the JSON form of the logic op (T1/T2, 2026-10-12); kept as the regression it already proves"
+      },
       "data": {
         "actions": [
           {
@@ -131,8 +134,7 @@
               {
                 "get": "ShowcaseGame",
                 "as": "ReadGames",
-                "start": "Offset",
-                "max": "Limit"
+                "max": "Offset + Limit"
               },
               {
                 "foreach": "ReadGames.List",
@@ -146,7 +148,9 @@
                       "Element": "ReadGames.List.Current.ShowcaseGame"
                     }
                   }
-                ]
+                ],
+                "start": "Offset",
+                "max": "Limit"
               },
               {
                 "assign": {

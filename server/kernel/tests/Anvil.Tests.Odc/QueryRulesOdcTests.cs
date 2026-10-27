@@ -36,4 +36,5 @@ public sealed class QueryRulesOdcTests
     [Fact] public void ALegacyLoopIsAHighWarningNotARefusal() => Run(QueryRulesScenarios.ALegacyLoopIsAHighWarningNotARefusal);
     [Fact] public void RelatedAggregatesUsedTogetherAreAHighWarning() => Run(QueryRulesScenarios.RelatedAggregatesUsedTogetherAreAHighWarning);
     [Fact] public void UnrelatedAggregatesAreNotAWarning() => Run(QueryRulesScenarios.UnrelatedAggregatesAreNotAWarning);
+    [Fact] public void ConsolidationRequiresSemanticReview() => Run(QueryRulesScenarios.ConsolidationNeverRewritesIndependentPagesOrInterveningReads);
 }

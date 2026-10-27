@@ -27,6 +27,7 @@ public sealed class QueryRulesTests
     [Fact] public void ALegacyLoopIsAHighWarningNotARefusal() => Run(QueryRulesScenarios.ALegacyLoopIsAHighWarningNotARefusal);
     [Fact] public void RelatedAggregatesUsedTogetherAreAHighWarning() => Run(QueryRulesScenarios.RelatedAggregatesUsedTogetherAreAHighWarning);
     [Fact] public void UnrelatedAggregatesAreNotAWarning() => Run(QueryRulesScenarios.UnrelatedAggregatesAreNotAWarning);
+    [Fact] public void ConsolidationRequiresSemanticReview() => Run(QueryRulesScenarios.ConsolidationNeverRewritesIndependentPagesOrInterveningReads);
 
     [Fact]
     public void TheEscapeKeyIsPartOfTheVerbContract()

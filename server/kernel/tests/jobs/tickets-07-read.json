@@ -793,7 +793,7 @@
    "op": "create",
    "parent": "$Ticket_Search",
    "type": "IAggregateNode",
-   "name": "SearchTickets",
+   "name": "CountTickets",
    "as": "$Ticket_Search_agg17"
   },
   {
@@ -906,13 +906,453 @@
    "op": "set",
    "target": "$Ticket_Search_agg17",
    "prop": "MaxRecords",
-   "value": "If(MaxRecords <= 0, 50, MaxRecords)"
+   "value": "1"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Search",
+   "type": "ISQLNode",
+   "name": "SearchTickets",
+   "as": "$Ticket_Search_sql17"
   },
   {
    "op": "set",
-   "target": "$Ticket_Search_agg17",
-   "prop": "StartIndex",
-   "value": "StartIndex"
+   "target": "$Ticket_Search_sql17",
+   "prop": "Statement",
+   "value": "SELECT {Ticket}.* FROM {Ticket} WHERE (@NoSearch = 1 OR {Ticket}.[Subject] LIKE @Pattern OR {Ticket}.[Number] LIKE @Pattern) AND (@NoStatus = 1 OR {Ticket}.[StatusId] = @StatusId) AND (@NoPriority = 1 OR {Ticket}.[PriorityId] = @PriorityId) AND (@NoTeam = 1 OR {Ticket}.[TeamId] = @TeamId) AND (@NoAssignee = 1 OR {Ticket}.[AssigneeId] = @AssigneeId) AND (@NoRequester = 1 OR {Ticket}.[RequesterId] = @RequesterId) AND (@NoCategory = 1 OR {Ticket}.[CategoryId] = @CategoryId) AND (@NoFrom = 1 OR {Ticket}.[CreatedOn] >= @FromDate) AND (@NoTo = 1 OR {Ticket}.[CreatedOn] <= @ToDate) AND (@SeesAll = 1 OR {Ticket}.[RequesterId] = @ViewerId) ORDER BY {Ticket}.[CreatedOn] DESC, {Ticket}.[Id] OFFSET @Skip ROWS FETCH NEXT @Take ROWS ONLY"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Search_sql17",
+   "prop": "MaxRecords",
+   "value": "If(MaxRecords <= 0, 50, MaxRecords)"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Search_sql17",
+   "type": "ISQLInputParameter",
+   "name": "NoSearch",
+   "as": "$Ticket_Search_sqlp0"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Search_sqlp0",
+   "prop": "DataType",
+   "value": "Integer"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Search_sql17",
+   "type": "ISQLInputParameter",
+   "name": "Pattern",
+   "as": "$Ticket_Search_sqlp1"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Search_sqlp1",
+   "prop": "DataType",
+   "value": "Text"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Search_sql17",
+   "type": "ISQLInputParameter",
+   "name": "NoStatus",
+   "as": "$Ticket_Search_sqlp2"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Search_sqlp2",
+   "prop": "DataType",
+   "value": "Integer"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Search_sql17",
+   "type": "ISQLInputParameter",
+   "name": "StatusId",
+   "as": "$Ticket_Search_sqlp3"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Search_sqlp3",
+   "prop": "DataType",
+   "value": "TicketStatus Identifier"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Search_sql17",
+   "type": "ISQLInputParameter",
+   "name": "NoPriority",
+   "as": "$Ticket_Search_sqlp4"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Search_sqlp4",
+   "prop": "DataType",
+   "value": "Integer"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Search_sql17",
+   "type": "ISQLInputParameter",
+   "name": "PriorityId",
+   "as": "$Ticket_Search_sqlp5"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Search_sqlp5",
+   "prop": "DataType",
+   "value": "TicketPriority Identifier"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Search_sql17",
+   "type": "ISQLInputParameter",
+   "name": "NoTeam",
+   "as": "$Ticket_Search_sqlp6"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Search_sqlp6",
+   "prop": "DataType",
+   "value": "Integer"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Search_sql17",
+   "type": "ISQLInputParameter",
+   "name": "TeamId",
+   "as": "$Ticket_Search_sqlp7"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Search_sqlp7",
+   "prop": "DataType",
+   "value": "Team Identifier"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Search_sql17",
+   "type": "ISQLInputParameter",
+   "name": "NoAssignee",
+   "as": "$Ticket_Search_sqlp8"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Search_sqlp8",
+   "prop": "DataType",
+   "value": "Integer"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Search_sql17",
+   "type": "ISQLInputParameter",
+   "name": "AssigneeId",
+   "as": "$Ticket_Search_sqlp9"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Search_sqlp9",
+   "prop": "DataType",
+   "value": "User Identifier"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Search_sql17",
+   "type": "ISQLInputParameter",
+   "name": "NoRequester",
+   "as": "$Ticket_Search_sqlp10"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Search_sqlp10",
+   "prop": "DataType",
+   "value": "Integer"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Search_sql17",
+   "type": "ISQLInputParameter",
+   "name": "RequesterId",
+   "as": "$Ticket_Search_sqlp11"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Search_sqlp11",
+   "prop": "DataType",
+   "value": "User Identifier"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Search_sql17",
+   "type": "ISQLInputParameter",
+   "name": "NoCategory",
+   "as": "$Ticket_Search_sqlp12"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Search_sqlp12",
+   "prop": "DataType",
+   "value": "Integer"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Search_sql17",
+   "type": "ISQLInputParameter",
+   "name": "CategoryId",
+   "as": "$Ticket_Search_sqlp13"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Search_sqlp13",
+   "prop": "DataType",
+   "value": "Category Identifier"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Search_sql17",
+   "type": "ISQLInputParameter",
+   "name": "NoFrom",
+   "as": "$Ticket_Search_sqlp14"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Search_sqlp14",
+   "prop": "DataType",
+   "value": "Integer"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Search_sql17",
+   "type": "ISQLInputParameter",
+   "name": "FromDate",
+   "as": "$Ticket_Search_sqlp15"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Search_sqlp15",
+   "prop": "DataType",
+   "value": "Date Time"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Search_sql17",
+   "type": "ISQLInputParameter",
+   "name": "NoTo",
+   "as": "$Ticket_Search_sqlp16"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Search_sqlp16",
+   "prop": "DataType",
+   "value": "Integer"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Search_sql17",
+   "type": "ISQLInputParameter",
+   "name": "ToDate",
+   "as": "$Ticket_Search_sqlp17"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Search_sqlp17",
+   "prop": "DataType",
+   "value": "Date Time"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Search_sql17",
+   "type": "ISQLInputParameter",
+   "name": "SeesAll",
+   "as": "$Ticket_Search_sqlp18"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Search_sqlp18",
+   "prop": "DataType",
+   "value": "Integer"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Search_sql17",
+   "type": "ISQLInputParameter",
+   "name": "ViewerId",
+   "as": "$Ticket_Search_sqlp19"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Search_sqlp19",
+   "prop": "DataType",
+   "value": "User Identifier"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Search_sql17",
+   "type": "ISQLInputParameter",
+   "name": "Skip",
+   "as": "$Ticket_Search_sqlp20"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Search_sqlp20",
+   "prop": "DataType",
+   "value": "Integer"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Search_sql17",
+   "type": "ISQLInputParameter",
+   "name": "Take",
+   "as": "$Ticket_Search_sqlp21"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Search_sqlp21",
+   "prop": "DataType",
+   "value": "Integer"
+  },
+  {
+   "op": "create",
+   "parent": "$Ticket_Search_sql17",
+   "type": "ISQLOutput",
+   "name": "List",
+   "args": {
+    "entityOrStructure": "Ticket"
+   }
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Search_sql17/arg:NoSearch",
+   "prop": "Value",
+   "value": "If(Search = \"\", 1, 0)"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Search_sql17/arg:Pattern",
+   "prop": "Value",
+   "value": "\"%\" + Search + \"%\""
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Search_sql17/arg:NoStatus",
+   "prop": "Value",
+   "value": "If(StatusId = NullIdentifier(), 1, 0)"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Search_sql17/arg:StatusId",
+   "prop": "Value",
+   "value": "StatusId"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Search_sql17/arg:NoPriority",
+   "prop": "Value",
+   "value": "If(PriorityId = NullIdentifier(), 1, 0)"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Search_sql17/arg:PriorityId",
+   "prop": "Value",
+   "value": "PriorityId"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Search_sql17/arg:NoTeam",
+   "prop": "Value",
+   "value": "If(TeamId = NullIdentifier(), 1, 0)"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Search_sql17/arg:TeamId",
+   "prop": "Value",
+   "value": "TeamId"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Search_sql17/arg:NoAssignee",
+   "prop": "Value",
+   "value": "If(AssigneeId = NullIdentifier(), 1, 0)"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Search_sql17/arg:AssigneeId",
+   "prop": "Value",
+   "value": "AssigneeId"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Search_sql17/arg:NoRequester",
+   "prop": "Value",
+   "value": "If(RequesterId = NullIdentifier(), 1, 0)"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Search_sql17/arg:RequesterId",
+   "prop": "Value",
+   "value": "RequesterId"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Search_sql17/arg:NoCategory",
+   "prop": "Value",
+   "value": "If(CategoryId = NullIdentifier(), 1, 0)"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Search_sql17/arg:CategoryId",
+   "prop": "Value",
+   "value": "CategoryId"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Search_sql17/arg:NoFrom",
+   "prop": "Value",
+   "value": "If(FromDate = NullDate(), 1, 0)"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Search_sql17/arg:FromDate",
+   "prop": "Value",
+   "value": "FromDate"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Search_sql17/arg:NoTo",
+   "prop": "Value",
+   "value": "If(ToDate = NullDate(), 1, 0)"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Search_sql17/arg:ToDate",
+   "prop": "Value",
+   "value": "ToDate"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Search_sql17/arg:SeesAll",
+   "prop": "Value",
+   "value": "If(Permissions.IsAgent or Permissions.IsManager, 1, 0)"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Search_sql17/arg:ViewerId",
+   "prop": "Value",
+   "value": "ViewerId"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Search_sql17/arg:Skip",
+   "prop": "Value",
+   "value": "Max(0, StartIndex)"
+  },
+  {
+   "op": "set",
+   "target": "$Ticket_Search_sql17/arg:Take",
+   "prop": "Value",
+   "value": "If(MaxRecords <= 0, 50, MaxRecords)"
   },
   {
    "op": "create",
@@ -961,7 +1401,7 @@
    "op": "set",
    "target": "$Ticket_Search_a21",
    "prop": "Value",
-   "value": "SearchTickets.Count"
+   "value": "CountTickets.Count"
   },
   {
    "op": "create",
@@ -982,6 +1422,11 @@
   {
    "op": "link",
    "from": "$Ticket_Search_agg17",
+   "to": "$Ticket_Search_sql17"
+  },
+  {
+   "op": "link",
+   "from": "$Ticket_Search_sql17",
    "to": "$Ticket_Search_asg19"
   },
   {
@@ -1144,7 +1589,9 @@
    "type": "IForEachNode",
    "name": "EachComment",
    "as": "$Ticket_Timeline_fe9",
-   "allowForEach": {"why": "a proof job written before the owner rule reached raw ops: the loop maps the rows into a list (T2), kept as written and listed"}
+   "allowForEach": {
+    "why": "a proof job written before the owner rule reached raw ops: the loop maps the rows into a list (T2), kept as written and listed"
+   }
   },
   {
    "op": "set",
@@ -1333,7 +1780,9 @@
    "type": "IForEachNode",
    "name": "EachEvent",
    "as": "$Ticket_Timeline_fe19",
-   "allowForEach": {"why": "a proof job written before the owner rule reached raw ops: the loop maps the rows into a list (T2), kept as written and listed"}
+   "allowForEach": {
+    "why": "a proof job written before the owner rule reached raw ops: the loop maps the rows into a list (T2), kept as written and listed"
+   }
   },
   {
    "op": "set",

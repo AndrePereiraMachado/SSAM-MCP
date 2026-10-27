@@ -24,6 +24,14 @@ test('the reference families are the kernel\'s, interface and aliases (NativeRef
   assert.deepEqual(FAMILIES.map(f => ({ kind: f.kind, types: f.types })), declared);
 });
 
+test('the facade and frozen ODC envelope agree on every supported kind', () => {
+  const source = fs.readFileSync(path.join(path.dirname(kinds), 'NativeReferenceSnapshot.cs'), 'utf8');
+  const array = source.match(/OdcPublicKinds\s*=\s*\[([^\]]+)\]/)?.[1];
+  assert.ok(array, 'the native ODC kind boundary was read');
+  const declared = [...array.matchAll(/"([^"]+)"|\bOdcBlockKind\b/g)].map(m => m[1] ?? 'block');
+  assert.deepEqual(ODC_PUBLIC_KINDS, declared);
+});
+
 test('a type without its Model API "I" is the family of the interface with it (NativeReferenceKinds.ForType)', () => {
   assert.equal(familyOf('ServerAction').kind, 'action');
   assert.equal(familyOf('IServerAction').kind, 'action');
@@ -43,7 +51,7 @@ test('the elements a job asks of one producer, with their pointers (reference op
 
 // Round 2 (review C:\t\revisoes\unpublished-lib, A4), changed expectation (declared): another letter case is another element,
 // as NativeReferenceSnapshot.Select compares ordinally (the first round matched it ignoring case). A1: a kind the ODC
-// signature cannot hold (a service action, a web block) is never in it.
+// signature cannot hold (a web block) is never in it. Service actions have their own family.
 test('a published signature has an element exactly as the kernel selects it: the ODC kind, then name, path or @key, ordinal', () => {
   const elements = [{ Kind: 'action', Name: 'GetQuotes', Key: 'k1' }, { Kind: 'block', Name: 'Card', Path: 'Common/Card', Key: 'k2' }, { Kind: 'structure', Name: 'Quote', Key: 'k3' }];
   assert.ok(signatureHas(elements, parseElement('ServerAction:GetQuotes')));
@@ -54,16 +62,24 @@ test('a published signature has an element exactly as the kernel selects it: the
   assert.ok(signatureHas(elements, parseElement('Structure:@k3')));
   assert.ok(!signatureHas(elements, parseElement('ServerAction:@k3')), 'a key of another kind is another element');
   assert.ok(!signatureHas(elements, parseElement('ClientAction:GetQuotes')), 'another kind is another element');
-  assert.ok(!signatureHas(elements, parseElement('ServiceAction:GetQuotes')), 'a kind the ODC signature cannot hold');
+  assert.ok(!signatureHas(elements, parseElement('ServiceAction:GetQuotes')), 'a server action never matches the service-action family');
   assert.ok(!signatureHas(elements, parseElement('ServerAction:CreateApplication')));
 });
 
-test('round 2 (A1): the ODC published signature holds five kinds (an External Library: two); the open model counts only those', () => {
-  assert.deepEqual(ODC_PUBLIC_KINDS, ['action', 'entity', 'structure', 'block', 'client-action']);
+test('ODC signatures include service actions; External Libraries retain their two supported kinds', () => {
+  assert.deepEqual(ODC_PUBLIC_KINDS, ['action', 'entity', 'structure', 'block', 'client-action', 'service-action']);
   assert.ok(odcExportable(parseElement('ServerAction:A')) && odcExportable(parseElement('IMobileBlock:B')) && odcExportable(parseElement('ClientAction:C')));
-  assert.ok(!odcExportable(parseElement('ServiceAction:A')) && !odcExportable(parseElement('Role:R')) && !odcExportable(parseElement('IWebBlock:B')) && !odcExportable(parseElement('Action:X')));
+  assert.ok(odcExportable(parseElement('ServiceAction:A')) && !odcExportable(parseElement('Role:R')) && !odcExportable(parseElement('IWebBlock:B')) && !odcExportable(parseElement('Action:X')));
   assert.ok(odcExportable(parseElement('Structure:S'), 'ExternalLibrary') && !odcExportable(parseElement('ClientAction:C'), 'ExternalLibrary'));
-  assert.ok(odcExportableSurface({ kind: 'ServerAction' }) && odcExportableSurface({ kind: 'WebBlock' }) && !odcExportableSurface({ kind: 'ServiceAction' }) && !odcExportableSurface({ kind: 'Role' }));
+  assert.ok(!odcExportable(parseElement('ServiceAction:A'), 'ExternalLibrary'));
+  assert.ok(odcExportableSurface({ kind: 'ServerAction' }) && odcExportableSurface({ kind: 'WebBlock' }) && odcExportableSurface({ kind: 'ServiceAction' }) && !odcExportableSurface({ kind: 'Role' }));
+  const signature = [{ Kind: 'service-action', Name: 'Echo', Key: 's1' }];
+  for (const type of ['ServiceAction', 'IServiceAction', 'IServiceActionSignature']) {
+    assert.ok(signatureHas(signature, parseElement(type + ':Echo')));
+    assert.ok(signatureHas(signature, parseElement(type + ':@s1')));
+  }
+  assert.ok(!signatureHas(signature, parseElement('ServerAction:Echo')));
+  assert.ok(!signatureHas(signature, parseElement('ServiceAction:echo')));
   assert.equal(parseElement(' ServerAction:A').family, null, 'the type is read untrimmed, as the kernel reads it');
 });
 

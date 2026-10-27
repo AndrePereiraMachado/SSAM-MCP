@@ -12,7 +12,7 @@ namespace Anvil.Reading;
 public sealed class ModuleIndex
 {
     public const string Schema = "ssam-module-index/1";
-    public const int Extractor = 1;
+    public const int Extractor = 2;
     public const string IdentityScope = "Keys belong to this snapshot. Resolve again after a new capture or save/reload; paths can be ambiguous.";
     public static readonly string[] Roles = ["module", "flow", "screen", "block", "action", "actionRef", "aggregate", "entity",
         "staticEntity", "structure", "attribute", "parameter", "variable", "widget", "event", "flowNode", "expression", "reference", "other"];
@@ -139,7 +139,7 @@ public sealed class ModuleIndex
             : Is("Parameter") || Ends("Parameter") ? "parameter"
             : Is("LocalVariable", "ClientVariable") || kind == "SiteProperty" ? "variable"
             : Is("Widget", "MobileWidget", "WebWidget") ? "widget"
-            : Is("Event") || Ends("Event") || kind == "EventHandler" ? "event"
+            : Is("Event") || Ends("Event") || kind is "EventHandler" or "OnNotify" or "OnChange" or "OnClick" or "LinkOnClick" ? "event"
             : Is("FlowNode", "ActionNode") || Ends("Node") ? "flowNode"
             : Is("Expression") ? "expression"
             : "other";
@@ -348,7 +348,7 @@ public sealed class ModuleIndex
 }
 
 // One folder of indexes per lane: <root>\v1\<lane>\<sha256>.<adapter>.json, and beside each the module digest
-// <sha256>.<adapter>.digest.json (ModuleDigest: valid for the same schema, extractor, lane, adapter and sha256), the data
+// <sha256>.<adapter>.digest.e<Extractor>.json (ModuleDigest: valid for the same schema, extractor, lane, adapter and sha256), the data
 // text <sha256>.<adapter>.ddl.json (DataDdl, the same rule) and, when asked for, the rich index
 // <sha256>.<adapter>.rich.json (ModuleRichIndex, the same rule). A cache: written atomically, trimmed to the budget by
 // oldest write (indexes, digests, data texts and rich indexes together), and any file that fails validation is a miss.
@@ -395,7 +395,12 @@ public sealed class ModuleIndexStore(string root, string lane, string adapter, l
         public void Dispose() { if (done) return; done = true; scoped.Value = previous; }
     }
 
-    public string PathOf(string sourceSha256) => Path.Combine(root, "v1", lane, sourceSha256.ToLowerInvariant() + "." + adapter + ".json");
+    // The folder of this store's files: the store version and the extractors of the index and of the flow reading, so two
+    // releases that share one SSAM_MODULE_INDEX_ROOT never read or overwrite each other's files (module-map.mjs
+    // STORE_GENERATION is the same text). A release with other extractors starts its own folder.
+    public static readonly string Generation = "v1-i" + ModuleIndex.Extractor + "f" + ModuleFlow.Extractor;
+
+    public string PathOf(string sourceSha256) => Path.Combine(root, Generation, lane, sourceSha256.ToLowerInvariant() + "." + adapter + ".json");
 
     public ModuleIndex? Load(string sourceSha256)
     {
@@ -413,7 +418,10 @@ public sealed class ModuleIndexStore(string root, string lane, string adapter, l
         return file;
     }
 
-    public string DigestPathOf(string sourceSha256) => Path.Combine(root, "v1", lane, sourceSha256.ToLowerInvariant() + "." + adapter + ".digest.json");
+    // T12: the extractor is in the name, so two releases of the digest never overwrite each other's file (a hosted server
+    // serves several releases over one store).
+    public string DigestPathOf(string sourceSha256) => Path.Combine(root, Generation, lane, sourceSha256.ToLowerInvariant() + "." + adapter + DigestSuffix);
+    public static string DigestSuffix => ".digest.e" + ModuleDigest.Extractor + ".json";
 
     public ModuleDigest? LoadDigest(string sourceSha256)
     {
@@ -432,7 +440,7 @@ public sealed class ModuleIndexStore(string root, string lane, string adapter, l
     }
 
     // The rich index (ModuleRichIndex, built only on request) beside them: <sha256>.<adapter>.rich.json.
-    public string RichPathOf(string sourceSha256) => Path.Combine(root, "v1", lane, sourceSha256.ToLowerInvariant() + "." + adapter + ".rich.json");
+    public string RichPathOf(string sourceSha256) => Path.Combine(root, Generation, lane, sourceSha256.ToLowerInvariant() + "." + adapter + ".rich.json");
 
     public ModuleRichIndex? LoadRich(string sourceSha256)
     {
@@ -453,7 +461,7 @@ public sealed class ModuleIndexStore(string root, string lane, string adapter, l
     // The key table of one ssam-html/1 reading (ScreenHtml): k -> ObjectKey of the document with that htmlSha256, kept with
     // the capture's sha256 so an edit based on {capture, html} finds its keys: <sha256>.<adapter>.html-<htmlSha256>.json.
     public string HtmlKeysPathOf(string sourceSha256, string htmlSha256) =>
-        Path.Combine(root, "v1", lane, sourceSha256.ToLowerInvariant() + "." + adapter + ".html-" + htmlSha256.ToLowerInvariant() + ".json");
+        Path.Combine(root, Generation, lane, sourceSha256.ToLowerInvariant() + "." + adapter + ".html-" + htmlSha256.ToLowerInvariant() + ".json");
 
     public string SaveHtmlKeys(string sourceSha256, ScreenHtmlDocument document)
     {
@@ -471,7 +479,7 @@ public sealed class ModuleIndexStore(string root, string lane, string adapter, l
     }
 
     // The data text (DataDdl, ssam-ddl/1) beside them: <sha256>.<adapter>.ddl.json, the same rule.
-    public string DdlPathOf(string sourceSha256) => Path.Combine(root, "v1", lane, sourceSha256.ToLowerInvariant() + "." + adapter + ".ddl.json");
+    public string DdlPathOf(string sourceSha256) => Path.Combine(root, Generation, lane, sourceSha256.ToLowerInvariant() + "." + adapter + ".ddl.json");
 
     public DataDdl? LoadDdl(string sourceSha256)
     {
@@ -490,7 +498,7 @@ public sealed class ModuleIndexStore(string root, string lane, string adapter, l
     }
 
     // The flow reading (ModuleFlow, ssam-flow/1) beside them: <sha256>.<adapter>.flow.json.
-    public string FlowPathOf(string sourceSha256) => Path.Combine(root, "v1", lane, sourceSha256.ToLowerInvariant() + "." + adapter + ".flow.json");
+    public string FlowPathOf(string sourceSha256) => Path.Combine(root, Generation, lane, sourceSha256.ToLowerInvariant() + "." + adapter + ".flow.json");
 
     public ModuleFlow? LoadFlow(string sourceSha256)
     {
@@ -512,7 +520,7 @@ public sealed class ModuleIndexStore(string root, string lane, string adapter, l
     // flow serves the action (the facade writes the same file): <sha256>.<adapter>.flow-<textSha>.json. An edit of that read
     // (basedOn = its textSha) that arrives after the action changed is merged three ways with it (FlowMerge).
     public string FlowReadingPathOf(string sourceSha256, string textSha) =>
-        Path.Combine(root, "v1", lane, sourceSha256.ToLowerInvariant() + "." + adapter + ".flow-" + textSha.ToLowerInvariant() + ".json");
+        Path.Combine(root, Generation, lane, sourceSha256.ToLowerInvariant() + "." + adapter + ".flow-" + textSha.ToLowerInvariant() + ".json");
 
     public string SaveFlowReading(FlowReading reading)
     {
@@ -529,7 +537,7 @@ public sealed class ModuleIndexStore(string root, string lane, string adapter, l
     {
         if (textSha.Length != 16 || !textSha.All(Uri.IsHexDigit)) return null;
         if (capture != null && (capture.Length != 64 || !capture.All(Uri.IsHexDigit))) return null;
-        var folder = Path.Combine(root, "v1", lane);
+        var folder = Path.Combine(root, Generation, lane);
         try {
             if (!Directory.Exists(folder)) return null;
             foreach (var file in new DirectoryInfo(folder).GetFiles((capture?.ToLowerInvariant() ?? "*") + "." + adapter + ".flow-" + textSha.ToLowerInvariant() + ".json").OrderByDescending(f => f.LastWriteTimeUtc))

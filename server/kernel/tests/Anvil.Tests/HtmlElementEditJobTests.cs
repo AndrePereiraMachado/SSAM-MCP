@@ -321,7 +321,7 @@ public class HtmlElementEditJobTests(ITestOutputHelper output)
         host.ReadModel(basePath, "/", new ReadingOptions(Max: 1), own.Store);
         var index = own.Store.PathOf(sha);
         Assert.True(File.Exists(index), index);
-        Assert.False(File.Exists(Path.Combine(Path.GetDirectoryName(index)!, sha + ".kernel.digest.json")));
+        Assert.False(File.Exists(Path.Combine(Path.GetDirectoryName(index)!, sha + ".kernel" + ModuleIndexStore.DigestSuffix)));
         JsonObject Check(JsonObject job, string name)
         {
             var file = Path.Combine(host.WorkDirectory, name + ".json"); File.WriteAllText(file, job.ToJsonString());

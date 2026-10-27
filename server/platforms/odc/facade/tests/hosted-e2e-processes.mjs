@@ -871,8 +871,8 @@ const stdio = await ssamModule.createSsamServer({ ...ssamModule.servedLanes(), p
     ['studio_deliver', { feature: 'prototype', module: ODC_MODULE.name, job: { ops: [PROTOTYPE] }, owners: ['e2e'], changes: ['The prototype op over the hosted path'] }],
     ['o11_deliver', { module: O11_MODULE.name, job: { ops: [PROTOTYPE] }, authorize: 'pode entregar no Headless_CS' }]])
     prototypes[name] = sc(await call(clientA, name, args, 120000));
-  check('24th (D2): the prototype op is refused at the gate in the four job tools (HOSTED_UNAVAILABLE, cause PROTOTYPE_SOURCE_LOCAL, not-sent), before any capture',
-    Object.values(prototypes).every(value => value?.code === 'HOSTED_UNAVAILABLE' && value.cause === 'PROTOTYPE_SOURCE_LOCAL' && value.outcome === 'not-sent')
+  check('24th (D2): the prototype op is refused at the gate in the four job tools (HOSTED_UNAVAILABLE, cause PROTOTYPE_IMPORT_DISABLED, not-sent), before any capture',
+    Object.values(prototypes).every(value => value?.code === 'HOSTED_UNAVAILABLE' && value.cause === 'PROTOTYPE_IMPORT_DISABLED' && value.outcome === 'not-sent')
       && odcLines(A).length === odcSeen && o11Count() === seen,
     Object.fromEntries(Object.entries(prototypes).map(([name, value]) => [name, { code: value?.code ?? null, cause: value?.cause ?? null, outcome: value?.outcome ?? null }])));
 
@@ -891,7 +891,7 @@ const stdio = await ssamModule.createSsamServer({ ...ssamModule.servedLanes(), p
     ['o11_deliver', { module: O11_MODULE.name, job: 'ws:inbox/proto-main.json', authorize: 'pode entregar no Headless_CS' }]])
     composites[name] = sc(await call(clientA, name, args, 120000));
   check('24th (D2): a composite job whose sub-part carries the prototype op is refused at the gate too, before any capture; the server file its data.capture named was never read',
-    Object.values(composites).every(value => value?.code === 'HOSTED_UNAVAILABLE' && value.cause === 'PROTOTYPE_SOURCE_LOCAL' && value.outcome === 'not-sent')
+    Object.values(composites).every(value => value?.code === 'HOSTED_UNAVAILABLE' && value.cause === 'PROTOTYPE_IMPORT_DISABLED' && value.outcome === 'not-sent')
       && odcLines(A).length === odcSeen && o11Count() === seen && shaFile(outsideCapture) === tokensBeforeComposite,
     Object.fromEntries(Object.entries(composites).map(([name, value]) => [name, { code: value?.code ?? null, cause: value?.cause ?? null, outcome: value?.outcome ?? null }])));
 

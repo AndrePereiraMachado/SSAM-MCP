@@ -1,0 +1,3448 @@
+/// 01 Abre centro com teto financeiro e capacidade física validados.
+server action HxEstablishHub public
+  in Name: Text
+  in Budget: Decimal
+  in Capacity: Decimal
+  out Id: HxHub Identifier
+  local H: HxHub
+  local EmptyH: HxHub
+  local J: HxJournal
+  local EmptyJ: HxJournal
+  if not (GetUserId() <> NullIdentifier() and Length(Trim(Name)) >= 3):
+    raise HxRejected("Identidade ou nome inválido")
+  if not (Budget >= 0 and Capacity > 0):
+    raise HxRejected("Limites inválidos")
+  assign H = EmptyH
+  assign
+    H.Owner = GetUserId()
+    H.Name = Trim(Name)
+    H.Budget = Budget
+    H.Capacity = Capacity
+    H.Active = True
+    H.Version = 1
+  CreateH = CreateHxHub(Source=H)
+  assign H.Id = CreateH.Id
+  assign J = EmptyJ
+  assign
+    J.HubId = H.Id
+    J.Category = "Abertura"
+    J.Amount = Budget
+    J.At = CurrDateTime()
+    J.Actor = GetUserId()
+  CreateJ = CreateHxJournal(Source=J)
+  assign J.Id = CreateJ.Id
+  assign
+    Id = H.Id
+  end
+
+/// 02 Redimensiona teto sem invalidar ocupação e compromissos existentes.
+server action HxResizeHub public
+  in HubId: HxHub Identifier
+  in Version: Integer
+  in Budget: Decimal
+  in Capacity: Decimal
+  local H: HxHub
+  local J: HxJournal
+  local EmptyJ: HxJournal
+  local BeforeH: HxHub
+  LoadH = GetHxHubForUpdate(Id=HubId)
+  assign H = LoadH.Record.HxHub
+  if not (H.Owner=GetUserId() and GetUserId()<>NullIdentifier()):
+    raise HxRejected("Acesso negado")
+  if not (H.Version=Version and H.Active):
+    raise HxRejected("Estado desatualizado")
+  if not (Capacity>=H.Used and Budget>=H.Committed+H.Spent):
+    raise HxRejected("Limite abaixo do uso")
+  assign J = EmptyJ
+  assign
+    J.HubId = H.Id
+    J.Category = "Redimensionamento"
+    J.Amount = Budget-H.Budget
+    J.At = CurrDateTime()
+    J.Actor = GetUserId()
+  CreateJ = CreateHxJournal(Source=J)
+  assign J.Id = CreateJ.Id
+  assign BeforeH = H
+  assign
+    H.Budget = Budget
+    H.Capacity = Capacity
+    H.Version = BeforeH.Version+1
+  SaveH = UpdateHxHub(Source=H)
+  end
+
+/// 03 Recebe lote com validade e capacidade; código único impede duplicidade.
+server action HxReceiveLot public
+  in HubId: HxHub Identifier
+  in Code: Text
+  in Product: Text
+  in Quantity: Decimal
+  in Expiry: Date Time
+  in Low: Decimal
+  in High: Decimal
+  out Id: HxLot Identifier
+  local H: HxHub
+  local L: HxLot
+  local EmptyL: HxLot
+  local BeforeH: HxHub
+  local J: HxJournal
+  local EmptyJ: HxJournal
+  LoadH = GetHxHubForUpdate(Id=HubId)
+  assign H = LoadH.Record.HxHub
+  if not (H.Owner=GetUserId() and GetUserId()<>NullIdentifier() and H.Active):
+    raise HxRejected("Acesso negado")
+  if not (Quantity>0 and H.Used+Quantity<=H.Capacity and Expiry>CurrDateTime() and Low<High):
+    raise HxRejected("Lote inviável")
+  if not (Length(Trim(Code))>0 and Length(Trim(Product))>0):
+    raise HxRejected("Identificação vazia")
+  assign L = EmptyL
+  assign
+    L.HubId = H.Id
+    L.Code = Trim(Code)
+    L.Product = Trim(Product)
+    L.Quantity = Quantity
+    L.Expiry = Expiry
+    L.MinTemp = Low
+    L.MaxTemp = High
+    L.State = 1
+    L.Version = 1
+  CreateL = CreateHxLot(Source=L)
+  assign L.Id = CreateL.Id
+  assign BeforeH = H
+  assign
+    H.Used = BeforeH.Used+Quantity
+    H.Version = BeforeH.Version+1
+  SaveH = UpdateHxHub(Source=H)
+  assign J = EmptyJ
+  assign
+    J.HubId = H.Id
+    J.Category = "Recebimento"
+    J.RefId = L.Id
+    J.Amount = Quantity
+    J.At = CurrDateTime()
+    J.Actor = GetUserId()
+  CreateJ = CreateHxJournal(Source=J)
+  assign J.Id = CreateJ.Id
+  assign
+    Id = L.Id
+  end
+
+/// 04 Corrige contagem sem consumir estoque reservado e registra diferença.
+server action HxRecountLot public
+  in HubId: HxHub Identifier
+  in LotId: HxLot Identifier
+  in Version: Integer
+  in Counted: Decimal
+  in Reason: Text
+  local H: HxHub
+  local L: HxLot
+  local BeforeH: HxHub
+  local J: HxJournal
+  local EmptyJ: HxJournal
+  local BeforeL: HxLot
+  LoadH = GetHxHubForUpdate(Id=HubId)
+  assign H = LoadH.Record.HxHub
+  if not (H.Owner=GetUserId() and GetUserId()<>NullIdentifier()):
+    raise HxRejected("Acesso negado")
+  LoadL = GetHxLotForUpdate(Id=LotId)
+  assign L = LoadL.Record.HxLot
+  if not (L.HubId=H.Id and L.Version=Version and L.State<>3):
+    raise HxRejected("Lote inválido")
+  if not (Counted>=L.Reserved and H.Used+Counted-L.Quantity<=H.Capacity and Length(Trim(Reason))>=10):
+    raise HxRejected("Contagem inconsistente")
+  assign BeforeH = H
+  assign
+    H.Used = BeforeH.Used+Counted-L.Quantity
+    H.Version = BeforeH.Version+1
+  SaveH = UpdateHxHub(Source=H)
+  assign J = EmptyJ
+  assign
+    J.HubId = H.Id
+    J.Category = "Contagem"
+    J.RefId = L.Id
+    J.Amount = Counted-L.Quantity
+    J.Note = Reason
+    J.At = CurrDateTime()
+    J.Actor = GetUserId()
+  CreateJ = CreateHxJournal(Source=J)
+  assign J.Id = CreateJ.Id
+  assign BeforeL = L
+  assign
+    L.Quantity = Counted
+    L.Version = BeforeL.Version+1
+  SaveL = UpdateHxLot(Source=L)
+  end
+
+/// 05 Segrega estoque livre em novo lote sem alterar ocupação total.
+server action HxSplitLot public
+  in HubId: HxHub Identifier
+  in LotId: HxLot Identifier
+  in Code: Text
+  in Quantity: Decimal
+  out NewLotId: HxLot Identifier
+  local H: HxHub
+  local L: HxLot
+  local N: HxLot
+  local EmptyN: HxLot
+  local BeforeL: HxLot
+  local J: HxJournal
+  local EmptyJ: HxJournal
+  LoadH = GetHxHubForUpdate(Id=HubId)
+  assign H = LoadH.Record.HxHub
+  if not (H.Owner=GetUserId() and GetUserId()<>NullIdentifier()):
+    raise HxRejected("Acesso negado")
+  LoadL = GetHxLotForUpdate(Id=LotId)
+  assign L = LoadL.Record.HxLot
+  if not (L.HubId=H.Id and L.State=1 and Quantity>0 and Quantity<=L.Quantity-L.Reserved and Length(Trim(Code))>0):
+    raise HxRejected("Segregação inválida")
+  assign N = EmptyN
+  assign
+    N.HubId = H.Id
+    N.Code = Trim(Code)
+    N.Product = L.Product
+    N.Quantity = Quantity
+    N.Expiry = L.Expiry
+    N.MinTemp = L.MinTemp
+    N.MaxTemp = L.MaxTemp
+    N.State = 1
+    N.Version = 1
+  CreateN = CreateHxLot(Source=N)
+  assign N.Id = CreateN.Id
+  assign BeforeL = L
+  assign
+    L.Quantity = BeforeL.Quantity-Quantity
+    L.Version = BeforeL.Version+1
+  SaveL = UpdateHxLot(Source=L)
+  assign J = EmptyJ
+  assign
+    J.HubId = H.Id
+    J.Category = "Segregação"
+    J.RefId = L.Id
+    J.Amount = Quantity
+    J.Note = Code
+    J.At = CurrDateTime()
+    J.Actor = GetUserId()
+  CreateJ = CreateHxJournal(Source=J)
+  assign J.Id = CreateJ.Id
+  assign
+    NewLotId = N.Id
+  end
+
+/// 06 Funde apenas lotes compatíveis; conserva a validade mais restritiva.
+server action HxMergeLots public
+  in HubId: HxHub Identifier
+  in SourceId: HxLot Identifier
+  in TargetId: HxLot Identifier
+  local H: HxHub
+  local S: HxLot
+  local T: HxLot
+  local BeforeT: HxLot
+  local J: HxJournal
+  local EmptyJ: HxJournal
+  local BeforeS: HxLot
+  LoadH = GetHxHubForUpdate(Id=HubId)
+  assign H = LoadH.Record.HxHub
+  if not (H.Owner=GetUserId() and GetUserId()<>NullIdentifier() and SourceId<>TargetId):
+    raise HxRejected("Acesso ou identidade inválida")
+  LoadS = GetHxLotForUpdate(Id=SourceId)
+  assign S = LoadS.Record.HxLot
+  LoadT = GetHxLotForUpdate(Id=TargetId)
+  assign T = LoadT.Record.HxLot
+  if not (S.HubId=H.Id and T.HubId=H.Id and S.State=1 and T.State=1 and S.Reserved=0):
+    raise HxRejected("Lotes indisponíveis")
+  if not (S.Product=T.Product and S.MinTemp=T.MinTemp and S.MaxTemp=T.MaxTemp):
+    raise HxRejected("Lotes incompatíveis")
+  assign BeforeT = T
+  assign
+    T.Quantity = BeforeT.Quantity+S.Quantity
+    T.Expiry = If(S.Expiry<BeforeT.Expiry,S.Expiry,BeforeT.Expiry)
+    T.Version = BeforeT.Version+1
+  SaveT = UpdateHxLot(Source=T)
+  assign J = EmptyJ
+  assign
+    J.HubId = H.Id
+    J.Category = "Fusão"
+    J.RefId = S.Id
+    J.Amount = S.Quantity
+    J.At = CurrDateTime()
+    J.Actor = GetUserId()
+  CreateJ = CreateHxJournal(Source=J)
+  assign J.Id = CreateJ.Id
+  assign BeforeS = S
+  assign
+    S.Quantity = 0
+    S.State = 3
+    S.Version = BeforeS.Version+1
+  SaveS = UpdateHxLot(Source=S)
+  end
+
+/// 07 Quarentena mantém reservas para investigação, mas impede separação.
+server action HxQuarantineLot public
+  in HubId: HxHub Identifier
+  in LotId: HxLot Identifier
+  in Reason: Text
+  local H: HxHub
+  local L: HxLot
+  local BeforeL: HxLot
+  local J: HxJournal
+  local EmptyJ: HxJournal
+  LoadH = GetHxHubForUpdate(Id=HubId)
+  assign H = LoadH.Record.HxHub
+  if not (H.Owner=GetUserId() and GetUserId()<>NullIdentifier()):
+    raise HxRejected("Acesso negado")
+  LoadL = GetHxLotForUpdate(Id=LotId)
+  assign L = LoadL.Record.HxLot
+  if not (L.HubId=H.Id and L.State<>3 and Length(Trim(Reason))>=10):
+    raise HxRejected("Quarentena inválida")
+  if L.State=2:
+    end
+  assign BeforeL = L
+  assign
+    L.State = 2
+    L.Version = BeforeL.Version+1
+  SaveL = UpdateHxLot(Source=L)
+  assign J = EmptyJ
+  assign
+    J.HubId = H.Id
+    J.Category = "Quarentena"
+    J.RefId = L.Id
+    J.Amount = L.Quantity
+    J.Note = Reason
+    J.At = CurrDateTime()
+    J.Actor = GetUserId()
+  CreateJ = CreateHxJournal(Source=J)
+  assign J.Id = CreateJ.Id
+  end
+
+/// 08 Libera lote somente com evidência e sem validade vencida.
+server action HxReleaseQuarantine public
+  in HubId: HxHub Identifier
+  in LotId: HxLot Identifier
+  in Version: Integer
+  in Certificate: Text
+  local H: HxHub
+  local L: HxLot
+  local BeforeL: HxLot
+  local J: HxJournal
+  local EmptyJ: HxJournal
+  LoadH = GetHxHubForUpdate(Id=HubId)
+  assign H = LoadH.Record.HxHub
+  if not (H.Owner=GetUserId() and GetUserId()<>NullIdentifier()):
+    raise HxRejected("Acesso negado")
+  LoadL = GetHxLotForUpdate(Id=LotId)
+  assign L = LoadL.Record.HxLot
+  if not (L.HubId=H.Id and L.Version=Version and L.State=2):
+    raise HxRejected("Estado inválido")
+  if not (L.Expiry>CurrDateTime() and Length(Trim(Certificate))>=10):
+    raise HxRejected("Liberação sem evidência")
+  assign BeforeL = L
+  assign
+    L.State = 1
+    L.Version = BeforeL.Version+1
+  SaveL = UpdateHxLot(Source=L)
+  assign J = EmptyJ
+  assign
+    J.HubId = H.Id
+    J.Category = "Liberação"
+    J.RefId = L.Id
+    J.Note = Certificate
+    J.At = CurrDateTime()
+    J.Actor = GetUserId()
+  CreateJ = CreateHxJournal(Source=J)
+  assign J.Id = CreateJ.Id
+  end
+
+/// 09 Descarta apenas a parte livre com justificativa, reduzindo ocupação.
+server action HxDisposeLot public
+  in HubId: HxHub Identifier
+  in LotId: HxLot Identifier
+  in Quantity: Decimal
+  in Reason: Text
+  local H: HxHub
+  local L: HxLot
+  local BeforeH: HxHub
+  local BeforeL: HxLot
+  local J: HxJournal
+  local EmptyJ: HxJournal
+  LoadH = GetHxHubForUpdate(Id=HubId)
+  assign H = LoadH.Record.HxHub
+  if not (H.Owner=GetUserId() and GetUserId()<>NullIdentifier()):
+    raise HxRejected("Acesso negado")
+  LoadL = GetHxLotForUpdate(Id=LotId)
+  assign L = LoadL.Record.HxLot
+  if not (L.HubId=H.Id and Quantity>0 and Quantity<=L.Quantity-L.Reserved and Length(Trim(Reason))>=10):
+    raise HxRejected("Descarte inválido")
+  assign BeforeH = H
+  assign
+    H.Used = BeforeH.Used-Quantity
+    H.Version = BeforeH.Version+1
+  SaveH = UpdateHxHub(Source=H)
+  assign BeforeL = L
+  assign
+    L.Quantity = BeforeL.Quantity-Quantity
+    L.State = If(BeforeL.Quantity=Quantity,3,BeforeL.State)
+    L.Version = BeforeL.Version+1
+  SaveL = UpdateHxLot(Source=L)
+  assign J = EmptyJ
+  assign
+    J.HubId = H.Id
+    J.Category = "Descarte"
+    J.RefId = L.Id
+    J.Amount = -Quantity
+    J.Note = Reason
+    J.At = CurrDateTime()
+    J.Actor = GetUserId()
+  CreateJ = CreateHxJournal(Source=J)
+  assign J.Id = CreateJ.Id
+  end
+
+/// 10 Registra leitura idempotente; divergência de payload é recusada.
+server action HxRecordTemperature public
+  in HubId: HxHub Identifier
+  in LotId: HxLot Identifier
+  in Sequence: Integer
+  in Value: Decimal
+  in At: Date Time
+  out Excursion: Boolean
+  local H: HxHub
+  local L: HxLot
+  local R: HxReading
+  local EmptyR: HxReading
+  local BeforeL: HxLot
+  LoadH = GetHxHubForUpdate(Id=HubId)
+  assign H = LoadH.Record.HxHub
+  if not (H.Owner=GetUserId() and GetUserId()<>NullIdentifier()):
+    raise HxRejected("Acesso negado")
+  LoadL = GetHxLotForUpdate(Id=LotId)
+  assign L = LoadL.Record.HxLot
+  if not (L.HubId=H.Id and L.State<>3 and Sequence>0 and At<=CurrDateTime()):
+    raise HxRejected("Leitura inválida")
+  Previous = aggregate FROM HxReading WHERE (HxReading.LotId=LotId and HxReading.Sequence=Sequence) MAX 1
+  if not Previous.List.Empty:
+    if not (Previous.List.Current.HxReading.Value=Value and Previous.List.Current.HxReading.At=At):
+      raise HxRejected("Sequência reutilizada")
+    assign
+      Excursion = Previous.List.Current.HxReading.Excursion
+    end
+  assign Excursion=Value<L.MinTemp or Value>L.MaxTemp
+  assign R = EmptyR
+  assign
+    R.LotId = L.Id
+    R.Sequence = Sequence
+    R.Value = Value
+    R.At = At
+    R.Excursion = Excursion
+  CreateR = CreateHxReading(Source=R)
+  assign R.Id = CreateR.Id
+  if Excursion:
+    assign BeforeL = L
+    assign
+      L.State = 2
+      L.Version = BeforeL.Version+1
+    SaveL = UpdateHxLot(Source=L)
+    -> @flowJoin1
+  end @flowJoin1
+
+/// 11 Abre demanda com prazo futuro, prioridade e produto explícitos.
+server action HxRequestSupply public
+  in HubId: HxHub Identifier
+  in Product: Text
+  in Quantity: Decimal
+  in Deadline: Date Time
+  in Priority: Integer
+  out Id: HxDemand Identifier
+  local H: HxHub
+  local D: HxDemand
+  local EmptyD: HxDemand
+  local J: HxJournal
+  local EmptyJ: HxJournal
+  LoadH = GetHxHubForUpdate(Id=HubId)
+  assign H = LoadH.Record.HxHub
+  if not (H.Owner=GetUserId() and GetUserId()<>NullIdentifier() and H.Active):
+    raise HxRejected("Acesso negado")
+  if not (Quantity>0 and Deadline>CurrDateTime() and Priority>=1 and Priority<=5 and Length(Trim(Product))>0):
+    raise HxRejected("Demanda inválida")
+  assign D = EmptyD
+  assign
+    D.HubId = H.Id
+    D.Product = Trim(Product)
+    D.Requested = Quantity
+    D.Priority = Priority
+    D.Deadline = Deadline
+    D.State = 1
+    D.Version = 1
+  CreateD = CreateHxDemand(Source=D)
+  assign D.Id = CreateD.Id
+  assign J = EmptyJ
+  assign
+    J.HubId = H.Id
+    J.Category = "Demanda"
+    J.RefId = D.Id
+    J.Amount = Quantity
+    J.At = CurrDateTime()
+    J.Actor = GetUserId()
+  CreateJ = CreateHxJournal(Source=J)
+  assign J.Id = CreateJ.Id
+  assign
+    Id = D.Id
+  end
+
+/// 12 Revisa necessidade sem reduzir abaixo de alocações já assumidas.
+server action HxReviseDemand public
+  in HubId: HxHub Identifier
+  in DemandId: HxDemand Identifier
+  in Version: Integer
+  in Quantity: Decimal
+  in Deadline: Date Time
+  local H: HxHub
+  local D: HxDemand
+  local J: HxJournal
+  local EmptyJ: HxJournal
+  local BeforeD: HxDemand
+  LoadH = GetHxHubForUpdate(Id=HubId)
+  assign H = LoadH.Record.HxHub
+  if not (H.Owner=GetUserId() and GetUserId()<>NullIdentifier()):
+    raise HxRejected("Acesso negado")
+  LoadD = GetHxDemandForUpdate(Id=DemandId)
+  assign D = LoadD.Record.HxDemand
+  if not (D.HubId=H.Id and D.State=1 and D.Version=Version):
+    raise HxRejected("Demanda desatualizada")
+  if not (Quantity>=D.Allocated and Quantity>0 and Deadline>CurrDateTime()):
+    raise HxRejected("Revisão inviável")
+  assign J = EmptyJ
+  assign
+    J.HubId = H.Id
+    J.Category = "Revisão"
+    J.RefId = D.Id
+    J.Amount = Quantity-D.Requested
+    J.At = CurrDateTime()
+    J.Actor = GetUserId()
+  CreateJ = CreateHxJournal(Source=J)
+  assign J.Id = CreateJ.Id
+  assign BeforeD = D
+  assign
+    D.Requested = Quantity
+    D.Deadline = Deadline
+    D.Version = BeforeD.Version+1
+  SaveD = UpdateHxDemand(Source=D)
+  end
+
+/// 13 Reserva parcial exige produto, validade e saldo de ambos os lados.
+server action HxAllocateLot public
+  in HubId: HxHub Identifier
+  in DemandId: HxDemand Identifier
+  in LotId: HxLot Identifier
+  in Quantity: Decimal
+  out Id: HxReservation Identifier
+  local H: HxHub
+  local D: HxDemand
+  local L: HxLot
+  local R: HxReservation
+  local EmptyR: HxReservation
+  local BeforeL: HxLot
+  local BeforeD: HxDemand
+  LoadH = GetHxHubForUpdate(Id=HubId)
+  assign H = LoadH.Record.HxHub
+  if not (H.Owner=GetUserId() and GetUserId()<>NullIdentifier() and H.Active):
+    raise HxRejected("Acesso negado")
+  LoadD = GetHxDemandForUpdate(Id=DemandId)
+  assign D = LoadD.Record.HxDemand
+  LoadL = GetHxLotForUpdate(Id=LotId)
+  assign L = LoadL.Record.HxLot
+  if not (D.HubId=H.Id and L.HubId=H.Id and D.State=1 and L.State=1 and D.Product=L.Product):
+    raise HxRejected("Vínculo inválido")
+  if not (Quantity>0 and Quantity<=D.Requested-D.Allocated and Quantity<=L.Quantity-L.Reserved and L.Expiry>D.Deadline):
+    raise HxRejected("Saldo ou validade insuficiente")
+  assign R = EmptyR
+  assign
+    R.DemandId = D.Id
+    R.LotId = L.Id
+    R.Quantity = Quantity
+    R.State = 1
+    R.Version = 1
+  CreateR = CreateHxReservation(Source=R)
+  assign R.Id = CreateR.Id
+  assign BeforeL = L
+  assign
+    L.Reserved = BeforeL.Reserved+Quantity
+    L.Version = BeforeL.Version+1
+  SaveL = UpdateHxLot(Source=L)
+  assign BeforeD = D
+  assign
+    D.Allocated = BeforeD.Allocated+Quantity
+    D.Version = BeforeD.Version+1
+  SaveD = UpdateHxDemand(Source=D)
+  assign
+    Id = R.Id
+  end
+
+/// 14 Reduz reserva ainda não separada e devolve os dois saldos.
+server action HxReduceAllocation public
+  in HubId: HxHub Identifier
+  in ReservationId: HxReservation Identifier
+  in Quantity: Decimal
+  local H: HxHub
+  local R: HxReservation
+  local D: HxDemand
+  local L: HxLot
+  local BeforeD: HxDemand
+  local BeforeL: HxLot
+  local BeforeR: HxReservation
+  LoadH = GetHxHubForUpdate(Id=HubId)
+  assign H = LoadH.Record.HxHub
+  if not (H.Owner=GetUserId() and GetUserId()<>NullIdentifier()):
+    raise HxRejected("Acesso negado")
+  LoadR = GetHxReservationForUpdate(Id=ReservationId)
+  assign R = LoadR.Record.HxReservation
+  LoadD = GetHxDemandForUpdate(Id=R.DemandId)
+  assign D = LoadD.Record.HxDemand
+  LoadL = GetHxLotForUpdate(Id=R.LotId)
+  assign L = LoadL.Record.HxLot
+  if not (D.HubId=H.Id and L.HubId=H.Id and R.State=1 and Quantity>0 and Quantity<=R.Quantity):
+    raise HxRejected("Redução inválida")
+  assign BeforeD = D
+  assign
+    D.Allocated = BeforeD.Allocated-Quantity
+    D.Version = BeforeD.Version+1
+  SaveD = UpdateHxDemand(Source=D)
+  assign BeforeL = L
+  assign
+    L.Reserved = BeforeL.Reserved-Quantity
+    L.Version = BeforeL.Version+1
+  SaveL = UpdateHxLot(Source=L)
+  assign BeforeR = R
+  assign
+    R.Quantity = BeforeR.Quantity-Quantity
+    R.State = If(BeforeR.Quantity=Quantity,5,1)
+    R.Version = BeforeR.Version+1
+  SaveR = UpdateHxReservation(Source=R)
+  end
+
+/// 15 Troca lote sem alterar a demanda; recusa origem separada.
+server action HxSubstituteLot public
+  in HubId: HxHub Identifier
+  in ReservationId: HxReservation Identifier
+  in NewLotId: HxLot Identifier
+  local H: HxHub
+  local R: HxReservation
+  local D: HxDemand
+  local S: HxLot
+  local T: HxLot
+  local BeforeS: HxLot
+  local BeforeT: HxLot
+  local BeforeR: HxReservation
+  LoadH = GetHxHubForUpdate(Id=HubId)
+  assign H = LoadH.Record.HxHub
+  if not (H.Owner=GetUserId() and GetUserId()<>NullIdentifier()):
+    raise HxRejected("Acesso negado")
+  LoadR = GetHxReservationForUpdate(Id=ReservationId)
+  assign R = LoadR.Record.HxReservation
+  LoadD = GetHxDemand(Id=R.DemandId)
+  assign D = LoadD.Record.HxDemand
+  if not (D.HubId=H.Id and R.State=1 and R.LotId<>NewLotId):
+    raise HxRejected("Reserva inválida")
+  LoadS = GetHxLotForUpdate(Id=R.LotId)
+  assign S = LoadS.Record.HxLot
+  LoadT = GetHxLotForUpdate(Id=NewLotId)
+  assign T = LoadT.Record.HxLot
+  if not (S.HubId=H.Id and T.HubId=H.Id and T.Product=D.Product and T.State=1 and T.Expiry>D.Deadline and T.Quantity-T.Reserved>=R.Quantity):
+    raise HxRejected("Substituto incompatível")
+  assign BeforeS = S
+  assign
+    S.Reserved = BeforeS.Reserved-R.Quantity
+    S.Version = BeforeS.Version+1
+  SaveS = UpdateHxLot(Source=S)
+  assign BeforeT = T
+  assign
+    T.Reserved = BeforeT.Reserved+R.Quantity
+    T.Version = BeforeT.Version+1
+  SaveT = UpdateHxLot(Source=T)
+  assign BeforeR = R
+  assign
+    R.LotId = T.Id
+    R.Version = BeforeR.Version+1
+  SaveR = UpdateHxReservation(Source=R)
+  end
+
+/// 16 Separação retira estoque físico uma única vez.
+server action HxPickReservation public
+  in HubId: HxHub Identifier
+  in ReservationId: HxReservation Identifier
+  local H: HxHub
+  local R: HxReservation
+  local D: HxDemand
+  local L: HxLot
+  local BeforeL: HxLot
+  local BeforeH: HxHub
+  local BeforeR: HxReservation
+  LoadH = GetHxHubForUpdate(Id=HubId)
+  assign H = LoadH.Record.HxHub
+  if not (H.Owner=GetUserId() and GetUserId()<>NullIdentifier()):
+    raise HxRejected("Acesso negado")
+  LoadR = GetHxReservationForUpdate(Id=ReservationId)
+  assign R = LoadR.Record.HxReservation
+  LoadD = GetHxDemand(Id=R.DemandId)
+  assign D = LoadD.Record.HxDemand
+  LoadL = GetHxLotForUpdate(Id=R.LotId)
+  assign L = LoadL.Record.HxLot
+  if not (D.HubId=H.Id and L.HubId=H.Id):
+    raise HxRejected("Vínculo inválido")
+  if R.State=2:
+    end
+  if not (R.State=1 and L.State=1 and L.Expiry>CurrDateTime() and L.Quantity>=R.Quantity and L.Reserved>=R.Quantity):
+    raise HxRejected("Separação indisponível")
+  assign BeforeL = L
+  assign
+    L.Quantity = BeforeL.Quantity-R.Quantity
+    L.Reserved = BeforeL.Reserved-R.Quantity
+    L.Version = BeforeL.Version+1
+  SaveL = UpdateHxLot(Source=L)
+  assign BeforeH = H
+  assign
+    H.Used = BeforeH.Used-R.Quantity
+    H.Version = BeforeH.Version+1
+  SaveH = UpdateHxHub(Source=H)
+  assign BeforeR = R
+  assign
+    R.Picked = BeforeR.Quantity
+    R.State = 2
+    R.Version = BeforeR.Version+1
+  SaveR = UpdateHxReservation(Source=R)
+  end
+
+/// 17 Desfaz separação antes do transporte com limite de capacidade.
+server action HxUndoPick public
+  in HubId: HxHub Identifier
+  in ReservationId: HxReservation Identifier
+  local H: HxHub
+  local R: HxReservation
+  local D: HxDemand
+  local L: HxLot
+  local BeforeL: HxLot
+  local BeforeH: HxHub
+  local BeforeR: HxReservation
+  LoadH = GetHxHubForUpdate(Id=HubId)
+  assign H = LoadH.Record.HxHub
+  if not (H.Owner=GetUserId() and GetUserId()<>NullIdentifier()):
+    raise HxRejected("Acesso negado")
+  LoadR = GetHxReservationForUpdate(Id=ReservationId)
+  assign R = LoadR.Record.HxReservation
+  LoadD = GetHxDemand(Id=R.DemandId)
+  assign D = LoadD.Record.HxDemand
+  LoadL = GetHxLotForUpdate(Id=R.LotId)
+  assign L = LoadL.Record.HxLot
+  if not (D.HubId=H.Id and L.HubId=H.Id and R.State=2 and H.Used+R.Picked<=H.Capacity):
+    raise HxRejected("Retorno inviável")
+  assign BeforeL = L
+  assign
+    L.Quantity = BeforeL.Quantity+R.Picked
+    L.Reserved = BeforeL.Reserved+R.Picked
+    L.Version = BeforeL.Version+1
+  SaveL = UpdateHxLot(Source=L)
+  assign BeforeH = H
+  assign
+    H.Used = BeforeH.Used+R.Picked
+    H.Version = BeforeH.Version+1
+  SaveH = UpdateHxHub(Source=H)
+  assign BeforeR = R
+  assign
+    R.Picked = 0
+    R.State = 1
+    R.Version = BeforeR.Version+1
+  SaveR = UpdateHxReservation(Source=R)
+  end
+
+/// 18 Fecha demanda satisfeita; parcial exige justificativa e nenhuma reserva pendente.
+server action HxCloseDemand public
+  in HubId: HxHub Identifier
+  in DemandId: HxDemand Identifier
+  in Reason: Text
+  local H: HxHub
+  local D: HxDemand
+  local BeforeD: HxDemand
+  local J: HxJournal
+  local EmptyJ: HxJournal
+  LoadH = GetHxHubForUpdate(Id=HubId)
+  assign H = LoadH.Record.HxHub
+  if not (H.Owner=GetUserId() and GetUserId()<>NullIdentifier()):
+    raise HxRejected("Acesso negado")
+  LoadD = GetHxDemandForUpdate(Id=DemandId)
+  assign D = LoadD.Record.HxDemand
+  if not (D.HubId=H.Id):
+    raise HxRejected("Demanda inválida")
+  if D.State=2:
+    end
+  Pending = aggregate FROM HxReservation WHERE (HxReservation.DemandId=DemandId and HxReservation.State<>4 and HxReservation.State<>5) MAX 1
+  if not (Pending.List.Empty and (D.Delivered>=D.Requested or Length(Trim(Reason))>=10)):
+    raise HxRejected("Pendências ou justificativa ausente")
+  assign BeforeD = D
+  assign
+    D.State = 2
+    D.Version = BeforeD.Version+1
+  SaveD = UpdateHxDemand(Source=D)
+  assign J = EmptyJ
+  assign
+    J.HubId = H.Id
+    J.Category = "Fechamento"
+    J.RefId = D.Id
+    J.Amount = D.Requested-D.Delivered
+    J.Note = Reason
+    J.At = CurrDateTime()
+    J.Actor = GetUserId()
+  CreateJ = CreateHxJournal(Source=J)
+  assign J.Id = CreateJ.Id
+  end
+
+/// 19 Reabre demanda parcial, sem recriar quantidades já entregues.
+server action HxReopenDemand public
+  in HubId: HxHub Identifier
+  in DemandId: HxDemand Identifier
+  in NewDeadline: Date Time
+  in Reason: Text
+  local H: HxHub
+  local D: HxDemand
+  local BeforeD: HxDemand
+  local J: HxJournal
+  local EmptyJ: HxJournal
+  LoadH = GetHxHubForUpdate(Id=HubId)
+  assign H = LoadH.Record.HxHub
+  if not (H.Owner=GetUserId() and GetUserId()<>NullIdentifier() and H.Active):
+    raise HxRejected("Acesso negado")
+  LoadD = GetHxDemandForUpdate(Id=DemandId)
+  assign D = LoadD.Record.HxDemand
+  if not (D.HubId=H.Id and D.State=2 and D.Delivered<D.Requested and NewDeadline>CurrDateTime() and Length(Trim(Reason))>=10):
+    raise HxRejected("Reabertura inválida")
+  assign BeforeD = D
+  assign
+    D.State = 1
+    D.Deadline = NewDeadline
+    D.Version = BeforeD.Version+1
+  SaveD = UpdateHxDemand(Source=D)
+  assign J = EmptyJ
+  assign
+    J.HubId = H.Id
+    J.Category = "Reabertura"
+    J.RefId = D.Id
+    J.Amount = D.Requested-D.Delivered
+    J.Note = Reason
+    J.At = CurrDateTime()
+    J.Actor = GetUserId()
+  CreateJ = CreateHxJournal(Source=J)
+  assign J.Id = CreateJ.Id
+  end
+
+/// 20 Escala prioridade por prazo vencido; registra decisão manual auditável.
+server action HxEscalateDemand public
+  in HubId: HxHub Identifier
+  in DemandId: HxDemand Identifier
+  in Priority: Integer
+  in Reason: Text
+  local H: HxHub
+  local D: HxDemand
+  local BeforeD: HxDemand
+  local J: HxJournal
+  local EmptyJ: HxJournal
+  LoadH = GetHxHubForUpdate(Id=HubId)
+  assign H = LoadH.Record.HxHub
+  if not (H.Owner=GetUserId() and GetUserId()<>NullIdentifier()):
+    raise HxRejected("Acesso negado")
+  LoadD = GetHxDemandForUpdate(Id=DemandId)
+  assign D = LoadD.Record.HxDemand
+  if not (D.HubId=H.Id and D.State=1 and Priority>D.Priority and Priority<=5 and Length(Trim(Reason))>=10):
+    raise HxRejected("Escalada inválida")
+  assign BeforeD = D
+  assign
+    D.Priority = If(BeforeD.Deadline<CurrDateTime(),5,Priority)
+    D.Version = BeforeD.Version+1
+  SaveD = UpdateHxDemand(Source=D)
+  assign J = EmptyJ
+  assign
+    J.HubId = H.Id
+    J.Category = "Escalada"
+    J.RefId = D.Id
+    J.Amount = D.Priority
+    J.Note = Reason
+    J.At = CurrDateTime()
+    J.Actor = GetUserId()
+  CreateJ = CreateHxJournal(Source=J)
+  assign J.Id = CreateJ.Id
+  end
+
+/// 21 Planeja transporte reservando orçamento sem desembolso.
+server action HxPlanTrip public
+  in HubId: HxHub Identifier
+  in Driver: User Identifier
+  in Capacity: Decimal
+  in Cost: Decimal
+  out Id: HxTrip Identifier
+  local H: HxHub
+  local T: HxTrip
+  local EmptyT: HxTrip
+  local BeforeH: HxHub
+  local J: HxJournal
+  local EmptyJ: HxJournal
+  LoadH = GetHxHubForUpdate(Id=HubId)
+  assign H = LoadH.Record.HxHub
+  if not (H.Owner=GetUserId() and GetUserId()<>NullIdentifier() and H.Active):
+    raise HxRejected("Acesso negado")
+  if not (Driver<>NullIdentifier() and Capacity>0 and Cost>=0 and H.Budget-H.Spent-H.Committed>=Cost):
+    raise HxRejected("Viagem inviável")
+  assign T = EmptyT
+  assign
+    T.HubId = H.Id
+    T.Driver = Driver
+    T.Capacity = Capacity
+    T.Cost = Cost
+    T.State = 1
+    T.Version = 1
+  CreateT = CreateHxTrip(Source=T)
+  assign T.Id = CreateT.Id
+  assign BeforeH = H
+  assign
+    H.Committed = BeforeH.Committed+Cost
+    H.Version = BeforeH.Version+1
+  SaveH = UpdateHxHub(Source=H)
+  assign J = EmptyJ
+  assign
+    J.HubId = H.Id
+    J.Category = "Viagem planejada"
+    J.RefId = T.Id
+    J.Amount = Cost
+    J.At = CurrDateTime()
+    J.Actor = GetUserId()
+  CreateJ = CreateHxJournal(Source=J)
+  assign J.Id = CreateJ.Id
+  assign
+    Id = T.Id
+  end
+
+/// 22 Reestima custo sem violar compromissos de outros trabalhos.
+server action HxRepriceTrip public
+  in HubId: HxHub Identifier
+  in TripId: HxTrip Identifier
+  in Cost: Decimal
+  in Version: Integer
+  local H: HxHub
+  local T: HxTrip
+  local BeforeH: HxHub
+  local J: HxJournal
+  local EmptyJ: HxJournal
+  local BeforeT: HxTrip
+  LoadH = GetHxHubForUpdate(Id=HubId)
+  assign H = LoadH.Record.HxHub
+  if not (H.Owner=GetUserId() and GetUserId()<>NullIdentifier()):
+    raise HxRejected("Acesso negado")
+  LoadT = GetHxTripForUpdate(Id=TripId)
+  assign T = LoadT.Record.HxTrip
+  if not (T.HubId=H.Id and T.Version=Version and T.State<=2 and Cost>=0):
+    raise HxRejected("Viagem inválida")
+  if not (H.Budget-H.Spent-H.Committed+T.Cost>=Cost):
+    raise HxRejected("Orçamento insuficiente")
+  assign BeforeH = H
+  assign
+    H.Committed = BeforeH.Committed+Cost-T.Cost
+    H.Version = BeforeH.Version+1
+  SaveH = UpdateHxHub(Source=H)
+  assign J = EmptyJ
+  assign
+    J.HubId = H.Id
+    J.Category = "Reestimativa"
+    J.RefId = T.Id
+    J.Amount = Cost-T.Cost
+    J.At = CurrDateTime()
+    J.Actor = GetUserId()
+  CreateJ = CreateHxJournal(Source=J)
+  assign J.Id = CreateJ.Id
+  assign BeforeT = T
+  assign
+    T.Cost = Cost
+    T.Version = BeforeT.Version+1
+  SaveT = UpdateHxTrip(Source=T)
+  end
+
+/// 23 Carrega reserva integral, impedindo duplicação por estado.
+server action HxLoadCargo public
+  in HubId: HxHub Identifier
+  in TripId: HxTrip Identifier
+  in ReservationId: HxReservation Identifier
+  out Id: HxCargo Identifier
+  local H: HxHub
+  local T: HxTrip
+  local R: HxReservation
+  local D: HxDemand
+  local C: HxCargo
+  local EmptyC: HxCargo
+  local BeforeR: HxReservation
+  local BeforeT: HxTrip
+  LoadH = GetHxHubForUpdate(Id=HubId)
+  assign H = LoadH.Record.HxHub
+  if not (H.Owner=GetUserId() and GetUserId()<>NullIdentifier()):
+    raise HxRejected("Acesso negado")
+  LoadT = GetHxTripForUpdate(Id=TripId)
+  assign T = LoadT.Record.HxTrip
+  LoadR = GetHxReservationForUpdate(Id=ReservationId)
+  assign R = LoadR.Record.HxReservation
+  LoadD = GetHxDemand(Id=R.DemandId)
+  assign D = LoadD.Record.HxDemand
+  if not (T.HubId=H.Id and D.HubId=H.Id and T.State<=2 and R.State=2 and R.Picked>0):
+    raise HxRejected("Carga inválida")
+  if not (T.Loaded+R.Picked<=T.Capacity):
+    raise HxRejected("Capacidade insuficiente")
+  assign C = EmptyC
+  assign
+    C.TripId = T.Id
+    C.ReservationId = R.Id
+    C.Quantity = R.Picked
+    C.State = 1
+  CreateC = CreateHxCargo(Source=C)
+  assign C.Id = CreateC.Id
+  assign BeforeR = R
+  assign
+    R.State = 3
+    R.Version = BeforeR.Version+1
+  SaveR = UpdateHxReservation(Source=R)
+  assign BeforeT = T
+  assign
+    T.Loaded = BeforeT.Loaded+R.Picked
+    T.State = 2
+    T.Version = BeforeT.Version+1
+  SaveT = UpdateHxTrip(Source=T)
+  assign
+    Id = C.Id
+  end
+
+/// 24 Descarrega antes da partida, preservando separação no depósito.
+server action HxUnloadCargo public
+  in HubId: HxHub Identifier
+  in CargoId: HxCargo Identifier
+  local H: HxHub
+  local C: HxCargo
+  local T: HxTrip
+  local R: HxReservation
+  local BeforeR: HxReservation
+  local BeforeC: HxCargo
+  local BeforeT: HxTrip
+  LoadH = GetHxHubForUpdate(Id=HubId)
+  assign H = LoadH.Record.HxHub
+  if not (H.Owner=GetUserId() and GetUserId()<>NullIdentifier()):
+    raise HxRejected("Acesso negado")
+  LoadC = GetHxCargoForUpdate(Id=CargoId)
+  assign C = LoadC.Record.HxCargo
+  LoadT = GetHxTripForUpdate(Id=C.TripId)
+  assign T = LoadT.Record.HxTrip
+  LoadR = GetHxReservationForUpdate(Id=C.ReservationId)
+  assign R = LoadR.Record.HxReservation
+  if not (T.HubId=H.Id and T.State<=2 and C.State=1 and R.State=3):
+    raise HxRejected("Descarregamento inválido")
+  assign BeforeR = R
+  assign
+    R.State = 2
+    R.Version = BeforeR.Version+1
+  SaveR = UpdateHxReservation(Source=R)
+  assign BeforeC = C
+  assign
+    C.State = 3
+  SaveC = UpdateHxCargo(Source=C)
+  assign BeforeT = T
+  assign
+    T.Loaded = BeforeT.Loaded-C.Quantity
+    T.State = If(BeforeT.Loaded=C.Quantity,1,2)
+    T.Version = BeforeT.Version+1
+  SaveT = UpdateHxTrip(Source=T)
+  end
+
+/// 25 Partida exige carga e motorista; repetições não mudam horário.
+server action HxDepartTrip public
+  in HubId: HxHub Identifier
+  in TripId: HxTrip Identifier
+  local H: HxHub
+  local T: HxTrip
+  local BeforeT: HxTrip
+  local J: HxJournal
+  local EmptyJ: HxJournal
+  LoadH = GetHxHubForUpdate(Id=HubId)
+  assign H = LoadH.Record.HxHub
+  if not (H.Owner=GetUserId() and GetUserId()<>NullIdentifier()):
+    raise HxRejected("Acesso negado")
+  LoadT = GetHxTripForUpdate(Id=TripId)
+  assign T = LoadT.Record.HxTrip
+  if not (T.HubId=H.Id):
+    raise HxRejected("Viagem inválida")
+  if T.State=3:
+    end
+  if not (T.State=2 and T.Loaded>0 and T.Loaded<=T.Capacity and T.Driver<>NullIdentifier()):
+    raise HxRejected("Partida bloqueada")
+  assign BeforeT = T
+  assign
+    T.State = 3
+    T.Departed = CurrDateTime()
+    T.Version = BeforeT.Version+1
+  SaveT = UpdateHxTrip(Source=T)
+  assign J = EmptyJ
+  assign
+    J.HubId = H.Id
+    J.Category = "Partida"
+    J.RefId = T.Id
+    J.Amount = T.Loaded
+    J.At = CurrDateTime()
+    J.Actor = GetUserId()
+  CreateJ = CreateHxJournal(Source=J)
+  assign J.Id = CreateJ.Id
+  end
+
+/// 26 Aceitação parcial fecha a carga e torna perdas explícitas na demanda.
+server action HxReconcileCargo public
+  in HubId: HxHub Identifier
+  in CargoId: HxCargo Identifier
+  in Accepted: Decimal
+  in Rejected: Decimal
+  in Reason: Text
+  local H: HxHub
+  local C: HxCargo
+  local T: HxTrip
+  local R: HxReservation
+  local D: HxDemand
+  local BeforeD: HxDemand
+  local BeforeR: HxReservation
+  local BeforeC: HxCargo
+  local J: HxJournal
+  local EmptyJ: HxJournal
+  LoadH = GetHxHubForUpdate(Id=HubId)
+  assign H = LoadH.Record.HxHub
+  if not (H.Owner=GetUserId() and GetUserId()<>NullIdentifier()):
+    raise HxRejected("Acesso negado")
+  LoadC = GetHxCargoForUpdate(Id=CargoId)
+  assign C = LoadC.Record.HxCargo
+  LoadT = GetHxTrip(Id=C.TripId)
+  assign T = LoadT.Record.HxTrip
+  LoadR = GetHxReservationForUpdate(Id=C.ReservationId)
+  assign R = LoadR.Record.HxReservation
+  LoadD = GetHxDemandForUpdate(Id=R.DemandId)
+  assign D = LoadD.Record.HxDemand
+  if not (T.HubId=H.Id and D.HubId=H.Id and T.State=3):
+    raise HxRejected("Viagem inválida")
+  if C.State=2:
+    if not (C.Accepted=Accepted and C.Rejected=Rejected):
+      raise HxRejected("Reconciliação divergente")
+    end
+  if not (C.State=1 and Accepted>=0 and Rejected>=0 and Accepted+Rejected=C.Quantity and (Rejected=0 or Length(Trim(Reason))>=10)):
+    raise HxRejected("Quantidades inválidas")
+  assign BeforeD = D
+  assign
+    D.Delivered = BeforeD.Delivered+Accepted
+    D.Allocated = BeforeD.Allocated-Rejected
+    D.Version = BeforeD.Version+1
+  SaveD = UpdateHxDemand(Source=D)
+  assign BeforeR = R
+  assign
+    R.Delivered = Accepted
+    R.State = 4
+    R.Version = BeforeR.Version+1
+  SaveR = UpdateHxReservation(Source=R)
+  assign BeforeC = C
+  assign
+    C.Accepted = Accepted
+    C.Rejected = Rejected
+    C.State = 2
+  SaveC = UpdateHxCargo(Source=C)
+  assign J = EmptyJ
+  assign
+    J.HubId = H.Id
+    J.Category = "Entrega"
+    J.RefId = C.Id
+    J.Amount = Accepted
+    J.Note = Reason
+    J.At = CurrDateTime()
+    J.Actor = GetUserId()
+  CreateJ = CreateHxJournal(Source=J)
+  assign J.Id = CreateJ.Id
+  end
+
+/// 27 Encerra somente após todas as cargas terem destino e realiza custo.
+server action HxFinishTrip public
+  in HubId: HxHub Identifier
+  in TripId: HxTrip Identifier
+  in Distance: Decimal
+  local H: HxHub
+  local T: HxTrip
+  local BeforeH: HxHub
+  local BeforeT: HxTrip
+  LoadH = GetHxHubForUpdate(Id=HubId)
+  assign H = LoadH.Record.HxHub
+  if not (H.Owner=GetUserId() and GetUserId()<>NullIdentifier()):
+    raise HxRejected("Acesso negado")
+  LoadT = GetHxTripForUpdate(Id=TripId)
+  assign T = LoadT.Record.HxTrip
+  if not (T.HubId=H.Id and Distance>=0):
+    raise HxRejected("Viagem inválida")
+  if T.State=4:
+    if not (T.Distance=Distance):
+      raise HxRejected("Distância divergente")
+    end
+  Pending = aggregate FROM HxCargo WHERE (HxCargo.TripId=TripId and HxCargo.State=1) MAX 1
+  if not (T.State=3 and Pending.List.Empty):
+    raise HxRejected("Cargas pendentes")
+  assign BeforeH = H
+  assign
+    H.Committed = BeforeH.Committed-T.Cost
+    H.Spent = BeforeH.Spent+T.Cost
+    H.Version = BeforeH.Version+1
+  SaveH = UpdateHxHub(Source=H)
+  assign BeforeT = T
+  assign
+    T.State = 4
+    T.Distance = Distance
+    T.Arrived = CurrDateTime()
+    T.Version = BeforeT.Version+1
+  SaveT = UpdateHxTrip(Source=T)
+  end
+
+/// 28 Cancelamento só antes da partida e depois de descarregar.
+server action HxCancelTrip public
+  in HubId: HxHub Identifier
+  in TripId: HxTrip Identifier
+  in Reason: Text
+  local H: HxHub
+  local T: HxTrip
+  local BeforeH: HxHub
+  local BeforeT: HxTrip
+  local J: HxJournal
+  local EmptyJ: HxJournal
+  LoadH = GetHxHubForUpdate(Id=HubId)
+  assign H = LoadH.Record.HxHub
+  if not (H.Owner=GetUserId() and GetUserId()<>NullIdentifier()):
+    raise HxRejected("Acesso negado")
+  LoadT = GetHxTripForUpdate(Id=TripId)
+  assign T = LoadT.Record.HxTrip
+  if not (T.HubId=H.Id):
+    raise HxRejected("Viagem inválida")
+  if T.State=5:
+    end
+  if not (T.State=1 and T.Loaded=0 and Length(Trim(Reason))>=10):
+    raise HxRejected("Cancelamento bloqueado")
+  assign BeforeH = H
+  assign
+    H.Committed = BeforeH.Committed-T.Cost
+    H.Version = BeforeH.Version+1
+  SaveH = UpdateHxHub(Source=H)
+  assign BeforeT = T
+  assign
+    T.State = 5
+    T.Version = BeforeT.Version+1
+  SaveT = UpdateHxTrip(Source=T)
+  assign J = EmptyJ
+  assign
+    J.HubId = H.Id
+    J.Category = "Cancelamento viagem"
+    J.RefId = T.Id
+    J.Amount = -T.Cost
+    J.Note = Reason
+    J.At = CurrDateTime()
+    J.Actor = GetUserId()
+  CreateJ = CreateHxJournal(Source=J)
+  assign J.Id = CreateJ.Id
+  end
+
+/// 29 Troca motorista antes da partida e evita duas viagens ativas atribuídas.
+server action HxReassignDriver public
+  in HubId: HxHub Identifier
+  in TripId: HxTrip Identifier
+  in Driver: User Identifier
+  in Version: Integer
+  local H: HxHub
+  local T: HxTrip
+  local BeforeT: HxTrip
+  local J: HxJournal
+  local EmptyJ: HxJournal
+  LoadH = GetHxHubForUpdate(Id=HubId)
+  assign H = LoadH.Record.HxHub
+  if not (H.Owner=GetUserId() and GetUserId()<>NullIdentifier()):
+    raise HxRejected("Acesso negado")
+  LoadT = GetHxTripForUpdate(Id=TripId)
+  assign T = LoadT.Record.HxTrip
+  if not (T.HubId=H.Id and T.State<=2 and T.Version=Version and Driver<>NullIdentifier()):
+    raise HxRejected("Troca inválida")
+  Busy = aggregate FROM HxTrip WHERE (HxTrip.HubId=HubId and HxTrip.Driver=Driver and HxTrip.State=3) MAX 1
+  if not (Busy.List.Empty):
+    raise HxRejected("Motorista em viagem")
+  assign BeforeT = T
+  assign
+    T.Driver = Driver
+    T.Version = BeforeT.Version+1
+  SaveT = UpdateHxTrip(Source=T)
+  assign J = EmptyJ
+  assign
+    J.HubId = H.Id
+    J.Category = "Motorista"
+    J.RefId = T.Id
+    J.At = CurrDateTime()
+    J.Actor = GetUserId()
+  CreateJ = CreateHxJournal(Source=J)
+  assign J.Id = CreateJ.Id
+  end
+
+/// 30 Reconfigura veículo respeitando a carga já separada.
+server action HxResizeVehicle public
+  in HubId: HxHub Identifier
+  in TripId: HxTrip Identifier
+  in Capacity: Decimal
+  in Version: Integer
+  local H: HxHub
+  local T: HxTrip
+  local BeforeT: HxTrip
+  local J: HxJournal
+  local EmptyJ: HxJournal
+  LoadH = GetHxHubForUpdate(Id=HubId)
+  assign H = LoadH.Record.HxHub
+  if not (H.Owner=GetUserId() and GetUserId()<>NullIdentifier()):
+    raise HxRejected("Acesso negado")
+  LoadT = GetHxTripForUpdate(Id=TripId)
+  assign T = LoadT.Record.HxTrip
+  if not (T.HubId=H.Id and T.Version=Version and T.State<=2 and Capacity>=T.Loaded and Capacity>0):
+    raise HxRejected("Capacidade inválida")
+  assign BeforeT = T
+  assign
+    T.Capacity = Capacity
+    T.Version = BeforeT.Version+1
+  SaveT = UpdateHxTrip(Source=T)
+  assign J = EmptyJ
+  assign
+    J.HubId = H.Id
+    J.Category = "Veículo"
+    J.RefId = T.Id
+    J.Amount = Capacity
+    J.At = CurrDateTime()
+    J.Actor = GetUserId()
+  CreateJ = CreateHxJournal(Source=J)
+  assign J.Id = CreateJ.Id
+  end
+
+/// 31 Promessa condicionada exige finalidade; não aumenta caixa.
+server action HxPledgeDonation public
+  in HubId: HxHub Identifier
+  in Donor: Text
+  in Amount: Decimal
+  in Restricted: Boolean
+  in Purpose: Text
+  out Id: HxDonation Identifier
+  local H: HxHub
+  local D: HxDonation
+  local EmptyD: HxDonation
+  local J: HxJournal
+  local EmptyJ: HxJournal
+  LoadH = GetHxHubForUpdate(Id=HubId)
+  assign H = LoadH.Record.HxHub
+  if not (H.Owner=GetUserId() and GetUserId()<>NullIdentifier() and H.Active):
+    raise HxRejected("Acesso negado")
+  if not (Amount>0 and Length(Trim(Donor))>0 and (not Restricted or Length(Trim(Purpose))>=10)):
+    raise HxRejected("Promessa inválida")
+  assign D = EmptyD
+  assign
+    D.HubId = H.Id
+    D.Donor = Trim(Donor)
+    D.Pledged = Amount
+    D.Restricted = Restricted
+    D.Purpose = Purpose
+    D.State = 1
+    D.Version = 1
+  CreateD = CreateHxDonation(Source=D)
+  assign D.Id = CreateD.Id
+  assign J = EmptyJ
+  assign
+    J.HubId = H.Id
+    J.Category = "Promessa"
+    J.RefId = D.Id
+    J.Amount = Amount
+    J.At = CurrDateTime()
+    J.Actor = GetUserId()
+  CreateJ = CreateHxJournal(Source=J)
+  assign J.Id = CreateJ.Id
+  assign
+    Id = D.Id
+  end
+
+/// 32 Recebe parcela com versão e impede ultrapassar promessa.
+server action HxReceiveDonation public
+  in HubId: HxHub Identifier
+  in DonationId: HxDonation Identifier
+  in Version: Integer
+  in Amount: Decimal
+  local H: HxHub
+  local D: HxDonation
+  local BeforeD: HxDonation
+  local BeforeH: HxHub
+  local J: HxJournal
+  local EmptyJ: HxJournal
+  LoadH = GetHxHubForUpdate(Id=HubId)
+  assign H = LoadH.Record.HxHub
+  if not (H.Owner=GetUserId() and GetUserId()<>NullIdentifier()):
+    raise HxRejected("Acesso negado")
+  LoadD = GetHxDonationForUpdate(Id=DonationId)
+  assign D = LoadD.Record.HxDonation
+  if not (D.HubId=H.Id and D.Version=Version and D.State=1 and Amount>0 and D.Received+Amount<=D.Pledged):
+    raise HxRejected("Recebimento inválido")
+  assign BeforeD = D
+  assign
+    D.Received = BeforeD.Received+Amount
+    D.Version = BeforeD.Version+1
+  SaveD = UpdateHxDonation(Source=D)
+  if not D.Restricted:
+    assign BeforeH = H
+    assign
+      H.Budget = BeforeH.Budget+Amount
+      H.Version = BeforeH.Version+1
+    SaveH = UpdateHxHub(Source=H)
+    -> @flowJoin1
+  assign J = EmptyJ @flowJoin1
+  assign
+    J.HubId = H.Id
+    J.Category = "Doação recebida"
+    J.RefId = D.Id
+    J.Amount = Amount
+    J.At = CurrDateTime()
+    J.Actor = GetUserId()
+  CreateJ = CreateHxJournal(Source=J)
+  assign J.Id = CreateJ.Id
+  end
+
+/// 33 Estorna somente saldo recebido e disponível; restrito não toca orçamento geral.
+server action HxRefundDonation public
+  in HubId: HxHub Identifier
+  in DonationId: HxDonation Identifier
+  in Version: Integer
+  in Amount: Decimal
+  in Reason: Text
+  local H: HxHub
+  local D: HxDonation
+  local BeforeH: HxHub
+  local BeforeD: HxDonation
+  local J: HxJournal
+  local EmptyJ: HxJournal
+  LoadH = GetHxHubForUpdate(Id=HubId)
+  assign H = LoadH.Record.HxHub
+  if not (H.Owner=GetUserId() and GetUserId()<>NullIdentifier()):
+    raise HxRejected("Acesso negado")
+  LoadD = GetHxDonationForUpdate(Id=DonationId)
+  assign D = LoadD.Record.HxDonation
+  if not (D.HubId=H.Id and D.Version=Version and Amount>0 and D.Refunded+Amount<=D.Received and Length(Trim(Reason))>=10):
+    raise HxRejected("Estorno inválido")
+  if not D.Restricted:
+    if not (H.Budget-Amount>=H.Spent+H.Committed):
+      raise HxRejected("Saldo comprometido")
+    assign BeforeH = H
+    assign
+      H.Budget = BeforeH.Budget-Amount
+      H.Version = BeforeH.Version+1
+    SaveH = UpdateHxHub(Source=H)
+    -> @flowJoin1
+  assign BeforeD = D @flowJoin1
+  assign
+    D.Refunded = BeforeD.Refunded+Amount
+    D.Version = BeforeD.Version+1
+  SaveD = UpdateHxDonation(Source=D)
+  assign J = EmptyJ
+  assign
+    J.HubId = H.Id
+    J.Category = "Estorno doação"
+    J.RefId = D.Id
+    J.Amount = -Amount
+    J.Note = Reason
+    J.At = CurrDateTime()
+    J.Actor = GetUserId()
+  CreateJ = CreateHxJournal(Source=J)
+  assign J.Id = CreateJ.Id
+  end
+
+/// 34 Revisa promessa sem apagar parcelas históricas recebidas.
+server action HxAmendPledge public
+  in HubId: HxHub Identifier
+  in DonationId: HxDonation Identifier
+  in Version: Integer
+  in Pledged: Decimal
+  in Reason: Text
+  local H: HxHub
+  local D: HxDonation
+  local J: HxJournal
+  local EmptyJ: HxJournal
+  local BeforeD: HxDonation
+  LoadH = GetHxHubForUpdate(Id=HubId)
+  assign H = LoadH.Record.HxHub
+  if not (H.Owner=GetUserId() and GetUserId()<>NullIdentifier()):
+    raise HxRejected("Acesso negado")
+  LoadD = GetHxDonationForUpdate(Id=DonationId)
+  assign D = LoadD.Record.HxDonation
+  if not (D.HubId=H.Id and D.Version=Version and D.State=1 and Pledged>=D.Received and Pledged>0 and Length(Trim(Reason))>=10):
+    raise HxRejected("Aditivo inválido")
+  assign J = EmptyJ
+  assign
+    J.HubId = H.Id
+    J.Category = "Aditivo doação"
+    J.RefId = D.Id
+    J.Amount = Pledged-D.Pledged
+    J.Note = Reason
+    J.At = CurrDateTime()
+    J.Actor = GetUserId()
+  CreateJ = CreateHxJournal(Source=J)
+  assign J.Id = CreateJ.Id
+  assign BeforeD = D
+  assign
+    D.Pledged = Pledged
+    D.Version = BeforeD.Version+1
+  SaveD = UpdateHxDonation(Source=D)
+  end
+
+/// 35 Libera restrição com autorização documentada e transfere saldo líquido.
+server action HxReleaseDonationRestriction public
+  in HubId: HxHub Identifier
+  in DonationId: HxDonation Identifier
+  in Consent: Text
+  local H: HxHub
+  local D: HxDonation
+  local BeforeH: HxHub
+  local BeforeD: HxDonation
+  local J: HxJournal
+  local EmptyJ: HxJournal
+  LoadH = GetHxHubForUpdate(Id=HubId)
+  assign H = LoadH.Record.HxHub
+  if not (H.Owner=GetUserId() and GetUserId()<>NullIdentifier()):
+    raise HxRejected("Acesso negado")
+  LoadD = GetHxDonationForUpdate(Id=DonationId)
+  assign D = LoadD.Record.HxDonation
+  if not (D.HubId=H.Id and D.Restricted and Length(Trim(Consent))>=20):
+    raise HxRejected("Consentimento insuficiente")
+  assign BeforeH = H
+  assign
+    H.Budget = BeforeH.Budget+D.Received-D.Refunded
+    H.Version = BeforeH.Version+1
+  SaveH = UpdateHxHub(Source=H)
+  assign BeforeD = D
+  assign
+    D.Restricted = False
+    D.Version = BeforeD.Version+1
+  SaveD = UpdateHxDonation(Source=D)
+  assign J = EmptyJ
+  assign
+    J.HubId = H.Id
+    J.Category = "Restrição liberada"
+    J.RefId = D.Id
+    J.Amount = D.Received-D.Refunded
+    J.Note = Consent
+    J.At = CurrDateTime()
+    J.Actor = GetUserId()
+  CreateJ = CreateHxJournal(Source=J)
+  assign J.Id = CreateJ.Id
+  end
+
+/// 36 Fecha promessa cumprida ou dispensada com motivo, preservando o recebido.
+server action HxClosePledge public
+  in HubId: HxHub Identifier
+  in DonationId: HxDonation Identifier
+  in Reason: Text
+  local H: HxHub
+  local D: HxDonation
+  local BeforeD: HxDonation
+  local J: HxJournal
+  local EmptyJ: HxJournal
+  LoadH = GetHxHubForUpdate(Id=HubId)
+  assign H = LoadH.Record.HxHub
+  if not (H.Owner=GetUserId() and GetUserId()<>NullIdentifier()):
+    raise HxRejected("Acesso negado")
+  LoadD = GetHxDonationForUpdate(Id=DonationId)
+  assign D = LoadD.Record.HxDonation
+  if not (D.HubId=H.Id):
+    raise HxRejected("Promessa inválida")
+  if D.State=2:
+    end
+  if not (D.Received=D.Pledged or Length(Trim(Reason))>=10):
+    raise HxRejected("Dispensa sem motivo")
+  assign BeforeD = D
+  assign
+    D.State = 2
+    D.Version = BeforeD.Version+1
+  SaveD = UpdateHxDonation(Source=D)
+  assign J = EmptyJ
+  assign
+    J.HubId = H.Id
+    J.Category = "Promessa encerrada"
+    J.RefId = D.Id
+    J.Amount = D.Pledged-D.Received
+    J.Note = Reason
+    J.At = CurrDateTime()
+    J.Actor = GetUserId()
+  CreateJ = CreateHxJournal(Source=J)
+  assign J.Id = CreateJ.Id
+  end
+
+/// 37 Registra obrigação com retenção limitada ao total bruto.
+server action HxRegisterInvoice public
+  in HubId: HxHub Identifier
+  in Supplier: Text
+  in Net: Decimal
+  in Tax: Decimal
+  in Retained: Decimal
+  out Id: HxInvoice Identifier
+  local H: HxHub
+  local I: HxInvoice
+  local EmptyI: HxInvoice
+  local J: HxJournal
+  local EmptyJ: HxJournal
+  LoadH = GetHxHubForUpdate(Id=HubId)
+  assign H = LoadH.Record.HxHub
+  if not (H.Owner=GetUserId() and GetUserId()<>NullIdentifier() and H.Active):
+    raise HxRejected("Acesso negado")
+  if not (Net>0 and Tax>=0 and Retained>=0 and Retained<=Net+Tax and Length(Trim(Supplier))>0):
+    raise HxRejected("Documento inválido")
+  assign I = EmptyI
+  assign
+    I.HubId = H.Id
+    I.Supplier = Trim(Supplier)
+    I.Net = Net
+    I.Tax = Tax
+    I.Retained = Retained
+    I.State = 1
+    I.Version = 1
+  CreateI = CreateHxInvoice(Source=I)
+  assign I.Id = CreateI.Id
+  assign J = EmptyJ
+  assign
+    J.HubId = H.Id
+    J.Category = "Documento fiscal"
+    J.RefId = I.Id
+    J.Amount = Net+Tax
+    J.At = CurrDateTime()
+    J.Actor = GetUserId()
+  CreateJ = CreateHxJournal(Source=J)
+  assign J.Id = CreateJ.Id
+  assign
+    Id = I.Id
+  end
+
+/// 38 Aprova fatura e reserva todo bruto, inclusive retenção futura.
+server action HxApproveInvoice public
+  in HubId: HxHub Identifier
+  in InvoiceId: HxInvoice Identifier
+  in Version: Integer
+  local H: HxHub
+  local I: HxInvoice
+  local Total: Decimal
+  local BeforeH: HxHub
+  local BeforeI: HxInvoice
+  LoadH = GetHxHubForUpdate(Id=HubId)
+  assign H = LoadH.Record.HxHub
+  if not (H.Owner=GetUserId() and GetUserId()<>NullIdentifier()):
+    raise HxRejected("Acesso negado")
+  LoadI = GetHxInvoiceForUpdate(Id=InvoiceId)
+  assign I = LoadI.Record.HxInvoice
+  if not (I.HubId=H.Id and I.Version=Version and I.State=1):
+    raise HxRejected("Documento inválido")
+  assign Total = I.Net+I.Tax-I.Credit
+  if not (Total>=0 and H.Budget-H.Spent-H.Committed>=Total):
+    raise HxRejected("Orçamento insuficiente")
+  assign BeforeH = H
+  assign
+    H.Committed = BeforeH.Committed+Total
+    H.Version = BeforeH.Version+1
+  SaveH = UpdateHxHub(Source=H)
+  assign BeforeI = I
+  assign
+    I.State = 2
+    I.Version = BeforeI.Version+1
+  SaveI = UpdateHxInvoice(Source=I)
+  end
+
+/// 39 Pagamento parcial não consome retenção e exige versão corrente.
+server action HxPayInvoice public
+  in HubId: HxHub Identifier
+  in InvoiceId: HxInvoice Identifier
+  in Version: Integer
+  in Amount: Decimal
+  local H: HxHub
+  local I: HxInvoice
+  local BeforeI: HxInvoice
+  local BeforeH: HxHub
+  local J: HxJournal
+  local EmptyJ: HxJournal
+  LoadH = GetHxHubForUpdate(Id=HubId)
+  assign H = LoadH.Record.HxHub
+  if not (H.Owner=GetUserId() and GetUserId()<>NullIdentifier()):
+    raise HxRejected("Acesso negado")
+  LoadI = GetHxInvoiceForUpdate(Id=InvoiceId)
+  assign I = LoadI.Record.HxInvoice
+  if not (I.HubId=H.Id and I.Version=Version and I.State=2 and Amount>0):
+    raise HxRejected("Pagamento inválido")
+  if not (I.Paid+Amount<=I.Net+I.Tax-I.Retained-I.Credit):
+    raise HxRejected("Pagamento excede saldo líquido")
+  assign BeforeI = I
+  assign
+    I.Paid = BeforeI.Paid+Amount
+    I.Version = BeforeI.Version+1
+  SaveI = UpdateHxInvoice(Source=I)
+  assign BeforeH = H
+  assign
+    H.Committed = BeforeH.Committed-Amount
+    H.Spent = BeforeH.Spent+Amount
+    H.Version = BeforeH.Version+1
+  SaveH = UpdateHxHub(Source=H)
+  assign J = EmptyJ
+  assign
+    J.HubId = H.Id
+    J.Category = "Pagamento"
+    J.RefId = I.Id
+    J.Amount = Amount
+    J.At = CurrDateTime()
+    J.Actor = GetUserId()
+  CreateJ = CreateHxJournal(Source=J)
+  assign J.Id = CreateJ.Id
+  end
+
+/// 40 Nota de crédito reduz somente obrigação ainda não paga nem retida.
+server action HxCreditInvoice public
+  in HubId: HxHub Identifier
+  in InvoiceId: HxInvoice Identifier
+  in Version: Integer
+  in Amount: Decimal
+  in Reason: Text
+  local H: HxHub
+  local I: HxInvoice
+  local BeforeH: HxHub
+  local BeforeI: HxInvoice
+  local J: HxJournal
+  local EmptyJ: HxJournal
+  LoadH = GetHxHubForUpdate(Id=HubId)
+  assign H = LoadH.Record.HxHub
+  if not (H.Owner=GetUserId() and GetUserId()<>NullIdentifier()):
+    raise HxRejected("Acesso negado")
+  LoadI = GetHxInvoiceForUpdate(Id=InvoiceId)
+  assign I = LoadI.Record.HxInvoice
+  if not (I.HubId=H.Id and I.Version=Version and I.State<=2 and Amount>0 and Length(Trim(Reason))>=10):
+    raise HxRejected("Crédito inválido")
+  if not (I.Credit+Amount<=I.Net+I.Tax-I.Retained-I.Paid):
+    raise HxRejected("Crédito excessivo")
+  if I.State=2:
+    assign BeforeH = H
+    assign
+      H.Committed = BeforeH.Committed-Amount
+      H.Version = BeforeH.Version+1
+    SaveH = UpdateHxHub(Source=H)
+    -> @flowJoin1
+  assign BeforeI = I @flowJoin1
+  assign
+    I.Credit = BeforeI.Credit+Amount
+    I.Version = BeforeI.Version+1
+  SaveI = UpdateHxInvoice(Source=I)
+  assign J = EmptyJ
+  assign
+    J.HubId = H.Id
+    J.Category = "Crédito fiscal"
+    J.RefId = I.Id
+    J.Amount = -Amount
+    J.Note = Reason
+    J.At = CurrDateTime()
+    J.Actor = GetUserId()
+  CreateJ = CreateHxJournal(Source=J)
+  assign J.Id = CreateJ.Id
+  end
+
+/// 41 Recolhe retenção após quitação do fornecedor e encerra documento.
+server action HxSettleWithholding public
+  in HubId: HxHub Identifier
+  in InvoiceId: HxInvoice Identifier
+  in Version: Integer
+  in Receipt: Text
+  local H: HxHub
+  local I: HxInvoice
+  local BeforeH: HxHub
+  local J: HxJournal
+  local EmptyJ: HxJournal
+  local BeforeI: HxInvoice
+  LoadH = GetHxHubForUpdate(Id=HubId)
+  assign H = LoadH.Record.HxHub
+  if not (H.Owner=GetUserId() and GetUserId()<>NullIdentifier()):
+    raise HxRejected("Acesso negado")
+  LoadI = GetHxInvoiceForUpdate(Id=InvoiceId)
+  assign I = LoadI.Record.HxInvoice
+  if not (I.HubId=H.Id and I.Version=Version and I.State=2 and Length(Trim(Receipt))>=10):
+    raise HxRejected("Recolhimento inválido")
+  if not (I.Paid=I.Net+I.Tax-I.Credit-I.Retained):
+    raise HxRejected("Fornecedor não quitado")
+  assign BeforeH = H
+  assign
+    H.Committed = BeforeH.Committed-I.Retained
+    H.Spent = BeforeH.Spent+I.Retained
+    H.Version = BeforeH.Version+1
+  SaveH = UpdateHxHub(Source=H)
+  assign J = EmptyJ
+  assign
+    J.HubId = H.Id
+    J.Category = "Retenção recolhida"
+    J.RefId = I.Id
+    J.Amount = I.Retained
+    J.Note = Receipt
+    J.At = CurrDateTime()
+    J.Actor = GetUserId()
+  CreateJ = CreateHxJournal(Source=J)
+  assign J.Id = CreateJ.Id
+  assign BeforeI = I
+  assign
+    I.Paid = BeforeI.Paid+BeforeI.Retained
+    I.Retained = 0
+    I.State = 3
+    I.Version = BeforeI.Version+1
+  SaveI = UpdateHxInvoice(Source=I)
+  end
+
+/// 42 Reverte aprovação somente antes de pagamento e devolve compromisso.
+server action HxRevokeApproval public
+  in HubId: HxHub Identifier
+  in InvoiceId: HxInvoice Identifier
+  in Reason: Text
+  local H: HxHub
+  local I: HxInvoice
+  local BeforeH: HxHub
+  local BeforeI: HxInvoice
+  local J: HxJournal
+  local EmptyJ: HxJournal
+  LoadH = GetHxHubForUpdate(Id=HubId)
+  assign H = LoadH.Record.HxHub
+  if not (H.Owner=GetUserId() and GetUserId()<>NullIdentifier()):
+    raise HxRejected("Acesso negado")
+  LoadI = GetHxInvoiceForUpdate(Id=InvoiceId)
+  assign I = LoadI.Record.HxInvoice
+  if not (I.HubId=H.Id and I.State=2 and I.Paid=0 and Length(Trim(Reason))>=10):
+    raise HxRejected("Revogação inválida")
+  assign BeforeH = H
+  assign
+    H.Committed = BeforeH.Committed-I.Net-I.Tax+I.Credit
+    H.Version = BeforeH.Version+1
+  SaveH = UpdateHxHub(Source=H)
+  assign BeforeI = I
+  assign
+    I.State = 1
+    I.Version = BeforeI.Version+1
+  SaveI = UpdateHxInvoice(Source=I)
+  assign J = EmptyJ
+  assign
+    J.HubId = H.Id
+    J.Category = "Aprovação revogada"
+    J.RefId = I.Id
+    J.Note = Reason
+    J.At = CurrDateTime()
+    J.Actor = GetUserId()
+  CreateJ = CreateHxJournal(Source=J)
+  assign J.Id = CreateJ.Id
+  end
+
+/// 43 Corrige base fiscal em rascunho preservando o crédito já emitido.
+server action HxAmendInvoice public
+  in HubId: HxHub Identifier
+  in InvoiceId: HxInvoice Identifier
+  in Version: Integer
+  in Net: Decimal
+  in Tax: Decimal
+  in Retained: Decimal
+  local H: HxHub
+  local I: HxInvoice
+  local J: HxJournal
+  local EmptyJ: HxJournal
+  local BeforeI: HxInvoice
+  LoadH = GetHxHubForUpdate(Id=HubId)
+  assign H = LoadH.Record.HxHub
+  if not (H.Owner=GetUserId() and GetUserId()<>NullIdentifier()):
+    raise HxRejected("Acesso negado")
+  LoadI = GetHxInvoiceForUpdate(Id=InvoiceId)
+  assign I = LoadI.Record.HxInvoice
+  if not (I.HubId=H.Id and I.State=1 and I.Version=Version and I.Paid=0):
+    raise HxRejected("Documento fechado")
+  if not (Net>0 and Tax>=0 and Retained>=0 and Net+Tax-Retained>=I.Credit):
+    raise HxRejected("Base fiscal inconsistente")
+  assign J = EmptyJ
+  assign
+    J.HubId = H.Id
+    J.Category = "Base corrigida"
+    J.RefId = I.Id
+    J.Amount = Net+Tax-I.Net-I.Tax
+    J.At = CurrDateTime()
+    J.Actor = GetUserId()
+  CreateJ = CreateHxJournal(Source=J)
+  assign J.Id = CreateJ.Id
+  assign BeforeI = I
+  assign
+    I.Net = Net
+    I.Tax = Tax
+    I.Retained = Retained
+    I.Version = BeforeI.Version+1
+  SaveI = UpdateHxInvoice(Source=I)
+  end
+
+/// 44 Abre reparo impedindo duplicata ativa por ativo.
+server action HxOpenRepair public
+  in HubId: HxHub Identifier
+  in Asset: Text
+  in Estimate: Decimal
+  in Severity: Integer
+  in Due: Date Time
+  out Id: HxRepair Identifier
+  local H: HxHub
+  local R: HxRepair
+  local EmptyR: HxRepair
+  LoadH = GetHxHubForUpdate(Id=HubId)
+  assign H = LoadH.Record.HxHub
+  if not (H.Owner=GetUserId() and GetUserId()<>NullIdentifier() and H.Active):
+    raise HxRejected("Acesso negado")
+  if not (Length(Trim(Asset))>0 and Estimate>=0 and Severity>=1 and Severity<=5 and Due>CurrDateTime()):
+    raise HxRejected("Reparo inválido")
+  Existing = aggregate FROM HxRepair WHERE (HxRepair.HubId=HubId and HxRepair.Asset=Trim(Asset) and HxRepair.State<4) MAX 1
+  if not (Existing.List.Empty):
+    raise HxRejected("Reparo já aberto")
+  assign R = EmptyR
+  assign
+    R.HubId = H.Id
+    R.Asset = Trim(Asset)
+    R.Estimate = Estimate
+    R.Severity = Severity
+    R.State = 1
+    R.Opened = CurrDateTime()
+    R.Due = Due
+    R.Version = 1
+  CreateR = CreateHxRepair(Source=R)
+  assign R.Id = CreateR.Id
+  assign
+    Id = R.Id
+  end
+
+/// 45 Autoriza serviço com orçamento e prioridade verificáveis.
+server action HxApproveRepair public
+  in HubId: HxHub Identifier
+  in RepairId: HxRepair Identifier
+  in Version: Integer
+  local H: HxHub
+  local R: HxRepair
+  local BeforeH: HxHub
+  local BeforeR: HxRepair
+  local J: HxJournal
+  local EmptyJ: HxJournal
+  LoadH = GetHxHubForUpdate(Id=HubId)
+  assign H = LoadH.Record.HxHub
+  if not (H.Owner=GetUserId() and GetUserId()<>NullIdentifier()):
+    raise HxRejected("Acesso negado")
+  LoadR = GetHxRepairForUpdate(Id=RepairId)
+  assign R = LoadR.Record.HxRepair
+  if not (R.HubId=H.Id and R.State=1 and R.Version=Version):
+    raise HxRejected("Reparo desatualizado")
+  if not (H.Budget-H.Spent-H.Committed>=R.Estimate):
+    raise HxRejected("Orçamento insuficiente")
+  assign BeforeH = H
+  assign
+    H.Committed = BeforeH.Committed+R.Estimate
+    H.Version = BeforeH.Version+1
+  SaveH = UpdateHxHub(Source=H)
+  assign BeforeR = R
+  assign
+    R.State = 2
+    R.Version = BeforeR.Version+1
+  SaveR = UpdateHxRepair(Source=R)
+  assign J = EmptyJ
+  assign
+    J.HubId = H.Id
+    J.Category = "Reparo aprovado"
+    J.RefId = R.Id
+    J.Amount = R.Estimate
+    J.At = CurrDateTime()
+    J.Actor = GetUserId()
+  CreateJ = CreateHxJournal(Source=J)
+  assign J.Id = CreateJ.Id
+  end
+
+/// 46 Inicia serviço; atraso crítico exige justificativa de segurança.
+server action HxBeginRepair public
+  in HubId: HxHub Identifier
+  in RepairId: HxRepair Identifier
+  in SafetyNote: Text
+  local H: HxHub
+  local R: HxRepair
+  local BeforeR: HxRepair
+  local J: HxJournal
+  local EmptyJ: HxJournal
+  LoadH = GetHxHubForUpdate(Id=HubId)
+  assign H = LoadH.Record.HxHub
+  if not (H.Owner=GetUserId() and GetUserId()<>NullIdentifier()):
+    raise HxRejected("Acesso negado")
+  LoadR = GetHxRepairForUpdate(Id=RepairId)
+  assign R = LoadR.Record.HxRepair
+  if not (R.HubId=H.Id and R.State=2):
+    raise HxRejected("Reparo não aprovado")
+  if not (R.Severity<4 or R.Due>=CurrDateTime() or Length(Trim(SafetyNote))>=20):
+    raise HxRejected("Atraso crítico sem análise")
+  assign BeforeR = R
+  assign
+    R.State = 3
+    R.Version = BeforeR.Version+1
+  SaveR = UpdateHxRepair(Source=R)
+  assign J = EmptyJ
+  assign
+    J.HubId = H.Id
+    J.Category = "Reparo iniciado"
+    J.RefId = R.Id
+    J.Note = SafetyNote
+    J.At = CurrDateTime()
+    J.Actor = GetUserId()
+  CreateJ = CreateHxJournal(Source=J)
+  assign J.Id = CreateJ.Id
+  end
+
+/// 47 Reorça serviço aberto, compensando o compromisso anterior.
+server action HxReestimateRepair public
+  in HubId: HxHub Identifier
+  in RepairId: HxRepair Identifier
+  in Version: Integer
+  in Estimate: Decimal
+  in Reason: Text
+  local H: HxHub
+  local R: HxRepair
+  local BeforeH: HxHub
+  local J: HxJournal
+  local EmptyJ: HxJournal
+  local BeforeR: HxRepair
+  LoadH = GetHxHubForUpdate(Id=HubId)
+  assign H = LoadH.Record.HxHub
+  if not (H.Owner=GetUserId() and GetUserId()<>NullIdentifier()):
+    raise HxRejected("Acesso negado")
+  LoadR = GetHxRepairForUpdate(Id=RepairId)
+  assign R = LoadR.Record.HxRepair
+  if not (R.HubId=H.Id and R.State<4 and R.Version=Version and Estimate>=0 and Length(Trim(Reason))>=10):
+    raise HxRejected("Reorçamento inválido")
+  if R.State>=2:
+    if not (H.Budget-H.Spent-H.Committed+R.Estimate>=Estimate):
+      raise HxRejected("Sem saldo")
+    assign BeforeH = H
+    assign
+      H.Committed = BeforeH.Committed+Estimate-R.Estimate
+      H.Version = BeforeH.Version+1
+    SaveH = UpdateHxHub(Source=H)
+    -> @flowJoin1
+  assign J = EmptyJ @flowJoin1
+  assign
+    J.HubId = H.Id
+    J.Category = "Reorçamento"
+    J.RefId = R.Id
+    J.Amount = Estimate-R.Estimate
+    J.Note = Reason
+    J.At = CurrDateTime()
+    J.Actor = GetUserId()
+  CreateJ = CreateHxJournal(Source=J)
+  assign J.Id = CreateJ.Id
+  assign BeforeR = R
+  assign
+    R.Estimate = Estimate
+    R.Version = BeforeR.Version+1
+  SaveR = UpdateHxRepair(Source=R)
+  end
+
+/// 48 Finaliza serviço com custo real e libera sobra de compromisso.
+server action HxCompleteRepair public
+  in HubId: HxHub Identifier
+  in RepairId: HxRepair Identifier
+  in Actual: Decimal
+  in Evidence: Text
+  local H: HxHub
+  local R: HxRepair
+  local BeforeH: HxHub
+  local BeforeR: HxRepair
+  local J: HxJournal
+  local EmptyJ: HxJournal
+  LoadH = GetHxHubForUpdate(Id=HubId)
+  assign H = LoadH.Record.HxHub
+  if not (H.Owner=GetUserId() and GetUserId()<>NullIdentifier()):
+    raise HxRejected("Acesso negado")
+  LoadR = GetHxRepairForUpdate(Id=RepairId)
+  assign R = LoadR.Record.HxRepair
+  if not (R.HubId=H.Id and R.State=3 and Actual>=0 and Length(Trim(Evidence))>=10):
+    raise HxRejected("Conclusão inválida")
+  if not (H.Budget-H.Spent-H.Committed+R.Estimate>=Actual):
+    raise HxRejected("Custo real excede orçamento")
+  assign BeforeH = H
+  assign
+    H.Committed = BeforeH.Committed-R.Estimate
+    H.Spent = BeforeH.Spent+Actual
+    H.Version = BeforeH.Version+1
+  SaveH = UpdateHxHub(Source=H)
+  assign BeforeR = R
+  assign
+    R.Actual = Actual
+    R.State = 4
+    R.Version = BeforeR.Version+1
+  SaveR = UpdateHxRepair(Source=R)
+  assign J = EmptyJ
+  assign
+    J.HubId = H.Id
+    J.Category = "Reparo concluído"
+    J.RefId = R.Id
+    J.Amount = Actual
+    J.Note = Evidence
+    J.At = CurrDateTime()
+    J.Actor = GetUserId()
+  CreateJ = CreateHxJournal(Source=J)
+  assign J.Id = CreateJ.Id
+  end
+
+/// 49 Cancela antes da execução; serviço em andamento exige conclusão de custo.
+server action HxCancelRepair public
+  in HubId: HxHub Identifier
+  in RepairId: HxRepair Identifier
+  in Reason: Text
+  local H: HxHub
+  local R: HxRepair
+  local BeforeH: HxHub
+  local BeforeR: HxRepair
+  local J: HxJournal
+  local EmptyJ: HxJournal
+  LoadH = GetHxHubForUpdate(Id=HubId)
+  assign H = LoadH.Record.HxHub
+  if not (H.Owner=GetUserId() and GetUserId()<>NullIdentifier()):
+    raise HxRejected("Acesso negado")
+  LoadR = GetHxRepairForUpdate(Id=RepairId)
+  assign R = LoadR.Record.HxRepair
+  if not (R.HubId=H.Id and R.State<=2 and Length(Trim(Reason))>=10):
+    raise HxRejected("Cancelamento inválido")
+  if R.State=2:
+    assign BeforeH = H
+    assign
+      H.Committed = BeforeH.Committed-R.Estimate
+      H.Version = BeforeH.Version+1
+    SaveH = UpdateHxHub(Source=H)
+    -> @flowJoin1
+  assign BeforeR = R @flowJoin1
+  assign
+    R.State = 5
+    R.Version = BeforeR.Version+1
+  SaveR = UpdateHxRepair(Source=R)
+  assign J = EmptyJ
+  assign
+    J.HubId = H.Id
+    J.Category = "Reparo cancelado"
+    J.RefId = R.Id
+    J.Note = Reason
+    J.At = CurrDateTime()
+    J.Actor = GetUserId()
+  CreateJ = CreateHxJournal(Source=J)
+  assign J.Id = CreateJ.Id
+  end
+
+/// 50 Reprioriza triagem com prazo encurtado para gravidade crítica.
+server action HxTriageRepair public
+  in HubId: HxHub Identifier
+  in RepairId: HxRepair Identifier
+  in Severity: Integer
+  in Due: Date Time
+  in Version: Integer
+  local H: HxHub
+  local R: HxRepair
+  local BeforeR: HxRepair
+  local J: HxJournal
+  local EmptyJ: HxJournal
+  LoadH = GetHxHubForUpdate(Id=HubId)
+  assign H = LoadH.Record.HxHub
+  if not (H.Owner=GetUserId() and GetUserId()<>NullIdentifier()):
+    raise HxRejected("Acesso negado")
+  LoadR = GetHxRepairForUpdate(Id=RepairId)
+  assign R = LoadR.Record.HxRepair
+  if not (R.HubId=H.Id and R.State<4 and R.Version=Version and Severity>=1 and Severity<=5 and Due>CurrDateTime()):
+    raise HxRejected("Triagem inválida")
+  if not (Severity<5 or Due<=AddHours(CurrDateTime(),24)):
+    raise HxRejected("Crítico exige atendimento em 24h")
+  assign BeforeR = R
+  assign
+    R.Severity = Severity
+    R.Due = Due
+    R.Version = BeforeR.Version+1
+  SaveR = UpdateHxRepair(Source=R)
+  assign J = EmptyJ
+  assign
+    J.HubId = H.Id
+    J.Category = "Triagem"
+    J.RefId = R.Id
+    J.Amount = Severity
+    J.At = CurrDateTime()
+    J.Actor = GetUserId()
+  CreateJ = CreateHxJournal(Source=J)
+  assign J.Id = CreateJ.Id
+  end
+
+/// 51 Quarentena em massa por validade, sem tocar descartados.
+server action HxQuarantineExpired public
+  in HubId: HxHub Identifier
+  in Cutoff: Date Time
+  out Count: Integer
+  local H: HxHub
+  local J: HxJournal
+  local EmptyJ: HxJournal
+  LoadH = GetHxHubForUpdate(Id=HubId)
+  assign H = LoadH.Record.HxHub
+  if not (H.Owner=GetUserId() and GetUserId()<>NullIdentifier()):
+    raise HxRejected("Acesso negado")
+  if not (Cutoff<=CurrDateTime()):
+    raise HxRejected("Corte futuro inválido")
+  Changed = sql -> HxAffected max 1
+    in HubId: HxHub Identifier = HubId
+    in Cutoff: Date Time = Cutoff
+    | UPDATE {HxLot} SET [State]=2,[Version]=[Version]+1 WHERE [HubId]=@HubId AND [State]=1 AND [Expiry]<=@Cutoff;
+    | SELECT CAST(ROWCOUNT_BIG() AS INT);
+  assign J = EmptyJ
+  assign
+    J.HubId = H.Id
+    J.Category = "Validade vencida"
+    J.Amount = Changed.List.Current.HxAffected.Count
+    J.At = CurrDateTime()
+    J.Actor = GetUserId()
+  CreateJ = CreateHxJournal(Source=J)
+  assign J.Id = CreateJ.Id
+  assign
+    Count = Changed.List.Current.HxAffected.Count
+  end
+
+/// 52 Escala demandas atrasadas abertas sem afetar concluídas.
+server action HxEscalateOverdue public
+  in HubId: HxHub Identifier
+  in Cutoff: Date Time
+  out Count: Integer
+  local H: HxHub
+  local J: HxJournal
+  local EmptyJ: HxJournal
+  LoadH = GetHxHubForUpdate(Id=HubId)
+  assign H = LoadH.Record.HxHub
+  if not (H.Owner=GetUserId() and GetUserId()<>NullIdentifier() and H.Active):
+    raise HxRejected("Acesso negado")
+  if not (Cutoff<=CurrDateTime()):
+    raise HxRejected("Corte inválido")
+  Changed = sql -> HxAffected max 1
+    in HubId: HxHub Identifier = HubId
+    in Cutoff: Date Time = Cutoff
+    | UPDATE {HxDemand} SET [Priority]=5,[Version]=[Version]+1 WHERE [HubId]=@HubId AND [State]=1 AND [Priority]<5 AND [Deadline]<@Cutoff AND [Delivered]<[Requested];
+    | SELECT CAST(ROWCOUNT_BIG() AS INT);
+  assign J = EmptyJ
+  assign
+    J.HubId = H.Id
+    J.Category = "Escalada em massa"
+    J.Amount = Changed.List.Current.HxAffected.Count
+    J.At = CurrDateTime()
+    J.Actor = GetUserId()
+  CreateJ = CreateHxJournal(Source=J)
+  assign J.Id = CreateJ.Id
+  assign
+    Count = Changed.List.Current.HxAffected.Count
+  end
+
+/// 53 Revoga reservas não separadas de lotes impróprios em três atualizações atômicas.
+server action HxReleaseUnsafeReservations public
+  in HubId: HxHub Identifier
+  out Count: Integer
+  local H: HxHub
+  local J: HxJournal
+  local EmptyJ: HxJournal
+  LoadH = GetHxHubForUpdate(Id=HubId)
+  assign H = LoadH.Record.HxHub
+  if not (H.Owner=GetUserId() and GetUserId()<>NullIdentifier()):
+    raise HxRejected("Acesso negado")
+  Changed = sql -> HxAffected max 1
+    in HubId: HxHub Identifier = HubId
+    | UPDATE d SET d.[Allocated]=d.[Allocated]-x.qty,d.[Version]=d.[Version]+1 FROM {HxDemand} d JOIN (SELECT r.[DemandId],SUM(r.[Quantity]) qty FROM {HxReservation} r JOIN {HxLot} l ON l.[Id]=r.[LotId] WHERE l.[HubId]=@HubId AND l.[State]<>1 AND r.[State]=1 GROUP BY r.[DemandId]) x ON x.[DemandId]=d.[Id] WHERE d.[HubId]=@HubId;
+    | UPDATE l SET l.[Reserved]=l.[Reserved]-x.qty,l.[Version]=l.[Version]+1 FROM {HxLot} l JOIN (SELECT [LotId],SUM([Quantity]) qty FROM {HxReservation} WHERE [State]=1 GROUP BY [LotId]) x ON x.[LotId]=l.[Id] WHERE l.[HubId]=@HubId AND l.[State]<>1;
+    | UPDATE r SET r.[State]=5,r.[Version]=r.[Version]+1 FROM {HxReservation} r JOIN {HxLot} l ON l.[Id]=r.[LotId] WHERE l.[HubId]=@HubId AND l.[State]<>1 AND r.[State]=1;
+    | SELECT CAST(ROWCOUNT_BIG() AS INT);
+  assign J = EmptyJ
+  assign
+    J.HubId = H.Id
+    J.Category = "Reservas revogadas"
+    J.Amount = Changed.List.Current.HxAffected.Count
+    J.At = CurrDateTime()
+    J.Actor = GetUserId()
+  CreateJ = CreateHxJournal(Source=J)
+  assign J.Id = CreateJ.Id
+  assign
+    Count = Changed.List.Current.HxAffected.Count
+  end
+
+/// 54 Fecha demandas completamente entregues sem reservas em aberto.
+server action HxCloseSatisfiedDemands public
+  in HubId: HxHub Identifier
+  out Count: Integer
+  local H: HxHub
+  local J: HxJournal
+  local EmptyJ: HxJournal
+  LoadH = GetHxHubForUpdate(Id=HubId)
+  assign H = LoadH.Record.HxHub
+  if not (H.Owner=GetUserId() and GetUserId()<>NullIdentifier()):
+    raise HxRejected("Acesso negado")
+  Changed = sql -> HxAffected max 1
+    in HubId: HxHub Identifier = HubId
+    | UPDATE d SET d.[State]=2,d.[Version]=d.[Version]+1 FROM {HxDemand} d WHERE d.[HubId]=@HubId AND d.[State]=1 AND d.[Delivered]>=d.[Requested] AND NOT EXISTS(SELECT 1 FROM {HxReservation} r WHERE r.[DemandId]=d.[Id] AND r.[State] NOT IN (4,5));
+    | SELECT CAST(ROWCOUNT_BIG() AS INT);
+  assign J = EmptyJ
+  assign
+    J.HubId = H.Id
+    J.Category = "Demandas satisfeitas"
+    J.Amount = Changed.List.Current.HxAffected.Count
+    J.At = CurrDateTime()
+    J.Actor = GetUserId()
+  CreateJ = CreateHxJournal(Source=J)
+  assign J.Id = CreateJ.Id
+  assign
+    Count = Changed.List.Current.HxAffected.Count
+  end
+
+/// 55 Expurgo de leituras só sem excursão, conservando a última de cada lote.
+server action HxPruneSafeReadings public
+  in HubId: HxHub Identifier
+  in Before: Date Time
+  out Count: Integer
+  local H: HxHub
+  local J: HxJournal
+  local EmptyJ: HxJournal
+  LoadH = GetHxHubForUpdate(Id=HubId)
+  assign H = LoadH.Record.HxHub
+  if not (H.Owner=GetUserId() and GetUserId()<>NullIdentifier()):
+    raise HxRejected("Acesso negado")
+  if not (Before<AddDays(CurrDateTime(),-90)):
+    raise HxRejected("Retenção mínima de 90 dias")
+  Changed = sql -> HxAffected max 1
+    in HubId: HxHub Identifier = HubId
+    in Before: Date Time = Before
+    | DELETE r FROM {HxReading} r JOIN {HxLot} l ON l.[Id]=r.[LotId] WHERE l.[HubId]=@HubId AND r.[At]<@Before AND r.[Excursion]=0 AND r.[Sequence]<(SELECT MAX(x.[Sequence]) FROM {HxReading} x WHERE x.[LotId]=r.[LotId]);
+    | SELECT CAST(ROWCOUNT_BIG() AS INT);
+  assign J = EmptyJ
+  assign
+    J.HubId = H.Id
+    J.Category = "Retenção leituras"
+    J.Amount = Changed.List.Current.HxAffected.Count
+    J.At = CurrDateTime()
+    J.Actor = GetUserId()
+  CreateJ = CreateHxJournal(Source=J)
+  assign J.Id = CreateJ.Id
+  assign
+    Count = Changed.List.Current.HxAffected.Count
+  end
+
+/// 56 Reconcilia ocupação com soma física, recusando transbordo.
+server action HxReconcileOccupancy public
+  in HubId: HxHub Identifier
+  in Version: Integer
+  out Difference: Decimal
+  local H: HxHub
+  local Actual: Decimal
+  local BeforeH: HxHub
+  local J: HxJournal
+  local EmptyJ: HxJournal
+  LoadH = GetHxHubForUpdate(Id=HubId)
+  assign H = LoadH.Record.HxHub
+  if not (H.Owner=GetUserId() and GetUserId()<>NullIdentifier() and H.Version=Version):
+    raise HxRejected("Acesso ou versão inválida")
+  Totals = sql -> HxMetric max 1
+    in HubId: HxHub Identifier = HubId
+    | SELECT 'Estoque',COUNT_BIG(*),COALESCE(SUM([Quantity]),0),COALESCE(SUM([Reserved]),0) FROM {HxLot} WHERE [HubId]=@HubId;
+  assign Actual = Totals.List.Current.HxMetric.Amount
+  if not (Actual>=0 and Actual<=H.Capacity):
+    raise HxRejected("Ocupação fora do limite")
+  assign Difference=Actual-H.Used
+  assign BeforeH = H
+  assign
+    H.Used = Actual
+    H.Version = BeforeH.Version+1
+  SaveH = UpdateHxHub(Source=H)
+  assign J = EmptyJ
+  assign
+    J.HubId = H.Id
+    J.Category = "Ocupação reconciliada"
+    J.Amount = Difference
+    J.At = CurrDateTime()
+    J.Actor = GetUserId()
+  CreateJ = CreateHxJournal(Source=J)
+  assign J.Id = CreateJ.Id
+  end
+
+/// 57 Pausa centro somente após verificar ausência de viagens em trânsito.
+server action HxSuspendHub public
+  in HubId: HxHub Identifier
+  in Reason: Text
+  local H: HxHub
+  local BeforeH: HxHub
+  local J: HxJournal
+  local EmptyJ: HxJournal
+  LoadH = GetHxHubForUpdate(Id=HubId)
+  assign H = LoadH.Record.HxHub
+  if not (H.Owner=GetUserId() and GetUserId()<>NullIdentifier() and Length(Trim(Reason))>=10):
+    raise HxRejected("Acesso ou motivo inválido")
+  ActiveTrips = aggregate FROM HxTrip WHERE (HxTrip.HubId=HubId and HxTrip.State=3) MAX 1
+  if not (ActiveTrips.List.Empty):
+    raise HxRejected("Há viagens em trânsito")
+  if not H.Active:
+    end
+  assign BeforeH = H
+  assign
+    H.Active = False
+    H.Version = BeforeH.Version+1
+  SaveH = UpdateHxHub(Source=H)
+  assign J = EmptyJ
+  assign
+    J.HubId = H.Id
+    J.Category = "Centro suspenso"
+    J.Note = Reason
+    J.At = CurrDateTime()
+    J.Actor = GetUserId()
+  CreateJ = CreateHxJournal(Source=J)
+  assign J.Id = CreateJ.Id
+  end
+
+/// 58 Retoma centro verificando ocupação, solvência e manutenção crítica.
+server action HxResumeHub public
+  in HubId: HxHub Identifier
+  in Version: Integer
+  local H: HxHub
+  local BeforeH: HxHub
+  local J: HxJournal
+  local EmptyJ: HxJournal
+  LoadH = GetHxHubForUpdate(Id=HubId)
+  assign H = LoadH.Record.HxHub
+  if not (H.Owner=GetUserId() and GetUserId()<>NullIdentifier() and H.Version=Version):
+    raise HxRejected("Acesso ou versão inválida")
+  Critical = aggregate FROM HxRepair WHERE (HxRepair.HubId=HubId and HxRepair.Severity=5 and HxRepair.State<4 and HxRepair.Due<CurrDateTime()) MAX 1
+  if not (Critical.List.Empty and H.Used<=H.Capacity and H.Committed+H.Spent<=H.Budget):
+    raise HxRejected("Centro não está apto")
+  assign BeforeH = H
+  assign
+    H.Active = True
+    H.Version = BeforeH.Version+1
+  SaveH = UpdateHxHub(Source=H)
+  assign J = EmptyJ
+  assign
+    J.HubId = H.Id
+    J.Category = "Centro retomado"
+    J.At = CurrDateTime()
+    J.Actor = GetUserId()
+  CreateJ = CreateHxJournal(Source=J)
+  assign J.Id = CreateJ.Id
+  end
+
+/// 59 Transfere responsabilidade apenas com centro suspenso e aceite explícito.
+server action HxTransferOwnership public
+  in HubId: HxHub Identifier
+  in NewOwner: User Identifier
+  in Version: Integer
+  in Acceptance: Text
+  local H: HxHub
+  local J: HxJournal
+  local EmptyJ: HxJournal
+  local BeforeH: HxHub
+  LoadH = GetHxHubForUpdate(Id=HubId)
+  assign H = LoadH.Record.HxHub
+  if not (H.Owner=GetUserId() and GetUserId()<>NullIdentifier() and H.Version=Version):
+    raise HxRejected("Acesso ou versão inválida")
+  if not (not H.Active and NewOwner<>NullIdentifier() and NewOwner<>H.Owner and Length(Trim(Acceptance))>=20):
+    raise HxRejected("Transferência inválida")
+  assign J = EmptyJ
+  assign
+    J.HubId = H.Id
+    J.Category = "Responsabilidade"
+    J.Note = Acceptance
+    J.At = CurrDateTime()
+    J.Actor = GetUserId()
+  CreateJ = CreateHxJournal(Source=J)
+  assign J.Id = CreateJ.Id
+  assign BeforeH = H
+  assign
+    H.Owner = NewOwner
+    H.Version = BeforeH.Version+1
+  SaveH = UpdateHxHub(Source=H)
+  end
+
+/// 60 Reconcilia compromissos de viagens, reparos e faturas em uma consulta.
+server action HxReconcileCommitments public
+  in HubId: HxHub Identifier
+  in Version: Integer
+  out Difference: Decimal
+  local H: HxHub
+  local Actual: Decimal
+  local BeforeH: HxHub
+  local J: HxJournal
+  local EmptyJ: HxJournal
+  LoadH = GetHxHubForUpdate(Id=HubId)
+  assign H = LoadH.Record.HxHub
+  if not (H.Owner=GetUserId() and GetUserId()<>NullIdentifier() and H.Version=Version):
+    raise HxRejected("Acesso ou versão inválida")
+  Totals = sql -> HxMetric max 1
+    in HubId: HxHub Identifier = HubId
+    | SELECT 'Compromissos',COUNT_BIG(*),COALESCE(SUM(x.amount),0),0 FROM (SELECT [Cost] amount FROM {HxTrip} WHERE [HubId]=@HubId AND [State] IN (1,2,3) UNION ALL SELECT [Estimate] FROM {HxRepair} WHERE [HubId]=@HubId AND [State] IN (2,3) UNION ALL SELECT [Net]+[Tax]-[Credit]-[Paid] FROM {HxInvoice} WHERE [HubId]=@HubId AND [State]=2) x;
+  assign Actual = Totals.List.Current.HxMetric.Amount
+  if not (Actual>=0 and Actual+H.Spent<=H.Budget):
+    raise HxRejected("Compromisso inconsistente")
+  assign Difference=Actual-H.Committed
+  assign BeforeH = H
+  assign
+    H.Committed = Actual
+    H.Version = BeforeH.Version+1
+  SaveH = UpdateHxHub(Source=H)
+  assign J = EmptyJ
+  assign
+    J.HubId = H.Id
+    J.Category = "Compromissos reconciliados"
+    J.Amount = Difference
+    J.At = CurrDateTime()
+    J.Actor = GetUserId()
+  CreateJ = CreateHxJournal(Source=J)
+  assign J.Id = CreateJ.Id
+  end
+
+/// 61 Distribui capacidade por peso, limita demanda e informa sobra não redistribuída.
+server action HxWeightedAllocation public
+  in Items: HxItem List
+  in Capacity: Decimal
+  out Rows: HxItem List
+  out Unallocated: Decimal
+  local Weight: Decimal
+  assign Weight = 0
+  if not (Capacity>=0 and Items.Length<=1000):
+    raise HxRejected("Entrada inválida")
+  foreach Items:
+    if not (Items.Current.Weight>=0 and Items.Current.Limit>=0):
+      raise HxRejected("Peso ou teto negativo")
+    assign Weight=Weight+Items.Current.Weight
+    next
+  if not (Weight>0 or Items.Empty):
+    raise HxRejected("Peso total nulo")
+  assign Rows=Items
+  assign Unallocated=Capacity
+  foreach Rows:
+    assign Rows.Current.Value=Min(Rows.Current.Limit,Capacity*Rows.Current.Weight/Weight)
+    assign Unallocated=Unallocated-Rows.Current.Value
+    next
+  end
+
+/// 62 Preenche demandas na ordem recebida sem ultrapassar orçamento unitário.
+server action HxSequentialFunding public
+  in Items: HxItem List
+  in Budget: Decimal
+  out Rows: HxItem List
+  out Remaining: Decimal
+  if not (Budget>=0 and Items.Length<=1000):
+    raise HxRejected("Entrada inválida")
+  assign Rows=Items
+  assign Remaining=Budget
+  foreach Rows:
+    if not (Rows.Current.Weight>0 and Rows.Current.Limit>=0):
+      raise HxRejected("Custo inválido")
+    assign Rows.Current.Value=Min(Rows.Current.Limit,Remaining/Rows.Current.Weight)
+    assign Remaining=Max(0,Remaining-Rows.Current.Value*Rows.Current.Weight)
+    assign Rows.Current.Flag=Rows.Current.Value=Rows.Current.Limit
+    next
+  end
+
+/// 63 Empacota cargas indivisíveis na ordem dada; itens grandes não bloqueiam menores.
+server action HxPackVehicle public
+  in Items: HxItem List
+  in Capacity: Decimal
+  out Rows: HxItem List
+  out Used: Decimal
+  out Rejected: Integer
+  if not (Capacity>0 and Items.Length<=1000):
+    raise HxRejected("Capacidade inválida")
+  assign Rows=Items
+  foreach Rows:
+    if not (Rows.Current.Weight>0):
+      raise HxRejected("Carga sem peso")
+    assign Rows.Current.Flag=Used+Rows.Current.Weight<=Capacity
+    if Rows.Current.Flag:
+      assign Used=Used+Rows.Current.Weight
+      -> @flowJoin1
+    if not Rows.Current.Flag: @flowJoin1
+      assign Rejected=Rejected+1
+      next
+    next
+  end
+
+/// 64 Calcula média e dispersão ponderadas com algoritmo incremental estável.
+server action HxWeightedMoments public
+  in Items: HxItem List
+  out Mean: Decimal
+  out Variance: Decimal
+  out TotalWeight: Decimal
+  local M2: Decimal
+  local Delta: Decimal
+  assign M2 = 0
+  assign Delta = 0
+  if not (Items.Length<=1000):
+    raise HxRejected("Amostra extensa")
+  foreach Items:
+    if not (Items.Current.Weight>=0):
+      raise HxRejected("Peso negativo")
+    if Items.Current.Weight>0:
+      assign Delta=Items.Current.Value-Mean
+      assign TotalWeight=TotalWeight+Items.Current.Weight
+      assign Mean=Mean+Delta*Items.Current.Weight/TotalWeight
+      assign M2=M2+Items.Current.Weight*Delta*(Items.Current.Value-Mean)
+      next
+    next
+  if not (TotalWeight>0):
+    raise HxRejected("Amostra sem peso")
+  assign
+    Variance = Max(0,M2/TotalWeight)
+  end
+
+/// 65 Quantil ponderado com ordenação nativa; ignora pesos nulos.
+server action HxWeightedQuantile public
+  in Items: HxItem List
+  in Quantile: Decimal
+  out Value: Decimal
+  local Rows: HxItem List
+  local Total: Decimal
+  local Seen: Decimal
+  assign Total = 0
+  assign Seen = 0
+  if not (Quantile>=0 and Quantile<=1 and not Items.Empty and Items.Length<=1000):
+    raise HxRejected("Quantil inválido")
+  foreach Items:
+    if not (Items.Current.Weight>=0):
+      raise HxRejected("Peso negativo")
+    assign Total=Total+Items.Current.Weight
+    next
+  if not (Total>0):
+    raise HxRejected("Peso total nulo")
+  assign Rows=Items
+  (System).ListSort(List=Rows, By=Value, Ascending=True)
+  foreach Rows:
+    assign Seen=Seen+Rows.Current.Weight
+    if Rows.Current.Weight>0 and Seen>=Total*Quantile:
+      assign
+        Value = Rows.Current.Value
+      end
+    next
+  raise HxRejected("Quantil não encontrado")
+
+/// 66 Suaviza série em ordem recebida com estado inicial explícito.
+server action HxSmoothDemand public
+  in Items: HxItem List
+  in Alpha: Decimal
+  in Initial: Decimal
+  out Rows: HxItem List
+  out Forecast: Decimal
+  if not (Alpha>0 and Alpha<=1 and Items.Length<=1000):
+    raise HxRejected("Suavização inválida")
+  assign Forecast=Initial
+  assign Rows=Items
+  foreach Rows:
+    if not (Rows.Current.Value>=0):
+      raise HxRejected("Demanda negativa")
+    assign Forecast=Alpha*Rows.Current.Value+(1-Alpha)*Forecast
+    assign Rows.Current.Value=Forecast
+    assign Rows.Current.Flag=Forecast>Rows.Current.Limit
+    next
+  end
+
+/// 67 Regressão linear com centralização incremental e rejeição de X constante.
+server action HxEstimateTrend public
+  in Points: HxPoint List
+  out Slope: Decimal
+  out Intercept: Decimal
+  local N: Integer
+  local MeanX: Decimal
+  local MeanY: Decimal
+  local XX: Decimal
+  local XY: Decimal
+  local DX: Decimal
+  local DY: Decimal
+  assign N = 0
+  assign MeanX = 0
+  assign MeanY = 0
+  assign XX = 0
+  assign XY = 0
+  assign DX = 0
+  assign DY = 0
+  if not (Points.Length>=2 and Points.Length<=1000):
+    raise HxRejected("Amostra inválida")
+  foreach Points:
+    assign N=N+1
+    assign DX=Points.Current.X-MeanX
+    assign DY=Points.Current.Y-MeanY
+    assign MeanX=MeanX+DX/N
+    assign MeanY=MeanY+DY/N
+    assign XX=XX+DX*(Points.Current.X-MeanX)
+    assign XY=XY+DX*(Points.Current.Y-MeanY)
+    next
+  if not (XX>0):
+    raise HxRejected("Tempos constantes")
+  assign Slope=XY/XX
+  assign
+    Intercept = MeanY-Slope*MeanX
+  end
+
+/// 68 Alarme com histerese conta transições e evita oscilação no limiar.
+server action HxTemperatureHysteresis public
+  in Items: HxItem List
+  in High: Decimal
+  in Reset: Decimal
+  in InitiallyActive: Boolean
+  out Active: Boolean
+  out Transitions: Integer
+  out Rows: HxItem List
+  if not (Reset<High and Items.Length<=1000):
+    raise HxRejected("Histerese inválida")
+  assign Active=InitiallyActive
+  assign Rows=Items
+  foreach Rows:
+    if not Active and Rows.Current.Value>=High:
+      assign Active=True
+      assign Transitions=Transitions+1
+      -> @flowJoin2
+    if Active and Rows.Current.Value<=Reset: @flowJoin2
+      assign Active=False
+      assign Transitions=Transitions+1
+      -> @flowJoin1
+    assign Rows.Current.Flag=Active @flowJoin1
+    next
+  end
+
+/// 69 Integra exposição térmica pelo trapézio em tempos estritamente crescentes.
+server action HxThermalExposure public
+  in Points: HxPoint List
+  in Limit: Decimal
+  out Exposure: Decimal
+  out Duration: Decimal
+  local First: Boolean
+  local LastX: Decimal
+  local LastY: Decimal
+  assign First = True
+  assign LastX = 0
+  assign LastY = 0
+  if not (Points.Length<=1000):
+    raise HxRejected("Série extensa")
+  foreach Points:
+    if not First:
+      if not (Points.Current.X>LastX):
+        raise HxRejected("Tempo fora de ordem")
+      assign Duration=Duration+Points.Current.X-LastX
+      assign Exposure=Exposure+(Max(0,LastY-Limit)+Max(0,Points.Current.Y-Limit))*(Points.Current.X-LastX)/2
+      -> @flowJoin1
+    assign First=False @flowJoin1
+    assign LastX=Points.Current.X
+    assign LastY=Points.Current.Y
+    next
+  end
+
+/// 70 Detecta sequências ausentes e duplicadas sem descartar regressões silenciosamente.
+server action HxAuditSequence public
+  in Items: HxItem List
+  out Gaps: Integer
+  out Duplicates: Integer
+  out Regressions: Integer
+  local First: Boolean
+  local Last: Integer
+  assign First = True
+  assign Last = 0
+  if not (Items.Length<=1000):
+    raise HxRejected("Série extensa")
+  foreach Items:
+    if not (Items.Current.Rank>0):
+      raise HxRejected("Sequência inválida")
+    if not First:
+      if Items.Current.Rank=Last:
+        assign Duplicates=Duplicates+1
+        -> @flowJoin3
+      if Items.Current.Rank<Last: @flowJoin3
+        assign Regressions=Regressions+1
+        -> @flowJoin2
+      if Items.Current.Rank>Last+1: @flowJoin2
+        assign Gaps=Gaps+Items.Current.Rank-Last-1
+        -> @flowJoin1
+      -> @flowJoin1
+    assign Last=Max(Last,Items.Current.Rank) @flowJoin1
+    assign First=False
+    next
+  end
+
+/// 71 União de intervalos ordenados por início calcula tempo ocupado e sobreposição.
+server action HxMergeTimeWindows public
+  in Points: HxPoint List
+  out Covered: Decimal
+  out Overlap: Decimal
+  out Segments: Integer
+  local First: Boolean
+  local Start: Decimal
+  local Finish: Decimal
+  local LastStart: Decimal
+  local Sum: Decimal
+  assign First = True
+  assign Start = 0
+  assign Finish = 0
+  assign LastStart = 0
+  assign Sum = 0
+  if not (Points.Length<=1000):
+    raise HxRejected("Série extensa")
+  foreach Points:
+    if not (Points.Current.Y>=Points.Current.X and (First or Points.Current.X>=LastStart)):
+      raise HxRejected("Intervalos inválidos")
+    assign Sum=Sum+Points.Current.Y-Points.Current.X
+    if First:
+      assign Start=Points.Current.X
+      assign Finish=Points.Current.Y
+      assign Segments=1
+      -> @flowJoin4
+    if not First: @flowJoin4
+      if Points.Current.X>Finish:
+        assign Covered=Covered+Finish-Start
+        assign Start=Points.Current.X
+        assign Segments=Segments+1
+        -> @flowJoin2
+      assign Finish=Max(Finish,Points.Current.Y) @flowJoin2
+      -> @flowJoin3
+    assign LastStart=Points.Current.X @flowJoin3
+    assign First=False
+    next
+  if not First:
+    assign Covered=Covered+Finish-Start
+    -> @flowJoin1
+  assign @flowJoin1
+    Overlap = Sum-Covered
+  end
+
+/// 72 Simula estoque diário, demanda perdida e pico de ocupação sem estoque negativo.
+server action HxInventoryProjection public
+  in Days: HxPoint List
+  in Initial: Decimal
+  out Closing: Decimal
+  out LostDemand: Decimal
+  out Peak: Decimal
+  if not (Initial>=0 and Days.Length<=366):
+    raise HxRejected("Horizonte inválido")
+  assign Closing=Initial
+  assign Peak=Initial
+  foreach Days:
+    if not (Days.Current.X>=0 and Days.Current.Y>=0):
+      raise HxRejected("Movimento negativo")
+    assign Closing=Closing+Days.Current.X
+    assign Peak=Max(Peak,Closing)
+    assign LostDemand=LostDemand+Max(0,Days.Current.Y-Closing)
+    assign Closing=Max(0,Closing-Days.Current.Y)
+    next
+  end
+
+/// 73 Simula caixa com piso e contabiliza necessidade máxima de financiamento.
+server action HxCashProjection public
+  in Days: HxPoint List
+  in Opening: Decimal
+  in Floor: Decimal
+  out Closing: Decimal
+  out Financing: Decimal
+  out FirstShortfall: Integer
+  local Day: Integer
+  assign Day = 0
+  if not (Opening>=0 and Floor>=0 and Days.Length<=366):
+    raise HxRejected("Entrada inválida")
+  assign Closing=Opening
+  foreach Days:
+    if not (Days.Current.X>=0 and Days.Current.Y>=0):
+      raise HxRejected("Fluxo negativo")
+    assign Day=Day+1
+    assign Closing=Closing+Days.Current.X-Days.Current.Y
+    if Closing<Floor and FirstShortfall=0:
+      assign FirstShortfall=Day
+      -> @flowJoin1
+    assign Financing=Max(Financing,Floor-Closing) @flowJoin1
+    next
+  end
+
+/// 74 Retentativas com backoff multiplicativo limitado e janela de validade.
+server action HxRetrySchedule public
+  in Attempts: Integer
+  in InitialSeconds: Decimal
+  in Multiplier: Decimal
+  in MaximumSeconds: Decimal
+  in WindowSeconds: Decimal
+  out Delay: Decimal
+  out Allowed: Boolean
+  out TotalElapsed: Decimal
+  local I: Integer
+  assign I = 0
+  if not (Attempts>=0 and Attempts<=50 and InitialSeconds>0 and Multiplier>=1 and MaximumSeconds>=InitialSeconds and WindowSeconds>0):
+    raise HxRejected("Retentativa inválida")
+  assign Delay=InitialSeconds
+  if I<Attempts: @Advance
+    assign TotalElapsed=TotalElapsed+Delay
+    assign Delay=Min(MaximumSeconds,Delay*Multiplier)
+    assign I=I+1
+    -> @Advance
+  assign
+    Allowed = TotalElapsed+Delay<=WindowSeconds
+  end
+
+/// 75 Rateio arredondado conserva total distribuindo resíduo ao último peso positivo.
+server action HxRoundAllocation public
+  in Items: HxItem List
+  in Total: Decimal
+  out Rows: HxItem List
+  local Sum: Decimal
+  local Remaining: Decimal
+  local LeftWeight: Decimal
+  assign Sum = 0
+  assign Remaining = 0
+  assign LeftWeight = 0
+  if not (Total>=0 and Total=Round(Total,2) and Items.Length<=1000):
+    raise HxRejected("Total inválido")
+  foreach Items:
+    if not (Items.Current.Weight>=0):
+      raise HxRejected("Peso inválido")
+    assign Sum=Sum+Items.Current.Weight
+    next
+  if not (Sum>0):
+    raise HxRejected("Pesos vazios")
+  assign Rows=Items
+  assign Remaining=Total
+  assign LeftWeight=Sum
+  foreach Rows:
+    assign Rows.Current.Value=0
+    if Rows.Current.Weight>0:
+      assign Rows.Current.Value=If(Rows.Current.Weight=LeftWeight,Remaining,Min(Remaining,Round(Total*Rows.Current.Weight/Sum,2)))
+      assign Remaining=Remaining-Rows.Current.Value
+      assign LeftWeight=LeftWeight-Rows.Current.Weight
+      next
+    next
+  end
+
+/// 76 Calcula frete por faixas cumulativas de peso com seguro e piso.
+server action HxTieredFreight public
+  in Tiers: HxItem List
+  in Weight: Decimal
+  in DeclaredValue: Decimal
+  in InsuranceRate: Decimal
+  in Minimum: Decimal
+  out Total: Decimal
+  local Remaining: Decimal
+  local LastLimit: Decimal
+  local Slice: Decimal
+  assign Remaining = 0
+  assign LastLimit = 0
+  assign Slice = 0
+  if not (Weight>0 and DeclaredValue>=0 and InsuranceRate>=0 and InsuranceRate<=1 and Minimum>=0):
+    raise HxRejected("Frete inválido")
+  assign Remaining=Weight
+  foreach Tiers:
+    if not (Tiers.Current.Limit>LastLimit and Tiers.Current.Value>=0):
+      raise HxRejected("Faixas inválidas")
+    assign Slice=Min(Remaining,Tiers.Current.Limit-LastLimit)
+    assign Total=Total+Slice*Tiers.Current.Value
+    assign Remaining=Remaining-Slice
+    assign LastLimit=Tiers.Current.Limit
+    next
+  if not (Remaining=0):
+    raise HxRejected("Peso excede última faixa")
+  assign
+    Total = Round(Max(Minimum,Total)+DeclaredValue*InsuranceRate,2)
+  end
+
+/// 77 Mede concentração de doadores pelo índice de Herfindahl e maior participação.
+server action HxDonorConcentration public
+  in Items: HxItem List
+  out Index: Decimal
+  out LargestShare: Decimal
+  out Total: Decimal
+  if not (not Items.Empty and Items.Length<=1000):
+    raise HxRejected("Doadores inválidos")
+  foreach Items:
+    if not (Items.Current.Value>=0):
+      raise HxRejected("Valor negativo")
+    assign Total=Total+Items.Current.Value
+    next
+  if not (Total>0):
+    raise HxRejected("Total nulo")
+  foreach Items:
+    assign Index=Index+(Items.Current.Value/Total)*(Items.Current.Value/Total)
+    assign LargestShare=Max(LargestShare,Items.Current.Value/Total)
+    next
+  end
+
+/// 78 Avalia risco por fatores com veto e classificação por limites explícitos.
+server action HxCompositeRisk public
+  in Factors: HxItem List
+  in Moderate: Decimal
+  in Critical: Decimal
+  out Score: Decimal
+  out Band: Text
+  out Veto: Boolean
+  local Weight: Decimal
+  assign Weight = 0
+  if not (Moderate>=0 and Critical>Moderate and Critical<=100 and Factors.Length<=100):
+    raise HxRejected("Limiares inválidos")
+  foreach Factors:
+    if not (Factors.Current.Value>=0 and Factors.Current.Value<=100 and Factors.Current.Weight>=0):
+      raise HxRejected("Fator inválido")
+    assign Score=Score+Factors.Current.Value*Factors.Current.Weight
+    assign Weight=Weight+Factors.Current.Weight
+    assign Veto=Veto or (Factors.Current.Flag and Factors.Current.Value>=Factors.Current.Limit)
+    next
+  if not (Weight>0):
+    raise HxRejected("Pesos nulos")
+  assign Score=Score/Weight
+  switch:
+    case Veto or Score>=Critical:
+      assign
+        Band = "Crítico"
+      end
+    case Score>=Moderate:
+      assign
+        Band = "Moderado"
+      end
+    otherwise:
+      assign
+        Band = "Baixo"
+      end
+
+/// 79 Confere desvios de conciliação com tolerância absoluta e relativa combinadas.
+server action HxToleranceReconciliation public
+  in Items: HxItem List
+  in AbsoluteTolerance: Decimal
+  in RelativeTolerance: Decimal
+  out Rows: HxItem List
+  out Exceptions: Integer
+  out NetDifference: Decimal
+  if not (AbsoluteTolerance>=0 and RelativeTolerance>=0 and RelativeTolerance<=1 and Items.Length<=1000):
+    raise HxRejected("Tolerância inválida")
+  assign Rows=Items
+  foreach Rows:
+    assign NetDifference=NetDifference+Rows.Current.Value-Rows.Current.Weight
+    assign Rows.Current.Limit=Max(AbsoluteTolerance,Abs(Rows.Current.Weight)*RelativeTolerance)
+    assign Rows.Current.Flag=Abs(Rows.Current.Value-Rows.Current.Weight)>Rows.Current.Limit
+    if Rows.Current.Flag:
+      assign Exceptions=Exceptions+1
+      next
+    next
+  end
+
+/// 80 Simula consumo de validade em FEFO, priorizando prazos menores.
+server action HxFefoSimulation public
+  in Items: HxItem List
+  in Required: Decimal
+  in MinimumDays: Integer
+  out Rows: HxItem List
+  out Shortage: Decimal
+  if not (Required>=0 and MinimumDays>=0 and Items.Length<=1000):
+    raise HxRejected("Demanda inválida")
+  assign Rows=Items
+  (System).ListSort(List=Rows, By=Rank, Ascending=True)
+  assign Shortage=Required
+  foreach Rows:
+    if not (Rows.Current.Limit>=0):
+      raise HxRejected("Saldo inválido")
+    assign Rows.Current.Value=0
+    if Rows.Current.Rank>=MinimumDays and not Rows.Current.Flag:
+      assign Rows.Current.Value=Min(Shortage,Rows.Current.Limit)
+      assign Shortage=Shortage-Rows.Current.Value
+      next
+    next
+  end
+
+/// 81 Avalia rota plana e detecção de saltos sem arredondar cada segmento.
+server action HxRouteGeometry public
+  in Points: HxPoint List
+  in MaximumSegment: Decimal
+  out Distance: Decimal
+  out Jumps: Integer
+  local First: Boolean
+  local X: Decimal
+  local Y: Decimal
+  local Segment: Decimal
+  assign First = True
+  assign X = 0
+  assign Y = 0
+  assign Segment = 0
+  if not (MaximumSegment>0 and Points.Length<=1000):
+    raise HxRejected("Rota inválida")
+  foreach Points:
+    if not First:
+      assign Segment=Sqrt((Points.Current.X-X)*(Points.Current.X-X)+(Points.Current.Y-Y)*(Points.Current.Y-Y))
+      assign Distance=Distance+Segment
+      if Segment>MaximumSegment:
+        assign Jumps=Jumps+1
+        -> @flowJoin1
+      -> @flowJoin1
+    assign X=Points.Current.X @flowJoin1
+    assign Y=Points.Current.Y
+    assign First=False
+    next
+  end
+
+/// 82 Ordena prioridades e dá a mesma posição a valores empatados.
+server action HxPrioritizeCandidates public
+  in Items: HxItem List
+  out Rows: HxItem List
+  local Ordinal: Integer
+  local Last: Decimal
+  local Rank: Integer
+  assign Ordinal = 0
+  assign Last = 0
+  assign Rank = 0
+  if not (Items.Length<=1000):
+    raise HxRejected("Candidatos extensos")
+  assign Rows=Items
+  (System).ListSort(List=Rows, By=Value, Ascending=False)
+  foreach Rows:
+    assign Ordinal=Ordinal+1
+    if Ordinal=1 or Rows.Current.Value<>Last:
+      assign Rank=Ordinal
+      -> @flowJoin1
+    assign Rows.Current.Rank=Rank @flowJoin1
+    assign Last=Rows.Current.Value
+    next
+  end
+
+/// 83 Mede atendimento por classes; zero solicitado não produz divisão por zero.
+server action HxServiceLevel public
+  in Items: HxItem List
+  out Requested: Decimal
+  out Delivered: Decimal
+  out WeightedLevel: Decimal
+  out Breaches: Integer
+  local Weights: Decimal
+  assign Weights = 0
+  if not (Items.Length<=1000):
+    raise HxRejected("Lista extensa")
+  foreach Items:
+    if not (Items.Current.Value>=0 and Items.Current.Limit>=0 and Items.Current.Value<=Items.Current.Limit and Items.Current.Weight>=0):
+      raise HxRejected("Atendimento inválido")
+    assign Requested=Requested+Items.Current.Limit
+    assign Delivered=Delivered+Items.Current.Value
+    if Items.Current.Limit>0:
+      assign WeightedLevel=WeightedLevel+Items.Current.Weight*Items.Current.Value/Items.Current.Limit
+      assign Weights=Weights+Items.Current.Weight
+      -> @flowJoin2
+    if Items.Current.Value<Items.Current.Limit and Items.Current.Flag: @flowJoin2
+      assign Breaches=Breaches+1
+      next
+    next
+  if Weights>0:
+    assign WeightedLevel=WeightedLevel/Weights
+    -> @flowJoin1
+  end @flowJoin1
+
+/// 84 Mede duração de séries de falhas e recuperação em inspeções discretas.
+server action HxFailureStreaks public
+  in Items: HxItem List
+  out Longest: Integer
+  out Current: Integer
+  out Recoveries: Integer
+  out Failures: Integer
+  if not (Items.Length<=1000):
+    raise HxRejected("Série extensa")
+  foreach Items:
+    if Items.Current.Flag:
+      assign Current=Current+1
+      assign Failures=Failures+1
+      assign Longest=Max(Longest,Current)
+      -> @flowJoin2
+    if not Items.Current.Flag: @flowJoin2
+      if Current>0:
+        assign Recoveries=Recoveries+1
+        -> @flowJoin1
+      assign Current=0 @flowJoin1
+      next
+    next
+  end
+
+/// 85 Valida entrada textual tipada e retorna diagnóstico de desserialização sem persistir.
+server action HxParsePlanningInput public
+  in Json: Text
+  out Rows: HxItem List
+  out Valid: Boolean
+  out Error: Text
+  if not (Length(Json)<=100000):
+    raise HxRejected("Documento muito grande")
+  Parsed = JSONDeserialize(Json) as HxItem List
+  assign Rows=Parsed.Data
+  if not (Rows.Length<=1000):
+    raise HxRejected("Itens demais")
+  foreach Rows:
+    if not (Length(Trim(Rows.Current.Key))>0 and Rows.Current.Weight>=0 and Rows.Current.Limit>=0):
+      raise HxRejected("Item inválido")
+    next
+  assign
+    Valid = True
+  end
+  on exception All Exceptions abort:
+    assign
+      Valid = False
+      Error = "Documento de planejamento inválido"
+    end
+
+/// 86 Consolida estoque livre, reservado e indisponível por produto em uma consulta.
+server action HxStockPosition public
+  in HubId: HxHub Identifier
+  in At: Date Time
+  out Rows: HxMetric List
+  local H: HxHub
+  LoadH = GetHxHub(Id=HubId)
+  assign H = LoadH.Record.HxHub
+  if not (H.Owner=GetUserId() and GetUserId()<>NullIdentifier()):
+    raise HxRejected("Acesso negado")
+  Query = sql -> HxMetric max 1000
+    in At: Date Time = At
+    in HubId: HxHub Identifier = HubId
+    | SELECT [Product],COUNT_BIG(*),SUM(CASE WHEN [State]=1 AND [Expiry]>@At THEN [Quantity]-[Reserved] ELSE 0 END),SUM(CASE WHEN [State]<>1 OR [Expiry]<=@At THEN [Quantity] ELSE [Reserved] END) FROM {HxLot} WHERE [HubId]=@HubId GROUP BY [Product] ORDER BY [Product];
+  assign
+    Rows = Query.List
+  end
+
+/// 87 Rastreia saldo de atendimento e perdas por lote sem multiplicar somas por joins.
+server action HxAllocationTrace public
+  in HubId: HxHub Identifier
+  in DemandId: HxDemand Identifier
+  out Rows: HxMetric List
+  local H: HxHub
+  local D: HxDemand
+  LoadH = GetHxHub(Id=HubId)
+  assign H = LoadH.Record.HxHub
+  if not (H.Owner=GetUserId() and GetUserId()<>NullIdentifier()):
+    raise HxRejected("Acesso negado")
+  LoadD = GetHxDemand(Id=DemandId)
+  assign D = LoadD.Record.HxDemand
+  if not (D.HubId=H.Id):
+    raise HxRejected("Demanda inválida")
+  Query = sql -> HxMetric max 1000
+    in DemandId: HxDemand Identifier = DemandId
+    in HubId: HxHub Identifier = HubId
+    | SELECT l.[Code],COUNT_BIG(*),SUM(CASE WHEN r.[State]<>5 THEN r.[Quantity] ELSE 0 END),SUM(r.[Delivered]) FROM {HxReservation} r JOIN {HxLot} l ON l.[Id]=r.[LotId] WHERE r.[DemandId]=@DemandId AND l.[HubId]=@HubId GROUP BY l.[Code] ORDER BY l.[Code];
+  assign
+    Rows = Query.List
+  end
+
+/// 88 Compara demanda aberta e estoque utilizável com agregações independentes.
+server action HxSupplyGaps public
+  in HubId: HxHub Identifier
+  in At: Date Time
+  out Rows: HxMetric List
+  local H: HxHub
+  LoadH = GetHxHub(Id=HubId)
+  assign H = LoadH.Record.HxHub
+  if not (H.Owner=GetUserId() and GetUserId()<>NullIdentifier()):
+    raise HxRejected("Acesso negado")
+  Query = sql -> HxMetric max 1000
+    in HubId: HxHub Identifier = HubId
+    in At: Date Time = At
+    | SELECT d.[Product],d.n,d.need,COALESCE(l.available,0) FROM (SELECT [Product],COUNT_BIG(*) n,SUM([Requested]-[Allocated]) need FROM {HxDemand} WHERE [HubId]=@HubId AND [State]=1 GROUP BY [Product]) d LEFT JOIN (SELECT [Product],SUM([Quantity]-[Reserved]) available FROM {HxLot} WHERE [HubId]=@HubId AND [State]=1 AND [Expiry]>@At GROUP BY [Product]) l ON l.[Product]=d.[Product] WHERE d.need>COALESCE(l.available,0) ORDER BY d.need-COALESCE(l.available,0) DESC,d.[Product];
+  assign
+    Rows = Query.List
+  end
+
+/// 89 Agrupa vencimentos em faixas relativas com quantidade e comprometimento.
+server action HxExpiryBuckets public
+  in HubId: HxHub Identifier
+  in At: Date Time
+  out Rows: HxMetric List
+  local H: HxHub
+  LoadH = GetHxHub(Id=HubId)
+  assign H = LoadH.Record.HxHub
+  if not (H.Owner=GetUserId() and GetUserId()<>NullIdentifier()):
+    raise HxRejected("Acesso negado")
+  Query = sql -> HxMetric max 10
+    in At: Date Time = At
+    in HubId: HxHub Identifier = HubId
+    | SELECT x.bucket,COUNT_BIG(*),SUM(x.qty),SUM(x.reserved) FROM (SELECT CASE WHEN [Expiry]<=@At THEN 'Vencido' WHEN [Expiry]<=DATEADD(day,7,@At) THEN '7 dias' WHEN [Expiry]<=DATEADD(day,30,@At) THEN '30 dias' ELSE 'Longo prazo' END bucket,[Quantity] qty,[Reserved] reserved FROM {HxLot} WHERE [HubId]=@HubId AND [State]<>3) x GROUP BY x.bucket ORDER BY x.bucket;
+  assign
+    Rows = Query.List
+  end
+
+/// 90 Prestação de contas separa promessa, caixa líquido e recursos restritos.
+server action HxDonorAccountability public
+  in HubId: HxHub Identifier
+  in RestrictedOnly: Boolean
+  out Rows: HxMetric List
+  local H: HxHub
+  LoadH = GetHxHub(Id=HubId)
+  assign H = LoadH.Record.HxHub
+  if not (H.Owner=GetUserId() and GetUserId()<>NullIdentifier()):
+    raise HxRejected("Acesso negado")
+  Query = sql -> HxMetric max 1000
+    in HubId: HxHub Identifier = HubId
+    in RestrictedOnly: Boolean = RestrictedOnly
+    | SELECT [Donor],COUNT_BIG(*),SUM([Pledged]-[Received]),SUM([Received]-[Refunded]) FROM {HxDonation} WHERE [HubId]=@HubId AND (@RestrictedOnly=0 OR [Restricted]=1) GROUP BY [Donor] HAVING SUM([Pledged])+SUM([Received])>0 ORDER BY SUM([Received]-[Refunded]) DESC,[Donor];
+  assign
+    Rows = Query.List
+  end
+
+/// 91 Custo por unidade aceita usa subconsulta de carga agregada para não duplicar frete.
+server action HxTransportEfficiency public
+  in HubId: HxHub Identifier
+  in MinimumAccepted: Decimal
+  out Rows: HxMetric List
+  local H: HxHub
+  LoadH = GetHxHub(Id=HubId)
+  assign H = LoadH.Record.HxHub
+  if not (H.Owner=GetUserId() and GetUserId()<>NullIdentifier() and MinimumAccepted>0):
+    raise HxRejected("Consulta inválida")
+  Query = sql -> HxMetric max 1000
+    in HubId: HxHub Identifier = HubId
+    in MinimumAccepted: Decimal = MinimumAccepted
+    | SELECT CAST(t.[Id] AS NVARCHAR(100)),CAST(c.n AS BIGINT),t.[Cost]/NULLIF(c.accepted,0),CASE WHEN t.[Capacity]>0 THEN t.[Loaded]/t.[Capacity] ELSE 0 END FROM {HxTrip} t JOIN (SELECT [TripId],COUNT_BIG(*) n,SUM([Accepted]) accepted FROM {HxCargo} WHERE [State]=2 GROUP BY [TripId]) c ON c.[TripId]=t.[Id] WHERE t.[HubId]=@HubId AND t.[State]=4 AND c.accepted>=@MinimumAccepted ORDER BY t.[Cost]/NULLIF(c.accepted,0) DESC,t.[Id];
+  assign
+    Rows = Query.List
+  end
+
+/// 92 Classifica atrasos por prioridade sem incorporar demandas concluídas.
+server action HxOverdueDemand public
+  in HubId: HxHub Identifier
+  in At: Date Time
+  out Rows: HxMetric List
+  local H: HxHub
+  LoadH = GetHxHub(Id=HubId)
+  assign H = LoadH.Record.HxHub
+  if not (H.Owner=GetUserId() and GetUserId()<>NullIdentifier()):
+    raise HxRejected("Acesso negado")
+  Query = sql -> HxMetric max 5
+    in At: Date Time = At
+    in HubId: HxHub Identifier = HubId
+    | SELECT CAST([Priority] AS NVARCHAR(100)),COUNT_BIG(*),SUM([Requested]-[Delivered]),CAST(MAX(DATEDIFF(hour,[Deadline],@At)) AS DECIMAL(18,2)) FROM {HxDemand} WHERE [HubId]=@HubId AND [State]=1 AND [Deadline]<@At AND [Delivered]<[Requested] GROUP BY [Priority] ORDER BY [Priority] DESC;
+  assign
+    Rows = Query.List
+  end
+
+/// 93 Variação de custo de reparos concluídos por ativo com limiar mínimo de desvio.
+server action HxRepairVariance public
+  in HubId: HxHub Identifier
+  in MinimumVariance: Decimal
+  out Rows: HxMetric List
+  local H: HxHub
+  LoadH = GetHxHub(Id=HubId)
+  assign H = LoadH.Record.HxHub
+  if not (H.Owner=GetUserId() and GetUserId()<>NullIdentifier() and MinimumVariance>=0):
+    raise HxRejected("Consulta inválida")
+  Query = sql -> HxMetric max 1000
+    in HubId: HxHub Identifier = HubId
+    in MinimumVariance: Decimal = MinimumVariance
+    | SELECT [Asset],COUNT_BIG(*),SUM([Actual]-[Estimate]),SUM(CASE WHEN [Actual]>[Estimate] THEN [Actual]-[Estimate] ELSE 0 END) FROM {HxRepair} WHERE [HubId]=@HubId AND [State]=4 GROUP BY [Asset] HAVING ABS(SUM([Actual]-[Estimate]))>=@MinimumVariance ORDER BY SUM([Actual]-[Estimate]) DESC,[Asset];
+  assign
+    Rows = Query.List
+  end
+
+/// 94 Detecta saldos reservados divergentes sem corrigir automaticamente histórico.
+server action HxReservationAnomalies public
+  in HubId: HxHub Identifier
+  in Tolerance: Decimal
+  out Rows: HxMetric List
+  local H: HxHub
+  LoadH = GetHxHub(Id=HubId)
+  assign H = LoadH.Record.HxHub
+  if not (H.Owner=GetUserId() and GetUserId()<>NullIdentifier() and Tolerance>=0):
+    raise HxRejected("Consulta inválida")
+  Query = sql -> HxMetric max 1000
+    in HubId: HxHub Identifier = HubId
+    in Tolerance: Decimal = Tolerance
+    | SELECT l.[Code],COALESCE(r.n,0),l.[Reserved],COALESCE(r.qty,0) FROM {HxLot} l LEFT JOIN (SELECT [LotId],COUNT_BIG(*) n,SUM([Quantity]) qty FROM {HxReservation} WHERE [State]=1 GROUP BY [LotId]) r ON r.[LotId]=l.[Id] WHERE l.[HubId]=@HubId AND (ABS(l.[Reserved]-COALESCE(r.qty,0))>@Tolerance OR l.[Reserved]>l.[Quantity] OR l.[Quantity]<0) ORDER BY l.[Code];
+  assign
+    Rows = Query.List
+  end
+
+/// 95 Resume excursões e maior salto entre leituras consecutivas por lote.
+server action HxColdChainAnomalies public
+  in HubId: HxHub Identifier
+  in Since: Date Time
+  out Rows: HxMetric List
+  local H: HxHub
+  LoadH = GetHxHub(Id=HubId)
+  assign H = LoadH.Record.HxHub
+  if not (H.Owner=GetUserId() and GetUserId()<>NullIdentifier() and Since<=CurrDateTime()):
+    raise HxRejected("Consulta inválida")
+  Query = sql -> HxMetric max 1000
+    in HubId: HxHub Identifier = HubId
+    in Since: Date Time = Since
+    | SELECT x.code,COUNT_BIG(*),SUM(CASE WHEN x.excursion=1 THEN 1.0 ELSE 0 END),COALESCE(MAX(ABS(x.value-x.previous)),0) FROM (SELECT l.[Code] code,r.[Value] value,r.[Excursion] excursion,LAG(r.[Value]) OVER(PARTITION BY r.[LotId] ORDER BY r.[Sequence]) previous FROM {HxReading} r JOIN {HxLot} l ON l.[Id]=r.[LotId] WHERE l.[HubId]=@HubId AND r.[At]>=@Since) x GROUP BY x.code HAVING SUM(CASE WHEN x.excursion=1 THEN 1 ELSE 0 END)>0 ORDER BY x.code;
+  assign
+    Rows = Query.List
+  end
+
+/// 96 Extrato agregado por categoria com corte temporal fechado-aberto.
+server action HxJournalSummary public
+  in HubId: HxHub Identifier
+  in Since: Date Time
+  in Until: Date Time
+  out Rows: HxMetric List
+  local H: HxHub
+  LoadH = GetHxHub(Id=HubId)
+  assign H = LoadH.Record.HxHub
+  if not (H.Owner=GetUserId() and GetUserId()<>NullIdentifier() and Since<Until):
+    raise HxRejected("Período inválido")
+  Query = sql -> HxMetric max 1000
+    in HubId: HxHub Identifier = HubId
+    in Since: Date Time = Since
+    in Until: Date Time = Until
+    | SELECT [Category],COUNT_BIG(*),SUM(CASE WHEN [Amount]>0 THEN [Amount] ELSE 0 END),SUM(CASE WHEN [Amount]<0 THEN -[Amount] ELSE 0 END) FROM {HxJournal} WHERE [HubId]=@HubId AND [At]>=@Since AND [At]<@Until GROUP BY [Category] ORDER BY [Category];
+  assign
+    Rows = Query.List
+  end
+
+/// 97 Separa saldo de fornecedor e retenção em aberto sem misturar documentos rascunho.
+server action HxSupplierExposure public
+  in HubId: HxHub Identifier
+  in Minimum: Decimal
+  out Rows: HxMetric List
+  local H: HxHub
+  LoadH = GetHxHub(Id=HubId)
+  assign H = LoadH.Record.HxHub
+  if not (H.Owner=GetUserId() and GetUserId()<>NullIdentifier() and Minimum>=0):
+    raise HxRejected("Consulta inválida")
+  Query = sql -> HxMetric max 1000
+    in HubId: HxHub Identifier = HubId
+    in Minimum: Decimal = Minimum
+    | SELECT [Supplier],COUNT_BIG(*),SUM([Net]+[Tax]-[Credit]-[Paid]-[Retained]),SUM([Retained]) FROM {HxInvoice} WHERE [HubId]=@HubId AND [State]=2 GROUP BY [Supplier] HAVING SUM([Net]+[Tax]-[Credit]-[Paid])>=@Minimum ORDER BY SUM([Net]+[Tax]-[Credit]-[Paid]) DESC,[Supplier];
+  assign
+    Rows = Query.List
+  end
+
+/// 98 Inventário de demandas alocadas além do prazo de validade do lote.
+server action HxUnsafeAllocations public
+  in HubId: HxHub Identifier
+  out Rows: HxMetric List
+  local H: HxHub
+  LoadH = GetHxHub(Id=HubId)
+  assign H = LoadH.Record.HxHub
+  if not (H.Owner=GetUserId() and GetUserId()<>NullIdentifier()):
+    raise HxRejected("Acesso negado")
+  Query = sql -> HxMetric max 1000
+    in HubId: HxHub Identifier = HubId
+    | SELECT d.[Product],COUNT_BIG(*),SUM(r.[Quantity]),SUM(CASE WHEN l.[State]<>1 THEN r.[Quantity] ELSE 0 END) FROM {HxReservation} r JOIN {HxDemand} d ON d.[Id]=r.[DemandId] JOIN {HxLot} l ON l.[Id]=r.[LotId] WHERE d.[HubId]=@HubId AND l.[HubId]=@HubId AND r.[State]=1 AND (l.[Expiry]<=d.[Deadline] OR l.[State]<>1) GROUP BY d.[Product] ORDER BY d.[Product];
+  assign
+    Rows = Query.List
+  end
+
+/// 99 Reconcilia entregue por demanda contra cargas aceitas, reportando diferenças.
+server action HxDeliveryAnomalies public
+  in HubId: HxHub Identifier
+  in Tolerance: Decimal
+  out Rows: HxMetric List
+  local H: HxHub
+  LoadH = GetHxHub(Id=HubId)
+  assign H = LoadH.Record.HxHub
+  if not (H.Owner=GetUserId() and GetUserId()<>NullIdentifier() and Tolerance>=0):
+    raise HxRejected("Consulta inválida")
+  Query = sql -> HxMetric max 1000
+    in HubId: HxHub Identifier = HubId
+    in Tolerance: Decimal = Tolerance
+    | SELECT CAST(d.[Id] AS NVARCHAR(100)),COALESCE(x.n,0),d.[Delivered],COALESCE(x.accepted,0) FROM {HxDemand} d LEFT JOIN (SELECT r.[DemandId],COUNT_BIG(*) n,SUM(c.[Accepted]) accepted FROM {HxReservation} r JOIN {HxCargo} c ON c.[ReservationId]=r.[Id] WHERE c.[State]=2 GROUP BY r.[DemandId]) x ON x.[DemandId]=d.[Id] WHERE d.[HubId]=@HubId AND ABS(d.[Delivered]-COALESCE(x.accepted,0))>@Tolerance ORDER BY d.[Id];
+  assign
+    Rows = Query.List
+  end
+
+/// 100 Propõe picking FEFO por soma cumulativa sem reservar ou alterar dados.
+server action HxProposePicking public
+  in HubId: HxHub Identifier
+  in Product: Text
+  in Required: Decimal
+  in Deadline: Date Time
+  out Rows: HxMetric List
+  local H: HxHub
+  LoadH = GetHxHub(Id=HubId)
+  assign H = LoadH.Record.HxHub
+  if not (H.Owner=GetUserId() and GetUserId()<>NullIdentifier() and Required>0 and Deadline>CurrDateTime()):
+    raise HxRejected("Proposta inválida")
+  Query = sql -> HxMetric max 1000
+    in Required: Decimal = Required
+    in HubId: HxHub Identifier = HubId
+    in Product: Text = Product
+    in Deadline: Date Time = Deadline
+    | SELECT x.code,CAST(x.id AS BIGINT),CASE WHEN @Required-x.prior>=x.available THEN x.available ELSE @Required-x.prior END,x.available FROM (SELECT [Id] id,[Code] code,[Quantity]-[Reserved] available,COALESCE(SUM([Quantity]-[Reserved]) OVER(ORDER BY [Expiry],[Id] ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING),0) prior FROM {HxLot} WHERE [HubId]=@HubId AND [Product]=@Product AND [State]=1 AND [Expiry]>@Deadline AND [Quantity]>[Reserved]) x WHERE x.prior<@Required ORDER BY x.prior,x.id;
+  assign
+    Rows = Query.List
+  end

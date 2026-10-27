@@ -107,6 +107,76 @@ public class StudioDefaultsTests(ITestOutputHelper output)
         finally { StudioDefaults.ResetForTests(); }
     }
 
+    // Review of 3ab12209, finding 6: recipe 6 tried the 19 Traditional-only widget kinds in every Reactive and Mobile page (and
+    // ODC: StudioDefaultsOdcTests), about 3,000 refused creates per context. Each context tries the widget kinds of its runtime
+    // only: no Traditional-only kind in a Reactive or Mobile page; in a Traditional Web page its Traditional kinds, never a
+    // Reactive kind the writer writes as its Traditional counterpart (ScreenHtmlTables.TraditionalKind).
+    [Fact]
+    public void EachContextTriesOnlyTheWidgetKindsOfItsRuntime()
+    {
+        if (!StudioAvailable()) { output.WriteLine("WARNING: no Service Studio: skipped."); return; }
+        var host = new ModelHost(Work());
+        foreach (var (name, file, traditional) in new[] { ("Reactive", Fixture, false), ("Mobile", Mobile, false), ("Traditional", Traditional, true) }) {
+            var bytes = File.ReadAllBytes(file);
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            var measured = host.MeasureBorn(bytes);
+            var tried = TriedKinds(measured.Log);
+            output.WriteLine(name + ": measured in " + sw.ElapsedMilliseconds + " ms, " + measured.Born.Count + " kinds born, " + measured.Log.Count + " log lines, "
+                + measured.Log.Count(l => l.StartsWith("create ", StringComparison.Ordinal)) + " refused creates");
+            output.WriteLine(name + " born: " + string.Join(", ", measured.Born.Keys));
+            Assert.True(measured.Born.Values.Count > 0 && measured.Roles.Values.Any(r => r is "screen" or "block"), name + ": nothing measured");
+            if (!traditional) {
+                var wrong = tried.Where(ScreenHtmlTables.TraditionalOnly.Contains).Distinct().Order(StringComparer.Ordinal).ToList();
+                Assert.True(wrong.Count == 0, name + ": Traditional-only kinds tried: " + string.Join(", ", wrong));
+                Assert.DoesNotContain(measured.Born.Keys, k => ScreenHtmlTables.TraditionalOnly.Contains(k.Split('@')[0]));
+                Assert.Contains("Container", measured.Born.Keys);
+                Assert.Contains("MobileBlockInstanceWidget", measured.Born.Keys);
+            } else {
+                var replaced = tried.Where(k => ScreenHtmlTables.TraditionalKind(k) != k).Distinct().Order(StringComparer.Ordinal).ToList();
+                Assert.True(replaced.Count == 0, name + ": Reactive kinds written as their Traditional counterpart tried: " + string.Join(", ", replaced));
+                foreach (var kind in new[] { "ContainerWidget", "ButtonWidget", "LinkWidget", "InputWidget", "ExpressionWidget", "CheckBoxWidget", "ComboBoxWidget", "TableRecordsWidget", "WebBlockInstanceWidget" })
+                    Assert.True(measured.Born.ContainsKey(kind), name + ": " + kind + " not measured");
+                Assert.DoesNotContain("MobileBlockInstanceWidget", tried);
+            }
+        }
+    }
+
+    // The kinds a measurement tried and the Studio refused ("create X under Y: ...", "not created: X", "not created in a popup: X").
+    private static List<string> TriedKinds(IEnumerable<string> log) =>
+        log.Select(l => Regex.Match(l, @"^(?:create (?<k>\w+) under |not created(?: in a popup)?: (?<k>\w+)$)")).Where(m => m.Success).Select(m => m.Groups["k"].Value).ToList();
+
+    // Cache names (review of 3ab12209): the kept file names the schema and the recipe of the kernel that measured it, so two
+    // kernel releases that share one root keep two files and never overwrite each other's.
+    [Fact]
+    public void TheKeptMeasurementNamesItsSchemaAndRecipeAndLeavesAnotherReleasesFile()
+    {
+        if (!StudioAvailable()) { output.WriteLine("WARNING: no Service Studio: skipped."); return; }
+        var work = Work();
+        var host = new ModelHost(work);
+        var cache = Path.Combine(work, "cache");
+        try {
+            StudioDefaults.ResetForTests(cache);
+            var id = StudioDefaults.Identity();
+            var bytes = File.ReadAllBytes(Fixture);
+            var context = host.StudioDefaultsOf(bytes).Context;
+            var dir = Path.Combine(cache, "ss11");
+            var schema = StudioDefaults.Schema[(StudioDefaults.Schema.LastIndexOf('/') + 1)..];
+            var expected = "studio-defaults.s" + schema + "-r" + StudioBornValues.Recipe + "." + id + "." + context + ".json";
+            var kept = Directory.GetFiles(dir, "studio-defaults.*.json").Select(Path.GetFileName).ToList();
+            Assert.Equal(new[] { expected }, kept);
+            // A file another release kept for the same Studio identity and context (another recipe) is never read or overwritten.
+            var other = Path.Combine(dir, "studio-defaults.s" + schema + "-r" + (StudioBornValues.Recipe + 1) + "." + id + "." + context + ".json");
+            File.WriteAllText(other, "{\"other\":\"release\"}");
+            File.Delete(Path.Combine(dir, expected));
+            StudioDefaults.ResetForTests(cache);
+            Assert.True(host.StudioDefaultsOf(bytes).Measured);
+            Assert.Equal("{\"other\":\"release\"}", File.ReadAllText(other));
+            Assert.True(File.Exists(Path.Combine(dir, expected)));
+            Assert.Equal(2, Directory.GetFiles(dir, "studio-defaults.*.json").Length);
+        }
+        finally { StudioDefaults.ResetForTests(); }
+    }
+
     [Fact]
     public void AFlowWithAThemeOfItsOwnReadsWithItsDefaultsTheSameOnEveryLoad()
     {

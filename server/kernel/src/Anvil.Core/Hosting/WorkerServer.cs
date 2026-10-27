@@ -14,9 +14,20 @@ public sealed class WorkerServer : IDisposable
     /// reply and every <see cref="Poll"/> while idle. A request queued meanwhile cancels its token unless <see cref="Wait"/>
     /// says the request needs what Run is preparing; it then waits for the remainder. <see cref="Shed"/> runs after each
     /// command, before the heap recycle rule.</summary>
-    public sealed record IdleWork(Action<CancellationToken> Run, Func<string[], bool> Wait, Action Shed, TimeSpan Poll);
+    public sealed record IdleWork(Action<CancellationToken> Run, Func<string[], bool> Wait, Action Shed, TimeSpan Poll)
+    {
+        /// <summary>L3b: the `warm` command (the base cache's <c>Warm</c>): it names the captures the idle work prepares next and
+        /// answers at once; the ping says `warm:true`. Null: the command is the host's (anvil-odc's builder has none).</summary>
+        public Func<string[], JsonObject>? Warm { get; init; }
+        public const string WarmCommand = "warm";
+    }
 
-    private sealed record Request(string[] Args, long Received, TaskCompletionSource<JsonObject> Completion);
+    private sealed record Request(string[] Args, long Received, TaskCompletionSource<JsonObject> Completion)
+    {
+        // Under the state lock: the dispatch thread took it (Started), or its client gave up before that (Withdrawn: never run).
+        public bool Started { get; set; }
+        public bool Withdrawn { get; set; }
+    }
     private readonly TcpListener listener;
     private readonly BlockingCollection<Request> queue = new();
     private readonly Func<string[], JsonObject> execute;
@@ -107,6 +118,9 @@ public sealed class WorkerServer : IDisposable
             ["idleExitMinutes"] = idleExit is { } exit ? Math.Round(exit.TotalMinutes, 2) : null,
             ["gcMB"] = heap() >> 20, ["workingSetMB"] = Environment.WorkingSet >> 20,
         };
+        // S14: a worker with spares (the base cache's idle work) reads over them (HotModuleRead).
+        if (idle != null) result["hotRead"] = true;
+        if (idle?.Warm != null) result["warm"] = true;
         foreach (var pair in metadata) result[pair.Key] = pair.Value?.DeepClone();
         return result;
         }
@@ -151,12 +165,25 @@ public sealed class WorkerServer : IDisposable
                     {
                         var request = new Request(args, Stopwatch.GetTimestamp(), new(TaskCreationOptions.RunContinuationsAsynchronously));
                         CancellationTokenSource? running = null;
+                        var hotRead = args[0] == HotModuleRead.Command;
+                        // S14/L3b: a hot read of the model whose spare is being prepared joins that prefetch (the base cache's
+                        // Wait says so, and the idle step ends after it); any other prefetch is never stopped for a read.
+                        var joins = hotRead && idle != null && idleRun != null && JoinsPrefetch(args);
                         lock (state)
                         {
                             if (draining || queue.IsAddingCompleted) request.Completion.SetResult(Retry(args[0]));
-                            else { queue.Add(request); running = idleRun; }
+                            // S14: otherwise a hot read never waits nor stops a prefetch: refused at once (not executed) unless the
+                            // dispatch thread is free now; the caller then reads cold.
+                            else if (hotRead && (idle == null || current != null || queue.Count > 0 || idleRun != null && !joins))
+                                request.Completion.SetResult(HotModuleRead.Busy(idle == null ? "this worker keeps no spare" : current != null ? "busy with " + current : queue.Count > 0 ? "requests queued" : "preparing the spare of another model"));
+                            else { queue.Add(request); running = hotRead ? null : idleRun; }
                         }
                         if (running != null) Arrived(running, args);
+                        // A joined hot read waits at most HotModuleRead.JoinWait for the prefetch; still not taken then, it is
+                        // withdrawn (never run) and refused, and the caller reads cold.
+                        if (joins && await Task.WhenAny(request.Completion.Task, Task.Delay(HotModuleRead.JoinWait)) != request.Completion.Task)
+                            lock (state)
+                                if (!request.Started) { request.Withdrawn = true; request.Completion.TrySetResult(HotModuleRead.Busy("the spare of this model was still being prepared after " + HotModuleRead.JoinWait.TotalSeconds + " s")); }
                         reply = await request.Completion.Task;
                     }
                     await writer.WriteLineAsync(reply.ToJsonString());
@@ -186,16 +213,22 @@ public sealed class WorkerServer : IDisposable
                 continue;
             }
             var command = request.Args[0];
+            bool withdrawn;
             lock (state)
             {
                 if (draining) { request.Completion.TrySetResult(Retry(command)); continue; }
-                current = command; started = Stopwatch.GetTimestamp();
+                withdrawn = request.Withdrawn;
+                if (!withdrawn) { request.Started = true; current = command; started = Stopwatch.GetTimestamp(); }
             }
+            // A hot read that gave up waiting was answered already: nothing runs, the idle work goes on.
+            if (withdrawn) { RunIdle(); continue; }
             JsonObject result;
             try
             {
                 result = command == "shutdown" ? Success(command, Status())
-                    : command == "serve" ? Failure(command, "serve inside worker is not allowed") : execute(request.Args);
+                    : command == "serve" ? Failure(command, "serve inside worker is not allowed")
+                    : command == HotModuleRead.Command && idle != null ? HotModuleRead.Serve(request.Args)
+                    : command == IdleWork.WarmCommand && idle?.Warm is { } warm ? warm(request.Args) : execute(request.Args);
             }
             catch (Exception ex) { result = Failure(command, ex.Message); }
             try { idle?.Shed(); } catch (Exception ex) { log?.Invoke("worker: idle shed failed: " + ex.Message); }
@@ -261,6 +294,11 @@ public sealed class WorkerServer : IDisposable
         run.Dispose();
     }
 
+    private bool JoinsPrefetch(string[] args)
+    {
+        try { return idle!.Wait(args); } catch { return false; }
+    }
+
     private void Arrived(CancellationTokenSource running, string[] args)
     {
         bool wait;
@@ -285,4 +323,29 @@ public sealed class WorkerServer : IDisposable
         stopping.Cancel(); listener.Stop();
     }
     public void Dispose() { Stop(); stopping.Dispose(); queue.Dispose(); }
+}
+
+
+/// <summary>
+/// S14 (leitura quente): the `hot-read` command of the write worker. The reader itself (HotModuleRead.Kernel.cs) is set by the
+/// kernel over its spare of the model; a build that shares this file without it (the ODC builder) has no reader and answers Busy.
+/// </summary>
+public static partial class HotModuleRead
+{
+    public const string Command = "hot-read";
+
+    /// <summary>Set by the kernel part; null where the worker keeps no spare of a model.</summary>
+    public static Func<string[], JsonObject>? Reader { get; set; }
+
+    /// <summary>L3b follow-up: the longest a hot read of the model being prepared waits for that prefetch (the load and walk of a
+    /// large module in a warm worker: ~2 s after a merge, ~6 s as the first load of the process).</summary>
+    public static TimeSpan JoinWait { get; set; } = TimeSpan.FromSeconds(8);
+
+    /// <summary>A test's own reader, for the flow of execution that starts the worker (its dispatch thread inherits it).</summary>
+    internal static readonly AsyncLocal<Func<string[], JsonObject>?> ReaderOverride = new();
+
+    public static JsonObject Busy(string why) => new() { ["ok"] = false, ["command"] = Command, ["executed"] = false, ["code"] = "WORKER_BUSY",
+        ["error"] = "the worker is not free for a hot read (" + why + "); nothing ran" };
+
+    public static JsonObject Serve(string[] args) => (ReaderOverride.Value ?? Reader) is { } read ? read(args) : Busy("this worker has no hot reader");
 }

@@ -122,7 +122,7 @@ public sealed class ModuleIndexTests
                 first = cache.Read(Query(file));
                 Assert.Equal("built", first["cache"]!["index"]!.ToString()); Assert.Equal(1, loads);
                 Assert.True(File.Exists(store.PathOf(first["sourceSha256"]!.ToString())));
-                Assert.EndsWith(".kernel.json", store.PathOf("AB")); Assert.Contains(Path.Combine("v1", "o11", "ab."), store.PathOf("AB"));
+                Assert.EndsWith(".kernel.json", store.PathOf("AB")); Assert.Contains(Path.Combine(ModuleIndexStore.Generation, "o11", "ab."), store.PathOf("AB"));
             }
             // A new process: the listing comes from the index, the model is never loaded.
             using (var cold = new SnapshotReadCache(Refuse, store)) {

@@ -129,7 +129,7 @@ const TABLE = {
   RELEASE_IN_USE: c('ssam_update', { action: 'prune', dryRun: true }, 'a live process or a connection record uses that release; the dryRun shows what stays'),
   RELEASE_INTEGRITY: c('ssam_doctor', { checks: ['install', 'signatures'] }, 'release files changed or are missing; reinstall or update'),
   SMART_APP_CONTROL_BLOCKED: c('ssam_doctor', { checks: ['signatures'] }, 'Windows blocked an unsigned binary; the doctor shows the Smart App Control state'),
-  TASK_RUNNING: c(SAME_TOOL, { continueTask: '<taskId>' }, 'the same tool waits up to 25 s for the result; never repeat the original call nor sleep'),
+  TASK_RUNNING: c(SAME_TOOL, { continueTask: '<taskId>' }, 'the same tool waits for the result up to its deadline (50 s for a delivery, a publication or ssam_code write; 25 s otherwise); never repeat the original call nor sleep'),
   TASK_NOT_FOUND: c('ssam_task', {}, 'lists the task records of this root'),
   TASK_TOOL_MISMATCH: c(SAME_TOOL, { continueTask: '<taskId>' }, 'continue through the tool that started this task'),
   TASK_ORPHANED: c('ssam_doctor', { lane: '<lane>' }, 'reconcile the state of the lane; never repeat an uncertain write'),

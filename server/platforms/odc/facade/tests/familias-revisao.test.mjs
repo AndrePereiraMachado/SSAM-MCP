@@ -24,9 +24,9 @@ test('two patches of one path with different values are no patch: patchOmitted w
   const aggregate = html.replace('E.Id &gt; 1', 'IdentifierToLongInteger(E.Id) &gt; 1');
   const prose = html.replace('placeholder="Buscar por nome"', 'placeholder=\'"Buscar por nome"\'');
   const problems = [
-    { phase: 'preflight', op: 0, pointer: '/ops/0/data/html', code: 'OPERAND_TYPES', severity: 'error', message: 'a', fix: 'f', patch: [{ op: 'replace', path: '/ops/0/data/html', value: aggregate }] },
-    { phase: 'apply', op: 0, pointer: '/ops/0/data/html', code: 'HTML_INVALID', severity: 'error', message: 'b', fix: 'f', patch: [{ op: 'replace', path: '/ops/0/data/html', value: prose }] },
-    { phase: 'apply', op: 1, pointer: '/ops/1/value', code: 'OTHER', severity: 'error', message: 'c', fix: 'f', patch: [{ op: 'replace', path: '/ops/1/value', value: 'x' }] },
+    { phase: 'preflight', op: 0, pointer: '/ops/0/data/html', code: 'OPERAND_TYPES', severity: 'error', message: 'a', fix: 'f', patch: [{ op: 'replace', path: '/ops/0/data/html', value: aggregate }], patchCertain: true },
+    { phase: 'apply', op: 0, pointer: '/ops/0/data/html', code: 'HTML_INVALID', severity: 'error', message: 'b', fix: 'f', patch: [{ op: 'replace', path: '/ops/0/data/html', value: prose }], patchCertain: true },
+    { phase: 'apply', op: 1, pointer: '/ops/1/value', code: 'OTHER', severity: 'error', message: 'c', fix: 'f', patch: [{ op: 'replace', path: '/ops/1/value', value: 'x' }], patchCertain: true },
   ];
   assert.deepEqual(patchConflicts(problems.flatMap(p => p.patch)), [{ path: '/ops/0/data/html', values: 2 }]);
   const dir = tmp(); const file = path.join(dir, 'job.json');

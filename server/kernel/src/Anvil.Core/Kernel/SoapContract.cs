@@ -6,7 +6,7 @@ namespace Anvil.Core;
 /// <summary>
 /// The contract check of an imported SOAP client (op `soap`), on the candidate before any merge: every parameter of the
 /// requested methods keeps the exact WSDL type. A parameter whose OriginalType is an XML Schema primitive must have the
-/// OutSystems type of that primitive; one whose OriginalType is complex must be typed by the client's own SOAP structure
+/// compatible OutSystems representation of that primitive; one whose OriginalType is complex must be typed by the client's own SOAP structure
 /// of that name, bound by key (never Text, never a same-named structure elsewhere). GitSSAM proved live that an import
 /// over a filtered WSDL detached a complex type (tCurrency) this way and code generation crashed later; here the delivery
 /// stops before the merge with SOAP_CONTRACT_TYPE_MISMATCH naming each parameter. The check itself is pure (records);
@@ -55,7 +55,11 @@ public static class SoapContract
             var where = $"{p.Action}.{p.Name} ({p.Direction})";
             if (primitive != null)
             {
-                if (!Same(actual, primitive))
+                // The native O11 SOAP importer also represents xsd:decimal as Text, preserving XML Schema's
+                // arbitrary precision as a lexical decimal. Do not extend this exception to other primitives
+                // or to complex types: an int imported as Text or a detached structure is still a broken contract.
+                var lexicalDecimal = Same(LocalName(p.OriginalType), "decimal") && Same(actual, "Text");
+                if (!Same(actual, primitive) && !lexicalDecimal)
                     problems.Add(new("SOAP_CONTRACT_TYPE_MISMATCH", "/data/methods", $"soap: {where} is {p.ActualType} and the WSDL type {p.OriginalType} is {primitive}",
                         "nothing was merged; refresh the method (\"refresh\": [\"" + p.Action + "\"]) so the native import types it again from the full WSDL"));
                 continue;

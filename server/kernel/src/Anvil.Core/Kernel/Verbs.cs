@@ -62,6 +62,8 @@ public sealed partial class ModelSession
         using var timing = NativePerformanceCapture.Measure("apply.total", cpu: true);
         var results = new JsonArray();
         EndOfApplyFailure = null;
+        _preparedDocuments = null;
+        _documentDeclarationErrors = null;
         try
         {
         StudioAdapter.Runtime.Mutate(_espace, "Anvil: apply job", _ =>
@@ -85,7 +87,12 @@ public sealed partial class ModelSession
             var refusedBefore = false;
             // C28 (K2, atritos 3): an event argument written before the Destination of its event runs right after it.
             var order = ArgumentOrder(ops, (argument, destination) => Report("reorderedArguments", new JsonObject { ["op"] = argument, ["after"] = destination }));
-            foreach (var i in order)
+            // F5 (JobComposition.cs): the order of the ops never matters for the references among the elements the job creates.
+            // An op that declares what an earlier op needs whole runs before it; a screen an earlier op only navigates to has
+            // its root (name, flow, inputs) declared before the first op, and its document fills it in place.
+            var composition = Compose(ops, order, log);
+            var executed = new List<int>();
+            foreach (var i in composition.Order)
             {
                 var node = ops[i];
                 if (KeepFailures && (SkipOps?.Contains(i) == true || node is not JsonObject || node["op"] is not JsonValue))
@@ -107,6 +114,7 @@ public sealed partial class ModelSession
                 }
                 JsonNode? r;
                 _applyOps = ops; _applyIndex = i;
+                if (kind == "logic") PrepareUiForLogic(op);
                 _flowBlocked = flowTexts ? blocked : null;
                 _flowDependencySkipped = flowTexts ? (pointer, origin, name) => {
                     var at = opsPointer == null ? null : $"{opsPointer}/{i}/data{pointer}";
@@ -115,6 +123,7 @@ public sealed partial class ModelSession
                     log?.Invoke($"#{i} {kind} {pointer} skipped: it uses {name} of failed op #{origin}");
                 } : null;
                 BeginAnchors(i);
+                _ranOps.Add(i);
                 var opFailed = true;
                 try { r = ApplyOne(op); opFailed = false; }
                 catch (Exception ex)
@@ -124,7 +133,7 @@ public sealed partial class ModelSession
                     // Errors.Describe keeps the outermost text that contains the root's, so without it the op index was lost.
                     if (ex.GetBaseException() is { } cause && !msg.Contains(cause.Message, StringComparison.Ordinal)) msg += $" <- {cause.GetType().Name}: {cause.Message}";
                     // referencia por resolver: dizer ONDE no job o alvo nasce e listar todos os forward-refs de uma vez (plano, item 14)
-                    if (Errors.FindUnresolved(ex) is { } u) msg += ForwardRefs.Explain(ops, i, u.Name);
+                    if (Errors.FindUnresolved(ex) is { } u) msg += ForwardRefs.Explain(ops, i, u.Name, ComposedElsewhere);
                     // A name that does not resolve because an earlier failed (or skipped) op would have created it is that op's
                     // consequence, not a fault of its own: the op is skipped, never a second problem.
                     if (!flowTexts && (failures.Count > 0 || refusedBefore) && Blocked.MissingName(ex, msg) is { } missing && blocked.Mentioned(missing) is { } origin)
@@ -144,6 +153,7 @@ public sealed partial class ModelSession
                         if (isolated.Result != null)
                         {
                             opFailed = false;
+                            executed.Add(i);
                             results.Add(new JsonObject { ["op"] = kind, ["result"] = isolated.Result, ["isolated"] = isolated.Kept });
                             log?.Invoke($"#{i} {kind} applied without {isolated.Broken["data"]!["actions"]!.AsArray().Count} action(s): failed or using a failed one");
                         }
@@ -155,10 +165,15 @@ public sealed partial class ModelSession
                     continue;
                 }
                 finally { _flowBlocked = null; _flowDependencySkipped = null; EndAnchors(opFailed); }
+                executed.Add(i);
                 results.Add(new JsonObject { ["op"] = kind, ["result"] = r });
                 log?.Invoke($"#{i} {kind} ok");
             }
             _applyOps = null;
+            // The results in the job's order, whatever order the composition ran the ops in.
+            if (composition.Moved.Count > 0) InJobOrder(results, executed);
+            _preparedDocuments = null;
+            _documentDeclarationErrors = null;
             // C36 (atritos 3): a delete whose consumers later ops of this job remove runs now, once they are gone.
             foreach (var (index, pending) in _pendingDeletes.ToArray())
             {
@@ -178,6 +193,8 @@ public sealed partial class ModelSession
             OwnerRulesReview(ops, failures, opsPointer);
             // Checagem de compilação (CompileCheck.cs): what the OutSystems compiler cannot build is one more failure.
             CompileCheckReview(ops, failures);
+            // T3 (Preflight/PagingRules.cs): paging that does not page is one more failure.
+            PagingReview(ops, failures);
             AggregateConsolidationReview(ops);
             var failed = failures.Count > 0 || refusedBefore;
             if (failed)
@@ -223,6 +240,8 @@ public sealed partial class ModelSession
     public JsonNode? ApplyOne(JsonObject op)
     {
         var kind = op["op"]?.GetValue<string>() ?? throw new InvalidOperationException("missing 'op'");
+        // The prototype import is turned off (PrototypeImport): no session applies the op, whatever path reached it.
+        if (kind == PrototypeImport.Op) throw PrototypeImport.Refusal(_applyOps != null ? _applyIndex : null);
         VerbSurface.Check(op); // the executed contract: verb, required keys and the closed key set (api --op verbs)
         using var timing = NativePerformanceCapture.MeasureVerb(kind);
         var renamed = kind == "rename" ? Resolve(Req(op, "target")) : null;
@@ -234,10 +253,19 @@ public sealed partial class ModelSession
             movedFrom = moved?.Parent as IObjectSignature;
             movedOwn = moved?.GetAllDescendantsOfType<IObjectSignature>().Append(moved).Where(o => JavaScriptOrLoop(o) && o.ObjectKey?.ToString() is { } k && _jobWrittenNodes.Contains(k)).ToList();
         }
-        Anotar(kind, op, null);   // antes: e a unica altura em que o alvo de um delete ainda existe
-        FootprintScopes(kind, op); // B3: the children of what the op names, before it writes (Verbs.Footprint.cs)
+        using (NativePerformanceCapture.Measure("verb.bookkeeping.before"))
+        {
+            Anotar(kind, op, null);   // antes: e a unica altura em que o alvo de um delete ainda existe
+            FootprintScopes(kind, op); // B3: the children of what the op names, before it writes (Verbs.Footprint.cs)
+        }
         _lastWritten = null;
-        var result = kind switch
+        // S12: the names this verb changes, for the indexes of the op that are open (ModelSession.ApplyCache.cs); a verb that
+        // fails half-way may have changed any of them.
+        WatchNamesBefore(kind, op, renamed);
+        JsonNode? result;
+        try
+        {
+        result = kind switch
         {
             "create" => Create(op), "set" => Set(op), "link" => Link(op), "move" => Move(op), "reference" => Reference(op), "usages" => Usages(op), "rename" => Rename(op),
             "duplicate" => Duplicate(op), "delete" => Delete(op), "get" => Get(Resolve(Req(op, "target"))), "find" => Find(op),
@@ -248,7 +276,6 @@ public sealed partial class ModelSession
             "agent" => Agent(op),
             "screen" => Screen(op),
             "html" => Html(op),
-            "prototype" => Prototype(op),
             // The standard actions of the data model, generated from the module (Verbs.EntityActions.cs).
             "entity-actions" => EntityActions(op),
             // Integration ops (Verbs.Integration.cs): consumed REST, exposed REST, SOAP (O11).
@@ -257,9 +284,15 @@ public sealed partial class ModelSession
             "rest-consume" => RestConsume(op),
             "rest-expose" => RestExpose(op),
             "soap" => Soap(op),
+            // T18: the keyed css edit op (Verbs.Css.cs).
+            CssEdits.Op => Css(op),
             "dump" => Dump(Resolve(Req(op, "target")), op["depth"]?.GetValue<int>() ?? 3),
             _ => throw new InvalidOperationException("unknown op: " + kind),
         };
+        }
+        catch { MarkAllNames(); throw; }
+        WatchNamesAfter(kind, op, renamed, _lastWritten);
+        using var after = NativePerformanceCapture.Measure("verb.bookkeeping.after");
         Anotar(kind, op, result);  // depois: create e duplicate so revelam o tipo no resultado
         if (kind == "create") RememberCreate(op, result);
         // A theme the job writes (created, its base theme or its style sheet): with no base theme at the end, it gets the native
@@ -527,6 +560,7 @@ public sealed partial class ModelSession
         }
         foreach (var batch in construction.Batches())
         using (NativePerformanceCapture.Measure(batch.ExpressionPhase ? "logic.bodyExpressions" : "logic.structure", cpu: true))
+        {
         foreach (var k in batch.OriginalOrdinals)
         {
             var e = expanded[k];
@@ -545,6 +579,8 @@ public sealed partial class ModelSession
                 if (ActionOfGenerated(e, expanded, data) is { } action) failed.Data[LogicActionKey] = action;
                 throw failed;
             }
+        }
+        if (!batch.ExpressionPhase) RebindNativeCallNames(data, construction);
         }
         var healed = new JsonArray();
         foreach (var replacement in replacements)
@@ -632,7 +668,8 @@ public sealed partial class ModelSession
             if (op["as"]?.GetValue<string>() is { } indexAlias) Register(indexAlias, index);
             return Summary(index);
         }
-        var options = FindCreate(parent, typeName);
+        IReadOnlyList<(MethodInfo Method, bool Generic, Type Target)> options;
+        using (NativePerformanceCapture.Measure("create.findCreate")) options = FindCreate(parent, typeName);
         if (options.Count == 0) throw new InvalidOperationException($"{Describe(parent)} cannot create {typeName} (no Create method in the API)");
         // Several Create forms without a name parameter, one of them named after the element (the REST callbacks:
         // CreateOnBeforeRequestCallback, CreateOnAfterResponseCallback...): that one, never the first of the list.
@@ -674,7 +711,7 @@ public sealed partial class ModelSession
                     throw new InvalidOperationException($"{m.Name} needs arg '{p.Name}' ({p.ParameterType.Name})");
                 values[k] = p.ParameterType.IsValueType ? Activator.CreateInstance(p.ParameterType) : null;
             }
-            try { created = m.Invoke(parent, values); }
+            try { using (NativePerformanceCapture.Measure("create.native")) created = m.Invoke(parent, values); }
             catch (TargetInvocationException ex) when (options.Count > 1 && ex.GetBaseException() is { } cause && (cause.Message.Contains("unknown WidgetKind") || cause.Message.Contains("can't be children")
                 || cause.Message.Contains("Couldn't find any concrete class implementing") || cause.Message.Contains("are not allowed in") // ODC: a same-name interface of another API area
                 || cause is InvalidCastException)) // ODC: a Create form that does not fit this parent (the ODC factory nests the invocation exception)
@@ -842,6 +879,10 @@ public sealed partial class ModelSession
         Touch(target);
         var prop = Req(op, "prop");
         var value = op["value"];
+        if (prop == "SpecialOptions" && TraditionalWidgetMetadata.Combo(target.GetType())) {
+            TraditionalWidgetMetadata.SetSpecialOptions(target, value?.GetValue<string>() ?? "[]");
+            return new JsonObject { ["set"] = prop, ["via"] = "native special options" };
+        }
         // The parameter interface exposes Description, but JavaScript parameters reject it at runtime.
         // This is documentation only, so follow the same dropped-property contract as a missing setter.
         if (Preflight.JobNormalizer.Droppable(prop) && target is IObjectSignature parameter
@@ -886,6 +927,8 @@ public sealed partial class ModelSession
         if (prop == "Roles" && pi?.GetValue(target) is ICollection<OutSystems.Model.Logic.IRoleSignature> roles)
         {
             var wanted = value!.AsArray().Select(v => (OutSystems.Model.Logic.IRoleSignature)Resolve(v!.ToString())).ToArray();
+            CheckAccessCurrent(target, "Roles", op["ifCurrent"]);
+            RememberAccess(target, "Roles");
             preparationTiming.Dispose();
             using (NativePerformanceCapture.MeasureSet(target.GetType(), prop, "rolesCollection"))
             {
@@ -932,6 +975,8 @@ public sealed partial class ModelSession
                 // Label igual ao nome antigo). O contrato absorve essas reescritas como faz no rename.
                 oldIdentifier = TypeResolver.Name(named); renaming = SnapshotAssertions();
             }
+            CheckAccessCurrent(target, prop, op["ifCurrent"]);
+            if (prop == "AnonymousAccess") RememberAccess(target, prop);
             RememberValue(target, prop, Remembered(converted, value), Req(op, "target"));
             // Clear old placeholder content before changing the definition; otherwise the Studio retains
             // populated, now-orphaned placeholders even when the new block has no corresponding slot.
@@ -939,6 +984,8 @@ public sealed partial class ModelSession
             // A new Action (execute node) or Handler (event handler) keeps the argument values of the parameters that keep
             // their name; the arguments the new target has no parameter for go.
             var arguments = prop is "Action" or "Handler" ? CaptureArguments(target) : null;
+            // T18 (Verbs.Css.cs): a StyleSheet set with basedOn is refused THEME_CHANGED when the author CSS is not that one.
+            var styleBefore = prop == "StyleSheet" ? StyleSheetBefore(target, op["basedOn"], op) : null;
             preparationTiming.Dispose();
             try { using (NativePerformanceCapture.MeasureSet(target.GetType(), prop, "property.SetValue")) pi.SetValue(target, converted); }
             catch (TargetInvocationException ex) when (ex.InnerException != null)
@@ -951,12 +998,9 @@ public sealed partial class ModelSession
             if (prop == "AnonymousAccess" && AnonymousIntent.Opens(converted)) DeclareAnonymous(target);
             // Num tema com CSS do Theme Editor, ITheme.StyleSheet escreve a metade do autor e le a efetiva, que
             // so a interface recompoe: sem isto o get seguinte devolve o texto antigo e a escrita fica invisivel.
+            // T18: every stylesheet (theme, screen, block; split or not) settles through the one normalization (ThemeCss.Settle).
             JsonObject? styleSheet = null;
-            if (prop == "StyleSheet" && ThemeCss.Of(target) is { } sheet && ThemeCss.IsSplit(sheet))
-            {
-                ThemeCss.Recompute(sheet);
-                styleSheet = ThemeCss.Landing(sheet);
-            }
+            if (prop == "StyleSheet" && ThemeCss.Of(target) is { } sheet) styleSheet = StyleSheetSettled(target, sheet, styleBefore, op["value"]?.ToString(), op);
             // Some compound native properties have invalid getters until the remaining setters run
             // (e.g. ComboBox.SourceEntity before SourceAttribute). Expose the assigned reference
             // directly; read back the completed model during the independent proof.
@@ -1024,6 +1068,8 @@ public sealed partial class ModelSession
                 && value is JsonValue sv && sv.TryGetValue<string>(out var setterText) && IsExpressionProperty(target, prop))
                 value = JsonValue.Create(Expression(target, prop, setterText, Req(op, "target")));
             var converted = Convert(value, setter.GetParameters()[0].ParameterType);
+            CheckAccessCurrent(target, prop, op["ifCurrent"]);
+            if (prop == "AnonymousAccess") RememberAccess(target, prop);
             RememberValue(target, prop, Remembered(converted, value), Req(op, "target"));
             var arguments = prop is "Action" or "Handler" ? CaptureArguments(target) : null;
             preparationTiming.Dispose();
@@ -1099,6 +1145,7 @@ public sealed partial class ModelSession
             var add = coll.GetType().GetMethod("Add", new[] { to.GetType() }) ?? coll.GetType().GetMethods().FirstOrDefault(m => m.Name == "Add" && m.GetParameters().Length == 1 && m.GetParameters()[0].ParameterType.IsInstanceOfType(to));
             if (add != null)
             {
+                if (connector == "Roles") RememberAccess(from, connector);
                 add.Invoke(coll, new[] { to });
                 if (connector == "Roles" && AnonymousIntent.IsAnonymousRole(TypeResolver.Name(to))) DeclareAnonymous(from);
                 return new JsonObject { ["linked"] = connector, ["via"] = "collection.Add" };
@@ -1418,6 +1465,8 @@ public sealed partial class ModelSession
             shareables.Add(e as IShareable ?? throw new InvalidOperationException($"reference: {Describe(e)} cannot be referenced (not IShareable)"));
         }
         var before = _es.References.Select(r => r.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        // The producer's signature manager must know what it gives (ODC Studio 1.7.29 loads a module without: IStudioRuntime.PrepareProducer).
+        StudioAdapter.Runtime.PrepareProducer(producer, shareables.Cast<object>().ToList());
         _es.RefreshDependencies(shareables.ToArray());
         _byKey = null;
         var reference = _es.References.FirstOrDefault(r => string.Equals(r.Name, producerName, StringComparison.OrdinalIgnoreCase));
@@ -1521,11 +1570,15 @@ public sealed partial class ModelSession
             var key = reference[1..];
             // GetAllDescendantsOfType omits some native children (e.g. IdentifierType).
             // Include the same graph exposed by inspect, while retaining O11's native index adapters.
-            _byKey ??= new KernelModelReader().Walk(_es).Concat(Descendants()).Where(d => d.ObjectKey != null)
-                .GroupBy(d => d.ObjectKey!.ToString()!).ToDictionary(g => g.Key, g => g.First());
+            if (_byKey == null)
+                using (NativePerformanceCapture.Measure("lookup.key.index"))
+                    _byKey = new KernelModelReader().Walk(_es).Concat(Descendants()).Where(d => d.ObjectKey != null)
+                        .GroupBy(d => d.ObjectKey!.ToString()!).ToDictionary(g => g.Key, g => g.First());
             if (_byKey.TryGetValue(key, out var o) && !o.WasDeleted) return o;
             // Native setters/create can materialize children after the lookup cache was built.
-            var fresh = new KernelModelReader().Walk(_es).FirstOrDefault(n => n.ObjectKey?.ToString() == key && !n.WasDeleted);
+            IObjectSignature? fresh;
+            using (NativePerformanceCapture.Measure("lookup.key.miss"))
+                fresh = new KernelModelReader().Walk(_es).FirstOrDefault(n => n.ObjectKey?.ToString() == key && !n.WasDeleted);
             if (fresh != null) { _byKey[key] = fresh; return fresh; }
             if (!reference.Contains('/')) throw new KeyNotFoundException("no object with key " + key);
             // Full native keys may contain slashes. Only fall back to a key/child path if the full key is absent.
@@ -1546,6 +1599,7 @@ public sealed partial class ModelSession
         if (colon >= 0)
         {
             // A27: the kind with or without the I of its interface (ServerActionSignature:X is IServerActionSignature:X).
+            using var kindName = NativePerformanceCapture.Measure("lookup.kindName");
             var type = Preflight.KindNames.Normalize(reference[..colon]); var name = reference[(colon + 1)..];
             List<IObjectSignature> named;
             var stableType = type is "IServerEntity" or "IEntitySignature" or "IStaticEntity" or "IStaticEntitySignature"
@@ -1560,9 +1614,10 @@ public sealed partial class ModelSession
                 && (type is "IServerAction" or "IServiceAction" or "IClientAction") && Implements(fresh, type)
                 && !(_logicNames.GetValueOrDefault(name) ?? []).Any(o => Implements(o, type) || Implements(o, type + "Signature")))
                 return fresh; // no preexisting compatible symbol can change the original traversal precedence
-            else named = Descendants().Where(d => string.Equals(TypeResolver.Name(d), name, StringComparison.OrdinalIgnoreCase)).ToList();
+            else using (NativePerformanceCapture.Measure("lookup.kindName.walk"))
+                named = Descendants().Where(d => string.Equals(TypeResolver.Name(d), name, StringComparison.OrdinalIgnoreCase)).ToList();
             // An element without a name answers to its Label (an If, an Assign), as in inspect (C21).
-            if (named.Count == 0 && !stableType) named = Descendants().Where(d => string.IsNullOrEmpty(TypeResolver.Name(d)) && string.Equals(LabelOf(d), name, StringComparison.OrdinalIgnoreCase)).ToList();
+            if (named.Count == 0 && !stableType) using (NativePerformanceCapture.Measure("lookup.kindName.label")) named = Descendants().Where(d => string.IsNullOrEmpty(TypeResolver.Name(d)) && string.Equals(LabelOf(d), name, StringComparison.OrdinalIgnoreCase)).ToList();
             // Varios objectos podem casar por nome sem distincao de maiusculas e implementar o tipo pedido (um IEvent
             // 'onclick' e o IBuiltinEvent 'OnClick' de um botao implementam ambos IEvent): a ordem de GetAllDescendants
             // nao e estavel entre processos, e "o primeiro" mudava de corrida para corrida (platform-events-lifecycle,
@@ -1580,7 +1635,7 @@ public sealed partial class ModelSession
             // Each candidate with its key, so the job can name the one it means exactly (Kind:Name or @key).
             var keyed = named.Where(d => d.ObjectKey != null).GroupBy(ShortType).Select(g => g.Key + " (" + string.Join(", ", g.Take(3).Select(d => "@" + d.ObjectKey)) + ")").Take(6).ToList();
             throw new UnresolvedReferenceException(reference, type, name, kinds.Count == 0
-                ? $"no {type} named {name}: not in this module, not in its references, and not created by an EARLIER op of this job (create it first, or add the dependency with the reference verb)"
+                ? $"no {type} named {name}: not in this module, not in its references, and no op of this job that ran before this one creates it (the kernel runs the html, logic and data op that creates it first; a raw op keeps its place: create it in such an op or before this one, or add the dependency with the reference verb)"
                 : $"no {type} named {name}; objects with that name: {string.Join(", ", keyed.Count == kinds.Count ? keyed : kinds)}");
         }
         throw new InvalidOperationException($"unresolved reference '{reference}' (use $alias, @key or Type:Name)");
@@ -1825,10 +1880,16 @@ public sealed partial class ModelSession
         if (value is JsonValue jv)
         {
             if (t == typeof(string)) return jv.ToString();
-            if (t == typeof(bool)) return jv.TryGetValue<bool>(out var b) ? b : bool.Parse(jv.ToString());
-            if (t == typeof(int)) return jv.TryGetValue<int>(out var i) ? i : int.Parse(jv.ToString());
-            if (t == typeof(long)) return jv.TryGetValue<long>(out var l) ? l : long.Parse(jv.ToString());
-            if (t == typeof(decimal)) return jv.TryGetValue<decimal>(out var d) ? d : decimal.Parse(jv.ToString());
+            // A text the type does not parse is refused with the values it takes (the caller names the element and the property),
+            // never a FormatException: the same parse the data text's way back compares with (DdlValues.Native).
+            if (t == typeof(bool)) return jv.TryGetValue<bool>(out var b) ? b : bool.TryParse(jv.ToString(), out var pb) ? pb
+                : throw new ArgumentException($"Invalid Boolean value '{jv}'; allowed: True, False");
+            if (t == typeof(int)) return jv.TryGetValue<int>(out var i) ? i : int.TryParse(jv.ToString(), System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.CurrentCulture, out var pi) ? pi
+                : throw new ArgumentException($"Invalid Integer value '{jv}'; allowed: a whole number");
+            if (t == typeof(long)) return jv.TryGetValue<long>(out var l) ? l : long.TryParse(jv.ToString(), System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.CurrentCulture, out var pl) ? pl
+                : throw new ArgumentException($"Invalid Long value '{jv}'; allowed: a whole number");
+            if (t == typeof(decimal)) return jv.TryGetValue<decimal>(out var d) ? d : decimal.TryParse(jv.ToString(), System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.CurrentCulture, out var pd) ? pd
+                : throw new ArgumentException($"Invalid Decimal value '{jv}'; allowed: a number");
             // Binary content (CreateImage, CreateLocalizedImage, SetImageContent): JSON has no bytes, so the job carries base64.
             if (t == typeof(byte[]))
             {
@@ -1837,10 +1898,10 @@ public sealed partial class ModelSession
             }
             if (t.IsEnum)
             {
-                var names = Enum.GetNames(t);
-                if (!names.Contains(jv.ToString(), StringComparer.OrdinalIgnoreCase))
-                    throw new ArgumentException($"Invalid {t.Name} value '{jv}'; allowed: {string.Join(", ", names)}; see anvil api --name {t.Name}");
-                return Enum.Parse(t, jv.ToString(), ignoreCase: true);
+                // The same rule the data text's way back compares with (DdlValues), so a value it calls equal is the one stored.
+                var name = Anvil.Reading.DdlValues.EnumName(t, jv.ToString())
+                    ?? throw new ArgumentException($"Invalid {t.Name} value '{jv}'; allowed: {string.Join(", ", Enum.GetNames(t))}; see anvil api --name {t.Name}");
+                return Enum.Parse(t, name);
             }
             var s = jv.ToString();
             if (typeof(OutSystems.Model.Types.ITypeSignature).IsAssignableFrom(t) && !typeof(IObjectSignature).IsAssignableFrom(t) || t.Name is "ITypeSignature" or "IBasicType" or "IRecordTypeSignature" or "IListType")
@@ -1850,7 +1911,7 @@ public sealed partial class ModelSession
                 if (!t.IsInstanceOfType(resolved)) throw new InvalidOperationException($"type '{s}' is {ShortType(resolved)}, not {t.Name}");
                 return resolved;
             }
-            if (t.IsInterface)
+            if (t.IsInterface || typeof(IObjectSignature).IsAssignableFrom(t))
             {
                 var o = Resolve(s);
                 if (!t.IsInstanceOfType(o)) throw new InvalidOperationException($"'{s}' is {ShortType(o)}, not {t.Name}");

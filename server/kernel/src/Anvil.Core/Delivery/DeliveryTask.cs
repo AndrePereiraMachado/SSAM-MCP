@@ -26,16 +26,31 @@ public sealed class DeliveryTask : IDisposable
             {
                 State = DurableJson.Read(file);
                 if (!JsonNode.DeepEquals(State["request"], binding)) throw new InvalidOperationException("Task request is fixed; resume without replacing its job, target or checks");
+                RecordTrace(State, request.Trace, "resume");
             }
             else
             {
                 if (request.TaskId != null) throw new InvalidOperationException("Unknown delivery task; no operation was started");
                 State = new() { ["taskId"] = id, ["request"] = binding, ["module"] = request.Module,
                     ["work"] = DirectoryPath, ["delivered"] = false, ["writeState"] = "not-sent", ["history"] = new JsonArray() };
+                RecordTrace(State, request.Trace, "create");
                 Save("registered");
             }
         }
         catch { lease.Dispose(); throw; }
+    }
+
+    /// <summary>F7: the creating call names the task (correlationId, trace) once; every run adds one line to traces (the last
+    /// 20, a run of the same call once). Never part of the request binding.</summary>
+    public static void RecordTrace(JsonObject state, DeliveryTrace? trace, string run)
+    {
+        if (trace == null) return;
+        state["correlationId"] ??= trace.CorrelationId;
+        state["trace"] ??= new JsonObject { ["correlationId"] = trace.CorrelationId, ["operationId"] = trace.OperationId };
+        if (state["traces"] is not JsonArray runs) state["traces"] = runs = new JsonArray();
+        if (runs.Any(r => r?["correlationId"]?.ToString() == trace.CorrelationId && r?["operationId"]?.ToString() == trace.OperationId && r?["run"]?.ToString() == run)) return;
+        runs.Add(trace.ToJson(run));
+        while (runs.Count > 20) runs.RemoveAt(0);
     }
 
     public void Save(string stage)
@@ -90,10 +105,10 @@ public sealed class DeliveryTask : IDisposable
     /// An uncertain task (writeState unknown or intent) closes only with the hash proof of C15: the live module captured now
     /// has exactly the bytes of the attempt's base, so nothing was applied (writeState becomes not-applied). Without a recorded
     /// base, or with a live module that differs, it stays uncertain and nothing is closed.</summary>
-    public static JsonObject CloseKnownFailure(string work, string id, string reason, IBridgeClient bridge)
+    public static JsonObject CloseKnownFailure(string work, string id, string reason, IBridgeClient bridge, DeliveryTrace? trace = null)
     {
         if (string.IsNullOrWhiteSpace(reason)) throw new ArgumentException("Closing requires a reason");
-        var request = ResumeRequest(work, id);
+        var request = ResumeRequest(work, id) with { Trace = trace };
         using var task = new DeliveryTask(request); var state = task.State;
         if (state["closed"]?.GetValue<bool>() == true) return state;
         // CX14 N6: what this close sends again after the proof of a call it settles (its open_module), for its notes.

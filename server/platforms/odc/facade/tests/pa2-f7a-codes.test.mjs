@@ -32,6 +32,10 @@ const REAL = [
   ['o11_dependencies', 'ArgumentException: missing --out', 'ARGUMENT_INVALID'],
   ['o11_dependencies', 'SharpZipBaseException: Illegal rep length code', 'FILE_UNREADABLE'],
   ['o11_data', 'InvalidOperationException: Users and roles are out of reach of Edit Data here', 'OPERATION_INVALID'],
+  // Goal list of 2026-10-20, item 2: the texts behind 184 SSAM_MAP_FAILED (11..20/10/2026).
+  ['ssam_map', "No screen or block named 'Ordres'. MobileScreen:Orders @S1; MobileBlock:Card @B1", 'ELEMENT_NOT_FOUND'],
+  ['ssam_map', "Ambiguous screen or block 'Card'. MobileBlock:Card @B1; WebBlock:Card @B2", 'AMBIGUOUS_ELEMENT'],
+  ['ssam_map', 'Snapshot content changed: expectedSourceSha256 does not match the source bytes', 'CAPTURE_CHANGED'],
 ];
 
 test('every real code-less refusal of the report gets its specific code, as JSON and as plain text', () => {

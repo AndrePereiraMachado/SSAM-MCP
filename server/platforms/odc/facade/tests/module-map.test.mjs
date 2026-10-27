@@ -9,10 +9,11 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { moduleMap, parseMapArguments, prefetchIndex, prefetchMain, prefetchCacheRoot, readerConfig, indexFile, MAP_SCHEMA, MAP_USAGE, DEFAULT_MAP_BUDGET } from '../module-map.mjs';
+import { moduleMap, parseMapArguments, prefetchIndex, prefetchMain, prefetchCacheRoot, readerConfig, indexFile, MAP_SCHEMA, MAP_USAGE, DEFAULT_MAP_BUDGET, EXTRACTOR } from '../module-map.mjs';
 import { paths } from '../lib.mjs';
 import { LANES } from '../lanes.mjs';
 import { LONG_NAME, NODES, moduleIndex, writeCapture, writeIndex, storeFile } from './fixtures/module-index.mjs';
+import { STORE_GENERATION } from '../store-generation.mjs';
 
 const helper = fileURLToPath(new URL('../module-map.mjs', import.meta.url));
 function setup(t, text) {
@@ -212,7 +213,7 @@ test('the reader of every lane gets the store root the map reads (module-map ind
   for (const lane of ['odc', 'o11']) {
     const config = readerConfig(lane, { env, entry: { cli: 'C:\\lane\\anvil.dll', root: 'C:\\kernel', lane: 'ss4' }, ssDir: 'C:\\studio' });
     assert.equal(config.indexRoot, path.resolve('relative-store'), lane);
-    assert.equal(indexFile(lane, 'A'.repeat(64), env), path.join(config.indexRoot, 'v1', lane, 'a'.repeat(64) + (lane === 'odc' ? '.builder' : '.kernel') + '.json'), lane);
+    assert.equal(indexFile(lane, 'A'.repeat(64), env), path.join(config.indexRoot, STORE_GENERATION, lane, 'a'.repeat(64) + (lane === 'odc' ? '.builder' : '.kernel') + '.json'), lane);
   }
 });
 
@@ -279,7 +280,7 @@ test('a stale, corrupt or foreign index is never served: it is a miss, and a rea
   const variants = {
     'another capture': moduleIndex({ lane: 'odc', sourceSha256: other }),
     'truncated JSON': '{"schema":"ssam-module-index/1","rows":[',
-    'another extractor': moduleIndex({ lane: 'odc', sourceSha256: c.sha256, overrides: { extractor: 2 } }),
+    'another extractor': moduleIndex({ lane: 'odc', sourceSha256: c.sha256, overrides: { extractor: EXTRACTOR + 1 } }),
     'another schema': moduleIndex({ lane: 'odc', sourceSha256: c.sha256, overrides: { schema: 'ssam-module-index/2' } }),
     'another adapter': moduleIndex({ lane: 'odc', sourceSha256: c.sha256, overrides: { adapter: 'kernel' } }),
     'a row with a parent outside the rows': moduleIndex({ lane: 'odc', sourceSha256: c.sha256, overrides: { rows: [['K', 0, 'x', null, null, 7, 0, null, 0]] } }),
@@ -383,4 +384,99 @@ test('the helper ensures through the reader of its own cache root, skips a store
   const stale = setup(t);
   assert.match((await prefetchMain({ file: stale.file, lane: 'odc' }, { env: stale.env, read: noReader, fresh: () => false })).skipped, /never builds/);
   assert.equal(indexFile('odc', stale.sha256, stale.env), storeFile(stale.store, 'odc', stale.sha256));
+});
+
+// ---- R4 (2026-10-24): ssam_map never refuses dry. 61 ELEMENT_NOT_FOUND and 16 BUDGET_TOO_SMALL after 20/10, each a round
+// of the agent: a miss names its nearest names (at most NEAR_MAX) with the corrected call when one dominates, a page past the
+// end names the last page, a budget below a page of the action text reads at the smallest page, said in normalizations.
+import { nearest, editDistance, mapRefusal, ownerReadings, flowReadingFile as readingFileOf, NEAR_MAX } from '../module-map.mjs';
+import { FLOW_EXTRACTOR, textSha as shaOfText } from '../module-flow.mjs';
+
+const nearText = (name, key, lines = 3) => ['server action ' + name + ' @' + key, '  in Id: Long Integer @p1',
+  ...Array.from({ length: lines }, (_, i) => '  assign Total = Total + ' + i + ' @n' + (i + 1)), '  end @n' + (lines + 1)].join('\n') + '\n';
+function nearFlow(store, lane, sourceSha256, { big = 3 } = {}) {
+  const action = (name, key, lines = 3) => ({ key, kind: 'ServerAction', name, fixedPoint: true, nodes: lines + 2, digestBytes: 100, text: nearText(name, key, lines), ids: { n1: 'N' + key }, problems: [] });
+  const flow = { schema: 'ssam-flow/1', extractor: FLOW_EXTRACTOR, lane, adapter: 'kernel', sourceSha256, sourceBytes: 42, createdAt: '2026-10-24T00:00:00Z',
+    module: { name: 'Quotes', key: 'R0' }, notWritten: {},
+    actions: [action('GetQuote', 'A1', big), action('SaveQuote', 'A2'), action('DeleteQuote', 'A3'), action('ListCustomers', 'A4'), action('Recalculate', 'A5'),
+      action('ApproveOrder', 'A6'), action('RejectOrder', 'A7')] };
+  const file = path.join(store, STORE_GENERATION, lane, sourceSha256 + '.kernel.flow.json');
+  fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, JSON.stringify(flow));
+  return flow;
+}
+const nearSetup = t => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ssam-map-near-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const store = path.join(dir, 'store');
+  return { dir, store, env: { ...process.env, SSAM_MODULE_INDEX_ROOT: store, SSAM_READER_CACHE_ROOT: path.join(dir, 'readers') }, ...writeCapture(dir) };
+};
+const never = async () => { throw new Error('the reader must not be called on a hit'); };
+
+test('R4 nearest: case, prefix, containment and edit distance (a transposition is one), the same kind first, a dominant only when clear', () => {
+  assert.equal(editDistance('ordres', 'orders'), 1); assert.equal(editDistance('getqoute', 'getquote'), 1); assert.equal(editDistance('abc', 'abc'), 0);
+  const items = ['Orders', 'OrderLines', 'Card', 'Customers', 'Order_Detail', 'Reports', 'Settings'].map((name, i) => ({ name, kind: i % 2 ? 'MobileBlock' : 'MobileScreen' }));
+  const typo = nearest('Ordres', items);
+  assert.equal(typo.dominant.name, 'Orders'); assert.ok(typo.candidates.length <= NEAR_MAX); assert.equal(typo.candidates[0].name, 'Orders');
+  const prefix = nearest('Order', items);
+  assert.equal(prefix.dominant, null, 'three names begin with Order: none dominates');
+  assert.deepEqual(prefix.candidates.map(c => c.name).slice(0, 3).sort(), ['OrderLines', 'Order_Detail', 'Orders']);
+  assert.equal(nearest('orders', items).dominant.name, 'Orders', 'the same name but for case');
+  assert.equal(nearest('Zebra', items).dominant, null);
+  assert.equal(nearest('OrderLine', items, { kind: 'MobileBlock' }).candidates[0].name, 'OrderLines');
+});
+
+test('R4 flow: a typo answers the nearest actions and the corrected read; a far name the list; at most NEAR_MAX candidates', async t => {
+  const c = nearSetup(t); nearFlow(c.store, 'o11', c.sha256);
+  const typo = await moduleMap({ lane: 'o11', target: c.file, view: 'flow', element: 'GetQoute' }, { env: c.env, read: never });
+  assert.equal(typo.code, 'ELEMENT_NOT_FOUND'); assert.equal(typo.candidates[0].name, 'GetQuote');
+  assert.ok(typo.candidates.length >= 1 && typo.candidates.length <= NEAR_MAX);
+  assert.equal(typo.corrected.arguments.element, 'GetQuote'); assert.deepEqual(typo.continuation, typo.corrected);
+  const fixed = await moduleMap(typo.corrected.arguments, { env: c.env, read: never });
+  assert.equal(fixed.ok, true); assert.equal(fixed.action.name, 'GetQuote');
+  const quote = await moduleMap({ lane: 'o11', target: c.file, view: 'flow', element: 'Quote' }, { env: c.env, read: never });
+  assert.deepEqual(quote.candidates.map(a => a.name), ['GetQuote', 'SaveQuote', 'DeleteQuote']); assert.equal(quote.corrected, undefined, 'three contain it: none dominates');
+  assert.equal(quote.continuation.arguments.element, undefined, 'the list of the actions');
+  const far = await moduleMap({ lane: 'o11', target: c.file, view: 'flow', element: 'Xylophone' }, { env: c.env, read: never });
+  assert.equal(far.code, 'ELEMENT_NOT_FOUND'); assert.equal(far.corrected, undefined); assert.ok((far.candidates ?? []).length <= NEAR_MAX);
+  const list = await moduleMap({ lane: 'o11', target: c.file, view: 'flow', element: ['GetQuote', 'SaveQoute'] }, { env: c.env, read: never });
+  assert.equal(list.code, 'ELEMENT_NOT_FOUND'); assert.equal(list.misses[0].dominant, 'SaveQuote');
+  assert.deepEqual(list.continuation.arguments.element, ['GetQuote', 'SaveQuote']);
+});
+
+test('R4 flow: a budget below a page of the text reads at the smallest page (budget-minimum, truncated), and a list with an action larger than the budget serves its first page and the rest', async t => {
+  const c = nearSetup(t); nearFlow(c.store, 'o11', c.sha256, { big: 400 });
+  const small = await moduleMap({ lane: 'o11', target: c.file, view: 'flow', element: 'GetQuote', budgetBytes: 2000 }, { env: c.env, read: never });
+  assert.equal(small.ok, true, JSON.stringify(small).slice(0, 300));
+  assert.deepEqual(small.normalizations.map(n => n.rule), ['budget-minimum']);
+  assert.equal(small.truncated, small.pages > 1); assert.ok(small.pages > 1 && small.continuations.next);
+  assert.ok(small.size.bytes <= small.size.budgetBytes, small.size.bytes + ' > ' + small.size.budgetBytes);
+  const next = await moduleMap(small.continuations.next.arguments, { env: c.env, read: never });
+  assert.equal(next.ok, true); assert.equal(next.page, 2);
+  const list = await moduleMap({ lane: 'o11', target: c.file, view: 'flow', element: ['GetQuote', 'SaveQuote'], budgetBytes: 6000 }, { env: c.env, read: never });
+  assert.equal(list.ok, true, JSON.stringify(list).slice(0, 300)); assert.equal(list.action.name, 'GetQuote'); assert.equal(list.page, 1); assert.equal(list.truncated, true);
+  assert.deepEqual(list.continuations.rest.arguments.element, ['SaveQuote']);
+  assert.deepEqual(list.normalizations.map(n => n.rule), ['list-to-pages']);
+});
+
+test('R4 refusals: an html miss with one near screen carries the corrected read; a page past the end names the last page and the read at it', () => {
+  const pin = { lane: 'odc', target: 'C:\\c\\Q.oml', view: 'html' };
+  const miss = mapRefusal(new Error("No screen or block named 'Ordres'. MobileScreen:Orders @S1; MobileBlock:Card @B1; MobileScreen:Customers @S2"), pin);
+  assert.equal(miss.code, 'ELEMENT_NOT_FOUND'); assert.equal(miss.candidates[0].name, 'Orders');
+  assert.deepEqual(miss.corrected.arguments, { ...pin, screen: 'Orders' });
+  const page = mapRefusal(new Error('page 9 does not exist: the text of GetQuote has 3 page(s) at budgetBytes 4000'), { lane: 'o11', view: 'flow' },
+    { lane: 'o11', target: 'Q.oml', view: 'flow', element: 'GetQuote', page: 9, budgetBytes: 4000 });
+  assert.equal(page.code, 'PAGE_NOT_FOUND'); assert.equal(page.pages, 3);
+  assert.deepEqual(page.corrected.arguments, { lane: 'o11', target: 'Q.oml', view: 'flow', element: 'GetQuote', page: 3, budgetBytes: 4000 });
+});
+
+test('R4 ownerReadings: the flow of the actions a change edits, from the store, kept as the base of the three-way merge; a changed capture reads nothing', async t => {
+  const c = nearSetup(t); const flow = nearFlow(c.store, 'o11', c.sha256);
+  const read = await ownerReadings({ lane: 'o11', file: c.file, sourceSha256: c.sha256, targets: [{ kind: 'flow', name: 'GetQuote', key: 'A1' }, { kind: 'flow', name: 'Nope' }] }, { env: c.env, read: never });
+  assert.equal(read.ok, true);
+  assert.deepEqual(read.readings.map(r => [r.name, r.textSha]), [['GetQuote', shaOfText(flow.actions[0].text)]]);
+  assert.equal(read.readings[0].text, flow.actions[0].text);
+  assert.deepEqual(read.errors.map(e => e.name), ['Nope']);
+  assert.ok(fs.existsSync(readingFileOf('o11', c.sha256, shaOfText(flow.actions[0].text), c.env)), 'the read kept beside the flow file');
+  const changed = await ownerReadings({ lane: 'o11', file: c.file, sourceSha256: 'f'.repeat(64), targets: [{ kind: 'flow', name: 'GetQuote' }] }, { env: c.env, read: never });
+  assert.equal(changed.ok, false); assert.deepEqual(changed.readings, []);
 });
