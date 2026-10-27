@@ -122,7 +122,10 @@ async function main() {
     fs.writeFileSync(config, JSON.stringify({ extends: path.join(app, 'electron-builder.yml'), ...(options.noUpdates ? { publish: null } : {}),
       ...(options.notarize ? { forceCodeSigning: true } : {}),
       ...(nativeMac ? { mac: { target: [{ target: 'dmg', arch: [process.arch] }, { target: 'zip', arch: [process.arch] }],
-        ...(options.notarize ? { signIgnore: ['Contents/Resources/pack/native/ssam-agent$'] } : {}) } } : {}) }));
+        // Ad-hoc sealing needs no Apple certificate and keeps ARM64 code valid.
+        // The native core is already sealed before its manifest hash is recorded.
+        ...(!options.notarize ? { identity: '-', hardenedRuntime: false } : {}),
+        signIgnore: ['Contents/Resources/pack/native/ssam-agent$'] } } : {}) }));
   }
   // Explicit CLI target names bypass merged YAML target arrays. Otherwise the
   // parent config can add an Intel installer containing an ARM-only core.

@@ -111,6 +111,7 @@ jobs:
       - name: Verify the installed app
         run: |
           node scripts/verify-native-distribution.mjs 'dist/mac-arm64/SSAM Agent.app'
+          codesign --verify --deep --strict 'dist/mac-arm64/SSAM Agent.app'
           shasum -a 256 dist/*.dmg dist/*.zip > dist/SHA256SUMS
       - name: Exercise the Mac desktop interface and native agent
         run: |
@@ -119,6 +120,7 @@ jobs:
           # its own Electron; install the matching test binary explicitly too.
           node node_modules/electron/install.js
           PLAYWRIGHT_MODULE="$RUNNER_TEMP/ssam-ui-test/node_modules/playwright" node --test tests/native/electron-smoke.test.mjs
+          SSAM_PACKAGED_APP="$PWD/dist/mac-arm64/SSAM Agent.app/Contents/MacOS/SSAM Agent" PLAYWRIGHT_MODULE="$RUNNER_TEMP/ssam-ui-test/node_modules/playwright" node --test tests/native/electron-smoke.test.mjs
       - name: Verify Developer ID and Gatekeeper
         if: inputs.sign_and_notarize
         run: |
