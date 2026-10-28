@@ -90,7 +90,7 @@ test('a suite that runs nothing cannot approve a version',async t=>{
 test('a stopped Docker defers the round (environment, not a test result) and the next round retries',async t=>{
  let up=false;const f=fixture(t,{docker:async()=>{if(!up)throw new EnvironmentError('Docker Desktop did not answer.','docker-unavailable');}});
  const r=await f.round();assert.equal(r.status,'deferred');assert.equal(readAttempts(f.outDir)[r.id].status,'deferred');
- assert.match(fs.readFileSync(path.join(r.dir,'FALHAS.md'),'utf8'),/retries it automatically/);
+ assert.match(fs.readFileSync(path.join(r.dir,'AGUARDANDO.md'),'utf8'),/retries it automatically/);assert.equal(fs.existsSync(path.join(r.dir,'FALHAS.md')),false,'a deferral is not a failure');
  up=true;const again=await f.round({now:T0+6*3600000});assert.equal(again.status,'proposed');
  assert.equal(fs.existsSync(path.join(again.dir,'previous')),false,'a deferral leaves no archive');assert.equal(readAttempts(f.outDir)[again.id].deferrals,1);
 });

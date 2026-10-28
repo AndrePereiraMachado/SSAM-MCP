@@ -93,6 +93,8 @@ async function runAttempt(config,ops,decision,now){
  // A deferred attempt left no evidence beyond its notice: it is overwritten (and counted), not archived.
  const waited=decision.previous?.status==='deferred'?decision.previous:null;
  if(!waited)archive(dir,decision.previous);fs.mkdirSync(dir,{recursive:true});
+ // The waiting notice of a deferral is the vigia's own (a FALHAS.md there came from a deferral of the first rounds).
+ if(waited)for(const name of ['AGUARDANDO.md','FALHAS.md'])fs.rmSync(path.join(dir,name),{force:true});
  for(const s of decision.skipped??[])log(`lanes ${s.lanes.join(', ')} of ${s.id} failed before with the same inputs; trying ${id}`);
  const attempt={id,pair:{odc:pair.odc,o11:pair.o11,lanes:pair.lanes},inputs:decision.inputs,status:'running',at:new Date(now).toISOString(),baseManifest:base,replayed:config.replayed??[],
   ...(waited?{deferrals:(waited.deferrals??1),firstDeferredAt:waited.firstDeferredAt??waited.at}:{})};
@@ -151,12 +153,12 @@ async function runAttempt(config,ops,decision,now){
   await remind(outDir,'proposal:'+id,'SSAM: Studio versions ready for approval',`${id}: ${path.join(dir,'PROPOSTA.md')}`,ops,{now,link:path.join(dir,'PROPOSTA.md')});
   return {status:'proposed',id,branch,dir,built};
  }catch(error){
-  const environmental=!!error.environmental;
-  fs.writeFileSync(path.join(dir,'FALHAS.md'),failureText({id,error:String(error.message),environmental,dir,retry:config.retryHours??12}));
+  const environmental=!!error.environmental,notice=path.join(dir,environmental?'AGUARDANDO.md':'FALHAS.md');
+  fs.writeFileSync(notice,failureText({id,error:String(error.message),environmental,dir,retry:config.retryHours??12}));
   writeAttempt(outDir,{...attempt,status:environmental?'deferred':'failed',...(environmental?{deferrals:(attempt.deferrals??0)+1,firstDeferredAt:attempt.firstDeferredAt??attempt.at}:{}),error:String(error.message),code:error.code??null,failedLanes:error.lanes??[],runtimes,endedAt:new Date().toISOString()});
   log(`${environmental?'deferred':'failed'}: ${error.message}`);
   const key=(environmental?'deferred:':'failed:')+id+(environmental?':'+(error.code??''):'');
-  await remind(outDir,key,environmental?'SSAM: Studio version round waiting':'SSAM: Studio version checks failed',`${id}: ${error.message.split('\n')[0]}`,ops,{now,link:path.join(dir,'FALHAS.md')});
+  await remind(outDir,key,environmental?'SSAM: Studio version round waiting':'SSAM: Studio version checks failed',`${id}: ${error.message.split('\n')[0]}`,ops,{now,link:notice});
   return {status:environmental?'deferred':'failed',id,dir,error:String(error.message)};
  }
 }

@@ -37,6 +37,8 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:/Users/andre/SSAM-MCP/
    worktree commit and the Studio builds) and at most every `retryHours` after they change; `-Retry` forces it. When one lane
    of a pair failed its tests, the next round tries the other lane alone. An environment problem (Docker, disk, another
    dotnet build, the runtime rule missing, a gap in the bundle store) defers the round and the next round retries.
+   Each pair has its folder `outDir/<pair>/`: `attempt.json` (state), `AGUARDANDO.md` (deferred), `FALHAS.md` (failed, with
+   the failure names), `PROPOSTA.md` (proposed), `APROVADO.md` (approved) and the evidence.
 5. **Preflight**: free disk (`minFreeGb`), Docker Desktop (started and awaited when it is not answering), the buildx builder.
 6. **Runtime**: for each new Studio, the watcher asks MSBuild which target framework the workspace's build rule takes for that
    Studio folder (`dotnet msbuild -getProperty:TargetFramework`) and compares it with the Studio's own runtime. It never picks a
