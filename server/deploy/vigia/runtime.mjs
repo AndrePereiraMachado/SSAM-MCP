@@ -3,7 +3,7 @@
 // Nothing here touches the VPS, Coolify or GitHub, pushes Git or moves latest.
 import fs from 'node:fs';
 import path from 'node:path';
-import {spawn} from 'node:child_process';
+import {spawn,spawnSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
 import {fileURLToPath} from 'node:url';
 import {readTrx,pairTag,pairId,packFor,version as threeOf} from './window.mjs';
@@ -16,6 +16,8 @@ const slash=p=>p.replaceAll('\\','/');
 const bashPath=p=>slash(p).replace(/^([A-Za-z]):/,(_,drive)=>'/'+drive.toLowerCase());
 const hash=file=>createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+// A command and everything it started (dotnet test and its testhost, bash and its docker), on Windows.
+const killTree=child=>{try{if(process.platform==='win32')spawnSync('C:/Windows/System32/taskkill.exe',['/PID',String(child.pid),'/T','/F'],{windowsHide:true});else child.kill();}catch{}};
 export const DEFAULT_FILTERS={odc:'FullyQualifiedName~ScreenHtmlDataTableOdcTests|FullyQualifiedName~ScreenVisualOdcTests',o11:'FullyQualifiedName~ScreenHtmlDataTableTests|FullyQualifiedName~ScreenVisualCheckTests'};
 export const TEST_PROJECT={odc:'server/kernel/tests/Anvil.Tests.Odc',o11:'server/kernel/tests/Anvil.Tests'};
 export const STUDIO_PROPERTY={odc:'OdcInstall',o11:'SSDir'};
@@ -34,19 +36,47 @@ export const RUNTIME_PIN={odc:'AnvilOdcStudioTfm',o11:'AnvilO11StudioTfm'};
 export function runtimePins(side){
  return Object.entries(RUNTIME_PIN).flatMap(([lane,prop])=>{const s=side[lane];if(!s?.snapshot||studioTfm(s.snapshot,lane))return [];const tfm=assemblyTfm(s.snapshot);return tfm?[`-p:${prop}=${tfm}`]:[];});
 }
+// The Studio version a Features.plain.xml was exported from (<Features Version="1.7.29.10940">), or null.
+export function featuresVersion(file){
+ try{const b=fs.readFileSync(file).subarray(0,4096);const text=b[0]===0xff&&b[1]===0xfe?b.toString('utf16le'):b.toString('utf8');
+  return /<Features\b[^>]*\bVersion="([^"]+)"/.exec(text)?.[1]??null;}catch{return null;}
+}
+// Why a test run gave no usable result, when the machine is the cause: a timeout, a package restore or the network, or a
+// baseline (the default pair, already served) that does not build here. Anything else on the candidate is the version's.
+const NETWORK=/NU1301|NU1101|NU1102|Unable to load the service index|Failed to download package|The SSL connection could not be established|No such host is known|Name or service not known|actively refused|Response status code does not indicate success|A connection attempt failed/i;
+export function testCause(result,kind,hasReport){
+ const out=`${result.stdout??''}\n${result.stderr??''}`;
+ if(/\(timed out after \d+ ms\)/.test(out))return {environmental:true,why:'timed out'};
+ if(!hasReport&&NETWORK.test(out))return {environmental:true,why:'package restore or network'};
+ if(!hasReport&&kind==='baseline')return {environmental:true,why:'no test results from the baseline'};
+ return {environmental:false};
+}
+// Why build.sh failed: the network or a registry (pulling a base image), a timeout, or the build itself. The client-name
+// guard refusing is the code's, never the environment's.
+const REGISTRY=/failed to (resolve source metadata|do request|fetch oauth token|authorize|copy)|TLS handshake timeout|i\/o timeout|no such host|connection (refused|reset by peer)|toomanyrequests|429 Too Many Requests|unexpected EOF|dial tcp|Temporary failure in name resolution|error pulling image|net\/http: request canceled|Cannot connect to the Docker daemon|error during connect/i;
+export function buildCause(result){
+ const out=`${result.stdout??''}\n${result.stderr??''}`;
+ if(/\(timed out after \d+ ms\)/.test(out))return {environmental:true,why:'timed out'};
+ const net=REGISTRY.exec(out);
+ if(/the client-name guard FAILED/.test(out)&&!net)return {environmental:false,why:'the client-name guard failed: a client name would ship'};
+ if(net)return {environmental:true,why:`network or registry: ${net[0]}`};
+ return {environmental:false,why:''};
+}
 export async function createRuntime(config,{log=()=>{}}={}){
  const root=path.resolve(config.workspace),temp=path.resolve(config.tempRoot),out=path.resolve(config.outDir),store=path.resolve(config.bundleRoot);
  if(/^c:[\\/]t(?:[\\/]|$)/i.test(temp))throw Error('tempRoot must be private and outside C:\\t.');
  const exe={git:config.git??'C:/Program Files/Git/cmd/git.exe',powershell:config.powershell??'C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe',bash:config.bash??'C:/Program Files/Git/bin/bash.exe',dotnet:config.dotnet??'C:/Program Files/dotnet/dotnet.exe',docker:config.docker??'C:/Program Files/Docker/Docker/resources/bin/docker.exe',dockerDesktop:config.dockerDesktop??'C:/Program Files/Docker/Docker/Docker Desktop.exe',tar:config.tar??'C:/Windows/System32/tar.exe',node:process.execPath};
  const context=config.dockerContext??'desktop-linux';if(context!=='desktop-linux')throw Error('Only the local Docker Desktop context is supported.');
  const ps=(file,args,options)=>run(exe.powershell,['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',file,...args],options);
- let sequence=0;
+ const featuresRoot=path.resolve(config.featuresRoot??path.join(temp,'features'));
+ if(/^c:[\\/]t(?:[\\/]|$)/i.test(featuresRoot))throw Error('featuresRoot must be private and outside C:\\t.');
+ let sequence=0;const active=new Set();
  async function run(command,args,{env={},input,dir,allowFailure=false,secret=false,cwd=root,timeoutMs=0}={}){
   if(dir){fs.mkdirSync(dir,{recursive:true});fs.appendFileSync(path.join(dir,'commands.jsonl'),JSON.stringify({time:new Date().toISOString(),command,args:secret?['(not recorded)']:args,cwd,env:Object.keys(env)})+'\n');}
   const result=await new Promise((resolve,reject)=>{
-   const child=spawn(command,args,{cwd,env:{...process.env,...env},windowsHide:true,stdio:['pipe','pipe','pipe']});let stdout='',stderr='',timer=null;
-   if(timeoutMs)timer=setTimeout(()=>{stderr+=`\n(timed out after ${timeoutMs} ms)`;child.kill();},timeoutMs);
-   child.stdout.on('data',b=>stdout+=b);child.stderr.on('data',b=>stderr+=b);child.once('error',e=>{clearTimeout(timer);reject(e);});child.once('close',code=>{clearTimeout(timer);resolve({code,stdout,stderr});});child.stdin.end(input);
+   const child=spawn(command,args,{cwd,env:{...process.env,...env},windowsHide:true,stdio:['pipe','pipe','pipe']});let stdout='',stderr='',timer=null;active.add(child);
+   if(timeoutMs)timer=setTimeout(()=>{stderr+=`\n(timed out after ${timeoutMs} ms)`;killTree(child);},timeoutMs);
+   child.stdout.on('data',b=>stdout+=b);child.stderr.on('data',b=>stderr+=b);child.once('error',e=>{clearTimeout(timer);active.delete(child);reject(e);});child.once('close',code=>{clearTimeout(timer);active.delete(child);resolve({code,stdout,stderr});});child.stdin.end(input);
   });
   if(dir&&!secret)fs.writeFileSync(path.join(dir,`command-${++sequence}.log`),`> ${path.basename(command)} ${args.join(' ')}\n`+result.stdout+result.stderr);
   if(result.code!==0&&!allowFailure)throw Error(`Command failed (${result.code}): ${path.basename(command)} ${args.slice(0,3).join(' ')}. See ${dir?path.join(dir,'commands.jsonl'):'the run log'}.`);
@@ -58,7 +88,9 @@ export async function createRuntime(config,{log=()=>{}}={}){
  async function checkWorkspace(){
   if(!fs.statSync(path.join(root,'.git')).isFile())throw new EnvironmentError('Use a dedicated Git worktree, not the primary checkout.','workspace');
   const branch=(await git(['branch','--show-current'])).stdout.trim();if(!branch||branch==='main'||branch==='master'||branch.startsWith('vigia/'))throw new EnvironmentError('Use the clean integration worktree (not main, not a vigia/ proposal branch).','workspace');
-  if((await git(['status','--porcelain','--untracked-files=no'])).stdout.trim())throw new EnvironmentError('The watcher worktree has tracked changes. Commit or review them first.','workspace');
+  // Untracked files count too: build.sh sends the tree to Docker, and .dockerignore does not cover a loose file.
+  const dirty=(await git(['status','--porcelain'])).stdout.split('\n').filter(l=>l.trim());
+  if(dirty.length)throw new EnvironmentError(`The watcher worktree has changes or untracked files (${dirty.slice(0,3).map(l=>l.slice(3)).join(', ')}). Commit or review them first.`,'workspace');
   return branch;
  }
  const storeDir=(lane,v)=>path.join(store,`${lane}-${v}`);
@@ -69,11 +101,35 @@ export async function createRuntime(config,{log=()=>{}}={}){
   const chosen=full?found.find(m=>m[1]===full):found.sort((a,b)=>Number(b[1].split('.')[3])-Number(a[1].split('.')[3]))[0];
   return chosen?{file:path.join(folder,chosen[0]),fullVersion:chosen[1]}:null;
  }
+ // A bundle in the store that does not check out is never bundled over (it may be another session's, half-written, or
+ // the one a published image was built from): the lane waits for a person to review the store.
  function verifyBundle(lane,v,file){
-  const sha=hash(file);let recorded='';try{recorded=fs.readFileSync(file+'.sha256','utf8').toLowerCase();}catch{throw new EnvironmentError(`The bundle ${file} has no .sha256 beside it.`,'store-incomplete');}
-  if(!recorded.includes(sha))throw Error(`The bundle checksum does not match its .sha256: ${file}.`);
-  const pin=config.bundlePins?.[`${lane}-${v}`];if(pin&&pin.toLowerCase()!==sha)throw Error(`The bundle ${file} is not the pinned one (bundlePins ${lane}-${v}).`);
+  const review=why=>new EnvironmentError(`${why}: ${file}. Review the bundle store; nothing was bundled over or changed.`,'store-mismatch',[lane]);
+  const sha=hash(file);let recorded='';try{recorded=fs.readFileSync(file+'.sha256','utf8').toLowerCase();}catch{throw review('The bundle has no .sha256 beside it');}
+  if(!recorded.includes(sha))throw review('The bundle checksum does not match its .sha256');
+  const pin=config.bundlePins?.[`${lane}-${v}`];if(pin&&pin.toLowerCase()!==sha)throw review(`The bundle is not the pinned one (bundlePins ${lane}-${v})`);
   return sha;
+ }
+ // The features of an ODC version (the tenant's feature flags) live only in the private featuresRoot, never under C:/t.
+ // Their root names the Studio version they came from; a cache of another version is never stored under this one.
+ const privateFeatures=v=>path.join(featuresRoot,`odc-${v}`,'Features.plain.xml');
+ function checkFeatures(file,v,source){
+  const found=featuresVersion(file);
+  if(threeOf(found)!==v)throw new EnvironmentError(`The ODC Studio features ${source} are for ${found??'no version'}, not ${v}. Open ODC Studio ${v} once, signed in, so it refreshes its feature cache; nothing was stored.`,'features-stale',['odc']);
+ }
+ async function featuresFor(v,{exportFrom,dir}={}){
+  const target=privateFeatures(v);
+  if(fs.existsSync(target)){checkFeatures(target,v,target);return target;}
+  const legacy=path.join(storeDir('odc',v),'Features.plain.xml');
+  if(fs.existsSync(legacy)){checkFeatures(legacy,v,legacy);fs.mkdirSync(path.dirname(target),{recursive:true});fs.copyFileSync(legacy,target);log(`features of ODC ${v} copied into the private store from ${legacy}`);return target;}
+  if(!exportFrom)throw new EnvironmentError(`No Features.plain.xml for ODC ${v} in ${path.dirname(target)}.`,'store-incomplete',['odc']);
+  const stage=path.join(temp,'features-export',`odc-${v}-${Date.now()}.xml`);fs.mkdirSync(path.dirname(stage),{recursive:true});
+  try{
+   try{await ps(path.join(root,'server/deploy/odc-features-export.ps1'),['-Source',exportFrom,'-Out',stage],{dir});}
+   catch(e){throw new EnvironmentError(`The ODC Studio feature cache ${exportFrom} could not be exported (${e.message}). Open ODC Studio ${v} once, signed in.`,'features-unavailable',['odc']);}
+   checkFeatures(stage,v,exportFrom);
+   fs.mkdirSync(path.dirname(target),{recursive:true});fs.renameSync(stage,target);return target;
+  }finally{fs.rmSync(stage,{force:true});}
  }
  // The frozen copy of a bundle: its files exactly as the image gets them, plus the Studio's runtimeconfig.json (so the
  // build rule sees the Studio's .NET in this folder too).
@@ -86,10 +142,13 @@ export async function createRuntime(config,{log=()=>{}}={}){
   if(!holds(snap)){
    const stage=path.join(folder,`.snapshot-partial-${process.pid}`);fs.rmSync(stage,{recursive:true,force:true});fs.mkdirSync(stage,{recursive:true});
    await run(exe.tar,['-xzf',file,'-C',stage],{dir});
-   if(fs.existsSync(snap))throw Error(`${snap} exists but does not hold ${lane} ${fullVersion}; review the bundle store.`);
+   if(fs.existsSync(snap))throw new EnvironmentError(`${snap} exists but does not hold ${lane} ${fullVersion}; review the bundle store.`,'store-mismatch',[lane]);
+   fs.writeFileSync(path.join(stage,'.vigia'),'frozen by the Studio versions watcher\n');
    fs.renameSync(stage,snap);
   }
-  if(runtimeFrom){const name=RUNTIME_CONFIG[lane],source=path.join(runtimeFrom,name);if(fs.existsSync(source))fs.copyFileSync(source,path.join(snap,'files',name));}
+  // The Studio's runtimeconfig.json goes only into a copy the watcher froze itself (never into another session's).
+  const mine=fs.existsSync(path.join(snap,'.vigia'));
+  if(runtimeFrom&&mine){const name=RUNTIME_CONFIG[lane],source=path.join(runtimeFrom,name),to=path.join(snap,'files',name);if(fs.existsSync(source)&&!fs.existsSync(to))fs.copyFileSync(source,to);}
   return path.join(snap,'files');
  }
  async function companion(lane,v,dir){
@@ -97,9 +156,8 @@ export async function createRuntime(config,{log=()=>{}}={}){
   if(!found)throw new EnvironmentError(`No ${lane} ${v} bundle in ${folder}. The store keeps one folder per served version (<lane>-studio-<version>.tar.gz and its .sha256).`,'store-incomplete');
   const sha256=verifyBundle(lane,v,found.file);
   const snapshot=await freeze(folder,found.file,found.fullVersion,null,lane,dir);
-  if(threeOf(studioVersionOf(snapshot))!==v)throw Error(`The frozen copy ${snapshot} is not ${lane} ${v}.`);
-  const features=lane==='odc'?path.join(folder,'Features.plain.xml'):null;
-  if(features&&!fs.existsSync(features))throw new EnvironmentError(`No Features.plain.xml for ODC ${v} in ${folder}.`,'store-incomplete');
+  if(threeOf(studioVersionOf(snapshot))!==v)throw new EnvironmentError(`The frozen copy ${snapshot} is not ${lane} ${v}; review the bundle store.`,'store-mismatch',[lane]);
+  const features=lane==='odc'?await featuresFor(v):null;
   return {lane,version:v,fullVersion:found.fullVersion,file:found.file,sha256,snapshot,features,tfm:studioTfm(snapshot,lane)??assemblyTfm(snapshot)};
  }
  async function waitForDotnet(dir){
@@ -182,22 +240,20 @@ export async function createRuntime(config,{log=()=>{}}={}){
   },
   async bundle(candidate,dir){
    const folder=storeDir(candidate.lane,candidate.version);fs.mkdirSync(folder,{recursive:true});
+   // A bundle of this build already in the store is used as it is, or the lane waits (verifyBundle); only a build the
+   // store does not have yet is bundled.
    let found=bundleFile(folder,candidate.lane,candidate.version,candidate.fullVersion);
-   if(found){try{verifyBundle(candidate.lane,candidate.version,found.file);}catch{found=null;}}
    if(!found){
     const privateTemp=path.join(temp,'bundle');fs.mkdirSync(privateTemp,{recursive:true});
-    await ps(path.join(root,'server/docker/ssam-server/studio-bundle.ps1'),['-Lane',candidate.lane,'-Studio',candidate.studio,'-OutDir',folder],{dir,env:{TEMP:privateTemp,TMP:privateTemp}});
+    try{await ps(path.join(root,'server/docker/ssam-server/studio-bundle.ps1'),['-Lane',candidate.lane,'-Studio',candidate.studio,'-OutDir',folder],{dir,env:{TEMP:privateTemp,TMP:privateTemp}});}
+    catch(e){throw new EnvironmentError(`studio-bundle.ps1 could not bundle ${candidate.lane} ${candidate.fullVersion} from ${candidate.studio} (${e.message}); the Studio folder may be incomplete.`,'bundle',[candidate.lane]);}
     found=bundleFile(folder,candidate.lane,candidate.version,candidate.fullVersion);
-    if(!found)throw Error(`studio-bundle.ps1 did not write ${candidate.lane}-studio-${candidate.fullVersion}.tar.gz.`);
+    if(!found)throw new EnvironmentError(`studio-bundle.ps1 did not write ${candidate.lane}-studio-${candidate.fullVersion}.tar.gz.`,'bundle',[candidate.lane]);
    }
    const sha256=verifyBundle(candidate.lane,candidate.version,found.file);
    const snapshot=await freeze(folder,found.file,found.fullVersion,candidate.studio,candidate.lane,dir);
-   let features=null;
-   if(candidate.lane==='odc'){
-    // The features of this ODC version, exported once from this machine's ODC Studio cache; an existing file is kept.
-    features=path.join(folder,'Features.plain.xml');
-    if(!fs.existsSync(features))await ps(path.join(root,'server/deploy/odc-features-export.ps1'),['-Source',config.featuresSource,'-Out',features],{dir});
-   }
+   // The features of this ODC version, exported once from this machine's ODC Studio cache when it is for this version.
+   const features=candidate.lane==='odc'?await featuresFor(candidate.version,{exportFrom:config.featuresSource,dir}):null;
    return {lane:candidate.lane,version:candidate.version,fullVersion:found.fullVersion,file:found.file,sha256,snapshot,features,tfm:studioTfm(snapshot,candidate.lane)??candidate.tfm??assemblyTfm(snapshot)};
   },
   companion:(lane,v)=>companion(lane,v),
@@ -209,14 +265,19 @@ export async function createRuntime(config,{log=()=>{}}={}){
    let featuresDir=null;
    if(lane==='odc'&&side.odc.features){
     featuresDir=path.join(privateTemp,'features');
-    await ps(path.join(here,'features-protect.ps1'),['-Plain',side.odc.features,'-OutDir',featuresDir],{dir});
+    try{await ps(path.join(here,'features-protect.ps1'),['-Plain',side.odc.features,'-OutDir',featuresDir],{dir});}
+    catch(e){throw new EnvironmentError(`The ODC features could not be prepared for the ${kind} tests (${e.message}).`,kind==='baseline'?'baseline':'test-environment',[lane]);}
    }
    await waitForDotnet(dir);
    const env={TEMP:privateTemp,TMP:privateTemp,DOTNET_CLI_HOME:path.join(temp,'dotnet-home'),DOTNET_CLI_TELEMETRY_OPTOUT:'1',DOTNET_NOLOGO:'1',SSAM_MODULE_INDEX_ROOT:path.join(privateTemp,'index'),ANVIL_WORKER:'0',ANVIL_ODC_NO_WORKER:'1',SSAM_NO_WARM:'1',ANVIL_STUDIO_DIR:side.o11.snapshot,ANVIL_ODC_STUDIO_DIR:side.odc.snapshot,...(featuresDir?{ANVIL_ODC_FEATURES_DIR:featuresDir}:{})};
    fs.rmSync(path.join(resultDir,'results.trx'),{force:true});
    const result=await run(exe.dotnet,['test',path.join(root,TEST_PROJECT[lane]),'-c','Release','--filter',filter,'--logger','trx;LogFileName=results.trx','--results-directory',resultDir,'-nodeReuse:false',`-p:${STUDIO_PROPERTY[lane]}=${side[lane].snapshot}`,...runtimePins(side)],{dir,env,allowFailure:true,timeoutMs:(config.testTimeoutMinutes??90)*60000});
-   const report=path.join(resultDir,'results.trx');if(!fs.existsSync(report))throw Object.assign(Error(`No test results from the ${lane} ${kind} run (exit ${result.code}): the test project did not build or run against ${side[lane].snapshot}. See ${path.join(dir,'commands.jsonl')}.`),{lanes:[lane]});
-   return readTrx(fs.readFileSync(report,'utf8'));
+   const report=path.join(resultDir,'results.trx');
+   const cause=testCause(result,kind,fs.existsSync(report));
+   if(cause.environmental)throw new EnvironmentError(`The ${lane} ${kind} tests could not run (${cause.why}; exit ${result.code}): ${kind==='baseline'?"the default pair's suite does not build or run on this machine now":'the machine, not the version'}. See ${path.join(dir,'commands.jsonl')}.`,kind==='baseline'?'baseline':'test-environment',[lane]);
+   if(!fs.existsSync(report))throw Object.assign(Error(`No test results from the ${lane} candidate run (exit ${result.code}): the test project did not build or run against ${side[lane].snapshot}. See ${path.join(dir,'commands.jsonl')}.`),{lanes:[lane]});
+   try{return readTrx(fs.readFileSync(report,'utf8'));}
+   catch(e){throw new EnvironmentError(`The ${lane} ${kind} run reported no executed tests (${e.message}); the Studio folder did not load for the tests.`,kind==='baseline'?'baseline':'test-environment',[lane]);}
   },
   async build(pair,bundles,dir){
    await checkWorkspace();
@@ -227,7 +288,12 @@ export async function createRuntime(config,{log=()=>{}}={}){
     for(const b of Object.values(bundles)){const to=path.join(installers,path.basename(b.file));try{fs.linkSync(b.file,to);}catch{fs.copyFileSync(b.file,to);}}
     const metadata=path.join(dir,'image-metadata.json'),image=config.image??'docker.io/andrepereiramachado/ssam-server';
     const env={TEMP:temp,TMP:temp,PATH:path.dirname(exe.docker)+path.delimiter+path.dirname(exe.git)+path.delimiter+process.env.PATH,DOCKER:'docker --context '+context,BUILDX_BUILDER:config.builder??'ssam-multiver-impl',STUDIO_INSTALLERS_DIR:bashPath(installers),SSAM_BUILD_METADATA_FILE:slash(metadata),SERVICE_STUDIO_BUNDLE:path.basename(bundles.o11.file),SERVICE_STUDIO_BUNDLE_SHA256:bundles.o11.sha256,ODC_STUDIO_BUNDLE:path.basename(bundles.odc.file),ODC_STUDIO_BUNDLE_SHA256:bundles.odc.sha256,SSAM_IMAGE_O11:bundles.o11.version,SSAM_IMAGE_ODC:bundles.odc.version};
-    await run(exe.bash,[slash(path.join(root,'server/deploy/build.sh')),'--image',image,'--tag',tag,'--','--progress','plain'],{dir,env,timeoutMs:(config.buildTimeoutMinutes??120)*60000});
+    const r=await run(exe.bash,[slash(path.join(root,'server/deploy/build.sh')),'--image',image,'--tag',tag,'--','--progress','plain'],{dir,env,allowFailure:true,timeoutMs:(config.buildTimeoutMinutes??120)*60000});
+    if(r.code!==0){
+     const cause=buildCause(r);
+     if(cause.environmental)throw new EnvironmentError(`build.sh could not finish for an environment reason (${cause.why}; exit ${r.code}); the round retries. See ${path.join(dir,'commands.jsonl')}.`,'build-environment');
+     throw Error(`build.sh failed (exit ${r.code})${cause.why?': '+cause.why:''}. See ${path.join(dir,'commands.jsonl')}.`);
+    }
     const sha256=JSON.parse(fs.readFileSync(metadata,'utf8'))['containerimage.digest'].replace(/^sha256:/,'');
     return {odc:bundles.odc.version,o11:bundles.o11.version,image,tag,sha256,revision:commitShort,commit:revision};
    }finally{fs.rmSync(installers,{recursive:true,force:true});}
@@ -235,15 +301,33 @@ export async function createRuntime(config,{log=()=>{}}={}){
   async smoke(built,bundles,served,dir){
    return smokeImage({pair:built,bundle:{features:bundles.odc.features},dir,root,docker,served,pack:packFor(config,bundles),budget:readListingBudget(root)});
   },
-  async propose(manifest,branch,dir,message){
+  // The proposal branch starts from HEAD, or from the newest approved pin main does not carry yet (base), so merging the
+  // newest proposal brings the approved one too, without a conflict in versions.json.
+  async propose(manifest,branch,dir,message,{base}={}){
    await checkWorkspace();
    let name=branch;for(let i=2;(await git(['rev-parse','--verify','--quiet','refs/heads/'+name],{allowFailure:true})).code===0;i++)name=`${branch}-${i}`;
-   return withWorktree('HEAD',true,async wt=>{
+   const from=base&&(await git(['merge-base','--is-ancestor',base,'HEAD'],{allowFailure:true})).code!==0?base:'HEAD';
+   if(from!=='HEAD')log(`proposal branch from the approved pin ${base.slice(0,7)} (main does not carry it yet)`);
+   return withWorktree(from,true,async wt=>{
     await git(['switch','-c',name],{dir,cwd:wt});
     await writeWindow(wt,manifest,dir,['gen-compose.test.mjs']);
     return {commit:await commit(wt,message,dir),branch:name};
    },dir);
   },
+  // The deploy folder of the approved commit, for the VPS (ssamctl.sh and kernel-pair-check.mjs of that commit).
+  async archiveDeploy(commit,file){await git(['archive','--format=tar.gz','-o',file,commit,'server/deploy'],{dir:path.dirname(file)});},
+  // A pin committed on the proposal branch whose record was lost (a crash between the commit and the record): the commit
+  // right after the proposed one, whose versions.json pins that digest for that tag. Else null.
+  async pinnedAt(branch,proposed,tag,digest){
+   const head=(await git(['rev-parse','--verify',`refs/heads/${branch}`],{allowFailure:true})).stdout.trim();
+   if(!head||head===proposed)return null;
+   const parent=(await git(['rev-parse','--verify',`${head}^`],{allowFailure:true})).stdout.trim();
+   if(parent!==proposed)return null;
+   const shown=await git(['show',`${head}:server/deploy/coolify/versions.json`],{allowFailure:true});
+   try{const m=JSON.parse(shown.stdout);const entries=['odc','o11'].flatMap(l=>m[l].filter(e=>e.tag===tag));return entries.length===2&&entries.every(e=>e.sha256===digest.replace(/^sha256:/,''))?head:null;}catch{return null;}
+  },
+  // Stops every command the round started (its time limit).
+  stopAll(){for(const child of active)killTree(child);},
   async verifyBranch(branch,expected){
    const head=(await git(['rev-parse','--verify',`refs/heads/${branch}`],{allowFailure:true})).stdout.trim();
    if(head!==expected)throw Error(`The proposal branch ${branch} is at ${head||'nothing'}, not the proposed commit ${expected}. Review it before approving.`);

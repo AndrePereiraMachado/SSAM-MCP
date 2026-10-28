@@ -1,7 +1,7 @@
 // Simulation of the watcher: fake Studios, fake operations, real files in a temporary outDir. No Studio, Docker, dotnet
 // or Git here (vigia-runtime.test.mjs covers the real Git and PowerShell parts).
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';
-import {packFor,missingPack,planWindow,rotateWindow,compareFailures,readTrx,runVigia,detectVersionFolders,pairId,pairTag,replayApprovals,pinDigest,literalCompose,literalComposeText,EnvironmentError,approve,reject,retry,acquireLock,busyDotnet,readAttempts,localDay,baseWindow} from './vigia.mjs';
+import {timedOut,packFor,missingPack,planWindow,rotateWindow,compareFailures,readTrx,runVigia,detectVersionFolders,pairId,pairTag,replayApprovals,pinDigest,literalCompose,literalComposeText,EnvironmentError,approve,reject,retry,acquireLock,registerChild,busyDotnet,readAttempts,localDay,baseWindow} from './vigia.mjs';
 import {smokeImage} from './smoke.mjs';
 import {generateCompose} from '../coolify/gen-compose.mjs';
 const image='docker.io/andrepereiramachado/ssam-server';
@@ -22,13 +22,13 @@ function fixture(t,{failures={},smokeOk=true,tfm={odc:'net10.0',o11:'net10.0'},p
   targetFramework:async c=>{calls.push('tfm:'+c.lane);return tfm[c.lane]??null;},
   bundle:async c=>{calls.push('bundle:'+c.lane);return {...side(c.lane,c.version),tfm:bundleTfm};},
   companion:async(lane,v)=>{calls.push('companion:'+lane);return side(lane,v);},
-  test:async(lane,kind)=>{calls.push(`test:${lane}:${kind}`);return {total:3,passed,failures:kind==='baseline'?['Known']:(failures[lane]??['Known'])};},
+  test:async(lane,kind)=>{calls.push(`test:${lane}:${kind}`);return {total:3,passed:typeof passed==='object'?passed[kind]:passed,failures:kind==='baseline'?['Known']:(failures[lane]??['Known'])};},
   build:async pair=>{calls.push('build');return {odc:pair.odc,o11:pair.o11,image,tag:pairTag(pair,'abc1234','20261028'),sha256:sha('a'),revision:'abc1234',commit:'abc1234'+'0'.repeat(33)};},
   smoke:async()=>{calls.push('smoke');return {ok:smokeOk};},
   propose:async(m,branch)=>{calls.push('propose');return {commit:'c'.repeat(40),branch};},
  };
- const round=(extra={})=>runVigia({manifest,observed:[odc,o11],outDir,head:'h1',now:T0,agentPack:{odcBridge:'v97',runtime:'net8.0'},...extra},ops);
- return {outDir,calls,notes,ops,round};
+ const round=(extra={})=>runVigia({manifest,observed:[odc,o11],outDir,head:'h1',now:T0,agentPack:{odcBridge:'v97',runtime:'net8.0'},agentPackByRuntime:{net10:{odcBridge:'v100',o11BuiltFor:'11.55.94'}},...extra},ops);
+ return {outDir,calls,notes,ops,round,features};
 }
 test('fake installed folders reveal a new version and dry-run has no writes or operations',async()=>{
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'vigia-fake-'));try{
@@ -56,7 +56,8 @@ test('ODC and O11 new together become ONE pair: one build, one smoke, one propos
  const a=readAttempts(f.outDir)[r.id];assert.equal(a.status,'proposed');
  assert.equal(a.proposedManifest.odc[0].version,'1.7.30');assert.equal(a.proposedManifest.odc[0].sha256,undefined,'no digest before publication');assert.equal(a.proposedManifest.odc[1].sha256,sha('1'));
  const proposal=fs.readFileSync(path.join(r.dir,'PROPOSTA.md'),'utf8');assert.match(proposal,/-Approve o11-11\.55\.94-odc-1\.7\.30/);assert.match(proposal,/No image was published/);
- assert.ok(fs.existsSync(path.join(r.dir,'Features.plain.xml')));
+ // The tenant's feature flags stay in the private store, never in the watcher folder (C:/t).
+ assert.equal(fs.existsSync(path.join(r.dir,'Features.plain.xml')),false);assert.equal(a.features,f.features);
 });
 test('an unchanged pending proposal is never rebuilt and its notice repeats at most once a day',async t=>{
  const f=fixture(t);await f.round();const n=f.notes.length,c=f.calls.length;
@@ -84,8 +85,10 @@ test('a failure is retried when main moved and enough time passed, or on -Retry'
  await f.round({now:T0+13*3600000,head:'h2'});assert.equal(f.calls.filter(c=>c==='preflight').length,builds+1,'retried after main moved');
  retry({outDir:f.outDir},r.id);await f.round({now:T0+14*3600000,head:'h2'});assert.equal(f.calls.filter(c=>c==='preflight').length,builds+2,'retried on -Retry');
 });
-test('a suite that runs nothing cannot approve a version',async t=>{
- const f=fixture(t,{passed:0});const r=await f.round();assert.equal(r.status,'failed');assert.match(r.error,/did not run/);
+test('a candidate suite that runs nothing cannot approve a version; a baseline that does not run is the machine, not the version',async t=>{
+ const f=fixture(t,{passed:{baseline:2,candidate:0}});const r=await f.round();assert.equal(r.status,'failed');assert.match(r.error,/did not run on the candidate/);
+ const g=fixture(t,{passed:{baseline:0,candidate:2}});const b=await g.round();assert.equal(b.status,'deferred');const a=readAttempts(g.outDir)[b.id];assert.equal(a.code,'baseline');assert.deepEqual(a.deferredLanes,['odc']);
+ assert.ok(fs.existsSync(path.join(b.dir,'AGUARDANDO.md')));
 });
 test('a stopped Docker defers the round (environment, not a test result) and the next round retries',async t=>{
  let up=false;const f=fixture(t,{docker:async()=>{if(!up)throw new EnvironmentError('Docker Desktop did not answer.','docker-unavailable');}});
@@ -101,13 +104,45 @@ test('a Studio on .NET 10 follows the normal path when the build rule targets it
  assert.equal(w.status,'deferred');assert.equal(readAttempts(old.outDir)[w.id].code,'runtime-unsupported');assert.ok(!old.calls.some(c=>c.startsWith('test:')));
  assert.ok(!old.calls.includes('docker'),'a round that waits for the runtime rule never starts Docker');assert.match(w.error,/ODC Studio 1.7.30 runs on net10.0.*; Service Studio 11.55.94 runs on net10.0/,'every lane in one message');
  await old.round({now:T0+6*3600000});await old.round({now:T0+12*3600000});const a=readAttempts(old.outDir)[w.id];assert.equal(a.deferrals,3);assert.equal(a.firstDeferredAt,new Date(T0).toISOString());assert.equal(fs.existsSync(path.join(w.dir,'previous')),false);
- const unknown=fixture(t,{tfm:{}});assert.equal((await unknown.round()).status,'proposed','an unevaluated target does not block');
+ // MSBuild that cannot be asked: the watcher never picks a framework, so the lane waits (it used to go on).
+ const unknown=fixture(t,{tfm:{}});const u=await unknown.round();assert.equal(u.status,'deferred');assert.equal(readAttempts(unknown.outDir)[u.id].code,'runtime-unknown');
 });
 test('a pair on .NET 10 waits for its agent pack instead of failing the smoke; with agentPackByRuntime.net10 it proceeds',async t=>{
- const f=fixture(t,{bundleTfm:'net10.0'});const r=await f.round();
+ const f=fixture(t,{bundleTfm:'net10.0'});const r=await f.round({agentPackByRuntime:{}});
  assert.equal(r.status,'deferred');assert.equal(readAttempts(f.outDir)[r.id].code,'agent-pack-missing');assert.match(r.error,/agentPackByRuntime.net10/);assert.ok(!f.calls.some(c=>c.startsWith('test:')||c==='build'));
+ assert.ok(!f.calls.includes('docker'),'a round that waits for the agent pack never starts Docker');assert.deepEqual(readAttempts(f.outDir)[r.id].deferredLanes,['odc','o11']);
  const g=fixture(t,{bundleTfm:'net10.0'});assert.equal((await g.round({agentPackByRuntime:{net10:{odcBridge:'v100',o11BuiltFor:'11.55.94'}}})).status,'proposed');
  assert.deepEqual(missingPack({agentPack:{runtime:'net8.0'}},{odc:{tfm:'net8.0'},o11:{tfm:null}}),[]);
+});
+// M3: a lane deferred for its own reason holds the pair for laneWaitHours (24 h), then the other lane goes on alone.
+test('one lane waiting for the runtime rule holds the other for a day at most, then the other lane goes on alone',async t=>{
+ const f=fixture(t,{tfm:{odc:'net8.0',o11:'net8.0'}});
+ const observed=[odc,{lane:'o11',version:'11.55.95',fullVersion:'11.55.95.1',studio:'C:/fake/o11',tfm:'net8.0'}];
+ const rounds=[];for(const h of [0,6,12,18])rounds.push((await f.round({observed,now:T0+h*3600000})).status);
+ assert.deepEqual(rounds,['deferred','deferred','deferred','deferred']);assert.ok(!f.calls.some(c=>c.startsWith('test:')));
+ const a=readAttempts(f.outDir)['o11-11.55.95-odc-1.7.30'];assert.deepEqual(a.deferredLanes,['odc']);assert.equal(a.laneSince.odc,new Date(T0).toISOString());
+ const alone=await f.round({observed,now:T0+24*3600000});
+ assert.equal(alone.status,'proposed');assert.equal(alone.id,'o11-11.55.95-odc-1.7.29','the O11 lane alone, with the default ODC');
+});
+test('one lane without its agent pack holds the other for a day at most',async t=>{
+ const f=fixture(t,{tfm:{odc:'net8.0',o11:'net10.0'}});
+ const observed=[{...odc,tfm:'net8.0'},o11];
+ for(const h of [0,6,12,18])assert.equal((await f.round({observed,now:T0+h*3600000,agentPackByRuntime:{}})).status,'deferred');
+ const alone=await f.round({observed,now:T0+24*3600000,agentPackByRuntime:{}});assert.equal(alone.status,'proposed');assert.equal(alone.id,'o11-11.55.93-odc-1.7.30');
+});
+test('an incomplete Studio folder (no exe, no runtimeconfig.json) defers its lane with the reason, never as an unknown runtime',async t=>{
+ const f=fixture(t);
+ const broken={...o11,tfm:null,missing:['ServiceStudio.exe','ServiceStudio.runtimeconfig.json']};
+ const r=await f.round({observed:[odc,broken]});
+ assert.equal(r.status,'deferred');const a=readAttempts(f.outDir)[r.id];assert.equal(a.laneCodes.o11,'studio-incomplete');assert.deepEqual(a.deferredLanes,['o11']);
+ assert.match(r.error,/Service Studio folder C:\/fake\/o11 has ServiceStudio\.Framework\.dll 11\.55\.94\.65328 but not ServiceStudio\.exe, ServiceStudio\.runtimeconfig\.json: the Studio is incomplete/);
+ assert.ok(!f.calls.includes('tfm:o11'),'the build rule is not asked about an incomplete folder');assert.ok(!f.calls.includes('docker'));
+ const quiet=fixture(t);const q=await quiet.round({observed:[odc,{...o11,tfm:null}]});assert.equal(readAttempts(quiet.outDir)[q.id].laneCodes.o11,'studio-incomplete','a null runtime is never skipped');
+ const alone=await f.round({observed:[odc,broken],now:T0+24*3600000});assert.equal(alone.id,'o11-11.55.93-odc-1.7.30');assert.equal(alone.status,'proposed');
+});
+test('a round stopped at its time limit leaves its attempt deferred with its notice',async t=>{
+ const f=fixture(t);const r=await f.round();const a={...readAttempts(f.outDir)[r.id],status:'running'};
+ timedOut({outDir:f.outDir},a);const b=readAttempts(f.outDir)[r.id];assert.equal(b.status,'deferred');assert.equal(b.code,'round-timeout');assert.ok(fs.existsSync(path.join(r.dir,'AGUARDANDO.md')));
 });
 test('an idle round writes nothing at all',async t=>{
  const outDir=path.join(os.tmpdir(),'vigia-idle-'+process.pid);t.after(()=>fs.rmSync(outDir,{recursive:true,force:true}));
@@ -138,9 +173,9 @@ test('image smoke takes the listing budget, keeps credentials out of arguments a
  const features=path.join(dir,'Features.plain.xml');fs.writeFileSync(features,'<Features/>');const commands=[];
  const docker=async(args,options={})=>{commands.push(args);if(args[0]==='logs')return {code:0,stdout:JSON.stringify({event:'warm',indexes:{ok:true},delivery:{builder:{ok:true},worker:{ok:true}}}),stderr:''};
   if(args.includes('server-token'))return {code:0,stdout:JSON.stringify({token:'private-mcp-token',agentCredential:'private-agent-token'}),stderr:''};
-  if(args.includes('-i')){assert.ok(options.input.includes('private-mcp-token'));assert.ok(options.input.includes('"o11Hook":"dev"'));assert.ok(options.input.includes('"tools":93'));return {code:0,stdout:JSON.stringify({ok:true,tools:93,totalBytes:261000}),stderr:''};}
+  if(args.includes('-i')){assert.ok(options.input.includes('private-mcp-token'));assert.ok(options.input.includes('"o11Hook":"dev"'));assert.ok(options.input.includes('"tools":93'));assert.ok(options.input.includes('"coreBytes":34097'),'the core ceiling is checked too');return {code:0,stdout:JSON.stringify({ok:true,tools:93,totalBytes:261000}),stderr:''};}
   return {code:0,stdout:'',stderr:''};};
- const result=await smokeImage({pair:{image,tag:'test',odc:'1.7.30',o11:'11.55.93'},bundle:{features},dir,root:dir,docker,served:{odc:['1.7.30'],o11:['11.55.93','11.55.92']},budget:{tools:93,totalBytes:262000},pack:{odcBridgeAccepted:['v99']}});
+ const result=await smokeImage({pair:{image,tag:'test',odc:'1.7.30',o11:'11.55.93'},bundle:{features},dir,root:dir,docker,served:{odc:['1.7.30'],o11:['11.55.93','11.55.92']},budget:{tools:93,totalBytes:262000,coreBytes:34097,core:['ssam_doctor']},pack:{odcBridgeAccepted:['v99']}});
  assert.equal(result.ok,true);assert.equal(fs.existsSync(path.join(dir,'segredo')),false);assert.ok(commands.some(x=>x[0]==='rm'&&x.includes('-v')));assert.doesNotMatch(JSON.stringify(commands),/private-mcp-token|private-agent-token/);
  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(dir,'kernel.json'),'utf8')).odcBridgeAccepted,['v99']);
  await assert.rejects(smokeImage({pair:{image,tag:'t',odc:'1.7.30',o11:'11.55.93'},bundle:{features},dir,root:dir,docker,served:{}}),/listing budget/);
@@ -154,16 +189,33 @@ test('the listing budget is one file shared by the rehearsal, the smoke and the 
 });
 function approvalOps(f,{digest='sha256:'+sha('a'),already=false}={}){
  const calls=[];
- return {calls,ops:{log(){},verifyBranch:async(b,c)=>calls.push(['branch',b,c]),verifyLocalImage:async b=>calls.push(['image',b.tag]),publish:async b=>{calls.push(['publish',b.tag]);return {digest,already};},
-  pin:async(m,branch)=>{calls.push(['pin',branch,m]);return {commit:'d'.repeat(40)};}}};
+ return {calls,ops:{log(){},manifest:()=>manifest,verifyBranch:async(b,c)=>calls.push(['branch',b,c]),verifyLocalImage:async b=>calls.push(['image',b.tag]),publish:async b=>{calls.push(['publish',b.tag]);return {digest,already};},
+  pin:async(m,branch)=>{calls.push(['pin',branch,m]);return {commit:'d'.repeat(40)};},archiveDeploy:async(commit,file)=>{calls.push(['archive',commit]);fs.writeFileSync(file,'tar');}}};
 }
 const domains={ssam:'mcp.example.test',console:'panel.example.test'};
+test('-Approve prints the owner steps in the runbook order: the new compose and its stopped containers BEFORE kernel and features, Redeploy last',async t=>{
+ const f=fixture(t);const r=await f.round();const a=approvalOps(f);
+ const all=(await approve({outDir:f.outDir,domains},a.ops,r.id)).steps,steps=all.slice(all.indexOf('What is left'));
+ const at=re=>{const m=re.exec(steps);assert.ok(m,'missing: '+re);return m.index;};
+ const order=[/maintenance window/,/ssamctl\.sh backup/,/deploy-[0-9a-f]{7}\.tar\.gz/,/In Coolify, replace the compose/,/ssamctl\.sh status/,/kernel write --version odc=1\.7\.30/,/features put --version odc=1\.7\.30/,/rm \/tmp\/ssam-vigia\/Features\.plain\.xml/,/\n\d+\. Redeploy in Coolify/,/SESSION_REROUTED/];
+ const positions=order.map(at);assert.deepEqual([...positions].sort((x,y)=>x-y),positions,'steps out of order');
+ assert.ok(!/Redeploy/.test(steps.slice(0,at(/kernel write/)).replace(/without a Redeploy/g,'')),'no Redeploy before the kernel is written');
+ assert.match(steps,/candidates: none/,'says what the selector error means');
+ assert.ok(a.calls.some(c=>c[0]==='archive'&&c[1]==='d'.repeat(40)),'the deploy folder comes from the pin commit');
+ assert.doesNotMatch(steps,new RegExp(f.outDir.replace(/[\\.]/g,'\\$&')+'[^\\n]*Features\\.plain\\.xml'),'the features never sit in the watcher folder');
+});
+test('-Approve refuses a pair main already serves (published by hand), before publishing',async t=>{
+ const f=fixture(t);const r=await f.round();const a=approvalOps(f);
+ const served=structuredClone(manifest);served.odc.unshift({version:'1.7.30',tag:'manual',image,sha256:sha('f')});served.o11.unshift({version:'11.55.94',tag:'manual',image,sha256:sha('f')});served.odc.pop();served.o11.pop();
+ a.ops.manifest=()=>served;
+ await assert.rejects(approve({outDir:f.outDir,domains},a.ops,r.id),/main already serves/);assert.ok(!a.calls.some(c=>c[0]==='publish'));
+});
 test('-Approve checks, publishes (simulated), pins the published digest and prints what is left and the way back',async t=>{
  const f=fixture(t);const r=await f.round();const a=approvalOps(f);
  const done=await approve({outDir:f.outDir,domains},a.ops,'odc-1.7.30');
- assert.equal(done.status,'approved');assert.deepEqual(a.calls.map(c=>c[0]),['branch','image','publish','branch','pin']);
+ assert.equal(done.status,'approved');assert.deepEqual(a.calls.map(c=>c[0]),['branch','image','publish','branch','pin','archive']);
  const pinned=a.calls[4][2];assert.equal(pinned.odc[0].sha256,sha('a'));assert.equal(pinned.o11[0].sha256,sha('a'));
- assert.match(done.steps,/kernel write --version odc=1\.7\.30/);assert.match(done.steps,/compose\.coolify\.literal\.yml/);assert.match(done.steps,/Way back: .*compose\.rollback\.literal\.yml/);assert.match(done.steps,/latest was not moved/);
+ assert.match(done.steps,/kernel write --version odc=1\.7\.30/);assert.match(done.steps,/compose\.coolify\.literal\.yml/);assert.match(done.steps,/Way back \(if the checks fail\): paste .*compose\.rollback\.literal\.yml/);assert.match(done.steps,/latest was not moved/);
  const literal=fs.readFileSync(path.join(r.dir,'compose.coolify.literal.yml'),'utf8');assert.match(literal,/Host\(`mcp\.example\.test`\)/);assert.match(literal,/o115594-odc1730/);
  assert.match(fs.readFileSync(path.join(r.dir,'compose.rollback.literal.yml'),'utf8'),/"image": "docker.io\/andrepereiramachado\/ssam-server:new"/);
  assert.equal(readAttempts(f.outDir)[r.id].status,'approved');
@@ -182,7 +234,7 @@ test('-Approve checks the configuration before publishing and resumes an approva
  await assert.rejects(approve({outDir:f.outDir,domains},a.ops,r.id),/disk full/);
  assert.equal(readAttempts(f.outDir)[r.id].status,'proposed');assert.ok(readAttempts(f.outDir)[r.id].published);
  const b=approvalOps(f);const done=await approve({outDir:f.outDir,domains},b.ops,r.id);
- assert.equal(done.status,'approved');assert.deepEqual(b.calls.map(c=>c[0]),['branch','pin'],'resumed at the pin: no second publication');
+ assert.equal(done.status,'approved');assert.deepEqual(b.calls.map(c=>c[0]),['branch','pin','archive'],'resumed at the pin: no second publication');
 });
 test('-Reject drops a proposal for good with the same inputs; -Retry builds it again',async t=>{
  const f=fixture(t);const r=await f.round();
@@ -209,15 +261,20 @@ test('the release literal compose of 2026-10-27 is exactly what the watcher woul
  const want=fs.readFileSync('C:/t/vps-a11/compose.coolify.literal.yml','utf8').replace(/\r\n/g,'\n');
  assert.equal(literalComposeText(main,{ssam:'mcp.ssam.pro',console:'panel.ssam.pro'}),want);
 });
-test('one round at a time: the lock is exclusive, a dead holder is stale, release frees it',()=>{
+test('one round at a time: the lock names its processes by pid AND start time; a reused pid is stale, a live orphan round holds it',()=>{
  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'vigia-lock-'));try{
-  const file=path.join(dir,'vigia.lock');const a=acquireLock(file);assert.ok(a.token);
-  assert.ok(acquireLock(file).busy,'held by a live process');
-  a.release();const b=acquireLock(file);assert.ok(b.token);b.release();
-  fs.writeFileSync(file,JSON.stringify({pid:999999,token:'old',at:new Date().toISOString()}));
-  const c=acquireLock(file,{alive:()=>false});assert.ok(c.token,'dead holder: stale lock taken over');c.release();
-  fs.writeFileSync(file,JSON.stringify({pid:process.pid,token:'old',at:new Date(Date.now()-30*3600000).toISOString()}));
-  assert.ok(acquireLock(file).token,'a lock older than a day is stale');
+  const file=path.join(dir,'vigia.lock'),starts={[process.pid]:'2026-10-28T10:00:00.000Z',4242:'2026-10-28T10:00:05.000Z'};
+  const identity=pid=>starts[pid]??null,opts={identity};
+  const a=acquireLock(file,opts);assert.ok(a.token);
+  assert.ok(acquireLock(file,opts).busy,'held by the live launcher');
+  a.release();const b=acquireLock(file,opts);assert.ok(b.token);b.release();
+  // The launcher died and Windows gave its pid to another process: another start time, so the lock is stale.
+  fs.writeFileSync(file,JSON.stringify({pid:process.pid,started:'2026-10-27T01:00:00.000Z',token:'old',at:new Date().toISOString()}));
+  const c=acquireLock(file,opts);assert.ok(c.token,'pid reused by another process: stale');
+  // The launcher was killed (8 h limit) but its round process lives on: still held.
+  registerChild(file,c.token,4242,opts);starts[process.pid]=null;
+  const d=acquireLock(file,opts);assert.ok(d.busy,'the orphan round still runs');assert.equal(d.busy.child.pid,4242);
+  starts[4242]=null;assert.ok(acquireLock(file,opts).token,'both gone: stale');
  }finally{fs.rmSync(dir,{recursive:true,force:true});}
 });
 test('one dotnet build/test at a time: builds and tests count, kernel servers and idle build servers do not',()=>{
@@ -238,5 +295,16 @@ test('a pair whose Studio moved to .NET 10 presents the agent pack built for it;
  assert.deepEqual(packFor(config,{odc:{tfm:'net10.0'},o11:{tfm:null}}),{odcBridge:'v100',odcBridgeAccepted:['v97'],o11BuiltFor:'11.55.92',o11Hook:'dev'});
  assert.deepEqual(packFor(config,{odc:{tfm:'net10.0'},o11:{tfm:'net10.0'}}).o11BuiltFor,'11.55.94');
  assert.deepEqual(packFor(config,{odc:{tfm:'net8.0'},o11:{}}),config.agentPack);
+});
+test('M2: test and build failures of the machine (restore, network, timeout, a baseline that does not build) wait; the code\'s fail',async()=>{
+ const {testCause,buildCause}=await import('./runtime.mjs');
+ assert.equal(testCause({stdout:'error NU1301: Unable to load the service index for source https://api.nuget.org/v3/index.json.',stderr:''},'candidate',false).environmental,true);
+ assert.equal(testCause({stdout:'',stderr:'\n(timed out after 5400000 ms)'},'candidate',true).environmental,true);
+ assert.equal(testCause({stdout:'error CS0518: Predefined type System.Object is not defined',stderr:''},'baseline',false).environmental,true,'the default pair must build: the machine');
+ assert.equal(testCause({stdout:'error CS0518: Predefined type System.Object is not defined',stderr:''},'candidate',false).environmental,false,'the candidate not building is the version');
+ assert.equal(buildCause({stdout:'ERROR: failed to solve: failed to resolve source metadata for docker.io/library/node:24: failed to do request: dial tcp: lookup registry-1.docker.io: no such host',stderr:''}).environmental,true);
+ assert.equal(buildCause({stdout:'',stderr:'toomanyrequests: You have reached your pull rate limit'}).environmental,true);
+ assert.equal(buildCause({stdout:'build: the client-name guard FAILED: a client name would ship; nothing was built',stderr:''}).environmental,false);
+ assert.equal(buildCause({stdout:'#12 ERROR: process "/bin/sh -c dotnet publish" did not complete successfully: exit code: 1',stderr:''}).environmental,false);
 });
 test('the notice day is the local calendar day',()=>{assert.match(localDay(T0),/^\d{4}-\d{2}-\d{2}$/);});

@@ -2,6 +2,7 @@
   "workspace": "C:/Users/OWNER/SSAM-MCP-wt/vigia-run",
   "updateFrom": "main",
   "tempRoot": "C:/ssam-priv/vigia-tmp",
+  "featuresRoot": "C:/ssam-priv/vigia-tmp/features",
   "outDir": "C:/t/vigia",
   "bundleRoot": "C:/t/studio-bundles",
   "bundlePins": {
@@ -34,5 +35,8 @@
   "minFreeGb": 25,
   "retryHours": 12,
   "dotnetWaitMinutes": 180,
-  "dockerWaitMinutes": 8
+  "dockerWaitMinutes": 8,
+  "laneWaitHours": 24,
+  "roundHours": 7,
+  "busyNoticeHours": 10
 }

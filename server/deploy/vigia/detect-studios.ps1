@@ -5,6 +5,7 @@ param([string]$Odc,[string]$O11,[string]$Installers)
 $ErrorActionPreference='Stop'
 $result=@()
 $runtimeConfig=@{odc='ODCStudio.runtimeconfig.json';o11='ServiceStudio.runtimeconfig.json'}
+$exe=@{odc='ODCStudio.exe';o11='ServiceStudio.exe'}
 foreach($item in @(@{lane='odc';root=$Odc},@{lane='o11';root=$O11})){
  if(-not $item.root){continue}
  $dll=Join-Path $item.root 'ServiceStudio.Framework.dll'
@@ -14,7 +15,10 @@ foreach($item in @(@{lane='odc';root=$Odc},@{lane='o11';root=$O11})){
  $tfm=$null
  $rc=Join-Path $item.root $runtimeConfig[$item.lane]
  if(Test-Path -LiteralPath $rc){try{$tfm=(Get-Content -LiteralPath $rc -Raw | ConvertFrom-Json).runtimeOptions.tfm}catch{$tfm=$null}}
- if($full){$result+=@{lane=$item.lane;studio=$item.root;fullVersion=$full;version=($full -split '\.')[0..2] -join '.';tfm=$tfm}}
+ # An installed Studio has its executable and its runtimeconfig.json; without them it is incomplete (an installation
+ # half-way, a repair needed), and the watcher defers its lane instead of guessing its runtime.
+ $missing=@(@($exe[$item.lane],$runtimeConfig[$item.lane]) | Where-Object { -not (Test-Path -LiteralPath (Join-Path $item.root $_)) })
+ if($full){$result+=@{lane=$item.lane;studio=$item.root;fullVersion=$full;version=($full -split '\.')[0..2] -join '.';tfm=$tfm;missing=$missing}}
 }
 if($Installers -and (Test-Path -LiteralPath $Installers)){
  foreach($file in Get-ChildItem -LiteralPath $Installers -File -Filter '*.exe'){

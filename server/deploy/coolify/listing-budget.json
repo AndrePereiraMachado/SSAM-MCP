@@ -1,5 +1,5 @@
 {
-  "comment": "The hosted tools/list a release image must serve: tool count and byte ceilings (toolListingBytes), all tools and the fixed core. One source for the release rehearsal (rehearse.mjs), the Studio watcher smoke (vigia/smoke.mjs) and the facade budget test (deploy/tests/listing-budget.test.mjs keeps them equal).",
+  "comment": "The hosted tools/list a release image must serve: tool count and byte ceilings (toolListingBytes), all tools and the fixed core. One source for the release rehearsal (rehearse.mjs) and the Studio watcher smoke (vigia/smoke.mjs); vigia/vigia.test.mjs checks that the facade budget test (hosted-listing-budget.test.mjs) has the same numbers.",
   "tools": 92,
   "totalBytes": 261330,
   "coreBytes": 34097,

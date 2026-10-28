@@ -2,7 +2,7 @@
 // Never a VPS, Coolify or GitHub action; never latest.
 import fs from 'node:fs';
 import path from 'node:path';
-import {STUDIO_NAME,pinDigest,literalComposeText,windowPairs,pairId} from './window.mjs';
+import {STUDIO_NAME,pinDigest,literalComposeText,windowPairs,pairId,hasPair} from './window.mjs';
 import {readAttempts,writeAttempt} from './pipeline.mjs';
 export function findAttempt(outDir,selector,statuses){
  const attempts=Object.values(readAttempts(outDir)).filter(a=>statuses.includes(a.status));
@@ -11,13 +11,22 @@ export function findAttempt(outDir,selector,statuses){
  const known=attempts.map(a=>a.id).join(', ')||'none';
  throw Error(hits.length?`${selector} matches several attempts (${hits.map(a=>a.id).join(', ')}); give the pair id.`:`No ${statuses.join('/')} attempt matches ${selector}. Known: ${known}.`);
 }
-// The selector names a lane version that only the new pair has (the new lane is newer than the whole window).
-const ssamctl=(pair,kernel,features)=>{const lane=pair.lanes[0],sel=lane+'='+pair[lane];return [
- `sh ssamctl.sh kernel write --version ${sel} /tmp/ssam-vigia/kernel.json   # copy ${kernel}`,
- `sh ssamctl.sh features put --version ${sel} /tmp/ssam-vigia/Features.plain.xml   # copy ${features}`];};
-export function ownerSteps({attempt,dir,published,commit,files,newPair}){
- const a=attempt,p=a.pair;
- return `# Approved: ${a.id}\n\nDone by the watcher:\n- local image digest checked: sha256:${a.built.sha256}\n- published ${a.built.image}:${a.built.tag} to the private registry${published.already?' (it was already there with the same digest)':''}; latest was not moved\n- pinned the published digest in versions.json and regenerated the compose, tests green, commit ${commit} on ${a.branch} (not pushed)\n\nWhat is left (owner; the watcher never touches the VPS or Coolify):\n\n1. Backup of the whole window on the VPS (ssamctl.sh backup, or the Integradora's recipe).\n${newPair?`2. The new pair ${a.id} needs its kernel and features before its container serves (COOLIFY.md section 5). On the VPS, in deploy/coolify:\n\n   ${ssamctl(p,files.kernel,files.features).join('\n   ')}\n\n`:'2. No new pair container: kernel and features are already on the VPS.\n'}3. In Coolify, replace the compose with:\n\n   ${files.compose}\n\n   and click Redeploy. Then check /health, the kernel and warm events of each backend, and the agents.\n4. The Integradora merges ${a.branch} into main (local, no push without your OK). Until then the watcher already plans from this window.\n\nWay back: paste ${files.rollback} in Coolify and Redeploy. Tags stay in the registry; latest is untouched.\n`;
+// The owner's steps after an approval, in the order of COOLIFY.md sections 5 and 7: ssamctl.sh finds a version container by
+// its labels and writes into its volumes, so the new pair's container must exist (from the new compose, stopped) before its
+// kernel and features are written, and Redeploy comes only after them. The selector names a lane version only the new pair
+// has (the new lane is newer than the whole window).
+export function ownerSteps({attempt,published,commit,files,newPair,proposed}){
+ const a=attempt,p=a.pair,lane=p.lanes[0],sel=`${lane}=${p[lane]}`,short=commit.slice(0,7);
+ const tags=windowPairs(proposed).map(x=>pairId(x)).join(', ');
+ const steps=[
+  `Tell the customers about the maintenance window: recreating the containers cuts the calls in flight; afterwards they only reconnect the MCP (no new agent package).`,
+  `On the VPS, back up the whole window before changing anything: sh ssamctl.sh backup (deploy/coolify of the commit in production). Keep its volume manifest and database dump.`,
+  `Copy to the VPS the deploy folder of the approved commit ${short}: ${files.deploy} (git archive of server/deploy; unpack it with tar -xzf, it holds coolify/ssamctl.sh and kernel-pair-check.mjs)${newPair?`, and into /tmp/ssam-vigia/ the kernel of the new pair, ${files.kernel}, and its features, ${files.features} (private: never leave other copies)`:''}.`,
+  `In Coolify, replace the compose with ${files.compose} and prepare the containers of the new window stopped, without a Redeploy yet (COOLIFY.md 5: the containers must exist, stopped, with the image and the volumes of the new compose; the router must not serve before the pins). Then, in the unpacked deploy/coolify: sh ssamctl.sh status must list the new pair ${a.id} (o11 ${p.o11}, odc ${p.odc}).`,
+  ...(newPair?[`Write the kernel and the features of the new pair (the kernel write runs the pair check inside the new image and must exit 0):\n\n   sh ssamctl.sh kernel write --version ${sel} /tmp/ssam-vigia/kernel.json\n   sh ssamctl.sh features put --version ${sel} /tmp/ssam-vigia/Features.plain.xml\n   rm /tmp/ssam-vigia/Features.plain.xml\n\n   "version must identify exactly one container; candidates: none" means the new compose of the previous step is not applied yet: go back one step, never Redeploy first (the new pair is the default and would start without its kernel).`]:[`No new pair: the kernels and features of every pair are already on the VPS.`]),
+  `Redeploy in Coolify. Then check: sh ssamctl.sh status lists the pairs of the proposed window (${tags}) and the digest sha256:${a.built.sha256} for ${a.built.tag}; /health aggregate ok; the kernel and warm events of each backend (indexes, builder and worker ok); an agent with the new Studio and one with an older Studio are routed to their pairs; an MCP session opened before the Redeploy gets SESSION_REROUTED once and reconnects.`,
+  `The Integradora merges ${a.branch} into main (local, no push without your OK). Until then the watcher already plans from this window.`];
+ return `# Approved: ${a.id}\n\nDone by the watcher:\n- local image digest checked: sha256:${a.built.sha256}\n- published ${a.built.image}:${a.built.tag} to the private registry${published.already?' (it was already there with the same digest)':''}; latest was not moved\n- pinned the published digest in versions.json and regenerated the compose, tests green, commit ${commit} on ${a.branch} (not pushed)\n- deploy folder of that commit: ${files.deploy}\n\nWhat is left, in this order (owner; the watcher never touches the VPS or Coolify):\n\n${steps.map((s,i)=>`${i+1}. ${s}`).join('\n')}\n\nWay back (if the checks fail): paste ${files.rollback} in Coolify and Redeploy. The previous pairs keep their own kernel.json and features (per-pair folder and volumes); the new pair's volumes stay unused. Restore data (ssamctl.sh restore) only if data must come back, with every backend stopped. Tags stay in the registry; latest is untouched.\n`;
 }
 export async function approve(config,ops,selector){
  const log=ops.log??(()=>{});
@@ -26,6 +35,8 @@ export async function approve(config,ops,selector){
  // Everything that can be checked before publishing is checked first; each step is recorded, so an approval stopped
  // half-way resumes where it stopped (a published tag is never pushed again, a pin is never repeated).
  literalComposeText(a.baseManifest,config.domains);
+ // A pair main already serves was published by another way: a second image of it is never made.
+ if(!a.published&&ops.manifest&&hasPair(ops.manifest(),a.pair))throw Error(`main already serves ${a.id} (published another way). Nothing was published; drop this proposal with -Reject ${a.id} -Reason "served".`);
  if(!a.published){
   await ops.verifyBranch(a.branch,a.commit);
   await ops.verifyLocalImage(a.built);
@@ -36,16 +47,22 @@ export async function approve(config,ops,selector){
  }else log(`already published ${a.published.digest}`);
  const published=a.published,pinned=pinDigest(a.proposedManifest,a.built.tag,published.digest);
  if(!a.pinCommit){
-  await ops.verifyBranch(a.branch,a.commit);
-  const {commit}=await ops.pin(pinned,a.branch,dir,`build(deploy): pin the image ${a.built.tag}\n\nPublished to the private registry by the owner's approval (vigia.ps1 -Approve ${a.id}); digest ${published.digest}.\nlatest is unchanged.\n`);
-  a=writeAttempt(config.outDir,{...a,pinCommit:commit});
+  // A pin committed just before a crash (not yet recorded) is recognised instead of refused.
+  const done=await ops.pinnedAt?.(a.branch,a.commit,a.built.tag,published.digest);
+  if(done)a=writeAttempt(config.outDir,{...a,pinCommit:done});
+  else{
+   await ops.verifyBranch(a.branch,a.commit);
+   const {commit}=await ops.pin(pinned,a.branch,dir,`build(deploy): pin the image ${a.built.tag}\n\nPublished to the private registry by the owner's approval (vigia.ps1 -Approve ${a.id}); digest ${published.digest}.\nlatest is unchanged.\n`);
+   a=writeAttempt(config.outDir,{...a,pinCommit:commit});
+  }
  }else await ops.verifyBranch(a.branch,a.pinCommit);
  const commit=a.pinCommit;
- const files={compose:path.join(dir,'compose.coolify.literal.yml'),rollback:path.join(dir,'compose.rollback.literal.yml'),kernel:path.join(dir,'kernel.json'),features:path.join(dir,'Features.plain.xml')};
+ const files={compose:path.join(dir,'compose.coolify.literal.yml'),rollback:path.join(dir,'compose.rollback.literal.yml'),kernel:path.join(dir,'kernel.json'),features:a.features??'(no ODC features recorded)',deploy:path.join(dir,`deploy-${commit.slice(0,7)}.tar.gz`)};
  fs.writeFileSync(files.compose,literalComposeText(pinned,config.domains));
  fs.writeFileSync(files.rollback,literalComposeText(a.baseManifest,config.domains));
+ await ops.archiveDeploy(commit,files.deploy);
  const newPair=!windowPairs(a.baseManifest).some(p=>pairId(p)===a.id);
- const steps=ownerSteps({attempt:a,dir,published,commit,files,newPair});
+ const steps=ownerSteps({attempt:a,published,commit,files,newPair,proposed:pinned});
  fs.writeFileSync(path.join(dir,'APROVADO.md'),steps);
  writeAttempt(config.outDir,{...a,status:'approved',approved:{at:new Date().toISOString(),digest:published.digest,commit,already:!!published.already}});
  return {status:'approved',id:a.id,commit,steps};
@@ -56,8 +73,10 @@ export function reject(config,selector,reason){
  writeAttempt(config.outDir,{...a,status:'rejected',rejected:{at:new Date().toISOString(),reason}});
  return {status:'rejected',id:a.id,note:`${a.id} will not be rebuilt with the same inputs. Its branch ${a.branch} and local image stay for reference. -Retry ${a.id} builds it again.`};
 }
+// -Retry also takes a proposal (its local image was pruned, say): the next round builds it again.
 export function retry(config,selector){
- const a=findAttempt(config.outDir,selector,['failed','rejected','deferred']);
+ const a=findAttempt(config.outDir,selector,['failed','rejected','deferred','proposed']);
+ if(a.published)throw Error(`${a.id} is already published (${a.published.digest}); finish it with -Approve ${a.id}.`);
  writeAttempt(config.outDir,{...a,retry:true});
  return {status:'retry',id:a.id,note:`The next round runs ${a.id} again (${a.pair.lanes.map(l=>`${STUDIO_NAME[l]} ${a.pair[l]}`).join(', ')}).`};
 }

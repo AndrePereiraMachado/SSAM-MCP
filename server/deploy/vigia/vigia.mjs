@@ -7,10 +7,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {spawn} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
-import {runVigia,readAttempts,remind} from './pipeline.mjs';
+import {runVigia,readAttempts,remind,timedOut} from './pipeline.mjs';
 import {replayApprovals} from './window.mjs';
 import {approve,reject,retry} from './approve.mjs';
-import {acquireLock,lockHeldBy,runLogFile,createLog} from './host.mjs';
+import {acquireLock,lockHeldBy,registerChild,runLogFile,createLog} from './host.mjs';
 export * from './window.mjs';
 export * from './pipeline.mjs';
 export * from './approve.mjs';
@@ -31,29 +31,37 @@ export function parseArgs(argv){
 }
 export function readConfig(file){
  const config=JSON.parse(fs.readFileSync(file,'utf8').replace(/^﻿/,''));
- config.outDir=path.resolve(config.outDir??path.dirname(path.resolve(file)));
+ config.outDir=path.resolve(config.outDir??path.dirname(path.resolve(file)));config.configFile=path.resolve(file);
  for(const key of ['workspace','tempRoot','bundleRoot'])if(!config[key])throw Error(`The watcher configuration needs ${key}.`);
  return config;
 }
 // The window the next proposal starts from: main's versions.json plus the approvals main does not carry yet.
 export function baseWindow(mainManifest,outDir){
  const approved=Object.values(readAttempts(outDir)).filter(a=>a.status==='approved');
- return replayApprovals(mainManifest,approved);
+ const r=replayApprovals(mainManifest,approved);
+ // The next proposal branch starts from the newest approved pin main lacks, so merging it brings both without a conflict.
+ const last=approved.filter(a=>r.replayed.includes(a.id)).sort((x,y)=>String(x.approved?.at).localeCompare(String(y.approved?.at))).at(-1);
+ return {...r,branchBase:last?.pinCommit??last?.approved?.commit??null};
 }
 export async function round(config,runtime,{dryRun=false}={}){
- const {manifest,replayed}=baseWindow(runtime.manifest(),config.outDir);
+ const {manifest,replayed,branchBase}=baseWindow(runtime.manifest(),config.outDir);
  const observed=await runtime.detect();
  let state={};if(config.versionStateFile&&fs.existsSync(config.versionStateFile))state=JSON.parse(fs.readFileSync(config.versionStateFile,'utf8'));
  const head=await runtime.head();
  runtime.log?.(`workspace ${head}; observed ${observed.map(o=>`${o.lane} ${o.fullVersion}${o.tfm?' '+o.tfm:''}${o.requiresInstallation?' (installer)':''}`).join(', ')||'nothing'}${replayed.length?`; approved, not in main: ${replayed.join(', ')}`:''}`);
- return runVigia({...config,manifest,replayed,state,observed,head,dryRun},runtime);
+ return runVigia({...config,manifest,replayed,branchBase,state,observed,head,dryRun},runtime);
 }
 async function childSupportsRounds(file){try{return fs.readFileSync(file,'utf8').includes('ROUND_PROTOCOL=2');}catch{return false;}}
 async function launch(args,config,log){
  const {createRuntime}=await import('./runtime.mjs');
  const runtime=await createRuntime(config,{log});
  const lock=acquireLock(path.join(config.outDir,'vigia.lock'));
- if(lock.busy){log(`another round holds the lock (pid ${lock.busy.pid??'?'} since ${lock.busy.at??'?'}); nothing to do`);return {status:'busy'};}
+ if(lock.busy){
+  log(`another round holds the lock (pid ${lock.busy.pid??'?'}${lock.busy.child?', round pid '+lock.busy.child.pid:''} since ${lock.busy.at??'?'}); nothing to do`);
+  const held=(Date.now()-Date.parse(lock.busy.at))/3600000;
+  if(held>=(config.busyNoticeHours??10))await remind(config.outDir,'busy','SSAM watcher round still running',`A watcher round has held the lock for ${Math.floor(held)} h (pid ${lock.busy.pid}${lock.busy.child?', round pid '+lock.busy.child.pid:''}). See the newest log in ${path.join(config.outDir,'runs')}.`,{...runtime,log});
+  return {status:'busy'};
+ }
  try{
   if(!args.flags.has('no-update')){
    try{const u=await runtime.updateWorkspace(config.updateFrom??'main');log(u.updated?`workspace fast-forwarded ${u.from.slice(0,7)} -> ${u.head.slice(0,7)} from ${config.updateFrom??'main'}`:`workspace up to date at ${u.head.slice(0,7)}`);}
@@ -62,7 +70,7 @@ async function launch(args,config,log){
   const child=path.join(path.resolve(config.workspace),'server/deploy/vigia/vigia.mjs');
   if(await childSupportsRounds(child)){
    let stderr='';const before=fs.statSync(log.file).size;
-   const code=await new Promise((resolve,reject_)=>{const p=spawn(process.execPath,[child,'--config',args.config,'--round','--log',log.file],{env:{...process.env,SSAM_VIGIA_LOCK:lock.token},stdio:['ignore','inherit','pipe'],windowsHide:true});p.stderr.on('data',b=>{stderr+=b;process.stderr.write(b);});p.once('error',reject_);p.once('close',resolve);});
+   const code=await new Promise((resolve,reject_)=>{const p=spawn(process.execPath,[child,'--config',args.config,'--round','--log',log.file],{env:{...process.env,SSAM_VIGIA_LOCK:lock.token},stdio:['ignore','inherit','pipe'],windowsHide:true});try{registerChild(path.join(config.outDir,'vigia.lock'),lock.token,p.pid);}catch(e){log(`round process not registered in the lock: ${e.message}`);}p.stderr.on('data',b=>{stderr+=b;process.stderr.write(b);});p.once('error',reject_);p.once('close',resolve);});
    // A round that could not even start (the code fetched from main does not load) still leaves a trace and a notice: the
    // child always ends its log with "round <status>" or "round error: ...".
    const tail=fs.readFileSync(log.file,'utf8').slice(before);
@@ -94,6 +102,14 @@ if(process.argv[1]&&path.resolve(process.argv[1])===self){
   if(!lockHeldBy(path.join(config.outDir,'vigia.lock'),process.env.SSAM_VIGIA_LOCK))throw Error('--round runs only under the launcher that holds the watcher lock.');
   const {createRuntime}=await import('./runtime.mjs');
   const runtime=await createRuntime(config,{log});
+  // A round ends before the scheduled task's time limit (8 h): at roundHours it stops its commands, records the running
+  // attempt as deferred (round-timeout) and says so, instead of being killed half-way.
+  const deadline=setTimeout(async()=>{
+   log(`round stopped at its time limit (${config.roundHours??7} h)`);runtime.stopAll?.();
+   for(const a of Object.values(readAttempts(config.outDir)).filter(a=>a.status==='running'))timedOut(config,a);
+   await remind(config.outDir,'round-timeout','SSAM watcher round stopped',`A round reached its ${config.roundHours??7} h limit and was stopped; the next round retries (log ${log.file}).`,{...runtime,log}).catch(()=>{});
+   log('round timeout');process.exit(3);
+  },(config.roundHours??7)*3600000);deadline.unref();
   try{const result=await round(config,runtime);log(`round ${result.status}${result.id?' '+result.id:''}`);console.log(JSON.stringify(result,null,2));if(result.status==='failed')process.exitCode=1;}
   catch(error){log(`round error: ${error.stack??error.message}`);await remind(config.outDir,'error:'+String(error.message).split('\n')[0].slice(0,120),'SSAM watcher error',`${String(error.message).split('\n')[0]} (log ${log.file})`,{...runtime,log}).catch(()=>{});process.exitCode=1;}
  }else{

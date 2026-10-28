@@ -4,7 +4,7 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';
 import {spawnSync} from 'node:child_process';import {createHash} from 'node:crypto';
 import {createRuntime,studioTfm,assemblyTfm,runtimePins} from './runtime.mjs';
-import {approve,runVigia,readAttempts,pairTag,EnvironmentError,acquireLock} from './vigia.mjs';
+import {approve,runVigia,readAttempts,pairTag,EnvironmentError,acquireLock,processStart} from './vigia.mjs';
 const windows=process.platform==='win32';
 const GIT='C:/Program Files/Git/cmd/git.exe',PS='C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe';
 const here=path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/,'$1'));
@@ -18,7 +18,7 @@ function tempDir(t,prefix){const d=fs.mkdtempSync(path.join(os.tmpdir(),prefix))
 // A repository with the files the window commit needs, its main, and the watcher worktree on server/vigia-run.
 function repo(t){
  const root=tempDir(t,'vigia-repo-'),main=path.join(root,'main'),ws=path.join(root,'vigia-run');
- for(const rel of ['deploy/coolify/versions.json','deploy/coolify/gen-compose.mjs','deploy/coolify/compose.template.json','deploy/coolify/gen-compose.test.mjs','deploy/coolify/initial-window.test.mjs','platforms/odc/facade/tests/fixtures/isolated-profile.mjs']){
+ for(const rel of ['deploy/coolify/versions.json','deploy/coolify/gen-compose.mjs','deploy/coolify/compose.template.json','deploy/coolify/gen-compose.test.mjs','deploy/coolify/initial-window.test.mjs','deploy/odc-features-export.ps1','platforms/odc/facade/tests/fixtures/isolated-profile.mjs']){
   const to=path.join(main,'server',rel);fs.mkdirSync(path.dirname(to),{recursive:true});fs.copyFileSync(path.join(server,rel),to);
  }
  sh(GIT,['init','-q','-b','main',main]);git(main,'add','.');git(main,'commit','-q','-m','base');
@@ -46,9 +46,9 @@ test('-Approve with a simulated publication pins the digest on the proposal bran
  // A proposal exactly as a round leaves it, through the pipeline with fake heavy operations and the real propose.
  const manifest=runtime.manifest(),features=path.join(r.root,'Features.plain.xml');fs.writeFileSync(features,'<Features/>');
  const side=(lane,v)=>({lane,version:v,fullVersion:v+'.1',file:`${lane}.tar.gz`,sha256:sha('9'),snapshot:'x',features:lane==='odc'?features:null});
- const heavy={preflight:async()=>{},dockerReady:async()=>{},targetFramework:async()=>null,bundle:async c=>side(c.lane,c.version),companion:async(l,v)=>side(l,v),
+ const heavy={preflight:async()=>{},dockerReady:async()=>{},targetFramework:async c=>c.tfm,bundle:async c=>side(c.lane,c.version),companion:async(l,v)=>side(l,v),
   test:async()=>({total:2,passed:2,failures:[]}),build:async pair=>({odc:pair.odc,o11:pair.o11,image,tag:pairTag(pair,'abc1234','20261028'),sha256:sha('a'),revision:'abc1234'}),smoke:async()=>({ok:true})},ops={...runtime,...heavy};
- const round=await runVigia({...config(r),manifest,observed:[{lane:'odc',version:'1.7.30',fullVersion:'1.7.30.10980'}],head:'h'},ops);
+ const round=await runVigia({...config(r),manifest,observed:[{lane:'odc',version:'1.7.30',fullVersion:'1.7.30.10980',studio:'C:/fake/odc',tfm:'net8.0'}],head:'h'},ops);
  assert.equal(round.status,'proposed');
  const before=git(r.main,'rev-parse',round.branch);
  const published=[];
@@ -64,7 +64,7 @@ test('-Approve with a simulated publication pins the digest on the proposal bran
  assert.equal(readAttempts(r.out)[round.id].status,'approved');
  // A moved proposal branch is refused before anything is published.
  const r2=repo(t);const rt2=await createRuntime(config(r2));
- const p2=await runVigia({...config(r2),manifest:rt2.manifest(),observed:[{lane:'odc',version:'1.7.30',fullVersion:'1.7.30.10980'}],head:'h'},{...rt2,...heavy});
+ const p2=await runVigia({...config(r2),manifest:rt2.manifest(),observed:[{lane:'odc',version:'1.7.30',fullVersion:'1.7.30.10980',studio:'C:/fake/odc',tfm:'net8.0'}],head:'h'},{...rt2,...heavy});
  git(r2.main,'branch','-f',p2.branch,'main');
  let pushed=false;await assert.rejects(approve(config(r2),{...rt2,verifyLocalImage:async()=>{},publish:async()=>{pushed=true;}},p2.id),/not the proposed commit/);assert.equal(pushed,false);
 });
@@ -79,7 +79,10 @@ test('the watcher worktree fast-forwards from main and stops when it cannot',{sk
  const primary=await createRuntime({...config(r),workspace:r.main});await assert.rejects(primary.updateWorkspace('main'),/dedicated Git worktree/);
  // A worktree edited by hand is an environment problem (the round waits and says so), never a failure of the pair.
  fs.appendFileSync(path.join(r.ws,'server/local.txt'),'edited');
- await assert.rejects(runtime.preflight(),e=>e instanceof EnvironmentError&&e.code==='workspace'&&/tracked changes/.test(e.message));
+ await assert.rejects(runtime.preflight(),e=>e instanceof EnvironmentError&&e.code==='workspace'&&/changes or untracked files \(server\/local\.txt\)/.test(e.message));
+ // An untracked loose file would ship in the image (build.sh sends the tree): it stops the round too.
+ git(r.ws,'checkout','--','server/local.txt');fs.writeFileSync(path.join(r.ws,'server/loose.txt'),'x');
+ await assert.rejects(runtime.preflight(),e=>e.code==='workspace'&&/server\/loose\.txt/.test(e.message));
 });
 test('the bundle store: a frozen copy per version, its checksum and Studio version checked, a gap is an environment problem',{skip:!windows||!fs.existsSync(SNAPSHOT_DLL)},async t=>{
  const r=repo(t),store=path.join(r.root,'store'),stage=path.join(r.root,'stage');
@@ -144,6 +147,72 @@ test('a round whose fetched code does not load still leaves a log line and a not
  assert.match(log,/round process exited 1 without finishing its round: .*broken main/s);
  assert.ok(JSON.parse(fs.readFileSync(path.join(out,'reminders.json'),'utf8'))['round-exit']);
  assert.equal(fs.existsSync(path.join(out,'vigia.lock')),false,'the lock is released');assert.equal(r.status,1,'the scheduler sees the failed round');
+});
+// A store folder with a real tar (bundle.txt + files/ServiceStudio.Framework.dll of the O11 snapshot) for lane/version.
+function storeTar(root,lane,v,full){
+ const stage=path.join(root,'stage-'+lane+v);fs.mkdirSync(path.join(stage,'files'),{recursive:true});
+ fs.copyFileSync(SNAPSHOT_DLL,path.join(stage,'files/ServiceStudio.Framework.dll'));fs.writeFileSync(path.join(stage,'bundle.txt'),`schema ssam-studio-bundle/1\nlane ${lane}\nversion ${full}\n`);
+ const folder=path.join(root,'store',`${lane}-${v}`),tar=path.join(folder,`${lane}-studio-${full}.tar.gz`);fs.mkdirSync(folder,{recursive:true});
+ sh('C:/Windows/System32/tar.exe',['-czf',tar,'-C',stage,'bundle.txt','files']);
+ fs.writeFileSync(tar+'.sha256',`${createHash('sha256').update(fs.readFileSync(tar)).digest('hex')}  ${path.basename(tar)}\n`);
+ return {folder,tar};
+}
+const cache=(dir,version)=>{const plain=path.join(dir,`plain-${version}.xml`);fs.writeFileSync(plain,`<?xml version="1.0" encoding="utf-16"?>\n<Features Version="${version}">\n  <Feature key="k" kind="String">UseCodeDefault</Feature>\n</Features>`);
+ sh(PS,['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',path.join(here,'features-protect.ps1'),'-Plain',plain,'-OutDir',path.join(dir,'cache-'+version)]);return path.join(dir,'cache-'+version,'Features.xml');};
+test('M1/M5: the features of a new ODC version are stored only when the cache is for that version, and only in the private root',{skip:!windows||!fs.existsSync(SNAPSHOT_DLL)},async t=>{
+ const r=repo(t);const {folder}=storeTar(r.root,'odc','1.7.30','1.7.30.1');
+ const featuresRoot=path.join(r.priv,'features'),candidate={lane:'odc',version:'1.7.30',fullVersion:'1.7.30.1',studio:path.join(r.root,'no-studio'),tfm:'net10.0'};
+ const stale=await createRuntime({...config(r),featuresRoot,featuresSource:cache(r.root,'1.7.29.10940')});
+ await assert.rejects(stale.bundle(candidate,path.join(r.out,'x')),e=>e.code==='features-stale'&&e.lanes[0]==='odc'&&/open ODC Studio 1\.7\.30 once/i.test(e.message));
+ assert.equal(fs.existsSync(path.join(featuresRoot,'odc-1.7.30')),false,'nothing stored under the new version');assert.equal(fs.existsSync(path.join(folder,'Features.plain.xml')),false);
+ const fresh=await createRuntime({...config(r),featuresRoot,featuresSource:cache(r.root,'1.7.30.1')});
+ const b=await fresh.bundle(candidate,path.join(r.out,'x'));
+ assert.equal(b.features,path.join(featuresRoot,'odc-1.7.30','Features.plain.xml'));assert.match(fs.readFileSync(b.features,'utf8'),/Version="1\.7\.30\.1"/);
+ assert.equal(fs.existsSync(path.join(folder,'Features.plain.xml')),false,'never under the bundle store (C:/t)');
+ await assert.rejects(createRuntime({...config(r),featuresRoot:'C:/t/x'}),/featuresRoot must be private/);
+ // A legacy store file of another version is refused, never copied under this one.
+ fs.writeFileSync(path.join(r.root,'store','odc-1.7.30','Features.plain.xml'),'<Features Version="1.7.28.10850"/>');fs.rmSync(path.join(featuresRoot,'odc-1.7.30'),{recursive:true});
+ await assert.rejects(fresh.bundle(candidate,path.join(r.out,'x')),e=>e.code==='features-stale'&&/1\.7\.28\.10850/.test(e.message));
+ assert.equal(fs.existsSync(path.join(featuresRoot,'odc-1.7.30')),false);
+ // One of the right version (another session's) is copied into the private root and used; the store file is left as is.
+ fs.writeFileSync(path.join(r.root,'store','odc-1.7.30','Features.plain.xml'),'<Features Version="1.7.30.1"/>');
+ assert.equal((await fresh.bundle(candidate,path.join(r.out,'x'))).features,path.join(featuresRoot,'odc-1.7.30','Features.plain.xml'));
+});
+test('M4: a bundle of the candidate build that does not check out is never bundled over',{skip:!windows||!fs.existsSync(SNAPSHOT_DLL)},async t=>{
+ const r=repo(t);const {tar}=storeTar(r.root,'o11','11.55.94','11.55.94.1');const bytes=fs.readFileSync(tar);
+ fs.writeFileSync(tar+'.sha256',`${sha('0')}  x\n`);
+ const runtime=await createRuntime(config(r));const candidate={lane:'o11',version:'11.55.94',fullVersion:'11.55.94.1',studio:path.join(r.root,'no-studio'),tfm:'net10.0'};
+ await assert.rejects(runtime.bundle(candidate,path.join(r.out,'x')),e=>e.code==='store-mismatch'&&e.lanes[0]==='o11'&&/nothing was bundled over/.test(e.message));
+ assert.deepEqual(fs.readFileSync(tar),bytes,'the tar is untouched');assert.equal(fs.existsSync(path.join(path.dirname(tar),'snapshot')),false);
+ fs.rmSync(tar+'.sha256');await assert.rejects(runtime.bundle(candidate,path.join(r.out,'x')),e=>e.code==='store-mismatch','a tar without its .sha256 (being written) waits');
+ assert.deepEqual(fs.readFileSync(tar),bytes);
+});
+test('a pin committed before a crash is recognised on resume; the deploy folder of a commit is archived',{skip:!windows},async t=>{
+ const r=repo(t);const runtime=await createRuntime(config(r));
+ const base=runtime.manifest(),tag='prod-x-o115594-odc1730';
+ const proposed={window:base.window,odc:[{version:'1.7.30',tag,image},...base.odc].slice(0,base.window),o11:[{version:'11.55.94',tag,image},...base.o11].slice(0,base.window)};
+ const dir=path.join(r.out,'p');fs.mkdirSync(dir,{recursive:true});
+ const p=await runtime.propose(proposed,'vigia/p',dir,'propose\n');
+ assert.equal(await runtime.pinnedAt(p.branch,p.commit,tag,'sha256:'+sha('a')),null,'nothing pinned yet');
+ const pinned=JSON.parse(JSON.stringify(proposed));for(const l of ['odc','o11'])pinned[l][0].sha256=sha('a');
+ const {commit}=await runtime.pin(pinned,p.branch,dir,'pin\n');
+ assert.equal(await runtime.pinnedAt(p.branch,p.commit,tag,'sha256:'+sha('a')),commit);assert.equal(await runtime.pinnedAt(p.branch,p.commit,tag,'sha256:'+sha('b')),null);
+ const file=path.join(dir,'deploy.tar.gz');await runtime.archiveDeploy(commit,file);
+ const list=sh('C:/Windows/System32/tar.exe',['-tzf',file]);assert.match(list,/server\/deploy\/coolify\/versions\.json/);assert.doesNotMatch(list,/platforms\//);
+});
+test('detection says what an installed Studio folder misses (an installation half-way)',{skip:!windows||!fs.existsSync(SNAPSHOT_DLL)},t=>{
+ const dir=tempDir(t,'vigia-incomplete-');fs.copyFileSync(SNAPSHOT_DLL,path.join(dir,'ServiceStudio.Framework.dll'));
+ const out=JSON.parse(sh(PS,['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',path.join(here,'detect-studios.ps1'),'-O11',dir]))[0];
+ assert.deepEqual(out.missing,['ServiceStudio.exe','ServiceStudio.runtimeconfig.json']);assert.equal(out.tfm,null);
+ fs.writeFileSync(path.join(dir,'ServiceStudio.exe'),'');fs.writeFileSync(path.join(dir,'ServiceStudio.runtimeconfig.json'),JSON.stringify({runtimeOptions:{tfm:'net10.0'}}));
+ assert.deepEqual(JSON.parse(sh(PS,['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',path.join(here,'detect-studios.ps1'),'-O11',dir]))[0].missing,[]);
+});
+test('the lock names a real process by its start time: the live launcher holds it, a dead or reused pid does not',{skip:!windows},t=>{
+ const dir=tempDir(t,'vigia-ident-'),file=path.join(dir,'vigia.lock');
+ const me=processStart(process.pid);assert.match(me,/^\d{4}-\d{2}-\d{2}T/);assert.equal(processStart(999999),null);
+ const held=acquireLock(file);assert.ok(acquireLock(file).busy);held.release();
+ fs.writeFileSync(file,JSON.stringify({pid:process.pid,started:'2000-01-01T00:00:00.000Z',token:'old',at:new Date().toISOString()}));
+ const taken=acquireLock(file);assert.ok(taken.token,'same pid, another start time: another process');taken.release();
 });
 test('a second launcher finds the round lock and leaves at once',t=>{
  const dir=tempDir(t,'vigia-lock2-'),file=path.join(dir,'vigia.lock');const held=acquireLock(file);

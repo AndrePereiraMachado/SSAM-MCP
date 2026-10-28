@@ -30,7 +30,7 @@ export async function smokeImage({pair,bundle,dir,root,docker,served,pack=DEFAUL
   if(!credentials.token||!credentials.agentCredential)throw Error('Smoke credentials could not be issued.');
   const script=`import {toolListingBytes} from './platforms/odc/facade/tool-listing.mjs';
 try {
-const credentials=${JSON.stringify(credentials)},pair=${JSON.stringify(pair)},pack=${JSON.stringify(hello)},budget=${JSON.stringify({tools:budget.tools,totalBytes:budget.totalBytes})};
+const credentials=${JSON.stringify(credentials)},pair=${JSON.stringify(pair)},pack=${JSON.stringify(hello)},budget=${JSON.stringify({tools:budget.tools,totalBytes:budget.totalBytes,coreBytes:budget.coreBytes??null,core:budget.core??[]})};
 const parse=text=>{const line=text.split('\\n').find(x=>x.startsWith('data:'));return JSON.parse(line?line.slice(5):text);};
 async function post(route,token,body,headers={}){const r=await fetch('http://127.0.0.1:7310'+route,{method:'POST',headers:{authorization:'Bearer '+token,'content-type':'application/json',accept:'application/json, text/event-stream',...headers},body:JSON.stringify(body)});const text=await r.text();return {status:r.status,sid:r.headers.get('mcp-session-id'),data:text?parse(text):null};}
 const hello=await post('/agent/v1/hello',credentials.agentCredential,{t:'hello',protocol:'ssam-agent/1',instance:'smoke',agent:{version:'0.3.1'},pack:{id:'smoke',lanes:['odc','o11'],...pack},studios:{odc:{installed:{version:pair.odc,dir:'C:/Smoke'}},o11:{installed:{version:pair.o11,dir:'C:/Smoke'}}}});
@@ -41,7 +41,8 @@ const headers={'mcp-session-id':init.sid};await post('/mcp',credentials.token,{j
 const listed=await post('/mcp',credentials.token,{jsonrpc:'2.0',id:2,method:'tools/list',params:{}},headers),tools=listed.data?.result?.tools;
 if(listed.status!==200||!Array.isArray(tools)||tools.length!==budget.tools)throw Error('Unexpected hosted tool listing: '+(tools?.length??0)+' tools, expected '+budget.tools+'.');
 const totalBytes=tools.reduce((n,t)=>n+toolListingBytes(t),0);if(totalBytes>budget.totalBytes)throw Error('Hosted listing grew beyond its approved size: '+totalBytes+' B > '+budget.totalBytes+' B.');
-console.log(JSON.stringify({ok:true,healthy:true,agentAccepted:true,tools:tools.length,totalBytes}));
+const coreBytes=tools.filter(t=>budget.core.includes(t.name)).reduce((n,t)=>n+toolListingBytes(t),0);if(budget.coreBytes&&coreBytes>budget.coreBytes)throw Error('Hosted core listing grew beyond its approved size: '+coreBytes+' B > '+budget.coreBytes+' B.');
+console.log(JSON.stringify({ok:true,healthy:true,agentAccepted:true,tools:tools.length,totalBytes,coreBytes}));
 } catch(error) { console.error('SMOKE_CHECK:'+error.message); process.exitCode=1; }`;
   const checked=await docker(['exec','-i',name,'node','--input-type=module'],{input:script,dir,secret:true,allowFailure:true});
   if(checked.code!==0)throw Error(checked.stderr.split('\n').find(x=>x.startsWith('SMOKE_CHECK:'))??'Image smoke script failed.');

@@ -3,26 +3,44 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {randomUUID} from 'node:crypto';
-const pidAlive=pid=>{try{process.kill(pid,0);return true;}catch(e){return e.code==='EPERM';}};
-// The lock of a round (and of -Approve/-Reject/-Retry). A lock whose process is gone, or older than staleHours, is stale.
-export function acquireLock(file,{now=Date.now(),staleHours=24,alive=pidAlive,pid=process.pid}={}){
+import {spawnSync} from 'node:child_process';
+// A process is named by its pid AND its start time: Windows reuses pids, so a pid alone can name another program.
+// Returns the start time (ISO) of a live process, or null.
+export function processStart(pid){
+ if(!Number.isInteger(pid)||pid<=0)return null;
+ if(process.platform!=='win32'){try{process.kill(pid,0);return 'alive';}catch(e){return e.code==='EPERM'?'alive':null;}}
+ const r=spawnSync('C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe',['-NoProfile','-NonInteractive','-Command',`$p=Get-CimInstance Win32_Process -Filter "ProcessId=${pid}";if($p){$p.CreationDate.ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ss.fffZ')}`],{encoding:'utf8',windowsHide:true,timeout:60000});
+ return r.stdout?.trim()||null;
+}
+// A lock written before locks named their start time (no "started") counts only within the task's 8 h limit.
+const holds=(entry,identity,now,at)=>!!entry&&Number.isInteger(entry.pid)&&(entry.started?identity(entry.pid)===entry.started:identity(entry.pid)!==null&&(now-Date.parse(at))/3600000<8);
+// The lock of a round (and of -Approve/-Reject/-Retry): held while its launcher or the round process it registered is the
+// same live process (pid and start time). Anything else is stale and taken over.
+export function acquireLock(file,{now=Date.now(),identity=processStart,pid=process.pid}={}){
  fs.mkdirSync(path.dirname(file),{recursive:true});
- const token=randomUUID(),body=JSON.stringify({pid,token,at:new Date(now).toISOString()})+'\n';
+ const token=randomUUID(),body=JSON.stringify({pid,started:identity(pid),token,at:new Date(now).toISOString(),child:null})+'\n';
  for(let attempt=0;attempt<3;attempt++){
   try{fs.writeFileSync(file,body,{flag:'wx'});return {token,release:()=>releaseLock(file,token)};}
   catch(e){if(e.code!=='EEXIST')throw e;}
   let held=null;try{held=JSON.parse(fs.readFileSync(file,'utf8'));}catch{}
-  if(held&&Number.isInteger(held.pid)&&alive(held.pid)&&(now-Date.parse(held.at))/3600000<staleHours)return {busy:held};
+  if(held&&(holds(held,identity,now,held.at)||holds(held.child,identity,now,held.at)))return {busy:held};
   try{const again=fs.readFileSync(file,'utf8');if(!held||JSON.parse(again).token===held.token)fs.rmSync(file,{force:true});}catch{}
  }
  return {busy:{reason:'lock contention'}};
 }
+// The launcher names the round process it started, so a launcher killed at the task's time limit leaves the lock held
+// while that round still runs.
+export function registerChild(file,token,childPid,{identity=processStart}={}){
+ const held=JSON.parse(fs.readFileSync(file,'utf8'));if(held.token!==token)return false;
+ held.child={pid:childPid,started:identity(childPid)};const temp=file+'.'+process.pid+'.tmp';fs.writeFileSync(temp,JSON.stringify(held)+'\n');fs.renameSync(temp,file);return true;
+}
 export function releaseLock(file,token){try{if(JSON.parse(fs.readFileSync(file,'utf8')).token===token)fs.rmSync(file,{force:true});}catch{}}
 export function lockHeldBy(file,token){try{return JSON.parse(fs.readFileSync(file,'utf8')).token===token;}catch{return false;}}
-// runs/<local date>/<HHMMSS>Z[-<mode>].log, append-only. Never given a secret: commands log arguments, never tokens.
+// runs/<local date>/<local HHMMSS>[-<mode>].log (date and time in the same zone, so the files sort by time), append-only.
+// Never given a secret: commands log arguments, never tokens.
 export function runLogFile(outDir,now=new Date(),mode=''){
- const day=now.toLocaleDateString('sv-SE'),time=now.toISOString().slice(11,19).replaceAll(':','');
- return path.join(outDir,'runs',day,`${time}Z${mode?'-'+mode:''}.log`);
+ const [day,time]=now.toLocaleString('sv-SE').split(' ');
+ return path.join(outDir,'runs',day,`${time.replaceAll(':','')}${mode?'-'+mode:''}.log`);
 }
 export function createLog(file,{echo=false}={}){
  if(file)fs.mkdirSync(path.dirname(file),{recursive:true});

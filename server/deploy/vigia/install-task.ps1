@@ -5,7 +5,7 @@
 .DESCRIPTION
   The task runs as the signed-in user, only while that user is logged on (no stored password), never two at a time
   (MultipleInstances IgnoreNew; the watcher also holds its own lock), catches up after sleep (StartWhenAvailable), and
-  runs hidden (conhost --headless). It runs vigia.ps1 of the watcher worktree, which fast-forwards itself from the local
+  runs without a window (conhost --headless) and stays visible in the Task Scheduler library. It runs vigia.ps1 of the watcher worktree, which fast-forwards itself from the local
   main before each round. Nothing is installed by any other script.
 
 .EXAMPLE
@@ -64,7 +64,7 @@ $action = New-ScheduledTaskAction -Execute $conhost -Argument $arguments -Workin
 $every = New-ScheduledTaskTrigger -Once -At ((Get-Date).AddMinutes(10)) -RepetitionInterval (New-TimeSpan -Hours $Hours)
 $logon = New-ScheduledTaskTrigger -AtLogOn -User $user
 $logon.Delay = 'PT15M'
-$settings = New-ScheduledTaskSettingsSet -MultipleInstances IgnoreNew -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Hours 8) -Hidden
+$settings = New-ScheduledTaskSettingsSet -MultipleInstances IgnoreNew -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Hours 8)
 $principal = New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive -RunLevel Limited
 $task = New-ScheduledTask -Action $action -Trigger @($every, $logon) -Settings $settings -Principal $principal `
     -Description "SSAM Studio versions watcher: every $Hours h and 15 min after logon, reads the installed Studios and, for a new version, bundles, tests, builds and proposes (never publishes). Logs: $(Split-Path -Parent $Config)\runs. server/deploy/vigia/README.md"
