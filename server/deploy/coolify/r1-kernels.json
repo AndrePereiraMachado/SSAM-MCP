@@ -1,4 +1,32 @@
 {
-  "v1": { "o11": "11.55.93", "odc": "1.7.29", "odcBridge": "v97", "odcBridgeAccepted": ["v98", "v96", "v48", "v45"] },
-  "v2": { "o11": "11.55.92", "odc": "1.7.28", "odcBridge": "v97", "odcBridgeAccepted": ["v98", "v96", "v48", "v45"] }
+  "v1": {
+    "o11": "11.55.94",
+    "odc": "1.7.30",
+    "odcBridge": "v100",
+    "odcBridgeAccepted": [
+      "v98"
+    ]
+  },
+  "v2": {
+    "o11": "11.55.93",
+    "odc": "1.7.29",
+    "odcBridge": "v97",
+    "odcBridgeAccepted": [
+      "v98",
+      "v96",
+      "v48",
+      "v45"
+    ]
+  },
+  "v3": {
+    "o11": "11.55.92",
+    "odc": "1.7.28",
+    "odcBridge": "v97",
+    "odcBridgeAccepted": [
+      "v98",
+      "v96",
+      "v48",
+      "v45"
+    ]
+  }
 }
