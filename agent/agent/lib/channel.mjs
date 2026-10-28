@@ -22,13 +22,14 @@ export const STREAM_HEADERS_MS = 15000;
 export const HELLO_MS = 15000;
 export const messagesTimeoutMs = (bytes, base = MESSAGES_MS) => base + Math.ceil(Math.max(0, Number(bytes) || 0) / 65536) * 1000;
 
-export function createChannel({ server, credential, hello, onCall, outbox, pongVersions = () => undefined, fetch = globalThis.fetch,
+export function createChannel({ server, credential, hello, onCall, outbox, onWelcome = async () => false, pongVersions = () => undefined, fetch = globalThis.fetch,
   now = Date.now, setTimeout: setTimer = globalThis.setTimeout, clearTimeout: clearTimer = globalThis.clearTimeout, random = Math.random,
   log = () => {}, onState = () => {}, deadMs = DEAD_MS, messagesMs = MESSAGES_MS, streamHeadersMs = STREAM_HEADERS_MS, helloMs = HELLO_MS }) {
   const base = String(server ?? '').replace(/\/+$/, '');
   let welcome = null; let channel = null; let stream = null; let resolveRun = null;
   // connecting: a hello or a stream request is in flight; connected: the stream is open.
   let connecting = false; let connected = false; let stopped = false;
+  let reconnectPending = false;
   let attempt = 0; let connectedAt = 0; let postFailures = 0;
   // One immediate hello after a stream that failed right after a successful hello (C03: 3 of 5 reconnections of a client
   // session got a hello but no stream); reset when a stream opens.
@@ -100,6 +101,10 @@ export function createChannel({ server, credential, hello, onCall, outbox, pongV
     const body = await reply.json().catch(() => null);
     if (body?.t !== 'welcome' || !/^[0-9a-f]{32}$/.test(body.channel ?? '')) { log('welcome-invalid'); return retry(); }
     welcome = body; channel = body.channel;
+    try {
+      if (await onWelcome(body)) { connecting = false; if (!stopped) return connect(); }
+    } catch (error) { log('bridge-update-error', { error: error.message }); }
+    if (stopped) return;
     openStream();
   }
 
@@ -126,6 +131,7 @@ export function createChannel({ server, credential, hello, onCall, outbox, pongV
     if (response.status === 401 || response.status === 403) { await discard(response); return finish(EXIT.credential, 'stream-' + response.status); }
     if (response.status !== 200 || !response.body) { await discard(response); stream = null; log('stream-refused', { status: response.status }); return streamFailed(); }
     connecting = false; connected = true; connectedAt = now(); postFailures = 0; quickHelloUsed = false;
+    if (reconnectPending) { reconnectPending = false; return lose('bridge-changed'); }
     flushTimer = clear(flushTimer);
     log('connected', { resumed: welcome.resumed === true });
     onState('connected');
@@ -221,6 +227,7 @@ export function createChannel({ server, credential, hello, onCall, outbox, pongV
       finish(EXIT.stopped, 'stop');
     },
     flush,
+    reconnect: () => { if (connecting) reconnectPending = true; else lose('bridge-changed'); },
     welcome: () => welcome,
     connected: () => connected,
     // One part, within its own deadline (timeoutMs covers the answer and its body); fresh after a part that got no answer.

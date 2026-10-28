@@ -21,6 +21,8 @@ import { connector, readConnection } from './o11-connect.mjs';
 import { createMacAttach } from './attach-unix.mjs';
 import { createUnixPipe } from './odc-pipe-unix.mjs';
 import { AgentError } from './errors.mjs';
+import { createBridgeUpdates } from './bridge-updates.mjs';
+import { studioRuntime } from './studio-runtime.mjs';
 
 // 0.2.0 (servidor/fase4): C03 (POST of 10 s, pong in its own POST, stream headers in 15 s), C26 (agent.root in the Hello),
 // C14 (file.sync), the query-test command of the ODC bridge v45 and the process listing without PowerShell for known pids.
@@ -96,6 +98,16 @@ export function createAgent({ root, runtimeRoot = root, config = {}, deps = {}, 
 
   const credential = config.credential ?? fs.readFileSync(credentialFile(base), 'utf8').trim();
   const pack = readPack(runtimeRoot);
+  const bridgeAbort = new AbortController();
+  const updates = createBridgeUpdates({ root: base, runtimeRoot, platform,
+    ...(deps.bridgeTrust ?? {}),
+    request: (route, { size }) => d.fetch(String(config.server).replace(/\/+$/, '') + route, {
+      headers: { authorization: 'Bearer ' + credential }, redirect: 'manual',
+      signal: AbortSignal.any([bridgeAbort.signal, AbortSignal.timeout(Math.min(300000, 15000 + Math.ceil(size / 65536) * 1000))]) }),
+    notify: status => log('bridge-update', status) });
+  d.bridgeUpdates = updates;
+  d.studioRuntime ??= (target, lane) => studioRuntime(target, lane, { platform });
+  d.bridgeChanged = () => channel.reconnect();
   const ws = createWorkspace(base, { platform });
   const outbox = createOutbox();
   const instance = randomUUID();
@@ -130,12 +142,20 @@ export function createAgent({ root, runtimeRoot = root, config = {}, deps = {}, 
     if (!studios) await refreshStudios();
     connection = await currentConnection();
     reported = JSON.stringify({ studios, o11Connection: connection });
+    const active = {};
+    for (const lane of ['odc', 'o11']) {
+      const installed = studios[lane]?.installed;
+      if (!installed) continue;
+      installed.runtime = await d.studioRuntime(installed.dir, lane);
+      const bridge = await updates.select(lane, installed.version, installed.runtime);
+      if (bridge) active[lane] = { lane, studioVersion: bridge.studioVersion, runtime: bridge.runtime, protocol: bridge.protocol };
+    }
     return { t: 'hello', protocol: PROTOCOL, instance,
       // root (C26): the folder of this agent, so the server names its inbox exactly; kinds: what this agent runs (file.sync
       // since 0.2.0), so the server never asks an older agent for a kind it does not have.
-      agent: { version: AGENT_VERSION, node: process.version, platform, startedAt, root: base, kinds: [...KINDS], machine },
-      pack: { id: pack.id, lanes: pack.lanes, odcBridge: pack.odcBridge, o11BuiltFor: pack.o11BuiltFor, o11Hook: pack.o11Hook },
-      studios, o11Connection: connection };
+      agent: { version: AGENT_VERSION, node: process.version, platform, startedAt, root: base, kinds: [...KINDS], machine, bridgeOffers: 1 },
+      pack: { id: pack.id, lanes: pack.lanes, odcBridge: active.odc?.protocol ?? pack.odcBridge, o11BuiltFor: active.o11?.studioVersion ?? pack.o11BuiltFor, o11Hook: active.o11?.protocol ?? pack.o11Hook },
+      capabilities: { bridgeOffer: true }, bridges: active, bridgeUpdate: updates.status(), studios, o11Connection: connection };
   }
 
   // pong.versions only when something changed since the last report; installed Studios are looked up again every
@@ -193,13 +213,14 @@ export function createAgent({ root, runtimeRoot = root, config = {}, deps = {}, 
 
   // deps.channel (tests): the channel's own timings (messagesMs, streamHeadersMs).
   const channel = createChannel({ server: config.server, credential, hello, onCall, outbox, pongVersions, fetch: d.fetch, now: d.now,
+    onWelcome: welcome => updates.offers(welcome, studios),
     setTimeout: d.setTimeout, clearTimeout: d.clearTimeout, random: d.random, log, onState, ...(d.channel ?? {}) });
 
   return {
     instance,
     run: () => channel.run(),
     // After the channel's own goodbye (DELETE /agent/v1/channel), the pooled connections are closed.
-    stop: async () => { await channel.stop(); transport?.close(); },
+    stop: async () => { bridgeAbort.abort(); await channel.stop(); transport?.close(); },
     // One kind run locally exactly as a call would run it (tests, diagnostics): the result message.
     execute: (kind, params) => execute({ id: randomUUID(), kind, params }),
     outbox,

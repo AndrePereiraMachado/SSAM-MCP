@@ -99,7 +99,7 @@ export function createKinds({ root, runtimeRoot = root, ws, pack = {}, kernel = 
       const pid = Number(p?.pid);
       if (!Number.isSafeInteger(pid) || pid < 1) continue;
       const version = p.version ?? (p.path ? await deps.fileVersion(p.path) : null) ?? null;
-      pids.set(pid, { image, version });
+      pids.set(pid, { image, version, path: p.path });
       processes.push({ pid, path: p.path ?? null, version });
     }
     return processes;
@@ -187,12 +187,14 @@ export function createKinds({ root, runtimeRoot = root, ws, pack = {}, kernel = 
     if (texts.some(a => /[\r\n\0]/.test(a))) throw refuse('COMMAND_NOT_ALLOWED', 'A bridge argument may not contain a line break or NUL');
     if (!ODC_COMMANDS.includes(texts[0]))
       throw refuse('COMMAND_NOT_ALLOWED', texts[0] === 'attach' ? 'attach never goes through odc.pipe; the agent attaches its own bridge (odc.attach)' : `The ODC bridge command ${JSON.stringify(texts[0])} is not allowed on this agent`);
-    if (!pack.odcBridge || version !== pack.odcBridge)
+    const target = await checkPid('odc', pid);
+    const selected = await selectedBridge('odc', target);
+    const expectedVersion = selected?.protocol ?? pack.odcBridge;
+    if (!expectedVersion || version !== expectedVersion)
       throw refuse('BRIDGE_VERSION_MISMATCH', `The agent pack carries the ODC bridge ${pack.odcBridge ?? '(none)'}; the server asked for ${version}`);
     const mapped = mapOdcArgs(texts);
     checkFinalLine(mapped);
     if (MANIFEST_COMMANDS.has(mapped[0]) && mapped[1]) checkManifestFile(mapped[1]);
-    const target = await checkPid('odc', pid);
     const connect = Number.isFinite(Number(connectMs)) ? Math.min(Math.max(Number(connectMs), 1), 120000) : undefined;
     try {
       await bindOdcRoot(target.pid, version);
@@ -207,16 +209,40 @@ export function createKinds({ root, runtimeRoot = root, ws, pack = {}, kernel = 
   async function odcAttach({ pid }) {
     requireLane('odc');
     const target = await checkPid('odc', pid);
-    const version = pack.odcBridge;
+    const selected = await selectedBridge('odc', target);
+    const version = selected?.protocol ?? pack.odcBridge;
     requireDataRootProtocol(version);
     if (!/^v\d+$/.test(version ?? '')) throw refuse('BRIDGE_VERSION_MISMATCH', 'The agent pack carries no ODC bridge');
     const client = path.join(runtimeRoot, 'odc', 'studio', 'bridge', 'client', 'bin', 'Release', 'net10.0', 'ODC3.Bridge.Client.dll');
-    const bridge = path.join(runtimeRoot, 'odc', 'studio', 'bridge', 'bin', 'Release', 'net8.0', 'ODC3.Bridge.' + version + '.dll');
+    const bundled = path.join(runtimeRoot, 'odc', 'studio', 'bridge', 'bin', 'Release', 'net8.0', 'ODC3.Bridge.' + version + '.dll');
+    const bridge = selected ? selectedFile(selected, ['ODC3.Bridge.' + version + '.dll', 'ODC3.Bridge.dll']) : bundled;
     // macOS: no .NET client, the agent itself speaks the diagnostic IPC (the client is not in the macOS pack).
     for (const file of platform === 'darwin' ? [bridge] : [client, bridge]) if (!fs.existsSync(file)) throw refuse('ATTACH_FAILED', 'The agent pack is missing ' + path.relative(root, file));
-    const result = await deps.attachOdc(platform === 'darwin' ? { pid: target.pid, bridge, version } : { pid: target.pid, client, bridge });
-    if (result?.ok === true && result?.attached === true) await bindOdcRoot(target.pid, version, null);
-    return { ok: result?.ok === true, attached: result?.attached === true, pid: target.pid, version, note: result?.note ?? result?.error ?? null };
+    try {
+      const result = await deps.attachOdc(platform === 'darwin' ? { pid: target.pid, bridge, version } : { pid: target.pid, client, bridge });
+      if (result?.ok !== true || result?.attached !== true) {
+        if (!selected) return { ok: result?.ok === true, attached: result?.attached === true, pid: target.pid, version, note: result?.note ?? result?.error ?? null };
+        throw new AgentError('ATTACH_FAILED', result?.error ?? result?.note ?? 'Bridge load was not confirmed', { executed: null });
+      }
+      await bindOdcRoot(target.pid, version, null);
+      return { ok: true, attached: true, pid: target.pid, version, note: result?.note ?? null };
+    } catch (error) {
+      if (!selected) throw error;
+      deps.bridgeUpdates.rejectLoad(selected, error.message); deps.bridgeChanged?.();
+      // Never repeat a startup hook when it may have executed in this process.
+      if (error.executed === false) return odcAttach({ pid });
+      throw error;
+    }
+  }
+
+  async function selectedBridge(lane, target) {
+    if (!deps.bridgeUpdates || !target.path) return null;
+    return deps.bridgeUpdates.select(lane, target.version, await deps.studioRuntime(target.path, lane));
+  }
+  function selectedFile(selected, names) {
+    const candidates = selected.files.filter(f => names.includes(path.posix.basename(f.path)));
+    if (candidates.length !== 1) throw refuse('ATTACH_FAILED', 'The downloaded bridge layout is missing or ambiguous');
+    return path.join(selected.root, candidates[0].path);
   }
 
   // ---- o11.bridge: allowlist, positions, the local key and the port of this agent's own connection record.
@@ -277,11 +303,14 @@ export function createKinds({ root, runtimeRoot = root, ws, pack = {}, kernel = 
     if (candidates.length === 0) throw refuse('STUDIO_NOT_SELECTED', 'No matching Service Studio is open. Open it normally, then connect.');
     if (candidates.length > 1) throw refuse('STUDIO_NOT_SELECTED', 'Several Service Studios are open (' + candidates.map(p => p.pid).join(', ') + '); select one with pid.');
     const target = await checkPid('o11', candidates[0].pid);
+    const selected = await selectedBridge('o11', target);
+    const activePack = selected ? { ...pack, o11BuiltFor: selected.studioVersion, o11Hook: selected.files.some(f => f.path === 'hook/Anvil.RuntimeHook.Agent.dll') ? 'dev' : selected.protocol,
+      o11Bridge: { sha256: selected.files.find(f => path.posix.basename(f.path) === 'Anvil.Bridge.dll')?.sha256 } } : pack;
     // The server's version window (servedVersions of the hello reply) decides, not the pack alone: a bridge built for one
     // served version is loaded into another served Service Studio with a warning. Without a window from the server, or
     // with either version outside it, the built-for version must match as before.
     let warning;
-    if (pack.o11BuiltFor && !sameVersion(target.version, pack.o11BuiltFor)) {
+    if (!selected && pack.o11BuiltFor && !sameVersion(target.version, pack.o11BuiltFor)) {
       const window = windowOf(kernel(), 'o11');
       const inWindow = version => window.some(v => sameVersion(v, version));
       if (!(inWindow(target.version) || newerThanWindow(target.version, window)) || !inWindow(pack.o11BuiltFor))
@@ -292,10 +321,17 @@ export function createKinds({ root, runtimeRoot = root, ws, pack = {}, kernel = 
           + (inWindow(target.version) ? 'the server serves both versions. ' : 'this Service Studio is newer than the versions the server serves (' + window.join(', ') + '). ') + 'Check the result in Service Studio before publishing.' };
     }
     // pack.json decides the hook (o11Hook "h1": the signed release layout) and the bridge file of the version handshake.
-    const record = await connectO11({ root, runtimeRoot, pid: target.pid, port: o11Port, studioVersion: target.version, describe: deps.describe,
-      attach: deps.attachO11, sleep: deps.sleep, now: deps.now, pack, warning, ...(deps.env ? { env: deps.env } : {}) });
-    onConnection(record);
-    return record;
+    try {
+      const record = await connectO11({ root, runtimeRoot: selected?.root ?? runtimeRoot, pid: target.pid, port: o11Port, studioVersion: target.version, describe: deps.describe,
+        attach: deps.attachO11, sleep: deps.sleep, now: deps.now, pack: activePack, installedBridge: selected, warning, ...(deps.env ? { env: deps.env } : {}) });
+      onConnection(record);
+      return record;
+    } catch (error) {
+      if (!selected) throw error;
+      deps.bridgeUpdates.rejectLoad(selected, error.message); deps.bridgeChanged?.();
+      if (error.executed === false) return o11ConnectKind({ pid });
+      throw error;
+    }
   }
 
   async function o11Selected() {

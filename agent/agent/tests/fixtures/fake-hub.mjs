@@ -25,6 +25,7 @@ export async function fakeHub({ credential, kernel = { odc: '1.7.28', o11: '11.5
     corruptParts: new Set(), // "transfer/index" served with wrong bytes (right header)
     stream: null, channel: null, instance: null,
     downloads: new Map(),  // transfer -> {buffer, partBytes}
+    bridges: new Map(), // authenticated bridge route -> bytes, or null to interrupt the download
     uploads: new Map(),    // transfer -> {parts: [], headers}
   };
   const notify = () => { for (const w of [...waiters]) if (w.check()) { waiters.splice(waiters.indexOf(w), 1); w.done(); } };
@@ -45,6 +46,12 @@ export async function fakeHub({ credential, kernel = { odc: '1.7.28', o11: '11.5
     }
     if (req.headers.authorization !== 'Bearer ' + credential) { res.writeHead(401).end(); return; }
     const json = (status, value) => res.writeHead(status, { 'content-type': 'application/json' }).end(JSON.stringify(value));
+    if (req.method === 'GET' && url.pathname.startsWith('/agent/bridges/')) {
+      if (!hub.bridges.has(url.pathname)) return json(404, { code: 'NOT_FOUND' });
+      const bytes = hub.bridges.get(url.pathname);
+      if (bytes === null) { res.writeHead(200, { 'content-length': 999 }); res.write('partial'); res.destroy(); return; }
+      res.writeHead(200, { 'content-length': bytes.length }).end(bytes); return;
+    }
     if (req.method === 'POST' && url.pathname === '/agent/v1/messages' && hub.holdPosts > 0) {
       hub.holdPosts--;
       await new Promise(resolve => { hub.held.push(resolve); notify(); });

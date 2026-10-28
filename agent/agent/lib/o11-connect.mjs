@@ -154,7 +154,7 @@ const nonThin = (port, executed = false) =>
 const failedReceipt = hook => { try { return readJson(hook + '.receipt.json').ok === false; } catch { return false; } };
 
 export async function connectO11({ root, runtimeRoot = root, pid, port, studioVersion = null, describe, attach, probe = probeBridge, request = bridgeRequest,
-  sleep = delay, now = Date.now, pack = null, env = process.env, warning = null }) {
+  sleep = delay, now = Date.now, pack = null, env = process.env, warning = null, installedBridge = null }) {
   const folder = path.join(root, 'private', 'runtime-connect');
   fs.mkdirSync(folder, { recursive: true });
   const lock = path.join(folder, 'port-' + port + '.lock');
@@ -189,9 +189,12 @@ export async function connectO11({ root, runtimeRoot = root, pid, port, studioVe
         const evidence = path.join(folder, id);
         fs.mkdirSync(evidence, { recursive: true });
         hook = path.join(evidence, 'Anvil.RuntimeHook.Agent.dll');
-        fs.copyFileSync(path.join(runtimeRoot, 'bin', 'o11', 'hook', 'Anvil.RuntimeHook.Agent.dll'), hook);
+        const sourceHook = installedBridge ? path.join(runtimeRoot, 'hook/Anvil.RuntimeHook.Agent.dll') : path.join(runtimeRoot, 'bin', 'o11', 'hook', 'Anvil.RuntimeHook.Agent.dll');
+        fs.copyFileSync(sourceHook, hook);
+        if (installedBridge && sha256(fs.readFileSync(hook)) !== installedBridge.files.find(f => f.path === 'hook/Anvil.RuntimeHook.Agent.dll')?.sha256)
+          throw fail('The verified hook changed while preparing the attach. Nothing was sent.');
         fs.writeFileSync(hook + '.json', JSON.stringify({ pid: target.pid, startedUtc: target.startedUtc, port,
-          bridgePath: path.join(runtimeRoot, 'bin', 'o11', 'bridge', 'Anvil.Bridge.dll'), authorityDir: path.join(root, 'private', 'authority') }));
+          bridgePath: installedBridge ? path.join(runtimeRoot, 'bridge/Anvil.Bridge.dll') : path.join(runtimeRoot, 'bin', 'o11', 'bridge', 'Anvil.Bridge.dll'), authorityDir: path.join(root, 'private', 'authority') }));
       }
       // Identity and port again after preparing, right before the single attach request.
       const current = await describe(target.pid);
