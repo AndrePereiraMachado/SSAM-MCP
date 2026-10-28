@@ -22,6 +22,18 @@ export const STUDIO_PROPERTY={odc:'OdcInstall',o11:'SSDir'};
 const RUNTIME_CONFIG={odc:'ODCStudio.runtimeconfig.json',o11:'ServiceStudio.runtimeconfig.json'};
 // The .NET a Studio folder runs on, from its main runtimeconfig.json (null when the folder has none).
 export function studioTfm(dir,lane){try{return JSON.parse(fs.readFileSync(path.join(dir,RUNTIME_CONFIG[lane]),'utf8')).runtimeOptions?.tfm??null;}catch{return null;}}
+// The framework the Studio's own ServiceStudio.Framework.dll was built for (its TargetFrameworkAttribute,
+// ".NETCoreApp,Version=v8.0"), for a frozen copy that has no runtimeconfig.json (bundles made before 2026-10-27).
+export function assemblyTfm(dir){
+ try{const b=fs.readFileSync(path.join(dir,'ServiceStudio.Framework.dll')),at=b.indexOf('.NETCoreApp,Version=v');if(at<0)return null;
+  const m=/^\.NETCoreApp,Version=v(\d+\.\d+)/.exec(b.toString('latin1',at,at+32));return m?'net'+m[1]:null;}catch{return null;}
+}
+// The build rule (kernel/StudioRuntime.props) reads the Studio folder's runtimeconfig.json and refuses to guess without
+// it; for such a folder the documented pin carries the framework the Studio's assemblies were built for.
+export const RUNTIME_PIN={odc:'AnvilOdcStudioTfm',o11:'AnvilO11StudioTfm'};
+export function runtimePins(side){
+ return Object.entries(RUNTIME_PIN).flatMap(([lane,prop])=>{const s=side[lane];if(!s?.snapshot||studioTfm(s.snapshot,lane))return [];const tfm=assemblyTfm(s.snapshot);return tfm?[`-p:${prop}=${tfm}`]:[];});
+}
 export async function createRuntime(config,{log=()=>{}}={}){
  const root=path.resolve(config.workspace),temp=path.resolve(config.tempRoot),out=path.resolve(config.outDir),store=path.resolve(config.bundleRoot);
  if(/^c:[\\/]t(?:[\\/]|$)/i.test(temp))throw Error('tempRoot must be private and outside C:\\t.');
@@ -88,7 +100,7 @@ export async function createRuntime(config,{log=()=>{}}={}){
   if(threeOf(studioVersionOf(snapshot))!==v)throw Error(`The frozen copy ${snapshot} is not ${lane} ${v}.`);
   const features=lane==='odc'?path.join(folder,'Features.plain.xml'):null;
   if(features&&!fs.existsSync(features))throw new EnvironmentError(`No Features.plain.xml for ODC ${v} in ${folder}.`,'store-incomplete');
-  return {lane,version:v,fullVersion:found.fullVersion,file:found.file,sha256,snapshot,features,tfm:studioTfm(snapshot,lane)};
+  return {lane,version:v,fullVersion:found.fullVersion,file:found.file,sha256,snapshot,features,tfm:studioTfm(snapshot,lane)??assemblyTfm(snapshot)};
  }
  async function waitForDotnet(dir){
   const deadline=Date.now()+(config.dotnetWaitMinutes??180)*60000;let said=false;
@@ -186,7 +198,7 @@ export async function createRuntime(config,{log=()=>{}}={}){
     features=path.join(folder,'Features.plain.xml');
     if(!fs.existsSync(features))await ps(path.join(root,'server/deploy/odc-features-export.ps1'),['-Source',config.featuresSource,'-Out',features],{dir});
    }
-   return {lane:candidate.lane,version:candidate.version,fullVersion:found.fullVersion,file:found.file,sha256,snapshot,features,tfm:studioTfm(snapshot,candidate.lane)??candidate.tfm??null};
+   return {lane:candidate.lane,version:candidate.version,fullVersion:found.fullVersion,file:found.file,sha256,snapshot,features,tfm:studioTfm(snapshot,candidate.lane)??candidate.tfm??assemblyTfm(snapshot)};
   },
   companion:(lane,v)=>companion(lane,v),
   async test(lane,kind,side,dir){
@@ -202,7 +214,7 @@ export async function createRuntime(config,{log=()=>{}}={}){
    await waitForDotnet(dir);
    const env={TEMP:privateTemp,TMP:privateTemp,DOTNET_CLI_HOME:path.join(temp,'dotnet-home'),DOTNET_CLI_TELEMETRY_OPTOUT:'1',DOTNET_NOLOGO:'1',SSAM_MODULE_INDEX_ROOT:path.join(privateTemp,'index'),ANVIL_WORKER:'0',ANVIL_ODC_NO_WORKER:'1',SSAM_NO_WARM:'1',ANVIL_STUDIO_DIR:side.o11.snapshot,ANVIL_ODC_STUDIO_DIR:side.odc.snapshot,...(featuresDir?{ANVIL_ODC_FEATURES_DIR:featuresDir}:{})};
    fs.rmSync(path.join(resultDir,'results.trx'),{force:true});
-   const result=await run(exe.dotnet,['test',path.join(root,TEST_PROJECT[lane]),'-c','Release','--filter',filter,'--logger','trx;LogFileName=results.trx','--results-directory',resultDir,'-nodeReuse:false',`-p:${STUDIO_PROPERTY[lane]}=${side[lane].snapshot}`],{dir,env,allowFailure:true,timeoutMs:(config.testTimeoutMinutes??90)*60000});
+   const result=await run(exe.dotnet,['test',path.join(root,TEST_PROJECT[lane]),'-c','Release','--filter',filter,'--logger','trx;LogFileName=results.trx','--results-directory',resultDir,'-nodeReuse:false',`-p:${STUDIO_PROPERTY[lane]}=${side[lane].snapshot}`,...runtimePins(side)],{dir,env,allowFailure:true,timeoutMs:(config.testTimeoutMinutes??90)*60000});
    const report=path.join(resultDir,'results.trx');if(!fs.existsSync(report))throw Object.assign(Error(`No test results from the ${lane} ${kind} run (exit ${result.code}): the test project did not build or run against ${side[lane].snapshot}. See ${path.join(dir,'commands.jsonl')}.`),{lanes:[lane]});
    return readTrx(fs.readFileSync(report,'utf8'));
   },

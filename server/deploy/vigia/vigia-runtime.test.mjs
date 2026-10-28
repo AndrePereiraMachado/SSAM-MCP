@@ -3,7 +3,7 @@
 // runtime detection and the Features.xml protection. No Docker, dotnet, Studio installation or network.
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';
 import {spawnSync} from 'node:child_process';import {createHash} from 'node:crypto';
-import {createRuntime,studioTfm} from './runtime.mjs';
+import {createRuntime,studioTfm,assemblyTfm,runtimePins} from './runtime.mjs';
 import {approve,runVigia,readAttempts,pairTag,EnvironmentError,acquireLock} from './vigia.mjs';
 const windows=process.platform==='win32';
 const GIT='C:/Program Files/Git/cmd/git.exe',PS='C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe';
@@ -85,7 +85,7 @@ test('the bundle store: a frozen copy per version, its checksum and Studio versi
  sh('C:/Windows/System32/tar.exe',['-czf',tar,'-C',stage,'bundle.txt','files']);
  const digest=createHash('sha256').update(fs.readFileSync(tar)).digest('hex');fs.writeFileSync(tar+'.sha256',`${digest}  ${path.basename(tar)}\n`);
  const runtime=await createRuntime(config(r));
- const c=await runtime.companion('o11','11.55.93');assert.equal(c.sha256,digest);assert.equal(c.fullVersion,'11.55.93.65289');assert.ok(fs.existsSync(path.join(c.snapshot,'ServiceStudio.Framework.dll')));assert.equal(c.tfm,null);
+ const c=await runtime.companion('o11','11.55.93');assert.equal(c.sha256,digest);assert.equal(c.fullVersion,'11.55.93.65289');assert.ok(fs.existsSync(path.join(c.snapshot,'ServiceStudio.Framework.dll')));assert.equal(c.tfm,'net8.0','from the Studio assembly when the copy has no runtimeconfig.json');
  assert.equal((await runtime.companion('o11','11.55.93')).snapshot,c.snapshot,'an existing frozen copy is reused');
  // A snapshot folder someone else left (another layout, another build) is never renamed or overwritten.
  const other=path.join(r.root,'store2','o11-11.55.93');fs.mkdirSync(path.join(other,'snapshot'),{recursive:true});fs.writeFileSync(path.join(other,'snapshot','theirs.txt'),'keep');
@@ -103,6 +103,12 @@ test('detection records the .NET of each Studio folder: a synthetic net10 Studio
  assert.deepEqual(out.map(o=>[o.lane,o.version,o.tfm]),[['o11','11.55.93','net10.0']]);assert.equal(studioTfm(dir,'o11'),'net10.0');
  fs.rmSync(path.join(dir,'ServiceStudio.runtimeconfig.json'));
  assert.equal(JSON.parse(sh(PS,['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',path.join(here,'detect-studios.ps1'),'-O11',dir]))[0].tfm,null);
+ // A frozen copy without runtimeconfig.json: the build rule refuses to guess, so the test build gets the documented pin
+ // with the framework the Studio's own assembly declares (.NETCoreApp,Version=v8.0 for 11.55.93); with the file, no pin.
+ assert.equal(assemblyTfm(dir),'net8.0');
+ assert.deepEqual(runtimePins({o11:{snapshot:dir},odc:{snapshot:dir}}),['-p:AnvilOdcStudioTfm=net8.0','-p:AnvilO11StudioTfm=net8.0']);
+ fs.writeFileSync(path.join(dir,'ServiceStudio.runtimeconfig.json'),JSON.stringify({runtimeOptions:{tfm:'net10.0'}}));
+ assert.deepEqual(runtimePins({o11:{snapshot:dir}}),[]);
 });
 test('Features.plain.xml becomes a Features.xml this Windows user decrypts exactly as the ODC Studio export reads it',{skip:!windows},t=>{
  const dir=tempDir(t,'vigia-features-'),plain=path.join(dir,'Features.plain.xml');
