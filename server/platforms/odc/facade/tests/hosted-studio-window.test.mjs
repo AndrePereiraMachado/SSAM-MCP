@@ -38,6 +38,32 @@ test('v97 and an O11 bridge built inside the window are accepted', () => {
   assert.equal(result.odc.warning.code, 'studioNewerThanServed');
 });
 
+test('a newer O11 Studio accepts its matching local bridge without accepting an unrelated future pack', () => {
+  const hello = { studios: { o11: { installed: { version: '11.55.94.1' } } },
+    pack: { lanes: ['o11'], o11BuiltFor: '11.55.94', o11Hook: 'dev' } };
+  const result = compatibility(hello, kernel, ['o11']).o11;
+  assert.equal(result.ok, true);
+  assert.equal(result.warning.code, 'studioNewerThanServed');
+  for (const o11BuiltFor of ['11.55.95', '11.55.91', null]) {
+    assert.equal(compatibility({ ...hello, pack: { ...hello.pack, o11BuiltFor } }, kernel, ['o11']).o11.code, 'AGENT_PACK_MISMATCH');
+  }
+  assert.equal(compatibility({ ...hello, pack: { ...hello.pack, o11Hook: 'unknown' } }, kernel, ['o11']).o11.code, 'AGENT_PACK_MISMATCH');
+  assert.equal(compatibility(hello, { ...kernel, o11Hook: 'h1' }, ['o11']).o11.code, 'AGENT_PACK_MISMATCH');
+  assert.equal(compatibility(hello, kernel, []).o11.code, 'LANE_DISABLED');
+});
+
+test('three deployed releases route to the matching kernel for both lanes', () => {
+  const window = { odc: ['1.7.28', '1.7.29', '1.7.30'], o11: ['11.55.92', '11.55.93', '11.55.94'] };
+  for (const lane of ['odc', 'o11']) for (const version of window[lane]) {
+    const local = { ...kernel, [lane]: version, builds: {}, servedVersions: window };
+    const hello = { studios: { [lane]: { installed: { version: version + '.1' } } },
+      pack: { lanes: [lane], odcBridge: 'v97', o11BuiltFor: version, o11Hook: 'dev' } };
+    assert.equal(compatibility(hello, local, [lane])[lane].ok, true);
+    const other = window[lane].find(value => value !== version);
+    assert.equal(compatibility(hello, { ...local, [lane]: other }, [lane])[lane].cause, 'STUDIO_VERSION_CHANGED');
+  }
+});
+
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
