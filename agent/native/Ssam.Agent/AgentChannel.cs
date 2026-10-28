@@ -17,6 +17,7 @@ internal sealed class AgentChannel : IDisposable
     private readonly FileKinds files;
     private readonly StudioKinds? studios;
     private readonly JsonObject? pack;
+    private readonly BridgeUpdates bridges;
     private JsonNode? kernel;
     private readonly string startedAt = DateTimeOffset.UtcNow.ToString("O");
     private readonly JsonObject? machine;
@@ -36,12 +37,14 @@ internal sealed class AgentChannel : IDisposable
     private int maxMessageBytes = 1048576;
     private readonly string instance = Guid.NewGuid().ToString();
 
-    public AgentChannel(Uri server, string credential, StateStore state, int bridgePort, string? runtime = null, JsonObject? pack = null)
+    public AgentChannel(Uri server, string credential, StateStore state, int bridgePort, string? runtime = null, JsonObject? pack = null, BridgeUpdates? bridgeUpdates = null)
     {
         this.state = state;
         this.bridgePort = bridgePort;
         this.pack = pack;
-        if (runtime != null && pack != null) { studios = new StudioKinds(state.Root, runtime, pack, () => kernel); machine = NativeHost.Machine(); }
+        bridges = bridgeUpdates ?? new BridgeUpdates(state.Root, runtime ?? AppContext.BaseDirectory);
+        bridges.Changed = () => { lock (gate) activeStream?.Cancel(); };
+        if (runtime != null && pack != null) { studios = new StudioKinds(state.Root, runtime, pack, () => kernel, bridges); machine = NativeHost.Machine(); }
         http = new HttpClient(new SocketsHttpHandler {
             AllowAutoRedirect = false, PooledConnectionIdleTimeout = TimeSpan.FromSeconds(2),
             ConnectTimeout = TimeSpan.FromSeconds(10)
@@ -81,8 +84,16 @@ internal sealed class AgentChannel : IDisposable
             connection = new() { ["pid"] = record["pid"]?.DeepClone(), ["port"] = record["port"]?.DeepClone(), ["startedUtc"] = record["startedUtc"]?.DeepClone(), ["studioVersion"] = record["studioVersion"]?.DeepClone() };
         return new() { ["studios"] = installed.DeepClone(), ["o11Connection"] = connection };
     }
-    private JsonObject Hello() {
+    private async Task<JsonObject> Hello(CancellationToken token) {
         var versions = Versions();
+        var active = new JsonObject();
+        foreach (var lane in new[] { "odc", "o11" })
+        {
+            if (installed?[lane]?["installed"] is not JsonObject studio) continue;
+            var framework = BridgeUpdates.StudioRuntime(StudioKinds.Text(studio["dir"]), lane); studio["runtime"] = framework;
+            var bridge = await bridges.Select(lane, StudioKinds.Text(studio["version"]), framework, token);
+            if (bridge != null) active[lane] = new JsonObject { ["lane"] = lane, ["studioVersion"] = bridge.Manifest["studioVersion"]?.DeepClone(), ["runtime"] = framework, ["protocol"] = bridge.Protocol };
+        }
         return new() {
         ["t"] = "hello", ["protocol"] = "ssam-agent/1", ["instance"] = instance,
         ["agent"] = new JsonObject {
@@ -91,8 +102,8 @@ internal sealed class AgentChannel : IDisposable
             ["startedAt"] = startedAt, ["root"] = state.Root, ["machine"] = machine?.DeepClone(),
             ["kinds"] = new JsonArray((studios == null ? new[] { "qualification.bridge", "file.put", "file.get", "file.list", "file.sync" } : StudioKinds.Names.Concat(FileKinds.Names).Append("net.probe").ToArray()).Select(n => (JsonNode?)JsonValue.Create(n)).ToArray())
         },
-        ["pack"] = pack == null ? new JsonObject { ["id"] = "native-qualification", ["lanes"] = new JsonArray() } : new JsonObject { ["id"] = pack["id"]?.DeepClone(), ["lanes"] = pack["lanes"]?.DeepClone(), ["odcBridge"] = pack["odcBridge"]?.DeepClone(), ["o11BuiltFor"] = pack["o11BuiltFor"]?.DeepClone(), ["o11Hook"] = pack["o11Hook"]?.DeepClone() },
-        ["studios"] = versions["studios"]?.DeepClone(), ["o11Connection"] = versions["o11Connection"]?.DeepClone()
+        ["pack"] = pack == null ? new JsonObject { ["id"] = "native-qualification", ["lanes"] = new JsonArray() } : new JsonObject { ["id"] = pack["id"]?.DeepClone(), ["lanes"] = pack["lanes"]?.DeepClone(), ["odcBridge"] = (active["odc"]?["protocol"] ?? pack["odcBridge"])?.DeepClone(), ["o11BuiltFor"] = (active["o11"]?["studioVersion"] ?? pack["o11BuiltFor"])?.DeepClone(), ["o11Hook"] = (active["o11"]?["protocol"] ?? pack["o11Hook"])?.DeepClone() },
+        ["capabilities"] = new JsonObject { ["bridgeOffer"] = true }, ["bridges"] = active, ["bridgeUpdate"] = bridges.Status?.DeepClone(), ["studios"] = installed?.DeepClone(), ["o11Connection"] = versions["o11Connection"]?.DeepClone()
     }; }
 
     public async Task<int> RunAsync(CancellationToken token)
@@ -111,7 +122,7 @@ internal sealed class AgentChannel : IDisposable
                 try
                 {
                     state.Write("connecting");
-                    using var hello = await Send(HttpMethod.Post, "agent/v1/hello", Hello(), TimeSpan.FromSeconds(15), token);
+                    using var hello = await Send(HttpMethod.Post, "agent/v1/hello", await Hello(token), TimeSpan.FromSeconds(15), token);
                     if (CredentialRefused(hello.StatusCode)) break;
                     if (hello.StatusCode == HttpStatusCode.Conflict) { exitCode = 4; break; }
                     retryAfter = hello.Headers.RetryAfter?.Delta?.TotalMilliseconds ?? 0;
@@ -123,6 +134,7 @@ internal sealed class AgentChannel : IDisposable
                         throw new IOException("Invalid welcome");
                     channel = id;
                     kernel = welcome?["kernel"]?.DeepClone();
+                    if (await bridges.Offers(welcome, installed ?? new(), http, token)) continue;
                     maxMessageBytes = Math.Clamp(welcome?["maxMessageBytes"]?.GetValue<int>() ?? 1048576, 1024, 16 * 1024 * 1024);
                     PartBytes = Math.Clamp(welcome?["partBytes"]?.GetValue<int>() ?? 4194304, 1, 4194304);
                     MaxFileBytes = Math.Clamp(welcome?["maxFileBytes"]?.GetValue<long>() ?? 536870912, 0, 536870912);

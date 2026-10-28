@@ -5,7 +5,7 @@ using System.Text.RegularExpressions;
 
 namespace Ssam.Agent;
 
-internal sealed class StudioKinds(string root, string runtime, JsonObject pack, Func<JsonNode?> kernel)
+internal sealed class StudioKinds(string root, string runtime, JsonObject pack, Func<JsonNode?> kernel, BridgeUpdates? bridges = null)
 {
     public static readonly string[] Names = ["studio.processes", "odc.pipe", "odc.attach", "o11.bridge", "o11.connect", "o11.selected"];
     internal static readonly HashSet<string> OdcCommands = ["status", "wait", "authorize", "open", "snapshot", "latest", "check-base", "preview", "merge", "publish", "publish-status", "publish-log", "dismiss-dialog", "close", "module-info", "assets", "consumers", "create", "create-app", "templates", "template-download", "refresh-references", "reference-snapshot", "reference-producers", "data", "data-insert", "data-update", "data-delete", "portal-call", "portal-session", "auth-status", "stop", "query-test"];
@@ -44,14 +44,14 @@ internal sealed class StudioKinds(string root, string runtime, JsonObject pack, 
         var match = Regex.Match(value ?? "", @"^(\d+)\.(\d+)\.(\d+)");
         return match.Success && Version.TryParse(match.Value, out var v) ? v : null;
     }
-    internal JsonObject CheckPid(string lane, JsonNode? value)
+    internal JsonObject CheckPid(string lane, JsonNode? value, bool exactBuild = true)
     {
         var pid = Integer(value);
         if (pid < 1) throw Invalid("pid must be a positive integer");
         var found = Processes(lane == "odc" ? "ODCStudio.exe" : "ServiceStudio.exe").OfType<JsonObject>().FirstOrDefault(p => Integer(p["pid"]) == pid)
             ?? throw new AgentFault("STUDIO_NOT_SELECTED", "The selected Studio process is not running");
         var actual = Three(Text(found["version"]));
-        CheckExactBuild(pack, lane, Text(found["version"]));
+        if (exactBuild) CheckExactBuild(pack, lane, Text(found["version"]));
         var expected = Three(Text(kernel()?[lane]));
         var window = (kernel()?["servedVersions"]?[lane] as JsonArray)?.Select(n => Three(Text(n))).ToArray() ?? [];
         if (expected == null || actual == null || actual != expected && !(window.Length > 0 && window.All(v => v != null && actual > v)))
@@ -233,7 +233,26 @@ internal sealed class StudioKinds(string root, string runtime, JsonObject pack, 
         if (kind == "studio.processes") return new JsonObject { ["processes"] = Processes(Text(p["image"]) ?? "") };
         var lane = kind.StartsWith("odc.") ? "odc" : "o11";
         Lane(lane);
-        if (kind is "o11.connect" or "o11.selected") return await new O11Connection(root, runtime, pack, this).Execute(kind, p, token);
+        if (kind is "o11.connect" or "o11.selected")
+        {
+            if (kind == "o11.selected" || bridges == null) return await new O11Connection(root, runtime, pack, this).Execute(kind, p, token);
+            var candidates = Processes("ServiceStudio.exe").OfType<JsonObject>().Where(n => p["pid"] == null || Integer(n["pid"]) == Integer(p["pid"])).ToArray();
+            if (candidates.Length != 1) throw new AgentFault("STUDIO_NOT_SELECTED", "Select exactly one running Service Studio with pid");
+            var o11Target = CheckPid("o11", candidates[0]["pid"], false);
+            var selected = await bridges.Select("o11", Text(o11Target["version"]), BridgeUpdates.StudioRuntime(Text(o11Target["path"]), "o11"), token);
+            if (selected == null) return await new O11Connection(root, runtime, pack, this).Execute(kind, p, token);
+            var activePack = (JsonObject)pack.DeepClone(); activePack.Remove("studioBuilds");
+            activePack["o11BuiltFor"] = selected.Manifest["studioVersion"]?.DeepClone();
+            activePack["o11Hook"] = File.Exists(Path.Combine(selected.Root, "hook/Anvil.RuntimeHook.Agent.dll")) ? "dev" : selected.Protocol;
+            activePack["o11Bridge"] = new JsonObject { ["sha256"] = ((JsonArray)selected.Manifest["files"]!).FirstOrDefault(f => Path.GetFileName(Text(f?["path"])) == "Anvil.Bridge.dll")?["sha256"]?.DeepClone() };
+            try { return await new O11Connection(root, selected.Root, activePack, this, runtime, true, selected).Execute(kind, p, token); }
+            catch (Exception error) when (!token.IsCancellationRequested)
+            {
+                bridges.RejectLoad(selected);
+                if (error is AgentFault { Executed: false }) return await Execute(kind, p, token);
+                throw;
+            }
+        }
         if (kind == "o11.bridge")
         {
             var method = Text(p["method"]) ?? "";
@@ -245,16 +264,20 @@ internal sealed class StudioKinds(string root, string runtime, JsonObject pack, 
             var paths = new JsonArray();
             return new JsonObject { ["reply"] = Relativize(reply, paths), ["paths"] = paths };
         }
-        var version = Text(pack["odcBridge"]) ?? "";
+        var target = CheckPid("odc", p["pid"], false);
+        var selectedBridge = bridges == null ? null : await bridges.Select("odc", Text(target["version"]), BridgeUpdates.StudioRuntime(Text(target["path"]), "odc"), token);
+        if (selectedBridge == null) CheckExactBuild(pack, "odc", Text(target["version"]));
+        var version = selectedBridge?.Protocol ?? Text(pack["odcBridge"]) ?? "";
         if (!Regex.IsMatch(version, @"^v\d+$") || Integer(JsonValue.Create(int.TryParse(version[1..], out var n) ? n : 0)) < 98) throw new AgentFault("BRIDGE_VERSION_MISMATCH", "ODC bridge v98 or newer is required");
         if (kind == "odc.pipe" && Text(p["version"]) != version) throw new AgentFault("BRIDGE_VERSION_MISMATCH", "The requested bridge version differs from the installed pack");
         var words = kind == "odc.pipe" ? MapOdc(p) : [];
-        var target = CheckPid("odc", p["pid"]);
         var pid = Integer(target["pid"]);
         if (kind == "odc.attach")
         {
             var client = Path.Combine(runtime, "odc/studio/bridge/client/bin/Release/net10.0/ODC3.Bridge.Client.dll");
-            var bridge = Path.Combine(runtime, $"odc/studio/bridge/bin/Release/net8.0/ODC3.Bridge.{version}.dll");
+            var bridge = selectedBridge?.FileNamed($"ODC3.Bridge.{version}.dll", "ODC3.Bridge.dll") ?? Path.Combine(runtime, $"odc/studio/bridge/bin/Release/net8.0/ODC3.Bridge.{version}.dll");
+            try
+            {
             if (!File.Exists(bridge)) throw new AgentFault("ATTACH_FAILED", "The installed bridge is missing");
             JsonObject result;
             if (OperatingSystem.IsMacOS())
@@ -264,8 +287,16 @@ internal sealed class StudioKinds(string root, string runtime, JsonObject pack, 
                 result = new() { ["ok"] = true, ["attached"] = true };
             }
             else result = await Helper(client, [pid.ToString(), "attach", bridge], 90000, true, token);
+            if (selectedBridge != null && (result["ok"]?.GetValue<bool>() != true || result["attached"]?.GetValue<bool>() != true)) throw new AgentFault("ATTACH_FAILED", "Bridge load was not confirmed", null);
             if (result["ok"]?.GetValue<bool>() == true && result["attached"]?.GetValue<bool>() == true) await Bind(pid, version, token, null);
             return new JsonObject { ["ok"] = result["ok"]?.DeepClone(), ["attached"] = result["attached"]?.DeepClone(), ["pid"] = pid, ["version"] = version, ["note"] = (result["note"] ?? result["error"])?.DeepClone() };
+            }
+            catch (Exception error) when (selectedBridge != null && !token.IsCancellationRequested)
+            {
+                bridges!.RejectLoad(selectedBridge);
+                if (error is AgentFault { Executed: false }) return await Execute(kind, p, token);
+                throw;
+            }
         }
         await Bind(pid, version, token);
         var line = await StudioWire.Pipe(pid, version, words, Math.Clamp(Integer(p["connectMs"], 10000), 1, 120000), token);

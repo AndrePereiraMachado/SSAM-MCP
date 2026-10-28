@@ -5,7 +5,7 @@ using static Ssam.Agent.StudioKinds;
 
 namespace Ssam.Agent;
 
-internal sealed class O11Connection(string root, string runtime, JsonObject pack, StudioKinds studios)
+internal sealed class O11Connection(string root, string runtime, JsonObject pack, StudioKinds studios, string? helperRuntime = null, bool downloaded = false, InstalledBridge? installedBridge = null)
 {
     internal static JsonObject? Read(string file) { try { return JsonNode.Parse(File.ReadAllText(file).TrimStart('\uFEFF')) as JsonObject; } catch (Exception e) when (e is IOException or System.Text.Json.JsonException or UnauthorizedAccessException) { return null; } }
     internal static JsonObject? Record(string root)
@@ -18,7 +18,7 @@ internal sealed class O11Connection(string root, string runtime, JsonObject pack
     private async Task<JsonObject> Describe(int pid, CancellationToken token)
     {
         if (OperatingSystem.IsMacOS()) return await MacPlatform.Describe("o11", pid, token);
-        var reply = await Helper(Path.Combine(runtime, "bin/o11/connect/Anvil.Connect.dll"), ["describe", pid.ToString()], 30000, false, token);
+        var reply = await Helper(Path.Combine(helperRuntime ?? runtime, "bin/o11/connect/Anvil.Connect.dll"), ["describe", pid.ToString()], 30000, false, token);
         if (reply["ok"]?.GetValue<bool>() != true) throw Fail("The connector could not describe the selected Studio");
         return reply;
     }
@@ -91,8 +91,8 @@ internal sealed class O11Connection(string root, string runtime, JsonObject pack
         }
         var candidates = Processes("ServiceStudio.exe").OfType<JsonObject>().Where(n => p["pid"] == null || Integer(n["pid"]) == Integer(p["pid"])).ToArray();
         if (candidates.Length != 1) throw new AgentFault("STUDIO_NOT_SELECTED", "Select exactly one running Service Studio with pid");
-        var selected = studios.CheckPid("o11", candidates[0]["pid"]);
-        var warning = studios.CheckO11Build(Text(selected["version"]));
+        var selected = studios.CheckPid("o11", candidates[0]["pid"], !downloaded);
+        var warning = downloaded ? null : studios.CheckO11Build(Text(selected["version"]));
         var pid = Integer(selected["pid"]);
         var config = Read(Path.Combine(root, "private/agent-config.json")) ?? Read(Path.Combine(root, "private/config.json"));
         var port = Integer(config?["o11Port"], 4516);
@@ -135,8 +135,9 @@ internal sealed class O11Connection(string root, string runtime, JsonObject pack
                     var evidence = Path.Combine(folder, id);
                     Directory.CreateDirectory(evidence);
                     hook = Path.Combine(evidence, "Anvil.RuntimeHook.Agent.dll");
-                    File.Copy(Path.Combine(runtime, "bin/o11/hook/Anvil.RuntimeHook.Agent.dll"), hook);
-                    Atomic(hook + ".json", new JsonObject { ["pid"] = pid, ["startedUtc"] = started, ["port"] = port, ["bridgePath"] = Path.Combine(runtime, "bin/o11/bridge/Anvil.Bridge.dll"), ["authorityDir"] = Path.Combine(root, "private/authority") });
+                    File.Copy(installedBridge?.FileNamed("Anvil.RuntimeHook.Agent.dll") ?? Path.Combine(runtime, "bin/o11/hook/Anvil.RuntimeHook.Agent.dll"), hook);
+                    if (installedBridge != null && Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(hook))) != Text(((JsonArray)installedBridge.Manifest["files"]!).First(f => Text(f?["path"]) == "hook/Anvil.RuntimeHook.Agent.dll")?["sha256"])) throw Fail("The verified hook changed before attach");
+                    Atomic(hook + ".json", new JsonObject { ["pid"] = pid, ["startedUtc"] = started, ["port"] = port, ["bridgePath"] = installedBridge?.FileNamed("Anvil.Bridge.dll") ?? Path.Combine(runtime, "bin/o11/bridge/Anvil.Bridge.dll"), ["authorityDir"] = Path.Combine(root, "private/authority") });
                     receipt = hook + ".receipt.json";
                 }
                 var current = await Describe(pid, token);
@@ -147,7 +148,7 @@ internal sealed class O11Connection(string root, string runtime, JsonObject pack
                 try
                 {
                     if (OperatingSystem.IsMacOS()) await MacPlatform.Attach("o11", pid, started, hook, token);
-                    else await Helper(Path.Combine(runtime, "bin/o11/connect/Anvil.Connect.dll"), ["attach", pid.ToString(), started, hook], 30000, true, token);
+                    else await Helper(Path.Combine(helperRuntime ?? runtime, "bin/o11/connect/Anvil.Connect.dll"), ["attach", pid.ToString(), started, hook], 30000, true, token);
                 }
                 catch (AgentFault) { }
                 var end = DateTime.UtcNow.AddSeconds(30);
