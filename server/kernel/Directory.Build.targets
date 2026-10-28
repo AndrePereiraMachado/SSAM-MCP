@@ -75,8 +75,28 @@
     </Task>
   </UsingTask>
 
+  <!--
+    The runtime of the Studio folder (its runtimeconfig.json, kernel/StudioRuntime.props) bounds both rules here:
+    - the framework copies above are out-of-band packages of the Studio's own runtime; a project of the build that targets
+      a LOWER runtime than the Studio (a plain library such as Anvil.CSharp, net8.0, in a build against a net10 Studio)
+      takes none of them: a self-contained net10 Studio carries the whole net10 runtime, which is not a package for net8;
+    - AnvilStudioRuntimeFloor: a project that references the Studio's assemblies never targets a runtime below the
+      Studio's; its build stops with this message instead of thousands of CS0518/CS1069.
+    A Studio folder without runtimeconfig.json (a studio bundle frozen before 2026-10-27) keeps the rules as they were.
+  -->
+  <PropertyGroup>
+    <_AnvilProjectTfmVersion Condition="'$(TargetFrameworkIdentifier)' == '.NETCoreApp' and '$(TargetFrameworkVersion)' != ''">$(TargetFrameworkVersion.TrimStart('v'))</_AnvilProjectTfmVersion>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(AnvilStudioDir)' != ''">
+    <_AnvilStudioDirRuntimeConfig Condition="Exists('$(AnvilStudioDir)\ServiceStudio.runtimeconfig.json')">$([System.IO.Path]::Combine('$(AnvilStudioDir)', 'ServiceStudio.runtimeconfig.json'))</_AnvilStudioDirRuntimeConfig>
+    <_AnvilStudioDirRuntimeConfig Condition="Exists('$(AnvilStudioDir)\ODCStudio.runtimeconfig.json')">$([System.IO.Path]::Combine('$(AnvilStudioDir)', 'ODCStudio.runtimeconfig.json'))</_AnvilStudioDirRuntimeConfig>
+    <_AnvilStudioDirTfm Condition="'$(_AnvilStudioDirRuntimeConfig)' != ''">$([System.Text.RegularExpressions.Regex]::Match($([System.IO.File]::ReadAllText('$(_AnvilStudioDirRuntimeConfig)')), '(?&lt;="tfm"\s*:\s*")net\d+\.\d+(?=")').Value)</_AnvilStudioDirTfm>
+    <_AnvilStudioDirTfmVersion Condition="'$(_AnvilStudioDirTfm)' != ''">$(_AnvilStudioDirTfm.Substring(3))</_AnvilStudioDirTfmVersion>
+    <_AnvilBelowStudioRuntime Condition="'$(_AnvilStudioDirTfmVersion)' != '' and '$(_AnvilProjectTfmVersion)' != ''">$([MSBuild]::VersionLessThan('$(_AnvilProjectTfmVersion)', '$(_AnvilStudioDirTfmVersion)'))</_AnvilBelowStudioRuntime>
+  </PropertyGroup>
+
   <Target Name="AnvilStudioFramework" AfterTargets="ResolveTargetingPackAssets"
-          Condition="'$(AnvilStudioFramework)' != 'false' and '$(AnvilStudioDir)' != '' and Exists('$(AnvilStudioDir)')">
+          Condition="'$(AnvilStudioFramework)' != 'false' and '$(AnvilStudioDir)' != '' and Exists('$(AnvilStudioDir)') and '$(_AnvilBelowStudioRuntime)' != 'true'">
     <AnvilStudioFrameworkOverrides References="@(Reference)" StudioDir="$(AnvilStudioDir)">
       <Output TaskParameter="Replaced" ItemName="_AnvilFrameworkReplaced" />
       <Output TaskParameter="Replacements" ItemName="_AnvilFrameworkReplacements" />
@@ -85,5 +105,24 @@
       <Reference Remove="@(_AnvilFrameworkReplaced)" />
       <Reference Include="@(_AnvilFrameworkReplacements)" />
     </ItemGroup>
+  </Target>
+
+  <!-- The floor, per lane: the Studio folders and runtimeconfig.json files StudioRuntime.props resolved (the same folders
+       the HintPaths use), so it holds for every project that references a Studio's assemblies, also the kernel ODC ones. -->
+  <PropertyGroup>
+    <_AnvilO11FloorVersion Condition="'$(_AnvilO11StudioFileTfm)' != ''">$(_AnvilO11StudioFileTfm.Substring(3))</_AnvilO11FloorVersion>
+    <_AnvilOdcFloorVersion Condition="'$(_AnvilOdcStudioFileTfm)' != ''">$(_AnvilOdcStudioFileTfm.Substring(3))</_AnvilOdcFloorVersion>
+    <_AnvilBelowO11Runtime Condition="'$(_AnvilO11FloorVersion)' != '' and '$(_AnvilProjectTfmVersion)' != ''">$([MSBuild]::VersionLessThan('$(_AnvilProjectTfmVersion)', '$(_AnvilO11FloorVersion)'))</_AnvilBelowO11Runtime>
+    <_AnvilBelowOdcRuntime Condition="'$(_AnvilOdcFloorVersion)' != '' and '$(_AnvilProjectTfmVersion)' != ''">$([MSBuild]::VersionLessThan('$(_AnvilProjectTfmVersion)', '$(_AnvilOdcFloorVersion)'))</_AnvilBelowOdcRuntime>
+  </PropertyGroup>
+  <Target Name="AnvilStudioRuntimeFloor" BeforeTargets="ResolveAssemblyReferences" Condition="'$(_AnvilBelowO11Runtime)' == 'true' or '$(_AnvilBelowOdcRuntime)' == 'true'">
+    <ItemGroup>
+      <_AnvilO11StudioReference Include="@(Reference)" Condition="'$(_AnvilBelowO11Runtime)' == 'true' and $([System.String]::Copy('%(Reference.HintPath)|%(Reference.Identity)').Contains('$(_AnvilO11StudioDir)'))" />
+      <_AnvilOdcStudioReference Include="@(Reference)" Condition="'$(_AnvilBelowOdcRuntime)' == 'true' and $([System.String]::Copy('%(Reference.HintPath)|%(Reference.Identity)').Contains('$(_AnvilOdcStudioDir)'))" />
+    </ItemGroup>
+    <Error Condition="'@(_AnvilO11StudioReference)' != ''"
+           Text="anvil: $(MSBuildProjectName) targets $(TargetFramework) and compiles against a Service Studio that runs on $(_AnvilO11StudioFileTfm) ($(AnvilO11StudioRuntimeConfig)). Its TargetFramework is %24(AnvilO11TargetFramework) (kernel/StudioRuntime.props); a pin below the Studio's own runtime is refused." />
+    <Error Condition="'@(_AnvilOdcStudioReference)' != ''"
+           Text="anvil: $(MSBuildProjectName) targets $(TargetFramework) and compiles against an ODC Studio that runs on $(_AnvilOdcStudioFileTfm) ($(AnvilOdcStudioRuntimeConfig)). Its TargetFramework is %24(AnvilOdcTargetFramework) (kernel/StudioRuntime.props); a pin below the Studio's own runtime is refused." />
   </Target>
 </Project>

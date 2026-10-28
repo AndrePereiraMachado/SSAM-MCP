@@ -6,7 +6,8 @@
     do usuario (StudioAssemblies.Bind). Nenhum binario da OutSystems entra no pacote.
   -->
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
+    <!-- The runtime of the Studio it compiles against (kernel/StudioRuntime.props). -->
+    <TargetFramework>$(AnvilO11TargetFramework)</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <RollForward>Major</RollForward>

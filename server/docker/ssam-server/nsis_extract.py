@@ -8,7 +8,7 @@ list     prints every file the installer would write ($INSTDIR\\..., $PLUGINSDIR
 extract  writes the files of the Studio folder: the $INSTDIR subfolder that holds --marker (ServiceStudio.Framework.dll
          for Service Studio 11, OutSystems.ModelAPILoader.dll for ODC Studio). With --only, just the paths of that list
          (relative to the Studio folder, one per line, # comments); a listed path the installer does not carry stops
-         the extraction (exit 2) and names it.
+         the extraction (exit 2) and names it, except an optional one ("?path"), which comes out only when present.
 
 How it reads: the NSIS first header (0xDEADBEEF "NullsoftInst") is followed by one LZMA stream (5 property bytes, no end
 marker). Decompressed, it is the install header (its size first) and then the data blocks (4-byte size + bytes). The
@@ -213,11 +213,15 @@ def main():
     only = None
     if option("--only"):
         with open(option("--only"), encoding="utf-8") as fp:
-            only = [line.strip() for line in fp if line.strip() and not line.lstrip().startswith("#")]
-        missing = [p for p in only if p.lower() not in inside]
+            lines = [line.strip() for line in fp if line.strip() and not line.lstrip().startswith("#")]
+        # "?path" is an optional entry: a file that newer Studios carry and older ones do not (studio-<lane>.txt)
+        required = [p for p in lines if not p.startswith("?")]
+        optional = [p[1:].strip() for p in lines if p.startswith("?")]
+        missing = [p for p in required if p.lower() not in inside]
         if missing:
             print("the installer does not carry %d listed file(s): %s" % (len(missing), ", ".join(missing)), file=sys.stderr)
             sys.exit(2)
+        only = required + [p for p in optional if p.lower() in inside]
     chosen = only if only is not None else [inside[k]["path"][len(root):].replace("\\", "/") for k in sorted(inside)]
     by_offset = {}
     for rel in chosen:

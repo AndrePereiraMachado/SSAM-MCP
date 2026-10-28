@@ -1,0 +1,74 @@
+<Project InitialTargets="AnvilStudioRuntimeCheck">
+  <!--
+    The TargetFramework of a project compiled against a Studio follows that Studio's runtime: one rule, read from the
+    Studio folder the build uses, never from a list of versions.
+
+    A Studio is a self-contained .NET application. Its <app>.runtimeconfig.json names the runtime it runs on
+    (runtimeOptions.tfm: net8.0 up to ODC Studio 1.7.29 and Service Studio 11.55.93, net10.0 from ODC Studio 1.7.30 and
+    Service Studio 11.55.94) and its assemblies reference that runtime's framework (System.Private.CoreLib 10.0.0.0 on
+    net10). A net8.0 project compiled against a net10 Studio fails with thousands of CS0518/CS1069; the same source compiled
+    for the Studio's own framework builds and behaves the same. A net8 Studio keeps net8.0, so its artifacts do not change.
+
+    Read here (imported by kernel/Directory.Build.props and platforms/odc/studio/Directory.Build.props), nothing to pass:
+      O11  <folder>\ServiceStudio.runtimeconfig.json  ->  $(AnvilO11StudioTfm)  ->  $(AnvilO11TargetFramework)
+      ODC  <folder>\ODCStudio.runtimeconfig.json      ->  $(AnvilOdcStudioTfm)  ->  $(AnvilOdcTargetFramework)
+    <folder> is the Studio folder the projects compile against: -p:SSDir / -p:OdcInstall (or an environment variable of
+    that name) when given; else the projects' default (O11 %USERPROFILE%\OutSystems\Service Studio 11 - Anvil 4516\Service
+    Studio, ODC %ProgramFiles%\OutSystems\ODC Studio\ODC Studio); when that is not a Studio folder, the Studio registered in
+    Windows, then the default install folder: the order of Directory.Build.targets. $(AnvilO11StudioRuntimeConfig) and
+    $(AnvilOdcStudioRuntimeConfig) are the files read.
+
+    A project opts in with <TargetFramework>$(AnvilO11TargetFramework)</TargetFramework> or
+    <TargetFramework>$(AnvilOdcTargetFramework)</TargetFramework>. A project that keeps its own TargetFramework and compiles
+    against a Studio (the ODC builder, net10.0) must never be below the Studio's runtime: kernel/Directory.Build.targets
+    (AnvilStudioRuntimeFloor) stops its build otherwise.
+
+    No runtimeconfig.json (or no runtimeOptions.tfm in it): the build of an opted-in project stops naming the file
+    (AnvilStudioRuntimeCheck); it never guesses. Pin the runtime only for a Studio folder without the file (a studio bundle
+    frozen before 2026-10-27, whose Studio no longer exists) or for a test: -p:AnvilO11StudioTfm=net8.0,
+    -p:AnvilOdcStudioTfm=net8.0. A pin wins over the file; a pin below the file's runtime fails in AnvilStudioRuntimeFloor.
+  -->
+  <PropertyGroup>
+    <_AnvilO11StudioDir>$(SSDir)</_AnvilO11StudioDir>
+    <_AnvilO11StudioDir Condition="'$(_AnvilO11StudioDir)' == ''">$(USERPROFILE)\OutSystems\Service Studio 11 - Anvil 4516\Service Studio</_AnvilO11StudioDir>
+    <_AnvilOdcStudioDir>$(OdcInstall)</_AnvilOdcStudioDir>
+    <_AnvilOdcStudioDir Condition="'$(_AnvilOdcStudioDir)' == ''">$(ProgramFiles)\OutSystems\ODC Studio\ODC Studio</_AnvilOdcStudioDir>
+  </PropertyGroup>
+  <PropertyGroup Condition="!Exists('$(_AnvilO11StudioDir)\ServiceStudio.Framework.dll')">
+    <_AnvilRegisteredO11>$([MSBuild]::GetRegistryValueFromView('HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\OutSystems Service Studio 11', 'InstallLocation', null, RegistryView.Registry64, RegistryView.Registry32))</_AnvilRegisteredO11>
+    <_AnvilRegisteredO11 Condition="'$(_AnvilRegisteredO11)' == ''">$([MSBuild]::GetRegistryValueFromView('HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\OutSystems Service Studio 11', 'InstallLocation', null, RegistryView.Registry64, RegistryView.Registry32))</_AnvilRegisteredO11>
+    <_AnvilO11StudioDir Condition="'$(_AnvilRegisteredO11)' != '' and Exists('$(_AnvilRegisteredO11)\Service Studio\ServiceStudio.Framework.dll')">$([System.IO.Path]::Combine('$(_AnvilRegisteredO11)', 'Service Studio'))</_AnvilO11StudioDir>
+    <_AnvilO11StudioDir Condition="!Exists('$(_AnvilO11StudioDir)\ServiceStudio.Framework.dll') and Exists('$(ProgramFiles)\OutSystems\Service Studio 11\Service Studio\ServiceStudio.Framework.dll')">$(ProgramFiles)\OutSystems\Service Studio 11\Service Studio</_AnvilO11StudioDir>
+  </PropertyGroup>
+  <PropertyGroup Condition="!Exists('$(_AnvilOdcStudioDir)\OutSystems.Model.dll')">
+    <_AnvilRegisteredOdc>$([MSBuild]::GetRegistryValueFromView('HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\OutSystems ODC Studio', 'InstallLocation', null, RegistryView.Registry64, RegistryView.Registry32))</_AnvilRegisteredOdc>
+    <_AnvilRegisteredOdc Condition="'$(_AnvilRegisteredOdc)' == ''">$([MSBuild]::GetRegistryValueFromView('HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\OutSystems ODC Studio', 'InstallLocation', null, RegistryView.Registry64, RegistryView.Registry32))</_AnvilRegisteredOdc>
+    <_AnvilOdcStudioDir Condition="'$(_AnvilRegisteredOdc)' != '' and Exists('$(_AnvilRegisteredOdc)\ODC Studio\OutSystems.Model.dll')">$([System.IO.Path]::Combine('$(_AnvilRegisteredOdc)', 'ODC Studio'))</_AnvilOdcStudioDir>
+  </PropertyGroup>
+  <PropertyGroup>
+    <AnvilO11StudioRuntimeConfig>$([System.IO.Path]::Combine('$(_AnvilO11StudioDir)', 'ServiceStudio.runtimeconfig.json'))</AnvilO11StudioRuntimeConfig>
+    <AnvilOdcStudioRuntimeConfig>$([System.IO.Path]::Combine('$(_AnvilOdcStudioDir)', 'ODCStudio.runtimeconfig.json'))</AnvilOdcStudioRuntimeConfig>
+    <_AnvilO11StudioFileTfm Condition="Exists('$(AnvilO11StudioRuntimeConfig)')">$([System.Text.RegularExpressions.Regex]::Match($([System.IO.File]::ReadAllText('$(AnvilO11StudioRuntimeConfig)')), '(?&lt;="tfm"\s*:\s*")net\d+\.\d+(?=")').Value)</_AnvilO11StudioFileTfm>
+    <_AnvilOdcStudioFileTfm Condition="Exists('$(AnvilOdcStudioRuntimeConfig)')">$([System.Text.RegularExpressions.Regex]::Match($([System.IO.File]::ReadAllText('$(AnvilOdcStudioRuntimeConfig)')), '(?&lt;="tfm"\s*:\s*")net\d+\.\d+(?=")').Value)</_AnvilOdcStudioFileTfm>
+    <AnvilO11StudioTfm Condition="'$(AnvilO11StudioTfm)' == ''">$(_AnvilO11StudioFileTfm)</AnvilO11StudioTfm>
+    <AnvilOdcStudioTfm Condition="'$(AnvilOdcStudioTfm)' == ''">$(_AnvilOdcStudioFileTfm)</AnvilOdcStudioTfm>
+    <AnvilO11TargetFramework>$(AnvilO11StudioTfm)</AnvilO11TargetFramework>
+    <AnvilOdcTargetFramework>$(AnvilOdcStudioTfm)</AnvilOdcTargetFramework>
+  </PropertyGroup>
+
+  <!-- An opted-in project whose Studio runtime is unknown has no TargetFramework: stop here, naming the file. -->
+  <Target Name="AnvilStudioRuntimeCheck" Condition="'$(TargetFramework)' == '' and '$(TargetFrameworks)' == ''">
+    <PropertyGroup>
+      <_AnvilO11Why Condition="Exists('$(AnvilO11StudioRuntimeConfig)')">has no runtimeOptions.tfm</_AnvilO11Why>
+      <_AnvilO11Why Condition="!Exists('$(AnvilO11StudioRuntimeConfig)')">does not exist</_AnvilO11Why>
+      <_AnvilOdcWhy Condition="Exists('$(AnvilOdcStudioRuntimeConfig)')">has no runtimeOptions.tfm</_AnvilOdcWhy>
+      <_AnvilOdcWhy Condition="!Exists('$(AnvilOdcStudioRuntimeConfig)')">does not exist</_AnvilOdcWhy>
+    </PropertyGroup>
+    <Error Condition="'$(AnvilO11StudioTfm)' == '' and '$(AnvilOdcStudioTfm)' != ''"
+           Text="anvil: $(MSBuildProjectName) targets the runtime of the Service Studio it compiles against, and $(AnvilO11StudioRuntimeConfig) $(_AnvilO11Why). Build against a Service Studio folder that has it (-p:SSDir=&lt;folder&gt;), or pin the runtime of a folder without it (a studio bundle frozen before 2026-10-27): -p:AnvilO11StudioTfm=net8.0 (kernel/StudioRuntime.props)." />
+    <Error Condition="'$(AnvilOdcStudioTfm)' == '' and '$(AnvilO11StudioTfm)' != ''"
+           Text="anvil: $(MSBuildProjectName) targets the runtime of the ODC Studio it compiles against, and $(AnvilOdcStudioRuntimeConfig) $(_AnvilOdcWhy). Build against an ODC Studio folder that has it (-p:OdcInstall=&lt;folder&gt;), or pin the runtime of a folder without it (a studio bundle frozen before 2026-10-27): -p:AnvilOdcStudioTfm=net8.0 (kernel/StudioRuntime.props)." />
+    <Error Condition="'$(AnvilO11StudioTfm)' == '' and '$(AnvilOdcStudioTfm)' == ''"
+           Text="anvil: $(MSBuildProjectName) targets the runtime of the Studio it compiles against, and neither $(AnvilO11StudioRuntimeConfig) nor $(AnvilOdcStudioRuntimeConfig) names one. Build against a Studio folder that has it (-p:SSDir=&lt;folder&gt; or -p:OdcInstall=&lt;folder&gt;), or pin the runtime of a folder without it: -p:AnvilO11StudioTfm=net8.0 / -p:AnvilOdcStudioTfm=net8.0 (kernel/StudioRuntime.props)." />
+  </Target>
+</Project>

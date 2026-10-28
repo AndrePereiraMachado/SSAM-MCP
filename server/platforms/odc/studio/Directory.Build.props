@@ -1,0 +1,7 @@
+<Project>
+  <!--
+    The ODC Studio projects take the rule of kernel/StudioRuntime.props: a project compiled against the ODC Studio targets
+    that Studio's runtime ($(AnvilOdcTargetFramework), read from ODCStudio.runtimeconfig.json of $(OdcInstall)).
+  -->
+  <Import Project="$(MSBuildThisFileDirectory)..\..\..\kernel\StudioRuntime.props" />
+</Project>

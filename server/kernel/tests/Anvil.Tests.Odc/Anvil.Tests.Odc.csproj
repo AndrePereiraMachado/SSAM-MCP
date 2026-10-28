@@ -6,7 +6,8 @@
     are skipped, like JobTests without the Service Studio.
   -->
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
+    <!-- The runtime of the Studio it compiles against (kernel/StudioRuntime.props). -->
+    <TargetFramework>$(AnvilOdcTargetFramework)</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <IsPackable>false</IsPackable>
@@ -47,6 +48,8 @@
     <Compile Include="../../../platforms/odc/studio/bridge/BridgeDataIndexes.cs" Link="BridgeDataIndexes.cs" />
     <Compile Include="../Shared/PatchCertaintyTableTests.cs" Link="PatchCertaintyTableTests.cs" />
     <Compile Include="../Shared/T16CreateCollisionSweepTests.cs" Link="T16CreateCollisionSweepTests.cs" />
+    <Compile Include="../Anvil.Tests/JobRunnerCompatibilityTests.cs" Link="JobRunnerCompatibilityTests.cs" />
+    <Compile Include="../Anvil.Tests/ReferenceMissingFileTests.cs" Link="ReferenceMissingFileTests.cs" />
     <Compile Include="../Shared/PatchCertaintyCorpusTests.cs" Link="PatchCertaintyCorpusTests.cs" />
     <Compile Include="../Shared/PatchCertaintyLiteralRevisionTests.cs" Link="PatchCertaintyLiteralRevisionTests.cs" />
     <Compile Include="../Shared/PatchCertaintyDeclaredNameTests.cs" Link="PatchCertaintyDeclaredNameTests.cs" />

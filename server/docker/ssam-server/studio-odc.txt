@@ -207,3 +207,17 @@ System.ServiceModel.dll
 System.ServiceModel.Primitives.dll
 System.ServiceModel.Security.dll
 System.Windows.Extensions.dll
+# Optional entries ("?path"): files that newer Studios carry and older ones do not. An installer or studio bundle without
+# them stays valid (nothing changes for it); when the input has them they come out and are checked like any other file.
+# Added 2026-10-27 for the .NET 10 Studios (ODC Studio 1.7.30.10980, Service Studio 11.55.94.65328):
+# - the Studio's runtimeconfig.json: its runtimeOptions.tfm picks the TargetFramework of every project compiled against
+#   the Studio (kernel/StudioRuntime.props); without it such a build stops unless the runtime is pinned by property;
+# - the new closure of Microsoft.Diagnostics.Runtime (Azure.Core and what it references) and of
+#   Microsoft.Extensions.Hosting.Abstractions (Microsoft.Extensions.Diagnostics.Abstractions), same rule as above.
+?ODCStudio.runtimeconfig.json
+?Azure.Core.dll
+?Microsoft.Extensions.Diagnostics.Abstractions.dll
+?Microsoft.Identity.Client.dll
+?Microsoft.Identity.Client.Extensions.Msal.dll
+?System.ClientModel.dll
+?System.Memory.Data.dll

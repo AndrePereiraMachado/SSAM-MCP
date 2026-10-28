@@ -1,10 +1,15 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
+    <!-- The runtime of the Studio it compiles against (kernel/StudioRuntime.props): v100 runs inside the net10 ODC Studios
+         (1.7.30 on) only, see OdcBridgeRuntime below. -->
+    <TargetFramework>$(AnvilOdcTargetFramework)</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <!-- One assembly name per bridge version. A loaded DLL is never replaced: a new version is a new name and a new pipe. -->
-    <AssemblyName>ODC3.Bridge.v97</AssemblyName>
+    <!-- One assembly name per bridge version. A loaded DLL is never replaced: a new version is a new name and a new pipe.
+         v100 (D3: the server line's numbers v100-v199) is the v97 code built for the net10 ODC Studios; the net8 ODC Studios
+         (up to 1.7.29) keep the v97 binary of the agent pack (sources 3c2c73e), which the client still attaches. -->
+    <AssemblyName>ODC3.Bridge.v100</AssemblyName>
+    <OdcBridgeRuntime>net10.0</OdcBridgeRuntime>
     <!-- IncrementalClean must never treat a prior resident version as an orphan. -->
     <CleanFile>$(MSBuildProjectFile).$(AssemblyName).FileListAbsolute.txt</CleanFile>
     <DefineConstants>$(DefineConstants);QUERY_TEST_ODC</DefineConstants>
@@ -73,4 +78,8 @@
          (kernel/src/Anvil.Core/Kernel/SecurityWarnings.cs), never the kernel file. -->
     <Compile Include="SecurityWarningsCopy.cs" />
   </ItemGroup>
+  <!-- The bridge loads into the Studio's own runtime: a bridge version is built for one Studio runtime only. -->
+  <Target Name="OdcBridgeRuntime" BeforeTargets="CoreCompile" Condition="'$(TargetFramework)' != '$(OdcBridgeRuntime)'">
+    <Error Text="ODC bridge: $(AssemblyName) is built for the $(OdcBridgeRuntime) ODC Studios, and $(AnvilOdcStudioRuntimeConfig) says $(AnvilOdcStudioTfm). The net8.0 ODC Studios (up to 1.7.29) keep the ODC3.Bridge.v97 binary of the agent pack; a bridge for another runtime is a new version (Bridge.csproj, StartupHook.cs, client/Program.cs)." />
+  </Target>
 </Project>

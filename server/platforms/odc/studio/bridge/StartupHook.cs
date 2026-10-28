@@ -32,13 +32,13 @@ public static class StartupHook { public static void Initialize() => Bridge.Star
 // model directly: every mutation goes through the native CompareAndMerge with a hash-checked base
 // and an immutable candidate, and every command appends one line to the operations journal.
 internal static partial class Bridge {
-    public const string Version = "v97";
+    public const string Version = "v100";
     // A command that outlives its timeout is reported as uncertain and keeps running; the loop stays
     // available for status, and every other command is refused until the late command completes.
     private static volatile string? busyCommand;
     private static DateTimeOffset busySince;
     // The SSAM Hybrid-ODC repository root: SSAM_HYBRID_ODC_ROOT or ODC3_ROOT when set, otherwise found from this
-    // assembly's location (studio\bridge\bin\Release\net8.0). A checkout is recognized by its studio folder and README.
+    // assembly's location (studio\bridge\bin\Release\<runtime>). A checkout is recognized by its studio folder and README.
     private static readonly string Root = ResolveRoot();
     private static string ResolveRoot() {
         foreach (var name in new[] { "SSAM_HYBRID_ODC_ROOT", "ODC3_ROOT" }) { var v = Environment.GetEnvironmentVariable(name); if (!string.IsNullOrWhiteSpace(v) && Directory.Exists(v)) return v; }

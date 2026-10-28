@@ -48,7 +48,10 @@ foreach ($l in $lanes) {
     $installer = Join-Path $Installers $l.Installer
     if (-not (Test-Path -LiteralPath $installer)) { Write-Host "  MISSING installer $installer"; $failed = $true; continue }
     $list = Join-Path $here "studio-$lane.txt"
-    $needed = Get-Content -LiteralPath $list | Where-Object { $_.Trim() -and -not $_.TrimStart().StartsWith('#') } | ForEach-Object { $_.Trim() }
+    $listed = Get-Content -LiteralPath $list | Where-Object { $_.Trim() -and -not $_.TrimStart().StartsWith('#') } | ForEach-Object { $_.Trim() }
+    # "?path" is optional (newer Studios carry it, older ones do not): compared only when this installer carries it
+    $needed = @($listed | Where-Object { -not $_.StartsWith('?') })
+    $optional = @($listed | Where-Object { $_.StartsWith('?') } | ForEach-Object { $_.Substring(1).Trim() })
     Write-Host ("  installer sha256 {0}" -f (Hash $installer))
 
     # 1-2. 7-Zip
@@ -68,6 +71,7 @@ foreach ($l in $lanes) {
     Write-Host ("  needed: {0} listed, {1} missing in the 7z output, {2:N0} bytes" -f $needed.Count, $missing.Count, $bytes)
     foreach ($m in $missing) { Write-Host "    missing $m" }
     if ($missing.Count) { $failed = $true }
+    $needed += @($optional | Where-Object { Test-Path -LiteralPath (Join-Path $root7 ($_ -replace '/', '\')) })
 
     # 4. nsis_extract.py (the default reader of the image build)
     $xn = Join-Path $Out "$lane-nsis"
