@@ -46,7 +46,7 @@ test('-Approve with a simulated publication pins the digest on the proposal bran
  // A proposal exactly as a round leaves it, through the pipeline with fake heavy operations and the real propose.
  const manifest=runtime.manifest(),features=path.join(r.root,'Features.plain.xml');fs.writeFileSync(features,'<Features/>');
  const side=(lane,v)=>({lane,version:v,fullVersion:v+'.1',file:`${lane}.tar.gz`,sha256:sha('9'),snapshot:'x',features:lane==='odc'?features:null});
- const heavy={preflight:async()=>{},targetFramework:async()=>null,bundle:async c=>side(c.lane,c.version),companion:async(l,v)=>side(l,v),
+ const heavy={preflight:async()=>{},dockerReady:async()=>{},targetFramework:async()=>null,bundle:async c=>side(c.lane,c.version),companion:async(l,v)=>side(l,v),
   test:async()=>({total:2,passed:2,failures:[]}),build:async pair=>({odc:pair.odc,o11:pair.o11,image,tag:pairTag(pair,'abc1234','20261028'),sha256:sha('a'),revision:'abc1234'}),smoke:async()=>({ok:true})},ops={...runtime,...heavy};
  const round=await runVigia({...config(r),manifest,observed:[{lane:'odc',version:'1.7.30',fullVersion:'1.7.30.10980'}],head:'h'},ops);
  assert.equal(round.status,'proposed');

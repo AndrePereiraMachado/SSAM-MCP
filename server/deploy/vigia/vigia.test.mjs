@@ -10,7 +10,7 @@ const manifest={window:2,odc:[{version:'1.7.29',tag:'new',image,sha256:sha('1')}
 const odc={lane:'odc',version:'1.7.30',fullVersion:'1.7.30.10980',studio:'C:/fake/odc',tfm:'net10.0'};
 const o11={lane:'o11',version:'11.55.94',fullVersion:'11.55.94.65328',studio:'C:/fake/o11',tfm:'net10.0'};
 const DAY=86400000,T0=Date.parse('2026-10-28T12:00:00Z');
-function fixture(t,{failures={},smokeOk=true,tfm={odc:'net10.0',o11:'net10.0'},preflight,passed=2}={}){
+function fixture(t,{failures={},smokeOk=true,tfm={odc:'net10.0',o11:'net10.0'},preflight,docker,passed=2}={}){
  const outDir=fs.mkdtempSync(path.join(os.tmpdir(),'vigia-sim-'));t.after(()=>fs.rmSync(outDir,{recursive:true,force:true}));
  const features=path.join(outDir,'..',path.basename(outDir)+'-features.xml');fs.writeFileSync(features,'<Features/>');t.after(()=>fs.rmSync(features,{force:true}));
  const calls=[],notes=[];
@@ -18,6 +18,7 @@ function fixture(t,{failures={},smokeOk=true,tfm={odc:'net10.0',o11:'net10.0'},p
  const ops={log(){},
   notify:async title=>{notes.push(title);calls.push('notify');},
   preflight:async()=>{calls.push('preflight');if(preflight)await preflight();},
+  dockerReady:async()=>{calls.push('docker');if(docker)await docker();},
   targetFramework:async c=>{calls.push('tfm:'+c.lane);return tfm[c.lane]??null;},
   bundle:async c=>{calls.push('bundle:'+c.lane);return side(c.lane,c.version);},
   companion:async(lane,v)=>{calls.push('companion:'+lane);return side(lane,v);},
@@ -50,7 +51,7 @@ test('rotation keeps a bounded pair window and lists customers losing a served v
 test('ODC and O11 new together become ONE pair: one build, one smoke, one proposal without a digest until approval',async t=>{
  const f=fixture(t);const r=await f.round();
  assert.equal(r.status,'proposed');assert.equal(r.id,'o11-11.55.94-odc-1.7.30');assert.equal(r.branch,'vigia/o11-11.55.94-odc-1.7.30');
- assert.deepEqual(f.calls,['preflight','tfm:odc','tfm:o11','bundle:odc','bundle:o11','companion:odc','companion:o11','test:odc:baseline','test:odc:candidate','test:o11:baseline','test:o11:candidate','build','smoke','propose','notify']);
+ assert.deepEqual(f.calls,['preflight','tfm:odc','tfm:o11','docker','bundle:odc','bundle:o11','companion:odc','companion:o11','test:odc:baseline','test:odc:candidate','test:o11:baseline','test:o11:candidate','build','smoke','propose','notify']);
  assert.equal(r.built.tag,'prod-20261028-abc1234-o115594-odc1730');
  const a=readAttempts(f.outDir)[r.id];assert.equal(a.status,'proposed');
  assert.equal(a.proposedManifest.odc[0].version,'1.7.30');assert.equal(a.proposedManifest.odc[0].sha256,undefined,'no digest before publication');assert.equal(a.proposedManifest.odc[1].sha256,sha('1'));
@@ -87,17 +88,19 @@ test('a suite that runs nothing cannot approve a version',async t=>{
  const f=fixture(t,{passed:0});const r=await f.round();assert.equal(r.status,'failed');assert.match(r.error,/did not run/);
 });
 test('a stopped Docker defers the round (environment, not a test result) and the next round retries',async t=>{
- let up=false;const f=fixture(t,{preflight:async()=>{if(!up)throw new EnvironmentError('Docker Desktop did not answer.','docker-unavailable');}});
+ let up=false;const f=fixture(t,{docker:async()=>{if(!up)throw new EnvironmentError('Docker Desktop did not answer.','docker-unavailable');}});
  const r=await f.round();assert.equal(r.status,'deferred');assert.equal(readAttempts(f.outDir)[r.id].status,'deferred');
  assert.match(fs.readFileSync(path.join(r.dir,'FALHAS.md'),'utf8'),/retries it automatically/);
  up=true;const again=await f.round({now:T0+6*3600000});assert.equal(again.status,'proposed');
- assert.ok(fs.existsSync(path.join(again.dir,'previous')),'the deferred attempt is kept');
+ assert.equal(fs.existsSync(path.join(again.dir,'previous')),false,'a deferral leaves no archive');assert.equal(readAttempts(f.outDir)[again.id].deferrals,1);
 });
 test('a Studio on .NET 10 follows the normal path when the build rule targets it; without the rule the round waits, never FALHAS of tests',async t=>{
  const ok=fixture(t,{tfm:{odc:'net10.0',o11:'net10.0'}});const r=await ok.round();assert.equal(r.status,'proposed');
  assert.match(fs.readFileSync(path.join(r.dir,'PROPOSTA.md'),'utf8'),/odc: Studio net10\.0, build net10\.0/);
  const old=fixture(t,{tfm:{odc:'net8.0',o11:'net8.0'}});const w=await old.round();
  assert.equal(w.status,'deferred');assert.equal(readAttempts(old.outDir)[w.id].code,'runtime-unsupported');assert.ok(!old.calls.some(c=>c.startsWith('test:')));
+ assert.ok(!old.calls.includes('docker'),'a round that waits for the runtime rule never starts Docker');assert.match(w.error,/ODC Studio 1.7.30 runs on net10.0.*; Service Studio 11.55.94 runs on net10.0/,'every lane in one message');
+ await old.round({now:T0+6*3600000});await old.round({now:T0+12*3600000});const a=readAttempts(old.outDir)[w.id];assert.equal(a.deferrals,3);assert.equal(a.firstDeferredAt,new Date(T0).toISOString());assert.equal(fs.existsSync(path.join(w.dir,'previous')),false);
  const unknown=fixture(t,{tfm:{}});assert.equal((await unknown.round()).status,'proposed','an unevaluated target does not block');
 });
 test('an idle round writes nothing at all',async t=>{

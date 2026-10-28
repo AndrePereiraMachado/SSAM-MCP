@@ -151,6 +151,9 @@ export async function createRuntime(config,{log=()=>{}}={}){
    await checkWorkspace();
    const free=fs.statfsSync(temp.slice(0,3)).bavail*fs.statfsSync(temp.slice(0,3)).bsize/2**30,min=config.minFreeGb??25;
    if(free<min)throw new EnvironmentError(`Only ${free.toFixed(1)} GB free on ${temp.slice(0,2)}; a round needs ${min} GB (image build and Docker disk).`,'disk-full');
+  },
+  // Docker Desktop answering (started and awaited when it is not) and the buildx builder present.
+  async dockerReady(){
    await ensureDocker();
    const builder=config.builder??'ssam-multiver-impl';
    if((await docker(['buildx','inspect',builder],{allowFailure:true,timeoutMs:60000})).code!==0)throw new EnvironmentError(`The buildx builder ${builder} does not exist in Docker Desktop.`,'builder-missing');
@@ -262,7 +265,9 @@ export async function createRuntime(config,{log=()=>{}}={}){
   async notify(title,message,{link}={}){
    fs.mkdirSync(out,{recursive:true});fs.appendFileSync(path.join(out,'notifications.jsonl'),JSON.stringify({time:new Date().toISOString(),title,message,link:link??null})+'\n');
    if(config.notify===false)return;
-   try{spawn(exe.powershell,['-NoProfile','-NonInteractive','-WindowStyle','Hidden','-ExecutionPolicy','Bypass','-File',path.join(here,'notify.ps1'),'-Title',title,'-Message',message,...(link?['-Link',link]:[])],{detached:true,stdio:'ignore',windowsHide:true}).unref();}catch{}
+   // Synchronous (a toast returns at once; the balloon fallback takes 16 s): a detached PowerShell without a console
+   // never showed the toast.
+   try{const r=await ps(path.join(here,'notify.ps1'),['-Title',title,'-Message',message,...(link?['-Link',link]:[]),'-Report'],{allowFailure:true,timeoutMs:60000});log(`notice shown: ${(r.stdout.trim()||r.stderr.trim()||'exit '+r.code).split('\n')[0]}`);}catch(e){log(`notice not shown: ${e.message}`);}
   }
  };
  return runtime;

@@ -86,21 +86,29 @@ export async function runVigia(config,ops){
 }
 async function runAttempt(config,ops,decision,now){
  const {pair,id}=decision,outDir=config.outDir,dir=path.join(outDir,id),log=ops.log??(()=>{}),base=config.manifest;
- archive(dir,decision.previous);fs.mkdirSync(dir,{recursive:true});
+ // A deferred attempt left no evidence beyond its notice: it is overwritten (and counted), not archived.
+ const waited=decision.previous?.status==='deferred'?decision.previous:null;
+ if(!waited)archive(dir,decision.previous);fs.mkdirSync(dir,{recursive:true});
  for(const s of decision.skipped??[])log(`lanes ${s.lanes.join(', ')} of ${s.id} failed before with the same inputs; trying ${id}`);
- const attempt={id,pair:{odc:pair.odc,o11:pair.o11,lanes:pair.lanes},inputs:decision.inputs,status:'running',at:new Date(now).toISOString(),baseManifest:base,replayed:config.replayed??[]};
+ const attempt={id,pair:{odc:pair.odc,o11:pair.o11,lanes:pair.lanes},inputs:decision.inputs,status:'running',at:new Date(now).toISOString(),baseManifest:base,replayed:config.replayed??[],
+  ...(waited?{deferrals:(waited.deferrals??1),firstDeferredAt:waited.firstDeferredAt??waited.at}:{})};
  writeAttempt(outDir,attempt);
  const comparisons={},runtimes={};
  try{
+  // Cheap checks first (worktree, disk), then the runtime question (dotnet only); Docker is started only for a round that
+  // can build.
   await ops.preflight({pair,id,dir});
   // A Studio that moved to another .NET is the build rule's job (Directory.Build.targets): ask MSBuild which target it
   // takes for that Studio folder. A workspace without the rule is waiting for code, not a test failure.
+  const mismatched=[];
   for(const c of pair.candidates){
    const build=await ops.targetFramework(c);
    runtimes[c.lane]={studio:c.tfm??null,build:build??null,baseline:config.baselineTfm?.[c.lane]??null};
    log(`runtime ${c.lane} ${c.version}: Studio ${c.tfm??'unknown'}, build ${build??'unknown'}`);
-   if(c.tfm&&build&&tfmMajor(c.tfm)!==tfmMajor(build))throw new EnvironmentError(`${STUDIO_NAME[c.lane]} ${c.version} runs on ${c.tfm}, but this workspace builds the kernel for ${build} against it. The workspace needs the build rule that follows the Studio runtime (Directory.Build.targets); the round waits for that code in main.`,'runtime-unsupported');
+   if(c.tfm&&build&&tfmMajor(c.tfm)!==tfmMajor(build))mismatched.push(`${STUDIO_NAME[c.lane]} ${c.version} runs on ${c.tfm}, but this workspace builds the kernel for ${build} against it`);
   }
+  if(mismatched.length)throw new EnvironmentError(`${mismatched.join('; ')}. The workspace needs the build rule that follows the Studio runtime (Directory.Build.targets); the round waits for that code in main.`,'runtime-unsupported');
+  await ops.dockerReady();
   const bundles={};
   for(const lane of LANES){
    const candidate=pair.candidates.find(c=>c.lane===lane);
@@ -139,7 +147,7 @@ async function runAttempt(config,ops,decision,now){
  }catch(error){
   const environmental=!!error.environmental;
   fs.writeFileSync(path.join(dir,'FALHAS.md'),failureText({id,error:String(error.message),environmental,dir,retry:config.retryHours??12}));
-  writeAttempt(outDir,{...attempt,status:environmental?'deferred':'failed',error:String(error.message),code:error.code??null,failedLanes:error.lanes??[],runtimes,endedAt:new Date().toISOString()});
+  writeAttempt(outDir,{...attempt,status:environmental?'deferred':'failed',...(environmental?{deferrals:(attempt.deferrals??0)+1,firstDeferredAt:attempt.firstDeferredAt??attempt.at}:{}),error:String(error.message),code:error.code??null,failedLanes:error.lanes??[],runtimes,endedAt:new Date().toISOString()});
   log(`${environmental?'deferred':'failed'}: ${error.message}`);
   const key=(environmental?'deferred:':'failed:')+id+(environmental?':'+(error.code??''):'');
   await remind(outDir,key,environmental?'SSAM: Studio version round waiting':'SSAM: Studio version checks failed',`${id}: ${error.message.split('\n')[0]}`,ops,{now,link:path.join(dir,'FALHAS.md')});
