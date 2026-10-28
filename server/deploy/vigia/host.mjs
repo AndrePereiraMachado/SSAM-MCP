@@ -6,14 +6,24 @@ import {randomUUID} from 'node:crypto';
 import {spawnSync} from 'node:child_process';
 // A process is named by its pid AND its start time: Windows reuses pids, so a pid alone can name another program.
 // Returns the start time (ISO) of a live process, or null.
+// 'alive' when the start time cannot be read (the CIM query failed or timed out) but the pid exists: never "gone" by mistake.
 export function processStart(pid){
  if(!Number.isInteger(pid)||pid<=0)return null;
- if(process.platform!=='win32'){try{process.kill(pid,0);return 'alive';}catch(e){return e.code==='EPERM'?'alive':null;}}
+ const alive=()=>{try{process.kill(pid,0);return 'alive';}catch(e){return e.code==='EPERM'?'alive':null;}};
+ if(process.platform!=='win32')return alive();
  const r=spawnSync('C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe',['-NoProfile','-NonInteractive','-Command',`$p=Get-CimInstance Win32_Process -Filter "ProcessId=${pid}";if($p){$p.CreationDate.ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ss.fffZ')}`],{encoding:'utf8',windowsHide:true,timeout:60000});
+ if(r.error||r.status!==0)return alive();
  return r.stdout?.trim()||null;
 }
-// A lock written before locks named their start time (no "started") counts only within the task's 8 h limit.
-const holds=(entry,identity,now,at)=>!!entry&&Number.isInteger(entry.pid)&&(entry.started?identity(entry.pid)===entry.started:identity(entry.pid)!==null&&(now-Date.parse(at))/3600000<8);
+// A holder whose identity cannot be read now counts as live (the safe side). A lock without a readable start time (written
+// before locks named it, or when it could not be read) counts only within the task's 8 h limit.
+const holds=(entry,identity,now,at)=>{
+ if(!entry||!Number.isInteger(entry.pid))return false;
+ const id=identity(entry.pid);
+ if(id===null)return false;
+ if(id==='alive')return true;
+ return entry.started&&entry.started!=='alive'?id===entry.started:(now-Date.parse(at))/3600000<8;
+};
 // The lock of a round (and of -Approve/-Reject/-Retry): held while its launcher or the round process it registered is the
 // same live process (pid and start time). Anything else is stale and taken over.
 export function acquireLock(file,{now=Date.now(),identity=processStart,pid=process.pid}={}){

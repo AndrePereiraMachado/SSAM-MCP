@@ -24,13 +24,14 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:/Users/andre/SSAM-MCP/
 ## A round
 
 1. **Lock and log.** One round at a time (`vigia.lock` in outDir). The lock names the launcher and the round process it
-   started by pid AND start time: a reused pid is not a holder, and a round process left running after the task's 8 h
-   limit keeps the lock. A lock held for more than `busyNoticeHours` (10) gives a notice once a day. Every round appends to
+   started by pid AND start time: a reused pid is not a holder, a round process left running after the task's 8 h limit
+   keeps the lock, and a holder whose start time cannot be read but whose pid lives counts as live. A lock held for more than `busyNoticeHours` (10) gives a notice once a day. Every round appends to
    `runs/<local date>/<local time>.log`.
 2. **Self-update.** The watcher worktree (a dedicated worktree on an integration branch, never `main` nor `vigia/*`)
    fast-forwards from the local `main`. Anything but a fast-forward stops the round with a notice. The round then runs in a
    child process from the code just fetched; a child that does not even load leaves its output in the log and a notice. A
-   round stops itself at `roundHours` (7, under the task's 8 h): it stops its commands and records its attempt as deferred.
+   round stops itself at `roundHours` (7, under the task's 8 h): it stops its commands and records its attempt as deferred;
+   that record is final (a command killed by the cut never turns it into a failure, and no command starts after it).
 3. **Detect** (`detect-studios.ps1`): ProductVersion of `ServiceStudio.Framework.dll`, the .NET of each installed Studio
    (`tfm` of its `runtimeconfig.json`) and what an installed Studio folder misses (its executable, its `runtimeconfig.json`),
    plus downloaded O11 installers in `installersDir` (read, never run).
@@ -66,10 +67,11 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:/Users/andre/SSAM-MCP/
    `anvil.dll serve` and idle build servers do not count), baseline = the current default pair's frozen copies, candidate =
    the new pair's frozen copies, ODC features protected for this Windows user (`features-protect.ps1`). Failures are
    compared by full name. A baseline that does not run, a package restore without network or a timeout is the machine
-   (deferred); a candidate that does not build or passes nothing is the version (failed).
+   (deferred); a candidate that does not build or passes nothing is the version (failed). Candidate tests that time out or
+   run nothing `testEnvLimit` (3) rounds in a row with the same inputs are held (notice) until main or the Studio changes.
 10. **Image and smoke**: `build.sh` with both bundles, tag `prod-<yyyymmdd>-<commit>-o<o11>-odc<odc>` (a registry or network
     failure or a timeout defers; the client-name guard or a build error fails); the smoke runs the image without network:
-    pair check, health, warm (indexes, builder, worker), the agent pack of the pair (`agentPack`, built for
+    pair check, health, warm (indexes, builder, worker), with the test server's state and features in `<tempRoot>/smoke`, the agent pack of the pair (`agentPack`, built for
     `agentPack.runtime`, with `agentPackByRuntime.net<N>` for a Studio on .NET N), `tools/list` against
     `../coolify/listing-budget.json` (all tools and the core). The watcher does not run `builder-image.test.mjs` nor the
     whole-window rehearsal of the manual recipe; `PROPOSTA.md` says so.
@@ -99,7 +101,7 @@ reaches `main`. `-Retry` also takes an unpublished proposal (its local image was
 `workspace`, `updateFrom` (default `main`), `tempRoot` and `featuresRoot` (private, outside `C:/t`; features default to
 `<tempRoot>/features`), `outDir`, `bundleRoot`, `bundlePins`, `studios`, `featuresSource`, `installersDir`, `image`,
 `builder`, `dockerContext` (only `desktop-linux`), `domains`, `agentPack`, `agentPackByRuntime`, `filters`, `notify`,
-`node`, `minFreeGb` (25), `retryHours` (12), `laneWaitHours` (24), `roundHours` (7), `busyNoticeHours` (10),
+`node`, `minFreeGb` (25), `retryHours` (12), `laneWaitHours` (24), `testEnvLimit` (3), `roundHours` (7), `busyNoticeHours` (10),
 `dotnetWaitMinutes` (180), `dockerWaitMinutes` (8), `testTimeoutMinutes` (90), `buildTimeoutMinutes` (120),
 `versionStateFile` (optional local copy of the server's `studio-versions.json`).
 

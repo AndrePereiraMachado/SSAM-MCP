@@ -140,6 +140,33 @@ test('an incomplete Studio folder (no exe, no runtimeconfig.json) defers its lan
  const quiet=fixture(t);const q=await quiet.round({observed:[odc,{...o11,tfm:null}]});assert.equal(readAttempts(quiet.outDir)[q.id].laneCodes.o11,'studio-incomplete','a null runtime is never skipped');
  const alone=await f.round({observed:[odc,broken],now:T0+24*3600000});assert.equal(alone.id,'o11-11.55.93-odc-1.7.30');assert.equal(alone.status,'proposed');
 });
+test('R3: candidate tests that time out three rounds in a row are held (no 90 min every 6 h) until main moves or -Retry',async t=>{
+ const f=fixture(t);
+ f.ops.test=async(lane,kind)=>{f.calls.push(`test:${lane}:${kind}`);if(kind==='baseline')return {total:3,passed:3,failures:[]};throw new EnvironmentError('The odc candidate tests could not run (timed out).','test-environment',[lane]);};
+ const config=extra=>({manifest,observed:[odc],outDir:f.outDir,head:'h1',agentPack:{runtime:'net8.0'},agentPackByRuntime:{net10:{odcBridge:'v100',o11BuiltFor:'11.55.94'}},...extra});
+ for(const h of [0,6,12])assert.equal((await runVigia(config({now:T0+h*3600000}),f.ops)).status,'deferred');
+ const runs=f.calls.filter(c=>c==='test:odc:candidate').length;assert.equal(runs,3);
+ const held=await runVigia(config({now:T0+18*3600000}),f.ops);assert.equal(held.status,'held');assert.equal(f.calls.filter(c=>c==='test:odc:candidate').length,runs,'not run again');
+ assert.ok(f.notes.includes('SSAM: Studio version tests do not run'));
+ await runVigia(config({now:T0+19*3600000,head:'h2'}),f.ops);assert.equal(f.calls.filter(c=>c==='test:odc:candidate').length,runs+1,'main moved: tried again');
+});
+test('N1: at the time limit the record stays deferred even when the killed test returns afterwards as a failure',async t=>{
+ let kill;const killed=new Promise(r=>kill=r);
+ const f=fixture(t);
+ f.ops.test=async(lane,kind)=>{f.calls.push(`test:${lane}:${kind}`);if(kind==='baseline')return {total:3,passed:3,failures:[]};
+  await killed;throw Object.assign(Error(`No test results from the ${lane} candidate run (exit 1)`),{lanes:[lane]});};
+ const config={manifest,observed:[odc],outDir:f.outDir,head:'h1',now:T0,agentPack:{runtime:'net8.0'},agentPackByRuntime:{net10:{odcBridge:'v100',o11BuiltFor:'11.55.94'}}};
+ const round=runVigia(config,f.ops);
+ while(!f.calls.includes('test:odc:candidate'))await new Promise(r=>setTimeout(r,5));
+ // The timer of vigia.mjs: stop the commands, record the cut, then (while the toast shows) the killed test comes back.
+ for(const a of Object.values(readAttempts(f.outDir)).filter(a=>a.status==='running'))timedOut(config,a);
+ kill();const r=await round;
+ const a=readAttempts(f.outDir)['o11-11.55.93-odc-1.7.30'];
+ assert.equal(a.status,'deferred');assert.equal(a.code,'round-timeout');assert.equal(r.status,'deferred');
+ assert.equal(fs.existsSync(path.join(f.outDir,'o11-11.55.93-odc-1.7.30','FALHAS.md')),false,'no FALHAS beside the cut');
+ assert.ok(fs.existsSync(path.join(f.outDir,'o11-11.55.93-odc-1.7.30','AGUARDANDO.md')));
+ assert.ok(!f.notes.includes('SSAM: Studio version checks failed'));
+});
 test('a round stopped at its time limit leaves its attempt deferred with its notice',async t=>{
  const f=fixture(t);const r=await f.round();const a={...readAttempts(f.outDir)[r.id],status:'running'};
  timedOut({outDir:f.outDir},a);const b=readAttempts(f.outDir)[r.id];assert.equal(b.status,'deferred');assert.equal(b.code,'round-timeout');assert.ok(fs.existsSync(path.join(r.dir,'AGUARDANDO.md')));
@@ -175,9 +202,15 @@ test('image smoke takes the listing budget, keeps credentials out of arguments a
   if(args.includes('server-token'))return {code:0,stdout:JSON.stringify({token:'private-mcp-token',agentCredential:'private-agent-token'}),stderr:''};
   if(args.includes('-i')){assert.ok(options.input.includes('private-mcp-token'));assert.ok(options.input.includes('"o11Hook":"dev"'));assert.ok(options.input.includes('"tools":93'));assert.ok(options.input.includes('"coreBytes":34097'),'the core ceiling is checked too');return {code:0,stdout:JSON.stringify({ok:true,tools:93,totalBytes:261000}),stderr:''};}
   return {code:0,stdout:'',stderr:''};};
- const result=await smokeImage({pair:{image,tag:'test',odc:'1.7.30',o11:'11.55.93'},bundle:{features},dir,root:dir,docker,served:{odc:['1.7.30'],o11:['11.55.93','11.55.92']},budget:{tools:93,totalBytes:262000,coreBytes:34097,core:['ssam_doctor']},pack:{odcBridgeAccepted:['v99']}});
+ // R1: the test server's state and features go to a private folder, never into the evidence folder (C:/t/vigia/<pair>).
+ const evidence=path.join(dir,'evidence'),privateDir=path.join(dir,'private');const mounts=[];
+ const result=await smokeImage({pair:{image,tag:'test',odc:'1.7.30',o11:'11.55.93'},bundle:{features},dir:evidence,root:dir,docker:async(args,o)=>{if(args[0]==='run')mounts.push(...args.filter(a=>/:\/data\//.test(a)));return docker(args,o);},served:{odc:['1.7.30'],o11:['11.55.93','11.55.92']},budget:{tools:93,totalBytes:262000,coreBytes:34097,core:['ssam_doctor']},pack:{odcBridgeAccepted:['v99']},privateDir});
+ assert.ok(mounts.length&&mounts.every(m=>m.startsWith(privateDir.replaceAll('\\','/'))),'state, features and cache mounted from the private folder');
+ assert.deepEqual(fs.readdirSync(evidence).filter(n=>!/^(kernel\.json|smoke-server\.log|commands\.jsonl|command-\d+\.log)$/.test(n)),[],'only evidence in the watcher folder');
+ assert.deepEqual(fs.readdirSync(privateDir),[],'the private state is removed');
+ await assert.rejects(smokeImage({pair:{image,tag:'t',odc:'1.7.30',o11:'11.55.93'},bundle:{features},dir:evidence,root:dir,docker,served:{},budget:{tools:1,totalBytes:1}}),/private folder/);
  assert.equal(result.ok,true);assert.equal(fs.existsSync(path.join(dir,'segredo')),false);assert.ok(commands.some(x=>x[0]==='rm'&&x.includes('-v')));assert.doesNotMatch(JSON.stringify(commands),/private-mcp-token|private-agent-token/);
- assert.deepEqual(JSON.parse(fs.readFileSync(path.join(dir,'kernel.json'),'utf8')).odcBridgeAccepted,['v99']);
+ assert.deepEqual(JSON.parse(fs.readFileSync(path.join(evidence,'kernel.json'),'utf8')).odcBridgeAccepted,['v99']);
  await assert.rejects(smokeImage({pair:{image,tag:'t',odc:'1.7.30',o11:'11.55.93'},bundle:{features},dir,root:dir,docker,served:{}}),/listing budget/);
 });
 test('the listing budget is one file shared by the rehearsal, the smoke and the facade budget test',()=>{
@@ -274,7 +307,9 @@ test('one round at a time: the lock names its processes by pid AND start time; a
   // The launcher was killed (8 h limit) but its round process lives on: still held.
   registerChild(file,c.token,4242,opts);starts[process.pid]=null;
   const d=acquireLock(file,opts);assert.ok(d.busy,'the orphan round still runs');assert.equal(d.busy.child.pid,4242);
-  starts[4242]=null;assert.ok(acquireLock(file,opts).token,'both gone: stale');
+  starts[4242]=null;const e=acquireLock(file,opts);assert.ok(e.token,'both gone: stale');
+  // R2: when the start time cannot be read (CIM failed) but the pid lives, the holder counts as live.
+  starts[process.pid]='alive';assert.ok(acquireLock(file,opts).busy,'unreadable identity of a live pid: held');
  }finally{fs.rmSync(dir,{recursive:true,force:true});}
 });
 test('one dotnet build/test at a time: builds and tests count, kernel servers and idle build servers do not',()=>{

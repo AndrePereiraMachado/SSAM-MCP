@@ -214,6 +214,14 @@ test('the lock names a real process by its start time: the live launcher holds i
  fs.writeFileSync(file,JSON.stringify({pid:process.pid,started:'2000-01-01T00:00:00.000Z',token:'old',at:new Date().toISOString()}));
  const taken=acquireLock(file);assert.ok(taken.token,'same pid, another start time: another process');taken.release();
 });
+test('N1: after the cut a running command reports the cut, no command starts, and the notice still runs',{skip:!windows},async t=>{
+ const r=repo(t);const runtime=await createRuntime(config(r));
+ const slow=runtime.run(PS,['-NoProfile','-Command','Start-Sleep -Seconds 30'],{allowFailure:true});
+ await new Promise(res=>setTimeout(res,1500));const started=Date.now();runtime.stopAll();
+ await assert.rejects(slow,e=>e.code==='round-timeout');assert.ok(Date.now()-started<15000,'the command tree was killed, not awaited');
+ await assert.rejects(runtime.run(GIT,['--version']),e=>e.code==='round-timeout');
+ assert.equal(runtime.stopping,true);await runtime.notify('t','m');assert.match(fs.readFileSync(path.join(r.out,'notifications.jsonl'),'utf8'),/"title":"t"/);
+});
 test('a second launcher finds the round lock and leaves at once',t=>{
  const dir=tempDir(t,'vigia-lock2-'),file=path.join(dir,'vigia.lock');const held=acquireLock(file);
  const r=spawnSync(process.execPath,['--input-type=module','-e',`import {acquireLock} from ${JSON.stringify(new URL('./host.mjs',import.meta.url).href)};console.log(JSON.stringify(acquireLock(${JSON.stringify(file)})));`],{encoding:'utf8'});

@@ -70,14 +70,18 @@ export async function createRuntime(config,{log=()=>{}}={}){
  const ps=(file,args,options)=>run(exe.powershell,['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',file,...args],options);
  const featuresRoot=path.resolve(config.featuresRoot??path.join(temp,'features'));
  if(/^c:[\\/]t(?:[\\/]|$)/i.test(featuresRoot))throw Error('featuresRoot must be private and outside C:\\t.');
- let sequence=0;const active=new Set();
- async function run(command,args,{env={},input,dir,allowFailure=false,secret=false,cwd=root,timeoutMs=0}={}){
+ let sequence=0;const active=new Set();let stopping=false;
+ // After the round's time limit no command starts, and one that ends (killed by the cut) reports the cut, never a result.
+ const cutShort=()=>new EnvironmentError('The round reached its time limit; its commands were stopped.','round-timeout');
+ async function run(command,args,{env={},input,dir,allowFailure=false,secret=false,cwd=root,timeoutMs=0,evenWhenStopping=false}={}){
+  if(stopping&&!evenWhenStopping)throw cutShort();
   if(dir){fs.mkdirSync(dir,{recursive:true});fs.appendFileSync(path.join(dir,'commands.jsonl'),JSON.stringify({time:new Date().toISOString(),command,args:secret?['(not recorded)']:args,cwd,env:Object.keys(env)})+'\n');}
   const result=await new Promise((resolve,reject)=>{
    const child=spawn(command,args,{cwd,env:{...process.env,...env},windowsHide:true,stdio:['pipe','pipe','pipe']});let stdout='',stderr='',timer=null;active.add(child);
    if(timeoutMs)timer=setTimeout(()=>{stderr+=`\n(timed out after ${timeoutMs} ms)`;killTree(child);},timeoutMs);
    child.stdout.on('data',b=>stdout+=b);child.stderr.on('data',b=>stderr+=b);child.once('error',e=>{clearTimeout(timer);active.delete(child);reject(e);});child.once('close',code=>{clearTimeout(timer);active.delete(child);resolve({code,stdout,stderr});});child.stdin.end(input);
   });
+  if(stopping&&!evenWhenStopping)throw cutShort();
   if(dir&&!secret)fs.writeFileSync(path.join(dir,`command-${++sequence}.log`),`> ${path.basename(command)} ${args.join(' ')}\n`+result.stdout+result.stderr);
   if(result.code!==0&&!allowFailure)throw Error(`Command failed (${result.code}): ${path.basename(command)} ${args.slice(0,3).join(' ')}. See ${dir?path.join(dir,'commands.jsonl'):'the run log'}.`);
   return result;
@@ -299,7 +303,7 @@ export async function createRuntime(config,{log=()=>{}}={}){
    }finally{fs.rmSync(installers,{recursive:true,force:true});}
   },
   async smoke(built,bundles,served,dir){
-   return smokeImage({pair:built,bundle:{features:bundles.odc.features},dir,root,docker,served,pack:packFor(config,bundles),budget:readListingBudget(root)});
+   return smokeImage({pair:built,bundle:{features:bundles.odc.features},dir,root,docker,served,pack:packFor(config,bundles),budget:readListingBudget(root),privateDir:path.join(temp,'smoke')});
   },
   // The proposal branch starts from HEAD, or from the newest approved pin main does not carry yet (base), so merging the
   // newest proposal brings the approved one too, without a conflict in versions.json.
@@ -327,7 +331,8 @@ export async function createRuntime(config,{log=()=>{}}={}){
    try{const m=JSON.parse(shown.stdout);const entries=['odc','o11'].flatMap(l=>m[l].filter(e=>e.tag===tag));return entries.length===2&&entries.every(e=>e.sha256===digest.replace(/^sha256:/,''))?head:null;}catch{return null;}
   },
   // Stops every command the round started (its time limit).
-  stopAll(){for(const child of active)killTree(child);},
+  stopAll(){stopping=true;for(const child of active)killTree(child);},
+  get stopping(){return stopping;},
   async verifyBranch(branch,expected){
    const head=(await git(['rev-parse','--verify',`refs/heads/${branch}`],{allowFailure:true})).stdout.trim();
    if(head!==expected)throw Error(`The proposal branch ${branch} is at ${head||'nothing'}, not the proposed commit ${expected}. Review it before approving.`);
@@ -364,7 +369,7 @@ export async function createRuntime(config,{log=()=>{}}={}){
    if(config.notify===false)return;
    // Synchronous (a toast returns at once; the balloon fallback takes 16 s): a detached PowerShell without a console
    // never showed the toast.
-   try{const r=await ps(path.join(here,'notify.ps1'),['-Title',title,'-Message',message,...(link?['-Link',link]:[]),'-Report'],{allowFailure:true,timeoutMs:60000});log(`notice shown: ${(r.stdout.trim()||r.stderr.trim()||'exit '+r.code).split('\n')[0]}`);}catch(e){log(`notice not shown: ${e.message}`);}
+   try{const r=await ps(path.join(here,'notify.ps1'),['-Title',title,'-Message',message,...(link?['-Link',link]:[]),'-Report'],{allowFailure:true,timeoutMs:60000,evenWhenStopping:true});log(`notice shown: ${(r.stdout.trim()||r.stderr.trim()||'exit '+r.code).split('\n')[0]}`);}catch(e){log(`notice not shown: ${e.message}`);}
   }
  };
  return runtime;

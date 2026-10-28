@@ -3,7 +3,7 @@
 // a Studio that still has to be installed. A round with nothing new reads only and writes nothing.
 import fs from 'node:fs';
 import path from 'node:path';
-import {LANES,STUDIO_NAME,missingPack,planWindow,readyCandidates,pairFor,pairId,hasPair,rotateWindow,compareFailures,windowPairs,tfmMajor,proposalText,failureText,composeText} from './window.mjs';
+import {LANES,STUDIO_NAME,ownerCommand,missingPack,planWindow,readyCandidates,pairFor,pairId,hasPair,rotateWindow,compareFailures,windowPairs,tfmMajor,proposalText,failureText,composeText} from './window.mjs';
 import {generateCompose} from '../coolify/gen-compose.mjs';
 // An environment problem (not a test result): the round waits and retries. lanes: the lanes it concerns (empty = the pair).
 export class EnvironmentError extends Error{constructor(message,code='environment',lanes=[]){super(message);this.environmental=true;this.code=code;this.lanes=lanes;}}
@@ -29,7 +29,7 @@ const hours=(now,at)=>(now-Date.parse(at))/3600000;
 // A lane deferred for its own reason (its Studio incomplete, its runtime rule or agent pack missing...) holds the pair for
 // laneWaitHours (24 h by default: an installation finishing, a fix landing in main); after that the other lane goes on
 // alone, and the pair as a whole is checked again every retryHours.
-export function decide({manifest,observed,state,attempts,inputs,now=Date.now(),retryHours=12,laneWaitHours=24}){
+export function decide({manifest,observed,state,attempts,inputs,now=Date.now(),retryHours=12,laneWaitHours=24,testEnvLimit=3}){
  const plan=planWindow(manifest,observed,state);
  const install=plan.candidates.filter(c=>c.requiresInstallation);
  const waiting={installers:install,requested:plan.requested.filter(r=>!plan.candidates.some(c=>c.lane===r.lane&&c.version===r.version&&!c.requiresInstallation))};
@@ -43,6 +43,13 @@ export function decide({manifest,observed,state,attempts,inputs,now=Date.now(),r
   if(a&&!a.retry&&a.status==='deferred'&&(a.deferredLanes??[]).length&&hours(now,a.at)<retryHours){
    const held=a.deferredLanes.filter(l=>pair.lanes.includes(l)&&hours(now,a.laneSince?.[l]??a.at)>=laneWaitHours);
    if(held.length&&held.length<pair.lanes.length){skipped.push({id,lanes:held,why:'deferred'});ready=ready.filter(c=>!held.includes(c.lane));continue;}
+  }
+  // Candidate tests that timed out or ran nothing testEnvLimit times in a row with the same inputs (a Studio that hangs the
+  // tests) are not retried every round: that lane is set aside, or the pair is held until main or the Studio changes.
+  if(a&&!a.retry&&a.status==='deferred'&&(a.testEnvRuns??0)>=testEnvLimit&&sameInputs(a.inputs,want)){
+   const lanes=(a.deferredLanes??[]).filter(l=>pair.lanes.includes(l));
+   if(lanes.length&&lanes.length<pair.lanes.length){skipped.push({id,lanes,why:'held'});ready=ready.filter(c=>!lanes.includes(c.lane));continue;}
+   return {action:'held',plan,waiting,pair,id,attempt:a,skipped};
   }
   if(!a||a.retry||['deferred','running'].includes(a.status))return {action:'run',plan,waiting,pair,id,inputs:want,previous:a??null,skipped};
   if(a.status==='failed'){
@@ -78,7 +85,7 @@ export async function runVigia(config,ops){
  const attempts=readAttempts(outDir);
  const head=config.head??null;
  const inputs=pair=>({head,studios:Object.fromEntries(pair.candidates.map(c=>[c.lane,c.fullVersion??c.version]))});
- const decision=decide({manifest:config.manifest,observed:config.observed,state:config.state,attempts,inputs,now,retryHours:config.retryHours??12,laneWaitHours:config.laneWaitHours??24});
+ const decision=decide({manifest:config.manifest,observed:config.observed,state:config.state,attempts,inputs,now,retryHours:config.retryHours??12,laneWaitHours:config.laneWaitHours??24,testEnvLimit:config.testEnvLimit??3});
  const plan=decision.plan;
  if(config.dryRun)return {status:'dry-run',decision:{action:decision.action,pair:decision.id??null,proposal:decision.proposal?.id??null,skipped:decision.skipped??[]},plan};
  log(`decision: ${decision.action}${decision.id?' '+decision.id:''}`);
@@ -94,10 +101,14 @@ export async function runVigia(config,ops){
   return {status:'failed',id:decision.id??null,dir:decision.id?path.join(outDir,decision.id):null,plan};
  }
  if(decision.action==='rejected')return {status:'rejected',id:decision.id,plan};
+ if(decision.action==='held'){
+  await remind(outDir,'held:'+decision.id,'SSAM: Studio version tests do not run',`${decision.id}: the candidate tests timed out or ran nothing ${decision.attempt.testEnvRuns} times in a row; the watcher stops retrying them until main or the Studio changes. After checking, ${ownerCommand(config,'-Retry '+decision.id)}`,ops,{now,link:path.join(outDir,decision.id,'AGUARDANDO.md')});
+  return {status:'held',id:decision.id,plan};
+ }
  const result=await runAttempt(config,ops,decision,now);
  // The pair was checked again and its waiting lanes still wait past laneWaitHours: the other lane goes on in this round.
- if(result.status==='deferred'){
-  const again=decide({manifest:config.manifest,observed:config.observed,state:config.state,attempts:readAttempts(outDir),inputs,now,retryHours:config.retryHours??12,laneWaitHours:config.laneWaitHours??24});
+ if(result.status==='deferred'&&result.code!=='round-timeout'){
+  const again=decide({manifest:config.manifest,observed:config.observed,state:config.state,attempts:readAttempts(outDir),inputs,now,retryHours:config.retryHours??12,laneWaitHours:config.laneWaitHours??24,testEnvLimit:config.testEnvLimit??3});
   if(again.action==='run'&&again.id!==result.id&&again.skipped?.some(s=>s.id===result.id&&s.why==='deferred')){log(`decision: run ${again.id} (the other lanes waited long enough)`);return runAttempt(config,ops,again,now);}
  }
  return result;
@@ -120,7 +131,9 @@ async function laneChecks(config,ops,pair,runtimes,log){
   problems.push({lane:p.lane,code:'agent-pack-missing',text:`no agent pack for ${STUDIO_NAME[p.lane]} ${p.version} (${p.tfm}): the configured pack is built for ${config.agentPack?.runtime??'net8.0'}; add agentPackByRuntime.net${tfmMajor(p.tfm)} (odcBridge, odcBridgeAccepted, o11BuiltFor) once that pack exists`});
  if(problems.length)throw Object.assign(new EnvironmentError(problems.map(p=>p.text).join('; ')+'. The round waits and retries.',problems[0].code,[...new Set(problems.map(p=>p.lane))]),{laneCodes:Object.fromEntries(problems.map(p=>[p.lane,p.code]))});
 }
-// A round stopped at its time limit: its running attempt is recorded as deferred, with its notice.
+// A round stopped at its time limit: its running attempt is recorded as deferred, with its notice. That record is final:
+// a command killed by the cut that returns afterwards (a test with no results, a build cut short) never overwrites it.
+const wasCut=(outDir,attempt)=>{const now=readAttempts(outDir)[attempt.id];return now?.status==='deferred'&&now.code==='round-timeout'&&now.at===attempt.at;};
 export function timedOut(config,attempt){
  const dir=path.join(config.outDir,attempt.id);
  fs.writeFileSync(path.join(dir,'AGUARDANDO.md'),failureText({id:attempt.id,error:`The round reached its ${config.roundHours??7} h limit and was stopped.`,environmental:true,dir,retry:config.retryHours??12,config}));
@@ -135,7 +148,7 @@ async function runAttempt(config,ops,decision,now){
  if(waited)for(const name of ['AGUARDANDO.md','FALHAS.md'])fs.rmSync(path.join(dir,name),{force:true});
  for(const s of decision.skipped??[])log(`lanes ${s.lanes.join(', ')} of ${s.id} ${s.why==='deferred'?`have waited ${config.laneWaitHours??24} h`:'failed before with the same inputs'}; trying ${id}`);
  const attempt={id,pair:{odc:pair.odc,o11:pair.o11,lanes:pair.lanes},inputs:decision.inputs,status:'running',at:new Date(now).toISOString(),baseManifest:base,replayed:config.replayed??[],
-  ...(waited?{deferrals:(waited.deferrals??1),firstDeferredAt:waited.firstDeferredAt??waited.at,laneSince:waited.laneSince??{}}:{})};
+  ...(waited?{deferrals:(waited.deferrals??1),firstDeferredAt:waited.firstDeferredAt??waited.at,laneSince:waited.laneSince??{},testEnvRuns:waited.testEnvRuns??0}:{})};
  writeAttempt(outDir,attempt);
  const comparisons={},runtimes={};
  try{
@@ -179,14 +192,20 @@ async function runAttempt(config,ops,decision,now){
   const branch=proposed.branch??'vigia/'+id,commit=proposed.commit;
   const base_=windowPairs(base).map(p=>pairId(p)).join(', ');
   fs.writeFileSync(path.join(dir,'PROPOSTA.md'),proposalText({id,pair,built,next,comparisons,branch,commit,dir,base:base_,replayed:config.replayed??[],runtimes,features:bundles.odc.features,config}));
+  if(wasCut(outDir,attempt)){log('the round was cut at its time limit; the proposal is not recorded');return {status:'deferred',id,dir,code:'round-timeout'};}
   writeAttempt(outDir,{...attempt,status:'proposed',built,branch,commit,proposedManifest:next.manifest,leaving:next.leaving,affected:next.affected,runtimes,features:bundles.odc.features,proposedAt:new Date().toISOString()});
   await remind(outDir,'proposal:'+id,'SSAM: Studio versions ready for approval',`${id}: ${path.join(dir,'PROPOSTA.md')}`,ops,{now,link:path.join(dir,'PROPOSTA.md')});
   return {status:'proposed',id,branch,dir,built};
  }catch(error){
+  if(wasCut(outDir,attempt)||error.code==='round-timeout'){
+   if(!wasCut(outDir,attempt))timedOut(config,attempt);
+   log(`stopped at the time limit (${error.message.split('\n')[0]}); the attempt stays deferred`);
+   return {status:'deferred',id,dir,code:'round-timeout',error:'round time limit'};
+  }
   const environmental=!!error.environmental,notice=path.join(dir,environmental?'AGUARDANDO.md':'FALHAS.md'),lanes=error.lanes??[];
   fs.writeFileSync(notice,failureText({id,error:String(error.message),environmental,dir,retry:config.retryHours??12,config}));
   const laneSince=environmental?Object.fromEntries(lanes.map(l=>[l,attempt.laneSince?.[l]??attempt.at])):undefined;
-  writeAttempt(outDir,{...attempt,status:environmental?'deferred':'failed',...(environmental?{deferrals:(attempt.deferrals??0)+1,firstDeferredAt:attempt.firstDeferredAt??attempt.at,deferredLanes:lanes,laneSince,laneCodes:error.laneCodes??null}:{failedLanes:lanes}),error:String(error.message),code:error.code??null,runtimes,endedAt:new Date().toISOString()});
+  writeAttempt(outDir,{...attempt,status:environmental?'deferred':'failed',...(environmental?{deferrals:(attempt.deferrals??0)+1,firstDeferredAt:attempt.firstDeferredAt??attempt.at,deferredLanes:lanes,laneSince,laneCodes:error.laneCodes??null,testEnvRuns:error.code==='test-environment'?(attempt.testEnvRuns??0)+1:0}:{failedLanes:lanes}),error:String(error.message),code:error.code??null,runtimes,endedAt:new Date().toISOString()});
   log(`${environmental?'deferred':'failed'}: ${error.message}`);
   const key=(environmental?'deferred:':'failed:')+id+(environmental?':'+(error.code??''):'');
   await remind(outDir,key,environmental?'SSAM: Studio version round waiting':'SSAM: Studio version checks failed',`${id}: ${error.message.split('\n')[0]}`,ops,{now,link:notice});

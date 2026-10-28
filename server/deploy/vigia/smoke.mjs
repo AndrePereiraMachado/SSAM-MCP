@@ -5,11 +5,14 @@ const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 // The listing every release image must serve (coolify/listing-budget.json, shared with the release rehearsal).
 export const readListingBudget=root=>JSON.parse(fs.readFileSync(path.join(root,'server/deploy/coolify/listing-budget.json'),'utf8'));
 const DEFAULT_PACK={odcBridge:'v97',o11BuiltFor:'11.55.92',o11Hook:'dev',odcBridgeAccepted:['v96','v48','v45']};
-export async function smokeImage({pair,bundle,dir,root,docker,served,pack=DEFAULT_PACK,budget}){
+// privateDir: where the test server's state, its features and its cache live during the smoke (private, outside C:/t;
+// removed in finally). dir keeps only the evidence (kernel.json, the server log without credentials, the commands).
+export async function smokeImage({pair,bundle,dir,root,docker,served,pack=DEFAULT_PACK,budget,privateDir}){
  if(!budget||!Number.isInteger(budget.tools)||!Number.isInteger(budget.totalBytes))throw Error('The smoke test needs the listing budget.');
+ if(!privateDir||/^c:[\\/]t(?:[\\/]|$)/i.test(path.resolve(privateDir)))throw Error('The smoke test needs a private folder outside C:/t for the test server state.');
  pack={...DEFAULT_PACK,...pack};const hello={odcBridge:pack.odcBridge,o11BuiltFor:pack.o11BuiltFor,o11Hook:pack.o11Hook};
- const name='ssam-vigia-'+randomUUID().slice(0,12),secret=path.resolve(dir,'segredo'),state=path.join(secret,'state'),features=path.join(secret,'features'),cache=path.join(secret,'cache');
- for(const folder of [state,features,cache])fs.mkdirSync(folder,{recursive:true});
+ const name='ssam-vigia-'+randomUUID().slice(0,12),home=path.resolve(privateDir??''),secret=path.join(home,'segredo-'+name),state=path.join(secret,'state'),features=path.join(secret,'features'),cache=path.join(secret,'cache');
+ for(const folder of [dir,state,features,cache])fs.mkdirSync(folder,{recursive:true});
  const kernel={o11:pair.o11,odc:pair.odc,odcBridge:pack.odcBridge,odcBridgeAccepted:pack.odcBridgeAccepted};
  fs.writeFileSync(path.join(state,'kernel.json'),JSON.stringify(kernel));fs.writeFileSync(path.join(dir,'kernel.json'),JSON.stringify(kernel,null,2));fs.copyFileSync(bundle.features,path.join(features,'Features.plain.xml'));
  const image=pair.image+':'+pair.tag,mount=(from,to)=>['-v',from.replaceAll('\\','/')+':'+to];
@@ -53,7 +56,7 @@ console.log(JSON.stringify({ok:true,healthy:true,agentAccepted:true,tools:tools.
    if(!credentials||![credentials.token,credentials.agentCredential].some(v=>v&&text.includes(v)))fs.writeFileSync(path.join(dir,'smoke-server.log'),text);
    await docker(['rm','-f','-v',name],{allowFailure:true});
   }
-  if(secret!==path.resolve(dir,'segredo'))throw Error('Unexpected smoke cleanup path.');
+  if(path.dirname(secret)!==home||!path.basename(secret).startsWith('segredo-ssam-vigia-'))throw Error('Unexpected smoke cleanup path.');
   fs.rmSync(secret,{recursive:true,force:true});
  }
 }
