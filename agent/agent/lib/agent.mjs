@@ -153,7 +153,7 @@ export function createAgent({ root, runtimeRoot = root, config = {}, deps = {}, 
     return { t: 'hello', protocol: PROTOCOL, instance,
       // root (C26): the folder of this agent, so the server names its inbox exactly; kinds: what this agent runs (file.sync
       // since 0.2.0), so the server never asks an older agent for a kind it does not have.
-      agent: { version: AGENT_VERSION, node: process.version, platform, startedAt, root: base, kinds: [...KINDS], machine, bridgeOffers: 1 },
+      agent: { version: AGENT_VERSION, node: process.version, platform, startedAt, root: base, kinds: [...KINDS], machine },
       pack: { id: pack.id, lanes: pack.lanes, odcBridge: active.odc?.protocol ?? pack.odcBridge, o11BuiltFor: active.o11?.studioVersion ?? pack.o11BuiltFor, o11Hook: active.o11?.protocol ?? pack.o11Hook },
       capabilities: { bridgeOffer: true }, bridges: active, bridgeUpdate: updates.status(), studios, o11Connection: connection };
   }

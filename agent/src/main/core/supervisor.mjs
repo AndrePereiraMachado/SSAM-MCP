@@ -68,6 +68,10 @@ export function createSupervisor({ root, packDir, installedPack = false, fork, i
     const external = !child && externalAgent();
     const setUp = isSetUp(files);
     const view = summarize({ setUp, running: Boolean(child), state: child ? (state?.pid === childPid ? state : null) : state, external: Boolean(external), lastExit, packProblem });
+    try {
+      const update = JSON.parse(fs.readFileSync(path.join(root, 'private', 'bridge-update.json'), 'utf8'));
+      if (typeof update.message === 'string') view.bridgeUpdate = update.message.slice(0, 1000);
+    } catch { /* No bridge update has been reported. */ }
     const pack = readPackJson(runtimeRoot);
     const config = (() => { try { return JSON.parse(fs.readFileSync(files.config, 'utf8')); } catch { return null; } })();
     return { view, root, setUp, server: config?.server ?? null, o11Port: config?.o11Port ?? null, pid: child ? childPid : external ? external.pid : null,

@@ -33,6 +33,12 @@ export function stageNativePack(source, executable, destination) {
   };
   for (const file of checked.pack.files) {
     const relative = String(file.path).replaceAll('\\', '/');
+    // The optional, integrity-checked macOS Authenticode verifier is bundled by the release owner.
+    if (mac && ['tools/osslsigncode', 'tools/osslsigncode-ca.pem'].includes(relative)) {
+      add(relative, fs.readFileSync(path.join(source, relative)));
+      if (relative === 'tools/osslsigncode') fs.chmodSync(path.join(destination, relative), 0o755);
+      continue;
+    }
     // Explicit binary/runtime metadata roots. Source, launch scripts, symbols,
     // captured data and tool trees cannot enter the installed native pack.
     if (!/^(?:odc\/studio\/bridge\/|bin\/o11\/|studio\/o11\/)/.test(relative) || !/\.(?:dll|exe|json)$/i.test(relative)) continue;
