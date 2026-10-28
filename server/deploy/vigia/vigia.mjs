@@ -61,7 +61,12 @@ async function launch(args,config,log){
   }
   const child=path.join(path.resolve(config.workspace),'server/deploy/vigia/vigia.mjs');
   if(await childSupportsRounds(child)){
-   const code=await new Promise((resolve,reject_)=>{const p=spawn(process.execPath,[child,'--config',args.config,'--round','--log',log.file],{env:{...process.env,SSAM_VIGIA_LOCK:lock.token},stdio:['ignore','inherit','inherit'],windowsHide:true});p.once('error',reject_);p.once('close',resolve);});
+   let stderr='';const before=fs.statSync(log.file).size;
+   const code=await new Promise((resolve,reject_)=>{const p=spawn(process.execPath,[child,'--config',args.config,'--round','--log',log.file],{env:{...process.env,SSAM_VIGIA_LOCK:lock.token},stdio:['ignore','inherit','pipe'],windowsHide:true});p.stderr.on('data',b=>{stderr+=b;process.stderr.write(b);});p.once('error',reject_);p.once('close',resolve);});
+   // A round that could not even start (the code fetched from main does not load) still leaves a trace and a notice: the
+   // child always ends its log with "round <status>" or "round error: ...".
+   const tail=fs.readFileSync(log.file,'utf8').slice(before);
+   if(!/^\S+ round (\w|error:)/m.test(tail)){const first=stderr.trim().split('\n').find(Boolean)??'no output';log(`round process exited ${code} without finishing its round: ${stderr.trim().slice(-2000)}`);await remind(config.outDir,'round-exit','SSAM watcher round did not run',`The round process exited ${code}: ${first.slice(0,160)} (log ${log.file})`,{...runtime,log});}
    return {status:'round-finished',code};
   }
   log('the workspace has an older watcher; this round runs the launcher code');

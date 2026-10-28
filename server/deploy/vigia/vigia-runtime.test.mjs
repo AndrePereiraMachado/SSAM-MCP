@@ -77,6 +77,9 @@ test('the watcher worktree fast-forwards from main and stops when it cannot',{sk
  fs.writeFileSync(path.join(r.main,'server/other.txt'),'z');git(r.main,'add','.');git(r.main,'commit','-q','-m','main again');
  await assert.rejects(runtime.updateWorkspace('main'),/cannot fast-forward/);
  const primary=await createRuntime({...config(r),workspace:r.main});await assert.rejects(primary.updateWorkspace('main'),/dedicated Git worktree/);
+ // A worktree edited by hand is an environment problem (the round waits and says so), never a failure of the pair.
+ fs.appendFileSync(path.join(r.ws,'server/local.txt'),'edited');
+ await assert.rejects(runtime.preflight(),e=>e instanceof EnvironmentError&&e.code==='workspace'&&/tracked changes/.test(e.message));
 });
 test('the bundle store: a frozen copy per version, its checksum and Studio version checked, a gap is an environment problem',{skip:!windows||!fs.existsSync(SNAPSHOT_DLL)},async t=>{
  const r=repo(t),store=path.join(r.root,'store'),stage=path.join(r.root,'stage');
@@ -130,6 +133,17 @@ test('publication goes through the real publish.sh (never --latest) and reads th
  const log=fs.readFileSync(calls,'utf8');assert.match(log,/push registry\.example\.test\/ns\/ssam-server:prod-x-o115594-odc1730/);assert.doesNotMatch(log,/:latest/);
  fs.writeFileSync(path.join(r.root,'exists'),'');
  assert.deepEqual(await runtime.publish({image:registry,tag:'prod-x-o115594-odc1730',odc:'1.7.30',o11:'11.55.94'}),{digest,already:true});
+});
+test('a round whose fetched code does not load still leaves a log line and a notice',t=>{
+ const root=tempDir(t,'vigia-broken-'),ws=path.join(root,'ws'),out=path.join(root,'out');
+ fs.mkdirSync(path.join(ws,'server/deploy/vigia'),{recursive:true});
+ fs.writeFileSync(path.join(ws,'server/deploy/vigia/vigia.mjs'),"// ROUND_PROTOCOL=2\nthrow new Error('broken main');\n");
+ const cfg=path.join(root,'config.json');fs.writeFileSync(cfg,JSON.stringify({workspace:ws,tempRoot:path.join(root,'priv'),outDir:out,bundleRoot:path.join(root,'store'),notify:false}));
+ const r=spawnSync(process.execPath,[path.join(here,'vigia.mjs'),'--config',cfg,'--no-update'],{encoding:'utf8'});
+ const day=fs.readdirSync(path.join(out,'runs'))[0],log=fs.readFileSync(path.join(out,'runs',day,fs.readdirSync(path.join(out,'runs',day))[0]),'utf8');
+ assert.match(log,/round process exited 1 without finishing its round: .*broken main/s);
+ assert.ok(JSON.parse(fs.readFileSync(path.join(out,'reminders.json'),'utf8'))['round-exit']);
+ assert.equal(fs.existsSync(path.join(out,'vigia.lock')),false,'the lock is released');assert.equal(r.status,1,'the scheduler sees the failed round');
 });
 test('a second launcher finds the round lock and leaves at once',t=>{
  const dir=tempDir(t,'vigia-lock2-'),file=path.join(dir,'vigia.lock');const held=acquireLock(file);

@@ -56,9 +56,9 @@ export async function createRuntime(config,{log=()=>{}}={}){
  const git=(args,options={})=>run(exe.git,['-C',options.cwd??root,...args],options);
  const commitAs=['-c','user.name=Andre Machado','-c','user.email=andre_c_machado@hotmail.com'];
  async function checkWorkspace(){
-  if(!fs.statSync(path.join(root,'.git')).isFile())throw Error('Use a dedicated Git worktree, not the primary checkout.');
-  const branch=(await git(['branch','--show-current'])).stdout.trim();if(!branch||branch==='main'||branch==='master'||branch.startsWith('vigia/'))throw Error('Use the clean integration worktree (not main, not a vigia/ proposal branch).');
-  if((await git(['status','--porcelain','--untracked-files=no'])).stdout.trim())throw Error('The worktree has tracked changes. Commit or review them first.');
+  if(!fs.statSync(path.join(root,'.git')).isFile())throw new EnvironmentError('Use a dedicated Git worktree, not the primary checkout.','workspace');
+  const branch=(await git(['branch','--show-current'])).stdout.trim();if(!branch||branch==='main'||branch==='master'||branch.startsWith('vigia/'))throw new EnvironmentError('Use the clean integration worktree (not main, not a vigia/ proposal branch).','workspace');
+  if((await git(['status','--porcelain','--untracked-files=no'])).stdout.trim())throw new EnvironmentError('The watcher worktree has tracked changes. Commit or review them first.','workspace');
   return branch;
  }
  const storeDir=(lane,v)=>path.join(store,`${lane}-${v}`);
