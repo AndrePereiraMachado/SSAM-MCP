@@ -639,20 +639,21 @@ public static class FlowApplyScenarios
         Run(dir, "fa-base", $$$"""{"base":"{{{fixture}}}","ops":[{{{Spec}}},{{{Action}}}]}""");
         var read = Read(dir, "fa-base", lane, "FaCount");
         // Two texts with a problem each (an id the read never gave; a new action named after one the module has): one
-        // refusal with both, each at its text. The base finds the collision and supplies the Studio's free-name patch.
+        // refusal with both, each at its text. The base supplies the existing action's edit path.
         var countSeen = Line(read.Text, "assign Seen = GetOrders.Count");
         var foreign = read.Text.Replace(countSeen + "\n", countSeen + "\n  assign Total = 1 @n99\n");
         var job = new JsonObject { ["ops"] = new JsonArray(new JsonObject { ["op"] = "logic", ["data"] = new JsonObject {
             ["flow"] = new JsonArray(new JsonObject { ["text"] = foreign, ["basedOn"] = read.TextSha }, "server action FaCount\n  end\n") } }) }.ToJsonString();
         var problems = Refused(dir, "fa-two-bad", job, Path.Combine(dir, "fa-base.oml"));
         Assert.Contains(problems, p => p!["code"]!.ToString() == "FLOW_KEY_FOREIGN" && p["pointer"]!.ToString() == "/ops/0/data/flow/0");
-        var taken = Assert.Single(problems, p => p!["code"]!.ToString() == "NAME_COLLISION")!;
+        var taken = Assert.Single(problems, p => p!["code"]!.ToString() == "FLOW_ACTION_NAME_TAKEN")!;
         Assert.Equal("/ops/0/data/flow/1", taken["pointer"]!.ToString());
         Assert.Equal("base", taken["phase"]!.ToString());
         Assert.Equal("FaCount", taken["taken"]!["name"]!.ToString());
-        var rename = Assert.Single(taken["patch"]!.AsArray());
-        Assert.Equal("/ops/0/data/flow/1", rename!["path"]!.ToString());
-        Assert.Equal("server action FaCount2\n  end\n", rename["value"]!.ToString());
+        Assert.Null(taken["patch"]);
+        Assert.Equal(read.Text, taken["text"]!.ToString());
+        Assert.Equal(read.TextSha, taken["textSha"]!.ToString());
+        Assert.Equal("@" + taken["id"]!.ToString(), taken["rename"]!["target"]!.ToString());
         // A new action another text of the op calls is created first, whatever the order of the texts.
         var caller = "server action FaCaller\n  out Total: Integer\n  Helped = FaHelper(N=1)\n  assign Total = Helped.R\n  end\n";
         var helper = "server action FaHelper\n  in N: Integer\n  out R: Integer\n  assign R = N + 1\n  end\n";
@@ -843,6 +844,38 @@ public static class FlowApplyScenarios
         var after = Read(dir, "fa-new", lane, "FaNew");
         // The text it reads as is the one written, with the ids of a read.
         Assert.Equal(text, System.Text.RegularExpressions.Regex.Replace(after.Text, @" @[A-Za-z0-9+/_=-]+$", "", System.Text.RegularExpressions.RegexOptions.Multiline));
+    }
+
+    // R1 item 4 (2026-10-28): a model sent the texts of the module's actions again without @key; the base phase answered
+    // NAME_COLLISION with a derived name (X2) for each, and they were deleted and created again. A declaration (text or JSON)
+    // named after a server action of the module is that action: the refusal comes once, before the apply, as
+    // FLOW_ACTION_NAME_TAKEN with its key, its current text (the module's read, a fixed point) and the op rename, which runs.
+    public static void ADeclarationNamedAfterAnActionOfTheModuleIsItsEditPathNeverADerivedName(string dir, string fixture, string lane)
+    {
+        var text = "server action FnTaken\n  in Amount: Integer\n  out Total: Integer\n  assign Total = Amount + 1\n  end\n";
+        var created = Run(dir, "fn-base", $$$"""{"base":"{{{fixture}}}","ops":[{{{Texts(text)}}}]}""");
+        Assert.True(created["accepted"]!.GetValue<bool>(), created["policyMessages"]?.ToJsonString() + created["details"]);
+        var basePath = Path.Combine(dir, "fn-base.oml");
+        var read = Read(dir, "fn-base", lane, "FnTaken");
+        // The same file again, changed, without @key: the edit path of the action, never a new name.
+        var again = Refused(dir, "fn-text", $$$"""{"ops":[{{{Texts(text.Replace("Amount + 1", "Amount + 2"))}}}]}""", basePath);
+        Assert.DoesNotContain(again, p => p!["code"]!.ToString() == "NAME_COLLISION" || p.ToJsonString().Contains("FnTaken2", StringComparison.Ordinal));
+        var taken = Assert.Single(again, p => p!["code"]!.ToString() == "FLOW_ACTION_NAME_TAKEN")!;
+        Assert.Equal("/ops/0/data/flow/0", taken["pointer"]!.ToString());
+        Assert.Equal(read.Text, taken["text"]!.ToString());
+        Assert.Equal(read.TextSha, taken["textSha"]!.ToString());
+        var key = taken["id"]!.ToString();
+        Assert.Contains("@" + key, read.Text.Split('\n')[0]);
+        Assert.Equal("@" + key, taken["rename"]!["target"]!.ToString());
+        // The JSON form of the same declaration: the same rule.
+        var json = Refused(dir, "fn-json", """{"ops":[{"op":"logic","data":{"actions":[{"name":"FnTaken","inputs":[{"name":"Amount","type":"Integer"}],"steps":[]}]}}]}""", basePath);
+        var jsonTaken = Assert.Single(json, p => p!["code"]!.ToString() == "FLOW_ACTION_NAME_TAKEN")!;
+        Assert.Equal("/ops/0/data/actions/0/name", jsonTaken["pointer"]!.ToString());
+        Assert.Equal(key, jsonTaken["id"]!.ToString());
+        // The rename the refusal offers runs, and the action keeps its key.
+        var renamed = Run(dir, "fn-renamed", new JsonObject { ["ops"] = new JsonArray(new JsonObject { ["op"] = "rename", ["target"] = "@" + key, ["name"] = "FnRenamed" }) }.ToJsonString(), basePath);
+        Assert.True(renamed["accepted"]!.GetValue<bool>(), renamed["policyMessages"]?.ToJsonString() + renamed["details"]);
+        Assert.Equal(read.Key, Read(dir, "fn-renamed", lane, "FnRenamed").Key);
     }
 
     // The three-way merge (FlowMerge): an edit written on a read the store kept, delivered after the action changed (another

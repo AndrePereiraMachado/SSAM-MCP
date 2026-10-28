@@ -10,7 +10,8 @@
     (Service Center session and C# extensions: O11-only).
   -->
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
+    <!-- The runtime of the Studio it compiles against (kernel/StudioRuntime.props). -->
+    <TargetFramework>$(AnvilOdcTargetFramework)</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <RollForward>Major</RollForward>

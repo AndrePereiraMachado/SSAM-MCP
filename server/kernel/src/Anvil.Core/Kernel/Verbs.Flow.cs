@@ -602,13 +602,10 @@ public sealed partial class ModelSession
     // FLOW_ACTION_NAME_TAKEN: the text of the action already there is the patch (edit it and keep its ids).
     private FlowProblem NameTaken(KernelModelReader reader, IObjectSignature taken, string where)
     {
-        var current = new FlowExtractor<IObjectSignature>(reader, (IObjectSignature)_es).Action(taken, out var found);
-        var printed = ModuleFlow.Print(current);
-        var currentText = found.Count == 0 && printed.Unprintable.Count == 0 && ModuleFlow.Check(current, printed) == null ? printed.Text : null;
+        var currentText = FlowTextForm.Current(reader, (IObjectSignature)_es, taken);
         return new("FLOW_ACTION_NAME_TAKEN", "a text without @key creates an action, but " + where + " " + reader.KindOf(taken) + " " + reader.NameOf(taken)
-            + " (@" + taken.ObjectKey + "): to change that action, edit its text (header with @key, lines with their ids)", taken.ObjectKey!.ToString(),
-            currentText != null ? "edit the text below (its textSha " + ModuleFlow.TextSha(currentText) + " is the basedOn) and send it, or give the new action another name"
-                : "give the new action another name; that action is not a fixed point of its text (change it with the logic op replace)", currentText);
+            + " (@" + taken.ObjectKey + "): that name belongs to the existing action", taken.ObjectKey!.ToString(),
+            Preflight.ActionNameRules.EditAdvice(taken.ObjectKey!.ToString()!, currentText, true), currentText);
     }
 
     // The module's own action of that name (server, service or client, any case), if any.
@@ -1736,6 +1733,15 @@ public sealed partial class ModelSession
 /// (a reference to ModelSession would load the Model API assemblies with the method that names it).</summary>
 internal static class FlowTextForm
 {
+    /// <summary>The current text of an action of the module (header with @key, lines with their ids), or null when the
+    /// action is not a fixed point of its text. The patch of FLOW_ACTION_NAME_TAKEN, in the apply and in the preflight.</summary>
+    internal static string? Current(KernelModelReader reader, IObjectSignature root, IObjectSignature action)
+    {
+        var current = new FlowExtractor<IObjectSignature>(reader, root).Action(action, out var found);
+        var printed = ModuleFlow.Print(current);
+        return found.Count == 0 && printed.Unprintable.Count == 0 && ModuleFlow.Check(current, printed) == null ? printed.Text : null;
+    }
+
     /// <summary>The declaration's header independently of its body: a malformed later line does not hide its name.</summary>
     internal static FlowItem? Header(string text)
     {

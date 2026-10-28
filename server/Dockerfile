@@ -55,6 +55,14 @@ ARG ODC_STUDIO_BUNDLE=odc-studio-1.7.28.10850.tar.gz
 ARG ODC_STUDIO_BUNDLE_SHA256=
 ARG STUDIO_EXTRACTOR=nsis
 ARG REQUIRE_PINNED_STUDIOS=1
+# The runtime of each Studio (net8.0 up to ODC Studio 1.7.29 / Service Studio 11.55.93, net10.0 from 1.7.30 / 11.55.94)
+# picks the TargetFramework of the kernels compiled against it (kernel/StudioRuntime.props), read from the Studio's
+# runtimeconfig.json, which the studio lists carry since 2026-10-27 (an optional "?" entry). A studio bundle frozen
+# before that has no such file and its kernel build stops naming it; for such a bundle ONLY, pin its runtime here, next
+# to its SHA256 (net8.0 for the bundles of 1.7.28, 1.7.29, 11.55.92 and 11.55.93). A pin never overrides a runtimeconfig
+# of a newer runtime (the build stops, AnvilStudioRuntimeFloor).
+ARG SERVICE_STUDIO_TFM=
+ARG ODC_STUDIO_TFM=
 # The Studio versions this image serves, three numbers each (multi-version design rev. 3, O.6.1: the interim image).
 # ENV SSAM_IMAGE_O11 / SSAM_IMAGE_ODC for the server (a lane whose kernel.json names another version is off,
 # KERNEL_UNAVAILABLE, logged kernel-version-missing) and the labels ssam.kernels.o11 / ssam.kernels.odc for the deploy
@@ -151,17 +159,19 @@ COPY kernel/ kernel/
 
 # ---- O11 kernel (anvil.dll), against /studio/o11 -----------------------------------------------------------------------------------
 FROM sdk AS kernel-o11
+ARG SERVICE_STUDIO_TFM
 RUN --mount=type=bind,from=studio-o11,source=/studio/o11,target=/studio/o11 \
     --mount=type=cache,id=ssam-nuget-kernel-o11,sharing=locked,target=/root/.nuget/packages \
     dotnet build kernel/src/Anvil.Cli -c Release -nologo -v q -nodeReuse:false \
-      -p:SSDir=/studio/o11 -o /out/kernel/.local/cli
+      -p:SSDir=/studio/o11 ${SERVICE_STUDIO_TFM:+-p:AnvilO11StudioTfm=$SERVICE_STUDIO_TFM} -o /out/kernel/.local/cli
 
 # ---- ODC kernel (anvil-odc.dll), against /studio/odc ------------------------------------------------------------------------------
 FROM sdk AS kernel-odc
+ARG ODC_STUDIO_TFM
 RUN --mount=type=bind,from=studio-odc,source=/studio/odc,target=/studio/odc \
     --mount=type=cache,id=ssam-nuget-kernel-odc,sharing=locked,target=/root/.nuget/packages \
     dotnet build kernel/src/Anvil.Cli.Odc -c Release -nologo -v q -nodeReuse:false \
-      -p:OdcInstall=/studio/odc -o /out/kernel/.local/lane-odc/cli
+      -p:OdcInstall=/studio/odc ${ODC_STUDIO_TFM:+-p:AnvilOdcStudioTfm=$ODC_STUDIO_TFM} -o /out/kernel/.local/lane-odc/cli
 
 # ---- ODC builder / reader (ODC3.Builder.dll), against /studio/odc -------------------------------------------------------------------
 FROM sdk AS builder-odc

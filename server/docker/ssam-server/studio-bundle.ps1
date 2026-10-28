@@ -41,9 +41,13 @@ $version = if (Test-Path -LiteralPath $versionFile) { ((Get-Content -LiteralPath
 if ($version -notmatch '^\d+(\.\d+){1,3}$') { throw "no Studio version found in $Studio (Version.txt / ServiceStudio.Framework.dll): '$version'" }
 
 $list = Join-Path $here "studio-$Lane.txt"
-$paths = Get-Content -LiteralPath $list | Where-Object { $_.Trim() -and -not $_.TrimStart().StartsWith('#') } | ForEach-Object { $_.Trim() }
+$lines = Get-Content -LiteralPath $list | Where-Object { $_.Trim() -and -not $_.TrimStart().StartsWith('#') } | ForEach-Object { $_.Trim() }
+# "?path" is an optional entry (a file newer Studios carry and older ones do not): packed when the Studio has it.
+$paths = @($lines | Where-Object { -not $_.StartsWith('?') })
 $missing = @($paths | Where-Object { -not (Test-Path -LiteralPath (Join-Path $Studio ($_ -replace '/', '\'))) })
 if ($missing.Count) { throw "$Studio lacks $($missing.Count) listed file(s): $($missing -join ', ')" }
+$paths += @($lines | Where-Object { $_.StartsWith('?') } | ForEach-Object { $_.Substring(1).Trim() } |
+    Where-Object { Test-Path -LiteralPath (Join-Path $Studio ($_ -replace '/', '\')) })
 
 $stage = Join-Path ([IO.Path]::GetTempPath()) ("ssam-bundle-" + [Guid]::NewGuid().ToString('N').Substring(0, 8))
 $files = Join-Path $stage 'files'

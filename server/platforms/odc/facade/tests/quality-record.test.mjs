@@ -24,6 +24,7 @@ import { compactDelivery, shapeToolResult } from '../responses.mjs';
 import { interpretKernelResult, requiredFlowLayoutEngine } from '../kernel-delivery.mjs';
 import { refusalFields, normalizationsOf } from '../refusal-problems.mjs';
 import { agentNotConnected } from '../hosted/policy.mjs';
+import { prepareWorkspace, runWithExecutor } from '../executor.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const FIXTURES = path.join(here, 'fixtures', 'quality');
@@ -352,12 +353,18 @@ test('spans: category per kind and verb, unions, kernelOwn, rest, top and approx
   assert.ok(!JSON.stringify(free).includes('sntl'));
 });
 
-test('VERB_FIELDS are the enums of tools/list and the module constants', { timeout: 120000 }, async () => {
+test('VERB_FIELDS are the enums of tools/list and the module constants', { timeout: 120000 }, async t => {
   process.env.SSAM_APP_HOOK_TOOLS = '1';
   const { createSsamServer } = await import('../ssam.mjs');
   const { frictionTool } = await import('../../../../facade/friction-boundary.mjs');
   // servidor/fase4-26 (a7): the hosted server serves the profile all (CX11); the record reads the tools it serves.
-  const server = await createSsamServer({ profile: 'all' });
+  const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'quality-listing-'));
+  t.after(() => fs.rmSync(workspace, { recursive: true, force: true }));
+  prepareWorkspace(workspace);
+  const context = { hosted: true, id: 'quality-listing', workspace, lanes: ['o11', 'odc'],
+    executor: { id: 'quality-listing', hosted: true, workspace, call: async () => ({}), relayPort: () => 41997,
+      o11Connection: () => null, quota: { full: () => false } } };
+  const server = await runWithExecutor(context, () => createSsamServer({ profile: 'all' }));
   const [serverSide, clientSide] = InMemoryTransport.createLinkedPair();
   const client = new Client({ name: 'quality-record-test', version: '1.0.0' });
   await Promise.all([server.connect(serverSide), client.connect(clientSide)]);

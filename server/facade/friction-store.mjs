@@ -1,4 +1,3 @@
-import {runtimeDir,runtimeDirectories} from '../platforms/odc/facade/hosted/storage.mjs';
 // Local metadata only. Operation records never persist arguments, stdout, error text, model content or credentials.
 // A manual report (ssam_friction {view:"report"}, A31 of the 2026-10-06 package) is the one exception: it keeps only the
 // short fields the session writes on purpose (kind, tool, intent, attempted, workaround, cost, summary), each bounded;
@@ -22,6 +21,13 @@ const KPI = await import('./friction-kpi.mjs').catch(() => null);
 // F7 (traceability per session): the one rule of the session option and the caller key (platforms/odc/facade/correlation.mjs).
 // A copied launcher without the facade reads every session, as before.
 export const CORRELATION = await import(pathToFileURL(path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'platforms', 'odc', 'facade', 'correlation.mjs')).href).catch(() => null);
+// fase4-28 R1 (F5): the owners of the folders by backend (hosted/storage.mjs) and by lane (lane-folders.mjs), which
+// frictionPaths reads; loaded the same way: a copied launcher without the facade keeps one index folder and reads no receipt.
+const STORAGE = await import(pathToFileURL(path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'platforms', 'odc', 'facade', 'hosted', 'storage.mjs')).href).catch(() => null);
+const LANE_FOLDERS = await import(pathToFileURL(path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'platforms', 'odc', 'facade', 'lane-folders.mjs')).href).catch(() => null);
+const runtimeDir = (root, backend) => STORAGE ? STORAGE.runtimeDir(root, backend) : root;
+const runtimeDirectories = root => STORAGE ? STORAGE.runtimeDirectories(root) : [root];
+const deliverReceiptDirs = where => LANE_FOLDERS?.deliverReceiptDirs(where) ?? [];
 const id = value => typeof value === 'string' && /^[a-f0-9-]{36}$/i.test(value) ? value.toLowerCase() : null;
 const CALLER_KEY = /^c-[a-f0-9]{24}$/;
 // The hosted caller of this process (SSAM_EXPOSURE=licensee): its key, never the caller id; null for the owner.
@@ -204,12 +210,29 @@ export function outcomeOf(input, transport = {}, { tool = null } = {}) {
 export function frictionDirectory({ root, directory, env = process.env } = {}) {
   return directory ?? (typeof env.SSAM_FRICTION_DIR === 'string' && env.SSAM_FRICTION_DIR.trim() ? path.resolve(env.SSAM_FRICTION_DIR) : path.join(root, '.local', 'friction'));
 }
+// fase4-28 R1 (review item F5): the telemetry folders of one queue, ONE resolver for the store that writes and for every
+// reader (issues, the delivery KPI, the CLI --root). The hosted KPI read index/ while a server with several backends writes
+// index/versions/<backend>, and looked for the receipts in <ws>/kernel/.local/work/deliver while a customer's kernel
+// writes them in <ws>/o11/work/deliver: no hosted delivery was ever measured.
+//   - index: the daily index this process writes, one folder per backend (hosted/storage.mjs runtimeDir); indexDirs: every
+//     index folder a reader reads (index/ and each backend's, hosted/storage.mjs runtimeDirectories);
+//   - receipts: the folders where the kernel of each lane writes its delivery receipts (lane-folders.mjs): of a hosted
+//     customer's workspace, else of the lanes of <root>/kernel; `receipts` names others on purpose (tests, a copy).
+export function frictionPaths({ root, directory, workspace = null, env = process.env, receipts } = {}) {
+  const dir = frictionDirectory({ root, directory, env });
+  const indexRoot = path.join(dir, 'index');
+  const receiptDirs = receipts !== undefined ? [receipts].flat().filter(Boolean)
+    : workspace ? deliverReceiptDirs({ workspace }) : root ? deliverReceiptDirs({ kernel: path.join(root, 'kernel'), odc: path.join(root, 'platforms', 'odc') }) : [];
+  // indexDirs is read again at each use: a backend's folder appears with its first line.
+  return { dir, index: runtimeDir(indexRoot, env.SSAM_BACKEND_NAME), get indexDirs() { return runtimeDirectories(indexRoot); }, receipts: receiptDirs };
+}
 // rebuild:false (the MCP launcher, where the queue answers synchronously on the line of the client's requests): an index
 // without its .complete mark is read as it is (health.indexComplete false), never rebuilt from the operation files; the
 // CLI and a direct store rebuild it. Every read the relay makes is bounded by what it names (UI-Mockup, 2026-10-11: one
 // report that read 37,666 operation files stopped a session's MCP for 8 min 11 s).
-export function createStore({ root, directory, env = process.env, warning = code => process.stderr.write(`[ssam-friction] ${code}; operation result is unchanged.\n`), clock = () => Date.now(), rebuild = true, receipts } = {}) {
-  const dir = frictionDirectory({ root, directory, env });
+export function createStore({ root, directory, workspace = null, env = process.env, warning = code => process.stderr.write(`[ssam-friction] ${code}; operation result is unchanged.\n`), clock = () => Date.now(), rebuild = true, receipts } = {}) {
+  const folders = frictionPaths({ root, directory, workspace, env, receipts });
+  const dir = folders.dir;
   let losses = 0;
   const warn = code => { losses++; try { warning(code); } catch {} };
   function write(folder, name, value, immutable = false) {
@@ -245,9 +268,10 @@ export function createStore({ root, directory, env = process.env, warning = code
   // index/.complete says the index holds every operation. A store that had operations before the index (or an index write
   // that failed, which removes the mark) is rebuilt from the operation files once, by the next reader. Lines are only
   // appended, so a rebuild racing a writer makes duplicates, never losses; readers keep the first line of each kind.
-  const indexRoot=path.join(dir,'index');
-  const indexDir = runtimeDir(indexRoot,env.SSAM_BACKEND_NAME), indexMark = path.join(indexDir, '.complete');
-  const indexFiles = () => runtimeDirectories(indexRoot).flatMap(folder=>{try{return fs.readdirSync(folder).filter(n=>n.endsWith('.jsonl')).map(n=>path.join(folder,n));}catch{return [];}});
+  // fase4-28 R1 (F5): this process writes its backend's index; readers read every backend's (frictionPaths).
+  const indexDir = folders.index, indexMark = path.join(indexDir, '.complete');
+  const indexFiles = (wanted = n => n.endsWith('.jsonl')) => folders.indexDirs.flatMap(folder => {
+    try { return fs.readdirSync(folder).filter(wanted).map(n => path.join(folder, n)); } catch { return []; } });
   const indexDay = iso => (typeof iso === 'string' && /^\d{4}-\d{2}-\d{2}/.test(iso) ? iso.slice(0, 10).replace(/-/g, '') : 'undated');
   // F7: callerKey (hosted) scopes a line; the end line names the records the call created and its times (timeline).
   const INDEX_FIELDS = ['startedAt', 'operation', 'lane', 'profile', 'taskRef', 'sessionId', 'interface', 'callerKey', 'facadeTaskId'];
@@ -312,11 +336,9 @@ export function createStore({ root, directory, env = process.env, warning = code
     const complete = fs.existsSync(indexMark);
     if (!complete && rebuild) rebuildIndex();
     const starts = new Map(), ends = new Map(); let damaged = 0;
-    let names = [];
-    try { names = indexFiles(); } catch { names = []; }
-    for (const name of names) {
+    for (const file of indexFiles()) {
       let text = '';
-      try { text = fs.readFileSync(name, 'utf8'); } catch { damaged++; continue; }
+      try { text = fs.readFileSync(file, 'utf8'); } catch { damaged++; continue; }
       damaged += indexLines(text, starts, ends);
     }
     return { operations: ordered(starts, ends), health: { damagedRecords: damaged, partialRecords: 0, localWriteLosses: losses, source: 'index',
@@ -326,8 +348,7 @@ export function createStore({ root, directory, env = process.env, warning = code
   // report links. The index of a day holds the operations started that day, appended in order.
   function sessionTail(session, count) {
     const starts = new Map(), ends = new Map();
-    let names = [];
-    try { names = indexFiles().filter(n => /^\d{8}\.jsonl$/.test(path.basename(n))).sort((a,b)=>path.basename(b).localeCompare(path.basename(a))); } catch { names = []; }
+    const names = indexFiles(n => /^\d{8}\.jsonl$/.test(n)).sort((a, b) => path.basename(b).localeCompare(path.basename(a)));
     let budget = TAIL_BYTES;
     for (const name of names) {
       if (budget <= 0 || starts.size >= count) break;
@@ -556,7 +577,7 @@ export function createStore({ root, directory, env = process.env, warning = code
   // Read only, whatever rebuild says: it never rebuilds the index nor reads the operation files.
   function deliveryKpi({ since, until, lane } = {}) {
     if (!KPI) throw Error('Invalid delivery-kpi: this launcher has no facade/friction-kpi.mjs');
-    return KPI.kpiView({ queueDirectory: dir, receiptsDirectory: receipts === undefined ? (root ? path.join(root, 'kernel', '.local', 'work', 'deliver') : null) : receipts, since, until, lane });
+    return KPI.kpiView({ indexDirectories: folders.indexDirs, receiptsDirectories: folders.receipts, since, until, lane });
   }
   // F7: the timeline of one session (scope; default the caller's): each operation with its start and end, its tool time
   // (the observer's monotonic duration), the time it waited in a Studio write queue (from its answer) and the gap since the

@@ -10,4 +10,6 @@
     <EnableSourceLink>false</EnableSourceLink>
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
   </PropertyGroup>
+  <!-- The TargetFramework of the projects compiled against a Studio follows that Studio's runtime (StudioRuntime.props). -->
+  <Import Project="$(MSBuildThisFileDirectory)StudioRuntime.props" />
 </Project>

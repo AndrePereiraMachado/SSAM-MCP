@@ -7,6 +7,7 @@ const out=path.resolve(process.env.SSAM_REHEARSAL_DIR??'C:/t/multiver-impl/etapa
 const docker=process.env.DOCKER_EXE??'C:/Program Files/Docker/Docker/resources/bin/docker.exe';
 const prefix='ssam-multiver-'+Date.now(),containers=[];const checks=[];
 const images=process.env.SSAM_REHEARSAL_IMAGES?JSON.parse(process.env.SSAM_REHEARSAL_IMAGES):null;
+const releaseKernels=JSON.parse(fs.readFileSync(new URL('./r1-kernels.json',import.meta.url),'utf8'));
 if(images&&images.length!==2)throw Error('The initial window requires two images.');
 const image=images?.[0].image??process.env.SSAM_REHEARSAL_IMAGE??'ssam-server:prod-20261021-ac614ad';
 fs.mkdirSync(out,{recursive:true});fs.mkdirSync(path.join(out,'segredo'),{recursive:true});
@@ -28,7 +29,7 @@ try{
  const backends=[{name:'v1',url:'http://v1:7310',odc:'1.7.29',o11:'11.55.93',default:true},{name:'v2',url:'http://v2:7310',odc:'1.7.28',o11:'11.55.92'}];
  for(const [index,backend] of backends.entries()){
   const runtime=path.join(out,'segredo/runtime/versions',backend.name);fs.mkdirSync(runtime,{recursive:true});
-  const kernel={o11:images?backend.o11:'11.55.92',odc:images?backend.odc:'1.7.28',odcBridge:'v97',odcBridgeAccepted:['v96','v48','v45']};
+  const kernel=images?releaseKernels[backend.name]:{o11:'11.55.92',odc:'1.7.28',odcBridge:'v97',odcBridgeAccepted:['v98','v96','v48','v45']};
   const kernelFile=path.join(runtime,'kernel.json');fs.writeFileSync(kernelFile,JSON.stringify(kernel));
   const args=[...db,...mounts,'-e','SSAM_SERVER_DIR=/data/server','-e','SSAM_BACKEND_NAME='+backend.name,'-e','SSAM_RUNTIME_DIR=/data/server/versions/'+backend.name,'-e','SSAM_ACCESS_NOTIFY=0','-e','SSAM_SERVED_VERSIONS='+JSON.stringify({odc:['1.7.29','1.7.28'],o11:['11.55.93','11.55.92']})];
   if(images){
@@ -65,7 +66,7 @@ try{
   const tools=payload.result.tools;
   const core=new Set(['ssam_doctor','ssam_connect','ssam_discover','ssam_map','ssam_code','ssam_reference','ssam_evidence','ssam_task','o11_inspect','o11_deliver','o11_publish','o11_studio','studio_deliver','studio_inspect','studio_status']);
   const totalBytes=tools.reduce((n,t)=>n+toolListingBytes(t),0),coreBytes=tools.filter(t=>core.has(t.name)).reduce((n,t)=>n+toolListingBytes(t),0);
-  assert.equal(tools.length,92);assert.ok(totalBytes<=261330&&coreBytes<=34097,'Hosted listing must not grow');
+  assert.equal(tools.length,90);assert.ok(!tools.some(t=>['ssam_preview','studio_preview'].includes(t.name)),'Local previews must stay out of the hosted listing');assert.ok(totalBytes<=261330&&coreBytes<=34097,'Hosted listing must not grow');
   checks.push({name:'tools/list v'+(index+1),ok:true,count:tools.length,responseBytes:Buffer.byteLength(listed.text),totalBytes,coreBytes});
  }
  await Promise.all(Array.from({length:20},(_,i)=>post('/mcp',i%2?a.token:b.token,{jsonrpc:'2.0',id:i+2,method:'tools/call',params:{name:'ssam_doctor',arguments:{}}},{'mcp-session-id':i%2?sa.sid:sb.sid})).map(async p=>assert.equal((await p).status,200)));checks.push({name:'concurrent MCP calls',ok:true,count:20});

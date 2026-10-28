@@ -33,7 +33,12 @@ stage=$(mktemp -d)
 trap 'rm -rf "$stage"' EXIT
 mkdir -p "$stage/files"
 n=0 bytes=0 missing=0
-grep -v '^[[:space:]]*#' "$list" | sed '/^[[:space:]]*$/d' > "$stage/paths"
+grep -v '^[[:space:]]*#' "$list" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e '/^$/d' > "$stage/listed"
+# "?path" is an optional entry (a file newer Studios carry and older ones do not): packed when the Studio has it.
+sed -n '/^?/!p' "$stage/listed" > "$stage/paths"
+sed -n 's/^?[[:space:]]*//p' "$stage/listed" | while IFS= read -r rel; do
+  if [ -f "$studio/$rel" ]; then echo "$rel"; fi
+done >> "$stage/paths"
 while IFS= read -r rel; do
   if [ ! -f "$studio/$rel" ]; then echo "missing $rel" >&2; missing=$((missing + 1)); continue; fi
   mkdir -p "$stage/files/$(dirname "$rel")"

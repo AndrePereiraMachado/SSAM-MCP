@@ -5,7 +5,8 @@
 
 The bundle holds bundle.txt (schema ssam-studio-bundle/1, lane, version, ...), SHA256SUMS (sha256sum format, paths
 under files/) and files/<path>. Only the paths of --only come out, each written once and checked against SHA256SUMS
-while it is written; the result is the same /studio/<lane> as from the installer. Refused, with nothing left in outdir:
+while it is written; the result is the same /studio/<lane> as from the installer. An optional path of the list ("?path")
+comes out only when the bundle carries it. Refused, with nothing left in outdir:
 another schema or lane (exit 2), a listed path the bundle or SHA256SUMS lacks (exit 2), a member that is not a plain
 file or leaves files/ (exit 2), a file whose sha256 differs from SHA256SUMS (exit 3).
 """
@@ -27,7 +28,11 @@ def option(name):
 
 def unpack(bundle, outdir, lane, listfile):
     with open(listfile, encoding="utf-8") as fp:
-        wanted = [l.strip() for l in fp if l.strip() and not l.lstrip().startswith("#")]
+        lines = [l.strip() for l in fp if l.strip() and not l.lstrip().startswith("#")]
+    # "?path" is an optional entry: a file that newer Studios carry and older ones do not (studio-<lane>.txt). A bundle
+    # packed before the entry existed has no such file and stays valid; when the bundle has it, it is checked like any other.
+    wanted = [l for l in lines if not l.startswith("?")]
+    optional = [l[1:].strip() for l in lines if l.startswith("?")]
     with tarfile.open(bundle, "r:gz") as tar:
         members = {}
         for m in tar.getmembers():
@@ -56,6 +61,12 @@ def unpack(bundle, outdir, lane, listfile):
         lacking = [p for p in wanted if "files/" + p not in sums or "files/" + p not in members]
         if lacking:
             fail(2, "%s lacks %d listed file(s): %s" % (bundle, len(lacking), ", ".join(lacking)))
+        for p in optional:
+            present = ("files/" + p in sums, "files/" + p in members)
+            if present == (True, True):
+                wanted.append(p)
+            elif any(present):
+                fail(2, "%s: the optional file %s is %s" % (bundle, p, "not in SHA256SUMS" if present[1] else "in SHA256SUMS but absent"))
         written = 0
         try:
             for rel in wanted:

@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { createStore, digest, operationName } from './friction-store.mjs';
+import { createStore, digest, frictionPaths, operationName } from './friction-store.mjs';
 import { readQueue } from './friction-boundary.mjs';
 
 export async function main(args,{root,store=createStore({root})}={}) {
@@ -28,8 +28,9 @@ export async function main(args,{root,store=createStore({root})}={}) {
   }
   if(verb==='delivery-kpi'){
     const range={...(options.since?{since:options.since}:{}),...(options.until?{until:options.until}:{}),...(options.lane?{lane:options.lane}:{})};
-    // --root: another SSAM root (its .local/friction and kernel/.local/work/deliver), read without a store: nothing is written there.
-    if(options.root){const other=path.resolve(options.root),{kpiView}=await import('./friction-kpi.mjs');return kpiView({queueDirectory:path.join(other,'.local','friction'),receiptsDirectory:path.join(other,'kernel','.local','work','deliver'),...range});}
+    // --root: another SSAM root (its .local/friction, every backend's index, and its lanes' receipts: the store's own
+    // resolver, frictionPaths, without this process's SSAM_FRICTION_DIR), read without a store: nothing is written there.
+    if(options.root){const folders=frictionPaths({root:path.resolve(options.root),env:{}}),{kpiView}=await import('./friction-kpi.mjs');return kpiView({indexDirectories:folders.indexDirs,receiptsDirectories:folders.receipts,...range});}
     return readQueue(store,{view:'delivery-kpi',...range});
   }
   if(verb==='report'){const {'task-id':taskId,...fields}=options;return readQueue(store,{view:'report',...fields,...(taskId!==undefined?{taskId}:{})});}

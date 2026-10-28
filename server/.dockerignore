@@ -61,6 +61,9 @@ kernel/docs/proofs
 kernel/docs/specs
 kernel/docs/tasks
 kernel/docs/mapa
+!kernel/docs/mapa/
+kernel/docs/mapa/*
+!kernel/docs/mapa/criar-*.json
 kernel/tests/Anvil.*
 kernel/tests/Shared
 kernel/tests/SSAM.*
@@ -134,6 +137,9 @@ docker/installers
 # archive left there); state archives of deploy/backup.sh anywhere in the tree (customer data and customer names).
 Dockerfile
 deploy
+!deploy/coolify/
+deploy/coolify/*
+!deploy/coolify/r1-kernels.json
 # ...except the owner console (deploy/console), which the Coolify compose runs from the image itself as the ssam-console
 # service (node /app/deploy/console/server.mjs; deploy/coolify/COOLIFY.md 11): its code only, never its tests, the UI
 # tests, the mock fixtures or the owner's tunnel script

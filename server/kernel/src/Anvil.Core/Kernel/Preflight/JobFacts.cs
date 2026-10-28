@@ -32,6 +32,13 @@ public interface IBaseFacts
     ActionNameFact? ActionNameTaken(string name) => null;
     /// <summary>Server/service and client actions have independent native naming scopes.</summary>
     ActionNameFact? ActionNameTaken(string name, string kind) => ActionNameTaken(name);
+    /// <summary>R1 item 4: the module's own action of exactly this kind (<paramref name="kind"/> ServerAction, ServiceAction or
+    /// ClientAction: an action of the module itself, never a screen's, an entity's or a reference's), with its key and, when
+    /// the module reads it as a text, that text (the current text with @key): a declaration without @key named after it is
+    /// the edit of that action, never a new one. Null when there is none, or when the base cannot tell.</summary>
+    (string Key, string? Text)? OwnAction(string name, string kind) => null;
+    /// <summary>True when this source reads action bodies; a missing text then means it cannot round trip.</summary>
+    bool HasActionBodies => false;
     IReadOnlyDictionary<string, string>? Attributes(string record);
     bool IsClientEntity(string name);
     CalleeFact? Callee(string target, JsonObject caller);

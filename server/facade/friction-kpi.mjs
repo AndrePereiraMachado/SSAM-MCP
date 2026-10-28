@@ -1,7 +1,7 @@
 // ssam_friction {view:"delivery-kpi"} (front R0 of the plan of 2026-10-24, the "first time right and speed" plan):
 // the eight delivery KPIs of the plan's goal table, by ISO week and lane, computed from the friction queue (its daily
 // index; the chain fields the boundary records since R0) and, when the root has them, the kernel's delivery receipts
-// (kernel/.local/work/deliver/<task>/result.json). Read only: it never writes the queue, never rebuilds its index and
+// (<lane work>/deliver/<task>/result.json, the folders friction-store.mjs frictionPaths names). Read only: it never writes the queue, never rebuilds its index and
 // never reads an operation file. Synchronous, as every answer of the queue on the MCP line.
 //
 // Definitions (the same words go in the answer's `definitions`):
@@ -55,17 +55,20 @@ export function kpiRange({ since, until } = {}) {
 
 // The operations of the daily index (index/<yyyymmdd>.jsonl, the first line of each kind wins, as the store reads it),
 // of the days from `from` (less the look-back of the reads and chains) to `to`. Never writes; a damaged line is counted.
-export function readIndexOperations(directory, { from = -Infinity, to = Infinity } = {}) {
-  const indexDir = path.join(directory, 'index');
+// indexDirs: every index folder of the queue, as the store names them (friction-store.mjs frictionPaths: index/ and each
+// backend's index/versions/<backend>, fase4-28 R1).
+export function readIndexOperations(indexDirs, { from = -Infinity, to = Infinity } = {}) {
   const dayOf = ms => (Number.isFinite(ms) ? new Date(ms).toISOString().slice(0, 10).replace(/-/g, '') : null);
   const first = dayOf(from - KPI_WINDOWS.chainGapMs - 86_400_000), last = dayOf(to);
-  let names = [];
-  try { names = fs.readdirSync(indexDir).filter(n => /^\d{8}\.jsonl$/.test(n)).sort(); } catch { names = []; }
+  const names = [];
+  for (const indexDir of indexDirs ?? []) {
+    try { names.push(...fs.readdirSync(indexDir).filter(n => /^\d{8}\.jsonl$/.test(n)).map(n => ({ day: n.slice(0, 8), file: path.join(indexDir, n) }))); } catch { /* no index there */ }
+  }
+  names.sort((a, b) => a.day.localeCompare(b.day) || a.file.localeCompare(b.file));
   const starts = new Map(), ends = new Map(); let damaged = 0, files = 0;
-  for (const name of names) {
-    const day = name.slice(0, 8);
+  for (const { day, file } of names) {
     if ((first && day < first) || (last && day > last)) continue;
-    let text; try { text = fs.readFileSync(path.join(indexDir, name), 'utf8'); files++; } catch { damaged++; continue; }
+    let text; try { text = fs.readFileSync(file, 'utf8'); files++; } catch { damaged++; continue; }
     for (const line of text.split('\n')) {
       if (!line.trim()) continue;
       let entry; try { entry = JSON.parse(line); } catch { damaged++; continue; }
@@ -77,28 +80,36 @@ export function readIndexOperations(directory, { from = -Infinity, to = Infinity
   const operations = [...starts.values()].map(s => ({ ...s, ...(ends.get(s.id) ?? { outcome: 'incomplete', code: 'NO_COMPLETION_RECEIPT' }), delivery: ends.get(s.id)?.delivery ?? s.delivery ?? null }));
   for (const [key, e] of ends) if (!starts.has(key)) operations.push(e);
   operations.sort((a, b) => a.startedAt.localeCompare(b.startedAt) || String(a.id).localeCompare(String(b.id)));
-  return { operations, files, damaged, indexComplete: fs.existsSync(path.join(indexDir, '.complete')) };
+  // Complete when every index folder that holds days carries its mark (each writer marks its own), and one exists at all.
+  const holding = (indexDirs ?? []).filter(dir => names.some(n => path.dirname(n.file) === dir));
+  const marked = (indexDirs ?? []).filter(dir => fs.existsSync(path.join(dir, '.complete')));
+  return { operations, files, damaged, indexComplete: marked.length > 0 && holding.every(dir => marked.includes(dir)) };
 }
 
 // The kernel's delivery receipts registered in [from, to): delivered or not, the registered -> complete time, and the
 // phases of the problems of a refusal. Only result.json files of at most 16 MB whose mtime is not before `from`.
+// directory: one folder or the list the store names (every lane's work/deliver, friction-store.mjs frictionPaths).
 export function readReceipts(directory, { from = -Infinity, to = Infinity } = {}) {
   const receipts = []; let damaged = 0, skipped = 0;
-  if (!directory) return { receipts, damaged, skipped, present: false };
-  let names = [];
-  try { names = fs.readdirSync(directory); } catch { return { receipts, damaged, skipped, present: false }; }
-  for (const name of names) {
-    const file = path.join(directory, name, 'result.json');
+  const folders = [directory].flat().filter(Boolean);
+  const entries = [];
+  for (const folder of folders) { try { entries.push(...fs.readdirSync(folder).map(name => path.join(folder, name))); } catch { /* no receipts there */ } }
+  if (!folders.some(folder => fs.existsSync(folder))) return { receipts, damaged, skipped, present: false };
+  for (const entry of entries) {
+    const odc = !fs.existsSync(path.join(entry, 'result.json'));
+    const file = path.join(entry, odc ? 'deliver-result.json' : 'result.json');
     let stat; try { stat = fs.statSync(file); } catch { continue; }
     if (stat.mtimeMs < from || stat.size > 16 * 1024 * 1024) { skipped++; continue; }
     let value; try { value = JSON.parse(fs.readFileSync(file, 'utf8')); } catch { damaged++; continue; }
     const history = Array.isArray(value?.history) ? value.history : [];
     const time = stage => { const h = history.find(x => x?.stage === stage); const ms = Date.parse(h?.time ?? ''); return Number.isFinite(ms) ? ms : null; };
-    const registered = time('registered'), complete = time('complete');
-    if (registered === null || registered < from || registered >= to) { skipped++; continue; }
+    const registered = odc ? Date.parse(value.startedAt ?? '') : time('registered');
+    const complete = odc ? Date.parse(value.completedAt ?? '') : time('complete');
+    if (!Number.isFinite(registered) || registered < from || registered >= to) { skipped++; continue; }
     const phases = [...new Set((Array.isArray(value.problems) ? value.problems : []).map(p => p?.phase).filter(p => typeof p === 'string'))];
-    receipts.push({ registered, delivered: value.delivered === true, kernelMs: value.delivered === true && complete !== null ? complete - registered : null,
-      code: typeof value.code === 'string' ? value.code : null, phases, lane: 'o11' });
+    const delivered = odc ? value.ok === true && value.merged === true : value.delivered === true;
+    receipts.push({ registered, delivered, kernelMs: delivered && Number.isFinite(complete) ? complete - registered : null,
+      code: typeof value.code === 'string' ? value.code : null, phases, lane: odc ? 'odc' : 'o11' });
   }
   return { receipts, damaged, skipped, present: true };
 }
@@ -262,12 +273,13 @@ export function deliveryKpi({ operations = [], receipts = [], from = -Infinity, 
 }
 
 // The answer of the view: the table as paged.tables (the shape of the paged answers: at, columns, rows of cells), the
-// definitions and what was read. queueDirectory: the friction folder; receiptsDirectory: kernel/.local/work/deliver or null.
-export function kpiView({ queueDirectory, receiptsDirectory = null, since, until, lane } = {}) {
+// definitions and what was read. indexDirectories and receiptsDirectories: the folders the store names for its queue
+// (friction-store.mjs frictionPaths, the same resolver its writer uses; fase4-28 R1).
+export function kpiView({ indexDirectories = [], receiptsDirectories = [], since, until, lane } = {}) {
   if (lane !== undefined && !['o11', 'odc'].includes(lane)) throw Error('Invalid lane');
   const { from, to } = kpiRange({ since, until });
-  const index = readIndexOperations(queueDirectory, { from, to });
-  const read = readReceipts(receiptsDirectory, { from, to });
+  const index = readIndexOperations(indexDirectories, { from, to });
+  const read = readReceipts(receiptsDirectories, { from, to });
   const kpi = deliveryKpi({ operations: index.operations, receipts: read.receipts, from, to, lane });
   return { ok: true, view: 'delivery-kpi', ...(since ? { since } : {}), ...(until ? { until } : {}), ...(lane ? { lane } : {}),
     logical: kpi.logical, chains: kpi.chains, calls: kpi.calls, recordedCalls: kpi.recordedCalls,

@@ -86,10 +86,12 @@ class Lane:
 
     @property
     def cli(self) -> pathlib.Path:
-        for c in (self.local / "cli" / "anvil.dll", ROOT / ".local" / "cli" / "anvil.dll"):
+        # The source build lands in the folder of its Studio's runtime (kernel/StudioRuntime.props): net10.0, else net8.0.
+        source = ROOT / "src" / "Anvil.Cli" / "bin" / "Release"
+        for c in (self.local / "cli" / "anvil.dll", ROOT / ".local" / "cli" / "anvil.dll", source / "net10.0" / "anvil.dll"):
             if c.exists():
                 return c
-        return ROOT / "src" / "Anvil.Cli" / "bin" / "Release" / "net8.0" / "anvil.dll"
+        return source / "net8.0" / "anvil.dll"
 
     @property
     def jobs(self) -> pathlib.Path: return self.local / "jobs"

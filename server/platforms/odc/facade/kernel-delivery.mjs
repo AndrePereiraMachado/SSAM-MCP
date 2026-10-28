@@ -1125,7 +1125,7 @@ export async function deliverKernel(input, deps) {
   const cache = deps.cache !== undefined ? deps.cache : process.env.SSAM_ODC_DELIVER_CACHE === '0' ? null
     : deliveryCache({ root, ...(hostedContext() ? { builder: path.join(odcRoot, 'studio', 'builder', 'bin', 'Release', 'net10.0', 'ODC3.Builder.dll') } : {}) });
   const started = Date.now();
-  const report = { ok: false, source: 'kernel-job', module, feature, job, until, steps: [], merged: false, publishInvoked: false };
+  const report = { ok: false, source: 'kernel-job', startedAt: new Date().toISOString(), module, feature, job, until, steps: [], merged: false, publishInvoked: false };
   let stage = 'snapshot', claimed = false;
   // proto: the expansion of a prototype op (captures, warnings, timings), its degraded items and its receipt.
   let proto = null, protoRefusal = null;
@@ -2091,6 +2091,7 @@ export async function deliverKernel(input, deps) {
     report.totalSeconds = (Date.now() - started) / 1000;
     if (claimed) {
       // F7: the receipt names the session and the call of the delivery (the answer itself is unchanged).
+      report.completedAt = new Date().toISOString();
       try { fs.writeFileSync(path.join(output, 'deliver-result.json'), JSON.stringify(stamped(report), null, 2)); }
       catch (error) { report.receiptError = error.message; }
     }

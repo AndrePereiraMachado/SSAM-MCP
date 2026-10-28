@@ -92,6 +92,8 @@ import { systemModuleName } from './studio-module.mjs';
 import { stallRecovery } from './studio-recovery.mjs';
 import { isErrorReportTitle } from './bridge-stall.mjs';
 import { isStudioWrite } from './tool-classification.mjs';
+import { moduleReservation, sameDeliveryLineage, reservationContinuation } from './delivery-lineage.mjs';
+import { laneLocalDir, laneWorkDir } from './lane-folders.mjs';
 const APP_TOOLS = new Set(['context', 'propose', 'continue', 'status']);
 const O11_STUDIO_BARRIER_WAITS = new Set(['idle', 'no-dialogs']);
 
@@ -786,7 +788,7 @@ export async function withStudioWriteLock({ tool, args = {}, lane, studioKey, de
     return fn();
   }
   if (phased === true && isPhased(tool, args) && !target.lane.startsWith(DATA_LANE_PREFIX))
-    return runPhased({ target, tool, ctx, limit, signal, studio, refuse }, fn);
+    return runPhased({ target, tool, args, deps, ctx, limit, signal, studio, refuse }, fn);
   const turn = await takeTurn({ target, tool, args, ctx, limit, signal, studio, priority:mode==='first' });
   if (!turn.ok && turn.bypass) return bypass();
   if (!turn.ok) return refuse(turn.value);
@@ -839,19 +841,30 @@ export function isPhased(name, args = {}) {
 const guardsHeld = new Map(); // guard file -> token
 const guardOwners = new Map(); // guard file -> {tool, pid, startedAt} of the delivery of this process that holds it
 const guardLines = new Map(); // guard file -> waiters of this process, in arrival order
+const reservationWaiters = new Map(); // reporting only; these callers never hold or queue for the module guard
 let guardExitHooked = false;
-async function takeGuard({ target, tool, ctx, limit, signal, studio }) {
+async function takeGuard({ target, tool, ctx, limit, signal, studio, reservation }) {
   const module = target.module;
   if (!module) return { ok: true, release: () => {}, waitedMs: 0, queue: null };
   const file = path.join(target.dir, target.lane + '~b-' + safe(module.key ?? module.name) + '.guard');
   const me = { token: randomUUID() };
-  const line = guardLines.get(file) ?? [];
-  guardLines.set(file, line);
-  line.push(me);
+  let line = null, reservationLine = null;
+  const joinGuardLine = () => {
+    if (line) return;
+    line = guardLines.get(file) ?? [];
+    guardLines.set(file, line);
+    line.push(me);
+  };
+  const leaveReservationLine = () => {
+    if (!reservationLine) return;
+    const at = reservationLine.indexOf(me); if (at >= 0) reservationLine.splice(at, 1);
+    if (!reservationLine.length && reservationWaiters.get(file) === reservationLine) reservationWaiters.delete(file);
+    reservationLine = null;
+  };
   if (!guardExitHooked) { guardExitHooked = true; process.on('exit', () => { for (const [f, token] of guardsHeld) unlinkIfMine(f, token); guardsHeld.clear(); }); }
   let holder = null;
   const take = () => {
-    if (line[0] !== me || guardsHeld.has(file)) return false;
+    if (line?.[0] !== me || guardsHeld.has(file)) return false;
     const record = { schema: GUARD_SCHEMA, pid: process.pid, tool: String(tool), startedAt: new Date(ctx.now()).toISOString(), lane: target.lane, token: me.token };
     guardsHeld.set(file, me.token);
     try {
@@ -865,16 +878,62 @@ async function takeGuard({ target, tool, ctx, limit, signal, studio }) {
     } catch { guardOwners.set(file, holderOf({ record })); return true; } // the folder cannot be written: the in-process line still orders this process's deliveries
   };
   const started = Date.now();
-  let position = null, step = NAP_FIRST, taken = false, firstHolder = null;
-  const release = () => {
+  let position = null, step = NAP_FIRST, taken = false, firstHolder = null, lastReservation = null;
+  const releaseGuard = () => {
+    const occupied = guardsHeld.get(file) === me.token || line !== null;
     if (guardsHeld.get(file) === me.token) { guardsHeld.delete(file); guardOwners.delete(file); unlinkIfMine(file, me.token); }
-    const at = line.indexOf(me); if (at >= 0) line.splice(at, 1);
-    if (!line.length) guardLines.delete(file);
-    changed();
+    if (line) {
+      const at = line.indexOf(me); if (at >= 0) line.splice(at, 1);
+      if (!line.length && guardLines.get(file) === line) guardLines.delete(file);
+      line = null;
+    }
+    if (occupied) changed();
+  };
+  const release = () => { releaseGuard(); leaveReservationLine(); };
+  const reservationRefusal = held => {
+    const waitedMs = Date.now() - started, budget = Math.min(limit, reservation.waitMs);
+    return { ok: false, value: {
+      ok: false, code: signal?.aborted ? CANCELLED_CODE : 'MODULE_RESERVED', outcome: 'not-sent',
+      error: 'This delivery exhausted its reservation wait or was cancelled; nothing of it ran.',
+      holder: { taskId: held.taskId, since: held.since }, position, waitedMs, queueMs: budget,
+      moduleQueue: { position, waitedMs, queueMs: budget }, continuation: reservationContinuation(held.taskId)
+    } };
   };
   try {
     for (;;) {
-      if (take()) { taken = true; break; }
+      const held = reservation?.();
+      if (held) {
+        // The owner may need this exact guard for closePrevious or patch + basedOn. Wait outside both its file and FIFO.
+        releaseGuard();
+        lastReservation = held;
+        firstHolder ??= { taskId: held.taskId, since: held.since };
+        if (!reservationLine) {
+          reservationLine = reservationWaiters.get(file) ?? [];
+          reservationWaiters.set(file, reservationLine);
+          reservationLine.push(me);
+        }
+        position ??= reservationLine.indexOf(me) + 1;
+        const left = started + Math.min(limit, reservation.waitMs) - Date.now();
+        if (signal?.aborted || left <= 0) return reservationRefusal(held);
+        await nap(Math.min(step, left), signal);
+        step = Math.min(step * 2, NAP_MAX);
+        continue;
+      }
+      leaveReservationLine();
+      // Leaving the reservation wait never resets its deadline, even if the reservation disappeared at the last instant.
+      if (lastReservation && (signal?.aborted || Date.now() - started >= Math.min(limit, reservation.waitMs)))
+        return reservationRefusal(lastReservation);
+      joinGuardLine();
+      if (take()) {
+        const changedReservation = reservation?.();
+        if (changedReservation) {
+          // A reservation acquired between our read and the guard: back out completely before waiting again.
+          releaseGuard();
+          lastReservation = changedReservation;
+          continue;
+        }
+        taken = true; break;
+      }
       // The deliveries of this process ahead (the holder among them) and a holder in another process.
       const ahead = Math.max(0, line.indexOf(me)) + (holder && !guardsHeld.has(file) ? 1 : 0);
       position ??= Math.max(1, ahead);
@@ -894,7 +953,8 @@ async function takeGuard({ target, tool, ctx, limit, signal, studio }) {
   const waitedMs = Date.now() - started;
   // A delivery that waited for another one of its module is told so as a write that waited its turn: queue {position,
   // waitedMs, holder}.
-  return { ok: true, release, waitedMs, queue: position != null ? { position, waitedMs, holder: firstHolder } : null };
+  return { ok: true, release, waitedMs, queue: position != null ? { position, waitedMs, holder: firstHolder,
+    ...(reservation ? { queueMs: Math.min(limit, reservation.waitMs) } : {}) } : null };
 }
 
 // The answer of a phased call (see withQueue): its own result with the given fields added in one place.
@@ -935,13 +995,30 @@ function stampReceipts(files, phases) {
   }
 }
 
-async function runPhased({ target, tool, ctx, limit, signal, studio, refuse }, fn) {
+async function runPhased({ target, tool, args, deps, ctx, limit, signal, studio, refuse }, fn) {
   if (signal?.aborted) return refuse({ ok: false, code: CANCELLED_CODE, outcome: 'not-sent', error: 'The call was cancelled before it started; nothing ran.', continuation: busyContinuation(studio) });
   const startedAt = Date.now();
-  const guard = await takeGuard({ target, tool, ctx, limit, signal, studio });
+  let reservation = null;
+  if (tool === 'o11_deliver' && !args.resume && !args.close && !args.closePrevious && args.until !== 'apply') {
+    const root = deps.o11Root ?? anvilRoot;
+    const lane = anvilLaneOf(null, args, deps);
+    const hosted = usesWorkspace(root, anvilRoot);
+    const local = laneLocalDir(lane, hosted ? { workspace: workspacePath() } : { kernel: root });
+    let record; try { record = deps.connection ? deps.connection(lane) : readConnection(root, lane); } catch { record = null; }
+    const directory = hosted ? workspacePath('state', 'relay-authority', 'reservations')
+      : path.join(record?.authorityDir ?? deps.env?.ANVIL_AUTHORITY_DIR ?? process.env.ANVIL_AUTHORITY_DIR ?? '', 'reservations');
+    reservation = () => {
+      const held = moduleReservation({ directory, work: laneWorkDir(local), module: args.module, environment: args.expectedEnvironment });
+      return held && !sameDeliveryLineage(args, args.job, held.task) ? held : null;
+    };
+    const configured = Number(deps.env?.SSAM_RESERVATION_QUEUE_MS ?? process.env.SSAM_RESERVATION_QUEUE_MS ?? 120000);
+    reservation.waitMs = Number.isFinite(configured) && configured >= 0 ? configured : 120000;
+  }
+  const guard = await takeGuard({ target, tool, ctx, limit, signal, studio, reservation });
   if (!guard.ok) return refuse(guard.value);
   const phase = { startedAt, guardWaitMs: guard.waitedMs, poolWaitMs: 0, promoteAt: null, acquiredAt: null, queue: null, refusal: null,
-    built: false, rebased: null, buildQueue: null, moduleQueue: guard.queue ? { position: guard.queue.position, waitedMs: guard.queue.waitedMs } : null, receipts: [] };
+    built: false, rebased: null, buildQueue: null, moduleQueue: guard.queue ? { position: guard.queue.position, waitedMs: guard.queue.waitedMs,
+      ...(guard.queue.queueMs != null ? { queueMs: guard.queue.queueMs } : {}) } : null, receipts: [] };
   const entry = { slot: target, lock: null, deferred: true, tool: String(tool), phase };
   let promoting = null;
   entry.promote = () => promoting ??= (async () => {

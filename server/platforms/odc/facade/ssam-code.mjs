@@ -866,10 +866,46 @@ export const PART_SYNONYMS = { ddl: ['ddl', 'data', 'sql', 'schema', 'database',
   html: ['html', 'screen', 'screens', 'ui', 'page', 'pages', 'block', 'blocks', 'ssam-html', 'ssam-html/1'] };
 export const canonicalPart = word => (typeof word !== 'string' ? null : Object.entries(PART_SYNONYMS).find(([, ws]) => ws.includes(word.trim().toLowerCase()))?.[0] ?? null);
 
+// ---- What a part of a write creates and consumes, by name: the facts a dependency order reads (R1 item 5). Today
+// orderParts orders one edge by them (a data text whose timer names an action of this write goes after the part that
+// creates that action, whatever part creates it); the topological order of every edge (blocks, structures, screens, drops:
+// the next release) reads the same facts, so a part that declares a new kind of name adds it here.
+const ACTION_TYPE = /^I?(?:Server|Service|Client)Action$/;
+const named = name => String(name).toLowerCase();
+const moduleOwner = owner => owner == null || owner === '@espace';
+const moduleActionKind = kind => /^(?:server|service|client)(?: action)?$/i.test(kind ?? 'server');
+const flowTexts = flow => (Array.isArray(flow) ? flow : [flow]).map(f => (plain(f) ? lines(f.text) : lines(f)));
+// The JSON ops of an ops part, normalized as they are delivered.
+const opsOf = p => { const job = normalizeCodeOps(Array.isArray(p.ops) ? p.ops : []).job; return (Array.isArray(job) ? job : []).filter(plain); };
+// The module actions a part creates: a logic text without @key; in an ops part, a logic op's new actions (JSON, or text
+// without @key) and a create of an action type.
+function actionsCreatedBy(p) {
+  const fromTexts = texts => texts.flatMap(t => splitActions(t) ?? [t]).map(headerOf).filter(h => h && h.key == null && moduleOwner(h.owner) && moduleActionKind(h.kind)).map(h => named(h.name));
+  if (p.part === 'logic') return fromTexts(textList(p.text));
+  if (p.part !== 'ops') return [];
+  return opsOf(p).flatMap(op => [
+    ...(op.op === 'create' && moduleOwner(op.parent) && typeof op.name === 'string' && ACTION_TYPE.test(String(op.type ?? '').split(/[.:]/).pop()) ? [named(op.name)] : []),
+    ...(op.op === 'logic' && plain(op.data) && Array.isArray(op.data.actions)
+      ? op.data.actions.filter(a => plain(a) && moduleOwner(a.owner) && moduleActionKind(a.kind) && typeof a.name === 'string' && a.replace !== true).map(a => named(a.name)) : []),
+    ...(op.op === 'logic' && plain(op.data) && op.data.flow != null ? fromTexts(flowTexts(op.data.flow)) : []),
+  ]);
+}
+// The data texts of a part: a ddl part's text, an ops part's spec ddl.
+const ddlTextsOf = p => (p.part === 'ddl' ? [textList(p.text).join('\n')]
+  : p.part === 'ops' ? opsOf(p).filter(op => op.op === 'spec' && plain(op.data) && typeof op.data.ddl === 'string').map(op => op.data.ddl) : []);
+/** Action dependency facts, ready for the later full dependency ordering pass. */
+export function partFacts(p) {
+  const ddlTexts = ddlTextsOf(p);
+  return { creates: { actions: [...new Set(actionsCreatedBy(p))] },
+    consumes: { actions: [...new Set(ddlTexts.flatMap(timerActions))] } };
+}
+
 /**
  * The parts of a write in the order the delivery needs them (one meaning: the order of the parts in a call never carries
- * the person's intent, the dependencies do): the data first (unless a timer of it names an action this write creates),
- * then new blocks (a block another one uses first), then new screens, then the actions and the screen edits as given.
+ * the person's intent, the dependencies do): the data first, then new blocks (a block another one uses first), then new
+ * screens, then the actions and the screen edits as given. A data text whose timer names an action of this write goes
+ * right after the part that creates that action (any part: a logic text, an ops part's logic or create).
+ * Full dependency sorting and mixed DDL splitting belong to the next ordering pass.
  * Returns {parts, moved}.
  */
 export function orderParts(parts) {
@@ -881,7 +917,15 @@ export function orderParts(parts) {
   const ddl = parts.filter(p => p.part === 'ddl').map(p => ({ p, drops: dropsOf(p.text), other: othersOf(p.text) }));
   if (ddl.some(d => d.drops && d.other)) return { parts, moved: false };
   const dropsOnly = new Set(ddl.filter(d => d.drops).map(d => d.p));
-  const newActions = new Set(parts.filter(p => p.part === 'logic').flatMap(p => textList(p.text).map(headerOf).filter(h => h && h.key == null).map(h => h.name.toLowerCase())));
+  const facts = new Map(parts.map(p => [p, partFacts(p)]));
+  // R1 item 5: the parts that create an action a data text's timer names. Before, only a logic text counted (an action of an
+  // ops part left the timer first) and the timer tied in rank with the logic texts, so the order of the files decided
+  // (DDL_REFUSED "no IServerAction named ...").
+  const creatorsOf = p => (facts.get(p).consumes.actions.length
+    ? parts.filter(o => o !== p && facts.get(o).creates.actions.some(a => facts.get(p).consumes.actions.includes(a))) : []);
+  const follows = new Map(parts.map(p => [p, creatorsOf(p)]).filter(([, creators]) => creators.length));
+  // Preserve the existing rank of unrelated parts before applying timer dependencies.
+  const newActions = new Set(parts.filter(p => p.part === 'logic').flatMap(p => facts.get(p).creates.actions));
   const rank = p => (p.part === 'ddl' ? (dropsOnly.has(p) ? 4 : timerActions(p.text).some(a => newActions.has(a)) ? 3 : 0)
     : p.part === 'html' && !isHtmlEdit(p) ? (blockDefined(p.text) ? 1 : 2) : p.part === 'ops' ? 2.5 : 3);
   const ranked = parts.map((p, i) => ({ p, i, r: rank(p) })).sort((a, b) => a.r - b.r || a.i - b.i);
@@ -894,8 +938,24 @@ export function orderParts(parts) {
     const [next] = blocks.splice(ready < 0 ? 0 : ready, 1);
     sortedBlocks.push(next); done.add(blockDefined(next.p.text));
   }
-  const ordered = [...ranked.filter(x => x.r === 0), ...sortedBlocks, ...ranked.filter(x => x.r > 1)];
-  return { parts: ordered.map(x => x.p), moved: ordered.some((x, i) => x.i !== i) };
+  const rankedParts = [...ranked.filter(x => x.r === 0), ...sortedBlocks, ...ranked.filter(x => x.r > 1)].map(x => x.p);
+  // Defer only timer consumers until their action creators have been emitted. Flush in input order so two timers
+  // waiting for the same action keep their relative order. Other dependency kinds stay with the existing ranks.
+  const ordered = [], pending = [], emitted = new Set();
+  const ready = p => (follows.get(p) ?? []).every(c => emitted.has(c));
+  const emit = p => { ordered.push(p); emitted.add(p); };
+  for (const p of rankedParts) {
+    if (ready(p)) emit(p); else pending.push(p);
+    for (let i = 0; i < pending.length;) {
+      if (ready(pending[i])) { emit(pending.splice(i, 1)[0]); i = 0; } else i++;
+    }
+  }
+  // Cyclic mixed parts need statement splitting in the full ordering pass; preserve their order for now.
+  ordered.push(...pending);
+  const reasons = [];
+  if (rankedParts.some((p, i) => p !== parts[i])) reasons.push('data first, then new blocks and screens, then actions and screen edits, with data that only drops last');
+  if (ordered.some((p, i) => p !== rankedParts[i])) reasons.push('timers follow the parts that create their module actions');
+  return { parts: ordered, moved: ordered.some((p, i) => p !== parts[i]), reasons };
 }
 
 /** The delivery call of a write: {tool, arguments, normalizations?} for o11_deliver / studio_deliver, or {refusal}. deps.readJob reads a job file. */
@@ -1028,7 +1088,7 @@ export function writeCall(input, { readJob = readJobFile, readReading = loadFlow
   if (problems.length) return refuse(problems.map(p => p.at + ': ' + p.error).join(' | '), { problems, ...(normalizations.length ? { normalizations } : {}) });
   const sorted = orderParts(parts);
   if (sorted.moved) note('parts-order', '/also', 'written as ' + sorted.parts.map(p => p.part + (p.part === 'html' ? (isHtmlEdit(p) ? ' edit' : ' document') : '')).join(', ')
-    + ': the data first, then new blocks and screens, then the actions and the screen edits, then a data text that only drops');
+    + ': ' + sorted.reasons.join('; '));
   parts = sorted.parts;
   // A new screen action and the change of its screen in one write: the action first, so the button that names it
   // resolves (HTML_NAME_UNKNOWN otherwise); the edit then rebases over the screen the action changed. A new <screen>

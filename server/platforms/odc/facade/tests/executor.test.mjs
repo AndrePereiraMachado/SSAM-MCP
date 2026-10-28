@@ -35,6 +35,7 @@ const executor = await import('../executor.mjs');
 const { CALL_KINDS, MACHINE_KINDS, LocalExecutor, DenyExecutor, setDefaultExecutor, runWithExecutor, currentExecutor, hostedContext,
   servedWithoutContext, workspacePath, usesWorkspace, hostedSpawnEnv, fileVersion, createHostedContext, prepareWorkspace, SPAWN_ALLOWED, LOCAL_CALLS } = executor;
 const { anvilRoot } = await import('../workspace.mjs');
+const { runtimeDir } = await import('../hosted/storage.mjs');
 
 const fakeExecutor = (record = null) => ({ id: 'fake-' + randomUUID(), hosted: true, calls: [], record,
   async call(kind, params) { this.calls.push({ kind, params }); return {}; }, o11Connection() { return this.record; }, async close() {} });
@@ -141,7 +142,8 @@ test('hostedSpawnEnv is a closed list: the workspace, the relay, and nothing els
       const { env, cwd } = hostedSpawnEnv('odc');
       assert.equal(cwd, path.join(none.workspace, 'odc'));
       assert.equal(env.SSAM_HYBRID_ODC_ROOT, path.join(none.workspace, 'odc'));
-      assert.equal(env.TEMP, path.join(none.workspace, 'odc', 'tmp')); assert.equal(env.TMP, env.TEMP); assert.ok(fs.existsSync(env.TEMP));
+      // fase4-28 R1 (F1): <ws>/<lane>/tmp, one sub-folder per backend when the server names one (hosted-temp-mirror.test.mjs).
+      assert.equal(env.TEMP, runtimeDir(path.join(none.workspace, 'odc', 'tmp'))); assert.equal(env.TMP, env.TEMP); assert.ok(fs.existsSync(env.TEMP));
       assert.equal(env.TMPDIR, env.TEMP, 'TMPDIR: the temp folder of .NET on Linux');
       assert.equal(env.ANVIL_AUTHORITY_DIR, path.join(none.workspace, 'state', 'relay-authority'));
       assert.equal(env.ANVIL_ODC_FEATURES_DIR, 'C:\\server\\features');
@@ -157,7 +159,7 @@ test('hostedSpawnEnv is a closed list: the workspace, the relay, and nothing els
       assert.equal(env.ANVIL_LANE, 'ss4');
       assert.equal(env.ANVIL_BRIDGE_FLAVOR, 'thin', 'set here, never copied from this process');
       assert.equal(env.ANVIL_BRIDGE_TIMEOUT_SECONDS, '600');
-      assert.equal(env.TMPDIR, path.join(context.workspace, 'o11', 'tmp'));
+      assert.equal(env.TMPDIR, runtimeDir(path.join(context.workspace, 'o11', 'tmp')));
       const allowed = new Set([...SPAWN_ALLOWED, 'TEMP', 'TMP', 'TMPDIR', 'ANVIL_AUTHORITY_DIR', 'ANVIL_BRIDGE_PORT', 'ANVIL_STUDIO_DIR', 'ANVIL_LANE',
         'ANVIL_BRIDGE_FLAVOR', 'ANVIL_BRIDGE_TIMEOUT_SECONDS', 'ANVIL_BRIDGE_PROBE_MS', 'ANVIL_KEPT_READINGS',
     'SSAM_STUDIO_DEFAULTS_ROOT', // a7 (SD): the customer's own folder of the Studio defaults

@@ -37,7 +37,10 @@ export const python = () => process.env.SSAM_PYTHON ?? (fs.existsSync(CODEX_PYTH
 // The lane's CLI assembly, in the order scripts/lanes.py uses: the lane build, the ss4 build, the source build.
 export function anvilCli(root = anvilRoot, laneName = anvilLane) {
   const local = path.join(root, laneName === 'ss5' ? path.join('.local', 'lane-ss5') : '.local');
+  // The source build lands in the folder of its Studio's runtime (kernel/StudioRuntime.props): net10.0 from Service Studio
+  // 11.55.94 on, net8.0 before.
   return first(path.join(local, 'cli', 'anvil.dll'), path.join(root, '.local', 'cli', 'anvil.dll'),
+    path.join(root, 'src', 'Anvil.Cli', 'bin', 'Release', 'net10.0', 'anvil.dll'),
     path.join(root, 'src', 'Anvil.Cli', 'bin', 'Release', 'net8.0', 'anvil.dll'));
 }
 // Cold data commands can be rebuilt independently of a loaded model-reading worker.

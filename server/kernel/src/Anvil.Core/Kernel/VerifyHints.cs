@@ -10,8 +10,7 @@ public static class VerifyHints
 {
     public static IReadOnlyDictionary<string, VerifyHint> Read(string? root = null)
     {
-        root ??= JobRunner.RepoRoot(Directory.GetCurrentDirectory())
-            ?? JobRunner.RepoRoot(Path.GetDirectoryName(typeof(VerifyHints).Assembly.Location)!);
+        root ??= JobSources.KernelRoot();   // the kernel that runs, never the current directory first
         if (root == null) return new Dictionary<string, VerifyHint>();
         var result = new Dictionary<string, VerifyHint>(StringComparer.Ordinal);
         foreach (var file in Directory.GetFiles(Path.Combine(root, "catalog"), "verify-hints-*.json").OrderBy(f => f, StringComparer.Ordinal))

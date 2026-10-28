@@ -7,7 +7,9 @@
 // files) must be, byte for byte with LF line ends, the one recorded below for the version the three version marks
 // declare (StartupHook.cs Version, Bridge.csproj AssemblyName, client/Program.cs Version). A change without a new version
 // fails here, naming every file that differs, in one answer. A new version records its own hashes (the sha256 of each
-// file with CRLF turned into LF, as SHARED.md computes them). v97: computed from git show 3c2c73e:<path>.
+// file with CRLF turned into LF, as SHARED.md computes them). v97: computed from git show 3c2c73e:<path>. v100 (2026-10-27): the v97 code built for the net10 ODC Studios (1.7.30 on);
+// only the three version marks changed (Bridge.csproj also names its runtime, OdcBridgeRuntime net10.0; the client attaches
+// v97 to a net8 Studio and v100 to a net10 one, by the Studio's own runtimeconfig.json).
 // The same test, with the same table, guards the agent box (tests/odc-bridge-version.test.mjs).
 import './fixtures/isolated-profile.mjs';
 import { test } from 'node:test';
@@ -52,6 +54,42 @@ const RECORDED = {
     'platforms/odc/studio/bridge/TemplateCache.cs': 'a57ef89f222983393d3249c75d543e6a2fc06aef456340a63272d8f127b3f20c',
     'platforms/odc/studio/bridge/client/Client.csproj': 'a5b9c2d9640b4df751a052075cd5b2bf9b568b7b2e00f72b160acb9ebdc953f2',
     'platforms/odc/studio/bridge/client/Program.cs': '371ac5aff49a07d71b307252b6305165f9bf258c678e9ffdc20e7e5190482f87',
+    'platforms/odc/studio/engine/NativeMergeOrder.cs': '3ec32ca130504f0375a12704b58123e88539fc0472dd8174945430ac10c7e127',
+    'platforms/odc/studio/engine/NativeMergeVerification.cs': 'b7b797836070709672c57d3bdeb0ebed8571e06c4dfba172b9a5a0ab7ce4aede',
+    'platforms/odc/studio/shared/Journal.cs': 'e0cc116aec478a3092b9e31c04f470b6d5a47f7af72974234a3d7fa93586185e',
+    'platforms/odc/studio/shared/Manifest.cs': 'bcc45f95c3b541739dad91211be17df8d2dfe1f59398ed579d5672f095b3788b',
+  },
+  v100: {
+    'kernel/query-test/NativeQueryTest.cs': '89e2889b8a6c05380124c98239a1b4bb16eed266f031466444b76e06b4f39177',
+    'kernel/query-test/QueryTestContract.cs': 'a778e457aba47971224e4a48e1a7c2ea69541a3bd8dc246527cb147218bdf7f3',
+    'kernel/query-test/QueryTestOutput.cs': 'a9bb3f539accf807984d6798355ae648642568d43950b2ec01ff51784568eebf',
+    'kernel/query-test/QueryTestRunner.cs': 'b9f96ac09f1aeb20493843df77a6ff6f4a59d26e485de0f603922fcfd464844c',
+    'kernel/src/Anvil.Bridge/PrivateHttpContext.cs': '73785bbd6483074d865848ef9bc4f13423aabc7d371d8931e2936ffe85fdbca8',
+    'platforms/odc/studio/bridge/AppCreationCommands.cs': '416c95f5bf1a86476109aa07d4950d12c05c72450a6d860a9dec4924b1341ccf',
+    'platforms/odc/studio/bridge/Bridge.csproj': 'be0cc814196fba67deb34938563f46188b861a98baac34ac3e2b611e9f378198',
+    'platforms/odc/studio/bridge/DataCommands.cs': '2c8eb954b4b1d1ccace550179399a4418f43fee308f3014fe1490a30f4196aa6',
+    'platforms/odc/studio/bridge/MergeDiagnostics.cs': '8a1d4b6206278e146729c6a3515d0962d0db6b64156dc9cee313dd9adf3b8573',
+    'platforms/odc/studio/bridge/MergeOrderCopy.cs': '4e7a187554154662f5ffcecf401904eb4b59ef656192f7fa57afc73b13a4d2d9',
+    'platforms/odc/studio/bridge/PortalApiClientCleanup.cs': '8e16426f6382149808da6cf169ab9d3e3e3bfc516b8a055467e0a6532728fd48',
+    'platforms/odc/studio/bridge/PortalApiClientSecret.cs': '2bf23662976750d82ee96ca742cfd8efb3c7ea5428e5af8c2050208243f8d959',
+    'platforms/odc/studio/bridge/PortalCommands.cs': '242b2e5a79eb00a78e49da9dee2b0dc42511ca3484422f7cac3a63fc7c6656c5',
+    'platforms/odc/studio/bridge/PortalCore.cs': '8ad3ed73d9d362d55cd5266fc63742fbb8b395ae4296e4662286399965b4697a',
+    'platforms/odc/studio/bridge/PortalKnowledgeDownload.cs': '198d3aff0965210d288e5ca17d3f19335a49856311a060813ceeecf25ceeedba',
+    'platforms/odc/studio/bridge/PortalMobileDownload.cs': '14f22439e5addfb29f90292ed5c8a25a0f45ce1edd8576097a0bb73f2708fb7c',
+    'platforms/odc/studio/bridge/PortalMobileUpload.cs': 'c94e420a777d52017cfa963c1f8170213d7e045f472b7d5b388a8aa72955e695',
+    'platforms/odc/studio/bridge/PortalPrivateHttp.cs': '71d15be9b8394ddbd87ad084f264a2fdcefb157ef57021ca42caf54bc49c89a2',
+    'platforms/odc/studio/bridge/PortalUpload.cs': '945c40b566a21546ecf36b2a0029d357f465ef8b74e5008b28acb79cfcd55736',
+    'platforms/odc/studio/bridge/PortalVault.cs': 'e8780ab773dab88a75b48737b7aa29047d29aa7394206662400b4a4c652ecf7c',
+    'platforms/odc/studio/bridge/PublicSignatureReader.cs': '2caccb3e657b84f750af2a1ba2723509b2775c9a4ffbd79f431fba100d6a1567',
+    'platforms/odc/studio/bridge/PublishLogCommands.cs': '3f2b097bb4837e7f0a3e19a9534f5adb9dec6ec61129b9106133037bf96c8c56',
+    'platforms/odc/studio/bridge/PublishLogCore.cs': '33b820a24c909f5528e3aaa50d5ac7410ae3721d3e0f819d3c4dd586cf9db730',
+    'platforms/odc/studio/bridge/QueryTestCommands.cs': '97be6ecf1e5f05c2c047b03852cab69c632e580d187d6e3186932d080fd2906d',
+    'platforms/odc/studio/bridge/ReferenceCommands.cs': '615e55dec013036b12270e55ec8eea2a723cce753eb367cd232884b65adf9db0',
+    'platforms/odc/studio/bridge/SecurityWarningsCopy.cs': '9994c72f57a32b74fd8ca92299198e44dea11efed1023d5526f72eeb5307b698',
+    'platforms/odc/studio/bridge/StartupHook.cs': '32e5995e50c5519296b86519f56a2f7330cdbb1420c325200dcddab8503931f0',
+    'platforms/odc/studio/bridge/TemplateCache.cs': 'a57ef89f222983393d3249c75d543e6a2fc06aef456340a63272d8f127b3f20c',
+    'platforms/odc/studio/bridge/client/Client.csproj': 'a5b9c2d9640b4df751a052075cd5b2bf9b568b7b2e00f72b160acb9ebdc953f2',
+    'platforms/odc/studio/bridge/client/Program.cs': '5c21180708bbceff05a19af82baee14287ce96f73c287200eb7813b012017d34',
     'platforms/odc/studio/engine/NativeMergeOrder.cs': '3ec32ca130504f0375a12704b58123e88539fc0472dd8174945430ac10c7e127',
     'platforms/odc/studio/engine/NativeMergeVerification.cs': 'b7b797836070709672c57d3bdeb0ebed8571e06c4dfba172b9a5a0ab7ce4aede',
     'platforms/odc/studio/shared/Journal.cs': 'e0cc116aec478a3092b9e31c04f470b6d5a47f7af72974234a3d7fa93586185e',

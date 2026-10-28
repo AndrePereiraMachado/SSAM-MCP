@@ -188,7 +188,7 @@ public sealed class PatchCertaintyCorpusTests(ITestOutputHelper output)
                         ["name"] = name, ["public"] = true, ["steps"] = new JsonArray() }) } });
                     var problems = ActionNameRules.Check(ops, "/ops", session.ActionNameFacts());
                     Assert.NotEmpty(problems);
-                    Assert.All(problems, p => { Assert.IsType<JsonArray>(p["patch"]); Assert.Equal("ACTION_RENAMED_FREE_NAME", p["patchRule"]!.ToString()); Assert.False(PatchCertainty.IsCertain(p)); });
+                    Assert.All(problems, p => AssertCollision(p, session.ActionNameFacts().OwnAction(name, "ServerAction") != null));
                     collisions += problems.Count;
                 }
                 return (localExpressions, getterFailures, restored, absent, collisions, declaredArguments, matchingDefaults);
@@ -205,6 +205,24 @@ public sealed class PatchCertaintyCorpusTests(ITestOutputHelper output)
         foreach (var literal in literals) ProsePatch(literal);
         output.WriteLine($"{available.Count} captures; TEXT_LITERAL_QUOTED: {expressionCount} expressions, {proseLiterals.Count} eligible distinct prose literals, {literals.Length} real prose patches; TEXT_LITERAL_CHOICE: {choiceLiterals.Count} ineligible distinct prose literals ({foreignMarkerLiterals.Count} with foreign-language markers); REQUIRED_ARGUMENT_DEFAULT: {defaults} exact restorations; REQUIRED_ARGUMENT_TYPE_DEFAULT: {noDefault} real absent defaults; ACTION_RENAMED_FREE_NAME: {collisionCases} public-action choices; {clock.Elapsed.TotalSeconds:0.0}s");
         Assert.True(clock.Elapsed < TimeSpan.FromMinutes(5), "sampled certainty corpus must finish in less than five minutes");
+    }
+
+    internal static void AssertCollision(JsonObject problem, bool own)
+    {
+        if (own)
+        {
+            Assert.Equal("FLOW_ACTION_NAME_TAKEN", problem["code"]!.ToString());
+            Assert.Null(problem["patch"]);
+            Assert.True(problem["text"] != null || problem["textSha"] != null);
+            Assert.Equal("rename", problem["rename"]!["op"]!.ToString());
+            Assert.Equal("@" + problem["id"]!.ToString(), problem["rename"]!["target"]!.ToString());
+        }
+        else
+        {
+            Assert.IsType<JsonArray>(problem["patch"]);
+            Assert.Equal("ACTION_RENAMED_FREE_NAME", problem["patchRule"]!.ToString());
+            Assert.False(PatchCertainty.IsCertain(problem));
+        }
     }
 
     private void ProsePatch(string prose)

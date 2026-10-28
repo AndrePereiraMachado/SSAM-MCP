@@ -100,11 +100,11 @@ test('CX11 P: a hosted session serves the profile all (every tool of hosted/tool
   const asked = await hostedServer(context, { profile: 'app' });
   try {
     const names = [...(await asked.tools()).keys()].sort();
-    assert.deepEqual(names, [...(await local.tools()).keys()].sort(), 'the hosted listing is the profile all');
+    assert.deepEqual(names, [...(await local.tools()).keys()].filter(n => !['ssam_preview', 'studio_preview'].includes(n)).sort(), 'the hosted listing is the profile all except local previews');
     for (const debug of ['ssam_debug', 'ssam_debug_run', 'ssam_debug_invoke', 'ssam_debug_client', 'ssam_debug_server', 'ssam_debug_matrix']) assert.ok(names.includes(debug), debug);
     assert.deepEqual(names.filter(n => !hostedTools()[n]), [], 'every listed tool has a hosted class');
     // The hosted catalog is these, ssam_friction (added by the served mode) and the four hook tools (SSAM_APP_HOOK_TOOLS=1 only).
-    assert.equal(Object.keys(hostedTools()).length - names.length, 5, 'ssam_friction and the four hook tools');
+    assert.equal(Object.keys(hostedTools()).length - names.length, 7, 'ssam_friction, the four hook tools and two local previews');
   } finally { await asked.close(); await local.close(); }
 });
 
@@ -126,7 +126,8 @@ test('CX11 L: the hosted tools/list is the local projection; a tool whose part i
       const original = remote.server.ssamOriginalTools.find(t => t.name === name)?.description;
       if (original !== note + localOriginal(local, name)) continue;
       compared++;
-      assert.equal(tool.description, note + mine.get(name).description, name + ': the note, then the same projection as a local server');
+      const { hostedDocumentation } = await import('../hosted/availability.mjs');
+      assert.equal(tool.description, hostedDocumentation(note + mine.get(name).description), name + ': the note and projection without local previews');
       if (mine.get(name).description !== localOriginal(local, name)) projected++;
     }
     assert.ok(compared >= 85, 'compared: ' + compared + ' of ' + theirs.size);

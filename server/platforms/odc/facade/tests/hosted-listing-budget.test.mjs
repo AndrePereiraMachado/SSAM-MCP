@@ -44,6 +44,7 @@ test('the hosted listing holds the release rehearsal\'s ceilings: all tools with
   const listed = tools.some(tool => tool.name === frictionTool.name) ? tools : [...tools, frictionTool];
   const total = listed.reduce((sum, tool) => sum + toolListingBytes(tool), 0);
   const core = CORE.reduce((sum, name) => { const tool = tools.find(x => x.name === name); assert.ok(tool, name + ' is listed'); return sum + toolListingBytes(tool); }, 0);
+  t.diagnostic(JSON.stringify({ count: listed.length, totalBytes: total, coreBytes: core }));
   assert.ok(total <= HOSTED_LISTING_CEILING, `hosted listing ${total} B > ${HOSTED_LISTING_CEILING} B`);
   assert.ok(core <= HOSTED_CORE_CEILING, `hosted core ${core} B > ${HOSTED_CORE_CEILING} B`);
   // The hosted network check stays in the listing: its parameter and its sentence (the line's own rule).

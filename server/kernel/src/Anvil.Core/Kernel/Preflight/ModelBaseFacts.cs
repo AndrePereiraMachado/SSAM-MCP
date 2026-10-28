@@ -23,6 +23,22 @@ internal sealed class ModelBaseFacts(ModelSession session, ServiceStudio.Model.E
         return element == null ? null : DescribeAction(element);
     }
 
+    public bool HasActionBodies => true;
+
+    public (string Key, string? Text)? OwnAction(string name, string kind)
+    {
+        var wanted = kind switch { "ServerAction" => "IServerAction", "ServiceAction" => "IServiceAction", "ClientAction" => "IClientAction", _ => null };
+        if (wanted == null || !Index().TryGetValue(name, out var named)) return null;
+        // An action of the module itself: its parent is the module (a screen action or an entity action has another owner).
+        var own = named.FirstOrDefault(e => ModelHost.Prop(e, "WasDeleted") is not true && e.GetInterface()?.Name == wanted && e.ObjectKey != null
+            && e.Parent is IObjectSignature parent && (ReferenceEquals(parent, espace) || ModelSession.Implements(parent, "IESpace") || ModelSession.Implements(parent, "IModule")));
+        if (own == null) return null;
+        string? text;
+        try { text = FlowTextForm.Current(new KernelModelReader(), (IObjectSignature)(object)espace, own); }
+        catch (Exception) { text = null; }   // the key alone still says where the edit goes
+        return (own.ObjectKey!.ToString()!, text);
+    }
+
     internal IObjectSignature? ActionElement(string name, string kind = "server")
         => Index().TryGetValue(name, out var named) ? named.FirstOrDefault(e => InActionScope(e) && ScopeOf(e) == ActionNameRules.Scope(kind)) : null;
 

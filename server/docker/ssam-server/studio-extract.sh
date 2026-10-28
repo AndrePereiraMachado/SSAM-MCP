@@ -14,12 +14,31 @@
 #   2. when that installer is absent: a studio bundle (studio-bundle.ps1 / studio-bundle.sh, packed from an INSTALLED
 #      Studio) in the same context, ${INSTALLERS_DIR:-/installers}/<bundle file>. A pinned <bundle sha256> is checked
 #      (else its .sha256 sidecar, integrity only); studio_bundle.py checks every file against the bundle's SHA256SUMS.
-# Either way every path of <list> (relative to the Studio folder, # comments) must come out, or the build stops naming it.
+# Either way every path of <list> (relative to the Studio folder, # comments) must come out, or the build stops naming it;
+# an optional path ("?path": a file newer Studios carry and older ones do not) comes out when the input carries it.
 set -eu
 lane=$1 file=$2 url=$3 sha=$4 marker=$5 list=$6 out=$7 bundle=${8:-} bundle_sha=${9:-}
 here=$(dirname "$0")
 work=$(mktemp -d)
 ctx=${INSTALLERS_DIR:-/installers}
+
+# The listed paths, split into required and optional ("?path").
+grep -v '^[[:space:]]*#' "$list" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e '/^$/d' > "$work/listed"
+sed -n '/^?/!p' "$work/listed" > "$work/required"
+sed -n 's/^?[[:space:]]*//p' "$work/listed" > "$work/optional"
+
+# Every required path is in <out>, an optional one may be, and nothing else is.
+check_out() {
+  lacking=0
+  while IFS= read -r rel; do
+    [ -f "$out/$rel" ] || { echo "ssam-server: $lane lacks the listed $rel in $out" >&2; lacking=1; }
+  done < "$work/required"
+  (cd "$out" && find . -type f | sed 's|^\./||' | sort) > "$work/actual"
+  sort "$work/required" "$work/optional" > "$work/allowed"
+  extra=$(comm -23 "$work/actual" "$work/allowed" | head -n 5)
+  if [ -n "$extra" ]; then echo "ssam-server: $lane has unlisted files in $out: $extra" >&2; lacking=1; fi
+  [ "$lacking" -eq 0 ] || exit 1
+}
 
 if [ -z "$url" ] && [ ! -f "$ctx/$file" ] && [ -n "$bundle" ] && [ -f "$ctx/$bundle" ]; then
   src="$ctx/$bundle"
@@ -36,10 +55,8 @@ if [ -z "$url" ] && [ ! -f "$ctx/$file" ] && [ -n "$bundle" ] && [ -f "$ctx/$bun
   fi
   mkdir -p "$out"
   python3 "$here/studio_bundle.py" unpack "$src" "$out" --lane "$lane" --only "$list"
-  expected=$(grep -v '^[[:space:]]*#' "$list" | sed '/^[[:space:]]*$/d' | wc -l)
-  actual=$(find "$out" -type f | wc -l)
-  if [ "$expected" -ne "$actual" ]; then echo "ssam-server: $lane has $actual files in $out, the list names $expected" >&2; exit 1; fi
-  echo "ssam-server: $lane: $actual files ($(du -sh "$out" | cut -f1)) from the bundle $bundle into $out"
+  check_out
+  echo "ssam-server: $lane: $(wc -l < "$work/actual") files ($(du -sh "$out" | cut -f1)) from the bundle $bundle into $out"
   rm -rf "$work"
   exit 0
 fi
@@ -81,21 +98,19 @@ case "${STUDIO_EXTRACTOR:-nsis}" in
     found=$(find "$work/x" -type f -name "$marker" | awk '{ print length($0) "\t" $0 }' | sort -n | head -n 1 | cut -f2-)
     if [ -z "$found" ]; then echo "ssam-server: 7z found no $marker in $file" >&2; exit 1; fi
     root=$(dirname "$found")
-    missing=0
-    grep -v '^[[:space:]]*#' "$list" | sed '/^[[:space:]]*$/d' | while IFS= read -r rel; do
+    while IFS= read -r rel; do
       if [ -f "$root/$rel" ]; then mkdir -p "$out/$(dirname "$rel")"; cp "$root/$rel" "$out/$rel"
       else echo "ssam-server: $file does not carry $rel" >&2; echo x >> "$work/missing"; fi
-    done
+    done < "$work/required"
+    while IFS= read -r rel; do
+      if [ -f "$root/$rel" ]; then mkdir -p "$out/$(dirname "$rel")"; cp "$root/$rel" "$out/$rel"; fi
+    done < "$work/optional"
     if [ -f "$work/missing" ]; then exit 2; fi
     ;;
   *) echo "ssam-server: STUDIO_EXTRACTOR must be nsis or 7z" >&2; exit 1 ;;
 esac
 
-# Every listed file is there, and nothing else.
-expected=$(grep -v '^[[:space:]]*#' "$list" | sed '/^[[:space:]]*$/d' | wc -l)
-actual=$(find "$out" -type f | wc -l)
-if [ "$expected" -ne "$actual" ]; then
-  echo "ssam-server: $lane has $actual files in $out, the list names $expected" >&2; exit 1
-fi
-echo "ssam-server: $lane: $actual files ($(du -sh "$out" | cut -f1)) from $file into $out"
+# Every required file is there, and nothing unlisted.
+check_out
+echo "ssam-server: $lane: $(wc -l < "$work/actual") files ($(du -sh "$out" | cut -f1)) from $file into $out"
 rm -rf "$work"

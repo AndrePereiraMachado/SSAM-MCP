@@ -81,6 +81,42 @@ public static class CommandSurface
             hint = hints.GetValueOrDefault(m.Id)?.Hint, hintOrigin = hints.GetValueOrDefault(m.Id)?.Origin }).ToArray();
     }
 
+    /// <summary>`ui-block --catalog &lt;json&gt; --name &lt;Block&gt; | --find &lt;text&gt;`: the block of that name (any case), or
+    /// the blocks whose name or description contains the text. A name the catalog does not have is UI_BLOCK_NOT_FOUND (R1
+    /// item 3: it came back as CLI_REFUSED, the code of a failure of the CLI), with the closest block names.</summary>
+    public static object UiBlock(string catalogPath, string? name, string? find)
+    {
+        var m = UiCatalog.ReadJson(catalogPath);
+        if (name != null)
+            return m.Blocks.FirstOrDefault(b => string.Equals(b.Name, name, StringComparison.OrdinalIgnoreCase))
+                ?? throw NotFound("UI_BLOCK_NOT_FOUND", $"block '{name}' not in {m.Name} {m.Version}; try --find", name, m.Blocks.Select(b => b.Name));
+        var text = find ?? throw new ArgumentException("missing --find");
+        return m.Blocks.Where(b => b.Name.Contains(text, StringComparison.OrdinalIgnoreCase) || (b.Description ?? "").Contains(text, StringComparison.OrdinalIgnoreCase))
+            .Select(b => new { b.Name, b.Flow, b.Public, b.Description, Inputs = b.Inputs.Select(i => i.Name), Placeholders = b.Placeholders.Select(x => x.Name), Events = b.Events.Select(e => e.Name) }).ToList();
+    }
+
+    /// <summary>A name a reference lookup does not have: its own code (never a failure of the CLI), the closest names in the
+    /// message and as the envelope's `candidates` (Errors.Envelope copies the fields of Errors.DiagnosisKey).</summary>
+    internal static KernelRefusalException NotFound(string code, string message, string asked, IEnumerable<string> known)
+    {
+        var closest = ClosestNames(asked, known);
+        var refusal = new KernelRefusalException(code, message + (closest.Count > 0 ? "; closest: " + string.Join(", ", closest) : ""));
+        refusal.Data[Errors.DiagnosisKey] = new JsonObject { ["candidates"] = new JsonArray(closest.Select(c => (JsonNode?)JsonValue.Create(c)).ToArray()) };
+        return refusal;
+    }
+
+    // Up to five known names nearest to the asked one: by edit distance, then the ones that contain a word of it (3+ letters).
+    private static List<string> ClosestNames(string asked, IEnumerable<string> known)
+    {
+        var folded = (asked ?? "").Trim().ToLowerInvariant();
+        var words = Regex.Split(Regex.Replace(asked ?? "", "([a-z0-9])([A-Z])", "$1 $2"), "[^A-Za-z0-9]+").Where(w => w.Length >= 3).Select(w => w.ToLowerInvariant()).Distinct().ToArray();
+        return known.Distinct(StringComparer.OrdinalIgnoreCase)
+            .Select(k => (Name: k, Distance: Distance(folded, k.ToLowerInvariant()), Words: words.Count(w => k.Contains(w, StringComparison.OrdinalIgnoreCase))))
+            .Where(c => c.Distance <= Math.Max(2, folded.Length / 3) || c.Words > 0)
+            .OrderBy(c => c.Distance <= Math.Max(2, folded.Length / 3) ? 0 : 1).ThenByDescending(c => c.Words).ThenBy(c => c.Distance).ThenBy(c => c.Name, StringComparer.Ordinal)
+            .Take(5).Select(c => c.Name).ToList();
+    }
+
     public static object WhereCan(string root, string catalogPath, string name)
     {
         var bytes = File.ReadAllBytes(catalogPath);
@@ -93,13 +129,18 @@ public static class CommandSurface
         var results = lanes.Select(lane =>
         {
             var path = Path.Combine(root, "docs", "mapa", "criar-" + lane.Item2 + ".json");
+            // R1 item 2: a proof map this installation does not carry leaves that runtime unproved, named, and never brings
+            // the whole answer down (the parents the catalog lists still answer).
+            if (!File.Exists(path))
+                return (object)new { runtime = lane.Item1, fixture = lane.Item2 + ".oml", status = "unproved",
+                    skipped = $"the proof map docs/mapa/criar-{lane.Item2}.json is not in this installation: this runtime is not proved here" };
             var map = JsonNode.Parse(File.ReadAllText(path))!;
             var rows = map["rows"]!.AsArray();
             if (map["catalogCreatables"]?.GetValue<int>() != creatables.Count || rows.Count != creatables.Count
                 || map["catalogSha256"]?.GetValue<string>() != hash || map["partial"]?.GetValue<bool>() != false)
                 throw new InvalidOperationException($"stale map {path}: regenerate with anvil prove --fixture tests/fixtures/{lane.Item2}.oml --catalog {catalogPath} --out {path}");
             var matched = rows.Where(r => Matches((r!["FullType"] ?? r["Type"])!.GetValue<string>())).ToArray();
-            return new { runtime = lane.Item1, fixture = lane.Item2 + ".oml", studioVersion = map["studioVersion"]?.GetValue<string>(),
+            return (object)new { runtime = lane.Item1, fixture = lane.Item2 + ".oml", studioVersion = map["studioVersion"]?.GetValue<string>(),
                 status = Best(matched.Select(r => r!["Status"]!.GetValue<string>())),
                 evidence = matched.Select(r => new { parent = (r!["FullParent"] ?? r["Parent"])!.GetValue<string>(),
                     via = r["Via"]!.GetValue<string>(), status = r["Status"]!.GetValue<string>(), error = r["Error"]?.GetValue<string>() }).ToArray() };
@@ -172,10 +213,22 @@ public static class CommandSurface
     /// words, so "default screen" finds the jobs that set DefaultScreen and "screen roles" the ones that set the Roles of
     /// a screen (2026-10-05: both answered nothing, sessions dd2b79c0 and 62a884e8). An exact job name answers that job.
     /// </summary>
-    public static object Recipes(string root, string query, bool includeOps = false, int? max = null)
+    public static object Recipes(string root, string query, bool includeOps = false, int? max = null,
+        Func<JsonNode, string, JsonArray>? expand = null)
     {
+        expand ??= (job, directory) => JobRunner.CollectOps(job, directory);
         if (includeOps && (max == null || max <= 0)) throw new ArgumentException("recipe --ops requires --max <positive number>; output is bounded across all matches");
-        var guide = File.ReadAllLines(Path.Combine(root, "AGENTS.md"));
+        // R1 item 2 (2026-10-28: one recipe query answered "Could not find file" for the whole search): a file of the recipe
+        // surface that this installation does not have or cannot read (the guide, a suite job, a part of a composite job) is
+        // skipped and named after the recipes found ({name, path, skipped: why}); the rest is searched as before.
+        var skipped = new List<object>();
+        string[] guide;
+        try { guide = File.ReadAllLines(Path.Combine(root, "AGENTS.md")); }
+        catch (Exception ex) when (UnreadableRecipe(ex))
+        {
+            guide = [];
+            skipped.Add(new { name = "AGENTS.md", path = "AGENTS.md", skipped = "the guide " + RecipeTrouble(ex, root) + ": its curated rows are missing, only the suite jobs were searched" });
+        }
         // The header is English since 16/10 ("| Task |"); the Portuguese one of the guide before ("| Tarefa |") is read too.
         var table = guide.SkipWhile(l => !l.StartsWith("| Task |", StringComparison.Ordinal) && !l.StartsWith("| Tarefa |", StringComparison.Ordinal)).Skip(2).TakeWhile(l => l.StartsWith('|'));
         var entries = new Dictionary<string, (string Path, List<string> Rows)>(StringComparer.Ordinal);
@@ -205,9 +258,22 @@ public static class CommandSurface
         foreach (var entry in entries.OrderBy(e => curated.Contains(e.Key) ? 0 : 1).ThenBy(e => e.Key, StringComparer.Ordinal))
         {
             if (entries.ContainsKey(query) && entry.Key != query) continue;
-            var text = File.ReadAllText(entry.Value.Path);
-            var job = JsonNode.Parse(text)!;
-            var description = job["description"]?.GetValue<string>() ?? "";
+            string text; JsonNode job; string description;
+            try
+            {
+                text = File.ReadAllText(entry.Value.Path);
+                job = JsonNode.Parse(text) ?? throw new JsonException("the file is empty");
+                if (job is not JsonObject && job is not JsonArray) throw new JobShapeException("job must be an object or an array of ops");
+                var descriptionNode = (job as JsonObject)?["description"];
+                if (descriptionNode != null && (descriptionNode is not JsonValue value || !value.TryGetValue<string>(out _)))
+                    throw new JobShapeException("job description must be text");
+                description = descriptionNode?.GetValue<string>() ?? "";
+            }
+            catch (Exception ex) when (UnreadableRecipe(ex))
+            {
+                skipped.Add(new { name = entry.Key, path = "tests/jobs/" + entry.Key + ".json", skipped = "the job " + RecipeTrouble(ex, root) });
+                continue;
+            }
             var head = entry.Key + " " + description + " " + string.Join(" ", entry.Value.Rows);
             // A job with an alias is matched on the text it had before 16/10 (its Portuguese prose and table rows, then the
             // rest of the job without its prose), so the English prose never changes what a query finds.
@@ -219,13 +285,76 @@ public static class CommandSurface
                 var folded = Fold(hasAlias ? entry.Key + " " + alias + " " + WithoutProse(job) : head + " " + text);
                 if (words.Length == 0 || !words.All(w => folded.Contains(w, StringComparison.Ordinal))) continue;
             }
-            var ops = JobRunner.CollectOps(job, Path.GetDirectoryName(entry.Value.Path)!);
+            JsonArray ops;
+            try
+            {
+                var directory = Path.GetDirectoryName(entry.Value.Path)!;
+                ValidateRecipeShape(job, directory, new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+                ops = expand(job, directory);
+            }
+            catch (Exception ex) when (UnreadableRecipe(ex))
+            {
+                skipped.Add(new { name = entry.Key, path = "tests/jobs/" + entry.Key + ".json", description, skipped = "the job matched, but " + RecipeTrouble(ex, root) });
+                continue;
+            }
             var take = includeOps ? Math.Min(remaining, ops.Count) : 0;
             result.Add(new { name = entry.Key, path = "tests/jobs/" + entry.Key + ".json", description, rows = entry.Value.Rows,
                 opCount = ops.Count, ops = includeOps ? ops.Take(take).Select(o => o!.DeepClone()).ToArray() : null,
                 truncated = includeOps && take < ops.Count });
             remaining -= take;
         }
+        result.AddRange(skipped);
         return result;
+    }
+
+    // Shape policy belongs to recipe lookup only. The job runner keeps its established interpretation and errors.
+    private static void ValidateRecipeShape(JsonNode job, string directory, HashSet<string> active)
+    {
+        if (job is JsonArray) return;
+        if (job is not JsonObject obj) throw new JobShapeException("job must be an object or an array of ops");
+        if (obj["jobs"] == null)
+        {
+            if (obj["ops"] is not JsonArray) throw new JobShapeException("job without an array of 'ops' or 'jobs'");
+            return;
+        }
+        if (obj["jobs"] is not JsonArray parts) throw new JobShapeException("composite job: 'jobs' must be an array");
+        if (obj["ops"] != null && (obj["ops"] is not JsonArray own || own.Count > 0))
+            throw new JobShapeException("composite job: use 'jobs' OR 'ops', not both");
+        foreach (var part in parts)
+        {
+            if (part is not JsonValue value || !value.TryGetValue<string>(out var spec) || string.IsNullOrWhiteSpace(spec))
+                throw new JobShapeException("composite job: each part must be a nonempty job name or path");
+            var path = Path.GetFullPath(JobRunner.ResolveJobFile(spec, directory));
+            // A cycle is a runner error, not an unreadable shape; let the runner report it unchanged.
+            if (!active.Add(path)) continue;
+            try
+            {
+                var nested = JsonNode.Parse(File.ReadAllText(path)) ?? throw new JsonException("the job part is empty");
+                ValidateRecipeShape(nested, JobSources.DirectoryOf(path), active);
+            }
+            finally { active.Remove(path); }
+        }
+    }
+
+    // A recipe file that is missing or unreadable (I/O, access, invalid JSON, a composite job whose part is missing or that
+    // is no job): skipped with its note. Anything else is a fault of the kernel and still fails the lookup.
+    private static bool UnreadableRecipe(Exception ex) => ex is IOException or UnauthorizedAccessException or JsonException or JobShapeException;
+
+    // Why a recipe file was skipped, without the folders of this installation (the answer of a hosted server names none).
+    private static string RecipeTrouble(Exception ex, string root)
+    {
+        var detail = Regex.Replace(ex.Message.Replace(Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar, ""), @"\s+", " ").Trim();
+        // "jobs: part not found: job:x (looked in <folders>)": the part, never the folders it was looked for in.
+        if (detail.IndexOf(" (looked in ", StringComparison.Ordinal) is var looked and > 0) detail = detail[..looked];
+        if (detail.Length > 200) detail = detail[..200] + "...";
+        return ex switch
+        {
+            FileNotFoundException f => "needs a file this installation does not have" + (f.FileName is { Length: > 0 } name ? " (" + Path.GetFileName(name) + ")" : detail.StartsWith("jobs: part not found", StringComparison.Ordinal) ? " (" + detail + ")" : ""),
+            DirectoryNotFoundException => "needs a folder this installation does not have",
+            UnauthorizedAccessException => "cannot be read here (access denied)",
+            JsonException => "is not valid JSON (" + detail + ")",
+            IOException => "cannot be read here (" + ex.GetType().Name + ")",
+            _ => "is not a job the suite can read (" + detail + ")",
+        };
     }
 }

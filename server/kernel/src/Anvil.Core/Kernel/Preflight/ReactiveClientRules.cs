@@ -399,7 +399,7 @@ public static class ReactiveClientRules
         var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         try
         {
-            var root = JobRunner.RepoRoot(Environment.CurrentDirectory) ?? JobRunner.RepoRoot(Path.GetDirectoryName(typeof(ReactiveClientRules).Assembly.Location)!);
+            var root = JobSources.KernelRoot();   // the kernel that runs, never the current directory first
             var folder = root == null ? null : Path.Combine(root, "catalog", "ui");
             if (folder != null && Directory.Exists(folder))
                 foreach (var file in Directory.GetFiles(folder, "*.json"))
