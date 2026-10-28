@@ -2,6 +2,7 @@
 // State lives in outDir: <pair id>/attempt.json per attempt, reminders.json for the once-a-day notices, PENDENTE.md for
 // a Studio that still has to be installed. A round with nothing new reads only and writes nothing.
 import fs from 'node:fs';
+import {releaseAutomatically} from './automatic.mjs';
 import path from 'node:path';
 import {LANES,STUDIO_NAME,ownerCommand,missingPack,planWindow,readyCandidates,pairFor,pairId,hasPair,rotateWindow,compareFailures,windowPairs,tfmMajor,proposalText,failureText,composeText} from './window.mjs';
 import {generateCompose} from '../coolify/gen-compose.mjs';
@@ -130,7 +131,7 @@ async function laneChecks(config,ops,pair,runtimes,log){
   if(!build)problems.push({lane:c.lane,code:'runtime-unknown',text:`MSBuild could not tell which target framework this workspace builds against ${STUDIO_NAME[c.lane]} ${c.version} (${c.tfm}); the watcher never picks one`});
   else if(tfmMajor(c.tfm)!==tfmMajor(build))problems.push({lane:c.lane,code:'runtime-unsupported',text:`${STUDIO_NAME[c.lane]} ${c.version} runs on ${c.tfm}, but this workspace builds the kernel for ${build} against it (the build rule that follows the Studio runtime is not in this workspace)`});
  }
- for(const p of missingPack(config,Object.fromEntries(pair.candidates.filter(c=>!problems.some(x=>x.lane===c.lane)).map(c=>[c.lane,{tfm:c.tfm,version:c.version}]))))
+ for(const p of (config.automatic ? [] : missingPack(config,Object.fromEntries(pair.candidates.filter(c=>!problems.some(x=>x.lane===c.lane)).map(c=>[c.lane,{tfm:c.tfm,version:c.version}])))))
   problems.push({lane:p.lane,code:'agent-pack-missing',text:`no agent pack for ${STUDIO_NAME[p.lane]} ${p.version} (${p.tfm}): the configured pack is built for ${config.agentPack?.runtime??'net8.0'}; add agentPackByRuntime.net${tfmMajor(p.tfm)} (odcBridge, odcBridgeAccepted, o11BuiltFor) once that pack exists`});
  if(problems.length)throw Object.assign(new EnvironmentError(problems.map(p=>p.text).join('; ')+'. The round waits and retries.',problems[0].code,[...new Set(problems.map(p=>p.lane))]),{laneCodes:Object.fromEntries(problems.map(p=>[p.lane,p.code]))});
 }
@@ -183,12 +184,23 @@ async function runAttempt(config,ops,decision,now){
   }
   fs.writeFileSync(path.join(dir,'comparison.json'),JSON.stringify(comparisons,null,2));
   if(failedLanes.length)throw Object.assign(Error('New kernel test failures:\n'+failedLanes.map(l=>`${l}:\n`+comparisons[l].newFailures.map(n=>'  '+n).join('\n')).join('\n')),{lanes:failedLanes});
+  const bridges=config.automatic?await ops.buildBridges(pair,bundles,dir):null;
+  if(bridges)ops.bridgeKernel=bridges.kernel;
   const built=await ops.build(pair,bundles,dir);
   fs.writeFileSync(path.join(dir,'image.json'),JSON.stringify(built,null,2));
   const next=rotateWindow(base,{odc:pair.odc,o11:pair.o11,image:built.image,tag:built.tag},config.state);
   const served=Object.fromEntries(LANES.map(lane=>[lane,[...new Set(next.manifest[lane].map(x=>x.version))]]));
   const smoke=await ops.smoke(built,bundles,served,dir);fs.writeFileSync(path.join(dir,'smoke.json'),JSON.stringify(smoke,null,2));
   if(!smoke.ok)throw Error('Image smoke failed: '+(smoke.error??'see smoke.json'));
+  if(config.automatic){
+   const release={id,dir,built,manifest:next.manifest,kernel:bridges.kernel,bridges,features:bundles.odc.features};
+   // Persist only public identities and local artifact paths. Never keys or tokens.
+   fs.writeFileSync(path.join(dir,'release.json'),JSON.stringify(release,null,2));
+   const result=await releaseAutomatically(config,ops,release);
+   if(result.status==='live')writeAttempt(outDir,{...attempt,status:'approved',built,pinCommit:result.commit,approved:{at:new Date().toISOString(),digest:'sha256:'+built.sha256,commit:result.commit}});
+   else writeAttempt(outDir,{...attempt,status:'failed',built,code:result.code,failedLanes:pair.lanes});
+   return {...result,dir};
+  }
   fs.writeFileSync(path.join(dir,'proposed-window.json'),JSON.stringify(next.manifest,null,2)+'\n');
   fs.writeFileSync(path.join(dir,'compose.coolify.yml'),composeText(generateCompose(next.manifest)));
   const proposed=await ops.propose(next.manifest,'vigia/'+id,dir,`build(deploy): propose the Studio pair ${id}\n\nNew: ${pair.lanes.map(l=>`${STUDIO_NAME[l]} ${pair[l]}`).join(', ')}. Local image ${built.tag}, filtered kernel tests and image smoke passed.\nThe new pair has no digest until the owner approves and the tag is published (vigia.ps1 -Approve ${id}).\n`,{base:config.branchBase??null});

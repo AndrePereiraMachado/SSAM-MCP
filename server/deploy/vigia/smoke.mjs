@@ -13,7 +13,7 @@ export async function smokeImage({pair,bundle,dir,root,docker,served,pack=DEFAUL
  pack={...DEFAULT_PACK,...pack};const hello={odcBridge:pack.odcBridge,o11BuiltFor:pack.o11BuiltFor,o11Hook:pack.o11Hook};
  const name='ssam-vigia-'+randomUUID().slice(0,12),home=path.resolve(privateDir??''),secret=path.join(home,'segredo-'+name),state=path.join(secret,'state'),features=path.join(secret,'features'),cache=path.join(secret,'cache');
  for(const folder of [dir,state,features,cache])fs.mkdirSync(folder,{recursive:true});
- const kernel={o11:pair.o11,odc:pair.odc,odcBridge:pack.odcBridge,odcBridgeAccepted:pack.odcBridgeAccepted};
+ const kernel={o11:pair.o11,odc:pair.odc,odcBridge:pack.odcBridge,odcBridgeAccepted:pack.odcBridgeAccepted,...(pack.o11Hook?{o11Hook:pack.o11Hook}:{}),...(pack.o11BridgeAccepted?{o11BridgeAccepted:pack.o11BridgeAccepted}:{})};
  fs.writeFileSync(path.join(state,'kernel.json'),JSON.stringify(kernel));fs.writeFileSync(path.join(dir,'kernel.json'),JSON.stringify(kernel,null,2));fs.copyFileSync(bundle.features,path.join(features,'Features.plain.xml'));
  const image=pair.image+':'+pair.tag,mount=(from,to)=>['-v',from.replaceAll('\\','/')+':'+to];
  let created=false,credentials=null;

@@ -17,10 +17,13 @@ foreach ($item in @(
     @('webhookUrl','Optional webhook URL (Enter to disable)')
 )) {
     $secure = Read-Host $item[1] -AsSecureString
-    if ($secure.Length -eq 0 -and $item[0] -ne 'webhookUrl') { throw 'A required secret is empty.' }
+    if ($secure.Length -eq 0) {
+        if ($item[0] -ne 'webhookUrl') { throw 'A required secret is empty.' }
+        continue
+    }
     $values[$item[0]] = ConvertFrom-SecureString $secure
 }
-$pair = & $Node -e 'const c=require("node:crypto");const p=c.generateKeyPairSync("ed25519");process.stdout.write(JSON.stringify({privateKey:p.privateKey.export({type:"pkcs8",format:"pem"}),publicKey:p.publicKey.export({type:"spki",format:"pem"})}));'
+$pair = & $Node (Join-Path $PSScriptRoot 'key-pair.mjs')
 if ($LASTEXITCODE -ne 0) { throw 'Cannot generate the Ed25519 signing key.' }
 $keys = $pair | ConvertFrom-Json
 $values.manifestPrivateKey = ConvertFrom-SecureString (ConvertTo-SecureString $keys.privateKey -AsPlainText -Force)

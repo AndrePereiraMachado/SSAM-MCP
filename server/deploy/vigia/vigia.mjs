@@ -11,6 +11,7 @@ import {runVigia,readAttempts,remind,timedOut} from './pipeline.mjs';
 import {replayApprovals} from './window.mjs';
 import {approve,reject,retry} from './approve.mjs';
 import {acquireLock,lockHeldBy,registerChild,runLogFile,createLog} from './host.mjs';
+import {AUTOMATIC_PLAN,releaseAutomatically} from './automatic.mjs';
 export * from './window.mjs';
 export * from './pipeline.mjs';
 export * from './approve.mjs';
@@ -31,25 +32,57 @@ export function parseArgs(argv){
 }
 export function readConfig(file){
  const config=JSON.parse(fs.readFileSync(file,'utf8').replace(/^﻿/,''));
+ config.automatic=config.automatic!==false;
+ if(config.automatic)config.updateFrom=config.updateFrom??'server/vigia-auto';
  config.outDir=path.resolve(config.outDir??path.dirname(path.resolve(file)));config.configFile=path.resolve(file);
  for(const key of ['workspace','tempRoot','bundleRoot'])if(!config[key])throw Error(`The watcher configuration needs ${key}.`);
  return config;
 }
 // The window the next proposal starts from: main's versions.json plus the approvals main does not carry yet.
 export function baseWindow(mainManifest,outDir){
- const approved=Object.values(readAttempts(outDir)).filter(a=>a.status==='approved');
- const r=replayApprovals(mainManifest,approved);
+ const attempts=Object.values(readAttempts(outDir));
+ // An automatic pin precedes deployment. If deployment failed, that local pin
+ // is evidence, not the served baseline; plan from its recorded previous window.
+ const failed=attempts.filter(a=>a.status==='failed'&&a.baseManifest&&a.built?.tag&&mainManifest.odc.some(e=>e.tag===a.built.tag)).sort((a,b)=>String(b.at).localeCompare(String(a.at)))[0];
+ const approved=attempts.filter(a=>a.status==='approved');
+ const r=replayApprovals(failed?.baseManifest??mainManifest,approved);
  // The next proposal branch starts from the newest approved pin main lacks, so merging it brings both without a conflict.
  const last=approved.filter(a=>r.replayed.includes(a.id)).sort((x,y)=>String(x.approved?.at).localeCompare(String(y.approved?.at))).at(-1);
  return {...r,branchBase:last?.pinCommit??last?.approved?.commit??null};
 }
 export async function round(config,runtime,{dryRun=false}={}){
+ if(config.automatic&&!dryRun)await runtime.secrets();
+ // A process interrupted after publication resumes its journal before any new build.
+ if(config.automatic&&!dryRun)for(const a of Object.values(readAttempts(config.outDir))){
+  const file=path.join(config.outDir,a.id,'release.json'),journal=path.join(config.outDir,a.id,'deployment.json');
+  if(!fs.existsSync(file)||!fs.existsSync(journal))continue;
+  const state=JSON.parse(fs.readFileSync(journal,'utf8'));
+  const release=JSON.parse(fs.readFileSync(file,'utf8'));
+  if(state.status==='rollback-failed')return {status:'rollback-failed',id:a.id,code:'rollback-needs-attention'};
+  if(state.status==='live'&&a.status!=='approved'){
+   const {writeAttempt}=await import('./pipeline.mjs');
+   writeAttempt(config.outDir,{...a,status:'approved',built:release.built,pinCommit:state.pin,approved:{at:new Date().toISOString(),digest:'sha256:'+release.built.sha256,commit:state.pin}});
+  }
+  if(['rolled-back','preparation-failed'].includes(state.status)&&a.status==='running'){
+   const {writeAttempt}=await import('./pipeline.mjs');writeAttempt(config.outDir,{...a,status:'failed',built:release.built,failedLanes:a.pair.lanes,code:state.status});
+  }
+  if(!['live','rolled-back','rollback-failed','preparation-failed'].includes(state.status)){
+   const result=await releaseAutomatically(config,runtime,release);
+   if(result.status==='live'){
+    const {writeAttempt}=await import('./pipeline.mjs');
+    writeAttempt(config.outDir,{...a,status:'approved',built:release.built,pinCommit:result.commit,approved:{at:new Date().toISOString(),digest:'sha256:'+release.built.sha256,commit:result.commit}});
+   }
+   return result;
+  }
+ }
  const {manifest,replayed,branchBase}=baseWindow(runtime.manifest(),config.outDir);
- const observed=await runtime.detect();
+ const local=await runtime.detect();
+ const observed=config.automatic?await runtime.observe(local,{dryRun}):local;
  let state={};if(config.versionStateFile&&fs.existsSync(config.versionStateFile))state=JSON.parse(fs.readFileSync(config.versionStateFile,'utf8'));
  const head=await runtime.head();
  runtime.log?.(`workspace ${head}; observed ${observed.map(o=>`${o.lane} ${o.fullVersion}${o.tfm?' '+o.tfm:''}${o.requiresInstallation?' (installer)':''}`).join(', ')||'nothing'}${replayed.length?`; approved, not in main: ${replayed.join(', ')}`:''}`);
- return runVigia({...config,manifest,replayed,branchBase,state,observed,head,dryRun},runtime);
+ const result=await runVigia({...config,manifest,replayed,branchBase,state,observed,head,dryRun},runtime);
+ return dryRun&&config.automatic?{...result,sources:runtime.sourceStatus,automaticPlan:AUTOMATIC_PLAN}:result;
 }
 async function childSupportsRounds(file){try{return fs.readFileSync(file,'utf8').includes('ROUND_PROTOCOL=2');}catch{return false;}}
 async function launch(args,config,log){
@@ -94,6 +127,21 @@ async function owner(args,config,log){
 if(process.argv[1]&&path.resolve(process.argv[1])===self){
  const args=parseArgs(process.argv.slice(2));
  const config=readConfig(args.config);
+ if(config.automatic&&!args.flags.has('dry-run')){
+  const {createRuntime}=await import('./runtime.mjs');
+  let startup;
+  try{startup=await createRuntime(config);await startup.secrets();}
+  catch{
+   const message='Required secrets or deployment configuration are missing. No release writes were started.';
+   console.error('SSAM watcher deferred: '+message);
+   // No journal/directory is written before this gate; the only side effect is
+   // a generic Windows notification so a scheduled, hidden task is observable.
+   if(config.notify!==false&&startup)await startup.run(config.powershell??'C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe',[
+    '-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',path.join(path.dirname(self),'notify.ps1'),'-Title','SSAM watcher deferred','-Message',message
+   ],{secret:true,allowFailure:true,timeoutMs:60000}).catch(()=>{});
+   process.exit(2);
+  }
+ }
  if(args.flags.has('dry-run')){
   const {createRuntime}=await import('./runtime.mjs');
   console.log(JSON.stringify(await round(config,await createRuntime(config),{dryRun:true}),null,2));
@@ -110,7 +158,7 @@ if(process.argv[1]&&path.resolve(process.argv[1])===self){
    await remind(config.outDir,'round-timeout','SSAM watcher round stopped',`A round reached its ${config.roundHours??7} h limit and was stopped; the next round retries (log ${log.file}).`,{...runtime,log}).catch(()=>{});
    log('round timeout');process.exit(3);
   },(config.roundHours??7)*3600000);deadline.unref();
-  try{const result=await round(config,runtime);log(`round ${result.status}${result.id?' '+result.id:''}`);console.log(JSON.stringify(result,null,2));if(result.status==='failed')process.exitCode=1;}
+  try{const result=await round(config,runtime);log(`round ${result.status}${result.id?' '+result.id:''}`);console.log(JSON.stringify(result,null,2));if(['failed','rolled-back','rollback-failed'].includes(result.status))process.exitCode=1;}
   catch(error){log(`round error: ${error.stack??error.message}`);await remind(config.outDir,'error:'+String(error.message).split('\n')[0].slice(0,120),'SSAM watcher error',`${String(error.message).split('\n')[0]} (log ${log.file})`,{...runtime,log}).catch(()=>{});process.exitCode=1;}
  }else{
   const mode=args.approve?'approve':args.reject?'reject':args.retry?'retry':'';

@@ -11,6 +11,7 @@ import {smokeImage,readListingBudget} from './smoke.mjs';
 import {EnvironmentError} from './pipeline.mjs';
 import {busyDotnet} from './host.mjs';
 import {peFileVersion} from '../kernel-pair-check.mjs';
+import {createAutoRuntime} from './auto-runtime.mjs';
 const here=path.dirname(fileURLToPath(import.meta.url));
 const slash=p=>p.replaceAll('\\','/');
 const bashPath=p=>slash(p).replace(/^([A-Za-z]):/,(_,drive)=>'/'+drive.toLowerCase());
@@ -75,6 +76,8 @@ export async function createRuntime(config,{log=()=>{}}={}){
  const cutShort=()=>new EnvironmentError('The round reached its time limit; its commands were stopped.','round-timeout');
  async function run(command,args,{env={},input,dir,allowFailure=false,secret=false,cwd=root,timeoutMs=0,evenWhenStopping=false}={}){
   if(stopping&&!evenWhenStopping)throw cutShort();
+  // PowerShell 7 hosts otherwise pass their incompatible module path to 5.1.
+  if(process.platform==='win32'&&command===exe.powershell)env={PSModulePath:'C:/Windows/System32/WindowsPowerShell/v1.0/Modules;'+(process.env.PSModulePath??''),...env};
   if(dir){fs.mkdirSync(dir,{recursive:true});fs.appendFileSync(path.join(dir,'commands.jsonl'),JSON.stringify({time:new Date().toISOString(),command,args:secret?['(not recorded)']:args,cwd,env:Object.keys(env)})+'\n');}
   const result=await new Promise((resolve,reject)=>{
    const child=spawn(command,args,{cwd,env:{...process.env,...env},windowsHide:true,stdio:['pipe','pipe','pipe']});let stdout='',stderr='',timer=null;active.add(child);
@@ -208,6 +211,7 @@ export async function createRuntime(config,{log=()=>{}}={}){
   run,docker,log,checkWorkspace,ensureDocker,waitForDotnet,
   manifest:()=>JSON.parse(fs.readFileSync(path.join(root,'server/deploy/coolify/versions.json'),'utf8')),
   head:async()=>(await git(['rev-parse','--short=7','HEAD'])).stdout.trim(),
+  fullHead:async()=>(await git(['rev-parse','HEAD'])).stdout.trim(),
   async detect(){
    const result=await ps(path.join(here,'detect-studios.ps1'),['-Odc',config.studios?.odc??'','-O11',config.studios?.o11??'','-Installers',config.installersDir??''],{timeoutMs:120000});
    return JSON.parse(result.stdout.replace(/^\uFEFF/,''));
@@ -229,6 +233,13 @@ export async function createRuntime(config,{log=()=>{}}={}){
   // Docker Desktop answering (started and awaited when it is not) and the buildx builder present.
   async dockerReady(){
    await ensureDocker();
+   const deadline=Date.now()+(config.dockerWaitMinutes??8)*60000;
+   for(;;){
+    const r=await run(exe.powershell,['-NoProfile','-NonInteractive','-Command',"@(Get-CimInstance Win32_Process | Where-Object { $_.Name -match '^(docker|docker-buildx)(\\.exe)?$' -and $_.CommandLine -match '(buildx\\s+build|docker-buildx.+build)' } | Select-Object ProcessId) | ConvertTo-Json -Compress"],{timeoutMs:60000});
+    if(!r.stdout.trim()||r.stdout.trim()==='[]')break;
+    if(Date.now()>deadline)throw new EnvironmentError('Another Docker build is still running; this round is deferred.','docker-busy');
+    log('waiting for another Docker build');await wait(5000);
+   }
    const builder=config.builder??'ssam-multiver-impl';
    if((await docker(['buildx','inspect',builder],{allowFailure:true,timeoutMs:60000})).code!==0)throw new EnvironmentError(`The buildx builder ${builder} does not exist in Docker Desktop.`,'builder-missing');
   },
@@ -292,7 +303,9 @@ export async function createRuntime(config,{log=()=>{}}={}){
     for(const b of Object.values(bundles)){const to=path.join(installers,path.basename(b.file));try{fs.linkSync(b.file,to);}catch{fs.copyFileSync(b.file,to);}}
     const metadata=path.join(dir,'image-metadata.json'),image=config.image??'docker.io/andrepereiramachado/ssam-server';
     const env={TEMP:temp,TMP:temp,PATH:path.dirname(exe.docker)+path.delimiter+path.dirname(exe.git)+path.delimiter+process.env.PATH,DOCKER:'docker --context '+context,BUILDX_BUILDER:config.builder??'ssam-multiver-impl',STUDIO_INSTALLERS_DIR:bashPath(installers),SSAM_BUILD_METADATA_FILE:slash(metadata),SERVICE_STUDIO_BUNDLE:path.basename(bundles.o11.file),SERVICE_STUDIO_BUNDLE_SHA256:bundles.o11.sha256,ODC_STUDIO_BUNDLE:path.basename(bundles.odc.file),ODC_STUDIO_BUNDLE_SHA256:bundles.odc.sha256,SSAM_IMAGE_O11:bundles.o11.version,SSAM_IMAGE_ODC:bundles.odc.version};
-    const r=await run(exe.bash,[slash(path.join(root,'server/deploy/build.sh')),'--image',image,'--tag',tag,'--','--progress','plain'],{dir,env,allowFailure:true,timeoutMs:(config.buildTimeoutMinutes??120)*60000});
+    Object.assign(env,{SERVICE_STUDIO_TFM:bundles.o11.tfm,ODC_STUDIO_TFM:bundles.odc.tfm});
+    const extra=runtime.bridgeStage?['--build-context','client-bridges='+slash(runtime.bridgeStage)]:[];
+    const r=await run(exe.bash,[slash(path.join(root,'server/deploy/build.sh')),'--image',image,'--tag',tag,'--','--progress','plain',...extra],{dir,env,allowFailure:true,timeoutMs:(config.buildTimeoutMinutes??120)*60000});
     if(r.code!==0){
      const cause=buildCause(r);
      if(cause.environmental)throw new EnvironmentError(`build.sh could not finish for an environment reason (${cause.why}; exit ${r.code}); the round retries. See ${path.join(dir,'commands.jsonl')}.`,'build-environment');
@@ -303,7 +316,8 @@ export async function createRuntime(config,{log=()=>{}}={}){
    }finally{fs.rmSync(installers,{recursive:true,force:true});}
   },
   async smoke(built,bundles,served,dir){
-   return smokeImage({pair:built,bundle:{features:bundles.odc.features},dir,root,docker,served,pack:packFor(config,bundles),budget:readListingBudget(root),privateDir:path.join(temp,'smoke')});
+   const pack=runtime.bridgeKernel?{...runtime.bridgeKernel,o11BuiltFor:built.o11}:packFor(config,bundles);
+   return smokeImage({pair:built,bundle:{features:bundles.odc.features},dir,root,docker,served,pack,budget:readListingBudget(root),privateDir:path.join(temp,'smoke')});
   },
   // The proposal branch starts from HEAD, or from the newest approved pin main does not carry yet (base), so merging the
   // newest proposal brings the approved one too, without a conflict in versions.json.
@@ -372,5 +386,25 @@ export async function createRuntime(config,{log=()=>{}}={}){
    try{const r=await ps(path.join(here,'notify.ps1'),['-Title',title,'-Message',message,...(link?['-Link',link]:[]),'-Report'],{allowFailure:true,timeoutMs:60000,evenWhenStopping:true});log(`notice shown: ${(r.stdout.trim()||r.stderr.trim()||'exit '+r.code).split('\n')[0]}`);}catch(e){log(`notice not shown: ${e.message}`);}
   }
  };
+ if(config.automatic===true){
+  const auto=createAutoRuntime(config,runtime);Object.assign(runtime,auto);
+  runtime.pinExecution=async(manifest,dir,id,kernel)=>{
+   const branch=await checkWorkspace();
+   if(branch!==(config.executionBranch??'server/vigia-auto'))throw Error('Automatic pins require the configured execution branch.');
+   if(JSON.stringify(runtime.manifest())===JSON.stringify(manifest))return runtime.fullHead();
+   const kernelsFile=path.join(root,'server/deploy/coolify/r1-kernels.json');
+   const previous=Object.values(JSON.parse(fs.readFileSync(kernelsFile,'utf8')));
+   const kernels=Object.fromEntries(manifest.odc.map((entry,i)=>{
+    const pair={odc:entry.version,o11:manifest.o11[i].version};
+    const value=kernel?.odc===pair.odc&&kernel?.o11===pair.o11?kernel:previous.find(k=>k.odc===pair.odc&&k.o11===pair.o11);
+    if(!value)throw Error('The proposed window has no kernel metadata for a retained pair.');
+    return ['v'+(i+1),value];
+   }));
+   await writeWindow(root,manifest,dir,['gen-compose.test.mjs','initial-window.test.mjs']);
+   fs.writeFileSync(kernelsFile,JSON.stringify(kernels,null,2)+'\n');
+   await git(['add','--','server/deploy/coolify/r1-kernels.json'],{dir});
+   return commit(root,`feat(vigia): pin the verified image for ${id}\n`,dir);
+  };
+ }
  return runtime;
 }

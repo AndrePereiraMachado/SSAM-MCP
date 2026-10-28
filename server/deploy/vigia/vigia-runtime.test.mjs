@@ -141,7 +141,7 @@ test('a round whose fetched code does not load still leaves a log line and a not
  const root=tempDir(t,'vigia-broken-'),ws=path.join(root,'ws'),out=path.join(root,'out');
  fs.mkdirSync(path.join(ws,'server/deploy/vigia'),{recursive:true});
  fs.writeFileSync(path.join(ws,'server/deploy/vigia/vigia.mjs'),"// ROUND_PROTOCOL=2\nthrow new Error('broken main');\n");
- const cfg=path.join(root,'config.json');fs.writeFileSync(cfg,JSON.stringify({workspace:ws,tempRoot:path.join(root,'priv'),outDir:out,bundleRoot:path.join(root,'store'),notify:false}));
+ const cfg=path.join(root,'config.json');fs.writeFileSync(cfg,JSON.stringify({workspace:ws,tempRoot:path.join(root,'priv'),outDir:out,bundleRoot:path.join(root,'store'),notify:false,automatic:false}));
  const r=spawnSync(process.execPath,[path.join(here,'vigia.mjs'),'--config',cfg,'--no-update'],{encoding:'utf8'});
  const day=fs.readdirSync(path.join(out,'runs'))[0],log=fs.readFileSync(path.join(out,'runs',day,fs.readdirSync(path.join(out,'runs',day))[0]),'utf8');
  assert.match(log,/round process exited 1 without finishing its round: .*broken main/s);
@@ -226,4 +226,19 @@ test('a second launcher finds the round lock and leaves at once',t=>{
  const dir=tempDir(t,'vigia-lock2-'),file=path.join(dir,'vigia.lock');const held=acquireLock(file);
  const r=spawnSync(process.execPath,['--input-type=module','-e',`import {acquireLock} from ${JSON.stringify(new URL('./host.mjs',import.meta.url).href)};console.log(JSON.stringify(acquireLock(${JSON.stringify(file)})));`],{encoding:'utf8'});
  assert.ok(JSON.parse(r.stdout).busy);held.release();
+});
+
+test('automatic pin commits the three-pair window and kernel metadata on the execution branch and resumes idempotently',{skip:!windows},async t=>{
+ const r=repo(t),file=path.join(r.ws,'server/deploy/coolify/r1-kernels.json');
+ fs.copyFileSync(path.join(server,'deploy/coolify/r1-kernels.json'),file);git(r.ws,'add','.');git(r.ws,'commit','-m','kernel fixture');
+ const runtime=await createRuntime({...config(r),automatic:true,executionBranch:'server/vigia-run'});
+ const base=runtime.manifest(),tag='prod-auto-o115594-odc1730',kernel={o11:'11.55.94',odc:'1.7.30',odcBridge:'v100',odcBridgeAccepted:['v100']};
+ const manifest={window:3,odc:[{version:'1.7.30',image,tag,sha256:sha('a')},...base.odc],o11:[{version:'11.55.94',image,tag,sha256:sha('a')},...base.o11]};
+ const dir=path.join(r.out,'pin');fs.mkdirSync(dir,{recursive:true});
+ const commit=await runtime.pinExecution(manifest,dir,'pair',kernel);
+ assert.equal(git(r.ws,'branch','--show-current'),'server/vigia-run');
+ assert.deepEqual(JSON.parse(fs.readFileSync(file,'utf8')).v1,kernel);
+ assert.equal(Object.keys(JSON.parse(fs.readFileSync(file,'utf8'))).length,3);
+ assert.equal(await runtime.pinExecution(manifest,dir,'pair',kernel),commit);
+ assert.equal(git(r.ws,'status','--porcelain'),'');
 });
