@@ -23,6 +23,9 @@ export async function remind(outDir,key,title,message,ops,{now=Date.now(),link}=
  data[key]=day;writeJson(file,data);ops.log?.(`notice: ${title}: ${message}`);
  await ops.notify(title,message,{link});return true;
 }
+// The time a notice is given, which decides its "once a day" (a round can wait hours for another dotnet and cross
+// midnight): config.clock in tests, else the round's fixed time in tests (config.now), else the time of the notice itself.
+const noticeNow=config=>config.clock?.()??config.now??Date.now();
 const sameInputs=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
 const hours=(now,at)=>(now-Date.parse(at))/3600000;
 // What a round would do, without side effects (the dry run prints it).
@@ -78,7 +81,7 @@ async function noteWaiting(config,ops,waiting,now){
  const file=path.join(config.outDir,'pending.json');let previous='';try{previous=fs.readFileSync(file,'utf8');}catch{}
  if(previous!==text){fs.mkdirSync(config.outDir,{recursive:true});fs.writeFileSync(file,text);fs.writeFileSync(path.join(config.outDir,'PENDENTE.md'),'# Studio installation required\n\nInstall the observed Studio on this machine (or provide its folder in the watcher configuration). The next round then bundles and tests it. No image was built or published.\n\n'+text+'\n');}
  const what=[...waiting.installers.map(i=>`${STUDIO_NAME[i.lane]} ${i.version} (installer downloaded, not installed)`),...waiting.requested.map(r=>`${STUDIO_NAME[r.lane]} ${r.version} (${r.customers} customers)`)].join(', ');
- await remind(config.outDir,'install:'+what,'SSAM: install a newer Studio',`${what}. See ${path.join(config.outDir,'PENDENTE.md')}`,ops,{now,link:path.join(config.outDir,'PENDENTE.md')});
+ await remind(config.outDir,'install:'+what,'SSAM: install a newer Studio',`${what}. See ${path.join(config.outDir,'PENDENTE.md')}`,ops,{now:noticeNow(config),link:path.join(config.outDir,'PENDENTE.md')});
 }
 export async function runVigia(config,ops){
  const now=config.now??Date.now(),outDir=config.outDir,log=ops.log??(()=>{});
@@ -93,16 +96,16 @@ export async function runVigia(config,ops){
  if(decision.action==='idle'||decision.action==='waiting-for-studio')return {status:decision.action,plan};
  if(decision.action==='pending-approval'){
   const p=decision.proposal,newer=decision.observedPair!==p.id?` A newer pair was observed (${decision.observedPair}); it is tested after this proposal is approved or rejected.`:'';
-  await remind(outDir,'proposal:'+p.id,'SSAM: Studio versions ready for approval',`${p.id} waits for your approval: ${path.join(outDir,p.id,'PROPOSTA.md')}.${newer}`,ops,{now,link:path.join(outDir,p.id,'PROPOSTA.md')});
+  await remind(outDir,'proposal:'+p.id,'SSAM: Studio versions ready for approval',`${p.id} waits for your approval: ${path.join(outDir,p.id,'PROPOSTA.md')}.${newer}`,ops,{now:noticeNow(config),link:path.join(outDir,p.id,'PROPOSTA.md')});
   return {status:'pending-approval',id:p.id,dir:path.join(outDir,p.id),plan};
  }
  if(decision.action==='failed'){
-  if(decision.id)await remind(outDir,'failed:'+decision.id,'SSAM: Studio version checks failed',`${decision.id}: ${path.join(outDir,decision.id,'FALHAS.md')}`,ops,{now,link:path.join(outDir,decision.id,'FALHAS.md')});
+  if(decision.id)await remind(outDir,'failed:'+decision.id,'SSAM: Studio version checks failed',`${decision.id}: ${path.join(outDir,decision.id,'FALHAS.md')}`,ops,{now:noticeNow(config),link:path.join(outDir,decision.id,'FALHAS.md')});
   return {status:'failed',id:decision.id??null,dir:decision.id?path.join(outDir,decision.id):null,plan};
  }
  if(decision.action==='rejected')return {status:'rejected',id:decision.id,plan};
  if(decision.action==='held'){
-  await remind(outDir,'held:'+decision.id,'SSAM: Studio version tests do not run',`${decision.id}: the candidate tests timed out or ran nothing ${decision.attempt.testEnvRuns} times in a row; the watcher stops retrying them until main or the Studio changes. After checking, ${ownerCommand(config,'-Retry '+decision.id)}`,ops,{now,link:path.join(outDir,decision.id,'AGUARDANDO.md')});
+  await remind(outDir,'held:'+decision.id,'SSAM: Studio version tests do not run',`${decision.id}: the candidate tests timed out or ran nothing ${decision.attempt.testEnvRuns} times in a row; the watcher stops retrying them until main or the Studio changes. After checking, ${ownerCommand(config,'-Retry '+decision.id)}`,ops,{now:noticeNow(config),link:path.join(outDir,decision.id,'AGUARDANDO.md')});
   return {status:'held',id:decision.id,plan};
  }
  const result=await runAttempt(config,ops,decision,now);
@@ -194,7 +197,7 @@ async function runAttempt(config,ops,decision,now){
   fs.writeFileSync(path.join(dir,'PROPOSTA.md'),proposalText({id,pair,built,next,comparisons,branch,commit,dir,base:base_,replayed:config.replayed??[],runtimes,features:bundles.odc.features,config}));
   if(wasCut(outDir,attempt)){log('the round was cut at its time limit; the proposal is not recorded');return {status:'deferred',id,dir,code:'round-timeout'};}
   writeAttempt(outDir,{...attempt,status:'proposed',built,branch,commit,proposedManifest:next.manifest,leaving:next.leaving,affected:next.affected,runtimes,features:bundles.odc.features,proposedAt:new Date().toISOString()});
-  await remind(outDir,'proposal:'+id,'SSAM: Studio versions ready for approval',`${id}: ${path.join(dir,'PROPOSTA.md')}`,ops,{now,link:path.join(dir,'PROPOSTA.md')});
+  await remind(outDir,'proposal:'+id,'SSAM: Studio versions ready for approval',`${id}: ${path.join(dir,'PROPOSTA.md')}`,ops,{now:noticeNow(config),link:path.join(dir,'PROPOSTA.md')});
   return {status:'proposed',id,branch,dir,built};
  }catch(error){
   if(wasCut(outDir,attempt)||error.code==='round-timeout'){
@@ -208,7 +211,7 @@ async function runAttempt(config,ops,decision,now){
   writeAttempt(outDir,{...attempt,status:environmental?'deferred':'failed',...(environmental?{deferrals:(attempt.deferrals??0)+1,firstDeferredAt:attempt.firstDeferredAt??attempt.at,deferredLanes:lanes,laneSince,laneCodes:error.laneCodes??null,testEnvRuns:error.code==='test-environment'?(attempt.testEnvRuns??0)+1:0}:{failedLanes:lanes}),error:String(error.message),code:error.code??null,runtimes,endedAt:new Date().toISOString()});
   log(`${environmental?'deferred':'failed'}: ${error.message}`);
   const key=(environmental?'deferred:':'failed:')+id+(environmental?':'+(error.code??''):'');
-  await remind(outDir,key,environmental?'SSAM: Studio version round waiting':'SSAM: Studio version checks failed',`${id}: ${error.message.split('\n')[0]}`,ops,{now,link:notice});
+  await remind(outDir,key,environmental?'SSAM: Studio version round waiting':'SSAM: Studio version checks failed',`${id}: ${error.message.split('\n')[0]}`,ops,{now:noticeNow(config),link:notice});
   return {status:environmental?'deferred':'failed',id,dir,error:String(error.message)};
  }
 }

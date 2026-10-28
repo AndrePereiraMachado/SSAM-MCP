@@ -140,6 +140,15 @@ test('an incomplete Studio folder (no exe, no runtimeconfig.json) defers its lan
  const quiet=fixture(t);const q=await quiet.round({observed:[odc,{...o11,tfm:null}]});assert.equal(readAttempts(quiet.outDir)[q.id].laneCodes.o11,'studio-incomplete','a null runtime is never skipped');
  const alone=await f.round({observed:[odc,broken],now:T0+24*3600000});assert.equal(alone.id,'o11-11.55.93-odc-1.7.30');assert.equal(alone.status,'proposed');
 });
+test('R7: the once-a-day notice counts the day of the notice, not the day the round started (a round across midnight)',async t=>{
+ const f=fixture(t,{tfm:{odc:'net8.0',o11:'net8.0'}});
+ // Day 1: the waiting notice is given.
+ await f.round();const given=f.notes.length;assert.ok(given>=1);
+ // Day 2: a round that started on day 1 (decision time T0+1h) defers only on day 2 (it waited for another dotnet).
+ let clock=T0+3600000;const wait=f.ops.targetFramework;f.ops.targetFramework=async c=>{clock=T0+DAY+3600000;return wait(c);};
+ await f.round({now:T0+3600000,clock:()=>clock});
+ assert.equal(f.notes.length,given+1,'the first notice of day 2 is given');
+});
 test('R3: candidate tests that time out three rounds in a row are held (no 90 min every 6 h) until main moves or -Retry',async t=>{
  const f=fixture(t);
  f.ops.test=async(lane,kind)=>{f.calls.push(`test:${lane}:${kind}`);if(kind==='baseline')return {total:3,passed:3,failures:[]};throw new EnvironmentError('The odc candidate tests could not run (timed out).','test-environment',[lane]);};
