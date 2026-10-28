@@ -16,8 +16,9 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:/Users/andre/SSAM-MCP-
 ... vigia.ps1 -Config C:/t/vigia/config.json -Approve <id>
 ... vigia.ps1 -Config C:/t/vigia/config.json -Reject <id> -Reason "<why>"
 ... vigia.ps1 -Config C:/t/vigia/config.json -Retry <id>
-# the scheduled task (-Show prints it without registering; -Uninstall removes it)
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:/Users/andre/SSAM-MCP-wt/vigia-run/server/deploy/vigia/install-task.ps1
+# the scheduled task, once main carries this watcher: fast-forwards the watcher worktree from main, then registers
+# (-Show prints it without registering anything; -Uninstall removes it)
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:/Users/andre/SSAM-MCP/server/deploy/vigia/install-task.ps1
 ```
 
 ## A round

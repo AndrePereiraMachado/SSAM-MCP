@@ -112,6 +112,19 @@ test('Features.plain.xml becomes a Features.xml this Windows user decrypts exact
  sh(PS,['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',path.join(server,'deploy/odc-features-export.ps1'),'-Source',path.join(dir,'cache/Features.xml'),'-Out',back]);
  assert.deepEqual(fs.readFileSync(back),fs.readFileSync(plain));assert.doesNotMatch(fs.readFileSync(path.join(dir,'cache/Features.xml'),'utf8'),/Feature Name/);
 });
+test('publication goes through the real publish.sh (never --latest) and reads the pushed digest; an already published tag of the same digest is accepted',{skip:!windows||!fs.existsSync('C:/Program Files/Git/bin/bash.exe')},async t=>{
+ const r=repo(t),bin=path.join(r.root,'bin'),calls=path.join(r.root,'docker-calls.txt');fs.mkdirSync(bin,{recursive:true});
+ for(const rel of ['deploy/publish.sh']){const to=path.join(r.ws,'server',rel);fs.mkdirSync(path.dirname(to),{recursive:true});fs.copyFileSync(path.join(server,rel),to);}
+ const digest='sha256:'+sha('e'),registry='registry.example.test/ns/ssam-server';
+ // A docker that records its arguments; "exists" makes the registry already hold the tag.
+ fs.writeFileSync(path.join(bin,'docker'),`#!/bin/sh\n[ "$1" = "--context" ] && shift 2\necho "$*" >> '${calls.replaceAll('\\','/')}'\ncase "$1 $2" in\n "image inspect") case "$*" in *revision*) echo abc1234 ;; esac; exit 0 ;;\n "manifest inspect") [ -f '${path.join(r.root,'exists').replaceAll('\\','/')}' ] && exit 0; exit 1 ;;\n "buildx imagetools") echo "Name: x"; echo "Digest: ${digest}"; exit 0 ;;\n "tag "*) exit 0 ;;\n "push "*) echo "prod-x: digest: ${digest} size: 1234"; exit 0 ;;\nesac\nexit 0\n`);
+ const runtime=await createRuntime({...config(r),docker:path.join(bin,'docker.exe')});
+ const first=await runtime.publish({image:registry,tag:'prod-x-o115594-odc1730',odc:'1.7.30',o11:'11.55.94'});
+ assert.deepEqual(first,{digest,already:false});
+ const log=fs.readFileSync(calls,'utf8');assert.match(log,/push registry\.example\.test\/ns\/ssam-server:prod-x-o115594-odc1730/);assert.doesNotMatch(log,/:latest/);
+ fs.writeFileSync(path.join(r.root,'exists'),'');
+ assert.deepEqual(await runtime.publish({image:registry,tag:'prod-x-o115594-odc1730',odc:'1.7.30',o11:'11.55.94'}),{digest,already:true});
+});
 test('a second launcher finds the round lock and leaves at once',t=>{
  const dir=tempDir(t,'vigia-lock2-'),file=path.join(dir,'vigia.lock');const held=acquireLock(file);
  const r=spawnSync(process.execPath,['--input-type=module','-e',`import {acquireLock} from ${JSON.stringify(new URL('./host.mjs',import.meta.url).href)};console.log(JSON.stringify(acquireLock(${JSON.stringify(file)})));`],{encoding:'utf8'});

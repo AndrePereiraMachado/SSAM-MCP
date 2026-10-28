@@ -21,15 +21,26 @@ export function ownerSteps({attempt,dir,published,commit,files,newPair}){
 }
 export async function approve(config,ops,selector){
  const log=ops.log??(()=>{});
- const a=findAttempt(config.outDir,selector,['proposed']),dir=path.join(config.outDir,a.id);
+ let a=findAttempt(config.outDir,selector,['proposed']);const dir=path.join(config.outDir,a.id);
  log(`approve ${a.id}`);
- await ops.verifyBranch(a.branch,a.commit);
- await ops.verifyLocalImage(a.built);
- const published=await ops.publish(a.built);
- if(published.digest!=='sha256:'+a.built.sha256)throw Error(`The registry holds ${published.digest} for ${a.built.tag}, not the tested sha256:${a.built.sha256}. Nothing was pinned; check the registry before anything else.`);
- log(`published ${a.built.tag} ${published.digest}${published.already?' (already in the registry)':''}`);
- const pinned=pinDigest(a.proposedManifest,a.built.tag,published.digest);
- const {commit}=await ops.pin(pinned,a.branch,dir,`build(deploy): pin the image ${a.built.tag}\n\nPublished to the private registry by the owner's approval (vigia.ps1 -Approve ${a.id}); digest ${published.digest}.\nlatest is unchanged.\n`);
+ // Everything that can be checked before publishing is checked first; each step is recorded, so an approval stopped
+ // half-way resumes where it stopped (a published tag is never pushed again, a pin is never repeated).
+ literalComposeText(a.baseManifest,config.domains);
+ if(!a.published){
+  await ops.verifyBranch(a.branch,a.commit);
+  await ops.verifyLocalImage(a.built);
+  const published=await ops.publish(a.built);
+  if(published.digest!=='sha256:'+a.built.sha256)throw Error(`The registry holds ${published.digest} for ${a.built.tag}, not the tested sha256:${a.built.sha256}. Nothing was pinned; check the registry before anything else.`);
+  log(`published ${a.built.tag} ${published.digest}${published.already?' (already in the registry)':''}`);
+  a=writeAttempt(config.outDir,{...a,published:{...published,at:new Date().toISOString()}});
+ }else log(`already published ${a.published.digest}`);
+ const published=a.published,pinned=pinDigest(a.proposedManifest,a.built.tag,published.digest);
+ if(!a.pinCommit){
+  await ops.verifyBranch(a.branch,a.commit);
+  const {commit}=await ops.pin(pinned,a.branch,dir,`build(deploy): pin the image ${a.built.tag}\n\nPublished to the private registry by the owner's approval (vigia.ps1 -Approve ${a.id}); digest ${published.digest}.\nlatest is unchanged.\n`);
+  a=writeAttempt(config.outDir,{...a,pinCommit:commit});
+ }else await ops.verifyBranch(a.branch,a.pinCommit);
+ const commit=a.pinCommit;
  const files={compose:path.join(dir,'compose.coolify.literal.yml'),rollback:path.join(dir,'compose.rollback.literal.yml'),kernel:path.join(dir,'kernel.json'),features:path.join(dir,'Features.plain.xml')};
  fs.writeFileSync(files.compose,literalComposeText(pinned,config.domains));
  fs.writeFileSync(files.rollback,literalComposeText(a.baseManifest,config.domains));

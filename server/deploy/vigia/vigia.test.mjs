@@ -153,8 +153,8 @@ const domains={ssam:'mcp.example.test',console:'panel.example.test'};
 test('-Approve checks, publishes (simulated), pins the published digest and prints what is left and the way back',async t=>{
  const f=fixture(t);const r=await f.round();const a=approvalOps(f);
  const done=await approve({outDir:f.outDir,domains},a.ops,'odc-1.7.30');
- assert.equal(done.status,'approved');assert.deepEqual(a.calls.map(c=>c[0]),['branch','image','publish','pin']);
- const pinned=a.calls[3][2];assert.equal(pinned.odc[0].sha256,sha('a'));assert.equal(pinned.o11[0].sha256,sha('a'));
+ assert.equal(done.status,'approved');assert.deepEqual(a.calls.map(c=>c[0]),['branch','image','publish','branch','pin']);
+ const pinned=a.calls[4][2];assert.equal(pinned.odc[0].sha256,sha('a'));assert.equal(pinned.o11[0].sha256,sha('a'));
  assert.match(done.steps,/kernel write --version odc=1\.7\.30/);assert.match(done.steps,/compose\.coolify\.literal\.yml/);assert.match(done.steps,/Way back: .*compose\.rollback\.literal\.yml/);assert.match(done.steps,/latest was not moved/);
  const literal=fs.readFileSync(path.join(r.dir,'compose.coolify.literal.yml'),'utf8');assert.match(literal,/Host\(`mcp\.example\.test`\)/);assert.match(literal,/o115594-odc1730/);
  assert.match(fs.readFileSync(path.join(r.dir,'compose.rollback.literal.yml'),'utf8'),/"image": "docker.io\/andrepereiramachado\/ssam-server:new"/);
@@ -166,6 +166,15 @@ test('-Approve checks, publishes (simulated), pins the published digest and prin
 test('-Approve refuses to pin when the registry digest is not the tested one',async t=>{
  const f=fixture(t);await f.round();const a=approvalOps(f,{digest:'sha256:'+sha('b')});
  await assert.rejects(approve({outDir:f.outDir,domains},a.ops,'o11-11.55.94'),/not the tested/);assert.ok(!a.calls.some(c=>c[0]==='pin'));
+});
+test('-Approve checks the configuration before publishing and resumes an approval stopped half-way without publishing or pinning twice',async t=>{
+ const f=fixture(t);const r=await f.round();
+ const none=approvalOps(f);await assert.rejects(approve({outDir:f.outDir},none.ops,r.id),/domains/);assert.equal(none.calls.length,0,'nothing published without the domains');
+ const a=approvalOps(f);a.ops.pin=async()=>{a.calls.push(['pin']);throw Error('disk full');};
+ await assert.rejects(approve({outDir:f.outDir,domains},a.ops,r.id),/disk full/);
+ assert.equal(readAttempts(f.outDir)[r.id].status,'proposed');assert.ok(readAttempts(f.outDir)[r.id].published);
+ const b=approvalOps(f);const done=await approve({outDir:f.outDir,domains},b.ops,r.id);
+ assert.equal(done.status,'approved');assert.deepEqual(b.calls.map(c=>c[0]),['branch','pin'],'resumed at the pin: no second publication');
 });
 test('-Reject drops a proposal for good with the same inputs; -Retry builds it again',async t=>{
  const f=fixture(t);const r=await f.round();

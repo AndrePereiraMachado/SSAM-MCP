@@ -38,6 +38,23 @@ if ([IO.Path]::GetFullPath($configured).TrimEnd('\') -ne [IO.Path]::GetFullPath(
 $git = 'C:\Program Files\Git\cmd\git.exe'
 $branch = (& $git -C $Workspace branch --show-current).Trim()
 if (-not $branch -or $branch -eq 'main' -or $branch -like 'vigia/*') { throw "The watcher worktree must be on its integration branch, not '$branch'." }
+# The task runs the worktree's own watcher, which fast-forwards itself from then on; a watcher older than the self-updating
+# one would not, so the worktree is brought to main here (fast-forward only) and must carry the round protocol.
+$head = (& $git -C $Workspace rev-parse HEAD).Trim()
+$main = (& $git -C $Workspace rev-parse --verify 'main^{commit}').Trim()
+if ($head -ne $main) {
+    & $git -C $Workspace merge-base --is-ancestor HEAD $main
+    if ($LASTEXITCODE -ne 0) { throw "$Workspace ($branch at $($head.Substring(0,7))) cannot fast-forward to main ($($main.Substring(0,7)))." }
+    if ($Show) { Write-Host "Would fast-forward $Workspace from $($head.Substring(0,7)) to main $($main.Substring(0,7))." }
+    else {
+        if (& $git -C $Workspace status --porcelain --untracked-files=no) { throw "$Workspace has tracked changes." }
+        & $git -C $Workspace merge --ff-only $main | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw "Fast-forward of $Workspace failed." }
+        Write-Host "Fast-forwarded $Workspace to main $($main.Substring(0,7))."
+    }
+}
+$watcher = Join-Path $Workspace 'server\deploy\vigia\vigia.mjs'
+if (-not $Show -and -not (Select-String -LiteralPath $watcher -SimpleMatch 'ROUND_PROTOCOL=2' -Quiet)) { throw "The watcher in $Workspace does not update itself yet: main must carry server/vigia-ops first." }
 
 $user = "$env:USERDOMAIN\$env:USERNAME"
 $conhost = Join-Path $env:SystemRoot 'System32\conhost.exe'

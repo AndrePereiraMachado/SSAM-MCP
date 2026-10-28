@@ -250,7 +250,8 @@ export async function createRuntime(config,{log=()=>{}}={}){
    const pushed=/publish: the digest to compare on the VPS[^\n]*?(sha256:[a-f0-9]{64})/.exec(r.stdout+r.stderr)?.[1];
    if(r.code===0&&pushed)return {digest:pushed,already:false};
    if(/already exists in the registry/.test(r.stderr)){
-    const inspect=await docker(['buildx','imagetools','inspect',`${built.image}:${built.tag}`],{allowFailure:true,timeoutMs:120000});
+    // The registry's digest of that tag, read the way publish.sh reads it (same DOCKER).
+    const inspect=await run(exe.bash,['-c','$DOCKER buildx imagetools inspect "$1"','publish',`${built.image}:${built.tag}`],{dir,env,allowFailure:true,timeoutMs:120000});
     const digest=/^Digest:\s*(sha256:[a-f0-9]{64})/m.exec(inspect.stdout)?.[1];
     if(digest)return {digest,already:true};
    }
