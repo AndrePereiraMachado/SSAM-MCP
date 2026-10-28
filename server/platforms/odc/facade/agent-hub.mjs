@@ -32,6 +32,7 @@ import { agentVerbOf } from './quality-line.mjs';
 import { buildPolicyOf, servedBuildOf, studioIdentity, studioRefusal, studioVersions, studioWarningOf, threePart, servedVersions, causeOf } from './studio-identity.mjs';
 import { recordStudioVersions } from './studio-version-state.mjs';
 import { UNKNOWN_EXIT } from './hosted/network-check.mjs';
+import { createBridgeStore } from './bridge-store.mjs';
 
 // A Windows balloon on the server machine (owner test, 2026-10-08); off with SSAM_ACCESS_NOTIFY=0, never fails a call.
 function notifyOwner(title, text) {
@@ -125,6 +126,7 @@ export const normalizeKernel = (kernel = {}) => {
   const out = { o11: threePart(kernel?.o11), odc: threePart(kernel?.odc),
     odcBridge: typeof kernel?.odcBridge === 'string' && kernel.odcBridge ? kernel.odcBridge : null,
     ...(kernel?.o11Hook === 'h1' ? { o11Hook: 'h1' } : {}),
+    ...(Array.isArray(kernel?.o11BridgeAccepted) ? {o11BridgeAccepted: kernel.o11BridgeAccepted.filter(p => /^h\d+$/.test(p))} : {}),
     // kernel.json odcBridgeAccepted (owner, 2026-10-08): older ODC bridges the server still serves, so a bridge bump does
     // not cut the customers that have not installed the new agent package yet.
     ...(Array.isArray(kernel?.odcBridgeAccepted) ? { odcBridgeAccepted: kernel.odcBridgeAccepted.filter(v => typeof v === 'string' && v) } : {}) };
@@ -152,9 +154,19 @@ export const O11_HOOKS = Object.freeze(['dev', 'h1']);
 //     identity in studio, served [build] and installed, before any package check: no package changes it (a bridge built
 //     for 11.55.92 does not bind on 11.55.91), so "ask for the current package" would mislead. Another build under "warn"
 //     (the default) is served: {ok: true, studio, warning} (studioBuildDiffers), and the gate puts it in every answer.
-export function compatibility(hello, kernel, lanes, { refused = null } = {}) {
+export function compatibility(hello, kernel, lanes, { refused = null, bridges = null } = {}) {
   const k = normalizeKernel(kernel);
-  return Object.fromEntries(LANES.map(lane => [lane, laneCompatibility(lane, hello, k, lanes ?? [], refused?.[lane] ?? null)]));
+  return Object.fromEntries(LANES.map(lane => {
+    const result = laneCompatibility(lane, hello, k, lanes ?? [], refused?.[lane] ?? null);
+    const capable = hello?.capabilities?.bridgeOffer === true || hello?.capabilities?.includes?.('bridgeOffer');
+    if (capable && result.code === 'AGENT_PACK_MISMATCH') {
+      const version = threePart(hello?.studios?.[lane]?.installed?.version);
+      const accepted = lane === 'odc' ? [k.odcBridge,...(k.odcBridgeAccepted ?? [])] : [k.o11Hook,...(k.o11BridgeAccepted ?? [])];
+      const offer = version && bridges?.offer(lane, version, accepted);
+      if (offer) return [lane, {ok:false, code:'BRIDGE_UPDATE_REQUIRED', message:'Install the signed bridge and reconnect.', bridgeOffer:offer}];
+    }
+    return [lane,result];
+  }));
 }
 function laneCompatibility(lane, hello, kernel, lanes, refused) {
   const no = (code, message, extra = {}) => ({ ok: false, code, message, ...extra });
@@ -178,10 +190,10 @@ function laneCompatibility(lane, hello, kernel, lanes, refused) {
     return no('AGENT_PACK_MISMATCH', 'The O11 bridge of the agent package was built for Service Studio ' + (pack.o11BuiltFor ?? 'none') + '; this server has the kernel for Service Studio ' + server + '. Ask the server owner for the current agent package.');
   if (lane === 'o11') {
     const hook = pack.o11Hook ?? 'dev';
-    if (!O11_HOOKS.includes(hook))
+    if (!O11_HOOKS.includes(hook) && !(kernel.o11BridgeAccepted ?? []).includes(hook))
       return no('AGENT_PACK_MISMATCH', 'The agent package declares the O11 hook ' + JSON.stringify(hook) + ', which this server does not know (known: ' + O11_HOOKS.join(', ') + '). Ask the server owner for the current agent package.');
     // kernel.json {"o11Hook": "h1"}: the owner accepts only packages whose thin bridge is loaded by the signed release hook.
-    if (kernel.o11Hook === 'h1' && hook !== 'h1')
+    if (kernel.o11Hook === 'h1' && hook !== 'h1' && !(kernel.o11BridgeAccepted ?? []).includes(hook))
       return no('AGENT_PACK_MISMATCH', 'This server accepts only agent packages with the signed release hook h1; this package uses the ' + hook + ' hook. Ask the server owner for the current agent package.');
   }
   if (!installed) return no('STUDIO_NOT_INSTALLED', 'The agent found no ' + name + ' installed on the user\'s machine; this server has the kernel for ' + name + ' ' + server + '.');
@@ -241,7 +253,7 @@ async function hashFile(file) {
   return hash.digest('hex');
 }
 
-export function createAgentHub({ dir, store, kernel, kernelRefused = null, log = () => {}, now = () => new Date(), limits: overrides = {}, onCallSettled = null } = {}) {
+export function createAgentHub({ dir, store, kernel, kernelRefused = null, log = () => {}, now = () => new Date(), limits: overrides = {}, onCallSettled = null, bridges = createBridgeStore() } = {}) {
   if (!dir) throw new Error('dir is required');
   if (!store?.verifyAgent || !store?.lookup) throw new Error('store with verifyAgent and lookup is required');
   const limits = { ...LIMITS, ...overrides };
@@ -460,7 +472,7 @@ export function createAgentHub({ dir, store, kernel, kernelRefused = null, log =
           agentRoot: hello?.agent?.root ?? null, agentKinds: hello?.agent?.kinds ?? null, agentPlatform: hello?.agent?.platform ?? null,
           connectedAt: state.connectedAt, lastSeenAt: state.lastSeenAt, lanes: [...state.lanes], pack: hello?.pack ?? null,
           studios: hello?.studios ?? null, o11Connection: hello?.o11Connection ?? null, kernel: { ...serverKernel },
-          compatible: compatibility(hello, serverKernel, state.lanes, { refused: kernelRefused }) };
+          compatible: compatibility(hello, serverKernel, state.lanes, { refused: kernelRefused, bridges }) };
       },
       // A1 (round 2): a Studio process the executor or the gate refused (studio-identity.mjs), named once like the hub's.
       studioUnserved: (lane, studio, cause) => logUnserved(state, lane, studio, cause),
@@ -612,7 +624,7 @@ export function createAgentHub({ dir, store, kernel, kernelRefused = null, log =
     // E1 (A-M1): the version of each installed Studio, the numbers only (studioVersions: never the folder).
     log({ event: resumed ? 'agent-resumed' : 'agent-connected', token: state.tokenId, agent: String(h.agent?.version ?? '?').slice(0, 32),
       ip, machine, o11: h.o11Connection ? JSON.stringify(h.o11Connection).slice(0, 200) : null, studios: studioVersions(h.studios) });
-    const compatible = compatibility(state.hello, serverKernel, state.lanes, { refused: kernelRefused });
+    const compatible = compatibility(state.hello, serverKernel, state.lanes, { refused: kernelRefused, bridges });
     noteUnserved(state, compatible);
     const welcome = { t: 'welcome', channel: state.channel.id, customer: auth.customer, resumed,
       heartbeatMs: limits.heartbeatMs, deadAfterMs: limits.deadAfterMs, maxMessageBytes: limits.maxMessageBytes,
@@ -670,7 +682,7 @@ export function createAgentHub({ dir, store, kernel, kernelRefused = null, log =
         }
         if ('o11Connection' in m.versions) state.hello.o11Connection = m.versions.o11Connection ?? null;
         // a Studio that changed under a connected agent is judged now (the gate reads info() on every call)
-        if ('studios' in m.versions) noteUnserved(state, compatibility(state.hello, serverKernel, state.lanes, { refused: kernelRefused }));
+        if ('studios' in m.versions) noteUnserved(state, compatibility(state.hello, serverKernel, state.lanes, { refused: kernelRefused, bridges }));
       }
       return;
     }
@@ -804,6 +816,20 @@ export function createAgentHub({ dir, store, kernel, kernelRefused = null, log =
     }
     const retry = rateLimited(auth.id);
     if (retry) return reply(res, 429, 'RATE_LIMITED', 'Rate limit: ' + limits.ratePerMinute + ' agent requests per minute.', { 'retry-after': String(retry) });
+    if (segments[2] === 'bridges') {
+      const [, , , lane, studioVersion, protocol, digest, extra] = segments;
+      const accepted = lane === 'odc' ? [serverKernel.odcBridge,...(serverKernel.odcBridgeAccepted ?? [])] : [serverKernel.o11Hook,...(serverKernel.o11BridgeAccepted ?? [])];
+      if (req.method !== 'GET' || extra !== undefined || !auth.lanes?.includes(lane) ||
+          // This backend only distributes bridges for the pair inside its image.
+          serverKernel[lane] !== studioVersion || !accepted.includes(protocol))
+        return reply(res,404,'NOT_FOUND','Not found.');
+      const file = bridges.file(lane,studioVersion,protocol,digest);
+      if (!file) return reply(res,404,'NOT_FOUND','Not found.');
+      const bytes = fs.readFileSync(file);
+      if (sha256Of(bytes) !== digest) return reply(res,404,'NOT_FOUND','Not found.');
+      res.writeHead(200,{'content-type':'application/octet-stream','content-length':bytes.length,'cache-control':'no-store'});
+      res.end(bytes);return true;
+    }
     const state = stateOf(auth.id);
     const [version, route, transferId, index, extra] = segments.slice(2);
     const method = req.method;

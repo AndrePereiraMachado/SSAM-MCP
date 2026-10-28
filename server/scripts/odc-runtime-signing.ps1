@@ -1,13 +1,33 @@
 [CmdletBinding()]
 param(
-    [ValidateSet('Prepare', 'Sign', 'Verify', 'Activate')][string]$Mode = 'Prepare',
+    [ValidateSet('Prepare', 'Sign', 'Verify', 'Activate', 'Artifacts')][string]$Mode = 'Prepare',
     [string]$BundleId,
     [string]$CertificateThumbprint,
     [ValidateSet('CurrentUser', 'LocalMachine')][string]$CertificateStore = 'CurrentUser',
-    [string]$TimestampServer
+    [string]$TimestampServer,
+    [string]$ArtifactDirectory,
+    [string]$Vault = "$env:LOCALAPPDATA\SSAM\vigia\secrets.dpapi.json"
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
+if ($Mode -eq 'Artifacts') {
+    . "$PSScriptRoot\..\deploy\vigia\vault.ps1"
+    $secrets = Read-VigiaVault $Vault
+    $thumb = $secrets.authenticodeThumbprint
+    if ($thumb -notmatch '^[a-fA-F0-9]{40}$' -or $TimestampServer -notmatch '^https?://[^\s]+$') { throw 'Signing configuration is invalid.' }
+    $certificate = Get-Item -LiteralPath "Cert:\CurrentUser\My\$thumb"
+    if (-not $certificate.HasPrivateKey -or -not $certificate.Verify() -or $certificate.Subject -eq $certificate.Issuer) { throw 'A valid provider-issued signing certificate is required.' }
+    if (@($certificate.EnhancedKeyUsageList | Where-Object { $_.ObjectId.Value -eq '1.3.6.1.5.5.7.3.3' }).Count -eq 0) { throw 'Certificate does not allow code signing.' }
+    $files = @(Get-ChildItem -LiteralPath $ArtifactDirectory -Recurse -File | Where-Object { $_.Extension -in '.dll','.exe' })
+    if (-not $files.Count) { throw 'No bridge binaries were built.' }
+    foreach ($file in $files) {
+        $result = Set-AuthenticodeSignature -LiteralPath $file.FullName -Certificate $certificate -HashAlgorithm SHA256 -IncludeChain NotRoot -TimestampServer $TimestampServer
+        $verified = Get-AuthenticodeSignature -LiteralPath $file.FullName
+        if ($result.Status -ne 'Valid' -or $null -eq $result.TimeStamperCertificate -or $verified.Status -ne 'Valid' -or $verified.SignerCertificate.Thumbprint -ne $thumb) { throw 'Bridge signature verification failed.' }
+    }
+    Write-Output 'Bridge signatures verified.'
+    return
+}
 $workspace = Split-Path $PSScriptRoot -Parent
 $odcRoot = Join-Path $workspace 'platforms\odc'
 $bundleRoot = Join-Path $odcRoot '.local\signed-runtime'
