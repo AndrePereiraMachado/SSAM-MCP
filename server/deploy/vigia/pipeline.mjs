@@ -54,7 +54,11 @@ function archive(dir,previous){
  for(const name of fs.readdirSync(dir))if(name!=='previous')fs.renameSync(path.join(dir,name),path.join(target,name));
 }
 async function noteWaiting(config,ops,waiting,now){
- if(!waiting.installers.length&&!waiting.requested.length)return;
+ if(!waiting.installers.length&&!waiting.requested.length){
+  // Nothing waits any more: the old notice is kept as resolved, so it never reads as current (one rename, once).
+  for(const name of ['pending.json','PENDENTE.md'])if(fs.existsSync(path.join(config.outDir,name)))fs.renameSync(path.join(config.outDir,name),path.join(config.outDir,name.replace(/(\.\w+)$/,'.resolved$1')));
+  return;
+ }
  const text=JSON.stringify({requested:waiting.requested,installers:waiting.installers.map(({lane,version,fullVersion,installer})=>({lane,version,fullVersion,installer}))},null,2);
  const file=path.join(config.outDir,'pending.json');let previous='';try{previous=fs.readFileSync(file,'utf8');}catch{}
  if(previous!==text){fs.mkdirSync(config.outDir,{recursive:true});fs.writeFileSync(file,text);fs.writeFileSync(path.join(config.outDir,'PENDENTE.md'),'# Studio installation required\n\nInstall the observed Studio on this machine (or provide its folder in the watcher configuration). The next round then bundles and tests it. No image was built or published.\n\n'+text+'\n');}

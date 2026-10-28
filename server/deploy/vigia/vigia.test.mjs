@@ -119,6 +119,8 @@ test('an unserved observation without an installed Studio is reported without bu
  const r=await runVigia({manifest,observed:[],state,outDir:f.outDir,now:T0},f.ops);
  assert.equal(r.status,'waiting-for-studio');assert.deepEqual(f.calls,['notify']);assert.ok(fs.existsSync(path.join(f.outDir,'PENDENTE.md')));
  await runVigia({manifest,observed:[],state,outDir:f.outDir,now:T0+3600000},f.ops);assert.deepEqual(f.calls,['notify']);
+ await runVigia({manifest,observed:[],state:{},outDir:f.outDir,now:T0+7200000},f.ops);
+ assert.equal(fs.existsSync(path.join(f.outDir,'PENDENTE.md')),false,'a resolved notice never reads as current');assert.ok(fs.existsSync(path.join(f.outDir,'PENDENTE.resolved.md')));
 });
 test('old observations do not trigger a release and skipped suites cannot approve one',()=>{
  assert.equal(planWindow(manifest,[],{unserved:{odc:{'1.7.12':{tokens:['old']}}}}).requested.length,0);
