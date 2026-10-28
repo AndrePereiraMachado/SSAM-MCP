@@ -33,10 +33,16 @@ export const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '
 // The ODC data root: this folder, or hosted the customer's <ws>/odc. a7 (review M1/B2): exported for the handlers of mcp.mjs
 // that take a data root (studio_reference_snapshot, studio_publish), read at call time inside the call's context.
 export const dataPath = (...segments) => (usesWorkspace(root, root) ? workspacePath('odc', ...segments) : path.join(root, ...segments));
+// The runtime the current bridge version is built for (Bridge.csproj OdcBridgeRuntime); net8.0 for a source without it.
+function bridgeRuntime() {
+  try { return /<OdcBridgeRuntime>(net\d+\.\d+)<\/OdcBridgeRuntime>/.exec(fs.readFileSync(path.join(root, 'studio', 'bridge', 'Bridge.csproj'), 'utf8'))?.[1] ?? 'net8.0'; }
+  catch { return 'net8.0'; }
+}
 export const paths = {
   client: bridgeClientPath(),
   builder: path.join(root, 'studio', 'builder', 'bin', 'Release', 'net10.0', 'ODC3.Builder.dll'),
-  bridgeBin: path.join(root, 'studio', 'bridge', 'bin', 'Release', 'net8.0'),
+  // The bridge's runtime folder: the OdcBridgeRuntime of Bridge.csproj (v100: net10.0; the bridges before it: net8.0).
+  get bridgeBin() { return path.join(root, 'studio', 'bridge', 'bin', 'Release', bridgeRuntime()); },
   get tenants() { return dataPath('tenants.json'); },
   get catalog() { return dataPath('snapshots', 'modules.json'); },
   get journal() { return dataPath('journal', 'operations.jsonl'); },

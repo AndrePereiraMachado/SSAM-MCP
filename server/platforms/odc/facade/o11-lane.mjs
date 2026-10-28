@@ -52,8 +52,10 @@ export function o11LaneOf(name, { root = anvilRoot, workspace = workspaceRoot, e
   const own = path.join(root, row.local);
   const local = hosted ? workspacePath('o11') : own;
   const studioDir = () => studioDirOf(row, env);
-  const cli = () => [path.join(own, 'cli', 'anvil.dll'), path.join(root, '.local', 'cli', 'anvil.dll')].find(p => fs.existsSync(p))
-    ?? path.join(root, 'src', 'Anvil.Cli', 'bin', 'Release', 'net8.0', 'anvil.dll');
+  // The source build lands in the folder of its Studio's runtime (kernel/StudioRuntime.props): net10.0, else net8.0.
+  const source = runtime => path.join(root, 'src', 'Anvil.Cli', 'bin', 'Release', runtime, 'anvil.dll');
+  const cli = () => [path.join(own, 'cli', 'anvil.dll'), path.join(root, '.local', 'cli', 'anvil.dll'), source('net10.0')].find(p => fs.existsSync(p))
+    ?? source('net8.0');
   const lane = {
     name: laneName, bridge: row.bridge, cdp: row.cdp, worker: hosted ? null : row.worker, local, root,
     get studioDir() { return studioDir(); },
