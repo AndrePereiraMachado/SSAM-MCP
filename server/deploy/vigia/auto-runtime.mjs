@@ -131,7 +131,7 @@ export function createAutoRuntime(config,runtime) {
   backup:(s,id)=>ssh(s,{action:'backup',id}),
   async prepare(s,r){
    const archive=path.join(r.dir,'deploy.tar.gz');await runtime.archiveDeploy(await runtime.fullHead(),archive);
-   return ssh(s,{action:'prepare',id:r.id,built:r.built,kernel:r.kernel,compose:JSON.parse(r.compose),
+   return ssh(s,{action:'prepare',id:r.id,built:r.built,kernel:r.kernel,compose:JSON.parse(r.compose.replace(/^#[^\n]*\n/,'')),
     archive:fs.readFileSync(archive).toString('base64'),features:fs.readFileSync(r.features).toString('base64')});
   },
   writeCompose:(s,compose)=>api(s,'PATCH',resource(),{docker_compose_raw:Buffer.from(compose).toString('base64'),instant_deploy:false}),
