@@ -51,6 +51,10 @@ class RemoteTests(unittest.TestCase):
     def archive(self):
         data = io.BytesIO()
         with tarfile.open(fileobj=data, mode="w:gz") as tar:
+            for name in ["server", "server/deploy", "server/deploy/coolify"]:
+                item = tarfile.TarInfo(name)
+                item.type = tarfile.DIRTYPE
+                tar.addfile(item)
             for name in ["server/deploy/coolify/ssamctl.sh", "server/deploy/kernel-pair-check.mjs"]:
                 item = tarfile.TarInfo(name)
                 item.size = 1

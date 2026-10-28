@@ -76,7 +76,9 @@ def dispatch(request):
         directory.mkdir(parents=True, exist_ok=True)
         with tarfile.open(fileobj=io.BytesIO(base64.b64decode(request["archive"])), mode="r:gz") as archive:
             for member in archive.getmembers():
-                if not member.name.startswith("server/deploy/") or ".." in pathlib.PurePosixPath(member.name).parts or member.issym() or member.islnk():
+                name = member.name.rstrip("/")
+                ancestor = member.isdir() and name in ("server", "server/deploy")
+                if not (ancestor or name.startswith("server/deploy/")) or ".." in pathlib.PurePosixPath(name).parts or member.issym() or member.islnk():
                     raise ValueError("Unsafe deploy archive.")
             archive.extractall(directory, filter="data")
         kernel = directory / "kernel.json"
