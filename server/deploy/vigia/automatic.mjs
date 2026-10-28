@@ -20,6 +20,13 @@ export const AUTOMATIC_PLAN = [
  'Notify once per event; preserve volumes of pairs leaving the window'
 ];
 const atomic=(file,value)=>{const tmp=file+'.next';fs.writeFileSync(tmp,JSON.stringify(value,null,2)+'\n');fs.renameSync(tmp,file);};
+export async function releaseEvent(directory,ops,name,id,message,secrets){
+ const file=path.join(directory,'release-events.json');let events={};
+ if(fs.existsSync(file))events=JSON.parse(fs.readFileSync(file,'utf8'));
+ const key=id+':'+name;if(events[key])return;
+ events[key]=new Date().toISOString();atomic(file,events);
+ await ops.event(name,{id,message},secrets).catch(()=>{});
+}
 export async function releaseAutomatically(config,ops,release) {
  const {id,dir,built,manifest,kernel,bridges,features}=release;
  const secrets=await ops.secrets(); // Never persisted in the journal or spread into a result.
@@ -34,7 +41,7 @@ export async function releaseAutomatically(config,ops,release) {
   if(state.steps['notice-'+name])return;
   // Record first: at most one attempt to deliver an event, including after a crash.
   state.steps['notice-'+name]={at:new Date().toISOString()};save();
-  await ops.event(name,{id,message},secrets).catch(()=>{});
+  await releaseEvent(config.outDir??dir,ops,name,id,message,secrets);
  };
  await event('detected',`${id}: tests and signed bridges passed; preparing automatic deployment.`);
  let published,pinned,live;

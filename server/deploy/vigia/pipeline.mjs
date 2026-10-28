@@ -2,7 +2,7 @@
 // State lives in outDir: <pair id>/attempt.json per attempt, reminders.json for the once-a-day notices, PENDENTE.md for
 // a Studio that still has to be installed. A round with nothing new reads only and writes nothing.
 import fs from 'node:fs';
-import {releaseAutomatically} from './automatic.mjs';
+import {releaseAutomatically,releaseEvent} from './automatic.mjs';
 import path from 'node:path';
 import {LANES,STUDIO_NAME,ownerCommand,missingPack,planWindow,readyCandidates,pairFor,pairId,hasPair,rotateWindow,compareFailures,windowPairs,tfmMajor,proposalText,failureText,composeText} from './window.mjs';
 import {generateCompose} from '../coolify/gen-compose.mjs';
@@ -156,6 +156,7 @@ async function runAttempt(config,ops,decision,now){
  writeAttempt(outDir,attempt);
  const comparisons={},runtimes={};
  try{
+  if(config.automatic)await releaseEvent(outDir,ops,'detected',id,`${id}: a new Studio pair was detected.`,await ops.secrets());
   // Cheap checks first (worktree, disk), then the lane checks (dotnet only); Docker is started only for a round that
   // can build.
   await ops.preflight({pair,id,dir});
@@ -218,6 +219,7 @@ async function runAttempt(config,ops,decision,now){
    return {status:'deferred',id,dir,code:'round-timeout',error:'round time limit'};
   }
   const environmental=!!error.environmental,notice=path.join(dir,environmental?'AGUARDANDO.md':'FALHAS.md'),lanes=error.lanes??[];
+  if(config.automatic&&!environmental)await releaseEvent(outDir,ops,'failed',id,`${id}: build or verification failed before deployment.`,await ops.secrets());
   fs.writeFileSync(notice,failureText({id,error:String(error.message),environmental,dir,retry:config.retryHours??12,config}));
   const laneSince=environmental?Object.fromEntries(lanes.map(l=>[l,attempt.laneSince?.[l]??attempt.at])):undefined;
   writeAttempt(outDir,{...attempt,status:environmental?'deferred':'failed',...(environmental?{deferrals:(attempt.deferrals??0)+1,firstDeferredAt:attempt.firstDeferredAt??attempt.at,deferredLanes:lanes,laneSince,laneCodes:error.laneCodes??null,testEnvRuns:error.code==='test-environment'?(attempt.testEnvRuns??0)+1:0}:{failedLanes:lanes}),error:String(error.message),code:error.code??null,runtimes,endedAt:new Date().toISOString()});
