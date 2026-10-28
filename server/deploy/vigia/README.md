@@ -52,8 +52,9 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:/Users/andre/SSAM-MCP/
    copies, ODC features protected for this Windows user (`features-protect.ps1`). Failures are compared by full name; a
    suite that passed nothing cannot approve.
 9. **Image and smoke**: `build.sh` with both bundles, tag `prod-<yyyymmdd>-<commit>-o<o11>-odc<odc>`; the smoke runs it
-   without network: pair check, health, warm (indexes, builder, worker), the agent pack of the pair (`agentPack`, with
-   `agentPackByRuntime.net<N>` for a Studio on .NET N), `tools/list` against `../coolify/listing-budget.json`.
+   without network: pair check, health, warm (indexes, builder, worker), the agent pack of the pair (`agentPack`, built
+   for `agentPack.runtime`, with `agentPackByRuntime.net<N>` for a Studio on .NET N; a pair on a runtime no pack covers
+   waits, `agent-pack-missing`, before any test), `tools/list` against `../coolify/listing-budget.json`.
 10. **Proposal**: a commit on `vigia/<pair>` made in a temporary worktree (the watcher worktree never leaves its branch):
     `versions.json` rotated (the new pair without a digest, nothing is published yet) and the compose regenerated and tested;
     `PROPOSTA.md` and the evidence in `outDir/<pair>/`; a Windows notification that stays in the notification center.

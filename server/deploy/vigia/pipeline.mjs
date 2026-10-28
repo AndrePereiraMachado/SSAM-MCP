@@ -3,7 +3,7 @@
 // a Studio that still has to be installed. A round with nothing new reads only and writes nothing.
 import fs from 'node:fs';
 import path from 'node:path';
-import {LANES,STUDIO_NAME,planWindow,readyCandidates,pairFor,pairId,hasPair,rotateWindow,compareFailures,windowPairs,tfmMajor,proposalText,failureText,composeText} from './window.mjs';
+import {LANES,STUDIO_NAME,missingPack,planWindow,readyCandidates,pairFor,pairId,hasPair,rotateWindow,compareFailures,windowPairs,tfmMajor,proposalText,failureText,composeText} from './window.mjs';
 import {generateCompose} from '../coolify/gen-compose.mjs';
 export class EnvironmentError extends Error{constructor(message,code='environment'){super(message);this.environmental=true;this.code=code;}}
 const writeJson=(file,data)=>{fs.mkdirSync(path.dirname(file),{recursive:true});const temp=file+'.'+process.pid+'.tmp';fs.writeFileSync(temp,JSON.stringify(data,null,2)+'\n');fs.renameSync(temp,file);};
@@ -115,6 +115,8 @@ async function runAttempt(config,ops,decision,now){
    bundles[lane]=candidate?await ops.bundle(candidate,dir):await ops.companion(lane,base[lane][0].version);
    log(`bundle ${lane} ${bundles[lane].version}: ${bundles[lane].file} sha256 ${bundles[lane].sha256}`);
   }
+  const packless=missingPack(config,bundles);
+  if(packless.length)throw new EnvironmentError(`No agent pack for ${packless.map(p=>`${STUDIO_NAME[p.lane]} ${p.version} (${p.tfm})`).join(' and ')}: the agent pack in the configuration is built for ${config.agentPack?.runtime??'net8.0'}. Add agentPackByRuntime.net${tfmMajor(packless[0].tfm)} (odcBridge, odcBridgeAccepted, o11BuiltFor) to the watcher configuration once that pack exists; the round waits.`,'agent-pack-missing');
   const baseline={odc:await ops.companion('odc',base.odc[0].version),o11:await ops.companion('o11',base.o11[0].version)};
   fs.writeFileSync(path.join(dir,'bundles.json'),JSON.stringify({pair:bundles,baseline},null,2));
   const failedLanes=[];

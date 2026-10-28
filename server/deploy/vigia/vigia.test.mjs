@@ -1,7 +1,7 @@
 // Simulation of the watcher: fake Studios, fake operations, real files in a temporary outDir. No Studio, Docker, dotnet
 // or Git here (vigia-runtime.test.mjs covers the real Git and PowerShell parts).
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';
-import {packFor,planWindow,rotateWindow,compareFailures,readTrx,runVigia,detectVersionFolders,pairId,pairTag,replayApprovals,pinDigest,literalCompose,literalComposeText,EnvironmentError,approve,reject,retry,acquireLock,busyDotnet,readAttempts,localDay,baseWindow} from './vigia.mjs';
+import {packFor,missingPack,planWindow,rotateWindow,compareFailures,readTrx,runVigia,detectVersionFolders,pairId,pairTag,replayApprovals,pinDigest,literalCompose,literalComposeText,EnvironmentError,approve,reject,retry,acquireLock,busyDotnet,readAttempts,localDay,baseWindow} from './vigia.mjs';
 import {smokeImage} from './smoke.mjs';
 import {generateCompose} from '../coolify/gen-compose.mjs';
 const image='docker.io/andrepereiramachado/ssam-server';
@@ -10,7 +10,7 @@ const manifest={window:2,odc:[{version:'1.7.29',tag:'new',image,sha256:sha('1')}
 const odc={lane:'odc',version:'1.7.30',fullVersion:'1.7.30.10980',studio:'C:/fake/odc',tfm:'net10.0'};
 const o11={lane:'o11',version:'11.55.94',fullVersion:'11.55.94.65328',studio:'C:/fake/o11',tfm:'net10.0'};
 const DAY=86400000,T0=Date.parse('2026-10-28T12:00:00Z');
-function fixture(t,{failures={},smokeOk=true,tfm={odc:'net10.0',o11:'net10.0'},preflight,docker,passed=2}={}){
+function fixture(t,{failures={},smokeOk=true,tfm={odc:'net10.0',o11:'net10.0'},preflight,docker,passed=2,bundleTfm=null}={}){
  const outDir=fs.mkdtempSync(path.join(os.tmpdir(),'vigia-sim-'));t.after(()=>fs.rmSync(outDir,{recursive:true,force:true}));
  const features=path.join(outDir,'..',path.basename(outDir)+'-features.xml');fs.writeFileSync(features,'<Features/>');t.after(()=>fs.rmSync(features,{force:true}));
  const calls=[],notes=[];
@@ -20,14 +20,14 @@ function fixture(t,{failures={},smokeOk=true,tfm={odc:'net10.0',o11:'net10.0'},p
   preflight:async()=>{calls.push('preflight');if(preflight)await preflight();},
   dockerReady:async()=>{calls.push('docker');if(docker)await docker();},
   targetFramework:async c=>{calls.push('tfm:'+c.lane);return tfm[c.lane]??null;},
-  bundle:async c=>{calls.push('bundle:'+c.lane);return side(c.lane,c.version);},
+  bundle:async c=>{calls.push('bundle:'+c.lane);return {...side(c.lane,c.version),tfm:bundleTfm};},
   companion:async(lane,v)=>{calls.push('companion:'+lane);return side(lane,v);},
   test:async(lane,kind)=>{calls.push(`test:${lane}:${kind}`);return {total:3,passed,failures:kind==='baseline'?['Known']:(failures[lane]??['Known'])};},
   build:async pair=>{calls.push('build');return {odc:pair.odc,o11:pair.o11,image,tag:pairTag(pair,'abc1234','20261028'),sha256:sha('a'),revision:'abc1234',commit:'abc1234'+'0'.repeat(33)};},
   smoke:async()=>{calls.push('smoke');return {ok:smokeOk};},
   propose:async(m,branch)=>{calls.push('propose');return {commit:'c'.repeat(40),branch};},
  };
- const round=(extra={})=>runVigia({manifest,observed:[odc,o11],outDir,head:'h1',now:T0,...extra},ops);
+ const round=(extra={})=>runVigia({manifest,observed:[odc,o11],outDir,head:'h1',now:T0,agentPack:{odcBridge:'v97',runtime:'net8.0'},...extra},ops);
  return {outDir,calls,notes,ops,round};
 }
 test('fake installed folders reveal a new version and dry-run has no writes or operations',async()=>{
@@ -102,6 +102,12 @@ test('a Studio on .NET 10 follows the normal path when the build rule targets it
  assert.ok(!old.calls.includes('docker'),'a round that waits for the runtime rule never starts Docker');assert.match(w.error,/ODC Studio 1.7.30 runs on net10.0.*; Service Studio 11.55.94 runs on net10.0/,'every lane in one message');
  await old.round({now:T0+6*3600000});await old.round({now:T0+12*3600000});const a=readAttempts(old.outDir)[w.id];assert.equal(a.deferrals,3);assert.equal(a.firstDeferredAt,new Date(T0).toISOString());assert.equal(fs.existsSync(path.join(w.dir,'previous')),false);
  const unknown=fixture(t,{tfm:{}});assert.equal((await unknown.round()).status,'proposed','an unevaluated target does not block');
+});
+test('a pair on .NET 10 waits for its agent pack instead of failing the smoke; with agentPackByRuntime.net10 it proceeds',async t=>{
+ const f=fixture(t,{bundleTfm:'net10.0'});const r=await f.round();
+ assert.equal(r.status,'deferred');assert.equal(readAttempts(f.outDir)[r.id].code,'agent-pack-missing');assert.match(r.error,/agentPackByRuntime.net10/);assert.ok(!f.calls.some(c=>c.startsWith('test:')||c==='build'));
+ const g=fixture(t,{bundleTfm:'net10.0'});assert.equal((await g.round({agentPackByRuntime:{net10:{odcBridge:'v100',o11BuiltFor:'11.55.94'}}})).status,'proposed');
+ assert.deepEqual(missingPack({agentPack:{runtime:'net8.0'}},{odc:{tfm:'net8.0'},o11:{tfm:null}}),[]);
 });
 test('an idle round writes nothing at all',async t=>{
  const outDir=path.join(os.tmpdir(),'vigia-idle-'+process.pid);t.after(()=>fs.rmSync(outDir,{recursive:true,force:true}));

@@ -23,6 +23,7 @@
   "featuresSource": "C:/Users/OWNER/AppData/Local/OutSystems/ODC Studio/Features.xml",
   "installersDir": "C:/t/comb/installers",
   "agentPack": {
+    "runtime": "net8.0",
     "odcBridge": "v97",
     "odcBridgeAccepted": ["v96", "v48", "v45"],
     "o11BuiltFor": "11.55.92",
