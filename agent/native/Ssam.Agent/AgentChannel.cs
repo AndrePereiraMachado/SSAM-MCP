@@ -18,6 +18,7 @@ internal sealed class AgentChannel : IDisposable
     private readonly StudioKinds? studios;
     private readonly JsonObject? pack;
     private readonly BridgeUpdates bridges;
+    private readonly Func<JsonObject>? discoverStudios;
     private JsonNode? kernel;
     private readonly string startedAt = DateTimeOffset.UtcNow.ToString("O");
     private readonly JsonObject? machine;
@@ -37,11 +38,12 @@ internal sealed class AgentChannel : IDisposable
     private int maxMessageBytes = 1048576;
     private readonly string instance = Guid.NewGuid().ToString();
 
-    public AgentChannel(Uri server, string credential, StateStore state, int bridgePort, string? runtime = null, JsonObject? pack = null, BridgeUpdates? bridgeUpdates = null)
+    public AgentChannel(Uri server, string credential, StateStore state, int bridgePort, string? runtime = null, JsonObject? pack = null, BridgeUpdates? bridgeUpdates = null, Func<JsonObject>? discoverStudios = null)
     {
         this.state = state;
         this.bridgePort = bridgePort;
         this.pack = pack;
+        this.discoverStudios = discoverStudios;
         bridges = bridgeUpdates ?? new BridgeUpdates(state.Root, runtime ?? AppContext.BaseDirectory);
         bridges.Changed = () => { lock (gate) activeStream?.Cancel(); };
         if (runtime != null && pack != null) { studios = new StudioKinds(state.Root, runtime, pack, () => kernel, bridges); machine = NativeHost.Machine(); }
@@ -77,7 +79,7 @@ internal sealed class AgentChannel : IDisposable
 
     private JsonObject Versions()
     {
-        if (installed == null || DateTimeOffset.UtcNow - installedAt > TimeSpan.FromMinutes(5)) { installed = studios == null ? new() : NativeHost.Installed(); installedAt = DateTimeOffset.UtcNow; }
+        if (installed == null || DateTimeOffset.UtcNow - installedAt > TimeSpan.FromMinutes(5)) { installed = discoverStudios?.Invoke() ?? (studios == null ? new() : NativeHost.Installed()); installedAt = DateTimeOffset.UtcNow; }
         var record = O11Connection.Record(state.Root);
         JsonObject? connection = null;
         if (record != null && StudioKinds.Processes("ServiceStudio.exe").Any(n => StudioKinds.Integer(n?["pid"]) == StudioKinds.Integer(record["pid"])))

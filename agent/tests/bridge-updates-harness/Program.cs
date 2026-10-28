@@ -16,6 +16,16 @@ var root = input["root"]!.GetValue<string>();
 var thumb = input["thumbprint"]!.GetValue<string>();
 var accepted = input["authenticode"]?.GetValue<bool>() != false;
 var store = new BridgeUpdates(root, root, key, thumb, (_, _) => accepted ? Task.CompletedTask : Task.FromException(new IOException("Test certificate refused")));
+if (input["channel"]?.GetValue<bool>() == true)
+{
+    using var channel = new AgentChannel(new Uri(input["server"]!.GetValue<string>()), "bridge-test-token", new StateStore(root, false), 4516,
+        pack: new JsonObject { ["id"] = "bridge-test", ["lanes"] = new JsonArray("odc"), ["odcBridge"] = "v98" }, bridgeUpdates: store,
+        discoverStudios: () => (JsonObject)input["installed"]!.DeepClone());
+    using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+    var code = await channel.RunAsync(timeout.Token);
+    Console.WriteLine(new JsonObject { ["exitCode"] = code }.ToJsonString());
+    return;
+}
 using var http = new HttpClient(new SocketsHttpHandler { AllowAutoRedirect = false }) { BaseAddress = new Uri(input["server"]!.GetValue<string>()) };
 http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", "bridge-test-token");
 var resultsList = new JsonArray();

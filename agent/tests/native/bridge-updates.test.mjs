@@ -8,6 +8,7 @@ import http from 'node:http';
 import { spawn } from 'node:child_process';
 import { generateKeyPairSync, sign, createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+import { fakeHub } from '../../agent/tests/fixtures/fake-hub.mjs';
 
 const dll = fileURLToPath(new URL('../bridge-updates-harness/bin/Release/net10.0/NativeProtocol.Tests.dll', import.meta.url));
 const keys = generateKeyPairSync('ed25519');
@@ -76,4 +77,19 @@ for (const scenario of ['signature', 'hash', 'certificate', 'interrupt', 'path']
   const result = await f.run({ authenticode: scenario !== 'certificate', requests: [{ offer }, {}] });
   assert.equal(result[0].changed, false); assert.equal(result[1].selected, null);
   assert.equal(fs.existsSync(path.join(f.root, 'bridges/odc/1.7.30/v101')), false);
+});
+test('native channel reconnects with the installed bridge and retains the original package id', async t => {
+  const f = await fixture(t); const offer = f.offer('v101');
+  const hub = await fakeHub({ credential: 'bridge-test-token', welcome: { compatible: { odc: { bridgeOffer: offer } } } });
+  t.after(() => hub.close());
+  for (const [route, bytes] of f.files) hub.bridges.set(route, bytes);
+  fs.writeFileSync(path.join(f.root, 'ODCStudio.runtimeconfig.json'), JSON.stringify({ runtimeOptions: { tfm: 'net10.0' } }));
+  const result = run({ root: f.root, server: hub.url + '/', channel: true, installed: { odc: { installed: { dir: f.root, version: '1.7.30.1' } } } });
+  await hub.until(() => hub.streams === 1 && hub.hellos.length === 2);
+  assert.equal(hub.hellos[0].capabilities.bridgeOffer, true);
+  assert.equal(hub.hellos[1].pack.odcBridge, 'v101');
+  assert.equal(hub.hellos[1].pack.id, 'bridge-test');
+  assert.equal(hub.hellos[1].bridges.odc.runtime, 'net10.0');
+  hub.send({ t: 'close', reason: 'replaced' });
+  assert.equal((await result).exitCode, 3);
 });

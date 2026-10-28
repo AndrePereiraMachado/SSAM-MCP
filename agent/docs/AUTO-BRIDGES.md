@@ -91,3 +91,6 @@ then run `node --test --test-concurrency=1 tests/native/bridge-updates.test.mjs`
 The test harness accepts ephemeral test keys over stdin and contacts only its
 loopback fake server. It is not packaged and no production CLI flag enables it.
 Existing native suites and `tests/native-protocol` must also pass before release.
+
+The macOS verifier flags are documented by the upstream project:
+https://github.com/mtrojnar/osslsigncode/blob/master/osslsigncode.md#verification-options

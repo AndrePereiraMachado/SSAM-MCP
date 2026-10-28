@@ -187,14 +187,14 @@ export function createKinds({ root, runtimeRoot = root, ws, pack = {}, kernel = 
     if (texts.some(a => /[\r\n\0]/.test(a))) throw refuse('COMMAND_NOT_ALLOWED', 'A bridge argument may not contain a line break or NUL');
     if (!ODC_COMMANDS.includes(texts[0]))
       throw refuse('COMMAND_NOT_ALLOWED', texts[0] === 'attach' ? 'attach never goes through odc.pipe; the agent attaches its own bridge (odc.attach)' : `The ODC bridge command ${JSON.stringify(texts[0])} is not allowed on this agent`);
+    const mapped = mapOdcArgs(texts);
+    checkFinalLine(mapped);
+    if (MANIFEST_COMMANDS.has(mapped[0]) && mapped[1]) checkManifestFile(mapped[1]);
     const target = await checkPid('odc', pid);
     const selected = await selectedBridge('odc', target);
     const expectedVersion = selected?.protocol ?? pack.odcBridge;
     if (!expectedVersion || version !== expectedVersion)
       throw refuse('BRIDGE_VERSION_MISMATCH', `The agent pack carries the ODC bridge ${pack.odcBridge ?? '(none)'}; the server asked for ${version}`);
-    const mapped = mapOdcArgs(texts);
-    checkFinalLine(mapped);
-    if (MANIFEST_COMMANDS.has(mapped[0]) && mapped[1]) checkManifestFile(mapped[1]);
     const connect = Number.isFinite(Number(connectMs)) ? Math.min(Math.max(Number(connectMs), 1), 120000) : undefined;
     try {
       await bindOdcRoot(target.pid, version);
