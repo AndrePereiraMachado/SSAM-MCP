@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  Registers the Windows scheduled task that runs the Studio versions watcher every 6 hours (or removes it with -Uninstall).
+  Registers the Windows scheduled task that runs the Studio versions watcher every 2 hours (or removes it with -Uninstall).
 
 .DESCRIPTION
   The task runs as the signed-in user, only while that user is logged on (no stored password), never two at a time
@@ -14,9 +14,9 @@
   powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\Users\andre\SSAM-MCP-wt\vigia-run\server\deploy\vigia\install-task.ps1 -Uninstall
 #>
 param(
-    [string]$Config = 'C:\t\vigia\config.json',
-    [string]$Workspace = 'C:\Users\andre\SSAM-MCP-wt\vigia-run',
-    [ValidateRange(1, 24)][int]$Hours = 6,
+    [string]$Config = 'C:\t\vigia-auto\config.json',
+    [string]$Workspace = 'C:\Users\andre\SSAM-MCP-wt\vigia-auto',
+    [ValidateRange(1, 24)][int]$Hours = 2,
     [string]$TaskName = 'SSAM Studio watcher',
     [switch]$Uninstall,
     [switch]$Show
@@ -33,7 +33,8 @@ $script = Join-Path $Workspace 'server\deploy\vigia\vigia.ps1'
 if (-not (Test-Path -LiteralPath $script)) { throw "No watcher at $script." }
 if (-not (Test-Path -LiteralPath $Config)) { throw "No watcher configuration at $Config." }
 if (-not (Test-Path -LiteralPath (Join-Path $Workspace '.git') -PathType Leaf)) { throw "$Workspace is not a dedicated Git worktree." }
-$configured = (Get-Content -LiteralPath $Config -Raw | ConvertFrom-Json).workspace
+$configuration = Get-Content -LiteralPath $Config -Raw | ConvertFrom-Json
+$configured = $configuration.workspace
 if ([IO.Path]::GetFullPath($configured).TrimEnd('\') -ne [IO.Path]::GetFullPath($Workspace).TrimEnd('\')) { throw "The configuration's workspace ($configured) is not $Workspace." }
 $git = 'C:\Program Files\Git\cmd\git.exe'
 $branch = (& $git -C $Workspace branch --show-current).Trim()
@@ -41,16 +42,17 @@ if (-not $branch -or $branch -eq 'main' -or $branch -like 'vigia/*') { throw "Th
 # The task runs the worktree's own watcher, which fast-forwards itself from then on; a watcher older than the self-updating
 # one would not, so the worktree is brought to main here (fast-forward only) and must carry the round protocol.
 $head = (& $git -C $Workspace rev-parse HEAD).Trim()
-$main = (& $git -C $Workspace rev-parse --verify 'main^{commit}').Trim()
+$source = if ($configuration.updateFrom) { $configuration.updateFrom } else { 'server/vigia-auto' }
+$main = (& $git -C $Workspace rev-parse --verify "$source^{commit}").Trim()
 if ($head -ne $main) {
     & $git -C $Workspace merge-base --is-ancestor HEAD $main
-    if ($LASTEXITCODE -ne 0) { throw "$Workspace ($branch at $($head.Substring(0,7))) cannot fast-forward to main ($($main.Substring(0,7)))." }
-    if ($Show) { Write-Host "Would fast-forward $Workspace from $($head.Substring(0,7)) to main $($main.Substring(0,7))." }
+    if ($LASTEXITCODE -ne 0) { throw "$Workspace ($branch at $($head.Substring(0,7))) cannot fast-forward to $source ($($main.Substring(0,7)))." }
+    if ($Show) { Write-Host "Would fast-forward $Workspace from $($head.Substring(0,7)) to $source $($main.Substring(0,7))." }
     else {
-        if (& $git -C $Workspace status --porcelain --untracked-files=no) { throw "$Workspace has tracked changes." }
+        if (& $git -C $Workspace status --porcelain) { throw "$Workspace has uncommitted changes." }
         & $git -C $Workspace merge --ff-only $main | Out-Null
         if ($LASTEXITCODE -ne 0) { throw "Fast-forward of $Workspace failed." }
-        Write-Host "Fast-forwarded $Workspace to main $($main.Substring(0,7))."
+        Write-Host "Fast-forwarded $Workspace to $source $($main.Substring(0,7))."
     }
 }
 $watcher = Join-Path $Workspace 'server\deploy\vigia\vigia.mjs'
@@ -67,7 +69,7 @@ $logon.Delay = 'PT15M'
 $settings = New-ScheduledTaskSettingsSet -MultipleInstances IgnoreNew -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Hours 8)
 $principal = New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive -RunLevel Limited
 $task = New-ScheduledTask -Action $action -Trigger @($every, $logon) -Settings $settings -Principal $principal `
-    -Description "SSAM Studio versions watcher: every $Hours h and 15 min after logon, reads the installed Studios and, for a new version, bundles, tests, builds and proposes (never publishes). Logs: $(Split-Path -Parent $Config)\runs. server/deploy/vigia/README.md"
+    -Description "SSAM Studio versions watcher: every $Hours h and 15 min after logon, detects releases, builds signed bridges, publishes, deploys and rolls back on failure. Logs: $(Split-Path -Parent $Config)\runs. server/deploy/vigia/README.md"
 if ($Show) {
     [pscustomobject]@{
         TaskName = $TaskName; User = $user; LogonType = $principal.LogonType; RunLevel = $principal.RunLevel

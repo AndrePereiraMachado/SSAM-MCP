@@ -1,9 +1,9 @@
 {
-  "workspace": "C:/Users/OWNER/SSAM-MCP-wt/vigia-run",
-  "updateFrom": "main",
+  "workspace": "C:/Users/OWNER/SSAM-MCP-wt/vigia-auto",
+  "updateFrom": "server/vigia-auto",
   "tempRoot": "C:/ssam-priv/vigia-tmp",
   "featuresRoot": "C:/ssam-priv/vigia-tmp/features",
-  "outDir": "C:/t/vigia",
+  "outDir": "C:/t/vigia-auto",
   "bundleRoot": "C:/t/studio-bundles",
   "bundlePins": {
     "odc-1.7.29": "b64f5381439e1fcc3be1f0cc298bd86c71ae8ffaeec2a704e2c21f1ec7e112ca",
@@ -22,11 +22,15 @@
     "o11": "C:/Program Files/OutSystems/Service Studio 11/Service Studio"
   },
   "featuresSource": "C:/Users/OWNER/AppData/Local/OutSystems/ODC Studio/Features.xml",
-  "installersDir": "C:/t/comb/installers",
+  "installersDir": "C:/ssam-priv/vigia-installers",
   "agentPack": {
     "runtime": "net8.0",
     "odcBridge": "v97",
-    "odcBridgeAccepted": ["v96", "v48", "v45"],
+    "odcBridgeAccepted": [
+      "v96",
+      "v48",
+      "v45"
+    ],
     "o11BuiltFor": "11.55.92",
     "o11Hook": "dev"
   },
@@ -38,5 +42,26 @@
   "dockerWaitMinutes": 8,
   "laneWaitHours": 24,
   "roundHours": 7,
-  "busyNoticeHours": 10
+  "busyNoticeHours": 10,
+  "automatic": true,
+  "executionBranch": "server/vigia-auto",
+  "automaticDeployment": {
+    "coolify": {
+      "url": "https://COOLIFY_HOST",
+      "resource": "RESOURCE_UUID"
+    },
+    "ssh": {
+      "user": "root",
+      "knownHosts": "C:/Users/OWNER/.ssh/known_hosts",
+      "host": "VPS_HOST"
+    },
+    "timestampServer": "http://timestamp.digicert.com",
+    "remote": {
+      "healthUrl": "https://mcp.ssam.pro/health",
+      "warmTimeoutSeconds": 300,
+      "composeProject": "RESOURCE_UUID",
+      "directory": "/var/lib/ssam-vigia",
+      "postgresContainer": "POSTGRES_CONTAINER"
+    }
+  }
 }

@@ -1,109 +1,43 @@
-# Local Studio version watcher
+# Automatic Studio release watcher
 
-Runs on the owner's Windows machine (Docker Desktop, the installed ODC Studio and Service Studio), every 6 hours from a
-scheduled task, in its own Git worktree. It notices a new Studio version, bundles and tests it, builds and smoke-tests a
-local image, and leaves a proposal that the owner approves with one command. It never publishes on its own, never touches
-the VPS, Coolify or GitHub, never pushes and never moves `latest`.
+The default CLI mode detects official releases, tests the new Studio pair, builds signed client bridges and the image, publishes an immutable private tag, commits the digest locally and deploys through Coolify. A failed deployment restores the actual previous compose through the same API and verifies the previous images. Nothing pushes a Git branch or moves the `latest` tag. Set `automatic: false` only to retain the older proposal/approval workflow.
 
-## Commands
+## Owner activation
 
-```powershell
-# what a round would do; writes nothing
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:/Users/andre/SSAM-MCP-wt/vigia-run/server/deploy/vigia/vigia.ps1 -Config C:/t/vigia/config.json -DryRun
-# one round (what the scheduled task runs)
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:/Users/andre/SSAM-MCP-wt/vigia-run/server/deploy/vigia/vigia.ps1 -Config C:/t/vigia/config.json
-# the owner's commands on a proposal (<id> is the pair, o11-11.55.94-odc-1.7.30, or one lane of it, odc-1.7.30)
-... vigia.ps1 -Config C:/t/vigia/config.json -Approve <id>
-... vigia.ps1 -Config C:/t/vigia/config.json -Reject <id> -Reason "<why>"
-... vigia.ps1 -Config C:/t/vigia/config.json -Retry <id>
-# the scheduled task, once main carries this watcher: fast-forwards the watcher worktree from main, then registers
-# (-Show prints it without registering anything; -Uninstall removes it)
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:/Users/andre/SSAM-MCP/server/deploy/vigia/install-task.ps1
-```
+Copy `config.example.json` to an absolute private operational path and fill in the workspace, tools, Coolify URL/resource UUID, SSH host/known_hosts, remote directory, exact Compose project name and PostgreSQL container. The running user's Docker registry login must already work. The remote host needs Python 3.12+, Docker, curl, tar, logger, and permission to back up all SSAM volumes. Host keys must already be trusted; this watcher never disables host-key checking.
 
-## A round
+Run `set-secrets.ps1` in your own terminal. It reads the Coolify token, base64 SSH private key, certificate thumbprint and optional webhook with `Read-Host -AsSecureString`, generates Ed25519 once, protects every value with DPAPI CurrentUser and prints only the public key. The code-signing certificate and its private key must be installed in the current user's certificate store. Pin the printed public key and certificate identity in the agent before enabling downloads. The vault is not overwritten on a second invocation.
 
-1. **Lock and log.** One round at a time (`vigia.lock` in outDir). The lock names the launcher and the round process it
-   started by pid AND start time: a reused pid is not a holder, a round process left running after the task's 8 h limit
-   keeps the lock, and a holder whose start time cannot be read but whose pid lives counts as live. A lock held for more than `busyNoticeHours` (10) gives a notice once a day. Every round appends to
-   `runs/<local date>/<local time>.log`.
-2. **Self-update.** The watcher worktree (a dedicated worktree on an integration branch, never `main` nor `vigia/*`)
-   fast-forwards from the local `main`. Anything but a fast-forward stops the round with a notice. The round then runs in a
-   child process from the code just fetched; a child that does not even load leaves its output in the log and a notice. A
-   round stops itself at `roundHours` (7, under the task's 8 h): it stops its commands and records its attempt as deferred;
-   that record is final (a command killed by the cut never turns it into a failure, and no command starts after it).
-3. **Detect** (`detect-studios.ps1`): ProductVersion of `ServiceStudio.Framework.dll`, the .NET of each installed Studio
-   (`tfm` of its `runtimeconfig.json`) and what an installed Studio folder misses (its executable, its `runtimeconfig.json`),
-   plus downloaded O11 installers in `installersDir` (read, never run).
-4. **Decide.** The base window is `versions.json` of the worktree plus approved proposals `main` does not carry yet. The newest
-   installed version of each lane that is newer than the whole window is a candidate; ODC and O11 new at the same time go
-   into ONE pair (one image, one approval). Nothing new: the round ends in seconds and writes only its log. A pending
-   proposal is never rebuilt; its notice repeats at most once a day. A failure is not retried with the same inputs (the
-   worktree commit and the Studio builds) and at most every `retryHours` after they change; `-Retry` forces it. A lane that
-   failed its tests is set aside and the other lane goes on alone. An environment problem defers the round and the next
-   round retries; when it concerns one lane only (its Studio incomplete, its runtime rule or agent pack missing, its baseline
-   or tests not running, its bundle or features), that lane holds the pair for `laneWaitHours` (24) and then the other lane
-   goes on alone (in the same round), while the whole pair is checked again every `retryHours`.
-   Each pair has its folder `outDir/<pair>/`: `attempt.json` (state), `AGUARDANDO.md` (deferred), `FALHAS.md` (failed, with
-   the failure names), `PROPOSTA.md` (proposed), `APROVADO.md` (approved) and the evidence.
-5. **Preflight**: the worktree clean (untracked files too: build.sh sends the tree to Docker) and free disk (`minFreeGb`).
-6. **Lane checks**, all at once and before Docker: an incomplete installed Studio (no executable or no `runtimeconfig.json`)
-   waits (`studio-incomplete`), never as an unknown runtime; for each new Studio the watcher asks MSBuild which target
-   framework the workspace's build rule takes for that Studio folder (`dotnet msbuild -getProperty:TargetFramework`) and
-   compares it with the Studio's own runtime. It never picks a framework: a workspace without the rule
-   (`runtime-unsupported`) or an MSBuild that cannot be asked (`runtime-unknown`) waits. A Studio on a .NET no agent pack
-   covers waits (`agent-pack-missing`). Then Docker Desktop (started and awaited) and the buildx builder.
-7. **Bundle store** (`bundleRoot/<lane>-<version>/`): `<lane>-studio-<full>.tar.gz` with its `.sha256` (and optional
-   `bundlePins`) and a frozen copy `snapshot/files` (exactly the bundle's files, plus the Studio's `runtimeconfig.json` in a
-   copy the watcher froze itself). A new build is bundled by `studio-bundle.ps1`; a bundle of that build already there is
-   used as it is, and one that does not check out is never bundled over (`store-mismatch`, the lane waits for a review).
-   Existing folders are never renamed or overwritten. The companion lane and the baseline come from the store by the
-   window's versions; no configuration edit is needed after an approval.
-8. **Features** of each ODC version (the tenant's feature flags) live only in the private `featuresRoot`
-   (`<featuresRoot>/odc-<version>/Features.plain.xml`, outside `C:/t`), exported from this machine's ODC Studio cache only
-   when its `<Features Version>` is that version (else `features-stale`: open the new ODC Studio once, signed in).
-9. **Tests**: the explicit filtered kernel classes (`filters`, default ScreenHtmlDataTable/ScreenVisual of each lane), one
-   dotnet process at a time on the machine (the watcher waits for another session's build or test; the prototype's
-   `anvil.dll serve` and idle build servers do not count), baseline = the current default pair's frozen copies, candidate =
-   the new pair's frozen copies, ODC features protected for this Windows user (`features-protect.ps1`). Failures are
-   compared by full name. A baseline that does not run, a package restore without network or a timeout is the machine
-   (deferred); a candidate that does not build or passes nothing is the version (failed). Candidate tests that time out or
-   run nothing `testEnvLimit` (3) rounds in a row with the same inputs are held (notice) until main or the Studio changes.
-10. **Image and smoke**: `build.sh` with both bundles, tag `prod-<yyyymmdd>-<commit>-o<o11>-odc<odc>` (a registry or network
-    failure or a timeout defers; the client-name guard or a build error fails); the smoke runs the image without network:
-    pair check, health, warm (indexes, builder, worker), with the test server's state and features in `<tempRoot>/smoke`, the agent pack of the pair (`agentPack`, built for
-    `agentPack.runtime`, with `agentPackByRuntime.net<N>` for a Studio on .NET N), `tools/list` against
-    `../coolify/listing-budget.json` (all tools and the core). The watcher does not run `builder-image.test.mjs` nor the
-    whole-window rehearsal of the manual recipe; `PROPOSTA.md` says so.
-11. **Proposal**: a commit on `vigia/<pair>` made in a temporary worktree (the watcher worktree never leaves its branch),
-    from HEAD or from the newest approved pin `main` lacks: `versions.json` rotated (the new pair without a digest, nothing is
-    published yet) and the compose regenerated and tested; `PROPOSTA.md` and the evidence in `outDir/<pair>/`; a Windows
-    notification that stays in the notification center.
+Then run `vigia.ps1 -Config <absolute-config> -DryRun`, review the complete plan, and run `install-task.ps1 -Config <absolute-config> -Workspace <absolute-worktree>`. `install-task.ps1 -Show` only displays the two-hour and logon triggers; it does not register them. The interactive task runs under the vault owner, retains the existing process-identity lock and stops overlapping rounds. Its first logon run is delayed 15 minutes. An unavailable Docker builder or another active Docker build defers the round; dotnet builds/tests remain serialized across the machine.
 
-## Approval (`-Approve`)
+The execution branch defaults to `server/vigia-auto`. Pins stay on that branch. Integrate it into main separately; do not configure main as the execution branch. Self-update uses the configured local ref and fast-forward only. The scheduled task and vault setup are owner actions; the test suite never installs them.
 
-Refuses a pair `main` already serves. Checks that the proposal branch is unchanged and that the local image is the tested
-digest, publishes the tag with `publish.sh --private-repo-ready` (never `--latest`; an earlier publication of the same digest
-is accepted), refuses to pin a registry digest that is not the tested one, then commits on the proposal branch the pin (the
-published digest in `versions.json`) with the compose regenerated by `gen-compose.mjs` and `gen-compose.test.mjs` +
-`initial-window.test.mjs` green. Each step is recorded: an approval stopped half-way resumes without publishing or pinning
-twice. It writes `compose.coolify.literal.yml` (the domains of `domains` in the Traefik rules, ready to paste),
-`compose.rollback.literal.yml` (the previous window), `deploy-<commit>.tar.gz` (the deploy folder of the pin commit) and
-`APROVADO.md`, and prints what is left to the owner in the order of COOLIFY.md sections 5 and 7: maintenance notice, VPS
-backup, the deploy folder and the new pair's kernel and features to the VPS, the new compose in Coolify with its containers
-prepared stopped (`ssamctl.sh status` lists the new pair), `ssamctl.sh kernel write` / `features put` with the new lane's
-selector (then delete the features copy), Redeploy and the checks (status, health, kernel and warm events, routing,
-`SESSION_REROUTED`), and the way back. From then on the watcher plans from the approved window even before the branch
-reaches `main`. `-Retry` also takes an unpublished proposal (its local image was pruned).
+## Detection and build
 
-## Configuration (`C:/t/vigia/config.json`)
+The installed updater configuration identifies `releaseshub/v1/latest`, component `ODCStudio`, stable channel. The public endpoint takes `component`, `version`, `luv`, `releaseline=stable`, and `platform=Windows`. The same official API serves `ServiceStudio`. The official O11 download page was investigated but is not a stable machine-readable installer manifest; the updater endpoint supplies its release and download link. Requests do not borrow a browser login or Studio credentials. Source failure is reported in the dry-run and preserves installed-version detection.
 
-`workspace`, `updateFrom` (default `main`), `tempRoot` and `featuresRoot` (private, outside `C:/t`; features default to
-`<tempRoot>/features`), `outDir`, `bundleRoot`, `bundlePins`, `studios`, `featuresSource`, `installersDir`, `image`,
-`builder`, `dockerContext` (only `desktop-linux`), `domains`, `agentPack`, `agentPackByRuntime`, `filters`, `notify`,
-`node`, `minFreeGb` (25), `retryHours` (12), `laneWaitHours` (24), `testEnvLimit` (3), `roundHours` (7), `busyNoticeHours` (10),
-`dotnetWaitMinutes` (180), `dockerWaitMinutes` (8), `testTimeoutMinutes` (90), `buildTimeoutMinutes` (120),
-`versionStateFile` (optional local copy of the server's `studio-versions.json`).
+Downloads accept HTTPS OutSystems domains and the specific official CDN `dxejw4oyledi.cloudfront.net`, validating every redirect. Installers are saved by lane/full version under `installersDir` with SHA-256. Existing hashes must match; executables are never launched. Extraction uses the existing `nsis_extract.py`, followed by the same DLL-version and runtime checks as an installed Studio. A new ODC release still needs its matching tenant features; a stale cache defers the lane instead of reusing another version's features.
 
-Never run the full Anvil.Tests suite. Temporary smoke credentials stay in memory or the smoke's `segredo` folder, removed in
-`finally`; commands never contain them.
+Runtime properties, Docker inputs and the thin O11 bridge are inherited from `server/r33-r1`. The active versions remain the existing baseline until the automatic transaction pins the candidate. `versions.json`, `gen-compose.mjs`, `compose.template.json` and `r1-kernels.json` describe a window of up to three pairs. Old frozen bundles use their net8.0 pin. New bundles use the Studio runtime checked through MSBuild.
+
+## Bridge contract
+
+Artifacts are inside the pair's image at `/app/bridges/<lane>/<studioVersion>/<protocol>/`, brought in via the `client-bridges` Docker build context. Each contains the exact signed `manifest.json`, binary `manifest.sig`, and hashed files. The public verification key is `/app/bridges/public-key.pem`. All executable outputs are Authenticode signed and verified by `scripts/odc-runtime-signing.ps1 -Mode Artifacts`; the thumbprint is read from DPAPI, never a command argument.
+
+An updated agent advertises `capabilities: {bridgeOffer: true}` (the array form `['bridgeOffer']` is also accepted). Only a package mismatch for an otherwise served Studio can become `BRIDGE_UPDATE_REQUIRED` with `bridgeOffer`. The offer has exactly the contract fields: lane, studioVersion, protocol, manifest and base64 signature. An agent without the capability retains `AGENT_PACK_MISMATCH`. The agent still verifies Ed25519, file hashes, Authenticode, monotonic protocol and atomic local installation under its own pinned trust anchors.
+
+`GET /agent/bridges/<lane>/<studioVersion>/<protocol>/<sha256>` requires a valid agent bearer token with that lane. Only the backend's own pair and kernel-accepted protocols are available. Files and manifest signatures are rechecked before an offer/download; invalid signatures, unknown hashes, traversal and altered files are refused. No server path is returned.
+
+## Transaction and rollback
+
+`release.json` holds public build metadata; `deployment.json` journals publication, local pin, snapshot, backup, preparation, deploy and checks. Secret values never enter either. The actual Coolify response is DPAPI encrypted under the private `tempRoot/rollback`. The API uses GET `/api/v1/services/<uuid>`, PATCH with base64 `docker_compose_raw` and `instant_deploy: false`, and POST `/api/v1/services/<uuid>/restart`. These match the [Coolify update](https://coolify.io/docs/api/endpoints/services/update-service-by-uuid) and [restart](https://coolify.io/docs/api/endpoints/services/restart-service-by-uuid) contracts.
+
+SSH backs up PostgreSQL with pg_dump plus every volume mounted by current backends. A temporary stopped container mounts the future pair's exact Compose volumes. `ssamctl.sh` from the pinned deploy archive writes and checks kernel/features through that container. It is removed without `-v`; then Coolify owns deployment. There is no remote `compose up`. The SSH key is temporarily materialized only in a private ACL-restricted directory, passed by filename, and removed in `finally`; it is never a command value or log entry.
+
+Verification compares the full running pair window and actual image digests, waits for every backend's indexes/builder/worker warm event, checks public aggregate health, runs synthetic authenticated hello on both lanes, checks signed bridge offers/downloads, and validates total/core listing budgets. Synthetic tokens remain in memory and are revoked. Rollback compares the exact previous pair/image identities and repeats protocol, warm, listing and health checks. A rollback failure produces a distinct result requiring owner attention; it is never called successful. Volumes leaving the window are never deleted.
+
+Notifications are at most one attempt per release event: detected, live, failed/rolled back. The Windows toast, local event journal, remote system journal and optional vault webhook receive only event metadata. The server console has no supported event-ingestion API in this baseline; the remote system journal is the available channel.
+
+## Proof and limits
+
+Tests use a loopback Coolify HTTP server, fake SSH/Docker/compilers and temporary stores. They cover success, API/warm failure and rollback, partial publication, missing secrets, source/local detection and signed delivery. Real certificate signing, registry publication, VPS access and task installation are deliberately not exercised during development. The first owner activation must validate its external credentials, precise Coolify volume naming and remote prerequisites. Build outputs are not proof of live Studio bridge loading; that belongs to the agent's validation and rollback.
