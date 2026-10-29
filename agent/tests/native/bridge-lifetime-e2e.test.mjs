@@ -64,8 +64,9 @@ async function fixture(t, mode, badBind = false) {
       const answer = new Promise(resolve => queue.length ? resolve(queue.shift()) : waiting.push(resolve)); fs.writeFileSync(path.join(root, 'private/test-command.json'), JSON.stringify({ op: 'reconcile', running: rows }));
       const result = await answer; assert.equal(result.error, undefined);
     }
-    await hub.until(() => hub.hellos.length > before, 3000);
-    await hub.until(() => hub.stream && hub.streamChannel === hub.channel, 3000);
+    // Repeated reconnects deliberately retain the channel's exponential backoff.
+    await hub.until(() => hub.hellos.length > before, 15000);
+    await hub.until(() => hub.stream && hub.streamChannel === hub.channel, 15000);
     return hub.hellos.at(-1);
   }, snapshot() { const home = path.join(root, 'private/bridge-loads'); return path.join(home, fs.readdirSync(home).find(n => !n.endsWith('.json'))); } };
 }
@@ -74,7 +75,7 @@ for (const mode of ['node', 'native']) {
     const f = await fixture(t, mode); const result = await f.attach(); assert.equal(result.ok, true); assert.ok(fs.existsSync(f.marker)); await f.stopHost();
     const hello = await f.reconcile([]); assert.equal(accepted(hello), true); assert.equal(hello.bridges[0].status, 'installed');
   });
-  test(`R4.4 ${mode}: unavailable discovery never unlocks a real loaded DLL or takes the channel offline`, { skip: !enabled, timeout: 20000 }, async t => {
+  test(`R4.4 ${mode}: unavailable discovery never unlocks a real loaded DLL or takes the channel offline`, { skip: !enabled, timeout: 60000 }, async t => {
     const f = await fixture(t, mode); assert.equal((await f.attach()).ok, true); const snapshot = f.snapshot();
     await f.reconcile(null, true);
     await f.reconcile([]);
