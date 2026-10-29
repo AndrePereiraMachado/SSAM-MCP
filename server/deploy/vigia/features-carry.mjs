@@ -98,9 +98,10 @@ export function featuresVersion(file){
  try{const b=fs.readFileSync(file).subarray(0,4096);const text=b[0]===0xff&&b[1]===0xfe?b.toString('utf16le'):b.toString('utf8');
   return /<Features\b[^>]*\bVersion="([^"]+)"/.exec(text)?.[1]??null;}catch{return null;}
 }
-// Each use of a recorded file (tests, smoke) checks its bytes against the provenance it was resolved with.
+// Each use of a recorded file (tests, smoke, approval) checks its bytes against the provenance it was resolved with; a
+// provenance without its file is a difference too.
 export function verifyFeaturesUse(file,summary){
- if(!file||!summary?.sha256)return;
+ if(!summary?.sha256)return;
  let actual=null;try{actual=sha256(fs.readFileSync(file));}catch{}
  if(actual!==summary.sha256)throw new EnvironmentError(`The ODC features ${file} changed after they were recorded (sha256 ${summary.sha256}). Review the features store; nothing was used or changed.`,'store-mismatch',['odc']);
 }

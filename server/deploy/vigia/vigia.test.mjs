@@ -387,11 +387,11 @@ test('the seed command validates, stores once, refuses during a round and prints
  assert.deepEqual(leaks(logs()),[]);
 });
 test('the proposal and the approval text name the features provenance and the missing kernel flags',async t=>{
- const {featuresLine}=await import('./window.mjs');
- const carried={version:'1.7.30',mode:'carried',sha256:sha('c'),fileVersion:'1.7.29.10940',source:{kind:'carry',from:{version:'1.7.29',fullVersion:'1.7.29.10940',sha256:sha('d'),kind:'seed',recordedAt:'2026-10-29T10:00:00.000Z'},direction:'forward'},chain:1,recordedAt:'2026-10-30T09:00:00.000Z',
+ const {featuresLine}=await import('./window.mjs'),{createHash}=await import('node:crypto');
+ const tested=fixture(t),carried={version:'1.7.30',mode:'carried',sha256:createHash('sha256').update(fs.readFileSync(tested.features)).digest('hex'),fileVersion:'1.7.29.10940',source:{kind:'carry',from:{version:'1.7.29',fullVersion:'1.7.29.10940',sha256:sha('d'),kind:'seed',recordedAt:'2026-10-29T10:00:00.000Z'},direction:'forward'},chain:1,recordedAt:'2026-10-30T09:00:00.000Z',
   drift:{studioKeys:316,fileKeys:509,newKeys:Array.from({length:12},(_,i)=>'NewFlag'+i),removedKeys:1,kindConflicts:[],kernelRelevant:['AI_NL2Agg','FixIconConversionIssues'],missingKernelRelevant:['FixIconConversionIssues']}};
  const withFeatures=(f,p)=>{const bundle=f.ops.bundle;f.ops.bundle=async c=>({...(await bundle(c)),...(c.lane==='odc'?{featuresProvenance:p}:{})});return f;};
- const f=withFeatures(fixture(t),carried);const r=await f.round();assert.equal(r.status,'proposed');
+ const f=withFeatures(tested,carried);const r=await f.round();assert.equal(r.status,'proposed');
  const line="ODC features: carried from 1.7.29.10940 (exact, seeded 2026-10-29); 12 new flags use the Studio's code defaults; kernel flags missing: FixIconConversionIssues";
  assert.equal(featuresLine(carried),line);
  const proposal=fs.readFileSync(path.join(r.dir,'PROPOSTA.md'),'utf8');assert.ok(proposal.includes('## ODC features\n\n- '+line),proposal);assert.match(proposal,/-SeedFeatures <Features\.plain\.xml>/);
@@ -408,4 +408,21 @@ test('the proposal and the approval text name the features provenance and the mi
  const h=withFeatures(fixture(t),{version:'1.7.30',mode:'exact',sha256:sha('e'),fileVersion:'1.7.30.10980',source:{kind:'export',file:'C:/x/Features.xml'},chain:0,recordedAt:'2026-10-30T08:00:00.000Z'});const hr=await h.round();
  assert.ok(!h.notes.some(n=>/ODC features/.test(n)));assert.ok(fs.readFileSync(path.join(hr.dir,'PROPOSTA.md'),'utf8').includes('- ODC features: exact 1.7.30.10980 (exported 2026-10-30)'));
  assert.equal(featuresLine({version:'1.7.31',mode:'defaults',chain:0,drift:{newKeys:['A','B'],kindConflicts:[],missingKernelRelevant:['AI_NL2Agg','FixIconConversionIssues']}}),"ODC features: the Studio's code defaults only (no exact features existed to carry); kernel flags missing: AI_NL2Agg, FixIconConversionIssues");
+});
+test('an approval refuses ODC features that changed after the tests; nothing is published',async t=>{
+ const {createHash}=await import('node:crypto');
+ const f=fixture(t),tested=fs.readFileSync(f.features),digest=createHash('sha256').update(tested).digest('hex');
+ const provenance={version:'1.7.30',mode:'exact',sha256:digest,fileVersion:'1.7.30.10980',source:{kind:'seed',file:'Features.plain.xml',sha256:digest},chain:0,recordedAt:'2026-10-29T10:00:00.000Z'};
+ const bundle=f.ops.bundle;f.ops.bundle=async c=>({...(await bundle(c)),...(c.lane==='odc'?{featuresProvenance:provenance}:{})});
+ const r=await f.round();assert.equal(r.status,'proposed');
+ // The file the tests used is replaced (a seed, an edit): the approval stops before publishing anything.
+ fs.writeFileSync(f.features,'<Features Version="1.7.30.10980"/>');
+ const a=approvalOps(f);
+ await assert.rejects(approve({outDir:f.outDir,domains},a.ops,r.id),e=>e.code==='store-mismatch'&&e.lanes[0]==='odc'&&/changed after the tests/.test(e.message)&&/Nothing was published\. -Retry o11-11\.55\.94-odc-1\.7\.30 runs the tests again/.test(e.message));
+ assert.deepEqual(a.calls.filter(c=>['publish','pin'].includes(c[0])),[],'nothing published or pinned');
+ assert.equal(readAttempts(f.outDir)[r.id].status,'proposed');assert.equal(fs.existsSync(path.join(r.dir,'APROVADO.md')),false);
+ // The tested bytes back: the approval goes through.
+ fs.writeFileSync(f.features,tested);
+ assert.equal((await approve({outDir:f.outDir,domains},a.ops,r.id)).status,'approved');
+ assert.deepEqual(a.calls.filter(c=>c[0]==='publish').length,1);
 });

@@ -4,7 +4,8 @@ import fs from 'node:fs';
 import {readJournal} from './journal.mjs';
 import path from 'node:path';
 import {STUDIO_NAME,pinDigest,literalComposeText,windowPairs,pairId,hasPair,featuresLine} from './window.mjs';
-import {readAttempts,writeAttempt} from './pipeline.mjs';
+import {readAttempts,writeAttempt,EnvironmentError} from './pipeline.mjs';
+import {verifyFeaturesUse} from './features-carry.mjs';
 export function findAttempt(outDir,selector,statuses){
  const attempts=Object.values(readAttempts(outDir)).filter(a=>statuses.includes(a.status));
  const hits=attempts.filter(a=>a.id===selector||(a.pair.lanes??[]).some(l=>`${l}-${a.pair[l]}`===selector));
@@ -29,10 +30,23 @@ export function ownerSteps({attempt,published,commit,files,newPair,proposed}){
   `The Integradora merges ${a.branch} into main (local, no push without your OK). Until then the watcher already plans from this window.`];
  return `# Approved: ${a.id}\n\nDone by the watcher:\n- local image digest checked: sha256:${a.built.sha256}\n- published ${a.built.image}:${a.built.tag} to the private registry${published.already?' (it was already there with the same digest)':''}; latest was not moved\n- pinned the published digest in versions.json and regenerated the compose, tests green, commit ${commit} on ${a.branch} (not pushed)\n- deploy folder of that commit: ${files.deploy}\n- ${featuresLine(a.featuresProvenance)}\n\nWhat is left, in this order (owner; the watcher never touches the VPS or Coolify):\n\n${steps.map((s,i)=>`${i+1}. ${s}`).join('\n')}\n\nWay back (if the checks fail): paste ${files.rollback} in Coolify and Redeploy. The previous pairs keep their own kernel.json and features (per-pair folder and volumes); the new pair's volumes stay unused. Restore data (ssamctl.sh restore) only if data must come back, with every backend stopped. Tags stay in the registry; latest is untouched.\n`;
 }
+// The ODC features an approval hands over are the bytes the tests and the smoke used (the sha256 their provenance
+// recorded). An attempt from before provenance has none and is not checked.
+function checkFeatures(a){
+ try{verifyFeaturesUse(a.features,a.featuresProvenance);}
+ catch(e){
+  if(e.code!=='store-mismatch')throw e;
+  const what=`The ODC features ${a.features??'(no file)'} changed after the tests (the tests and the smoke used sha256 ${a.featuresProvenance.sha256}).`;
+  throw new EnvironmentError(a.published
+   ?`${what} The image was already published; no owner steps were written. Restore the tested file, then run -Approve ${a.id} again.`
+   :`${what} Nothing was published. -Retry ${a.id} runs the tests again with the current file.`,'store-mismatch',['odc']);
+ }
+}
 export async function approve(config,ops,selector){
  const log=ops.log??(()=>{});
  let a=findAttempt(config.outDir,selector,['proposed']);const dir=path.join(config.outDir,a.id);
  log(`approve ${a.id}`);
+ checkFeatures(a);
  // Everything that can be checked before publishing is checked first; each step is recorded, so an approval stopped
  // half-way resumes where it stopped (a published tag is never pushed again, a pin is never repeated).
  literalComposeText(a.baseManifest,config.domains);
@@ -64,6 +78,7 @@ export async function approve(config,ops,selector){
  await ops.archiveDeploy(commit,files.deploy);
  const newPair=!windowPairs(a.baseManifest).some(p=>pairId(p)===a.id);
  const steps=ownerSteps({attempt:a,published,commit,files,newPair,proposed:pinned});
+ checkFeatures(a);
  fs.writeFileSync(path.join(dir,'APROVADO.md'),steps);
  writeAttempt(config.outDir,{...a,status:'approved',approved:{at:new Date().toISOString(),digest:published.digest,commit,already:!!published.already}});
  return {status:'approved',id:a.id,commit,steps};
