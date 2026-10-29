@@ -50,15 +50,22 @@ export function uploadPath(file, { platform, dataRoot, runtimeRoot }) {
   let parsed;
   try { parsed = parseLocalPath(file, { platform }); } catch (error) { throw notSent(error.code, error.message); }
   const shown = JSON.stringify(parsed.normalized);
-  const name = parsed.segments.at(-1);
-  if (!EXTENSION.test(flavor(platform).extname(name).toLowerCase()))
-    throw notSent('PATH_FORBIDDEN', `${shown} has no file extension of 1 to 12 letters or digits; only such files are uploaded`);
-  if (parsed.segments.some(segment => CREDENTIAL_SEGMENTS.includes(segment.toLowerCase())) || CREDENTIAL_NAME.test(name))
-    throw notSent('PATH_FORBIDDEN', `${shown} is a credential or key file; the agent never uploads those`);
+  nameRefusal(parsed.segments, shown, platform);
   const p = flavor(platform);
   for (const folder of [dataRoot, runtimeRoot].filter(Boolean))
     if (insidePath(parsed.normalized, p.resolve(folder), platform)) throw notSent('PATH_FORBIDDEN', `${shown} is inside the SSAM agent folder; the agent never uploads its own files`);
   return parsed;
+}
+
+// The name rules of step 3 over path segments: the extension of the last one, credential folders in any of them,
+// credential and key names in the last one. Run on the path as asked AND on the real path of the opened file below the
+// approved folder's real path (long names: an 8.3 short name or a link inside the folder cannot hide .env, .git ...).
+export function nameRefusal(segments, shown, platform) {
+  const name = segments.at(-1) ?? '';
+  if (!EXTENSION.test(flavor(platform).extname(name).toLowerCase()))
+    throw notSent('PATH_FORBIDDEN', `${shown} has no file extension of 1 to 12 letters or digits; only such files are uploaded`);
+  if (segments.some(segment => CREDENTIAL_SEGMENTS.includes(segment.toLowerCase())) || CREDENTIAL_NAME.test(name))
+    throw notSent('PATH_FORBIDDEN', `${shown} is a credential or key file; the agent never uploads those`);
 }
 
 // The approved root that holds the path (as text, by its approved or its real path): {index, root, relative}.
@@ -108,8 +115,17 @@ export async function prepareUpload(params, { dataRoot, runtimeRoot = dataRoot, 
     if (stat.nlink > 1n) throw notSent('PATH_FORBIDDEN', `${shown} is a hard link (the same file has other names); the agent does not upload hard links`);
     let real;
     try { real = files.realpath(parsed.normalized); } catch { throw notSent('PATH_CHANGED', `${shown} changed while it was being checked; nothing was sent`); }
-    if (networkPath(real, platform) || !insidePath(real, rootReal, platform))
+    if (networkPath(real, platform) || !insidePath(real, rootReal, platform) || samePath(real, rootReal, platform))
       throw notSent('PATH_LEAVES_ROOT', `${shown} leaves the approved folder through a link or junction`);
+    // The same name rules on the real path, component by component below the approved folder, and the agent's folders by
+    // their real paths.
+    const p = flavor(platform);
+    nameRefusal(real.slice(rootReal.replace(/[\\/]+$/, '').length).split(/[\\/]/).filter(Boolean), shown, platform);
+    for (const folder of [dataRoot, runtimeRoot].filter(Boolean)) {
+      let agentReal = null;
+      try { agentReal = files.realpath(p.resolve(folder)); } catch { agentReal = null; }
+      if (agentReal && insidePath(real, agentReal, platform)) throw notSent('PATH_FORBIDDEN', `${shown} is inside the SSAM agent folder; the agent never uploads its own files`);
+    }
     let named;
     try { named = files.stat(real); } catch { throw notSent('PATH_CHANGED', `${shown} changed while it was being checked; nothing was sent`); }
     if (named.dev !== stat.dev || named.ino !== stat.ino) throw notSent('PATH_CHANGED', `${shown} changed while it was being checked; nothing was sent`);

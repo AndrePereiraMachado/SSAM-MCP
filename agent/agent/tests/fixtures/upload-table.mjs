@@ -7,6 +7,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { LAYOUT } from '../../lib/workspace.mjs';
 import { rootsCommand } from '../../lib/upload-roots.mjs';
 
@@ -54,8 +55,23 @@ export function uploadFixture({ prefix = 'ssam-upload-' } = {}) {
   let fileLink = null;
   try { fs.symlinkSync(path.join(outside, 'secret.csv'), path.join(R, 'filelink.csv'), 'file'); fileLink = path.join(R, 'filelink.csv'); }
   catch (error) { fileLink = { skip: 'no privilege to create a file symbolic link here (' + error.code + ')' }; }
+  // Credential files the long-name rules refuse, reached through their 8.3 short names and through a junction inside R.
+  fs.mkdirSync(path.join(R, '.docker')); fs.mkdirSync(path.join(R, '.git', 'objects'), { recursive: true });
+  fs.writeFileSync(path.join(R, '.env.local'), 'env canary\n');
+  fs.writeFileSync(path.join(R, 'credentials.json'), '{"canary":1}\n');
+  fs.writeFileSync(path.join(R, '.docker', 'config.json'), '{"auths":{}}\n');
+  fs.writeFileSync(path.join(R, '.git', 'objects', 'pack.idx'), 'git canary\n');
+  junction(path.join(R, '.git'), path.join(R, 'jgit'));
+  const shortOf = shortNames([path.join(R, '.env.local'), path.join(R, 'credentials.json'), path.join(R, '.docker'), path.join(R, '.git')]);
+  // Folders whose names differ only by a sign NTFS keeps distinct from the letter (Kelvin, Angstrom, Ohm).
+  const signs = [['K', '\u212A'], ['\u00E5', '\u212B'], ['\u03C9', '\u2126']];
+  for (const [i, [letter, sign]] of signs.entries()) {
+    const parent = path.join(base, 'signs' + i);
+    fs.mkdirSync(path.join(parent, letter), { recursive: true }); fs.mkdirSync(path.join(parent, sign));
+    fs.writeFileSync(path.join(parent, letter, 'x.csv'), 'approved\n'); fs.writeFileSync(path.join(parent, sign, 'secret.csv'), 'sibling\n');
+  }
   approve(data, R, runtime);
-  approve(data, path.join(base, 'rootlink'), runtime);
+  for (const [i, [letter]] of signs.entries()) approve(data, path.join(base, 'signs' + i, letter), runtime);  approve(data, path.join(base, 'rootlink'), runtime);
   // The approved junction now leads to another folder.
   fs.rmdirSync(path.join(base, 'rootlink')); junction(path.join(base, 'real2'), path.join(base, 'rootlink'));
   const at = (...parts) => path.join(R, ...parts);
@@ -118,10 +134,32 @@ export function uploadFixture({ prefix = 'ssam-upload-' } = {}) {
     ['maxBytes not an integer', { path: at('a.csv'), maxBytes: 1.5 }, 'PARAMS_INVALID'],
     ['path not a string', { path: 7, maxBytes: max }, 'PARAMS_INVALID'],
   ].map(([label, request, expected, size]) => ({ label, request, expected, size }));
+  const shortRows = [['.env.local by its 8.3 name', shortOf[0], null], ['credentials.json by its 8.3 name', shortOf[1], null],
+    ['.docker by its 8.3 name', shortOf[2], 'config.json'], ['.git by its 8.3 name', shortOf[3], 'objects\\pack.idx']];
+  const shortSkip = shortOf.some((short, i) => !short || path.basename(short) === path.basename([path.join(R, '.env.local'), path.join(R, 'credentials.json'), path.join(R, '.docker'), path.join(R, '.git')][i]))
+    ? 'the test volume makes no 8.3 short names' : null;
+  if (!shortSkip) for (const [label, short, tail] of shortRows) rows.push({ label, request: { path: tail ? path.join(short, tail) : short, maxBytes: max }, expected: 'PATH_FORBIDDEN' });
+  rows.push({ label: 'a junction inside the approved folder to its .git', request: { path: at('jgit', 'objects', 'pack.idx'), maxBytes: max }, expected: 'PATH_FORBIDDEN' });
+  for (const [i, [letter, sign]] of signs.entries()) {
+    rows.push({ label: `the approved ${letter} folder`, request: { path: path.join(base, 'signs' + i, letter, 'x.csv'), maxBytes: max }, expected: 'send', size: 9 });
+    rows.push({ label: `the sibling ${JSON.stringify(sign)} of the approved ${letter}`, request: { path: path.join(base, 'signs' + i, sign, 'secret.csv'), maxBytes: max }, expected: 'UPLOAD_ROOT_NOT_APPROVED' });
+  }
+  rows.push({ label: 'the approved K folder asked in lower case', request: { path: path.join(base, 'signs0', 'k', 'x.csv'), maxBytes: max }, expected: 'send', size: 9 });
+  rows.push({ label: 'a lower-case drive letter', request: { path: at('a.csv').replace(/^[A-Z]:/, d => d.toLowerCase()), maxBytes: max }, expected: 'send', size: 5 });
   if (typeof fileLink === 'string') rows.push({ label: 'a file symbolic link that escapes', request: { path: fileLink, maxBytes: max }, expected: 'PATH_LEAVES_ROOT' });
-  return { base, data, runtime, approved: R, rows, fileLinkSkip: typeof fileLink === 'string' ? null : fileLink.skip,
+  return { base, data, runtime, approved: R, rows, shortSkip, fileLinkSkip: typeof fileLink === 'string' ? null : fileLink.skip,
     remove: () => fs.rmSync(base, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }) };
 }
 
 // A row's beforeOpen.move, as the native check-upload does it.
 export const moveHook = request => (request.beforeOpen?.move ? () => { for (const [from, to] of request.beforeOpen.move) fs.renameSync(from, to); } : undefined);
+
+// The 8.3 short names of files and folders (Windows Scripting.FileSystemObject), null where there is none.
+function shortNames(paths) {
+  if (process.platform !== 'win32') return paths.map(() => null);
+  const script = paths.map(p => `$fs.${fs.statSync(p).isDirectory() ? 'GetFolder' : 'GetFile'}('${p.replace(/'/g, "''")}').ShortPath`).join(';');
+  const result = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', '$fs = New-Object -ComObject Scripting.FileSystemObject;' + script], { encoding: 'utf8', windowsHide: true });
+  const lines = String(result.stdout ?? '').split(/\r?\n/).filter(Boolean);
+  // Only the last name is the short one: the folders above keep their long names, as the request spells the approved folder.
+  return paths.map((p, i) => (lines[i] ? path.join(path.dirname(p), path.win32.basename(lines[i])) : null));
+}

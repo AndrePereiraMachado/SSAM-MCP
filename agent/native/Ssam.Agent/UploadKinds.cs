@@ -21,6 +21,17 @@ internal sealed class UploadKinds(string dataRoot, string runtimeRoot, Blobs? bl
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Singleline);
     private readonly SemaphoreSlim parallel = new(2);
 
+    // The name rules of step 3 (agent/lib/upload.mjs nameRefusal): extension of the last segment, credential folders in
+    // any segment, credential and key names in the last one.
+    private static void NameRefusal(IReadOnlyList<string> segments, string shown)
+    {
+        var name = segments.Count == 0 ? "" : segments[^1];
+        if (!LocalPaths.Extension.IsMatch(LocalPaths.ExtensionOf(name).ToLowerInvariant()))
+            throw NotSent("PATH_FORBIDDEN", $"{shown} has no file extension of 1 to 12 letters or digits; only such files are uploaded");
+        if (segments.Any(s => CredentialSegments.Contains(s.ToLowerInvariant())) || CredentialName.IsMatch(name))
+            throw NotSent("PATH_FORBIDDEN", $"{shown} is a credential or key file; the agent never uploads those");
+    }
+
     internal sealed record Prepared(byte[] Bytes, string Sha256, long Size, int Index, string Relative);
 
     private static AgentFault NotSent(string code, string message) => new(code, message) { Sent = false };
@@ -37,11 +48,7 @@ internal sealed class UploadKinds(string dataRoot, string runtimeRoot, Blobs? bl
         LocalPaths.Parsed parsed;
         try { parsed = LocalPaths.Parse(file); } catch (PathRefusal e) { throw NotSent(e.Code, e.Message); }
         var shown = LocalPaths.Quoted(parsed.Normalized);
-        var name = parsed.Segments[^1];
-        if (!LocalPaths.Extension.IsMatch(LocalPaths.ExtensionOf(name).ToLowerInvariant()))
-            throw NotSent("PATH_FORBIDDEN", $"{shown} has no file extension of 1 to 12 letters or digits; only such files are uploaded");
-        if (parsed.Segments.Any(s => CredentialSegments.Contains(s.ToLowerInvariant())) || CredentialName.IsMatch(name))
-            throw NotSent("PATH_FORBIDDEN", $"{shown} is a credential or key file; the agent never uploads those");
+        NameRefusal(parsed.Segments, shown);
         foreach (var folder in new[] { dataRoot, runtimeRoot })
             if (LocalPaths.Inside(parsed.Normalized, Path.GetFullPath(folder))) throw NotSent("PATH_FORBIDDEN", $"{shown} is inside the SSAM agent folder; the agent never uploads its own files");
 
@@ -80,7 +87,16 @@ internal sealed class UploadKinds(string dataRoot, string runtimeRoot, Blobs? bl
             string real;
             try { real = OperatingSystem.IsWindows() ? NativeFileIdentity.FinalPath(handle) : MacPlatform.RealPath(parsed.Normalized); }
             catch (Exception e) when (e is IOException or UnauthorizedAccessException) { throw NotSent("PATH_CHANGED", $"{shown} changed while it was being checked; nothing was sent"); }
-            if (LocalPaths.Network(real) || !LocalPaths.Inside(real, rootReal)) throw NotSent("PATH_LEAVES_ROOT", $"{shown} leaves the approved folder through a link or junction");
+            if (LocalPaths.Network(real) || !LocalPaths.Inside(real, rootReal) || LocalPaths.Same(real, rootReal)) throw NotSent("PATH_LEAVES_ROOT", $"{shown} leaves the approved folder through a link or junction");
+            // The same name rules on the real (long-name) path, component by component below the approved folder, and the
+            // agent's folders by their real paths: an 8.3 short name or a link inside the folder cannot hide .env, .git ...
+            NameRefusal(real[rootReal.TrimEnd('\\', '/').Length..].Split('\\', '/', StringSplitOptions.RemoveEmptyEntries), shown);
+            foreach (var folder in new[] { dataRoot, runtimeRoot })
+            {
+                string? agentReal = null;
+                try { if (Directory.Exists(folder)) agentReal = NativeFileIdentity.RealDirectory(folder); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
+                if (agentReal != null && LocalPaths.Inside(real, agentReal)) throw NotSent("PATH_FORBIDDEN", $"{shown} is inside the SSAM agent folder; the agent never uploads its own files");
+            }
             if (!OperatingSystem.IsWindows())
             {
                 string named;
