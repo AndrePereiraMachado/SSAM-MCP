@@ -18,7 +18,7 @@ try {
   if(!r.ok)throw Error('Protocol verification refused.');
   return {data:text?JSON.parse(line?line.slice(5):text):null,sid:r.headers.get('mcp-session-id')};
  };
- const hello={t:'hello',protocol:'ssam-agent/1',instance:'vigia-verification',agent:{version:'1'},pack:{id:'verification',lanes:['odc','o11'],odcBridge:kernel.odcBridge,o11BuiltFor:kernel.o11,o11Hook:kernel.o11Hook??'dev'},studios:{odc:{installed:{version:kernel.odc,dir:'C:/Verification'}},o11:{installed:{version:kernel.o11,dir:'C:/Verification'}}}};
+ const hello={t:'hello',verification:true,protocol:'ssam-agent/1',instance:'vigia-verification',agent:{version:'1'},pack:{id:'verification',lanes:['odc','o11'],odcBridge:kernel.odcBridge,o11BuiltFor:kernel.o11,o11Hook:kernel.o11Hook??'dev'},studios:{odc:{installed:{version:kernel.odc,dir:'C:/Verification'}},o11:{installed:{version:kernel.o11,dir:'C:/Verification'}}}};
  const accepted=await post('/agent/v1/hello',issued.agentCredential,hello);
  if(!accepted.data.compatible.odc.ok||!accepted.data.compatible.o11.ok)throw Error('Synthetic hello failed.');
  for(const offer of (expected.offers??[]).filter(x=>kernel[x.lane]===x.studioVersion)){
@@ -43,7 +43,7 @@ try {
  budget.coreBytes=tools?.filter(t=>budget.core.includes(t.name)).reduce((n,t)=>n+toolListingBytes(t),0);
  if(!tools||(!expected.capture&&(budget.tools!==expected.budget.tools||budget.totalBytes>expected.budget.totalBytes)))throw Error('Listing budget failed.');
  if(!expected.capture&&expected.budget.coreBytes&&budget.coreBytes>expected.budget.coreBytes)throw Error('Core listing budget failed.');
- console.log(JSON.stringify({ok:true,kernel,budget,telemetry:expected.capture?readStudioVersions(process.env.SSAM_SERVER_DIR||'/data/server'):undefined}));
+ console.log(JSON.stringify({ok:true,kernel,budget,telemetry:expected.capture?readStudioVersions(process.env.SSAM_SERVER_DIR||'/data/server',await store.list()):undefined}));
 } finally {
  if(issued?.id)await store.revoke(issued.id);
  await store.close?.();

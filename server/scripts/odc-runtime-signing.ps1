@@ -6,33 +6,61 @@ param(
     [ValidateSet('CurrentUser', 'LocalMachine')][string]$CertificateStore = 'CurrentUser',
     [string]$TimestampServer,
     [string]$ArtifactDirectory,
+    [string]$BuildEvidence,
+    [string]$ConfigPath,
     [string]$Vault = "$env:LOCALAPPDATA\SSAM\vigia\secrets.dpapi.json"
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 if ($Mode -eq 'Artifacts') {
     $executionRoot = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
+    . "$PSScriptRoot\..\deploy\vigia\execution-trust.ps1"
+    Assert-ExecutionClone $executionRoot
     $git = 'C:\Program Files\Git\cmd\git.exe'
-    if ((Split-Path $executionRoot -Leaf) -ne 'vigia-run' -or (& $git -C $executionRoot branch --show-current).Trim() -ne 'server/vigia-run' -or (& $git -C $executionRoot rev-parse HEAD).Trim() -ne (& $git -C $executionRoot rev-parse main).Trim() -or (& $git -C $executionRoot status --porcelain)) {
+    $safe = @('-c','core.hooksPath=','-c','core.fsmonitor=false','-c','core.pager=cat','-c','credential.helper=','-c','protocol.ext.allow=never','-c','protocol.file.allow=never','-c','core.attributesFile=NUL')
+    Get-ChildItem Env:GIT_* | Remove-Item
+    $env:GIT_CONFIG_NOSYSTEM='1'; $env:GIT_CONFIG_GLOBAL='NUL'
+    $env:GIT_CONFIG_COUNT=$null; $env:GIT_CONFIG_PARAMETERS=$null
+    if ((Split-Path $executionRoot -Leaf) -ne 'vigia-run' -or (& $git @safe -C $executionRoot branch --show-current).Trim() -ne 'server/vigia-run' -or (& $git @safe -C $executionRoot rev-parse HEAD).Trim() -ne (& $git @safe -C $executionRoot rev-parse main).Trim() -or (& $git @safe -C $executionRoot status --porcelain)) {
         throw 'Signing requires the clean trusted vigia-run checkout at reviewed main.'
     }
+    if(-not $ConfigPath){throw 'Private signing configuration is required.'}
+    . "$PSScriptRoot\..\deploy\vigia\execution-trust.ps1" -PrivatePaths $ConfigPath
+    $config=Get-Content -LiteralPath $ConfigPath -Raw | ConvertFrom-Json
+    if($config.PSObject.Properties['ownerSigningPublicKey'] -and $config.ownerSigningPublicKey){
+        $allowed=Join-Path $config.tempRoot 'allowed-signers'
+        [IO.File]::WriteAllText($allowed,('owner '+$config.ownerSigningPublicKey+"`n"))
+        & $git @safe -C $executionRoot -c gpg.format=ssh -c gpg.ssh.program=C:/Windows/System32/OpenSSH/ssh-keygen.exe -c "gpg.ssh.allowedSignersFile=$allowed" verify-commit HEAD
+        if($LASTEXITCODE -ne 0){throw 'Owner commit signature is invalid.'}
+    }
     . "$PSScriptRoot\..\deploy\vigia\vault.ps1"
+
     $secrets = Read-VigiaVault $Vault
     $thumb = $secrets.authenticodeThumbprint
     $cert = Get-Item -LiteralPath "Cert:\CurrentUser\My\$thumb"
     if (-not $cert.HasPrivateKey -or -not $cert.Verify() -or $cert.Subject -eq $cert.Issuer) { throw 'A valid provider-issued signing certificate is required.' }
     if (@($cert.EnhancedKeyUsageList | Where-Object { $_.ObjectId.Value -eq '1.3.6.1.5.5.7.3.3' }).Count -eq 0) { throw 'Certificate does not allow code signing.' }
+    $evidence=Get-Content -LiteralPath $BuildEvidence -Raw | ConvertFrom-Json
+    $pins=Get-Content -LiteralPath "$PSScriptRoot\..\deploy\vigia\publisher-pins.json" -Raw | ConvertFrom-Json
     $records = @()
     foreach ($file in Get-ChildItem -LiteralPath $ArtifactDirectory -Recurse -File | Where-Object { $_.Extension -in '.dll','.exe' }) {
-        $own = $file.Name -match '^(ODC3\.Bridge(\.Client|\.v[0-9]+)?|Anvil\.Bridge|Anvil\.RuntimeHook\.Agent)\.(dll|exe)$'
+        $relative=$file.FullName.Substring($ArtifactDirectory.Length).TrimStart('\').Replace('\','/')
+        $digest=(Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+        $ownerRecord=$evidence.owned.PSObject.Properties[$relative]
+        $own = $null -ne $ownerRecord
+        if($own -and $digest -ne $ownerRecord.Value){throw 'Build output changed before signing.'}
         $signature = Get-AuthenticodeSignature -LiteralPath $file.FullName
         if ($own) {
             $signature = Set-AuthenticodeSignature -LiteralPath $file.FullName -Certificate $cert -HashAlgorithm SHA256 -IncludeChain NotRoot -TimestampServer $TimestampServer
             if ($signature.Status -ne 'Valid' -or $null -eq $signature.TimeStamperCertificate -or $signature.SignerCertificate.Thumbprint -ne $thumb) { throw 'Bridge signature verification failed.' }
-        } elseif ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch 'O=Microsoft Corporation') {
-            throw 'A dependency must retain its valid original Microsoft signature.'
+        } else {
+            $dep=$evidence.dependencies.PSObject.Properties[$relative]
+            if($null -eq $dep -or $dep.Value.sha256 -ne $digest -or (Get-FileHash -LiteralPath $dep.Value.source -Algorithm SHA256).Hash.ToLowerInvariant() -ne $digest){throw 'Dependency differs from restored NuGet bytes.'}
+            if($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch '(?:^|,\s*)O=Microsoft Corporation(?:,|$)'){throw 'Unsupported dependency signer; report it to the integrator.'}
+            $chain=New-Object Security.Cryptography.X509Certificates.X509Chain
+            if(-not $chain.Build($signature.SignerCertificate) -or $pins.microsoftRoots -notcontains $chain.ChainElements[$chain.ChainElements.Count-1].Certificate.Thumbprint){throw 'Microsoft dependency root is not pinned.'}
         }
-        $records += @{ path=$file.FullName.Substring($ArtifactDirectory.Length).TrimStart('\').Replace('\','/'); thumbprint=$signature.SignerCertificate.Thumbprint }
+        $records += @{ path=$relative; signer=$(if($own){'owner'}else{'microsoft'}); thumbprint=$signature.SignerCertificate.Thumbprint }
     }
     [IO.File]::WriteAllText((Join-Path $ArtifactDirectory 'authenticode.json'), ($records | ConvertTo-Json), (New-Object Text.UTF8Encoding($false)))
     Write-Output 'Bridge signatures verified; dependency signatures preserved.'

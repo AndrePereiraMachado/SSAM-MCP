@@ -30,6 +30,9 @@ foreach ($item in @(
 $pair = & $Node (Join-Path $PSScriptRoot 'key-pair.mjs')
 if ($LASTEXITCODE -ne 0) { throw 'Cannot generate the Ed25519 signing key.' }
 $keys = $pair | ConvertFrom-Json
+$random = New-Object byte[] 32
+$rng = [Security.Cryptography.RandomNumberGenerator]::Create(); $rng.GetBytes($random); $rng.Dispose()
+$values.journalKey = Protect-VigiaValue ([Convert]::ToBase64String($random))
 $values.manifestPrivateKey = Protect-VigiaValue $keys.privateKey
 [IO.File]::WriteAllText($Vault, (@{schema=2;values=$values} | ConvertTo-Json), (New-Object Text.UTF8Encoding($false)))
 # Only the public key is displayed. Pin it in the agent before enabling updates.

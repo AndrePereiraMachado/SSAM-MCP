@@ -4,6 +4,7 @@
 //   --dry-run     reads the versions and prints what a round would do; writes nothing;
 //   --approve <id|lane-version>, --reject <id> --reason <text>, --retry <id>: the owner's commands.
 import fs from 'node:fs';
+import {readJournal} from './journal.mjs';
 import path from 'node:path';
 import {spawn} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
@@ -23,7 +24,7 @@ export function parseArgs(argv){
  const args={flags:new Set()};
  for(let i=0;i<argv.length;i++){
   const a=argv[i];
-  if(['--config','--approve','--reject','--reason','--retry','--log'].includes(a)){if(argv[i+1]===undefined)throw Error(`${a} needs a value.`);args[a.slice(2)]=argv[++i];}
+  if(['--config','--approve','--reject','--reason','--retry','--log','--acknowledge-rollback'].includes(a)){if(argv[i+1]===undefined)throw Error(`${a} needs a value.`);args[a.slice(2)]=argv[++i];}
   else if(['--dry-run','--round','--no-update'].includes(a))args.flags.add(a.slice(2));
   else throw Error(`Unknown argument ${a}. Usage: vigia.mjs --config <file> [--dry-run | --approve <id> | --reject <id> --reason <text> | --retry <id>] [--no-update]`);
  }
@@ -51,14 +52,15 @@ export function baseWindow(mainManifest,outDir){
  return {...r,branchBase:last?.pinCommit??last?.approved?.commit??null};
 }
 export async function round(config,runtime,{dryRun=false}={}){
- if(config.automatic&&!dryRun){await runtime.executionSource();await runtime.cleanupSsh();await runtime.secrets();await runtime.pause();}
+ if(config.automatic&&!dryRun){await runtime.executionSource();await runtime.secrets();await runtime.cleanupSsh();await runtime.pause();}
  // A process interrupted after publication resumes its journal before any new build.
  if(config.automatic&&!dryRun)for(const a of Object.values(readAttempts(config.outDir))){
   const file=path.join(config.outDir,a.id,'release.json'),journal=path.join(config.outDir,a.id,'deployment.json');
   if(!fs.existsSync(file)||!fs.existsSync(journal))continue;
-  const state=JSON.parse(fs.readFileSync(journal,'utf8'));
-  const release=JSON.parse(fs.readFileSync(file,'utf8'));
-  if(a.retry)continue;
+  const state=readJournal(journal);
+  const release=readJournal(file);
+  if(a.retry&&state.status!=='rollback-failed')continue;
+  if(a.retry&&state.status==='rollback-failed'&&a.acknowledgeRollback===a.id)continue;
   if(state.status==='rollback-failed'){
    await releaseEvent(config.outDir,runtime,'rollback-failed',a.id,'Rollback still requires owner attention.',await runtime.secrets(),a.at);
    return {status:'rollback-failed',id:a.id,code:'rollback-needs-attention'};
@@ -71,6 +73,7 @@ export async function round(config,runtime,{dryRun=false}={}){
    const {writeAttempt}=await import('./pipeline.mjs');writeAttempt(config.outDir,{...a,status:'failed',built:release.built,rollbackLatch:state.status==='rolled-back',failedLanes:a.pair.lanes,code:state.status});
   }
   if(!['live','rolled-back','rollback-failed','preparation-failed'].includes(state.status)){
+   if(runtime.verifyRelease)await runtime.verifyRelease(release);
    const result=await releaseAutomatically(config,runtime,release);
    if(result.status==='live'){
     const {writeAttempt}=await import('./pipeline.mjs');
@@ -131,7 +134,7 @@ async function owner(args,config,log){
 }
 if(process.argv[1]&&path.resolve(process.argv[1])===self){
  const args=parseArgs(process.argv.slice(2));
- const config=readConfig(args.config);
+ const config=readConfig(args.config);config.acknowledgeRollback=args['acknowledge-rollback'];
  if(config.automatic&&!args.flags.has('dry-run')){
   const {createRuntime}=await import('./runtime.mjs');
   let startup;

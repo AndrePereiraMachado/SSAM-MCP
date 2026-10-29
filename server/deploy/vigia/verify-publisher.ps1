@@ -1,9 +1,12 @@
 param([Parameter(Mandatory)][string]$File)
 $ErrorActionPreference = 'Stop'
 $signature = Get-AuthenticodeSignature -LiteralPath $File
-# Observed on the installed, signed ODCStudio.exe; renewal requires review.
-$pinnedPublisher = 'B3980F207C99E04BE91F80D498A9C5C7E317B31B'
-if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Thumbprint -ne $pinnedPublisher -or $signature.SignerCertificate.Subject -notmatch 'O="?OutSystems, Inc\.') {
-    throw 'Studio input does not have the pinned valid OutSystems Authenticode signature.'
+$pins = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'publisher-pins.json') -Raw | ConvertFrom-Json
+$chain = New-Object Security.Cryptography.X509Certificates.X509Chain
+if ($signature.Status -ne 'Valid' -or -not $chain.Build($signature.SignerCertificate)) { throw 'Installer Authenticode is invalid.' }
+$ca = $chain.ChainElements[1].Certificate.Thumbprint
+$matches = @($pins.outsystems | Where-Object { $_.subject -ceq $signature.SignerCertificate.Subject -and $_.ca -eq $ca })
+if ($matches.Count -ne 1) {
+    throw 'Installer does not match the reviewed OutSystems subject and CA pins.'
 }
-Write-Output 'OutSystems publisher verified.'
+@{status='Valid';subject=$signature.SignerCertificate.Subject;ca=$ca;thumbprint=$signature.SignerCertificate.Thumbprint} | ConvertTo-Json -Compress

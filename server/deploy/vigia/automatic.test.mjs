@@ -6,6 +6,7 @@ import path from 'node:path';
 import http from 'node:http';
 import {fileURLToPath} from 'node:url';
 import {generateKeyPairSync,createHash,sign,verify} from 'node:crypto';
+import {configureJournals,readJournal,writeJournal} from './journal.mjs';
 import {releaseAutomatically,AUTOMATIC_PLAN} from './automatic.mjs';
 import {createAutoRuntime} from './auto-runtime.mjs';
 import {detectSources,downloadInstaller,officialUrl} from './sources.mjs';
@@ -30,12 +31,12 @@ async function fixture(t,fail){
   res.setHeader('content-type','application/json');res.end(JSON.stringify({docker_compose_raw:compose}));
  });
  const key=generateKeyPairSync('ed25519').privateKey.export({format:'pem',type:'pkcs8'});
- const config={workspace:path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../../..'),tempRoot:dir,domains:{ssam:'mcp.example.test',console:'panel.example.test'},automaticDeployment:{testOnly:true,coolify:{url:endpoint,resource:'fixture'},ssh:{host:'fixture',knownHosts:'fixture'},remote:{}}};
+ const config={workspace:path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../../..'),tempRoot:dir,outDir:dir,configFile:path.join(dir,'config.json'),domains:{ssam:'mcp.example.test',console:'panel.example.test'},automaticDeployment:{testOnly:true,coolify:{url:endpoint,resource:'fixture'},ssh:{host:'fixture',knownHosts:'fixture'},remote:{}}};
  const base={
   executionSource:async()=>{},
   openLease:async()=>{calls.push('lock');const close=async()=>calls.push('unlock');close.assertHeld=()=>{};return close;},
   async run(cmd,args,{input}={}){
-   if(args.some(x=>String(x).endsWith('read-secrets.ps1')))return {stdout:JSON.stringify({coolifyToken:'memory-only-token',sshPrivateKey:Buffer.from('PRIVATE KEY').toString('base64'),authenticodeThumbprint:'b'.repeat(40),manifestPrivateKey:key})};
+   if(args.some(x=>String(x).endsWith('read-secrets.ps1')))return {stdout:JSON.stringify({coolifyToken:'memory-only-token',sshPrivateKey:Buffer.from('PRIVATE KEY').toString('base64'),authenticodeThumbprint:'b'.repeat(40),manifestPrivateKey:key,journalKey:Buffer.alloc(32,1).toString('base64')})};
    if(args.includes('Protect'))return {stdout:Buffer.from(input).toString('base64')};
    if(args.includes('Unprotect'))return {stdout:Buffer.from(input,'base64').toString()};
    if(cmd.endsWith('icacls.exe'))return {stdout:''};
@@ -57,7 +58,7 @@ async function fixture(t,fail){
 }
 test('complete release uses fake Coolify HTTP and SSH, pins locally and never deploys twice',async t=>{
  const f=await fixture(t);const r=await releaseAutomatically(f.config,f.ops,release(f.dir));assert.equal(r.status,'live');
- assert.deepEqual(f.calls,['verify','publish','pin','lock','preflight','snapshot','backup','prepare','snapshot','compose','deploy','check','unlock']);
+ assert.deepEqual(f.calls.filter(x=>x!=='fence'),['verify','publish','pin','lock','preflight','snapshot','backup','prepare','snapshot','compose','snapshot','deploy','check','unlock']);
  assert.deepEqual(f.notices,['detected','live']);
  await releaseAutomatically(f.config,f.ops,release(f.dir));assert.equal(f.calls.filter(x=>x==='publish').length,1);
  assert.ok(!fs.readFileSync(path.join(f.dir,'deployment.json'),'utf8').includes('memory-only-token'));
@@ -79,15 +80,15 @@ test('a mismatched registry digest stops before pin or deployment',async t=>{
 test('a failed rollback is never reported as restored',async t=>{
  const f=await fixture(t,'warm');f.ops.restoreCompose=async()=>{throw Error('offline');};
  assert.equal((await releaseAutomatically(f.config,f.ops,release(f.dir))).status,'rollback-failed');
- assert.equal(JSON.parse(fs.readFileSync(path.join(f.dir,'deployment.json'))).status,'rollback-failed');
+ assert.equal(readJournal(path.join(f.dir,'deployment.json')).status,'rollback-failed');
 });
 test('an interrupted rollback resumes restoration without deploying the candidate again',async t=>{
  const f=await fixture(t);const r=release(f.dir);await releaseAutomatically(f.config,f.ops,r);
- const file=path.join(f.dir,'deployment.json'),journal=JSON.parse(fs.readFileSync(file));
- journal.status='rolling-back';delete journal.steps['notice-live'];delete journal.steps['notice-failed'];fs.writeFileSync(file,JSON.stringify(journal));
+ const file=path.join(f.dir,'deployment.json'),journal=readJournal(file);
+ journal.status='rolling-back';delete journal.steps['notice-live'];delete journal.steps['notice-failed'];writeJournal(file,journal);
  const before=f.calls.length;
  assert.equal((await releaseAutomatically(f.config,f.ops,r)).status,'rolled-back');
- assert.deepEqual(f.calls.slice(before),['lock','restore','deploy','check','unlock']);
+ assert.deepEqual(f.calls.slice(before).filter(x=>x!=='fence'),['lock','restore','snapshot','deploy','check','unlock']);
 });
 test('missing secrets stops before any journal or external write',async t=>{
  const dir=tmp(t);await assert.rejects(releaseAutomatically({}, {secrets:async()=>{throw Error('missing');}},release(dir)),/missing/);
@@ -106,7 +107,7 @@ test('source detection, local fallback and installer hash never execute an insta
  assert.throws(()=>officialUrl('https://evil.example/a.exe'));
  assert.ok(AUTOMATIC_PLAN.some(x=>x.includes('MSBuild')));
 });
-function bridge(t){const dir=tmp(t),keys=generateKeyPairSync('ed25519'),sub=path.join(dir,'odc','1.7.30','v101');fs.mkdirSync(path.join(sub,'bridge'),{recursive:true});const bytes=Buffer.from('synthetic signed DLL');const sha=createHash('sha256').update(bytes).digest('hex');fs.writeFileSync(path.join(sub,'bridge','test.dll'),bytes);const m={schema:1,lane:'odc',studioVersion:'1.7.30',runtime:'net10.0',protocol:'v101',sequence:1,createdAt:new Date().toISOString(),authenticodeThumbprint:'b'.repeat(40),files:[{path:'bridge/test.dll',sha256:sha,size:bytes.length}]};const raw=Buffer.from(JSON.stringify(m));fs.writeFileSync(path.join(sub,'manifest.json'),raw);fs.writeFileSync(path.join(sub,'manifest.sig'),sign(null,raw,keys.privateKey));return {dir,sub,sha,store:createBridgeStore({root:dir,publicKey:keys.publicKey}),keys};}
+function bridge(t){const dir=tmp(t),keys=generateKeyPairSync('ed25519'),sub=path.join(dir,'odc','1.7.30','v101');fs.mkdirSync(path.join(sub,'bridge'),{recursive:true});const bytes=Buffer.from('synthetic signed DLL');const sha=createHash('sha256').update(bytes).digest('hex');fs.writeFileSync(path.join(sub,'bridge','test.dll'),bytes);const m={schema:1,lane:'odc',studioVersion:'1.7.30',runtime:'net10.0',protocol:'v101',sequence:1,createdAt:new Date().toISOString(),authenticodeThumbprint:'b'.repeat(40),files:[{path:'bridge/test.dll',sha256:sha,size:bytes.length,signer:'owner'}]};const raw=Buffer.from(JSON.stringify(m));fs.writeFileSync(path.join(sub,'manifest.json'),raw);fs.writeFileSync(path.join(sub,'manifest.sig'),sign(null,raw,keys.privateKey));return {dir,sub,sha,store:createBridgeStore({root:dir,publicKey:keys.publicKey}),keys};}
 const hello={pack:{lanes:['odc','o11'],odcBridge:'v0',o11BuiltFor:'11.55.94'},studios:{odc:{installed:{version:'1.7.30'}},o11:{installed:{version:'11.55.94'}}}};
 const kernel={odc:'1.7.30',o11:'11.55.94',odcBridge:'v101'};
 test('new agent gets signed offer; old agent retains its package refusal; invalid signatures never get offered',t=>{
@@ -141,22 +142,26 @@ test('automatic pipeline compiles bridges before the image and never creates an 
  assert.ok(events.indexOf('image')<events.indexOf('publish'));
 });
 test('bridge builder targets the Studio runtime, signs through the vault entry point and packages verifiable manifests',async t=>{
- const f=await fixture(t),builds=[];
+ const f=await fixture(t),builds=[];const agent=path.join(f.dir,'agent-source');
+ const bundle=path.join(f.dir,'bundle');fs.writeFileSync(bundle,'fixture');const sha=createHash('sha256').update('fixture').digest('hex');f.config.bundlePins={'odc-1.7.30':sha,'o11-11.55.94':sha};
  const privateKey=generateKeyPairSync('ed25519').privateKey.export({type:'pkcs8',format:'pem'});
- const runtime={executionSource:async()=>{},agentSource:async()=>'/pinned-agent',waitForDotnet:async()=>{},async run(cmd,args){
-  if(args.some(x=>String(x).endsWith('read-secrets.ps1')))return {stdout:JSON.stringify({coolifyToken:'memory',sshPrivateKey:Buffer.from('PRIVATE KEY').toString('base64'),authenticodeThumbprint:'b'.repeat(40),manifestPrivateKey:privateKey})};
-  if(args[0]==='msbuild')return {stdout:'net10.0'};
+ const runtime={executionSource:async()=>{},agentSource:async()=>agent,waitForDotnet:async()=>{},async run(cmd,args){
+  if(args.some(x=>String(x).endsWith('read-secrets.ps1')))return {stdout:JSON.stringify({coolifyToken:'memory',sshPrivateKey:Buffer.from('PRIVATE KEY').toString('base64'),authenticodeThumbprint:'b'.repeat(40),manifestPrivateKey:privateKey,journalKey:Buffer.alloc(32,1).toString('base64')})};
+  if(args.includes('-getProperty:TargetFramework'))return {stdout:'net10.0'};
+  if(args.includes('-getProperty:TargetPath'))return {stdout:builds.at(-1).output};
   if(args[0]==='build'){
    builds.push(args);const out=args[args.indexOf('-o')+1];fs.mkdirSync(out,{recursive:true});
    const name=args[1].endsWith('Client.csproj')?'ODC3.Bridge.Client.dll':args[1].includes('Anvil.RuntimeHook')?'Anvil.RuntimeHook.Agent.dll':args[1].includes('Anvil.Bridge.Thin')?'Anvil.Bridge.dll':'ODC3.Bridge.v100.dll';
-   fs.writeFileSync(path.join(out,name),'fake signed binary');
+   fs.writeFileSync(path.join(out,name),'fake signed binary');args.output=path.join(out,name);
+   const assets=path.join(path.dirname(args[1]),'obj/project.assets.json');fs.mkdirSync(path.dirname(assets),{recursive:true});fs.writeFileSync(assets,JSON.stringify({packageFolders:{},libraries:{}}));
    if(name==='ODC3.Bridge.Client.dll')fs.writeFileSync(path.join(out,'ODC3.Bridge.Client.runtimeconfig.json'),JSON.stringify({runtimeOptions:{tfm:'net10.0'}}));
    return {stdout:''};
   }
-  assert.ok(args.includes('Artifacts'));assert.ok(!args.includes('b'.repeat(40)));return {stdout:'Bridge signatures verified.'};
+  assert.ok(args.includes('Artifacts'));assert.ok(!args.includes('b'.repeat(40)));const target=args[args.indexOf('-ArtifactDirectory')+1],records=[];for(const sub of fs.readdirSync(target)){if(!fs.statSync(path.join(target,sub)).isDirectory())continue;for(const name of fs.readdirSync(path.join(target,sub)))if(name.endsWith('.dll'))records.push({path:sub+'/'+name,signer:'owner'});}fs.writeFileSync(path.join(target,'authenticode.json'),JSON.stringify(records));return {stdout:'Bridge signatures verified.'};
  }};
- const adapter=createAutoRuntime(f.config,runtime);
- const result=await adapter.buildBridges({odc:'1.7.30',o11:'11.55.94'},{odc:{version:'1.7.30',tfm:'net10.0',snapshot:'odc'},o11:{version:'11.55.94',tfm:'net10.0',snapshot:'o11'}},f.dir);
+ const fakeRoot=path.join(f.dir,'source');for(const rel of ['server/platforms/odc/studio/bridge/client/Program.cs','server/deploy/coolify/r1-kernels.json']){const dest=path.join(fakeRoot,rel);fs.mkdirSync(path.dirname(dest),{recursive:true});fs.copyFileSync(path.join(f.config.workspace,rel),dest);}
+ const adapter=createAutoRuntime({...f.config,workspace:fakeRoot},runtime);
+ const result=await adapter.buildBridges({odc:'1.7.30',o11:'11.55.94'},{odc:{lane:'odc',file:bundle,sha256:sha,version:'1.7.30',tfm:'net10.0',snapshot:'odc'},o11:{lane:'o11',file:bundle,sha256:sha,version:'11.55.94',tfm:'net10.0',snapshot:'o11'}},f.dir);
  assert.equal(result.kernel.o11Hook,undefined);assert.deepEqual(result.kernel.o11BridgeAccepted,['d1']);
  const oldHello={pack:{lanes:['odc','o11'],odcBridge:result.kernel.odcBridge,o11BuiltFor:'11.55.94',o11Hook:'dev'},studios:{odc:{installed:{version:'1.7.30'}},o11:{installed:{version:'11.55.94'}}}};
  assert.equal(compatibility(oldHello,result.kernel,['odc','o11']).o11.ok,true);

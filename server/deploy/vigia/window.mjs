@@ -34,6 +34,7 @@ export const pairId=p=>`o11-${p.o11}-odc-${p.odc}`;
 export const pairTag=(p,commit,date)=>`prod-${date}-${commit}-o${p.o11.replaceAll('.','')}-odc${p.odc.replaceAll('.','')}`;
 export const windowPairs=manifest=>versionPairs(manifest).map(p=>({odc:p.odc,o11:p.o11}));
 export const hasPair=(manifest,pair)=>windowPairs(manifest).some(p=>p.odc===pair.odc&&p.o11===pair.o11);
+export const isRealClient=data=>!data.revokedAt&&!data.revoked&&data.state!=='revoked'&&!data.verification&&data.customer!=='Version verification';
 export function rotateWindow(manifest,pair,state={}){
  const old=versionPairs(manifest),window=manifest.window??3;
  pair={odc:old[0].odc,o11:old[0].o11,...pair};
@@ -42,11 +43,13 @@ export function rotateWindow(manifest,pair,state={}){
  })];
  const now=state.now??Date.now(),held=[];
  const recent=p=>Object.entries(state.tokens??{}).some(([token,data])=>{
-  const active=now-Date.parse(data.seen)<14*86400000;
+  const active=isRealClient(data)&&now-Date.parse(data.seen)<14*86400000;
   const uses=LANES.some(l=>version(data[l]?.installed)===p[l]);
   if(active&&uses){held.push({pair:pairId(p),token,lastSeen:data.seen});return true;}return false;
  });
  entries=entries.filter((p,i)=>i<window||recent(p));
+ const limit=state.maxWindow??4;
+ if(!Number.isInteger(limit)||limit<3||entries.length>limit)throw Object.assign(Error('Active clients require a window above the configured limit; owner review is required.'),{code:'WINDOW_LIMIT',environmental:true});
  const next={window:Math.max(window,entries.length),odc:[],o11:[]};
  for(const p of entries)for(const lane of LANES)next[lane].push({version:p[lane],tag:p.tag,image:p.image,...(p.sha256?{sha256:p.sha256}:{})});
  versionPairs(next);

@@ -2,6 +2,7 @@
 // State lives in outDir: <pair id>/attempt.json per attempt, reminders.json for the once-a-day notices, PENDENTE.md for
 // a Studio that still has to be installed. A round with nothing new reads only and writes nothing.
 import fs from 'node:fs';
+import {readJournal,writeJournal} from './journal.mjs';
 import {releaseAutomatically,releaseEvent} from './automatic.mjs';
 import path from 'node:path';
 import {LANES,STUDIO_NAME,ownerCommand,missingPack,planWindow,readyCandidates,pairFor,pairId,hasPair,rotateWindow,compareFailures,windowPairs,tfmMajor,proposalText,failureText,composeText} from './window.mjs';
@@ -13,9 +14,9 @@ const readJson=file=>{try{return JSON.parse(fs.readFileSync(file,'utf8'));}catch
 export const localDay=now=>new Date(now).toLocaleDateString('sv-SE');
 export function readAttempts(outDir){
  let entries=[];try{entries=fs.readdirSync(outDir,{withFileTypes:true});}catch(e){if(e.code!=='ENOENT')throw e;}
- return Object.fromEntries(entries.filter(e=>e.isDirectory()&&/^o11-\d+\.\d+\.\d+-odc-\d+\.\d+\.\d+$/.test(e.name)).map(e=>[e.name,readJson(path.join(outDir,e.name,'attempt.json'))]).filter(([,a])=>a));
+ return Object.fromEntries(entries.filter(e=>e.isDirectory()&&/^o11-\d+\.\d+\.\d+-odc-\d+\.\d+\.\d+$/.test(e.name)).map(e=>[e.name,(fs.existsSync(path.join(outDir,e.name,'attempt.json'))?readJournal(path.join(outDir,e.name,'attempt.json')):null)]).filter(([,a])=>a));
 }
-export function writeAttempt(outDir,attempt){writeJson(path.join(outDir,attempt.id,'attempt.json'),attempt);return attempt;}
+export function writeAttempt(outDir,attempt){writeJournal(path.join(outDir,attempt.id,'attempt.json'),attempt);return attempt;}
 // At most one notice per key and local day: a pending proposal, a failure or a missing Studio is repeated daily, never
 // every round.
 export async function remind(outDir,key,title,message,ops,{now=Date.now(),link}={}){
@@ -193,15 +194,15 @@ async function runAttempt(config,ops,decision,now){
   if(bridges)ops.bridgeKernel=bridges.kernel;
   const built=await ops.build(pair,bundles,dir);
   fs.writeFileSync(path.join(dir,'image.json'),JSON.stringify(built,null,2));
-  const next=rotateWindow(base,{odc:pair.odc,o11:pair.o11,image:built.image,tag:built.tag},config.state);
+  const next=rotateWindow(base,{odc:pair.odc,o11:pair.o11,image:built.image,tag:built.tag},{...config.state,maxWindow:config.maxWindow??4});
   if(config.automatic&&next.held?.length)await releaseEvent(outDir,ops,'retained',id,'Active clients require retaining an older pair; the window was extended.',await ops.secrets(),attempt.at);
   const served=Object.fromEntries(LANES.map(lane=>[lane,[...new Set(next.manifest[lane].map(x=>x.version))]]));
   const smoke=await ops.smoke(built,bundles,served,dir);fs.writeFileSync(path.join(dir,'smoke.json'),JSON.stringify(smoke,null,2));
   if(!smoke.ok)throw Error('Image smoke failed: '+(smoke.error??'see smoke.json'));
   if(config.automatic){
-   const release={id,dir,attempt:attempt.at,baseline:config.liveBaseline,built,manifest:next.manifest,kernel:bridges.kernel,bridges,features:bundles.odc.features};
+   const release={id,dir,attempt:attempt.at,baseline:config.liveBaseline,built,manifest:next.manifest,kernel:bridges.kernel,bridges,features:bundles.odc.features,bundles};
    // Persist only public identities and local artifact paths. Never keys or tokens.
-   fs.writeFileSync(path.join(dir,'release.json'),JSON.stringify(release,null,2));
+   writeJournal(path.join(dir,'release.json'),release);
    const result=await releaseAutomatically(config,ops,release);
    if(result.status==='live')writeAttempt(outDir,{...attempt,status:'approved',built,pinCommit:result.commit,approved:{at:new Date().toISOString(),digest:'sha256:'+built.sha256,commit:result.commit}});
    else writeAttempt(outDir,{...attempt,status:result.status==='deferred'?'deferred':'failed',built,rollbackLatch:['rolled-back','rollback-failed'].includes(result.status),code:result.code,failedLanes:pair.lanes});

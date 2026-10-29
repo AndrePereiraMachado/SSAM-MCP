@@ -58,7 +58,7 @@ export const CALL_KINDS = Object.freeze(['studio.processes', 'odc.pipe', 'odc.at
   'file.put', 'file.get', 'file.list', 'file.sync', 'net.probe']);
 const LANES = ['odc', 'o11'];
 const STUDIO = { odc: 'ODC Studio', o11: 'Service Studio' };
-export function bridgeReports(value){return (Array.isArray(value)?value:[]).filter(r=>r&&typeof r==='object'&&LANES.includes(r.lane)&&/^\d+\.\d+\.\d+$/.test(r.studioVersion)&&/^(v\d+|d\d+)$/.test(r.protocol)&&Number.isSafeInteger(r.sequence)&&r.sequence>0&&['installed','active','failed','fallback'].includes(r.status)).slice(0,16).map(r=>({lane:r.lane,studioVersion:r.studioVersion,protocol:r.protocol,sequence:r.sequence,status:r.status,reason:/^[A-Z_]{1,64}$/.test(r.reason??'')?r.reason:'UNSPECIFIED'}));}
+export function bridgeReports(value){return (Array.isArray(value)?value:[]).filter(r=>r&&typeof r==='object'&&LANES.includes(r.lane)&&/^\d+\.\d+\.\d+$/.test(r.studioVersion)&&/^(v\d+|d\d+)$/.test(r.protocol)&&Number.isSafeInteger(r.sequence)&&r.sequence>0&&['installed','active','failed','refused','fallback'].includes(r.status)).slice(0,16).map(r=>({lane:r.lane,studioVersion:r.studioVersion,protocol:r.protocol,sequence:r.sequence,status:r.status,reason:/^[A-Z_]{1,64}$/.test(r.reason??'')?r.reason:'UNSPECIFIED'}));}
 const HEX32 = /^[0-9a-f]{32}$/;
 const INDEX = /^(0|[1-9][0-9]{0,5})$/;
 const SHA256 = /^[0-9a-f]{64}$/;
@@ -170,7 +170,7 @@ export function compatibility(hello, kernel, lanes, { refused = null, bridges = 
     const result = laneCompatibility(lane, effective, k, lanes ?? [], refused?.[lane] ?? null);
     const needsO11=lane==='o11'&&threePart(hello?.pack?.o11BuiltFor)!==version;
     if (capable && offer && !active && (result.code === 'AGENT_PACK_MISMATCH'||(result.ok&&needsO11))) {
-      if (offer) return [lane, {ok:false, code:'BRIDGE_UPDATE_REQUIRED', message:'Install the signed bridge and reconnect.', bridgeOffer:offer}];
+      if (offer) return [lane, result.ok ? {...result, bridgeOffer:offer} : {...result, ok:false, code:'BRIDGE_UPDATE_REQUIRED', message:'Install the signed bridge and reconnect.', bridgeOffer:offer}];
     }
     return [lane,result];
   }));
@@ -565,7 +565,7 @@ export function createAgentHub({ dir, store, kernel, kernelRefused = null, log =
       const studio = studioIdentity(lane, state.hello?.studios?.[lane]?.installed, serverKernel);
       return [lane, {studio, ok: studio?.ok, cause: causeOf(studio)}];
     }));
-    try { recordStudioVersions(dir, state, observed, iso()); }
+    try { if(!state.hello?.verification) recordStudioVersions(dir, state, observed, iso()); }
     catch (error) { log({ event: 'studio-versions-write-failed', code: error.code ?? 'EIO' }); }
     for (const lane of LANES) {
       const entry = observed[lane];
@@ -623,7 +623,7 @@ export function createAgentHub({ dir, store, kernel, kernelRefused = null, log =
     }
     state.customer = auth.customer; state.lanes = auth.lanes; state.closedFor = null;
     state.instance = h.instance;
-    state.hello = { agent: h.agent ?? null, pack: h.pack ?? null, studios: h.studios ?? null, o11Connection: h.o11Connection ?? null, capabilities:h.capabilities??null, bridges:bridgeReports(h.bridges) };
+    state.hello = { verification:h.verification===true, agent: h.agent ?? null, pack: h.pack ?? null, studios: h.studios ?? null, o11Connection: h.o11Connection ?? null, capabilities:h.capabilities??null, bridges:bridgeReports(h.bridges) };
     for(const report of state.hello.bridges){
       log({event:'bridge-report',token:auth.id,...report});
       const customer=customerStateDir(path.join(dir,'customers',auth.id));

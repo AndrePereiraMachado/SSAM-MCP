@@ -5,6 +5,7 @@ param(
  [string]$Reject,
  [string]$Reason,
  [string]$Retry,
+ [string]$AcknowledgeRollback,
  [switch]$NoUpdate
 )
 # Entry point of the Studio versions watcher (README.md). The scheduled task runs it with -Config only.
@@ -19,6 +20,7 @@ $argsList=@((Join-Path $PSScriptRoot 'vigia.mjs'),'--config',$Config)
 if($DryRun){$argsList+='--dry-run'}
 if($Approve){$argsList+=@('--approve',$Approve)}
 if($Reject){$argsList+=@('--reject',$Reject);if($Reason){$argsList+=@('--reason',$Reason)}}
+if($AcknowledgeRollback){$argsList+=@('--acknowledge-rollback',$AcknowledgeRollback)}
 if($Retry){$argsList+=@('--retry',$Retry)}
 if($NoUpdate){$argsList+='--no-update'}
 & $node @argsList

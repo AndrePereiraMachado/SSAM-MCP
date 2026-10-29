@@ -9,8 +9,13 @@ function Unprotect-VigiaValue([string]$Value, [string]$Purpose = 'vault') {
     $bytes = [Security.Cryptography.ProtectedData]::Unprotect([Convert]::FromBase64String($Value),(Get-VigiaEntropy $Purpose),[Security.Cryptography.DataProtectionScope]::CurrentUser)
     return [Text.Encoding]::UTF8.GetString($bytes)
 }
+function Get-VigiaPackage {
+    try { return [Windows.ApplicationModel.Package,Windows.ApplicationModel,ContentType=WindowsRuntime]::Current } catch { if ($_.Exception.GetBaseException().HResult -ne -2147009196) { throw }; return $null }
+}
 function Assert-VigiaNormalProfile {
-    if ($env:LOCALAPPDATA -match '(?i)[\\/]Packages[\\/]' -or $env:APPX_PACKAGE_FAMILY_NAME) {
+    $packaged = $false
+    $packaged = $null -ne (Get-VigiaPackage)
+    if ($packaged) {
         throw 'Open a normal Windows PowerShell terminal outside the MSIX app to configure watcher secrets.'
     }
 }

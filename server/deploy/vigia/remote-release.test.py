@@ -22,6 +22,8 @@ class RemoteTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.settings = {"directory": self.temp.name, "composeProject": "fixture", "postgresContainer": "postgres-fixture", "healthUrl": "https://example.test/health", "warmTimeoutSeconds": 0}
+        if hasattr(remote, 'assert_fence'):
+            patcher=patch.object(remote, 'assert_fence', return_value=None); patcher.start(); self.addCleanup(patcher.stop)
         self.calls = []
         self.inputs = []
 
@@ -54,7 +56,7 @@ class RemoteTests(unittest.TestCase):
 
     def request(self, action, **kwargs):
         with patch.object(remote, "docker", self.docker), patch.object(remote, "command", self.command):
-            return remote.dispatch({"settings": self.settings, "action": action, **kwargs})
+            return remote.dispatch({"fence": 'synthetic-token', "settings": self.settings, "action": action, **kwargs})
 
     def archive(self):
         data = io.BytesIO()
@@ -92,18 +94,18 @@ class RemoteTests(unittest.TestCase):
         expected = [{"o11": "11.55.93", "odc": "1.7.29", "image": "sha256:old"}]
         self.assertTrue(self.request("check", expectedBackends=expected, checkSource="synthetic")['ok'])
         expected[0]["image"] = "wrong"
-        with self.assertRaisesRegex(RuntimeError, "timed out"):
+        with self.assertRaisesRegex(RuntimeError, "NOT_WARM"):
             self.request("check", expectedBackends=expected, checkSource="synthetic")
 
     def test_low_memory_rejected_without_any_write(self):
         with patch.object(pathlib.Path, "read_text", return_value="MemAvailable: 3144704 kB\n"):
-            with self.assertRaisesRegex(RuntimeError, "memory"):
+            with self.assertRaisesRegex(RuntimeError, "MEMORY_LOW"):
                 self.request("preflight", backendCount=3)
         self.assertEqual(self.calls, [])
 
     def test_low_disk_rejected_before_backup_directory(self):
         with patch.object(remote.shutil, "disk_usage", return_value=SimpleNamespace(free=1)):
-            with self.assertRaisesRegex(RuntimeError, "disk"):
+            with self.assertRaisesRegex(RuntimeError, "DISK_LOW"):
                 self.request("backup", id="low-disk")
         self.assertFalse((pathlib.Path(self.temp.name) / "backups").exists())
 
@@ -119,8 +121,13 @@ class RemoteTests(unittest.TestCase):
         self.assertEqual(len(list(home.iterdir())), 5)
         self.assertFalse((home / "0").exists())
 
-    def prepare(self):
-        return self.request("prepare", id="o11-11.55.94-odc-1.7.30", archive=self.archive(), features=base64.b64encode(b"private").decode(), kernel={}, built={"image": "private/image", "tag": "prod-fixed", "sha256": "a"*64}, compose={"services": {"ssam-server-v1": {"labels": {}, "environment": {"SSAM_RUNTIME_DIR": "/data/server/versions/new"}, "volumes": []}}, "volumes": {}})
+    def prepare(self, volumes=None):
+        return self.request("prepare", id="o11-11.55.94-odc-1.7.30", archive=self.archive(), features=base64.b64encode(b"private").decode(), kernel={}, built={"image": "private/image", "tag": "prod-fixed", "sha256": "a"*64}, compose={"services": {"ssam-server-v1": {"labels": {}, "environment": {"SSAM_RUNTIME_DIR": "/data/server/versions/new"}, "volumes": volumes or []}}, "volumes": {"friction": {}}})
+
+    def test_generated_friction_volume_is_allowed_and_extra_mount_is_refused(self):
+        self.assertTrue(self.prepare([{"type": "volume", "source": "friction", "target": "/data/friction"}])["ok"])
+        with self.assertRaisesRegex(RuntimeError, "Unexpected backend volume"):
+            self.prepare([{"type": "bind", "source": "/secret", "target": "/secret"}])
 
     def test_pull_failure_removes_features(self):
         original = self.docker

@@ -10,7 +10,7 @@ const GIT='C:/Program Files/Git/cmd/git.exe',PS='C:/Windows/System32/WindowsPowe
 const here=path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/,'$1'));
 const server=path.resolve(here,'../..');
 const sh=(cmd,args,cwd)=>{const r=spawnSync(cmd,args,{cwd,encoding:'utf8'});if(r.status!==0)throw Error(`${cmd} ${args.join(' ')}: ${r.stderr}`);return r.stdout.trim();};
-const git=(cwd,...args)=>sh(GIT,['-C',cwd,'-c','user.name=Test','-c','user.email=test@example.test',...args]);
+const git=(cwd,...args)=>sh(GIT,['-C',cwd,'-c','core.autocrlf=false','-c','user.name=Test','-c','user.email=test@example.test',...args]);
 const image='docker.io/andrepereiramachado/ssam-server';
 const sha=c=>c.repeat(64);
 const SNAPSHOT_DLL='C:/t/studio-bundles/o11-11.55.93/snapshot/files/ServiceStudio.Framework.dll';

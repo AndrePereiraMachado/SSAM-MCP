@@ -2,9 +2,10 @@
 // tests, the local image, its smoke test, the proposal branch and, on the owner's command, publication and the pin.
 // Nothing here touches the VPS, Coolify or GitHub, pushes Git or moves latest.
 import fs from 'node:fs';
+import {verifyProvenance,verifyBundleCustody} from './provenance.mjs';
 import path from 'node:path';
 import {spawn,spawnSync} from 'node:child_process';
-import {createHash} from 'node:crypto';
+import crypto,{createHash} from 'node:crypto';
 import {fileURLToPath} from 'node:url';
 import {readTrx,pairTag,pairId,packFor,version as threeOf} from './window.mjs';
 import {smokeImage,readListingBudget} from './smoke.mjs';
@@ -65,6 +66,7 @@ export function buildCause(result){
  return {environmental:false,why:''};
 }
 export async function createRuntime(config,{log=()=>{}}={}){
+ const SAFE_GIT=['-c','core.autocrlf=false','-c','core.hooksPath=','-c','core.fsmonitor=false','-c','core.pager=cat','-c','credential.helper=','-c','diff.external=','-c','protocol.ext.allow=never','-c','protocol.file.allow=never','-c','core.attributesFile=NUL'];
  const root=path.resolve(config.workspace),temp=path.resolve(config.tempRoot),out=path.resolve(config.outDir),store=path.resolve(config.bundleRoot);
  if(/^c:[\\/]t(?:[\\/]|$)/i.test(temp))throw Error('tempRoot must be private and outside C:\\t.');
  const exe={git:config.git??'C:/Program Files/Git/cmd/git.exe',powershell:config.powershell??'C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe',bash:config.bash??'C:/Program Files/Git/bin/bash.exe',dotnet:config.dotnet??'C:/Program Files/dotnet/dotnet.exe',docker:config.docker??'C:/Program Files/Docker/Docker/resources/bin/docker.exe',dockerDesktop:config.dockerDesktop??'C:/Program Files/Docker/Docker/Docker Desktop.exe',tar:config.tar??'C:/Windows/System32/tar.exe',node:process.execPath};
@@ -81,7 +83,7 @@ export async function createRuntime(config,{log=()=>{}}={}){
   if(process.platform==='win32'&&command===exe.powershell)env={PSModulePath:'C:/Windows/System32/WindowsPowerShell/v1.0/Modules;'+(process.env.PSModulePath??''),...env};
   if(dir){fs.mkdirSync(dir,{recursive:true});fs.appendFileSync(path.join(dir,'commands.jsonl'),JSON.stringify({time:new Date().toISOString(),command,args:secret?['(not recorded)']:args,cwd,env:Object.keys(env)})+'\n');}
   const result=await new Promise((resolve,reject)=>{
-   const child=spawn(command,args,{cwd,env:{...process.env,...env},windowsHide:true,stdio:['pipe','pipe','pipe']});let stdout='',stderr='',timer=null;active.add(child);
+   const child=spawn(command,args,{cwd,env:{...Object.fromEntries(Object.entries(process.env).filter(([k])=>!k.startsWith('GIT_'))),...env},windowsHide:true,stdio:['pipe','pipe','pipe']});let stdout='',stderr='',timer=null;active.add(child);
    if(timeoutMs)timer=setTimeout(()=>{stderr+=`\n(timed out after ${timeoutMs} ms)`;killTree(child);},timeoutMs);
    child.stdout.on('data',b=>stdout+=b);child.stderr.on('data',b=>stderr+=b);child.once('error',e=>{clearTimeout(timer);active.delete(child);reject(e);});child.once('close',code=>{clearTimeout(timer);active.delete(child);resolve({code,stdout,stderr});});child.stdin.end(input);
   });
@@ -91,10 +93,13 @@ export async function createRuntime(config,{log=()=>{}}={}){
   return result;
  }
  const docker=(args,options={})=>run(exe.docker,['--context',context,...args],options);
- const git=(args,options={})=>run(exe.git,['-C',options.cwd??root,...args],options);
+ const git=(args,options={})=>run(exe.git,[...SAFE_GIT,'-C',options.cwd??root,...args],{...options,env:{...options.env,GIT_CONFIG_NOSYSTEM:'1',GIT_CONFIG_GLOBAL:process.platform==='win32'?'NUL':'/dev/null',GIT_ATTR_NOSYSTEM:'1',GIT_TERMINAL_PROMPT:'0',GIT_PAGER:'cat'}});
  const commitAs=['-c','user.name=Andre Machado','-c','user.email=andre_c_machado@hotmail.com'];
  async function checkWorkspace(){
-  if(!fs.statSync(path.join(root,'.git')).isFile())throw new EnvironmentError('Use a dedicated Git worktree, not the primary checkout.','workspace');
+  if(config.automatic){await ps(path.join(here,'execution-trust.ps1'),['-Workspace',root]);}
+  else if(!fs.statSync(path.join(root,'.git')).isFile())throw new EnvironmentError('Use a dedicated Git worktree, not the primary checkout.','workspace');
+  const executors=await git(['config','--local','--get-regexp','^(include|includeIf|filter\\.|diff\\..*\\.command|merge\\..*\\.driver)'],{allowFailure:true});
+  if(executors.stdout.trim())throw new EnvironmentError('Executable or included repository configuration is refused.','UNTRUSTED_SOURCE');
   const branch=(await git(['branch','--show-current'])).stdout.trim();if(!branch||branch==='main'||branch==='master'||branch.startsWith('vigia/'))throw new EnvironmentError('Use the clean integration worktree (not main, not a vigia/ proposal branch).','workspace');
   // Untracked files count too: build.sh sends the tree to Docker, and .dockerignore does not cover a loose file.
   const dirty=(await git(['status','--porcelain'])).stdout.split('\n').filter(l=>l.trim());
@@ -115,7 +120,7 @@ export async function createRuntime(config,{log=()=>{}}={}){
   const review=why=>new EnvironmentError(`${why}: ${file}. Review the bundle store; nothing was bundled over or changed.`,'store-mismatch',[lane]);
   const sha=hash(file);let recorded='';try{recorded=fs.readFileSync(file+'.sha256','utf8').toLowerCase();}catch{throw review('The bundle has no .sha256 beside it');}
   if(!recorded.includes(sha))throw review('The bundle checksum does not match its .sha256');
-  const pin=config.bundlePins?.[`${lane}-${v}`];if(pin&&pin.toLowerCase()!==sha)throw review(`The bundle is not the pinned one (bundlePins ${lane}-${v})`);
+  const pin=config.bundlePins?.[`${lane}-${v}`];if(config.automatic&&!pin&&!fs.existsSync(file+'.provenance.json'))throw review('Bundle requires a reviewed pin or installer provenance');if(pin&&pin.toLowerCase()!==sha)throw review(`The bundle is not the pinned one (bundlePins ${lane}-${v})`);
   return sha;
  }
  // The features of an ODC version (the tenant's feature flags) live only in the private featuresRoot, never under C:/t.
@@ -145,7 +150,7 @@ export async function createRuntime(config,{log=()=>{}}={}){
  // snapshot-<full version>/.
  async function freeze(folder,file,fullVersion,runtimeFrom,lane,dir){
   const holds=snap=>{try{return /^version (\S+)$/m.exec(fs.readFileSync(path.join(snap,'bundle.txt'),'utf8'))?.[1]===fullVersion;}catch{return false;}};
-  const plain=path.join(folder,'snapshot'),own=path.join(folder,`snapshot-${fullVersion}`);
+  const plain=path.join(folder,config.automatic?'snapshot-'+crypto.randomUUID():'snapshot'),own=path.join(folder,`snapshot-${fullVersion}`);
   const snap=holds(plain)?plain:holds(own)?own:fs.existsSync(plain)?own:plain;
   if(!holds(snap)){
    const stage=path.join(folder,`.snapshot-partial-${process.pid}`);fs.rmSync(stage,{recursive:true,force:true});fs.mkdirSync(stage,{recursive:true});
@@ -166,7 +171,9 @@ export async function createRuntime(config,{log=()=>{}}={}){
   const snapshot=await freeze(folder,found.file,found.fullVersion,null,lane,dir);
   if(threeOf(studioVersionOf(snapshot))!==v)throw new EnvironmentError(`The frozen copy ${snapshot} is not ${lane} ${v}; review the bundle store.`,'store-mismatch',[lane]);
   const features=lane==='odc'?await featuresFor(v):null;
-  return {lane,version:v,fullVersion:found.fullVersion,file:found.file,sha256,snapshot,features,tfm:studioTfm(snapshot,lane)??assemblyTfm(snapshot)};
+  const provenance=fs.existsSync(found.file+'.provenance.json')?JSON.parse(fs.readFileSync(found.file+'.provenance.json','utf8')):undefined;
+  if(config.automatic)verifyBundleCustody({file:found.file,sha256,snapshot,provenance},config.bundlePins?.[`${lane}-${v}`]);
+  return {provenance,lane,version:v,fullVersion:found.fullVersion,file:found.file,sha256,snapshot,features,tfm:studioTfm(snapshot,lane)??assemblyTfm(snapshot)};
  }
  async function waitForDotnet(dir){
   const deadline=Date.now()+(config.dotnetWaitMinutes??180)*60000;let said=false;
@@ -208,6 +215,12 @@ export async function createRuntime(config,{log=()=>{}}={}){
   await git([...commitAs,'commit','-F',file],{dir,cwd:wt});
   return (await git(['rev-parse','HEAD'],{cwd:wt})).stdout.trim();
  }
+ async function verifyCommit(commit){
+  if(!config.ownerSigningPublicKey)return;
+  if(!/^ssh-(ed25519|rsa) [A-Za-z0-9+/=]+(?: [^\r\n]*)?$/.test(config.ownerSigningPublicKey))throw Error('Invalid owner signing public key.');
+  const allowed=path.join(temp,'allowed-signers');fs.writeFileSync(allowed,'owner '+config.ownerSigningPublicKey+'\n',{mode:0o600});
+  await git(['-c','gpg.format=ssh','-c','gpg.ssh.program=C:/Windows/System32/OpenSSH/ssh-keygen.exe','-c','gpg.ssh.allowedSignersFile='+allowed,'verify-commit',commit]);
+ }
  const runtime={
   run,docker,log,checkWorkspace,ensureDocker,waitForDotnet,
   deploymentActive:false,
@@ -216,12 +229,13 @@ export async function createRuntime(config,{log=()=>{}}={}){
    const child=spawn(command,args,{windowsHide:true,stdio:['pipe','pipe','pipe']});
    let alive=true;const closed=new Promise(resolve=>child.once('close',code=>{alive=false;resolve(code);}));child.stderr.resume();
    await new Promise((resolve,reject)=>{
-    let text='';const timer=setTimeout(()=>{child.kill();reject(Error('Remote release lock timed out.'));},45000);
-    child.once('error',()=>{clearTimeout(timer);reject(Error('Remote release lock unavailable.'));});
-    child.once('close',()=>{clearTimeout(timer);reject(Error('Remote release lock refused.'));});
+    let text='';const timer=setTimeout(()=>{child.kill();reject(new EnvironmentError('Remote release lock timed out.','LOCK_BUSY'));},45000);
+    child.once('error',()=>{clearTimeout(timer);reject(new EnvironmentError('Remote release lock unavailable.','LOCK_BUSY'));});
+    child.once('close',()=>{clearTimeout(timer);reject(new EnvironmentError('Remote release lock refused.','LOCK_BUSY'));});
+    child.stdin.on('error',()=>{});
     child.stdout.on('data',b=>{text+=b;if(text.includes('SSAM_LOCKED')){clearTimeout(timer);resolve();}});
    });
-   const release=async()=>{child.stdin.end();await closed;};release.assertHeld=()=>{if(!alive)throw Error('Remote release lease was lost.');};return release;
+   const release=async()=>{if(alive)child.stdin.end();await closed;};release.assertHeld=()=>{if(!alive)throw new EnvironmentError('Remote release lease was lost.','LOCK_LOST');};return release;
   },
   manifest:()=>JSON.parse(fs.readFileSync(path.join(root,'server/deploy/coolify/versions.json'),'utf8')),
   head:async()=>(await git(['rev-parse','--short=7','HEAD'])).stdout.trim(),
@@ -233,6 +247,13 @@ export async function createRuntime(config,{log=()=>{}}={}){
   // Fast-forward of the integration worktree from the local main, before each round. Anything else stops the round.
   async updateWorkspace(from='main'){
    const branch=await checkWorkspace();
+   if(config.automatic){
+    if(!/^https:\/\/[^@?#]+$/.test(config.trustedRemote??''))throw Error('Pin a credential-free HTTPS remote in the private configuration.');
+    await git(['fetch','--no-tags','--no-recurse-submodules',config.trustedRemote,'+refs/heads/main:refs/remotes/vigia/main']);
+    const fetched=(await git(['rev-parse','refs/remotes/vigia/main'])).stdout.trim();
+    await verifyCommit(fetched);
+    await git(['update-ref','refs/heads/main',fetched]);
+   }
    const before=(await git(['rev-parse','HEAD'])).stdout.trim(),target=(await git(['rev-parse','--verify',from+'^{commit}'])).stdout.trim();
    if(before===target)return {updated:false,branch,head:before};
    if((await git(['merge-base','--is-ancestor','HEAD',target],{allowFailure:true})).code!==0)throw Error(`The watcher worktree (${branch} at ${before.slice(0,7)}) cannot fast-forward to ${from} (${target.slice(0,7)}): it has commits ${from} does not have. Nothing was changed; review the worktree ${root}.`);
@@ -260,6 +281,7 @@ export async function createRuntime(config,{log=()=>{}}={}){
   // The target framework MSBuild picks for the test project against that Studio folder (the workspace's build rule),
   // or null when it cannot be evaluated. The watcher compares it with the Studio's own runtime; it never picks one.
   async targetFramework(candidate){
+   if(config.automatic)verifyProvenance(candidate.provenance,candidate.studio);
    await waitForDotnet();
    const env={TEMP:temp,TMP:temp,DOTNET_CLI_HOME:path.join(temp,'dotnet-home'),DOTNET_CLI_TELEMETRY_OPTOUT:'1',DOTNET_NOLOGO:'1'};
    const r=await run(exe.dotnet,['msbuild',path.join(root,TEST_PROJECT[candidate.lane]),'-nologo','-getProperty:TargetFramework',`-p:${STUDIO_PROPERTY[candidate.lane]}=${candidate.studio}`],{env,allowFailure:true,timeoutMs:300000});
@@ -268,6 +290,7 @@ export async function createRuntime(config,{log=()=>{}}={}){
    return value;
   },
   async bundle(candidate,dir){
+   if(config.automatic)verifyProvenance(candidate.provenance,candidate.studio);
    const folder=storeDir(candidate.lane,candidate.version);fs.mkdirSync(folder,{recursive:true});
    // A bundle of this build already in the store is used as it is, or the lane waits (verifyBundle); only a build the
    // store does not have yet is bundled.
@@ -279,14 +302,16 @@ export async function createRuntime(config,{log=()=>{}}={}){
     found=bundleFile(folder,candidate.lane,candidate.version,candidate.fullVersion);
     if(!found)throw new EnvironmentError(`studio-bundle.ps1 did not write ${candidate.lane}-studio-${candidate.fullVersion}.tar.gz.`,'bundle',[candidate.lane]);
    }
+   if(config.automatic){verifyProvenance(candidate.provenance,candidate.studio);fs.writeFileSync(found.file+'.provenance.json',JSON.stringify(candidate.provenance));}
    const sha256=verifyBundle(candidate.lane,candidate.version,found.file);
    const snapshot=await freeze(folder,found.file,found.fullVersion,candidate.studio,candidate.lane,dir);
    // The features of this ODC version, exported once from this machine's ODC Studio cache when it is for this version.
    const features=candidate.lane==='odc'?await featuresFor(candidate.version,{exportFrom:config.featuresSource,dir}):null;
-   return {lane:candidate.lane,version:candidate.version,fullVersion:found.fullVersion,file:found.file,sha256,snapshot,features,tfm:studioTfm(snapshot,candidate.lane)??candidate.tfm??assemblyTfm(snapshot)};
+   return {provenance:candidate.provenance,lane:candidate.lane,version:candidate.version,fullVersion:found.fullVersion,file:found.file,sha256,snapshot,features,tfm:studioTfm(snapshot,candidate.lane)??candidate.tfm??assemblyTfm(snapshot)};
   },
   companion:(lane,v)=>companion(lane,v),
   async test(lane,kind,side,dir){
+   if(config.automatic)for(const b of Object.values(side))verifyBundleCustody(b,config.bundlePins?.[`${b.lane}-${b.version}`]);
    const filter=config.filters?.[lane]??DEFAULT_FILTERS[lane];
    if(!/^FullyQualifiedName~[A-Za-z0-9_.]+(?:\|FullyQualifiedName~[A-Za-z0-9_.]+)*$/.test(filter))throw Error('Use an explicit finite class filter; the full kernel suite is forbidden.');
    const resultDir=path.join(dir,`${lane}-${kind}`),privateTemp=path.join(temp,path.basename(dir),`${lane}-${kind}`);
@@ -309,25 +334,28 @@ export async function createRuntime(config,{log=()=>{}}={}){
    catch(e){throw new EnvironmentError(`The ${lane} ${kind} run reported no executed tests (${e.message}); the Studio folder did not load for the tests.`,kind==='baseline'?'baseline':'test-environment',[lane]);}
   },
   async build(pair,bundles,dir){
+   if(config.automatic)for(const b of Object.values(bundles))verifyBundleCustody(b,config.bundlePins?.[`${b.lane}-${b.version}`]);
    if(config.automatic)await runtime.executionSource();
    await checkWorkspace();
    const commitShort=(await git(['rev-parse','--short=7','HEAD'])).stdout.trim(),revision=(await git(['rev-parse','HEAD'])).stdout.trim();
-   const tag=pairTag(pair,commitShort,new Date().toISOString().slice(0,10).replaceAll('-',''));
+   const tag=pairTag(pair,commitShort,new Date().toISOString().slice(0,10).replaceAll('-',''))+(config.automatic?'-a'+crypto.randomUUID().replaceAll('-','').slice(0,12):'');
    const installers=path.join(temp,'installers',pairId(pair));fs.rmSync(installers,{recursive:true,force:true});fs.mkdirSync(installers,{recursive:true});
    try{
     for(const b of Object.values(bundles)){const to=path.join(installers,path.basename(b.file));try{fs.linkSync(b.file,to);}catch{fs.copyFileSync(b.file,to);}}
     const metadata=path.join(dir,'image-metadata.json'),image=config.image??'docker.io/andrepereiramachado/ssam-server';
     const env={TEMP:temp,TMP:temp,PATH:path.dirname(exe.docker)+path.delimiter+path.dirname(exe.git)+path.delimiter+process.env.PATH,DOCKER:'docker --context '+context,BUILDX_BUILDER:config.builder??'ssam-multiver-impl',STUDIO_INSTALLERS_DIR:bashPath(installers),SSAM_BUILD_METADATA_FILE:slash(metadata),SERVICE_STUDIO_BUNDLE:path.basename(bundles.o11.file),SERVICE_STUDIO_BUNDLE_SHA256:bundles.o11.sha256,ODC_STUDIO_BUNDLE:path.basename(bundles.odc.file),ODC_STUDIO_BUNDLE_SHA256:bundles.odc.sha256,SSAM_IMAGE_O11:bundles.o11.version,SSAM_IMAGE_ODC:bundles.odc.version};
     Object.assign(env,{SERVICE_STUDIO_TFM:bundles.o11.tfm,ODC_STUDIO_TFM:bundles.odc.tfm});
+    const custody=JSON.stringify(Object.fromEntries(Object.entries(bundles).map(([lane,b])=>[lane,b.provenance??{bundlePin:b.sha256}])));
+    const custodyFile=path.join(installers,'provenance.json');fs.writeFileSync(custodyFile,custody);
     const extra=runtime.bridgeStage?['--build-context','client-bridges='+slash(runtime.bridgeStage)]:[];
-    const r=await run(exe.bash,[slash(path.join(root,'server/deploy/build.sh')),'--image',image,'--tag',tag,'--','--progress','plain',...extra],{dir,env,allowFailure:true,timeoutMs:(config.buildTimeoutMinutes??120)*60000});
+    const r=await run(exe.bash,[slash(path.join(root,'server/deploy/build.sh')),'--image',image,'--tag',tag,'--','--progress','plain',...extra,'--label','pro.ssam.studio-provenance-sha256='+hash(custodyFile),'--build-context','studio-provenance='+slash(installers)],{dir,env,allowFailure:true,timeoutMs:(config.buildTimeoutMinutes??120)*60000});
     if(r.code!==0){
      const cause=buildCause(r);
      if(cause.environmental)throw new EnvironmentError(`build.sh could not finish for an environment reason (${cause.why}; exit ${r.code}); the round retries. See ${path.join(dir,'commands.jsonl')}.`,'build-environment');
      throw Error(`build.sh failed (exit ${r.code})${cause.why?': '+cause.why:''}. See ${path.join(dir,'commands.jsonl')}.`);
     }
     const sha256=JSON.parse(fs.readFileSync(metadata,'utf8'))['containerimage.digest'].replace(/^sha256:/,'');
-    return {odc:bundles.odc.version,o11:bundles.o11.version,image,tag,sha256,revision:commitShort,commit:revision};
+    return {odc:bundles.odc.version,o11:bundles.o11.version,image,tag,sha256,revision:commitShort,commit:revision,provenance:JSON.parse(custody)};
    }finally{fs.rmSync(installers,{recursive:true,force:true});}
   },
   async smoke(built,bundles,served,dir){
@@ -406,10 +434,15 @@ export async function createRuntime(config,{log=()=>{}}={}){
   const auto=createAutoRuntime(config,runtime);Object.assign(runtime,auto);
   runtime.executionSource=async()=>{
    if(path.resolve(root,'server/deploy/vigia').toLowerCase()!==here.toLowerCase())throw Error('The watcher code must run from its execution checkout.');
-   const branch=await checkWorkspace();executionSource({workspace:root,branch,head:await runtime.fullHead(),main:(await git(['rev-parse','main'])).stdout.trim()});
+   const branch=await checkWorkspace();
+   for(const target of [config.outDir,config.bundleRoot,config.installersDir,config.tempRoot,config.configFile,config.vault]){
+    if(!target)throw Error('Automatic private paths must be explicitly configured.');
+    await ps(path.join(here,'execution-trust.ps1'),['-PrivatePaths',target]);
+   }
+   executionSource({workspace:root,branch,head:await runtime.fullHead(),main:(await git(['rev-parse','main'])).stdout.trim(),gitDirectory:fs.statSync(path.join(root,'.git')).isDirectory()});
+   await verifyCommit(await runtime.fullHead());
   };
-  runtime.verifyPublisher=async file=>{await ps(path.join(here,'verify-publisher.ps1'),['-File',file],{secret:true});};
-  runtime.verifyStudioPublisher=async(folder,lane)=>{for(const name of ['ServiceStudio.Framework.dll',lane==='odc'?'ODCStudio.exe':'ServiceStudio.exe'])await runtime.verifyPublisher(path.join(folder,name));};
+  runtime.verifyPublisher=async file=>JSON.parse((await ps(path.join(here,'verify-publisher.ps1'),['-File',file],{secret:true})).stdout);
   runtime.agentSource=async()=>{
    await runtime.executionSource();const commit=config.agentReleaseCommit,ref=config.agentReleaseRef;
    agentReleasePin(commit,ref);

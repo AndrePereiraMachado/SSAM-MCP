@@ -1,10 +1,10 @@
 {
-  "workspace": "C:/Users/OWNER/SSAM-MCP-wt/vigia-run",
+  "workspace": "C:/ssam-priv/vigia-run",
   "updateFrom": "main",
   "tempRoot": "C:/ssam-priv/vigia-tmp",
   "featuresRoot": "C:/ssam-priv/vigia-tmp/features",
-  "outDir": "C:/t/vigia-auto",
-  "bundleRoot": "C:/t/studio-bundles",
+  "outDir": "C:/ssam-priv/vigia",
+  "bundleRoot": "C:/ssam-priv/studio-bundles",
   "bundlePins": {
     "odc-1.7.29": "b64f5381439e1fcc3be1f0cc298bd86c71ae8ffaeec2a704e2c21f1ec7e112ca",
     "o11-11.55.93": "ad4f23b53db20ff9d5ae4d6899cbe9c41bab9f7a7b88c41be3d6b2ee47b0de95"
@@ -68,5 +68,9 @@
   "agentReleaseCommit": "REVIEWED_40_HEX_AGENT_COMMIT",
   "agentReleaseRef": "agent/release",
   "deploymentMaxMinutes": 180,
-  "pauseFile": "C:/ssam-priv/vigia/PAUSE"
+  "pauseFile": "C:/ssam-priv/vigia/PAUSE",
+  "vault": "C:/ssam-priv/vigia/secrets.dpapi.json",
+  "trustedRemote": "https://GIT_HOST/OWNER/SSAM-MCP.git",
+  "ownerSigningPublicKey": null,
+  "maxWindow": 4
 }

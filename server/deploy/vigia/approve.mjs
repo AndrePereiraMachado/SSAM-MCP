@@ -1,6 +1,7 @@
 // The owner's one command after a proposal: check, publish, pin, print what is left. Also -Reject and -Retry.
 // Never a VPS, Coolify or GitHub action; never latest.
 import fs from 'node:fs';
+import {readJournal} from './journal.mjs';
 import path from 'node:path';
 import {STUDIO_NAME,pinDigest,literalComposeText,windowPairs,pairId,hasPair} from './window.mjs';
 import {readAttempts,writeAttempt} from './pipeline.mjs';
@@ -76,7 +77,9 @@ export function reject(config,selector,reason){
 // -Retry also takes a proposal (its local image was pruned, say): the next round builds it again.
 export function retry(config,selector){
  const a=findAttempt(config.outDir,selector,['failed','rejected','deferred','proposed']);
+ const journal=path.join(config.outDir,a.id,'deployment.json');
+ if(fs.existsSync(journal)){const state=readJournal(journal);if(state.status==='rollback-failed'&&config.acknowledgeRollback!==a.id)throw Error('Use -AcknowledgeRollback '+a.id+' after manually checking and restoring production.');}
  if(a.published)throw Error(`${a.id} is already published (${a.published.digest}); finish it with -Approve ${a.id}.`);
- writeAttempt(config.outDir,{...a,retry:true});
+ writeAttempt(config.outDir,{...a,retry:true,...(config.acknowledgeRollback===a.id?{acknowledgeRollback:a.id}:{})});
  return {status:'retry',id:a.id,note:`The next round runs ${a.id} again (${a.pair.lanes.map(l=>`${STUDIO_NAME[l]} ${a.pair[l]}`).join(', ')}).`};
 }

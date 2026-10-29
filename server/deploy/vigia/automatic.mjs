@@ -1,6 +1,7 @@
 // The release is based on observed production state; every mutation is fenced
 // by the shared remote lease and the original Coolify compose fingerprint.
 import fs from 'node:fs';
+import {readJournal,writeJournal} from './journal.mjs';
 import path from 'node:path';
 import {pinDigest} from './window.mjs';
 import {assertUnserved,assertRetained} from './safety.mjs';
@@ -33,14 +34,14 @@ export async function releaseAutomatically(config,ops,release){
  const {id,dir,built,manifest,kernel,bridges,features}=release;
  const secrets=await ops.secrets();
  const file=path.join(dir,'deployment.json');
- let state=fs.existsSync(file)?JSON.parse(fs.readFileSync(file,'utf8')):{schema:2,id,attempt:release.attempt??new Date().toISOString(),steps:{}};
+ let state=fs.existsSync(file)?readJournal(file):{schema:2,id,attempt:release.attempt??new Date().toISOString(),steps:{}};
  if(release.attempt&&state.attempt!==release.attempt){
   const previous=path.join(dir,'previous');fs.mkdirSync(previous,{recursive:true});
   fs.renameSync(file,path.join(previous,'deployment-'+String(state.attempt).replace(/[^A-Za-z0-9_-]/g,'_')+'.json'));
   state={schema:2,id,attempt:release.attempt,steps:{}};
  }
  if(!state.mutationStarted){await ops.pause();await ops.deploymentBudget();}
- const save=()=>atomic(file,state);
+ const save=()=>writeJournal(file,state);
  const event=(name,message)=>releaseEvent(config.outDir??dir,ops,name,id,message,secrets,state.attempt);
  if(state.status==='live')return {status:'live',id,commit:state.pin};
  if(state.status==='rollback-failed'){await event('rollback-failed',`${id}: rollback still requires owner attention.`);return {status:'rollback-failed',id};}
@@ -48,7 +49,7 @@ export async function releaseAutomatically(config,ops,release){
  // Never retain arbitrary service/API response objects in this journal.
  const once=async(name,fn,select=x=>x)=>{if(state.steps[name])return state.steps[name].value;state.activeStep=name;save();const value=select(await fn());state.steps[name]={value,at:new Date().toISOString()};save();return value;};
  const baseline=release.baseline??await ops.liveBaseline(secrets);
- try{assertUnserved(baseline,{odc:built.odc??kernel.odc,o11:built.o11??kernel.o11});}
+ try{if(!state.mutationStarted)assertUnserved(baseline,{odc:built.odc??kernel.odc,o11:built.o11??kernel.o11});}
  catch(e){if(e.code==='ALREADY_SERVED')return {status:'idle',id};throw e;}
  const pinned=pinDigest(manifest,built.tag,'sha256:'+built.sha256);assertRetained(baseline,pinned);
  await event('detected',`${id}: verified candidate detected.`);
@@ -82,11 +83,11 @@ export async function releaseAutomatically(config,ops,release){
  }catch(error){
   state.failure={step:state.activeStep??'preflight',code:/^[A-Z_]+$/.test(error.code??'')?error.code:'RELEASE_FAILED'};
   if(!state.mutationStarted){
-   state.status='preparation-failed';save();await event('failed',`${id}: ${state.failure.step} failed before mutation (${state.failure.code}).`);
+   state.status=error.environmental?'deferred':'preparation-failed';save();await event('failed',`${id}: ${state.failure.step} failed before mutation (${state.failure.code}).`);
    return {status:error.environmental?'deferred':'failed',id,code:state.failure.code};
   }
   state.status='rolling-back';save();let restored=false;
-  try{await ops.restoreCompose(secrets,baseline);await ops.deploy(secrets);const r=await ops.checks(secrets,{rollback:true,live:baseline});if(!r?.ok)throw Error('Rollback checks failed.');restored=true;}catch{}
+  try{if(ops.ensureReleaseLock)unlock=await ops.ensureReleaseLock(secrets,unlock);await ops.restoreCompose(secrets,baseline);await ops.deploy(secrets);const r=await ops.checks(secrets,{rollback:true,live:baseline});if(!r?.ok)throw Error('Rollback checks failed.');restored=true;}catch{}
   state.status=restored?'rolled-back':'rollback-failed';save();
   await event(restored?'failed':'rollback-failed',`${id}: ${state.failure.step} failed; ${restored?'previous live baseline restored':'rollback requires owner attention'}.`);
   return {status:state.status,id,code:'automatic-deployment-failed'};

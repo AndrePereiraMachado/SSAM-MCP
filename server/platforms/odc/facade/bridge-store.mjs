@@ -20,6 +20,7 @@ export function verifyBridge(directory, publicKey) {
     if (!/^(bridge|client|hook)\/[A-Za-z0-9_][A-Za-z0-9_.-]*$/.test(f.path) || names.has(f.path) ||
         !/^[a-f0-9]{64}$/.test(f.sha256) || !Number.isSafeInteger(f.size) || f.size < 1 || f.size > 64 * 1024 * 1024)
       throw Error('Bridge file entry is invalid.');
+    if (/\.(dll|exe)$/i.test(f.path) && !['owner','microsoft'].includes(f.signer)) throw Error('Bridge executable signer is invalid.');
     names.add(f.path);
     const file = path.join(directory, f.path), stat = fs.lstatSync(file);
     if (stat.isSymbolicLink() || !stat.isFile() || stat.size !== f.size || sha(fs.readFileSync(file)) !== f.sha256)
@@ -33,10 +34,21 @@ export function verifyBridge(directory, publicKey) {
 export function createBridgeStore({root = process.env.SSAM_BRIDGES_DIR || '/app/bridges', publicKey,
     keyFile = process.env.SSAM_BRIDGES_PUBLIC_KEY || '/app/bridges/public-key.pem'} = {}) {
   const key = publicKey || (()=>{try{return fs.readFileSync(keyFile);}catch{return null;}})();
+  const cache = new Map();
   function read(lane, studioVersion, protocol) {
     if (!key || !['odc','o11'].includes(lane) || !version.test(studioVersion) || !/^(v\d+|d\d+)$/.test(protocol)) return null;
     try {
-      const value = verifyBridge(path.join(root,lane,studioVersion,protocol),key);
+      const directory=path.join(root,lane,studioVersion,protocol);
+      // Include each covered file and directory identity: an atomic replacement or
+      // a changed byte count/mtime invalidates the cached verification.
+      const fingerprint=dir=>fs.readdirSync(dir).sort().map(name=>{
+        const file=path.join(dir,name),s=fs.lstatSync(file);
+        if(s.isSymbolicLink())throw Error('Bridge link refused.');
+        return name+':'+s.ino+':'+s.size+':'+s.mtimeMs+':'+s.ctimeMs+(s.isDirectory()?fingerprint(file):'');
+      }).join('|');
+      const stamp=fingerprint(directory),prior=cache.get(directory);
+      const value=prior?.stamp===stamp?prior.value:verifyBridge(directory,key);
+      cache.set(directory,{stamp,value});
       return value.manifest.lane === lane && value.manifest.studioVersion === studioVersion && value.manifest.protocol === protocol ? value : null;
     } catch { return null; }
   }
@@ -45,7 +57,7 @@ export function createBridgeStore({root = process.env.SSAM_BRIDGES_DIR || '/app/
       let protocols=[];try{protocols=fs.readdirSync(path.join(root,lane,studioVersion));}catch{return null;}
       for(const protocol of protocols.filter(p=>accepted.includes(p)).sort((a,b)=>Number(b.slice(1))-Number(a.slice(1)))) {
         const b=read(lane,studioVersion,protocol);
-        if(b&&!reports.some(r=>r.status==='failed'&&r.lane===lane&&r.studioVersion===studioVersion&&r.protocol===protocol&&r.sequence>=b.manifest.sequence))return {lane,studioVersion,protocol,manifest:b.text,signature:b.signature};
+        if(b&&!reports.some(r=>['failed','refused'].includes(r.status)&&r.lane===lane&&r.studioVersion===studioVersion&&r.protocol===protocol&&r.sequence>=b.manifest.sequence))return {lane,studioVersion,protocol,manifest:b.text,signature:b.signature};
       }
       return null;
     },

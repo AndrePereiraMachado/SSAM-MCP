@@ -13,9 +13,35 @@ import sys
 import tarfile
 import time
 import shutil
+try:
+    import fcntl
+except ImportError:
+    fcntl = None
+
+class RemoteError(RuntimeError):
+    def __init__(self, code):
+        super().__init__(code)
+        self.code = code
+
+active_fence = None
+def assert_fence(token):
+    try:
+        owner = pathlib.Path('/var/lock/ssam-release.owner').read_text()
+    except OSError:
+        raise RemoteError('LOCK_LOST')
+    if not token or owner != token:
+        raise RemoteError('LOCK_LOST')
+    with open('/var/lock/ssam-release.lock', 'a') as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            return
+        raise RemoteError('LOCK_LOST')
 
 
 def command(args, data=None, env=None):
+    if active_fence:
+        assert_fence(active_fence)
     result = subprocess.run(args, input=data, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                             env=env, timeout=900)
     if result.returncode:
@@ -37,10 +63,17 @@ def backup_space(base, settings):
     while not disk.exists():
         disk = disk.parent
     if shutil.disk_usage(disk).free < settings.get("backupMinFreeMiB", 2048) * 1024 ** 2:
-        raise RuntimeError("Insufficient disk space for backup.")
+        raise RemoteError('DISK_LOW')
 
 
 def dispatch(request):
+    global active_fence
+    active_fence = None
+    if request['action'] in ('fence', 'backup', 'prepare', 'check', 'preflight'):
+        assert_fence(request.get('fence'))
+        active_fence = request['fence']
+    if request['action'] == 'fence':
+        return {'ok': True}
     settings = request["settings"]
     base = pathlib.Path(settings["directory"])
     if not base.is_absolute() or ".." in base.parts:
@@ -50,7 +83,7 @@ def dispatch(request):
         meminfo = pathlib.Path("/proc/meminfo").read_text()
         available = int(re.search(r"^MemAvailable:\s+(\d+)", meminfo, re.M).group(1)) // 1024
         if available < max(1024, request["backendCount"] * 1024):
-            raise RuntimeError("Insufficient available memory for proposed backends.")
+            raise RemoteError('MEMORY_LOW')
         backup_space(base, settings)
         return {"ok": True, "availableMiB": available}
     if action == "snapshot":
@@ -153,7 +186,10 @@ def dispatch(request):
             for key, value in service["labels"].items():
                 args += ["--label", key + "=" + str(value)]
             args += ["-e", "SSAM_RUNTIME_DIR=" + service["environment"]["SSAM_RUNTIME_DIR"]]
+            allowed_targets = {'/data/server', '/data/cache', '/data/odc-features', '/data/friction'}
             for mount in service["volumes"]:
+                if mount.get('target') not in allowed_targets:
+                    raise RuntimeError('Unexpected backend volume target.')
                 if mount.get("type", "volume") != "volume":
                     raise RuntimeError("Unexpected mount type.")
                 key = mount["source"]
@@ -208,7 +244,7 @@ def dispatch(request):
                 break
             except Exception:
                 if time.monotonic() >= deadline:
-                    raise RuntimeError("Backend checks timed out.")
+                    raise RemoteError('NOT_WARM')
                 time.sleep(3)
         # The executable check is copied with the release and runs inside each
         # image. Its synthetic credentials stay in memory and are revoked.
@@ -228,7 +264,7 @@ def dispatch(request):
 if __name__ == "__main__":
     try:
         print(json.dumps(dispatch(json.load(sys.stdin))))
-    except Exception:
+    except Exception as error:
         # No subprocess output or request data (it may contain private features).
-        print(json.dumps({"ok": False, "code": "remote-release-failed"}))
+        print(json.dumps({"ok": False, "code": getattr(error, 'code', 'REMOTE_FAILED')}))
         sys.exit(1)
