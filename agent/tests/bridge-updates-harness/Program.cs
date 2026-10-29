@@ -15,7 +15,8 @@ if (input["verify"] is JsonArray checks)
 var root = input["root"]!.GetValue<string>();
 var thumb = input["thumbprint"]!.GetValue<string>();
 var accepted = input["authenticode"]?.GetValue<bool>() != false;
-var store = new BridgeUpdates(root, root, key, thumb, (_, _) => accepted ? Task.CompletedTask : Task.FromException(new IOException("Test certificate refused")));
+var checksCount = 0;
+using var store = new BridgeUpdates(root, root, key, thumb, (_, _) => { checksCount++; return accepted ? Task.CompletedTask : Task.FromException(new IOException("Test certificate refused")); }, input["pack"] as JsonObject);
 if (input["channel"]?.GetValue<bool>() == true)
 {
     using var channel = new AgentChannel(new Uri(input["server"]!.GetValue<string>()), "bridge-test-token", new StateStore(root, false), 4516,
@@ -39,13 +40,23 @@ foreach (var request in input["requests"]!.AsArray())
         var welcome = new JsonObject { ["compatible"] = new JsonObject { [lane] = new JsonObject { ["bridgeOffer"] = offer.DeepClone() } } };
         var studios = new JsonObject { [lane] = new JsonObject { ["installed"] = new JsonObject { ["version"] = version, ["runtime"] = framework } } };
         var changed = await store.Offers(welcome, studios, http, CancellationToken.None);
-        resultsList.Add((JsonNode)new JsonObject { ["changed"] = changed, ["status"] = store.Status?.DeepClone() });
+        resultsList.Add((JsonNode)new JsonObject { ["changed"] = changed, ["checks"] = checksCount, ["reports"] = store.Reports(), ["status"] = store.Status?.DeepClone() });
     }
     else
     {
-        var selected = await store.Select(lane, version, framework, CancellationToken.None);
-        if (selected != null && request?["failLoad"]?.GetValue<bool>() == true) store.RejectLoad(selected);
-        resultsList.Add((JsonNode)new JsonObject { ["selected"] = selected?.Protocol, ["status"] = store.Status?.DeepClone() });
+        var context = new JsonObject { ["pid"] = 1234, ["startedUtc"] = request?["startedUtc"]?.GetValue<string>() ?? "S" };
+        var selected = await store.Select(lane, version, framework, CancellationToken.None, context);
+        if (selected != null && request?["failLoad"]?.GetValue<bool>() == true) store.RejectLoad(selected, "Test bridge failure", context,
+            request?["attempted"]?.GetValue<bool>() ?? true, request?["bridgeFailure"]?.GetValue<bool>() ?? true);
+        var protectedCopy = false;
+        if (selected != null && request?["prepare"]?.GetValue<bool>() == true)
+        {
+            using var snapshot = await store.PrepareAttach(selected, context, CancellationToken.None);
+            try { File.WriteAllText(snapshot.Bridge.FileNamed("ODC3.Bridge.dll", "ODC3.Bridge.v100.dll", "ODC3.Bridge.v101.dll"), "tampered"); }
+            catch (IOException) { protectedCopy = true; }
+        }
+        resultsList.Add((JsonNode)new JsonObject { ["selected"] = selected?.Protocol, ["sequence"] = selected?.Manifest["sequence"]?.DeepClone(),
+            ["checks"] = checksCount, ["protectedCopy"] = protectedCopy, ["reports"] = store.Reports(), ["status"] = store.Status?.DeepClone() });
     }
 }
 Console.WriteLine(resultsList.ToJsonString());

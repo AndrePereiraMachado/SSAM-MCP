@@ -9,6 +9,8 @@ internal sealed class AgentFault(string code, string message, bool? executed = f
     public string Code { get; } = code;
     public bool? Executed { get; } = executed;
     public bool? Sent { get; init; }
+    public bool AttachAttempted { get; init; }
+    public bool BridgeLoadFailure { get; init; }
 }
 
 internal sealed record BlobRef(string Transfer, string Sha256, long Size, int Parts, int PartBytes)

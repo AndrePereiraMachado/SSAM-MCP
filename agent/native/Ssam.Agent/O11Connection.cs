@@ -5,7 +5,7 @@ using static Ssam.Agent.StudioKinds;
 
 namespace Ssam.Agent;
 
-internal sealed class O11Connection(string root, string runtime, JsonObject pack, StudioKinds studios, string? helperRuntime = null, bool downloaded = false, InstalledBridge? installedBridge = null)
+internal sealed class O11Connection(string root, string runtime, JsonObject pack, StudioKinds studios, string? helperRuntime = null, bool downloaded = false, InstalledBridge? installedBridge = null, BridgeUpdates? updates = null)
 {
     internal static JsonObject? Read(string file) { try { return JsonNode.Parse(File.ReadAllText(file).TrimStart('\uFEFF')) as JsonObject; } catch (Exception e) when (e is IOException or System.Text.Json.JsonException or UnauthorizedAccessException) { return null; } }
     internal static JsonObject? Record(string root)
@@ -102,6 +102,7 @@ internal sealed class O11Connection(string root, string runtime, JsonObject pack
         FileStream guard;
         try { guard = new FileStream(lockPath, FileMode.CreateNew, FileAccess.Write, FileShare.None); }
         catch (IOException) { throw Fail("Another connection attempt holds the local port"); }
+        BridgeLease? snapshot = null; var keepSnapshot = false;
         try
         {
             var target = await Describe(pid, token);
@@ -117,6 +118,11 @@ internal sealed class O11Connection(string root, string runtime, JsonObject pack
                 var started = Text(target["startedUtc"]) ?? throw Fail("The Studio start time is unavailable");
                 var pending = Path.Combine(folder, Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(pid + ":" + started + ":" + port))) + ".json");
                 if (File.Exists(pending)) throw Fail("A previous attach may have executed and will not be repeated");
+                if (installedBridge != null && updates != null)
+                {
+                    snapshot = await updates.PrepareAttach(installedBridge, new JsonObject { ["pid"] = pid, ["startedUtc"] = started, ["port"] = port }, token);
+                    installedBridge = snapshot.Bridge;
+                }
                 var id = Guid.NewGuid().ToString("N");
                 string hook, receipt;
                 if (release)
@@ -129,6 +135,13 @@ internal sealed class O11Connection(string root, string runtime, JsonObject pack
                     if (File.Exists(receipt)) throw Fail("The release hook already answered for this Studio; it will not be repeated");
                     hook = Path.Combine(runtime, "studio/o11/hook/Anvil.Hook.h1.dll");
                     Atomic(Path.Combine(exchange, "request-b1.json"), new JsonObject { ["pid"] = pid, ["startedUtc"] = started, ["bridgeId"] = "b1", ["bridgeDir"] = Path.Combine(runtime, "studio/o11/bridge/b1"), ["port"] = port, ["dataDir"] = Path.Combine(root, "private/o11-bridge"), ["authorityDir"] = Path.Combine(root, "private/authority") });
+                }
+                else if (installedBridge != null)
+                {
+                    hook = installedBridge.FileNamed("Anvil.RuntimeHook.Agent.dll");
+                    var binding = Read(hook + ".json");
+                    if (Integer(binding?["pid"]) != pid || Text(binding?["startedUtc"]) != started || Integer(binding?["port"]) != port || Text(binding?["bridgePath"]) != installedBridge.FileNamed("Anvil.Bridge.dll")) throw Fail("The protected hook configuration differs from this Studio");
+                    receipt = hook + ".receipt.json";
                 }
                 else
                 {
@@ -158,18 +171,21 @@ internal sealed class O11Connection(string root, string runtime, JsonObject pack
                     if (probed["connected"]?.GetValue<bool>() == true || probed["thin"]?.GetValue<bool>() == false || Read(receipt)?["ok"]?.GetValue<bool>() == false || DateTime.UtcNow >= end) break;
                     await Task.Delay(delay, token);
                 }
+                if (Read(receipt)?["ok"]?.GetValue<bool>() == false) throw new AgentFault("ATTACH_FAILED", "The hook refused the bridge", null) { AttachAttempted = true, BridgeLoadFailure = true };
                 if (probed["connected"]?.GetValue<bool>() != true || Integer(probed["pid"]) != pid) throw Fail("Attach was not confirmed and must not be repeated", null);
-                Handshake(probed["manifest"], null);
+                try { Handshake(probed["manifest"], null); }
+                catch (AgentFault e) { throw new AgentFault(e.Code, e.Message, null) { AttachAttempted = true, BridgeLoadFailure = true }; }
+                keepSnapshot = true;
             }
             var key = Key(root) ?? throw Fail("The bridge key is missing", null);
             var alive = await StudioWire.Bridge(port, key, "ui_alive", new() { ["timeout_ms"] = 1000 }, token, 6000);
             if (alive?["success"]?.GetValue<bool>() != true) throw Fail("The bridge did not accept the local key", null);
             if (Text((await Describe(pid, token))["startedUtc"]) != Text(target["startedUtc"])) throw Fail("The Studio changed before connection was confirmed", null);
-            var record = new JsonObject { ["ok"] = true, ["lane"] = "o11", ["connected"] = true, ["reused"] = reused, ["pid"] = pid, ["startedUtc"] = target["startedUtc"]?.DeepClone(), ["studioVersion"] = selected["version"]?.DeepClone(), ["port"] = port, ["uiResponsive"] = alive?["data"]?["alive"]?.GetValue<bool>() == true, ["connectedAt"] = DateTimeOffset.UtcNow.ToString("O"), ["hook"] = release ? "h1" : "dev", ["bridgeId"] = probed["manifest"]?["bridgeId"]?.DeepClone(), ["bridgeSha256"] = probed["manifest"]?["bridgeSha256"]?.DeepClone() };
+            var record = new JsonObject { ["ok"] = true, ["lane"] = "o11", ["connected"] = true, ["reused"] = reused, ["pid"] = pid, ["startedUtc"] = target["startedUtc"]?.DeepClone(), ["studioVersion"] = selected["version"]?.DeepClone(), ["port"] = port, ["uiResponsive"] = alive?["data"]?["alive"]?.GetValue<bool>() == true, ["connectedAt"] = DateTimeOffset.UtcNow.ToString("O"), ["hook"] = installedBridge != null ? "d1" : release ? "h1" : "dev", ["bridgeId"] = probed["manifest"]?["bridgeId"]?.DeepClone(), ["bridgeSha256"] = probed["manifest"]?["bridgeSha256"]?.DeepClone() };
             if (warning != null) record["warning"] = warning;
             Atomic(Path.Combine(root, "private/o11-connection.json"), record);
             return record;
         }
-        finally { guard.Dispose(); File.Delete(lockPath); }
+        finally { if (!keepSnapshot) snapshot?.Dispose(); guard.Dispose(); File.Delete(lockPath); }
     }
 }

@@ -47,8 +47,9 @@ async function fixture(t) {
   t.after(async () => { await new Promise(resolve => server.close(resolve)); fs.rmSync(root, { recursive: true, force: true }); });
   function offer(protocol, alter = {}) {
     const bytes = Buffer.from('test bridge ' + protocol);
-    const manifest = JSON.stringify({ schema: 1, lane: 'odc', studioVersion: '1.7.30', runtime: 'net10.0', protocol,
-      createdAt: '2026-10-28T00:00:00Z', authenticodeThumbprint: thumbprint, files: [{ path: 'bridge/ODC3.Bridge.' + protocol + '.dll', size: bytes.length, sha256: hash(bytes) }], ...alter });
+    const manifest = JSON.stringify({ schema: 1, lane: 'odc', studioVersion: '1.7.30', runtime: 'net10.0', protocol, sequence: Number(protocol.slice(1)),
+      createdAt: '2026-10-28T00:00:00Z', authenticodeThumbprint: thumbprint, files: [{ path: 'bridge/ODC3.Bridge.' + protocol + '.dll', size: bytes.length, sha256: hash(bytes) },
+        { path: 'client/ODC3.Bridge.Client.dll', size: bytes.length, sha256: hash(bytes) }], ...alter });
     files.set('/agent/bridges/odc/1.7.30/' + protocol + '/' + hash(bytes), bytes);
     return { lane: 'odc', studioVersion: '1.7.30', protocol, manifest, signature: sign(null, Buffer.from(manifest), keys.privateKey).toString('base64') };
   }
@@ -62,7 +63,7 @@ test('native authenticated install, exact runtime, retained fallback and downgra
   assert.equal(results[2].selected, null); assert.equal(results[3].selected, 'v102');
   assert.equal(results[5].selected, 'v101'); assert.equal(results[6].changed, false);
   assert.match(results[6].status.message, /downgrade/);
-  assert.equal(f.gets(), 2);
+  assert.equal(f.gets(), 4);
   const restarted = await f.run({ requests: [{}] }); assert.equal(restarted[0].selected, 'v101');
 });
 for (const scenario of ['signature', 'hash', 'certificate', 'interrupt', 'path']) test('native refuses ' + scenario, async t => {
@@ -76,20 +77,51 @@ for (const scenario of ['signature', 'hash', 'certificate', 'interrupt', 'path']
   }
   const result = await f.run({ authenticode: scenario !== 'certificate', requests: [{ offer }, {}] });
   assert.equal(result[0].changed, false); assert.equal(result[1].selected, null);
-  assert.equal(fs.existsSync(path.join(f.root, 'bridges/odc/1.7.30/v101')), false);
+  assert.equal(fs.existsSync(path.join(f.root, 'bridges/odc/1.7.30/v101/101')), false);
 });
 test('native channel reconnects with the installed bridge and retains the original package id', async t => {
   const f = await fixture(t); const offer = f.offer('v101');
   const hub = await fakeHub({ credential: 'bridge-test-token', welcome: { compatible: { odc: { bridgeOffer: offer } } } });
+  hub.holdBridges = true;
   t.after(() => hub.close());
   for (const [route, bytes] of f.files) hub.bridges.set(route, bytes);
   fs.writeFileSync(path.join(f.root, 'ODCStudio.runtimeconfig.json'), JSON.stringify({ runtimeOptions: { tfm: 'net10.0' } }));
   const result = run({ root: f.root, server: hub.url + '/', channel: true, installed: { odc: { installed: { dir: f.root, version: '1.7.30.1' } } } });
-  await hub.until(() => hub.streams === 1 && hub.hellos.length === 2);
+  await hub.until(() => hub.bridgeWaiters.length > 0);
+  await hub.until(() => hub.streams > 0, 1000);
+  hub.releaseBridges();
+  await hub.until(() => hub.hellos.length >= 2 && hub.hellos.at(-1).bridges.some(b => b.status === 'installed') && hub.stream && hub.streamChannel === hub.channel);
   assert.equal(hub.hellos[0].capabilities.bridgeOffer, true);
-  assert.equal(hub.hellos[1].pack.odcBridge, 'v101');
+  assert.equal(hub.hellos[1].pack.odcBridge, 'v98');
   assert.equal(hub.hellos[1].pack.id, 'bridge-test');
-  assert.equal(hub.hellos[1].bridges.odc.runtime, 'net10.0');
+  assert.equal(hub.hellos[1].bridges[0].protocol, 'v101');
+  for (const end = Date.now() + 5000; ; await new Promise(resolve => setTimeout(resolve, 5))) {
+    try { if (JSON.parse(fs.readFileSync(path.join(f.root, 'private/agent.json'), 'utf8')).state === 'connected') break; } catch { }
+    assert.ok(Date.now() < end, 'The replacement stream must become connected');
+  }
+  hub.send({ t: 'ping', seq: 7 });
+  await hub.until(() => hub.messages.some(m => m.t === 'pong' && m.seq === 7));
   hub.send({ t: 'close', reason: 'replaced' });
-  assert.equal((await result).exitCode, 3);
+  assert.equal((await result).exitCode, 3, JSON.stringify({ hellos: hub.hellos.length, streams: hub.streams, requests: hub.requests }));
+});
+test('R2 native verification cache and locked attach snapshot', async t => {
+  const f = await fixture(t); const offer = f.offer('v101');
+  const result = await f.run({ requests: [{ offer }, {}, {}, { prepare: true }] });
+  assert.equal(result[1].checks, result[0].checks); assert.equal(result[2].checks, result[0].checks);
+  assert.ok(result[3].checks > result[2].checks); assert.equal(result[3].protectedCopy, true);
+});
+test('R2 native sequence and telemetry survive cleanup and process restart', async t => {
+  const f = await fixture(t); const first = f.offer('v101', { sequence: 1 }), second = f.offer('v101', { sequence: 2 });
+  const result = await f.run({ requests: [{ offer: first }, { offer: second }, { failLoad: true }, {}, { startedUtc: 'restarted' }] });
+  assert.equal(result[1].changed, true); assert.equal(result[3].sequence, 1); assert.equal(result[4].sequence, 2);
+  fs.rmSync(path.join(f.root, 'bridges'), { recursive: true, force: true });
+  const replay = await f.run({ requests: [{ offer: first }, {}] });
+  assert.equal(replay[0].changed, false); assert.ok(replay[1].reports.some(r => r.sequence === 2));
+});
+test('R2 native transient failures do not quarantine and the package wins', async t => {
+  const f = await fixture(t); const offer = f.offer('v101');
+  const result = await f.run({ requests: [{ offer }, { failLoad: true, attempted: false, bridgeFailure: false }, {}] });
+  assert.equal(result[2].selected, 'v101'); assert.ok(!result[2].reports.some(r => r.status === 'failed'));
+  const preferred = await f.run({ pack: { odcBridge: 'v110', odcBuiltFor: '1.7.30', odcRuntime: 'net10.0' }, requests: [{}] });
+  assert.equal(preferred[0].selected, null);
 });
