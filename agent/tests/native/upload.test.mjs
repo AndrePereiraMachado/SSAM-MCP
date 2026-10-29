@@ -10,7 +10,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import { fakeHub } from '../../agent/tests/fixtures/fake-hub.mjs';
-import { uploadFixture, moveHook, tempProblem, MiB } from '../../agent/tests/fixtures/upload-table.mjs';
+import { uploadFixture, moveHook, tempProblem, MiB, foldedSiblings } from '../../agent/tests/fixtures/upload-table.mjs';
 import { prepareUpload } from '../../agent/lib/upload.mjs';
 import { readRoots, rootsFile } from '../../agent/lib/upload-roots.mjs';
 import { insidePath } from '../../agent/lib/local-paths.mjs';
@@ -82,7 +82,7 @@ test('native file.upload through the channel: exactly {blob}, the deadline and t
   assert.ok(!q.hub.hellos[0].agent.kinds.includes('screen.render'));
   // The approvals of the fixture, now in the qualification root (the file is read at every call).
   fs.copyFileSync(rootsFile(f.data), rootsFile(q.root));
-  assert.equal(readRoots(q.root).length, 5);
+  assert.equal(readRoots(q.root).length, 7);
   const file = path.join(f.approved, 'sub', 'b.txt');
   let answer = await q.call({ path: file, maxBytes: 64 * MiB }, { deadline: Date.now() + 120000 });
   assert.equal(answer.ok, true, JSON.stringify(answer));
@@ -184,4 +184,25 @@ test('native and Node compare paths the same way: ordinal without case, never Un
   assert.equal(insidePath('C:\\d\\\u212A\\f.csv', 'C:\\d\\K', 'win32'), false);
   assert.equal(insidePath('C:\\d\\\u2126\\f.csv', 'C:\\d\\\u03C9', 'win32'), false);
   assert.equal(insidePath('C:\\d\\k\\f.csv', 'C:\\d\\K', 'win32'), true);
+});
+test('native check-upload refuses every folded pair NTFS keeps apart, as the Node agent does', { skip, timeout: 300000 }, async t => {
+  const f = foldedSiblings({ prefix: 'ssam-folded-native-' });
+  t.after(f.remove);
+  assert.ok(f.rows.length > 100);
+  const expected = [];
+  for (const row of f.rows) {
+    try { await prepareUpload(row.request, { dataRoot: f.data, runtimeRoot: f.runtime }); expected.push({ decision: 'send' }); }
+    catch (error) { expected.push({ error: error.code }); }
+  }
+  const result = native(['check-upload', '--root', f.data, '--runtime-root', f.runtime], { input: JSON.stringify(f.rows.map(row => row.request)), maxBuffer: 64 * 1024 * 1024 });
+  assert.equal(result.status, 0, result.stderr);
+  const actual = JSON.parse(result.stdout);
+  // Both cores refuse every pair. The refusal code may differ only where the lexical pre-selection's case tables differ
+  // (letters newer than the .NET table, which JavaScript already maps): PATH_LEAVES_ROOT in one, UPLOAD_ROOT_NOT_APPROVED in
+  // the other; the decision itself is the exact real comparison, the same in both.
+  const sent = f.rows.filter((row, i) => actual[i].decision || expected[i].decision).map(row => row.label);
+  assert.deepEqual(sent.slice(0, 30), []);
+  const codes = ['PATH_LEAVES_ROOT', 'UPLOAD_ROOT_NOT_APPROVED'];
+  assert.ok(actual.every((answer, i) => codes.includes(answer.error) && codes.includes(expected[i].error)));
+  t.diagnostic(`refusal codes differ on ${f.rows.filter((row, i) => actual[i].error !== expected[i].error).length} of ${f.rows.length} pairs (case tables of the pre-selection)`);
 });

@@ -76,6 +76,13 @@ internal static class LocalPaths
         var lp = parent.TrimEnd('\\', '/');
         return child.Equals(lp, StringComparison.OrdinalIgnoreCase) || child.StartsWith(lp + "\\", StringComparison.OrdinalIgnoreCase);
     }
+    // child equals parent or is under it, ORDINALLY with case (macOS in NFC): for real paths the system spelled itself.
+    internal static bool InsideExact(string child, string parent)
+    {
+        var c = Mac ? child.Normalize() : child; var p = (Mac ? parent.Normalize() : parent).TrimEnd('\\', '/');
+        var sep = Mac ? "/" : "\\";
+        return c.Equals(p, StringComparison.Ordinal) || c.StartsWith(p + sep, StringComparison.Ordinal) || Mac && p.Length == 0;
+    }
     internal static bool Same(string a, string b) => Inside(a, b) && Inside(b, a);
     internal static bool Network(string real) => !Mac && real.Length >= 2 && real[0] is '\\' or '/' && real[1] is '\\' or '/';
     internal static string Full(string folder) => Path.GetFullPath(folder);

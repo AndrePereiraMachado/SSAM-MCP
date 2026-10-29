@@ -18,7 +18,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { AgentError, refuse } from './errors.mjs';
-import { parseLocalPath, insidePath, samePath, networkPath, flavor, EXTENSION } from './local-paths.mjs';
+import { parseLocalPath, insidePath, insideExact, samePath, networkPath, flavor, EXTENSION } from './local-paths.mjs';
 import { readRoots } from './upload-roots.mjs';
 
 export const UPLOAD_KIND = 'file.upload';
@@ -102,7 +102,10 @@ export async function prepareUpload(params, { dataRoot, runtimeRoot = dataRoot, 
   const { index, root, relative } = approvedRoot(parsed.normalized, readRoots(dataRoot), platform);
   let rootReal;
   try { rootReal = files.realpath(root.path); } catch { throw notSent('UPLOAD_ROOT_NOT_APPROVED', 'The approved folder that holds this path no longer exists; approve it again'); }
-  if (!samePath(rootReal, root.real, platform) || networkPath(rootReal, platform))
+  // The approved folder must still be the same folder: equal by file identity (volume and file id), not by spelling.
+  let sameRoot = false;
+  try { const now = files.stat(root.path); const then = files.stat(root.real); sameRoot = now.dev === then.dev && now.ino === then.ino; } catch { sameRoot = false; }
+  if (!sameRoot || networkPath(rootReal, platform))
     throw notSent('PATH_LEAVES_ROOT', 'The approved folder that holds this path now leads to another place through a link or junction; approve it again');
   await hooks.beforeOpen?.();
   let handle;
@@ -115,7 +118,10 @@ export async function prepareUpload(params, { dataRoot, runtimeRoot = dataRoot, 
     if (stat.nlink > 1n) throw notSent('PATH_FORBIDDEN', `${shown} is a hard link (the same file has other names); the agent does not upload hard links`);
     let real;
     try { real = files.realpath(parsed.normalized); } catch { throw notSent('PATH_CHANGED', `${shown} changed while it was being checked; nothing was sent`); }
-    if (networkPath(real, platform) || !insidePath(real, rootReal, platform) || samePath(real, rootReal, platform))
+    // Containment of the real path in the approved folder's real path is EXACT (ordinal, with case): both come from the
+    // system's final path, spelled as on the disk, and no case table may decide (NTFS keeps folders apart that any table
+    // folds together).
+    if (networkPath(real, platform) || !insideExact(real, rootReal, platform) || real.length <= rootReal.replace(/[\\/]+$/, '').length + 1)
       throw notSent('PATH_LEAVES_ROOT', `${shown} leaves the approved folder through a link or junction`);
     // The same name rules on the real path, component by component below the approved folder, and the agent's folders by
     // their real paths.

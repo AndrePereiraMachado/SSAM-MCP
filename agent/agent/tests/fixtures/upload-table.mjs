@@ -10,6 +10,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { LAYOUT } from '../../lib/workspace.mjs';
 import { rootsCommand } from '../../lib/upload-roots.mjs';
+import { ordinalUpper } from '../../lib/local-paths.mjs';
 
 export const MiB = 1024 * 1024;
 // An approval refuses AppData (lib/upload-roots.mjs): the table needs a temporary folder outside it.
@@ -64,7 +65,10 @@ export function uploadFixture({ prefix = 'ssam-upload-' } = {}) {
   junction(path.join(R, '.git'), path.join(R, 'jgit'));
   const shortOf = shortNames([path.join(R, '.env.local'), path.join(R, 'credentials.json'), path.join(R, '.docker'), path.join(R, '.git')]);
   // Folders whose names differ only by a sign NTFS keeps distinct from the letter (Kelvin, Angstrom, Ohm).
-  const signs = [['K', '\u212A'], ['\u00E5', '\u212B'], ['\u03C9', '\u2126']];
+  // And folders any case table folds together but NTFS keeps apart: they pass the lexical pre-selection and the exact real
+  // comparison refuses them.
+  const signs = [['K', '\u212A', 'UPLOAD_ROOT_NOT_APPROVED'], ['\u00E5', '\u212B', 'UPLOAD_ROOT_NOT_APPROVED'], ['\u03C9', '\u2126', 'UPLOAD_ROOT_NOT_APPROVED'],
+    ['\u03A3\u039F\u03A6\u039F\u03A3', '\u03C3\u03BF\u03C6\u03BF\u03C2', 'PATH_LEAVES_ROOT'], ['\u00B5s', '\u03BCs', 'PATH_LEAVES_ROOT']];
   for (const [i, [letter, sign]] of signs.entries()) {
     const parent = path.join(base, 'signs' + i);
     fs.mkdirSync(path.join(parent, letter), { recursive: true }); fs.mkdirSync(path.join(parent, sign));
@@ -140,9 +144,10 @@ export function uploadFixture({ prefix = 'ssam-upload-' } = {}) {
     ? 'the test volume makes no 8.3 short names' : null;
   if (!shortSkip) for (const [label, short, tail] of shortRows) rows.push({ label, request: { path: tail ? path.join(short, tail) : short, maxBytes: max }, expected: 'PATH_FORBIDDEN' });
   rows.push({ label: 'a junction inside the approved folder to its .git', request: { path: at('jgit', 'objects', 'pack.idx'), maxBytes: max }, expected: 'PATH_FORBIDDEN' });
+  rows.push({ label: 'the approved folder asked in another case', request: { path: path.join(base, 'signs3', '\u03C3\u03BF\u03C6\u03BF\u03C3', 'x.csv'), maxBytes: max }, expected: 'send', size: 9 });
   for (const [i, [letter, sign]] of signs.entries()) {
     rows.push({ label: `the approved ${letter} folder`, request: { path: path.join(base, 'signs' + i, letter, 'x.csv'), maxBytes: max }, expected: 'send', size: 9 });
-    rows.push({ label: `the sibling ${JSON.stringify(sign)} of the approved ${letter}`, request: { path: path.join(base, 'signs' + i, sign, 'secret.csv'), maxBytes: max }, expected: 'UPLOAD_ROOT_NOT_APPROVED' });
+    rows.push({ label: `the sibling ${JSON.stringify(sign)} of the approved ${letter}`, request: { path: path.join(base, 'signs' + i, sign, 'secret.csv'), maxBytes: max }, expected: signs[i][2] });
   }
   rows.push({ label: 'the approved K folder asked in lower case', request: { path: path.join(base, 'signs0', 'k', 'x.csv'), maxBytes: max }, expected: 'send', size: 9 });
   rows.push({ label: 'a lower-case drive letter', request: { path: at('a.csv').replace(/^[A-Z]:/, d => d.toLowerCase()), maxBytes: max }, expected: 'send', size: 5 });
@@ -162,4 +167,40 @@ function shortNames(paths) {
   const lines = String(result.stdout ?? '').split(/\r?\n/).filter(Boolean);
   // Only the last name is the short one: the folders above keep their long names, as the request spells the approved folder.
   return paths.map((p, i) => (lines[i] ? path.join(path.dirname(p), path.win32.basename(lines[i])) : null));
+}
+// Every pair of names the agent's case-insensitive pre-selection folds together (ordinalUpper) that NTFS keeps as two
+// folders: the first one approved, a file in the second one asked. Each must be refused.
+export function foldedSiblings({ prefix = 'ssam-folded-' } = {}) {
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+  const data = path.join(base, 'data'); const runtime = path.join(base, 'runtime');
+  for (const folder of LAYOUT) fs.mkdirSync(path.join(data, ...folder.split('/')), { recursive: true });
+  fs.mkdirSync(runtime);
+  const groups = new Map();
+  const codes = [];
+  for (let c = 0x20; c <= 0xfffd; c++) if (c < 0xd800 || c > 0xdfff) codes.push(c);
+  for (const [from, to] of [[0x10400, 0x1044f], [0x104b0, 0x104fb], [0x10c80, 0x10cff], [0x118a0, 0x118df], [0x16e40, 0x16e7f], [0x1e900, 0x1e943]]) for (let c = from; c <= to; c++) codes.push(c);
+  for (const c of codes) {
+    const ch = String.fromCodePoint(c);
+    if (/[\\/:*?"<>|. ]/.test(ch)) continue;
+    const key = ordinalUpper('n' + ch);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push('n' + ch);
+  }
+  const roots = []; const rows = []; let pairs = 0;
+  for (const names of groups.values()) {
+    for (let i = 0; i < names.length; i++) for (let j = 0; j < names.length; j++) {
+      if (i === j) continue;
+      pairs++;
+      const parent = path.join(base, 'p' + rows.length + '-' + pairs);
+      fs.mkdirSync(path.join(parent, names[i]), { recursive: true });
+      try { fs.mkdirSync(path.join(parent, names[j])); } catch { fs.rmSync(parent, { recursive: true, force: true }); continue; }
+      fs.writeFileSync(path.join(parent, names[j], 's.csv'), 'sibling\n');
+      const root = path.join(parent, names[i]);
+      roots.push({ path: root, real: fs.realpathSync.native(root), addedAt: null });
+      rows.push({ label: [...names[i].slice(1)].map(x => x.codePointAt(0).toString(16)).join('') + ' approved, ' + [...names[j].slice(1)].map(x => x.codePointAt(0).toString(16)).join('') + ' asked',
+        request: { path: path.join(parent, names[j], 's.csv'), maxBytes: 1024 } });
+    }
+  }
+  fs.writeFileSync(path.join(data, 'private', 'upload-roots.json'), JSON.stringify({ schema: 'ssam-upload-roots/1', roots }));
+  return { base, data, runtime, rows, pairs, remove: () => fs.rmSync(base, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }) };
 }

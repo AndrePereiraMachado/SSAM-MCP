@@ -12,7 +12,7 @@ import { createAgent } from '../lib/agent.mjs';
 import { rootsCommand, readRoots, rootsFile, checkApproval } from '../lib/upload-roots.mjs';
 import { fakeHub } from './fixtures/fake-hub.mjs';
 import { CREDENTIAL } from './fixtures/agent-root.mjs';
-import { uploadFixture, moveHook, tempProblem, MiB } from './fixtures/upload-table.mjs';
+import { uploadFixture, moveHook, tempProblem, MiB, foldedSiblings } from './fixtures/upload-table.mjs';
 
 const windows = process.platform === 'win32';
 const skip = !windows ? 'the table is written for Windows paths' : tempProblem();
@@ -300,4 +300,18 @@ test('roots CLI: ssam-agent.mjs roots add|list|remove', { skip, timeout: 30000 }
   assert.equal(r.status, 1);
   r = run('roots', 'list', '--server', 'x');
   assert.equal(r.status, 1); assert.match(r.stderr, /unknown option/);
+});
+
+test('file.upload: every pair of folders the case pre-selection folds but NTFS keeps apart is refused', { skip, timeout: 300000 }, async t => {
+  const f = foldedSiblings();
+  t.after(f.remove);
+  t.diagnostic(`${f.pairs} folded pairs, ${f.rows.length} kept apart by the file system`);
+  assert.ok(f.rows.length > 100, 'the file system keeps folded pairs apart');
+  const sent = [];
+  for (const row of f.rows) {
+    const result = await outcome(row.request, { dataRoot: f.data, runtimeRoot: f.runtime });
+    if (!result.error) sent.push(row.label);
+    else assert.ok(['PATH_LEAVES_ROOT', 'UPLOAD_ROOT_NOT_APPROVED'].includes(result.error), row.label + ': ' + result.error);
+  }
+  assert.deepEqual(sent.slice(0, 30), []);
 });

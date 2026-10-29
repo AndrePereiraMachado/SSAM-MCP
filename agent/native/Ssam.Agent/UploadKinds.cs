@@ -63,7 +63,11 @@ internal sealed class UploadKinds(string dataRoot, string runtimeRoot, Blobs? bl
         string rootReal;
         try { rootReal = NativeFileIdentity.RealDirectory(match.Root.Path); }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException) { throw NotSent("UPLOAD_ROOT_NOT_APPROVED", "The approved folder that holds this path no longer exists; approve it again"); }
-        if (!LocalPaths.Same(rootReal, match.Root.Real) || LocalPaths.Network(rootReal))
+        // The approved folder must still be the same folder: equal by file identity (volume and file id), not by spelling.
+        bool sameRoot;
+        try { sameRoot = NativeFileIdentity.IdentityOf(match.Root.Path) == NativeFileIdentity.IdentityOf(match.Root.Real); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { sameRoot = false; }
+        if (!sameRoot || LocalPaths.Network(rootReal))
             throw NotSent("PATH_LEAVES_ROOT", "The approved folder that holds this path now leads to another place through a link or junction; approve it again");
 
         beforeOpen?.Invoke();
@@ -87,7 +91,9 @@ internal sealed class UploadKinds(string dataRoot, string runtimeRoot, Blobs? bl
             string real;
             try { real = OperatingSystem.IsWindows() ? NativeFileIdentity.FinalPath(handle) : MacPlatform.RealPath(parsed.Normalized); }
             catch (Exception e) when (e is IOException or UnauthorizedAccessException) { throw NotSent("PATH_CHANGED", $"{shown} changed while it was being checked; nothing was sent"); }
-            if (LocalPaths.Network(real) || !LocalPaths.Inside(real, rootReal) || LocalPaths.Same(real, rootReal)) throw NotSent("PATH_LEAVES_ROOT", $"{shown} leaves the approved folder through a link or junction");
+            // EXACT containment (ordinal, with case): both sides are the system's final paths, spelled as on the disk; no case
+            // table decides (NTFS keeps folders apart that any table folds together).
+            if (LocalPaths.Network(real) || !LocalPaths.InsideExact(real, rootReal) || real.Length <= rootReal.TrimEnd('\\', '/').Length + 1) throw NotSent("PATH_LEAVES_ROOT", $"{shown} leaves the approved folder through a link or junction");
             // The same name rules on the real (long-name) path, component by component below the approved folder, and the
             // agent's folders by their real paths: an 8.3 short name or a link inside the folder cannot hide .env, .git ...
             NameRefusal(real[rootReal.TrimEnd('\\', '/').Length..].Split('\\', '/', StringSplitOptions.RemoveEmptyEntries), shown);

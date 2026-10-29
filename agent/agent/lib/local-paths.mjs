@@ -82,6 +82,14 @@ export function ordinalUpper(text) {
   return out;
 }
 
+// child equals parent or is under it, ORDINALLY with case (macOS: in NFC): for real paths the system spelled itself.
+export function insideExact(child, parent, platform = process.platform) {
+  const sep = platform === 'darwin' ? '/' : '\\';
+  const c = platform === 'darwin' ? String(child).normalize('NFC') : String(child);
+  const p = (platform === 'darwin' ? String(parent).normalize('NFC') : String(parent)).replace(/[\\/]+$/, '');
+  return c === p || c.startsWith(p + sep) || (platform === 'darwin' && p === '');
+}
+
 export const samePath = (a, b, platform = process.platform) => insidePath(a, b, platform) && insidePath(b, a, platform);
 // A real path the system resolved to a network share (a UNC path, a mapped drive) on Windows.
 export const networkPath = (real, platform = process.platform) => platform !== 'darwin' && /^[\\/]{2}/.test(String(real));
