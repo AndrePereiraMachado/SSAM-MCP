@@ -13,6 +13,7 @@ import { fakeHub } from '../../agent/tests/fixtures/fake-hub.mjs';
 import { uploadFixture, moveHook, tempProblem, MiB } from '../../agent/tests/fixtures/upload-table.mjs';
 import { prepareUpload } from '../../agent/lib/upload.mjs';
 import { readRoots, rootsFile } from '../../agent/lib/upload-roots.mjs';
+import { insidePath } from '../../agent/lib/local-paths.mjs';
 
 const app = fileURLToPath(new URL('../../', import.meta.url));
 const dll = path.join(app, 'native/Ssam.Agent/bin/Release/net10.0/ssam-agent.dll');
@@ -81,7 +82,7 @@ test('native file.upload through the channel: exactly {blob}, the deadline and t
   assert.ok(!q.hub.hellos[0].agent.kinds.includes('screen.render'));
   // The approvals of the fixture, now in the qualification root (the file is read at every call).
   fs.copyFileSync(rootsFile(f.data), rootsFile(q.root));
-  assert.equal(readRoots(q.root).length, 2);
+  assert.equal(readRoots(q.root).length, 5);
   const file = path.join(f.approved, 'sub', 'b.txt');
   let answer = await q.call({ path: file, maxBytes: 64 * MiB }, { deadline: Date.now() + 120000 });
   assert.equal(answer.ok, true, JSON.stringify(answer));
@@ -126,7 +127,10 @@ test('native roots: add, list, remove and every approval refusal, with the Node 
   const f = uploadFixture({ prefix: 'ssam-upload-roots-' });
   t.after(f.remove);
   fs.rmSync(rootsFile(f.data));
-  const env = { ...process.env, USERPROFILE: path.join(f.base, 'home'), SystemRoot: path.join(f.base, 'Windows'), ProgramData: path.join(f.base, 'ProgramData'), ProgramFiles: path.join(f.base, 'Apps') };
+  // Every spelling of these keys goes first (a Node started from Git Bash has SYSTEMROOT besides SystemRoot; Windows would
+  // keep the real one).
+  const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !['userprofile', 'systemroot', 'programdata', 'programfiles'].includes(key.toLowerCase())));
+  Object.assign(env, { USERPROFILE: path.join(f.base, 'home'), SystemRoot: path.join(f.base, 'Windows'), ProgramData: path.join(f.base, 'ProgramData'), ProgramFiles: path.join(f.base, 'Apps') });
   for (const dir of ['home/Documents/Project', 'Windows/System32', 'ProgramData/x', 'Apps/x', 'home/AppData/Roaming/x']) fs.mkdirSync(path.join(f.base, ...dir.split('/')), { recursive: true });
   fs.symlinkSync(path.join(f.base, 'Windows', 'System32'), path.join(f.base, 'to-windows'), 'junction');
   const roots = (...args) => native(['roots', ...args, '--root', f.data, '--runtime-root', f.runtime], { env });
@@ -159,4 +163,25 @@ test('native roots: add, list, remove and every approval refusal, with the Node 
   }
   assert.equal(readRoots(f.data).length, 0);
   assert.equal(roots('add', '--folder', path.join(env.USERPROFILE, 'Documents', 'Project')).status, 0);
+});
+
+test('native and Node compare paths the same way: ordinal without case, never Unicode folding', { skip: process.platform !== 'win32' && 'Windows comparison', timeout: 60000 }, () => {
+  const pairs = [];
+  const add = (child, parent) => pairs.push(['C:\\d\\' + child + '\\f.csv', 'C:\\d\\' + parent]);
+  for (const code of [...Array.from({ length: 0x3000 - 0x20 }, (_, i) => 0x20 + i), ...Array.from({ length: 0x100 }, (_, i) => 0xff00 + i), ...Array.from({ length: 0x80 }, (_, i) => 0x10400 + i)]) {
+    if (code >= 0xd800 && code <= 0xdfff) continue;
+    const ch = String.fromCodePoint(code);
+    for (const other of new Set([ch.toUpperCase(), ch.toLowerCase(), ch.normalize('NFKC')])) if ([...other].length === 1) { add(ch, other); add(other, ch); }
+  }
+  for (const [a, b] of [['K', '\u212A'], ['k', '\u212A'], ['\u00E5', '\u212B'], ['\u00C5', '\u212B'], ['\u03C9', '\u2126'], ['\u03A9', '\u2126'], ['i', '\u0130'], ['I', '\u0131'],
+    ['s', '\u017F'], ['ss', '\u00DF'], ['SS', '\u00DF'], ['\uD801\uDC28', '\uD801\uDC00'], ['A.CSV', 'a.csv'], ['K', 'k']]) { add(a, b); add(b, a); }
+  const result = native(['check-inside'], { input: JSON.stringify(pairs) });
+  assert.equal(result.status, 0, result.stderr);
+  const answers = JSON.parse(result.stdout);
+  const differ = pairs.filter(([child, parent], i) => insidePath(child, parent, 'win32') !== answers[i]);
+  assert.deepEqual(differ.slice(0, 60).map(([c, p]) => [...c.slice(5, -6)].map(x => x.codePointAt(0).toString(16)).join(' ') + ' / ' + [...p.slice(5)].map(x => x.codePointAt(0).toString(16)).join(' ')), []);
+  // The signs NTFS keeps apart stay apart; letters still match without case.
+  assert.equal(insidePath('C:\\d\\\u212A\\f.csv', 'C:\\d\\K', 'win32'), false);
+  assert.equal(insidePath('C:\\d\\\u2126\\f.csv', 'C:\\d\\\u03C9', 'win32'), false);
+  assert.equal(insidePath('C:\\d\\k\\f.csv', 'C:\\d\\K', 'win32'), true);
 });
