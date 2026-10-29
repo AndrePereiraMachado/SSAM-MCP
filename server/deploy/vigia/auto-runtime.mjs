@@ -1,18 +1,20 @@
 import fs from 'node:fs';
 import {artifactEvidence} from './artifact-evidence.mjs';
-import {captureProvenance,verifyProvenance,verifyBundleCustody} from './provenance.mjs';
-import {configureJournals} from './journal.mjs';
+import {cleanupArtifacts,assertDisk} from './artifact-retention.mjs';
+import {captureProvenance,verifyProvenance,verifyBundleCustody,verifyInstallerCustody} from './provenance.mjs';
+import {configureJournals,requireJournalKey,readJournal,writeJournal} from './journal.mjs';
 import path from 'node:path';
 import {createPrivateKey,createPublicKey,createHash,sign,randomUUID} from 'node:crypto';
 import {fileURLToPath} from 'node:url';
 import {verifyBridge} from '../../platforms/odc/facade/bridge-store.mjs';
 import {detectSources,downloadInstaller} from './sources.mjs';
 import {readListingBudget} from './smoke.mjs';
-import {assertPause,assertTime,cleanupSsh,cleanupRollback,liveBaseline,composeHash,unchanged,preserveCompose} from './safety.mjs';
+import {assertPause,assertTime,canonicalComposeHash,cleanupSsh,cleanupRollback,liveBaseline,composeHash,unchanged,preserveCompose} from './safety.mjs';
 const here=path.dirname(fileURLToPath(import.meta.url));
 const hash=b=>createHash('sha256').update(b).digest('hex');
 const q=s=>"'"+String(s).replaceAll("'","'\\''")+"'";
 export function createAutoRuntime(config,runtime) {
+ if(config.automatic&&!config.dryRun)requireJournalKey(config.outDir);
  const root=path.resolve(config.workspace),priv=path.resolve(config.tempRoot),settings=config.automaticDeployment??{};
  const ps=config.powershell??'C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe';
  const script=(name,args=[],input)=>runtime.run(ps,['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',path.join(here,name),...args],{input,secret:true});
@@ -33,7 +35,7 @@ export function createAutoRuntime(config,runtime) {
    if(url.protocol!=='https:'&&!(settings.testOnly&&url.protocol==='http:'&&['127.0.0.1','localhost'].includes(url.hostname)))throw Error();
    if(!/^[A-Za-z0-9_-]+$/.test(c.resource))throw Error();
   }catch{throw Object.assign(Error('Watcher secrets or deployment settings are missing or invalid. Run set-secrets.ps1 and review the configuration.'),{code:'secrets-missing'});}
-  configureJournals(config.outDir,s.journalKey);cached=s;return s;
+  configureJournals(config.outDir,s.journalKey);configureJournals(priv,s.journalKey);if(config.bundleRoot)configureJournals(config.bundleRoot,s.journalKey);cached=s;return s;
  }
  async function api(s,method,route,body) {
   if(method!=='GET'){if(!activeLease)throw Error('Remote release lease is required.');activeLease.assertHeld();await ssh(s,{action:'fence'});}
@@ -67,10 +69,14 @@ export function createAutoRuntime(config,runtime) {
  const checkSource=(budget,offers=[],capture=false)=>'const expected='+JSON.stringify({budget,offers,capture})+';\n'+fs.readFileSync(path.join(here,'check-backend.mjs'),'utf8');
  return {
   secrets,
-  async verifyRelease(release){for(const b of Object.values(release.bundles??{}))verifyBundleCustody(b,config.bundlePins?.[`${b.lane}-${b.version}`]);if(!release.bundles)throw Error('Release provenance is missing.');},
+  async verifyInput(chain){return verifyInstallerCustody(chain,{privateRoot:priv,verifyPublisher:runtime.verifyPublisher});},
+  diskPreflight(){assertDisk(priv,(config.minFreeGb??25)*2**30);},
+  async verifyRelease(release){for(const b of Object.values(release.bundles??{})){verifyBundleCustody(b,config.bundlePins?.[`${b.lane}-${b.version}`]);if(b.provenance)await this.verifyInput(b.provenance);}if(!release.bundles)throw Error('Release provenance is missing.');},
   pause(){assertPause();if(config.pauseFile)assertPause(config.pauseFile);},
   deploymentBudget(){assertTime(config.roundDeadline??Date.now()+(config.roundHours??7)*3600000,Math.max(180,config.deploymentMaxMinutes??180));},
-  cleanupSsh(){cleanupSsh(priv);cleanupRollback(priv,config.outDir);},
+  cleanupSsh(){cleanupSsh(priv);cleanupRollback(priv,config.outDir);cleanupArtifacts(config);},
+  capacityPreflight:async manifest=>ssh(await secrets(),{action:'capacity',backendCount:manifest.odc.length}),
+  async assertRollbackSafe(s,baseline,ownedHash){const live=(await api(s,'GET',resource())).docker_compose_raw;const old=(await load(baseline)).compose;if(![ownedHash,canonicalComposeHash(old)].includes(canonicalComposeHash(live)))throw Error('Rollback refused: another writer changed the compose.');},
   preflightRemote:(s,pinned)=>ssh(s,{action:'preflight',backendCount:pinned.odc.length}),
   async ensureReleaseLock(s,previous){
    try{activeLease?.assertHeld();if(activeLease){await ssh(s,{action:'fence'});return previous;}}catch{}
@@ -85,7 +91,7 @@ export function createAutoRuntime(config,runtime) {
     const token=randomUUID();
     const release=await runtime.openLease(settings.ssh.executable??'C:/Windows/System32/OpenSSH/ssh.exe',[
      '-T','-o','BatchMode=yes','-o','StrictHostKeyChecking=yes','-o',`UserKnownHostsFile=${settings.ssh.knownHosts}`,'-o','ServerAliveInterval=15','-o','ServerAliveCountMax=2','-i',key,`${settings.ssh.user??'root'}@${settings.ssh.host}`,
-     "flock -x -w 30 /var/lock/ssam-release.lock sh -c "+q("umask 077; printf %s "+q(token)+" > /var/lock/ssam-release.owner; trap 'rm -f /var/lock/ssam-release.owner' EXIT; printf 'SSAM_LOCKED\\n'; cat >/dev/null")
+     "flock -x -w 30 -F /var/lock/ssam-release.lock sh -c "+q("umask 077; printf '{\"token\":\"%s\",\"pid\":%s}' "+q(token)+" \"$$\" > /var/lock/ssam-release.owner; trap 'rm -f /var/lock/ssam-release.owner' EXIT; printf 'SSAM_LOCKED\\n'; cat >/dev/null")
     ]);
     release.token=token;activeLease=release;
     return async()=>{try{await release();}finally{activeLease=null;fs.rmSync(folder,{recursive:true,force:true});}};
@@ -98,19 +104,27 @@ export function createAutoRuntime(config,runtime) {
    const verified=[];
    for(const release of result.observed.filter(x=>x.url)){
     if(manifest[release.lane].some(x=>x.version===release.version))continue;
+    runtime.diskPreflight();
     const downloaded=await downloadInstaller(release,config.installersDir??'C:/ssam-priv/vigia-installers');
     const signer=await runtime.verifyPublisher(downloaded.file);
-    const folder=path.join(priv,'extracted',release.lane+'-'+release.fullVersion+'-'+randomUUID());
+    const folder=path.join(priv,'extracted',downloaded.sha256),receipt=folder+'.provenance.json';
+    let provenance;
+    if(fs.existsSync(receipt)){provenance=readJournal(receipt,{automatic:true});await runtime.verifyInput(provenance);}
+    else {
+    runtime.diskPreflight();
+    if(fs.existsSync(folder)){if(fs.lstatSync(folder).isSymbolicLink())throw Error('Extraction root is a link.');fs.rmSync(folder,{recursive:true,force:true});}
     fs.mkdirSync(folder,{recursive:true});
-    await runtime.run(config.python??'C:/Users/andre/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/python.exe',[
+    await runtime.run(config.python,[
      path.join(root,'server/docker/ssam-server/nsis_extract.py'),'extract',downloaded.file,folder,'--marker','ServiceStudio.Framework.dll'
     ],{secret:true,timeoutMs:180000});
+    await runtime.run(ps,['-NoProfile','-NonInteractive','-File',path.join(here,'verify-extraction.ps1'),'-Root',folder],{secret:true});
+    provenance=captureProvenance(folder,downloaded.file,signer);
+    writeJournal(receipt,provenance);
+    }
     const read=await runtime.run(ps,['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',path.join(here,'detect-studios.ps1'),release.lane==='odc'?'-Odc':'-O11',folder]);
     const found=JSON.parse(read.stdout).find(x=>x.lane===release.lane&&x.fullVersion===release.fullVersion);
     if(!found)throw Error('Extracted Studio version differs from the release source.');
-    await runtime.run(ps,['-NoProfile','-NonInteractive','-File',path.join(here,'verify-extraction.ps1'),'-Root',folder],{secret:true});
-    const provenance=captureProvenance(folder,downloaded.file,signer);
-    verifyProvenance(provenance);
+    await runtime.verifyInput(provenance);
     Object.assign(release,found,{requiresInstallation:false,installer:downloaded.file,sha256:downloaded.sha256,provenance});
     verified.push(release);
    }
@@ -118,7 +132,7 @@ export function createAutoRuntime(config,runtime) {
   },
   async buildBridges(pair,bundles,dir){
    await runtime.executionSource();
-   for(const b of Object.values(bundles))verifyBundleCustody(b,config.bundlePins?.[`${b.lane}-${b.version}`]);
+   for(const b of Object.values(bundles)){verifyBundleCustody(b,config.bundlePins?.[`${b.lane}-${b.version}`]);if(b.provenance)await runtime.verifyInput(b.provenance);}
    const agentSource=await runtime.agentSource();
    const s=await secrets(),key=createPublicKey(s.manifestPrivateKey).export({type:'spki',format:'pem'});
    const stage=path.join(priv,'bridges',randomUUID());fs.mkdirSync(stage,{recursive:true});
@@ -149,7 +163,9 @@ export function createAutoRuntime(config,runtime) {
     if(required.some(name=>!fs.existsSync(path.join(target,name))))throw Error('The compiled client bridge entrypoints are incomplete.');
     if(lane==='odc'&&JSON.parse(fs.readFileSync(path.join(target,'client/ODC3.Bridge.Client.runtimeconfig.json'),'utf8')).runtimeOptions?.tfm!==b.tfm)throw Error('The bridge client targets a different Studio runtime.');
     // The shared signing entry point reads the thumbprint from DPAPI itself.
-    await runtime.run(ps,['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',path.join(root,'server/scripts/odc-runtime-signing.ps1'),'-Mode','Artifacts','-ArtifactDirectory',target,'-BuildEvidence',evidenceFile,'-ConfigPath',config.configFile,...(config.vault?['-Vault',config.vault]:[]),'-TimestampServer',settings.timestampServer??'http://timestamp.digicert.com'],{secret:true,timeoutMs:300000});
+    const signing=await runtime.run(ps,['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',path.join(root,'server/scripts/odc-runtime-signing.ps1'),'-Mode','Artifacts','-ArtifactDirectory',target,'-BuildEvidence',evidenceFile,'-ConfigPath',config.configFile,...(config.vault?['-Vault',config.vault]:[]),'-TimestampServer',settings.timestampServer??'http://timestamp.digicert.com'],{secret:true,timeoutMs:300000,allowFailure:true});
+    if(signing.stdout.includes('REVOCATION_UNAVAILABLE'))throw Object.assign(Error('Certificate revocation service is unavailable.'),{code:'REVOCATION_UNAVAILABLE',environmental:true});
+    if(signing.code && signing.code!==0)throw Error('Bridge signing failed.');
     const signatures=JSON.parse(fs.readFileSync(path.join(target,'authenticode.json'),'utf8'));
     const files=[];
     for(const sub of fs.readdirSync(target)){
@@ -191,7 +207,7 @@ export function createAutoRuntime(config,runtime) {
    return ssh(s,{action:'prepare',id:r.id,built:r.built,kernel:r.kernel,compose:JSON.parse(r.compose.replace(/^#[^\n]*\n/,'')),
     archive:fs.readFileSync(archive).toString('base64'),features:fs.readFileSync(r.features).toString('base64')});
   },
-  async writeCompose(s,compose){await api(s,'PATCH',resource(),{docker_compose_raw:Buffer.from(compose).toString('base64'),instant_deploy:false});unchanged({hash:composeHash(compose)},(await api(s,'GET',resource())).docker_compose_raw);},
+  async writeCompose(s,compose){await api(s,'PATCH',resource(),{docker_compose_raw:Buffer.from(compose).toString('base64'),instant_deploy:false});if(canonicalComposeHash(compose)!==canonicalComposeHash((await api(s,'GET',resource())).docker_compose_raw))throw Error('Written compose read-back differs.');},
   deploy: s=>api(s,'POST',resource()+'/restart'),
   async restoreCompose(s,snapshot){const value=await load(snapshot);return this.writeCompose(s,value.compose);},
   async checks(s,expected){

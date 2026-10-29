@@ -67,7 +67,7 @@ export function tokenRecords({ now = () => new Date() } = {}) {
   const notRevoked = (entry, id) => { if (entry.revokedAt) throw coded('TOKEN_REVOKED', 'Token ' + id + ' is revoked; issue a new one instead.'); };
   const stateOf = t => t.revokedAt ? 'revoked' : t.expiresAt && Date.parse(t.expiresAt) <= now().getTime() ? 'expired' : 'active';
   const publicView = t => ({ id: t.id, customer: t.customer, createdAt: t.createdAt, ...(t.expiresAt ? { expiresAt: t.expiresAt } : {}),
-    ...(t.revokedAt ? { revokedAt: t.revokedAt } : {}), state: stateOf(t), lanes: lanesOf(t),
+    ...(t.revokedAt ? { revokedAt: t.revokedAt } : {}), state: stateOf(t), ...(t.verification===true?{verification:true}:{}), lanes: lanesOf(t),
     agent: t.agentSha256 ? { issuedAt: t.agentIssuedAt ?? null } : null });
   const newAgentCredential = () => AGENT_PREFIX + randomBytes(32).toString('base64url');
   // Every stored hash of the field is compared in constant time, with no early exit.
@@ -82,20 +82,20 @@ export function tokenRecords({ now = () => new Date() } = {}) {
   }
   return {
     stateOf, publicView, lanesOf,
-    checkIssue({ customer, days, lanes = TOKEN_LANES } = {}) {
+    checkIssue({ customer, days, lanes = TOKEN_LANES, verification=false } = {}) {
       if (typeof customer !== 'string' || !customerPattern.test(customer.trim())) throw coded('INVALID_CUSTOMER', 'customer: 1-64 letters, digits, space, dot, dash or underscore');
       if (days !== undefined && !validDays(days)) throw coded('INVALID_DAYS', DAYS_MESSAGE);
-      return { customer: customer.trim(), days, lanes: parseLanes(lanes) };
+      return { customer: customer.trim(), days, lanes: parseLanes(lanes), verification:verification===true };
     },
     // Issue: both plaintexts (MCP token and agent credential) come back here once and are never written anywhere.
-    issue(tokens, { customer, days, lanes }) {
+    issue(tokens, { customer, days, lanes, verification }) {
       const token = TOKEN_PREFIX + randomBytes(32).toString('base64url');
       const agentCredential = newAgentCredential();
       const created = now();
       const entry = { id: 'tok_' + randomBytes(6).toString('hex'), customer, createdAt: created.toISOString(),
         ...(days ? { expiresAt: new Date(created.getTime() + days * DAY_MS).toISOString() } : {}),
         sha256: sha256(token).toString('hex'), agentSha256: sha256(agentCredential).toString('hex'), agentIssuedAt: created.toISOString(),
-        lanes };
+        lanes, ...(verification?{verification:true}:{}) };
       tokens.push(entry);
       return { write: true, value: { token, agentCredential, ...publicView(entry) } };
     },
@@ -165,7 +165,7 @@ export function tokenRecords({ now = () => new Date() } = {}) {
     // hash of that credential (to close a channel opened with a rotated one). null for an unknown id.
     lookup(tokens, id) {
       const t = tokens.find(x => x.id === id);
-      return t ? { id: t.id, customer: t.customer, state: stateOf(t), lanes: lanesOf(t), credential: !!t.agentSha256, agentSha256: t.agentSha256 ?? null } : null;
+      return t ? { id: t.id, customer: t.customer, state: stateOf(t), ...(t.verification===true?{verification:true}:{}), lanes: lanesOf(t), credential: !!t.agentSha256, agentSha256: t.agentSha256 ?? null } : null;
     },
   };
 }

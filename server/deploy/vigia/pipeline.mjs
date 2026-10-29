@@ -45,6 +45,10 @@ export function decide({manifest,observed,state,attempts,inputs,now=Date.now(),r
  const skipped=[];
  while(ready.length){
   const pair=pairFor(manifest,ready),id=pairId(pair),a=attempts[id],want=inputs(pair);
+  if(a?.status==='closed'){
+   if(!sameInputs(a.inputs,want))return {action:'run',plan,waiting,pair,id,inputs:want,previous:a,skipped};
+   return {action:'idle',plan,waiting,pair,id,attempt:a,skipped};
+  }
   if(a?.rollbackLatch&&!a.retry){
    if(JSON.stringify(a.inputs?.studios)===JSON.stringify(want.studios))return {action:'failed',plan,waiting,pair,id,attempt:a,skipped};
    return {action:'run',plan,waiting,pair,id,inputs:want,previous:a,skipped};
@@ -164,6 +168,8 @@ async function runAttempt(config,ops,decision,now){
   if(config.automatic)await releaseEvent(outDir,ops,'detected',id,`${id}: a new Studio pair was detected.`,await ops.secrets(),attempt.at);
   // Cheap checks first (worktree, disk), then the lane checks (dotnet only); Docker is started only for a round that
   // can build.
+  const estimated=rotateWindow(base,{odc:pair.odc,o11:pair.o11,image:base.odc[0].image,tag:'pending'},{...config.state,maxWindow:config.maxWindow??4});
+  if(ops.capacityPreflight)await ops.capacityPreflight(estimated.manifest);
   await ops.preflight({pair,id,dir});
   await laneChecks(config,ops,pair,runtimes,log);
   await ops.dockerReady();

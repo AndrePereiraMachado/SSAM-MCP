@@ -5,6 +5,8 @@ import {readJournal} from './journal.mjs';
 import {generateCompose,versionPairs} from '../coolify/gen-compose.mjs';
 const fail=(message,code)=>{throw Object.assign(Error(message),{code,environmental:true});};
 export const composeHash=text=>createHash('sha256').update(text).digest('hex');
+const sorted=value=>Array.isArray(value)?value.map(sorted):value&&typeof value==='object'?Object.fromEntries(Object.keys(value).sort().map(k=>[k,sorted(value[k])])):value;
+export const canonicalComposeHash=text=>composeHash(JSON.stringify(sorted(parseCompose(text))));
 export const parseCompose=text=>JSON.parse(text.replace(/^\s*#[^\n]*\n/g,''));
 export function unchanged(snapshot,current){if(snapshot.hash!==composeHash(current))fail('Live compose changed; no further mutation is permitted.','LIVE_CHANGED');}
 export function liveBaseline(snapshot){
@@ -56,6 +58,7 @@ export function assertPause(file='C:/ssam-priv/vigia/PAUSE'){try{fs.statSync(fil
 export function memoryFloor(backends){if(!Number.isInteger(backends)||backends<1||backends>20)fail('Invalid proposed backend count.','MEMORY_LOW');return Math.max(1024,backends*1024);}
 export function assertMemory(availableMiB,backends){if(!Number.isFinite(availableMiB)||availableMiB<memoryFloor(backends))fail('Not enough available memory for the proposed window.','MEMORY_LOW');}
 export function assertTime(deadline,maxMinutes,now=Date.now()){if(!Number.isFinite(deadline)||!Number.isFinite(maxMinutes)||maxMinutes<=0||deadline-now<maxMinutes*60000)fail('Insufficient round time for deployment and rollback.','DEPLOYMENT_TIME');}
+export function signingPolicy(config){if(config.ownerSigningPublicKey)return true;if(config.acceptUnsignedMain===true)return false;throw Error('Owner signing public key or explicit acceptUnsignedMain:true is required.');}
 export function executionSource({workspace,branch,head,main,gitDirectory}){
  if(gitDirectory!==true||path.basename(workspace)!=='vigia-run'||branch!=='server/vigia-run'||head!==main)fail('Signing requires the clean vigia-run execution clone at reviewed main.','UNTRUSTED_SOURCE');
 }
@@ -74,7 +77,7 @@ export function cleanupRollback(root,outDir){
   if(!entry.isDirectory()||!/^o11-\d+\.\d+\.\d+-odc-\d+\.\d+\.\d+$/.test(entry.name))continue;
   const dir=path.join(outDir,entry.name),release=path.join(dir,'release.json'),state=path.join(dir,'deployment.json');
   if(!fs.existsSync(release))continue;
-  if(!fs.existsSync(state)||!['live','rolled-back','preparation-failed'].includes(readJournal(state).status)){
+  if(!fs.existsSync(state)||!['live','idle','abandoned','rolled-back','preparation-failed'].includes(readJournal(state).status)){
    const file=readJournal(release).baseline?.file;if(file)live.add(path.resolve(file));
   }
  }

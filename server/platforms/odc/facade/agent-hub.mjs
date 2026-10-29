@@ -565,7 +565,7 @@ export function createAgentHub({ dir, store, kernel, kernelRefused = null, log =
       const studio = studioIdentity(lane, state.hello?.studios?.[lane]?.installed, serverKernel);
       return [lane, {studio, ok: studio?.ok, cause: causeOf(studio)}];
     }));
-    try { if(!state.hello?.verification) recordStudioVersions(dir, state, observed, iso()); }
+    try { state.verification=record(state.tokenId)?.verification===true;if(!state.verification) recordStudioVersions(dir, state, observed, iso()); }
     catch (error) { log({ event: 'studio-versions-write-failed', code: error.code ?? 'EIO' }); }
     for (const lane of LANES) {
       const entry = observed[lane];
@@ -623,7 +623,7 @@ export function createAgentHub({ dir, store, kernel, kernelRefused = null, log =
     }
     state.customer = auth.customer; state.lanes = auth.lanes; state.closedFor = null;
     state.instance = h.instance;
-    state.hello = { verification:h.verification===true, agent: h.agent ?? null, pack: h.pack ?? null, studios: h.studios ?? null, o11Connection: h.o11Connection ?? null, capabilities:h.capabilities??null, bridges:bridgeReports(h.bridges) };
+    state.hello = { verification:record(state.tokenId)?.verification===true, agent: h.agent ?? null, pack: h.pack ?? null, studios: h.studios ?? null, o11Connection: h.o11Connection ?? null, capabilities:h.capabilities??null, bridges:bridgeReports(h.bridges) };
     for(const report of state.hello.bridges){
       log({event:'bridge-report',token:auth.id,...report});
       const customer=customerStateDir(path.join(dir,'customers',auth.id));

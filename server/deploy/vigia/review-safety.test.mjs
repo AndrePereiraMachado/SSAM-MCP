@@ -91,7 +91,7 @@ test('R10 a recent client retains the oldest pair and extends the window',()=>{
 });
 test('R11 signing cannot run from a development checkout or a head ahead of main',()=>{assert.equal(typeof safety.executionSource,'function');assert.throws(()=>safety.executionSource({workspace:'C:/work/vigia-auto',branch:'server/vigia-auto',head:'a',main:'a'}));assert.throws(()=>safety.executionSource({workspace:'C:/work/vigia-run',branch:'server/vigia-run',head:'b',main:'a'}));});
 test('R11 vault has entropy and refuses virtualized LOCALAPPDATA before prompting',()=>{assert.match(file('deploy/vigia/vault.ps1'),/Get-VigiaEntropy/);const s=file('deploy/vigia/set-secrets.ps1');assert.ok(s.indexOf('Assert-VigiaNormalProfile')<s.indexOf('Read-Host'));});
-test('R12 installer host allowlist is exact and publisher requires a valid signature',()=>{assert.throws(()=>officialUrl('https://rogue.outsystems.com/x'));assert.match(file('deploy/vigia/verify-publisher.ps1'),/Status -ne 'Valid'/);});
+test('R12 installer host allowlist is exact and publisher requires a valid signature',()=>{assert.throws(()=>officialUrl('https://rogue.outsystems.com/x'));assert.match(file('deploy/vigia/authenticode-chain.ps1'),/Status -ne 'Valid'/);});
 test('R13 dependencies are not re-signed and runtime selection is not overridden',()=>{assert.doesNotMatch(file('deploy/vigia/auto-runtime.mjs'),/-p:OdcBridgeRuntime=/);assert.match(file('scripts/odc-runtime-signing.ps1'),/if \(\$own\)/);assert.match(file('deploy/vigia/runtime.mjs'),/agentReleaseCommit/);});
 test('R13 raw API responses are excluded from the deployment journal',async t=>{const f=transaction(t);await releaseAutomatically({},f.ops,f.r);assert.ok(!fs.readFileSync(path.join(f.dir,'deployment.json'),'utf8').includes('never-journal'));});
 test('R13 remote features have unconditional cleanup and backups have five-item retention',()=>{const s=file('deploy/vigia/remote-release.py');assert.match(s,/finally:\n\s+features.unlink/);assert.match(s,/complete\[5:\]/);assert.match(s,/disk_usage/);});
@@ -187,4 +187,98 @@ test('R3-10 ownership follows TargetPath and dependency matches restored bytes',
  const a=await mod('deploy/vigia/artifact-evidence.mjs').catch(()=>({}));assert.equal(typeof a.artifactEvidence,'function');const d=tmp(t),target=path.join(d,'build'),pkg=path.join(d,'packages');fs.mkdirSync(target);fs.mkdirSync(path.join(pkg,'dep'),{recursive:true});
  const own=path.join(target,'SurprisingName.dll'),third=path.join(target,'ODC3.Bridge.dll');fs.writeFileSync(own,'compiled');fs.writeFileSync(third,'vendor');fs.writeFileSync(path.join(pkg,'dep/vendor.dll'),'vendor');const assets=path.join(d,'assets.json');fs.writeFileSync(assets,JSON.stringify({packageFolders:{[pkg]:{}},libraries:{dep:{type:'package',path:'dep'}}}));
  const result=a.artifactEvidence(target,[own],[assets]);assert.ok(result.owned['SurprisingName.dll']);assert.ok(result.dependencies['ODC3.Bridge.dll']);fs.writeFileSync(third,'tampered');assert.throws(()=>a.artifactEvidence(target,[own],[assets]));
+});
+
+// Round 4 regressions: the same cases run against the untouched 4fef710 export.
+test('R4-1 installer schedules an owned clone with password logon only',()=>{
+ const s=file('deploy/vigia/install-task.ps1');assert.doesNotMatch(s,/PathType Leaf|LogonType Interactive|C:\\Users\\andre/);
+ assert.match(s,/execution-trust.ps1.*-Workspace/);assert.match(s,/LogonType Password/);assert.match(s,/Get-Credential/);assert.match(s,/Register-ScheduledTask.*-User.*-Password/);
+});
+test('R4-2 all automatic executables are validated without user-profile fallback',()=>{
+ assert.match(file('deploy/vigia/execution-trust.ps1'),/function Assert-Executable/);
+ assert.match(file('deploy/vigia/vigia.ps1'),/if\(\$automatic\)/);assert.match(file('deploy/vigia/runtime.mjs'),/Configure trusted executable/);
+ assert.doesNotMatch(file('deploy/vigia/auto-runtime.mjs'),/config.python\?\?/);
+});
+test('R4-3 a foreign ancestor owner is refused even with no writable ACE',async t=>{
+ const {spawnSync}=await import('node:child_process'),d=tmp(t),parent=path.dirname(d),quote=s=>"'"+s.replaceAll("'","''")+"'";
+ const code=`. ${quote(path.join(server,'deploy/vigia/execution-trust.ps1'))}; function Get-Acl {param($LiteralPath) $a=[pscustomobject]@{Bad=($LiteralPath -eq ${quote(parent)})}; $a|Add-Member ScriptMethod GetOwner {param($type) if($this.Bad){return [Security.Principal.SecurityIdentifier]::new('S-1-5-21-1-2-3-999')}return [Security.Principal.WindowsIdentity]::GetCurrent().User};$a|Add-Member ScriptMethod GetAccessRules {param($a,$b,$c) @()};return $a };try{Assert-OwnedPath ${quote(d)};exit 3}catch{if($_.Exception.Message -notmatch 'account'){throw};'ancestor rejected'}`;
+ const r=spawnSync('C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe',['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-Command',code],{encoding:'utf8'});assert.equal(r.status,0,r.stderr);assert.match(r.stdout,/ancestor rejected/);
+});
+test('R4-4 deferred stale baseline closes idle when the candidate is live',async t=>{
+ const f=transaction(t,'reread1');f.r.baseline=await f.ops.liveBaseline();assert.equal((await releaseAutomatically({},f.ops,f.r)).status,'deferred');
+ f.ops.liveBaseline=async()=>({manifest:f.r.manifest,hash:'fresh',file:'protected'});
+ assert.equal((await releaseAutomatically({},f.ops,f.r)).status,'idle');assert.equal(JSON.parse(fs.readFileSync(path.join(f.dir,'deployment.json'))).status,'idle');
+});
+test('R4-4 deferred journal has a bounded retry lifetime',async t=>{
+ const f=transaction(t,'reread1');await releaseAutomatically({},f.ops,f.r);assert.equal((await releaseAutomatically({maxDeploymentDeferrals:1},f.ops,f.r)).status,'abandoned');
+ const id='o11-11.55.94-odc-1.7.31',inputs={head:'old',studios:{odc:'1.7.31.1'}};
+ const options={manifest:baseline,observed:[{lane:'odc',version:'1.7.31',fullVersion:'1.7.31.1'}],attempts:{[id]:{id,status:'closed',inputs}},inputs:()=>({...inputs,head:'new'})};
+ assert.equal(decide(options).action,'run');options.inputs=()=>inputs;assert.equal(decide(options).action,'idle');
+});
+test('R4-4 refreshed retained digests are repinned and persisted for recovery',async t=>{
+ const f=transaction(t,'reread1');f.r.baseline=await f.ops.liveBaseline();await releaseAutomatically({},f.ops,f.r);
+ const changed=structuredClone(baseline);changed.odc[0].sha256='c'.repeat(64);changed.o11[0].sha256='c'.repeat(64);
+ f.ops.liveBaseline=async()=>({manifest:changed,hash:'fresh',file:'protected',kernels:{}});
+ let pinned;f.ops.pinExecution=async m=>{pinned=m;return 'new-pin';};f.ops.assertLiveUnchanged=async(s,b)=>assert.equal(b.hash,'fresh');
+ assert.equal((await releaseAutomatically({},f.ops,f.r)).status,'live');assert.equal(pinned.odc[1].sha256,'c'.repeat(64));
+ const state=JSON.parse(fs.readFileSync(path.join(f.dir,'deployment.json')));assert.equal(state.baseline.hash,'fresh');assert.equal(state.proposed.odc[1].sha256,'c'.repeat(64));
+});
+test('R4-5 unused artifact trees are bounded while live journal references survive',async t=>{
+ const m=await mod('deploy/vigia/artifact-retention.mjs').catch(()=>({}));assert.equal(typeof m.cleanupArtifacts,'function');const root=tmp(t),priv=path.join(root,'priv'),out=path.join(root,'out'),id='o11-11.55.94-odc-1.7.30';fs.mkdirSync(path.join(out,id),{recursive:true});
+ const dirs=Array.from({length:4},(_,i)=>path.join(priv,'extracted',String(i).repeat(64)));dirs.forEach((d,i)=>{fs.mkdirSync(d,{recursive:true});fs.utimesSync(d,i+1,i+1);});
+ fs.writeFileSync(path.join(out,id,'release.json'),JSON.stringify({bundles:{odc:{provenance:{root:dirs[0]}}}}));fs.writeFileSync(path.join(out,id,'deployment.json'),JSON.stringify({status:'deferred'}));
+ m.cleanupArtifacts({tempRoot:priv,outDir:out,bundleRoot:path.join(root,'bundles'),keepArtifacts:1});assert.ok(fs.existsSync(dirs[0]));assert.equal(fs.readdirSync(path.dirname(dirs[0])).length,2);
+ assert.match(file('deploy/vigia/auto-runtime.mjs'),/extracted',downloaded.sha256/);assert.ok(file('deploy/vigia/auto-runtime.mjs').indexOf('runtime.diskPreflight()')<file('deploy/vigia/auto-runtime.mjs').indexOf('await downloadInstaller'));
+});
+test('R4-6 capacity/window rejection happens before any expensive operation',async t=>{
+ const {runVigia}=await mod('deploy/vigia/pipeline.mjs');const d=tmp(t),b=window3();b.odc.push(entry('1.7.27','old'));b.o11.push(entry('11.55.91','old'));b.window=4;
+ const state={tokens:Object.fromEntries(b.odc.map((e,i)=>['a'+i,{seen:new Date().toISOString(),odc:{installed:e.version}}]))};let expensive=0;
+ const result=await runVigia({automatic:true,outDir:d,manifest:b,state,observed:[{lane:'odc',version:'1.7.31',fullVersion:'1.7.31.1',tfm:'net10.0'}],head:'abc'}, {secrets:async()=>({}),event:async()=>{},notify:async()=>{},preflight:async()=>{expensive++;throw Error('too late');}});
+ assert.equal(result.status,'deferred');assert.equal(expensive,0);
+});
+test('R4-7 valid timestamped expired signer is verified at signing time',async()=>{
+ const {spawnSync}=await import('node:child_process'),p=path.join(server,'deploy/vigia/authenticode-chain.ps1');assert.ok(fs.existsSync(p));
+ const code=`. '${p.replaceAll("'","''")}'; function Get-AuthenticodeSigningTime {param($File,$Signature) [datetime]'2019-01-01Z'}; $c=[pscustomobject]@{ChainPolicy=[pscustomobject]@{VerificationTime=[datetime]::Now;RevocationMode=$null;RevocationFlag=$null;UrlRetrievalTimeout=$null};ChainStatus=@()};$c|Add-Member ScriptMethod Build {param($cert) $this.ChainPolicy.VerificationTime -lt [datetime]'2020-01-01Z'}; $s=[pscustomobject]@{Status='Valid';SignerCertificate='expired';TimeStamperCertificate='timestamp'}; $r=Get-VerifiedAuthenticodeChain 'synthetic' $s $c;if($r.ChainPolicy.RevocationMode -ne 'Online'){exit 3};'timestamp verified'`;
+ const offline=`; $c.ChainStatus=@([pscustomobject]@{Status=[Security.Cryptography.X509Certificates.X509ChainStatusFlags]::OfflineRevocation});$c|Add-Member -Force ScriptMethod Build {param($cert) $false};try{Get-VerifiedAuthenticodeChain 'synthetic' $s $c;exit 4}catch{'offline deferred'}`;
+ const r=spawnSync('C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe',['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-Command',code+offline],{encoding:'utf8'});assert.equal(r.status,0,r.stderr);assert.match(r.stdout,/timestamp verified/);assert.match(r.stdout,/REVOCATION_UNAVAILABLE/);assert.match(r.stdout,/offline deferred/);
+});
+test('R4-8 stale token with a different lock holder is refused',async()=>{
+ const {spawnSync}=await import('node:child_process');
+ const code=`import importlib.util,sys,types\nfrom unittest.mock import patch,MagicMock\np=${JSON.stringify(path.join(server,'deploy/vigia/remote-release.py'))}\ns=importlib.util.spec_from_file_location('remote',p);m=importlib.util.module_from_spec(s);s.loader.exec_module(m)\nm.fcntl=types.SimpleNamespace(LOCK_EX=2,LOCK_NB=4,flock=MagicMock(side_effect=BlockingIOError))\nwith patch.object(m.pathlib.Path,'read_text',return_value='stale-token'),patch('builtins.open',MagicMock()):\n try:m.assert_fence('stale-token')\n except Exception as e:\n  assert str(e)=='LOCK_LOST';sys.exit(0)\nsys.exit(3)`;
+ const r=spawnSync('C:/Users/andre/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/python.exe',['-c',code],{encoding:'utf8'});assert.equal(r.status,0,r.stderr);
+ assert.match(file('deploy/vigia/with-release-lock.sh'),/ssam-release.owner/);
+});
+test('R4-9 failure before deploy restores compose without restart',async t=>{
+ const f=transaction(t);f.ops.writeCompose=async()=>{throw Error('PATCH refused');};const result=await releaseAutomatically({},f.ops,f.r);assert.equal(result.status,'rolled-back');assert.ok(f.calls.includes('restore'));assert.ok(!f.calls.includes('deploy'));
+});
+test('R4-9 third-party compose after lock loss is never overwritten',async t=>{
+ const f=transaction(t);f.ops.deploy=async()=>{throw Error('lost');};f.ops.ensureReleaseLock=async()=>async()=>{};f.ops.assertRollbackSafe=async()=>{throw Error('third-party compose');};assert.equal((await releaseAutomatically({},f.ops,f.r)).status,'rollback-failed');assert.ok(!f.calls.includes('restore'));
+});
+test('R4-9 canonical JSON tolerates formatting and key order only',()=>{
+ assert.equal(typeof safety.canonicalComposeHash,'function');assert.equal(safety.canonicalComposeHash('{"a":1,"b":{"x":2}}'),safety.canonicalComposeHash('{ "b": {"x":2}, "a":1 }'));assert.notEqual(safety.canonicalComposeHash('{"a":1}'),safety.canonicalComposeHash('{"a":2}'));
+});
+test('R4-10 an agent cannot hide from retention using hello.verification',async t=>{
+ const {recordStudioVersions,readStudioVersions}=await mod('platforms/odc/facade/studio-version-state.mjs'),d=tmp(t);recordStudioVersions(d,{tokenId:'real',customer:'Real customer',hello:{verification:true,studios:{odc:{installed:{version:'1.7.28'}}}}},{},new Date().toISOString());assert.ok(readStudioVersions(d,[]).tokens.real);
+ assert.match(file('platforms/odc/facade/agent-hub.mjs'),/verification:record\(state.tokenId\)/);
+ const {tokenRecords}=await mod('platforms/odc/facade/server-tokens.mjs'),ops=tokenRecords(),tokens=[];
+ const issued=ops.issue(tokens,ops.checkIssue({customer:'Verification',verification:true}));assert.equal(issued.value.verification,true);assert.equal(ops.publicView(tokens[0]).verification,true);
+});
+test('R4-11 automatic reads refuse missing MAC key and installer roots outside custody',async t=>{
+ const j=await mod('deploy/vigia/journal.mjs'),p=await mod('deploy/vigia/provenance.mjs'),d=tmp(t),f=path.join(d,'journal.json');fs.writeFileSync(f,'{}');assert.throws(()=>j.readJournal(f,{automatic:true}));
+ assert.equal(typeof p.verifyInstallerCustody,'function');await assert.rejects(p.verifyInstallerCustody({root:d},{privateRoot:d,verifyPublisher:async()=>({})}),/private extracted/);assert.match(file('deploy/vigia/runtime.mjs'),/writeJournal\(found.file\+'\.provenance.json'/);
+ const root=path.join(d,'extracted','hash'),installer=path.join(d,'installer'),signer={status:'Valid',subject:'owner',ca:'CA'};fs.mkdirSync(root,{recursive:true});fs.writeFileSync(installer,'installer');fs.writeFileSync(path.join(root,'input.dll'),'original');const chain=p.captureProvenance(root,installer,signer);let calls=0;
+ await p.verifyInstallerCustody(chain,{privateRoot:d,verifyPublisher:async()=>{calls++;return signer;}});assert.equal(calls,1);
+ await assert.rejects(p.verifyInstallerCustody(chain,{privateRoot:d,verifyPublisher:async()=>({...signer,ca:'other'})}),/publisher custody/);
+});
+test('R4-12 unsigned main needs explicit owner acceptance',()=>{
+ assert.equal(typeof safety.signingPolicy,'function');assert.throws(()=>safety.signingPolicy({}));assert.equal(safety.signingPolicy({acceptUnsignedMain:true}),false);assert.equal(safety.signingPolicy({ownerSigningPublicKey:'owner'}),true);
+});
+test('R4-13 automatic build uses supplied revision without invoking git',async t=>{
+ const {spawnSync}=await import('node:child_process'),d=tmp(t),marker=path.join(d,'git-called'),fake=path.join(d,'git'),docker=path.join(d,'fake-docker');
+ const sh=s=>s.replaceAll('\\','/').replace(/^([A-Za-z]):/,(_,c)=>'/'+c.toLowerCase());
+ fs.writeFileSync(fake,`#!/bin/sh\necho invoked >> '${sh(marker)}'\necho ${'a'.repeat(40)}\n`);fs.writeFileSync(docker,'#!/bin/sh\nexit 1\n');
+ spawnSync('C:/Program Files/Git/bin/bash.exe',['-c',`chmod +x '${sh(fake)}' '${sh(docker)}'`]);
+ const r=spawnSync('C:/Program Files/Git/bin/bash.exe',['--noprofile','--norc','-c',`export PATH='${sh(d)}:/usr/bin:/bin'; exec /usr/bin/bash '${sh(path.join(server,'deploy/build.sh'))}' --tag prod-test --image fake/image`],{encoding:'utf8',env:{...process.env,SSAM_AUTOMATIC:'1',VCS_REF:'a'.repeat(40),STUDIO_INSTALLERS_DIR:sh(d),DOCKER:sh(docker),SSAM_ENV_FILE:sh(path.join(d,'missing.env'))}});
+ assert.match(file('deploy/build.sh'),/SSAM_AUTOMATIC/);
+ assert.notEqual(r.status,0);assert.match(r.stderr,/client-name guard FAILED/);assert.ok(!fs.existsSync(marker),r.stderr);
 });

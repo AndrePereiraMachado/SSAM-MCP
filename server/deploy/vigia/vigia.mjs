@@ -72,13 +72,14 @@ export async function round(config,runtime,{dryRun=false}={}){
   if(['rolled-back','preparation-failed'].includes(state.status)&&a.status==='running'){
    const {writeAttempt}=await import('./pipeline.mjs');writeAttempt(config.outDir,{...a,status:'failed',built:release.built,rollbackLatch:state.status==='rolled-back',failedLanes:a.pair.lanes,code:state.status});
   }
-  if(!['live','rolled-back','rollback-failed','preparation-failed'].includes(state.status)){
-   if(runtime.verifyRelease)await runtime.verifyRelease(release);
+  if(['idle','abandoned'].includes(state.status)){const {writeAttempt}=await import('./pipeline.mjs');writeAttempt(config.outDir,{...a,status:'closed',code:state.status});continue;}
+  if(!['live','idle','abandoned','rolled-back','rollback-failed','preparation-failed'].includes(state.status)){
    const result=await releaseAutomatically(config,runtime,release);
    if(result.status==='live'){
     const {writeAttempt}=await import('./pipeline.mjs');
     writeAttempt(config.outDir,{...a,status:'approved',built:release.built,pinCommit:result.commit,approved:{at:new Date().toISOString(),digest:'sha256:'+release.built.sha256,commit:result.commit}});
    }
+   if(['idle','abandoned'].includes(result.status)){const {writeAttempt}=await import('./pipeline.mjs');writeAttempt(config.outDir,{...a,status:'closed',code:result.status});continue;}
    return result;
   }
  }
@@ -152,7 +153,7 @@ if(process.argv[1]&&path.resolve(process.argv[1])===self){
  }
  if(args.flags.has('dry-run')){
   const {createRuntime}=await import('./runtime.mjs');
-  console.log(JSON.stringify(await round(config,await createRuntime(config),{dryRun:true}),null,2));
+  console.log(JSON.stringify(await round(config,await createRuntime({...config,dryRun:true}),{dryRun:true}),null,2));
  }else if(args.flags.has('round')){
   const log=createLog(args.log);
   if(!lockHeldBy(path.join(config.outDir,'vigia.lock'),process.env.SSAM_VIGIA_LOCK))throw Error('--round runs only under the launcher that holds the watcher lock.');

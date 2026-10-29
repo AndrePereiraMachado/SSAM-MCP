@@ -46,7 +46,12 @@ IMAGE=${IMAGE:-ssam-server}
 
 # Version and revision from git (the label org.opencontainers.image.revision is what a rollback checks out).
 ref=unknown
-if command -v git >/dev/null 2>&1 && git -C "$server" rev-parse HEAD >/dev/null 2>&1; then
+if [ "${SSAM_AUTOMATIC:-0}" = 1 ]; then
+  [ -n "$TAG" ] && [ -n "${VCS_REF:-}" ] || { echo 'build: automatic mode requires TAG and VCS_REF' >&2; exit 2; }
+  case "$VCS_REF" in *[!a-f0-9]*) echo 'build: invalid VCS_REF' >&2; exit 2 ;; esac
+  [ ${#VCS_REF} -eq 40 ] || exit 2
+  ref=$VCS_REF
+elif command -v git >/dev/null 2>&1 && git -C "$server" rev-parse HEAD >/dev/null 2>&1; then
   ref=$(git -C "$server" rev-parse HEAD)
   dirty=
   if [ -n "$(git -C "$server" status --porcelain --untracked-files=no -- . 2>/dev/null)" ]; then

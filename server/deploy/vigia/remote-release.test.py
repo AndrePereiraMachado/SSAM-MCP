@@ -15,9 +15,21 @@ source = pathlib.Path(os.environ["VIGIA_REVIEW_ROOT"]) / "deploy/vigia/remote-re
 spec = importlib.util.spec_from_file_location("remote", source)
 remote = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(remote)
+real_assert_fence = remote.assert_fence
 
 
 class RemoteTests(unittest.TestCase):
+    def test_fence_requires_the_recorded_pid_to_hold_the_kernel_lock(self):
+        def read(p):
+            return json.dumps({'token': 'current', 'pid': 51}) if p.name.endswith('.owner') else '1: FLOCK ADVISORY WRITE 51 00:12:123 0 EOF'
+        with patch.object(remote.pathlib.Path, 'read_text', autospec=True, side_effect=read), patch.object(remote.os, 'kill'), patch.object(remote.os, 'stat', return_value=SimpleNamespace(st_ino=123)):
+            real_assert_fence('current')
+        def changed(p):
+            return json.dumps({'token': 'current', 'pid': 51}) if p.name.endswith('.owner') else '1: FLOCK ADVISORY WRITE 52 00:12:123 0 EOF'
+        with patch.object(remote.pathlib.Path, 'read_text', autospec=True, side_effect=changed), patch.object(remote.os, 'kill'), patch.object(remote.os, 'stat', return_value=SimpleNamespace(st_ino=123)):
+            with self.assertRaisesRegex(RuntimeError, 'LOCK_LOST'):
+                real_assert_fence('current')
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)

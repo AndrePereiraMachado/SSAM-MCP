@@ -35,7 +35,7 @@
     "o11Hook": "dev"
   },
   "agentPackByRuntime": {},
-  "node": "C:/Users/OWNER/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node.exe",
+  "node": "C:/ssam-priv/tools/node/node.exe",
   "minFreeGb": 25,
   "retryHours": 12,
   "dotnetWaitMinutes": 180,
@@ -53,7 +53,8 @@
     "ssh": {
       "user": "root",
       "knownHosts": "C:/Users/OWNER/.ssh/known_hosts",
-      "host": "VPS_HOST"
+      "host": "VPS_HOST",
+      "executable": "C:/Windows/System32/OpenSSH/ssh.exe"
     },
     "timestampServer": "http://timestamp.digicert.com",
     "remote": {
@@ -72,5 +73,17 @@
   "vault": "C:/ssam-priv/vigia/secrets.dpapi.json",
   "trustedRemote": "https://GIT_HOST/OWNER/SSAM-MCP.git",
   "ownerSigningPublicKey": null,
-  "maxWindow": 4
+  "maxWindow": 4,
+  "python": "C:/ssam-priv/tools/python/python.exe",
+  "dotnet": "C:/Program Files/dotnet/dotnet.exe",
+  "git": "C:/Program Files/Git/cmd/git.exe",
+  "bash": "C:/Program Files/Git/bin/bash.exe",
+  "powershell": "C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe",
+  "tar": "C:/Windows/System32/tar.exe",
+  "docker": "C:/Program Files/Docker/Docker/resources/bin/docker.exe",
+  "sshKeygen": "C:/Windows/System32/OpenSSH/ssh-keygen.exe",
+  "acceptUnsignedMain": false,
+  "maxDeploymentDeferrals": 3,
+  "maxDeferredHours": 48,
+  "keepArtifacts": 2
 }

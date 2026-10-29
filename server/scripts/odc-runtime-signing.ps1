@@ -17,6 +17,8 @@ if ($Mode -eq 'Artifacts') {
     . "$PSScriptRoot\..\deploy\vigia\execution-trust.ps1"
     Assert-ExecutionClone $executionRoot
     $git = 'C:\Program Files\Git\cmd\git.exe'
+    Assert-Executable $git
+    . "$PSScriptRoot\..\deploy\vigia\authenticode-chain.ps1"
     $safe = @('-c','core.hooksPath=','-c','core.fsmonitor=false','-c','core.pager=cat','-c','credential.helper=','-c','protocol.ext.allow=never','-c','protocol.file.allow=never','-c','core.attributesFile=NUL')
     Get-ChildItem Env:GIT_* | Remove-Item
     $env:GIT_CONFIG_NOSYSTEM='1'; $env:GIT_CONFIG_GLOBAL='NUL'
@@ -32,7 +34,7 @@ if ($Mode -eq 'Artifacts') {
         [IO.File]::WriteAllText($allowed,('owner '+$config.ownerSigningPublicKey+"`n"))
         & $git @safe -C $executionRoot -c gpg.format=ssh -c gpg.ssh.program=C:/Windows/System32/OpenSSH/ssh-keygen.exe -c "gpg.ssh.allowedSignersFile=$allowed" verify-commit HEAD
         if($LASTEXITCODE -ne 0){throw 'Owner commit signature is invalid.'}
-    }
+    }elseif(-not ($config.PSObject.Properties['acceptUnsignedMain'] -and $config.acceptUnsignedMain -eq $true)){throw 'Owner signing public key or explicit acceptUnsignedMain:true is required.'}
     . "$PSScriptRoot\..\deploy\vigia\vault.ps1"
 
     $secrets = Read-VigiaVault $Vault
@@ -57,8 +59,8 @@ if ($Mode -eq 'Artifacts') {
             $dep=$evidence.dependencies.PSObject.Properties[$relative]
             if($null -eq $dep -or $dep.Value.sha256 -ne $digest -or (Get-FileHash -LiteralPath $dep.Value.source -Algorithm SHA256).Hash.ToLowerInvariant() -ne $digest){throw 'Dependency differs from restored NuGet bytes.'}
             if($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch '(?:^|,\s*)O=Microsoft Corporation(?:,|$)'){throw 'Unsupported dependency signer; report it to the integrator.'}
-            $chain=New-Object Security.Cryptography.X509Certificates.X509Chain
-            if(-not $chain.Build($signature.SignerCertificate) -or $pins.microsoftRoots -notcontains $chain.ChainElements[$chain.ChainElements.Count-1].Certificate.Thumbprint){throw 'Microsoft dependency root is not pinned.'}
+            $chain=Get-VerifiedAuthenticodeChain $file.FullName $signature
+            if($pins.microsoftRoots -notcontains $chain.ChainElements[$chain.ChainElements.Count-1].Certificate.Thumbprint){throw 'Microsoft dependency root is not pinned.'}
         }
         $records += @{ path=$relative; signer=$(if($own){'owner'}else{'microsoft'}); thumbprint=$signature.SignerCertificate.Thumbprint }
     }

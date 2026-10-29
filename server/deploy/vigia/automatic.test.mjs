@@ -46,7 +46,7 @@ async function fixture(t,fail){
   },log:()=>{},notify:async()=>{}
  };
  const adapter=createAutoRuntime(config,base);
- const ops={...adapter, notify:async()=>{},pause:()=>{},deploymentBudget:()=>{},liveBaseline:async()=>baseline,preflightRemote:async()=>calls.push('preflight'),
+ const ops={...adapter, verifyRelease:async()=>{},notify:async()=>{},pause:()=>{},deploymentBudget:()=>{},liveBaseline:async()=>baseline,preflightRemote:async()=>calls.push('preflight'),
   secrets:adapter.secrets,
   verifyLocalImage:async()=>calls.push('verify'),
   publish:async()=>{calls.push('publish');if(fail==='partial')throw Error('partial registry publication');return {digest:'sha256:'+digest};},
@@ -88,7 +88,7 @@ test('an interrupted rollback resumes restoration without deploying the candidat
  journal.status='rolling-back';delete journal.steps['notice-live'];delete journal.steps['notice-failed'];writeJournal(file,journal);
  const before=f.calls.length;
  assert.equal((await releaseAutomatically(f.config,f.ops,r)).status,'rolled-back');
- assert.deepEqual(f.calls.slice(before).filter(x=>x!=='fence'),['lock','restore','snapshot','deploy','check','unlock']);
+ assert.deepEqual(f.calls.slice(before).filter(x=>x!=='fence'),['lock','snapshot','restore','snapshot','deploy','check','unlock']);
 });
 test('missing secrets stops before any journal or external write',async t=>{
  const dir=tmp(t);await assert.rejects(releaseAutomatically({}, {secrets:async()=>{throw Error('missing');}},release(dir)),/missing/);

@@ -10,7 +10,7 @@ try {
  const kernel=JSON.parse(fs.readFileSync((process.env.SSAM_RUNTIME_DIR||'/data/server')+'/kernel.json','utf8'));
  if(expected.kernel&&JSON.stringify(kernel)!==JSON.stringify(expected.kernel))throw Error('Rollback kernel differs from the snapshot.');
  const health=await fetch('http://127.0.0.1:7310/health',{signal:AbortSignal.timeout(30000)});if(!health.ok)throw Error('Backend health failed.');
- issued=await store.issue({customer:'Version verification',days:1,lanes:'odc,o11'});
+ issued=await store.issue({customer:'Version verification',days:1,lanes:'odc,o11',verification:true});
  await new Promise(r=>setTimeout(r,1200));
  const post=async(route,token,body,headers={})=>{
   const r=await fetch('http://127.0.0.1:7310'+route,{method:'POST',headers:{authorization:'Bearer '+token,'content-type':'application/json',accept:'application/json, text/event-stream',...headers},body:JSON.stringify(body),signal:AbortSignal.timeout(30000)});
@@ -18,7 +18,7 @@ try {
   if(!r.ok)throw Error('Protocol verification refused.');
   return {data:text?JSON.parse(line?line.slice(5):text):null,sid:r.headers.get('mcp-session-id')};
  };
- const hello={t:'hello',verification:true,protocol:'ssam-agent/1',instance:'vigia-verification',agent:{version:'1'},pack:{id:'verification',lanes:['odc','o11'],odcBridge:kernel.odcBridge,o11BuiltFor:kernel.o11,o11Hook:kernel.o11Hook??'dev'},studios:{odc:{installed:{version:kernel.odc,dir:'C:/Verification'}},o11:{installed:{version:kernel.o11,dir:'C:/Verification'}}}};
+ const hello={t:'hello',protocol:'ssam-agent/1',instance:'vigia-verification',agent:{version:'1'},pack:{id:'verification',lanes:['odc','o11'],odcBridge:kernel.odcBridge,o11BuiltFor:kernel.o11,o11Hook:kernel.o11Hook??'dev'},studios:{odc:{installed:{version:kernel.odc,dir:'C:/Verification'}},o11:{installed:{version:kernel.o11,dir:'C:/Verification'}}}};
  const accepted=await post('/agent/v1/hello',issued.agentCredential,hello);
  if(!accepted.data.compatible.odc.ok||!accepted.data.compatible.o11.ok)throw Error('Synthetic hello failed.');
  for(const offer of (expected.offers??[]).filter(x=>kernel[x.lane]===x.studioVersion)){

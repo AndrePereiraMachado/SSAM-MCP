@@ -26,16 +26,20 @@ class RemoteError(RuntimeError):
 active_fence = None
 def assert_fence(token):
     try:
-        owner = pathlib.Path('/var/lock/ssam-release.owner').read_text()
-    except OSError:
+        owner = json.loads(pathlib.Path('/var/lock/ssam-release.owner').read_text())
+        pid = owner['pid']
+        if not isinstance(pid, int) or pid <= 0:
+            raise ValueError()
+        os.kill(pid, 0)
+        inode = str(os.stat('/var/lock/ssam-release.lock').st_ino)
+        locks = pathlib.Path('/proc/locks').read_text().splitlines()
+    except (OSError, ValueError, KeyError, TypeError):
         raise RemoteError('LOCK_LOST')
-    if not token or owner != token:
+    if not token or owner.get('token') != token:
         raise RemoteError('LOCK_LOST')
-    with open('/var/lock/ssam-release.lock', 'a') as lock:
-        try:
-            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError:
-            return
+    if not any(len(parts) > 5 and parts[1] == 'FLOCK' and parts[3] == 'WRITE' and parts[4] == str(pid) and parts[5].endswith(':' + inode) for parts in (line.split() for line in locks)):
+        raise RemoteError('LOCK_LOST')
+    if json.loads(pathlib.Path('/var/lock/ssam-release.owner').read_text()) != owner:
         raise RemoteError('LOCK_LOST')
 
 
@@ -79,7 +83,7 @@ def dispatch(request):
     if not base.is_absolute() or ".." in base.parts:
         raise ValueError("Remote directory must be absolute.")
     action = request["action"]
-    if action == "preflight":
+    if action in ('preflight','capacity'):
         meminfo = pathlib.Path("/proc/meminfo").read_text()
         available = int(re.search(r"^MemAvailable:\s+(\d+)", meminfo, re.M).group(1)) // 1024
         if available < max(1024, request["backendCount"] * 1024):

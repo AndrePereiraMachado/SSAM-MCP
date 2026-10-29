@@ -26,7 +26,7 @@ function summarize(data) {
   return data;
 }
 export function recordStudioVersions(dir, state, compatible, seen, version = process.env.SSAM_BACKEND_NAME) {
-  if(state.hello?.verification||state.customer==='Version verification')return;
+  if(state.verification===true)return;
   const folder = versionStateDir(dir, version);
   fs.mkdirSync(folder, {recursive:true});
   const file = path.join(folder, 'studio-versions.json');

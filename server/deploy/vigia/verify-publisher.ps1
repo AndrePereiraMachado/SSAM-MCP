@@ -1,9 +1,9 @@
 param([Parameter(Mandatory)][string]$File)
 $ErrorActionPreference = 'Stop'
+. "$PSScriptRoot\authenticode-chain.ps1"
 $signature = Get-AuthenticodeSignature -LiteralPath $File
 $pins = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'publisher-pins.json') -Raw | ConvertFrom-Json
-$chain = New-Object Security.Cryptography.X509Certificates.X509Chain
-if ($signature.Status -ne 'Valid' -or -not $chain.Build($signature.SignerCertificate)) { throw 'Installer Authenticode is invalid.' }
+$chain = Get-VerifiedAuthenticodeChain $File $signature
 $ca = $chain.ChainElements[1].Certificate.Thumbprint
 $matches = @($pins.outsystems | Where-Object { $_.subject -ceq $signature.SignerCertificate.Subject -and $_.ca -eq $ca })
 if ($matches.Count -ne 1) {
