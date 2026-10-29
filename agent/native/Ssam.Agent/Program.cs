@@ -10,6 +10,7 @@ internal static class Program
         Console.OutputEncoding = new System.Text.UTF8Encoding(false);
         try
         {
+            if (args is ["studio-instances"]) { Console.WriteLine(StudioInstance.Snapshot().ToJsonString()); return 0; }
             if (args is ["authenticode", "--file", var signatureFile, "--signer", var signatureClass])
             {
                 var result = AuthenticodeTrust.Check(signatureFile, signatureClass); Console.WriteLine(result.ToJsonString()); return result["ok"]!.GetValue<bool>() ? 0 : 1;
