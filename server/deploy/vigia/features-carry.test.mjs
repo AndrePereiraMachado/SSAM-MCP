@@ -345,11 +345,13 @@ test('readFeatures and features-protect.ps1 agree on random mutants of the expor
  ];
  const tokens=[' ','\t','\r','\n','\u00A0','\uFEFF','\u2028','\u2029','\u3000','\u1680','\u2000','\u200A','\u202F','\u205F','\u0085',
   ']]>',']]','<?pi?>','&#1;','&#0;','&#xD800;','&#x110000;','&amp;','&','<!--x-->','<![CDATA[x]]>','"',"'",'=','<','>','/','?',';',
-  '?>','<?xml version="1.0"?>','1.1',"'1.0'",'xmlns="u"',' xml:lang="en"','\u000b','\u0000','A','é','0','.','-','</Feature>',`<Feature key="${K2}" kind="String">`,'True','False'];
+  '?>','<?xml version="1.0"?>','1.1',"'1.0'",'xmlns="u"',' xml:lang="en"','\u000b','\u0000','A','é','0','.','-','</Feature>',`<Feature key="${K2}" kind="String">`,'True','False',
+  // Supplementary characters (surrogate pairs in the text), which .NET reads differently from the BMP.
+  '\u{10000}','\u{1F600}','\u{10FFFF}'];
  // A fixed seed and a bounded count: the same documents on every run.
  let state=20261029;const rnd=n=>{state=(state+0x6D2B79F5)>>>0;let x=Math.imul(state^(state>>>15),1|state);x^=x+Math.imul(x^(x>>>7),61|x);return ((x^(x>>>14))>>>0)%n;};
  const near=(text,anchor,span)=>{const at=text.indexOf(anchor);if(at<0)return rnd(text.length+1);const from=Math.max(0,at-span);return from+rnd(Math.min(text.length,at+anchor.length+span)-from+1);};
- const anchors=[['?>',30],['Version',12],['kind=',25],['key=',25],['>UseCodeDefault<',4],['>On<',4],['>42<',4],['</Features',12]];
+ const anchors=[['?>',30],['encoding=',12],['Version',12],['kind=',25],['key=',25],['>UseCodeDefault<',4],['>On<',4],['>42<',4],['</Features',12]];
  const mutants=new Set();
  for(let attempt=0;attempt<8000&&mutants.size<3000;attempt++){
   let text=bases[rnd(bases.length)];
@@ -420,4 +422,28 @@ for($i=0;$i -lt $Count;$i++){
  assert.deepEqual(script_,[],"features-protect.ps1 and its expression disagree");
  assert.deepEqual(forward,[],'readFeatures accepts what features-protect.ps1 or the contract refuses');
  assert.deepEqual(backward,[],'readFeatures refuses a document features-protect.ps1 prepares and the contract accepts');
+});
+// Round 4 of the review: the encoding name of the declaration, code point by code point, as .NET reads it.
+test('the encoding name of the declaration is read as .NET reads it',{skip:process.platform!=='win32'&&'the .NET reader runs on Windows'},async t=>{
+ const {parseFeatures}=await load(),{spawnSync}=await import('node:child_process');
+ const points=[];
+ for(let c=0x20;c<=0x7e;c++)points.push(c);
+ for(let c=0x80;c<=0xff;c++)points.push(c);
+ for(let c=0x2000;c<=0x206f;c++)points.push(c);
+ points.push(0x3000,0xfeff,0xfffd,0x10000,0x1f600,0x10ffff);
+ const documents=points.map(c=>`<?xml version="1.0" encoding="a${String.fromCodePoint(c)}b"?><Features Version="1.7.31.20000"><Feature key="${key(1)}" kind="String">On</Feature></Features>`);
+ const vigia=documents.map(text=>{try{parseFeatures(Buffer.from(text));return true;}catch(e){if(e.code!=='features-invalid')throw e;return false;}});
+ const dir=tmp(t);documents.forEach((text,i)=>fs.writeFileSync(path.join(dir,`e${i}.xml`),text));
+ // ONE PowerShell process: features-protect.ps1's expression for each document.
+ const script=`for($i=0;$i -lt ${documents.length};$i++){try{$x=[xml][Text.Encoding]::UTF8.GetString([IO.File]::ReadAllBytes((Join-Path '${dir.replaceAll("'","''")}' "e$i.xml")));if($x.DocumentElement.Name -ne 'Features'){throw 'root'};"$i 1"}catch{"$i 0"}}`;
+ const r=spawnSync('C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe',['-NoProfile','-NonInteractive','-Command',script],{encoding:'utf8',timeout:120000});
+ assert.equal(r.status,0,r.stderr);
+ const net=new Map(r.stdout.trim().split(/\r?\n/).map(line=>{const [i,v]=line.trim().split(' ');return [Number(i),v==='1'];}));
+ assert.equal(net.size,documents.length,'one answer per document');
+ const hex=c=>'U+'+c.toString(16).toUpperCase().padStart(4,'0');
+ t.diagnostic(`${points.length} code points in encoding="a<cp>b": readFeatures accepts ${vigia.filter(Boolean).length}, .NET accepts ${[...net.values()].filter(Boolean).length}`);
+ assert.deepEqual(points.filter((c,i)=>vigia[i]!==net.get(i)).map(hex),[],'readFeatures and .NET disagree on these code points');
+ // The supplementary characters are refused by both; the export's own name is accepted by both.
+ for(const c of [0x10000,0x1f600,0x10ffff])assert.equal(vigia[points.indexOf(c)],false,hex(c));
+ assert.equal(vigia[points.indexOf(0x2d)],true,'U+002D');
 });

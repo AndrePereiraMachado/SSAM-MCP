@@ -62,11 +62,12 @@ export function parseFeatures(input,label='(in memory)'){
  // XML whitespace is exactly S (space, tab, CR, LF) everywhere in this parser, never JavaScript's whitespace class
  // (which also matches U+00A0, U+FEFF, U+2028...).
  // The XML declaration, when there is one, is the very first thing of the document, version 1.0 (what .NET [xml] reads).
- // Its encoding name is not used for a document read from text (.NET does not check it either): any value without
- // tab, CR, LF, '<', '>', '&' or a quote, as .NET reads it.
+ // Its encoding name is not used for a document read from text (.NET does not check it either): any value of code
+ // points of the Basic Multilingual Plane without tab, CR, LF, '<', '>', '&' or a quote, exactly as .NET reads it; a
+ // supplementary character (a surrogate pair, above U+FFFF) is refused there as .NET refuses it.
  if(text.startsWith('<?xml')){
   const end=text.indexOf('?>');if(end<0)throw refuse(label,'the XML declaration does not end');
-  if(!/^<\?xml[ \t\r\n]+version[ \t\r\n]*=[ \t\r\n]*(["'])1\.0\1([ \t\r\n]+encoding[ \t\r\n]*=[ \t\r\n]*(["'])[^\t\n\r<>&"']*\3)?([ \t\r\n]+standalone[ \t\r\n]*=[ \t\r\n]*(["'])(yes|no)\5)?[ \t\r\n]*\?>$/.test(text.slice(i,end+2)))throw refuse(label,'a malformed XML declaration');
+  if(!/^<\?xml[ \t\r\n]+version[ \t\r\n]*=[ \t\r\n]*(["'])1\.0\1([ \t\r\n]+encoding[ \t\r\n]*=[ \t\r\n]*(["'])[^\t\n\r<>&"'\uD800-\uDFFF]*\3)?([ \t\r\n]+standalone[ \t\r\n]*=[ \t\r\n]*(["'])(yes|no)\5)?[ \t\r\n]*\?>$/.test(text.slice(i,end+2)))throw refuse(label,'a malformed XML declaration');
   i=end+2;
  }
  ws();
