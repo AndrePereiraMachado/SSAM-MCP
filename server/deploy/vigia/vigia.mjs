@@ -11,7 +11,7 @@ import {runVigia,readAttempts,remind,timedOut} from './pipeline.mjs';
 import {replayApprovals} from './window.mjs';
 import {approve,reject,retry} from './approve.mjs';
 import {acquireLock,lockHeldBy,registerChild,runLogFile,createLog} from './host.mjs';
-import {AUTOMATIC_PLAN,releaseAutomatically} from './automatic.mjs';
+import {AUTOMATIC_PLAN,releaseAutomatically,releaseEvent} from './automatic.mjs';
 export * from './window.mjs';
 export * from './pipeline.mjs';
 export * from './approve.mjs';
@@ -33,7 +33,7 @@ export function parseArgs(argv){
 export function readConfig(file){
  const config=JSON.parse(fs.readFileSync(file,'utf8').replace(/^﻿/,''));
  config.automatic=config.automatic!==false;
- if(config.automatic)config.updateFrom=config.updateFrom??'server/vigia-auto';
+ if(config.automatic)config.updateFrom='main';
  config.outDir=path.resolve(config.outDir??path.dirname(path.resolve(file)));config.configFile=path.resolve(file);
  for(const key of ['workspace','tempRoot','bundleRoot'])if(!config[key])throw Error(`The watcher configuration needs ${key}.`);
  return config;
@@ -51,20 +51,24 @@ export function baseWindow(mainManifest,outDir){
  return {...r,branchBase:last?.pinCommit??last?.approved?.commit??null};
 }
 export async function round(config,runtime,{dryRun=false}={}){
- if(config.automatic&&!dryRun)await runtime.secrets();
+ if(config.automatic&&!dryRun){await runtime.executionSource();await runtime.cleanupSsh();await runtime.secrets();await runtime.pause();}
  // A process interrupted after publication resumes its journal before any new build.
  if(config.automatic&&!dryRun)for(const a of Object.values(readAttempts(config.outDir))){
   const file=path.join(config.outDir,a.id,'release.json'),journal=path.join(config.outDir,a.id,'deployment.json');
   if(!fs.existsSync(file)||!fs.existsSync(journal))continue;
   const state=JSON.parse(fs.readFileSync(journal,'utf8'));
   const release=JSON.parse(fs.readFileSync(file,'utf8'));
-  if(state.status==='rollback-failed')return {status:'rollback-failed',id:a.id,code:'rollback-needs-attention'};
+  if(a.retry)continue;
+  if(state.status==='rollback-failed'){
+   await releaseEvent(config.outDir,runtime,'rollback-failed',a.id,'Rollback still requires owner attention.',await runtime.secrets(),a.at);
+   return {status:'rollback-failed',id:a.id,code:'rollback-needs-attention'};
+  }
   if(state.status==='live'&&a.status!=='approved'){
    const {writeAttempt}=await import('./pipeline.mjs');
    writeAttempt(config.outDir,{...a,status:'approved',built:release.built,pinCommit:state.pin,approved:{at:new Date().toISOString(),digest:'sha256:'+release.built.sha256,commit:state.pin}});
   }
   if(['rolled-back','preparation-failed'].includes(state.status)&&a.status==='running'){
-   const {writeAttempt}=await import('./pipeline.mjs');writeAttempt(config.outDir,{...a,status:'failed',built:release.built,failedLanes:a.pair.lanes,code:state.status});
+   const {writeAttempt}=await import('./pipeline.mjs');writeAttempt(config.outDir,{...a,status:'failed',built:release.built,rollbackLatch:state.status==='rolled-back',failedLanes:a.pair.lanes,code:state.status});
   }
   if(!['live','rolled-back','rollback-failed','preparation-failed'].includes(state.status)){
    const result=await releaseAutomatically(config,runtime,release);
@@ -75,13 +79,14 @@ export async function round(config,runtime,{dryRun=false}={}){
    return result;
   }
  }
- const {manifest,replayed,branchBase}=baseWindow(runtime.manifest(),config.outDir);
+ const live=config.automatic&&!dryRun?await runtime.liveBaseline(await runtime.secrets()):null;
+ const {manifest,replayed,branchBase}=live?{manifest:live.manifest,replayed:[],branchBase:null}:baseWindow(runtime.manifest(),config.outDir);
  const local=await runtime.detect();
- const observed=config.automatic?await runtime.observe(local,{dryRun}):local;
- let state={};if(config.versionStateFile&&fs.existsSync(config.versionStateFile))state=JSON.parse(fs.readFileSync(config.versionStateFile,'utf8'));
+ const observed=config.automatic?await runtime.observe(local,{dryRun,manifest}):local;
+ let state=live?.telemetry??{};if(!live&&config.versionStateFile&&fs.existsSync(config.versionStateFile))state=JSON.parse(fs.readFileSync(config.versionStateFile,'utf8'));
  const head=await runtime.head();
  runtime.log?.(`workspace ${head}; observed ${observed.map(o=>`${o.lane} ${o.fullVersion}${o.tfm?' '+o.tfm:''}${o.requiresInstallation?' (installer)':''}`).join(', ')||'nothing'}${replayed.length?`; approved, not in main: ${replayed.join(', ')}`:''}`);
- const result=await runVigia({...config,manifest,replayed,branchBase,state,observed,head,dryRun},runtime);
+ const result=await runVigia({...config,manifest,liveBaseline:live,replayed,branchBase,state,observed,head,dryRun},runtime);
  return dryRun&&config.automatic?{...result,sources:runtime.sourceStatus,automaticPlan:AUTOMATIC_PLAN}:result;
 }
 async function childSupportsRounds(file){try{return fs.readFileSync(file,'utf8').includes('ROUND_PROTOCOL=2');}catch{return false;}}
@@ -149,10 +154,11 @@ if(process.argv[1]&&path.resolve(process.argv[1])===self){
   const log=createLog(args.log);
   if(!lockHeldBy(path.join(config.outDir,'vigia.lock'),process.env.SSAM_VIGIA_LOCK))throw Error('--round runs only under the launcher that holds the watcher lock.');
   const {createRuntime}=await import('./runtime.mjs');
-  const runtime=await createRuntime(config,{log});
+  const runtime=await createRuntime({...config,roundDeadline:Date.now()+(config.roundHours??7)*3600000},{log});
   // A round ends before the scheduled task's time limit (8 h): at roundHours it stops its commands, records the running
   // attempt as deferred (round-timeout) and says so, instead of being killed half-way.
   const deadline=setTimeout(async()=>{
+   if(runtime.deploymentActive){log('round deadline reached during protected deployment; finishing verification or rollback');return;}
    log(`round stopped at its time limit (${config.roundHours??7} h)`);runtime.stopAll?.();
    for(const a of Object.values(readAttempts(config.outDir)).filter(a=>a.status==='running'))timedOut(config,a);
    await remind(config.outDir,'round-timeout','SSAM watcher round stopped',`A round reached its ${config.roundHours??7} h limit and was stopped; the next round retries (log ${log.file}).`,{...runtime,log}).catch(()=>{});

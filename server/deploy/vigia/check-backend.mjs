@@ -3,10 +3,13 @@
 import fs from 'node:fs';
 import {openTokenStore} from './platforms/odc/facade/server-tokens.mjs';
 import {toolListingBytes} from './platforms/odc/facade/tool-listing.mjs';
+import {readStudioVersions} from './platforms/odc/facade/studio-version-state.mjs';
 const store=await openTokenStore({dir:process.env.SSAM_SERVER_DIR||'/data/server',env:process.env});
 let issued;
 try {
  const kernel=JSON.parse(fs.readFileSync((process.env.SSAM_RUNTIME_DIR||'/data/server')+'/kernel.json','utf8'));
+ if(expected.kernel&&JSON.stringify(kernel)!==JSON.stringify(expected.kernel))throw Error('Rollback kernel differs from the snapshot.');
+ const health=await fetch('http://127.0.0.1:7310/health',{signal:AbortSignal.timeout(30000)});if(!health.ok)throw Error('Backend health failed.');
  issued=await store.issue({customer:'Version verification',days:1,lanes:'odc,o11'});
  await new Promise(r=>setTimeout(r,1200));
  const post=async(route,token,body,headers={})=>{
@@ -18,7 +21,7 @@ try {
  const hello={t:'hello',protocol:'ssam-agent/1',instance:'vigia-verification',agent:{version:'1'},pack:{id:'verification',lanes:['odc','o11'],odcBridge:kernel.odcBridge,o11BuiltFor:kernel.o11,o11Hook:kernel.o11Hook??'dev'},studios:{odc:{installed:{version:kernel.odc,dir:'C:/Verification'}},o11:{installed:{version:kernel.o11,dir:'C:/Verification'}}}};
  const accepted=await post('/agent/v1/hello',issued.agentCredential,hello);
  if(!accepted.data.compatible.odc.ok||!accepted.data.compatible.o11.ok)throw Error('Synthetic hello failed.');
- for(const offer of expected.offers.filter(x=>kernel[x.lane]===x.studioVersion)){
+ for(const offer of (expected.offers??[]).filter(x=>kernel[x.lane]===x.studioVersion)){
   const old=structuredClone(hello);old.capabilities={bridgeOffer:true};
   old.pack.odcBridge='v0';old.pack.o11BuiltFor='0.0.0';
   const response=await post('/agent/v1/hello',issued.agentCredential,old);
@@ -36,9 +39,11 @@ try {
  await post('/mcp',issued.token,{jsonrpc:'2.0',method:'notifications/initialized'},headers);
  const list=await post('/mcp',issued.token,{jsonrpc:'2.0',id:2,method:'tools/list',params:{}},headers);
  const tools=list.data?.result?.tools;
- if(!tools||tools.length!==expected.budget.tools||tools.reduce((n,t)=>n+toolListingBytes(t),0)>expected.budget.totalBytes)throw Error('Listing budget failed.');
- if(expected.budget.coreBytes&&tools.filter(t=>expected.budget.core.includes(t.name)).reduce((n,t)=>n+toolListingBytes(t),0)>expected.budget.coreBytes)throw Error('Core listing budget failed.');
- console.log(JSON.stringify({ok:true}));
+ const budget={tools:tools?.length,totalBytes:tools?.reduce((n,t)=>n+toolListingBytes(t),0),core:expected.budget?.core??[]};
+ budget.coreBytes=tools?.filter(t=>budget.core.includes(t.name)).reduce((n,t)=>n+toolListingBytes(t),0);
+ if(!tools||(!expected.capture&&(budget.tools!==expected.budget.tools||budget.totalBytes>expected.budget.totalBytes)))throw Error('Listing budget failed.');
+ if(!expected.capture&&expected.budget.coreBytes&&budget.coreBytes>expected.budget.coreBytes)throw Error('Core listing budget failed.');
+ console.log(JSON.stringify({ok:true,kernel,budget,telemetry:expected.capture?readStudioVersions(process.env.SSAM_SERVER_DIR||'/data/server'):undefined}));
 } finally {
  if(issued?.id)await store.revoke(issued.id);
  await store.close?.();

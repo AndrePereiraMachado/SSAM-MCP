@@ -12,6 +12,7 @@ import {EnvironmentError} from './pipeline.mjs';
 import {busyDotnet} from './host.mjs';
 import {peFileVersion} from '../kernel-pair-check.mjs';
 import {createAutoRuntime} from './auto-runtime.mjs';
+import {executionSource,agentReleasePin} from './safety.mjs';
 const here=path.dirname(fileURLToPath(import.meta.url));
 const slash=p=>p.replaceAll('\\','/');
 const bashPath=p=>slash(p).replace(/^([A-Za-z]):/,(_,drive)=>'/'+drive.toLowerCase());
@@ -209,6 +210,19 @@ export async function createRuntime(config,{log=()=>{}}={}){
  }
  const runtime={
   run,docker,log,checkWorkspace,ensureDocker,waitForDotnet,
+  deploymentActive:false,
+  beginDeployment(){runtime.deploymentActive=true;},endDeployment(){runtime.deploymentActive=false;},
+  async openLease(command,args){
+   const child=spawn(command,args,{windowsHide:true,stdio:['pipe','pipe','pipe']});
+   let alive=true;const closed=new Promise(resolve=>child.once('close',code=>{alive=false;resolve(code);}));child.stderr.resume();
+   await new Promise((resolve,reject)=>{
+    let text='';const timer=setTimeout(()=>{child.kill();reject(Error('Remote release lock timed out.'));},45000);
+    child.once('error',()=>{clearTimeout(timer);reject(Error('Remote release lock unavailable.'));});
+    child.once('close',()=>{clearTimeout(timer);reject(Error('Remote release lock refused.'));});
+    child.stdout.on('data',b=>{text+=b;if(text.includes('SSAM_LOCKED')){clearTimeout(timer);resolve();}});
+   });
+   const release=async()=>{child.stdin.end();await closed;};release.assertHeld=()=>{if(!alive)throw Error('Remote release lease was lost.');};return release;
+  },
   manifest:()=>JSON.parse(fs.readFileSync(path.join(root,'server/deploy/coolify/versions.json'),'utf8')),
   head:async()=>(await git(['rev-parse','--short=7','HEAD'])).stdout.trim(),
   fullHead:async()=>(await git(['rev-parse','HEAD'])).stdout.trim(),
@@ -295,6 +309,7 @@ export async function createRuntime(config,{log=()=>{}}={}){
    catch(e){throw new EnvironmentError(`The ${lane} ${kind} run reported no executed tests (${e.message}); the Studio folder did not load for the tests.`,kind==='baseline'?'baseline':'test-environment',[lane]);}
   },
   async build(pair,bundles,dir){
+   if(config.automatic)await runtime.executionSource();
    await checkWorkspace();
    const commitShort=(await git(['rev-parse','--short=7','HEAD'])).stdout.trim(),revision=(await git(['rev-parse','HEAD'])).stdout.trim();
    const tag=pairTag(pair,commitShort,new Date().toISOString().slice(0,10).replaceAll('-',''));
@@ -359,6 +374,7 @@ export async function createRuntime(config,{log=()=>{}}={}){
    if(info.Id!==want&&info.Descriptor?.digest!==want)throw Error(`The local image ${built.tag} is ${info.Descriptor?.digest??info.Id}, not the tested ${want}.`);
   },
   async publish(built){
+   if(config.automatic)await runtime.executionSource();
    const env={PATH:path.dirname(exe.docker)+path.delimiter+path.dirname(exe.git)+path.delimiter+process.env.PATH,DOCKER:'docker --context '+context};
    const dir=path.join(out,pairId(built));
    const r=await run(exe.bash,[slash(path.join(root,'server/deploy/publish.sh')),'--source',built.image,'--image',built.image,'--tag',built.tag,'--private-repo-ready'],{dir,env,allowFailure:true,timeoutMs:60*60000});
@@ -388,22 +404,44 @@ export async function createRuntime(config,{log=()=>{}}={}){
  };
  if(config.automatic===true){
   const auto=createAutoRuntime(config,runtime);Object.assign(runtime,auto);
-  runtime.pinExecution=async(manifest,dir,id,kernel)=>{
-   const branch=await checkWorkspace();
-   if(branch!==(config.executionBranch??'server/vigia-auto'))throw Error('Automatic pins require the configured execution branch.');
-   if(JSON.stringify(runtime.manifest())===JSON.stringify(manifest))return runtime.fullHead();
+  runtime.executionSource=async()=>{
+   if(path.resolve(root,'server/deploy/vigia').toLowerCase()!==here.toLowerCase())throw Error('The watcher code must run from its execution checkout.');
+   const branch=await checkWorkspace();executionSource({workspace:root,branch,head:await runtime.fullHead(),main:(await git(['rev-parse','main'])).stdout.trim()});
+  };
+  runtime.verifyPublisher=async file=>{await ps(path.join(here,'verify-publisher.ps1'),['-File',file],{secret:true});};
+  runtime.verifyStudioPublisher=async(folder,lane)=>{for(const name of ['ServiceStudio.Framework.dll',lane==='odc'?'ODCStudio.exe':'ServiceStudio.exe'])await runtime.verifyPublisher(path.join(folder,name));};
+  runtime.agentSource=async()=>{
+   await runtime.executionSource();const commit=config.agentReleaseCommit,ref=config.agentReleaseRef;
+   agentReleasePin(commit,ref);
+   if((await git(['merge-base','--is-ancestor',commit,ref],{allowFailure:true})).code!==0)throw Error('Agent commit is outside the approved release line.');
+   const target=path.join(temp,'agent-source-'+Date.now());fs.mkdirSync(target,{recursive:true});
+   const archive=path.join(target,'source.tar');await git(['archive','-o',archive,commit,'agent']);
+   await run(exe.tar,['-xf',archive,'-C',target]);fs.rmSync(archive);return target;
+  };
+  runtime.pinExecution=async(manifest,dir,id,kernel,liveKernels)=>{
+   await runtime.executionSource();
    const kernelsFile=path.join(root,'server/deploy/coolify/r1-kernels.json');
-   const previous=Object.values(JSON.parse(fs.readFileSync(kernelsFile,'utf8')));
+   const previous=Object.values(liveKernels??runtime.liveKernels??JSON.parse(fs.readFileSync(kernelsFile,'utf8')));
    const kernels=Object.fromEntries(manifest.odc.map((entry,i)=>{
     const pair={odc:entry.version,o11:manifest.o11[i].version};
     const value=kernel?.odc===pair.odc&&kernel?.o11===pair.o11?kernel:previous.find(k=>k.odc===pair.odc&&k.o11===pair.o11);
     if(!value)throw Error('The proposed window has no kernel metadata for a retained pair.');
     return ['v'+(i+1),value];
    }));
-   await writeWindow(root,manifest,dir,['gen-compose.test.mjs','initial-window.test.mjs']);
-   fs.writeFileSync(kernelsFile,JSON.stringify(kernels,null,2)+'\n');
-   await git(['add','--','server/deploy/coolify/r1-kernels.json'],{dir});
-   return commit(root,`feat(vigia): pin the verified image for ${id}\n`,dir);
+   const pinBranch=`vigia/pin-${id}-${createHash('sha256').update(JSON.stringify(manifest)).digest('hex').slice(0,12)}`;
+   const existing=await git(['rev-parse','--verify','--quiet',pinBranch],{allowFailure:true});
+   if(existing.code===0){
+    const saved=JSON.parse((await git(['show',`${pinBranch}:server/deploy/coolify/versions.json`])).stdout);
+    if(JSON.stringify(saved)!==JSON.stringify(manifest))throw Error('Existing pin identity differs from the verified manifest.');
+    return existing.stdout.trim();
+   }
+   return withWorktree('HEAD',true,async wt=>{
+    await git(['switch','-c',pinBranch],{cwd:wt,dir});
+    await writeWindow(wt,manifest,dir,['gen-compose.test.mjs']);
+    fs.writeFileSync(path.join(wt,'server/deploy/coolify/r1-kernels.json'),JSON.stringify(kernels,null,2)+'\n');
+    await git(['add','--','server/deploy/coolify/r1-kernels.json'],{dir,cwd:wt});
+    return commit(wt,`fix(vigia): record the verified pin for ${id}\n`,dir);
+   },dir);
   };
  }
  return runtime;

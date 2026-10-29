@@ -44,6 +44,10 @@ export function decide({manifest,observed,state,attempts,inputs,now=Date.now(),r
  const skipped=[];
  while(ready.length){
   const pair=pairFor(manifest,ready),id=pairId(pair),a=attempts[id],want=inputs(pair);
+  if(a?.rollbackLatch&&!a.retry){
+   if(JSON.stringify(a.inputs?.studios)===JSON.stringify(want.studios))return {action:'failed',plan,waiting,pair,id,attempt:a,skipped};
+   return {action:'run',plan,waiting,pair,id,inputs:want,previous:a,skipped};
+  }
   if(a&&!a.retry&&a.status==='deferred'&&(a.deferredLanes??[]).length&&hours(now,a.at)<retryHours){
    const held=a.deferredLanes.filter(l=>pair.lanes.includes(l)&&hours(now,a.laneSince?.[l]??a.at)>=laneWaitHours);
    if(held.length&&held.length<pair.lanes.length){skipped.push({id,lanes:held,why:'deferred'});ready=ready.filter(c=>!held.includes(c.lane));continue;}
@@ -156,7 +160,7 @@ async function runAttempt(config,ops,decision,now){
  writeAttempt(outDir,attempt);
  const comparisons={},runtimes={};
  try{
-  if(config.automatic)await releaseEvent(outDir,ops,'detected',id,`${id}: a new Studio pair was detected.`,await ops.secrets());
+  if(config.automatic)await releaseEvent(outDir,ops,'detected',id,`${id}: a new Studio pair was detected.`,await ops.secrets(),attempt.at);
   // Cheap checks first (worktree, disk), then the lane checks (dotnet only); Docker is started only for a round that
   // can build.
   await ops.preflight({pair,id,dir});
@@ -190,16 +194,17 @@ async function runAttempt(config,ops,decision,now){
   const built=await ops.build(pair,bundles,dir);
   fs.writeFileSync(path.join(dir,'image.json'),JSON.stringify(built,null,2));
   const next=rotateWindow(base,{odc:pair.odc,o11:pair.o11,image:built.image,tag:built.tag},config.state);
+  if(config.automatic&&next.held?.length)await releaseEvent(outDir,ops,'retained',id,'Active clients require retaining an older pair; the window was extended.',await ops.secrets(),attempt.at);
   const served=Object.fromEntries(LANES.map(lane=>[lane,[...new Set(next.manifest[lane].map(x=>x.version))]]));
   const smoke=await ops.smoke(built,bundles,served,dir);fs.writeFileSync(path.join(dir,'smoke.json'),JSON.stringify(smoke,null,2));
   if(!smoke.ok)throw Error('Image smoke failed: '+(smoke.error??'see smoke.json'));
   if(config.automatic){
-   const release={id,dir,built,manifest:next.manifest,kernel:bridges.kernel,bridges,features:bundles.odc.features};
+   const release={id,dir,attempt:attempt.at,baseline:config.liveBaseline,built,manifest:next.manifest,kernel:bridges.kernel,bridges,features:bundles.odc.features};
    // Persist only public identities and local artifact paths. Never keys or tokens.
    fs.writeFileSync(path.join(dir,'release.json'),JSON.stringify(release,null,2));
    const result=await releaseAutomatically(config,ops,release);
    if(result.status==='live')writeAttempt(outDir,{...attempt,status:'approved',built,pinCommit:result.commit,approved:{at:new Date().toISOString(),digest:'sha256:'+built.sha256,commit:result.commit}});
-   else writeAttempt(outDir,{...attempt,status:'failed',built,code:result.code,failedLanes:pair.lanes});
+   else writeAttempt(outDir,{...attempt,status:result.status==='deferred'?'deferred':'failed',built,rollbackLatch:['rolled-back','rollback-failed'].includes(result.status),code:result.code,failedLanes:pair.lanes});
    return {...result,dir};
   }
   fs.writeFileSync(path.join(dir,'proposed-window.json'),JSON.stringify(next.manifest,null,2)+'\n');
@@ -219,7 +224,7 @@ async function runAttempt(config,ops,decision,now){
    return {status:'deferred',id,dir,code:'round-timeout',error:'round time limit'};
   }
   const environmental=!!error.environmental,notice=path.join(dir,environmental?'AGUARDANDO.md':'FALHAS.md'),lanes=error.lanes??[];
-  if(config.automatic&&!environmental)await releaseEvent(outDir,ops,'failed',id,`${id}: build or verification failed before deployment.`,await ops.secrets());
+  if(config.automatic&&!environmental)await releaseEvent(outDir,ops,'failed',id,`${id}: build or verification failed before deployment.`,await ops.secrets(),attempt.at);
   fs.writeFileSync(notice,failureText({id,error:String(error.message),environmental,dir,retry:config.retryHours??12,config}));
   const laneSince=environmental?Object.fromEntries(lanes.map(l=>[l,attempt.laneSince?.[l]??attempt.at])):undefined;
   writeAttempt(outDir,{...attempt,status:environmental?'deferred':'failed',...(environmental?{deferrals:(attempt.deferrals??0)+1,firstDeferredAt:attempt.firstDeferredAt??attempt.at,deferredLanes:lanes,laneSince,laneCodes:error.laneCodes??null,testEnvRuns:error.code==='test-environment'?(attempt.testEnvRuns??0)+1:0}:{failedLanes:lanes}),error:String(error.message),code:error.code??null,runtimes,endedAt:new Date().toISOString()});

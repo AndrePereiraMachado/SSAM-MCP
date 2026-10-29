@@ -37,15 +37,22 @@ export const hasPair=(manifest,pair)=>windowPairs(manifest).some(p=>p.odc===pair
 export function rotateWindow(manifest,pair,state={}){
  const old=versionPairs(manifest),window=manifest.window??3;
  pair={odc:old[0].odc,o11:old[0].o11,...pair};
- const entries=[{...pair},...old.filter(p=>p.odc!==pair.odc||p.o11!==pair.o11).map(p=>{
+ let entries=[{...pair},...old.filter(p=>p.odc!==pair.odc||p.o11!==pair.o11).map(p=>{
   const at=manifest.odc.find(x=>x.version===p.odc&&p.image.startsWith(x.image+':'+x.tag));return {odc:p.odc,o11:p.o11,...at};
- })].slice(0,window);
- const next={window,odc:[],o11:[]};
+ })];
+ const now=state.now??Date.now(),held=[];
+ const recent=p=>Object.entries(state.tokens??{}).some(([token,data])=>{
+  const active=now-Date.parse(data.seen)<14*86400000;
+  const uses=LANES.some(l=>version(data[l]?.installed)===p[l]);
+  if(active&&uses){held.push({pair:pairId(p),token,lastSeen:data.seen});return true;}return false;
+ });
+ entries=entries.filter((p,i)=>i<window||recent(p));
+ const next={window:Math.max(window,entries.length),odc:[],o11:[]};
  for(const p of entries)for(const lane of LANES)next[lane].push({version:p[lane],tag:p.tag,image:p.image,...(p.sha256?{sha256:p.sha256}:{})});
  versionPairs(next);
  const leaving={};for(const lane of LANES)leaving[lane]=[...new Set(manifest[lane].map(x=>x.version))].filter(v=>!next[lane].some(x=>x.version===v));
  const affected=[];for(const [token,data]of Object.entries(state.tokens??{}))for(const lane of LANES)if(leaving[lane].includes(version(data[lane]?.installed)))affected.push({token,customer:data.customer??null,lane,version:version(data[lane].installed),lastSeen:data.seen??null});
- return {manifest:next,leaving,affected};
+ return {manifest:next,leaving,affected,held};
 }
 // Approved proposals that main does not carry yet are replayed on top of it, in approval order: the next proposal starts
 // from the window the owner deployed, whether or not its branch was merged. A pair main already has is skipped.

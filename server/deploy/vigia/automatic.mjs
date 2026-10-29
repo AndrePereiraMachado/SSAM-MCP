@@ -1,97 +1,96 @@
-// A durable release transaction. Its operations have no implicit globals, so the
-// same ordering, recovery and rollback are exercised with real HTTP and fake SSH.
+// The release is based on observed production state; every mutation is fenced
+// by the shared remote lease and the original Coolify compose fingerprint.
 import fs from 'node:fs';
 import path from 'node:path';
-import {pinDigest,literalComposeText} from './window.mjs';
-export const AUTOMATIC_PLAN = [
- 'Read all required secrets from the Windows DPAPI vault before any release write',
- 'Detect the stable Studio releases at the official source; fall back to installed Studios',
- 'Download and SHA-256 installers into the private installer store; extract without executing',
- 'Wait for other dotnet builds/tests and Docker builds; validate MSBuild runtimes and frozen baselines',
- 'Build client bridges, verify Authenticode and sign each manifest with Ed25519',
- 'Build and smoke the candidate image containing the signed bridges',
- 'Publish an immutable private tag and verify its registry digest (never latest)',
- 'Commit the digest pin and generated three-pair compose locally on the execution branch',
- 'Back up PostgreSQL and every live volume over SSH; save the live Coolify compose',
- 'Prepare the new pair stopped and write kernel/features with ssamctl',
- 'Update and deploy the compose using the Coolify API',
- 'Check backend warm, aggregate health, listing budget, synthetic hello on both lanes and bridge offers',
- 'On any deployment/check failure restore the saved compose, redeploy and verify rollback',
- 'Notify once per event; preserve volumes of pairs leaving the window'
+import {pinDigest} from './window.mjs';
+import {assertUnserved,assertRetained} from './safety.mjs';
+export const AUTOMATIC_PLAN=[
+ 'Read secrets and validate the reviewed vigia-run execution source',
+ 'Read the live pairs, immutable digests, kernels and telemetry (dry-run: public source reads only)',
+ 'Detect official Studio releases; retain active clients and never downgrade a live pair',
+ 'Verify installer publisher, extract, compare MSBuild runtimes and baseline/candidate tests',
+ 'Compile pinned client sources, verify signatures and publish sequenced manifests',
+ 'Build and smoke the candidate image; publish and verify its immutable digest',
+ 'Record the pin separately without modifying the trusted execution checkout',
+ 'Check PAUSE and the remaining deployment budget, then acquire the shared VPS flock',
+ 'Check memory and disk; compare live compose hash before backup',
+ 'Back up, prepare only the new stopped pair, then compare the live hash again',
+ 'PATCH and deploy through Coolify; check warm, health, listings and hello',
+ 'Restore only after a mutation; validate rollback against the captured live baseline',
+ 'Release the lock after verification or rollback; retain five backups',
+ 'Notify per attempt, always notify rollback failure'
 ];
 const atomic=(file,value)=>{const tmp=file+'.next';fs.writeFileSync(tmp,JSON.stringify(value,null,2)+'\n');fs.renameSync(tmp,file);};
-export async function releaseEvent(directory,ops,name,id,message,secrets){
+export async function releaseEvent(directory,ops,name,id,message,secrets,attempt='legacy'){
  const file=path.join(directory,'release-events.json');let events={};
  if(fs.existsSync(file))events=JSON.parse(fs.readFileSync(file,'utf8'));
- const key=id+':'+name;if(events[key])return;
+ const key=id+':'+attempt+':'+name;
+ if(name!=='rollback-failed'&&events[key])return;
  events[key]=new Date().toISOString();atomic(file,events);
- await ops.event(name,{id,message},secrets).catch(()=>{});
+ await ops.event(name,{id,attempt,message},secrets).catch(()=>{});
 }
-export async function releaseAutomatically(config,ops,release) {
+export async function releaseAutomatically(config,ops,release){
  const {id,dir,built,manifest,kernel,bridges,features}=release;
- const secrets=await ops.secrets(); // Never persisted in the journal or spread into a result.
+ const secrets=await ops.secrets();
  const file=path.join(dir,'deployment.json');
- let state=fs.existsSync(file)?JSON.parse(fs.readFileSync(file,'utf8')):{schema:1,id,steps:{}};
- const resumingRollback=state.status==='rolling-back';
- if(state.status==='live')return {status:'live',id,commit:state.pin};
- if(['rolled-back','rollback-failed'].includes(state.status))throw Error('This release was rolled back; inspect it before retrying.');
- const save=()=>atomic(file,state);
- const once=async(name,fn)=>{if(state.steps[name])return state.steps[name].value;state.activeStep=name;save();const value=await fn();state.steps[name]={value,at:new Date().toISOString()};save();return value;};
- const event=async(name,message)=>{
-  if(state.steps['notice-'+name])return;
-  // Record first: at most one attempt to deliver an event, including after a crash.
-  state.steps['notice-'+name]={at:new Date().toISOString()};save();
-  await releaseEvent(config.outDir??dir,ops,name,id,message,secrets);
- };
- await event('detected',`${id}: tests and signed bridges passed; preparing automatic deployment.`);
- let published,pinned,live;
- try {
- published=await once('published',async()=>{
-  await ops.verifyLocalImage(built);
-  const p=await ops.publish(built);
-  if(p.digest!=='sha256:'+built.sha256)throw Error('Registry digest differs from the tested image.');
-  return p;
- });
- pinned=pinDigest(manifest,built.tag,published.digest);
- state.pin=await once('pin',()=>ops.pinExecution(pinned,dir,id,kernel));
- // The actual live compose is the rollback source, never a regenerated guess.
- // It can contain Coolify values: keep it only in protected memory/storage.
- live=await once('live-snapshot',()=>ops.saveLiveCompose(secrets,id));
- await once('backup',()=>ops.backup(secrets,id));
- }catch(error){
-  state.failure={step:state.activeStep,code:/^[A-Z_]+$/.test(error.code??'')?error.code:'PREPARATION_FAILED'};
-  state.status='preparation-failed';save();
-  await event('failed',`${id}: ${state.failure.step} failed (${state.failure.code}); no deployment was started.`);
-  return {status:'failed',id,code:'release-preparation-failed'};
+ let state=fs.existsSync(file)?JSON.parse(fs.readFileSync(file,'utf8')):{schema:2,id,attempt:release.attempt??new Date().toISOString(),steps:{}};
+ if(release.attempt&&state.attempt!==release.attempt){
+  const previous=path.join(dir,'previous');fs.mkdirSync(previous,{recursive:true});
+  fs.renameSync(file,path.join(previous,'deployment-'+String(state.attempt).replace(/[^A-Za-z0-9_-]/g,'_')+'.json'));
+  state={schema:2,id,attempt:release.attempt,steps:{}};
  }
- const compose=literalComposeText(pinned,config.domains);
- try {
-  if(resumingRollback)throw Error('Resume the interrupted rollback.');
-  state.status='deploying';save();
-  await once('prepared',()=>ops.prepare(secrets,{id,built,kernel,features,bridges,compose,dir}));
-  // Mark the mutation BEFORE sending it: an ambiguous response must roll back.
-  state.mutationStarted=true;save();
-  await once('compose-written',()=>ops.writeCompose(secrets,compose));
-  await once('deploy',()=>ops.deploy(secrets));
-  await once('checks',async()=>{const r=await ops.checks(secrets,{id,pinned,kernel,bridges,built});if(!r?.ok)throw Error('Post-deployment checks failed.');return r;});
-  state.status='live';save();await event('live',`${id}: deployed and verified.`);
-  return {status:'live',id,commit:state.pin};
- } catch(error) {
-  state.failure={step:state.activeStep,code:/^[A-Z_]+$/.test(error.code??'')?error.code:'DEPLOYMENT_FAILED'};
-  // Even preparation failures may leave stopped containers; restore the exact
-  // former API configuration and let Coolify reconcile it, without deleting volumes.
-  state.status='rolling-back';save();
-  let restored=false;
-  try{
-   await ops.restoreCompose(secrets,live);
-   await ops.deploy(secrets);
-   const check=await ops.checks(secrets,{rollback:true,live});
-   if(!check?.ok)throw Error('Rollback checks failed.');
-   restored=true;
-  }catch{state.status='rollback-failed';}
+ if(!state.mutationStarted){await ops.pause();await ops.deploymentBudget();}
+ const save=()=>atomic(file,state);
+ const event=(name,message)=>releaseEvent(config.outDir??dir,ops,name,id,message,secrets,state.attempt);
+ if(state.status==='live')return {status:'live',id,commit:state.pin};
+ if(state.status==='rollback-failed'){await event('rollback-failed',`${id}: rollback still requires owner attention.`);return {status:'rollback-failed',id};}
+ if(state.status==='rolled-back')throw Error('Owner Retry or a new Studio build is required.');
+ // Never retain arbitrary service/API response objects in this journal.
+ const once=async(name,fn,select=x=>x)=>{if(state.steps[name])return state.steps[name].value;state.activeStep=name;save();const value=select(await fn());state.steps[name]={value,at:new Date().toISOString()};save();return value;};
+ const baseline=release.baseline??await ops.liveBaseline(secrets);
+ try{assertUnserved(baseline,{odc:built.odc??kernel.odc,o11:built.o11??kernel.o11});}
+ catch(e){if(e.code==='ALREADY_SERVED')return {status:'idle',id};throw e;}
+ const pinned=pinDigest(manifest,built.tag,'sha256:'+built.sha256);assertRetained(baseline,pinned);
+ await event('detected',`${id}: verified candidate detected.`);
+ let unlock,protectedPhase=false;
+ try{
+  if(!state.mutationStarted){
+   await once('published',async()=>{await ops.verifyLocalImage(built);const p=await ops.publish(built);if(p.digest!=='sha256:'+built.sha256)throw Error('Registry digest differs from tested image.');return p;},p=>({digest:p.digest,already:!!p.already}));
+   state.pin=await once('pin',()=>ops.pinExecution(pinned,dir,id,kernel,baseline.kernels));
+  }
+  if(!state.mutationStarted){await ops.pause();await ops.deploymentBudget();}
+  unlock=await ops.acquireReleaseLock(secrets);ops.beginDeployment?.();protectedPhase=true;
+  if(!state.mutationStarted){
+   await ops.preflightRemote(secrets,pinned);
+   await ops.assertLiveUnchanged(secrets,baseline);
+   await once('backup',()=>ops.backup(secrets,id),x=>({ok:!!x.ok,directory:x.directory,volumes:x.volumes}));
+  }
+  if(state.status!=='rolling-back'){
+   const compose=await ops.composeFor(secrets,baseline,pinned);
+   if(!state.mutationStarted){
+    await once('prepared',()=>ops.prepare(secrets,{id,built,kernel,features,bridges,compose,dir}),()=>({ok:true}));
+    await ops.pause();await ops.assertLiveUnchanged(secrets,baseline);
+    state.mutationStarted=true;save();
+    await once('compose-written',()=>ops.writeCompose(secrets,compose),()=>({ok:true}));
+   }
+   await once('deploy',()=>ops.deploy(secrets),()=>({ok:true}));
+   await once('checks',async()=>{const r=await ops.checks(secrets,{id,pinned,kernel,bridges,built});if(!r?.ok)throw Error('Post-deployment checks failed.');return r;},r=>({ok:true,backends:r.backends}));
+   state.status='live';save();await event('live',`${id}: deployed and verified.`);
+   return {status:'live',id,commit:state.pin};
+  }
+  throw Error('Resume interrupted rollback.');
+ }catch(error){
+  state.failure={step:state.activeStep??'preflight',code:/^[A-Z_]+$/.test(error.code??'')?error.code:'RELEASE_FAILED'};
+  if(!state.mutationStarted){
+   state.status='preparation-failed';save();await event('failed',`${id}: ${state.failure.step} failed before mutation (${state.failure.code}).`);
+   return {status:error.environmental?'deferred':'failed',id,code:state.failure.code};
+  }
+  state.status='rolling-back';save();let restored=false;
+  try{await ops.restoreCompose(secrets,baseline);await ops.deploy(secrets);const r=await ops.checks(secrets,{rollback:true,live:baseline});if(!r?.ok)throw Error('Rollback checks failed.');restored=true;}catch{}
   state.status=restored?'rolled-back':'rollback-failed';save();
-  await event('failed',`${id}: ${state.failure.step} failed (${state.failure.code}); ${restored?'previous compose restored and verified':'rollback requires attention'}.`);
-  // External API error bodies can contain secrets. Only a bounded internal code leaves this layer.
+  await event(restored?'failed':'rollback-failed',`${id}: ${state.failure.step} failed; ${restored?'previous live baseline restored':'rollback requires owner attention'}.`);
   return {status:state.status,id,code:'automatic-deployment-failed'};
+ }finally{
+  try{if(unlock)await unlock();}finally{if(protectedPhase)ops.endDeployment?.();}
  }
 }

@@ -12,6 +12,7 @@ import subprocess
 import sys
 import tarfile
 import time
+import shutil
 
 
 def command(args, data=None, env=None):
@@ -31,19 +32,57 @@ def backends(project):
     return json.loads(docker("inspect", *ids)) if ids else []
 
 
+def backup_space(base, settings):
+    disk = base
+    while not disk.exists():
+        disk = disk.parent
+    if shutil.disk_usage(disk).free < settings.get("backupMinFreeMiB", 2048) * 1024 ** 2:
+        raise RuntimeError("Insufficient disk space for backup.")
+
+
 def dispatch(request):
     settings = request["settings"]
     base = pathlib.Path(settings["directory"])
     if not base.is_absolute() or ".." in base.parts:
         raise ValueError("Remote directory must be absolute.")
     action = request["action"]
+    if action == "preflight":
+        meminfo = pathlib.Path("/proc/meminfo").read_text()
+        available = int(re.search(r"^MemAvailable:\s+(\d+)", meminfo, re.M).group(1)) // 1024
+        if available < max(1024, request["backendCount"] * 1024):
+            raise RuntimeError("Insufficient available memory for proposed backends.")
+        backup_space(base, settings)
+        return {"ok": True, "availableMiB": available}
     if action == "snapshot":
-        return {"ok": True, "backends": [{"o11": s["Config"]["Labels"].get("ssam.o11"), "odc": s["Config"]["Labels"].get("ssam.odc"), "image": s["Image"]} for s in backends(settings["composeProject"]) if s["State"]["Running"]]}
+        rows = []
+        telemetry = {"tokens": {}}
+        for server in backends(settings["composeProject"]):
+            if not server["State"]["Running"]:
+                continue
+            measured = json.loads(docker("exec", "-i", server["Id"], "node", "--input-type=module", data=request["checkSource"].encode()))
+            events = []
+            for line in docker("logs", server["Id"]).decode().splitlines():
+                try:
+                    events.append(json.loads(line))
+                except ValueError:
+                    pass
+            warm = next((x for x in reversed(events) if x.get("event") == "warm"), {})
+            if not (warm.get("indexes", {}).get("ok") and warm.get("delivery", {}).get("builder", {}).get("ok") and warm.get("delivery", {}).get("worker", {}).get("ok")):
+                raise RuntimeError("Live baseline is not warm.")
+            refs = json.loads(docker("image", "inspect", "--format", "{{json .RepoDigests}}", server["Image"]))
+            if not refs:
+                raise RuntimeError("No registry digest for a live backend.")
+            rows.append({"o11": server["Config"]["Labels"].get("ssam.o11"), "odc": server["Config"]["Labels"].get("ssam.odc"), "image": server["Image"], "reference": server["Config"]["Image"], "digest": refs[0].split("@")[1], "kernel": measured["kernel"], "budget": measured["budget"], "warm": warm})
+            for key, value in measured.get("telemetry", {}).get("tokens", {}).items():
+                if key not in telemetry["tokens"] or telemetry["tokens"][key]["seen"] < value["seen"]:
+                    telemetry["tokens"][key] = value
+        return {"ok": True, "backends": rows, "telemetry": telemetry}
     if action == "event":
         # The system journal is available even without a console ingestion API.
         command(["logger", "-t", "ssam-vigia", request["event"] + " " + request["id"]])
         return {"ok": True}
     if action == "backup":
+        backup_space(base, settings)
         os.umask(0o077)
         directory = base / "backups" / (request["id"] + "-" + time.strftime("%Y%m%dT%H%M%SZ", time.gmtime()))
         directory.mkdir(parents=True, exist_ok=False)
@@ -67,6 +106,12 @@ def dispatch(request):
             if (directory / ("volume-" + str(index) + ".tar.gz")).stat().st_size == 0:
                 raise RuntimeError("Empty volume backup.")
         (directory / "volumes.json").write_text(json.dumps(volumes))
+        (directory / "complete").write_text("ok")
+        complete = sorted((p for p in directory.parent.iterdir() if p.is_dir() and (p / "complete").is_file()), key=lambda p: p.stat().st_mtime, reverse=True)
+        for old in complete[5:]:
+            if old.resolve().parent != directory.parent.resolve():
+                raise RuntimeError("Invalid backup retention path.")
+            shutil.rmtree(old)
         return {"ok": True, "directory": str(directory), "volumes": len(volumes)}
     if action == "prepare":
         os.umask(0o077)
@@ -81,41 +126,51 @@ def dispatch(request):
                 if not (ancestor or name.startswith("server/deploy/")) or ".." in pathlib.PurePosixPath(name).parts or member.issym() or member.islnk():
                     raise ValueError("Unsafe deploy archive.")
             archive.extractall(directory, filter="data")
+        for live in backends(settings["composeProject"]):
+            labels = live["Config"]["Labels"]
+            if live["State"]["Running"] and labels.get("ssam.odc") == request["kernel"].get("odc") and labels.get("ssam.o11") == request["kernel"].get("o11"):
+                raise RuntimeError("Refusing to prepare an already running pair.")
         kernel = directory / "kernel.json"
         features = directory / "Features.plain.xml"
         kernel.write_text(json.dumps(request["kernel"]))
         features.write_bytes(base64.b64decode(request["features"]))
-        compose = request["compose"]
-        service = compose["services"]["ssam-server-v1"]
-        image = request["built"]["image"] + ":" + request["built"]["tag"]
-        docker("pull", image)
-        digests = json.loads(docker("image", "inspect", "--format", "{{json .RepoDigests}}", image))
-        if not any(d.endswith("@sha256:" + request["built"]["sha256"]) for d in digests):
-            raise RuntimeError("Pulled image digest differs from the tested digest.")
-        name = "ssam-vigia-prepare-" + request["id"]
-        # Explicit stopped staging container lets ssamctl initialize the exact
-        # future Coolify volumes without starting the new router or backend.
-        args = ["create", "--name", name, "--network", "none", "--label", "ssam.backend=true"]
-        for key, value in service["labels"].items():
-            args += ["--label", key + "=" + str(value)]
-        args += ["-e", "SSAM_RUNTIME_DIR=" + service["environment"]["SSAM_RUNTIME_DIR"]]
-        for mount in service["volumes"]:
-            if mount.get("type", "volume") != "volume":
-                raise RuntimeError("Unexpected mount type.")
-            key = mount["source"]
-            spec = compose["volumes"].get(key, {}) or {}
-            volume = spec.get("name") or settings["composeProject"] + "_" + key
-            args += ["-v", volume + ":" + mount["target"]]
-        docker(*args, image)
-        env = dict(os.environ, SSAM_CONTAINER=name)
-        ctl = str(directory / "server/deploy/coolify/ssamctl.sh")
         try:
-            command(["sh", ctl, "kernel", "write", str(kernel)], env=env)
-            command(["sh", ctl, "features", "put", str(features)], env=env)
+            compose = request["compose"]
+            service = compose["services"]["ssam-server-v1"]
+            image = request["built"]["image"] + ":" + request["built"]["tag"]
+            docker("pull", image)
+            digests = json.loads(docker("image", "inspect", "--format", "{{json .RepoDigests}}", image))
+            if not any(d.endswith("@sha256:" + request["built"]["sha256"]) for d in digests):
+                raise RuntimeError("Pulled image digest differs from the tested digest.")
+            name = "ssam-vigia-prepare-" + request["id"]
+            # Explicit stopped staging container lets ssamctl initialize the exact
+            # future Coolify volumes without starting the new router or backend.
+            try:
+                docker("rm", "-f", name)
+            except RuntimeError:
+                pass
+            args = ["create", "--name", name, "--network", "none", "--label", "ssam.backend=true"]
+            for key, value in service["labels"].items():
+                args += ["--label", key + "=" + str(value)]
+            args += ["-e", "SSAM_RUNTIME_DIR=" + service["environment"]["SSAM_RUNTIME_DIR"]]
+            for mount in service["volumes"]:
+                if mount.get("type", "volume") != "volume":
+                    raise RuntimeError("Unexpected mount type.")
+                key = mount["source"]
+                spec = compose["volumes"].get(key, {}) or {}
+                volume = spec.get("name") or settings["composeProject"] + "_" + key
+                args += ["-v", volume + ":" + mount["target"]]
+            docker(*args, image)
+            env = dict(os.environ, SSAM_CONTAINER=name)
+            ctl = str(directory / "server/deploy/coolify/ssamctl.sh")
+            try:
+                command(["sh", ctl, "kernel", "write", str(kernel)], env=env)
+                command(["sh", ctl, "features", "put", str(features)], env=env)
+            finally:
+                docker("rm", name)  # Deliberately no -v: never delete a pair volume.
+            return {"ok": True}
         finally:
             features.unlink(missing_ok=True)
-            docker("rm", name)  # Deliberately no -v: never delete a pair volume.
-        return {"ok": True}
     if action == "check":
         deadline = time.monotonic() + settings.get("warmTimeoutSeconds", 300)
         while True:
@@ -161,7 +216,9 @@ def dispatch(request):
         if not check_source:
             raise RuntimeError("Missing protocol check source.")
         for server in running:
-            docker("exec", "-i", server["Id"], "node", "--input-type=module", data=check_source.encode())
+            labels = server["Config"]["Labels"]
+            source = (request.get("checkSources") or {}).get(labels.get("ssam.o11", "") + "|" + labels.get("ssam.odc", ""), check_source)
+            docker("exec", "-i", server["Id"], "node", "--input-type=module", data=source.encode())
         # Check the public aggregate router as well, including TLS validation.
         command(["curl", "--fail", "--silent", "--show-error", "--max-time", "30", settings["healthUrl"]])
         return {"ok": True, "backends": len(running)}
