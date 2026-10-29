@@ -105,13 +105,16 @@ export async function prepareUpload(params, { dataRoot, runtimeRoot = dataRoot, 
   // The approved folder must still be the same folder: its current real path is the recorded one exactly (no link or
   // junction now on the way), that folder is not itself a link or junction, and it has the file identity (volume and file
   // id) recorded when it was approved (a root recorded before 0.3.4's identity keeps the exact path rule).
-  let sameRoot = false;
+  let samePlace = false; let sameFolder = false;
   try {
     const lstat = (files.lstat ?? (file => fs.lstatSync(file)))(root.real);
-    sameRoot = rootReal === root.real && !lstat.isSymbolicLink() && (root.id === null || root.id === undefined || fileIdentity(files.stat(root.real)) === root.id);
-  } catch { sameRoot = false; }
-  if (!sameRoot || networkPath(rootReal, platform))
+    samePlace = rootReal === root.real && !lstat.isSymbolicLink();
+    sameFolder = samePlace && (root.id === null || root.id === undefined || fileIdentity(files.stat(root.real)) === root.id);
+  } catch { samePlace = false; }
+  if (!samePlace || networkPath(rootReal, platform))
     throw notSent('PATH_LEAVES_ROOT', 'The approved folder that holds this path now leads to another place through a link or junction; approve it again');
+  if (!sameFolder)
+    throw notSent('UPLOAD_ROOT_REPLACED', 'The approved folder that holds this path was deleted and created again since it was approved; approve it again: SSAM Agent > Folders SSAM may read, or `ssam-agent roots add --folder <folder>`.');
   await hooks.beforeOpen?.();
   let handle;
   try { handle = await files.open(parsed.normalized); } catch (error) { throw openError(error, shown); }

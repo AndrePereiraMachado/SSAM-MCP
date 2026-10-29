@@ -208,3 +208,17 @@ test('native check-upload refuses every folded pair NTFS keeps apart, as the Nod
   assert.ok(actual.every((answer, i) => codes.includes(answer.error) && codes.includes(expected[i].error)));
   t.diagnostic(`refusal codes differ on ${f.rows.filter((row, i) => actual[i].error !== expected[i].error).length} of ${f.rows.length} pairs (case tables of the pre-selection)`);
 });
+test('native roots: a folder deleted and created again is refused with its own code, then approved again by roots add', { skip, timeout: 60000 }, async t => {
+  const f = uploadFixture({ prefix: 'ssam-upload-again-' });
+  t.after(f.remove);
+  const recreated = path.join(f.base, 'recreated');
+  const check = () => JSON.parse(native(['check-upload', '--root', f.data, '--runtime-root', f.runtime], { input: JSON.stringify([{ path: path.join(recreated, 'x.csv'), maxBytes: MiB }]) }).stdout)[0];
+  assert.deepEqual(check(), { error: 'UPLOAD_ROOT_REPLACED' });
+  let r = native(['roots', 'add', '--folder', recreated, '--root', f.data, '--runtime-root', f.runtime]);
+  assert.equal(r.status, 0, r.stderr); assert.match(r.stdout, /^Approved again: /);
+  assert.equal(check().decision?.size, 10);
+  r = native(['roots', 'add', '--folder', recreated, '--root', f.data, '--runtime-root', f.runtime]);
+  assert.match(r.stdout, /^Already approved: /);
+  r = native(['roots', 'add', '--folder', path.join(f.base, 'swapped'), '--root', f.data, '--runtime-root', f.runtime]);
+  assert.equal(r.status, 1); assert.match(r.stderr, /was approved as a folder and is now a link or junction\. Nothing was approved\./);
+});

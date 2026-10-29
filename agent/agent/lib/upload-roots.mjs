@@ -90,7 +90,7 @@ export function checkApproval(folder, { dataRoot, runtimeRoot = dataRoot, env = 
   const resolved = folderProblem(real, context);
   if (resolved) return { problem: `${shown} leads to a folder that ${resolved}` };
   let id;
-  try { id = fileIdentity(files.statSync(real, { bigint: true })); } catch { return { problem: ` is not an existing folder` }; }
+  try { id = fileIdentity(files.statSync(real, { bigint: true })); } catch { return { problem: `${shown} is not an existing folder` }; }
   return { path: parsed.normalized, real, id };
 }
 
@@ -120,8 +120,17 @@ export function rootsCommand({ op, folder, dataRoot, runtimeRoot = dataRoot, jso
   }
   const checked = checkApproval(folder, { dataRoot, runtimeRoot, env, platform });
   if (checked.problem) return fail(checked.problem + '. Nothing was approved.');
-  if (roots.some(entry => samePath(entry.path, checked.path, platform) || samePath(entry.real, checked.real, platform))) {
-    say(`Already approved: ${checked.path}.`);
+  const known = roots.findIndex(entry => samePath(entry.path, checked.path, platform) || samePath(entry.real, checked.real, platform));
+  if (known >= 0) {
+    const entry = roots[known];
+    if (entry.real === checked.real && entry.id === checked.id) { say(`Already approved: ${checked.path}.`); return 0; }
+    // The folder was deleted and created again, or now leads elsewhere: approving it again is the person's decision, except
+    // when a folder approved as a plain folder has become a link or junction.
+    let link = false;
+    try { link = fs.lstatSync(checked.path).isSymbolicLink(); } catch { link = false; }
+    if (link && samePath(entry.path, entry.real, platform)) return fail(`${JSON.stringify(checked.path)} was approved as a folder and is now a link or junction. Nothing was approved.`);
+    writeRoots(dataRoot, roots.map((other, i) => (i === known ? { path: checked.path, real: checked.real, id: checked.id, addedAt: now().toISOString() } : other)));
+    say(`Approved again: SSAM may read files in ${checked.path} when a request names them (the folder changed since it was approved).`);
     return 0;
   }
   writeRoots(dataRoot, [...roots, { path: checked.path, real: checked.real, id: checked.id, addedAt: now().toISOString() }]);

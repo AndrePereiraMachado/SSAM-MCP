@@ -129,7 +129,7 @@ export function uploadFixture({ prefix = 'ssam-upload-' } = {}) {
     ['the approved folder itself', { path: R, maxBytes: max }, 'PATH_FORBIDDEN'],
     ['a junction that escapes', { path: at('link', 'secret.csv'), maxBytes: max }, 'PATH_LEAVES_ROOT'],
     ['a plain approved folder replaced by a junction', { path: path.join(base, 'swapped', 'x.csv'), maxBytes: max }, 'PATH_LEAVES_ROOT'],
-    ['a plain approved folder deleted and created again', { path: path.join(base, 'recreated', 'x.csv'), maxBytes: max }, 'PATH_LEAVES_ROOT'],
+    ['a plain approved folder deleted and created again', { path: path.join(base, 'recreated', 'x.csv'), maxBytes: max }, 'UPLOAD_ROOT_REPLACED'],
     ['an approved junction that now leads elsewhere', { path: path.join(base, 'rootlink', 'x.csv'), maxBytes: max }, 'PATH_LEAVES_ROOT'],
     ['a junction swapped between the checks and the open', { path: at('swap', 'b.txt'), maxBytes: max,
       beforeOpen: { move: [[at('swap'), path.join(base, 'swap-old')], [path.join(base, 'swap-evil'), at('swap')]] } }, 'PATH_LEAVES_ROOT'],

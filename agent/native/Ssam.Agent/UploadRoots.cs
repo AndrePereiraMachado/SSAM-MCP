@@ -114,9 +114,23 @@ internal static class UploadRoots
         }
         var (path, real, problem) = Check(folder, dataRoot, runtimeRoot);
         if (problem != null) return Fail(problem + ". Nothing was approved.");
-        if (roots.Any(r => LocalPaths.Same(r.Path, path!) || LocalPaths.Same(r.Real, real!))) { output.WriteLine($"Already approved: {path}."); return 0; }
+        var known = roots.FindIndex(r => LocalPaths.Same(r.Path, path!) || LocalPaths.Same(r.Real, real!));
         string id;
         try { id = NativeFileIdentity.IdentityOf(real!); } catch (IOException) { return Fail(LocalPaths.Quoted(path!) + " is not an existing folder. Nothing was approved."); }
+        var now = DateTimeOffset.UtcNow.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", System.Globalization.CultureInfo.InvariantCulture);
+        if (known >= 0)
+        {
+            var entry = roots[known];
+            if (entry.Real == real && entry.Id == id) { output.WriteLine($"Already approved: {path}."); return 0; }
+            // The folder was deleted and created again, or now leads elsewhere: approving it again is the person's decision,
+            // except when a folder approved as a plain folder has become a link or junction.
+            var link = (System.IO.File.GetAttributes(path!) & FileAttributes.ReparsePoint) != 0;
+            if (link && LocalPaths.Same(entry.Path, entry.Real)) return Fail(LocalPaths.Quoted(path!) + " was approved as a folder and is now a link or junction. Nothing was approved.");
+            roots[known] = new(path!, real!, now, id);
+            Write(dataRoot, roots);
+            output.WriteLine($"Approved again: SSAM may read files in {path} when a request names them (the folder changed since it was approved).");
+            return 0;
+        }
         roots.Add(new(path!, real!, DateTimeOffset.UtcNow.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", System.Globalization.CultureInfo.InvariantCulture), id));
         Write(dataRoot, roots);
         output.WriteLine($"Approved: SSAM may read files in {path} when a request names them (one file at a time, up to 64 MiB).");

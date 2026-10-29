@@ -279,7 +279,7 @@ node C:\SSAM-Agent\agent\ssam-agent.mjs roots remove --folder C:\Projects\Orders
 ```
 
 With the app's native agent the same commands are `ssam-agent.exe roots add --folder <folder> --root <agent folder>`.
-A change counts at the next request, without a restart.
+A change counts at the next request, without a restart. A folder that was deleted and created again is refused (`UPLOAD_ROOT_REPLACED`) until you run `roots add` on it again; a folder approved as a plain folder that became a link or junction is never approved again.
 
 - Never approved: a whole disk (`C:\`), a network folder, your user folder itself or a folder that holds it, Windows,
   Program Files, ProgramData, AppData, and the agent's own folders (on a Mac: /System, /Library, ~/Library and the other

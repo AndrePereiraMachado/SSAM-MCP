@@ -316,3 +316,23 @@ test('file.upload: every pair of folders the case pre-selection folds but NTFS k
   }
   assert.deepEqual(sent.slice(0, 30), []);
 });
+test('roots: a folder deleted and created again is refused with its own code, then approved again by roots add', { skip }, async t => {
+  const f = uploadFixture();
+  t.after(f.remove);
+  const recreated = path.join(f.base, 'recreated');
+  let result = await outcome({ path: path.join(recreated, 'x.csv'), maxBytes: MiB }, { dataRoot: f.data, runtimeRoot: f.runtime });
+  assert.equal(result.error, 'UPLOAD_ROOT_REPLACED');
+  assert.match(result.message, /deleted and created again since it was approved; approve it again/);
+  assert.doesNotMatch(result.message, /link or junction/);
+  let r = roots('add', recreated, f);
+  assert.equal(r.code, 0, r.err); assert.match(r.out, /^Approved again: /);
+  result = await outcome({ path: path.join(recreated, 'x.csv'), maxBytes: MiB }, { dataRoot: f.data, runtimeRoot: f.runtime });
+  assert.equal(result.decision?.size, 10, result.message);
+  r = roots('add', recreated, f);
+  assert.match(r.out, /^Already approved: /);
+  // A plain approved folder that became a junction is not approved again.
+  r = roots('add', path.join(f.base, 'swapped'), f);
+  assert.equal(r.code, 1); assert.match(r.err, /was approved as a folder and is now a link or junction\. Nothing was approved\./);
+  result = await outcome({ path: path.join(f.base, 'swapped', 'x.csv'), maxBytes: MiB }, { dataRoot: f.data, runtimeRoot: f.runtime });
+  assert.equal(result.error, 'PATH_LEAVES_ROOT');
+});
