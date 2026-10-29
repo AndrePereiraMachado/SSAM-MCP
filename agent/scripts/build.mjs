@@ -16,6 +16,7 @@ import { extractZip } from './zip.mjs';
 import { verifyPack } from '../src/main/core/pack-sync.mjs';
 import { updateUrlProblem } from '../src/main/core/settings.mjs';
 import { stageNativePack } from './native-pack.mjs';
+import { assertBridgeTrust } from './bridge-trust-gate.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const app = path.resolve(here, '..');
@@ -78,6 +79,7 @@ export async function preparePack(source, platform, packDir = path.join(app, 'pa
 
 async function main() {
   const options = parse(process.argv.slice(2));
+  assertBridgeTrust();
   if (options.notarize) {
     if (options.platform !== 'mac' || process.platform !== 'darwin' || !options.native)
       throw new Error('Notarized releases require a native executable and a Mac build host.');
