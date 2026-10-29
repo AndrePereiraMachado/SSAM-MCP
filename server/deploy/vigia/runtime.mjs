@@ -63,6 +63,14 @@ export function buildCause(result){
  if(net)return {environmental:true,why:`network or registry: ${net[0]}`};
  return {environmental:false,why:''};
 }
+// The private store of the ODC features: featuresRoot, else tempRoot/features.
+export const resolvedFeaturesRoot=config=>path.resolve(config.featuresRoot??path.join(path.resolve(config.tempRoot),'features'));
+// Every path of the automatic state, in the order the execution-trust check reads them (-PrivatePaths: inside
+// C:\ssam-priv, owned by the execution account, no other writer, no reparse point). An unset one stays undefined, so the
+// caller refuses it. featuresRoot is always set (resolved).
+export function automaticPrivatePaths(config){
+ return [config.outDir,config.bundleRoot,config.installersDir,config.tempRoot,config.configFile,config.vault,config.tempRoot||config.featuresRoot?resolvedFeaturesRoot(config):undefined];
+}
 export async function createRuntime(config,{log=()=>{}}={}){
  const SAFE_GIT=['-c','core.autocrlf=false','-c','core.hooksPath=','-c','core.fsmonitor=false','-c','core.pager=cat','-c','credential.helper=','-c','diff.external=','-c','protocol.ext.allow=never','-c','protocol.file.allow=never','-c','core.attributesFile=NUL'];
  const root=path.resolve(config.workspace),temp=path.resolve(config.tempRoot),out=path.resolve(config.outDir),store=path.resolve(config.bundleRoot);
@@ -71,7 +79,7 @@ export async function createRuntime(config,{log=()=>{}}={}){
  const context=config.dockerContext??'desktop-linux';if(context!=='desktop-linux')throw Error('Only the local Docker Desktop context is supported.');
  const checkTrust=args=>run('C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe',['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',path.join(here,'execution-trust.ps1'),...args],{secret:true});
  const ps=(file,args,options)=>run(exe.powershell,['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',file,...args],options);
- const featuresRoot=path.resolve(config.featuresRoot??path.join(temp,'features'));
+ const featuresRoot=resolvedFeaturesRoot(config);
  if(/^c:[\\/]t(?:[\\/]|$)/i.test(featuresRoot))throw Error('featuresRoot must be private and outside C:\\t.');
  let sequence=0;const active=new Set();let stopping=false;
  // After the round's time limit no command starts, and one that ends (killed by the cut) reports the cut, never a result.
@@ -448,10 +456,15 @@ export async function createRuntime(config,{log=()=>{}}={}){
    if(path.resolve(config.node)!==path.resolve(process.execPath))throw Error('Watcher is running with a different node executable.');
    await checkTrust(['-Executables',settingsSshExecutable()]);
    const branch=await checkWorkspace();
-   for(const target of [config.outDir,config.bundleRoot,config.installersDir,config.tempRoot,config.configFile,config.vault]){
-    if(!target)throw Error('Automatic private paths must be explicitly configured.');
-    await checkTrust(['-PrivatePaths',target]);
+   const privatePaths=automaticPrivatePaths(config);
+   if(privatePaths.some(target=>!target))throw Error('Automatic private paths must be explicitly configured.');
+   // The features store is checked like the rest; a missing one is created only inside C:\ssam-priv (where the check
+   // can pass), never elsewhere.
+   if(!fs.existsSync(featuresRoot)){
+    if(!/^c:[\\/]ssam-priv[\\/]/i.test(featuresRoot))throw Error('featuresRoot must be inside C:\\ssam-priv in automatic mode.');
+    fs.mkdirSync(featuresRoot,{recursive:true});
    }
+   for(const target of privatePaths)await checkTrust(['-PrivatePaths',target]);
    executionSource({workspace:root,branch,head:await runtime.fullHead(),main:(await git(['rev-parse','main'])).stdout.trim(),gitDirectory:fs.statSync(path.join(root,'.git')).isDirectory()});
    await verifyCommit(await runtime.fullHead());
   };

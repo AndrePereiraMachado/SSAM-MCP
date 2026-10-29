@@ -352,3 +352,34 @@ test('automatic pin refuses a development code checkout before writing',{skip:!w
  await assert.rejects(runtime.pinExecution(manifest,dir,'pair',kernel),/execution checkout/);
  assert.equal(git(r.ws,'status','--porcelain'),'');
 });
+test('every automatic private path, featuresRoot included, goes through the execution-trust check',{skip:!windows},async t=>{
+ // child_process.spawn is replaced by a recorder (nothing runs): trust checks pass, git answers like a clean execution
+ // branch, and the first other command stops executionSource. Restored at the end.
+ const cp=(await import('node:child_process')).default,{syncBuiltinESMExports}=await import('node:module'),{EventEmitter}=await import('node:events'),{PassThrough}=await import('node:stream');
+ const original=cp.spawn,seen=[];
+ cp.spawn=(command,args)=>{
+  const child=new EventEmitter();child.stdout=new PassThrough();child.stderr=new PassThrough();child.stdin=new PassThrough();child.pid=1;child.kill=()=>{};
+  const trust=args.findIndex(a=>/execution-trust\.ps1$/.test(String(a)));let out='',code=0;
+  if(trust>=0)seen.push([args[trust+1],args[trust+2]]);
+  else if(/git/i.test(path.basename(command))){const a=args.join(' ');if(/branch --show-current/.test(a))out='server/vigia-run\n';else if(/config --local/.test(a))code=1;else if(!/status --porcelain/.test(a))code=1;}
+  else code=1;
+  setImmediate(()=>{child.stdout.end(out);child.stderr.end('');child.emit('close',code);});return child;
+ };
+ syncBuiltinESMExports();t.after(()=>{cp.spawn=original;syncBuiltinESMExports();});
+ const dir=tempDir(t,'vigia-trust-'),exe=process.execPath;
+ const base={workspace:path.resolve(server,'..'),tempRoot:path.join(dir,'tmp'),outDir:path.join(dir,'out'),bundleRoot:path.join(dir,'store'),installersDir:path.join(dir,'installers'),configFile:path.join(dir,'config.json'),vault:path.join(dir,'vault'),
+  automatic:true,dryRun:true,notify:false,node:exe,python:exe,dotnet:exe,git:GIT,bash:exe,powershell:exe,tar:exe,docker:exe,sshKeygen:exe,automaticDeployment:{ssh:{executable:exe}}};
+ const privatePaths=()=>seen.filter(([kind])=>kind==='-PrivatePaths').map(([,p])=>path.resolve(p).toLowerCase());
+ // A featuresRoot outside tempRoot (existing) is checked like every other private path.
+ const outside=path.join(dir,'elsewhere','features');fs.mkdirSync(outside,{recursive:true});
+ await (await createRuntime({...base,featuresRoot:outside})).executionSource().catch(()=>{});
+ assert.ok(privatePaths().includes(path.resolve(outside).toLowerCase()),`checked: ${privatePaths().join(', ')}`);
+ const {automaticPrivatePaths}=await import('./runtime.mjs');
+ assert.deepEqual(privatePaths(),automaticPrivatePaths({...base,featuresRoot:outside}).map(p=>path.resolve(p).toLowerCase()),'exactly the declared list');
+ // A missing featuresRoot outside C:\ssam-priv is refused before anything is created or checked.
+ seen.length=0;const missing=path.join(dir,'missing','features');
+ await assert.rejects((await createRuntime({...base,featuresRoot:missing})).executionSource(),/featuresRoot must be inside C:\\ssam-priv in automatic mode/);
+ assert.equal(fs.existsSync(path.join(dir,'missing')),false,'nothing created');assert.deepEqual(privatePaths(),[]);
+ // Without featuresRoot the list names tempRoot/features, resolved.
+ assert.equal(automaticPrivatePaths(base).at(-1),path.resolve(base.tempRoot,'features'));
+});
