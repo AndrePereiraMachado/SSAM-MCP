@@ -3,7 +3,8 @@ import path from 'node:path';
 
 // Compile the production client source. Only its pinned test-host path and the build's protocol differ.
 // Never install or inject into a real Studio to qualify this transport.
-const output = 'C:/t/vigia-auto/round2-e2e';
+// SSAM_E2E_OUTPUT: another folder for the generated projects (default as before).
+const output = process.env.SSAM_E2E_OUTPUT ?? 'C:/t/vigia-auto/round2-e2e';
 const repository = path.resolve(import.meta.dirname, '../../..');
 const original = fs.readFileSync(path.join(repository, 'server/platforms/odc/studio/bridge/client/Program.cs'), 'utf8');
 const host = path.join(output, 'host/bin/Release/net10.0/ODCStudio.exe');
@@ -37,5 +38,10 @@ fs.writeFileSync(path.join(output, 'settings.json'), JSON.stringify({ output, ho
 for (const [name, agent] of [['native-head', path.join(repository, 'agent/native/Ssam.Agent/Ssam.Agent.csproj')], ['native-base', 'C:/t/vigia-auto/round2-base/agent/native/Ssam.Agent/Ssam.Agent.csproj']]) {
   const dir = path.join(output, name); fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, name + '.csproj'), `<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net10.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><AssemblyName>NativeProtocol.Tests</AssemblyName></PropertyGroup><ItemGroup><Compile Include="${path.join(import.meta.dirname, 'NativeChannel.cs')}" Link="Program.cs"/><ProjectReference Include="${agent}"/></ItemGroup></Project>`);
+}
+// channel-head: the native harness of bridge-lifetime-e2e.test.mjs over this checkout (used with SSAM_E2E_OUTPUT).
+{
+  const dir = path.join(output, 'channel-head'); fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'channel-head.csproj'), `<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net10.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable><AssemblyName>NativeProtocol.Tests</AssemblyName></PropertyGroup><ItemGroup><Compile Include="${path.join(import.meta.dirname, '../bridge-lifetime-harness/NativeChannel.cs')}" Link="Program.cs"/><ProjectReference Include="${path.join(repository, 'agent/native/Ssam.Agent/Ssam.Agent.csproj')}"/></ItemGroup></Project>`);
 }
 console.log(output);
