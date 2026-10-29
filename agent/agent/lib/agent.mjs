@@ -11,7 +11,8 @@ import { execFileSync } from 'node:child_process';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { createChannel, PROTOCOL } from './channel.mjs';
 import { createOutbox } from './outbox.mjs';
-import { createKinds, KINDS } from './kinds.mjs';
+import { createKinds, helloKinds } from './kinds.mjs';
+import { resolveRenderer } from './render.mjs';
 import { createWorkspace } from './workspace.mjs';
 import { uploadBlob, downloadBlob, PART_BYTES, MAX_FILE_BYTES } from './blobs.mjs';
 import { createHttp } from './net.mjs';
@@ -77,7 +78,7 @@ export function readPack(root) {
     const pack = readJson(path.join(root, 'pack.json'));
     return { id: pack.id ?? null, lanes: Array.isArray(pack.lanes) ? pack.lanes : [], odcBridge: pack.odcBridge ?? null, o11BuiltFor: pack.o11BuiltFor ?? null,
       o11Hook: typeof pack.o11Hook === 'string' ? pack.o11Hook : null, o11Bridge: bridgeOf(pack.o11Bridge),
-      ...Object.fromEntries(['studioBuilds', 'odcBuiltFor', 'odcRuntime', 'o11Runtime'].filter(key => pack[key] !== undefined).map(key => [key, pack[key]])) };
+      ...Object.fromEntries(['studioBuilds', 'odcBuiltFor', 'odcRuntime', 'o11Runtime', 'renderer'].filter(key => pack[key] !== undefined).map(key => [key, pack[key]])) };
   } catch { return { id: null, lanes: [], odcBridge: null, o11BuiltFor: null, o11Hook: null, o11Bridge: null }; }
 }
 
@@ -101,6 +102,8 @@ export function createAgent({ root, runtimeRoot = root, config = {}, deps = {}, 
 
   const credential = config.credential ?? fs.readFileSync(credentialFile(base), 'utf8').trim();
   const pack = readPack(runtimeRoot);
+  // The render worker of this installation (render.mjs): deps.renderer in tests, else pack.json renderer, checked.
+  const renderer = deps.renderer ?? resolveRenderer({ runtimeRoot: path.resolve(runtimeRoot), dataRoot: base, pack, platform });
   const bridgeAbort = new AbortController();
   const processSnapshot = deps.bridgeProcessSnapshot ?? (deps.processes ? async () => {
     try { const rows = (await Promise.all(['ODCStudio.exe', 'ServiceStudio.exe'].map(image => d.processes(image)))).flat(); return completeInstances(rows) ? rows : null; }
@@ -158,8 +161,9 @@ export function createAgent({ root, runtimeRoot = root, config = {}, deps = {}, 
     catch { /* Bridge maintenance is never a prerequisite for opening the channel. */ }
     return { t: 'hello', protocol: PROTOCOL, instance,
       // root (C26): the folder of this agent, so the server names its inbox exactly; kinds: what this agent runs (file.sync
-      // since 0.2.0), so the server never asks an older agent for a kind it does not have.
-      agent: { version: AGENT_VERSION, node: process.version, platform, startedAt, root: base, kinds: [...KINDS], machine },
+      // since 0.2.0; file.upload and, with a renderer, screen.render since 0.3.4), so the server never asks an older agent for a
+      // kind it does not have.
+      agent: { version: AGENT_VERSION, node: process.version, platform, startedAt, root: base, kinds: helloKinds(renderer), machine },
       pack: { id: pack.id, lanes: pack.lanes, odcBridge: pack.odcBridge, o11BuiltFor: pack.o11BuiltFor, o11Hook: pack.o11Hook },
       capabilities: { bridgeOffer: platform !== 'darwin', ...(platform === 'darwin' ? { bridgeOfferReason: MAC_BRIDGE_REASON } : {}) },
       bridges: updates.reports(), bridgeUpdate: updates.wireStatus(), studios, o11Connection: connection };
@@ -178,7 +182,7 @@ export function createAgent({ root, runtimeRoot = root, config = {}, deps = {}, 
   // probe: the uploads of the network check (kind net.probe, net-probe.mjs); a kinds.mjs without that kind ignores it.
   const kinds = createKinds({ root: base, runtimeRoot: path.resolve(runtimeRoot), ws, pack, kernel: () => channel.welcome()?.kernel ?? null, deps: d, blobs, limits,
     o11Port: Number.isInteger(config.o11Port) ? config.o11Port : 4516, onConnection: record => { connection = view(record); },
-    probe: (id, body, options) => channel.probePut(id, body, options), platform });
+    probe: (id, body, options) => channel.probePut(id, body, options), platform, renderer });
 
   // One call -> its result message. A value above inlineMaxBytes (measured on the whole serialized message) goes as
   // a blob, up to maxValueBytes (the server assembles a value in memory and refuses a larger one: VALUE_TOO_LARGE, sent

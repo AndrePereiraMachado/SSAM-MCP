@@ -119,6 +119,7 @@ internal static class NativeHost
                 var studio = installed[lane]?["installed"];
                 Add(studio != null, lane + " Studio", studio == null ? "Not found" : StudioKinds.Text(studio["version"]) ?? "Version unknown", false);
             }
+            Add(true, "screen render", new RenderKinds(runtime, pack, root).Line, false);
             Add(true, "upload folders", UploadRoots.Read(root).Count + " approved", false);
             var report = new JsonObject { ["ok"] = ok, ["agentVersion"] = "0.4.0-native", ["runtime"] = "native-aot", ["root"] = root, ["pack"] = new JsonObject { ["id"] = pack["id"]?.DeepClone(), ["lanes"] = pack["lanes"]?.DeepClone() }, ["studios"] = installed, ["checks"] = checks, ["macOSValidated"] = false };
             Console.WriteLine(report.ToJsonString()); return ok ? 0 : 1;

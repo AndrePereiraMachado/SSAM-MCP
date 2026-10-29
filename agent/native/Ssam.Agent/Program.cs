@@ -109,6 +109,20 @@ internal static class Program
                 Console.WriteLine(answers.ToJsonString());
                 return 0;
             }
+            // check-render-request: stdin [request] -> [{ok:true} | {error}], the checks of screen.render (tests/native/render.test.mjs
+            // compares them with the Node agent's).
+            if (args is ["check-render-request"])
+            {
+                var requests = JsonNode.Parse(await Console.In.ReadToEndAsync()) as JsonArray ?? throw new ArgumentException("Expected a JSON array");
+                var answers = new JsonArray();
+                foreach (var request in requests)
+                {
+                    try { RenderRequest.Validate(request); answers.Add((JsonNode)new JsonObject { ["ok"] = true }); }
+                    catch (AgentFault e) { answers.Add((JsonNode)new JsonObject { ["error"] = e.Code }); }
+                }
+                Console.WriteLine(answers.ToJsonString());
+                return 0;
+            }
             if (args is ["version"])
             {
                 Console.WriteLine("{\"runtime\":\"native-aot\",\"protocol\":\"ssam-agent/1\",\"productionReady\":false}");
@@ -116,9 +130,12 @@ internal static class Program
             }
             // Qualification is deliberately loopback-only until all existing kinds are ported.
             // No production credentials or installed Studio session are used by this mode.
+            // --runtime-root <folder>: a test installation whose pack.json names a renderer (screen.render); nothing else is read there.
+            var renderRuntime = args is [.., "--runtime-root", var testRuntime] && args.Length == 9 ? testRuntime : null;
+            if (renderRuntime != null) args = args[..7];
             if (args is not ["qualify", "--root", var root, "--server", var server, "--bridge-port", var portText]
                 || !int.TryParse(portText, out var port) || port is < 1 or > 65535)
-                throw new ArgumentException("Use qualify --root <empty test directory> --server http://127.0.0.1:<port> --bridge-port <port>");
+                throw new ArgumentException("Use qualify --root <empty test directory> --server http://127.0.0.1:<port> --bridge-port <port> [--runtime-root <test installation>]");
             var uri = new Uri(server);
             if (uri.Scheme != "http" || uri.Host != "127.0.0.1" || uri.AbsolutePath != "/" || uri.Query != "" || uri.UserInfo != "")
                 throw new ArgumentException("Qualification accepts only an IPv4 loopback HTTP server");
@@ -127,7 +144,8 @@ internal static class Program
             if (credential != "ssam_native_qualification") throw new ArgumentException("Qualification credential required on stdin");
             using var lifetime = new CancellationTokenSource();
             Console.CancelKeyPress += (_, e) => { e.Cancel = true; lifetime.Cancel(); };
-            using var transport = new AgentChannel(uri, credential, state, port);
+            var render = new RenderKinds(renderRuntime, renderRuntime == null ? null : O11Connection.Read(Path.Combine(renderRuntime, "pack.json")), state.Root);
+            using var transport = new AgentChannel(uri, credential, state, port, render: render);
             var run = transport.RunAsync(lifetime.Token);
             while (!run.IsCompleted && !lifetime.IsCancellationRequested)
             {

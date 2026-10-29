@@ -16,6 +16,7 @@ internal sealed class AgentChannel : IDisposable
     private readonly Blobs blobs;
     private readonly FileKinds files;
     private readonly UploadKinds uploads;
+    private readonly RenderKinds renders;
     // The server's clock minus this machine's, from the welcome's Date (to the second) and each ping's at (to the
     // millisecond): a call's deadline is the server's time.
     private long? serverOffset;
@@ -49,7 +50,7 @@ internal sealed class AgentChannel : IDisposable
     private JsonObject? cachedProcesses;
     private DateTimeOffset processesAt;
 
-    public AgentChannel(Uri server, string credential, StateStore state, int bridgePort, string? runtime = null, JsonObject? pack = null, BridgeUpdates? bridgeUpdates = null, Func<JsonObject>? discoverStudios = null, Func<JsonObject>? processSnapshot = null)
+    public AgentChannel(Uri server, string credential, StateStore state, int bridgePort, string? runtime = null, JsonObject? pack = null, BridgeUpdates? bridgeUpdates = null, Func<JsonObject>? discoverStudios = null, Func<JsonObject>? processSnapshot = null, RenderKinds? render = null)
     {
         this.state = state;
         this.bridgePort = bridgePort;
@@ -67,6 +68,8 @@ internal sealed class AgentChannel : IDisposable
         blobs = new Blobs(this);
         files = new FileKinds(state.Root, this, blobs);
         uploads = new UploadKinds(state.Root, runtime ?? AppContext.BaseDirectory, blobs, () => MaxFileBytes);
+        // screen.render: the installed pack's renderer (qualification passes its own); announced only when it resolved.
+        renders = render ?? new RenderKinds(runtime, pack, state.Root);
         cleanup = new Timer(_ => ReconcileBridges(), null, TimeSpan.FromSeconds(30), Timeout.InfiniteTimeSpan);
     }
     private void ReconcileBridges()
@@ -127,7 +130,7 @@ internal sealed class AgentChannel : IDisposable
             ["version"] = "0.4.0-native", ["runtime"] = "native-aot",
             ["platform"] = OperatingSystem.IsWindows() ? "win32" : "darwin",
             ["startedAt"] = startedAt, ["root"] = state.Root, ["machine"] = machine?.DeepClone(),
-            ["kinds"] = new JsonArray((studios == null ? new[] { "qualification.bridge", "file.put", "file.get", "file.list", "file.sync", UploadKinds.Name } : StudioKinds.Names.Concat(FileKinds.Names).Append("net.probe").Append(UploadKinds.Name).ToArray()).Select(n => (JsonNode?)JsonValue.Create(n)).ToArray())
+            ["kinds"] = new JsonArray((studios == null ? new[] { "qualification.bridge", "file.put", "file.get", "file.list", "file.sync", UploadKinds.Name } : StudioKinds.Names.Concat(FileKinds.Names).Append("net.probe").Append(UploadKinds.Name).ToArray()).Concat(renders.Available ? new[] { RenderRequest.Kind } : Array.Empty<string>()).Select(n => (JsonNode?)JsonValue.Create(n)).ToArray())
         },
         ["pack"] = pack == null ? new JsonObject { ["id"] = "native-qualification", ["lanes"] = new JsonArray() } : new JsonObject { ["id"] = pack["id"]?.DeepClone(), ["lanes"] = pack["lanes"]?.DeepClone(), ["odcBridge"] = pack["odcBridge"]?.DeepClone(), ["o11BuiltFor"] = pack["o11BuiltFor"]?.DeepClone(), ["o11Hook"] = pack["o11Hook"]?.DeepClone() },
         ["capabilities"] = new JsonObject { ["bridgeOffer"] = !OperatingSystem.IsMacOS(), ["bridgeOfferReason"] = OperatingSystem.IsMacOS() ? BridgeUpdates.MacReason : null },
@@ -280,7 +283,7 @@ internal sealed class AgentChannel : IDisposable
         var kind = call["kind"]?.GetValue<string>();
         try
         {
-            if (!(kind == "qualification.bridge" && studios == null) && !FileKinds.Names.Contains(kind) && kind != UploadKinds.Name && !(studios != null && (StudioKinds.Names.Contains(kind) || kind == "net.probe")))
+            if (!(kind == "qualification.bridge" && studios == null) && !FileKinds.Names.Contains(kind) && kind != UploadKinds.Name && kind != RenderRequest.Kind && !(studios != null && (StudioKinds.Names.Contains(kind) || kind == "net.probe")))
                 throw new AgentFault("KIND_NOT_ALLOWED", "This kind is not available on the agent");
             var parameters = call["params"];
             if (call["paramsBlob"] != null)
@@ -299,6 +302,7 @@ internal sealed class AgentChannel : IDisposable
             long? callDeadline = call["deadline"] is JsonValue due && due.TryGetValue<double>(out var dueAt) && double.IsFinite(dueAt) ? (long)dueAt - (serverOffset ?? 0) : null;
             if (FileKinds.Names.Contains(kind)) value = await files.Execute(kind!, (JsonObject?)parameters ?? new JsonObject(), token);
             else if (kind == UploadKinds.Name) value = await uploads.Execute((JsonObject?)parameters ?? new JsonObject(), callDeadline, token);
+            else if (kind == RenderRequest.Kind) value = await renders.Execute((JsonObject?)parameters ?? new JsonObject(), callDeadline, token);
             else if (kind == "net.probe") value = await NetworkProbe((JsonObject?)parameters ?? new(), token);
             else if (studios != null) value = await studios.Execute(kind!, (JsonObject?)parameters ?? new(), token);
             else

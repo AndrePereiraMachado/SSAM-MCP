@@ -58,6 +58,14 @@ internal static class NativeFileIdentity
         return FinalPath(handle);
     }
 
+    // The real path of a file or folder by name, through a handle (Windows).
+    internal static string FinalPathOf(string file)
+    {
+        using var handle = CreateFile(file, 0x80, 7, IntPtr.Zero, 3, 0x02000000, IntPtr.Zero);
+        if (handle.IsInvalid) throw new IOException("The file cannot be opened");
+        return FinalPath(handle);
+    }
+
     // The identity of a path by name, the same form as Of() (macOS: stat).
     internal static string IdentityOf(string file)
     {
