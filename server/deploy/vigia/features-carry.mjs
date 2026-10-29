@@ -21,7 +21,7 @@ const sha256=bytes=>createHash('sha256').update(bytes).digest('hex');
 const refuse=(label,why)=>Object.assign(new EnvironmentError(`The ODC features ${label} are refused before use: ${why}. Nothing was used or stored.`,'features-invalid',['odc']),{why});
 const ENTITY={amp:'&',lt:'<',gt:'>',quot:'"',apos:"'"};
 function unescape(text,label){
- return text.replace(/&([^;&\s]*);?/g,(all,name)=>{
+ return text.replace(/&([^;& \t\r\n]*);?/g,(all,name)=>{
   if(!all.endsWith(';'))throw refuse(label,'a bare & outside an entity reference');
   if(Object.hasOwn(ENTITY,name))return ENTITY[name];
   const m=/^#(?:x([0-9a-f]{1,6})|(\d{1,7}))$/i.exec(name);
@@ -51,22 +51,27 @@ export function parseFeatures(input,label='(in memory)'){
    if(text.startsWith('/>',i)){i+=2;return {out,empty:true};}
    if(text[i]==='>'){i++;return {out,empty:false};}
    if(i===before)throw refuse(label,`${what} is malformed`);
-   const m=/^([A-Za-z_][\w.-]*)\s*=\s*("([^"<]*)"|'([^'<]*)')/.exec(text.slice(i,i+4096));
+   // Sticky at i, on the whole text: no window that would cut a long value.
+   const pair=/([A-Za-z_][\w.-]*)[ \t\r\n]*=[ \t\r\n]*("([^"<]*)"|'([^'<]*)')/y;pair.lastIndex=i;const m=pair.exec(text);
    if(!m)throw refuse(label,`${what} has a malformed attribute`);
    if(!allowed.includes(m[1]))throw refuse(label,`${what} has an unexpected attribute ${m[1]}`);
    if(m[1] in out)throw refuse(label,`${what} repeats the attribute ${m[1]}`);
    out[m[1]]=unescape(m[3]??m[4],label);i+=m[0].length;
   }
  };
+ // XML whitespace is exactly S (space, tab, CR, LF) everywhere in this parser, never JavaScript's whitespace class
+ // (which also matches U+00A0, U+FEFF, U+2028...).
  // The XML declaration, when there is one, is the very first thing of the document, version 1.0 (what .NET [xml] reads).
+ // Its encoding name is not used for a document read from text (.NET does not check it either): any value without
+ // tab, CR, LF, '<', '>', '&' or a quote, as .NET reads it.
  if(text.startsWith('<?xml')){
   const end=text.indexOf('?>');if(end<0)throw refuse(label,'the XML declaration does not end');
-  if(!/^<\?xml\s+version\s*=\s*(["'])1\.0\1(\s+encoding\s*=\s*(["'])[A-Za-z][\w.-]*\3)?(\s+standalone\s*=\s*(["'])(yes|no)\5)?\s*\?>$/.test(text.slice(i,end+2)))throw refuse(label,'a malformed XML declaration');
+  if(!/^<\?xml[ \t\r\n]+version[ \t\r\n]*=[ \t\r\n]*(["'])1\.0\1([ \t\r\n]+encoding[ \t\r\n]*=[ \t\r\n]*(["'])[^\t\n\r<>&"']*\3)?([ \t\r\n]+standalone[ \t\r\n]*=[ \t\r\n]*(["'])(yes|no)\5)?[ \t\r\n]*\?>$/.test(text.slice(i,end+2)))throw refuse(label,'a malformed XML declaration');
   i=end+2;
  }
  ws();
  if(text.startsWith('<?',i))throw refuse(label,'an XML declaration or processing instruction after the start of the document');
- if(!/^<Features[\s/>]/.test(text.slice(i,i+10)))throw refuse(label,'the root element is not <Features>');
+ if(!/^<Features[ \t\r\n/>]/.test(text.slice(i,i+10)))throw refuse(label,'the root element is not <Features>');
  i+='<Features'.length;
  const root=attributes(['Version'],'<Features>'),version=root.out.Version??null;
  if(version!==null&&!FULL.test(version))throw refuse(label,'the Features Version is not a four-part version');
@@ -74,7 +79,7 @@ export function parseFeatures(input,label='(in memory)'){
  if(!root.empty)for(;;){
   const lead=i;ws();
   if(text.startsWith('</Features',i)){i+='</Features'.length;ws();if(text[i]!=='>')throw refuse(label,'the root element does not close');i++;break;}
-  if(!/^<Feature[\s/>]/.test(text.slice(i,i+9)))throw refuse(label,i>=text.length?'the root element does not close':'an element, text or markup other than <Feature> inside <Features>');
+  if(!/^<Feature[ \t\r\n/>]/.test(text.slice(i,i+9)))throw refuse(label,i>=text.length?'the root element does not close':'an element, text or markup other than <Feature> inside <Features>');
   i+='<Feature'.length;
   const a=attributes(['key','kind'],'a <Feature>');
   if(!a.out.key||!GUID.test(a.out.key))throw refuse(label,'a Feature key is not a GUID');

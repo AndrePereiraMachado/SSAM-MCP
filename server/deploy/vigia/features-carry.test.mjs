@@ -243,6 +243,16 @@ test('every document readFeatures accepts is one features-protect.ps1 prepares',
   '"]]>" in a value':decl+one('a]]>b'),
   'a processing instruction after the declaration':decl+'<?pi x?>'+one('On'),
  };
+ // R3-1: XML whitespace is space, tab, CR and LF only; every other Unicode space in a tag or the declaration is refused.
+ for(const code of [0x85,0xa0,0x1680,0x2000,0x2001,0x2002,0x2003,0x2004,0x2005,0x2006,0x2007,0x2008,0x2009,0x200a,0x2028,0x2029,0x202f,0x205f,0x3000,0xfeff]){
+  const ch=String.fromCharCode(code),u='U+'+code.toString(16).toUpperCase().padStart(4,'0');
+  refused[`${u} before = in an attribute`]=decl+one('On').replace('kind=',`kind${ch}=`);
+  refused[`${u} after = in an attribute`]=decl+one('On').replace('kind=',`kind=${ch}`);
+  refused[`${u} between attributes`]=decl+one('On').replace('" kind=',`"${ch}kind=`);
+  refused[`${u} inside the declaration`]=`<?xml${ch}version="1.0"?>\r\n`+one('On');
+  refused[`${u} before ?> in the declaration`]=`<?xml version="1.0"${ch}?>\r\n`+one('On');
+  refused[`${u} around = in Version`]=decl+one('On').replace('Version=',`Version${ch}=`);
+ }
  for(const [name,text] of Object.entries(refused))assert.throws(()=>parseFeatures(Buffer.from(text)),e=>e.code==='features-invalid',name);
  const accepted=Object.entries({...corpus,...refused}).filter(([,text])=>{try{parseFeatures(Buffer.from(text));return true;}catch{return false;}});
  assert.deepEqual(Object.keys(corpus).filter(name=>!accepted.some(([n])=>n===name)),[],'the corpus is made of documents readFeatures accepts');
@@ -313,4 +323,101 @@ test('a crafted assembly with millions of table rows stays bounded in memory',as
   assert.equal(r.status,0,`${shape}: child exit ${r.status} ${r.signal??''} after ${took} ms: ${(r.stderr??'').split('\n').find(l=>/FATAL|Error/.test(l))??''}`);
   assert.match(r.stdout.trim(),/^(\d+ (features|reads)|unreadable-metadata)$/,shape);assert.ok(took<15000,`${shape}: ${took} ms`);
  }
+});
+// Round 3 of the review: readFeatures and the real features-protect.ps1 agree, both ways, on generated documents.
+// The oracle is what the next steps read: features-protect.ps1 succeeds (.NET [xml] of the UTF-8 bytes, root Features)
+// AND the parsed document follows the features contract, checked on the .NET DOM (root Features with at most a four-part
+// Version; only Feature children with exactly a GUID key and a Boolean, Integer or String kind; a text value only:
+// Boolean True or False, Integer of at most 19 digits; no U+0000 in a value; no duplicate key; no comment, processing
+// instruction, CDATA or document type anywhere). readFeatures must accept exactly the documents the oracle accepts.
+test('readFeatures and features-protect.ps1 agree on random mutants of the export shape',{skip:process.platform!=='win32'&&'features-protect.ps1 runs on Windows'},async t=>{
+ const {parseFeatures}=await load(),{spawnSync}=await import('node:child_process');
+ const protectScript=path.join(import.meta.dirname,'features-protect.ps1'),protectText=fs.readFileSync(protectScript,'utf8');
+ // The expression below is features-protect.ps1's own; if the script changes, this test has to follow it.
+ assert.match(protectText,/\$xml=\[xml\]\[Text\.Encoding\]::UTF8\.GetString\(\$bytes\)/);assert.match(protectText,/if\(\$xml\.DocumentElement\.Name -ne 'Features'\)\{throw/);
+ const K=key(1),K2=key(2),K3=key(3),K4=key(4);
+ const features=`  <Feature key="${K}" kind="Boolean">True</Feature>\r\n  <Feature key="${K2}" kind="String">UseCodeDefault</Feature>\r\n  <Feature key="${K3}" kind="Integer">42</Feature>\r\n  <Feature key="${K4}" kind="String">On</Feature>`;
+ const bases=[
+  `<?xml version="1.0" encoding="utf-16"?>\r\n<Features Version="1.7.31.20000">\r\n${features}\r\n</Features>`,
+  `<?xml version='1.0' encoding='utf-16' standalone='yes'?>\n<Features Version='1.7.31.20000'>\n${features}\n</Features>\n`,
+  `<Features Version="1.7.31.20000">${features}</Features>`,
+  `<?xml version="1.0"?><Features Version="1.7.31.20000"><Feature key="${K}" kind="String"/></Features>`,
+ ];
+ const tokens=[' ','\t','\r','\n','\u00A0','\uFEFF','\u2028','\u2029','\u3000','\u1680','\u2000','\u200A','\u202F','\u205F','\u0085',
+  ']]>',']]','<?pi?>','&#1;','&#0;','&#xD800;','&#x110000;','&amp;','&','<!--x-->','<![CDATA[x]]>','"',"'",'=','<','>','/','?',';',
+  '?>','<?xml version="1.0"?>','1.1',"'1.0'",'xmlns="u"',' xml:lang="en"','\u000b','\u0000','A','é','0','.','-','</Feature>',`<Feature key="${K2}" kind="String">`,'True','False'];
+ // A fixed seed and a bounded count: the same documents on every run.
+ let state=20261029;const rnd=n=>{state=(state+0x6D2B79F5)>>>0;let x=Math.imul(state^(state>>>15),1|state);x^=x+Math.imul(x^(x>>>7),61|x);return ((x^(x>>>14))>>>0)%n;};
+ const near=(text,anchor,span)=>{const at=text.indexOf(anchor);if(at<0)return rnd(text.length+1);const from=Math.max(0,at-span);return from+rnd(Math.min(text.length,at+anchor.length+span)-from+1);};
+ const anchors=[['?>',30],['Version',12],['kind=',25],['key=',25],['>UseCodeDefault<',4],['>On<',4],['>42<',4],['</Features',12]];
+ const mutants=new Set();
+ for(let attempt=0;attempt<8000&&mutants.size<3000;attempt++){
+  let text=bases[rnd(bases.length)];
+  for(let ops=rnd(10)<7?1:2;ops>0;ops--){
+   const pick=rnd(anchors.length+1),at=pick===anchors.length?rnd(text.length+1):near(text,...anchors[pick]);
+   const token=tokens[rnd(tokens.length)],op=rnd(3);
+   text=op===0?text.slice(0,at)+token+text.slice(at):op===1?text.slice(0,at)+token+text.slice(at+1):text.slice(0,at)+text.slice(at+1);
+  }
+  mutants.add(text);
+ }
+ const documents=[...bases,...mutants];
+ const vigia=documents.map(text=>{try{parseFeatures(Buffer.from(text));return true;}catch(e){if(e.code!=='features-invalid')throw e;return false;}});
+ const dir=tmp(t);documents.forEach((text,i)=>fs.writeFileSync(path.join(dir,`d${i}.xml`),text));
+ fs.writeFileSync(path.join(dir,'vigia.txt'),vigia.map(v=>v?'1':'0').join('\n'));
+ // ONE PowerShell process: for each document, features-protect.ps1's expression and the features contract on the DOM;
+ // and the real features-protect.ps1 for every document either side would accept.
+ const script=path.join(dir,'oracle.ps1');fs.writeFileSync(script,`param([string]$Dir,[string]$ProtectScript,[int]$Count)
+$ErrorActionPreference='Stop'
+# Ordinal comparisons only (regular expressions): PowerShell's -eq and -contains compare by culture and ignore
+# characters such as U+FEFF and U+0000.
+function Test-Contract([xml]$x){
+ foreach($n in $x.ChildNodes){if($n -isnot [Xml.XmlDeclaration] -and $n -isnot [Xml.XmlElement]){return $false}}
+ $root=$x.DocumentElement
+ if($root.Name -cnotmatch '^Features\\z' -or $root.NamespaceURI){return $false}
+ foreach($a in $root.Attributes){if($a.Name -cnotmatch '^Version\\z' -or $a.Value -cnotmatch '^[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+\\z'){return $false}}
+ $seen=@{}
+ foreach($f in $root.ChildNodes){
+  if($f -isnot [Xml.XmlElement] -or $f.Name -cnotmatch '^Feature\\z' -or $f.NamespaceURI){return $false}
+  if($f.Attributes.Count -ne 2){return $false}
+  $keyNode=$f.GetAttributeNode('key');$kindNode=$f.GetAttributeNode('kind')
+  if(-not $keyNode -or -not $kindNode){return $false}
+  if($keyNode.Value -cnotmatch '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\\z'){return $false}
+  if($kindNode.Value -cnotmatch '^(Boolean|Integer|String)\\z'){return $false}
+  foreach($c in $f.ChildNodes){if($c -isnot [Xml.XmlText]){return $false}}
+  $text=$f.InnerText
+  if($text.Contains([string][char]0)){return $false}
+  if($kindNode.Value -cmatch '^Boolean\\z' -and $text -cnotmatch '^(True|False)\\z'){return $false}
+  if($kindNode.Value -cmatch '^Integer\\z' -and $text -cnotmatch '^-?[0-9]{1,19}\\z'){return $false}
+  $lower=$keyNode.Value.ToLowerInvariant();if($seen.ContainsKey($lower)){return $false};$seen[$lower]=$true
+ }
+ return $true
+}
+$vigiaAccepts=[IO.File]::ReadAllLines((Join-Path $Dir 'vigia.txt'))
+$prepared=Join-Path $Dir 'prepared'
+for($i=0;$i -lt $Count;$i++){
+ $file=Join-Path $Dir "d$i.xml";$parsed=0;$contract=0;$real='-'
+ try{$xml=[xml][Text.Encoding]::UTF8.GetString([IO.File]::ReadAllBytes($file));if($xml.DocumentElement.Name -ne 'Features'){throw 'root'};$parsed=1;if(Test-Contract $xml){$contract=1}}catch{}
+ if($parsed -or $vigiaAccepts[$i] -eq '1'){try{& $ProtectScript -Plain $file -OutDir $prepared *> $null;$real='1'}catch{$real='0'}}
+ "$i $parsed $contract $real"
+}
+`);
+ const started=Date.now();
+ const r=spawnSync('C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe',['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',script,'-Dir',dir,'-ProtectScript',protectScript,'-Count',String(documents.length)],{encoding:'utf8',maxBuffer:16*1024*1024,timeout:300000});
+ assert.equal(r.status,0,r.stderr);
+ const oracle=new Map(r.stdout.trim().split(/\r?\n/).map(line=>{const [i,parsed,contract,real]=line.trim().split(' ');return [Number(i),{parsed:parsed==='1',contract:contract==='1',real}];}));
+ assert.equal(oracle.size,documents.length,'one answer per document');
+ const describe=i=>{const odd=[...new Set([...documents[i]].filter(ch=>ch.codePointAt(0)>126||(ch.codePointAt(0)<32&&!'\r\n\t'.includes(ch))).map(ch=>'U+'+ch.codePointAt(0).toString(16).toUpperCase().padStart(4,'0')))];return `document ${i} (unusual characters: ${odd.join(' ')||'none'})`;};
+ const forward=[],backward=[],script_=[];
+ documents.forEach((_,i)=>{
+  const o=oracle.get(i),prepares=o.real==='1',agreed=prepares&&o.contract;
+  if(o.real!=='-'&&prepares!==o.parsed)script_.push(`${describe(i)}: the expression says ${o.parsed}, features-protect.ps1 says ${prepares}`);
+  if(vigia[i]&&!agreed)forward.push(`${describe(i)}: ${prepares?'features-protect.ps1 prepares it but the contract refuses it':'features-protect.ps1 refuses it'}`);
+  if(!vigia[i]&&o.parsed&&o.contract)backward.push(describe(i));
+ });
+ const count=f=>[...oracle.values()].filter(f).length;
+ t.diagnostic(`${documents.length} documents (seed 20261029): readFeatures accepts ${vigia.filter(Boolean).length}, features-protect.ps1 prepares ${count(o=>o.parsed)} (run for real on ${count(o=>o.real!=='-')}), the oracle accepts ${count(o=>o.parsed&&o.contract)}; ${Date.now()-started} ms in one PowerShell process`);
+ assert.ok(vigia.filter(Boolean).length>=150,'the mutants keep enough valid documents to compare');
+ assert.deepEqual(script_,[],"features-protect.ps1 and its expression disagree");
+ assert.deepEqual(forward,[],'readFeatures accepts what features-protect.ps1 or the contract refuses');
+ assert.deepEqual(backward,[],'readFeatures refuses a document features-protect.ps1 prepares and the contract accepts');
 });
