@@ -23,24 +23,22 @@ const ENTITY={amp:'&',lt:'<',gt:'>',quot:'"',apos:"'"};
 function unescape(text,label){
  return text.replace(/&([^;&\s]*);?/g,(all,name)=>{
   if(!all.endsWith(';'))throw refuse(label,'a bare & outside an entity reference');
-  if(ENTITY[name])return ENTITY[name];
+  if(Object.hasOwn(ENTITY,name))return ENTITY[name];
   const m=/^#(?:x([0-9a-f]{1,6})|(\d{1,7}))$/i.exec(name);
   if(m){const code=m[1]?parseInt(m[1],16):Number(m[2]);if(code===0||code>0x10ffff)throw refuse(label,'an invalid character reference');return String.fromCodePoint(code);}
   throw refuse(label,'an unknown entity reference');
  });
 }
-// Strict parse of a Features.plain.xml: at most 1 MiB, UTF-16LE with BOM or UTF-8, no DOCTYPE or ENTITY, root <Features>
+// Strict parse of a Features.plain.xml: at most 1 MiB, UTF-8 without a byte order mark (the export's bytes, the only
+// encoding features-protect.ps1 prepares), no DOCTYPE or ENTITY, root <Features>
 // with an optional Version (a.b.c.d), children only <Feature key="GUID" kind="Boolean|Integer|String">, Boolean True or
 // False, Integer an integer, no duplicate key. Returns the version, the entries by lowercase key, the sha256 and what the
 // carry needs to filter entries out (the decoded text and each entry's span).
 export function parseFeatures(input,label='(in memory)'){
  const bytes=Buffer.from(input);
  if(bytes.length>FEATURES_MAX_BYTES)throw refuse(label,`${bytes.length} bytes, above the ${FEATURES_MAX_BYTES} byte limit`);
- let encoding='utf8',bom=0;
- if(bytes[0]===0xff&&bytes[1]===0xfe){encoding='utf16le';bom=2;}
- else if(bytes[0]===0xfe&&bytes[1]===0xff)throw refuse(label,'UTF-16 big-endian is not accepted');
- else if(bytes[0]===0xef&&bytes[1]===0xbb&&bytes[2]===0xbf)bom=3;
- let text;try{text=new TextDecoder(encoding==='utf16le'?'utf-16le':'utf-8',{fatal:true,ignoreBOM:true}).decode(bytes.subarray(bom));}catch{throw refuse(label,`not valid ${encoding==='utf16le'?'UTF-16LE':'UTF-8'}`);}
+ if((bytes[0]===0xff&&bytes[1]===0xfe)||(bytes[0]===0xfe&&bytes[1]===0xff)||(bytes[0]===0xef&&bytes[1]===0xbb&&bytes[2]===0xbf))throw refuse(label,"not the export's encoding (UTF-8 without a byte order mark, the one features-protect.ps1 and the ODC Studio provider read)");
+ let text;try{text=new TextDecoder('utf-8',{fatal:true,ignoreBOM:true}).decode(bytes);}catch{throw refuse(label,'not valid UTF-8');}
  if(/<!DOCTYPE|<!ENTITY/i.test(text))throw refuse(label,'a DOCTYPE or ENTITY declaration');
  if(/[\u0000-\u0008\u000b\u000c\u000e-\u001f￾￿]/.test(text))throw refuse(label,'a control character');
  let i=0;const ws=()=>{while(i<text.length&&/[ \t\r\n]/.test(text[i]))i++;};
@@ -92,7 +90,7 @@ export function parseFeatures(input,label='(in memory)'){
   entries.set(key,{kind:a.out.kind,value});spans.set(key,[lead,i]);
  }
  ws();if(i!==text.length)throw refuse(label,'content after the root element');
- return {version,entries,sha256:sha256(bytes),size:bytes.length,encoding,bom:bom>0,bytes,text,spans};
+ return {version,entries,sha256:sha256(bytes),size:bytes.length,bytes,text,spans};
 }
 // The Studio version a Features.plain.xml says it was exported from (<Features Version="1.7.29.10940">), or null; a
 // lenient look at its head, for messages only (readFeatures decides what is used).
@@ -150,13 +148,12 @@ export function drift(features,catalog){
  return {studioKeys:catalog.features.size,fileKeys:features.entries.size,newKeys:newKeys.sort(),removedKeys,kindConflicts,kernelRelevant,missingKernelRelevant:kernelRelevant.filter(k=>!k.inFile||conflicting.has(k.name)).map(k=>k.name)};
 }
 // The carried content: the source's bytes exactly, or, when some keys have another kind in the new version, the source
-// without those <Feature> elements (same encoding and BOM).
+// without those <Feature> elements (UTF-8 without a byte order mark, like the source).
 export function carriedContent(features,catalog,kindConflicts=[]){
  if(!kindConflicts.length)return {bytes:features.bytes,filtered:[],sha256:features.sha256};
  const keys=kindConflicts.map(c=>catalog.features.get(c.name).key),cut=keys.map(k=>features.spans.get(k)).sort((a,b)=>b[0]-a[0]);
  let text=features.text;for(const [from,to] of cut)text=text.slice(0,from)+text.slice(to);
- const body=Buffer.from(text,features.encoding),bom=!features.bom?Buffer.alloc(0):features.encoding==='utf16le'?Buffer.from([0xff,0xfe]):Buffer.from([0xef,0xbb,0xbf]);
- const bytes=Buffer.concat([bom,body]);
+ const bytes=Buffer.from(text,'utf8');
  return {bytes,filtered:kindConflicts.map(c=>c.name).sort(),sha256:sha256(bytes)};
 }
 // A provenance without any feature value (attempt.json, release.json, bundles.json and the texts carry this one).

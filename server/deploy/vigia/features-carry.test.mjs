@@ -20,8 +20,8 @@ test('invalid features are refused before use',async t=>{
  const dir=tmp(t),K=key(1),K2=key(2);
  const doc=body=>`<?xml version="1.0" encoding="utf-16"?>\r\n<Features Version="1.7.31.20000">\r\n${body}\r\n</Features>`;
  const good=doc(`  <Feature key="${K}" kind="Boolean">True</Feature>\r\n  <Feature key="${K2}" kind="String">UseCodeDefault</Feature>\r\n  <Feature key="${key(3)}" kind="Integer">-42</Feature>`);
- // Accepted: UTF-8 (the export's bytes), UTF-8 with BOM and UTF-16LE with BOM; the entries by key, the sha256 of the bytes.
- for(const bytes of [Buffer.from(good),Buffer.concat([Buffer.from([0xef,0xbb,0xbf]),Buffer.from(good)]),Buffer.concat([Buffer.from([0xff,0xfe]),Buffer.from(good,'utf16le')])]){
+ // Accepted: UTF-8 without a byte order mark (the export's bytes); the entries by key, the sha256 of the bytes.
+ for(const bytes of [Buffer.from(good)]){
   const file=path.join(dir,'ok.xml');fs.writeFileSync(file,bytes);const r=readFeatures(file);
   assert.equal(r.version,'1.7.31.20000');assert.equal(r.entries.size,3);assert.equal(r.entries.get(K).kind,'Boolean');assert.equal(r.entries.get(key(3)).kind,'Integer');assert.equal(r.sha256,sha(bytes));
  }
@@ -71,9 +71,7 @@ test('drift names new keys, kind conflicts and missing kernel flags; conflicts a
  assert.deepEqual(carried.filtered,['ChangedKind']);assert.equal(carried.sha256,sha(carried.bytes));
  const back=parseFeatures(carried.bytes);assert.equal(back.version,'1.7.30.10980');assert.equal(back.entries.size,4);assert.equal(back.entries.has(key(2)),false);
  assert.equal(back.text,text.replace(`\r\n  <Feature key="${key(2)}" kind="String">On</Feature>`,''),'only the conflicting element goes');
- // UTF-16LE with its BOM stays UTF-16LE with its BOM; without a conflict the copy is the source, byte for byte.
- const wide=parseFeatures(Buffer.concat([Buffer.from([0xff,0xfe]),Buffer.from(text,'utf16le')])),wideCopy=carriedContent(wide,catalog,drift(wide,catalog).kindConflicts);
- assert.deepEqual([...wideCopy.bytes.subarray(0,2)],[0xff,0xfe]);assert.equal(parseFeatures(wideCopy.bytes).entries.size,4);
+ // Without a conflict the copy is the source, byte for byte.
  const same=carriedContent(file,catalog,[]);assert.ok(same.bytes.equals(Buffer.from(text)));assert.equal(same.sha256,file.sha256);assert.deepEqual(same.filtered,[]);
  // A catalog that could not be read leaves the drift unknown (it never blocks).
  assert.deepEqual(drift(file,{unknown:'ServiceStudio.Common.dll is not in the frozen Studio copy'}),{unknown:'ServiceStudio.Common.dll is not in the frozen Studio copy',fileKeys:5});
@@ -140,4 +138,36 @@ test('an interrupted features write leaves nothing a later round reads as exact'
  assert.equal(fs.existsSync(path.join(manual,'odc-1.7.31','features.provenance.json')),false);
  // A complete write still records it whole, with a provenance signed for its final path.
  const done=store.defaults('1.7.31','1.7.31.20000');assert.equal(done.provenance.mode,'defaults');assert.equal(store.held('1.7.31').provenance.sha256,done.provenance.sha256);
+});
+test("only the export's encoding is accepted, the one the tests can prepare",async t=>{
+ const {readFeatures}=await load(),{spawnSync}=await import('node:child_process');
+ const dir=tmp(t),text=synthetic('1.7.31.20000',2);
+ const variants={'UTF-8 with BOM':Buffer.concat([Buffer.from([0xef,0xbb,0xbf]),Buffer.from(text)]),'UTF-16LE with BOM':Buffer.concat([Buffer.from([0xff,0xfe]),Buffer.from(text,'utf16le')]),'UTF-16BE with BOM':Buffer.concat([Buffer.from([0xfe,0xff]),Buffer.from(text,'utf16le').swap16()])};
+ const files={};
+ for(const [name,bytes] of Object.entries(variants)){
+  files[name]=path.join(dir,name.replaceAll(' ','-'),'Features.plain.xml');fs.mkdirSync(path.dirname(files[name]),{recursive:true});fs.writeFileSync(files[name],bytes);
+  assert.throws(()=>readFeatures(files[name]),e=>e.code==='features-invalid'&&/not the export's encoding \(UTF-8 without a byte order mark/.test(e.message),name);
+ }
+ // The seed command refuses them and stores nothing.
+ const featuresRoot=path.join(dir,'priv','features'),config=path.join(dir,'config.json');
+ fs.writeFileSync(config,JSON.stringify({workspace:path.join(dir,'ws'),tempRoot:path.join(dir,'priv'),bundleRoot:path.join(dir,'store'),outDir:path.join(dir,'out'),featuresRoot,notify:false,automatic:false}));
+ for(const name of ['UTF-8 with BOM','UTF-16LE with BOM']){
+  const r=spawnSync(process.execPath,[path.join(import.meta.dirname,'vigia.mjs'),'--config',config,'--seed-features',files[name]],{encoding:'utf8'});
+  assert.equal(r.status,1,name);assert.match(r.stderr,/not the export's encoding/);assert.equal(fs.existsSync(path.join(featuresRoot,'odc-1.7.31')),false,name);
+ }
+ // What is accepted, features-protect.ps1 prepares for the tests.
+ const plain=put(path.join(dir,'utf8','Features.plain.xml'),text);assert.equal(readFeatures(plain).entries.size,2);
+ if(process.platform==='win32'){
+  const r=spawnSync('C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe',['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',path.join(import.meta.dirname,'features-protect.ps1'),'-Plain',plain,'-OutDir',path.join(dir,'prepared')],{encoding:'utf8'});
+  assert.equal(r.status,0,r.stderr);assert.ok(fs.existsSync(path.join(dir,'prepared','Features.xml')));
+ }
+});
+test('entity references other than the five XML ones are refused, whatever their name',async t=>{
+ const {readFeatures}=await load();const dir=tmp(t);
+ const one=value=>`<Features Version="1.7.31.1"><Feature key="${key(1)}" kind="String">${value}</Feature></Features>`;
+ for(const name of ['constructor','toString','__proto__','hasOwnProperty','valueOf']){
+  const file=put(path.join(dir,name+'.xml'),one(`&${name};`));
+  assert.throws(()=>readFeatures(file),e=>e.code==='features-invalid'&&/an unknown entity reference/.test(e.message),name);
+ }
+ const ok=put(path.join(dir,'five.xml'),one('&amp;&lt;&gt;&quot;&apos;&#65;&#x42;'));assert.equal(readFeatures(ok).entries.get(key(1)).value,'&<>"\'AB');
 });
