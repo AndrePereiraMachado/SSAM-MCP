@@ -12,6 +12,7 @@ internal sealed class StudioKinds(string root, string runtime, JsonObject pack, 
     internal static readonly HashSet<string> O11Methods = ["ping", "bridge_manifest", "get_active_module", "list_open_modules", "get_errors", "open_module", "close_module", "publish", "windows", "ui_alive", "close_dialog", "snapshot_module", "merge_from_oml", "merge_status", "environment_session", "sc_api", "sc_web", "sc_http", "studio_login", "sc_session", "publish_log", "refresh_references", "answer_dependencies_dialog"];
     private static readonly HashSet<string> Manifests = ["check-base", "preview", "merge", "publish", "publish-status", "create", "authorize", "create-app"];
     private readonly Workspace workspace = new(root);
+    private readonly SemaphoreSlim attachGate = new(1, 1);
     internal static string? Text(JsonNode? node) => node is JsonValue v && v.TryGetValue<string>(out var s) ? s : null;
     internal static int Integer(JsonNode? node, int fallback = 0) => node is JsonValue v && v.TryGetValue<int>(out var n) ? n : fallback;
     internal static AgentFault Invalid(string message) => new("PARAMS_INVALID", message);
@@ -233,10 +234,17 @@ internal sealed class StudioKinds(string root, string runtime, JsonObject pack, 
             if (started) try { child.Kill(true); } catch (InvalidOperationException) { }
             var attempted = mutation && diagnostic.Contains("ApplyStartupHook", StringComparison.Ordinal);
             throw new AgentFault("ATTACH_FAILED", "The Studio helper did not confirm its result; a started attach must not be repeated", started && mutation ? null : false)
-                { AttachAttempted = attempted, BridgeLoadFailure = attempted && Regex.IsMatch(diagnostic, "BadImageFormat|FileLoadException|FileNotFoundException") };
+                { AttachAttempted = attempted, BridgeLoadFailure = attempted && Regex.IsMatch(diagnostic, "BadImageFormat|FileLoadException|FileNotFoundException|UnsupportedCommandException|ServerErrorException") && !Regex.IsMatch(diagnostic, "TimeoutException|TaskCanceledException|OperationCanceledException") };
         }
     }
     public async Task<JsonNode?> Execute(string kind, JsonObject p, CancellationToken token)
+    {
+        if (kind != "odc.attach") return await ExecuteCore(kind, p, token);
+        await attachGate.WaitAsync(token);
+        try { return await ExecuteCore(kind, p, token); }
+        finally { attachGate.Release(); }
+    }
+    private async Task<JsonNode?> ExecuteCore(string kind, JsonObject p, CancellationToken token)
     {
         if (kind == "studio.processes") return new JsonObject { ["processes"] = Processes(Text(p["image"]) ?? "") };
         var lane = kind.StartsWith("odc.") ? "odc" : "o11";
@@ -279,6 +287,7 @@ internal sealed class StudioKinds(string root, string runtime, JsonObject pack, 
         var target = CheckPid("odc", p["pid"], false);
         var context = Instance(target);
         var selectedBridge = kind == "odc.attach" && bridges != null ? await bridges.Select("odc", Text(target["version"]), BridgeUpdates.StudioRuntime(Text(target["path"]), "odc"), token, context) : null;
+        if (selectedBridge != null && bridges!.IsActive(selectedBridge, context)) return new JsonObject { ["ok"] = true, ["attached"] = true, ["reused"] = true, ["pid"] = target["pid"]?.DeepClone(), ["version"] = selectedBridge.Protocol };
         if (kind == "odc.attach" && selectedBridge == null) CheckExactBuild(pack, "odc", Text(target["version"]));
         var version = selectedBridge?.Protocol ?? (kind == "odc.pipe" ? bridges?.ProtocolFor("odc", Text(target["version"]), context) : null) ?? Text(pack["odcBridge"]) ?? "";
         if (!Regex.IsMatch(version, @"^v\d+$") || Integer(JsonValue.Create(int.TryParse(version[1..], out var n) ? n : 0)) < 98) throw new AgentFault("BRIDGE_VERSION_MISMATCH", "ODC bridge v98 or newer is required");
@@ -288,6 +297,7 @@ internal sealed class StudioKinds(string root, string runtime, JsonObject pack, 
         if (kind == "odc.attach")
         {
             var lease = selectedBridge == null ? null : await bridges!.PrepareAttach(selectedBridge, context, token);
+            try {
             var client = lease?.Bridge.FileNamed("ODC3.Bridge.Client.dll") ?? Path.Combine(runtime, "odc/studio/bridge/client/bin/Release/net10.0/ODC3.Bridge.Client.dll");
             var bridge = lease?.Bridge.FileNamed($"ODC3.Bridge.{version}.dll", "ODC3.Bridge.dll") ?? Path.Combine(runtime, $"odc/studio/bridge/bin/Release/net8.0/ODC3.Bridge.{version}.dll");
             JsonObject result;
@@ -302,7 +312,7 @@ internal sealed class StudioKinds(string root, string runtime, JsonObject pack, 
             }
             else result = await Helper(client, [pid.ToString(), "attach", bridge], 90000, true, token);
             if (selectedBridge != null && (result["ok"]?.GetValue<bool>() != true || result["attached"]?.GetValue<bool>() != true)) throw new AgentFault("ATTACH_FAILED", "Bridge load was not confirmed", null)
-                { AttachAttempted = result["attachAttempted"]?.GetValue<bool>() == true, BridgeLoadFailure = result["bridgeLoadFailure"]?.GetValue<bool>() == true };
+                { AttachAttempted = false, BridgeLoadFailure = false };
             }
             catch (Exception error) when (selectedBridge != null && !token.IsCancellationRequested)
             {
@@ -313,6 +323,7 @@ internal sealed class StudioKinds(string root, string runtime, JsonObject pack, 
             if (selectedBridge != null) bridges!.MarkActive(selectedBridge, context);
             if (result["ok"]?.GetValue<bool>() == true && result["attached"]?.GetValue<bool>() == true) await Bind(pid, version, token, null);
             return new JsonObject { ["ok"] = result["ok"]?.DeepClone(), ["attached"] = result["attached"]?.DeepClone(), ["pid"] = pid, ["version"] = version, ["note"] = (result["note"] ?? result["error"])?.DeepClone() };
+            } catch { lease?.Dispose(); throw; }
         }
         await Bind(pid, version, token);
         var line = await StudioWire.Pipe(pid, version, words, Math.Clamp(Integer(p["connectMs"], 10000), 1, 120000), token);

@@ -25,7 +25,7 @@ export async function attachOdc({ pid, client, bridge }, { run = exec } = {}) {
       : text.trim().split(/\r?\n/).find(Boolean) ?? 'The ODC bridge client failed';
     throw Object.assign(new AgentError('ATTACH_FAILED', message, { executed: null }), {
       attachAttempted: /ApplyStartupHook/.test(text),
-      bridgeLoadFailure: /ApplyStartupHook/.test(text) && /BadImageFormat|FileLoadException|FileNotFoundException/.test(text),
+      bridgeLoadFailure: /ApplyStartupHook/.test(text) && /BadImageFormat|FileLoadException|FileNotFoundException|UnsupportedCommandException|ServerErrorException/.test(text) && !/TimeoutException|TaskCanceledException|OperationCanceledException/.test(text),
     });
   }
 }

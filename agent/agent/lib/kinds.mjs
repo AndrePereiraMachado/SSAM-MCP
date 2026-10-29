@@ -205,34 +205,44 @@ export function createKinds({ root, runtimeRoot = root, ws, pack = {}, kernel = 
     }
   }
 
-  async function odcAttach({ pid }) {
+  const attachingOdc = new Map();
+  function odcAttach(params) {
+    const key = Number(params.pid);
+    if (attachingOdc.has(key)) return attachingOdc.get(key);
+    const task = attachOdcOnce(params).finally(() => attachingOdc.delete(key)); attachingOdc.set(key, task); return task;
+  }
+  async function attachOdcOnce({ pid }) {
     requireLane('odc');
     const target = await checkPid('odc', pid);
     const selected = await selectedBridge('odc', target);
+    if (selected && deps.bridgeUpdates.isActive?.(selected, target)) return { ok: true, attached: true, reused: true, pid: target.pid, version: selected.protocol };
     const version = selected?.protocol ?? pack.odcBridge;
     requireDataRootProtocol(version);
     if (!/^v\d+$/.test(version ?? '')) throw refuse('BRIDGE_VERSION_MISMATCH', 'The agent pack carries no ODC bridge');
     const lease = selected ? await deps.bridgeUpdates.prepareAttach(selected, target) : null;
-    const client = lease ? selectedFile(lease, ['ODC3.Bridge.Client.dll']) : path.join(runtimeRoot, 'odc', 'studio', 'bridge', 'client', 'bin', 'Release', 'net10.0', 'ODC3.Bridge.Client.dll');
-    const bridge = lease ? selectedFile(lease, ['ODC3.Bridge.' + version + '.dll', 'ODC3.Bridge.dll']) : path.join(runtimeRoot, 'odc', 'studio', 'bridge', 'bin', 'Release', 'net8.0', 'ODC3.Bridge.' + version + '.dll');
+    let client, bridge;
+    try {
+    client = lease ? selectedFile(lease, ['ODC3.Bridge.Client.dll']) : path.join(runtimeRoot, 'odc', 'studio', 'bridge', 'client', 'bin', 'Release', 'net10.0', 'ODC3.Bridge.Client.dll');
+    bridge = lease ? selectedFile(lease, ['ODC3.Bridge.' + version + '.dll']) : path.join(runtimeRoot, 'odc', 'studio', 'bridge', 'bin', 'Release', 'net8.0', 'ODC3.Bridge.' + version + '.dll');
     // macOS: no .NET client, the agent itself speaks the diagnostic IPC (the client is not in the macOS pack).
     for (const file of platform === 'darwin' ? [bridge] : [client, bridge]) if (!fs.existsSync(file)) throw refuse('ATTACH_FAILED', 'The agent pack is missing ' + path.relative(root, file));
+    } catch (error) { await lease?.release(); throw error; }
     let result;
     try {
       result = await deps.attachOdc(platform === 'darwin' ? { pid: target.pid, bridge, version } : { pid: target.pid, client, bridge });
       if (result?.ok !== true || result?.attached !== true) {
         if (!selected) return { ok: result?.ok === true, attached: result?.attached === true, pid: target.pid, version, note: result?.note ?? result?.error ?? null };
         throw Object.assign(new AgentError('ATTACH_FAILED', result?.error ?? result?.note ?? 'Bridge load was not confirmed', { executed: null }),
-          { attachAttempted: result.attachAttempted === true, bridgeLoadFailure: result.bridgeLoadFailure === true });
+          { attachAttempted: false, bridgeLoadFailure: false });
       }
     } catch (error) {
-      if (selected && deps.bridgeUpdates.rejectLoad(selected, error.message, { ...target, attempted: error.attachAttempted === true, bridgeFailure: error.bridgeLoadFailure === true })) deps.bridgeChanged?.();
       await lease?.release();
+      if (selected && deps.bridgeUpdates.rejectLoad(selected, error.message, { ...target, attempted: error.attachAttempted === true, bridgeFailure: error.bridgeLoadFailure === true })) deps.bridgeChanged?.();
       throw error;
     }
     if (lease) deps.bridgeUpdates.markActive(selected, target);
     // Binding, authentication and pipe failures are transient and never quarantine a DLL.
-    await bindOdcRoot(target.pid, version, null);
+    try { await bindOdcRoot(target.pid, version, null); } catch (error) { await lease?.release(); throw error; }
     return { ok: true, attached: true, pid: target.pid, version, note: result?.note ?? null };
   }
 

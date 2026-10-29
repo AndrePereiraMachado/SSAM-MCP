@@ -38,6 +38,7 @@ internal sealed class AgentChannel : IDisposable
     private int? exitCode;
     private int maxMessageBytes = 1048576;
     private readonly string instance = Guid.NewGuid().ToString();
+    private readonly Timer cleanup;
 
     public AgentChannel(Uri server, string credential, StateStore state, int bridgePort, string? runtime = null, JsonObject? pack = null, BridgeUpdates? bridgeUpdates = null, Func<JsonObject>? discoverStudios = null)
     {
@@ -55,6 +56,12 @@ internal sealed class AgentChannel : IDisposable
         http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", credential);
         blobs = new Blobs(this);
         files = new FileKinds(state.Root, this, blobs);
+        cleanup = new Timer(_ => ReconcileBridges(), null, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5));
+    }
+    private void ReconcileBridges()
+    {
+        try { bridges.Reconcile(new JsonArray(StudioKinds.Processes("ODCStudio.exe").Concat(StudioKinds.Processes("ServiceStudio.exe")).Select(p => p?.DeepClone()).ToArray()), installed); }
+        catch (IOException) { /* A concurrent attach or inaccessible process is retried on the next sweep. */ }
     }
 
     private async Task<HttpResponseMessage> Send(HttpMethod method, string route, JsonNode? body,
@@ -89,6 +96,7 @@ internal sealed class AgentChannel : IDisposable
     }
     private JsonObject Hello() {
         var versions = Versions();
+        ReconcileBridges();
         foreach (var lane in new[] { "odc", "o11" })
         {
             if (installed?[lane]?["installed"] is not JsonObject studio) continue;
@@ -104,7 +112,7 @@ internal sealed class AgentChannel : IDisposable
         },
         ["pack"] = pack == null ? new JsonObject { ["id"] = "native-qualification", ["lanes"] = new JsonArray() } : new JsonObject { ["id"] = pack["id"]?.DeepClone(), ["lanes"] = pack["lanes"]?.DeepClone(), ["odcBridge"] = pack["odcBridge"]?.DeepClone(), ["o11BuiltFor"] = pack["o11BuiltFor"]?.DeepClone(), ["o11Hook"] = pack["o11Hook"]?.DeepClone() },
         ["capabilities"] = new JsonObject { ["bridgeOffer"] = !OperatingSystem.IsMacOS(), ["bridgeOfferReason"] = OperatingSystem.IsMacOS() ? BridgeUpdates.MacReason : null },
-        ["bridges"] = bridges.Reports(), ["bridgeUpdate"] = bridges.Status?.DeepClone(), ["studios"] = installed?.DeepClone(), ["o11Connection"] = versions["o11Connection"]?.DeepClone()
+        ["bridges"] = bridges.Reports(), ["bridgeUpdate"] = bridges.WireStatus(), ["studios"] = installed?.DeepClone(), ["o11Connection"] = versions["o11Connection"]?.DeepClone()
     }; }
 
     public async Task<int> RunAsync(CancellationToken token)
@@ -361,7 +369,7 @@ internal sealed class AgentChannel : IDisposable
         catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
     }
 
-    public void Dispose() { bridges.Dispose(); http.Dispose(); }
+    public void Dispose() { cleanup.Dispose(); bridges.Dispose(); http.Dispose(); }
 
     private async Task<JsonNode> NetworkProbe(JsonObject p, CancellationToken token)
     {

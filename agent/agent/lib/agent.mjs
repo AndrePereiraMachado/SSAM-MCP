@@ -105,7 +105,7 @@ export function createAgent({ root, runtimeRoot = root, config = {}, deps = {}, 
     request: (route, { size }) => d.fetch(String(config.server).replace(/\/+$/, '') + route, {
       headers: { authorization: 'Bearer ' + credential }, redirect: 'manual',
       signal: AbortSignal.any([bridgeAbort.signal, AbortSignal.timeout(Math.min(300000, 15000 + Math.ceil(size / 65536) * 1000))]) }),
-    notify: status => log('bridge-update', status) });
+    notify: status => log('bridge-update', status), running: async () => [...await d.processes('ODCStudio.exe'), ...await d.processes('ServiceStudio.exe')] });
   d.bridgeUpdates = updates;
   d.studioRuntime ??= (target, lane) => studioRuntime(target, lane, { platform });
   d.bridgeChanged = () => channel.reconnect();
@@ -148,13 +148,14 @@ export function createAgent({ root, runtimeRoot = root, config = {}, deps = {}, 
       if (!installed) continue;
       installed.runtime = await d.studioRuntime(installed.dir, lane);
     }
+    if (updates.needsReconcile()) await updates.reconcile([...(await d.processes('ODCStudio.exe').catch(() => [])), ...(await d.processes('ServiceStudio.exe').catch(() => []))], studios);
     return { t: 'hello', protocol: PROTOCOL, instance,
       // root (C26): the folder of this agent, so the server names its inbox exactly; kinds: what this agent runs (file.sync
       // since 0.2.0), so the server never asks an older agent for a kind it does not have.
       agent: { version: AGENT_VERSION, node: process.version, platform, startedAt, root: base, kinds: [...KINDS], machine },
       pack: { id: pack.id, lanes: pack.lanes, odcBridge: pack.odcBridge, o11BuiltFor: pack.o11BuiltFor, o11Hook: pack.o11Hook },
       capabilities: { bridgeOffer: platform !== 'darwin', ...(platform === 'darwin' ? { bridgeOfferReason: MAC_BRIDGE_REASON } : {}) },
-      bridges: updates.reports(), bridgeUpdate: updates.status(), studios, o11Connection: connection };
+      bridges: updates.reports(), bridgeUpdate: updates.wireStatus(), studios, o11Connection: connection };
   }
 
   // pong.versions only when something changed since the last report; installed Studios are looked up again every
