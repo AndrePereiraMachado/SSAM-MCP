@@ -164,7 +164,7 @@ answer `AGENT_NOT_CONNECTED`, and the ones that run only on the server keep work
 
 ## What the agent does
 
-Only these 10 requests. Any other one is refused without running anything (`KIND_NOT_ALLOWED`); the server never sends
+Only these requests. Any other one is refused without running anything (`KIND_NOT_ALLOWED`); the server never sends
 code, scripts or DLL paths.
 
 | Request | What it does on your machine |
@@ -177,6 +177,9 @@ code, scripts or DLL paths.
 | `o11.selected` | checks whether the connected Service Studio is still the same one |
 | `file.put` / `file.get` / `file.list` | writes, reads and lists files only in the folders below |
 | `file.sync` | writes at once the several files of a step (agent 0.2.0), with the same rules as `file.put` |
+| `net.probe` | uploads a few throwaway bytes to the server for `ssam_doctor {network:true}`; nothing of your machine is read |
+| `file.upload` | sends ONE file of a folder YOU approved (agent 0.3.4; see "Folders SSAM may read" below) |
+| `screen.render` | draws screens the server sends in a sealed browser of the SSAM Agent app and returns measurements (agent 0.3.4; see "Screen rendering" below) |
 
 - Accepted ODC commands: `status`, `wait`, `authorize`, `open`, `snapshot`, `latest`, `check-base`, `preview`, `merge`,
   `publish`, `publish-status`, `publish-log`, `dismiss-dialog`, `close`, `module-info`, `assets`, `consumers`, `create`,
@@ -219,7 +222,8 @@ code, scripts or DLL paths.
 - Run another program, script or command that is not in the lists above. `attach` through `odc.pipe`, `login`,
   `export_*`, `find_element` and `get_flow_nodes` are refused.
 - Read or write outside the allowed folders: paths with `..`, absolute paths, UNC paths, alternate streams (`:`), device
-  names, and links or junctions that escape are refused before any access. The bridge receives only paths inside the
+  names, and links or junctions that escape are refused before any access. The one exception is `file.upload`: it reads
+  one file, only inside a folder you approved yourself. The bridge receives only paths inside the
   agent folder, including the ones inside a manifest.
 - Send the server your password, the cookies or tokens of the Studio, or the agent credential.
 - Show the credential on screen or in a log.
@@ -234,7 +238,8 @@ C:\SSAM-Agent\
   odc\studio\   ODC bridge and client       odc\README.md  marker of the root of the ODC bridge
   odc\snapshots\  odc\journal\  odc\lab\    ODC data (mirror of your space on the server)
   o11\          O11 data (mirror)           inbox\     files YOU deliver to the server
-  private\      config.json, credential, authority\, o11-connection.json, agent.log (only your user)
+  private\      config.json, credential, authority\, o11-connection.json, agent.log, upload-roots.json (the folders you
+                approved), uploads.jsonl (the files sent) (only your user)
   pack.json     id, lanes, versions and sha256 of each file of the pack
   studio\o11\   only in the pack with the release hook: hook\Anvil.Hook.h1.dll and bridge\b1\ (the thin bridge)
   release.json, release.sig.jws   only in the pack with the release hook: the owner's signature over each file
@@ -257,6 +262,56 @@ An absolute path inside the agent folder
 (`C:\SSAM-Agent\inbox\job.json`) counts as the same `agent:` path; any other path is refused with the exact place to
 write it. `ssam_doctor` shows the folder (`agent.inbox`). The server reads this file only when a tool asks for it. The
 paths the tools return appear as `ws:odc/...`, `ws:o11/...` or `ws:inbox/...` (your space on the server).
+
+## Folders SSAM may read (file uploads)
+
+With agent 0.3.4 and a server that has it turned on, your LLM can name a file of your computer by its full path (for
+example `C:\Projects\Orders\data.csv`) and the agent sends that one file to your space on the server
+(`ws:inbox/uploads/<sha256>.csv`). It works ONLY inside folders you approved on this computer; the server cannot approve
+a folder, and it never learns which folders you approved.
+
+Approve, list and remove folders in the SSAM Agent app (Folders SSAM may read) or with the command line:
+
+```powershell
+node C:\SSAM-Agent\agent\ssam-agent.mjs roots add --folder C:\Projects\Orders
+node C:\SSAM-Agent\agent\ssam-agent.mjs roots list
+node C:\SSAM-Agent\agent\ssam-agent.mjs roots remove --folder C:\Projects\Orders
+```
+
+With the app's native agent the same commands are `ssam-agent.exe roots add --folder <folder> --root <agent folder>`.
+A change counts at the next request, without a restart.
+
+- Never approved: a whole disk (`C:\`), a network folder, your user folder itself or a folder that holds it, Windows,
+  Program Files, ProgramData, AppData, and the agent's own folders (on a Mac: /System, /Library, ~/Library and the other
+  system folders). Approve the project folder itself, such as `C:\Users\you\Documents\Orders`.
+- Each request is one file: no folders, no other files next to it. At most 64 MiB, with an extension of letters or
+  digits (`.csv`, `.xlsx`, `.oml`...), two at a time.
+- Always refused, even inside an approved folder: credential and key files (`.ssh`, `.gnupg`, `.aws`, `.azure`, `.kube`,
+  `.docker` and `.git` folders; `id_rsa*`, `id_ed25519*`, `*.pem`, `*.key`, `*.pfx`, `*.p12`, `*.ppk`, `*.kdbx`, `.env`,
+  `.env.*`, `.npmrc`, `.netrc`, `credential*`), hard links, and any link or junction that leads out of the approved
+  folder (also when it changes while the file is being opened, and when the approved folder itself now leads elsewhere).
+- The file is read once; the bytes sent are exactly the bytes whose sha256 the server checks. A file locked by another
+  program is refused (`FILE_LOCKED`): close it there and ask again.
+- `private\uploads.jsonl` keeps, on your computer only, the last 1000 files sent (time, which approved folder, the path
+  inside it, size and sha256). The agent log keeps no paths.
+
+## Screen rendering
+
+With the SSAM Agent app (agent 0.3.4), the server can ask the agent to draw screens of the application you work on, so
+the LLM sees the layout without publishing it. The server builds each screen from the capture it already has (its HTML
+and the OutSystems style sheets, with sample data); the agent draws it in a sealed browser of the app and returns
+measurements: position and size of each element, whether it is hidden, covered or cut, how many lines its text takes,
+the computed styles the server asked for, and fonts that are missing. A JPEG of the screen comes back only when the LLM
+asks for it.
+
+- Nothing runs from the screen: no script, no network access, no navigation, no download, no permission. Only a fixed
+  measurement of the app runs, never code from the server.
+- Nothing of your computer leaves it: no text of the screen, no file, no cookie, no data of your applications. The only
+  hint about your computer is the list of fonts that were missing for the screen.
+- The worker is the app itself started for one request (`SSAM Agent --ssam-render-worker`). It opens no port, uses a
+  temporary folder that is removed afterwards, and stops after at most 90 s. One screen request runs at a time.
+- Without the app (command line only), the agent does not offer this, and the LLM goes on with the static checks and
+  publishing. `ssam-agent doctor` says "screen render: available" or why not.
 
 ## Network test
 

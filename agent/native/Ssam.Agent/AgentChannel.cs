@@ -127,7 +127,7 @@ internal sealed class AgentChannel : IDisposable
         return new() {
         ["t"] = "hello", ["protocol"] = "ssam-agent/1", ["instance"] = instance,
         ["agent"] = new JsonObject {
-            ["version"] = "0.4.0-native", ["runtime"] = "native-aot",
+            ["version"] = "0.4.1-native", ["runtime"] = "native-aot",
             ["platform"] = OperatingSystem.IsWindows() ? "win32" : "darwin",
             ["startedAt"] = startedAt, ["root"] = state.Root, ["machine"] = machine?.DeepClone(),
             ["kinds"] = new JsonArray((studios == null ? new[] { "qualification.bridge", "file.put", "file.get", "file.list", "file.sync", UploadKinds.Name } : StudioKinds.Names.Concat(FileKinds.Names).Append("net.probe").Append(UploadKinds.Name).ToArray()).Concat(renders.Available ? new[] { RenderRequest.Kind } : Array.Empty<string>()).Select(n => (JsonNode?)JsonValue.Create(n)).ToArray())

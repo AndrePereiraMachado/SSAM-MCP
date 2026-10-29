@@ -77,6 +77,8 @@ test('native file.upload through the channel: exactly {blob}, the deadline and t
   t.after(f.remove);
   const q = await qualify(t, { welcome: { partBytes: 4 } });
   assert.ok(q.hub.hellos[0].agent.kinds.includes('file.upload'));
+  assert.equal(q.hub.hellos[0].agent.version, '0.4.1-native');
+  assert.ok(!q.hub.hellos[0].agent.kinds.includes('screen.render'));
   // The approvals of the fixture, now in the qualification root (the file is read at every call).
   fs.copyFileSync(rootsFile(f.data), rootsFile(q.root));
   assert.equal(readRoots(q.root).length, 2);

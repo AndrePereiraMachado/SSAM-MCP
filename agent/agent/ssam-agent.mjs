@@ -28,6 +28,7 @@ import { readConnection } from './lib/o11-connect.mjs';
 import { macDoctor } from './lib/mac-doctor.mjs';
 import { writeInstallRecord, INSTALL_RECORD } from './lib/launcher.mjs';
 import { readRoots, rootsCommand } from './lib/upload-roots.mjs';
+import { resolveRenderer, rendererLine } from './lib/render.mjs';
 
 export { createAgent } from './lib/agent.mjs';
 
@@ -386,6 +387,7 @@ export async function doctor({ root, runtimeRoot = root, stdout = process.stdout
       add(Boolean(installed), lane === 'odc' ? 'ODC Studio' : 'Service Studio', installed ? `${installed.version ?? 'unknown version'} in ${installed.dir}` : 'not found on this machine', false);
     }
   }
+  add(true, 'screen render', rendererLine(resolveRenderer({ runtimeRoot, dataRoot: target, pack, platform })), false);
   const approved = readRoots(target).length;
   add(true, 'upload folders', `${approved} approved`, false);
   if (config?.server && !badServer) {

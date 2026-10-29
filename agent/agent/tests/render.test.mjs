@@ -148,6 +148,21 @@ test('screen.render through the channel: announced with a renderer, answered as 
   assert.equal(refused.error.executed, false);
 });
 
+test('doctor: the screen render line and the approved folders', async t => {
+  const { doctor } = await import('../ssam-agent.mjs');
+  const root = makeRoot(); t.after(() => removeRoot(root));
+  const report = async () => { const out = { text: '', write(chunk) { out.text += chunk; return true; } };
+    await doctor({ root, stdout: out, json: true, deps: { runtimes: async () => '', studios: async () => ({}), env: {} } }); return JSON.parse(out.text); };
+  let checks = (await report()).checks;
+  assert.match(checks.find(c => c.name === 'screen render').detail, /^not available \(this installation has no SSAM Agent app/);
+  assert.equal(checks.find(c => c.name === 'upload folders').detail, '0 approved');
+  const install = path.join(root, 'install'); fs.mkdirSync(path.join(install, 'resources', 'pack'), { recursive: true }); fs.writeFileSync(path.join(install, 'SSAM Agent.exe'), 'x');
+  fs.writeFileSync(path.join(install, 'resources', 'pack', 'pack.json'), JSON.stringify({ id: 'p', lanes: [], files: [], renderer: { kind: 'electron-worker', protocol: 1, path: '../../SSAM Agent.exe', electron: '44.9.2' } }));
+  const out = { text: '', write(chunk) { out.text += chunk; return true; } };
+  await doctor({ root: path.join(root, 'data-elsewhere'), runtimeRoot: path.join(install, 'resources', 'pack'), stdout: out, json: true, deps: { runtimes: async () => '', studios: async () => ({}), env: {} } });
+  assert.equal(JSON.parse(out.text).checks.find(c => c.name === 'screen render').detail, 'available (Electron 44.9.2)');
+});
+
 test('facts check: a result that names another document or viewport is refused', () => {
   const request = validateRenderRequest(baseRequest());
   const facts = { schema: 'ssam-render-facts/1', engine: { name: 'electron', version: '44', chromium: '1', protocol: 1 }, documents: [], images: [] };

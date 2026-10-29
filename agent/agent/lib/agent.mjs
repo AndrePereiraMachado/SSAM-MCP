@@ -40,7 +40,11 @@ import { completeInstances } from './studio-instance.mjs';
 // 0.3.3 (server/agent-mac): the macOS side (bundles, the diagnostic IPC attach, the Unix bridge pipe, POSIX paths,
 // install.sh and ssam-agent.sh); Windows, the kinds and the wire are those of 0.3.2. The server only shows and logs this
 // version (agent-hub.mjs info().agentVersion and agent-connected, 87e12565): no server change.
-export const AGENT_VERSION = '0.3.3';
+// 0.3.4 (agent/preview-upload): file.upload (one file of a folder the person approved, upload.mjs) and screen.render (the
+// app's Electron render worker, render.mjs), both announced in the hello only when they run here; the call's deadline
+// in this machine's clock. The other kinds and the wire are those of 0.3.3. The native core of the same change is
+// 0.4.1-native.
+export const AGENT_VERSION = '0.3.4';
 const INLINE_MAX_BYTES = 524288;
 const MAX_VALUE_BYTES = 16 * 1024 * 1024;
 const STUDIOS_REFRESH_MS = 5 * 60000;
