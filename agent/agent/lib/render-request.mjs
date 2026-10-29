@@ -47,15 +47,23 @@ function only(object, keys, where) {
   for (const key of Object.keys(object)) if (!keys.includes(key)) throw invalid(`${where} has an unknown field ${JSON.stringify(key).slice(0, 60)}`);
 }
 
-// ---- CSS read as tokens (CSS Syntax 3), never by a pattern over the raw text (the rule of the kernel's CssReach): comments
-// skipped, strings and identifiers with their escapes decoded before they are compared (u\72l( is url(, @\69mport is
-// @import), ASCII case ignored. The targets: the body of an unquoted url(); every string inside url(), src(), image-set(),
-// -webkit-image-set(), image(), -webkit-image(), cross-fade() and -webkit-cross-fade(); every string and url of an
-// @import prelude; and every string and identifier in the value of a custom property (--name: ... up to ; { or } outside a
-// function), because var() can carry it into any URL position. A target refused: after '\' -> '/' and trimming, one that
-// starts with // or an http(s), file or ftp scheme; in a URL position also any other scheme but data:image/ (only #id and
-// image data: survive the kernel's rewriting). The same reader is native/Ssam.Agent/RenderRequest.cs.
-const IMAGE_FUNCTIONS = new Set(['url', 'src', 'image-set', '-webkit-image-set', 'image', '-webkit-image', 'cross-fade', '-webkit-cross-fade']);
+// ---- CSS read as tokens (CSS Syntax 3), never by a pattern over the raw text, with the rule of the kernel's CssReach (R3-A):
+// comments skipped, strings and identifiers with their escapes decoded before they are compared (u\72l( is url(,
+// @\69mport is @import), ASCII case ignored, and the CONTEXT of each token decides whether it is a target:
+//   - targets: every string inside a URL or image function (url, src, image-set, image, cross-fade, element and their
+//     -webkit- forms) at any depth of the function stack, var() fallbacks included, also in content; every other string of
+//     a declaration VALUE (style rules, @font-face, @property initial-value, custom properties, style attributes) except
+//     the direct value of content and quotes outside any URL or image function and strings inside attr(), counter() and
+//     counters(); the body of every unquoted url() of a declaration value; every string and url of an @import prelude;
+//   - never targets: selector preludes ([href^="https://"] stays as written) and the @namespace prelude (not a fetch).
+// A target is refused when, after '\' -> '/' and trimming, it starts with // or an http(s), file or ftp scheme; inside a
+// URL or image function or @import also any other scheme but data:image/ (only #id and image data: stay). Normal CSS
+// (font-family names, grid-template-areas, local(), attr(), @counter-style) is never refused. The same reader is
+// native/Ssam.Agent/RenderRequest.cs; agent/tests/fixtures/render-table.mjs holds the shared cases.
+const IMAGE_FUNCTIONS = new Set(['url', 'src', 'image-set', '-webkit-image-set', 'image', '-webkit-image', 'cross-fade', '-webkit-cross-fade', 'element', '-moz-element']);
+const TEXT_FUNCTIONS = new Set(['attr', 'counter', 'counters']);
+// At-rules whose block holds rules (the others hold declarations).
+const RULE_BLOCKS = new Set(['media', 'supports', 'layer', 'container', 'document', '-moz-document', 'scope', 'starting-style', 'keyframes', '-webkit-keyframes', '-moz-keyframes']);
 const CSS_SPACE = new Set([' ', '\t', '\n', '\r', '\f']);
 const asciiLower = text => text.replace(/[A-Z]/g, c => c.toLowerCase());
 const cssTrim = text => { let s = 0; let e = text.length; while (s < e && CSS_SPACE.has(text[s])) s++; while (e > s && CSS_SPACE.has(text[e - 1])) e--; return text.slice(s, e); };
@@ -79,11 +87,24 @@ function readEscape(css, i) {
   return [String.fromCodePoint(code), j + (code > 0xffff ? 2 : 1)];
 }
 
-export function cssTargets(css) {
+// declarations: true for a style attribute (its text is one declaration list).
+export function cssTargets(css, { declarations = false } = {}) {
   const targets = [];
   const stack = [];
-  let custom = false; let pendingCustom = false; let atImport = false;
+  const blocks = [declarations ? 'decls' : 'rules'];
+  let at = null; let inValue = false; let property = ''; let lastIdent = null;
   const inImage = () => stack.some(name => IMAGE_FUNCTIONS.has(name));
+  const inText = () => stack.some(name => TEXT_FUNCTIONS.has(name));
+  const top = () => blocks[blocks.length - 1];
+  const reset = () => { at = null; inValue = false; property = ''; lastIdent = null; };
+  // A string or url body found here: is it a target, and with the URL-position rule?
+  const consider = (value, isUrl) => {
+    if (inImage() || isUrl) { if (at === 'import' || (top() === 'decls' && inValue)) targets.push({ value, url: true }); return; }
+    if (at === 'import') { targets.push({ value, url: true }); return; }
+    if (top() !== 'decls' || !inValue || inText()) return;
+    if ((property === 'content' || property === 'quotes')) return;
+    targets.push({ value, url: false });
+  };
   const readName = start => { let name = ''; let i = start; while (i < css.length) { if (identChar(css[i])) { name += css[i++]; continue; } if (validEscape(css, i)) { const [text, next] = readEscape(css, i); name += text; i = next; continue; } break; } return [name, i]; };
   let i = 0;
   while (i < css.length) {
@@ -102,14 +123,12 @@ export function cssTargets(css) {
         value += css[j++];
       }
       i = css[j] === c ? j + 1 : j;
-      if (atImport || inImage()) targets.push({ value, url: true });
-      else if (custom) targets.push({ value, url: false });
-      pendingCustom = false;
+      consider(value, false);
       continue;
     }
     if (c === '@') {
       const [name, next] = readName(i + 1);
-      if (name) { if (stack.length === 0 && asciiLower(name) === 'import') atImport = true; i = next; pendingCustom = false; continue; }
+      if (name) { if (stack.length === 0 && !inValue) at = asciiLower(name); i = next; continue; }
     }
     if (identStart(c) || validEscape(css, i) || (c === '-' && (identStart(css[i + 1]) || validEscape(css, i + 1)))) {
       const [name, next] = readName(i);
@@ -123,29 +142,29 @@ export function cssTargets(css) {
               let value = '';
               while (j < css.length && css[j] !== ')') { if (validEscape(css, j)) { const [text, next2] = readEscape(css, j); value += text; j = next2; } else value += css[j++]; }
               i = j < css.length ? j + 1 : j;
-              targets.push({ value: cssTrim(value), url: true });
-              pendingCustom = false;
+              if (at !== 'namespace') consider(cssTrim(value), true);
               continue;
             }
           }
-          stack.push(lower); pendingCustom = false;
+          stack.push(lower);
           continue;
         }
-        if (custom) targets.push({ value: name, url: false });
-        pendingCustom = stack.length === 0 && !custom && name.startsWith('--');
+        if (stack.length === 0 && !inValue) lastIdent = asciiLower(name);
         continue;
       }
     }
     if (c === '(') stack.push('');
     else if (c === ')') stack.pop();
-    else if (c === ':' && stack.length === 0 && pendingCustom) custom = true;
-    else if ((c === ';' || c === '{' || c === '}') && stack.length === 0) { custom = false; atImport = false; }
-    if (!CSS_SPACE.has(c)) pendingCustom = false;
+    else if (stack.length === 0) {
+      if (c === ':' && top() === 'decls' && !inValue && at === null) { inValue = true; property = lastIdent ?? ''; }
+      else if (c === ';') { if (top() === 'decls') { inValue = false; property = ''; lastIdent = null; } at = null; }
+      else if (c === '{') { blocks.push(at !== null && RULE_BLOCKS.has(at) ? 'rules' : 'decls'); reset(); }
+      else if (c === '}') { if (blocks.length > 1) blocks.pop(); reset(); }
+    }
     i++;
   }
   return targets;
 }
-
 const OUTSIDE = /^(?:https?|file|ftp):/i;
 const SCHEME = /^[A-Za-z][A-Za-z0-9+.-]*:/;
 function targetRefused({ value, url }) {
@@ -155,8 +174,8 @@ function targetRefused({ value, url }) {
 }
 
 // The CSS checks, for a style sheet, a <style> element and a style attribute (entities already decoded).
-function cssProblem(css) {
-  const refused = cssTargets(css).find(targetRefused);
+function cssProblem(css, options) {
+  const refused = cssTargets(css, options).find(targetRefused);
   return refused ? (refused.url ? 'a url, image or @import to an outside address' : 'an outside address in a custom property') : null;
 }
 
@@ -218,7 +237,7 @@ export function documentProblem(html) {
       const urls = name === 'srcset' || name === 'imagesrcset' ? value.split(',').map(part => part.trim().split(/\s+/)[0]) : [value.trim()];
       if (urls.some(url => FORBIDDEN_URL.test(url))) return `an outside address in a ${name} attribute`;
     }
-    if (name === 'style') { const css = cssProblem(value); if (css) return css + ' in a style attribute'; }
+    if (name === 'style') { const css = cssProblem(value, { declarations: true }); if (css) return css + ' in a style attribute'; }
   }
   for (const match of html.matchAll(/<style\b[^>]*>([\s\S]*?)(?:<\/style\s*>|$)/gi)) { const css = cssProblem(match[1]); if (css) return css + ' in a style element'; }
   return null;

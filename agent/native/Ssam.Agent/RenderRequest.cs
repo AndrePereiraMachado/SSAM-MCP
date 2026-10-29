@@ -69,7 +69,7 @@ internal static class RenderRequest
     // strings and identifiers with escapes decoded before they are compared, ASCII case ignored; targets are the body of an
     // unquoted url(), strings inside the image functions, strings and urls of an @import prelude, and strings and
     // identifiers in a custom property value.
-    private static readonly HashSet<string> ImageFunctions = ["url", "src", "image-set", "-webkit-image-set", "image", "-webkit-image", "cross-fade", "-webkit-cross-fade"];
+    private static readonly HashSet<string> ImageFunctions = ["url", "src", "image-set", "-webkit-image-set", "image", "-webkit-image", "cross-fade", "-webkit-cross-fade", "element", "-moz-element"];
     private static bool CssSpace(char c) => c is ' ' or '\t' or '\n' or '\r' or '\f';
     private static bool CssSpaceAt(string s, int i) => i < s.Length && CssSpace(s[i]);
     private static string AsciiLower(string s) => string.Concat(s.Select(c => c is >= 'A' and <= 'Z' ? (char)(c + 32) : c));
@@ -93,12 +93,27 @@ internal static class RenderRequest
         var width = char.IsHighSurrogate(s[j]) && j + 1 < s.Length && char.IsLowSurrogate(s[j + 1]) ? 2 : 1;
         return (s.Substring(j, width), j + width);
     }
-    internal static List<(string Value, bool Url)> CssTargets(string css)
+    private static readonly HashSet<string> TextFunctions = ["attr", "counter", "counters"];
+    private static readonly HashSet<string> RuleBlocks = ["media", "supports", "layer", "container", "document", "-moz-document", "scope", "starting-style", "keyframes", "-webkit-keyframes", "-moz-keyframes"];
+    // The context of each token decides whether it is a target (render-request.mjs cssTargets has the full rule).
+    internal static List<(string Value, bool Url)> CssTargets(string css, bool declarations = false)
     {
         var targets = new List<(string, bool)>();
         var stack = new List<string>();
-        bool custom = false, pendingCustom = false, atImport = false;
+        var blocks = new List<string> { declarations ? "decls" : "rules" };
+        string? at = null; var inValue = false; var property = ""; string? lastIdent = null;
         bool InImage() => stack.Any(ImageFunctions.Contains);
+        bool InText() => stack.Any(TextFunctions.Contains);
+        string Top() => blocks[^1];
+        void Reset() { at = null; inValue = false; property = ""; lastIdent = null; }
+        void Consider(string value, bool isUrl)
+        {
+            if (InImage() || isUrl) { if (at == "import" || Top() == "decls" && inValue) targets.Add((value, true)); return; }
+            if (at == "import") { targets.Add((value, true)); return; }
+            if (Top() != "decls" || !inValue || InText()) return;
+            if (property is "content" or "quotes") return;
+            targets.Add((value, false));
+        }
         (string, int) ReadName(int start)
         {
             var name = new StringBuilder(); var i = start;
@@ -131,15 +146,13 @@ internal static class RenderRequest
                     value.Append(css[j++]);
                 }
                 i = j < css.Length && css[j] == c ? j + 1 : j;
-                if (atImport || InImage()) targets.Add((value.ToString(), true));
-                else if (custom) targets.Add((value.ToString(), false));
-                pendingCustom = false;
+                Consider(value.ToString(), false);
                 continue;
             }
             if (c == '@')
             {
                 var (name, next) = ReadName(i + 1);
-                if (name.Length > 0) { if (stack.Count == 0 && AsciiLower(name) == "import") atImport = true; i = next; pendingCustom = false; continue; }
+                if (name.Length > 0) { if (stack.Count == 0 && !inValue) at = AsciiLower(name); i = next; continue; }
             }
             if (IdentStart(css, i) || ValidEscape(css, i) || c == '-' && (IdentStart(css, i + 1) || ValidEscape(css, i + 1)))
             {
@@ -162,29 +175,30 @@ internal static class RenderRequest
                                     else value.Append(css[j++]);
                                 }
                                 i = j < css.Length ? j + 1 : j;
-                                targets.Add((CssTrim(value.ToString()), true));
-                                pendingCustom = false;
+                                if (at != "namespace") Consider(CssTrim(value.ToString()), true);
                                 continue;
                             }
                         }
-                        stack.Add(lower); pendingCustom = false;
+                        stack.Add(lower);
                         continue;
                     }
-                    if (custom) targets.Add((name, false));
-                    pendingCustom = stack.Count == 0 && !custom && name.StartsWith("--", StringComparison.Ordinal);
+                    if (stack.Count == 0 && !inValue) lastIdent = AsciiLower(name);
                     continue;
                 }
             }
             if (c == '(') stack.Add("");
             else if (c == ')') { if (stack.Count > 0) stack.RemoveAt(stack.Count - 1); }
-            else if (c == ':' && stack.Count == 0 && pendingCustom) custom = true;
-            else if (c is ';' or '{' or '}' && stack.Count == 0) { custom = false; atImport = false; }
-            if (!CssSpace(c)) pendingCustom = false;
+            else if (stack.Count == 0)
+            {
+                if (c == ':' && Top() == "decls" && !inValue && at == null) { inValue = true; property = lastIdent ?? ""; }
+                else if (c == ';') { if (Top() == "decls") { inValue = false; property = ""; lastIdent = null; } at = null; }
+                else if (c == '{') { blocks.Add(at != null && RuleBlocks.Contains(at) ? "rules" : "decls"); Reset(); }
+                else if (c == '}') { if (blocks.Count > 1) blocks.RemoveAt(blocks.Count - 1); Reset(); }
+            }
             i++;
         }
         return targets;
-    }
-    private static readonly Regex Outside = new("^(?:https?|file|ftp):", I);
+    }    private static readonly Regex Outside = new("^(?:https?|file|ftp):", I);
     private static readonly Regex Scheme = new("^[A-Za-z][A-Za-z0-9+.-]*:", RegexOptions.CultureInvariant);
     private static readonly Regex DataImage = new("^data:image/", I);
     private static bool TargetRefused((string Value, bool Url) target)
@@ -193,9 +207,9 @@ internal static class RenderRequest
         if (text.StartsWith("//", StringComparison.Ordinal) || Outside.IsMatch(text)) return true;
         return target.Url && Scheme.IsMatch(text) && !DataImage.IsMatch(text);
     }
-    private static string? CssProblem(string css)
+    private static string? CssProblem(string css, bool declarations = false)
     {
-        foreach (var target in CssTargets(css))
+        foreach (var target in CssTargets(css, declarations))
             if (TargetRefused(target)) return target.Url ? "a url, image or @import to an outside address" : "an outside address in a custom property";
         return null;
     }
@@ -266,7 +280,7 @@ internal static class RenderRequest
                 var urls = name is "srcset" or "imagesrcset" ? value.Split(',').Select(part => Spaces.Split(JsTrim(part))[0]) : [JsTrim(value)];
                 if (urls.Any(url => ForbiddenUrl.IsMatch(url))) return $"an outside address in a {name} attribute";
             }
-            if (name == "style" && CssProblem(value) is string css) return css + " in a style attribute";
+            if (name == "style" && CssProblem(value, true) is string css) return css + " in a style attribute";
         }
         foreach (Match match in StyleElement.Matches(html)) if (CssProblem(match.Groups[1].Value) is string css) return css + " in a style element";
         return null;
