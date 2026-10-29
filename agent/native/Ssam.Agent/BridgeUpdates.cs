@@ -8,6 +8,11 @@ using static Ssam.Agent.StudioKinds;
 
 namespace Ssam.Agent;
 
+internal sealed class SignedManifestRefusal(JsonObject manifest) : IOException("Bridge signer policy refused")
+{
+    internal JsonObject Manifest { get; } = manifest;
+}
+
 internal sealed record InstalledBridge(JsonObject Manifest, string Root, string Digest)
 {
     internal string Protocol => StudioKinds.Text(Manifest["protocol"])!;
@@ -138,7 +143,7 @@ internal sealed class BridgeUpdates(string root, string runtime, string publicKe
         {
             var name = Text(entry?["path"]) ?? ""; var size = entry?["size"]?.GetValue<long>() ?? -1;
             if (Regex.IsMatch(name, @"\.(dll|exe)$", RegexOptions.IgnoreCase) && (Text(entry?["signer"]) is not ("owner" or "microsoft")
-                || Regex.IsMatch(name, @"(^|/)(ODC3\.|Anvil\.)|^hook/", RegexOptions.IgnoreCase) && Text(entry?["signer"]) != "owner")) throw new IOException("Bridge signer policy refused");
+                || Regex.IsMatch(name, @"(^|/)(ODC3\.|Anvil\.)|^hook/", RegexOptions.IgnoreCase) && Text(entry?["signer"]) != "owner")) throw new SignedManifestRefusal(m);
             if (!SafePath(name) || size is < 1 or > 134217728 || !Regex.IsMatch(Text(entry?["sha256"]) ?? "", "^[a-f0-9]{64}$")
                 || paths.Any(p => p.Equals(name, StringComparison.OrdinalIgnoreCase) || p.StartsWith(name + "/", StringComparison.OrdinalIgnoreCase) || name.StartsWith(p + "/", StringComparison.OrdinalIgnoreCase))) throw new IOException("Invalid or conflicting bridge file entry");
             paths.Add(name); total += size;
@@ -343,6 +348,7 @@ internal sealed class BridgeUpdates(string root, string runtime, string publicKe
                 try { changed = await Install(offer, lane, installed[lane]?["installed"], http, token) || changed; }
                 catch (Exception e) when (!token.IsCancellationRequested)
                 {
+                    if (e is SignedManifestRefusal refused && state["broken"] == null) Watermark(refused.Manifest, true);
                     try {
                         var m = JsonNode.Parse(ManifestText(offer["manifest"])) as JsonObject;
                         if (m != null && Text(m["lane"]) == lane && Three(Text(m["studioVersion"])) != null && ProtocolNumber(Text(m["protocol"])) >= 0 && Sequence(m) > 0)

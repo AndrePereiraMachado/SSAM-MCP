@@ -84,7 +84,7 @@ export function createBridgeUpdates({ root, runtimeRoot = root, platform = proce
     for (const f of m.files) {
       if (!safePath(f.path) || !/^[a-f0-9]{64}$/.test(f.sha256 ?? '') || !Number.isSafeInteger(f.size) || f.size < 1 || f.size > 128 * 1024 * 1024) fail('Invalid bridge file entry');
       const name = f.path.toLowerCase();
-      if (/\.(dll|exe)$/i.test(name) && (!['owner', 'microsoft'].includes(f.signer) || (/(^|\/)(odc3\.|anvil\.)|^hook\//i.test(name) && f.signer !== 'owner'))) fail('Bridge signer policy refused');
+      if (/\.(dll|exe)$/i.test(name) && (!['owner', 'microsoft'].includes(f.signer) || (/(^|\/)(odc3\.|anvil\.)|^hook\//i.test(name) && f.signer !== 'owner'))) throw Object.assign(new Error('Bridge signer policy refused'), { authenticatedManifest: m });
       if (seen.has(name) || [...seen].some(p => p.startsWith(name + '/') || name.startsWith(p + '/'))) fail('Duplicate or conflicting bridge path');
       seen.add(name); total += f.size;
     }
@@ -176,6 +176,7 @@ export function createBridgeUpdates({ root, runtimeRoot = root, platform = proce
       const offer = welcome?.compatible?.[lane]?.bridgeOffer; if (!offer) continue;
       try { if (offer.lane !== lane) fail('Bridge offer lane mismatch'); changed = await install(offer, studios?.[lane]?.installed) || changed; }
       catch (error) {
+        if (error.authenticatedManifest && !stateError) watermark(error.authenticatedManifest, true);
         try {
           const m = JSON.parse(textOf(offer.manifest));
           if (m.lane === lane && studioVersion(m.studioVersion) === m.studioVersion && number(m.protocol) !== undefined) report(m, 'refused', reasonCode(error));

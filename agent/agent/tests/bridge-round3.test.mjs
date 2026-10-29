@@ -83,6 +83,8 @@ test('R3.4 refused offers report codes, bound history, and never invent sequence
   await f.install(f.artifact(20)); const selected = await f.select();
   f.store.rejectLoad(selected, 'failure at C:\\private\\secret.dll', { ...context, attempted: true, bridgeFailure: true });
   assert.ok(f.store.reports().every(r => r.sequence > 0 && /^[A-Z_]{1,64}$/.test(r.reason)));
+  await f.install(f.artifact(22, files => { delete files[0].signer; }));
+  assert.equal(await f.install(f.artifact(21)), false, 'A signed signer refusal preserves the high-water sequence');
 });
 test('R3.5 release gate compares the executable and Microsoft roots', () => {
   const options = { publicKey: anchors.publicKey, nativeKey: anchors.publicKey, thumbprint: anchors.thumbprint, nativeThumbprint: anchors.thumbprint,

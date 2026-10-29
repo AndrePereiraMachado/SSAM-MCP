@@ -77,6 +77,10 @@ test('R3 native refused offers have machine-readable reasons and bounded history
   const results = await f.run({ requests }); const reports = results.at(-1).reports;
   assert.equal(reports.length, 16); assert.equal(reports[0].sequence, 20);
   assert.ok(reports.every(r => r.status === 'refused' && r.reason === 'VERIFY_FAILED' && r.sequence > 0));
+  const rejected = f.offer('v101', { sequence: 22 }); const manifest = JSON.parse(rejected.manifest); delete manifest.files[0].signer;
+  rejected.manifest = JSON.stringify(manifest); rejected.signature = sign(null, Buffer.from(rejected.manifest), keys.privateKey).toString('base64');
+  const replay = await f.run({ requests: [{ offer: rejected }, { offer: f.offer('v101', { sequence: 21 }) }] });
+  assert.equal(replay[1].changed, false, 'A signed signer refusal preserves the high-water sequence');
 });
 for (const scenario of ['signature', 'hash', 'certificate', 'interrupt', 'path']) test('native refuses ' + scenario, async t => {
   const f = await fixture(t); const offer = f.offer('v101');
