@@ -14,8 +14,10 @@ const here=path.dirname(fileURLToPath(import.meta.url));
 const hash=b=>createHash('sha256').update(b).digest('hex');
 const q=s=>"'"+String(s).replaceAll("'","'\\''")+"'";
 export function createAutoRuntime(config,runtime) {
- if(config.automatic&&!config.dryRun)requireJournalKey(config.outDir);
  const root=path.resolve(config.workspace),priv=path.resolve(config.tempRoot),settings=config.automaticDeployment??{};
+ // The ODC features provenance is a journal too: unsigned records are never written or accepted there.
+ const featuresRoot=path.resolve(config.featuresRoot??path.join(priv,'features'));
+ if(config.automatic&&!config.dryRun){requireJournalKey(config.outDir);requireJournalKey(featuresRoot);}
  const ps=config.powershell??'C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe';
  const script=(name,args=[],input)=>runtime.run(ps,['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',path.join(here,name),...args],{input,secret:true});
  let cached,activeLease;
@@ -35,7 +37,7 @@ export function createAutoRuntime(config,runtime) {
    if(url.protocol!=='https:'&&!(settings.testOnly&&url.protocol==='http:'&&['127.0.0.1','localhost'].includes(url.hostname)))throw Error();
    if(!/^[A-Za-z0-9_-]+$/.test(c.resource))throw Error();
   }catch{throw Object.assign(Error('Watcher secrets or deployment settings are missing or invalid. Run set-secrets.ps1 and review the configuration.'),{code:'secrets-missing'});}
-  configureJournals(config.outDir,s.journalKey);configureJournals(priv,s.journalKey);if(config.bundleRoot)configureJournals(config.bundleRoot,s.journalKey);cached=s;return s;
+  configureJournals(config.outDir,s.journalKey);configureJournals(priv,s.journalKey);if(config.bundleRoot)configureJournals(config.bundleRoot,s.journalKey);configureJournals(featuresRoot,s.journalKey);cached=s;return s;
  }
  async function api(s,method,route,body) {
   if(method!=='GET'){if(!activeLease)throw Error('Remote release lease is required.');activeLease.assertHeld();await ssh(s,{action:'fence'});}
@@ -203,9 +205,11 @@ export function createAutoRuntime(config,runtime) {
   async composeFor(s,baseline,pinned){return preserveCompose(await load(baseline),pinned);},
   backup:(s,id)=>ssh(s,{action:'backup',id}),
   async prepare(s,r){
+   const features=fs.readFileSync(r.features);
+   if(r.featuresSha256&&hash(features)!==r.featuresSha256)throw Object.assign(Error('The ODC features changed after they were recorded; nothing was sent.'),{code:'FEATURES_CHANGED'});
    const archive=path.join(r.dir,'deploy.tar.gz');await runtime.archiveDeploy(await runtime.fullHead(),archive);
    return ssh(s,{action:'prepare',id:r.id,built:r.built,kernel:r.kernel,compose:JSON.parse(r.compose.replace(/^#[^\n]*\n/,'')),
-    archive:fs.readFileSync(archive).toString('base64'),features:fs.readFileSync(r.features).toString('base64')});
+    archive:fs.readFileSync(archive).toString('base64'),features:features.toString('base64')});
   },
   async writeCompose(s,compose){await api(s,'PATCH',resource(),{docker_compose_raw:Buffer.from(compose).toString('base64'),instant_deploy:false});if(canonicalComposeHash(compose)!==canonicalComposeHash((await api(s,'GET',resource())).docker_compose_raw))throw Error('Written compose read-back differs.');},
   deploy: s=>api(s,'POST',resource()+'/restart'),

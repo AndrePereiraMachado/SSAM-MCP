@@ -5,6 +5,7 @@ import test from 'node:test';import assert from 'node:assert/strict';import fs f
 import {spawnSync} from 'node:child_process';import {createHash} from 'node:crypto';
 import {createRuntime,studioTfm,assemblyTfm,runtimePins} from './runtime.mjs';
 import {approve,runVigia,readAttempts,pairTag,EnvironmentError,acquireLock,processStart} from './vigia.mjs';
+import {configureJournals,readJournal} from './journal.mjs';
 const windows=process.platform==='win32';
 const GIT='C:/Program Files/Git/cmd/git.exe',PS='C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe';
 const here=path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/,'$1'));
@@ -160,26 +161,136 @@ function storeTar(root,lane,v,full){
  fs.writeFileSync(tar+'.sha256',`${createHash('sha256').update(fs.readFileSync(tar)).digest('hex')}  ${path.basename(tar)}\n`);
  return {folder,tar};
 }
-const cache=(dir,version)=>{const plain=path.join(dir,`plain-${version}.xml`);fs.writeFileSync(plain,`<?xml version="1.0" encoding="utf-16"?>\n<Features Version="${version}">\n  <Feature key="k" kind="String">UseCodeDefault</Feature>\n</Features>`);
+const cache=(dir,version)=>{const plain=path.join(dir,`plain-${version}.xml`);fs.writeFileSync(plain,`<?xml version="1.0" encoding="utf-16"?>\n<Features Version="${version}">\n  <Feature key="0f8fad5b-d9cb-469f-a165-70867728950e" kind="String">UseCodeDefault</Feature>\n</Features>`);
  sh(PS,['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',path.join(here,'features-protect.ps1'),'-Plain',plain,'-OutDir',path.join(dir,'cache-'+version)]);return path.join(dir,'cache-'+version,'Features.xml');};
 test('M1/M5: the features of a new ODC version are stored only when the cache is for that version, and only in the private root',{skip:!windows||!fs.existsSync(SNAPSHOT_DLL)},async t=>{
  const r=repo(t);const {folder}=storeTar(r.root,'odc','1.7.30','1.7.30.1');
  const featuresRoot=path.join(r.priv,'features'),candidate={lane:'odc',version:'1.7.30',fullVersion:'1.7.30.1',studio:path.join(r.root,'no-studio'),tfm:'net10.0'};
- const stale=await createRuntime({...config(r),featuresRoot,featuresSource:cache(r.root,'1.7.29.10940')});
- await assert.rejects(stale.bundle(candidate,path.join(r.out,'x')),e=>e.code==='features-stale'&&e.lanes[0]==='odc'&&/open ODC Studio 1\.7\.30 once/i.test(e.message));
- assert.equal(fs.existsSync(path.join(featuresRoot,'odc-1.7.30')),false,'nothing stored under the new version');assert.equal(fs.existsSync(path.join(folder,'Features.plain.xml')),false);
  const fresh=await createRuntime({...config(r),featuresRoot,featuresSource:cache(r.root,'1.7.30.1')});
  const b=await fresh.bundle(candidate,path.join(r.out,'x'));
  assert.equal(b.features,path.join(featuresRoot,'odc-1.7.30','Features.plain.xml'));assert.match(fs.readFileSync(b.features,'utf8'),/Version="1\.7\.30\.1"/);
+ assert.equal(b.featuresProvenance.mode,'exact');assert.equal(b.featuresProvenance.source.kind,'export');
  assert.equal(fs.existsSync(path.join(folder,'Features.plain.xml')),false,'never under the bundle store (C:/t)');
  await assert.rejects(createRuntime({...config(r),featuresRoot:'C:/t/x'}),/featuresRoot must be private/);
- // A legacy store file of another version is refused, never copied under this one.
+ // A legacy store file of another version is never copied under this one; with no exact file anywhere the lane waits.
  fs.writeFileSync(path.join(r.root,'store','odc-1.7.30','Features.plain.xml'),'<Features Version="1.7.28.10850"/>');fs.rmSync(path.join(featuresRoot,'odc-1.7.30'),{recursive:true});
- await assert.rejects(fresh.bundle(candidate,path.join(r.out,'x')),e=>e.code==='features-stale'&&/1\.7\.28\.10850/.test(e.message));
+ const plain=await createRuntime({...config(r),featuresRoot});
+ await assert.rejects(plain.bundle(candidate,path.join(r.out,'x')),e=>e.code==='features-unavailable'&&e.lanes[0]==='odc');
  assert.equal(fs.existsSync(path.join(featuresRoot,'odc-1.7.30')),false);
- // One of the right version (another session's) is copied into the private root and used; the store file is left as is.
+ // One of the right version (another session's) is copied into the private root as exact and used; the store file is left as is.
  fs.writeFileSync(path.join(r.root,'store','odc-1.7.30','Features.plain.xml'),'<Features Version="1.7.30.1"/>');
- assert.equal((await fresh.bundle(candidate,path.join(r.out,'x'))).features,path.join(featuresRoot,'odc-1.7.30','Features.plain.xml'));
+ const copied=await plain.bundle(candidate,path.join(r.out,'x'));
+ assert.equal(copied.features,path.join(featuresRoot,'odc-1.7.30','Features.plain.xml'));assert.equal(copied.featuresProvenance.source.kind,'legacy-store');
+ assert.equal(fs.readFileSync(path.join(r.root,'store','odc-1.7.30','Features.plain.xml'),'utf8'),'<Features Version="1.7.30.1"/>');
+});
+// Synthetic ODC features of a full version (no tenant data), and a private store holding one as a folder of the watcher
+// before provenance existed (recorded as exact at its first use).
+const KEY=Buffer.alloc(32,7).toString('base64');
+const fkey=i=>`00000000-0000-4000-8000-${String(i).padStart(12,'0')}`;
+const plainFeatures=(full,n=3)=>`<?xml version="1.0" encoding="utf-16"?>\r\n<Features Version="${full}">\r\n${Array.from({length:n},(_,i)=>`  <Feature key="${fkey(i+1)}" kind="Boolean">True</Feature>`).join('\r\n')}\r\n</Features>`;
+function exactIn(featuresRoot,v,full){const dir=path.join(featuresRoot,'odc-'+v);fs.mkdirSync(dir,{recursive:true});fs.writeFileSync(path.join(dir,'Features.plain.xml'),plainFeatures(full));return path.join(dir,'Features.plain.xml');}
+const odcCandidate=(r,v,full)=>{storeTar(r.root,'odc',v,full);return {lane:'odc',version:v,fullVersion:full,studio:path.join(r.root,'no-studio'),tfm:'net10.0'};};
+const provenanceOf=(featuresRoot,v)=>readJournal(path.join(featuresRoot,'odc-'+v,'features.provenance.json'),{automatic:true});
+const bytesSha=file=>createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+test('a new ODC version without its own cache gets the nearest exact features carried, with a signed provenance',{skip:!windows||!fs.existsSync(SNAPSHOT_DLL)},async t=>{
+ const r=repo(t),featuresRoot=path.join(r.priv,'features');configureJournals(featuresRoot,KEY);
+ const source=exactIn(featuresRoot,'1.7.30','1.7.30.10980'),candidate=odcCandidate(r,'1.7.31','1.7.31.20000');
+ // featuresSource holds the cache of the Studio that ran last (1.7.30), not of the candidate.
+ const runtime=await createRuntime({...config(r),featuresRoot,featuresSource:cache(r.root,'1.7.30.10980')});
+ const b=await runtime.bundle(candidate,path.join(r.out,'x'));
+ assert.equal(b.features,path.join(featuresRoot,'odc-1.7.31','Features.plain.xml'));
+ assert.ok(fs.readFileSync(b.features).equals(fs.readFileSync(source)),'a byte copy of the exact 1.7.30 file');
+ const p=provenanceOf(featuresRoot,'1.7.31');
+ assert.equal(p.schema,'ssam-odc-features/1');assert.equal(p.version,'1.7.31');assert.equal(p.mode,'carried');assert.equal(p.chain,1);assert.equal(p.sha256,bytesSha(b.features));assert.equal(p.fileVersion,'1.7.30.10980');
+ assert.deepEqual({...p.source,from:{...p.source.from,recordedAt:undefined}},{kind:'carry',from:{version:'1.7.30',fullVersion:'1.7.30.10980',sha256:bytesSha(source),kind:'legacy',recordedAt:undefined},direction:'forward'});
+ assert.match(p.drift.unknown,/ServiceStudio\.Common\.dll/,'the test snapshot has no ODC assemblies: the drift says so and nothing blocks');
+ assert.equal(provenanceOf(featuresRoot,'1.7.30').mode,'exact','the source is recorded as exact');
+ assert.deepEqual(b.featuresProvenance,{version:'1.7.31',mode:'carried',sha256:p.sha256,fileVersion:'1.7.30.10980',source:p.source,chain:1,recordedAt:p.recordedAt,drift:{unknown:p.drift.unknown,fileKeys:3}});
+ // The same round again uses what was recorded.
+ assert.equal((await runtime.bundle(candidate,path.join(r.out,'x'))).featuresProvenance.sha256,p.sha256);
+});
+test('a cache of another version is stored as that version\'s exact features, never as the candidate\'s',{skip:!windows||!fs.existsSync(SNAPSHOT_DLL)},async t=>{
+ const r=repo(t),featuresRoot=path.join(r.priv,'features');configureJournals(featuresRoot,KEY);
+ const candidate=odcCandidate(r,'1.7.31','1.7.31.20000');
+ const runtime=await createRuntime({...config(r),featuresRoot,featuresSource:cache(r.root,'1.7.30.10980')});
+ const b=await runtime.bundle(candidate,path.join(r.out,'x'));
+ const p30=provenanceOf(featuresRoot,'1.7.30');
+ assert.equal(p30.mode,'exact');assert.equal(p30.fileVersion,'1.7.30.10980');assert.equal(p30.source.kind,'export');
+ assert.match(fs.readFileSync(path.join(featuresRoot,'odc-1.7.30','Features.plain.xml'),'utf8'),/Version="1\.7\.30\.10980"/);
+ assert.equal(provenanceOf(featuresRoot,'1.7.31').mode,'carried','the candidate gets a carried copy, never the cache as its own');
+ assert.equal(b.featuresProvenance.source.from.version,'1.7.30');
+ // A later cache of 1.7.30 changes nothing: the folder of 1.7.30 exists.
+ const before=fs.readFileSync(path.join(featuresRoot,'odc-1.7.30','Features.plain.xml'));
+ const again=await createRuntime({...config(r),featuresRoot,featuresSource:cache(r.root,'1.7.30.10999')});
+ await again.bundle(odcCandidate(r,'1.7.32','1.7.32.1'),path.join(r.out,'y'));
+ assert.ok(fs.readFileSync(path.join(featuresRoot,'odc-1.7.30','Features.plain.xml')).equals(before));
+});
+test('an exact cache for the version supersedes a carried one at the next round; an exact one is never replaced',{skip:!windows||!fs.existsSync(SNAPSHOT_DLL)},async t=>{
+ const r=repo(t),featuresRoot=path.join(r.priv,'features');configureJournals(featuresRoot,KEY);
+ exactIn(featuresRoot,'1.7.30','1.7.30.10980');const candidate=odcCandidate(r,'1.7.31','1.7.31.20000');
+ const first=await (await createRuntime({...config(r),featuresRoot})).bundle(candidate,path.join(r.out,'x'));
+ assert.equal(first.featuresProvenance.mode,'carried');const carried=first.featuresProvenance.sha256;
+ const second=await (await createRuntime({...config(r),featuresRoot,featuresSource:cache(r.root,'1.7.31.20000')})).bundle(candidate,path.join(r.out,'x'));
+ assert.equal(second.featuresProvenance.mode,'exact');assert.equal(second.featuresProvenance.fileVersion,'1.7.31.20000');assert.equal(second.features,first.features);
+ assert.match(fs.readFileSync(second.features,'utf8'),/Version="1\.7\.31\.20000"/);
+ const old=path.join(featuresRoot,'odc-1.7.31','superseded',carried.slice(0,8));
+ assert.equal(bytesSha(path.join(old,'Features.plain.xml')),carried,'the carried file is kept aside');
+ const kept=readJournal(path.join(old,'features.provenance.json'),{automatic:true});assert.equal(kept.mode,'carried');assert.equal(kept.supersededBy,second.featuresProvenance.sha256);
+ // Another export of the same version never replaces the exact file.
+ const third=await (await createRuntime({...config(r),featuresRoot,featuresSource:cache(r.root,'1.7.31.20001')})).bundle(candidate,path.join(r.out,'x'));
+ assert.equal(third.featuresProvenance.sha256,second.featuresProvenance.sha256);assert.match(fs.readFileSync(third.features,'utf8'),/Version="1\.7\.31\.20000"/);
+});
+test('features whose bytes changed after they were recorded are refused (custody)',{skip:!windows||!fs.existsSync(SNAPSHOT_DLL)},async t=>{
+ const r=repo(t),featuresRoot=path.join(r.priv,'features');configureJournals(featuresRoot,KEY);
+ const source=exactIn(featuresRoot,'1.7.30','1.7.30.10980'),candidate=odcCandidate(r,'1.7.31','1.7.31.20000');
+ const runtime=await createRuntime({...config(r),featuresRoot});const b=await runtime.bundle(candidate,path.join(r.out,'x'));
+ const bytes=fs.readFileSync(b.features),changed=Buffer.concat([bytes,Buffer.from(' ')]);
+ // A test run checks the bytes again before it uses them (before any dotnet).
+ fs.writeFileSync(b.features,changed);
+ await assert.rejects(runtime.test('odc','candidate',{odc:b,o11:{snapshot:'x'}},path.join(r.out,'x')),e=>e.code==='store-mismatch'&&/nothing was used or changed/i.test(e.message));
+ await assert.rejects(runtime.bundle(candidate,path.join(r.out,'x')),e=>e.code==='store-mismatch'&&e.lanes[0]==='odc'&&/review the features store; nothing was used or changed/i.test(e.message));
+ assert.ok(fs.readFileSync(b.features).equals(changed),'nothing was changed');
+ // A provenance edited by hand fails its MAC.
+ fs.writeFileSync(b.features,bytes);const prov=path.join(featuresRoot,'odc-1.7.31','features.provenance.json'),recorded=fs.readFileSync(prov,'utf8'),journal=JSON.parse(recorded);
+ journal.value.mode='exact';fs.writeFileSync(prov,JSON.stringify(journal));
+ await assert.rejects(runtime.bundle(candidate,path.join(r.out,'x')),e=>e.code==='store-mismatch'&&/does not verify/.test(e.message));
+ fs.writeFileSync(prov,recorded);
+ // An exact source that changed is never carried.
+ fs.appendFileSync(source,' ');
+ await assert.rejects(runtime.bundle(odcCandidate(r,'1.7.32','1.7.32.1'),path.join(r.out,'y')),e=>e.code==='store-mismatch'&&e.message.includes(path.join(featuresRoot,'odc-1.7.30')));
+ assert.equal(fs.existsSync(path.join(featuresRoot,'odc-1.7.32')),false);
+});
+test('without any exact features the lane waits with the seed instruction; with featuresDefaultsFallback it gets a defaults-only file marked defaults',{skip:!windows||!fs.existsSync(SNAPSHOT_DLL)},async t=>{
+ const r=repo(t),featuresRoot=path.join(r.priv,'features');configureJournals(featuresRoot,KEY);
+ const candidate=odcCandidate(r,'1.7.31','1.7.31.20000');
+ await assert.rejects((await createRuntime({...config(r),featuresRoot,featuresSource:path.join(r.root,'no-cache','Features.xml')})).bundle(candidate,path.join(r.out,'x')),
+  e=>e instanceof EnvironmentError&&e.code==='features-unavailable'&&e.lanes[0]==='odc'&&/No exact ODC features exist to carry; seed one once with vigia\.ps1 -SeedFeatures <Features\.plain\.xml>\./.test(e.message)&&!/Open ODC Studio/.test(e.message));
+ assert.equal(fs.existsSync(path.join(featuresRoot,'odc-1.7.31')),false,'nothing stored');
+ const b=await (await createRuntime({...config(r),featuresRoot,featuresDefaultsFallback:true})).bundle(candidate,path.join(r.out,'x'));
+ assert.equal(fs.readFileSync(b.features,'utf8'),'<Features Version="1.7.31.20000"/>');
+ assert.equal(b.featuresProvenance.mode,'defaults');assert.equal(provenanceOf(featuresRoot,'1.7.31').source.kind,'defaults');
+ // Once an exact file exists, the defaults-only file gives way to a carried one (kept aside).
+ exactIn(featuresRoot,'1.7.30','1.7.30.10980');
+ const c=await (await createRuntime({...config(r),featuresRoot,featuresDefaultsFallback:true})).bundle(candidate,path.join(r.out,'x'));
+ assert.equal(c.featuresProvenance.mode,'carried');assert.ok(fs.existsSync(path.join(featuresRoot,'odc-1.7.31','superseded',b.featuresProvenance.sha256.slice(0,8),'Features.plain.xml')));
+});
+test('a carried file is never used as a carry source',{skip:!windows||!fs.existsSync(SNAPSHOT_DLL)},async t=>{
+ const r=repo(t),featuresRoot=path.join(r.priv,'features');configureJournals(featuresRoot,KEY);
+ exactIn(featuresRoot,'1.7.29','1.7.29.10940');
+ const runtime=await createRuntime({...config(r),featuresRoot});
+ const b30=await runtime.bundle(odcCandidate(r,'1.7.30','1.7.30.10980'),path.join(r.out,'x'));
+ assert.equal(b30.featuresProvenance.mode,'carried');assert.equal(b30.featuresProvenance.source.from.version,'1.7.29');
+ const b31=await runtime.bundle(odcCandidate(r,'1.7.31','1.7.31.20000'),path.join(r.out,'x'));
+ assert.equal(b31.featuresProvenance.source.from.version,'1.7.29','the exact 1.7.29, never the carried 1.7.30');assert.equal(b31.featuresProvenance.chain,2);
+ assert.equal(b31.featuresProvenance.source.from.fullVersion,'1.7.29.10940');
+ // With only carried files left, nothing is carried: the lane waits for a seed.
+ fs.rmSync(path.join(featuresRoot,'odc-1.7.29'),{recursive:true});
+ const c32=odcCandidate(r,'1.7.32','1.7.32.1');
+ await assert.rejects(runtime.bundle(c32,path.join(r.out,'x')),e=>e.code==='features-unavailable');
+ // Without a lower exact version, the nearest higher one is carried back.
+ exactIn(featuresRoot,'1.7.33','1.7.33.5');
+ const b32=await runtime.bundle(c32,path.join(r.out,'x'));
+ assert.equal(b32.featuresProvenance.source.from.version,'1.7.33');assert.equal(b32.featuresProvenance.source.direction,'backward');assert.equal(b32.featuresProvenance.chain,1);
 });
 test('M4: a bundle of the candidate build that does not check out is never bundled over',{skip:!windows||!fs.existsSync(SNAPSHOT_DLL)},async t=>{
  const r=repo(t);const {tar}=storeTar(r.root,'o11','11.55.94','11.55.94.1');const bytes=fs.readFileSync(tar);

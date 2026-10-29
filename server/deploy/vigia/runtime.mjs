@@ -14,6 +14,7 @@ import {EnvironmentError} from './pipeline.mjs';
 import {busyDotnet} from './host.mjs';
 import {peFileVersion} from '../kernel-pair-check.mjs';
 import {createAutoRuntime} from './auto-runtime.mjs';
+import {createFeaturesStore,featuresSummary,verifyFeaturesUse} from './features-carry.mjs';
 import {executionSource,agentReleasePin,signingPolicy} from './safety.mjs';
 const here=path.dirname(fileURLToPath(import.meta.url));
 const slash=p=>p.replaceAll('\\','/');
@@ -40,11 +41,7 @@ export const RUNTIME_PIN={odc:'AnvilOdcStudioTfm',o11:'AnvilO11StudioTfm'};
 export function runtimePins(side){
  return Object.entries(RUNTIME_PIN).flatMap(([lane,prop])=>{const s=side[lane];if(!s?.snapshot||studioTfm(s.snapshot,lane))return [];const tfm=assemblyTfm(s.snapshot);return tfm?[`-p:${prop}=${tfm}`]:[];});
 }
-// The Studio version a Features.plain.xml was exported from (<Features Version="1.7.29.10940">), or null.
-export function featuresVersion(file){
- try{const b=fs.readFileSync(file).subarray(0,4096);const text=b[0]===0xff&&b[1]===0xfe?b.toString('utf16le'):b.toString('utf8');
-  return /<Features\b[^>]*\bVersion="([^"]+)"/.exec(text)?.[1]??null;}catch{return null;}
-}
+export {featuresVersion} from './features-carry.mjs';
 // Why a test run gave no usable result, when the machine is the cause: a timeout, a package restore or the network, or a
 // baseline (the default pair, already served) that does not build here. Anything else on the candidate is the version's.
 const NETWORK=/NU1301|NU1101|NU1102|Unable to load the service index|Failed to download package|The SSL connection could not be established|No such host is known|Name or service not known|actively refused|Response status code does not indicate success|A connection attempt failed/i;
@@ -125,26 +122,29 @@ export async function createRuntime(config,{log=()=>{}}={}){
   const pin=config.bundlePins?.[`${lane}-${v}`];if(config.automatic&&!pin&&!fs.existsSync(file+'.provenance.json'))throw review('Bundle requires a reviewed pin or installer provenance');if(pin&&pin.toLowerCase()!==sha)throw review(`The bundle is not the pinned one (bundlePins ${lane}-${v})`);
   return sha;
  }
- // The features of an ODC version (the tenant's feature flags) live only in the private featuresRoot, never under C:/t.
- // Their root names the Studio version they came from; a cache of another version is never stored under this one.
- const privateFeatures=v=>path.join(featuresRoot,`odc-${v}`,'Features.plain.xml');
- function checkFeatures(file,v,source){
-  const found=featuresVersion(file);
-  if(threeOf(found)!==v)throw new EnvironmentError(`The ODC Studio features ${source} are for ${found??'no version'}, not ${v}. Open ODC Studio ${v} once, signed in, so it refreshes its feature cache; nothing was stored.`,'features-stale',['odc']);
- }
- async function featuresFor(v,{exportFrom,dir}={}){
-  const target=privateFeatures(v);
-  if(fs.existsSync(target)){checkFeatures(target,v,target);return target;}
-  const legacy=path.join(storeDir('odc',v),'Features.plain.xml');
-  if(fs.existsSync(legacy)){checkFeatures(legacy,v,legacy);fs.mkdirSync(path.dirname(target),{recursive:true});fs.copyFileSync(legacy,target);log(`features of ODC ${v} copied into the private store from ${legacy}`);return target;}
-  if(!exportFrom)throw new EnvironmentError(`No Features.plain.xml for ODC ${v} in ${path.dirname(target)}.`,'store-incomplete',['odc']);
-  const stage=path.join(temp,'features-export',`odc-${v}-${Date.now()}.xml`);fs.mkdirSync(path.dirname(stage),{recursive:true});
-  try{
-   try{await ps(path.join(root,'server/deploy/odc-features-export.ps1'),['-Source',exportFrom,'-Out',stage],{dir});}
-   catch(e){throw new EnvironmentError(`The ODC Studio feature cache ${exportFrom} could not be exported (${e.message}). Open ODC Studio ${v} once, signed in.`,'features-unavailable',['odc']);}
-   checkFeatures(stage,v,exportFrom);
-   fs.mkdirSync(path.dirname(target),{recursive:true});fs.renameSync(stage,target);return target;
-  }finally{fs.rmSync(stage,{force:true});}
+ // The features of an ODC version (the tenant's feature flags) live only in the private featuresRoot, never under C:/t,
+ // each with its signed provenance (features-carry.mjs). In order: the version's own verified file (an exact one ends
+ // the search); the legacy store's file of this version; an export of featuresSource (stored as the exact file of the
+ // version it says, never of another one); then, for a version without an exact file, the nearest exact file carried
+ // with its drift on this version's frozen assemblies; with no exact file at all, the code defaults when
+ // featuresDefaultsFallback is true, else the lane waits for a seed. Nothing here needs a signed-in Studio.
+ const featuresStore=createFeaturesStore({root:featuresRoot,legacyRoot:store,automatic:!!config.automatic,defaultsFallback:config.featuresDefaultsFallback===true,log});
+ async function featuresFor(v,{exportFrom,snapshot,fullVersion,dir}={}){
+  const current=featuresStore.held(v);
+  if(current?.provenance.mode==='exact')return current;
+  if(!current){const copied=featuresStore.legacy(v);if(copied)return copied;}
+  if(exportFrom&&!fs.existsSync(exportFrom))log(`features: no ODC Studio feature cache at ${exportFrom}; nothing exported`);
+  else if(exportFrom){
+   const stage=path.join(temp,'features-export',`odc-${v}-${Date.now()}.xml`);fs.mkdirSync(path.dirname(stage),{recursive:true});
+   try{
+    let exported=true;
+    try{await ps(path.join(root,'server/deploy/odc-features-export.ps1'),['-Source',exportFrom,'-Out',stage],{dir});}
+    catch(e){exported=false;log(`features: the ODC Studio feature cache ${exportFrom} was not exported (${e.message.split('\n')[0]})`);}
+    if(exported){const got=featuresStore.offer(v,stage,{kind:'export',file:exportFrom});if(got)return got;}
+   }finally{fs.rmSync(stage,{force:true});}
+  }
+  if(current){if(current.provenance.mode==='defaults'){const carried=featuresStore.carry(v,{snapshot,replace:current});if(carried)return carried;}return current;}
+  return featuresStore.carry(v,{snapshot})??featuresStore.defaults(v,fullVersion,{snapshot});
  }
  // The frozen copy of a bundle: its files exactly as the image gets them, plus the Studio's runtimeconfig.json (so the
  // build rule sees the Studio's .NET in this folder too).
@@ -173,10 +173,10 @@ export async function createRuntime(config,{log=()=>{}}={}){
   const sha256=verifyBundle(lane,v,found.file);
   const snapshot=await freeze(folder,found.file,found.fullVersion,null,lane,dir);
   if(threeOf(studioVersionOf(snapshot))!==v)throw new EnvironmentError(`The frozen copy ${snapshot} is not ${lane} ${v}; review the bundle store.`,'store-mismatch',[lane]);
-  const features=lane==='odc'?await featuresFor(v):null;
+  const features=lane==='odc'?await featuresFor(v,{snapshot,fullVersion:found.fullVersion,dir}):null;
   const provenance=fs.existsSync(found.file+'.provenance.json')?readJournal(found.file+'.provenance.json',{automatic:config.automatic}):undefined;
   if(config.automatic){verifyBundleCustody({file:found.file,sha256,snapshot,provenance},config.bundlePins?.[`${lane}-${v}`]);if(provenance)await runtime.verifyInput(provenance);}
-  return {provenance,lane,version:v,fullVersion:found.fullVersion,file:found.file,sha256,snapshot,features,tfm:studioTfm(snapshot,lane)??assemblyTfm(snapshot)};
+  return {provenance,lane,version:v,fullVersion:found.fullVersion,file:found.file,sha256,snapshot,features:features?.path??null,featuresProvenance:featuresSummary(features?.provenance),tfm:studioTfm(snapshot,lane)??assemblyTfm(snapshot)};
  }
  async function waitForDotnet(dir){
   const deadline=Date.now()+(config.dotnetWaitMinutes??180)*60000;let said=false;
@@ -309,11 +309,14 @@ export async function createRuntime(config,{log=()=>{}}={}){
    if(config.automatic){await runtime.verifyInput(candidate.provenance);writeJournal(found.file+'.provenance.json',candidate.provenance);}
    const sha256=verifyBundle(candidate.lane,candidate.version,found.file);
    const snapshot=await freeze(folder,found.file,found.fullVersion,candidate.studio,candidate.lane,dir);
-   // The features of this ODC version, exported once from this machine's ODC Studio cache when it is for this version.
-   const features=candidate.lane==='odc'?await featuresFor(candidate.version,{exportFrom:config.featuresSource,dir}):null;
-   return {provenance:candidate.provenance,lane:candidate.lane,version:candidate.version,fullVersion:found.fullVersion,file:found.file,sha256,snapshot,features,tfm:studioTfm(snapshot,candidate.lane)??candidate.tfm??assemblyTfm(snapshot)};
+   // The features of this ODC version: its exact file, an export of this machine's ODC Studio cache (the optional
+   // featuresSource) when it is for this version, else the nearest exact file carried (featuresFor).
+   const features=candidate.lane==='odc'?await featuresFor(candidate.version,{exportFrom:config.featuresSource,snapshot,fullVersion:found.fullVersion,dir}):null;
+   return {provenance:candidate.provenance,lane:candidate.lane,version:candidate.version,fullVersion:found.fullVersion,file:found.file,sha256,snapshot,features:features?.path??null,featuresProvenance:featuresSummary(features?.provenance),tfm:studioTfm(snapshot,candidate.lane)??candidate.tfm??assemblyTfm(snapshot)};
   },
   companion:(lane,v)=>companion(lane,v),
+  // The owner's one-time seed of an exact Features.plain.xml (vigia.ps1 -SeedFeatures): version, count and sha256 only.
+  seedFeatures:file=>featuresStore.seed(path.resolve(file)),
   async test(lane,kind,side,dir){
    if(config.automatic)for(const b of Object.values(side)){verifyBundleCustody(b,config.bundlePins?.[`${b.lane}-${b.version}`]);if(b.provenance)await runtime.verifyInput(b.provenance);}
    const filter=config.filters?.[lane]??DEFAULT_FILTERS[lane];
@@ -322,6 +325,7 @@ export async function createRuntime(config,{log=()=>{}}={}){
    fs.rmSync(privateTemp,{recursive:true,force:true});fs.mkdirSync(privateTemp,{recursive:true});
    let featuresDir=null;
    if(lane==='odc'&&side.odc.features){
+    verifyFeaturesUse(side.odc.features,side.odc.featuresProvenance);
     featuresDir=path.join(privateTemp,'features');
     try{await ps(path.join(here,'features-protect.ps1'),['-Plain',side.odc.features,'-OutDir',featuresDir],{dir});}
     catch(e){throw new EnvironmentError(`The ODC features could not be prepared for the ${kind} tests (${e.message}).`,kind==='baseline'?'baseline':'test-environment',[lane]);}
@@ -364,6 +368,7 @@ export async function createRuntime(config,{log=()=>{}}={}){
   },
   async smoke(built,bundles,served,dir){
    const pack=runtime.bridgeKernel?{...runtime.bridgeKernel,o11BuiltFor:built.o11}:packFor(config,bundles);
+   verifyFeaturesUse(bundles.odc.features,bundles.odc.featuresProvenance);
    return smokeImage({pair:built,bundle:{features:bundles.odc.features},dir,root,docker,served,pack,budget:readListingBudget(root),privateDir:path.join(temp,'smoke')});
   },
   // The proposal branch starts from HEAD, or from the newest approved pin main does not carry yet (base), so merging the

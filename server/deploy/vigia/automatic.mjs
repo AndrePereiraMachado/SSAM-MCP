@@ -88,7 +88,7 @@ export async function releaseAutomatically(config,ops,release){
   if(state.status!=='rolling-back'){
    const compose=await ops.composeFor(secrets,baseline,pinned);
    if(!state.mutationStarted){
-    await once('prepared',()=>ops.prepare(secrets,{id,built,kernel,features,bridges,compose,dir}),()=>({ok:true}));
+    await once('prepared',()=>ops.prepare(secrets,{id,built,kernel,features,featuresSha256:release.featuresProvenance?.sha256??null,bridges,compose,dir}),()=>({ok:true}));
     await ops.pause();await ops.assertLiveUnchanged(secrets,baseline);
     state.composeHash=canonicalComposeHash(compose);state.mutationStarted=true;save();
     await once('compose-written',()=>ops.writeCompose(secrets,compose),()=>({ok:true}));
