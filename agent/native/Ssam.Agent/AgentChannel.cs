@@ -15,6 +15,11 @@ internal sealed class AgentChannel : IDisposable
     private readonly int bridgePort;
     private readonly Blobs blobs;
     private readonly FileKinds files;
+    private readonly UploadKinds uploads;
+    // The server's clock minus this machine's, from the welcome's Date (to the second) and each ping's at (to the
+    // millisecond): a call's deadline is the server's time.
+    private long? serverOffset;
+    private bool offsetFromPing;
     private readonly StudioKinds? studios;
     private readonly JsonObject? pack;
     private readonly BridgeUpdates bridges;
@@ -61,6 +66,7 @@ internal sealed class AgentChannel : IDisposable
         http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", credential);
         blobs = new Blobs(this);
         files = new FileKinds(state.Root, this, blobs);
+        uploads = new UploadKinds(state.Root, runtime ?? AppContext.BaseDirectory, blobs, () => MaxFileBytes);
         cleanup = new Timer(_ => ReconcileBridges(), null, TimeSpan.FromSeconds(30), Timeout.InfiniteTimeSpan);
     }
     private void ReconcileBridges()
@@ -121,7 +127,7 @@ internal sealed class AgentChannel : IDisposable
             ["version"] = "0.4.0-native", ["runtime"] = "native-aot",
             ["platform"] = OperatingSystem.IsWindows() ? "win32" : "darwin",
             ["startedAt"] = startedAt, ["root"] = state.Root, ["machine"] = machine?.DeepClone(),
-            ["kinds"] = new JsonArray((studios == null ? new[] { "qualification.bridge", "file.put", "file.get", "file.list", "file.sync" } : StudioKinds.Names.Concat(FileKinds.Names).Append("net.probe").ToArray()).Select(n => (JsonNode?)JsonValue.Create(n)).ToArray())
+            ["kinds"] = new JsonArray((studios == null ? new[] { "qualification.bridge", "file.put", "file.get", "file.list", "file.sync", UploadKinds.Name } : StudioKinds.Names.Concat(FileKinds.Names).Append("net.probe").Append(UploadKinds.Name).ToArray()).Select(n => (JsonNode?)JsonValue.Create(n)).ToArray())
         },
         ["pack"] = pack == null ? new JsonObject { ["id"] = "native-qualification", ["lanes"] = new JsonArray() } : new JsonObject { ["id"] = pack["id"]?.DeepClone(), ["lanes"] = pack["lanes"]?.DeepClone(), ["odcBridge"] = pack["odcBridge"]?.DeepClone(), ["o11BuiltFor"] = pack["o11BuiltFor"]?.DeepClone(), ["o11Hook"] = pack["o11Hook"]?.DeepClone() },
         ["capabilities"] = new JsonObject { ["bridgeOffer"] = !OperatingSystem.IsMacOS(), ["bridgeOfferReason"] = OperatingSystem.IsMacOS() ? BridgeUpdates.MacReason : null },
@@ -155,6 +161,7 @@ internal sealed class AgentChannel : IDisposable
                         id.Length != 32 || id.Any(c => !(c is >= '0' and <= '9' or >= 'a' and <= 'f')))
                         throw new IOException("Invalid welcome");
                     channel = id;
+                    if (!offsetFromPing && hello.Headers.Date is DateTimeOffset date) serverOffset = date.ToUnixTimeMilliseconds() + 500 - DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
                     kernel = welcome?["kernel"]?.DeepClone();
                     Track(Task.Run(() => UpdateBridges(welcome, (JsonObject)(installed?.DeepClone() ?? new JsonObject()), operations.Token)));
                     maxMessageBytes = Math.Clamp(welcome?["maxMessageBytes"]?.GetValue<int>() ?? 1048576, 1024, 16 * 1024 * 1024);
@@ -188,6 +195,8 @@ internal sealed class AgentChannel : IDisposable
                             switch (message?["t"]?.GetValue<string>())
                             {
                                 case "ping":
+                                    if (message["at"] is JsonValue at && at.TryGetValue<double>(out var serverAt) && double.IsFinite(serverAt))
+                                    { serverOffset = (long)serverAt - DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(); offsetFromPing = true; }
                                     state.Write("connected");
                                     Track(Pong(id, message["seq"]?.DeepClone(), streamLifetime.Token));
                                     break;
@@ -271,7 +280,7 @@ internal sealed class AgentChannel : IDisposable
         var kind = call["kind"]?.GetValue<string>();
         try
         {
-            if (!(kind == "qualification.bridge" && studios == null) && !FileKinds.Names.Contains(kind) && !(studios != null && (StudioKinds.Names.Contains(kind) || kind == "net.probe")))
+            if (!(kind == "qualification.bridge" && studios == null) && !FileKinds.Names.Contains(kind) && kind != UploadKinds.Name && !(studios != null && (StudioKinds.Names.Contains(kind) || kind == "net.probe")))
                 throw new AgentFault("KIND_NOT_ALLOWED", "This kind is not available on the agent");
             var parameters = call["params"];
             if (call["paramsBlob"] != null)
@@ -286,7 +295,10 @@ internal sealed class AgentChannel : IDisposable
             }
             if (parameters != null && parameters is not JsonObject) throw new AgentFault("PARAMS_INVALID", "params must be an object");
             JsonNode? value;
+            // deadline: the server's time when it stops waiting, in this machine's clock.
+            long? callDeadline = call["deadline"] is JsonValue due && due.TryGetValue<double>(out var dueAt) && double.IsFinite(dueAt) ? (long)dueAt - (serverOffset ?? 0) : null;
             if (FileKinds.Names.Contains(kind)) value = await files.Execute(kind!, (JsonObject?)parameters ?? new JsonObject(), token);
+            else if (kind == UploadKinds.Name) value = await uploads.Execute((JsonObject?)parameters ?? new JsonObject(), callDeadline, token);
             else if (kind == "net.probe") value = await NetworkProbe((JsonObject?)parameters ?? new(), token);
             else if (studios != null) value = await studios.Execute(kind!, (JsonObject?)parameters ?? new(), token);
             else
@@ -317,6 +329,7 @@ internal sealed class AgentChannel : IDisposable
                 ["error"] = new JsonObject { ["code"] = e is AgentFault fault ? fault.Code : ((PathRefusal)e).Code,
                     ["message"] = e.Message, ["executed"] = e is AgentFault f ? f.Executed : false } };
             if (e is AgentFault { Sent: not null } sentFault) result["error"]!["sent"] = sentFault.Sent;
+            else if (e is AgentFault { SentUnknown: true }) result["error"]!["sent"] = null;
         }
         catch (Exception e) when (e is ArgumentException or IOException or SocketException or OperationCanceledException or System.Text.Json.JsonException)
         {

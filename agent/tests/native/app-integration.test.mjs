@@ -43,7 +43,8 @@ test('Electron supervisor runs the actual native core, reuses data, relays O11 a
   fs.writeFileSync(path.join(root, 'private/o11-connection.json'), JSON.stringify({ pid: 999999, port: bridge.address().port }));
   assert.equal((await supervisor.start()).connected, true);
   assert.equal(hub.hellos[0].agent.runtime, 'native-aot');
-  assert.equal(hub.hellos[0].agent.kinds.length, 11);
+  assert.equal(hub.hellos[0].agent.kinds.length, 12);
+  assert.ok(hub.hellos[0].agent.kinds.includes('file.upload'));
   hub.stream.write(JSON.stringify({ t: 'call', id: 'invalid-probe', kind: 'net.probe', params: { probes: [{ bytes: 999999999, count: 1 }] } }) + '\n');
   await hub.until(() => hub.results('invalid-probe').length > 0);
   assert.equal(hub.results('invalid-probe')[0].error.code, 'PARAMS_INVALID');

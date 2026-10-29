@@ -29,6 +29,43 @@ internal static class Program
             }
             if (args is ["mac-inspect"]) { Console.WriteLine((await MacPlatform.InspectHost()).ToJsonString(new() { WriteIndented = true })); return 0; }
             if (args.Length > 0 && args[0] is "run" or "setup" or "doctor") return await NativeHost.Command(args);
+            // roots add --folder <folder> --root <data> | roots remove --folder <folder> --root <data> | roots list --root <data> [--json]:
+            // the folders file.upload may read, changed only by the person (UploadRoots.cs).
+            if (args is ["roots", var op, ..])
+            {
+                var options = Options(args[2..], "--json");
+                var dataRoot = options.GetValueOrDefault("--root") ?? throw new ArgumentException("roots needs --root <agent folder>");
+                if (options.Keys.Except(["--root", "--runtime-root", "--folder", "--json"]).Any() || (options.ContainsKey("--json") && op != "list"))
+                    throw new ArgumentException("Use roots add --folder <folder> --root <folder> | roots remove --folder <folder> --root <folder> | roots list --root <folder> [--json]");
+                return UploadRoots.Command(op, options.GetValueOrDefault("--folder"), Path.GetFullPath(dataRoot), Path.GetFullPath(options.GetValueOrDefault("--runtime-root") ?? AppContext.BaseDirectory),
+                    options.ContainsKey("--json"), Console.Out, Console.Error);
+            }
+            // check-upload --root <data> [--runtime-root <dir>]: stdin [{path, maxBytes, deadline?, beforeOpen?}] -> [{decision} | {error}],
+            // every check of file.upload without the transport (tests/native/upload.test.mjs compares it with the Node agent).
+            // beforeOpen {move: [[from, to], ...]} renames links between the checks and the open, as a test hook.
+            if (args is ["check-upload", "--root", var uploadRoot, ..])
+            {
+                var runtimeRoot = args is [_, _, _, "--runtime-root", var given] ? given : AppContext.BaseDirectory;
+                var kinds = new UploadKinds(Path.GetFullPath(uploadRoot), Path.GetFullPath(runtimeRoot), null, () => 0);
+                var requests = JsonNode.Parse(await Console.In.ReadToEndAsync()) as JsonArray ?? throw new ArgumentException("Expected a JSON array");
+                var answers = new JsonArray();
+                foreach (var request in requests.OfType<JsonObject>())
+                {
+                    Action? hook = request["beforeOpen"]?["move"] is JsonArray moves ? () => {
+                        foreach (var move in moves.OfType<JsonArray>()) Directory.Move(move[0]!.GetValue<string>(), move[1]!.GetValue<string>());
+                    } : null;
+                    long? deadline = request["deadline"] is JsonValue due && due.TryGetValue<long>(out var at) ? at : null;
+                    try
+                    {
+                        var prepared = kinds.Prepare(request, deadline, null, hook);
+                        answers.Add((JsonNode)new JsonObject { ["decision"] = new JsonObject { ["size"] = prepared.Size, ["sha256"] = prepared.Sha256 } });
+                    }
+                    catch (AgentFault e) { answers.Add((JsonNode)new JsonObject { ["error"] = e.Code }); }
+                    catch (PathRefusal e) { answers.Add((JsonNode)new JsonObject { ["error"] = e.Code }); }
+                }
+                Console.WriteLine(answers.ToJsonString());
+                return 0;
+            }
             if (args is ["check-policy", "--root", var policyRoot])
             {
                 var policy = new StudioKinds(policyRoot, AppContext.BaseDirectory, new(), () => null);
@@ -104,6 +141,18 @@ internal static class Program
             Console.Error.WriteLine(e is ArgumentException ? e.Message : e.GetType().Name);
             return 1;
         }
+    }
+
+    // --name value pairs (flags: options without a value).
+    private static Dictionary<string, string> Options(string[] args, params string[] flags)
+    {
+        var options = new Dictionary<string, string>();
+        for (var i = 0; i < args.Length; i++)
+        {
+            if (flags.Contains(args[i])) { options[args[i]] = "true"; continue; }
+            if (!args[i].StartsWith("--") || i + 1 >= args.Length || !options.TryAdd(args[i], args[++i])) throw new ArgumentException("Invalid command options");
+        }
+        return options;
     }
 }
 

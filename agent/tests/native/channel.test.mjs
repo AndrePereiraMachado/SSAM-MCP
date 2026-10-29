@@ -56,7 +56,7 @@ test('native channel: reconnect, deduplicate local execution, separate pong and 
   const f = await fixture(t);
   await f.hub.until(() => f.hub.streams === 1);
   assert.equal(f.hub.hellos[0].agent.root, f.root);
-  assert.deepEqual(f.hub.hellos[0].agent.kinds, ['qualification.bridge', 'file.put', 'file.get', 'file.list', 'file.sync']);
+  assert.deepEqual(f.hub.hellos[0].agent.kinds, ['qualification.bridge', 'file.put', 'file.get', 'file.list', 'file.sync', 'file.upload']);
   f.hub.holdPosts = 1;
   const call = { t: 'call', id: 'once', kind: 'qualification.bridge', params: {} };
   f.hub.stream.write(JSON.stringify(call) + '\n');

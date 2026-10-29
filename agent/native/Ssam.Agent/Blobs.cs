@@ -9,6 +9,8 @@ internal sealed class AgentFault(string code, string message, bool? executed = f
     public string Code { get; } = code;
     public bool? Executed { get; } = executed;
     public bool? Sent { get; init; }
+    // sent: null on the wire (a part may have reached the server), as the Node agent reports it.
+    public bool SentUnknown { get; init; }
     public bool AttachAttempted { get; init; }
     public bool BridgeLoadFailure { get; init; }
 }
@@ -44,7 +46,8 @@ internal sealed class Blobs(AgentChannel channel)
         return Convert.ToHexStringLower(await SHA256.HashDataAsync(stream, token));
     }
 
-    public async Task<BlobRef> Upload(Stream source, CancellationToken token)
+    // beforePart(index) runs before each part is sent (file.upload checks the call's deadline there and may throw).
+    public async Task<BlobRef> Upload(Stream source, CancellationToken token, Action<int>? beforePart = null)
     {
         var size = source.Length;
         if (size > channel.MaxFileBytes) throw new AgentFault("FILE_TOO_LARGE", "File exceeds the negotiated limit");
@@ -56,6 +59,7 @@ internal sealed class Blobs(AgentChannel channel)
             Math.Max(1, (int)Math.Ceiling((double)size / bytes)), bytes);
         for (var index = 0; index < reference.Parts; index++)
         {
+            beforePart?.Invoke(index);
             var part = new byte[(int)Math.Min(bytes, size - (long)index * bytes)];
             await source.ReadExactlyAsync(part, token);
             var headers = new Dictionary<string, string> {
