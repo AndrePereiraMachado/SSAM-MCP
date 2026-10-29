@@ -437,6 +437,26 @@ provedor ler (`kernel/src/Anvil.Core.Odc/Adapters.ODC/OdcFeatures.cs`).
 
 `FeaturesOverride.xml` (raro) é copiado como está e não foi provado no Linux.
 
+**O que o kernel precisa de fato, e o que o vigia faz por versão.** O modelo do ODC no headless não lê esse arquivo: ele
+responde pelo provedor do ModelAPI, compilado em cada versão. O `Features.plain.xml` só serve para inicializar o provedor
+estático do `ServiceStudio.Common` (sem ele: "Provider not initialized.") e para dar valor às flags que os assemblies da
+camada de modelo leem — 6 no 1.7.30 (`AI_NL2Agg`, `MultiPortfolioOrganizations`, `UseNewSystemTrackedClipboard`,
+`WrapEditCommandsInDelayedVerySlowOperations`, `FixDragAndDropMultipleElements`, `FixIconConversionIssues`). Um arquivo
+de outra versão, ou até `<Features />`, inicializa o provedor; a diferença fica nas chaves novas (padrão do código) e
+nos valores que mudaram. Por isso:
+
+- O vigia não espera mais um ODC Studio logado por versão. Para uma versão sem exportação exata, ele **carrega** a cópia
+  byte a byte do exato mais próximo (de preferência a versão anterior), calcula a deriva estática nos assemblies do
+  snapshot da versão nova (chaves novas, conflitos de tipo filtrados, flags do kernel ausentes) e grava a proveniência
+  assinada (`featuresRoot/odc-<versão>/features.provenance.json`). A bateria do candidato e o smoke continuam sendo o
+  portão; a proposta, o aviso diário e o `APROVADO.md` dizem de onde vieram as features (README do vigia, seção
+  "ODC features").
+- A exportação exata (passo 1) fica **opcional**: quando o `featuresSource` do vigia tiver o cache da versão, ele vira o
+  exato dela e substitui o carregado na rodada seguinte; o dono também pode semear um export a qualquer momento com
+  `vigia.ps1 -SeedFeatures <Features.plain.xml>`. Um exato nunca é substituído.
+- O arquivo que vai para a VPS é o que o vigia resolveu (exato ou carregado); o contrato do volume não muda (o kernel não
+  confere o atributo `Version`).
+
 ### 7.3 Subir
 
 ```bash

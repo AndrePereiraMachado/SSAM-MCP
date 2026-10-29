@@ -34,9 +34,25 @@ All actors must take `/var/lock/ssam-release.lock` (manual wrapper: `with-releas
 
 Rollback uses the original encrypted compose, images, kernels and per-backend budgets. After manually checking/restoring production, the owner can use `-Retry <id> -AcknowledgeRollback <id>`; Retry alone cannot bypass rollback failure. Keep snapshots referenced by live attempts plus the five newest files, and five complete remote backups.
 
+## ODC features (no Studio sign-in per version)
+
+The ODC kernel needs a readable `Features.plain.xml` to initialize the Studio's static feature provider, and the values of the few flags its model-layer assemblies read (six in 1.7.30: AI_NL2Agg, MultiPortfolioOrganizations, UseNewSystemTrackedClipboard, WrapEditCommandsInDelayedVerySlowOperations, FixDragAndDropMultipleElements, FixIconConversionIssues). The model itself answers from the ModelAPI provider compiled into each version and never reads the file. So no ODC version waits for a signed-in Studio.
+
+`featuresRoot` (private, never under `C:\t`) keeps `odc-<a.b.c>/Features.plain.xml` with `features.provenance.json`, a journal (MAC-signed in automatic mode, bound to its path) with `mode`, `sha256`, the file's `Version`, its `source`, `chain` and the drift. Every use checks the MAC and the sha256 again; a difference stops the lane with `store-mismatch` and changes nothing. The modes:
+
+- `exact`: an export of that very version: seeded by the owner, exported from `featuresSource`, or a folder of the watcher from before provenance (recorded as `legacy`). An exact file is never replaced.
+- `carried`: a version without its own export gets a byte copy of the nearest exact file (the newest lower version, else the oldest higher one; never a carried file), `chain` counting the versions since that export. Keys whose kind changed in the new version are left out (`filtered`).
+- `defaults`: only with `featuresDefaultsFallback: true` (default false) and no exact file anywhere: `<Features Version="<full version>"/>`, the Studio's code defaults alone. Without it the lane waits with `features-unavailable` and the seed instruction.
+
+The drift is static, on the frozen snapshot of the new version (`pe-metadata.mjs`, no .NET run): the catalog of `ServiceStudio.Common.dll` (`FeaturesValues` *Key constants and getter types), the getters the model layer calls (ServiceStudio.BuiltInBehaviors, ServiceStudio.Framework, OutSystems.Model*, Plugins/**/ServiceStudio.Plugin.* and OutSystems.Model.Plugin.*), the new flags (they use the code defaults), unknown keys, kind conflicts and the kernel flags missing. Nothing blocks on drift: the candidate tests and the smoke run the new kernel with that file and stay the gate. PROPOSTA.md, APROVADO.md, attempt.json and release.json name the provenance (no feature values); a carried or defaults-only file gives one notice a day per version, insisting after three versions without an exact export.
+
+`featuresSource` is optional: when it names a cache this Windows user can decrypt, its export becomes the exact file of the version it says (never of another one) and replaces a carried one at the next round. A file that exports to an invalid document stops the lane with `features-invalid`.
+
+Seed the exact exports once, as the watcher account: `vigia.ps1 -Config <config> -SeedFeatures <Features.plain.xml>` (one file per call). It takes the watcher lock, validates the file strictly (at most 1 MiB, UTF-8 or UTF-16LE, no DOCTYPE or ENTITY, root `Features` with a four-part `Version`, `Feature key="GUID" kind="Boolean|Integer|String"`), stores it once as `exact` (over a carried or defaults-only file at most) and prints only the version, the feature count and the sha256.
+
 ## Validation
 
-Run the automatic, review-safety, vault, vigia and vigia-runtime suites; facade agent-hub, odc-bridge-version, r1-mixed-studio and hosted-studio-window suites; and remote-release.test.py. Use fake infrastructure and private temporary paths. R3 regressions run against an immutable bd9513b export via `VIGIA_REVIEW_ROOT`. Do not publish or contact production during validation.
+Run the automatic, review-safety, vault, vigia, vigia-runtime and features-carry suites; facade agent-hub, odc-bridge-version, r1-mixed-studio and hosted-studio-window suites; and remote-release.test.py. Use fake infrastructure and private temporary paths. R3 regressions run against an immutable bd9513b export via `VIGIA_REVIEW_ROOT`. Do not publish or contact production during validation.
 
 ## Round 4 operational requirements
 

@@ -22,6 +22,7 @@
     "o11": "C:/Program Files/OutSystems/Service Studio 11/Service Studio"
   },
   "featuresSource": "C:/Users/OWNER/AppData/Local/OutSystems/ODC Studio/Features.xml",
+  "featuresDefaultsFallback": false,
   "installersDir": "C:/ssam-priv/vigia-installers",
   "agentPack": {
     "runtime": "net8.0",
