@@ -30,7 +30,8 @@ function unescape(text,label){
  });
 }
 // Strict parse of a Features.plain.xml: at most 1 MiB, UTF-8 without a byte order mark (the export's bytes, the only
-// encoding features-protect.ps1 prepares), no DOCTYPE or ENTITY, root <Features>
+// encoding features-protect.ps1 prepares), an XML declaration (version 1.0) only at the very start, no DOCTYPE or ENTITY,
+// no "]]>" in a value, root <Features>
 // with an optional Version (a.b.c.d), children only <Feature key="GUID" kind="Boolean|Integer|String">, Boolean True or
 // False, Integer an integer, no duplicate key. Returns the version, the entries by lowercase key, the sha256 and what the
 // carry needs to filter entries out (the decoded text and each entry's span).
@@ -57,12 +58,14 @@ export function parseFeatures(input,label='(in memory)'){
    out[m[1]]=unescape(m[3]??m[4],label);i+=m[0].length;
   }
  };
- ws();
- if(text.startsWith('<?xml',i)){
-  const end=text.indexOf('?>',i);if(end<0)throw refuse(label,'the XML declaration does not end');
-  if(!/^<\?xml\s+version\s*=\s*(["'])1\.\d\1(\s+encoding\s*=\s*(["'])[A-Za-z][\w.-]*\3)?(\s+standalone\s*=\s*(["'])(yes|no)\5)?\s*\?>$/.test(text.slice(i,end+2)))throw refuse(label,'a malformed XML declaration');
-  i=end+2;ws();
+ // The XML declaration, when there is one, is the very first thing of the document, version 1.0 (what .NET [xml] reads).
+ if(text.startsWith('<?xml')){
+  const end=text.indexOf('?>');if(end<0)throw refuse(label,'the XML declaration does not end');
+  if(!/^<\?xml\s+version\s*=\s*(["'])1\.0\1(\s+encoding\s*=\s*(["'])[A-Za-z][\w.-]*\3)?(\s+standalone\s*=\s*(["'])(yes|no)\5)?\s*\?>$/.test(text.slice(i,end+2)))throw refuse(label,'a malformed XML declaration');
+  i=end+2;
  }
+ ws();
+ if(text.startsWith('<?',i))throw refuse(label,'an XML declaration or processing instruction after the start of the document');
  if(!/^<Features[\s/>]/.test(text.slice(i,i+10)))throw refuse(label,'the root element is not <Features>');
  i+='<Features'.length;
  const root=attributes(['Version'],'<Features>'),version=root.out.Version??null;
@@ -79,6 +82,7 @@ export function parseFeatures(input,label='(in memory)'){
   let value='';
   if(!a.empty){
    const end=text.indexOf('<',i);if(end<0)throw refuse(label,'a Feature does not close');
+   if(text.slice(i,end).includes(']]>'))throw refuse(label,"']]>' in a value");
    value=unescape(text.slice(i,end),label);i=end;
    if(!text.startsWith('</Feature',i))throw refuse(label,'a Feature holds markup');
    i+='</Feature'.length;ws();if(text[i]!=='>')throw refuse(label,'a Feature does not close');i++;

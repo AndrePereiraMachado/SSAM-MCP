@@ -206,3 +206,54 @@ test('a crafted assembly whose member names are one huge string is unreadable me
  assert.equal(r.status,0,`child exit ${r.status} ${r.signal??''} after ${took} ms: ${(r.stderr??'').split('\n').find(l=>/FATAL|Error/.test(l))??''}`);
  assert.equal(r.stdout.trim(),'unreadable-metadata');assert.ok(took<10000,`${took} ms`);
 });
+// Round 2 of the review: the family of F3 (what readFeatures accepts, features-protect.ps1 prepares) and of F6 (memory
+// bounded by what is kept, never by the row count of a table).
+test('every document readFeatures accepts is one features-protect.ps1 prepares',async t=>{
+ const {parseFeatures}=await load(),{spawn}=await import('node:child_process');
+ const dir=tmp(t),K=key(1),K2=key(2),decl='<?xml version="1.0" encoding="utf-16"?>\r\n';
+ const root=(features,attrs=' Version="1.7.31.20000"')=>`<Features${attrs}>\r\n${features}\r\n</Features>`;
+ const one=(value,kind='String')=>root(`  <Feature key="${K}" kind="${kind}">${value}</Feature>`);
+ const corpus={
+  'the export shape':decl+root(`  <Feature key="${K}" kind="Boolean">True</Feature>\r\n  <Feature key="${K2}" kind="String">UseCodeDefault</Feature>\r\n  <Feature key="${key(3)}" kind="Integer">-42</Feature>`),
+  'no XML declaration':one('On'),
+  'whitespace before the root without a declaration':'\r\n\t '+one('On'),
+  'declaration in single quotes':"<?xml version='1.0' encoding='utf-16'?>"+one('On'),
+  'declaration without encoding':'<?xml version="1.0"?>\n'+one('On'),
+  'declaration with an unknown encoding name':'<?xml version="1.0" encoding="x-bogus"?>\r\n'+one('On'),
+  'standalone="yes"':'<?xml version="1.0" encoding="utf-16" standalone="yes"?>\r\n'+one('On'),
+  'non-ASCII value':decl+one('ação ✓ 日本'),
+  'spaces inside the end tags':decl+`<Features Version="1.7.31.20000">\r\n  <Feature key="${K}" kind="String">On</Feature >\r\n</Features >`,
+  'spaces around = and single-quoted attributes':decl+`<Features Version = '1.7.31.20000'>\r\n  <Feature key = '${K}'  kind = 'String' >On</Feature>\r\n</Features>`,
+  'empty and self-closing features':decl+root(`  <Feature key="${K}" kind="String"></Feature>\r\n  <Feature key="${K2}" kind="String"/>`),
+  'the five entities and character references':decl+one('&amp;&lt;&gt;&quot;&apos;&#65;&#x42;'),
+  '"]]" and ">" without "]]>"':decl+one('a]]b > c ]'),
+  'LF line ends and whitespace after the root':'<?xml version="1.0"?>\n'+`<Features Version="1.7.31.20000">\n\t<Feature key="${K}" kind="Boolean">False</Feature>\n</Features>\n\n  `,
+  'an empty root':'<Features/>',
+  'an empty root with a Version and an end tag':decl+'<Features Version="1.7.31.20000"></Features>',
+  'a character reference in a key':decl+`<Features Version="1.7.31.20000"><Feature key="&#x30;${K.slice(1)}" kind="String">On</Feature></Features>`,
+  'a control character reference':decl+one('&#1;'),
+  'a large Integer':decl+one('99999999999','Integer'),
+  'a JSON value':decl+one('{"a":[1,2],"b":"c"}'),
+ };
+ // R2-1: accepted by the vigia before, refused by .NET [xml]; now refused before use.
+ const refused={
+  'whitespace before the XML declaration':' \r\n'+decl+one('On'),
+  'XML version 1.1':'<?xml version="1.1" encoding="utf-16"?>\r\n'+one('On'),
+  'XML version 1.9':'<?xml version="1.9"?>\r\n'+one('On'),
+  '"]]>" in a value':decl+one('a]]>b'),
+  'a processing instruction after the declaration':decl+'<?pi x?>'+one('On'),
+ };
+ for(const [name,text] of Object.entries(refused))assert.throws(()=>parseFeatures(Buffer.from(text)),e=>e.code==='features-invalid',name);
+ const accepted=Object.entries({...corpus,...refused}).filter(([,text])=>{try{parseFeatures(Buffer.from(text));return true;}catch{return false;}});
+ assert.deepEqual(Object.keys(corpus).filter(name=>!accepted.some(([n])=>n===name)),[],'the corpus is made of documents readFeatures accepts');
+ if(process.platform!=='win32')return;
+ // Each accepted document goes through the real features-protect.ps1 (six at a time).
+ const protect=(name,text,i)=>new Promise(resolve=>{
+  const plain=put(path.join(dir,`d${i}`,'Features.plain.xml'),text);
+  const child=spawn('C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe',['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',path.join(import.meta.dirname,'features-protect.ps1'),'-Plain',plain,'-OutDir',path.join(dir,`o${i}`)],{stdio:'ignore',windowsHide:true});
+  child.once('error',()=>resolve([name,-1]));child.once('close',code=>resolve([name,code]));
+ });
+ const results=[];
+ for(let k=0;k<accepted.length;k+=6)results.push(...await Promise.all(accepted.slice(k,k+6).map(([name,text],j)=>protect(name,text,k+j))));
+ assert.deepEqual(results.filter(([,code])=>code!==0).map(([name,code])=>`${name}: exit ${code}`),[],'accepted by readFeatures, refused by features-protect.ps1');
+});
