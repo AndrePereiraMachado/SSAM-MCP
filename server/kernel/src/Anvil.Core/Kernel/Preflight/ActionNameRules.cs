@@ -10,8 +10,10 @@ public static class ActionNameRules
 {
     public const string Fix = "give the new action another name (the patch uses the Studio's free name; a public action's name is its API: send the same patch with the name you want), or call the existing element instead";
     private sealed record Declaration(int Op, string Pointer, string Name, JsonObject Caller, IReadOnlyList<ParamFact> Inputs,
-        string Scope, int JsonIndex = -1, int TextIndex = -1);
+        string Scope, int JsonIndex = -1, int TextIndex = -1, string? Kind = null);
     private sealed record Rename(Declaration Action, ActionNameFact Taken, string Name, CalleeFact? Existing);
+    // R1 item 4: a declaration named after the module's own action of the same kind is the edit of that action.
+    private sealed record Edit(Declaration Action, ActionNameFact Taken, string Key, string? Text, bool TextKnown);
     internal static string Scope(string? kind) => kind?.Contains("client", StringComparison.OrdinalIgnoreCase) is true ? "client" : "server";
     private static string ScopedName(string scope, string name) => scope + ":" + name;
 
@@ -22,6 +24,7 @@ public static class ActionNameRules
         var occupiedByScope = new[] { "server", "client" }.ToDictionary(scope => scope,
             scope => pure.Values.Where(p => p.Scope == scope).Select(p => p.Name).Concat(declared.Where(d => d.Scope == scope).Select(d => d.Name)).ToHashSet(StringComparer.OrdinalIgnoreCase));
         var renames = new List<Rename>();
+        var edits = new List<Edit>();
         foreach (var action in declared)
         {
             // Recheck pure collisions with the module too: the pure pass cannot know whether its numbered patch name
@@ -29,6 +32,15 @@ public static class ActionNameRules
             var scoped = ScopedName(action.Scope, action.Name);
             var taken = pure.GetValueOrDefault(scoped) ?? model?.ActionNameTaken(action.Name, action.Scope);
             if (taken == null) continue;
+            // R1 item 4 (2026-10-28: NAME_COLLISION offered X2 for 83 actions a model sent again without @key, and they were
+            // deleted and created again): the module's own action of the same kind is that action. Its edit path comes back
+            // (FLOW_ACTION_NAME_TAKEN, the apply's rule: the current text with @key; the op rename for a new name), never a
+            // derived name. A numbered free name stays for an element of another kind (an entity's action, an import).
+            if (!pure.ContainsKey(scoped) && action.Kind != null && model?.OwnAction(action.Name, action.Kind) is { } own)
+            {
+                edits.Add(new(action, taken, own.Key, own.Text, model.HasActionBodies));
+                continue;
+            }
             var occupied = occupiedByScope[action.Scope];
             var free = NameRules.Free(action.Name, occupied);
             while (model?.ActionNameTaken(free, action.Scope) != null) { occupied.Add(free); free = NameRules.Free(action.Name, occupied); }
@@ -36,7 +48,7 @@ public static class ActionNameRules
             var existing = model?.Callee(taken.Kind + ":" + taken.Name, action.Caller) ?? PureCallee(taken);
             renames.Add(new(action, taken, free, existing));
         }
-        if (renames.Count == 0) return [];
+        if (renames.Count == 0) return edits.Select(e => Taken(e, prefix)).ToList();
         var edited = ops.DeepClone().AsArray();
         foreach (var rename in renames)
         {
@@ -72,7 +84,36 @@ public static class ActionNameRules
                 Fix, patch?.DeepClone().AsArray(), "logic", patchRule: "ACTION_RENAMED_FREE_NAME");
             p["taken"] = new JsonObject { ["kind"] = rename.Taken.Kind, ["name"] = rename.Taken.Name, ["owner"] = rename.Taken.Owner };
             return p;
-        }).ToList();
+        }).Concat(edits.Select(e => Taken(e, prefix))).ToList();
+    }
+
+    /// <summary>FLOW_ACTION_NAME_TAKEN of the preflight (the apply's rule, Verbs.NameTaken, a phase earlier and for every
+    /// declaration at once): the action exists; its edit path is its current text with @key (field text, basedOn its
+    /// textSha) and, to give it another name, the op rename (field rename). No patch: no name is derived for it.</summary>
+    private static JsonObject Taken(Edit edit, string? prefix)
+    {
+        var a = edit.Action;
+        var words = a.Kind switch { "ServiceAction" => "service action", "ClientAction" => "client action", _ => "server action" };
+        var p = JobPreflight.Problem(a.Op, prefix == null ? null : $"{prefix}/{a.Op}/data{a.Pointer}", "FLOW_ACTION_NAME_TAKEN", "error",
+            $"the module already has the {words} '{edit.Taken.Name}' (@{edit.Key}): a declaration without @key creates a new action, and that name is this action's",
+            EditAdvice(edit.Key, edit.Text, edit.TextKnown, a.JsonIndex >= 0),
+            null, "logic");
+        p["id"] = edit.Key;
+        if (edit.Text != null) { p["text"] = edit.Text; p["textSha"] = ModuleFlow.TextSha(edit.Text); }
+        p["rename"] = new JsonObject { ["op"] = "rename", ["target"] = "@" + edit.Key, ["name"] = "<new name>" };
+        p["taken"] = new JsonObject { ["kind"] = edit.Taken.Kind, ["name"] = edit.Taken.Name, ["owner"] = edit.Taken.Owner };
+        return p;
+    }
+
+    /// <summary>The same recovery advice in preflight and apply, selected by the actual source and declaration form.</summary>
+    internal static string EditAdvice(string key, string? text, bool textKnown, bool json = false)
+    {
+        var textEdit = text != null ? $"edit the current text (field text), keeping @{key} and its line ids, and send it with basedOn its textSha {ModuleFlow.TextSha(text)}"
+            : textKnown ? "this action is not a fixed point of its text: edit it with the logic op replace"
+            : $"the index has no action body: read the current text of the action @{key}, then edit it keeping its ids and send it with basedOn its textSha";
+        var edit = json ? "edit the existing action with the logic JSON declaration and replace:true"
+            + (text != null ? "; alternatively, " + textEdit : "") : textEdit;
+        return edit + $"; to rename this action, use op rename with target @{key} and the chosen name; never delete it and create it again under the new name";
     }
 
     /// <summary>The module-aware patch replaces the pure patch of the same declaration, including the joint renames
@@ -117,7 +158,8 @@ public static class ActionNameRules
                     if (actions[i] is not JsonObject a || a["name"]?.ToString() is not { Length: > 0 } name
                         || a["replace"] is JsonValue replace && replace.TryGetValue<bool>(out var replacing) && replacing
                         || JobFacts.Owner(a) != "@espace") continue;
-                    yield return new(op, $"/actions/{i}/name", name, a, Inputs(a), Scope(a["kind"]?.ToString()), JsonIndex: i);
+                    yield return new(op, $"/actions/{i}/name", name, a, Inputs(a), Scope(a["kind"]?.ToString()), JsonIndex: i,
+                        Kind: (a["kind"]?.ToString() ?? "server").ToLowerInvariant() switch { "server" => "ServerAction", "service" => "ServiceAction", "client" => "ClientAction", _ => null });
                 }
             if (data["flow"] == null) continue;
             var texts = FlowTextForm.Texts(data);
@@ -132,7 +174,8 @@ public static class ActionNameRules
                     inputs.AddRange(Regex.Matches(texts[i].Text, @"(?m)^  in ([A-Za-z_]\w*)\s*:")
                         .Select(m => new ParamFact(m.Groups[1].Value, null, true)));
                 }
-                yield return new(op, texts[i].Pointer, header.Name, new JsonObject { ["name"] = header.Name, ["kind"] = Scope(header.Kind) }, inputs, Scope(header.Kind), TextIndex: i);
+                yield return new(op, texts[i].Pointer, header.Name, new JsonObject { ["name"] = header.Name, ["kind"] = Scope(header.Kind) }, inputs, Scope(header.Kind), TextIndex: i,
+                    Kind: header.Kind is "ServerAction" or "ServiceAction" or "ClientAction" ? header.Kind : null);
             }
         }
     }

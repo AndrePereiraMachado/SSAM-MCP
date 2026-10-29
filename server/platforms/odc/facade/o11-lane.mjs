@@ -19,9 +19,10 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { anvilRoot, workspaceRoot } from './workspace.mjs';
 import { currentExecutor, hostedSpawnEnv, o11NotConnected, usesWorkspace, workspacePath } from './executor.mjs';
+import { O11_LANE_FOLDERS, laneLocalDir, laneWorkDir } from './lane-folders.mjs';
 
-const DEFAULT_TABLE = { ss4: { bridge: 4516, cdp: 9226, worker: 4517, local: '.local' },
-  ss5: { bridge: 4536, cdp: 9246, worker: 4537, local: path.join('.local', 'lane-ss5') } };
+const DEFAULT_TABLE = { ss4: { bridge: 4516, cdp: 9226, worker: 4517, local: O11_LANE_FOLDERS.ss4 },
+  ss5: { bridge: 4536, cdp: 9246, worker: 4537, local: O11_LANE_FOLDERS.ss5 } };
 
 export function laneTable(root = workspaceRoot) {
   const table = structuredClone(DEFAULT_TABLE);
@@ -49,8 +50,9 @@ export function o11LaneOf(name, { root = anvilRoot, workspace = workspaceRoot, e
   const row = laneTable(workspace)[laneName];
   if (!row) throw new Error(`Unknown O11 lane '${laneName}'; lanes: ${Object.keys(DEFAULT_TABLE).join(', ')}`);
   const hosted = usesWorkspace(root, anvilRoot);
-  const own = path.join(root, row.local);
-  const local = hosted ? workspacePath('o11') : own;
+  const own = laneLocalDir(laneName, { kernel: root });
+  // fase4-28 R1 (F5): the same folders the friction KPI reads the delivery receipts from (lane-folders.mjs).
+  const local = hosted ? laneLocalDir(laneName, { workspace: workspacePath() }) : own;
   const studioDir = () => studioDirOf(row, env);
   // The source build lands in the folder of its Studio's runtime (kernel/StudioRuntime.props): net10.0, else net8.0.
   const source = runtime => path.join(root, 'src', 'Anvil.Cli', 'bin', 'Release', runtime, 'anvil.dll');
@@ -60,7 +62,7 @@ export function o11LaneOf(name, { root = anvilRoot, workspace = workspaceRoot, e
     name: laneName, bridge: row.bridge, cdp: row.cdp, worker: hosted ? null : row.worker, local, root,
     get studioDir() { return studioDir(); },
     get cli() { return cli(); },
-    jobs: path.join(local, 'jobs'), proofs: path.join(local, 'proofs'), work: path.join(local, 'work'), soak: path.join(local, 'soak'),
+    jobs: path.join(local, 'jobs'), proofs: path.join(local, 'proofs'), work: laneWorkDir(local), soak: path.join(local, 'soak'),
     get bridgeLog() { return path.join(env.LOCALAPPDATA || home(env), 'Anvil', `bridge-${row.bridge}.log`); },
     // Environment for child processes: the lane and, when the installation exists, that lane's Studio. Hosted: the
     // closed environment of the customer's workspace (executor.mjs hostedSpawnEnv), never this process's.

@@ -186,7 +186,12 @@ function laneCompatibility(lane, hello, kernel, lanes, refused) {
     return no('AGENT_PACK_MISMATCH', 'The agent package has no ' + lane + ' lane. Ask the server owner for the current agent package.');
   if (lane === 'odc' && pack.odcBridge !== kernel.odcBridge && !(kernel.odcBridgeAccepted ?? []).includes(pack.odcBridge))
     return no('AGENT_PACK_MISMATCH', 'The agent package carries ODC bridge ' + (pack.odcBridge ?? 'none') + '; this server uses ' + kernel.odcBridge + '. Ask the server owner for the current agent package.');
-  if (lane === 'o11' && !servedVersions(lane, kernel).includes(threePart(pack.o11BuiltFor)))
+  // A newer Studio is already allowed by studioIdentity. Its locally matching
+  // bridge must not be rejected solely because the server image is older.
+  // This does not admit arbitrary future packs or relax hook/protocol checks.
+  const newerLocalBridge = lane === 'o11' && studio?.ok && studio.relation === 'newer'
+    && threePart(pack.o11BuiltFor) !== null && threePart(pack.o11BuiltFor) === threePart(installed?.version);
+  if (lane === 'o11' && !servedVersions(lane, kernel).includes(threePart(pack.o11BuiltFor)) && !newerLocalBridge)
     return no('AGENT_PACK_MISMATCH', 'The O11 bridge of the agent package was built for Service Studio ' + (pack.o11BuiltFor ?? 'none') + '; this server has the kernel for Service Studio ' + server + '. Ask the server owner for the current agent package.');
   if (lane === 'o11') {
     const hook = pack.o11Hook ?? 'dev';

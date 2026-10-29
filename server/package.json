@@ -6,6 +6,7 @@
   "scripts": {
     "doctor": "node facade/ssam.mjs doctor",
     "test": "node --test tests/*.test.mjs platforms/odc/facade/tests/*.test.mjs platforms/odc/portal/tests/*.test.mjs platforms/odc/tests/*.test.mjs",
+    "test:hosted": "node scripts/test-hosted.mjs",
     "configure:mcp": "node scripts/configure-mcp.mjs"
   }
 }

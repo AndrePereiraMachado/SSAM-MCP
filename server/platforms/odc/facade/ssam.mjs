@@ -524,12 +524,14 @@ const servedGates = new WeakMap();
 // presentation (a7 phase 4, tests): the presenter's view of the server layout ({workspace, serverRoots, pathApi}: the Linux
 // image's paths with path.posix on another machine); without it, this server's own roots and path flavor.
 async function hostedGate({ context, session, run, kernelRefused = null, tools, presentation = null }) {
-  const { wrapHostedTool } = await import('./hosted/policy.mjs');
+  const { wrapHostedTool, studioNoticeMemory } = await import('./hosted/policy.mjs');
   const runner = run ?? (await import('./executor.mjs')).runWithExecutor;
   const link = session?.agent ?? context.agent;
   const lanes = session?.lanes ?? context.lanes ?? [];
+  // fase4-28 R1 (F3): this gate is made once per MCP session, so its memory of the Studio warnings shown is the session's.
+  const studioNotices = studioNoticeMemory();
   return (name, config, handler, { argsOf = null } = {}) => wrapHostedTool(name, config, handler, { context, link, lanes, run: runner, argsOf, kernelRefused,
-    ...(tools ? { tools } : {}), ...(presentation ? { presentation } : {}) });
+    studioNotices, ...(tools ? { tools } : {}), ...(presentation ? { presentation } : {}) });
 }
 // The lanes the hosted server warms at start: the served lanes, without a lane its image refused (its kernel never runs).
 export const hostedWarmLanes = (lanes = {}, refused = null) => ['odc', 'o11'].filter(l => lanes[l] !== false && !refused?.[l]);
@@ -1837,13 +1839,17 @@ export async function createSsamServer({ o11 = true, odc = true, profile = 'app'
   const hostedProjection = Boolean(hosted && sdkList && deps.listing !== 'full');
   const sdkDetails = sdkList || !deps.registerTool ? installToolListing(server, { full: deps.listing === 'full',
     ...(presentTool && !hostedProjection ? { present: presentTool } : {}) }) : async () => null;
-  if (hostedProjection) {
+  if (hosted && sdkList) {
+    const { LOCAL_PREVIEWS, hostedDocumentation } = await import('./hosted/availability.mjs');
     const { hostedListed } = await import('./hosted/destructive.mjs');
     const projected = server.server._getRequestHandler('tools/list');
     server.server.removeRequestHandler('tools/list');
     server.server.setRequestHandler('tools/list', async (request, context) => {
       const result = await projected(request, context);
-      return { ...result, tools: result.tools.map(tool => { const listed = hostedListed(tool, listedTool); return presentTool ? presentTool(listed) : listed; }) };
+      return { ...result, tools: result.tools.filter(tool => !LOCAL_PREVIEWS.has(tool.name)).map(tool => {
+        const listed = hostedDocumentation(hostedProjection ? hostedListed(tool, listedTool) : tool);
+        return presentTool ? presentTool(listed) : listed;
+      }) };
     });
   }
   // A cached start registers the snapshot (projected) configs: the full text comes from the originals recorded above.
@@ -2054,6 +2060,29 @@ export async function startupKernel({ dir, fileVersion, env = process.env, log =
 // directory, so SSAM_FRICTION_DIR (a test or bench queue of the owner, friction-store.mjs) never merges the queues of
 // several customers into one.
 export const customerFrictionDirectory = workspace => path.join(workspace, '.local', 'friction');
+// fase4-28 R1 (review item F5): the store of one customer names its workspace, so its telemetry folders come from the same
+// resolver as the writers' (friction-store.mjs frictionPaths): its queue, every backend's index, and the delivery receipts
+// of the customer's own lane work folder (<ws>/o11/work/deliver, where its kernel writes them).
+export const customerFrictionStoreOptions = workspace => ({ root: workspace, directory: customerFrictionDirectory(workspace), workspace });
+// What the served mode records of each tool call in the customer's queue (the observer of http-server.mjs), as the stdio
+// relay records it (friction-boundary.mjs observeMcp): the operation, its lane and task and, fase4-28 R1 (F5), a delivery
+// call's chain identity (friction-store.mjs deliveryOfCall), which the delivery KPI links its chains with.
+export const servedFrictionObserver = ({ frictionStore, meta, frictionToolName = 'ssam_friction' }) => store => params => {
+  if (params.name === frictionToolName) return null;
+  const lane = frictionStore.laneName(params.arguments?.lane);
+  const inferred = String(params.name).startsWith('o11_') ? 'o11' : /^(studio_|odc_)/.test(params.name) ? 'odc' : meta.lane;
+  const taskId = params._meta?.['ssam/taskId'] ?? params.arguments?.task_id;
+  const delivery = frictionStore.deliveryOfCall?.(params.name, params.arguments) ?? null;
+  const op = store.begin({ ...meta, interface: 'mcp', operation: frictionStore.operationName(params.name), lane: lane === 'unknown' ? inferred : lane,
+    taskId, correlationSource: taskId ? 'explicit-task' : 'absent', ...(delivery ? { delivery } : {}) });
+  return { finish: message => op.finish(message.result ?? message.error, { protocolError: !!message.error }) };
+};
+// The handler of ssam_friction in the served mode: the queue answer, or the one refusal stdio gives too (friction-boundary.mjs
+// frictionRefusal: the real reason and the fields of each view, never a generic text).
+export const frictionToolHandler = (boundary, store) => async (input = {}) => {
+  try { const value = boundary.readQueue(store, input); return { content: [{ type: 'text', text: JSON.stringify(value) }], structuredContent: value }; }
+  catch (error) { const refused = boundary.frictionRefusal(error); return { isError: true, content: [{ type: 'text', text: JSON.stringify(refused) }], structuredContent: refused }; }
+};
 
 // `ssam serve`: the same MCP over Streamable HTTP at /mcp, loopback only, bearer tokens (http-server.mjs,
 // docs/SERVIDOR-LOCAL.md). Every client session gets its own server from createSsamServer, as stdio does.
@@ -2094,19 +2123,8 @@ export async function runServed(args) {
   const { frictionTool } = boundary;
   const frictionConfig = { description: frictionTool.description, inputSchema: fromJsonSchema(frictionTool.inputSchema), annotations: frictionTool.annotations };
   // Like stdio, this answer does not go through the SSAM response shaper (registerServedTool uses the prototype method).
-  const frictionHandler = store => async (input = {}) => {
-    try { const value = boundary.readQueue(store, input); return { content: [{ type: 'text', text: JSON.stringify(value) }], structuredContent: value }; }
-    catch { return { isError: true, content: [{ type: 'text', text: 'Invalid friction query; use issues or task with an explicit taskId.' }] }; }
-  };
-  const observer = store => params => {
-    if (params.name === frictionTool.name) return null;
-    const lane = frictionStore.laneName(params.arguments?.lane);
-    const inferred = String(params.name).startsWith('o11_') ? 'o11' : /^(studio_|odc_)/.test(params.name) ? 'odc' : meta.lane;
-    const taskId = params._meta?.['ssam/taskId'] ?? params.arguments?.task_id;
-    const op = store.begin({ ...meta, interface: 'mcp', operation: frictionStore.operationName(params.name), lane: lane === 'unknown' ? inferred : lane,
-      taskId, correlationSource: taskId ? 'explicit-task' : 'absent' });
-    return { finish: message => op.finish(message.result ?? message.error, { protocolError: !!message.error }) };
-  };
+  const frictionHandler = store => frictionToolHandler(boundary, store);
+  const observer = servedFrictionObserver({ frictionStore, meta, frictionToolName: frictionTool.name });
   const closers = [];
   const served = handle => {
     const stop = () => Promise.allSettled(closers.map(close => close())).then(() => handle.close()).finally(() => process.exit(0));
@@ -2161,7 +2179,7 @@ export async function runServed(args) {
   const exposure = { store: servedBytesStore({ dir: path.join(ensureRuntime(dir), 'exposure') }),
     onAlert: line => { let value; try { value = JSON.parse(line); } catch { value = { line: String(line) }; } log({ event: 'served-bytes-alert', ...value }); } };
   const stores = new Map();
-  const storeOf = workspace => { let store = stores.get(workspace); if (!store) stores.set(workspace, store = frictionStore.createStore({ root: workspace, directory: customerFrictionDirectory(workspace) })); return store; };
+  const storeOf = workspace => { let store = stores.get(workspace); if (!store) stores.set(workspace, store = frictionStore.createStore(customerFrictionStoreOptions(workspace))); return store; };
   const createServer = async session => {
     const context = await contextOf(session);
     const server = await executor.runWithExecutor(context, () => createSsamServer({ ...lanes, hosted: { context, session, kernelRefused, exposure } }));

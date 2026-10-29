@@ -14,6 +14,7 @@ import { CredentialProfiles } from './credential-profiles.mjs';
 import { readSnapshot, presentReading } from './reader-client.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
+import { odcDeliveryReceiptDir } from './lane-folders.mjs';
 import { agentJoin } from './agent-paths.mjs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { deliverKernel, publishAuthorization, publishDelivered, studioSteps, withMergeCode, withoutStack, staleRevisionNext } from './kernel-delivery.mjs';
@@ -458,7 +459,7 @@ export async function builder(args) {
 // The evidence directory is the next free lab\NN-<feature>; nothing is ever overwritten. Publish stays separate.
 const DELIVER_STEPS = ['snapshot', 'build', 'check-base', 'preview', 'merge'];
 export function nextLabDir(feature) {
-  const lab = dataPath('lab'); fs.mkdirSync(lab, { recursive: true });
+  const lab = odcDeliveryReceiptDir({ odc: dataPath() }); fs.mkdirSync(lab, { recursive: true });
   const numbers = fs.readdirSync(lab).map(n => /^(\d+)-/.exec(n)).filter(Boolean).map(m => Number(m[1]));
   const next = String((numbers.length ? Math.max(...numbers) : 0) + 1).padStart(2, '0');
   return path.join(lab, next + '-' + feature.replace(/[^A-Za-z0-9-]+/g, '-'));

@@ -136,6 +136,11 @@ com uma unica leitura sao reescritas e listadas em `normalizations`: `FLOW_INDEN
 `FLOW_ARGUMENT_SPACING`, `FLOW_NAVIGATE_ARGUMENTS`, `FLOW_JUMP_BY_NAME`, `FLOW_UNREACHED_END`, `FLOW_MAPPING_SPACING` (tabela com
 o antes e o depois em `docs/TEXTO-LOGICA.md`, "Parser tolerante"). Uma chamada nomeada e sempre um no, nunca atribuicao do bloco
 `assign` acima; o que nao normaliza continua `FLOW_SYNTAX` com a forma aceita ao lado e, quando certa, o `patch` da linha.
+An action declaration whose name and action kind already exist in the module returns `FLOW_ACTION_NAME_TAKEN`, for both
+flow text and JSON logic actions. Edit the returned current `text`, preserving its `@key` and line ids, with `textSha` as
+`basedOn`. To change the existing action's name, use the returned `rename` operation. This refusal never derives a new name
+or asks for delete-and-create; collisions with other kinds or imported actions retain their existing rules.
+
 Normalizacoes (lentidao 12/10/2026, `Preflight/JobNormalizer.cs`): erro de forma com uma unica leitura e reescrito no job em
 memoria antes das checagens (o arquivo nunca muda) e listado em `normalizations` ([{rule, path, from, to, message}], no
 resultado aceito, no `check-job`, no envelope da recusa e no resultado da entrega recusada), nunca recusado:

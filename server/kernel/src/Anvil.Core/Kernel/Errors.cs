@@ -26,6 +26,9 @@ public interface ICodedError
     JsonArray? Problems { get; }
 }
 
+/// <summary>A malformed job or composite part list, distinct from errors raised while expanding it.</summary>
+public sealed class JobShapeException(string message) : InvalidOperationException(message);
+
 /// <summary>A refusal the kernel decides before anything is saved, with its own code (SIGNATURE_CHANGE_BREAKS_CONSUMERS, ...).</summary>
 public class KernelRefusalException : InvalidOperationException, ICodedError
 {

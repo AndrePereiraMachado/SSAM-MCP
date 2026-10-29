@@ -146,7 +146,7 @@ test('G8 (call 14): api {op, name}: the valid op wins, name filters the keys of 
   // An op the CLI refuses: the name stays a key (of the verb table), never an interface (it went to {op:"native",
   // type:"file"}); only a name without op goes on to op native.
   const security = await h.ask('o11', 'api', { op: 'security', name: 'file' });
-  assert.equal(security.code, 'CLI_REFUSED');
+  assert.equal(security.code, 'UNKNOWN_OP');
   assert.deepEqual(security.continuation.arguments.query, { op: 'verbs', name: 'file' });
   const interfaceName = await h.ask('o11', 'api', { name: 'IDropdown' });
   assert.equal(interfaceName.code, 'CLI_REFUSED');
@@ -289,7 +289,7 @@ test('G9 (call 50): an unknown op holding the words of known ops answers UNKNOWN
   assert.deepEqual(await first('html-presentation', 'odc'), ['html-visual', 'html']);
   // Nothing to offer: the kernel's refusal as before, on to the verb table.
   const security = await h.ask('o11', 'api', { op: 'security' });
-  assert.equal(security.code, 'CLI_REFUSED');
+  assert.equal(security.code, 'UNKNOWN_OP');
   assert.deepEqual(security.continuation.arguments.query, { op: 'verbs' });
   assert.ok(API_OPS.every(op => typeof API_OP_LINES[op] === 'string' && API_OP_LINES[op].length > 0), 'every op has its line');
 });
@@ -320,7 +320,7 @@ test('the refusal of an unknown op as CommandSurface.UnknownOp writes it (read f
   const closest = await h.ask('o11', 'api', { op: 'refrence', name: 'ref' });
   assert.deepEqual([closest.code, closest.candidates, closest.continuation.arguments.query],
     ['UNKNOWN_OP', [{ op: 'reference', line: SCHEMAS.verbs.verbs.reference }], { op: 'reference', name: 'ref' }]);
-  assert.equal((await h.ask('o11', 'api', { op: 'security' })).code, 'CLI_REFUSED', 'no candidate');
+  assert.equal((await h.ask('o11', 'api', { op: 'security' })).code, 'UNKNOWN_OP', 'no candidate is still a lookup miss');
 });
 
 test('call 50 against the O11 CLI of this worktree: html-presentation answers html-visual and html (skipped without a build)', async t => {

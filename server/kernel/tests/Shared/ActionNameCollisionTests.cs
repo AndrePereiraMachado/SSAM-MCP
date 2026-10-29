@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using Anvil.Reading;
 using Anvil.Core;
 using Anvil.Core.Preflight;
 using Xunit;
@@ -137,6 +138,100 @@ public sealed class ActionNameCollisionTests
         Assert.Equal("CreateParcel3", pure["patch"]![0]!["value"]!.ToString());
         Assert.Equal(withBase[1]["patch"]!.ToJsonString(), pure["patch"]!.ToJsonString());
         Assert.Contains("CreateParcel3", preflight["errors"]![0]!.ToString());
+    }
+
+    /// <summary>R1 item 4 (2026-10-28): a model sent the texts of 83 actions of the module again without @key; NAME_COLLISION
+    /// offered each one a derived name (X2) and the actions were deleted and created again. A declaration named after the
+    /// module's own action of the same kind is the edit of that action: FLOW_ACTION_NAME_TAKEN with its key, its current text
+    /// and the op rename, for every such declaration at once, and no derived name anywhere. A name taken by an element of
+    /// another kind keeps its numbered free name.</summary>
+    [Fact]
+    public void ADeclarationNamedAfterAnOwnActionOfTheSameKindIsItsEditPathNeverADerivedName()
+    {
+        var ops = Ops("""
+        [{"op":"logic","data":{"flow":["server action Existing\n  in Amount: Integer\n  end\n","server action Caller\n  Existing(Amount=1)\n  end\n",
+          "service action Other\n  end\n"]}},
+         {"op":"logic","data":{"actions":[{"name":"ExistingJson","steps":[]},{"name":"Other","kind":"client","steps":[]}]}}]
+        """);
+        var problems = ActionNameRules.Check(ops, "/ops", new Own());
+        Assert.DoesNotContain(problems.Select(p => p.ToJsonString()), json => json.Contains("Existing2", StringComparison.Ordinal) || json.Contains("ExistingJson2", StringComparison.Ordinal));
+        var text = Assert.Single(problems, p => p["pointer"]!.ToString() == "/ops/0/data/flow/0");
+        Assert.Equal("FLOW_ACTION_NAME_TAKEN", text["code"]!.ToString());
+        Assert.Null(text["patch"]);
+        Assert.Equal("kExisting", text["id"]!.ToString());
+        Assert.Equal(Own.TextOf("Existing"), text["text"]!.ToString());
+        Assert.Equal(ModuleFlow.TextSha(Own.TextOf("Existing")), text["textSha"]!.ToString());
+        Assert.True(JsonNode.DeepEquals(JsonNode.Parse("""{"op":"rename","target":"@kExisting","name":"<new name>"}"""), text["rename"]));
+        Assert.Contains("@kExisting", text["message"]!.ToString());
+        var json = Assert.Single(problems, p => p["pointer"]!.ToString() == "/ops/1/data/actions/0/name");
+        Assert.Equal("FLOW_ACTION_NAME_TAKEN", json["code"]!.ToString());
+        Assert.Equal("@kExistingJson", json["rename"]!["target"]!.ToString());
+        // A service action named after a server action of the module is another kind of element in the same scope: the Studio
+        // would rename it, so that one keeps NAME_COLLISION and its free name. A client action is in another scope: nothing.
+        var other = Assert.Single(problems, p => p["pointer"]!.ToString() == "/ops/0/data/flow/2");
+        Assert.Equal("NAME_COLLISION", other["code"]!.ToString());
+        Assert.Contains("Other2", other["patch"]!.ToJsonString());
+        Assert.Equal(3, problems.Count);
+    }
+
+    [Fact]
+    public void CorpusCollisionContractDistinguishesOwnEntityAndImportedActionsWithoutCaptures()
+    {
+        var own = Assert.Single(ActionNameRules.Check(Ops("""[{"op":"logic","data":{"actions":[{"name":"Existing","steps":[]}]}}]"""), "/ops", new Own()));
+        PatchCertaintyCorpusTests.AssertCollision(own, true);
+        var entity = Assert.Single(ActionNameRules.Check(Ops("""[{"op":"logic","data":{"actions":[{"name":"Existing","steps":[]}]}}]"""), "/ops", new Base()));
+        PatchCertaintyCorpusTests.AssertCollision(entity, false);
+        var imported = Assert.Single(ActionNameRules.Check(Ops("""[{"op":"reference","producer":"Library","elements":["IServerAction:Imported"]},{"op":"logic","data":{"actions":[{"name":"Imported","steps":[]}]}}]"""), "/ops", null));
+        PatchCertaintyCorpusTests.AssertCollision(imported, false);
+    }
+
+    [Fact]
+    public void AnActionWhoseBodyCannotRoundTripRequiresLogicReplace()
+    {
+        var problem = Assert.Single(ActionNameRules.Check(Ops("""[{"op":"logic","data":{"flow":"server action Existing\n  end\n"}}]"""), "/ops", new Own(false)));
+        Assert.Null(problem["text"]);
+        Assert.Contains("not a fixed point", problem["fix"]!.ToString());
+        Assert.Contains("logic op replace", problem["fix"]!.ToString());
+        Assert.DoesNotContain("read the current text", problem["fix"]!.ToString());
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void AJsonRedeclarationOffersReplaceTrue(bool readable)
+    {
+        var problem = Assert.Single(ActionNameRules.Check(Ops("""[{"op":"logic","data":{"actions":[{"name":"Existing","steps":[]}]}}]"""), "/ops", new Own(readable)));
+        var fix = problem["fix"]!.ToString();
+        Assert.Contains("replace:true", fix);
+        Assert.Contains("never delete it and create it again under the new name", fix);
+        Assert.DoesNotContain("never delete and create it again", fix);
+        if (readable)
+        {
+            Assert.Contains("alternatively, edit the current text (field text), keeping @kExisting", fix);
+            Assert.Contains(problem["textSha"]!.ToString(), fix);
+        }
+        else Assert.DoesNotContain("alternatively", fix);
+        Assert.Equal("@kExisting", problem["rename"]!["target"]!.ToString());
+    }
+
+    // The module of R1 item 4: server actions Existing, ExistingJson and Other of the module itself.
+    private sealed class Own(bool readable = true) : IBaseFacts
+    {
+        public bool HasActionBodies => true;
+        private static readonly string[] Actions = ["Existing", "ExistingJson", "Other"];
+        public static string TextOf(string name) => $"server action {name} @k{name}\n  in Amount: Integer @kIn{name}\n  end\n";
+        public ActionNameFact? ActionNameTaken(string name, string kind)
+            => ActionNameRules.Scope(kind) == "server" && Actions.Contains(name, StringComparer.OrdinalIgnoreCase) ? new("IServerAction", name, "Mod", "server") : null;
+        public (string Key, string? Text)? OwnAction(string name, string kind)
+            => kind == "ServerAction" && Actions.FirstOrDefault(a => a.Equals(name, StringComparison.OrdinalIgnoreCase)) is { } found ? ("k" + found, readable ? TextOf(found) : null) : null;
+        public CalleeFact? Callee(string target, JsonObject caller) => null;
+        public IReadOnlyDictionary<string, string>? Attributes(string record) => null;
+        public bool IsClientEntity(string name) => false;
+        public bool HasName(string name) => false;
+        public bool NamesOnlyTypes(string name) => false;
+        public bool IsFunction(string name) => false;
+        public string? ModuleType => null;
+        public RawExpressionFact? RawExpression(string target, string prop) => null;
     }
 
     private sealed class Base(params string[] names) : IBaseFacts

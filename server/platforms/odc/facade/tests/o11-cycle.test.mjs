@@ -273,7 +273,7 @@ test('validation errors come back with stage and taskId, and nothing is delivere
   assert.equal(b.taskId, '1a2b3c4d5e6f708192a3b4c5d6e7f809'); assert.equal(b.merged, undefined);
   assert.equal(b.messages[0], "Error UndefinedVariable: Undefined variable 'Total' @ Orders/ServerAction:SaveOrder");
   assert.match(b.error, /merge was not attempted/);
-  assert.equal(b.continuation, undefined, 'no catalog of fixes');
+  assert.equal(b.continuation.tool, 'ssam_task', 'a refusal without a repair reads the existing task');
 
   const after = await call('o11_deliver', { module: 'Orders', job: box.job, authorize: WORDS });
   const a = after.structuredContent;
@@ -373,7 +373,7 @@ test('an uncertain write is never repeated: resume of the same task, or ssam_tas
   // this root does not have continues with ssam_doctor instead, pa2-f1-deliver.test.mjs)
   writeKernelTask(box.work, '3c4d5e6f708192a3b4c5d6e7f8091a2b', { moduleKey: 'k1', writeState: 'unknown', stage: 'merge', error: 'timed out' });
   const held = (await call('o11_deliver', { module: 'Orders', job: box.job, authorize: WORDS })).structuredContent;
-  assert.equal(held.code, 'DELIVERY_FAILED'); assert.deepEqual(held.continuation.arguments, { resume: '3c4d5e6f708192a3b4c5d6e7f8091a2b' });
+  assert.equal(held.code, 'DELIVERY_FAILED'); assert.deepEqual(held.continuation.arguments, { id: '3c4d5e6f708192a3b4c5d6e7f8091a2b' });
   assert.equal(box.runAnvil.calls.length, 3);
 });
 
@@ -620,7 +620,7 @@ test('closePrevious never closes an uncertain task, and a refused close stops th
 
 test('a module held by a refused task answers with the close-and-deliver continuation, the words only as a marker', async t => {
   const box = setup(t, { handlers: { deliver: () => envelopes.moduleHeld } });
-  writeKernelTask(box.work, HELD, refusedAfterMerge);
+  writeKernelTask(box.work, HELD, { ...refusedAfterMerge, request: { Module: 'Orders', JobPath: box.job } });
   const { call, close } = await serve(box.deps); t.after(close);
   const held = await call('o11_deliver', { module: 'Orders', job: box.job, checks: ['SaveOrder'], authorize: WORDS });
   const next = held.structuredContent.continuation;
@@ -631,12 +631,12 @@ test('a module held by a refused task answers with the close-and-deliver continu
   // the marker is never taken for the user's words
   const marker = (await call('o11_deliver', next.arguments)).structuredContent;
   assert.equal(marker.code, 'WORDS_REQUIRED');
-  // an inline job is handed back as the file it was saved to
-  const inline = (await call('o11_deliver', { module: 'Orders', job: [{ op: 'get', target: 'X' }], authorize: WORDS })).structuredContent.continuation.arguments.job;
-  assert.ok(path.isAbsolute(inline) && fs.existsSync(inline) && inline.startsWith(path.join(box.local, 'jobs', 'inline')));
-  // a holder whose write is uncertain is resumed, never closed
+  // A different inline job has no proof of lineage, even in this same MCP session.
+  const inline = (await call('o11_deliver', { module: 'Orders', job: [{ op: 'get', target: 'X' }], authorize: WORDS })).structuredContent.continuation;
+  assert.equal(inline.tool, 'ssam_task'); assert.deepEqual(inline.arguments, { id: HELD });
+  // A holder with no lineage proof is read, never automatically resumed or closed.
   writeKernelTask(box.work, HELD, { moduleKey: 'k1', writeState: 'unknown', stage: 'merge', error: 'timed out' });
-  assert.deepEqual((await call('o11_deliver', { module: 'Orders', job: box.job, authorize: WORDS })).structuredContent.continuation.arguments, { resume: HELD });
+  assert.deepEqual((await call('o11_deliver', { module: 'Orders', job: box.job, authorize: WORDS })).structuredContent.continuation.arguments, { id: HELD });
   assert.equal(box.runAnvil.calls.length, 3);
 });
 
@@ -669,7 +669,7 @@ test('every refusal names the job it ran (job, jobSha256); an uncertain one neve
   const refused = (await call('o11_deliver', { module: 'Orders', job: box.job, authorize: WORDS })).structuredContent;
   assert.equal(refused.code, 'VALIDATION_REFUSED');
   assert.equal(refused.job, box.job); assert.equal(refused.jobSha256, sha256(fs.readFileSync(box.job)));
-  assert.equal(refused.continuation, undefined, 'still no catalog of fixes');
+  assert.equal(refused.continuation.tool, 'ssam_task', 'a refusal without a repair reads the existing task');
   const inline = (await call('o11_deliver', { module: 'Orders', job: [{ op: 'get', target: 'X' }], authorize: WORDS })).structuredContent;
   assert.equal(path.dirname(inline.job), INLINE(box)); assert.equal(inline.jobSha256, sha256(fs.readFileSync(inline.job)));
   // an array job is named as one (its patch paths are /<i>/...); an {ops} job is the default

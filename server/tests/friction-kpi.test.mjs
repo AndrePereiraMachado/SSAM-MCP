@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createStore, deliveryOfCall, deliveryOfAnswer, jobRef, operationName } from '../facade/friction-store.mjs';
+import { createStore, deliveryOfCall, deliveryOfAnswer, frictionPaths, jobRef, operationName } from '../facade/friction-store.mjs';
 import { observeMcp, readQueue, frictionTool } from '../facade/friction-boundary.mjs';
 import { main } from '../facade/friction-cli.mjs';
 import { deliveryKpi, isoWeek, KPI_COLUMNS, kpiRange, logicalDeliveries, quantile, readReceipts } from '../facade/friction-kpi.mjs';
@@ -63,7 +63,9 @@ test('R0: a delivery call records tool, module, basedOn, continueTask and its an
   assert.deepEqual(resumed.delivery, { tool: 'ssam_code', continueTask: 'facadetask-0001', taskId: 'fedcba9876543210fedcba9876543210', result: 'delivered' });
   assert.deepEqual(publish.delivery, { tool: 'studio_publish' }, 'a capture path is never a module');
   // The index carries the same fields (the KPI reads only the index); no text, message, path or authorize words anywhere.
-  const index = fs.readdirSync(path.join(directory, 'index')).filter(n => n.endsWith('.jsonl')).map(n => fs.readFileSync(path.join(directory, 'index', n), 'utf8')).join('');
+  // (the index this store writes: frictionPaths, per backend when the server names one, fase4-28 R1)
+  const indexDir = frictionPaths({ directory }).index;
+  const index = fs.readdirSync(indexDir).filter(n => n.endsWith('.jsonl')).map(n => fs.readFileSync(path.join(indexDir, n), 'utf8')).join('');
   assert.equal(index.split('\n').filter(l => l.includes('"delivery"')).length, 8, 'start and end of the three deliveries and the publish; never the read');
   const everything = index + fs.readdirSync(path.join(directory, 'operations')).map(f => fs.readFileSync(path.join(directory, 'operations', f), 'utf8')).join('');
   assert.doesNotMatch(everything, /secret|someone|publish it|line 3|textsha|capture\.oml|inline|message/);

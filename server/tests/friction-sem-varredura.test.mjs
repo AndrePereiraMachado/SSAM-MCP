@@ -12,7 +12,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { createStore } from '../facade/friction-store.mjs';
+// frictionPaths: the index this store writes (per backend when the server names one, fase4-28 R1).
+import { createStore, frictionPaths } from '../facade/friction-store.mjs';
 import { observeMcp } from '../facade/friction-boundary.mjs';
 
 delete process.env.SSAM_FRICTION_DIR;
@@ -83,7 +84,7 @@ test('the task view and a verified transition read only the operations they name
 
 test('the MCP boundary answers from the index it has and never rebuilds it from the operations folder', t => {
   const { directory, mine } = queue(t);
-  fs.rmSync(path.join(directory, 'index', '.complete'));
+  fs.rmSync(path.join(frictionPaths({ directory }).index, '.complete'));
   process.env.SSAM_FRICTION_DIR = directory; t.after(() => { delete process.env.SSAM_FRICTION_DIR; });
   const received = [];
   const observer = observeMcp({ root, entry: 'ssam', args: ['mcp'], meta: { sessionId: mine, profile: 'operational' }, toServer: () => {}, toClient: s => received.push(s) });
@@ -98,9 +99,9 @@ test('the MCP boundary answers from the index it has and never rebuilds it from 
   assert.ok(issues.issues.some(i => i.code === 'PREFLIGHT_REFUSED'), 'the issues of the index are there');
   assert.equal(report.ok, true); assert.equal(report.linkedOperations, 5);
   assert.equal(seen.listed, 0, 'no listing of the operations folder on the relay');
-  assert.ok(fs.existsSync(path.join(directory, 'index', '.complete')) === false, 'the relay does not rebuild the index');
+  assert.ok(fs.existsSync(path.join(frictionPaths({ directory }).index, '.complete')) === false, 'the relay does not rebuild the index');
   // The CLI and a direct store still rebuild it, once.
   const cli = createStore({ directory, warning: () => {} });
   assert.equal(cli.issues().health.indexComplete, true);
-  assert.ok(fs.existsSync(path.join(directory, 'index', '.complete')));
+  assert.ok(fs.existsSync(path.join(frictionPaths({ directory }).index, '.complete')));
 });

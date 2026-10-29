@@ -39,6 +39,7 @@ public sealed class FlowApplyTests
     [Fact] public void JsonForEachRefusalsCarryIndividualCheckedPatches() => Run(FlowApplyScenarios.JsonForEachRefusalsCarryIndividualCheckedPatches);
     [Fact] public void JsonMappingValuesKeepTheirRelativeScope() => Run(FlowApplyScenarios.JsonMappingValuesKeepTheirRelativeScope);
     [Fact] public void ATextWithoutKeyCreatesTheAction() => Run(FlowApplyScenarios.ATextWithoutKeyCreatesTheAction);
+    [Fact] public void ADeclarationNamedAfterAnActionOfTheModuleIsItsEditPathNeverADerivedName() => Run(FlowApplyScenarios.ADeclarationNamedAfterAnActionOfTheModuleIsItsEditPathNeverADerivedName);
     [Fact] public void ThePacketExamplesApplyInOneJob() => Run(FlowApplyScenarios.ThePacketExamplesApplyInOneJob);
     [Fact] public void SeveralTextsAreCheckedTogetherAndANewCalleeComesFirst() => Run(FlowApplyScenarios.SeveralTextsAreCheckedTogetherAndANewCalleeComesFirst);
     [Fact] public void AServiceActionTextReadsBackWithoutTheStudioTemplate() => Run(FlowApplyScenarios.AServiceActionTextReadsBackWithoutTheStudioTemplate);

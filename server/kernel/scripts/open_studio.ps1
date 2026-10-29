@@ -40,7 +40,9 @@ if (-not $NoBuild) {
     dotnet build (Join-Path $Root "tools\Anvil.Inject\Anvil.Inject.csproj") -c Release -nologo -v q | Out-Host
     if ($LASTEXITCODE -ne 0) { throw "build do injetor falhou" }
 }
-$BridgeBin = Join-Path $Root "src\Anvil.Bridge\bin\Release\net8.0"
+# The bridge build lands in the folder of its Studio's runtime (kernel\StudioRuntime.props): net10.0, else net8.0.
+$BridgeBin = @("net10.0", "net8.0") | ForEach-Object { Join-Path $Root "src\Anvil.Bridge\bin\Release\$_" } | Where-Object { Test-Path -LiteralPath (Join-Path $_ "Anvil.Bridge.dll") } | Select-Object -First 1
+if (-not $BridgeBin) { throw "Anvil.Bridge.dll nao foi compilado (src\Anvil.Bridge\bin\Release\<runtime>)" }
 $InjectDll = Join-Path $Root "tools\Anvil.Inject\bin\Release\net8.0\Anvil.Inject.dll"
 
 # 1) copiar as DLLs do bridge (so as nossas; nunca binarios da OutSystems)

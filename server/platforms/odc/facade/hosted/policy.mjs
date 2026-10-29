@@ -43,6 +43,7 @@ import { CODE_TOOL, JOB_TOOLS, JobTextError, PathRefusal, confineJobs, jobTextPo
 import { generatorApproval, offered } from '../generators.mjs';
 import { holdPointers, pointersOf, scrubText } from '../exposure.mjs';
 import { hostedCatalog } from './served.mjs';
+import { withoutHostedPreview } from './availability.mjs';
 import { causeOf, studioIdentity, studioRefusal, studioWarningOf } from '../studio-identity.mjs';
 import { destructiveUnavailable, hostedDestructive, hostedDestructiveFiles } from './destructive.mjs';
 import { withStudioScope } from './studio-scope.mjs';
@@ -746,8 +747,38 @@ export function studioVerdict({ name, lane, need = 'always', info, context, lane
   if (need === 'always' && refusedNow.length && !scope.sent && !skipped.length) return { refusal: oneRefusal(refusedNow) };
   const warnings = [...byLane.values()];
   const all = [...skipped, ...refusedNow];
-  return { fields: { ...(warnings.length ? { studioWarning: warnings[0] } : {}), ...(warnings.length > 1 ? { studioWarnings: warnings } : {}),
-    ...(all.length ? { studioSkipped: all } : {}) } };
+  // judged: every lane whose Studio this answer speaks for, with its warning or null (served as it is); a lane skipped or
+  // refused is not in it (its refusal always comes whole, in studioSkipped).
+  const judged = new Map([...touchedLanes(name, lane, lanes), ...byLane.keys()].filter(l => !all.some(b => b.lane === l)).map(l => [l, byLane.get(l) ?? null]));
+  return { judged, fields: studioFieldsOf(warnings, all) };
+}
+const studioFieldsOf = (warnings, skipped = []) => ({ ...(warnings.length ? { studioWarning: warnings[0] } : {}), ...(warnings.length > 1 ? { studioWarnings: warnings } : {}),
+  ...(skipped.length ? { studioSkipped: skipped } : {}) });
+// fase4-28 R1 (review item F3): a warning about a lane's Studio that changes nothing in the answer (studioBuildDiffers,
+// studioNotServed) went in full into EVERY answer of the session, 26% of all the bytes SSAM returned in one scenario. Now it
+// goes in full once per MCP session and lane the tool touched, and again only when that lane's verdict changes: another
+// code, cause, installed or served version, relation or policy, or the lane served without a warning in between. One
+// memory per MCP session (ssam.mjs hostedGate makes it with the session's gate). The reports of the Studio state
+// (ssam_doctor, studio_doctor) always carry the warnings of the lanes they report. A version refusal (the gate's, a lane
+// the executor refused, studioSkipped) is not a warning: it always comes whole. Without a memory (tests of one call)
+// every answer carries the warning, as before.
+export const STUDIO_STATE_REPORTS = Object.freeze(['ssam_doctor', 'studio_doctor']);
+const verdictKey = w => JSON.stringify([w.code, w.lane, w.cause ?? null, w.installed ?? null, w.served ?? null, w.relation ?? null, w.policy ?? null]);
+export function studioNoticeMemory() {
+  const last = new Map(); // lane -> key of the verdict this session last saw for it (null: served without a warning)
+  return {
+    // The Studio fields of one answer: the warnings this session has not seen in this form, plus the refused lanes.
+    fields(name, verdict) {
+      if (!verdict?.judged) return verdict?.fields ?? {};
+      const shown = [];
+      for (const [lane, warning] of verdict.judged) {
+        const key = warning ? verdictKey(warning) : null;
+        if (warning && (last.get(lane) !== key || STUDIO_STATE_REPORTS.includes(name))) shown.push(warning);
+        last.set(lane, key);
+      }
+      return studioFieldsOf(shown, verdict.fields.studioSkipped ?? []);
+    },
+  };
 }
 // Kept for its callers: the lane's warning of the hub alone.
 export function studioNotice(lane, info) {
@@ -783,10 +814,11 @@ export const withStudioWarning = (answer, warning) => withStudioFields(answer, w
 // input layer's arguments for the ones sent (R1); every rule below and the handler read them. prototypeOp: the D2 switch
 // (HOSTED_PROTOTYPE_OP by default; tests pass the other value). kernelRefused: the lanes the server image refused at start
 // (ssam.mjs startupKernel), each off for every tool but the state reports (kernelLaneOff). destructive: the T2 switch
-// (HOSTED_DESTRUCTIVE by default; tests pass the other value).
+// (HOSTED_DESTRUCTIVE by default; tests pass the other value). studioNotices: the session's memory of the Studio warnings
+// it was shown (studioNoticeMemory, one per MCP session); without it every answer carries them.
 export function wrapHostedTool(name, config, handler, { context, link = context?.agent, lanes = context?.lanes ?? [], run = (ctx, fn) => fn(),
   tools = hostedTools(), serverRoots, waitMs = RECONNECT_WAIT_MS, argsOf = null, prototypeOp = HOSTED_PROTOTYPE_OP, generatorOps = HOSTED_GENERATOR_OPS,
-  kernelRefused = null, destructive = HOSTED_DESTRUCTIVE, presentation = null } = {}) {
+  kernelRefused = null, destructive = HOSTED_DESTRUCTIVE, presentation = null, studioNotices = null } = {}) {
   const entry = tools[name];
   // presentation (a7 phase 4, tests): {workspace, serverRoots, pathApi} of the presenter only (the Linux image's layout with
   // path.posix on another machine); the call itself keeps the context's workspace.
@@ -875,8 +907,10 @@ export function wrapHostedTool(name, config, handler, { context, link = context?
     // A-M1 + E2, round 2 (A1, A2): the Studio of every lane the call touched, never silent when it is not the server's build.
     const verdict = studioVerdict({ name, lane, need, info, context, lanes, scope, skipped, link });
     if (verdict.refusal) return refusal(verdict.refusal);
-    return withStudioFields(present.result(name === 'ssam_discover' ? scrubDiscover(result, thirdPartyJobs()) : scrubEvidence(result, thirdPartyJobs())),
-      verdict.fields);
+    // fase4-28 R1 (F3): once per session and lane touched, again when the lane's verdict changes (studioNoticeMemory).
+    const documentation = ['ssam_discover', 'ssam_reference'].includes(name) ? withoutHostedPreview(result) : result;
+    return withStudioFields(present.result(name === 'ssam_discover' ? scrubDiscover(documentation, thirdPartyJobs()) : scrubEvidence(documentation, thirdPartyJobs())),
+      studioNotices ? studioNotices.fields(name, verdict) : verdict.fields);
   };
   return async (...params) => {
     const answer = await execute(...params);

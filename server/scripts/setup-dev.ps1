@@ -465,7 +465,7 @@ else {
         $odcProperty = "-p:OdcInstall=$($odc.Dir)"
         $builds += [pscustomobject]@{ Name = 'CLI ODC'; Args = @('build', (Join-Path $Root 'kernel\src\Anvil.Cli.Odc')) + $common + @('-o', (Join-Path $Root 'kernel\.local\lane-odc\cli'), $odcProperty); Output = (Join-Path $Root 'kernel\.local\lane-odc\cli\anvil-odc.dll') }
         $builds += [pscustomobject]@{ Name = 'builder ODC'; Args = @('build', (Join-Path $odcStudio 'builder\Builder.csproj')) + $common + @($odcProperty); Output = (Join-Path $odcStudio 'builder\bin\Release\net10.0\ODC3.Builder.dll') }
-        $builds += [pscustomobject]@{ Name = 'bridge ODC'; Args = @('build', (Join-Path $odcStudio 'bridge\Bridge.csproj')) + $common + @($odcProperty); Output = (Join-Path $odcStudio 'bridge\bin\Release\net8.0\ODC3.Bridge.v*.dll') }
+        $builds += [pscustomobject]@{ Name = 'bridge ODC'; Args = @('build', (Join-Path $odcStudio 'bridge\Bridge.csproj')) + $common + @($odcProperty); Output = (Join-Path $odcStudio 'bridge\bin\Release\net*\ODC3.Bridge.v*.dll') }
         $builds += [pscustomobject]@{ Name = 'cliente da bridge ODC'; Args = @('build', (Join-Path $odcStudio 'bridge\client\Client.csproj')) + $common; Output = (Join-Path $odcStudio 'bridge\client\bin\Release\net10.0\ODC3.Bridge.Client.dll') }
     }
     if ($builds.Count -eq 0) { Write-Note 'Nenhum Studio instalado: nada para compilar.'; Add-Result 'Build' 'aviso' 'nenhum Studio instalado' }

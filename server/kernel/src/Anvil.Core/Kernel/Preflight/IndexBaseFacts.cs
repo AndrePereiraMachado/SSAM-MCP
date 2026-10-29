@@ -237,6 +237,17 @@ public sealed class IndexBaseFacts : IBaseFacts
         return null;
     }
 
+    /// <summary>R1 item 4: the module's own action of exactly this kind (a row of the module, never a reference's signature
+    /// nor an element inside a screen, block, entity or action) and its key; the index has no text.</summary>
+    public (string Key, string? Text)? OwnAction(string name, string kind)
+    {
+        if (basis.Module is not { } index || kind is not ("ServerAction" or "ServiceAction" or "ClientAction")) return null;
+        var rows = index.Rows().ToList();
+        var own = rows.FirstOrDefault(r => string.Equals(r.Name, name, StringComparison.OrdinalIgnoreCase) && r.Kind.TrimStart('I') == kind
+            && r.Key.Length > 0 && !InsideOf(rows, r));
+        return own == null ? null : (own.Key.TrimStart('@'), null);
+    }
+
     public IReadOnlyCollection<string>? ScreenNames(string owner)
     {
         if (basis.Module is not { } index) return null;

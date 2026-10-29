@@ -33,7 +33,7 @@ test('api {op:<verb>} goes to the kernel as api --op <verb>; an unknown op conti
   const odc = await h.ask('odc', 'api', { op: 'create' });
   assert.deepEqual(h.run.calls[1].args, ['api', '--op', 'create']); assert.equal(odc.ok, true);
   const unknown = await h.ask('o11', 'api', { op: 'security' });
-  assert.equal(unknown.code, 'CLI_REFUSED');
+  assert.equal(unknown.code, 'UNKNOWN_OP');
   assert.deepEqual(unknown.continuation.arguments, { lane: 'o11', kind: 'api', query: { op: 'verbs' } });
 });
 

@@ -51,6 +51,7 @@ import { clipText } from './text-clip.mjs';
 import { appendJsonLine } from './correlation.mjs';
 import { wordsGiven } from './destructive-operations.mjs';
 import fs from 'node:fs';
+import { sameDeliveryLineage, reservationContinuation } from './delivery-lineage.mjs';
 import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import * as z from 'zod/v4';
@@ -920,7 +921,10 @@ const proofSummary = proof => ({ accepted: proof?.accepted === true, checked: pr
 export function deliverOutcome(run, options) {
   const answer = deliverOutcomeCore(run, options);
   const state = run?.envelope?.data ?? findKernelTask(options.work, options);
-  return producerHashWarningsOf(state).length ? { ...answer, ...warningFields(taskWarnings(state)) } : answer;
+  const continued = answer?.ok === false && !answer.continuation ? { ...answer, continuation: {
+    tool: 'ssam_task', arguments: { id: answer.taskId ?? options.trackId }, why: 'Read the recorded delivery before correcting or resuming it; do not repeat an unconfirmed write.'
+  } } : answer;
+  return producerHashWarningsOf(state).length ? { ...continued, ...warningFields(taskWarnings(state)) } : continued;
 }
 
 function deliverOutcomeCore(run, { trackId, work, job, taskId, since, input = {}, pendingContext, producerModels = null }) {
@@ -1051,7 +1055,9 @@ function deliverOutcomeCore(run, { trackId, work, job, taskId, since, input = {}
   const holderState = holder ? findKernelTask(work, { taskId: holder }) : null;
   const foreign = state.code === 'MODULE_RESERVED_FOREIGN' || (holder && !holderState);
   const next = foreign ? doctor('The module is reserved by a delivery of another SSAM root, or by a task this root does not have: the doctor shows the reservation and releases it with the user\'s words.')
-    : holder && (closeState(holderState) === 'refused' && input.module && job ? closeAndDeliver(input, job, holder) : resumeWith(holder));
+    : holder && (sameDeliveryLineage(input, job, holderState)
+      ? (closeState(holderState) === 'refused' && input.module && job ? closeAndDeliver(input, job, holder) : resumeWith(holder))
+      : reservationContinuation(holder));
   // After a merge the first failure carries the kernel's own sentence: the merge stays for review in the Studio. A merge
   // order delivery is two native merges, so two undo steps (the bridge's receipt counts them).
   const merged = state.writeState === 'applied';
@@ -1172,7 +1178,11 @@ function deliverOutcomeCore(run, { trackId, work, job, taskId, since, input = {}
   const unknownNext = !merged && state.pendingBridgeOperation?.outcomeUnknown && TASK_ID.test(String(base.taskId ?? '')) ? { ...resumeWith(base.taskId),
     why: 'The Studio\'s ' + (state.pendingBridgeOperation.command ?? 'Refresh References') + ' of this task got no answer that says what it did: the resume first proves the Studio idle (two reads) and never sends it again blind. Meanwhile '
       + (wroteSaid || 'it may have changed the module outside the merge and may still change it; Ctrl+Z in Service Studio undoes it') + '.' } : null;
-  const continuation = next ?? unknownNext ?? evidence ?? refreshNext ?? changedNext ?? repair;
+  const failureText = [state.code, state.error, ...(state.failures ?? []).flatMap(f => [f?.code, f?.error])].join(' ');
+  const infrastructure = /\b(?:PATH_OUTSIDE_WORKSPACE|PATH_NOT_STAGEABLE|AGENT_[A-Z_]+|HOSTED_[A-Z_]+|BRIDGE_(?:DISCONNECTED|TIMEOUT|UNAVAILABLE)|NotSent)\b|\bnot sent\b/i.test(failureText)
+    || (state.failures ?? []).some(f => f?.executed === false);
+  const toolFailure = merged && infrastructure && !invalid && !order?.repair && TASK_ID.test(String(base.taskId ?? ''));
+  const continuation = next ?? unknownNext ?? (toolFailure ? resumeWith(base.taskId) : null) ?? evidence ?? refreshNext ?? changedNext ?? repair;
   // (d) A refusal of the validation contract names the part that refused (the Verify, the expectations, the data contract)
   // and always carries its problems: the kernel's, or one per new Verify error and uncovered message.
   const contract = !merged && !kernelCode && invalid && state.apply ? validationContract(state.apply) : null;

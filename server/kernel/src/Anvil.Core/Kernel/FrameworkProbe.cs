@@ -7,7 +7,13 @@ public static class FrameworkProbe
 {
     public static object Types(string studioDir, string assembly, string nsFilter, int max = 400)
     {
-        var asm = Assembly.LoadFrom(Path.Combine(studioDir, assembly + ".dll"));
+        var file = Path.Combine(studioDir, assembly + ".dll");
+        // R1 item 3: an assembly the Studio folder does not have is ASSEMBLY_NOT_FOUND with the closest names (it came back as
+        // CLI_REFUSED with the loader's text and the folder of the installation).
+        if (!File.Exists(file))
+            throw CommandSurface.NotFound("ASSEMBLY_NOT_FOUND", $"assembly '{assembly}' is not in the Studio's folder", assembly,
+                Directory.Exists(studioDir) ? Directory.GetFiles(studioDir, "*.dll").Select(f => Path.GetFileNameWithoutExtension(f)!) : []);
+        var asm = Assembly.LoadFrom(file);
         Type[] types;
         try { types = asm.GetTypes(); } catch (ReflectionTypeLoadException e) { types = e.Types.Where(t => t != null).ToArray()!; }
         var rows = types.Where(t => (t.IsInterface || (t.IsClass && !t.IsAbstract)) && (t.FullName ?? "").Contains(nsFilter, StringComparison.OrdinalIgnoreCase) && !t.Name.Contains('<'))

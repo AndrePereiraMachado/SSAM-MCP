@@ -126,6 +126,18 @@ export const frictionTool={name:'ssam_friction',description:'SSAM friction queue
   annotations:{readOnlyHint:false,destructiveHint:false,idempotentHint:false,openWorldHint:false}};
 
 const REPORT_KEYS=['view','kind','tool','intent','attempted','workaround','cost','summary','taskId'];
+const QUEUE_KEYS=['view','taskId','session','offset','limit','max'];
+// The fields each view takes (a refusal names them).
+export const FRICTION_VIEWS=Object.freeze({issues:QUEUE_KEYS,task:QUEUE_KEYS,timeline:QUEUE_KEYS,reports:QUEUE_KEYS,'delivery-kpi':['view','since','until','lane'],report:REPORT_KEYS});
+// fase4-28 R1 (review item F5): ONE refusal of a friction query, for the stdio relay and the served mode. It says the real
+// reason (the query's own "Invalid ..." text names the field and the view's fields) and lists the fields of every view; any
+// other failure is named as a failure of the queue with its own first line, never a generic text that hides it (the hosted
+// gate still replaces a server path in it). The hosted handler said "use issues or task with an explicit taskId" for every
+// error, so {view:"issues", since} never learned that since is not a field of issues.
+export function frictionRefusal(error){
+  const message=String(error?.message??error??'').split(/\r?\n/)[0].slice(0,400);
+  return {ok:false,code:'FRICTION_QUERY_INVALID',error:/^Invalid /.test(message)?message:'The friction queue could not answer this query: '+(message||'unknown error'),views:FRICTION_VIEWS};
+}
 export function readQueue(store,args={},context={}) {
   if(args&&typeof args==='object'&&!Array.isArray(args)&&args.view==='report'){
     if(Object.keys(args).some(k=>!REPORT_KEYS.includes(k)))throw Error('Invalid report: fields are '+REPORT_KEYS.join(', '));
@@ -141,7 +153,9 @@ export function readQueue(store,args={},context={}) {
   if(args&&typeof args==='object'&&!Array.isArray(args)&&args.session!==undefined&&typeof args.session!=='string'){
     return {ok:false,code:'SESSION_INVALID',error:'session takes '+(CORRELATION?.SESSION_FORMS??'a text'),continuation:{tool:'ssam_friction',arguments:{view:args.view??'issues'},why:'Reads this session.'}};
   }
-  if(!args||typeof args!=='object'||Array.isArray(args)||Object.keys(args).some(k=>!['view','taskId','session','offset','limit','max'].includes(k)))throw Error('Invalid queue query');
+  if(!args||typeof args!=='object'||Array.isArray(args))throw Error('Invalid queue query: the arguments are an object');
+  const unknown=Object.keys(args).filter(k=>!QUEUE_KEYS.includes(k));
+  if(unknown.length)throw Error('Invalid queue query: '+unknown.join(', ')+(unknown.length>1?' are not fields':' is not a field')+' of view '+(typeof args.view==='string'?args.view:'issues')+'; its fields are '+QUEUE_KEYS.join(', '));
   if(args.taskId!==undefined&&(typeof args.taskId!=='string'||args.taskId.length>512))throw Error('Invalid task ID');
   if(args.view!==undefined&&!['issues','task','timeline','reports'].includes(args.view))throw Error('Invalid view');
   // max (C33, atritos 3) is the page size of issues, as limit.
@@ -190,7 +204,7 @@ export function observeMcp({root,entry,args,env=process.env,store=createStore({r
           localAnswer(message.id,input.arguments,{content:[{type:'text',text:JSON.stringify(value)}],structuredContent:value,...(value?.ok===false?{isError:true}:{})});
         }
         catch(error){
-          const refused={ok:false,code:'FRICTION_QUERY_INVALID',error:/^Invalid (report|delivery-kpi)/.test(String(error?.message??''))?error.message:'Invalid friction query; use issues, reports, task with an explicit taskId, delivery-kpi {since?, until?, lane?}, or report {kind, tool, intent, attempted}.'};
+          const refused=frictionRefusal(error);
           localAnswer(message.id,input.arguments,{isError:true,content:[{type:'text',text:JSON.stringify(refused)}],structuredContent:refused});
         }
         return true;

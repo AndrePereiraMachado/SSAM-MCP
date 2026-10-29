@@ -13,6 +13,7 @@ import { createHash } from 'node:crypto';
 import * as meter from '../quality-meter.mjs';
 import { timesFromSpans } from '../quality-record.mjs';
 import { runWithExecutor } from '../executor.mjs';
+import { customerStateDir } from '../hosted/storage.mjs';
 
 const TOKEN = 'tok_0000000a1fa0', OTHER = 'tok_0000000b2fb1';
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -164,8 +165,9 @@ let wsCount = 0;
 // A hosted context as executor.mjs builds one (workspace, the O11 relay port), enough for the hosted spawn environment.
 function hostedContextOf({ relayKey = false } = {}) {
   const workspace = path.join(kernelTmp, 'ws' + (++wsCount));
-  fs.mkdirSync(path.join(workspace, 'state', 'relay-authority'), { recursive: true });
-  if (relayKey) fs.writeFileSync(path.join(workspace, 'state', 'relay-authority', 'bridge.key'), 'k'.repeat(43));
+  const authority = path.join(customerStateDir(workspace), 'relay-authority');
+  fs.mkdirSync(authority, { recursive: true });
+  if (relayKey) fs.writeFileSync(path.join(authority, 'bridge.key'), 'k'.repeat(43));
   return { hosted: true, id: 'ctx' + wsCount, tokenId: TOKEN, customer: 'Cliente Alfa', lanes: ['o11', 'odc'], workspace,
     executor: { call: async () => null, o11Connection: () => ({ port: 4321 }), relayPort: () => 4321 }, o11: { studioDir: null, lane: 'ss4' } };
 }

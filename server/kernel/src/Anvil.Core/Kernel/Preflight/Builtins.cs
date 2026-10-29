@@ -39,7 +39,7 @@ public static class Builtins
     {
         try
         {
-            var root = JobRunner.RepoRoot(Environment.CurrentDirectory) ?? JobRunner.RepoRoot(Path.GetDirectoryName(typeof(Builtins).Assembly.Location)!);
+            var root = JobSources.KernelRoot();   // the kernel that runs, never the current directory first
             var path = root == null ? null : Directory.GetFiles(Path.Combine(root, "catalog"), "functions-*.json").OrderDescending().FirstOrDefault();
             if (path == null) return null;
             var functions = JsonNode.Parse(File.ReadAllText(path))?["Functions"] as JsonArray;

@@ -415,7 +415,7 @@ async function probes() {
 
 test('completeness: every enum value of the hosted catalog named like a deletion is refused (or KEPT with a reason); the rest is not', async () => {
   const { tools } = await hostedListing();
-  assert.deepEqual(Object.keys(hostedTools()).filter(n => n !== 'ssam_friction' && !tools.has(n)), [], 'the hosted server lists every classified tool (ssam_friction is added by the served mode)');
+  assert.deepEqual(Object.keys(hostedTools()).filter(n => !['ssam_friction', 'ssam_preview', 'studio_preview'].includes(n) && !tools.has(n)), [], 'the hosted server lists classified tools except local previews (ssam_friction is added by the served mode)');
   const unclassified = [], overRefused = [];
   for (const probe of await probes()) {
     const kept = probe.value !== undefined && KEPT[probe.name]?.[probe.value];

@@ -128,10 +128,10 @@ test('every in/out pointer exists in the tool schema under the 6.4 grammar', asy
 });
 
 // servidor/fase4-26 a8: ssam_code moves from unavailable (fase4-25) to server, with a mode that uses the agent.
-test('the totals of section 5: 24 server (11 with a mode that uses the agent), 33 agent, 22 tenant-agent, 17 unavailable (a8: ssam_code served)', () => {
+test('the hosted catalog classifies both local previews as unavailable', () => {
   const count = klass => Object.values(tools).filter(t => t.class === klass).length;
   assert.deepEqual({ server: count('server'), agent: count('agent'), tenant: count('tenant-agent'), unavailable: count('unavailable') },
-    { server: 24, agent: 33, tenant: 22, unavailable: 17 });
+    { server: 24, agent: 32, tenant: 22, unavailable: 18 });
   assert.equal(Object.values(tools).filter(t => t.class === 'server' && typeof t.agent === 'object').length, 11);
   assert.deepEqual(Object.entries(tools).filter(([, t]) => t.agent === 'report').map(([n]) => n).sort(), ['hybrid_tenants', 'odc_auth_status', 'ssam_doctor', 'studio_doctor']);
 });

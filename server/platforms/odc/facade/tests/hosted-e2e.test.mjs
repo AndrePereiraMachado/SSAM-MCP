@@ -83,7 +83,7 @@ const stdio = await ssam.createSsamServer({ ...ssam.servedLanes(), profile: 'all
   const [a, b] = InMemoryTransport.createLinkedPair();
   const local = new Client({ name: 'e2e-stdio', version: '1' });
   await Promise.all([stdio.connect(a), local.connect(b)]);
-  const stdioNames = [...(await local.listTools()).tools.map(x => x.name), frictionTool.name].sort();
+  const stdioNames = [...(await local.listTools()).tools.map(x => x.name).filter(n => !['ssam_preview', 'studio_preview'].includes(n)), frictionTool.name].sort();
   await local.close(); await stdio.close();
 
   const base = fs.mkdtempSync(path.join(os.tmpdir(), 'hosted-e2e-'));

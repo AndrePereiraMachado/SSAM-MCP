@@ -41,7 +41,7 @@ syncBuiltinESMExports();
 const z = await import('zod/v4');
 const { McpServer, InMemoryTransport } = await import('@modelcontextprotocol/server');
 const { Client } = await import('@modelcontextprotocol/client');
-const { runWithExecutor, prepareWorkspace, currentExecutor } = await import('../executor.mjs');
+const { runWithExecutor, prepareWorkspace, currentExecutor, hostedTempDir } = await import('../executor.mjs');
 const { anvilRoot, odcRoot, o11Lane } = await import('../workspace.mjs');
 const lib = await import('../lib.mjs');
 const { o11Bridge, bridgeTarget } = await import('../o11-bridge.mjs');
@@ -141,7 +141,8 @@ function assertO11Spawn(call, context) {
   assert.equal(env.ANVIL_STUDIO_DIR, SERVER_STUDIO);
   assert.equal(env.ANVIL_LANE, LANE);
   assert.equal(call.options.cwd, path.join(context.workspace, 'o11'));
-  assert.equal(env.TEMP, path.join(context.workspace, 'o11', 'tmp')); assert.equal(env.TMP, env.TEMP);
+  // fase4-28 R1: the lane's TEMP rule (executor.mjs hostedTempDir: <ws>/o11/tmp, per backend when the server names one).
+  assert.equal(env.TEMP, hostedTempDir(context.workspace, 'o11')); assert.equal(env.TMP, env.TEMP);
   assert.equal(env.ANVIL_CSHARP_RUNTIME_REGISTRATION, undefined);
   // The kernel talks to the customer's thin bridge (docs/O11-BRIDGE-FINA.md §4.4-4.5).
   assert.equal(env.ANVIL_BRIDGE_FLAVOR, 'thin'); assert.equal(env.ANVIL_BRIDGE_TIMEOUT_SECONDS, '600');
@@ -159,7 +160,7 @@ function assertOdcSpawn(call, context) {
   assert.equal(env.SSAM_HYBRID_ODC_ROOT, path.join(context.workspace, 'odc'));
   assert.equal(env.ANVIL_AUTHORITY_DIR, path.join(context.workspace, 'state', 'relay-authority'));
   assert.equal(call.options.cwd, path.join(context.workspace, 'odc'));
-  assert.equal(env.TEMP, path.join(context.workspace, 'odc', 'tmp'));
+  assert.equal(env.TEMP, hostedTempDir(context.workspace, 'odc'));
   assert.equal(env.ANVIL_BRIDGE_PORT, undefined); assert.equal(env.ANVIL_CSHARP_RUNTIME_REGISTRATION, undefined); assert.equal(env.SSAM_HYBRID_ODC_TENANT, undefined);
   assert.equal(env.ANVIL_BRIDGE_FLAVOR, undefined); assert.equal(env.ANVIL_BRIDGE_TIMEOUT_SECONDS, undefined);
   assert.equal(env.ANVIL_BRIDGE_PROBE_MS, undefined); assert.equal(env.ANVIL_KEPT_READINGS, 'own');

@@ -129,6 +129,14 @@ export function studioVersions(studios) {
 // ---- the texts, one place for the hub, the gate and the warnings. B3 (owner rule of 2026-10-15): every text in English,
 // no bilingual line: `user` is the userMessage (for the person, shown as it is), `en` the error (for the model).
 const listOf = names => names.join(', ');
+// A mixed machine stays on its ODC-selected backend; only its older O11 lane needs an update.
+export function mixedStudioUpgrade(identity) {
+  if (identity?.lane !== 'o11' || identity.relation !== 'served-elsewhere'
+    || threePart(identity.served) !== '11.55.94'
+    || !['11.55.93', '11.55.92'].includes(threePart(identity.installed))) return null;
+  return 'Update Service Studio to 11.55.94, open it again, and reconnect the SSAM Agent; then repeat the O11 request. The ODC lane remains available. Reinstalling the agent does not fix this.';
+}
+
 function words(identity) {
   const S = STUDIO[identity.lane];
   const { installed, served } = identity;
@@ -150,7 +158,7 @@ function words(identity) {
   let user, en;
   switch (`${identity.relation}:${identity.direction}`) {
     case 'served-elsewhere:null':
-      user = en = 'Your Studio version changed and your agent is being redirected. Reconnect the agent and repeat the request. If this persists, ask the SSAM owner to serve both installed Studio versions together.';
+      user = en = mixedStudioUpgrade(identity) ?? 'Your Studio version changed and your agent is being redirected. Reconnect the agent and repeat the request. If this persists, ask the SSAM owner to serve both installed Studio versions together.';
       break;
     case 'older:older': {
       const range = identity.window?.length > 1 ? identity.window[0] + '–' + identity.window.at(-1) : identity.window?.[0] ?? served;
@@ -204,7 +212,8 @@ export function studioWarningOf(identity) {
   const { lane, installed, served, relation, policy } = identity;
   const three = threePart(served);
   if (relation === 'served-elsewhere') {
-    const message = 'Your Studio version changed and your agent is being redirected. This request ran on the server only; no operation ran on your Studio. Reconnect the agent and repeat the request.';
+    const upgrade = mixedStudioUpgrade(identity);
+    const message = upgrade ? upgrade + ' This request ran on the server only; no operation ran on your Studio.' : 'Your Studio version changed and your agent is being redirected. This request ran on the server only; no operation ran on your Studio. Reconnect the agent and repeat the request.';
     return { code: 'studioNotServed', lane, cause: 'STUDIO_VERSION_CHANGED', installed, served, relation, policy, userMessage: message, error: message + ' Show this warning to the user.' };
   }
   if (identity.ok && relation === 'newer') {

@@ -19,6 +19,8 @@ import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { pipeCall } from './odc-pipe.mjs';
 import { signedRuntime, bridgeClientError } from './signed-runtime.mjs';
+import { classify } from './hosted/mirror.mjs';
+import { runtimeDir } from './hosted/storage.mjs';
 
 // The closed list of 4.4: the six kinds that touch a machine, and the file kinds that exist only between the server and
 // the agent (the local executor refuses them).
@@ -28,7 +30,7 @@ export const MACHINE_KINDS = Object.freeze(CALL_KINDS.slice(0, 6));
 
 // Codes that only the seam, the hub, the AgentExecutor or the agent produce. Tool answers that flatten an error to its
 // message keep these codes (seamFields), so a refusal stays recognizable; local errors never carry them.
-export const SEAM_CODES = new Set(['HOSTED_CONTEXT_LOST', 'SEAM_LOCAL_IN_HOSTED', 'KIND_NOT_ALLOWED', 'O11_NOT_CONNECTED',
+export const SEAM_CODES = new Set(['HOSTED_CONTEXT_LOST', 'HOSTED_TEMP_OUTSIDE_MIRROR', 'SEAM_LOCAL_IN_HOSTED', 'KIND_NOT_ALLOWED', 'O11_NOT_CONNECTED',
   'HOSTED_STUDIO_SESSION_ONLY', 'HOSTED_PROMPT_UNAVAILABLE', 'HOSTED_UNAVAILABLE', 'COMPONENT_STALE',
   'AGENT_NOT_CONNECTED', 'AGENT_RECONNECTING', 'AGENT_BUSY', 'AGENT_DISCONNECTED', 'AGENT_TIMEOUT', 'AGENT_REVOKED', 'AGENT_PROTOCOL_VIOLATION',
   'COMMAND_NOT_ALLOWED', 'METHOD_NOT_ALLOWED', 'PATH_FORBIDDEN', 'PATH_NOT_AGENT', 'PATH_OUTSIDE_WORKSPACE', 'PATH_NOT_STAGEABLE',
@@ -231,6 +233,34 @@ export const SPAWN_ALLOWED = Object.freeze(['SystemRoot', 'windir', 'ComSpec', '
 // a bridge call there ends at this customer's relay and agent, which refuse it (O11_NOT_CONNECTED, AGENT_NOT_CONNECTED):
 // never another Studio. The verbs that need the Studio refuse before the spawn (assertSelectedO11, the lane's bridge
 // getter, the gate). Only an executor without a relay (none in a real hosted context) is refused here.
+//
+// The TEMP of every hosted process of a lane (fase4-28 R1, review item F1): ONE function, used by every spawn and checked
+// at the start of every hosted context. The kernel hands files of its TEMP to the customer's bridge through the agent
+// mirror (hosted/mirror.mjs): the thin O11 bridge's find_element of each delivery check is a snapshot_module into
+// <TEMP>/thin-bridge/<guid>.oml (ThinBridge.cs), the Publisher downloads into <TEMP>/sshedless-dl (Publisher.cs
+// DownloadBytes), and any kernel file there may be a merge_from_oml input. So the folder is <ws>/<lane>/tmp, with one
+// sub-folder per backend of the server (hosted/storage.mjs runtimeDir: two Studio versions of one customer never share a
+// TEMP), and it must be where the mirror takes what the lane's kernel hands its bridge from TEMP:
+//   - o11 'output': the bridge writes there, so the agent must be able to write it (mirror WRITABLE);
+//   - odc 'input': the ODC kernel keeps its own work and runtime in TEMP and never asks its bridge to write there; the
+//     folder stays inside the visible area (an input from it is staged) and is not one the agent may name.
+// A TEMP the mirror does not take fails closed with HOSTED_TEMP_OUTSIDE_MIRROR before any process starts.
+export const TEMP_MIRROR_ROLE = Object.freeze({ o11: 'output', odc: 'input' });
+export function hostedTempDir(workspace, lane, backend = process.env.SSAM_BACKEND_NAME) {
+  if (!Object.hasOwn(TEMP_MIRROR_ROLE, lane)) throw new Error('hostedTempDir takes lane o11 or odc, not ' + lane);
+  const tmp = runtimeDir(path.join(workspace, lane, 'tmp'), backend);
+  const verify = () => {
+    const where = classify(workspace, tmp);
+    if (!where.visible || (TEMP_MIRROR_ROLE[lane] === 'output' && !where.writable))
+    throw seamError('HOSTED_TEMP_OUTSIDE_MIRROR', 'Internal error of the SSAM server: the temporary folder of the ' + lane.toUpperCase()
+      + ' processes is not where the agent mirror takes their files, so nothing ran on any machine.',
+      { continuation: { tool: 'ssam_doctor', arguments: {}, why: 'report this to the server owner; do not retry in a loop' } });
+  };
+  verify(); // A symlink must be rejected before creating backend folders through it.
+  fs.mkdirSync(tmp, { recursive: true });
+  verify();
+  return tmp;
+}
 export function hostedSpawnEnv(lane) {
   const context = hostedContext();
   if (!context) throw contextLost('a hosted child process');
@@ -241,8 +271,7 @@ export function hostedSpawnEnv(lane) {
   const env = {};
   for (const name of SPAWN_ALLOWED) if (process.env[name] !== undefined) env[name] = process.env[name];
   const cwd = path.join(context.workspace, lane);
-  const tmp = process.env.SSAM_BACKEND_NAME ? path.join(customerStateDir(context.workspace), lane, 'tmp') : path.join(cwd,'tmp');
-  fs.mkdirSync(tmp, { recursive: true });
+  const tmp = hostedTempDir(context.workspace, lane);
   // TMPDIR is the temp folder of .NET on Linux (Path.GetTempPath; TEMP/TMP only on Windows). Without it the kernel of the
   // Linux image (server/Dockerfile) wrote to /tmp, shared by every customer and outside the workspace: the thin O11
   // bridge's snapshot_module path (ThinBridge.cs, <temp>/thin-bridge/<guid>.oml) was refused PATH_OUTSIDE_WORKSPACE.
@@ -302,6 +331,8 @@ export const WORKSPACE_FOLDERS = Object.freeze([
 // relay key; returns the relay authority folder. The server's controller key never enters it.
 export function prepareWorkspace(workspace) {
   for (const folder of WORKSPACE_FOLDERS) fs.mkdirSync(path.join(workspace, ...folder.split('/')), { recursive: true });
+  // The TEMP of each lane's processes, checked against the mirror before the context serves any call (hostedTempDir).
+  for (const lane of Object.keys(TEMP_MIRROR_ROLE)) hostedTempDir(path.resolve(workspace), lane);
   const tenants = path.join(workspace, 'odc', 'tenants.json');
   try { fs.writeFileSync(tenants, JSON.stringify({ default: null, tenants: {} }, null, 2),{flag:'wx'}); } catch(e) { if(e.code!=='EEXIST')throw e; }
   const relayAuthorityDir = path.join(customerStateDir(workspace), 'relay-authority');

@@ -5,9 +5,10 @@
 // The ODC CLI has only `api --op`, `check-job` and `verify-catalog` (kernel/src/Anvil.Cli.Odc/Program.cs): an interface
 // name there is answered by `api --op native --type`, a Verify message by verify-catalog; the other kinds refuse by
 // naming the O11 lane. Static answers are cached in memory per (lane, kind, query) for the life of the server;
-// check-job and check-delivery always run. where-can, verify-message, api and recipe find the repository from the
-// process folder (RepoRoot falls back to the working directory once the Studio assemblies are bound), so every call
-// runs with cwd = the kernel (anvilRoot). A large answer is written to <lane.local>/reference/<hash>.json.
+// check-job and check-delivery always run. where-can, verify-message, api and recipe find the kernel from the folder of
+// the CLI's own assembly (JobSources.KernelRoot), whatever the working directory and whether the Studio assemblies are
+// bound (a hosted run's cwd is the customer's workspace); every call still passes cwd = the kernel (anvilRoot) locally.
+// A large answer is written to <lane.local>/reference/<hash>.json.
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
@@ -409,9 +410,16 @@ export function odcRecipe(root, query) {
   const dir = path.join(root, 'tests', 'jobs-odc'); let files = [];
   try { files = fs.readdirSync(dir).filter(f => f.endsWith('.json')).sort(); } catch { /* no suite */ }
   const definitions = []; let remaining = q.ops === true ? q.max ?? RECIPE_OPS_MAX : 0;
+  // A suite job this installation cannot read is skipped and named after the recipes found (the O11 CLI's rule, R1 item 2).
+  const skipped = []; const named = files.includes(q.find.trim() + '.json');
   for (const f of files) {
     const name = f.slice(0, -5); let text; let job;
-    try { text = fs.readFileSync(path.join(dir, f), 'utf8').replace(/^﻿/, ''); job = JSON.parse(text); } catch { continue; }
+    try { text = fs.readFileSync(path.join(dir, f), 'utf8').replace(/^﻿/, ''); job = JSON.parse(text); }
+    catch (error) {
+      if (!named || name === q.find.trim())
+        skipped.push({ name, path: 'tests/jobs-odc/' + f, skipped: 'the job ' + (error instanceof SyntaxError ? 'is not valid JSON' : 'cannot be read here (' + (error?.code ?? error?.name ?? 'error') + ')') });
+      continue;
+    }
     const exact = name === q.find.trim();
     if (!exact && !jobOffered(job, q.find)) continue;
     // Matched on the text the job had before 16/10, its Portuguese prose (search-aliases.mjs: search only) with the rest of
@@ -424,7 +432,7 @@ export function odcRecipe(root, query) {
     definitions.push({ name, path: 'tests/jobs-odc/' + f, description: job.description ?? '', opCount: ops.length, ...(q.ops === true ? { ops: ops.slice(0, take).map(({ _why, ...op }) => op), truncated: take < ops.length } : {}) });
     if (exact) return [definitions.at(-1)];
   }
-  return definitions;
+  return [...definitions, ...skipped];
 }
 
 // ---- the owner's rules (kind rules): the files the team reads, served whole or by section, never the CLI. An app
@@ -560,8 +568,14 @@ export function functionList(query) {
   return { names, normalized };
 }
 
-// A refusal of the CLI itself: the natural next lookup for that kind.
-function nextLookup(lane, kind, query) {
+// A refusal of the CLI itself: the natural next lookup for that kind. An assembly the Studio folder does not have
+// (ASSEMBLY_NOT_FOUND) goes on to the closest one the kernel named, with the same filter.
+function nextLookup(lane, kind, query, envelope = null) {
+  if (kind === 'types' && envelope?.code === 'ASSEMBLY_NOT_FOUND' && query && typeof query === 'object') {
+    const closest = Array.isArray(envelope.candidates) ? envelope.candidates.find(c => typeof c === 'string') : undefined;
+    return again(lane, kind, { assembly: closest ?? 'ServiceStudio.Framework', filter: query.filter ?? '<text>', ...(query.max !== undefined ? { max: query.max } : {}) },
+      closest ? 'the closest assembly of the Studio folder' : 'an assembly of the Studio folder');
+  }
   const name = typeof query === 'string' ? query : query?.name;
   if (name && ['functions', 'verify-message'].includes(kind)) return again(lane, kind, { find: name }, 'search by part of the name');
   if (name && kind === 'ui-block') return again(lane, kind, { ...(typeof query === 'object' && query.catalog ? { catalog: query.catalog } : {}), find: name }, 'search the catalog by text');
@@ -593,9 +607,11 @@ export function opCandidates(op, known = API_OPS, closest = null) {
 // A refusal of the CLI itself. The kernel's refusal of an unknown op (CommandSurface.UnknownOp: "unknown op 'x'[; closest:
 // 'y']; allowed: <grammars>; verbs (their line): <verbs>"; a test renders it from CommandSurface.cs) with candidates is
 // UNKNOWN_OP: each candidate with its line (a grammar its line of API_OP_LINES, a verb its own line of the verb table:
-// verbTable, the verbs of `api --op verbs`), the continuation to the first one (name kept); without any, CLI_REFUSED and
-// the next lookup of that kind.
+// verbTable, the verbs of `api --op verbs`), the continuation to the first one (name kept); without candidates, UNKNOWN_OP
+// still identifies an unsuccessful lookup and the continuation lists the supported verbs.
 const UNKNOWN_OP = /unknown op '([^']*)'(?:; closest: '([^']*)')?; allowed: ([^;]*); verbs \(their line\): (.*)$/;
+// An UPPER_SNAKE code of the kernel's envelope (Errors.Envelope: the code of a KernelRefusalException).
+const KERNEL_CODE = /^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+$/;
 const unknownOpOf = (kind, query, envelope) => (kind === 'api' && query && typeof query === 'object' ? UNKNOWN_OP.exec(String(envelope?.error ?? '').split(/\r?\n/)[0]) : null);
 function cliRefusal(lane, kind, query, envelope, verbTable = null) {
   const unknown = unknownOpOf(kind, query, envelope);
@@ -612,9 +628,16 @@ function cliRefusal(lane, kind, query, envelope, verbTable = null) {
       return refusal('UNKNOWN_OP', `unknown op '${unknown[1]}'; candidates: ${candidates.map(c => c.op).join(', ')} (candidates[] has the line of each)`,
         again(lane, kind, { op: candidates[0].op, ...(query.name !== undefined ? { name: query.name } : {}) }, `the contract of the first candidate, ${candidates[0].op}`),
         { op: unknown[1], candidates, allowed });
-    return refusal('CLI_REFUSED', `unknown op '${unknown[1]}'; allowed: ${allowed.join(', ')}`, nextLookup(lane, kind, query));
+    return refusal('UNKNOWN_OP', `unknown op '${unknown[1]}'; allowed: ${allowed.join(', ')}`,
+      again(lane, kind, { op: 'verbs', ...(query.name !== undefined ? { name: query.name } : {}) }, 'list the supported verbs'),
+      { op: unknown[1], candidates: [], allowed });
   }
-  return refusal('CLI_REFUSED', firstLine(envelope.error), nextLookup(lane, kind, query));
+  // R1 item 3: a refusal the kernel codes (KernelRefusalException: UI_BLOCK_NOT_FOUND for a block the catalog does not
+  // have, ASSEMBLY_NOT_FOUND for an assembly the Studio folder does not have, ...) keeps its code and the kernel's closest
+  // names; CLI_REFUSED stays the code of a CLI failure that carries none.
+  const coded = typeof envelope?.code === 'string' && KERNEL_CODE.test(envelope.code) ? envelope.code : null;
+  const candidates = coded && Array.isArray(envelope.candidates) && envelope.candidates.length ? { candidates: envelope.candidates.filter(c => typeof c === 'string').slice(0, 5) } : {};
+  return refusal(coded ?? 'CLI_REFUSED', firstLine(envelope.error), nextLookup(lane, kind, query, envelope), candidates);
 }
 
 // The ssam_code part a lookup names, 'all' for the code form in general, or null (owner session 2026-10-12: {op:"ddl"}
@@ -845,7 +868,7 @@ export function registerSsamReference(server, deps = {}) {
       if (!Array.isArray(found)) return found;
       const q = typeof query === 'string' ? { find: query } : query;
       return { ok: true, lane, kind, source: 'tests/jobs-odc (suite jobs of the ODC lane; every word of find in the name, description or ops)',
-        ...(q.ops === true && q.max === undefined ? { maxDefaulted: RECIPE_OPS_MAX } : {}), ...sized(lane, { find: q.find, count: found.length, definitions: found }) };
+        ...(q.ops === true && q.max === undefined ? { maxDefaulted: RECIPE_OPS_MAX } : {}), ...sized(lane, { find: q.find, count: found.filter(entry => !entry.skipped).length, definitions: found }) };
     }
     // Several function names in one query (A1 of the 2026-10-12 analysis): every signature and, for a name that does not
     // exist, its closest names, in one answer.

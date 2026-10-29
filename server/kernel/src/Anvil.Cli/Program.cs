@@ -962,25 +962,13 @@ public static class Program
         return CommandSurface.VerifyMessages(VerifyCatalog.All, VerifyHints.Read(RepoRoot()), name ?? Need(args, "--find"), name != null);
     }
 
-    private static string RepoRoot()
-    {
-        var dir = AppContext.BaseDirectory;
-        while (dir != null && !File.Exists(Path.Combine(dir, "MANIFESTO.md"))) dir = Path.GetDirectoryName(dir);
-        return dir ?? Directory.GetCurrentDirectory();
-    }
+    /// <summary>Reference files belong to the running assembly's kernel. Studio binding changes AppContext.BaseDirectory,
+    /// and hosted calls use the customer's workspace as their current directory. Use the same resolver as jobs.</summary>
+    private static string RepoRoot() => JobSources.KernelRoot()
+        ?? throw new DirectoryNotFoundException("the kernel folder (the one with MANIFESTO.md) is neither above this CLI's assembly nor above the current directory");
 
-    /// ui-block --catalog <json> --name <Block> | --find <texto>
-    private static object UiBlockCmd(string[] args)
-    {
-        var m = UiCatalog.ReadJson(Need(args, "--catalog"));
-        var name = Opt(args, "--name");
-        if (name != null)
-            return m.Blocks.FirstOrDefault(b => string.Equals(b.Name, name, StringComparison.OrdinalIgnoreCase))
-                   ?? throw new ArgumentException($"block '{name}' not in {m.Name} {m.Version}; try --find");
-        var find = Need(args, "--find");
-        return m.Blocks.Where(b => b.Name.Contains(find, StringComparison.OrdinalIgnoreCase) || (b.Description ?? "").Contains(find, StringComparison.OrdinalIgnoreCase))
-            .Select(b => new { b.Name, b.Flow, b.Public, b.Description, Inputs = b.Inputs.Select(i => i.Name), Placeholders = b.Placeholders.Select(x => x.Name), Events = b.Events.Select(e => e.Name) }).ToList();
-    }
+    /// ui-block --catalog <json> --name <Block> | --find <text> (CommandSurface.UiBlock: a name the catalog lacks is UI_BLOCK_NOT_FOUND)
+    private static object UiBlockCmd(string[] args) => CommandSurface.UiBlock(Need(args, "--catalog"), Opt(args, "--name"), Opt(args, "--find"));
 
     private static object CatalogCmd(string[] args)
     {

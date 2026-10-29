@@ -4,8 +4,9 @@ namespace Anvil.Core;
 /// <summary>Checked-in metadata, available without loading a Studio runtime.</summary>
 public static class ApiCatalog
 {
+    // The kernel that runs (JobSources.KernelRoot: the assembly's folder first, the current directory last).
     private static readonly Lazy<JsonObject?> Default = new(() => {
-        var root = JobRunner.RepoRoot(Environment.CurrentDirectory) ?? JobRunner.RepoRoot(Path.GetDirectoryName(typeof(ApiCatalog).Assembly.Location)!);
+        var root = JobSources.KernelRoot();
         var path = root == null ? null : Directory.GetFiles(Path.Combine(root, "catalog"), "model-api-*.json").OrderDescending().FirstOrDefault();
         return path == null ? null : JsonNode.Parse(File.ReadAllText(path))!.AsObject();
     });
@@ -13,7 +14,7 @@ public static class ApiCatalog
     public static JsonObject? Enum(string name, JsonObject? catalog = null) => (catalog ?? Data)?["Enums"]?.AsArray()
         .OfType<JsonObject>().FirstOrDefault(e => string.Equals(e["Name"]?.ToString(), name.Split('.').Last(), StringComparison.OrdinalIgnoreCase));
     private static readonly Lazy<JsonObject?> PluginEnums = new(() => {
-        var root = JobRunner.RepoRoot(Environment.CurrentDirectory) ?? JobRunner.RepoRoot(Path.GetDirectoryName(typeof(ApiCatalog).Assembly.Location)!);
+        var root = JobSources.KernelRoot();
         var path = root == null ? null : Directory.GetFiles(Path.Combine(root, "catalog"), "ui-plugin-enums-*.json").OrderDescending().FirstOrDefault();
         return path == null ? null : JsonNode.Parse(File.ReadAllText(path))!.AsObject();
     });
