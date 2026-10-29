@@ -10,8 +10,9 @@ export function configureJournals(root,key){
 }
 const keyFor=file=>[...keys].find(([root])=>path.resolve(file).toLowerCase().startsWith(root+path.sep))?.[1];
 const tag=(key,file,value)=>createHmac('sha256',key).update(path.resolve(file).toLowerCase()+'\0'+JSON.stringify(value)).digest('hex');
-export function writeJournal(file,value){
- const key=keyFor(file);if(!key&&needsKey(file))throw Error('Automatic journal key is unavailable.');const data=key?{journal:1,value,mac:tag(key,file,value)}:value;
+// macPath: the path the journal will be read at, when it is written elsewhere first (a staged folder renamed in whole).
+export function writeJournal(file,value,{macPath=file}={}){
+ const key=keyFor(macPath);if(!key&&needsKey(macPath))throw Error('Automatic journal key is unavailable.');const data=key?{journal:1,value,mac:tag(key,macPath,value)}:value;
  fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file+'.next',JSON.stringify(data,null,2)+'\n',{mode:0o600});fs.renameSync(file+'.next',file);
 }
 export function readJournal(file,{automatic=false}={}){

@@ -169,14 +169,18 @@ export function featuresSummary(p){
 }
 // The private store: featuresRoot/odc-<a.b.c>/Features.plain.xml with features.provenance.json (a journal: MAC-signed
 // with the watcher's key in automatic mode, bound to its path) recording how it got there. An exact export is never
-// replaced; a carried or defaults-only file is moved to odc-<v>/superseded/<sha8>/ when an exact one arrives.
+// replaced; a carried or defaults-only file is moved to odc-<v>/superseded/<sha8>/ when an exact one arrives for its
+// version, and a defaults-only one also when a carry becomes possible. A new folder appears whole (file and provenance
+// staged, then one rename), so an interrupted write never leaves a file without provenance.
 export function createFeaturesStore({root,legacyRoot=null,automatic=false,defaultsFallback=false,log=()=>{},clock=()=>new Date()}){
  const folder=v=>path.join(root,`odc-${v}`),plainOf=dir=>path.join(dir,'Features.plain.xml'),provOf=dir=>path.join(dir,'features.provenance.json');
  const review=(dir,why)=>new EnvironmentError(`The ODC features store ${dir}: ${why}. Review the features store; nothing was used or changed.`,'store-mismatch',['odc']);
- const record=(dir,v,fields)=>{const p={schema:FEATURES_SCHEMA,version:v,...fields,recordedAt:clock().toISOString()};writeJournal(provOf(dir),p);return p;};
+ const recordAt=(file,macPath,v,fields)=>{const p={schema:FEATURES_SCHEMA,version:v,...fields,recordedAt:clock().toISOString()};writeJournal(file,p,{macPath});return p;};
+ const record=(dir,v,fields)=>recordAt(provOf(dir),provOf(dir),v,fields);
  const versions=()=>{let names=[];try{names=fs.readdirSync(root);}catch{}return names.map(n=>/^odc-(\d+\.\d+\.\d+)$/.exec(n)?.[1]).filter(Boolean);};
- // What odc-<v> holds, verified (provenance and sha256); a folder of the watcher before provenance becomes an exact one
- // when its Version is v. null when there is no folder.
+ // What odc-<v> holds, verified (provenance and sha256). A folder without provenance is never trusted in automatic mode;
+ // in manual mode a folder of the watcher from before provenance becomes an exact one when its Version is v and it holds
+ // features (a defaults-only document never does). null when there is no folder.
  function held(v){
   const dir=folder(v);if(!fs.existsSync(dir))return null;
   const plain=plainOf(dir),prov=provOf(dir);
@@ -187,20 +191,28 @@ export function createFeaturesStore({root,legacyRoot=null,automatic=false,defaul
    if(sha256(bytes)!==p.sha256)throw review(dir,'Features.plain.xml changed after it was recorded');
    return {dir,path:plain,provenance:p};
   }
+  if(automatic)throw new EnvironmentError(`The ODC features store ${dir} has no provenance. Review it, delete odc-${v} by name and seed it again with vigia.ps1 -SeedFeatures <Features.plain.xml>; nothing was used or changed.`,'store-mismatch',['odc']);
   if(!fs.existsSync(plain))throw review(dir,'the folder holds no Features.plain.xml');
   const parsed=readFeatures(plain);
-  if(threeOf(parsed.version)!==v)throw review(dir,`Features.plain.xml has no provenance and is for ${parsed.version??'no version'}, not ${v} (an interrupted write leaves this too)`);
+  if(threeOf(parsed.version)!==v)throw review(dir,`Features.plain.xml has no provenance and is for ${parsed.version??'no version'}, not ${v}`);
+  if(!parsed.entries.size)throw review(dir,'Features.plain.xml has no provenance and no feature (a defaults-only document is never recorded as exact); delete odc-'+v+' by name and seed it again with vigia.ps1 -SeedFeatures <Features.plain.xml>');
   const p=record(dir,v,{mode:'exact',sha256:parsed.sha256,fileVersion:parsed.version,source:{kind:'legacy'},chain:0});
   log(`features of ODC ${v}: the folder without provenance is recorded as exact ${parsed.version} (sha256 ${parsed.sha256})`);
   return {dir,path:plain,provenance:p};
  }
- // A new odc-<v>: the file first (staged, then renamed in), then its provenance (bound to the final path).
+ // A new odc-<v>, whole: the file and its provenance (signed for its final path) are staged, then one rename puts them in
+ // place. A failure before the rename leaves no odc-<v>; the watcher's own staging folders of v are removed.
  function install(v,bytes,fields){
   const dir=folder(v);if(fs.existsSync(dir))throw review(dir,'the folder appeared while the watcher was writing it');
   fs.mkdirSync(root,{recursive:true});
-  const stage=path.join(root,`.odc-${v}-partial-${process.pid}`);fs.rmSync(stage,{recursive:true,force:true});fs.mkdirSync(stage);
-  fs.writeFileSync(plainOf(stage),bytes,{mode:0o600});fs.renameSync(stage,dir);
-  return {dir,path:plainOf(dir),provenance:record(dir,v,fields)};
+  for(const name of fs.readdirSync(root))if(name.startsWith(`.odc-${v}-partial-`)&&/^\.odc-\d+\.\d+\.\d+-partial-\d+$/.test(name))fs.rmSync(path.join(root,name),{recursive:true,force:true});
+  const stage=path.join(root,`.odc-${v}-partial-${process.pid}`);fs.mkdirSync(stage);
+  try{
+   fs.writeFileSync(plainOf(stage),bytes,{mode:0o600});
+   const provenance=recordAt(provOf(stage),provOf(dir),v,fields);
+   fs.renameSync(stage,dir);
+   return {dir,path:plainOf(dir),provenance};
+  }catch(e){fs.rmSync(stage,{recursive:true,force:true});throw e;}
  }
  // A carried or defaults-only file makes way for an exact one: it goes, with its provenance, to superseded/<sha8>/.
  function supersede(current,bytes,fields){
@@ -221,6 +233,7 @@ export function createFeaturesStore({root,legacyRoot=null,automatic=false,defaul
  // The legacy store (bundleRoot/odc-<v>/Features.plain.xml) when it is this version's: copied into the private store.
  function legacy(v){
   if(!legacyRoot)return null;const file=path.join(legacyRoot,`odc-${v}`,'Features.plain.xml');if(!fs.existsSync(file))return null;
+  if(automatic){log(`features: ${file} has no provenance; not used in automatic mode; seed it with vigia.ps1 -SeedFeatures`);return null;}
   const found=featuresVersion(file);
   if(threeOf(found)!==v){log(`features: ${file} is for ${found??'no version'}, not ${v}; not used`);return null;}
   const parsed=readFeatures(file),r=putExact(parsed,{kind:'legacy-store',file});

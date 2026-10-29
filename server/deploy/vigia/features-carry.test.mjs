@@ -104,3 +104,40 @@ test('carrying 1.7.28 into the installed 1.7.30 reports FixIconConversionIssues 
  assert.ok(carriedContent(file,catalog,d.kindConflicts).bytes.equals(fs.readFileSync(F1728)),'carried byte for byte');
  t.diagnostic(`1.7.28.10850 -> ${installedVersion}: ${d.fileKeys} keys in the file, ${d.newKeys.length} new flags, ${d.removedKeys} unknown keys, kernel flags missing: ${d.missingKernelRelevant.join(', ')}`);
 });
+// The corrections of the independent review (F1-F6).
+const KEY=Buffer.alloc(32,9).toString('base64');
+const synthetic=(version,n,value='True')=>`<?xml version="1.0" encoding="utf-16"?>\r\n<Features Version="${version}">\r\n${Array.from({length:n},(_,i)=>`  <Feature key="${key(i+1)}" kind="Boolean">${value}</Feature>`).join('\r\n')}\r\n</Features>`;
+const put=(file,text)=>{fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file,text);return file;};
+test('in automatic mode a features folder without provenance and the legacy store are never trusted',async t=>{
+ const {createFeaturesStore}=await load(),{requireJournalKey,configureJournals}=await import('./journal.mjs');
+ const dir=tmp(t),root=path.join(dir,'features'),legacyRoot=path.join(dir,'store');requireJournalKey(root);configureJournals(root,KEY);
+ const store=createFeaturesStore({root,legacyRoot,automatic:true});
+ store.seed(put(path.join(dir,'seed','Features.plain.xml'),synthetic('1.7.30.10980',3)));
+ const odc=path.join(root,'odc-1.7.30');assert.equal(store.held('1.7.30').provenance.mode,'exact');
+ // Other bytes of the same Version, and the provenance deleted: never signed again as exact.
+ fs.writeFileSync(path.join(odc,'Features.plain.xml'),synthetic('1.7.30.10980',3,'False'));fs.rmSync(path.join(odc,'features.provenance.json'));
+ assert.throws(()=>store.held('1.7.30'),e=>e.code==='store-mismatch'&&e.lanes[0]==='odc'&&/has no provenance/.test(e.message)&&/seed it again with vigia\.ps1 -SeedFeatures/.test(e.message)&&/nothing was used or changed/.test(e.message));
+ assert.equal(fs.existsSync(path.join(odc,'features.provenance.json')),false,'no provenance recreated');
+ // The legacy store is not used in automatic mode.
+ put(path.join(legacyRoot,'odc-1.7.31','Features.plain.xml'),synthetic('1.7.31.1',3));
+ assert.equal(store.legacy('1.7.31'),null);assert.equal(fs.existsSync(path.join(root,'odc-1.7.31')),false);
+ // Manual mode keeps the migration of the store of the legacy layout.
+ assert.equal(createFeaturesStore({root:path.join(dir,'manual'),legacyRoot}).legacy('1.7.31').provenance.source.kind,'legacy-store');
+});
+test('an interrupted features write leaves nothing a later round reads as exact',async t=>{
+ const {createFeaturesStore}=await load(),{requireJournalKey,configureJournals}=await import('./journal.mjs');
+ const dir=tmp(t),root=path.join(dir,'features');requireJournalKey(root);
+ // The journal cannot be signed (no key yet): the write stops before anything appears as odc-1.7.31.
+ const store=createFeaturesStore({root,automatic:true,defaultsFallback:true});
+ assert.throws(()=>store.defaults('1.7.31','1.7.31.20000'),/journal key is unavailable/);
+ configureJournals(root,KEY);
+ let held=null;try{held=store.held('1.7.31');}catch(e){assert.equal(e.code,'store-mismatch');}
+ assert.notEqual(held?.provenance?.mode,'exact');
+ assert.deepEqual(fs.readdirSync(root).filter(n=>n.startsWith('.odc-')),[],'no staging folder left');
+ // A defaults-only document without provenance (manual mode) is never recorded as exact.
+ const manual=path.join(dir,'manual');put(path.join(manual,'odc-1.7.31','Features.plain.xml'),'<Features Version="1.7.31.20000"/>');
+ assert.throws(()=>createFeaturesStore({root:manual}).held('1.7.31'),e=>e.code==='store-mismatch'&&/no feature/.test(e.message));
+ assert.equal(fs.existsSync(path.join(manual,'odc-1.7.31','features.provenance.json')),false);
+ // A complete write still records it whole, with a provenance signed for its final path.
+ const done=store.defaults('1.7.31','1.7.31.20000');assert.equal(done.provenance.mode,'defaults');assert.equal(store.held('1.7.31').provenance.sha256,done.provenance.sha256);
+});
