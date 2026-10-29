@@ -23,7 +23,7 @@ function offer(protocol = 'v101', options = {}) {
   const manifest = JSON.stringify({ schema: 1, lane: 'odc', studioVersion: '1.7.30', runtime: 'net10.0', protocol,
     sequence: Number(protocol.slice(1)),
     createdAt: '2026-10-28T00:00:00Z', authenticodeThumbprint: anchors.thumbprint,
-    files: [{ path: `bridge/ODC3.Bridge.${protocol}.dll`, sha256: digest(bytes), size: bytes.length }, { path: 'client/ODC3.Bridge.Client.dll', sha256: digest(bytes), size: bytes.length }], ...options });
+    files: [{ path: `bridge/ODC3.Bridge.${protocol}.dll`, signer: 'owner', sha256: digest(bytes), size: bytes.length }, { path: 'client/ODC3.Bridge.Client.dll', signer: 'owner', sha256: digest(bytes), size: bytes.length }], ...options });
   return { value: { lane: 'odc', studioVersion: '1.7.30', protocol, manifest, signature: sign(null, Buffer.from(manifest), keys.privateKey).toString('base64') }, bytes };
 }
 function fixture(t, extra = {}) {
@@ -60,7 +60,7 @@ for (const scenario of ['signature', 'sha256', 'missing Authenticode', 'wrong Au
     let item = offer();
     if (scenario === 'signature') item.value.signature = Buffer.alloc(64).toString('base64');
     if (scenario === 'sha256') item.bytes = Buffer.alloc(item.bytes.length);
-    if (scenario === 'path') item = offer('v101', { files: [{ path: '../escape.dll', sha256: digest(item.bytes), size: item.bytes.length }] });
+    if (scenario === 'path') item = offer('v101', { files: [{ path: '../escape.dll', signer: 'owner', sha256: digest(item.bytes), size: item.bytes.length }] });
     if (scenario === 'identity') item.value.studioVersion = '1.7.29';
     f.set(item);
     let store = f.store;
@@ -86,10 +86,12 @@ test('an interrupted download can recover on the next hello without restarting',
 });
 test('Windows Authenticode demands Valid, embedded Authenticode and pinned signer; Mac updates fail closed', async () => {
   let args;
-  await verifyAuthenticode('C:\\safe\\bridge.dll', anchors.thumbprint, { platform: 'win32', runtimeRoot: 'C:\\app', run: async (exe, a) => { args = a; return { stdout: a[0] === 'windows-directory' ? 'C:\\Windows' : anchors.thumbprint }; } });
-  assert.match(args.join(' '), /Status -ne 'Valid'/);
-  assert.match(args.join(' '), /SignatureType -ne 'Authenticode'/);
-  await assert.rejects(verifyAuthenticode('test.dll', anchors.thumbprint, { platform: 'win32', runtimeRoot: 'C:\\app', run: async (exe, a) => ({ stdout: a[0] === 'windows-directory' ? 'C:\\Windows' : 'B'.repeat(40) }) }), /pinned/);
+  await verifyAuthenticode('C:\\safe\\bridge.dll', anchors.thumbprint, { platform: 'win32', runtimeRoot: 'C:\\app', run: async (exe, a) => { args = a; return { stdout: JSON.stringify({ ok: true, thumbprint: anchors.thumbprint }) }; } });
+  assert.deepEqual(args, ['authenticode', '--file', 'C:\\safe\\bridge.dll', '--signer', 'owner']);
+  await assert.rejects(verifyAuthenticode('C:\\safe\\bridge.dll', anchors.thumbprint, { platform: 'win32', runtimeRoot: 'C:\\app', run: async () => ({ stdout: JSON.stringify({ ok: false, thumbprint: anchors.thumbprint }) }) }), /pinned policy/);
+  await assert.rejects(verifyAuthenticode('C:\\safe\\bridge.dll', anchors.thumbprint, { platform: 'win32', runtimeRoot: 'C:\\app', run: async () => ({ stdout: JSON.stringify({ ok: true, thumbprint: 'B'.repeat(40) }) }) }), /pinned policy/);
+  assert.ok(!args.some(arg => /powershell/i.test(arg)));
+  await assert.rejects(verifyAuthenticode('test.dll', anchors.thumbprint, { platform: 'win32', runtimeRoot: 'C:\\app', run: async () => ({ stdout: JSON.stringify({ ok: false, thumbprint: 'B'.repeat(40) }) }) }), /pinned/);
   await assert.rejects(verifyAuthenticode('/test.dll', anchors.thumbprint, { platform: 'darwin', runtimeRoot: '/app' }), /disabled/);
 });
 test('runtimeconfig selects the Studio runtime and fails closed for unreadable config', async t => {
@@ -104,7 +106,7 @@ test('signed flat O11 artifact selects the new runtime and preserves the hash ha
   t.after(async () => { await bridge?.close(); fs.rmSync(root, { recursive: true, force: true }); });
   const contents = { 'hook/Anvil.RuntimeHook.Agent.dll': Buffer.from('signed hook'), 'bridge/Anvil.Bridge.dll': Buffer.from('signed bridge') };
   const m = { schema: 1, lane: 'o11', studioVersion: '11.55.94', runtime: 'net10.0', protocol: 'd1', sequence: 1, createdAt: '2026-10-28T00:00:00Z', authenticodeThumbprint: anchors.thumbprint,
-    files: Object.entries(contents).map(([name, bytes]) => ({ path: name, sha256: digest(bytes), size: bytes.length })) };
+    files: Object.entries(contents).map(([name, bytes]) => ({ path: name, signer: 'owner', sha256: digest(bytes), size: bytes.length })) };
   const manifest = JSON.stringify(m);
   const signed = { lane: m.lane, studioVersion: m.studioVersion, protocol: m.protocol, manifest, signature: sign(null, Buffer.from(manifest), keys.privateKey).toString('base64') };
   const updates = createBridgeUpdates({ root, anchors, authenticode: async () => {}, seal: async () => ({ release() {} }), request: async route => new Response(Object.values(contents).find(b => route.endsWith(digest(b)))) });

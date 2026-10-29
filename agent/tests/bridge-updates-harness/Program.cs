@@ -49,6 +49,14 @@ foreach (var request in input["requests"]!.AsArray())
         if (selected != null && request?["failLoad"]?.GetValue<bool>() == true) store.RejectLoad(selected, "Test bridge failure", context,
             request?["attempted"]?.GetValue<bool>() ?? true, request?["bridgeFailure"]?.GetValue<bool>() ?? true);
         var protectedCopy = false;
+        var snapshotCount = 0; var cleanupCount = -1;
+        if (selected != null && request?["repeatPrepare"]?.GetValue<int>() is int count)
+        {
+            var copies = new List<BridgeLease>();
+            for (var i = 0; i < count; i++) copies.Add(await store.PrepareAttach(selected, context, CancellationToken.None));
+            snapshotCount = copies.Select(c => c.Bridge.Root).Distinct().Count();
+            copies[0].Dispose(); cleanupCount = Directory.GetDirectories(Path.Combine(root, "private/bridge-loads")).Length;
+        }
         if (selected != null && request?["prepare"]?.GetValue<bool>() == true)
         {
             using var snapshot = await store.PrepareAttach(selected, context, CancellationToken.None);
@@ -56,7 +64,7 @@ foreach (var request in input["requests"]!.AsArray())
             catch (IOException) { protectedCopy = true; }
         }
         resultsList.Add((JsonNode)new JsonObject { ["selected"] = selected?.Protocol, ["sequence"] = selected?.Manifest["sequence"]?.DeepClone(),
-            ["checks"] = checksCount, ["protectedCopy"] = protectedCopy, ["reports"] = store.Reports(), ["status"] = store.Status?.DeepClone() });
+            ["checks"] = checksCount, ["snapshotCount"] = snapshotCount, ["cleanupCount"] = cleanupCount, ["protectedCopy"] = protectedCopy, ["reports"] = store.Reports(), ["status"] = store.Status?.DeepClone() });
     }
 }
 Console.WriteLine(resultsList.ToJsonString());

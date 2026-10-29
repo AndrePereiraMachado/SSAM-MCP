@@ -48,8 +48,8 @@ async function fixture(t) {
   function offer(protocol, alter = {}) {
     const bytes = Buffer.from('test bridge ' + protocol);
     const manifest = JSON.stringify({ schema: 1, lane: 'odc', studioVersion: '1.7.30', runtime: 'net10.0', protocol, sequence: Number(protocol.slice(1)),
-      createdAt: '2026-10-28T00:00:00Z', authenticodeThumbprint: thumbprint, files: [{ path: 'bridge/ODC3.Bridge.' + protocol + '.dll', size: bytes.length, sha256: hash(bytes) },
-        { path: 'client/ODC3.Bridge.Client.dll', size: bytes.length, sha256: hash(bytes) }], ...alter });
+      createdAt: '2026-10-28T00:00:00Z', authenticodeThumbprint: thumbprint, files: [{ path: 'bridge/ODC3.Bridge.' + protocol + '.dll', size: bytes.length, signer: 'owner', sha256: hash(bytes) },
+        { path: 'client/ODC3.Bridge.Client.dll', size: bytes.length, signer: 'owner', sha256: hash(bytes) }], ...alter });
     files.set('/agent/bridges/odc/1.7.30/' + protocol + '/' + hash(bytes), bytes);
     return { lane: 'odc', studioVersion: '1.7.30', protocol, manifest, signature: sign(null, Buffer.from(manifest), keys.privateKey).toString('base64') };
   }
@@ -65,6 +65,18 @@ test('native authenticated install, exact runtime, retained fallback and downgra
   assert.match(results[6].status.message, /downgrade/);
   assert.equal(f.gets(), 4);
   const restarted = await f.run({ requests: [{}] }); assert.equal(restarted[0].selected, 'v101');
+});
+test('R3 native snapshot reuse and immediate disposal cleanup', async t => {
+  const f = await fixture(t); const offer = f.offer('v101');
+  const results = await f.run({ requests: [{ offer }, { repeatPrepare: 8 }] });
+  assert.equal(results[1].snapshotCount, 1); assert.equal(results[1].cleanupCount, 0);
+});
+test('R3 native refused offers have machine-readable reasons and bounded history', async t => {
+  const f = await fixture(t);
+  const requests = Array.from({ length: 20 }, (_, i) => { const offer = f.offer('v101', { sequence: i + 1 }); offer.signature = Buffer.alloc(64).toString('base64'); return { offer }; });
+  const results = await f.run({ requests }); const reports = results.at(-1).reports;
+  assert.equal(reports.length, 16); assert.equal(reports[0].sequence, 20);
+  assert.ok(reports.every(r => r.status === 'refused' && r.reason === 'VERIFY_FAILED' && r.sequence > 0));
 });
 for (const scenario of ['signature', 'hash', 'certificate', 'interrupt', 'path']) test('native refuses ' + scenario, async t => {
   const f = await fixture(t); const offer = f.offer('v101');

@@ -12,7 +12,17 @@ import { lockBridgeSnapshot } from '../../agent/lib/bridge-lock.mjs';
 const enabled = process.env.SSAM_CLIENT_E2E === '1';
 const code = process.env.SSAM_REVIEW_BASE ? path.join(process.env.SSAM_REVIEW_BASE, 'agent') : path.resolve(import.meta.dirname, '../..');
 const { createAgent } = await import(pathToFileURL(path.join(code, 'agent/lib/agent.mjs')));
+const { attachOdc } = await import(pathToFileURL(path.join(code, 'agent/lib/odc-attach.mjs')));
 const outputs = 'C:/t/vigia-auto/round2-e2e';
+test('R3.2 real client classifies an invalid DLL as an attempted bridge failure', { skip: !enabled, timeout: 30000 }, async t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'invalid-hook-'));
+  const host = spawn(path.join(outputs, 'host/bin/Release/net10.0/ODCStudio.exe'), [], { windowsHide: true });
+  const stopped = new Promise(resolve => host.once('exit', resolve));
+  t.after(async () => { host.stdin.end(); await stopped; fs.rmSync(root, { recursive: true, force: true }); });
+  const info = await new Promise((resolve, reject) => { host.once('error', reject); host.stdout.once('data', bytes => resolve(JSON.parse(bytes))); });
+  const file = path.join(root, 'ODC3.Bridge.v100.dll'); fs.writeFileSync(file, Buffer.alloc(4096, 65));
+  await assert.rejects(attachOdc({ pid: info.pid, client: path.join(outputs, 'v100/bin/Release/net10.0/ODC3.Bridge.Client.dll'), bridge: file }), e => e.attachAttempted === true && e.bridgeLoadFailure === true);
+});
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 for (const mode of ['node', 'native']) test(`R2.1 ${mode}: real production client v100 loads a v100 bridge when the package client is v98`, { skip: !enabled, timeout: 30000 }, async t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'odc-e2e-'));
@@ -29,7 +39,7 @@ for (const mode of ['node', 'native']) test(`R2.1 ${mode}: real production clien
   const files = new Map(); files.set('bridge/ODC3.Bridge.v100.dll', fs.readFileSync(path.join(outputs, 'bridge/bin/Release/net10.0/ODC3.Bridge.v100.dll')));
   for (const name of fs.readdirSync(path.join(outputs, 'v100/bin/Release/net10.0')).filter(n => /\.(dll|json)$/.test(n))) files.set('client/' + name, fs.readFileSync(path.join(outputs, 'v100/bin/Release/net10.0', name)));
   const manifest = JSON.stringify({ schema: 1, lane: 'odc', studioVersion: '1.7.30', runtime: 'net10.0', protocol: 'v100', sequence: 1, createdAt: '2026-10-28T00:00:00Z', authenticodeThumbprint: anchors.thumbprint,
-    files: [...files].map(([name, bytes]) => ({ path: name, size: bytes.length, sha256: hash(bytes) })) });
+    files: [...files].map(([name, bytes]) => ({ path: name, size: bytes.length, signer: 'owner', sha256: hash(bytes) })) });
   const offer = { lane: 'odc', studioVersion: '1.7.30', protocol: 'v100', manifest, signature: sign(null, Buffer.from(manifest), keys.privateKey).toString('base64') };
   const credential = 'ssam_agent_' + 'a'.repeat(43);
   const hub = await fakeHub({ credential, kernel: { odc: '1.7.30', odcBridge: 'v100' }, welcome: { compatible: { odc: { bridgeOffer: offer } } } });
@@ -54,7 +64,7 @@ for (const mode of ['node', 'native']) test(`R2.1 ${mode}: real production clien
     async execute(kind, params) { await hub.until(() => hub.stream && hub.streamChannel === hub.channel); hub.send({ t: 'call', id: 'real-client', kind, params }); await hub.until(() => hub.results('real-client').length > 0); return hub.results('real-client')[0]; },
     async stop() { if (hub.stream) hub.send({ t: 'close', reason: 'replaced' }); await nativeExit; },
   };
-  t.after(async () => { await agent.stop(); await hub.close(); host.stdin.end(); await hostExit; fs.rmSync(root, { recursive: true, force: true }); });
+  t.after(async () => { try { await agent.stop(); } finally { await hub.close(); host.stdin.end(); await hostExit; fs.rmSync(root, { recursive: true, force: true }); } });
   agent.run(); await hub.until(() => updated || hub.hellos.some(h => Array.isArray(h.bridges) ? h.bridges.some(b => b.status === 'installed') : h.bridges?.odc)).catch(error => {
     let state = ''; try { state = fs.readFileSync(path.join(root, 'private/bridge-update.json'), 'utf8'); } catch { }
     throw new Error(error.message + JSON.stringify({ nativeError, state, hellos: hub.hellos, requests: hub.requests }));

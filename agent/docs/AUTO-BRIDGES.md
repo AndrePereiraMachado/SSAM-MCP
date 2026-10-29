@@ -56,9 +56,22 @@ Snapshots remain locked while the agent may use them, including lazy loads.
 The native core holds read handles without write/delete sharing. Node uses the
 bundled native core's `bridge-lock` helper, with readiness acknowledged only
 after every file is open. A missing helper fails closed for downloaded attachment.
-The Windows directory comes from the native `windows-directory` OS API command,
-and Authenticode imports the Security module by its full system path with a
-sanitized module search path. `SystemRoot` and `PSModulePath` are not trust inputs.
+Authenticode now uses WinVerifyTrust and its provider signer chain in process.
+Node calls the native `authenticode --file <file> --signer owner|microsoft`
+command. No PowerShell or environment-derived verifier path is involved.
+Every executable manifest entry requires a signer class. Owner entrypoints
+cannot be labeled Microsoft. Microsoft dependencies require the exact subject
+organization, the code-signing EKU and a pinned SHA-256 root fingerprint, in
+addition to successful Authenticode verification. Both build sources and the
+compiled native executable must report matching anchors at release time.
+`build.mjs --native <executable> --bridge-public-key <public-key.pem>` also
+compares the optional watcher key file. The native `trust-anchors` command
+reports only the public SPKI digest, owner thumbprint and Microsoft root pins.
+
+The Microsoft root pin was obtained offline from the provider chains of the
+three Microsoft DLLs beside the real v100 client used in qualification. These
+dependencies are never resigned. A different signer, including Json.NET's
+.NET Foundation signer, requires an explicit contract decision.
 
 ## Failure, channel and platform behavior
 
@@ -69,7 +82,20 @@ Quarantine is scoped to the Studio PID/start time. A restarted Studio or a newer
 sequence is eligible again. Existing guards still prohibit an unsafe second
 injection into a process where a hook may already be loaded.
 
-Failed and fallback records survive agent restarts. Downloads run in the
+Failed and fallback records survive agent restarts. Hello reports contain at
+most 16 entries, newest first, retaining each lane/version's current record.
+Reasons are machine-readable uppercase codes; a bundled fallback is recorded
+on the failed identity, never as sequence zero. Refused offers are reported too.
+Local notifications can explain the refusal but never include absolute paths.
+
+Snapshots are reused for the same artifact and Studio instance; an already
+active ODC identity is not injected again. Concurrent ODC attaches are serialized.
+Failure paths release handles and remove their snapshot. A periodic sweep frees
+dead-instance snapshots and removes dead active records; startup also reconciles
+the on-disk instance index. Stopping the agent releases locks but keeps active
+snapshots until their Studio exits, because Windows can still map those DLLs.
+
+Downloads run in the
 background while the channel opens immediately. Successful installation or a
 confirmed bridge failure requests reconnection to report the new state.
 
@@ -86,3 +112,15 @@ the real client source, changing only its protocol and its pinned test-host path
 it loads a v100 startup-hook fixture into a private ODCStudio test process. It
 never attaches to the installed Studio. Run both Node and native regression suites
 and compare named results against the release baseline before promotion.
+
+The real-client regression also supplies an invalid DLL. DiagnosticsClient's
+UnsupportedCommandException/ServerErrorException from ApplyStartupHook identify
+a bridge failure; timeouts and pre-command errors do not quarantine an artifact.
+The client emits no structured failure flags, so those are never inferred from
+its JSON output.
+
+Residual same-user risk: denying writes to existing snapshot files does not deny
+creation of new files in their directory. The O11 hook's Anvil/Esprima resolver
+therefore needs a future hash-bound configuration and dependency check before
+LoadFromAssemblyPath. A two-distinct-instance quarantine is only a proposal;
+current behavior still retries the newest failed identity after Studio restart.

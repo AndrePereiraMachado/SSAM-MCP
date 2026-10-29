@@ -27,7 +27,7 @@ function artifact(sequence = 1, lane = 'odc', protocol = lane === 'odc' ? 'v100'
     : { 'bridge/Anvil.Bridge.dll': Buffer.from('bridge ' + sequence), 'hook/Anvil.RuntimeHook.Agent.dll': Buffer.from('hook ' + sequence) };
   const manifest = JSON.stringify({ schema: 1, lane, studioVersion: lane === 'odc' ? '1.7.30' : '11.55.94', runtime: 'net10.0', protocol, sequence,
     createdAt: '2026-10-28T00:00:00Z', authenticodeThumbprint: anchors.thumbprint,
-    files: Object.entries(files).map(([name, bytes]) => ({ path: name, size: bytes.length, sha256: hash(bytes) })) });
+    files: Object.entries(files).map(([name, bytes]) => ({ path: name, size: bytes.length, signer: 'owner', sha256: hash(bytes) })) });
   return { files, offer: { lane, studioVersion: lane === 'odc' ? '1.7.30' : '11.55.94', protocol, manifest, signature: sign(null, Buffer.from(manifest), keys.privateKey).toString('base64') } };
 }
 function fixture(t, options = {}) {
@@ -86,11 +86,11 @@ test('R2.6 Authenticode ignores poisoned SystemRoot and PSModulePath', async () 
   const calls = [];
   try {
     await verifyAuthenticode('C:\\bridge.dll', anchors.thumbprint, { platform: 'win32', runtimeRoot: 'C:\\runtime', run: async (exe, args, options) => {
-      calls.push({ exe, args, options }); return { stdout: args[0] === 'windows-directory' ? 'C:\\Windows' : anchors.thumbprint };
+      calls.push({ exe, args, options }); return { stdout: JSON.stringify({ ok: true, thumbprint: anchors.thumbprint }) };
     } });
-    const check = calls.at(-1); assert.equal(check.exe, 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe');
-    assert.match(check.args.join(' '), /Import-Module .*Microsoft.PowerShell.Security.psd1/);
-    assert.ok(!check.options.env.PSModulePath.includes('poison'));
+    const check = calls.at(-1); assert.equal(path.win32.normalize(check.exe), 'C:\\runtime\\native\\ssam-agent.exe');
+    assert.deepEqual(check.args, ['authenticode', '--file', 'C:\\bridge.dll', '--signer', 'owner']);
+    assert.ok(!check.exe.includes('poison')); assert.equal(calls.length, 1);
   } finally { for (const [name, value] of Object.entries(before)) if (value === undefined) delete process.env[name]; else process.env[name] = value; }
 });
 test('R2.7 attach uses a verified private snapshot, never the writable download', async t => {
@@ -131,7 +131,7 @@ test('R2.11 installed and failed reports survive an agent restart', async t => {
   f.store.rejectLoad(selected, 'hook load failed', { ...processIdentity, attempted: true, bridgeFailure: true });
   const restarted = createBridgeUpdates(f.storeOptions);
   const records = restarted.reports(); assert.ok(Array.isArray(records));
-  assert.ok(records.some(r => r.sequence === 1 && r.status === 'failed' && r.reason.includes('hook load failed')));
+  assert.ok(records.some(r => r.sequence === 1 && r.status === 'failed' && r.reason === 'FALLBACK_BUNDLED'));
 });
 test('R2.2 two concurrent O11 connects do not quarantine the verified bridge', async t => {
   const f = fixture(t); f.set(artifact(1, 'o11')); assert.equal(await f.install(), true);
