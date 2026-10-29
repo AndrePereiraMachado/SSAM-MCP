@@ -1,6 +1,6 @@
 {
-  "workspace": "C:/Users/OWNER/SSAM-MCP-wt/vigia-auto",
-  "updateFrom": "server/vigia-auto",
+  "workspace": "C:/Users/OWNER/SSAM-MCP-wt/vigia-run",
+  "updateFrom": "main",
   "tempRoot": "C:/ssam-priv/vigia-tmp",
   "featuresRoot": "C:/ssam-priv/vigia-tmp/features",
   "outDir": "C:/t/vigia-auto",
@@ -44,7 +44,7 @@
   "roundHours": 7,
   "busyNoticeHours": 10,
   "automatic": true,
-  "executionBranch": "server/vigia-auto",
+  "executionBranch": "server/vigia-run",
   "automaticDeployment": {
     "coolify": {
       "url": "https://COOLIFY_HOST",
@@ -61,7 +61,12 @@
       "warmTimeoutSeconds": 300,
       "composeProject": "RESOURCE_UUID",
       "directory": "/var/lib/ssam-vigia",
-      "postgresContainer": "POSTGRES_CONTAINER"
+      "postgresContainer": "POSTGRES_CONTAINER",
+      "backupMinFreeMiB": 2048
     }
-  }
+  },
+  "agentReleaseCommit": "REVIEWED_40_HEX_AGENT_COMMIT",
+  "agentReleaseRef": "agent/release",
+  "deploymentMaxMinutes": 180,
+  "pauseFile": "C:/ssam-priv/vigia/PAUSE"
 }

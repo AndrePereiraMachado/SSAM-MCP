@@ -1,13 +1,43 @@
 [CmdletBinding()]
 param(
-    [ValidateSet('Prepare', 'Sign', 'Verify', 'Activate')][string]$Mode = 'Prepare',
+    [ValidateSet('Prepare', 'Sign', 'Verify', 'Activate', 'Artifacts')][string]$Mode = 'Prepare',
     [string]$BundleId,
     [string]$CertificateThumbprint,
     [ValidateSet('CurrentUser', 'LocalMachine')][string]$CertificateStore = 'CurrentUser',
-    [string]$TimestampServer
+    [string]$TimestampServer,
+    [string]$ArtifactDirectory,
+    [string]$Vault = "$env:LOCALAPPDATA\SSAM\vigia\secrets.dpapi.json"
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
+if ($Mode -eq 'Artifacts') {
+    $executionRoot = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
+    $git = 'C:\Program Files\Git\cmd\git.exe'
+    if ((Split-Path $executionRoot -Leaf) -ne 'vigia-run' -or (& $git -C $executionRoot branch --show-current).Trim() -ne 'server/vigia-run' -or (& $git -C $executionRoot rev-parse HEAD).Trim() -ne (& $git -C $executionRoot rev-parse main).Trim() -or (& $git -C $executionRoot status --porcelain)) {
+        throw 'Signing requires the clean trusted vigia-run checkout at reviewed main.'
+    }
+    . "$PSScriptRoot\..\deploy\vigia\vault.ps1"
+    $secrets = Read-VigiaVault $Vault
+    $thumb = $secrets.authenticodeThumbprint
+    $cert = Get-Item -LiteralPath "Cert:\CurrentUser\My\$thumb"
+    if (-not $cert.HasPrivateKey -or -not $cert.Verify() -or $cert.Subject -eq $cert.Issuer) { throw 'A valid provider-issued signing certificate is required.' }
+    if (@($cert.EnhancedKeyUsageList | Where-Object { $_.ObjectId.Value -eq '1.3.6.1.5.5.7.3.3' }).Count -eq 0) { throw 'Certificate does not allow code signing.' }
+    $records = @()
+    foreach ($file in Get-ChildItem -LiteralPath $ArtifactDirectory -Recurse -File | Where-Object { $_.Extension -in '.dll','.exe' }) {
+        $own = $file.Name -match '^(ODC3\.Bridge(\.Client|\.v[0-9]+)?|Anvil\.Bridge|Anvil\.RuntimeHook\.Agent)\.(dll|exe)$'
+        $signature = Get-AuthenticodeSignature -LiteralPath $file.FullName
+        if ($own) {
+            $signature = Set-AuthenticodeSignature -LiteralPath $file.FullName -Certificate $cert -HashAlgorithm SHA256 -IncludeChain NotRoot -TimestampServer $TimestampServer
+            if ($signature.Status -ne 'Valid' -or $null -eq $signature.TimeStamperCertificate -or $signature.SignerCertificate.Thumbprint -ne $thumb) { throw 'Bridge signature verification failed.' }
+        } elseif ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch 'O=Microsoft Corporation') {
+            throw 'A dependency must retain its valid original Microsoft signature.'
+        }
+        $records += @{ path=$file.FullName.Substring($ArtifactDirectory.Length).TrimStart('\').Replace('\','/'); thumbprint=$signature.SignerCertificate.Thumbprint }
+    }
+    [IO.File]::WriteAllText((Join-Path $ArtifactDirectory 'authenticode.json'), ($records | ConvertTo-Json), (New-Object Text.UTF8Encoding($false)))
+    Write-Output 'Bridge signatures verified; dependency signatures preserved.'
+    return
+}
 $workspace = Split-Path $PSScriptRoot -Parent
 $odcRoot = Join-Path $workspace 'platforms\odc'
 $bundleRoot = Join-Path $odcRoot '.local\signed-runtime'

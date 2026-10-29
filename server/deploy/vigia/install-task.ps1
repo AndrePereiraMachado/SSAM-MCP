@@ -15,7 +15,7 @@
 #>
 param(
     [string]$Config = 'C:\t\vigia-auto\config.json',
-    [string]$Workspace = 'C:\Users\andre\SSAM-MCP-wt\vigia-auto',
+    [string]$Workspace = 'C:\Users\andre\SSAM-MCP-wt\vigia-run',
     [ValidateRange(1, 24)][int]$Hours = 2,
     [string]$TaskName = 'SSAM Studio watcher',
     [switch]$Uninstall,
@@ -38,11 +38,11 @@ $configured = $configuration.workspace
 if ([IO.Path]::GetFullPath($configured).TrimEnd('\') -ne [IO.Path]::GetFullPath($Workspace).TrimEnd('\')) { throw "The configuration's workspace ($configured) is not $Workspace." }
 $git = 'C:\Program Files\Git\cmd\git.exe'
 $branch = (& $git -C $Workspace branch --show-current).Trim()
-if (-not $branch -or $branch -eq 'main' -or $branch -like 'vigia/*') { throw "The watcher worktree must be on its integration branch, not '$branch'." }
+if ($branch -ne 'server/vigia-run' -or (Split-Path -Leaf $Workspace) -ne 'vigia-run') { throw 'Only the dedicated vigia-run checkout may execute or sign releases.' }
 # The task runs the worktree's own watcher, which fast-forwards itself from then on; a watcher older than the self-updating
 # one would not, so the worktree is brought to main here (fast-forward only) and must carry the round protocol.
 $head = (& $git -C $Workspace rev-parse HEAD).Trim()
-$source = if ($configuration.updateFrom) { $configuration.updateFrom } else { 'server/vigia-auto' }
+$source = 'main'
 $main = (& $git -C $Workspace rev-parse --verify "$source^{commit}").Trim()
 if ($head -ne $main) {
     & $git -C $Workspace merge-base --is-ancestor HEAD $main

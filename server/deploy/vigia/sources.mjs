@@ -6,7 +6,7 @@ import {createHash} from 'node:crypto';
 export const RELEASE_ENDPOINT='https://api.outsystems.com/releaseshub/v1/latest';
 export function officialUrl(value) {
  const u=new URL(value);
- if(u.protocol!=='https:' || u.username || u.password || (!/(^|\.)outsystems\.(com|net)$/.test(u.hostname) && u.hostname!=='dxejw4oyledi.cloudfront.net'))throw Error('Untrusted Studio release URL.');
+ if(u.protocol!=='https:' || u.username || u.password || !['api.outsystems.com','dxejw4oyledi.cloudfront.net'].includes(u.hostname))throw Error('Untrusted Studio release URL.');
  return u.href;
 }
 export async function releaseFor(lane,installed,{fetcher=fetch,endpoint=RELEASE_ENDPOINT,allowTestHttp=false}={}) {
