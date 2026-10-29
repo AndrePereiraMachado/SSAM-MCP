@@ -352,3 +352,60 @@ test('M2: test and build failures of the machine (restore, network, timeout, a b
  assert.equal(buildCause({stdout:'#12 ERROR: process "/bin/sh -c dotnet publish" did not complete successfully: exit code: 1',stderr:''}).environmental,false);
 });
 test('the notice day is the local calendar day',()=>{assert.match(localDay(T0),/^\d{4}-\d{2}-\d{2}$/);});
+test('the seed command validates, stores once, refuses during a round and prints only version, count and sha256',{skip:process.platform!=='win32'},async t=>{
+ const {spawnSync}=await import('node:child_process'),{createHash}=await import('node:crypto');
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'vigia-seed-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+ const out=path.join(root,'out'),featuresRoot=path.join(root,'priv','features'),config=path.join(root,'config.json');
+ fs.writeFileSync(config,JSON.stringify({workspace:path.join(root,'ws'),tempRoot:path.join(root,'priv'),bundleRoot:path.join(root,'store'),outDir:out,featuresRoot,notify:false,automatic:false}));
+ // Feature values that must never be printed or logged (only the version, the count and the sha256 are).
+ const K1='6f9619ff-8b86-4d01-b42d-00c04fc964ff',K2='c56a4180-65aa-42ec-a945-5fd21dec0538',PRIVATE='{"mentorEndpoint":"private-value-7Q"}';
+ const write=(name,text)=>{const file=path.join(root,'export',name,'Features.plain.xml');fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file,text);return file;};
+ const doc=(version,value)=>`<?xml version="1.0" encoding="utf-16"?>\r\n<Features${version?` Version="${version}"`:''}>\r\n  <Feature key="${K1}" kind="Boolean">True</Feature>\r\n  <Feature key="${K2}" kind="String">${value}</Feature>\r\n</Features>`;
+ const seed=file=>spawnSync(process.execPath,[path.join(import.meta.dirname,'vigia.mjs'),'--config',config,'--seed-features',file],{encoding:'utf8'});
+ const logs=()=>{const dir=path.join(out,'runs');if(!fs.existsSync(dir))return '';return fs.readdirSync(dir).flatMap(d=>fs.readdirSync(path.join(dir,d)).map(f=>fs.readFileSync(path.join(dir,d,f),'utf8'))).join('\n');};
+ const leaks=text=>[K1,K2,PRIVATE,'private-value-7Q'].filter(v=>text.includes(v));
+ // Refused before anything is stored: an invalid document, and one that names no version.
+ let r=seed(write('doctype','<!DOCTYPE Features><Features Version="1.7.31.20000"/>'));
+ assert.equal(r.status,1);assert.match(r.stderr,/refused before use: a DOCTYPE or ENTITY declaration/);assert.equal(fs.existsSync(featuresRoot),false);
+ r=seed(write('unversioned',doc(null,'On')));assert.equal(r.status,1);assert.match(r.stderr,/has no <Features Version="\.\.\.">/);assert.equal(fs.existsSync(path.join(featuresRoot,'odc-1.7.31')),false);
+ // Stored once, as the exact features of its version, with the seed's provenance; the output is version, count and sha256.
+ const file=write('good',doc('1.7.31.20000',PRIVATE)),digest=createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+ r=seed(file);assert.equal(r.status,0,r.stderr);
+ assert.equal(r.stdout.trim(),`ODC features 1.7.31.20000 seeded: 2 features, sha256 ${digest}.`);
+ assert.deepEqual(leaks(r.stdout+r.stderr+logs()),[],'no feature key or value printed or logged');
+ const stored=path.join(featuresRoot,'odc-1.7.31','Features.plain.xml');assert.ok(fs.readFileSync(stored).equals(fs.readFileSync(file)),'the bytes of the export');
+ const provenance=JSON.parse(fs.readFileSync(path.join(featuresRoot,'odc-1.7.31','features.provenance.json'),'utf8'));
+ assert.equal(provenance.mode,'exact');assert.equal(provenance.version,'1.7.31');assert.equal(provenance.fileVersion,'1.7.31.20000');assert.deepEqual(provenance.source,{kind:'seed',file:'Features.plain.xml',sha256:digest});
+ // The same bytes again are already there; other bytes for the same version change nothing.
+ r=seed(file);assert.equal(r.status,0,r.stderr);assert.equal(r.stdout.trim(),`ODC features 1.7.31.20000 already stored: 2 features, sha256 ${digest}.`);
+ r=seed(write('again',doc('1.7.31.20001','Off')));assert.equal(r.status,1);assert.match(r.stderr,/ODC 1\.7\.31 already has exact features/);
+ assert.ok(fs.readFileSync(stored).equals(fs.readFileSync(file)));
+ // While a round holds the watcher lock, nothing is seeded.
+ const lock=acquireLock(path.join(out,'vigia.lock'));
+ try{r=seed(write('later',doc('1.7.32.1','On')));assert.equal(r.status,1);assert.match(r.stderr,/A watcher round is running/);assert.equal(fs.existsSync(path.join(featuresRoot,'odc-1.7.32')),false);}
+ finally{lock.release();}
+ assert.deepEqual(leaks(logs()),[]);
+});
+test('the proposal and the approval text name the features provenance and the missing kernel flags',async t=>{
+ const {featuresLine}=await import('./window.mjs');
+ const carried={version:'1.7.30',mode:'carried',sha256:sha('c'),fileVersion:'1.7.29.10940',source:{kind:'carry',from:{version:'1.7.29',fullVersion:'1.7.29.10940',sha256:sha('d'),kind:'seed',recordedAt:'2026-10-29T10:00:00.000Z'},direction:'forward'},chain:1,recordedAt:'2026-10-30T09:00:00.000Z',
+  drift:{studioKeys:316,fileKeys:509,newKeys:Array.from({length:12},(_,i)=>'NewFlag'+i),removedKeys:1,kindConflicts:[],kernelRelevant:['AI_NL2Agg','FixIconConversionIssues'],missingKernelRelevant:['FixIconConversionIssues']}};
+ const withFeatures=(f,p)=>{const bundle=f.ops.bundle;f.ops.bundle=async c=>({...(await bundle(c)),...(c.lane==='odc'?{featuresProvenance:p}:{})});return f;};
+ const f=withFeatures(fixture(t),carried);const r=await f.round();assert.equal(r.status,'proposed');
+ const line="ODC features: carried from 1.7.29.10940 (exact, seeded 2026-10-29); 12 new flags use the Studio's code defaults; kernel flags missing: FixIconConversionIssues";
+ assert.equal(featuresLine(carried),line);
+ const proposal=fs.readFileSync(path.join(r.dir,'PROPOSTA.md'),'utf8');assert.ok(proposal.includes('## ODC features\n\n- '+line),proposal);assert.match(proposal,/-SeedFeatures <Features\.plain\.xml>/);
+ assert.deepEqual(readAttempts(f.outDir)[r.id].featuresProvenance,carried,'the attempt records the provenance');
+ assert.ok(f.notes.includes('SSAM: ODC features carried'),'one notice for a carried file');
+ const done=await approve({outDir:f.outDir,domains},approvalOps(f).ops,r.id);
+ assert.ok(done.steps.includes('- '+line));assert.ok(fs.readFileSync(path.join(r.dir,'APROVADO.md'),'utf8').includes(line));
+ // The notice comes at most once a day per version, and insists after three versions without an exact export.
+ const g=withFeatures(fixture(t,{failures:{odc:['Known','New odc failure']}}),{...carried,chain:3}),insisting=()=>g.notes.filter(n=>n==='SSAM: ODC features carried for 3 versions').length;
+ const failed=await g.round();assert.equal(failed.status,'failed');assert.equal(insisting(),1);
+ retry({outDir:g.outDir},failed.id);await g.round({now:T0+3600000});assert.equal(insisting(),1,'the same day: no second notice');
+ retry({outDir:g.outDir},failed.id);await g.round({now:T0+DAY});assert.equal(insisting(),2,'the next day: one more');
+ // An exact file needs no notice and reads as exact; the code defaults name every kernel flag they leave missing.
+ const h=withFeatures(fixture(t),{version:'1.7.30',mode:'exact',sha256:sha('e'),fileVersion:'1.7.30.10980',source:{kind:'export',file:'C:/x/Features.xml'},chain:0,recordedAt:'2026-10-30T08:00:00.000Z'});const hr=await h.round();
+ assert.ok(!h.notes.some(n=>/ODC features/.test(n)));assert.ok(fs.readFileSync(path.join(hr.dir,'PROPOSTA.md'),'utf8').includes('- ODC features: exact 1.7.30.10980 (exported 2026-10-30)'));
+ assert.equal(featuresLine({version:'1.7.31',mode:'defaults',chain:0,drift:{newKeys:['A','B'],kindConflicts:[],missingKernelRelevant:['AI_NL2Agg','FixIconConversionIssues']}}),"ODC features: the Studio's code defaults only (no exact features existed to carry); kernel flags missing: AI_NL2Agg, FixIconConversionIssues");
+});

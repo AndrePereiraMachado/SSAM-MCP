@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import {readJournal,writeJournal} from './journal.mjs';
 import {releaseAutomatically,releaseEvent} from './automatic.mjs';
 import path from 'node:path';
-import {LANES,STUDIO_NAME,ownerCommand,missingPack,planWindow,readyCandidates,pairFor,pairId,hasPair,rotateWindow,compareFailures,windowPairs,tfmMajor,proposalText,failureText,composeText} from './window.mjs';
+import {LANES,STUDIO_NAME,ownerCommand,missingPack,planWindow,readyCandidates,pairFor,pairId,hasPair,rotateWindow,compareFailures,windowPairs,tfmMajor,proposalText,failureText,composeText,featuresLine} from './window.mjs';
 import {generateCompose} from '../coolify/gen-compose.mjs';
 // An environment problem (not a test result): the round waits and retries. lanes: the lanes it concerns (empty = the pair).
 export class EnvironmentError extends Error{constructor(message,code='environment',lanes=[]){super(message);this.environmental=true;this.code=code;this.lanes=lanes;}}
@@ -80,6 +80,15 @@ function archive(dir,previous){
  if(!previous||!fs.existsSync(dir))return;
  const target=path.join(dir,'previous',String(previous.at).replace(/[:.]/g,'-'));fs.mkdirSync(target,{recursive:true});
  for(const name of fs.readdirSync(dir))if(name!=='previous')fs.renameSync(path.join(dir,name),path.join(target,name));
+}
+// ODC features that are not an exact export of their version (carried or code defaults): a notice at most once a day per
+// version, more insistent after three versions without an exact export. It never holds the round: the candidate tests and
+// the smoke are the gate.
+async function featuresNotice(config,ops,p){
+ const insistent=(p.chain??0)>=3;
+ const title=p.mode==='defaults'?'SSAM: ODC features are code defaults only':insistent?`SSAM: ODC features carried for ${p.chain} versions`:'SSAM: ODC features carried';
+ const message=`ODC ${p.version}: ${featuresLine(p).replace(/^ODC features: /,'')}. Nothing waits for it. ${insistent||p.mode==='defaults'?'Seed an exact export soon':'To replace it with an exact export'}: ${ownerCommand(config,'-SeedFeatures <Features.plain.xml>')}`;
+ await remind(config.outDir,'features:odc-'+p.version,title,message,ops,{now:noticeNow(config)});
 }
 async function noteWaiting(config,ops,waiting,now){
  if(!waiting.installers.length&&!waiting.requested.length){
@@ -179,6 +188,9 @@ async function runAttempt(config,ops,decision,now){
    bundles[lane]=candidate?await ops.bundle(candidate,dir):await ops.companion(lane,base[lane][0].version);
    log(`bundle ${lane} ${bundles[lane].version}: ${bundles[lane].file} sha256 ${bundles[lane].sha256}`);
   }
+  // Where the pair's ODC features came from goes with the attempt, the release and the texts (no feature values).
+  const featuresProvenance=bundles.odc.featuresProvenance??null;
+  if(featuresProvenance){attempt.featuresProvenance=featuresProvenance;log(`features odc ${featuresProvenance.version}: ${featuresLine(featuresProvenance)}`);if(featuresProvenance.mode!=='exact')await featuresNotice(config,ops,featuresProvenance);}
   const baseline={odc:await ops.companion('odc',base.odc[0].version),o11:await ops.companion('o11',base.o11[0].version)};
   fs.writeFileSync(path.join(dir,'bundles.json'),JSON.stringify({pair:bundles,baseline},null,2));
   const failedLanes=[];
@@ -206,7 +218,7 @@ async function runAttempt(config,ops,decision,now){
   const smoke=await ops.smoke(built,bundles,served,dir);fs.writeFileSync(path.join(dir,'smoke.json'),JSON.stringify(smoke,null,2));
   if(!smoke.ok)throw Error('Image smoke failed: '+(smoke.error??'see smoke.json'));
   if(config.automatic){
-   const release={id,dir,attempt:attempt.at,baseline:config.liveBaseline,built,manifest:next.manifest,kernel:bridges.kernel,bridges,features:bundles.odc.features,bundles};
+   const release={id,dir,attempt:attempt.at,baseline:config.liveBaseline,built,manifest:next.manifest,kernel:bridges.kernel,bridges,features:bundles.odc.features,featuresProvenance,bundles};
    // Persist only public identities and local artifact paths. Never keys or tokens.
    writeJournal(path.join(dir,'release.json'),release);
    const result=await releaseAutomatically(config,ops,release);
@@ -219,7 +231,7 @@ async function runAttempt(config,ops,decision,now){
   const proposed=await ops.propose(next.manifest,'vigia/'+id,dir,`build(deploy): propose the Studio pair ${id}\n\nNew: ${pair.lanes.map(l=>`${STUDIO_NAME[l]} ${pair[l]}`).join(', ')}. Local image ${built.tag}, filtered kernel tests and image smoke passed.\nThe new pair has no digest until the owner approves and the tag is published (vigia.ps1 -Approve ${id}).\n`,{base:config.branchBase??null});
   const branch=proposed.branch??'vigia/'+id,commit=proposed.commit;
   const base_=windowPairs(base).map(p=>pairId(p)).join(', ');
-  fs.writeFileSync(path.join(dir,'PROPOSTA.md'),proposalText({id,pair,built,next,comparisons,branch,commit,dir,base:base_,replayed:config.replayed??[],runtimes,features:bundles.odc.features,config}));
+  fs.writeFileSync(path.join(dir,'PROPOSTA.md'),proposalText({id,pair,built,next,comparisons,branch,commit,dir,base:base_,replayed:config.replayed??[],runtimes,features:bundles.odc.features,featuresProvenance,config}));
   if(wasCut(outDir,attempt)){log('the round was cut at its time limit; the proposal is not recorded');return {status:'deferred',id,dir,code:'round-timeout'};}
   writeAttempt(outDir,{...attempt,status:'proposed',built,branch,commit,proposedManifest:next.manifest,leaving:next.leaving,affected:next.affected,runtimes,features:bundles.odc.features,proposedAt:new Date().toISOString()});
   await remind(outDir,'proposal:'+id,'SSAM: Studio versions ready for approval',`${id}: ${path.join(dir,'PROPOSTA.md')}`,ops,{now:noticeNow(config),link:path.join(dir,'PROPOSTA.md')});

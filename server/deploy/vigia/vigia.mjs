@@ -2,7 +2,8 @@
 //   (default)     an unattended round: lock, log, fast-forward of the watcher worktree from the local main, then the round
 //                 itself in a child process running the code just fetched (so a fix in main applies at once);
 //   --dry-run     reads the versions and prints what a round would do; writes nothing;
-//   --approve <id|lane-version>, --reject <id> --reason <text>, --retry <id>: the owner's commands.
+//   --approve <id|lane-version>, --reject <id> --reason <text>, --retry <id>: the owner's commands;
+//   --seed-features <Features.plain.xml>: the owner's one-time seed of an exact ODC features export (features-carry.mjs).
 import fs from 'node:fs';
 import {readJournal} from './journal.mjs';
 import path from 'node:path';
@@ -24,11 +25,11 @@ export function parseArgs(argv){
  const args={flags:new Set()};
  for(let i=0;i<argv.length;i++){
   const a=argv[i];
-  if(['--config','--approve','--reject','--reason','--retry','--log','--acknowledge-rollback'].includes(a)){if(argv[i+1]===undefined)throw Error(`${a} needs a value.`);args[a.slice(2)]=argv[++i];}
+  if(['--config','--approve','--reject','--reason','--retry','--log','--acknowledge-rollback','--seed-features'].includes(a)){if(argv[i+1]===undefined)throw Error(`${a} needs a value.`);args[a.slice(2)]=argv[++i];}
   else if(['--dry-run','--round','--no-update'].includes(a))args.flags.add(a.slice(2));
-  else throw Error(`Unknown argument ${a}. Usage: vigia.mjs --config <file> [--dry-run | --approve <id> | --reject <id> --reason <text> | --retry <id>] [--no-update]`);
+  else throw Error(`Unknown argument ${a}. Usage: vigia.mjs --config <file> [--dry-run | --approve <id> | --reject <id> --reason <text> | --retry <id> | --seed-features <Features.plain.xml>] [--no-update]`);
  }
- if(!args.config)throw Error('Usage: vigia.mjs --config <file> [--dry-run | --approve <id> | --reject <id> --reason <text> | --retry <id>]');
+ if(!args.config)throw Error('Usage: vigia.mjs --config <file> [--dry-run | --approve <id> | --reject <id> --reason <text> | --retry <id> | --seed-features <Features.plain.xml>]');
  return args;
 }
 export function readConfig(file){
@@ -135,6 +136,8 @@ async function owner(args,config,log){
   if(args.reject)return reject(config,args.reject,args.reason);
   if(args.retry)return retry(config,args.retry);
   const {createRuntime}=await import('./runtime.mjs');
+  // Only the version, the feature count and the sha256 are printed or logged, never a feature.
+  if(args['seed-features']){const r=(await createRuntime(config,{log})).seedFeatures(args['seed-features']);return {status:'seeded',version:r.version,count:r.count,sha256:r.sha256,note:`ODC features ${r.version} ${r.already?"already stored":"seeded"}: ${r.count} features, sha256 ${r.sha256}.`};}
   return await approve(config,await createRuntime(config,{log}),args.approve);
  }finally{lock.release();}
 }
@@ -176,7 +179,7 @@ if(process.argv[1]&&path.resolve(process.argv[1])===self){
   try{const result=await round(config,runtime);log(`round ${result.status}${result.id?' '+result.id:''}`);console.log(JSON.stringify(result,null,2));if(['failed','rolled-back','rollback-failed'].includes(result.status))process.exitCode=1;}
   catch(error){log(`round error: ${error.stack??error.message}`);await remind(config.outDir,'error:'+String(error.message).split('\n')[0].slice(0,120),'SSAM watcher error',`${String(error.message).split('\n')[0]} (log ${log.file})`,{...runtime,log}).catch(()=>{});process.exitCode=1;}
  }else{
-  const mode=args.approve?'approve':args.reject?'reject':args.retry?'retry':'';
+  const mode=args.approve?'approve':args.reject?'reject':args.retry?'retry':args['seed-features']?'seed-features':'';
   const log=createLog(runLogFile(config.outDir,new Date(),mode),{echo:!!mode});
   log(`watcher ${mode||'round'} start (pid ${process.pid})`);
   try{
