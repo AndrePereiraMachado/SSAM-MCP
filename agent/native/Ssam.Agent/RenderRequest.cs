@@ -94,26 +94,29 @@ internal static class RenderRequest
         return (s.Substring(j, width), j + width);
     }
     private static readonly HashSet<string> TextFunctions = ["attr", "counter", "counters"];
-    private static readonly HashSet<string> RuleBlocks = ["media", "supports", "layer", "container", "document", "-moz-document", "scope", "starting-style", "keyframes", "-webkit-keyframes", "-moz-keyframes"];
-    // The context of each token decides whether it is a target (render-request.mjs cssTargets has the full rule).
+    // Every declaration by its grammatical shape at any depth and in any block: an item that starts with an identifier and
+    // ':' is a declaration up to ';' or '}'; ended by '{' it was a selector and its strings are dropped (render-request.mjs
+    // cssTargets has the full rule).
     internal static List<(string Value, bool Url)> CssTargets(string css, bool declarations = false)
     {
+        _ = declarations;
         var targets = new List<(string, bool)>();
+        var pending = new List<(string, bool)>();
         var stack = new List<string>();
-        var blocks = new List<string> { declarations ? "decls" : "rules" };
-        string? at = null; var inValue = false; var property = ""; string? lastIdent = null;
+        var mode = "start"; var property = ""; string? at = null;
         bool InImage() => stack.Any(ImageFunctions.Contains);
         bool InText() => stack.Any(TextFunctions.Contains);
-        string Top() => blocks[^1];
-        void Reset() { at = null; inValue = false; property = ""; lastIdent = null; }
+        void End(bool commit) { if (commit && mode == "value") targets.AddRange(pending); pending.Clear(); mode = "start"; property = ""; at = null; }
         void Consider(string value, bool isUrl)
         {
-            if (InImage() || isUrl) { if (at == "import" || Top() == "decls" && inValue) targets.Add((value, true)); return; }
             if (at == "import") { targets.Add((value, true)); return; }
-            if (Top() != "decls" || !inValue || InText()) return;
-            if (property is "content" or "quotes") return;
-            targets.Add((value, false));
+            if (mode != "value") return;
+            if (InImage() || isUrl) { pending.Add((value, true)); return; }
+            if (InText()) return;
+            if (property is "content" or "quotes" && stack.Count == 0) return;
+            pending.Add((value, false));
         }
+        void Other() { if (stack.Count == 0 && mode is "start" or "ident") mode = "other"; }
         (string, int) ReadName(int start)
         {
             var name = new StringBuilder(); var i = start;
@@ -129,7 +132,7 @@ internal static class RenderRequest
         while (i < css.Length)
         {
             var c = css[i];
-            if (c == '/' && i + 1 < css.Length && css[i + 1] == '*') { var end = css.IndexOf("*/", i + 2, StringComparison.Ordinal); i = end < 0 ? css.Length : end + 2; continue; }
+            if (c == '/' && i + 1 < css.Length && css[i + 1] == '*') { var close = css.IndexOf("*/", i + 2, StringComparison.Ordinal); i = close < 0 ? css.Length : close + 2; continue; }
             if (c is '"' or '\'')
             {
                 var value = new StringBuilder(); var j = i + 1;
@@ -147,12 +150,13 @@ internal static class RenderRequest
                 }
                 i = j < css.Length && css[j] == c ? j + 1 : j;
                 Consider(value.ToString(), false);
+                Other();
                 continue;
             }
             if (c == '@')
             {
                 var (name, next) = ReadName(i + 1);
-                if (name.Length > 0) { if (stack.Count == 0 && !inValue) at = AsciiLower(name); i = next; continue; }
+                if (name.Length > 0) { if (stack.Count == 0 && mode == "start") { at = AsciiLower(name); mode = "other"; } else Other(); i = next; continue; }
             }
             if (IdentStart(css, i) || ValidEscape(css, i) || c == '-' && (IdentStart(css, i + 1) || ValidEscape(css, i + 1)))
             {
@@ -163,6 +167,7 @@ internal static class RenderRequest
                     if (i < css.Length && css[i] == '(')
                     {
                         var lower = AsciiLower(name); i++;
+                        Other();
                         if (lower == "url")
                         {
                             var j = i; while (CssSpaceAt(css, j)) j++;
@@ -182,21 +187,22 @@ internal static class RenderRequest
                         stack.Add(lower);
                         continue;
                     }
-                    if (stack.Count == 0 && !inValue) lastIdent = AsciiLower(name);
+                    if (stack.Count == 0 && mode == "start") { mode = "ident"; property = AsciiLower(name); } else Other();
                     continue;
                 }
             }
-            if (c == '(') stack.Add("");
+            if (c == '(') { Other(); stack.Add(""); }
             else if (c == ')') { if (stack.Count > 0) stack.RemoveAt(stack.Count - 1); }
             else if (stack.Count == 0)
             {
-                if (c == ':' && Top() == "decls" && !inValue && at == null) { inValue = true; property = lastIdent ?? ""; }
-                else if (c == ';') { if (Top() == "decls") { inValue = false; property = ""; lastIdent = null; } at = null; }
-                else if (c == '{') { blocks.Add(at != null && RuleBlocks.Contains(at) ? "rules" : "decls"); Reset(); }
-                else if (c == '}') { if (blocks.Count > 1) blocks.RemoveAt(blocks.Count - 1); Reset(); }
+                if (c == ':' && mode == "ident") mode = "value";
+                else if (c is ';' or '}') End(true);
+                else if (c == '{') End(false);
+                else if (!CssSpace(c)) Other();
             }
             i++;
         }
+        End(true);
         return targets;
     }    private static readonly Regex Outside = new("^(?:https?|file|ftp):", I);
     private static readonly Regex Scheme = new("^[A-Za-z][A-Za-z0-9+.-]*:", RegexOptions.CultureInvariant);

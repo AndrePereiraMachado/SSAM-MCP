@@ -142,7 +142,8 @@ export function renderRows() {
       ['content with image-set and a var() fallback', 'content:image-set(var(--m,"https://evil.test/c.png") 1x)', 'RENDER_DOCUMENT_REFUSED'],
       ['content with -webkit-image-set and //', 'content:-webkit-image-set(var(--m,"//evil.test/c.png") 1x)', 'RENDER_DOCUMENT_REFUSED'],
       ['an address as content text', 'content:"https://e.example/x"', 'ok'],
-      ['an address in a content var() fallback', 'content:var(--q,"https://e.example")', 'ok'],
+      ['an address in a content var() fallback (not the direct value)', 'content:var(--q,"https://e.example")', 'RENDER_DOCUMENT_REFUSED'],
+      ['content with counter() and //', 'content:counter(c,"//")', 'ok'],
       ['quotes with slashes', 'quotes:"//" "//"', 'ok'],
       ['grid-template-areas', 'grid-template-areas:"a b" "c d"', 'ok'],
       ['font-family names', 'font-family:"Open Sans","Segoe UI",sans-serif', 'ok'],
@@ -150,6 +151,8 @@ export function renderRows() {
       ['content with counters()', 'content:counters(item, ".") " "', 'ok'],
     ].flatMap(([label, declaration, expected]) => [[label, withCss('.a{' + declaration + '}'), expected],
       [label + ' (style attribute)', withHtml("<div style='" + declaration + "'>x</div>"), expected]]),
+    // Every declaration by its shape at any depth: each container nested in each other up to depth 3.
+    ...nestingRows(),
     ['@property initial-value with an address', withCss('@property --p{syntax:"*";inherits:false;initial-value:"https://e.example/x.png"}'), 'RENDER_DOCUMENT_REFUSED'],
     ['a selector with an address stays', withCss('.a[href^="https://"]{color:red} .b[title="//x"]{color:blue} a:not([href^="http:"]){color:green}'), 'ok'],
     ['@namespace stays', withCss('@namespace svg url(http://www.w3.org/2000/svg); @namespace html "http://www.w3.org/1999/xhtml"; svg|rect{fill:red}'), 'ok'],
@@ -170,4 +173,17 @@ export function renderRows() {
     if (change.styles && !change.documents) request.documents = base.documents.map(d => ({ ...d, styles: [change.styles[0]?.id ?? 'osui'].filter(id => change.styles.some(s => s.id === id)) }));
     return { label, request, expected };
   });
+}
+
+// Containers nested in each other (depth 1 to 3) around a declaration that must be refused and around a selector that
+// must stay: the reader finds declarations by their shape, never by a list of containers.
+export function nestingRows() {
+  const containers = ['@media screen', '@supports (display:grid)', '@layer x', '@container (min-width:1px)', '@scope (.s)', '@starting-style',
+    '@unknown-rule foo', '.nested', '&:hover'];
+  const chains = [];
+  for (const a of containers) { chains.push([a]); for (const b of containers) { chains.push([a, b]); for (const c of containers) chains.push([a, b, c]); } }
+  const wrap = (chain, inner) => chain.reduceRight((body, container) => `${container}{${body}}`, inner);
+  return chains.flatMap(chain => [
+    ['nested ' + chain.join(' > ') + ': an outside var() fallback', withCss(wrap(chain, '.x{background-image:var(--m,"https://e.example/x.png")}')), 'RENDER_DOCUMENT_REFUSED'],
+    ['nested ' + chain.join(' > ') + ': a selector with an address', withCss(wrap(chain, '.x[href^="https://"]:hover{color:red;content:"https://e.example"}')), 'ok']]);
 }

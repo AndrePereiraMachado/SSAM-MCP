@@ -62,8 +62,6 @@ function only(object, keys, where) {
 // native/Ssam.Agent/RenderRequest.cs; agent/tests/fixtures/render-table.mjs holds the shared cases.
 const IMAGE_FUNCTIONS = new Set(['url', 'src', 'image-set', '-webkit-image-set', 'image', '-webkit-image', 'cross-fade', '-webkit-cross-fade', 'element', '-moz-element']);
 const TEXT_FUNCTIONS = new Set(['attr', 'counter', 'counters']);
-// At-rules whose block holds rules (the others hold declarations).
-const RULE_BLOCKS = new Set(['media', 'supports', 'layer', 'container', 'document', '-moz-document', 'scope', 'starting-style', 'keyframes', '-webkit-keyframes', '-moz-keyframes']);
 const CSS_SPACE = new Set([' ', '\t', '\n', '\r', '\f']);
 const asciiLower = text => text.replace(/[A-Z]/g, c => c.toLowerCase());
 const cssTrim = text => { let s = 0; let e = text.length; while (s < e && CSS_SPACE.has(text[s])) s++; while (e > s && CSS_SPACE.has(text[e - 1])) e--; return text.slice(s, e); };
@@ -87,29 +85,36 @@ function readEscape(css, i) {
   return [String.fromCodePoint(code), j + (code > 0xffff ? 2 : 1)];
 }
 
-// declarations: true for a style attribute (its text is one declaration list).
-export function cssTargets(css, { declarations = false } = {}) {
+// Every declaration is found by its grammatical shape, at any nesting depth and inside any block (style rules, nested
+// rules, @media, @supports, @layer, @container, @scope, @starting-style, @font-face, @property, any unknown at-rule):
+// an item that starts with an identifier followed by ':' is a declaration whose value runs to ';' or '}'. Its targets
+// count only when the item ends that way; when a '{' ends it instead, it was a selector (a:hover{...}) and its strings
+// are dropped. The options argument is kept for the callers (a style attribute is one declaration list either way).
+export function cssTargets(css, options = {}) {
+  void options;
   const targets = [];
   const stack = [];
-  const blocks = [declarations ? 'decls' : 'rules'];
-  let at = null; let inValue = false; let property = ''; let lastIdent = null;
+  let pending = [];
+  let mode = 'start'; let property = ''; let at = null;
   const inImage = () => stack.some(name => IMAGE_FUNCTIONS.has(name));
   const inText = () => stack.some(name => TEXT_FUNCTIONS.has(name));
-  const top = () => blocks[blocks.length - 1];
-  const reset = () => { at = null; inValue = false; property = ''; lastIdent = null; };
+  const end = commit => { if (commit && mode === 'value') targets.push(...pending); pending = []; mode = 'start'; property = ''; at = null; };
   // A string or url body found here: is it a target, and with the URL-position rule?
   const consider = (value, isUrl) => {
-    if (inImage() || isUrl) { if (at === 'import' || (top() === 'decls' && inValue)) targets.push({ value, url: true }); return; }
     if (at === 'import') { targets.push({ value, url: true }); return; }
-    if (top() !== 'decls' || !inValue || inText()) return;
-    if ((property === 'content' || property === 'quotes')) return;
-    targets.push({ value, url: false });
+    if (mode !== 'value') return;
+    if (inImage() || isUrl) { pending.push({ value, url: true }); return; }
+    if (inText()) return;
+    if ((property === 'content' || property === 'quotes') && stack.length === 0) return;
+    pending.push({ value, url: false });
   };
+  // Any other token at depth 0 before the ':' makes the item something else than a declaration.
+  const other = () => { if (stack.length === 0 && (mode === 'start' || mode === 'ident')) mode = 'other'; };
   const readName = start => { let name = ''; let i = start; while (i < css.length) { if (identChar(css[i])) { name += css[i++]; continue; } if (validEscape(css, i)) { const [text, next] = readEscape(css, i); name += text; i = next; continue; } break; } return [name, i]; };
   let i = 0;
   while (i < css.length) {
     const c = css[i];
-    if (c === '/' && css[i + 1] === '*') { const end = css.indexOf('*/', i + 2); i = end < 0 ? css.length : end + 2; continue; }
+    if (c === '/' && css[i + 1] === '*') { const close = css.indexOf('*/', i + 2); i = close < 0 ? css.length : close + 2; continue; }
     if (c === '"' || c === "'") {
       let value = ''; let j = i + 1;
       while (j < css.length && css[j] !== c) {
@@ -124,11 +129,12 @@ export function cssTargets(css, { declarations = false } = {}) {
       }
       i = css[j] === c ? j + 1 : j;
       consider(value, false);
+      other();
       continue;
     }
     if (c === '@') {
       const [name, next] = readName(i + 1);
-      if (name) { if (stack.length === 0 && !inValue) at = asciiLower(name); i = next; continue; }
+      if (name) { if (stack.length === 0 && mode === 'start') { at = asciiLower(name); mode = 'other'; } else other(); i = next; continue; }
     }
     if (identStart(c) || validEscape(css, i) || (c === '-' && (identStart(css[i + 1]) || validEscape(css, i + 1)))) {
       const [name, next] = readName(i);
@@ -136,6 +142,7 @@ export function cssTargets(css, { declarations = false } = {}) {
         i = next;
         if (css[i] === '(') {
           const lower = asciiLower(name); i++;
+          other();
           if (lower === 'url') {
             let j = i; while (CSS_SPACE.has(css[j])) j++;
             if (css[j] !== '"' && css[j] !== "'") {
@@ -149,20 +156,21 @@ export function cssTargets(css, { declarations = false } = {}) {
           stack.push(lower);
           continue;
         }
-        if (stack.length === 0 && !inValue) lastIdent = asciiLower(name);
+        if (stack.length === 0 && mode === 'start') { mode = 'ident'; property = asciiLower(name); } else other();
         continue;
       }
     }
-    if (c === '(') stack.push('');
+    if (c === '(') { other(); stack.push(''); }
     else if (c === ')') stack.pop();
     else if (stack.length === 0) {
-      if (c === ':' && top() === 'decls' && !inValue && at === null) { inValue = true; property = lastIdent ?? ''; }
-      else if (c === ';') { if (top() === 'decls') { inValue = false; property = ''; lastIdent = null; } at = null; }
-      else if (c === '{') { blocks.push(at !== null && RULE_BLOCKS.has(at) ? 'rules' : 'decls'); reset(); }
-      else if (c === '}') { if (blocks.length > 1) blocks.pop(); reset(); }
+      if (c === ':' && mode === 'ident') mode = 'value';
+      else if (c === ';' || c === '}') end(true);
+      else if (c === '{') end(false);
+      else if (!CSS_SPACE.has(c)) other();
     }
     i++;
   }
+  end(true);
   return targets;
 }
 const OUTSIDE = /^(?:https?|file|ftp):/i;
