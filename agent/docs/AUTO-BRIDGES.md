@@ -1,96 +1,88 @@
-# Automatic Studio bridges
+# Automatic bridges: amendment 1
 
-Both the Node agent and the native core understand `compatible.<lane>.bridgeOffer`
-in a successful hello response. `capabilities.bridgeOffer: true` advertises this capability.
-The original package identity is retained; effective protocol fields in `pack` and
-the additional `bridges` object describe the installed bridge. `bridgeUpdate`
-reports installation, refusal or fallback without exposing local artifact paths.
+The Node agent and native core announce `capabilities.bridgeOffer` and accept
+`compatible.<lane>.bridgeOffer`. The original package fields, including
+`pack.odcBridge` and `pack.o11Hook`, always describe the actual bundled package.
+Downloaded bridges are reported separately as a persistent `bridges` array:
+`{lane, studioVersion, protocol, sequence, status, reason}`.
 
-## Trust and storage
+## Signed identity and storage
 
-The owner must set the Ed25519 SPKI PEM public key and the 40-character SHA-1
-Authenticode certificate thumbprint in BOTH `agent/lib/bridge-trust.mjs` and
-`native/Ssam.Agent/BridgeTrust.cs` before building. Empty constants fail closed.
-No environment variable, local settings file, offer, downloaded certificate or
-network response can override the production anchors. Test constructors inject
-ephemeral keys and fake certificate verification only in test harnesses.
+Every manifest has a positive safe-integer `sequence`, increasing for each
+`{lane, studioVersion}`. The agent keeps installed and rejected high-water marks
+in `private/bridge-state.json`, outside `bridges/`. Cleaning downloaded binaries
+does not reset replay protection. An unsigned or invalidly signed sequence never
+changes this state. A lower sequence or protocol is refused; a larger sequence
+can replace a broken build with the same protocol.
 
-Prefer a JSON string in `bridgeOffer.manifest`, preserving the exact signed UTF-8
-bytes, and a base64 string in `bridgeOffer.signature`. Object manifests are also
-accepted using compact JSON serialization; the server must sign precisely those
-bytes. A string avoids differences in escaping and property order across runtimes.
+Artifacts use immutable sequence directories under
+`bridges/<lane>/<studioVersion>/<protocol>/<sequence>/`. Installation verifies
+Ed25519, all sizes/SHA-256 values, then Authenticode for every DLL/EXE, before an
+atomic directory rename. Previous sequences stay available for fallback.
 
-Downloads use the authenticated server origin at
-`GET /agent/bridges/<lane>/<studioVersion>/<protocol>/<sha256>` with the same bearer
-token as hello. Redirects are refused. Files have signed size limits and bounded
-download deadlines. Verification order is Ed25519, every file's size/SHA-256,
-then valid embedded Authenticode for every DLL/EXE from the pinned signer.
+The build pins the SPKI PEM public key and certificate SHA-1 thumbprint in both
+`agent/lib/bridge-trust.mjs` and `native/Ssam.Agent/BridgeTrust.cs`. The application
+build refuses empty, invalid or differing anchors. No server value, setting or
+environment variable can replace these constants. Tests inject ephemeral keys
+only through test constructors.
 
-An installation is renamed from a sibling staging directory into
-`<data>/bridges/<lane>/<studioVersion>/<protocol>/` only after verification. The
-signed manifest remains there. Existing identities cannot be overwritten, and
-older protocols cannot be installed. Failed load digests live in `failed.json`;
-the original signed directories remain as the high-water record and rollback
-source. A corrupt cached manifest fails closed for that Studio version, rather
-than forgetting the high-water mark. Never prune these directories blindly.
+## Selection and attachment
 
-Every selection rechecks the manifest, hashes, signatures, links and file list.
-Unlisted dependencies, traversal, alternate data streams, reserved device paths
-and ambiguous entrypoints are refused. The agent never compiles a bridge.
+The bundled bridge wins whenever its Studio and runtime match. Package build
+metadata and runtime/dependency configuration establish compatibility; legacy
+layouts retain their .NET 8 runtime. The target Studio runtime comes from its
+runtime configuration. An unknown runtime never authorizes a downloaded bridge.
 
-## Artifact layout and runtime
+An ODC artifact includes `client/ODC3.Bridge.Client.dll` and its dependencies,
+plus `bridge/ODC3.Bridge.<protocol>.dll`. Windows attachment always uses this
+downloaded client with this bridge, never the bundled client from another
+protocol. The generic `ODC3.Bridge.dll` filename is also recognized by the macOS
+attach code.
 
-The ODC artifact contains exactly one entrypoint named `ODC3.Bridge.vNNN.dll`
-or `ODC3.Bridge.dll`, plus its dependencies. Relative subdirectories are allowed.
-The existing package helper performs the Windows attach; macOS retains its native
-diagnostic IPC attach. The selected manifest runtime must exactly match the target
-Studio's runtimeconfig (`net8.0`, `net10.0`, etc.). An unknown runtime never selects
-a downloaded bridge. Bundled selection stays as before when no download matches.
+Downloaded O11 artifacts use protocol `d1`: `hook/Anvil.RuntimeHook.Agent.dll`,
+`bridge/Anvil.Bridge.dll` and dependencies. The bundled package remains `dev` or
+its original release ABI. A downloaded hook is never advertised as release h1.
+The O11 hash handshake and existing process, port and pending-attach guards remain.
 
-O11 accepts the watcher's h1 artifact with `hook/Anvil.RuntimeHook.Agent.dll` and
-`bridge/Anvil.Bridge.dll`, plus dependencies. All bytes are verified before the
-hook is copied into its per-process exchange folder; the copied hook hash is
-checked again. The handshake must return the signed manifest's exact bridge hash.
+Verification is cached by signed digest and the file inventory's sizes and
+modification times. Changed files invalidate the cache. A pipe operation only
+checks the active protocol for that Studio process; it never runs Authenticode.
+Every actual attach copies the artifact into a unique `private/bridge-loads/`
+directory, locks the copy against write/delete sharing, and fully verifies that
+copy before use. O11's generated process-bound configuration is included in this
+locked copy. Both its hook and `bridgePath` refer to the protected snapshot.
+Snapshots remain locked while the agent may use them, including lazy loads.
 
-The existing h1 release layout is also supported. Its artifact must
-include `studio/o11/hook/Anvil.Hook.h1.dll`,
-`studio/o11/bridge/b1/Anvil.Bridge.dll`, dependencies, `release.json` and
-`release.sig.jws`. The existing hook still checks its own release signature and
-coverage; Ed25519/Authenticode do not bypass it. Future hook ABIs need agent support
-and are refused with a reason. The bundled connector remains the diagnostic helper.
+The native core holds read handles without write/delete sharing. Node uses the
+bundled native core's `bridge-lock` helper, with readiness acknowledged only
+after every file is open. A missing helper fails closed for downloaded attachment.
+The Windows directory comes from the native `windows-directory` OS API command,
+and Authenticode imports the Security module by its full system path with a
+sanitized module search path. `SystemRoot` and `PSModulePath` are not trust inputs.
 
-macOS downloads apply only to ODC. The installer must bundle a trusted executable
-`tools/osslsigncode` and `tools/osslsigncode-ca.pem`. Native staging preserves these
-two files only when the source pack already lists and hashes them. It runs `verify
--in <file> -CAfile <bundled CA store> -require-leaf-hash sha1:<pinned fingerprint>` with signature and chain verification
-enabled. A missing verifier or invalid trust store refuses the download. Existing
-macOS bundle discovery, exact-build checks for bundled bridges and attach guards
-remain in place. O11 downloads are not enabled on macOS.
+## Failure, channel and platform behavior
 
-## Fallback and visibility
+Only a load that was attempted and definitively failed because of the bridge
+quarantines that identity. Port contention, locks, concurrent requests, pending
+guards, reused-bridge handshakes and data-root binding errors never quarantine.
+Quarantine is scoped to the Studio PID/start time. A restarted Studio or a newer
+sequence is eligible again. Existing guards still prohibit an unsafe second
+injection into a process where a hook may already be loaded.
 
-The highest verified matching version wins. A failed load excludes its signed
-digest and reports fallback on the next hello. A known pre-attach failure can try
-the previous verified version immediately. An attach that may already have run is
-never repeated in that Studio process: restart the Studio before the rollback is
-loaded. Existing O11 pending receipts and identity checks remain authoritative.
+Failed and fallback records survive agent restarts. Downloads run in the
+background while the channel opens immediately. Successful installation or a
+confirmed bridge failure requests reconnection to report the new state.
 
-The app reads `<data>/private/bridge-update.json` on its normal refresh and renders
-the installation or refusal reason as a status message. Example:
-`Updated the odc bridge for ODC Studio 1.7.30`.
+This build disables remote offers on macOS and explains why in
+`capabilities.bridgeOfferReason`. Bundled macOS ODC/O11 behavior stays available.
+Re-enabling remote offers requires a packaged and qualified verifier; merely
+assuming `tools/osslsigncode` exists is insufficient.
 
-## Local verification
+## Qualification
 
-Use the Node runtime documented for this checkout. Run Node tests with TEMP/TMP
-pointing inside the approved test directory. Do not build release packages, sign
-artifacts or publish as part of this work. Before each native build or test,
-inspect running dotnet processes and obey the owner's machine-wide serialization.
-
-Build `tests/bridge-updates-harness/BridgeUpdates.Tests.csproj -c Release` once,
-then run `node --test --test-concurrency=1 tests/native/bridge-updates.test.mjs`.
-The test harness accepts ephemeral test keys over stdin and contacts only its
-loopback fake server. It is not packaged and no production CLI flag enables it.
-Existing native suites and `tests/native-protocol` must also pass before release.
-
-The macOS verifier flags are documented by the upstream project:
-https://github.com/mtrojnar/osslsigncode/blob/master/osslsigncode.md#verification-options
+Use a short test TEMP, such as `C:\t\va-tmp`. Serialize all dotnet builds/tests
+and inspect other dotnet processes first. The production-client test compiles
+the real client source, changing only its protocol and its pinned test-host path;
+it loads a v100 startup-hook fixture into a private ODCStudio test process. It
+never attaches to the installed Studio. Run both Node and native regression suites
+and compare named results against the release baseline before promotion.
