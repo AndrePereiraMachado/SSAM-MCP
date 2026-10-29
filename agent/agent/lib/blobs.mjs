@@ -42,7 +42,8 @@ export function validateRef(ref, { partBytes = PART_BYTES, maxFileBytes = MAX_FI
 
 // Uploads a file (path) or a Buffer. put(transfer, index, body, headers, {timeoutMs, fresh}) -> HTTP status. Returns the
 // BlobRef the result carries; the server checks each part on arrival and the whole file when it assembles it.
-export async function uploadBlob(source, { put, partBytes = PART_BYTES, retries = RETRIES, sleep = delay, partMs = PART_MS, log = () => {} } = {}) {
+// beforePart(index) runs before each part is sent (file.upload checks the call's deadline there and may throw).
+export async function uploadBlob(source, { put, partBytes = PART_BYTES, retries = RETRIES, sleep = delay, partMs = PART_MS, log = () => {}, beforePart = () => {} } = {}) {
   const isBuffer = Buffer.isBuffer(source);
   const size = isBuffer ? source.length : fs.statSync(source).size;
   const total = isBuffer ? sha256(source) : await fileSha256(source);
@@ -51,6 +52,7 @@ export async function uploadBlob(source, { put, partBytes = PART_BYTES, retries 
   const fd = isBuffer ? null : fs.openSync(source, 'r');
   try {
     for (let index = 0; index < parts; index++) {
+      await beforePart(index);
       const length = Math.min(partBytes, size - index * partBytes);
       let body;
       if (isBuffer) body = source.subarray(index * partBytes, index * partBytes + length);

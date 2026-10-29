@@ -128,7 +128,7 @@ export function createAgent({ root, runtimeRoot = root, config = {}, deps = {}, 
       maxValueBytes: welcome?.maxValueBytes ?? MAX_VALUE_BYTES };
   };
   const blobs = {
-    upload: source => uploadBlob(source, { put: channel.blobPut, partBytes: limits().partBytes, sleep: d.sleep, partMs: d.partMs, log }),
+    upload: (source, options = {}) => uploadBlob(source, { put: channel.blobPut, partBytes: limits().partBytes, sleep: d.sleep, partMs: d.partMs, log, ...options }),
     download: (ref, dest) => downloadBlob(ref, dest, { get: channel.blobGet, limits: limits(), sleep: d.sleep, partMs: d.partMs, log }),
   };
 
@@ -192,7 +192,10 @@ export function createAgent({ root, runtimeRoot = root, config = {}, deps = {}, 
         try { await blobs.download(call.paramsBlob, temporary); params = readJson(temporary); }
         finally { fs.rmSync(temporary, { force: true }); }
       }
-      const value = await kinds.execute(call.kind, params ?? {});
+      // deadline: the server's time when it stops waiting for this call (a hub of servidor/fase4 and later), here in this
+      // machine's clock (channel.localTime); the kinds that take long (file.upload) stop at it.
+      const deadline = Number.isFinite(call.deadline) ? channel.localTime(call.deadline) : null;
+      const value = await kinds.execute(call.kind, params ?? {}, { deadline });
       let message = { t: 'result', id: call.id, ok: true, value };
       if (Buffer.byteLength(JSON.stringify(message)) > limits().inlineMaxBytes) {
         const bytes = Buffer.from(JSON.stringify(value));
@@ -229,7 +232,7 @@ export function createAgent({ root, runtimeRoot = root, config = {}, deps = {}, 
     // After the channel's own goodbye (DELETE /agent/v1/channel), the pooled connections are closed.
     stop: async () => { bridgeAbort.abort(); await channel.stop(); await updates.dispose(); transport?.close(); },
     // One kind run locally exactly as a call would run it (tests, diagnostics): the result message.
-    execute: (kind, params) => execute({ id: randomUUID(), kind, params }),
+    execute: (kind, params, { deadline } = {}) => execute({ id: randomUUID(), kind, params, ...(deadline === undefined ? {} : { deadline }) }),
     outbox,
     channel,
   };

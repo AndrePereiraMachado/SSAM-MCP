@@ -35,6 +35,9 @@ export function createChannel({ server, credential, hello, onCall, outbox, onWel
   // session got a hello but no stream); reset when a stream opens.
   let quickHelloUsed = false;
   let reconnectTimer = null; let deadTimer = null; let flushTimer = null;
+  // The server's clock minus this machine's (0.3.4): a call's deadline is the server's time; the Date of the welcome
+  // gives it to the second, each ping's `at` to the millisecond. null until either was seen.
+  let serverOffset = null; let offsetFromPing = false;
 
   const auth = () => ({ authorization: 'Bearer ' + credential });
   // fresh: on a connection of its own (net.mjs); a fetch that does not know the flag ignores it.
@@ -100,6 +103,8 @@ export function createChannel({ server, credential, hello, onCall, outbox, onWel
     }
     const body = await reply.json().catch(() => null);
     if (body?.t !== 'welcome' || !/^[0-9a-f]{32}$/.test(body.channel ?? '')) { log('welcome-invalid'); return retry(); }
+    const date = Date.parse(reply.headers?.get?.('date') ?? '');
+    if (!offsetFromPing && Number.isFinite(date)) serverOffset = date + 500 - now();
     welcome = body; channel = body.channel;
     Promise.resolve().then(() => onWelcome(body)).then(changed => {
       if (changed && !stopped) { if (connecting) reconnectPending = true; else lose('bridge-changed'); }
@@ -163,6 +168,7 @@ export function createChannel({ server, credential, hello, onCall, outbox, onWel
     let message;
     try { message = JSON.parse(line); } catch { log('line-invalid'); return; }
     if (message?.t === 'ping') {
+      if (Number.isFinite(message.at)) { serverOffset = message.at - now(); offsetFromPing = true; }
       const versions = pongVersions();
       sendPong(versions ? { t: 'pong', seq: message.seq, versions } : { t: 'pong', seq: message.seq });
     } else if (message?.t === 'call' && typeof message.id === 'string' && message.id.length > 0 && message.id.length <= 128) {
@@ -230,6 +236,8 @@ export function createChannel({ server, credential, hello, onCall, outbox, onWel
     reconnect: () => { if (connecting) reconnectPending = true; else lose('bridge-changed'); },
     welcome: () => welcome,
     connected: () => connected,
+    // A time of the server's clock (a call's deadline) in this machine's clock.
+    localTime: serverMs => serverMs - (serverOffset ?? 0),
     // One part, within its own deadline (timeoutMs covers the answer and its body); fresh after a part that got no answer.
     async blobPut(transfer, index, body, headers, { timeoutMs, fresh = false } = {}) {
       if (!channel) throw new Error('not connected');
