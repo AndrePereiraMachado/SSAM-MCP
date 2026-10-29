@@ -61,7 +61,8 @@ export function insidePath(child, parent, platform = process.platform) {
 
 // Windows compares names ordinally without case: each character by its simple upper-case mapping, nothing else (the
 // .NET StringComparison.OrdinalIgnoreCase of native/Ssam.Agent/LocalPaths.cs). No Unicode case folding: the Kelvin sign,
-// the Angstrom sign and the Ohm sign stay distinct from K, Å and Ω, as NTFS keeps them distinct folders.
+// the Angstrom sign and the Ohm sign (U+212A, U+212B, U+2126) stay distinct from K, A-ring and omega, as NTFS keeps
+// them distinct folders.
 // .NET maps by the simple upper case of UnicodeData, never from a non-ASCII character to ASCII (dotless i and long s stay);
 // JavaScript only offers the full mapping, so the few letters whose full upper case is several characters (Greek with
 // ypogegrammeni) get their simple one here. tests/native/upload.test.mjs checks every character pair against .NET.
