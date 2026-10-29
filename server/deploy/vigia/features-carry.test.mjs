@@ -171,3 +171,38 @@ test('entity references other than the five XML ones are refused, whatever their
  }
  const ok=put(path.join(dir,'five.xml'),one('&amp;&lt;&gt;&quot;&apos;&#65;&#x42;'));assert.equal(readFeatures(ok).entries.get(key(1)).value,'&<>"\'AB');
 });
+// A minimal, well-formed PE32 .NET image: one section, CLI header, metadata root with #~, #Strings and #Blob, one TypeRef
+// ServiceStudio.Common.FeatureManagement.FeaturesValues and n MemberRef rows (class: that TypeRef) whose names all point at
+// one string 'get_' + 'A' x length.
+function craftAssembly(length,n){
+ const u16=v=>{const b=Buffer.alloc(2);b.writeUInt16LE(v);return b;},u32=v=>{const b=Buffer.alloc(4);b.writeUInt32LE(v>>>0);return b;},pad4=b=>Buffer.concat([b,Buffer.alloc((4-b.length%4)%4)]);
+ const strings=Buffer.concat([Buffer.from('\0FeaturesValues\0ServiceStudio.Common.FeatureManagement\0get_'),Buffer.alloc(length,0x41),Buffer.from('\0')]);
+ const nameAt=1,namespaceAt=nameAt+'FeaturesValues'.length+1,getterAt=namespaceAt+'ServiceStudio.Common.FeatureManagement'.length+1;
+ const wide=strings.length>=65536,index=v=>wide?u32(v):u16(v);
+ const valid=Buffer.alloc(8);valid.writeBigUInt64LE((1n<<1n)|(1n<<10n));
+ const header=Buffer.concat([u32(0),Buffer.from([2,0,wide?1:0,1]),valid,Buffer.alloc(8),u32(1),u32(n)]);
+ const typeRef=Buffer.concat([u16(0),index(nameAt),index(namespaceAt)]),memberRef=Buffer.concat([u16((1<<3)|1),index(getterAt),u16(0)]);
+ const tables=pad4(Buffer.concat([header,typeRef,Buffer.concat(Array(n).fill(memberRef))])),heap=pad4(strings),blob=pad4(Buffer.from([0]));
+ const version=Buffer.from('v4.0.30319\0\0');
+ const streams=offsets=>Buffer.concat([u32(offsets[0]),u32(tables.length),Buffer.from('#~\0\0'),u32(offsets[1]),u32(heap.length),Buffer.from('#Strings\0\0\0\0'),u32(offsets[2]),u32(blob.length),Buffer.from('#Blob\0\0\0')]);
+ const root=Buffer.concat([Buffer.from('BSJB'),u16(1),u16(1),u32(0),u32(version.length),version,u16(0),u16(3)]);
+ const first=root.length+streams([0,0,0]).length,metadata=Buffer.concat([root,streams([first,first+tables.length,first+tables.length+heap.length]),tables,heap,blob]);
+ const cli=Buffer.alloc(72);cli.writeUInt32LE(72,0);cli.writeUInt32LE(0x2000+72,8);cli.writeUInt32LE(metadata.length,12);
+ const section=Buffer.concat([cli,metadata]),raw=Buffer.concat([section,Buffer.alloc((0x200-section.length%0x200)%0x200)]);
+ const head=Buffer.alloc(0x200);head.write('MZ',0,'latin1');head.writeUInt32LE(0x80,0x3c);head.write('PE\0\0',0x80,'latin1');
+ head.writeUInt16LE(0x14c,0x84);head.writeUInt16LE(1,0x86);head.writeUInt16LE(0xe0,0x94);head.writeUInt16LE(0x2102,0x96);
+ const optional=0x98;head.writeUInt16LE(0x10b,optional);head.writeUInt32LE(16,optional+92);head.writeUInt32LE(0x2000,optional+96+14*8);head.writeUInt32LE(72,optional+96+14*8+4);
+ const table=optional+0xe0;head.write('.text',table,'latin1');head.writeUInt32LE(section.length,table+8);head.writeUInt32LE(0x2000,table+12);head.writeUInt32LE(raw.length,table+16);head.writeUInt32LE(0x200,table+20);
+ return Buffer.concat([head,raw]);
+}
+test('a crafted assembly whose member names are one huge string is unreadable metadata, in bounded time and memory',async t=>{
+ const {spawnSync}=await import('node:child_process'),{pathToFileURL}=await import('node:url');
+ const {featureReads}=await import('./pe-metadata.mjs');
+ assert.deepEqual(featureReads(craftAssembly(10,3)),['A'.repeat(10)],'the crafted image is well formed');
+ const dir=tmp(t),dll=path.join(dir,'crafted.dll');fs.writeFileSync(dll,craftAssembly(1000000,10000));
+ const script=`import {featureReads} from ${JSON.stringify(pathToFileURL(path.join(import.meta.dirname,'pe-metadata.mjs')).href)};try{featureReads(${JSON.stringify(dll)});console.log('read');}catch(e){console.log(e.code??e.message);}`;
+ const started=Date.now(),r=spawnSync(process.execPath,['--max-old-space-size=256','--input-type=module','-e',script],{encoding:'utf8',timeout:60000});
+ const took=Date.now()-started;
+ assert.equal(r.status,0,`child exit ${r.status} ${r.signal??''} after ${took} ms: ${(r.stderr??'').split('\n').find(l=>/FATAL|Error/.test(l))??''}`);
+ assert.equal(r.stdout.trim(),'unreadable-metadata');assert.ok(took<10000,`${took} ms`);
+});

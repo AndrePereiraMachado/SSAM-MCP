@@ -1,14 +1,18 @@
 // A minimal, read-only ECMA-335 reader for the feature toggles of an ODC Studio, from its assemblies alone (no .NET, no
 // Studio run): PE -> CLI header -> metadata root -> streams (#~ or #-, #Strings, #Blob, #US) -> tables 0x00-0x0B (Module,
 // TypeRef, TypeDef, FieldPtr, Field, MethodPtr, MethodDef, ParamPtr, Param, InterfaceImpl, MemberRef, Constant).
-// Every read is bounded by the buffer; anything that does not close is "unreadable metadata", never a guess.
+// Every read is bounded by the buffer and the work by the input: at most 256 MiB per file, 1024 bytes per name, each name
+// decoded once and 32 MiB of names per file. Anything that does not close is "unreadable metadata", never a guess.
 import fs from 'node:fs';
 export const FEATURES_VALUES={namespace:'ServiceStudio.Common.FeatureManagement',name:'FeaturesValues'};
 const GUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 // The return type of a getter signature (ELEMENT_TYPE_*) the feature provider has a kind for.
 const KIND={0x02:'Boolean',0x08:'Integer',0x0e:'String'};
 const unreadable=why=>Object.assign(Error(`unreadable metadata: ${why}`),{code:'unreadable-metadata'});
+export const METADATA_LIMITS={fileBytes:256*1024*1024,nameBytes:1024,namesBytes:32*1024*1024};
 export function readMetadata(input){
+ const bytes=Buffer.isBuffer(input)?input.length:fs.statSync(input).size;
+ if(bytes>METADATA_LIMITS.fileBytes)throw unreadable(`the file is larger than ${METADATA_LIMITS.fileBytes/1024/1024} MiB`);
  const b=Buffer.isBuffer(input)?input:fs.readFileSync(input);
  const need=(o,n,what)=>{if(!Number.isInteger(o)||o<0||o+n>b.length)throw unreadable(`${what} is outside the file`);return o;};
  const u8=(o,what='a byte')=>b[need(o,1,what)],u16=(o,what='a field')=>b.readUInt16LE(need(o,2,what)),u32=(o,what='a field')=>b.readUInt32LE(need(o,4,what));
@@ -46,12 +50,22 @@ export function readMetadata(input){
  if(q>T.end)throw unreadable('the tables are larger than their stream');
  const rd=(o,n)=>n===2?u16(o,'a table cell'):u32(o,'a table cell');
  const row=(t,r)=>{if(r<1||r>rows[t])throw unreadable(`row ${r} of table ${t} does not exist`);return start[t]+(r-1)*size[t];};
- const str=i=>{let o=streams['#Strings'].start+i,s='';if(o>=streams['#Strings'].end)throw unreadable('a name is outside #Strings');for(;o<streams['#Strings'].end&&b[o];o++)s+=String.fromCharCode(b[o]);if(o>=streams['#Strings'].end)throw unreadable('a name does not end');return Buffer.from(s,'latin1').toString('utf8');};
+ // A name of #Strings: at most nameBytes long, decoded once per index, within a budget of namesBytes per file.
+ const names=new Map();let decoded=0;
+ const str=i=>{
+  const known=names.get(i);if(known!==undefined)return known;
+  const heap=streams['#Strings'],from=heap.start+i;if(from>=heap.end)throw unreadable('a name is outside #Strings');
+  const limit=Math.min(heap.end,from+METADATA_LIMITS.nameBytes+1);let o=from;while(o<limit&&b[o])o++;
+  if(o>=heap.end)throw unreadable('a name does not end');
+  if(o-from>METADATA_LIMITS.nameBytes)throw unreadable(`a name is longer than ${METADATA_LIMITS.nameBytes} bytes`);
+  decoded+=o-from;if(decoded>METADATA_LIMITS.namesBytes)throw unreadable(`the names read exceed ${METADATA_LIMITS.namesBytes/1024/1024} MiB`);
+  const value=b.toString('utf8',from,o);names.set(i,value);return value;
+ };
  const compressed=(o,end)=>{const x=u8(o);if((x&0x80)===0)return [x,1];if((x&0xc0)===0x80){if(o+2>end)throw unreadable('a length is cut');return [((x&0x3f)<<8)|u8(o+1),2];}if((x&0xe0)===0xc0){if(o+4>end)throw unreadable('a length is cut');return [((x&0x1f)<<24)|(u8(o+1)<<16)|(u8(o+2)<<8)|u8(o+3),4];}throw unreadable('an invalid compressed length');};
  const heapBlob=(stream,i)=>{const s=streams[stream],o=s.start+i;if(o>=s.end)throw unreadable(`an entry is outside ${stream}`);const [length,used]=compressed(o,s.end);if(o+used+length>s.end)throw unreadable(`an entry is cut in ${stream}`);return b.subarray(o+used,o+used+length);};
  const blob=i=>heapBlob('#Blob',i);
  const fieldAt=r=>rows[0x03]?rd(row(0x03,r),idx(0x04)):r,methodAt=r=>rows[0x05]?rd(row(0x05,r),idx(0x06)):r;
- const typeDefs=()=>{const out=[];for(let r=1;r<=rows[0x02];r++){const o=row(0x02,r);out.push({row:r,name:str(rd(o+4,si)),namespace:str(rd(o+4+si,si)),fieldList:rd(o+4+si*2+tdor,idx(0x04)),methodList:rd(o+4+si*2+tdor+idx(0x04),idx(0x06))});}return out;};
+ const typeDefs=()=>{const out=[];for(let r=1;r<=rows[0x02];r++){const o=row(0x02,r);out.push({row:r,nameIndex:rd(o+4,si),namespaceIndex:rd(o+4+si,si),fieldList:rd(o+4+si*2+tdor,idx(0x04)),methodList:rd(o+4+si*2+tdor+idx(0x04),idx(0x06))});}return out;};
  // The field and method rows a type owns (FieldList/MethodList up to the next type's, through the Ptr tables when present).
  const members=type=>{
   const all=typeDefs(),next=all[type.row]??null,ptrF=rows[0x03]||rows[0x04],ptrM=rows[0x05]||rows[0x06];
@@ -60,12 +74,16 @@ export function readMetadata(input){
  };
  const field=r=>{const o=row(0x04,r);return {row:r,name:str(rd(o+2,si))};};
  const method=r=>{const o=row(0x06,r);return {row:r,name:str(rd(o+8,si)),signature:blob(rd(o+8+si,bi))};};
- const typeRef=r=>{const o=row(0x01,r);return {row:r,name:str(rd(o+rs,si)),namespace:str(rd(o+rs+si,si))};};
- const memberRefs=()=>{const out=[];for(let r=1;r<=rows[0x0a];r++){const o=row(0x0a,r),parent=rd(o,mrp);out.push({row:r,parentTag:parent&7,parentRow:parent>>3,name:str(rd(o+mrp,si))});}return out;};
+ const typeRef=r=>{const o=row(0x01,r);return {row:r,nameIndex:rd(o+rs,si),namespaceIndex:rd(o+rs+si,si)};};
+ // Whether a TypeDef or TypeRef row is the given type: its name first, its namespace only when the name matches.
+ const is=(t,{namespace,name})=>str(t.nameIndex)===name&&str(t.namespaceIndex)===namespace;
+ // MemberRef rows without their names: the caller decodes (name) only the rows it keeps.
+ const memberRefs=()=>{const out=[];for(let r=1;r<=rows[0x0a];r++){const o=row(0x0a,r),parent=rd(o,mrp);out.push({row:r,parentTag:parent&7,parentRow:parent>>3,nameIndex:rd(o+mrp,si)});}return out;};
  const constants=()=>{const out=[];for(let r=1;r<=rows[0x0b];r++){const o=row(0x0b,r),parent=rd(o+2,hc);out.push({type:u8(o),parentTag:parent&3,parentRow:parent>>2,value:blob(rd(o+2+hc,bi))});}return out;};
- // The user strings (#US: UTF-16 literals of ldstr), each with its trailing flag byte.
- const userStrings=()=>{const s=streams['#US'],out=[];if(!s)return out;for(let o=s.start+1;o<s.end;){if(b[o]===0){o++;continue;}const [length,used]=compressed(o,s.end);if(o+used+length>s.end)throw unreadable('a user string is cut');if(length>1)out.push(b.toString('utf16le',o+used,o+used+length-1));o+=used+length;}return out;};
- return {rows,typeDefs,members,field,method,typeRef,memberRefs,constants,userStrings};
+ // The user strings (#US: UTF-16 literals of ldstr, each with its trailing flag byte) of exactly chars characters; the
+ // others are skipped without being decoded.
+ const userStrings=chars=>{const s=streams['#US'],out=[];if(!s)return out;for(let o=s.start+1;o<s.end;){if(b[o]===0){o++;continue;}const [length,used]=compressed(o,s.end);if(o+used+length>s.end)throw unreadable('a user string is cut');if(length===chars*2+1)out.push(b.toString('utf16le',o+used,o+used+length-1));o+=used+length;}return out;};
+ return {rows,typeDefs,members,field,method,typeRef,memberRefs,constants,userStrings,name:str,is};
 }
 // The return type of a method signature: calling convention, parameter count, custom modifiers, then the type.
 function returnKind(signature){
@@ -80,7 +98,7 @@ function returnKind(signature){
 // provider's kinds is left out.
 export function featureCatalog(commonDll){
  const m=readMetadata(commonDll);
- const type=m.typeDefs().find(t=>t.namespace===FEATURES_VALUES.namespace&&t.name===FEATURES_VALUES.name);
+ const type=m.typeDefs().find(t=>m.is(t,FEATURES_VALUES));
  if(!type)throw unreadable(`${FEATURES_VALUES.namespace}.${FEATURES_VALUES.name} is not defined there`);
  const {fields,methods}=m.members(type),own=new Set(fields);
  const keys=new Map();
@@ -99,11 +117,11 @@ export function featureCatalog(commonDll){
 // parent is that TypeRef), sorted.
 export function featureReads(dll){
  const m=readMetadata(dll),refs=new Set();
- for(let r=1;r<=m.rows[0x01];r++){const t=m.typeRef(r);if(t.namespace===FEATURES_VALUES.namespace&&t.name===FEATURES_VALUES.name)refs.add(r);}
+ for(let r=1;r<=m.rows[0x01];r++)if(m.is(m.typeRef(r),FEATURES_VALUES))refs.add(r);
  const out=new Set();
- if(refs.size)for(const x of m.memberRefs())if(x.parentTag===1&&refs.has(x.parentRow)&&x.name.startsWith('get_'))out.add(x.name.slice(4));
+ if(refs.size)for(const x of m.memberRefs()){if(x.parentTag!==1||!refs.has(x.parentRow))continue;const name=m.name(x.nameIndex);if(name.startsWith('get_'))out.add(name.slice(4));}
  return [...out].sort();
 }
 // Every GUID literal of an assembly's user strings, lowercase (the model features of OutSystems.Model.dll are declared
 // with Guid.Parse("...")).
-export function userStringGuids(dll){return new Set(readMetadata(dll).userStrings().filter(s=>GUID.test(s)).map(s=>s.toLowerCase()));}
+export function userStringGuids(dll){return new Set(readMetadata(dll).userStrings(36).filter(s=>GUID.test(s)).map(s=>s.toLowerCase()));}
