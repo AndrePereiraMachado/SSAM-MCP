@@ -1,5 +1,5 @@
 // The folders the person approved for file.upload on this machine (docs/FASE2-AGENTE.md 4.4 and docs/AGENTE-CLIENTE.md):
-// private/upload-roots.json = {schema: "ssam-upload-roots/1", roots: [{path, real, addedAt}]}, written atomically and
+// private/upload-roots.json = {schema: "ssam-upload-roots/1", roots: [{path, real, id, addedAt}]}, written atomically and
 // read again at every upload, so a change counts without a restart. private/ is never readable nor writable by the
 // server and no kind reads or writes this file; only the person changes it, with `ssam-agent roots add|remove|list` (the
 // app's "Folders SSAM may read" runs the same commands). The hello never carries the list: folder names are private.
@@ -22,7 +22,13 @@ export function readRoots(dataRoot, { files = fs } = {}) {
   try { value = JSON.parse(files.readFileSync(rootsFile(dataRoot), 'utf8').replace(/^\uFEFF/, '')); } catch { return []; }
   if (value?.schema !== ROOTS_SCHEMA || !Array.isArray(value.roots)) return [];
   return value.roots.filter(entry => entry && typeof entry.path === 'string' && typeof entry.real === 'string')
-    .map(entry => ({ path: entry.path, real: entry.real, addedAt: typeof entry.addedAt === 'string' ? entry.addedAt : null }));
+    .map(entry => ({ path: entry.path, real: entry.real, id: typeof entry.id === 'string' ? entry.id : null, addedAt: typeof entry.addedAt === 'string' ? entry.addedAt : null }));
+}
+
+// The identity of a file or folder, volume and file id, in the native core's spelling (VVVVVVVV:IIIIIIIIIIIIIIII).
+export function fileIdentity(stat) {
+  const hex = (value, width) => BigInt.asUintN(64, BigInt(value)).toString(16).toUpperCase().padStart(width, '0');
+  return hex(stat.dev, 8) + ':' + hex(stat.ino, 16);
 }
 
 function writeRoots(dataRoot, roots) {
@@ -83,7 +89,9 @@ export function checkApproval(folder, { dataRoot, runtimeRoot = dataRoot, env = 
   } catch { return { problem: `${shown} is not an existing folder` }; }
   const resolved = folderProblem(real, context);
   if (resolved) return { problem: `${shown} leads to a folder that ${resolved}` };
-  return { path: parsed.normalized, real };
+  let id;
+  try { id = fileIdentity(files.statSync(real, { bigint: true })); } catch { return { problem: ` is not an existing folder` }; }
+  return { path: parsed.normalized, real, id };
 }
 
 // The CLI of `roots` (Node and native print the same lines): add | remove | list. -> exit code.
@@ -116,7 +124,7 @@ export function rootsCommand({ op, folder, dataRoot, runtimeRoot = dataRoot, jso
     say(`Already approved: ${checked.path}.`);
     return 0;
   }
-  writeRoots(dataRoot, [...roots, { path: checked.path, real: checked.real, addedAt: now().toISOString() }]);
+  writeRoots(dataRoot, [...roots, { path: checked.path, real: checked.real, id: checked.id, addedAt: now().toISOString() }]);
   say(`Approved: SSAM may read files in ${checked.path} when a request names them (one file at a time, up to 64 MiB).`);
   return 0;
 }

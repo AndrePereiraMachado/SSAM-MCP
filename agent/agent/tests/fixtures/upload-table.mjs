@@ -76,6 +76,12 @@ export function uploadFixture({ prefix = 'ssam-upload-' } = {}) {
   }
   approve(data, R, runtime);
   for (const [i, [letter]] of signs.entries()) approve(data, path.join(base, 'signs' + i, letter), runtime);  approve(data, path.join(base, 'rootlink'), runtime);
+  // A plain approved folder later replaced by a junction to another folder, and one deleted and created again.
+  for (const name of ['swapped', 'swapped-target', 'recreated']) { fs.mkdirSync(path.join(base, name)); fs.writeFileSync(path.join(base, name, 'x.csv'), name + '\n'); }
+  approve(data, path.join(base, 'swapped'), runtime);
+  approve(data, path.join(base, 'recreated'), runtime);
+  fs.rmSync(path.join(base, 'swapped'), { recursive: true }); junction(path.join(base, 'swapped-target'), path.join(base, 'swapped'));
+  fs.rmSync(path.join(base, 'recreated'), { recursive: true }); fs.mkdirSync(path.join(base, 'recreated')); fs.writeFileSync(path.join(base, 'recreated', 'x.csv'), 'recreated\n');
   // The approved junction now leads to another folder.
   fs.rmdirSync(path.join(base, 'rootlink')); junction(path.join(base, 'real2'), path.join(base, 'rootlink'));
   const at = (...parts) => path.join(R, ...parts);
@@ -122,6 +128,8 @@ export function uploadFixture({ prefix = 'ssam-upload-' } = {}) {
     ['outside the approved folders', { path: path.join(base, 'other', 'c.csv'), maxBytes: max }, 'UPLOAD_ROOT_NOT_APPROVED'],
     ['the approved folder itself', { path: R, maxBytes: max }, 'PATH_FORBIDDEN'],
     ['a junction that escapes', { path: at('link', 'secret.csv'), maxBytes: max }, 'PATH_LEAVES_ROOT'],
+    ['a plain approved folder replaced by a junction', { path: path.join(base, 'swapped', 'x.csv'), maxBytes: max }, 'PATH_LEAVES_ROOT'],
+    ['a plain approved folder deleted and created again', { path: path.join(base, 'recreated', 'x.csv'), maxBytes: max }, 'PATH_LEAVES_ROOT'],
     ['an approved junction that now leads elsewhere', { path: path.join(base, 'rootlink', 'x.csv'), maxBytes: max }, 'PATH_LEAVES_ROOT'],
     ['a junction swapped between the checks and the open', { path: at('swap', 'b.txt'), maxBytes: max,
       beforeOpen: { move: [[at('swap'), path.join(base, 'swap-old')], [path.join(base, 'swap-evil'), at('swap')]] } }, 'PATH_LEAVES_ROOT'],

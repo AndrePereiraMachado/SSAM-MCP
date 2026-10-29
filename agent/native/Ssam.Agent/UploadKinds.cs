@@ -63,9 +63,15 @@ internal sealed class UploadKinds(string dataRoot, string runtimeRoot, Blobs? bl
         string rootReal;
         try { rootReal = NativeFileIdentity.RealDirectory(match.Root.Path); }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException) { throw NotSent("UPLOAD_ROOT_NOT_APPROVED", "The approved folder that holds this path no longer exists; approve it again"); }
-        // The approved folder must still be the same folder: equal by file identity (volume and file id), not by spelling.
+        // The approved folder must still be the same folder: its current real path is the recorded one exactly (no link or
+        // junction now on the way), that folder is not itself a link or junction, and it has the file identity (volume and
+        // file id) recorded when it was approved (a root recorded without one keeps the exact path rule).
         bool sameRoot;
-        try { sameRoot = NativeFileIdentity.IdentityOf(match.Root.Path) == NativeFileIdentity.IdentityOf(match.Root.Real); }
+        try
+        {
+            sameRoot = rootReal == match.Root.Real && (File.GetAttributes(match.Root.Real) & FileAttributes.ReparsePoint) == 0
+                && (match.Root.Id == null || NativeFileIdentity.IdentityOf(match.Root.Real) == match.Root.Id);
+        }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException) { sameRoot = false; }
         if (!sameRoot || LocalPaths.Network(rootReal))
             throw NotSent("PATH_LEAVES_ROOT", "The approved folder that holds this path now leads to another place through a link or junction; approve it again");

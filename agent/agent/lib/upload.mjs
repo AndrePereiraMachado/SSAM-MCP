@@ -19,7 +19,7 @@ import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { AgentError, refuse } from './errors.mjs';
 import { parseLocalPath, insidePath, insideExact, samePath, networkPath, flavor, EXTENSION } from './local-paths.mjs';
-import { readRoots } from './upload-roots.mjs';
+import { readRoots, fileIdentity } from './upload-roots.mjs';
 
 export const UPLOAD_KIND = 'file.upload';
 export const UPLOAD_MAX_BYTES = 64 * 1024 * 1024;
@@ -102,9 +102,14 @@ export async function prepareUpload(params, { dataRoot, runtimeRoot = dataRoot, 
   const { index, root, relative } = approvedRoot(parsed.normalized, readRoots(dataRoot), platform);
   let rootReal;
   try { rootReal = files.realpath(root.path); } catch { throw notSent('UPLOAD_ROOT_NOT_APPROVED', 'The approved folder that holds this path no longer exists; approve it again'); }
-  // The approved folder must still be the same folder: equal by file identity (volume and file id), not by spelling.
+  // The approved folder must still be the same folder: its current real path is the recorded one exactly (no link or
+  // junction now on the way), that folder is not itself a link or junction, and it has the file identity (volume and file
+  // id) recorded when it was approved (a root recorded before 0.3.4's identity keeps the exact path rule).
   let sameRoot = false;
-  try { const now = files.stat(root.path); const then = files.stat(root.real); sameRoot = now.dev === then.dev && now.ino === then.ino; } catch { sameRoot = false; }
+  try {
+    const lstat = (files.lstat ?? (file => fs.lstatSync(file)))(root.real);
+    sameRoot = rootReal === root.real && !lstat.isSymbolicLink() && (root.id === null || root.id === undefined || fileIdentity(files.stat(root.real)) === root.id);
+  } catch { sameRoot = false; }
   if (!sameRoot || networkPath(rootReal, platform))
     throw notSent('PATH_LEAVES_ROOT', 'The approved folder that holds this path now leads to another place through a link or junction; approve it again');
   await hooks.beforeOpen?.();

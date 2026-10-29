@@ -12,7 +12,7 @@ import { createHash } from 'node:crypto';
 import { fakeHub } from '../../agent/tests/fixtures/fake-hub.mjs';
 import { uploadFixture, moveHook, tempProblem, MiB, foldedSiblings } from '../../agent/tests/fixtures/upload-table.mjs';
 import { prepareUpload } from '../../agent/lib/upload.mjs';
-import { readRoots, rootsFile } from '../../agent/lib/upload-roots.mjs';
+import { readRoots, rootsFile, fileIdentity } from '../../agent/lib/upload-roots.mjs';
 import { insidePath } from '../../agent/lib/local-paths.mjs';
 
 const app = fileURLToPath(new URL('../../', import.meta.url));
@@ -82,7 +82,7 @@ test('native file.upload through the channel: exactly {blob}, the deadline and t
   assert.ok(!q.hub.hellos[0].agent.kinds.includes('screen.render'));
   // The approvals of the fixture, now in the qualification root (the file is read at every call).
   fs.copyFileSync(rootsFile(f.data), rootsFile(q.root));
-  assert.equal(readRoots(q.root).length, 7);
+  assert.equal(readRoots(q.root).length, 9);
   const file = path.join(f.approved, 'sub', 'b.txt');
   let answer = await q.call({ path: file, maxBytes: 64 * MiB }, { deadline: Date.now() + 120000 });
   assert.equal(answer.ok, true, JSON.stringify(answer));
@@ -141,6 +141,8 @@ test('native roots: add, list, remove and every approval refusal, with the Node 
   const [entry] = readRoots(f.data);
   assert.equal(entry.path.toLowerCase(), f.approved.toLowerCase());
   assert.equal(entry.real.toLowerCase(), fs.realpathSync.native(f.approved).toLowerCase());
+  // The identity the native core records is the one the Node agent computes (volume and file id).
+  assert.equal(entry.id, fileIdentity(fs.statSync(f.approved, { bigint: true })));
   r = roots('add', '--folder', f.approved.toUpperCase());
   assert.match(r.stdout, /Already approved/);
   r = roots('list', '--json');

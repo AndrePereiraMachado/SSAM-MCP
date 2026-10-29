@@ -227,6 +227,7 @@ test('roots: add, list, remove, and the same folder twice', { skip }, async t =>
   assert.equal(entry.path, f.approved[0].toUpperCase() + f.approved.slice(1));
   assert.equal(entry.real.toLowerCase(), fs.realpathSync.native(f.approved).toLowerCase());
   assert.ok(!Number.isNaN(Date.parse(entry.addedAt)));
+  assert.match(entry.id, /^[0-9A-F]{8}:[0-9A-F]{16}$/);
   assert.deepEqual(JSON.parse(fs.readFileSync(rootsFile(f.data), 'utf8')).schema, 'ssam-upload-roots/1');
   r = roots('add', f.approved.toUpperCase(), f);
   assert.equal(r.code, 0); assert.match(r.out, /Already approved/);

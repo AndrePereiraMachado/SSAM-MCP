@@ -8,7 +8,7 @@ namespace Ssam.Agent;
 internal static class UploadRoots
 {
     internal const string Schema = "ssam-upload-roots/1";
-    internal sealed record Root(string Path, string Real, string? AddedAt);
+    internal sealed record Root(string Path, string Real, string? AddedAt, string? Id = null);
     private static readonly string[] MacSystem = ["/System", "/Library", "/Applications", "/usr", "/bin", "/sbin", "/etc", "/private", "/var", "/dev", "/cores", "/opt", "/Volumes", "/Network"];
     internal static string File(string dataRoot) => System.IO.Path.Combine(dataRoot, "private", "upload-roots.json");
 
@@ -21,7 +21,7 @@ internal static class UploadRoots
         var result = new List<Root>();
         foreach (var entry in roots)
             if (entry is JsonObject row && StudioKinds.Text(row["path"]) is string path && StudioKinds.Text(row["real"]) is string real)
-                result.Add(new(path, real, StudioKinds.Text(row["addedAt"])));
+                result.Add(new(path, real, StudioKinds.Text(row["addedAt"]), StudioKinds.Text(row["id"])));
         return result;
     }
 
@@ -29,7 +29,7 @@ internal static class UploadRoots
     {
         var file = File(dataRoot);
         Directory.CreateDirectory(System.IO.Path.GetDirectoryName(file)!);
-        var array = new JsonArray(roots.Select(r => (JsonNode?)new JsonObject { ["path"] = r.Path, ["real"] = r.Real, ["addedAt"] = r.AddedAt }).ToArray());
+        var array = new JsonArray(roots.Select(r => (JsonNode?)new JsonObject { ["path"] = r.Path, ["real"] = r.Real, ["id"] = r.Id, ["addedAt"] = r.AddedAt }).ToArray());
         var temporary = file + "." + Environment.ProcessId + "." + Guid.NewGuid().ToString("N") + ".tmp";
         System.IO.File.WriteAllText(temporary, new JsonObject { ["schema"] = Schema, ["roots"] = array }.ToJsonString(new() { WriteIndented = true }) + "\n");
         System.IO.File.Move(temporary, file, true);
@@ -115,7 +115,9 @@ internal static class UploadRoots
         var (path, real, problem) = Check(folder, dataRoot, runtimeRoot);
         if (problem != null) return Fail(problem + ". Nothing was approved.");
         if (roots.Any(r => LocalPaths.Same(r.Path, path!) || LocalPaths.Same(r.Real, real!))) { output.WriteLine($"Already approved: {path}."); return 0; }
-        roots.Add(new(path!, real!, DateTimeOffset.UtcNow.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", System.Globalization.CultureInfo.InvariantCulture)));
+        string id;
+        try { id = NativeFileIdentity.IdentityOf(real!); } catch (IOException) { return Fail(LocalPaths.Quoted(path!) + " is not an existing folder. Nothing was approved."); }
+        roots.Add(new(path!, real!, DateTimeOffset.UtcNow.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", System.Globalization.CultureInfo.InvariantCulture), id));
         Write(dataRoot, roots);
         output.WriteLine($"Approved: SSAM may read files in {path} when a request names them (one file at a time, up to 64 MiB).");
         return 0;
