@@ -33,6 +33,7 @@ import { buildPolicyOf, servedBuildOf, studioIdentity, studioRefusal, studioVers
 import { recordStudioVersions } from './studio-version-state.mjs';
 import { UNKNOWN_EXIT } from './hosted/network-check.mjs';
 import { createBridgeStore } from './bridge-store.mjs';
+import { recordEvent } from '../../../facade/friction-store.mjs';
 
 // A Windows balloon on the server machine (owner test, 2026-10-08); off with SSAM_ACCESS_NOTIFY=0, never fails a call.
 function notifyOwner(title, text) {
@@ -57,6 +58,7 @@ export const CALL_KINDS = Object.freeze(['studio.processes', 'odc.pipe', 'odc.at
   'file.put', 'file.get', 'file.list', 'file.sync', 'net.probe']);
 const LANES = ['odc', 'o11'];
 const STUDIO = { odc: 'ODC Studio', o11: 'Service Studio' };
+export function bridgeReports(value){return (Array.isArray(value)?value:[]).filter(r=>LANES.includes(r.lane)&&/^\d+\.\d+\.\d+$/.test(r.studioVersion)&&/^(v\d+|d\d+)$/.test(r.protocol)&&Number.isSafeInteger(r.sequence)&&r.sequence>0&&['installed','active','failed','fallback'].includes(r.status)).slice(0,16).map(r=>({lane:r.lane,studioVersion:r.studioVersion,protocol:r.protocol,sequence:r.sequence,status:r.status,reason:/^[A-Z_]{1,64}$/.test(r.reason??'')?r.reason:'UNSPECIFIED'}));}
 const HEX32 = /^[0-9a-f]{32}$/;
 const INDEX = /^(0|[1-9][0-9]{0,5})$/;
 const SHA256 = /^[0-9a-f]{64}$/;
@@ -126,7 +128,7 @@ export const normalizeKernel = (kernel = {}) => {
   const out = { o11: threePart(kernel?.o11), odc: threePart(kernel?.odc),
     odcBridge: typeof kernel?.odcBridge === 'string' && kernel.odcBridge ? kernel.odcBridge : null,
     ...(kernel?.o11Hook === 'h1' ? { o11Hook: 'h1' } : {}),
-    ...(Array.isArray(kernel?.o11BridgeAccepted) ? {o11BridgeAccepted: kernel.o11BridgeAccepted.filter(p => /^h\d+$/.test(p))} : {}),
+    ...(Array.isArray(kernel?.o11BridgeAccepted) ? {o11BridgeAccepted: kernel.o11BridgeAccepted.filter(p => /^d\d+$/.test(p))} : {}),
     // kernel.json odcBridgeAccepted (owner, 2026-10-08): older ODC bridges the server still serves, so a bridge bump does
     // not cut the customers that have not installed the new agent package yet.
     ...(Array.isArray(kernel?.odcBridgeAccepted) ? { odcBridgeAccepted: kernel.odcBridgeAccepted.filter(v => typeof v === 'string' && v) } : {}) };
@@ -157,12 +159,17 @@ export const O11_HOOKS = Object.freeze(['dev', 'h1']);
 export function compatibility(hello, kernel, lanes, { refused = null, bridges = null } = {}) {
   const k = normalizeKernel(kernel);
   return Object.fromEntries(LANES.map(lane => {
-    const result = laneCompatibility(lane, hello, k, lanes ?? [], refused?.[lane] ?? null);
     const capable = hello?.capabilities?.bridgeOffer === true || hello?.capabilities?.includes?.('bridgeOffer');
-    if (capable && result.code === 'AGENT_PACK_MISMATCH') {
-      const version = threePart(hello?.studios?.[lane]?.installed?.version);
-      const accepted = lane === 'odc' ? [k.odcBridge,...(k.odcBridgeAccepted ?? [])] : [k.o11Hook,...(k.o11BridgeAccepted ?? [])];
-      const offer = version && bridges?.offer(lane, version, accepted);
+    const reports=Array.isArray(hello?.bridges)?hello.bridges:[];
+    const version=threePart(hello?.studios?.[lane]?.installed?.version);
+    const accepted=lane==='odc'?[k.odcBridge,...(k.odcBridgeAccepted??[])]:k.o11BridgeAccepted??[];
+    const offer=capable&&version&&bridges?.offer(lane,version,accepted,reports);
+    const m=offer?(typeof offer.manifest==='string'?JSON.parse(offer.manifest):offer.manifest):null;
+    const active=m&&reports.some(r=>r.lane===lane&&r.studioVersion===version&&r.protocol===m.protocol&&r.sequence===m.sequence&&['active','installed'].includes(r.status));
+    const effective=active?{...hello,pack:{...hello.pack,...(lane==='odc'?{odcBridge:m.protocol}:{o11BuiltFor:version,o11Hook:m.protocol})}}:hello;
+    const result = laneCompatibility(lane, effective, k, lanes ?? [], refused?.[lane] ?? null);
+    const needsO11=lane==='o11'&&threePart(hello?.pack?.o11BuiltFor)!==version;
+    if (capable && offer && !active && (result.code === 'AGENT_PACK_MISMATCH'||(result.ok&&needsO11))) {
       if (offer) return [lane, {ok:false, code:'BRIDGE_UPDATE_REQUIRED', message:'Install the signed bridge and reconnect.', bridgeOffer:offer}];
     }
     return [lane,result];
@@ -616,7 +623,12 @@ export function createAgentHub({ dir, store, kernel, kernelRefused = null, log =
     }
     state.customer = auth.customer; state.lanes = auth.lanes; state.closedFor = null;
     state.instance = h.instance;
-    state.hello = { agent: h.agent ?? null, pack: h.pack ?? null, studios: h.studios ?? null, o11Connection: h.o11Connection ?? null };
+    state.hello = { agent: h.agent ?? null, pack: h.pack ?? null, studios: h.studios ?? null, o11Connection: h.o11Connection ?? null, capabilities:h.capabilities??null, bridges:bridgeReports(h.bridges) };
+    for(const report of state.hello.bridges){
+      log({event:'bridge-report',token:auth.id,...report});
+      const customer=customerStateDir(path.join(dir,'customers',auth.id));
+      recordEvent({operation:'bridge_update',lane:report.lane,code:report.status==='failed'?report.reason:null,step:report.protocol+'-'+report.sequence,outcome:report.status==='failed'?'failure':'success'}, {root:customer,directory:path.join(customer,'.local','friction')});
+    }
     state.connectedAt = iso(); state.lastSeenAt = state.connectedAt;
     state.channel = { id: randomBytes(16).toString('hex'), agentSha256: auth.agentSha256, stream: null, pingTimer: null, lastPostAt: nowMs() };
     // A replacing instance: the old channel's late POSTs belong to calls that already failed.
@@ -823,10 +835,8 @@ export function createAgentHub({ dir, store, kernel, kernelRefused = null, log =
     if (retry) return reply(res, 429, 'RATE_LIMITED', 'Rate limit: ' + limits.ratePerMinute + ' agent requests per minute.', { 'retry-after': String(retry) });
     if (segments[2] === 'bridges') {
       const [, , , lane, studioVersion, protocol, digest, extra] = segments;
-      const accepted = lane === 'odc' ? [serverKernel.odcBridge,...(serverKernel.odcBridgeAccepted ?? [])] : [serverKernel.o11Hook,...(serverKernel.o11BridgeAccepted ?? [])];
       if (req.method !== 'GET' || extra !== undefined || !auth.lanes?.includes(lane) ||
-          // This backend only distributes bridges for the pair inside its image.
-          serverKernel[lane] !== studioVersion || !accepted.includes(protocol))
+          !/^(odc|o11)$/.test(lane))
         return reply(res,404,'NOT_FOUND','Not found.');
       const file = bridges.file(lane,studioVersion,protocol,digest);
       if (!file) return reply(res,404,'NOT_FOUND','Not found.');

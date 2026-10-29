@@ -12,7 +12,7 @@ export function verifyBridge(directory, publicKey) {
   if (!verify(null, bytes, publicKey, signature)) throw Error('Bridge manifest signature is invalid.');
   const m = JSON.parse(bytes);
   if (m.schema !== 1 || !['odc','o11'].includes(m.lane) || !version.test(m.studioVersion) ||
-      !/^(v\d+|h\d+)$/.test(m.protocol) || !/^net\d+\.\d+$/.test(m.runtime) ||
+      !/^(v\d+|d\d+)$/.test(m.protocol) || !Number.isSafeInteger(m.sequence) || m.sequence<1 || !/^net\d+\.\d+$/.test(m.runtime) ||
       !/^[a-fA-F0-9]{40}$/.test(m.authenticodeThumbprint) || !Array.isArray(m.files) || !m.files.length || m.files.length > 128)
     throw Error('Bridge manifest identity is invalid.');
   const files = new Map(), names = new Set();
@@ -34,18 +34,18 @@ export function createBridgeStore({root = process.env.SSAM_BRIDGES_DIR || '/app/
     keyFile = process.env.SSAM_BRIDGES_PUBLIC_KEY || '/app/bridges/public-key.pem'} = {}) {
   const key = publicKey || (()=>{try{return fs.readFileSync(keyFile);}catch{return null;}})();
   function read(lane, studioVersion, protocol) {
-    if (!key || !['odc','o11'].includes(lane) || !version.test(studioVersion) || !/^(v\d+|h\d+)$/.test(protocol)) return null;
+    if (!key || !['odc','o11'].includes(lane) || !version.test(studioVersion) || !/^(v\d+|d\d+)$/.test(protocol)) return null;
     try {
       const value = verifyBridge(path.join(root,lane,studioVersion,protocol),key);
       return value.manifest.lane === lane && value.manifest.studioVersion === studioVersion && value.manifest.protocol === protocol ? value : null;
     } catch { return null; }
   }
   return {
-    offer(lane, studioVersion, accepted) {
+    offer(lane, studioVersion, accepted, reports=[]) {
       let protocols=[];try{protocols=fs.readdirSync(path.join(root,lane,studioVersion));}catch{return null;}
       for(const protocol of protocols.filter(p=>accepted.includes(p)).sort((a,b)=>Number(b.slice(1))-Number(a.slice(1)))) {
         const b=read(lane,studioVersion,protocol);
-        if(b)return {lane,studioVersion,protocol,manifest:b.text,signature:b.signature};
+        if(b&&!reports.some(r=>r.status==='failed'&&r.lane===lane&&r.studioVersion===studioVersion&&r.protocol===protocol&&r.sequence>=b.manifest.sequence))return {lane,studioVersion,protocol,manifest:b.text,signature:b.signature};
       }
       return null;
     },

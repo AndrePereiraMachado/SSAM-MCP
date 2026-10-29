@@ -31,6 +31,7 @@ export function recordStudioVersions(dir, state, compatible, seen, version = pro
   const file = path.join(folder, 'studio-versions.json');
   const data = read(file);
   const token = {customer:state.customer, seen, agent:threePart(state.hello?.agent?.version),
+    bridges:state.hello?.bridges??[],
     packBridges:[state.hello?.pack?.odcBridge, state.hello?.pack?.o11BuiltFor].filter(v => typeof v === 'string' && /^[v\d.]+$/.test(v))};
   const versions = studioVersions(state.hello?.studios);
   for (const lane of ['odc','o11']) {
