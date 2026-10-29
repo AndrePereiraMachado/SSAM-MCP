@@ -32,10 +32,18 @@ internal sealed class BridgeFileLease : IDisposable
     public void Dispose() { foreach (var handle in handles) handle.Dispose(); handles.Clear(); }
 }
 
-internal sealed class BridgeLease(InstalledBridge bridge, BridgeFileLease files, Action? released = null) : IDisposable
+internal sealed class BridgeLease(InstalledBridge bridge, BridgeFileLease files, Action? released = null, Action? attempted = null) : IDisposable
 {
     internal InstalledBridge Bridge { get; } = bridge;
-    internal bool PreserveDirectory { get; set; }
-    private bool disposed;
-    public void Dispose() { if (disposed) return; disposed = true; files.Dispose(); released?.Invoke(); }
+    internal bool MayBeLoaded { get; private set; }
+    private bool closed, removed;
+    internal void Retain() { if (!MayBeLoaded) { attempted?.Invoke(); MayBeLoaded = true; } }
+    internal void Close() { if (!closed) { files.Dispose(); closed = true; } }
+    internal bool Retire()
+    {
+        if (removed) return true;
+        try { Close(); released?.Invoke(); removed = true; return true; }
+        catch { return false; }
+    }
+    public void Dispose() { if (!MayBeLoaded) Retire(); }
 }

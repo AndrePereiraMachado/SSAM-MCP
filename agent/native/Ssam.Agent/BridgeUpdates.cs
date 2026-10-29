@@ -8,9 +8,10 @@ using static Ssam.Agent.StudioKinds;
 
 namespace Ssam.Agent;
 
-internal sealed class SignedManifestRefusal(JsonObject manifest) : IOException("Bridge signer policy refused")
+internal sealed class SignedManifestRefusal(JsonObject manifest, string code = "SIGNER_REFUSED") : IOException(code == "TRUST_ANCHOR_MISSING" ? "Bridge trust anchors are not configured in this build" : "Bridge signer policy refused")
 {
     internal JsonObject Manifest { get; } = manifest;
+    internal string Code { get; } = code;
 }
 
 internal sealed record InstalledBridge(JsonObject Manifest, string Root, string Digest)
@@ -36,6 +37,8 @@ internal sealed class BridgeUpdates(string root, string runtime, string publicKe
     private readonly List<BridgeLease> leases = [];
     private readonly Dictionary<string, BridgeLease> snapshots = [];
     private readonly SemaphoreSlim prepareGate = new(1, 1);
+    private bool initialized;
+    private bool startupScan = Directory.Exists(Path.Combine(root, "private/bridge-loads"));
     internal JsonObject? Status { get; private set; } = O11Connection.Read(Path.Combine(root, "private/bridge-update.json"));
     internal JsonObject? WireStatus() => Status == null ? null : new() { ["status"] = Text(Status["status"]) is "installed" or "fallback" ? Text(Status["status"]) : "refused", ["lane"] = Text(Status["lane"]) is "odc" or "o11" ? Text(Status["lane"]) : null };
     internal Action? Changed { get; set; }
@@ -44,6 +47,7 @@ internal sealed class BridgeUpdates(string root, string runtime, string publicKe
     private static long Sequence(JsonNode m) => m["sequence"]?.GetValue<long>() ?? 0;
     private static string Pair(JsonNode m) => Text(m["lane"]) + "/" + Text(m["studioVersion"]);
     private static string Identity(JsonNode m) => Pair(m) + "/" + Text(m["protocol"]) + "/" + Sequence(m);
+    private static string InstanceKey(string lane, JsonObject context) => lane + "/" + Integer(context["pid"]) + "/" + StudioInstance.Start(Text(context["startedUtc"]));
     private static JsonObject ReadState(string root)
     {
         var file = Path.Combine(root, "private/bridge-state.json");
@@ -51,33 +55,38 @@ internal sealed class BridgeUpdates(string root, string runtime, string publicKe
             if ((File.Exists(candidate) || Directory.Exists(candidate)) && File.GetAttributes(candidate).HasFlag(FileAttributes.ReparsePoint)) return new() { ["broken"] = true };
         if (!File.Exists(file)) return new() { ["schema"] = 2, ["watermarks"] = new JsonObject(), ["reports"] = new JsonObject(), ["failures"] = new JsonObject() };
         var value = O11Connection.Read(file);
-        return value != null && Integer(value["schema"]) == 2 ? value : new() { ["broken"] = true };
+        return value != null && Integer(value["schema"]) == 2 && new[] { "watermarks", "reports", "failures" }.All(k => value[k] is JsonObject)
+            && value["reports"]!.AsObject().All(p => p.Value is JsonObject r && r["sequence"] is JsonValue sequence && sequence.TryGetValue<long>(out _)) ? value : new() { ["broken"] = true };
     }
     private void Save()
     {
         if (state["broken"] != null) throw new IOException("Bridge state is unreadable; automatic updates are disabled");
         NoLinks(Path.Combine(root, "private/bridge-state.json")); Atomic(Path.Combine(root, "private/bridge-state.json"), state.ToJsonString());
     }
-    private void Remember(JsonObject m, string status, string reason, JsonObject? context = null)
+    private bool Remember(JsonObject m, string status, string reason, JsonObject? context = null)
     {
         lock (stateGate)
         {
             var record = new JsonObject { ["lane"] = m["lane"]?.DeepClone(), ["studioVersion"] = m["studioVersion"]?.DeepClone(), ["protocol"] = m["protocol"]?.DeepClone(),
-                ["sequence"] = Sequence(m), ["status"] = status, ["reason"] = reason, ["updatedAt"] = DateTime.UtcNow.Ticks };
-            if (context != null) { record["pid"] = context["pid"]?.DeepClone(); record["startedUtc"] = context["startedUtc"]?.DeepClone(); }
-            state["reports"]![Identity(m)] = record; Save();
+                ["sequence"] = Sequence(m), ["status"] = status, ["reason"] = reason };
+            if (context != null) { record["pid"] = context["pid"]?.DeepClone(); record["startedUtc"] = StudioInstance.Start(Text(context["startedUtc"])); }
+            if (status == "refused") record["authenticated"] = true;
+            var previous = state["reports"]![Identity(m)]?.DeepClone() as JsonObject; previous?.Remove("updatedAt");
+            if (JsonNode.DeepEquals(previous, record)) return false;
+            record["updatedAt"] = DateTime.UtcNow.Ticks;
+            state["reports"]![Identity(m)] = record; Save(); return true;
         }
     }
     internal JsonArray Reports()
     {
         lock (stateGate)
         {
-            var ordered = (state["reports"] as JsonObject ?? new()).Select(p => (JsonObject)p.Value!).Where(r => Sequence(r) > 0)
+            var ordered = (state["reports"] as JsonObject ?? new()).Select(p => (JsonObject)p.Value!).Where(r => Sequence(r) > 0 && (Text(r["status"]) != "refused" || r["authenticated"]?.ToJsonString() == "true"))
                 .OrderByDescending(r => r["updatedAt"]?.GetValue<long>() ?? Sequence(r)).ToArray();
             var chosen = ordered.GroupBy(Pair).Select(g => g.First()).Take(16).ToList();
             foreach (var item in ordered) if (chosen.Count < 16 && !chosen.Contains(item)) chosen.Add(item);
             return new(chosen.OrderByDescending(r => r["updatedAt"]?.GetValue<long>() ?? Sequence(r)).Select(r => {
-                var record = (JsonObject)r.DeepClone(); record.Remove("pid"); record.Remove("startedUtc"); record.Remove("updatedAt");
+                var record = (JsonObject)r.DeepClone(); record.Remove("pid"); record.Remove("startedUtc"); record.Remove("updatedAt"); record.Remove("authenticated");
                 if (!Regex.IsMatch(Text(record["reason"]) ?? "", "^[A-Z_]{1,64}$")) record["reason"] = Text(record["status"])!.ToUpperInvariant();
                 return (JsonNode?)record;
             }).ToArray());
@@ -127,16 +136,17 @@ internal sealed class BridgeUpdates(string root, string runtime, string publicKe
         && !p.EndsWith('.') && !Regex.IsMatch(p, @"^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\.|$)", RegexOptions.IgnoreCase));
     private (JsonObject Manifest, string Text) VerifyManifest(JsonObject offer)
     {
-        if (string.IsNullOrEmpty(publicKey) || !Regex.IsMatch(thumbprint, "^[a-fA-F0-9]{40}$")) throw new IOException("Bridge trust anchors are not configured in this build");
+        if (string.IsNullOrEmpty(publicKey)) throw new IOException("Bridge trust anchors are not configured in this build");
         var text = ManifestText(offer["manifest"]);
         if (Encoding.UTF8.GetByteCount(text) > 1024 * 1024 || !BridgeTrust.Verify(Encoding.UTF8.GetBytes(text), Convert.FromBase64String(Text(offer["signature"]) ?? ""), publicKey)) throw new IOException("Invalid bridge manifest signature");
         var m = JsonNode.Parse(text) as JsonObject ?? throw new IOException("Invalid bridge manifest");
         var lane = Text(m["lane"]); var version = Text(m["studioVersion"]); var protocol = Text(m["protocol"]);
         if (Integer(m["schema"]) != 1 || lane is not ("odc" or "o11") || Sequence(m) is < 1 or > 9007199254740991
             || !Regex.IsMatch(version ?? "", @"^\d+\.\d+\.\d+$") || ProtocolNumber(protocol) < 0 || !Regex.IsMatch(Text(m["runtime"]) ?? "", @"^net\d+\.\d+$")
-            || !DateTimeOffset.TryParse(Text(m["createdAt"]), CultureInfo.InvariantCulture, DateTimeStyles.None, out _)
-            || !string.Equals(Text(m["authenticodeThumbprint"]), thumbprint, StringComparison.OrdinalIgnoreCase)) throw new IOException("Invalid bridge identity or certificate");
+            || !DateTimeOffset.TryParse(Text(m["createdAt"]), CultureInfo.InvariantCulture, DateTimeStyles.None, out _)) throw new IOException("Invalid bridge identity");
         foreach (var key in new[] { "lane", "studioVersion", "protocol" }) if (Text(offer[key]) != Text(m[key])) throw new IOException("Bridge offer differs from its signed manifest");
+        if (!Regex.IsMatch(thumbprint, "^[a-fA-F0-9]{40}$")) throw new SignedManifestRefusal(m, "TRUST_ANCHOR_MISSING");
+        if (!string.Equals(Text(m["authenticodeThumbprint"]), thumbprint, StringComparison.OrdinalIgnoreCase)) throw new SignedManifestRefusal(m);
         if (m["files"] is not JsonArray entries || entries.Count is < 1 or > 512) throw new IOException("Invalid bridge file list");
         var paths = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "manifest.json", "manifest.sig" }; long total = 0;
         foreach (var entry in entries)
@@ -180,8 +190,8 @@ internal sealed class BridgeUpdates(string root, string runtime, string publicKe
         {
             var file = Path.Combine(directory, Text(entry["path"])!);
             if (Path.GetExtension(file).Equals(".dll", StringComparison.OrdinalIgnoreCase) || Path.GetExtension(file).Equals(".exe", StringComparison.OrdinalIgnoreCase))
-                try { if (authenticode != null) await authenticode(file, token); else if (AuthenticodeTrust.Check(file, Text(entry["signer"])!, thumbprint)["ok"]?.GetValue<bool>() != true) throw new IOException("Signer policy refused"); }
-                catch (Exception e) when (e is not OperationCanceledException) { throw new IOException("Authenticode verification failed", e); }
+                if (authenticode != null) await authenticode(file, token);
+                else if (AuthenticodeTrust.Check(file, Text(entry["signer"])!, thumbprint)["ok"]?.GetValue<bool>() != true) throw new SignedManifestRefusal(m);
         }
     }
     private string Fingerprint(string directory)
@@ -246,11 +256,11 @@ internal sealed class BridgeUpdates(string root, string runtime, string publicKe
         lock (stateGate)
         {
             var failure = state["failures"]![Identity(bridge.Manifest)] as JsonObject ?? new JsonObject();
-            failure[Integer(context!["pid"]).ToString(CultureInfo.InvariantCulture)] = context["startedUtc"]!.DeepClone();
+            failure[Integer(context!["pid"]).ToString(CultureInfo.InvariantCulture)] = StudioInstance.Start(Text(context["startedUtc"]));
             state["failures"]![Identity(bridge.Manifest)] = failure.DeepClone();
             Watermark(bridge.Manifest, true); Remember(bridge.Manifest, "failed", "LOAD_FAILED", context);
             var previous = state["reports"]!.AsObject().Select(p => p.Value).OfType<JsonObject>().Where(r => Pair(r) == Pair(bridge.Manifest) && Sequence(r) < Sequence(bridge.Manifest) && Text(r["status"]) is "installed" or "active" or "fallback").OrderByDescending(Sequence).FirstOrDefault();
-            if (previous != null) Remember(previous, "fallback", "FALLBACK_PREVIOUS");
+            if (previous != null) Remember(previous, "installed", "FALLBACK_PREVIOUS");
             else Remember(bridge.Manifest, "failed", "FALLBACK_BUNDLED", context);
             Report("fallback", "The downloaded bridge failed to load; retry after the Studio restarts or a newer sequence arrives.", Text(bridge.Manifest["lane"])!);
         }
@@ -260,9 +270,10 @@ internal sealed class BridgeUpdates(string root, string runtime, string publicKe
     {
         lock (stateGate)
         {
+            if (snapshots.TryGetValue(Identity(bridge.Manifest) + "/" + Integer(context["pid"]) + "/" + StudioInstance.Start(Text(context["startedUtc"])), out var snapshot)) snapshot.Retain();
             Remember(bridge.Manifest, "active", "ACTIVE", context);
             state["active"] ??= new JsonObject();
-            state["active"]![Text(bridge.Manifest["lane"]) + "/" + Integer(context["pid"]) + "/" + Text(context["startedUtc"])] =
+            state["active"]![InstanceKey(Text(bridge.Manifest["lane"])!, context)] =
                 new JsonObject { ["studioVersion"] = bridge.Manifest["studioVersion"]?.DeepClone(), ["protocol"] = bridge.Protocol, ["identity"] = Identity(bridge.Manifest) };
             Save();
         }
@@ -271,10 +282,10 @@ internal sealed class BridgeUpdates(string root, string runtime, string publicKe
     {
         lock (stateGate)
         {
-            var active = state["active"]?[lane + "/" + Integer(context["pid"]) + "/" + Text(context["startedUtc"])];
+            var active = FindActive(lane, context);
             if (Text(active?["studioVersion"]) == Three(version)?.ToString()) return Text(active?["protocol"]);
             var record = (state["reports"] as JsonObject)?.Select(p => p.Value).FirstOrDefault(r => Text(r?["lane"]) == lane && Text(r?["studioVersion"]) == Three(version)?.ToString()
-                && Text(r?["status"]) == "active" && Integer(r?["pid"]) == Integer(context["pid"]) && Text(r?["startedUtc"]) == Text(context["startedUtc"]));
+                && Text(r?["status"]) == "active" && StudioInstance.Same(r, context));
             return Text(record?["protocol"]) ?? Text(pack?[lane == "odc" ? "odcBridge" : "o11Hook"]);
         }
     }
@@ -290,7 +301,7 @@ internal sealed class BridgeUpdates(string root, string runtime, string publicKe
                 if (state["failures"]![Identity(bridge.Manifest)] is JsonObject blocked)
                 {
                     var processKey = Integer(context?["pid"]).ToString(CultureInfo.InvariantCulture);
-                    if (Text(context?["startedUtc"]) == null || Text(blocked[processKey]) == Text(context?["startedUtc"])) continue;
+                    if (Text(context?["startedUtc"]) == null || StudioInstance.Start(Text(blocked[processKey])) == StudioInstance.Start(Text(context?["startedUtc"]))) continue;
                     if (blocked[processKey] != null) { blocked.Remove(processKey); Remember(bridge.Manifest, "installed", "STUDIO_RESTARTED"); }
                 }
             }
@@ -303,7 +314,7 @@ internal sealed class BridgeUpdates(string root, string runtime, string publicKe
         await prepareGate.WaitAsync(token);
         try
         {
-        var key = Identity(bridge.Manifest) + "/" + Integer(context["pid"]) + "/" + Text(context["startedUtc"]);
+        var key = Identity(bridge.Manifest) + "/" + Integer(context["pid"]) + "/" + StudioInstance.Start(Text(context["startedUtc"]));
         lock (stateGate) if (snapshots.TryGetValue(key, out var existing)) return existing;
         var directory = Path.Combine(root, "private/bridge-loads", Guid.NewGuid().ToString("N")[..12]); NoLinks(directory); Directory.CreateDirectory(directory);
         BridgeFileLease? held = null;
@@ -326,12 +337,16 @@ internal sealed class BridgeUpdates(string root, string runtime, string publicKe
                 ["manifest"] = File.ReadAllText(Path.Combine(directory, "manifest.json")), ["signature"] = File.ReadAllText(Path.Combine(directory, "manifest.sig")) });
             if (Hash(Encoding.UTF8.GetBytes(text)) != bridge.Digest) throw new IOException("The bridge changed while preparing the attach");
             await VerifyFiles(m, directory, token, generated);
-            Atomic(directory + ".json", context.ToJsonString());
+            var index = (JsonObject)context.DeepClone(); index["startedUtc"] = StudioInstance.Start(Text(context["startedUtc"]));
+            index["lane"] = bridge.Manifest["lane"]?.DeepClone(); index["studioVersion"] = bridge.Manifest["studioVersion"]?.DeepClone(); index["identity"] = Identity(bridge.Manifest);
+            Atomic(directory + ".json", index.ToJsonString());
             BridgeLease? lease = null;
-            lease = new BridgeLease(new(m, directory, bridge.Digest), held, () => { lock (stateGate) { snapshots.Remove(key); leases.Remove(lease!); } if (!lease!.PreserveDirectory) { NoLinks(directory); Directory.Delete(directory, true); File.Delete(directory + ".json"); } });
+            lease = new BridgeLease(new(m, directory, bridge.Digest), held,
+                () => { NoLinks(directory); if (Directory.Exists(directory)) Directory.Delete(directory, true); File.Delete(directory + ".json"); lock (stateGate) { snapshots.Remove(key); leases.Remove(lease!); } },
+                () => { index["attempted"] = true; Atomic(directory + ".json", index.ToJsonString()); });
             lock (stateGate) { leases.Add(lease); snapshots[key] = lease; } return lease;
         }
-        catch { held?.Dispose(); NoLinks(directory); if (Directory.Exists(directory)) Directory.Delete(directory, true); File.Delete(directory + ".json"); throw; }
+        catch { try { held?.Dispose(); NoLinks(directory); if (Directory.Exists(directory)) Directory.Delete(directory, true); File.Delete(directory + ".json"); } catch { } throw; }
         }
         finally { prepareGate.Release(); }
     }
@@ -349,11 +364,8 @@ internal sealed class BridgeUpdates(string root, string runtime, string publicKe
                 catch (Exception e) when (!token.IsCancellationRequested)
                 {
                     if (e is SignedManifestRefusal refused && state["broken"] == null) Watermark(refused.Manifest, true);
-                    try {
-                        var m = JsonNode.Parse(ManifestText(offer["manifest"])) as JsonObject;
-                        if (m != null && Text(m["lane"]) == lane && Three(Text(m["studioVersion"])) != null && ProtocolNumber(Text(m["protocol"])) >= 0 && Sequence(m) > 0)
-                            Remember(m, "refused", e.Message.Contains("anchors", StringComparison.OrdinalIgnoreCase) ? "TRUST_ANCHOR_MISSING" : Regex.IsMatch(e.Message, "signer|Authenticode", RegexOptions.IgnoreCase) ? "SIGNER_REFUSED" : "VERIFY_FAILED");
-                    } catch { /* An unreadable identity cannot be reported. */ }
+                    if (e is SignedManifestRefusal refusal && Text(refusal.Manifest["lane"]) == lane
+                        && Text(state["reports"]?[Identity(refusal.Manifest)]?["status"]) is not ("installed" or "active" or "failed")) Remember(refusal.Manifest, "refused", refusal.Code);
                     Report("refused", "Bridge update refused: " + (e is IOException ? e.Message : "invalid offer or interrupted download"), lane);
                 }
             }
@@ -373,7 +385,10 @@ internal sealed class BridgeUpdates(string root, string runtime, string publicKe
             foreach (var previous in await Inventory(lane, version, token))
             {
                 if (Sequence(previous.Manifest) > Sequence(m) || ProtocolNumber(previous.Protocol) > ProtocolNumber(protocol)) throw new IOException("Bridge sequence replay or protocol downgrade refused");
-                if (Sequence(previous.Manifest) == Sequence(m)) { if (previous.Digest != Hash(Encoding.UTF8.GetBytes(text))) throw new IOException("An installed bridge identity cannot be replaced"); return false; }
+                if (Sequence(previous.Manifest) == Sequence(m)) {
+                    if (previous.Digest != Hash(Encoding.UTF8.GetBytes(text))) throw new IOException("An installed bridge identity cannot be replaced");
+                    return Text(state["reports"]?[Identity(m)]?["status"]) is not ("active" or "failed") && Remember(m, "installed", "INSTALLED");
+                }
             }
             var destination = Path.Combine(Home, lane, version, protocol, Sequence(m).ToString(CultureInfo.InvariantCulture)); NoLinks(destination); Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
             var staging = Path.Combine(Path.GetDirectoryName(destination)!, ".staging-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(staging);
@@ -401,39 +416,105 @@ internal sealed class BridgeUpdates(string root, string runtime, string publicKe
         }
         catch { Watermark(m, true); throw; }
     }
+    private JsonNode? FindActive(string lane, JsonObject context)
+    {
+        if (state["active"] is not JsonObject active) return null;
+        if (active[InstanceKey(lane, context)] is { } exact) return exact;
+        foreach (var item in active)
+        {
+            var parts = item.Key.Split('/');
+            if (parts.Length == 3 && parts[0] == lane && int.TryParse(parts[1], out var pid)
+                && StudioInstance.Same(new JsonObject { ["pid"] = pid, ["startedUtc"] = parts[2] }, context)) return item.Value;
+        }
+        return null;
+    }
     internal bool IsActive(InstalledBridge bridge, JsonObject context)
     {
-        lock (stateGate) return Text(state["active"]?[Text(bridge.Manifest["lane"]) + "/" + Integer(context["pid"]) + "/" + Text(context["startedUtc"])]?["identity"]) == Identity(bridge.Manifest);
+        lock (stateGate) return Text(FindActive(Text(bridge.Manifest["lane"])!, context)?["identity"]) == Identity(bridge.Manifest);
     }
-    internal void Reconcile(JsonArray running, JsonObject? installed = null)
+    internal bool HasLeases { get { lock (stateGate) return leases.Count > 0; } }
+    internal bool NeedsReconcile { get { lock (stateGate) return state["broken"] == null && (startupScan || leases.Count > 0 || (state["active"] as JsonObject)?.Count > 0); } }
+    internal async Task Initialize(JsonObject? installed, CancellationToken token)
     {
-        if (!prepareGate.Wait(0)) return;
-        try {
-        bool Alive(JsonNode c) => running.Any(p => Integer(p?["pid"]) == Integer(c["pid"]) && Text(p?["startedUtc"]) == Text(c["startedUtc"]));
-        lock (stateGate)
+        if (initialized || state["broken"] != null) return;
+        try
         {
-            if (state["broken"] != null) return;
-            var directory = Path.Combine(root, "private/bridge-loads"); NoLinks(directory);
-            if (Directory.Exists(directory)) foreach (var dir in Directory.EnumerateDirectories(directory))
+            foreach (var lane in new[] { "odc", "o11" })
             {
-                NoLinks(dir); NoLinks(dir + ".json"); var context = O11Connection.Read(dir + ".json");
-                if (context != null && Alive(context)) continue;
-                foreach (var lease in leases.Where(l => l.Bridge.Root == dir).ToArray()) lease.Dispose();
-                if (Directory.Exists(dir)) Directory.Delete(dir, true); File.Delete(dir + ".json");
+                var version = Three(Text(installed?[lane]?["installed"]?["version"]))?.ToString(); if (version == null) continue;
+                foreach (var bridge in await Inventory(lane, version, token))
+                    if (Text(state["reports"]?[Identity(bridge.Manifest)]?["status"]) is not ("installed" or "active" or "failed")) Remember(bridge.Manifest, "installed", "INSTALLED");
             }
-            if (state["active"] is JsonObject active) foreach (var item in active.ToArray())
-            {
-                var parts = item.Key.Split('/');
-                if (parts.Length != 3 || !Alive(new JsonObject { ["pid"] = int.TryParse(parts[1], out var pid) ? pid : 0, ["startedUtc"] = parts[2] })
-                    || installed != null && Three(Text(installed[parts[0]]?["installed"]?["version"]))?.ToString() != Text(item.Value?["studioVersion"])) active.Remove(item.Key);
-            }
-            if (state["reports"] is JsonObject records) foreach (var item in records.ToArray())
-                if (item.Value?["pid"] != null && !Alive(item.Value) || installed != null && Three(Text(installed[Text(item.Value?["lane"])!]?["installed"]?["version"]))?.ToString() != Text(item.Value?["studioVersion"])) records.Remove(item.Key);
-            Save();
+            initialized = true;
         }
-        } finally { prepareGate.Release(); }
+        catch { /* Installation telemetry cannot prevent the channel from opening. */ }
     }
-    public void Dispose() { lock (stateGate) { foreach (var lease in leases.ToArray()) { var context = O11Connection.Read(lease.Bridge.Root + ".json"); lease.PreserveDirectory = context != null && IsActive(lease.Bridge, context); lease.Dispose(); } leases.Clear(); } }
+    private bool? Present(JsonObject manifest)
+    {
+        var directory = Path.Combine(Home, Text(manifest["lane"])!, Text(manifest["studioVersion"])!, Text(manifest["protocol"])!, Sequence(manifest).ToString(CultureInfo.InvariantCulture));
+        try { NoLinks(directory); return File.GetAttributes(directory).HasFlag(FileAttributes.Directory); }
+        catch (FileNotFoundException) { return false; } catch (DirectoryNotFoundException) { return false; } catch { return null; }
+    }
+    private static bool StillRunning(JsonNode context)
+    {
+        try { using var process = Process.GetProcessById(Integer(context["pid"])); return StudioInstance.Start(process.StartTime.ToUniversalTime().ToString("O")) == StudioInstance.Start(Text(context["startedUtc"])); }
+        catch (ArgumentException) { return false; } catch { return true; }
+    }
+    internal void Reconcile(JsonArray? running, JsonObject? installed = null)
+    {
+        try
+        {
+            if (state["broken"] != null || !StudioInstance.Complete(running) || !prepareGate.Wait(0)) return;
+            try
+            {
+                bool Alive(JsonNode c) => running!.Any(p => StudioInstance.Same(p, c));
+                lock (stateGate)
+                {
+                    var directory = Path.Combine(root, "private/bridge-loads"); NoLinks(directory);
+                    var indexed = new List<(string Directory, JsonObject Context)>();
+                    if (Directory.Exists(directory)) foreach (var dir in Directory.EnumerateDirectories(directory))
+                    {
+                        NoLinks(dir); NoLinks(dir + ".json"); var context = O11Connection.Read(dir + ".json");
+                        if (context != null) indexed.Add((dir, context));
+                    }
+                    // A partial snapshot may have omitted a process. Keep its files and locks.
+                    if (indexed.Any(item => !Alive(item.Context) && StillRunning(item.Context))) return;
+                    if (state["active"] is JsonObject current) foreach (var key in current.Select(p => p.Key)) {
+                        var parts = key.Split('/');
+                        if (parts.Length == 3 && int.TryParse(parts[1], out var pid)) { var context = new JsonObject { ["pid"] = pid, ["startedUtc"] = parts[2] }; if (!Alive(context) && StillRunning(context)) return; }
+                    }
+                    startupScan = false;
+                    foreach (var (dir, context) in indexed)
+                    {
+                        if (Alive(context)) continue;
+                        var held = leases.Where(l => l.Bridge.Root == dir).ToArray();
+                        foreach (var lease in held) if (!lease.Retire()) startupScan = true;
+                        if (held.Length == 0) try { if (Directory.Exists(dir)) Directory.Delete(dir, true); File.Delete(dir + ".json"); } catch { startupScan = true; }
+                    }
+                    var changed = false;
+                    if (state["active"] is JsonObject active) foreach (var item in active.ToArray())
+                    {
+                        var parts = item.Key.Split('/');
+                        if (parts.Length == 3 && int.TryParse(parts[1], out var pid) && !Alive(new JsonObject { ["pid"] = pid, ["startedUtc"] = parts[2] })) { active.Remove(item.Key); changed = true; }
+                    }
+                    if (state["reports"] is JsonObject records) foreach (var item in records.ToArray())
+                    {
+                        if (item.Value is not JsonObject record) continue;
+                        var exists = Present(record); var version = Three(Text(installed?[Text(record["lane"])!]?["installed"]?["version"]))?.ToString();
+                        if (exists == false && Text(record["status"]) != "refused" || version != null && version != Text(record["studioVersion"])) { records.Remove(item.Key); changed = true; }
+                        else if (exists == true && (record["pid"] != null && !Alive(record) || Text(record["status"]) == "fallback")) changed = Remember(record, "installed", "INSTALLED") || changed;
+                    }
+                    if (changed) Save();
+                }
+            }
+            finally { prepareGate.Release(); }
+        }
+        catch { /* Maintenance is best effort, including corrupt state and inaccessible files. */ }
+    }
+    public void Dispose()
+    {
+        lock (stateGate) { foreach (var lease in leases.ToArray()) { if (lease.MayBeLoaded) lease.Close(); else lease.Dispose(); } leases.Clear(); snapshots.Clear(); }
+    }
     internal static string? Runtime(JsonNode? config)
     {
         var options = config?["runtimeOptions"];

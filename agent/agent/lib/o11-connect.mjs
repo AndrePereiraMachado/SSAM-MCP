@@ -154,7 +154,7 @@ const nonThin = (port, executed = false) =>
 const failedReceipt = hook => { try { return readJson(hook + '.receipt.json').ok === false; } catch { return false; } };
 
 export async function connectO11({ root, runtimeRoot = root, pid, port, studioVersion = null, describe, attach, probe = probeBridge, request = bridgeRequest,
-  sleep = delay, now = Date.now, pack = null, env = process.env, warning = null, installedBridge = null, prepareBridge = null }) {
+  sleep = delay, now = Date.now, pack = null, env = process.env, warning = null, installedBridge = null, prepareBridge = null, beforeAttach = null }) {
   const folder = path.join(root, 'private', 'runtime-connect');
   fs.mkdirSync(folder, { recursive: true });
   const lock = path.join(folder, 'port-' + port + '.lock');
@@ -221,6 +221,7 @@ export async function connectO11({ root, runtimeRoot = root, pid, port, studioVe
       }
       fs.writeFileSync(pending, JSON.stringify({ evidence: id, pid: target.pid, startedUtc: target.startedUtc, hook: releaseHook ? HOOK_ABI : 'dev' }));
       let attachError = null;
+      beforeAttach?.();
       try { await attach(target.pid, target.startedUtc, hook); } catch (error) { attachError = error.message; }
       const refusedReceipt = () => { try { const receipt = readJson(receiptFile); return receipt.ok === false ? receipt : null; } catch { return null; } };
       await pollWithBackoff(async () => {

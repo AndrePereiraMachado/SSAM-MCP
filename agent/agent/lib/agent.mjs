@@ -23,6 +23,8 @@ import { createUnixPipe } from './odc-pipe-unix.mjs';
 import { AgentError } from './errors.mjs';
 import { createBridgeUpdates, MAC_BRIDGE_REASON } from './bridge-updates.mjs';
 import { studioRuntime } from './studio-runtime.mjs';
+import { createStudioSnapshot } from './studio-snapshot.mjs';
+import { completeInstances } from './studio-instance.mjs';
 
 // 0.2.0 (servidor/fase4): C03 (POST of 10 s, pong in its own POST, stream headers in 15 s), C26 (agent.root in the Hello),
 // C14 (file.sync), the query-test command of the ODC bridge v45 and the process listing without PowerShell for known pids.
@@ -100,12 +102,16 @@ export function createAgent({ root, runtimeRoot = root, config = {}, deps = {}, 
   const credential = config.credential ?? fs.readFileSync(credentialFile(base), 'utf8').trim();
   const pack = readPack(runtimeRoot);
   const bridgeAbort = new AbortController();
+  const processSnapshot = deps.bridgeProcessSnapshot ?? (deps.processes ? async () => {
+    try { const rows = (await Promise.all(['ODCStudio.exe', 'ServiceStudio.exe'].map(image => d.processes(image)))).flat(); return completeInstances(rows) ? rows : null; }
+    catch { return null; }
+  } : createStudioSnapshot({ runtimeRoot: path.resolve(runtimeRoot), now: d.now }));
   const updates = createBridgeUpdates({ root: base, runtimeRoot, platform, pack,
     ...(deps.bridgeTrust ?? {}),
     request: (route, { size }) => d.fetch(String(config.server).replace(/\/+$/, '') + route, {
       headers: { authorization: 'Bearer ' + credential }, redirect: 'manual',
       signal: AbortSignal.any([bridgeAbort.signal, AbortSignal.timeout(Math.min(300000, 15000 + Math.ceil(size / 65536) * 1000))]) }),
-    notify: status => log('bridge-update', status), running: async () => [...await d.processes('ODCStudio.exe'), ...await d.processes('ServiceStudio.exe')] });
+    notify: status => log('bridge-update', status), running: processSnapshot });
   d.bridgeUpdates = updates;
   d.studioRuntime ??= (target, lane) => studioRuntime(target, lane, { platform });
   d.bridgeChanged = () => channel.reconnect();
@@ -148,7 +154,8 @@ export function createAgent({ root, runtimeRoot = root, config = {}, deps = {}, 
       if (!installed) continue;
       installed.runtime = await d.studioRuntime(installed.dir, lane);
     }
-    if (updates.needsReconcile()) await updates.reconcile([...(await d.processes('ODCStudio.exe').catch(() => [])), ...(await d.processes('ServiceStudio.exe').catch(() => []))], studios);
+    try { await updates.initialize(studios); if (updates.needsReconcile()) await updates.reconcile(await processSnapshot(), studios); }
+    catch { /* Bridge maintenance is never a prerequisite for opening the channel. */ }
     return { t: 'hello', protocol: PROTOCOL, instance,
       // root (C26): the folder of this agent, so the server names its inbox exactly; kinds: what this agent runs (file.sync
       // since 0.2.0), so the server never asks an older agent for a kind it does not have.

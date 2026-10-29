@@ -39,13 +39,18 @@ internal sealed class AgentChannel : IDisposable
     private int maxMessageBytes = 1048576;
     private readonly string instance = Guid.NewGuid().ToString();
     private readonly Timer cleanup;
+    private readonly Func<JsonObject> processSnapshot;
+    private readonly object maintenanceGate = new();
+    private JsonObject? cachedProcesses;
+    private DateTimeOffset processesAt;
 
-    public AgentChannel(Uri server, string credential, StateStore state, int bridgePort, string? runtime = null, JsonObject? pack = null, BridgeUpdates? bridgeUpdates = null, Func<JsonObject>? discoverStudios = null)
+    public AgentChannel(Uri server, string credential, StateStore state, int bridgePort, string? runtime = null, JsonObject? pack = null, BridgeUpdates? bridgeUpdates = null, Func<JsonObject>? discoverStudios = null, Func<JsonObject>? processSnapshot = null)
     {
         this.state = state;
         this.bridgePort = bridgePort;
         this.pack = pack;
         this.discoverStudios = discoverStudios;
+        this.processSnapshot = processSnapshot ?? StudioInstance.Snapshot;
         bridges = bridgeUpdates ?? new BridgeUpdates(state.Root, runtime ?? AppContext.BaseDirectory, pack: pack);
         bridges.Changed = RequestBridgeReconnect;
         if (runtime != null && pack != null) { studios = new StudioKinds(state.Root, runtime, pack, () => kernel, bridges); machine = NativeHost.Machine(); }
@@ -56,12 +61,19 @@ internal sealed class AgentChannel : IDisposable
         http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", credential);
         blobs = new Blobs(this);
         files = new FileKinds(state.Root, this, blobs);
-        cleanup = new Timer(_ => ReconcileBridges(), null, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5));
+        cleanup = new Timer(_ => ReconcileBridges(), null, TimeSpan.FromSeconds(30), Timeout.InfiniteTimeSpan);
     }
     private void ReconcileBridges()
     {
-        try { bridges.Reconcile(new JsonArray(StudioKinds.Processes("ODCStudio.exe").Concat(StudioKinds.Processes("ServiceStudio.exe")).Select(p => p?.DeepClone()).ToArray()), installed); }
-        catch (IOException) { /* A concurrent attach or inaccessible process is retried on the next sweep. */ }
+        try {
+            if (!bridges.NeedsReconcile) return;
+            lock (maintenanceGate) {
+                if (cachedProcesses == null || DateTimeOffset.UtcNow - processesAt > TimeSpan.FromSeconds(1)) { cachedProcesses = processSnapshot(); processesAt = DateTimeOffset.UtcNow; }
+                if (cachedProcesses?["complete"]?.GetValue<bool>() == true) bridges.Reconcile(cachedProcesses["processes"] as JsonArray, installed);
+            }
+        }
+        catch { /* Missing, partial or unreadable maintenance data never blocks the channel. */ }
+        finally { try { cleanup.Change(TimeSpan.FromSeconds(bridges.HasLeases ? 5 : 30), Timeout.InfiniteTimeSpan); } catch { } }
     }
 
     private async Task<HttpResponseMessage> Send(HttpMethod method, string route, JsonNode? body,
@@ -94,8 +106,9 @@ internal sealed class AgentChannel : IDisposable
             connection = new() { ["pid"] = record["pid"]?.DeepClone(), ["port"] = record["port"]?.DeepClone(), ["startedUtc"] = record["startedUtc"]?.DeepClone(), ["studioVersion"] = record["studioVersion"]?.DeepClone() };
         return new() { ["studios"] = installed.DeepClone(), ["o11Connection"] = connection };
     }
-    private JsonObject Hello() {
+    private async Task<JsonObject> Hello(CancellationToken token) {
         var versions = Versions();
+        try { await bridges.Initialize(installed, token); } catch { }
         ReconcileBridges();
         foreach (var lane in new[] { "odc", "o11" })
         {
@@ -131,7 +144,7 @@ internal sealed class AgentChannel : IDisposable
                 try
                 {
                     state.Write("connecting");
-                    using var hello = await Send(HttpMethod.Post, "agent/v1/hello", Hello(), TimeSpan.FromSeconds(15), token);
+                    using var hello = await Send(HttpMethod.Post, "agent/v1/hello", await Hello(token), TimeSpan.FromSeconds(15), token);
                     if (CredentialRefused(hello.StatusCode)) break;
                     if (hello.StatusCode == HttpStatusCode.Conflict) { exitCode = 4; break; }
                     retryAfter = hello.Headers.RetryAfter?.Delta?.TotalMilliseconds ?? 0;

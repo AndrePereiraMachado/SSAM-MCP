@@ -287,7 +287,10 @@ internal sealed class StudioKinds(string root, string runtime, JsonObject pack, 
         var target = CheckPid("odc", p["pid"], false);
         var context = Instance(target);
         var selectedBridge = kind == "odc.attach" && bridges != null ? await bridges.Select("odc", Text(target["version"]), BridgeUpdates.StudioRuntime(Text(target["path"]), "odc"), token, context) : null;
-        if (selectedBridge != null && bridges!.IsActive(selectedBridge, context)) return new JsonObject { ["ok"] = true, ["attached"] = true, ["reused"] = true, ["pid"] = target["pid"]?.DeepClone(), ["version"] = selectedBridge.Protocol };
+        if (selectedBridge != null && bridges!.IsActive(selectedBridge, context)) {
+            await Bind(Integer(target["pid"]), selectedBridge.Protocol, token, null);
+            return new JsonObject { ["ok"] = true, ["attached"] = true, ["reused"] = true, ["pid"] = target["pid"]?.DeepClone(), ["version"] = selectedBridge.Protocol };
+        }
         if (kind == "odc.attach" && selectedBridge == null) CheckExactBuild(pack, "odc", Text(target["version"]));
         var version = selectedBridge?.Protocol ?? (kind == "odc.pipe" ? bridges?.ProtocolFor("odc", Text(target["version"]), context) : null) ?? Text(pack["odcBridge"]) ?? "";
         if (!Regex.IsMatch(version, @"^v\d+$") || Integer(JsonValue.Create(int.TryParse(version[1..], out var n) ? n : 0)) < 98) throw new AgentFault("BRIDGE_VERSION_MISMATCH", "ODC bridge v98 or newer is required");
@@ -304,6 +307,8 @@ internal sealed class StudioKinds(string root, string runtime, JsonObject pack, 
             try
             {
             if (!File.Exists(bridge)) throw new AgentFault("ATTACH_FAILED", "The installed bridge is missing");
+            if (lease?.MayBeLoaded == true) throw new AgentFault("ATTACH_FAILED", "A previous attach may have executed; restart the Studio before retrying", null);
+            lease?.Retain();
             if (OperatingSystem.IsMacOS())
             {
                 var identity = await MacPlatform.Describe("odc", pid, token);

@@ -158,6 +158,7 @@ internal sealed class O11Connection(string root, string runtime, JsonObject pack
                 probed = await Probe(port, token);
                 if (probed["connected"]?.GetValue<bool>() == true || probed["occupied"]?.GetValue<bool>() == true) throw Fail("The local bridge port became occupied");
                 Atomic(pending, new JsonObject { ["pid"] = pid, ["startedUtc"] = started, ["evidence"] = id, ["hook"] = release ? "h1" : "dev" });
+                snapshot?.Retain();
                 try
                 {
                     if (OperatingSystem.IsMacOS()) await MacPlatform.Attach("o11", pid, started, hook, token);

@@ -215,7 +215,10 @@ export function createKinds({ root, runtimeRoot = root, ws, pack = {}, kernel = 
     requireLane('odc');
     const target = await checkPid('odc', pid);
     const selected = await selectedBridge('odc', target);
-    if (selected && deps.bridgeUpdates.isActive?.(selected, target)) return { ok: true, attached: true, reused: true, pid: target.pid, version: selected.protocol };
+    if (selected && deps.bridgeUpdates.isActive?.(selected, target)) {
+      await bindOdcRoot(target.pid, selected.protocol, null);
+      return { ok: true, attached: true, reused: true, pid: target.pid, version: selected.protocol };
+    }
     const version = selected?.protocol ?? pack.odcBridge;
     requireDataRootProtocol(version);
     if (!/^v\d+$/.test(version ?? '')) throw refuse('BRIDGE_VERSION_MISMATCH', 'The agent pack carries no ODC bridge');
@@ -229,6 +232,8 @@ export function createKinds({ root, runtimeRoot = root, ws, pack = {}, kernel = 
     } catch (error) { await lease?.release(); throw error; }
     let result;
     try {
+      if (lease?.mayBeLoaded) throw new AgentError('ATTACH_FAILED', 'A previous attach may have executed; restart the Studio before retrying.', { executed: null });
+      lease?.retain?.();
       result = await deps.attachOdc(platform === 'darwin' ? { pid: target.pid, bridge, version } : { pid: target.pid, client, bridge });
       if (result?.ok !== true || result?.attached !== true) {
         if (!selected) return { ok: result?.ok === true, attached: result?.attached === true, pid: target.pid, version, note: result?.note ?? result?.error ?? null };
@@ -238,11 +243,12 @@ export function createKinds({ root, runtimeRoot = root, ws, pack = {}, kernel = 
     } catch (error) {
       await lease?.release();
       if (selected && deps.bridgeUpdates.rejectLoad(selected, error.message, { ...target, attempted: error.attachAttempted === true, bridgeFailure: error.bridgeLoadFailure === true })) deps.bridgeChanged?.();
+      error.message = String(error.message).replaceAll(root, '[data]').replaceAll(runtimeRoot, '[runtime]');
       throw error;
     }
     if (lease) deps.bridgeUpdates.markActive(selected, target);
     // Binding, authentication and pipe failures are transient and never quarantine a DLL.
-    try { await bindOdcRoot(target.pid, version, null); } catch (error) { await lease?.release(); throw error; }
+    try { await bindOdcRoot(target.pid, version, null); } catch (error) { error.message = String(error.message).replaceAll(root, '[data]').replaceAll(runtimeRoot, '[runtime]'); throw error; }
     return { ok: true, attached: true, pid: target.pid, version, note: result?.note ?? null };
   }
 
@@ -338,13 +344,15 @@ export function createKinds({ root, runtimeRoot = root, ws, pack = {}, kernel = 
       const record = await connectO11({ root, runtimeRoot: selected?.root ?? runtimeRoot, pid: target.pid, port: o11Port, studioVersion: target.version, describe: deps.describe,
         attach: deps.attachO11, sleep: deps.sleep, now: deps.now, pack: activePack, installedBridge: selected,
         prepareBridge: selected ? async () => (lease = await deps.bridgeUpdates.prepareAttach(selected, { ...target, port: o11Port })) : null,
+        beforeAttach: () => lease?.retain?.(),
         warning, ...(deps.env ? { env: deps.env } : {}) });
       if (selected) deps.bridgeUpdates.markActive(selected, target);
       onConnection(record);
       return record;
     } catch (error) {
-      if (selected && deps.bridgeUpdates.rejectLoad(selected, error.message, { ...target, attempted: error.attachAttempted === true, bridgeFailure: error.bridgeLoadFailure === true })) deps.bridgeChanged?.();
       await lease?.release();
+      if (selected && deps.bridgeUpdates.rejectLoad(selected, error.message, { ...target, attempted: error.attachAttempted === true, bridgeFailure: error.bridgeLoadFailure === true })) deps.bridgeChanged?.();
+      error.message = String(error.message).replaceAll(root, '[data]').replaceAll(runtimeRoot, '[runtime]');
       throw error;
     }
   }
