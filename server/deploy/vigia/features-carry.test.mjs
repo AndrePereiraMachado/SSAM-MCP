@@ -345,19 +345,20 @@ test('readFeatures and features-protect.ps1 agree on random mutants of the expor
  ];
  const tokens=[' ','\t','\r','\n','\u00A0','\uFEFF','\u2028','\u2029','\u3000','\u1680','\u2000','\u200A','\u202F','\u205F','\u0085',
   ']]>',']]','<?pi?>','&#1;','&#0;','&#xD800;','&#x110000;','&amp;','&','<!--x-->','<![CDATA[x]]>','"',"'",'=','<','>','/','?',';',
-  '?>','<?xml version="1.0"?>','1.1',"'1.0'",'xmlns="u"',' xml:lang="en"','\u000b','\u0000','A','é','0','.','-','</Feature>',`<Feature key="${K2}" kind="String">`,'True','False',
-  // Supplementary characters (surrogate pairs in the text), which .NET reads differently from the BMP.
-  '\u{10000}','\u{1F600}','\u{10FFFF}'];
+  '?>','<?xml version="1.0"?>','1.1',"'1.0'",'xmlns="u"',' xml:lang="en"','\u000b','\u0000','A','é','0','.','-','</Feature>',`<Feature key="${K2}" kind="String">`,'True','False'];
+ // Supplementary characters (surrogate pairs in the text), which .NET reads differently from the BMP: one token in
+ // eight, so every part of the documents (the encoding name included) gets them.
+ const astral=['\u{10000}','\u{1D11E}','\u{1F600}','\u{2FFFF}','\u{10FFFF}'];
  // A fixed seed and a bounded count: the same documents on every run.
  let state=20261029;const rnd=n=>{state=(state+0x6D2B79F5)>>>0;let x=Math.imul(state^(state>>>15),1|state);x^=x+Math.imul(x^(x>>>7),61|x);return ((x^(x>>>14))>>>0)%n;};
  const near=(text,anchor,span)=>{const at=text.indexOf(anchor);if(at<0)return rnd(text.length+1);const from=Math.max(0,at-span);return from+rnd(Math.min(text.length,at+anchor.length+span)-from+1);};
- const anchors=[['?>',30],['encoding=',12],['Version',12],['kind=',25],['key=',25],['>UseCodeDefault<',4],['>On<',4],['>42<',4],['</Features',12]];
+ const anchors=[['?>',30],['encoding=',12],['utf-16',3],['Version',12],['kind=',25],['key=',25],['>UseCodeDefault<',4],['>On<',4],['>42<',4],['</Features',12]];
  const mutants=new Set();
  for(let attempt=0;attempt<8000&&mutants.size<3000;attempt++){
   let text=bases[rnd(bases.length)];
   for(let ops=rnd(10)<7?1:2;ops>0;ops--){
    const pick=rnd(anchors.length+1),at=pick===anchors.length?rnd(text.length+1):near(text,...anchors[pick]);
-   const token=tokens[rnd(tokens.length)],op=rnd(3);
+   const token=rnd(8)===0?astral[rnd(astral.length)]:tokens[rnd(tokens.length)],op=rnd(3);
    text=op===0?text.slice(0,at)+token+text.slice(at):op===1?text.slice(0,at)+token+text.slice(at+1):text.slice(0,at)+text.slice(at+1);
   }
   mutants.add(text);
