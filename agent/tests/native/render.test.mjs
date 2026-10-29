@@ -64,6 +64,34 @@ async function qualify(t, { env = process.env } = {}) {
   return { root, hub, call, install, stderr: () => stderr };
 }
 
+// The native core with the real Electron worker (SSAM_RENDER_E2E=1 and SSAM_ELECTRON_EXE, as tests/app/render-worker-e2e):
+// the Windows chain of a release, ssam-agent.exe -> the app executable with --ssam-render-worker, here through a .cmd that
+// starts electron.exe on src/main/index.mjs.
+const electron = process.env.SSAM_ELECTRON_EXE;
+const realSkip = !windows ? 'the stand-in renderer is a .cmd' : process.env.SSAM_RENDER_E2E !== '1' ? 'set SSAM_RENDER_E2E=1 and SSAM_ELECTRON_EXE to run the real Electron render worker'
+  : !electron || !fs.existsSync(electron) ? 'SSAM_ELECTRON_EXE does not name an Electron executable' : false;
+test('native screen.render with the real Electron worker', { skip: realSkip, timeout: 180000 }, async t => {
+  const q = await qualify(t);
+  fs.writeFileSync(path.join(q.install, 'renderer.cmd'), `@echo off\r\n"${electron}" "${path.join(app, 'src', 'main', 'index.mjs')}" %*\r\n`);
+  const css = '.menu{position:fixed;left:0;top:0;width:320px;height:100%;display:none}.tablet .menu{display:block}.content{margin:64px 0 0 16px;width:300px;height:40px}';
+  const html = '<!doctype html><html><head></head><body><div class="menu" data-ssam-key="menu"></div><div class="content" data-ssam-key="content">Hidden words</div></body></html>';
+  const { createHash } = await import('node:crypto');
+  const sha = text => createHash('sha256').update(text).digest('hex');
+  const request = { schema: 'ssam-render-request/1', styles: [{ id: 'osui', sha256: sha(css), css }], documents: [{ id: 's1', sha256: sha(html), html, styles: ['osui'] }],
+    viewports: [{ name: 'tablet', width: 768, height: 1024, bodyClasses: ['tablet'] }], probes: { keys: 'all', properties: ['width'], maxElements: 100 },
+    image: { format: 'jpeg', quality: 60, maxEdge: 400, fullPage: false }, timeoutMs: 60000 };
+  const answer = await q.call(request, { mode: 'unused' });
+  assert.equal(answer.ok, true, JSON.stringify(answer).slice(0, 600));
+  const view = answer.value.documents[0].viewports[0];
+  assert.equal(answer.value.engine.name, 'electron');
+  assert.deepEqual(view.elements.find(e => e.k === 'content').coveredBy, { k: 'menu', tag: 'div', classes: ['menu'] });
+  assert.equal(answer.value.images.length, 1);
+  assert.ok(!JSON.stringify(answer.value).includes('Hidden words'));
+  const tmp = path.join(q.root, 'private', 'tmp');
+  for (let i = 0; i < 100 && fs.readdirSync(tmp).some(name => name.startsWith('render-')); i++) await new Promise(resolve => setTimeout(resolve, 100));
+  assert.deepEqual(fs.readdirSync(tmp).filter(name => name.startsWith('render-')), []);
+});
+
 test('native screen.render: announced with a renderer, the same facts as the Node agent, the failures and the queue', { skip: !windows && 'the stand-in renderer is a .cmd', timeout: 180000 }, async t => {
   const q = await qualify(t, { env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' } });
   assert.ok(q.hub.hellos[0].agent.kinds.includes('screen.render'), JSON.stringify(q.hub.hellos[0].agent.kinds));
