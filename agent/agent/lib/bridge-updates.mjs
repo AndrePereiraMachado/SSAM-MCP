@@ -20,13 +20,23 @@ const pair = m => m.lane + '/' + m.studioVersion;
 const identity = m => pair(m) + '/' + m.protocol + '/' + m.sequence;
 export const MAC_BRIDGE_REASON = 'Automatic bridge downloads are disabled on macOS in this build; use the bundled bridge.';
 
+export function authenticodeDisposition(result, thumbprint, signer = 'owner') {
+  if (!Number.isInteger(result?.hresult) || result.hresult < -2147483648 || result.hresult > 0xffffffff) return 'retry';
+  const status = result.hresult >>> 0;
+  if (status === 0 && result.signatureValid === true) {
+    return result.ok === true && (signer !== 'owner' || result.thumbprint?.toUpperCase() === thumbprint.toUpperCase()) ? 'accepted' : 'refused';
+  }
+  return status === 0x800B0100 || status === 0x80096010 || (status === 0x800B0004 && result.policyFailure === true) ? 'refused' : 'retry';
+}
+
 export async function verifyAuthenticode(file, thumbprint, { platform = process.platform, runtimeRoot, run = exec, signer = 'owner' } = {}) {
   if (platform === 'win32') {
     let stdout;
     try { ({ stdout } = await run(path.join(runtimeRoot, 'native/ssam-agent.exe'), ['authenticode', '--file', file, '--signer', signer], { windowsHide: true, timeout: 30000 })); }
     catch (error) { if (!error.stdout) throw error; stdout = error.stdout; }
     const result = JSON.parse(stdout);
-    if (result.ok !== true || (signer === 'owner' && result.thumbprint?.toUpperCase() !== thumbprint.toUpperCase())) throw Object.assign(new Error('Authenticode signer does not match the pinned policy'), { signerRefused: true });
+    const disposition = authenticodeDisposition(result, thumbprint, signer);
+    if (disposition !== 'accepted') throw Object.assign(new Error(disposition === 'refused' ? 'Authenticode signer does not match the pinned policy' : 'VERIFY_FAILED: local Authenticode trust could not be established; retry after repairing the certificate chain'), { signerRefused: disposition === 'refused', trustUnavailable: disposition === 'retry', hresult: result.hresult });
   } else fail(platform === 'darwin' ? MAC_BRIDGE_REASON : 'Authenticode verification is unavailable on this platform');
 }
 
@@ -124,7 +134,7 @@ export function createBridgeUpdates({ root, runtimeRoot = root, platform = proce
     for (const [name, digest] of Object.entries(generated)) if (hash(fs.readFileSync(path.join(dir, name))) !== digest) fail('The generated hook configuration changed');
     for (const f of m.files) if (/\.(dll|exe)$/i.test(f.path)) {
       try { await authenticode(path.join(dir, f.path), anchors.thumbprint.toUpperCase(), f.signer); }
-      catch (error) { if (error.signerRefused) throw definitive(m, 'SIGNER_REFUSED', 'Authenticode verification failed'); throw new Error('Authenticode verification unavailable'); }
+      catch (error) { if (error.signerRefused) throw definitive(m, 'SIGNER_REFUSED', 'Authenticode verification failed'); if (error.trustUnavailable) throw error; throw new Error('Authenticode verification unavailable'); }
     }
   }
   async function read(dir, lane, version, protocol) {
@@ -141,7 +151,7 @@ export function createBridgeUpdates({ root, runtimeRoot = root, platform = proce
       const parent = path.join(dir, protocol); noLinks(parent);
       for (const seq of fs.readdirSync(parent).filter(p => /^\d+$/.test(p))) {
         try { entries.push(await read(path.join(parent, seq), lane, version, protocol)); }
-        catch (error) { emit('refused', 'Bridge update refused: ' + error.message, { lane }); }
+        catch (error) { emit(error.trustUnavailable ? 'warning' : 'refused', (error.trustUnavailable ? '' : 'Bridge update refused: ') + error.message, { lane, reason: error.trustUnavailable ? 'VERIFY_FAILED' : undefined }); }
       }
     }
     return entries.sort((a, b) => b.m.sequence - a.m.sequence);
@@ -155,36 +165,34 @@ export function createBridgeUpdates({ root, runtimeRoot = root, platform = proce
   }
   async function install(offer, installed) {
     const { m, text, signature } = manifest(offer);
+    watermark(m);
+    if (!installed || studioVersion(installed.version) !== m.studioVersion || installed.runtime !== m.runtime) fail('Bridge does not match the installed Studio and runtime');
+    if (bundledBridgeSupports(pack, runtimeRoot, m.lane, installed.version, installed.runtime)) return false;
+    const previous = await inventory(m.lane, m.studioVersion);
+    if (previous.some(p => p.m.sequence > m.sequence || Number(number(p.m.protocol)) > Number(number(m.protocol)))) fail('Bridge sequence replay or protocol downgrade refused');
+    const existing = previous.find(p => p.m.sequence === m.sequence);
+    if (existing) {
+      if (existing.text !== text) fail('An installed bridge identity cannot be replaced');
+      const record = state.reports[identity(m)];
+      return !['active', 'failed'].includes(record?.status) && report(m, 'installed', 'INSTALLED');
+    }
+    const dest = path.join(home, m.lane, m.studioVersion, m.protocol, String(m.sequence)); noLinks(dest); fs.mkdirSync(path.dirname(dest), { recursive: true, mode: 0o700 });
+    const staging = path.join(path.dirname(dest), '.staging-' + randomUUID()); fs.mkdirSync(staging, { mode: 0o700 });
     try {
-      watermark(m);
-      if (!installed || studioVersion(installed.version) !== m.studioVersion || installed.runtime !== m.runtime) fail('Bridge does not match the installed Studio and runtime');
-      if (bundledBridgeSupports(pack, runtimeRoot, m.lane, installed.version, installed.runtime)) return false;
-      const previous = await inventory(m.lane, m.studioVersion);
-      if (previous.some(p => p.m.sequence > m.sequence || Number(number(p.m.protocol)) > Number(number(m.protocol)))) fail('Bridge sequence replay or protocol downgrade refused');
-      const existing = previous.find(p => p.m.sequence === m.sequence);
-      if (existing) {
-        if (existing.text !== text) fail('An installed bridge identity cannot be replaced');
-        const record = state.reports[identity(m)];
-        return !['active', 'failed'].includes(record?.status) && report(m, 'installed', 'INSTALLED');
+      for (const f of m.files) {
+        const response = await request('/agent/bridges/' + [m.lane, m.studioVersion, m.protocol, f.sha256].join('/'), { size: f.size });
+        if (response.status !== 200 || response.redirected) { await response.body?.cancel(); fail('Bridge download refused'); }
+        if (response.headers.get('content-length') && Number(response.headers.get('content-length')) !== f.size) { await response.body?.cancel(); fail('Bridge download size mismatch'); }
+        const file = path.join(staging, f.path); fs.mkdirSync(path.dirname(file), { recursive: true }); const fd = fs.openSync(file, 'wx', 0o600); let size = 0;
+        try { for await (const chunk of response.body) { size += chunk.length; if (size > f.size) fail('Bridge download exceeds the signed size'); fs.writeSync(fd, chunk); } if (size !== f.size) fail('Bridge download was interrupted'); fs.fsyncSync(fd); }
+        finally { fs.closeSync(fd); }
       }
-      const dest = path.join(home, m.lane, m.studioVersion, m.protocol, String(m.sequence)); noLinks(dest); fs.mkdirSync(path.dirname(dest), { recursive: true, mode: 0o700 });
-      const staging = path.join(path.dirname(dest), '.staging-' + randomUUID()); fs.mkdirSync(staging, { mode: 0o700 });
-      try {
-        for (const f of m.files) {
-          const response = await request('/agent/bridges/' + [m.lane, m.studioVersion, m.protocol, f.sha256].join('/'), { size: f.size });
-          if (response.status !== 200 || response.redirected) { await response.body?.cancel(); fail('Bridge download refused'); }
-          if (response.headers.get('content-length') && Number(response.headers.get('content-length')) !== f.size) { await response.body?.cancel(); fail('Bridge download size mismatch'); }
-          const file = path.join(staging, f.path); fs.mkdirSync(path.dirname(file), { recursive: true }); const fd = fs.openSync(file, 'wx', 0o600); let size = 0;
-          try { for await (const chunk of response.body) { size += chunk.length; if (size > f.size) fail('Bridge download exceeds the signed size'); fs.writeSync(fd, chunk); } if (size !== f.size) fail('Bridge download was interrupted'); fs.fsyncSync(fd); }
-          finally { fs.closeSync(fd); }
-        }
-        fs.writeFileSync(path.join(staging, 'manifest.json'), text); fs.writeFileSync(path.join(staging, 'manifest.sig'), signature.toString('base64')); await files(m, staging);
-        const known = watermark(m); known.installed = Math.max(known.installed, m.sequence); known.protocol = Math.max(known.protocol, Number(number(m.protocol))); state.watermarks[pair(m)] = known; save();
-        noLinks(dest); fs.renameSync(staging, dest); cache.set(dest, { stamp: fingerprint(dest), entry: { m, text, signature, dir: dest } });
-        report(m, 'installed', 'INSTALLED');
-        emit('installed', `Updated the ${m.lane} bridge for ${m.lane === 'odc' ? 'ODC Studio' : 'Service Studio'} ${m.studioVersion}`, { lane: m.lane, studioVersion: m.studioVersion, protocol: m.protocol, sequence: m.sequence }); return true;
-      } finally { fs.rmSync(staging, { recursive: true, force: true }); }
-    } catch (error) { watermark(m, true); throw error; }
+      fs.writeFileSync(path.join(staging, 'manifest.json'), text); fs.writeFileSync(path.join(staging, 'manifest.sig'), signature.toString('base64')); await files(m, staging);
+      const known = watermark(m); known.installed = Math.max(known.installed, m.sequence); known.protocol = Math.max(known.protocol, Number(number(m.protocol))); state.watermarks[pair(m)] = known; save();
+      noLinks(dest); fs.renameSync(staging, dest); cache.set(dest, { stamp: fingerprint(dest), entry: { m, text, signature, dir: dest } });
+      report(m, 'installed', 'INSTALLED');
+      emit('installed', `Updated the ${m.lane} bridge for ${m.lane === 'odc' ? 'ODC Studio' : 'Service Studio'} ${m.studioVersion}`, { lane: m.lane, studioVersion: m.studioVersion, protocol: m.protocol, sequence: m.sequence }); return true;
+    } finally { fs.rmSync(staging, { recursive: true, force: true }); }
   }
   async function offers(welcome, studios) {
     if (platform === 'darwin') return false; let changed = false;
@@ -196,7 +204,7 @@ export function createBridgeUpdates({ root, runtimeRoot = root, platform = proce
         const m = error.authenticatedManifest;
         if (m?.lane === lane && ['SIGNER_REFUSED', 'TRUST_ANCHOR_MISSING'].includes(error.refusalCode)
           && !['installed', 'active', 'failed'].includes(state.reports[identity(m)]?.status)) report(m, 'refused', error.refusalCode);
-        emit('refused', 'Bridge update refused: ' + String(error.message).replace(/[A-Za-z]:[\\/][^\s]*/g, '[path]'), { lane });
+        emit(error.trustUnavailable ? 'warning' : 'refused', (error.trustUnavailable ? '' : 'Bridge update refused: ') + String(error.message).replace(/[A-Za-z]:[\\/][^\s]*/g, '[path]'), { lane, reason: error.refusalCode ?? 'VERIFY_FAILED' });
       }
     }
     return changed;
@@ -337,7 +345,7 @@ export function createBridgeUpdates({ root, runtimeRoot = root, platform = proce
     cleanup.unref();
   }
   schedule();
-  const wireStatus = () => last ? { status: ['installed', 'fallback', 'refused'].includes(last.status) ? last.status : 'refused', lane: ['odc', 'o11'].includes(last.lane) ? last.lane : null } : null;
+  const wireStatus = () => last && last.status !== 'warning' ? { status: ['installed', 'fallback', 'refused'].includes(last.status) ? last.status : 'refused', lane: ['odc', 'o11'].includes(last.lane) ? last.lane : null } : null;
   return { select, prepareAttach, rejectLoad, markActive, protocolFor, initialize, reconcile, needsReconcile, isActive, status: () => last, wireStatus,
     reports,
     async dispose() { stopped = true; clearTimeout(cleanup); await busy.catch(() => {}); await Promise.all([...leases].map(lease => lease.close())); },

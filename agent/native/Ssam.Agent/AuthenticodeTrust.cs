@@ -7,7 +7,7 @@ namespace Ssam.Agent;
 
 internal static class AuthenticodeTrust
 {
-    internal sealed record Evidence(bool Valid, string Thumbprint, string Organization, bool CodeSigning, string Root);
+    internal sealed record Evidence(bool Valid, string Thumbprint, string Organization, bool CodeSigning, string Root, int HResult = 0, bool PolicyFailure = false, DateTime? NotAfterUtc = null);
     internal static bool Accept(Evidence e, string signer, string owner, IEnumerable<string> roots) => e.Valid && (signer switch
     {
         "owner" => string.Equals(e.Thumbprint, owner, StringComparison.OrdinalIgnoreCase),
@@ -16,9 +16,15 @@ internal static class AuthenticodeTrust
     });
     internal static JsonObject Check(string file, string signer, string owner = BridgeTrust.AuthenticodeThumbprint)
     {
-        var e = Inspect(file);
-        return new() { ["ok"] = Accept(e, signer, owner, BridgeTrust.MicrosoftRoots), ["signatureValid"] = e.Valid,
-            ["thumbprint"] = e.Thumbprint, ["organization"] = e.Organization, ["codeSigning"] = e.CodeSigning, ["root"] = e.Root };
+        return Assess(Inspect(file), signer, owner, BridgeTrust.MicrosoftRoots);
+    }
+    internal static JsonObject Assess(Evidence e, string signer, string owner, IEnumerable<string> roots)
+    {
+        var accepted = e.HResult == 0 && Accept(e, signer, owner, roots);
+        var status = unchecked((uint)e.HResult);
+        var definitive = !accepted && (e.HResult == 0 && e.Valid || status is 0x800B0100 or 0x80096010 || status == 0x800B0004 && e.PolicyFailure);
+        return new() { ["ok"] = accepted, ["signatureValid"] = e.Valid, ["hresult"] = (long)status, ["policyFailure"] = e.PolicyFailure, ["definitive"] = definitive,
+            ["thumbprint"] = e.Thumbprint, ["organization"] = e.Organization, ["codeSigning"] = e.CodeSigning, ["root"] = e.Root, ["notAfterUtc"] = e.NotAfterUtc?.ToString("O") };
     }
     internal static Evidence Inspect(string file)
     {
@@ -30,19 +36,25 @@ internal static class AuthenticodeTrust
         try
         {
             var status = WinVerifyTrust(new IntPtr(-1), ref policy, ref data);
-            if (status != 0) return new(false, "", "", false, "");
+            Evidence Unavailable() => new(false, "", "", false, "", status);
+            if (data.State == IntPtr.Zero) return Unavailable();
             var provider = WTHelperProvDataFromStateData(data.State);
+            if (provider == IntPtr.Zero) return Unavailable();
             var signer = WTHelperGetProvSignerFromChain(provider, 0, false, 0);
-            if (signer == IntPtr.Zero) return new(false, "", "", false, "");
+            if (signer == IntPtr.Zero) return Unavailable();
             var signing = Marshal.PtrToStructure<ProviderSigner>(signer);
+            if (signing.Chain == IntPtr.Zero) return Unavailable();
             var chain = Marshal.PtrToStructure<ChainContext>(signing.Chain);
+            if (chain.Count == 0 || chain.Chains == IntPtr.Zero) return Unavailable();
             var simple = Marshal.PtrToStructure<SimpleChain>(Marshal.ReadIntPtr(chain.Chains));
-            if (simple.Count == 0) return new(false, "", "", false, "");
+            if (simple.Count == 0 || simple.Elements == IntPtr.Zero) return Unavailable();
             using var leaf = Certificate(Marshal.ReadIntPtr(simple.Elements));
             using var root = Certificate(Marshal.ReadIntPtr(simple.Elements, checked((int)(simple.Count - 1) * IntPtr.Size)));
             var organizations = leaf.SubjectName.Decode(X500DistinguishedNameFlags.UseNewLines).Split('\n').Select(x => x.Trim()).Where(x => x.StartsWith("O=", StringComparison.Ordinal)).Select(x => x[2..]).ToArray();
             var eku = leaf.Extensions.OfType<X509EnhancedKeyUsageExtension>().Any(x => x.EnhancedKeyUsages.Cast<Oid>().Any(o => o.Value == "1.3.6.1.5.5.7.3.3"));
-            return new(true, leaf.Thumbprint, organizations.Length == 1 ? organizations[0] : "", eku, Convert.ToHexString(SHA256.HashData(root.RawData)));
+            // A policy rejection is definitive only when the provider reports no chain failure.
+            var policyFailure = unchecked((uint)status) == 0x800B0004 && signing.Error is 0 or 0x800B0004 && chain.Error == 0 && simple.Error == 0;
+            return new(status == 0, leaf.Thumbprint, organizations.Length == 1 ? organizations[0] : "", eku, Convert.ToHexString(SHA256.HashData(root.RawData)), status, policyFailure, leaf.NotAfter.ToUniversalTime());
         }
         finally { data.Action = 2; WinVerifyTrust(new IntPtr(-1), ref policy, ref data); Marshal.FreeHGlobal(pointer); Marshal.FreeCoTaskMem(info.File); }
     }

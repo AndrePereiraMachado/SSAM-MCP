@@ -86,12 +86,12 @@ test('an interrupted download can recover on the next hello without restarting',
 });
 test('Windows Authenticode demands Valid, embedded Authenticode and pinned signer; Mac updates fail closed', async () => {
   let args;
-  await verifyAuthenticode('C:\\safe\\bridge.dll', anchors.thumbprint, { platform: 'win32', runtimeRoot: 'C:\\app', run: async (exe, a) => { args = a; return { stdout: JSON.stringify({ ok: true, thumbprint: anchors.thumbprint }) }; } });
+  await verifyAuthenticode('C:\\safe\\bridge.dll', anchors.thumbprint, { platform: 'win32', runtimeRoot: 'C:\\app', run: async (exe, a) => { args = a; return { stdout: JSON.stringify({ ok: true, signatureValid: true, hresult: 0, thumbprint: anchors.thumbprint }) }; } });
   assert.deepEqual(args, ['authenticode', '--file', 'C:\\safe\\bridge.dll', '--signer', 'owner']);
-  await assert.rejects(verifyAuthenticode('C:\\safe\\bridge.dll', anchors.thumbprint, { platform: 'win32', runtimeRoot: 'C:\\app', run: async () => ({ stdout: JSON.stringify({ ok: false, thumbprint: anchors.thumbprint }) }) }), /pinned policy/);
-  await assert.rejects(verifyAuthenticode('C:\\safe\\bridge.dll', anchors.thumbprint, { platform: 'win32', runtimeRoot: 'C:\\app', run: async () => ({ stdout: JSON.stringify({ ok: true, thumbprint: 'B'.repeat(40) }) }) }), /pinned policy/);
+  await assert.rejects(verifyAuthenticode('C:\\safe\\bridge.dll', anchors.thumbprint, { platform: 'win32', runtimeRoot: 'C:\\app', run: async () => ({ stdout: JSON.stringify({ ok: false, signatureValid: true, hresult: 0, thumbprint: anchors.thumbprint }) }) }), /pinned policy/);
+  await assert.rejects(verifyAuthenticode('C:\\safe\\bridge.dll', anchors.thumbprint, { platform: 'win32', runtimeRoot: 'C:\\app', run: async () => ({ stdout: JSON.stringify({ ok: true, signatureValid: true, hresult: 0, thumbprint: 'B'.repeat(40) }) }) }), /pinned policy/);
   assert.ok(!args.some(arg => /powershell/i.test(arg)));
-  await assert.rejects(verifyAuthenticode('test.dll', anchors.thumbprint, { platform: 'win32', runtimeRoot: 'C:\\app', run: async () => ({ stdout: JSON.stringify({ ok: false, thumbprint: 'B'.repeat(40) }) }) }), /pinned/);
+  await assert.rejects(verifyAuthenticode('test.dll', anchors.thumbprint, { platform: 'win32', runtimeRoot: 'C:\\app', run: async () => ({ stdout: JSON.stringify({ ok: false, signatureValid: true, hresult: 0, thumbprint: 'B'.repeat(40) }) }) }), /pinned/);
   await assert.rejects(verifyAuthenticode('/test.dll', anchors.thumbprint, { platform: 'darwin', runtimeRoot: '/app' }), /disabled/);
 });
 test('runtimeconfig selects the Studio runtime and fails closed for unreadable config', async t => {

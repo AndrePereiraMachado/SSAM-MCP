@@ -86,7 +86,7 @@ test('R2.6 Authenticode ignores poisoned SystemRoot and PSModulePath', async () 
   const calls = [];
   try {
     await verifyAuthenticode('C:\\bridge.dll', anchors.thumbprint, { platform: 'win32', runtimeRoot: 'C:\\runtime', run: async (exe, args, options) => {
-      calls.push({ exe, args, options }); return { stdout: JSON.stringify({ ok: true, thumbprint: anchors.thumbprint }) };
+      calls.push({ exe, args, options }); return { stdout: JSON.stringify({ ok: true, signatureValid: true, hresult: 0, thumbprint: anchors.thumbprint }) };
     } });
     const check = calls.at(-1); assert.equal(path.win32.normalize(check.exe), 'C:\\runtime\\native\\ssam-agent.exe');
     assert.deepEqual(check.args, ['authenticode', '--file', 'C:\\bridge.dll', '--signer', 'owner']);

@@ -8,6 +8,11 @@ using static Ssam.Agent.StudioKinds;
 
 namespace Ssam.Agent;
 
+internal sealed class BridgeVerificationUnavailable : IOException
+{
+    internal BridgeVerificationUnavailable() : base("VERIFY_FAILED: local Authenticode trust could not be established; retry after repairing the certificate chain") { }
+}
+
 internal sealed class SignedManifestRefusal(JsonObject manifest, string code = "SIGNER_REFUSED") : IOException(code == "TRUST_ANCHOR_MISSING" ? "Bridge trust anchors are not configured in this build" : "Bridge signer policy refused")
 {
     internal JsonObject Manifest { get; } = manifest;
@@ -40,7 +45,7 @@ internal sealed class BridgeUpdates(string root, string runtime, string publicKe
     private bool initialized;
     private bool startupScan = Directory.Exists(Path.Combine(root, "private/bridge-loads"));
     internal JsonObject? Status { get; private set; } = O11Connection.Read(Path.Combine(root, "private/bridge-update.json"));
-    internal JsonObject? WireStatus() => Status == null ? null : new() { ["status"] = Text(Status["status"]) is "installed" or "fallback" ? Text(Status["status"]) : "refused", ["lane"] = Text(Status["lane"]) is "odc" or "o11" ? Text(Status["lane"]) : null };
+    internal JsonObject? WireStatus() => Status == null || Text(Status["status"]) == "warning" ? null : new() { ["status"] = Text(Status["status"]) is "installed" or "fallback" ? Text(Status["status"]) : "refused", ["lane"] = Text(Status["lane"]) is "odc" or "o11" ? Text(Status["lane"]) : null };
     internal Action? Changed { get; set; }
     private static string Hash(byte[] bytes) => Convert.ToHexStringLower(SHA256.HashData(bytes));
     private static int ProtocolNumber(string? protocol) => Regex.IsMatch(protocol ?? "", @"^[vd](0|[1-9]\d{0,8})$") ? int.Parse(protocol![1..], CultureInfo.InvariantCulture) : -1;
@@ -114,10 +119,11 @@ internal sealed class BridgeUpdates(string root, string runtime, string publicKe
         try { File.WriteAllText(temporary, value, new UTF8Encoding(false)); File.Move(temporary, file, true); }
         finally { File.Delete(temporary); }
     }
-    private void Report(string status, string message, string lane)
+    private void Report(string status, string message, string lane, string? reason = null)
     {
         message = Regex.Replace(message, @"[A-Za-z]:[\\/][^\s]*", "[path]");
         Status = new() { ["status"] = status, ["message"] = message, ["lane"] = lane };
+        if (status is "refused" or "warning") Status["reason"] = reason ?? "VERIFY_FAILED";
         NoLinks(Path.Combine(root, "private"));
         Atomic(Path.Combine(root, "private/bridge-update.json"), Status.ToJsonString());
     }
@@ -191,8 +197,17 @@ internal sealed class BridgeUpdates(string root, string runtime, string publicKe
             var file = Path.Combine(directory, Text(entry["path"])!);
             if (Path.GetExtension(file).Equals(".dll", StringComparison.OrdinalIgnoreCase) || Path.GetExtension(file).Equals(".exe", StringComparison.OrdinalIgnoreCase))
                 if (authenticode != null) await authenticode(file, token);
-                else if (AuthenticodeTrust.Check(file, Text(entry["signer"])!, thumbprint)["ok"]?.GetValue<bool>() != true) throw new SignedManifestRefusal(m);
+                else {
+                    var evidence = AuthenticodeTrust.Check(file, Text(entry["signer"])!, thumbprint);
+                    RequireAuthenticode(evidence, m);
+                }
         }
+    }
+    internal static void RequireAuthenticode(JsonObject evidence, JsonObject manifest)
+    {
+        if (evidence["ok"]?.GetValue<bool>() == true) return;
+        if (evidence["definitive"]?.GetValue<bool>() == true) throw new SignedManifestRefusal(manifest);
+        throw new BridgeVerificationUnavailable();
     }
     private string Fingerprint(string directory)
     {
@@ -233,7 +248,7 @@ internal sealed class BridgeUpdates(string root, string runtime, string publicKe
                     entries.Add(bridge);
                 }
                 catch (Exception e) when (e is IOException or FormatException or System.Text.Json.JsonException)
-                { Report("refused", "Bridge update refused: cached bridge verification failed", lane); }
+                { Report(e is BridgeVerificationUnavailable ? "warning" : "refused", e is BridgeVerificationUnavailable ? e.Message : "Bridge update refused: cached bridge verification failed", lane); }
             }
         }
         return entries.OrderByDescending(b => Sequence(b.Manifest)).ToList();
@@ -366,7 +381,7 @@ internal sealed class BridgeUpdates(string root, string runtime, string publicKe
                     if (e is SignedManifestRefusal refused && state["broken"] == null) Watermark(refused.Manifest, true);
                     if (e is SignedManifestRefusal refusal && Text(refusal.Manifest["lane"]) == lane
                         && Text(state["reports"]?[Identity(refusal.Manifest)]?["status"]) is not ("installed" or "active" or "failed")) Remember(refusal.Manifest, "refused", refusal.Code);
-                    Report("refused", "Bridge update refused: " + (e is IOException ? e.Message : "invalid offer or interrupted download"), lane);
+                    Report(e is BridgeVerificationUnavailable ? "warning" : "refused", (e is BridgeVerificationUnavailable ? "" : "Bridge update refused: ") + (e is IOException ? e.Message : "invalid offer or interrupted download"), lane, (e as SignedManifestRefusal)?.Code);
                 }
             }
             return changed;
@@ -377,44 +392,40 @@ internal sealed class BridgeUpdates(string root, string runtime, string publicKe
     {
         var (m, text) = VerifyManifest(offer);
         var version = Text(m["studioVersion"])!; var protocol = Text(m["protocol"])!;
+        Watermark(m);
+        if (Text(m["lane"]) != lane || Three(Text(installed?["version"]))?.ToString() != version || Text(installed?["runtime"]) != Text(m["runtime"])) throw new IOException("Bridge does not match the installed Studio and runtime");
+        if (BundledSupports(pack ?? new(), runtime, lane, Text(installed?["version"]), Text(installed?["runtime"]))) return false;
+        foreach (var previous in await Inventory(lane, version, token))
+        {
+            if (Sequence(previous.Manifest) > Sequence(m) || ProtocolNumber(previous.Protocol) > ProtocolNumber(protocol)) throw new IOException("Bridge sequence replay or protocol downgrade refused");
+            if (Sequence(previous.Manifest) == Sequence(m)) {
+                if (previous.Digest != Hash(Encoding.UTF8.GetBytes(text))) throw new IOException("An installed bridge identity cannot be replaced");
+                return Text(state["reports"]?[Identity(m)]?["status"]) is not ("active" or "failed") && Remember(m, "installed", "INSTALLED");
+            }
+        }
+        var destination = Path.Combine(Home, lane, version, protocol, Sequence(m).ToString(CultureInfo.InvariantCulture)); NoLinks(destination); Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+        var staging = Path.Combine(Path.GetDirectoryName(destination)!, ".staging-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(staging);
         try
         {
-            Watermark(m);
-            if (Text(m["lane"]) != lane || Three(Text(installed?["version"]))?.ToString() != version || Text(installed?["runtime"]) != Text(m["runtime"])) throw new IOException("Bridge does not match the installed Studio and runtime");
-            if (BundledSupports(pack ?? new(), runtime, lane, Text(installed?["version"]), Text(installed?["runtime"]))) return false;
-            foreach (var previous in await Inventory(lane, version, token))
+            foreach (var file in ((JsonArray)m["files"]!).OfType<JsonObject>())
             {
-                if (Sequence(previous.Manifest) > Sequence(m) || ProtocolNumber(previous.Protocol) > ProtocolNumber(protocol)) throw new IOException("Bridge sequence replay or protocol downgrade refused");
-                if (Sequence(previous.Manifest) == Sequence(m)) {
-                    if (previous.Digest != Hash(Encoding.UTF8.GetBytes(text))) throw new IOException("An installed bridge identity cannot be replaced");
-                    return Text(state["reports"]?[Identity(m)]?["status"]) is not ("active" or "failed") && Remember(m, "installed", "INSTALLED");
-                }
+                var size = file["size"]!.GetValue<long>(); using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token); deadline.CancelAfter(TimeSpan.FromSeconds(Math.Min(300, 15 + (size + 65535) / 65536)));
+                using var response = await http.GetAsync("agent/bridges/" + lane + "/" + version + "/" + protocol + "/" + Text(file["sha256"]), HttpCompletionOption.ResponseHeadersRead, deadline.Token);
+                if (response.StatusCode != System.Net.HttpStatusCode.OK || response.Content.Headers.ContentLength is { } length && length != size) throw new IOException("Bridge download refused or size mismatch");
+                var target = Path.Combine(staging, Text(file["path"])!); Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+                await using var input = await response.Content.ReadAsStreamAsync(deadline.Token); await using var output = new FileStream(target, FileMode.CreateNew, FileAccess.Write, FileShare.None);
+                var buffer = new byte[65536]; long written = 0; int count;
+                while ((count = await input.ReadAsync(buffer, deadline.Token)) > 0) { written += count; if (written > size) throw new IOException("Bridge download exceeds the signed size"); await output.WriteAsync(buffer.AsMemory(0, count), deadline.Token); }
+                if (written != size) throw new IOException("Bridge download was interrupted"); output.Flush(true);
             }
-            var destination = Path.Combine(Home, lane, version, protocol, Sequence(m).ToString(CultureInfo.InvariantCulture)); NoLinks(destination); Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
-            var staging = Path.Combine(Path.GetDirectoryName(destination)!, ".staging-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(staging);
-            try
-            {
-                foreach (var file in ((JsonArray)m["files"]!).OfType<JsonObject>())
-                {
-                    var size = file["size"]!.GetValue<long>(); using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token); deadline.CancelAfter(TimeSpan.FromSeconds(Math.Min(300, 15 + (size + 65535) / 65536)));
-                    using var response = await http.GetAsync("agent/bridges/" + lane + "/" + version + "/" + protocol + "/" + Text(file["sha256"]), HttpCompletionOption.ResponseHeadersRead, deadline.Token);
-                    if (response.StatusCode != System.Net.HttpStatusCode.OK || response.Content.Headers.ContentLength is { } length && length != size) throw new IOException("Bridge download refused or size mismatch");
-                    var target = Path.Combine(staging, Text(file["path"])!); Directory.CreateDirectory(Path.GetDirectoryName(target)!);
-                    await using var input = await response.Content.ReadAsStreamAsync(deadline.Token); await using var output = new FileStream(target, FileMode.CreateNew, FileAccess.Write, FileShare.None);
-                    var buffer = new byte[65536]; long written = 0; int count;
-                    while ((count = await input.ReadAsync(buffer, deadline.Token)) > 0) { written += count; if (written > size) throw new IOException("Bridge download exceeds the signed size"); await output.WriteAsync(buffer.AsMemory(0, count), deadline.Token); }
-                    if (written != size) throw new IOException("Bridge download was interrupted"); output.Flush(true);
-                }
-                File.WriteAllText(Path.Combine(staging, "manifest.json"), text, new UTF8Encoding(false)); File.WriteAllText(Path.Combine(staging, "manifest.sig"), Text(offer["signature"]));
-                await VerifyFiles(m, staging, token);
-                lock (stateGate) { var known = Watermark(m); known["installed"] = Sequence(m); known["protocol"] = ProtocolNumber(protocol); state["watermarks"]![Pair(m)] = known.DeepClone(); Save(); }
-                NoLinks(destination); Directory.Move(staging, destination);
-                lock (stateGate) cache[destination] = (Fingerprint(destination), new(m, destination, Hash(Encoding.UTF8.GetBytes(text))));
-                Remember(m, "installed", "INSTALLED"); Report("installed", $"Updated the {lane} bridge for {(lane == "odc" ? "ODC Studio" : "Service Studio")} {version}", lane); return true;
-            }
-            finally { if (Directory.Exists(staging)) Directory.Delete(staging, true); }
+            File.WriteAllText(Path.Combine(staging, "manifest.json"), text, new UTF8Encoding(false)); File.WriteAllText(Path.Combine(staging, "manifest.sig"), Text(offer["signature"]));
+            await VerifyFiles(m, staging, token);
+            lock (stateGate) { var known = Watermark(m); known["installed"] = Sequence(m); known["protocol"] = ProtocolNumber(protocol); state["watermarks"]![Pair(m)] = known.DeepClone(); Save(); }
+            NoLinks(destination); Directory.Move(staging, destination);
+            lock (stateGate) cache[destination] = (Fingerprint(destination), new(m, destination, Hash(Encoding.UTF8.GetBytes(text))));
+            Remember(m, "installed", "INSTALLED"); Report("installed", $"Updated the {lane} bridge for {(lane == "odc" ? "ODC Studio" : "Service Studio")} {version}", lane); return true;
         }
-        catch { Watermark(m, true); throw; }
+        finally { if (Directory.Exists(staging)) Directory.Delete(staging, true); }
     }
     private JsonNode? FindActive(string lane, JsonObject context)
     {
