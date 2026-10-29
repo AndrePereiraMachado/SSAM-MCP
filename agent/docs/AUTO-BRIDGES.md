@@ -45,7 +45,10 @@ its original release ABI. A downloaded hook is never advertised as release h1.
 The O11 hash handshake and existing process, port and pending-attach guards remain.
 
 Verification is cached by signed digest and the file inventory's sizes and
-modification times. Changed files invalidate the cache. A pipe operation only
+modification times and file IDs. The selection cache is only an optimization:
+an in-place overwrite can preserve size, mtime and file id. The security
+guarantee is full verification of the locked copy at attach, not this cache.
+Changed metadata invalidates the cache. A pipe operation only
 checks the active protocol for that Studio process; it never runs Authenticode.
 Every actual attach copies the artifact into a unique `private/bridge-loads/`
 directory, locks the copy against write/delete sharing, and fully verifies that
@@ -82,18 +85,34 @@ Quarantine is scoped to the Studio PID/start time. A restarted Studio or a newer
 sequence is eligible again. Existing guards still prohibit an unsafe second
 injection into a process where a hook may already be loaded.
 
-Failed and fallback records survive agent restarts. Hello reports contain at
+Installation records survive agent and Studio restarts. Ending a Studio instance
+changes active or failed telemetry back to installed; it never erases a verified
+installation. A repeated offer repairs missing installation telemetry and
+reconnects only if that telemetry changed. Hello reports contain at
 most 16 entries, newest first, retaining each lane/version's current record.
 Reasons are machine-readable uppercase codes; a bundled fallback is recorded
-on the failed identity, never as sequence zero. Refused offers are reported too.
+on the failed identity, never as sequence zero. Only authenticated manifests with
+definitive signer or trust-anchor refusals produce persistent refused records.
+Transient preconditions, interrupted transfers and invalid signatures never
+replace installation or active-instance telemetry.
 Local notifications can explain the refusal but never include absolute paths.
 
 Snapshots are reused for the same artifact and Studio instance; an already
 active ODC identity is not injected again. Concurrent ODC attaches are serialized.
-Failure paths release handles and remove their snapshot. A periodic sweep frees
-dead-instance snapshots and removes dead active records; startup also reconciles
-the on-disk instance index. Stopping the agent releases locks but keeps active
-snapshots until their Studio exits, because Windows can still map those DLLs.
+Failures before load release handles and remove their snapshot. Once a load may
+have started, errors from binding, authentication, ui_alive or an unconfirmed
+attach preserve the entire copy and its lock until the instance exits.
+A complete process snapshot is required for cleanup; unavailable or partial
+enumeration is never interpreted as an empty list. Cleanup exceptions do not
+block hello, and a failed deletion keeps its index for retry. An unreadable state
+file disables maintenance without being overwritten.
+
+Instance lifetime comparisons normalize Process.StartTime and CIM timestamps to
+microseconds, while the hook request retains its exact timestamp. Node performs
+one cached native enumeration covering both Studios. Sweeps run only for leases
+or active state (plus startup recovery), at five seconds with leases and thirty
+seconds without them. Stopping the agent releases locks but keeps copies that
+may still be mapped, for cleanup after the Studio exits.
 
 Downloads run in the
 background while the channel opens immediately. Successful installation or a

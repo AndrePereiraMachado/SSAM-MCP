@@ -73,10 +73,10 @@ test('R3 native snapshot reuse and immediate disposal cleanup', async t => {
 });
 test('R3 native refused offers have machine-readable reasons and bounded history', async t => {
   const f = await fixture(t);
-  const requests = Array.from({ length: 20 }, (_, i) => { const offer = f.offer('v101', { sequence: i + 1 }); offer.signature = Buffer.alloc(64).toString('base64'); return { offer }; });
+  const requests = Array.from({ length: 20 }, (_, i) => { const offer = f.offer('v101', { sequence: i + 1 }); const m = JSON.parse(offer.manifest); m.files[0].signer = 'unknown'; offer.manifest = JSON.stringify(m); offer.signature = sign(null, Buffer.from(offer.manifest), keys.privateKey).toString('base64'); return { offer }; });
   const results = await f.run({ requests }); const reports = results.at(-1).reports;
   assert.equal(reports.length, 16); assert.equal(reports[0].sequence, 20);
-  assert.ok(reports.every(r => r.status === 'refused' && r.reason === 'VERIFY_FAILED' && r.sequence > 0));
+  assert.ok(reports.every(r => r.status === 'refused' && r.reason === 'SIGNER_REFUSED' && r.sequence > 0));
   const rejected = f.offer('v101', { sequence: 22 }); const manifest = JSON.parse(rejected.manifest); delete manifest.files[0].signer;
   rejected.manifest = JSON.stringify(manifest); rejected.signature = sign(null, Buffer.from(rejected.manifest), keys.privateKey).toString('base64');
   const replay = await f.run({ requests: [{ offer: rejected }, { offer: f.offer('v101', { sequence: 21 }) }] });

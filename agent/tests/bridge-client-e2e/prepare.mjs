@@ -29,7 +29,7 @@ public class StartupHook {
       using var pipe = new NamedPipeServerStream("ODC3-Bridge-v100-" + Environment.ProcessId, PipeDirection.InOut, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
       await pipe.WaitForConnectionAsync(); using var reader = new StreamReader(pipe); using var writer = new StreamWriter(pipe) { AutoFlush = true };
       var line = await reader.ReadLineAsync(); var data = JsonNode.Parse(line![(line.IndexOf(' ') + 1)..]);
-      await writer.WriteLineAsync(new JsonObject { ["ok"] = true, ["protocol"] = 1, ["root"] = data!["root"]!.DeepClone() }.ToJsonString());
+      await writer.WriteLineAsync(new JsonObject { ["ok"] = true, ["protocol"] = 1, ["root"] = Environment.GetEnvironmentVariable("SSAM_E2E_BAD_BIND") == "1" ? JsonValue.Create("wrong-root") : data!["root"]!.DeepClone() }.ToJsonString());
     } });
   }
 }`);

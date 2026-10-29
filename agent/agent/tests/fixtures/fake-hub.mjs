@@ -69,7 +69,7 @@ export async function fakeHub({ credential, kernel = { odc: '1.7.28', o11: '11.5
       hub.channel = randomBytes(16).toString('hex');
       return json(200, { t: 'welcome', channel: hub.channel, customer: 'Cliente Teste', resumed, heartbeatMs: 15000, deadAfterMs: 45000,
         maxMessageBytes: 1048576, inlineMaxBytes: 524288, partBytes: 4194304, maxFileBytes: 536870912, kernel,
-        compatible: { odc: { ok: true }, o11: { ok: true } }, ...welcome });
+        compatible: { odc: { ok: true }, o11: { ok: true } }, ...(typeof welcome === 'function' ? welcome(hello) : welcome) });
     }
     if (url.searchParams.get('channel') !== hub.channel) return json(404, { code: 'CHANNEL_UNKNOWN' });
     if (req.method === 'GET' && url.pathname === '/agent/v1/stream' && hub.holdStreams > 0) { hub.holdStreams--; hub.heldStreams = (hub.heldStreams ?? 0) + 1; notify(); return; }

@@ -64,7 +64,7 @@ test('R3.3 active identity is remembered and dead instances are pruned', async t
   f.store.rejectLoad(selected, 'failed instance', { ...context, attempted: true, bridgeFailure: true });
   assert.ok(f.store.reports().some(r => r.status === 'failed'));
   await f.store.reconcile([], { odc: { installed: { version: '1.7.30' } } });
-  assert.equal(f.store.isActive(selected, context), false); assert.equal(f.store.reports().length, 0);
+  assert.equal(f.store.isActive(selected, context), false); assert.deepEqual(f.store.reports().map(r => r.status), ['installed']);
 });
 test('R3.3 repeated and concurrent ODC attaches issue one load and preserve one snapshot', async t => {
   const f = fixture(t); await f.install(); let loads = 0;
