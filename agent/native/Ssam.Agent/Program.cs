@@ -111,6 +111,14 @@ internal static class Program
             }
             // check-render-request: stdin [request] -> [{ok:true} | {error}], the checks of screen.render (tests/native/render.test.mjs
             // compares them with the Node agent's).
+            // check-inside: stdin [[child, parent]] -> [bool], the path comparison of LocalPaths.Inside (tests/native/upload.test.mjs
+            // compares it with the Node agent's insidePath on every character pair of a table).
+            if (args is ["check-inside"])
+            {
+                var pairs = JsonNode.Parse(await Console.In.ReadToEndAsync()) as JsonArray ?? throw new ArgumentException("Expected a JSON array");
+                Console.WriteLine(new JsonArray(pairs.Select(pair => (JsonNode?)JsonValue.Create(LocalPaths.Inside(pair![0]!.GetValue<string>(), pair[1]!.GetValue<string>()))).ToArray()).ToJsonString());
+                return 0;
+            }
             if (args is ["check-render-request"])
             {
                 var requests = JsonNode.Parse(await Console.In.ReadToEndAsync()) as JsonArray ?? throw new ArgumentException("Expected a JSON array");

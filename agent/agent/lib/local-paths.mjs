@@ -55,8 +55,30 @@ export function insidePath(child, parent, platform = process.platform) {
     const c = String(child).normalize('NFC'); const p = String(parent).normalize('NFC').replace(/\/+$/, '');
     return c === p || c.startsWith(p + '/') || p === '';
   }
-  const c = String(child).toLowerCase(); const p = String(parent).toLowerCase().replace(/[\\/]+$/, '');
+  const c = ordinalUpper(String(child)); const p = ordinalUpper(String(parent).replace(/[\\/]+$/, ''));
   return c === p || c.startsWith(p + '\\');
+}
+
+// Windows compares names ordinally without case: each character by its simple upper-case mapping, nothing else (the
+// .NET StringComparison.OrdinalIgnoreCase of native/Ssam.Agent/LocalPaths.cs). No Unicode case folding: the Kelvin sign,
+// the Angstrom sign and the Ohm sign stay distinct from K, Å and Ω, as NTFS keeps them distinct folders.
+// .NET maps by the simple upper case of UnicodeData, never from a non-ASCII character to ASCII (dotless i and long s stay);
+// JavaScript only offers the full mapping, so the few letters whose full upper case is several characters (Greek with
+// ypogegrammeni) get their simple one here. tests/native/upload.test.mjs checks every character pair against .NET.
+const upperChar = ch => {
+  const code = ch.codePointAt(0);
+  if (code >= 0x1f80 && code <= 0x1faf) return (code & 0xf) < 8 ? String.fromCodePoint(code + 8) : ch;
+  if (code === 0x1fb3) return '\u1fbc';
+  if (code === 0x1fc3) return '\u1fcc';
+  if (code === 0x1ff3) return '\u1ffc';
+  const up = ch.toUpperCase();
+  if ([...up].length !== 1 || (code > 0x7f && up.codePointAt(0) <= 0x7f)) return ch;
+  return up;
+};
+export function ordinalUpper(text) {
+  let out = '';
+  for (const ch of text) out += upperChar(ch);
+  return out;
 }
 
 export const samePath = (a, b, platform = process.platform) => insidePath(a, b, platform) && insidePath(b, a, platform);

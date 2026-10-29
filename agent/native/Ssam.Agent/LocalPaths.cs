@@ -71,8 +71,10 @@ internal static class LocalPaths
             var c = child.Normalize(); var p = parent.Normalize().TrimEnd('/');
             return p.Length == 0 || c == p || c.StartsWith(p + "/", StringComparison.Ordinal);
         }
-        var lc = child.ToLowerInvariant(); var lp = parent.ToLowerInvariant().TrimEnd('\\', '/');
-        return lc == lp || lc.StartsWith(lp + "\\", StringComparison.Ordinal);
+        // Ordinal without case, never Unicode case folding (Kelvin, Angstrom and Ohm signs stay distinct, as on NTFS); the
+        // Node agent's ordinalUpper is the same rule.
+        var lp = parent.TrimEnd('\\', '/');
+        return child.Equals(lp, StringComparison.OrdinalIgnoreCase) || child.StartsWith(lp + "\\", StringComparison.OrdinalIgnoreCase);
     }
     internal static bool Same(string a, string b) => Inside(a, b) && Inside(b, a);
     internal static bool Network(string real) => !Mac && real.Length >= 2 && real[0] is '\\' or '/' && real[1] is '\\' or '/';
