@@ -99,7 +99,7 @@ export function createKinds({ root, runtimeRoot = root, ws, pack = {}, kernel = 
       const pid = Number(p?.pid);
       if (!Number.isSafeInteger(pid) || pid < 1) continue;
       const version = p.version ?? (p.path ? await deps.fileVersion(p.path) : null) ?? null;
-      pids.set(pid, { image, version, path: p.path });
+      pids.set(pid, { image, version, path: p.path, startedUtc: p.startedUtc });
       processes.push({ pid, path: p.path ?? null, version });
     }
     return processes;
@@ -191,8 +191,7 @@ export function createKinds({ root, runtimeRoot = root, ws, pack = {}, kernel = 
     checkFinalLine(mapped);
     if (MANIFEST_COMMANDS.has(mapped[0]) && mapped[1]) checkManifestFile(mapped[1]);
     const target = await checkPid('odc', pid);
-    const selected = await selectedBridge('odc', target);
-    const expectedVersion = selected?.protocol ?? pack.odcBridge;
+    const expectedVersion = deps.bridgeUpdates?.protocolFor('odc', target.version, target) ?? pack.odcBridge;
     if (!expectedVersion || version !== expectedVersion)
       throw refuse('BRIDGE_VERSION_MISMATCH', `The agent pack carries the ODC bridge ${pack.odcBridge ?? '(none)'}; the server asked for ${version}`);
     const connect = Number.isFinite(Number(connectMs)) ? Math.min(Math.max(Number(connectMs), 1), 120000) : undefined;
@@ -213,31 +212,33 @@ export function createKinds({ root, runtimeRoot = root, ws, pack = {}, kernel = 
     const version = selected?.protocol ?? pack.odcBridge;
     requireDataRootProtocol(version);
     if (!/^v\d+$/.test(version ?? '')) throw refuse('BRIDGE_VERSION_MISMATCH', 'The agent pack carries no ODC bridge');
-    const client = path.join(runtimeRoot, 'odc', 'studio', 'bridge', 'client', 'bin', 'Release', 'net10.0', 'ODC3.Bridge.Client.dll');
-    const bundled = path.join(runtimeRoot, 'odc', 'studio', 'bridge', 'bin', 'Release', 'net8.0', 'ODC3.Bridge.' + version + '.dll');
-    const bridge = selected ? selectedFile(selected, ['ODC3.Bridge.' + version + '.dll', 'ODC3.Bridge.dll']) : bundled;
+    const lease = selected ? await deps.bridgeUpdates.prepareAttach(selected, target) : null;
+    const client = lease ? selectedFile(lease, ['ODC3.Bridge.Client.dll']) : path.join(runtimeRoot, 'odc', 'studio', 'bridge', 'client', 'bin', 'Release', 'net10.0', 'ODC3.Bridge.Client.dll');
+    const bridge = lease ? selectedFile(lease, ['ODC3.Bridge.' + version + '.dll', 'ODC3.Bridge.dll']) : path.join(runtimeRoot, 'odc', 'studio', 'bridge', 'bin', 'Release', 'net8.0', 'ODC3.Bridge.' + version + '.dll');
     // macOS: no .NET client, the agent itself speaks the diagnostic IPC (the client is not in the macOS pack).
     for (const file of platform === 'darwin' ? [bridge] : [client, bridge]) if (!fs.existsSync(file)) throw refuse('ATTACH_FAILED', 'The agent pack is missing ' + path.relative(root, file));
+    let result;
     try {
-      const result = await deps.attachOdc(platform === 'darwin' ? { pid: target.pid, bridge, version } : { pid: target.pid, client, bridge });
+      result = await deps.attachOdc(platform === 'darwin' ? { pid: target.pid, bridge, version } : { pid: target.pid, client, bridge });
       if (result?.ok !== true || result?.attached !== true) {
         if (!selected) return { ok: result?.ok === true, attached: result?.attached === true, pid: target.pid, version, note: result?.note ?? result?.error ?? null };
-        throw new AgentError('ATTACH_FAILED', result?.error ?? result?.note ?? 'Bridge load was not confirmed', { executed: null });
+        throw Object.assign(new AgentError('ATTACH_FAILED', result?.error ?? result?.note ?? 'Bridge load was not confirmed', { executed: null }),
+          { attachAttempted: result.attachAttempted === true, bridgeLoadFailure: result.bridgeLoadFailure === true });
       }
-      await bindOdcRoot(target.pid, version, null);
-      return { ok: true, attached: true, pid: target.pid, version, note: result?.note ?? null };
     } catch (error) {
-      if (!selected) throw error;
-      deps.bridgeUpdates.rejectLoad(selected, error.message); deps.bridgeChanged?.();
-      // Never repeat a startup hook when it may have executed in this process.
-      if (error.executed === false) return odcAttach({ pid });
+      if (selected && deps.bridgeUpdates.rejectLoad(selected, error.message, { ...target, attempted: error.attachAttempted === true, bridgeFailure: error.bridgeLoadFailure === true })) deps.bridgeChanged?.();
+      await lease?.release();
       throw error;
     }
+    if (lease) deps.bridgeUpdates.markActive(selected, target);
+    // Binding, authentication and pipe failures are transient and never quarantine a DLL.
+    await bindOdcRoot(target.pid, version, null);
+    return { ok: true, attached: true, pid: target.pid, version, note: result?.note ?? null };
   }
 
   async function selectedBridge(lane, target) {
     if (!deps.bridgeUpdates || !target.path) return null;
-    return deps.bridgeUpdates.select(lane, target.version, await deps.studioRuntime(target.path, lane));
+    return deps.bridgeUpdates.select(lane, target.version, await deps.studioRuntime(target.path, lane), target);
   }
   function selectedFile(selected, names) {
     const candidates = selected.files.filter(f => names.includes(path.posix.basename(f.path)));
@@ -303,8 +304,9 @@ export function createKinds({ root, runtimeRoot = root, ws, pack = {}, kernel = 
     if (candidates.length === 0) throw refuse('STUDIO_NOT_SELECTED', 'No matching Service Studio is open. Open it normally, then connect.');
     if (candidates.length > 1) throw refuse('STUDIO_NOT_SELECTED', 'Several Service Studios are open (' + candidates.map(p => p.pid).join(', ') + '); select one with pid.');
     const target = await checkPid('o11', candidates[0].pid);
+    if (deps.bridgeUpdates) target.startedUtc = (await deps.describe(target.pid)).startedUtc;
     const selected = await selectedBridge('o11', target);
-    const activePack = selected ? { ...pack, o11BuiltFor: selected.studioVersion, o11Hook: selected.files.some(f => f.path === 'hook/Anvil.RuntimeHook.Agent.dll') ? 'dev' : selected.protocol,
+    const activePack = selected ? { ...pack, o11BuiltFor: selected.studioVersion, o11Hook: 'd1',
       o11Bridge: { sha256: selected.files.find(f => path.posix.basename(f.path) === 'Anvil.Bridge.dll')?.sha256 } } : pack;
     // The server's version window (servedVersions of the hello reply) decides, not the pack alone: a bridge built for one
     // served version is loaded into another served Service Studio with a warning. Without a window from the server, or
@@ -321,15 +323,18 @@ export function createKinds({ root, runtimeRoot = root, ws, pack = {}, kernel = 
           + (inWindow(target.version) ? 'the server serves both versions. ' : 'this Service Studio is newer than the versions the server serves (' + window.join(', ') + '). ') + 'Check the result in Service Studio before publishing.' };
     }
     // pack.json decides the hook (o11Hook "h1": the signed release layout) and the bridge file of the version handshake.
+    let lease;
     try {
       const record = await connectO11({ root, runtimeRoot: selected?.root ?? runtimeRoot, pid: target.pid, port: o11Port, studioVersion: target.version, describe: deps.describe,
-        attach: deps.attachO11, sleep: deps.sleep, now: deps.now, pack: activePack, installedBridge: selected, warning, ...(deps.env ? { env: deps.env } : {}) });
+        attach: deps.attachO11, sleep: deps.sleep, now: deps.now, pack: activePack, installedBridge: selected,
+        prepareBridge: selected ? async () => (lease = await deps.bridgeUpdates.prepareAttach(selected, { ...target, port: o11Port })) : null,
+        warning, ...(deps.env ? { env: deps.env } : {}) });
+      if (selected) deps.bridgeUpdates.markActive(selected, target);
       onConnection(record);
       return record;
     } catch (error) {
-      if (!selected) throw error;
-      deps.bridgeUpdates.rejectLoad(selected, error.message); deps.bridgeChanged?.();
-      if (error.executed === false) return o11ConnectKind({ pid });
+      if (selected && deps.bridgeUpdates.rejectLoad(selected, error.message, { ...target, attempted: error.attachAttempted === true, bridgeFailure: error.bridgeLoadFailure === true })) deps.bridgeChanged?.();
+      await lease?.release();
       throw error;
     }
   }

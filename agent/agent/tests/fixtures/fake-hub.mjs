@@ -26,6 +26,7 @@ export async function fakeHub({ credential, kernel = { odc: '1.7.28', o11: '11.5
     stream: null, channel: null, instance: null,
     downloads: new Map(),  // transfer -> {buffer, partBytes}
     bridges: new Map(), // authenticated bridge route -> bytes, or null to interrupt the download
+    holdBridges: false, bridgeWaiters: [],
     uploads: new Map(),    // transfer -> {parts: [], headers}
   };
   const notify = () => { for (const w of [...waiters]) if (w.check()) { waiters.splice(waiters.indexOf(w), 1); w.done(); } };
@@ -47,6 +48,7 @@ export async function fakeHub({ credential, kernel = { odc: '1.7.28', o11: '11.5
     if (req.headers.authorization !== 'Bearer ' + credential) { res.writeHead(401).end(); return; }
     const json = (status, value) => res.writeHead(status, { 'content-type': 'application/json' }).end(JSON.stringify(value));
     if (req.method === 'GET' && url.pathname.startsWith('/agent/bridges/')) {
+      if (hub.holdBridges) await new Promise(resolve => { hub.bridgeWaiters.push(resolve); notify(); });
       if (!hub.bridges.has(url.pathname)) return json(404, { code: 'NOT_FOUND' });
       const bytes = hub.bridges.get(url.pathname);
       if (bytes === null) { res.writeHead(200, { 'content-length': 999 }); res.write('partial'); res.destroy(); return; }
@@ -74,7 +76,7 @@ export async function fakeHub({ credential, kernel = { odc: '1.7.28', o11: '11.5
     if (req.method === 'GET' && url.pathname === '/agent/v1/stream') {
       res.writeHead(200, { 'content-type': 'application/x-ndjson', 'cache-control': 'no-store' });
       res.flushHeaders();
-      hub.stream = res; hub.streams++;
+      hub.stream = res; hub.streamChannel = url.searchParams.get('channel'); hub.streams++;
       req.on('close', () => { if (hub.stream === res) hub.stream = null; });
       notify();
       return;
@@ -142,6 +144,7 @@ export async function fakeHub({ credential, kernel = { odc: '1.7.28', o11: '11.5
     const buffer = Buffer.concat(upload.parts);
     return sha256(buffer) === ref.sha256 && buffer.length === ref.size ? buffer : null;
   };
-  hub.close = () => new Promise(resolve => { hub.endStream(); server.closeAllConnections(); server.close(resolve); });
+  hub.releaseBridges = () => { hub.holdBridges = false; for (const resolve of hub.bridgeWaiters.splice(0)) resolve(); };
+  hub.close = () => new Promise(resolve => { hub.releaseBridges(); hub.endStream(); server.closeAllConnections(); server.close(resolve); });
   return hub;
 }

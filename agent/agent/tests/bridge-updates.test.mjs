@@ -21,8 +21,9 @@ const installed = { version: '1.7.30.1234', runtime: 'net10.0' };
 function offer(protocol = 'v101', options = {}) {
   const bytes = Buffer.from('signed test binary ' + protocol);
   const manifest = JSON.stringify({ schema: 1, lane: 'odc', studioVersion: '1.7.30', runtime: 'net10.0', protocol,
+    sequence: Number(protocol.slice(1)),
     createdAt: '2026-10-28T00:00:00Z', authenticodeThumbprint: anchors.thumbprint,
-    files: [{ path: `bridge/ODC3.Bridge.${protocol}.dll`, sha256: digest(bytes), size: bytes.length }], ...options });
+    files: [{ path: `bridge/ODC3.Bridge.${protocol}.dll`, sha256: digest(bytes), size: bytes.length }, { path: 'client/ODC3.Bridge.Client.dll', sha256: digest(bytes), size: bytes.length }], ...options });
   return { value: { lane: 'odc', studioVersion: '1.7.30', protocol, manifest, signature: sign(null, Buffer.from(manifest), keys.privateKey).toString('base64') }, bytes };
 }
 function fixture(t, extra = {}) {
@@ -30,7 +31,7 @@ function fixture(t, extra = {}) {
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const events = [];
   let item = offer();
-  const store = createBridgeUpdates({ root, anchors, authenticode: async () => {}, request: async () => new Response(item.bytes), notify: e => events.push(e), ...extra });
+  const store = createBridgeUpdates({ root, anchors, authenticode: async () => {}, seal: async () => ({ release() {} }), request: async () => new Response(item.bytes), notify: e => events.push(e), ...extra });
   return { root, store, events, set: value => { item = value; }, install: (value = item.value) => store.offers({ compatible: { odc: { bridgeOffer: value } } }, { odc: { installed } }) };
 }
 test('valid offer verifies, installs atomically, preserves previous bridge and selects exact runtime', async t => {
@@ -40,12 +41,13 @@ test('valid offer verifies, installs atomically, preserves previous bridge and s
   assert.equal(await f.store.select('odc', installed.version, 'net8.0'), null);
   assert.equal(await f.store.select('odc', '1.7.29', 'net10.0'), null);
   const next = offer('v102'); f.set(next); await f.install();
-  assert.ok(fs.existsSync(path.join(f.root, 'bridges/odc/1.7.30/v101/manifest.json')));
+  assert.ok(fs.existsSync(path.join(f.root, 'bridges/odc/1.7.30/v101/101/manifest.json')));
   const selected = await f.store.select('odc', installed.version, installed.runtime);
-  f.store.rejectLoad(selected, 'test load failure');
-  assert.equal((await f.store.select('odc', installed.version, installed.runtime)).protocol, 'v101');
+  const context = { pid: 1, startedUtc: 'S', attempted: true, bridgeFailure: true };
+  f.store.rejectLoad(selected, 'test load failure', context);
+  assert.equal((await f.store.select('odc', installed.version, installed.runtime, context)).protocol, 'v101');
   const restarted = createBridgeUpdates({ root: f.root, anchors, authenticode: async () => {} });
-  assert.equal((await restarted.select('odc', installed.version, installed.runtime)).protocol, 'v101');
+  assert.equal((await restarted.select('odc', installed.version, installed.runtime, context)).protocol, 'v101');
   const old = offer('v100'); f.set(old);
   assert.equal(await f.install(), false);
   assert.match(f.events.at(-1).message, /downgrade/);
@@ -65,13 +67,13 @@ for (const scenario of ['signature', 'sha256', 'missing Authenticode', 'wrong Au
     if (scenario === 'interrupted') store = createBridgeUpdates({ root: f.root, anchors, authenticode: async () => {}, request: async () => new Response(new ReadableStream({ start(c) { c.enqueue(Buffer.from('x')); c.error(new Error('interrupted')); } })) });
     if (scenario === 'unconfigured') store = createBridgeUpdates({ root: f.root });
     assert.equal(await store.offers({ compatible: { odc: { bridgeOffer: item.value } } }, { odc: { installed } }), false);
-    assert.equal(fs.existsSync(path.join(f.root, 'bridges/odc/1.7.30/v101')), false);
+    assert.equal(fs.existsSync(path.join(f.root, 'bridges/odc/1.7.30/v101/101')), false);
     if (['signature', 'sha256', 'path', 'identity', 'unconfigured'].includes(scenario)) assert.equal(checks, 0);
   });
 }
 test('cached bridge is reverified before selection and unlisted dependency is refused', async t => {
   const f = fixture(t); await f.install();
-  fs.writeFileSync(path.join(f.root, 'bridges/odc/1.7.30/v101/bridge/evil.dll'), 'evil');
+  fs.writeFileSync(path.join(f.root, 'bridges/odc/1.7.30/v101/101/bridge/evil.dll'), 'evil');
   assert.equal(await f.store.select('odc', installed.version, installed.runtime), null);
   assert.match(f.events.at(-1).message, /Unlisted/);
 });
@@ -82,14 +84,13 @@ test('an interrupted download can recover on the next hello without restarting',
   f.set(item); assert.equal(await f.install(), true);
   assert.equal((await f.store.select('odc', installed.version, installed.runtime)).protocol, 'v101');
 });
-test('Windows Authenticode demands Valid, embedded Authenticode and pinned signer; Mac demands verifier success', async () => {
+test('Windows Authenticode demands Valid, embedded Authenticode and pinned signer; Mac updates fail closed', async () => {
   let args;
-  await verifyAuthenticode('C:\\safe\\bridge.dll', anchors.thumbprint, { platform: 'win32', run: async (exe, a) => { args = a; return { stdout: anchors.thumbprint }; } });
+  await verifyAuthenticode('C:\\safe\\bridge.dll', anchors.thumbprint, { platform: 'win32', runtimeRoot: 'C:\\app', run: async (exe, a) => { args = a; return { stdout: a[0] === 'windows-directory' ? 'C:\\Windows' : anchors.thumbprint }; } });
   assert.match(args.join(' '), /Status -ne 'Valid'/);
   assert.match(args.join(' '), /SignatureType -ne 'Authenticode'/);
-  await assert.rejects(verifyAuthenticode('test.dll', anchors.thumbprint, { platform: 'win32', run: async () => ({ stdout: 'B'.repeat(40) }) }), /pinned/);
-  await verifyAuthenticode('/test.dll', anchors.thumbprint, { platform: 'darwin', runtimeRoot: '/app', run: async (exe, a) => { assert.equal(exe, path.join('/app', 'tools/osslsigncode')); assert.ok(a.includes('sha1:' + anchors.thumbprint)); } });
-  await assert.rejects(verifyAuthenticode('/test.dll', anchors.thumbprint, { platform: 'darwin', runtimeRoot: '/app', run: async () => { throw new Error('missing'); } }));
+  await assert.rejects(verifyAuthenticode('test.dll', anchors.thumbprint, { platform: 'win32', runtimeRoot: 'C:\\app', run: async (exe, a) => ({ stdout: a[0] === 'windows-directory' ? 'C:\\Windows' : 'B'.repeat(40) }) }), /pinned/);
+  await assert.rejects(verifyAuthenticode('/test.dll', anchors.thumbprint, { platform: 'darwin', runtimeRoot: '/app' }), /disabled/);
 });
 test('runtimeconfig selects the Studio runtime and fails closed for unreadable config', async t => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'studio-runtime-')); t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
@@ -102,11 +103,11 @@ test('signed flat O11 artifact selects the new runtime and preserves the hash ha
   const root = makeRoot(); let bridge;
   t.after(async () => { await bridge?.close(); fs.rmSync(root, { recursive: true, force: true }); });
   const contents = { 'hook/Anvil.RuntimeHook.Agent.dll': Buffer.from('signed hook'), 'bridge/Anvil.Bridge.dll': Buffer.from('signed bridge') };
-  const m = { schema: 1, lane: 'o11', studioVersion: '11.55.94', runtime: 'net10.0', protocol: 'h1', createdAt: '2026-10-28T00:00:00Z', authenticodeThumbprint: anchors.thumbprint,
+  const m = { schema: 1, lane: 'o11', studioVersion: '11.55.94', runtime: 'net10.0', protocol: 'd1', sequence: 1, createdAt: '2026-10-28T00:00:00Z', authenticodeThumbprint: anchors.thumbprint,
     files: Object.entries(contents).map(([name, bytes]) => ({ path: name, sha256: digest(bytes), size: bytes.length })) };
   const manifest = JSON.stringify(m);
   const signed = { lane: m.lane, studioVersion: m.studioVersion, protocol: m.protocol, manifest, signature: sign(null, Buffer.from(manifest), keys.privateKey).toString('base64') };
-  const updates = createBridgeUpdates({ root, anchors, authenticode: async () => {}, request: async route => new Response(Object.values(contents).find(b => route.endsWith(digest(b)))) });
+  const updates = createBridgeUpdates({ root, anchors, authenticode: async () => {}, seal: async () => ({ release() {} }), request: async route => new Response(Object.values(contents).find(b => route.endsWith(digest(b)))) });
   assert.equal(await updates.offers({ compatible: { o11: { bridgeOffer: signed } } }, { o11: { installed: { version: '11.55.94.1', runtime: 'net10.0' } } }), true);
   const port = await freePort(); const pid = 6500; let attached = 0;
   const kinds = createKinds({ root, pack: readPack(root), ws: createWorkspace(root), kernel: () => ({ o11: '11.55.94' }), o11Port: port,
@@ -116,7 +117,7 @@ test('signed flat O11 artifact selects the new runtime and preserves the hash ha
       attachO11: async (number, started, hook) => {
         attached++;
         const config = JSON.parse(fs.readFileSync(hook + '.json', 'utf8'));
-        assert.equal(config.bridgePath, path.join(root, 'bridges/o11/11.55.94/h1/bridge/Anvil.Bridge.dll'));
+        assert.ok(config.bridgePath.startsWith(path.join(root, 'private/bridge-loads')));
         assert.equal(digest(fs.readFileSync(hook)), digest(contents['hook/Anvil.RuntimeHook.Agent.dll']));
         fs.writeFileSync(path.join(root, 'private/authority/bridge.key'), 'test-key');
         bridge = await fakeBridge(request => request.method === 'ping' ? { success: true, data: { bridge: 'anvil', pid } }
@@ -139,20 +140,20 @@ test('authenticated fake server installs and reconnects once, reporting effectiv
   const events = [];
   const agent = createAgent({ root, config: { server: hub.url, credential: CREDENTIAL }, log: (event, detail) => events.push({ event, ...detail }),
     deps: { locate: async lane => lane === 'odc' ? root : null, fileVersion: async () => installed.version, studioRuntime: async () => 'net10.0',
-      processes: async image => image === 'ODCStudio.exe' ? [{ pid: 1234, path: path.join(root, 'ODCStudio.exe'), version: installed.version }] : [],
-      machine: null, bridgeTrust: { anchors, authenticode: async () => {} }, attachOdc: async () => { throw Object.assign(new Error('cannot load'), { executed: null }); },
+      processes: async image => image === 'ODCStudio.exe' ? [{ pid: 1234, startedUtc: 'S', path: path.join(root, 'ODCStudio.exe'), version: installed.version }] : [],
+      machine: null, bridgeTrust: { anchors, authenticode: async () => {}, seal: async () => ({ release() {} }) }, attachOdc: async () => { throw Object.assign(new Error('cannot load'), { executed: null, attachAttempted: true, bridgeLoadFailure: true }); },
       setTimeout: (fn, ms) => setTimeout(fn, ms > 10000 ? ms : Math.min(ms, 10)) } });
   t.after(async () => { await agent.stop(); await hub.close(); });
   agent.run();
-  await hub.until(() => hub.streams === 1 && hub.hellos.length === 2).catch(e => { throw new Error(e.message + JSON.stringify({ events, hellos: hub.hellos.length, streams: hub.streams })); });
-  assert.equal(hub.hellos[1].pack.odcBridge, 'v101');
+  await hub.until(() => hub.hellos.length >= 2 && hub.hellos.at(-1).bridges.some(b => b.status === 'installed'));
+  assert.equal(hub.hellos[1].pack.odcBridge, 'v35');
   assert.equal(hub.hellos[1].capabilities.bridgeOffer, true);
-  assert.equal(hub.hellos[1].bridges.odc.runtime, 'net10.0');
+  assert.equal(hub.hellos[1].bridges[0].protocol, 'v101');
   assert.match(events.find(e => e.status === 'installed').message, /^Updated the odc bridge for ODC Studio 1.7.30$/);
   const result = await agent.execute('odc.attach', { pid: 1234 });
   assert.equal(result.ok, false);
   assert.equal(result.error.message, 'cannot load');
-  await hub.until(() => hub.hellos.length >= 3).catch(e => { throw new Error(e.message + JSON.stringify({ events, result })); });
-  assert.equal(hub.hellos[2].pack.odcBridge, 'v35');
-  assert.equal(hub.hellos[2].bridgeUpdate.status, 'fallback');
+  await hub.until(() => hub.hellos.at(-1).bridges.some(b => b.status === 'failed'));
+  assert.equal(hub.hellos.at(-1).pack.odcBridge, 'v35');
+  assert.equal(hub.hellos.at(-1).bridgeUpdate.status, 'fallback');
 });

@@ -23,6 +23,9 @@ export async function attachOdc({ pid, client, bridge }, { run = exec } = {}) {
     const message = /0x800711c7|0xc0e90002/i.test(text)
       ? 'odc_application_control_blocked: Windows blocked the ODC runtime of the agent pack (Smart App Control / application control). The attach is not confirmed.'
       : text.trim().split(/\r?\n/).find(Boolean) ?? 'The ODC bridge client failed';
-    throw new AgentError('ATTACH_FAILED', message, { executed: null });
+    throw Object.assign(new AgentError('ATTACH_FAILED', message, { executed: null }), {
+      attachAttempted: /ApplyStartupHook/.test(text),
+      bridgeLoadFailure: /ApplyStartupHook/.test(text) && /BadImageFormat|FileLoadException|FileNotFoundException/.test(text),
+    });
   }
 }

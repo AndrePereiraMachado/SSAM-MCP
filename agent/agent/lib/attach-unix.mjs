@@ -155,7 +155,7 @@ export function createMacAttach(deps = {}) {
 
   // ODC3.Bridge.Client attach, on macOS: {ok, attached, note}.
   async function attachOdc({ pid, bridge, version }) {
-    if (!/^v\d+$/.test(String(version ?? '')) || !path.basename(String(bridge ?? '')).startsWith('ODC3.Bridge.' + version + '.'))
+    if (!/^v\d+$/.test(String(version ?? '')) || (!path.basename(String(bridge ?? '')).startsWith('ODC3.Bridge.' + version + '.') && path.basename(String(bridge ?? '')) !== 'ODC3.Bridge.dll'))
       throw fail('This agent only attaches ODC3.Bridge.' + (version ?? '(no version)') + '.');
     const file = path.resolve(bridge);
     if (!f.existsSync(file)) throw fail('The agent pack is missing ' + file);

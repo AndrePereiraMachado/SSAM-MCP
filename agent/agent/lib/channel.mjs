@@ -101,9 +101,9 @@ export function createChannel({ server, credential, hello, onCall, outbox, onWel
     const body = await reply.json().catch(() => null);
     if (body?.t !== 'welcome' || !/^[0-9a-f]{32}$/.test(body.channel ?? '')) { log('welcome-invalid'); return retry(); }
     welcome = body; channel = body.channel;
-    try {
-      if (await onWelcome(body)) { connecting = false; if (!stopped) return connect(); }
-    } catch (error) { log('bridge-update-error', { error: error.message }); }
+    Promise.resolve().then(() => onWelcome(body)).then(changed => {
+      if (changed && !stopped) { if (connecting) reconnectPending = true; else lose('bridge-changed'); }
+    }).catch(error => log('bridge-update-error', { error: error.message }));
     if (stopped) return;
     openStream();
   }

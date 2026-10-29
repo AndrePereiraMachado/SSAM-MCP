@@ -10,6 +10,12 @@ internal static class Program
         Console.OutputEncoding = new System.Text.UTF8Encoding(false);
         try
         {
+            if (args is ["windows-directory"]) { Console.WriteLine(Environment.GetFolderPath(Environment.SpecialFolder.Windows)); return 0; }
+            if (args is ["bridge-lock", "--root", var lockRoot, "--directory", var lockDirectory])
+            {
+                using var lease = BridgeFileLease.Acquire(lockRoot, lockDirectory);
+                Console.WriteLine("locked"); await Console.In.ReadLineAsync(); return 0;
+            }
             if (args is ["mac-inspect"]) { Console.WriteLine((await MacPlatform.InspectHost()).ToJsonString(new() { WriteIndented = true })); return 0; }
             if (args.Length > 0 && args[0] is "run" or "setup" or "doctor") return await NativeHost.Command(args);
             if (args is ["check-policy", "--root", var policyRoot])

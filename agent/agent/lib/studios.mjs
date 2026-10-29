@@ -33,12 +33,12 @@ export function parseTasklist(text, image) {
 async function describePids(image, pids) {
   const filter = pids.map(pid => 'ProcessId=' + pid).join(' OR ');
   const script = "Get-CimInstance Win32_Process -Filter \"Name='" + image + "' AND (" + filter + ")\" | ForEach-Object { [pscustomobject]@{ pid = $_.ProcessId; "
-    + 'path = $_.ExecutablePath; version = $(if ($_.ExecutablePath) { (Get-Item -LiteralPath $_.ExecutablePath).VersionInfo.ProductVersion } else { $null }) } } '
+    + 'path = $_.ExecutablePath; startedUtc = $_.CreationDate.ToUniversalTime().ToString("O"); version = $(if ($_.ExecutablePath) { (Get-Item -LiteralPath $_.ExecutablePath).VersionInfo.ProductVersion } else { $null }) } } '
     + '| ConvertTo-Json -Compress';
   const text = await powershell(script);
   if (!text) return [];
   const parsed = JSON.parse(text);
-  return (Array.isArray(parsed) ? parsed : [parsed]).map(p => ({ pid: Number(p.pid), path: p.path ?? null, version: p.version ?? null }));
+  return (Array.isArray(parsed) ? parsed : [parsed]).map(p => ({ pid: Number(p.pid), path: p.path ?? null, version: p.version ?? null, ...(p.startedUtc ? { startedUtc: p.startedUtc } : {}) }));
 }
 export async function listProcesses(image, { tasklist = () => exec('tasklist', ['/FI', 'IMAGENAME eq ' + image, '/FO', 'CSV', '/NH'], { windowsHide: true, timeout: 15000 }),
   describe = describePids, platform = process.platform, mac = {} } = {}) {
@@ -49,10 +49,11 @@ export async function listProcesses(image, { tasklist = () => exec('tasklist', [
   for (const key of [...described.keys()]) if (key.startsWith(image + ':') && !pids.includes(Number(key.slice(image.length + 1)))) described.delete(key);
   const unknown = pids.filter(pid => !described.has(image + ':' + pid));
   if (unknown.length) {
-    try { for (const p of await describe(image, unknown)) if (unknown.includes(p.pid)) described.set(image + ':' + p.pid, { path: p.path, version: p.version }); }
+    try { for (const p of await describe(image, unknown)) if (unknown.includes(p.pid)) described.set(image + ':' + p.pid, { path: p.path, version: p.version, ...(p.startedUtc ? { startedUtc: p.startedUtc } : {}) }); }
     catch { /* undescribed pids answer path and version null; the next listing tries again */ }
   }
-  return pids.map(pid => ({ pid, path: described.get(image + ':' + pid)?.path ?? null, version: described.get(image + ':' + pid)?.version ?? null }));
+  return pids.map(pid => ({ pid, path: described.get(image + ':' + pid)?.path ?? null, version: described.get(image + ':' + pid)?.version ?? null,
+    ...(described.get(image + ':' + pid)?.startedUtc ? { startedUtc: described.get(image + ':' + pid).startedUtc } : {}) }));
 }
 // ProductVersion of an executable, or null.
 export async function fileVersion(exe) {
