@@ -257,3 +257,60 @@ test('every document readFeatures accepts is one features-protect.ps1 prepares',
  for(let k=0;k<accepted.length;k+=6)results.push(...await Promise.all(accepted.slice(k,k+6).map(([name,text],j)=>protect(name,text,k+j))));
  assert.deepEqual(results.filter(([,code])=>code!==0).map(([name,code])=>`${name}: exit ${code}`),[],'accepted by readFeatures, refused by features-protect.ps1');
 });
+// A well-formed PE32 .NET image whose cost is in its row counts: shape constants (a FeaturesValues TypeDef owning one Field
+// and n Constant rows on it), memberrefs (one FeaturesValues TypeRef and n MemberRef rows with one short name), fields
+// (a FeaturesValues TypeDef owning n Field rows) or typedefs (n TypeDef rows, the last one FeaturesValues). Index sizes
+// follow the row counts, as in a real assembly.
+function craftRows(shape,n){
+ const u16=v=>{const b=Buffer.alloc(2);b.writeUInt16LE(v);return b;},u32=v=>{const b=Buffer.alloc(4);b.writeUInt32LE(v>>>0);return b;},pad4=b=>Buffer.concat([b,Buffer.alloc((4-b.length%4)%4)]);
+ const strings=Buffer.from('\0FeaturesValues\0ServiceStudio.Common.FeatureManagement\0Dummy\0SomeKey\0get_Some\0'),S={name:1,ns:16,dummy:55,key:61,getter:69};
+ const blob=pad4(Buffer.from([0,3,0x06,0x08,0x01,4,0x41,0,0x42,0])),B={sig:1,value:5};
+ const w=(b,o,v,size)=>size===4?b.writeUInt32LE(v>>>0,o):b.writeUInt16LE(v,o);
+ const rows=(count,size,fill)=>{const b=Buffer.alloc(count*size);for(let r=0;r<count;r++)fill(b,r*size,r);return b;};
+ const T={};
+ if(shape==='constants'){
+  T[0x02]={count:2,data:Buffer.concat([u32(0),u16(S.name),u16(S.ns),u16(0),u16(1),u16(1),u32(0),u16(S.dummy),u16(0),u16(0),u16(2),u16(1)])};
+  T[0x04]={count:1,data:Buffer.concat([u16(0),u16(S.key),u16(0)])};
+  // Type String, parent Field 1 (owned), a 4-byte value: every row is looked at, none is a key.
+  T[0x0b]={count:n,data:rows(n,6,(b,o)=>{b[o]=0x0e;b.writeUInt16LE((1<<2)|0,o+2);b.writeUInt16LE(B.value,o+4);})};
+ }else if(shape==='memberrefs'){
+  T[0x01]={count:1,data:Buffer.concat([u16(0),u16(S.name),u16(S.ns)])};
+  T[0x0a]={count:n,data:rows(n,6,(b,o)=>{b.writeUInt16LE((1<<3)|1,o);b.writeUInt16LE(S.getter,o+2);b.writeUInt16LE(B.sig,o+4);})};
+ }else if(shape==='fields'){
+  const fi=n>=65536?4:2;
+  T[0x02]={count:1,data:Buffer.concat([u32(0),u16(S.name),u16(S.ns),u16(0),fi===4?u32(1):u16(1),u16(1)])};
+  T[0x04]={count:n,data:rows(n,6,(b,o)=>{b.writeUInt16LE(S.dummy,o+2);})};
+ }else if(shape==='typedefs'){
+  const tdor=n>=16384?4:2,size=4+2+2+tdor+2+2;
+  T[0x02]={count:n,data:rows(n,size,(b,o,r)=>{b.writeUInt16LE(r===n-1?S.name:S.dummy,o+4);b.writeUInt16LE(r===n-1?S.ns:0,o+6);w(b,o+8,0,tdor);b.writeUInt16LE(1,o+8+tdor);b.writeUInt16LE(1,o+10+tdor);})};
+ }else throw Error('unknown shape '+shape);
+ let valid=0n;for(const id of Object.keys(T))valid|=1n<<BigInt(id);
+ const vb=Buffer.alloc(8);vb.writeBigUInt64LE(valid);const ids=Object.keys(T).map(Number).sort((a,b)=>a-b);
+ const tables=pad4(Buffer.concat([u32(0),Buffer.from([2,0,0,1]),vb,Buffer.alloc(8),...ids.map(id=>u32(T[id].count)),...ids.map(id=>T[id].data)])),heap=pad4(strings),version=Buffer.from('v4.0.30319\0\0');
+ const streams=o=>Buffer.concat([u32(o[0]),u32(tables.length),Buffer.from('#~\0\0'),u32(o[1]),u32(heap.length),Buffer.from('#Strings\0\0\0\0'),u32(o[2]),u32(blob.length),Buffer.from('#Blob\0\0\0')]);
+ const rootHeader=Buffer.concat([Buffer.from('BSJB'),u16(1),u16(1),u32(0),u32(version.length),version,u16(0),u16(3)]);
+ const first=rootHeader.length+streams([0,0,0]).length,metadata=Buffer.concat([rootHeader,streams([first,first+tables.length,first+tables.length+heap.length]),tables,heap,blob]);
+ const cli=Buffer.alloc(72);cli.writeUInt32LE(72,0);cli.writeUInt32LE(0x2000+72,8);cli.writeUInt32LE(metadata.length,12);
+ const section=Buffer.concat([cli,metadata]),raw=Buffer.concat([section,Buffer.alloc((0x200-section.length%0x200)%0x200)]);
+ const head=Buffer.alloc(0x200);head.write('MZ',0,'latin1');head.writeUInt32LE(0x80,0x3c);head.write('PE\0\0',0x80,'latin1');
+ head.writeUInt16LE(0x14c,0x84);head.writeUInt16LE(1,0x86);head.writeUInt16LE(0xe0,0x94);head.writeUInt16LE(0x2102,0x96);
+ const optional=0x98;head.writeUInt16LE(0x10b,optional);head.writeUInt32LE(16,optional+92);head.writeUInt32LE(0x2000,optional+96+14*8);head.writeUInt32LE(72,optional+96+14*8+4);
+ const table=optional+0xe0;head.write('.text',table,'latin1');head.writeUInt32LE(section.length,table+8);head.writeUInt32LE(0x2000,table+12);head.writeUInt32LE(raw.length,table+16);head.writeUInt32LE(0x200,table+20);
+ return Buffer.concat([head,raw]);
+}
+test('a crafted assembly with millions of table rows stays bounded in memory',async t=>{
+ const {spawnSync}=await import('node:child_process'),{pathToFileURL}=await import('node:url'),{featureCatalog,featureReads}=await import('./pe-metadata.mjs');
+ // The small images are well formed and read as they are built.
+ assert.equal(featureCatalog(craftRows('constants',3)).size,0);assert.deepEqual(featureReads(craftRows('memberrefs',3)),['Some']);
+ assert.equal(featureCatalog(craftRows('fields',3)).size,0);assert.equal(featureCatalog(craftRows('typedefs',3)).size,0);
+ const dir=tmp(t),module=JSON.stringify(pathToFileURL(path.join(import.meta.dirname,'pe-metadata.mjs')).href);
+ for(const [shape,read] of [['constants','featureCatalog'],['memberrefs','featureReads'],['fields','featureCatalog'],['typedefs','featureCatalog']]){
+  const file=path.join(dir,shape+'.dll');fs.writeFileSync(file,craftRows(shape,4000000));
+  const script=`import {${read}} from ${module};try{const r=${read}(${JSON.stringify(file)});console.log((r.size??r.length)+' ${read==='featureReads'?'reads':'features'}');}catch(e){console.log(e.code??e.message);}`;
+  const started=Date.now(),r=spawnSync(process.execPath,['--max-old-space-size=256','--input-type=module','-e',script],{encoding:'utf8',timeout:60000});
+  const took=Date.now()-started,size=(fs.statSync(file).size/1048576).toFixed(1);fs.rmSync(file);
+  t.diagnostic(`${shape}: 4000000 rows, ${size} MB: ${r.stdout.trim()||'(no output)'} in ${took} ms`);
+  assert.equal(r.status,0,`${shape}: child exit ${r.status} ${r.signal??''} after ${took} ms: ${(r.stderr??'').split('\n').find(l=>/FATAL|Error/.test(l))??''}`);
+  assert.match(r.stdout.trim(),/^(\d+ (features|reads)|unreadable-metadata)$/,shape);assert.ok(took<15000,`${shape}: ${took} ms`);
+ }
+});
