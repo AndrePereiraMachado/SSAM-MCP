@@ -58,7 +58,7 @@ export const CALL_KINDS = Object.freeze(['studio.processes', 'odc.pipe', 'odc.at
   'file.put', 'file.get', 'file.list', 'file.sync', 'net.probe']);
 const LANES = ['odc', 'o11'];
 const STUDIO = { odc: 'ODC Studio', o11: 'Service Studio' };
-export function bridgeReports(value){return (Array.isArray(value)?value:[]).filter(r=>LANES.includes(r.lane)&&/^\d+\.\d+\.\d+$/.test(r.studioVersion)&&/^(v\d+|d\d+)$/.test(r.protocol)&&Number.isSafeInteger(r.sequence)&&r.sequence>0&&['installed','active','failed','fallback'].includes(r.status)).slice(0,16).map(r=>({lane:r.lane,studioVersion:r.studioVersion,protocol:r.protocol,sequence:r.sequence,status:r.status,reason:/^[A-Z_]{1,64}$/.test(r.reason??'')?r.reason:'UNSPECIFIED'}));}
+export function bridgeReports(value){return (Array.isArray(value)?value:[]).filter(r=>r&&typeof r==='object'&&LANES.includes(r.lane)&&/^\d+\.\d+\.\d+$/.test(r.studioVersion)&&/^(v\d+|d\d+)$/.test(r.protocol)&&Number.isSafeInteger(r.sequence)&&r.sequence>0&&['installed','active','failed','fallback'].includes(r.status)).slice(0,16).map(r=>({lane:r.lane,studioVersion:r.studioVersion,protocol:r.protocol,sequence:r.sequence,status:r.status,reason:/^[A-Z_]{1,64}$/.test(r.reason??'')?r.reason:'UNSPECIFIED'}));}
 const HEX32 = /^[0-9a-f]{32}$/;
 const INDEX = /^(0|[1-9][0-9]{0,5})$/;
 const SHA256 = /^[0-9a-f]{64}$/;
