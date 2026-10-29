@@ -34,8 +34,6 @@ const URL_ATTRIBUTES = new Set(['href', 'src', 'srcset', 'imagesrcset', 'action'
 const FORBIDDEN_URL = /^(?:https?:|file:|ftp:|\/\/|\\\\)/i;
 const FORBIDDEN_TAG = /<(?:script|iframe|frame|object|embed|link|base)/i;
 const META_REFRESH = /<meta[^>]*http-equiv/i;
-const CSS_URL = /url\(\s*['"]?\s*(?:https?:|file:|ftp:|\/\/|\\\\)/i;
-const CSS_IMPORT = /@import\s+(?:url\(\s*)?['"]?\s*(?:https?:|file:|ftp:|\/\/|\\\\)/i;
 const SCRIPT_URL = /javascript:|vbscript:/i;
 
 const invalid = message => new AgentError('RENDER_REQUEST_INVALID', message, { executed: false });
@@ -49,11 +47,128 @@ function only(object, keys, where) {
   for (const key of Object.keys(object)) if (!keys.includes(key)) throw invalid(`${where} has an unknown field ${JSON.stringify(key).slice(0, 60)}`);
 }
 
-// The CSS checks, for a style sheet, a <style> element and a style attribute.
+// ---- CSS read as tokens (CSS Syntax 3), never by a pattern over the raw text (the rule of the kernel's CssReach): comments
+// skipped, strings and identifiers with their escapes decoded before they are compared (u\72l( is url(, @\69mport is
+// @import), ASCII case ignored. The targets: the body of an unquoted url(); every string inside url(), src(), image-set(),
+// -webkit-image-set(), image(), -webkit-image(), cross-fade() and -webkit-cross-fade(); every string and url of an
+// @import prelude; and every string and identifier in the value of a custom property (--name: ... up to ; { or } outside a
+// function), because var() can carry it into any URL position. A target refused: after '\' -> '/' and trimming, one that
+// starts with // or an http(s), file or ftp scheme; in a URL position also any other scheme but data:image/ (only #id and
+// image data: survive the kernel's rewriting). The same reader is native/Ssam.Agent/RenderRequest.cs.
+const IMAGE_FUNCTIONS = new Set(['url', 'src', 'image-set', '-webkit-image-set', 'image', '-webkit-image', 'cross-fade', '-webkit-cross-fade']);
+const CSS_SPACE = new Set([' ', '\t', '\n', '\r', '\f']);
+const asciiLower = text => text.replace(/[A-Z]/g, c => c.toLowerCase());
+const cssTrim = text => { let s = 0; let e = text.length; while (s < e && CSS_SPACE.has(text[s])) s++; while (e > s && CSS_SPACE.has(text[e - 1])) e--; return text.slice(s, e); };
+const isHex = c => /^[0-9a-fA-F]$/.test(c ?? '');
+const identStart = c => c !== undefined && (/[A-Za-z_-]/.test(c) || c.charCodeAt(0) >= 0x80);
+const identChar = c => c !== undefined && (/[A-Za-z0-9_-]/.test(c) || c.charCodeAt(0) >= 0x80);
+const validEscape = (css, i) => css[i] === '\\' && i + 1 < css.length && css[i + 1] !== '\n' && css[i + 1] !== '\r' && css[i + 1] !== '\f';
+
+// The escape at css[i] (a backslash): [decoded text, next index].
+function readEscape(css, i) {
+  let j = i + 1;
+  if (isHex(css[j])) {
+    let hex = '';
+    while (hex.length < 6 && isHex(css[j])) hex += css[j++];
+    if (css[j] === '\r' && css[j + 1] === '\n') j += 2; else if (CSS_SPACE.has(css[j])) j++;
+    const code = parseInt(hex, 16);
+    return [code === 0 || code > 0x10ffff || (code >= 0xd800 && code <= 0xdfff) ? '\uFFFD' : String.fromCodePoint(code), j];
+  }
+  if (j >= css.length) return ['\uFFFD', j];
+  const code = css.codePointAt(j);
+  return [String.fromCodePoint(code), j + (code > 0xffff ? 2 : 1)];
+}
+
+export function cssTargets(css) {
+  const targets = [];
+  const stack = [];
+  let custom = false; let pendingCustom = false; let atImport = false;
+  const inImage = () => stack.some(name => IMAGE_FUNCTIONS.has(name));
+  const readName = start => { let name = ''; let i = start; while (i < css.length) { if (identChar(css[i])) { name += css[i++]; continue; } if (validEscape(css, i)) { const [text, next] = readEscape(css, i); name += text; i = next; continue; } break; } return [name, i]; };
+  let i = 0;
+  while (i < css.length) {
+    const c = css[i];
+    if (c === '/' && css[i + 1] === '*') { const end = css.indexOf('*/', i + 2); i = end < 0 ? css.length : end + 2; continue; }
+    if (c === '"' || c === "'") {
+      let value = ''; let j = i + 1;
+      while (j < css.length && css[j] !== c) {
+        if (css[j] === '\n' || css[j] === '\r' || css[j] === '\f') break;
+        if (css[j] === '\\') {
+          if (j + 1 >= css.length) { j++; continue; }
+          if (css[j + 1] === '\n' || css[j + 1] === '\f') { j += 2; continue; }
+          if (css[j + 1] === '\r') { j += css[j + 2] === '\n' ? 3 : 2; continue; }
+          const [text, next] = readEscape(css, j); value += text; j = next; continue;
+        }
+        value += css[j++];
+      }
+      i = css[j] === c ? j + 1 : j;
+      if (atImport || inImage()) targets.push({ value, url: true });
+      else if (custom) targets.push({ value, url: false });
+      pendingCustom = false;
+      continue;
+    }
+    if (c === '@') {
+      const [name, next] = readName(i + 1);
+      if (name) { if (stack.length === 0 && asciiLower(name) === 'import') atImport = true; i = next; pendingCustom = false; continue; }
+    }
+    if (identStart(c) || validEscape(css, i) || (c === '-' && (identStart(css[i + 1]) || validEscape(css, i + 1)))) {
+      const [name, next] = readName(i);
+      if (name && next > i) {
+        i = next;
+        if (css[i] === '(') {
+          const lower = asciiLower(name); i++;
+          if (lower === 'url') {
+            let j = i; while (CSS_SPACE.has(css[j])) j++;
+            if (css[j] !== '"' && css[j] !== "'") {
+              let value = '';
+              while (j < css.length && css[j] !== ')') { if (validEscape(css, j)) { const [text, next2] = readEscape(css, j); value += text; j = next2; } else value += css[j++]; }
+              i = j < css.length ? j + 1 : j;
+              targets.push({ value: cssTrim(value), url: true });
+              pendingCustom = false;
+              continue;
+            }
+          }
+          stack.push(lower); pendingCustom = false;
+          continue;
+        }
+        if (custom) targets.push({ value: name, url: false });
+        pendingCustom = stack.length === 0 && !custom && name.startsWith('--');
+        continue;
+      }
+    }
+    if (c === '(') stack.push('');
+    else if (c === ')') stack.pop();
+    else if (c === ':' && stack.length === 0 && pendingCustom) custom = true;
+    else if ((c === ';' || c === '{' || c === '}') && stack.length === 0) { custom = false; atImport = false; }
+    if (!CSS_SPACE.has(c)) pendingCustom = false;
+    i++;
+  }
+  return targets;
+}
+
+const OUTSIDE = /^(?:https?|file|ftp):/i;
+const SCHEME = /^[A-Za-z][A-Za-z0-9+.-]*:/;
+function targetRefused({ value, url }) {
+  const target = cssTrim(value.replace(/\\/g, '/'));
+  if (target.startsWith('//') || OUTSIDE.test(target)) return true;
+  return url && SCHEME.test(target) && !/^data:image\//i.test(target);
+}
+
+// The CSS checks, for a style sheet, a <style> element and a style attribute (entities already decoded).
 function cssProblem(css) {
-  if (CSS_URL.test(css)) return 'a url() to an outside address';
-  if (CSS_IMPORT.test(css)) return 'an @import of an outside address';
-  return null;
+  const refused = cssTargets(css).find(targetRefused);
+  return refused ? (refused.url ? 'a url, image or @import to an outside address' : 'an outside address in a custom property') : null;
+}
+
+// The character references of an attribute value (numeric, and the named ones that spell URL characters).
+const NAMED = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", colon: ':', sol: '/', bsol: '\\', lpar: '(', rpar: ')', Tab: '\t', NewLine: '\n', period: '.',
+  num: '#', percnt: '%', commat: '@', semi: ';', AMP: '&', LT: '<', GT: '>', QUOT: '"' };
+export function decodeEntities(text) {
+  return text.replace(/&#(?:[xX]([0-9a-fA-F]+)|([0-9]+));?|&([A-Za-z]+);/g, (match, hex, dec, name) => {
+    if (name !== undefined) return Object.hasOwn(NAMED, name) ? NAMED[name] : match;
+    const code = hex !== undefined ? parseInt(hex, 16) : parseInt(dec, 10);
+    return code === 0 || code > 0x10ffff || (code >= 0xd800 && code <= 0xdfff) || !Number.isFinite(code) ? '\uFFFD' : String.fromCodePoint(code);
+  });
 }
 
 // The attributes of every tag, as an HTML tokenizer reads them: '/' and white space separate attributes, a value is
@@ -94,9 +209,11 @@ export function documentProblem(html) {
   if (META_REFRESH.test(html)) return 'a meta http-equiv element';
   if (/srcdoc\s*=/i.test(html)) return 'a srcdoc attribute';
   if (SCRIPT_URL.test(html.replace(/[\t\n\r]/g, ''))) return 'a javascript: or vbscript: address';
-  for (const [name, value] of attributes(html)) {
+  for (let [name, value] of attributes(html)) {
     if (/^on[a-z]+$/.test(name)) return `an ${name} attribute`;
     if (value === null) continue;
+    value = decodeEntities(value);
+    if (SCRIPT_URL.test(value.replace(/[\t\n\r]/g, ''))) return 'a javascript: or vbscript: address';
     if (URL_ATTRIBUTES.has(name)) {
       const urls = name === 'srcset' || name === 'imagesrcset' ? value.split(',').map(part => part.trim().split(/\s+/)[0]) : [value.trim()];
       if (urls.some(url => FORBIDDEN_URL.test(url))) return `an outside address in a ${name} attribute`;

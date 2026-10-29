@@ -38,8 +38,6 @@ internal static class RenderRequest
     private static readonly Regex ForbiddenTag = new("<(?:script|iframe|frame|object|embed|link|base)", I);
     private static readonly Regex MetaRefresh = new("<meta[^>]*http-equiv", I);
     private static readonly Regex SrcDoc = new("srcdoc" + WS + "*=", I);
-    private static readonly Regex CssUrl = new(@"url\(" + WS + "*['\"]?" + WS + @"*(?:https?:|file:|ftp:|//|\\\\)", I);
-    private static readonly Regex CssImport = new("@import" + WS + @"+(?:url\(" + WS + "*)?['\"]?" + WS + @"*(?:https?:|file:|ftp:|//|\\\\)", I);
     private static readonly Regex ScriptUrl = new("javascript:|vbscript:", I);
     private static readonly Regex StyleElement = new(@"<style\b[^>]*>([\s\S]*?)(?:</style" + WS + "*>|$)", I);
     private static readonly Regex OnAttribute = new("^on[a-z]+$", RegexOptions.CultureInvariant);
@@ -67,12 +65,152 @@ internal static class RenderRequest
     private static string? Text(JsonNode? node) => node is JsonValue v && v.GetValueKind() == System.Text.Json.JsonValueKind.String ? v.GetValue<string>() : null;
     private static bool Missing(JsonObject o, string key) => !o.ContainsKey(key) || o[key] == null;
 
+    // ---- CSS read as tokens (CSS Syntax 3), the reader of agent/lib/render-request.mjs cssTargets: comments skipped,
+    // strings and identifiers with escapes decoded before they are compared, ASCII case ignored; targets are the body of an
+    // unquoted url(), strings inside the image functions, strings and urls of an @import prelude, and strings and
+    // identifiers in a custom property value.
+    private static readonly HashSet<string> ImageFunctions = ["url", "src", "image-set", "-webkit-image-set", "image", "-webkit-image", "cross-fade", "-webkit-cross-fade"];
+    private static bool CssSpace(char c) => c is ' ' or '\t' or '\n' or '\r' or '\f';
+    private static bool CssSpaceAt(string s, int i) => i < s.Length && CssSpace(s[i]);
+    private static string AsciiLower(string s) => string.Concat(s.Select(c => c is >= 'A' and <= 'Z' ? (char)(c + 32) : c));
+    private static string CssTrim(string s) { int a = 0, b = s.Length; while (a < b && CssSpace(s[a])) a++; while (b > a && CssSpace(s[b - 1])) b--; return s[a..b]; }
+    private static bool IsHex(string s, int i) => i < s.Length && char.IsAsciiHexDigit(s[i]);
+    private static bool IdentStart(string s, int i) => i < s.Length && (char.IsAsciiLetter(s[i]) || s[i] is '_' or '-' || s[i] >= 0x80);
+    private static bool IdentChar(string s, int i) => i < s.Length && (char.IsAsciiLetterOrDigit(s[i]) || s[i] is '_' or '-' || s[i] >= 0x80);
+    private static bool ValidEscape(string s, int i) => i + 1 < s.Length && s[i] == '\\' && s[i + 1] is not ('\n' or '\r' or '\f');
+    private static (string Text, int Next) ReadEscape(string s, int i)
+    {
+        var j = i + 1;
+        if (IsHex(s, j))
+        {
+            var start = j;
+            while (j - start < 6 && IsHex(s, j)) j++;
+            var code = int.Parse(s[start..j], System.Globalization.NumberStyles.HexNumber, System.Globalization.CultureInfo.InvariantCulture);
+            if (j + 1 < s.Length && s[j] == '\r' && s[j + 1] == '\n') j += 2; else if (CssSpaceAt(s, j)) j++;
+            return (code == 0 || code > 0x10FFFF || code is >= 0xD800 and <= 0xDFFF ? "\uFFFD" : char.ConvertFromUtf32(code), j);
+        }
+        if (j >= s.Length) return ("\uFFFD", j);
+        var width = char.IsHighSurrogate(s[j]) && j + 1 < s.Length && char.IsLowSurrogate(s[j + 1]) ? 2 : 1;
+        return (s.Substring(j, width), j + width);
+    }
+    internal static List<(string Value, bool Url)> CssTargets(string css)
+    {
+        var targets = new List<(string, bool)>();
+        var stack = new List<string>();
+        bool custom = false, pendingCustom = false, atImport = false;
+        bool InImage() => stack.Any(ImageFunctions.Contains);
+        (string, int) ReadName(int start)
+        {
+            var name = new StringBuilder(); var i = start;
+            while (i < css.Length)
+            {
+                if (IdentChar(css, i)) { name.Append(css[i++]); continue; }
+                if (ValidEscape(css, i)) { var (text, next) = ReadEscape(css, i); name.Append(text); i = next; continue; }
+                break;
+            }
+            return (name.ToString(), i);
+        }
+        var i = 0;
+        while (i < css.Length)
+        {
+            var c = css[i];
+            if (c == '/' && i + 1 < css.Length && css[i + 1] == '*') { var end = css.IndexOf("*/", i + 2, StringComparison.Ordinal); i = end < 0 ? css.Length : end + 2; continue; }
+            if (c is '"' or '\'')
+            {
+                var value = new StringBuilder(); var j = i + 1;
+                while (j < css.Length && css[j] != c)
+                {
+                    if (css[j] is '\n' or '\r' or '\f') break;
+                    if (css[j] == '\\')
+                    {
+                        if (j + 1 >= css.Length) { j++; continue; }
+                        if (css[j + 1] is '\n' or '\f') { j += 2; continue; }
+                        if (css[j + 1] == '\r') { j += j + 2 < css.Length && css[j + 2] == '\n' ? 3 : 2; continue; }
+                        var (text, next) = ReadEscape(css, j); value.Append(text); j = next; continue;
+                    }
+                    value.Append(css[j++]);
+                }
+                i = j < css.Length && css[j] == c ? j + 1 : j;
+                if (atImport || InImage()) targets.Add((value.ToString(), true));
+                else if (custom) targets.Add((value.ToString(), false));
+                pendingCustom = false;
+                continue;
+            }
+            if (c == '@')
+            {
+                var (name, next) = ReadName(i + 1);
+                if (name.Length > 0) { if (stack.Count == 0 && AsciiLower(name) == "import") atImport = true; i = next; pendingCustom = false; continue; }
+            }
+            if (IdentStart(css, i) || ValidEscape(css, i) || c == '-' && (IdentStart(css, i + 1) || ValidEscape(css, i + 1)))
+            {
+                var (name, next) = ReadName(i);
+                if (name.Length > 0 && next > i)
+                {
+                    i = next;
+                    if (i < css.Length && css[i] == '(')
+                    {
+                        var lower = AsciiLower(name); i++;
+                        if (lower == "url")
+                        {
+                            var j = i; while (CssSpaceAt(css, j)) j++;
+                            if (j >= css.Length || css[j] is not ('"' or '\''))
+                            {
+                                var value = new StringBuilder();
+                                while (j < css.Length && css[j] != ')')
+                                {
+                                    if (ValidEscape(css, j)) { var (text, next2) = ReadEscape(css, j); value.Append(text); j = next2; }
+                                    else value.Append(css[j++]);
+                                }
+                                i = j < css.Length ? j + 1 : j;
+                                targets.Add((CssTrim(value.ToString()), true));
+                                pendingCustom = false;
+                                continue;
+                            }
+                        }
+                        stack.Add(lower); pendingCustom = false;
+                        continue;
+                    }
+                    if (custom) targets.Add((name, false));
+                    pendingCustom = stack.Count == 0 && !custom && name.StartsWith("--", StringComparison.Ordinal);
+                    continue;
+                }
+            }
+            if (c == '(') stack.Add("");
+            else if (c == ')') { if (stack.Count > 0) stack.RemoveAt(stack.Count - 1); }
+            else if (c == ':' && stack.Count == 0 && pendingCustom) custom = true;
+            else if (c is ';' or '{' or '}' && stack.Count == 0) { custom = false; atImport = false; }
+            if (!CssSpace(c)) pendingCustom = false;
+            i++;
+        }
+        return targets;
+    }
+    private static readonly Regex Outside = new("^(?:https?|file|ftp):", I);
+    private static readonly Regex Scheme = new("^[A-Za-z][A-Za-z0-9+.-]*:", RegexOptions.CultureInvariant);
+    private static readonly Regex DataImage = new("^data:image/", I);
+    private static bool TargetRefused((string Value, bool Url) target)
+    {
+        var text = CssTrim(target.Value.Replace('\\', '/'));
+        if (text.StartsWith("//", StringComparison.Ordinal) || Outside.IsMatch(text)) return true;
+        return target.Url && Scheme.IsMatch(text) && !DataImage.IsMatch(text);
+    }
     private static string? CssProblem(string css)
     {
-        if (CssUrl.IsMatch(css)) return "a url() to an outside address";
-        if (CssImport.IsMatch(css)) return "an @import of an outside address";
+        foreach (var target in CssTargets(css))
+            if (TargetRefused(target)) return target.Url ? "a url, image or @import to an outside address" : "an outside address in a custom property";
         return null;
     }
+
+    private static readonly Dictionary<string, string> Named = new(StringComparer.Ordinal) { ["amp"] = "&", ["lt"] = "<", ["gt"] = ">", ["quot"] = "\"", ["apos"] = "'", ["colon"] = ":",
+        ["sol"] = "/", ["bsol"] = "\\", ["lpar"] = "(", ["rpar"] = ")", ["Tab"] = "\t", ["NewLine"] = "\n", ["period"] = ".", ["num"] = "#", ["percnt"] = "%", ["commat"] = "@",
+        ["semi"] = ";", ["AMP"] = "&", ["LT"] = "<", ["GT"] = ">", ["QUOT"] = "\"" };
+    private static readonly Regex Entity = new("&#(?:[xX]([0-9a-fA-F]+)|([0-9]+));?|&([A-Za-z]+);", RegexOptions.CultureInvariant);
+    internal static string DecodeEntities(string text) => Entity.Replace(text, m =>
+    {
+        if (m.Groups[3].Success) return Named.TryGetValue(m.Groups[3].Value, out var named) ? named : m.Value;
+        var digits = m.Groups[1].Success ? m.Groups[1].Value : m.Groups[2].Value;
+        var ok = long.TryParse(digits, m.Groups[1].Success ? System.Globalization.NumberStyles.HexNumber : System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var code);
+        return !ok || code == 0 || code > 0x10FFFF || code is >= 0xD800 and <= 0xDFFF ? "\uFFFD" : char.ConvertFromUtf32((int)code);
+    });
 
     private static IEnumerable<(string Name, string? Value)> Attributes(string html)
     {
@@ -116,10 +254,13 @@ internal static class RenderRequest
         if (MetaRefresh.IsMatch(html)) return "a meta http-equiv element";
         if (SrcDoc.IsMatch(html)) return "a srcdoc attribute";
         if (ScriptUrl.IsMatch(html.Replace("\t", "").Replace("\n", "").Replace("\r", ""))) return "a javascript: or vbscript: address";
-        foreach (var (name, value) in Attributes(html))
+        foreach (var (name, raw) in Attributes(html))
         {
             if (OnAttribute.IsMatch(name)) return $"an {name} attribute";
+            var value = raw;
             if (value == null) continue;
+            value = DecodeEntities(value);
+            if (ScriptUrl.IsMatch(value.Replace("\t", "").Replace("\n", "").Replace("\r", ""))) return "a javascript: or vbscript: address";
             if (UrlAttributes.Contains(name))
             {
                 var urls = name is "srcset" or "imagesrcset" ? value.Split(',').Select(part => Spaces.Split(JsTrim(part))[0]) : [JsTrim(value)];
