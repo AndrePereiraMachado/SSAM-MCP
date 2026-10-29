@@ -383,3 +383,44 @@ test('every automatic private path, featuresRoot included, goes through the exec
  // Without featuresRoot the list names tempRoot/features, resolved.
  assert.equal(automaticPrivatePaths(base).at(-1),path.resolve(base.tempRoot,'features'));
 });
+test('featuresRoot is created only after its parent passed the execution-trust check',{skip:!windows},async t=>{
+ // child_process.spawn is a recorder (trust checks pass, git answers like a clean execution branch, the first other
+ // command stops executionSource) and fs.mkdirSync records a folder under C:\ssam-priv without creating it. Both are
+ // restored at the end; nothing is written under C:\ssam-priv.
+ const cp=(await import('node:child_process')).default,{syncBuiltinESMExports}=await import('node:module'),{EventEmitter}=await import('node:events'),{PassThrough}=await import('node:stream'),{randomUUID}=await import('node:crypto');
+ const originalSpawn=cp.spawn,originalMkdir=fs.mkdirSync,order=[];
+ const inPrivate=p=>/^c:[\\/]ssam-priv[\\/]/i.test(path.resolve(String(p)));
+ cp.spawn=(command,args)=>{
+  const child=new EventEmitter();child.stdout=new PassThrough();child.stderr=new PassThrough();child.stdin=new PassThrough();child.pid=1;child.kill=()=>{};
+  const trust=args.findIndex(a=>/execution-trust\.ps1$/.test(String(a)));let out='',code=0;
+  if(trust>=0)order.push(`${args[trust+1]} ${path.resolve(args[trust+2]).toLowerCase()}`);
+  else if(/git/i.test(path.basename(command))){const a=args.join(' ');if(/branch --show-current/.test(a))out='server/vigia-run\n';else if(/config --local/.test(a))code=1;else if(!/status --porcelain/.test(a))code=1;}
+  else code=1;
+  setImmediate(()=>{child.stdout.end(out);child.stderr.end('');child.emit('close',code);});return child;
+ };
+ fs.mkdirSync=(target,options)=>{if(inPrivate(target)){order.push(`mkdir ${path.resolve(String(target)).toLowerCase()}`);return undefined;}return originalMkdir(target,options);};
+ syncBuiltinESMExports();t.after(()=>{cp.spawn=originalSpawn;fs.mkdirSync=originalMkdir;syncBuiltinESMExports();});
+ const dir=tempDir(t,'vigia-trust3-'),exe=process.execPath,lower=p=>path.resolve(p).toLowerCase();
+ const base={workspace:path.resolve(server,'..'),outDir:path.join(dir,'out'),bundleRoot:path.join(dir,'store'),installersDir:path.join(dir,'installers'),configFile:path.join(dir,'config.json'),vault:path.join(dir,'vault'),
+  automatic:true,dryRun:true,notify:false,node:exe,python:exe,dotnet:exe,git:GIT,bash:exe,powershell:exe,tar:exe,docker:exe,sshKeygen:exe,automaticDeployment:{ssh:{executable:exe}}};
+ // The default featuresRoot (tempRoot\features, missing): created after tempRoot passed and before it is checked itself.
+ const tempRoot=`C:/ssam-priv/vigia-test-${randomUUID()}/tmp`,features=path.join(tempRoot,'features');
+ assert.equal(fs.existsSync(path.dirname(tempRoot)),false,'a fresh name under C:\\ssam-priv');
+ await (await createRuntime({...base,tempRoot})).executionSource().catch(()=>{});
+ const at=entry=>order.indexOf(entry);
+ assert.ok(at(`mkdir ${lower(features)}`)>=0,`order: ${order.join(' | ')}`);
+ assert.ok(at(`-PrivatePaths ${lower(tempRoot)}`)>=0&&at(`-PrivatePaths ${lower(tempRoot)}`)<at(`mkdir ${lower(features)}`),'tempRoot is checked before featuresRoot is created');
+ assert.ok(at(`mkdir ${lower(features)}`)<at(`-PrivatePaths ${lower(features)}`),'featuresRoot is checked after it is created');
+ assert.equal(order.filter(e=>e.startsWith('mkdir ')).length,1,'one component, not a recursive creation');
+ // A missing featuresRoot whose parent is none of the checked paths: refused, nothing created.
+ order.length=0;const elsewhere=`C:/ssam-priv/vigia-test-${randomUUID()}/features`;
+ await assert.rejects((await createRuntime({...base,tempRoot:path.join(dir,'tmp'),featuresRoot:elsewhere})).executionSource(),/Create featuresRoot inside a checked private path \(for example tempRoot\\features\); nothing was created\./);
+ assert.deepEqual(order.filter(e=>e.startsWith('mkdir ')),[],'no mkdir');assert.equal(fs.existsSync(path.dirname(elsewhere)),false);
+ assert.ok(!order.includes(`-PrivatePaths ${lower(elsewhere)}`));
+ // A link on the way is never followed: a junction below a checked path stops the creation.
+ order.length=0;const checked=path.join(dir,'checked'),target=path.join(dir,'target');originalMkdir(checked,{recursive:true});originalMkdir(target,{recursive:true});
+ fs.symlinkSync(target,path.join(checked,'link'),'junction');
+ const {createBelowChecked}=await import('./runtime.mjs');
+ assert.throws(()=>createBelowChecked(path.join(checked,'link','features'),[checked]),/is a link or not a folder; featuresRoot was not created/);
+ assert.equal(fs.existsSync(path.join(target,'features')),false,'nothing created through the junction');
+});

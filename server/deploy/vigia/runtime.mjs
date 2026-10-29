@@ -71,6 +71,23 @@ export const resolvedFeaturesRoot=config=>path.resolve(config.featuresRoot??path
 export function automaticPrivatePaths(config){
  return [config.outDir,config.bundleRoot,config.installersDir,config.tempRoot,config.configFile,config.vault,config.tempRoot||config.featuresRoot?resolvedFeaturesRoot(config):undefined];
 }
+// A missing folder is created only below a private path the execution-trust check has just passed (owned, no other
+// writer, no reparse point in its tree): every existing component below it is read without following links (a link or
+// junction, or a file, stops it), and only then are the missing components created one at a time, never recursively.
+export function createBelowChecked(target,checked){
+ const key=p=>path.resolve(p).toLowerCase(),parent=key(path.dirname(target));
+ const base=checked.filter(p=>parent===key(p)||parent.startsWith(key(p)+path.sep)).sort((a,b)=>path.resolve(b).length-path.resolve(a).length)[0];
+ if(!base)throw Error('Create featuresRoot inside a checked private path (for example tempRoot\\features); nothing was created.');
+ let current=path.resolve(base);const missing=[];
+ for(const part of path.relative(current,path.resolve(target)).split(path.sep).filter(Boolean)){
+  current=path.join(current,part);
+  if(missing.length){missing.push(current);continue;}
+  const stat=fs.lstatSync(current,{throwIfNoEntry:false});
+  if(!stat){missing.push(current);continue;}
+  if(stat.isSymbolicLink()||!stat.isDirectory())throw Error(`${current} is a link or not a folder; featuresRoot was not created.`);
+ }
+ for(const folder of missing)fs.mkdirSync(folder);
+}
 export async function createRuntime(config,{log=()=>{}}={}){
  const SAFE_GIT=['-c','core.autocrlf=false','-c','core.hooksPath=','-c','core.fsmonitor=false','-c','core.pager=cat','-c','credential.helper=','-c','diff.external=','-c','protocol.ext.allow=never','-c','protocol.file.allow=never','-c','core.attributesFile=NUL'];
  const root=path.resolve(config.workspace),temp=path.resolve(config.tempRoot),out=path.resolve(config.outDir),store=path.resolve(config.bundleRoot);
@@ -452,19 +469,20 @@ export async function createRuntime(config,{log=()=>{}}={}){
   const auto=createAutoRuntime(config,runtime);Object.assign(runtime,auto);
   runtime.executionSource=async()=>{
    if(path.resolve(root,'server/deploy/vigia').toLowerCase()!==here.toLowerCase())throw Error('The watcher code must run from its execution checkout.');
+   const privatePaths=automaticPrivatePaths(config);
+   if(privatePaths.some(target=>!target))throw Error('Automatic private paths must be explicitly configured.');
+   // A missing featuresRoot outside C:\ssam-priv could never pass the check: refused before anything else.
+   if(!fs.existsSync(featuresRoot)&&!/^c:[\\/]ssam-priv[\\/]/i.test(featuresRoot))throw Error('featuresRoot must be inside C:\\ssam-priv in automatic mode.');
    for(const name of ['node','python','dotnet','git','bash','powershell','tar','docker','sshKeygen']){if(!config[name])throw Error('Configure trusted executable: '+name);await checkTrust(['-Executables',config[name]]);}
    if(path.resolve(config.node)!==path.resolve(process.execPath))throw Error('Watcher is running with a different node executable.');
    await checkTrust(['-Executables',settingsSshExecutable()]);
    const branch=await checkWorkspace();
-   const privatePaths=automaticPrivatePaths(config);
-   if(privatePaths.some(target=>!target))throw Error('Automatic private paths must be explicitly configured.');
-   // The features store is checked like the rest; a missing one is created only inside C:\ssam-priv (where the check
-   // can pass), never elsewhere.
-   if(!fs.existsSync(featuresRoot)){
-    if(!/^c:[\\/]ssam-priv[\\/]/i.test(featuresRoot))throw Error('featuresRoot must be inside C:\\ssam-priv in automatic mode.');
-    fs.mkdirSync(featuresRoot,{recursive:true});
-   }
-   for(const target of privatePaths)await checkTrust(['-PrivatePaths',target]);
+   // Every other private path is checked first; the features store is created (when missing) only below one of them,
+   // then checked like the rest.
+   const others=privatePaths.slice(0,-1);
+   for(const target of others)await checkTrust(['-PrivatePaths',target]);
+   if(!fs.existsSync(featuresRoot))createBelowChecked(featuresRoot,others);
+   await checkTrust(['-PrivatePaths',featuresRoot]);
    executionSource({workspace:root,branch,head:await runtime.fullHead(),main:(await git(['rev-parse','main'])).stdout.trim(),gitDirectory:fs.statSync(path.join(root,'.git')).isDirectory()});
    await verifyCommit(await runtime.fullHead());
   };
