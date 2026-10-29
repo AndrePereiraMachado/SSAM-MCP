@@ -7,9 +7,12 @@ import pathlib
 import tarfile
 import tempfile
 import unittest
+import os
+from types import SimpleNamespace
 from unittest.mock import patch
 
-spec = importlib.util.spec_from_file_location("remote", pathlib.Path(__file__).with_name("remote-release.py"))
+source = pathlib.Path(os.environ["VIGIA_REVIEW_ROOT"]) / "deploy/vigia/remote-release.py" if "VIGIA_REVIEW_ROOT" in os.environ else pathlib.Path(__file__).with_name("remote-release.py")
+spec = importlib.util.spec_from_file_location("remote", source)
 remote = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(remote)
 
@@ -20,9 +23,12 @@ class RemoteTests(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.settings = {"directory": self.temp.name, "composeProject": "fixture", "postgresContainer": "postgres-fixture", "healthUrl": "https://example.test/health", "warmTimeoutSeconds": 0}
         self.calls = []
+        self.inputs = []
 
     def docker(self, *args, data=None):
         self.calls.append(args)
+        if data:
+            self.inputs.append(data.decode())
         if args[0] == "ps":
             self.assertIn("label=com.docker.compose.project=fixture", args)
             return b"backend"
@@ -32,6 +38,8 @@ class RemoteTests(unittest.TestCase):
             return json.dumps(["image@sha256:" + "a" * 64]).encode()
         if args[0] == "exec" and args[1] == "postgres-fixture":
             return b"SQL backup"
+        if args[0] == "exec" and args[1] == "-i":
+            return json.dumps({"ok": True, "kernel": {"odc": "1.7.29", "o11": "11.55.93"}, "budget": {"tools": 90}, "telemetry": {"tokens": {}}}).encode()
         if args[0] == "run":
             mount = next(x for x in args if x.endswith(":/backup"))[:-8]
             name = next(x for x in args if x.startswith("/backup/"))[8:]
@@ -86,6 +94,62 @@ class RemoteTests(unittest.TestCase):
         expected[0]["image"] = "wrong"
         with self.assertRaisesRegex(RuntimeError, "timed out"):
             self.request("check", expectedBackends=expected, checkSource="synthetic")
+
+    def test_low_memory_rejected_without_any_write(self):
+        with patch.object(pathlib.Path, "read_text", return_value="MemAvailable: 3144704 kB\n"):
+            with self.assertRaisesRegex(RuntimeError, "memory"):
+                self.request("preflight", backendCount=3)
+        self.assertEqual(self.calls, [])
+
+    def test_low_disk_rejected_before_backup_directory(self):
+        with patch.object(remote.shutil, "disk_usage", return_value=SimpleNamespace(free=1)):
+            with self.assertRaisesRegex(RuntimeError, "disk"):
+                self.request("backup", id="low-disk")
+        self.assertFalse((pathlib.Path(self.temp.name) / "backups").exists())
+
+    def test_only_five_complete_backups_are_retained(self):
+        home = pathlib.Path(self.temp.name) / "backups"
+        home.mkdir()
+        for index in range(6):
+            item = home / str(index)
+            item.mkdir()
+            (item / "complete").write_text("ok")
+            os.utime(item, (index, index))
+        self.request("backup", id="new")
+        self.assertEqual(len(list(home.iterdir())), 5)
+        self.assertFalse((home / "0").exists())
+
+    def prepare(self):
+        return self.request("prepare", id="o11-11.55.94-odc-1.7.30", archive=self.archive(), features=base64.b64encode(b"private").decode(), kernel={}, built={"image": "private/image", "tag": "prod-fixed", "sha256": "a"*64}, compose={"services": {"ssam-server-v1": {"labels": {}, "environment": {"SSAM_RUNTIME_DIR": "/data/server/versions/new"}, "volumes": []}}, "volumes": {}})
+
+    def test_pull_failure_removes_features(self):
+        original = self.docker
+        def failed(*args, **kwargs):
+            if args[0] == "pull":
+                raise RuntimeError("pull failed")
+            return original(*args, **kwargs)
+        with patch.object(self, "docker", failed):
+            with self.assertRaisesRegex(RuntimeError, "pull failed"):
+                self.prepare()
+        self.assertFalse(list(pathlib.Path(self.temp.name).rglob("Features.plain.xml")))
+
+    def test_stale_staging_container_is_removed_by_exact_name_before_creation(self):
+        self.prepare()
+        expected = "ssam-vigia-prepare-o11-11.55.94-odc-1.7.30"
+        removed = next(i for i,c in enumerate(self.calls) if c == ("rm", "-f", expected))
+        created = next(i for i,c in enumerate(self.calls) if c[0] == "create")
+        self.assertLess(removed, created)
+
+    def test_snapshot_reads_live_kernel_digest_and_old_listing_budget(self):
+        value = self.request("snapshot", checkSource="capture-live")
+        self.assertEqual(value["backends"][0]["budget"]["tools"], 90)
+        self.assertEqual(value["backends"][0]["kernel"]["odc"], "1.7.29")
+        self.assertEqual(value["backends"][0]["reference"], "image:old")
+
+    def test_rollback_uses_old_ninety_tool_check_not_new_budget(self):
+        self.request("check", checkSource="new-92", checkSources={"11.55.93|1.7.29": "old-90"})
+        self.assertIn("old-90", self.inputs)
+        self.assertNotIn("new-92", self.inputs)
 
 
 if __name__ == "__main__":

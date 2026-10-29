@@ -44,7 +44,7 @@ test('test failures are compared by full name even when counts match',()=>{
  assert.throws(()=>readTrx('<Results/>'),/No test results/);
 });
 test('rotation keeps a bounded pair window and lists customers losing a served version',()=>{
- const next=rotateWindow(manifest,{odc:'1.7.30',o11:'11.55.93',tag:'next',image,sha256:sha('a')},{tokens:{tok_old:{customer:'Old',seen:'2026-10-20',odc:{installed:'1.7.28.10'}},tok_new:{odc:{installed:'1.7.29.10'}}}});
+ const next=rotateWindow(manifest,{odc:'1.7.30',o11:'11.55.93',tag:'next',image,sha256:sha('a')},{tokens:{tok_old:{customer:'Old',seen:'2026-09-20',odc:{installed:'1.7.28.10'}},tok_new:{odc:{installed:'1.7.29.10'}}}});
  assert.deepEqual(next.manifest.odc.map(x=>x.version),['1.7.30','1.7.29']);assert.equal(next.manifest.o11.length,2);assert.deepEqual(next.leaving.odc,['1.7.28']);assert.deepEqual(next.affected.map(x=>x.token),['tok_old']);
  assert.equal(planWindow(manifest,[{...odc,version:'1.7.27'}]).candidates.length,0);
 });
@@ -227,7 +227,7 @@ test('the listing budget is one file shared by the rehearsal, the smoke and the 
  const facade=fs.readFileSync(new URL('../../platforms/odc/facade/tests/hosted-listing-budget.test.mjs',import.meta.url),'utf8');
  assert.equal(Number(/HOSTED_LISTING_CEILING = (\d+)/.exec(facade)[1]),budget.totalBytes);assert.equal(Number(/HOSTED_CORE_CEILING = (\d+)/.exec(facade)[1]),budget.coreBytes);
  assert.deepEqual([.../const CORE = \[([^\]]+)\]/s.exec(facade)[1].matchAll(/'([^']+)'/g)].map(m=>m[1]),budget.core);
- const rehearse=fs.readFileSync(new URL('../coolify/rehearse.mjs',import.meta.url),'utf8');assert.doesNotMatch(rehearse,/261330|34097|tools\.length,92/);
+ const rehearse=fs.readFileSync(new URL('../coolify/rehearse.mjs',import.meta.url),'utf8');assert.match(rehearse,new RegExp('tools\\.length,'+budget.tools));
 });
 function approvalOps(f,{digest='sha256:'+sha('a'),already=false}={}){
  const calls=[];

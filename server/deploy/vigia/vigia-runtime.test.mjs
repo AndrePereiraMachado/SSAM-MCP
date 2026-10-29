@@ -21,6 +21,9 @@ function repo(t){
  for(const rel of ['deploy/coolify/versions.json','deploy/coolify/gen-compose.mjs','deploy/coolify/compose.template.json','deploy/coolify/gen-compose.test.mjs','deploy/coolify/initial-window.test.mjs','deploy/odc-features-export.ps1','platforms/odc/facade/tests/fixtures/isolated-profile.mjs']){
   const to=path.join(main,'server',rel);fs.mkdirSync(path.dirname(to),{recursive:true});fs.copyFileSync(path.join(server,rel),to);
  }
+ // Legacy approval fixtures model the pre-R1 two-pair window explicitly.
+ const mf=path.join(main,'server/deploy/coolify/versions.json'),m=JSON.parse(fs.readFileSync(mf,'utf8'));
+ m.odc=m.odc.filter(x=>x.version!=='1.7.30');m.o11=m.o11.filter(x=>x.version!=='11.55.94');fs.writeFileSync(mf,JSON.stringify(m));
  sh(GIT,['init','-q','-b','main',main]);git(main,'add','.');git(main,'commit','-q','-m','base');
  git(main,'worktree','add','-q','-b','server/vigia-run',ws,'main');
  return {root,main,ws,priv:path.join(root,'priv'),out:path.join(root,'out')};
@@ -228,17 +231,13 @@ test('a second launcher finds the round lock and leaves at once',t=>{
  assert.ok(JSON.parse(r.stdout).busy);held.release();
 });
 
-test('automatic pin commits the three-pair window and kernel metadata on the execution branch and resumes idempotently',{skip:!windows},async t=>{
+test('automatic pin refuses a development code checkout before writing',{skip:!windows},async t=>{
  const r=repo(t),file=path.join(r.ws,'server/deploy/coolify/r1-kernels.json');
  fs.copyFileSync(path.join(server,'deploy/coolify/r1-kernels.json'),file);git(r.ws,'add','.');git(r.ws,'commit','-m','kernel fixture');
  const runtime=await createRuntime({...config(r),automatic:true,executionBranch:'server/vigia-run'});
  const base=runtime.manifest(),tag='prod-auto-o115594-odc1730',kernel={o11:'11.55.94',odc:'1.7.30',odcBridge:'v100',odcBridgeAccepted:['v100']};
  const manifest={window:3,odc:[{version:'1.7.30',image,tag,sha256:sha('a')},...base.odc],o11:[{version:'11.55.94',image,tag,sha256:sha('a')},...base.o11]};
  const dir=path.join(r.out,'pin');fs.mkdirSync(dir,{recursive:true});
- const commit=await runtime.pinExecution(manifest,dir,'pair',kernel);
- assert.equal(git(r.ws,'branch','--show-current'),'server/vigia-run');
- assert.deepEqual(JSON.parse(fs.readFileSync(file,'utf8')).v1,kernel);
- assert.equal(Object.keys(JSON.parse(fs.readFileSync(file,'utf8'))).length,3);
- assert.equal(await runtime.pinExecution(manifest,dir,'pair',kernel),commit);
+ await assert.rejects(runtime.pinExecution(manifest,dir,'pair',kernel),/execution checkout/);
  assert.equal(git(r.ws,'status','--porcelain'),'');
 });
