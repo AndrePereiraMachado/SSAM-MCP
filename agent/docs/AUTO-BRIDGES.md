@@ -143,3 +143,9 @@ creation of new files in their directory. The O11 hook's Anvil/Esprima resolver
 therefore needs a future hash-bound configuration and dependency check before
 LoadFromAssemblyPath. A two-distinct-instance quarantine is only a proposal;
 current behavior still retries the newest failed identity after Studio restart.
+
+## Authenticode trust on target machines
+
+The owner's Authenticode certificate must chain to a CA root already trusted on every target machine. Verification is offline and uses the local certificate cache; it does not download missing roots or intermediate certificates. Missing roots, incomplete chains, expiration without a valid timestamp, and unavailable revocation evidence produce a local `VERIFY_FAILED` warning and are retried on the next hello. They do not suppress the offered identity on the server.
+
+Release qualification must include a clean Windows VM with the real owner certificate and the intended root/intermediate certificate deployment. Confirm both a successful update with the trusted chain and a recoverable warning before the root is installed. A timestamped signature remains valid after the signing certificate expires when WinVerifyTrust accepts its timestamp.

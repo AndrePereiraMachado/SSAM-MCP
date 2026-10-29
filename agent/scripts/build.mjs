@@ -41,6 +41,7 @@ function parse(argv) {
     if (name === '--update-url') options.updateUrl = value;
   }
   if (!['win', 'mac'].includes(options.platform)) throw new Error('use --platform win or --platform mac');
+  if (options.platform === 'win' && !options.native) throw new Error('Windows app builds require --native <qualified ssam-agent.exe>.');
   if (!options.packOnly && !options.noUpdates) {
     if (!options.updateUrl) throw new Error('give the update server with --update-url https://... (or SSAM_UPDATE_URL), or pass --no-updates for a build that never updates itself');
     const problem = updateUrlProblem(options.updateUrl);
