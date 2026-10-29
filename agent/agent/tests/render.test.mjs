@@ -139,6 +139,15 @@ test('screen.render through the channel: announced with a renderer, answered as 
   assert.equal(facts.documents[0].viewports[0].elements.length, 1500);
   assert.equal(facts.documents[0].viewports[0].truncated, true);
   assert.equal(facts.documents[0].viewports[0].elements[0].styles['white-space'].length, 200);
+  // A request above the inline limit comes as a paramsBlob and is read into memory: no file appears in private\tmp.
+  const big = baseRequest(); const css = '.x{color:red}' + ' '.repeat(600 * 1024);
+  big.styles = [{ id: 'osui', sha256: (await import('node:crypto')).createHash('sha256').update(css).digest('hex'), css }];
+  const seen = []; const watcher = fs.watch(path.join(root, 'private', 'tmp'), (event, name) => seen.push(String(name)));
+  hub.send({ t: 'call', id: 'render-2', kind: 'screen.render', paramsBlob: hub.putBlob(Buffer.from(JSON.stringify(big))) });
+  await hub.until(() => hub.results('render-2').length > 0, 30000);
+  watcher.close();
+  assert.equal(hub.results('render-2')[0].ok, true, JSON.stringify(hub.results('render-2')[0]).slice(0, 300));
+  assert.deepEqual(seen.filter(name => name.endsWith('.json')), []);
   // No renderer: not announced, RENDER_UNAVAILABLE when called anyway.
   const plain = makeRoot();
   const other = createAgent({ root: plain, config: { server: hub.url, credential: CREDENTIAL }, deps: { processes: async () => [], locate: async () => null, machine: null } });

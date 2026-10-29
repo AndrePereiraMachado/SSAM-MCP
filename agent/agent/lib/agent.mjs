@@ -14,7 +14,7 @@ import { createOutbox } from './outbox.mjs';
 import { createKinds, helloKinds } from './kinds.mjs';
 import { resolveRenderer } from './render.mjs';
 import { createWorkspace } from './workspace.mjs';
-import { uploadBlob, downloadBlob, PART_BYTES, MAX_FILE_BYTES } from './blobs.mjs';
+import { uploadBlob, downloadBlob, downloadBuffer, PART_BYTES, MAX_FILE_BYTES } from './blobs.mjs';
 import { createHttp } from './net.mjs';
 import { listProcesses, fileVersion, locateInstalled, installedStudios, macFileVersion, macLocate } from './studios.mjs';
 import { attachOdc } from './odc-attach.mjs';
@@ -47,6 +47,7 @@ import { completeInstances } from './studio-instance.mjs';
 export const AGENT_VERSION = '0.3.4';
 const INLINE_MAX_BYTES = 524288;
 const MAX_VALUE_BYTES = 16 * 1024 * 1024;
+const PARAMS_MEMORY_BYTES = 64 * 1024 * 1024;
 const STUDIOS_REFRESH_MS = 5 * 60000;
 const clip = text => String(text ?? '').slice(0, 4000);
 const readJson = file => JSON.parse(fs.readFileSync(file, 'utf8').replace(/^﻿/, ''));
@@ -137,6 +138,7 @@ export function createAgent({ root, runtimeRoot = root, config = {}, deps = {}, 
   const blobs = {
     upload: (source, options = {}) => uploadBlob(source, { put: channel.blobPut, partBytes: limits().partBytes, sleep: d.sleep, partMs: d.partMs, log, ...options }),
     download: (ref, dest) => downloadBlob(ref, dest, { get: channel.blobGet, limits: limits(), sleep: d.sleep, partMs: d.partMs, log }),
+    downloadBuffer: ref => downloadBuffer(ref, { get: channel.blobGet, limits: limits(), maxBytes: PARAMS_MEMORY_BYTES, sleep: d.sleep, partMs: d.partMs, log }),
   };
 
   const view = record => (record ? { pid: record.pid, startedUtc: record.startedUtc, port: record.port, studioVersion: record.studioVersion ?? null } : null);
@@ -195,7 +197,11 @@ export function createAgent({ root, runtimeRoot = root, config = {}, deps = {}, 
     const started = d.now();
     try {
       let params = call.params;
-      if (call.paramsBlob) {
+      // Parameters above the inline limit come as a blob, read into memory up to 64 MiB (0.3.4: a screen.render request and
+      // the style sheets it carries never touch the disk); a larger one of another kind goes through private\tmp as before.
+      if (call.paramsBlob && (call.kind === 'screen.render' || Number(call.paramsBlob.size) <= PARAMS_MEMORY_BYTES))
+        params = JSON.parse((await blobs.downloadBuffer(call.paramsBlob)).toString('utf8').replace(/^\uFEFF/, ''));
+      else if (call.paramsBlob) {
         const temporary = path.join(base, 'private', 'tmp', randomBytes(8).toString('hex') + '.json');
         try { await blobs.download(call.paramsBlob, temporary); params = readJson(temporary); }
         finally { fs.rmSync(temporary, { force: true }); }

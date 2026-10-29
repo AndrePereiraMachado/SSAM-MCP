@@ -286,7 +286,12 @@ internal sealed class AgentChannel : IDisposable
             if (!(kind == "qualification.bridge" && studios == null) && !FileKinds.Names.Contains(kind) && kind != UploadKinds.Name && kind != RenderRequest.Kind && !(studios != null && (StudioKinds.Names.Contains(kind) || kind == "net.probe")))
                 throw new AgentFault("KIND_NOT_ALLOWED", "This kind is not available on the agent");
             var parameters = call["params"];
-            if (call["paramsBlob"] != null)
+            // Parameters up to 64 MiB, and every screen.render request, are read into memory: the style sheets of a render
+            // never touch the disk. A larger blob of another kind goes through private/tmp as before.
+            var paramsRef = call["paramsBlob"] == null ? null : BlobRef.Parse(call["paramsBlob"], PartBytes, MaxFileBytes);
+            if (paramsRef != null && (kind == RenderRequest.Kind || paramsRef.Size <= 64L * 1024 * 1024))
+                parameters = JsonNode.Parse(await blobs.DownloadBytes(paramsRef, token));
+            else if (paramsRef != null)
             {
                 var temporary = Path.Combine(state.Private, "tmp", Guid.NewGuid().ToString("N") + ".json");
                 try

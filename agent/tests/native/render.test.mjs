@@ -122,6 +122,16 @@ test('native screen.render: announced with a renderer, the same facts as the Nod
   const outcomes = ['q1', 'q2', 'q3', 'q4'].map(id => q.hub.results(id)[0]);
   assert.equal(outcomes.filter(o => o.ok).length, 3, JSON.stringify(outcomes.map(o => o.error?.code ?? 'ok')));
   assert.equal(outcomes.filter(o => o.error?.code === 'RENDER_BUSY').length, 1);
+  // A request above the inline limit comes as a paramsBlob and is read into memory: no .json file appears in private/tmp.
+  const big = baseRequest(); const bigCss = '.x{color:red}' + ' '.repeat(600 * 1024);
+  big.styles = [{ id: 'osui', sha256: (await import('node:crypto')).createHash('sha256').update(bigCss).digest('hex'), css: bigCss }];
+  fs.writeFileSync(path.join(q.install, 'mode.txt'), 'success');
+  const seen = []; const watcher = fs.watch(path.join(q.root, 'private', 'tmp'), (event, name) => seen.push(String(name)));
+  q.hub.send({ t: 'call', id: 'blob-params', kind: 'screen.render', paramsBlob: q.hub.putBlob(Buffer.from(JSON.stringify(big))) });
+  await q.hub.until(() => q.hub.results('blob-params').length > 0, 60000);
+  watcher.close();
+  assert.equal(q.hub.results('blob-params')[0].ok, true, JSON.stringify(q.hub.results('blob-params')[0]).slice(0, 300));
+  assert.deepEqual(seen.filter(name => name.endsWith('.json')), []);
   answer = await q.call(baseRequest(), { mode: 'many' });
   assert.ok(answer.valueBlob, JSON.stringify(answer).slice(0, 300));
   const facts = JSON.parse(q.hub.assembled(answer.valueBlob));

@@ -122,6 +122,38 @@ internal sealed class Blobs(AgentChannel channel)
         }
         finally { if (File.Exists(temporary)) File.Delete(temporary); }
     }
+
+    // A blob into memory, with the same checks (0.4.1: the parameters of a call, so a screen.render request and the style
+    // sheets it carries never touch the disk).
+    public async Task<byte[]> DownloadBytes(BlobRef reference, CancellationToken token)
+    {
+        using var stream = new MemoryStream();
+        using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        for (var index = 0; index < reference.Parts; index++)
+        {
+            var fresh = false;
+            for (var attempt = 0; ; attempt++)
+            {
+                PartReply? reply = null;
+                try { reply = await channel.Part(HttpMethod.Get, reference.Transfer, index, null, null, reference.PartBytes, fresh, token); }
+                catch (Exception e) when (e is HttpRequestException || e is OperationCanceledException && !token.IsCancellationRequested) { }
+                if (reply?.Status == 200 && reply.Body.Length <= reference.PartBytes && Hash(reply.Body) == reply.PartSha?.ToLowerInvariant())
+                {
+                    if (stream.Length + reply.Body.Length > reference.Size) throw new AgentFault("BLOB_HASH_MISMATCH", "The downloaded data exceeds its declared size");
+                    hash.AppendData(reply.Body);
+                    stream.Write(reply.Body);
+                    break;
+                }
+                if (reply?.Status is 401 or 403 or 404 || attempt >= 3)
+                    throw new AgentFault(reply?.Status == 200 ? "BLOB_HASH_MISMATCH" : "BLOB_TRANSFER_FAILED", "A data part could not be verified");
+                fresh = reply == null;
+                await Task.Delay(250 * (attempt + 1), token);
+            }
+        }
+        if (stream.Length != reference.Size || Convert.ToHexStringLower(hash.GetHashAndReset()) != reference.Sha256)
+            throw new AgentFault("BLOB_HASH_MISMATCH", "The downloaded data does not match its hash");
+        return stream.ToArray();
+    }
 }
 
 internal sealed record PartReply(int Status, byte[] Body, string? PartSha);
