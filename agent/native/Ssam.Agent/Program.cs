@@ -10,6 +10,16 @@ internal static class Program
         Console.OutputEncoding = new System.Text.UTF8Encoding(false);
         try
         {
+            if (args is ["authenticode", "--file", var signatureFile, "--signer", var signatureClass])
+            {
+                var result = AuthenticodeTrust.Check(signatureFile, signatureClass); Console.WriteLine(result.ToJsonString()); return result["ok"]!.GetValue<bool>() ? 0 : 1;
+            }
+            if (args is ["trust-anchors"])
+            {
+                var digest = "";
+                if (BridgeTrust.ManifestPublicKey.Length > 0) { using var key = System.Security.Cryptography.ECDsa.Create(); var pem = System.Security.Cryptography.PemEncoding.Find(BridgeTrust.ManifestPublicKey); digest = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(Convert.FromBase64String(BridgeTrust.ManifestPublicKey[pem.Base64Data]))); }
+                Console.WriteLine(new JsonObject { ["spkiSha256"] = digest, ["thumbprint"] = BridgeTrust.AuthenticodeThumbprint, ["microsoftRoots"] = new JsonArray(BridgeTrust.MicrosoftRoots.Select(x => (JsonNode?)JsonValue.Create(x)).ToArray()) }.ToJsonString()); return 0;
+            }
             if (args is ["windows-directory"]) { Console.WriteLine(Environment.GetFolderPath(Environment.SpecialFolder.Windows)); return 0; }
             if (args is ["bridge-lock", "--root", var lockRoot, "--directory", var lockDirectory])
             {

@@ -8,6 +8,7 @@ internal static class BridgeTrust
     // Build-time constants only. The owner's watcher script supplies the real anchors.
     internal const string ManifestPublicKey = "";
     internal const string AuthenticodeThumbprint = "";
+    internal static readonly string[] MicrosoftRoots = ["847DF6A78497943F27FC72EB93F9A637320A02B561D0A91B09E87A7807ED7C61"];
     internal const string MacVerifier = "tools/osslsigncode";
 
     // Strict RFC 8032 verification over public data. No signing or secret scalar operations.

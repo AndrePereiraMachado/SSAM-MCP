@@ -31,12 +31,13 @@ function parse(argv) {
     if (name === '--pack-only') { options.packOnly = true; continue; }
     // macOS only: notarize with APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD and APPLE_TEAM_ID (electron-builder reads them).
     if (name === '--notarize') { options.notarize = true; continue; }
-    if (!['--platform', '--pack', '--update-url', '--native'].includes(name)) throw new Error('unknown option: ' + name);
+    if (!['--platform', '--pack', '--update-url', '--native', '--bridge-public-key'].includes(name)) throw new Error('unknown option: ' + name);
     if (i + 1 >= argv.length) throw new Error('missing the value of ' + name);
     const value = argv[++i];
     if (name === '--platform') options.platform = value;
     if (name === '--pack') options.pack = value;
     if (name === '--native') options.native = value;
+    if (name === '--bridge-public-key') options.bridgePublicKey = value;
     if (name === '--update-url') options.updateUrl = value;
   }
   if (!['win', 'mac'].includes(options.platform)) throw new Error('use --platform win or --platform mac');
@@ -79,7 +80,7 @@ export async function preparePack(source, platform, packDir = path.join(app, 'pa
 
 async function main() {
   const options = parse(process.argv.slice(2));
-  assertBridgeTrust();
+  assertBridgeTrust({ nativeExecutable: options.native, publicKeyFile: options.bridgePublicKey });
   if (options.notarize) {
     if (options.platform !== 'mac' || process.platform !== 'darwin' || !options.native)
       throw new Error('Notarized releases require a native executable and a Mac build host.');
