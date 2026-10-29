@@ -58,6 +58,25 @@ function copyFolder(from, to) {
   }
 }
 
+// The render worker of screen.render is this app's own executable started with --ssam-render-worker
+// (src/main/render/worker.mjs). pack.json names it relative to the pack, which electron-builder puts in resources/pack:
+// Windows <install>/resources/pack -> ../../SSAM Agent.exe; macOS SSAM Agent.app/Contents/Resources/pack ->
+// ../../MacOS/SSAM Agent. The agent takes it only inside the installation (agent/lib/render.mjs, RenderKinds.cs).
+export function rendererFor(platform, electron = electronVersion()) {
+  return { kind: 'electron-worker', protocol: 1, path: platform === 'mac' ? '../../MacOS/SSAM Agent' : '../../SSAM Agent.exe', ...(electron ? { electron } : {}) };
+}
+export function electronVersion(appDir = app) {
+  try { return JSON.parse(fs.readFileSync(path.join(appDir, 'node_modules', 'electron', 'package.json'), 'utf8')).version ?? null; } catch { return null; }
+}
+// pack.json of the staged pack with its renderer (pack.json is not one of its own files: the integrity list is unchanged).
+export function withRenderer(packDir, platform, electron = electronVersion()) {
+  const file = path.join(packDir, 'pack.json');
+  const pack = JSON.parse(fs.readFileSync(file, 'utf8').replace(/^﻿/, ''));
+  const next = { ...pack, renderer: rendererFor(platform, electron) };
+  fs.writeFileSync(file, JSON.stringify(next, null, 2) + '\n');
+  return next;
+}
+
 // pack/ filled from the source and checked; returns the pack.json.
 export async function preparePack(source, platform, packDir = path.join(app, 'pack')) {
   if (source) {
@@ -107,6 +126,7 @@ async function main() {
     fs.renameSync(destination, target);
   }
   if (options.platform === 'win' && !pack.nativeCore) throw new Error('Windows app builds require --native <qualified ssam-agent.exe>.');
+  pack = withRenderer(path.join(app, 'pack'), options.platform);
   console.log(`pack ${pack.id} ready in pack/ (${pack.files.length} files, lanes ${(pack.lanes ?? []).join(',')}, ODC bridge ${pack.odcBridge ?? '-'}, Service Studio ${pack.o11BuiltFor ?? '-'})`);
   if (options.packOnly) return;
   if (options.platform === 'mac' && process.platform !== 'darwin') throw new Error('a macOS build (DMG, ZIP, signing) only runs on a Mac');
