@@ -219,6 +219,7 @@ export async function createRuntime(config,{log=()=>{}}={}){
   return (await git(['rev-parse','HEAD'],{cwd:wt})).stdout.trim();
  }
  async function verifyCommit(commit){
+  // The round itself notifies this every time (vigia.mjs round, event unsigned-main); the log keeps the local trace.
   if(!signingPolicy(config)){log('WARNING: owner explicitly accepts unsigned main for this round.');return;}
   if(!/^ssh-(ed25519|rsa) [A-Za-z0-9+/=]+(?: [^\r\n]*)?$/.test(config.ownerSigningPublicKey))throw Error('Invalid owner signing public key.');
   const allowed=path.join(temp,'allowed-signers');fs.writeFileSync(allowed,'owner '+config.ownerSigningPublicKey+'\n',{mode:0o600});

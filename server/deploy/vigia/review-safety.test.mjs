@@ -282,3 +282,102 @@ test('R4-13 automatic build uses supplied revision without invoking git',async t
  assert.match(file('deploy/build.sh'),/SSAM_AUTOMATIC/);
  assert.notEqual(r.status,0);assert.match(r.stderr,/client-name guard FAILED/);assert.ok(!fs.existsSync(marker),r.stderr);
 });
+
+// Round 5 regressions: the same cases run against the untouched fbe51d7 export. The "(real Windows)" cases only read this
+// machine (ACLs of C:\ and of installed executables, Authenticode of installed files and of the user's NuGet cache) and are
+// skipped off Windows or when the file is missing.
+const R5=await import('node:child_process'),onWindows=process.platform==='win32';
+const PS='C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe',psq=s=>"'"+String(s).replaceAll("'","''")+"'";
+const psEnv={...process.env,PSModulePath:'C:/Windows/System32/WindowsPowerShell/v1.0/Modules;'+(process.env.PSModulePath??'')};
+const powershell=code=>R5.spawnSync(PS,['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-Command',code],{encoding:'utf8',windowsHide:true,env:psEnv});
+const lastJson=text=>JSON.parse(text.trim().split(/\r?\n/).pop());
+const trustScript=()=>`. ${psq(path.join(server,'deploy/vigia/execution-trust.ps1'))};`;
+const pins=()=>JSON.parse(file('deploy/vigia/publisher-pins.json'));
+test('R5-1 the default C:\\ ACL passes as an ancestor while Authenticated Users:Modify is still refused (real Windows, read-only)',{skip:!onWindows||!fs.existsSync('C:/Program Files')},()=>{
+ // The item is synthetic (in memory, owned by this account); C:\ is read for real. Nothing is written to any ACL.
+ const r=powershell(trustScript()+`
+$me=[Security.Principal.WindowsIdentity]::GetCurrent().User;$users=New-Object Security.Principal.SecurityIdentifier('S-1-5-11')
+function New-Owned([switch]$Modify,[switch]$InheritOnly){$s=New-Object Security.AccessControl.DirectorySecurity;$s.SetOwner($me);$s.SetAccessRuleProtection($true,$false);$s.AddAccessRule((New-Object Security.AccessControl.FileSystemAccessRule($me,'FullControl','ContainerInherit,ObjectInherit','None','Allow')));if($Modify){$s.AddAccessRule((New-Object Security.AccessControl.FileSystemAccessRule($users,'Modify','ContainerInherit,ObjectInherit',$(if($InheritOnly){'InheritOnly'}else{'None'}),'Allow')))};return $s}
+$script:item='owned';$script:root='real'
+function Get-Acl {param($LiteralPath) if($LiteralPath -eq 'C:\\'){$real=Microsoft.PowerShell.Security\\Get-Acl -LiteralPath 'C:\\';if($script:root -eq 'real'){return $real};$s=New-Object Security.AccessControl.DirectorySecurity;$s.SetSecurityDescriptorSddlForm($real.Sddl);$s.AddAccessRule((New-Object Security.AccessControl.FileSystemAccessRule($users,'Modify','None','None','Allow')));return $s};switch($script:item){'owned'{New-Owned}'modify'{New-Owned -Modify}'inherit'{New-Owned -Modify -InheritOnly}}}
+function Check([string]$label){try{Assert-OwnedPath 'C:\\Program Files';"$label=pass"}catch{"$label=refused"}}
+Check 'default-root';$script:root='modify';Check 'root-modify';$script:root='real';$script:item='modify';Check 'item-modify';$script:item='inherit';Check 'item-inherit-only'`);
+ assert.equal(r.status,0,r.stderr);
+ for(const line of ['default-root=pass','root-modify=refused','item-modify=refused','item-inherit-only=refused'])assert.match(r.stdout,new RegExp(line),r.stdout);
+});
+test('R5-2 the executable walk visits every ancestor of git.exe (real Windows, read-only)',{skip:!onWindows||!fs.existsSync('C:/Program Files/Git/cmd/git.exe')},()=>{
+ const r=powershell(trustScript()+` $script:seen=New-Object Collections.Generic.List[string]; function Assert-AclItem {param($Item,$Owners,$Writers,[switch]$Ancestor) $script:seen.Add($Item.FullName.TrimEnd('\\'))}; Assert-Executable 'C:\\Program Files\\Git\\cmd\\git.exe'; $script:seen -join '|'`);
+ assert.equal(r.status,0,r.stderr);const seen=r.stdout.trim().toLowerCase().split('|');
+ for(const p of ['c:\\program files\\git\\cmd\\git.exe','c:\\program files\\git\\cmd','c:\\program files\\git','c:\\program files','c:'])assert.ok(seen.includes(p),'missing '+p+' in '+seen.join(', '));
+});
+const odcStudio=['C:/Program Files/OutSystems/ODC Studio/ODC Studio/ODCStudio.exe','C:/Program Files/OutSystems/ODC Studio/ODCStudio.exe'].find(f=>fs.existsSync(f));
+test('R5-3 ODCStudio.exe verifies at its timestamp under the pinned OutSystems CA (real Windows, read-only)',{skip:!onWindows||!odcStudio},t=>{
+ const r=R5.spawnSync(PS,['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',path.join(server,'deploy/vigia/verify-publisher.ps1'),'-File',odcStudio],{encoding:'utf8',windowsHide:true,env:psEnv});
+ if(/REVOCATION_UNAVAILABLE/.test(r.stdout))return t.skip('revocation service unavailable on this network');
+ assert.equal(r.status,0,r.stderr);const signer=lastJson(r.stdout);
+ assert.equal(signer.status,'Valid');assert.ok(pins().outsystems.some(p=>p.subject===signer.subject&&p.ca===signer.ca),JSON.stringify(signer));
+});
+const nugetRoot=process.env.NUGET_PACKAGES??path.join(os.homedir(),'.nuget','packages');
+const expiredClient=['net6.0','netstandard2.0'].map(f=>path.join(nugetRoot,'microsoft.diagnostics.netcore.client','0.2.410101','lib',f,'Microsoft.Diagnostics.NETCore.Client.dll')).find(f=>fs.existsSync(f));
+test('R5-3 an expired NuGet signer verifies at its 2023-02-01 timestamp under the pinned Microsoft root (real Windows, read-only)',{skip:!onWindows||!expiredClient},t=>{
+ const r=powershell(`. ${psq(path.join(server,'deploy/vigia/authenticode-chain.ps1'))}; $f=${psq(expiredClient)}; $s=Get-AuthenticodeSignature -LiteralPath $f; $now=New-Object Security.Cryptography.X509Certificates.X509Chain; $now.ChainPolicy.RevocationMode='NoCheck'; $validNow=$now.Build($s.SignerCertificate); $c=Get-VerifiedAuthenticodeChain $f $s; [pscustomobject]@{status=[string]$s.Status;notAfter=$s.SignerCertificate.NotAfter.ToUniversalTime().ToString('o');time=$c.ChainPolicy.VerificationTime.ToUniversalTime().ToString('o');root=$c.ChainElements[$c.ChainElements.Count-1].Certificate.Thumbprint;validNow=$validNow} | ConvertTo-Json -Compress`);
+ if(/REVOCATION_UNAVAILABLE/.test(r.stdout))return t.skip('revocation service unavailable on this network');
+ assert.equal(r.status,0,r.stderr);const v=lastJson(r.stdout);
+ assert.equal(v.status,'Valid');assert.ok(Date.parse(v.notAfter)<Date.now());assert.equal(v.validNow,false);
+ assert.match(v.time??'',/^2023-02-01T/);assert.ok(pins().microsoftRoots.includes(v.root),JSON.stringify(v));
+});
+test('R5-4 retention keeps the served pair: bundle receipts, their extractions and installers, stored snapshots and live journals',async t=>{
+ const m=await mod('deploy/vigia/artifact-retention.mjs'),base=tmp(t);
+ const tempRoot=path.join(base,'tmp'),bundleRoot=path.join(base,'bundles'),outDir=path.join(base,'out'),installersDir=path.join(base,'installers');
+ for(const d of [tempRoot,bundleRoot,outDir,installersDir])fs.mkdirSync(d,{recursive:true});
+ const age=(p,minutes)=>{const at=new Date(Date.now()-minutes*60000);fs.utimesSync(p,at,at);return p;};
+ const dir=(p,minutes)=>{fs.mkdirSync(p,{recursive:true});fs.writeFileSync(path.join(p,'ServiceStudio.Framework.dll'),'x');return age(p,minutes);};
+ const installer=(name,minutes)=>{const f=path.join(installersDir,name);fs.writeFileSync(f,'MZ');fs.writeFileSync(f+'.sha256','a'.repeat(64)+'\n');return age(f,minutes);};
+ // The r4-retention pattern: pair X is served, its journals are terminal, and its bundle receipts cite these roots.
+ const xOdc=dir(path.join(tempRoot,'extracted','a'.repeat(64)),300),xO11=dir(path.join(tempRoot,'extracted','b'.repeat(64)),299);
+ const iOdc=installer('odc-1.7.30.10980.exe',300),iO11=installer('o11-11.55.94.65328.exe',299);
+ const store=(lane,v,full,root,inst)=>{const folder=path.join(bundleRoot,`${lane}-${v}`);fs.mkdirSync(folder,{recursive:true});const bundle=path.join(folder,`${lane}-studio-${full}.tar.gz`);fs.writeFileSync(bundle,lane);const digest=createHash('sha256').update(lane).digest('hex');fs.writeFileSync(bundle+'.sha256',digest+'  '+path.basename(bundle)+'\n');fs.writeFileSync(bundle+'.provenance.json',JSON.stringify({value:{root,installer:{file:inst}}}));return {folder,digest};};
+ const odc=store('odc','1.7.30','1.7.30.10980',xOdc,iOdc);store('o11','11.55.94','11.55.94.65328',xO11,iO11);
+ const stored=dir(path.join(odc.folder,'snapshot-'+odc.digest),400);fs.writeFileSync(stored+'.tree.json','{}');
+ const orphans=[1,2,3].map(i=>dir(path.join(odc.folder,'snapshot-'+String(i).repeat(64)),300-i));
+ // Pair Y (the candidate, no release.json yet): newer extractions whose receipts cite newer installers.
+ const yInstallers=[];for(const [c,minutes] of [['c',10],['d',9]]){const root=dir(path.join(tempRoot,'extracted',c.repeat(64)),minutes);const inst=installer(`odc-1.7.31.${minutes}.exe`,minutes);yInstallers.push(inst);fs.writeFileSync(root+'.provenance.json',JSON.stringify({root,installer:{file:inst}}));}
+ const oldInstaller=installer('odc-1.7.29.1.exe',500),newer=[installer('odc-1.7.31.1.exe',8),installer('odc-1.7.31.2.exe',7)];
+ const partial=path.join(installersDir,'odc-1.7.31.3.exe.partial-999999');fs.writeFileSync(partial,'MZ');
+ const stage=n=>dir(path.join(tempRoot,'bridges',`${n}0000000-0000-0000-0000-000000000000`),600-n);
+ const servedStage=stage(1),leftStage=stage(2);stage(3);stage(4);
+ const journal=(id,s)=>{fs.mkdirSync(path.join(outDir,id),{recursive:true});fs.writeFileSync(path.join(outDir,id,'release.json'),JSON.stringify({bridges:{stage:s}}));fs.writeFileSync(path.join(outDir,id,'deployment.json'),JSON.stringify({status:'live'}));};
+ journal('o11-11.55.94-odc-1.7.30',servedStage);journal('o11-11.55.92-odc-1.7.28',leftStage);
+ m.cleanupArtifacts({tempRoot,bundleRoot,outDir,installersDir,keepArtifacts:2,livePairs:['o11-11.55.94-odc-1.7.30']});
+ for(const p of [xOdc,xO11,iOdc,iO11,...yInstallers,stored,stored+'.tree.json',orphans[1],orphans[2],servedStage,...newer])assert.ok(fs.existsSync(p),'kept '+p);
+ for(const p of [orphans[0],leftStage,oldInstaller,oldInstaller+'.sha256',partial])assert.ok(!fs.existsSync(p),'removed '+p);
+ const s=file('deploy/vigia/auto-runtime.mjs');assert.match(s,/livePairs:readLivePairs\(config.outDir\)/);assert.match(s,/recordLivePairs\(config.outDir,Object.keys\(baseline.kernels\)\)/);
+});
+test('R5-5 an abandoned attempt has its own event with the cause code and -Retry reopens it',async t=>{
+ const f=transaction(t,'reread1');assert.equal((await releaseAutomatically({},f.ops,f.r)).status,'deferred');
+ assert.equal((await releaseAutomatically({maxDeploymentDeferrals:1},f.ops,f.r)).status,'abandoned');
+ const abandoned=f.events.find(([n])=>n==='abandoned');assert.ok(abandoned,JSON.stringify(f.events.map(([n])=>n)));assert.equal(abandoned[1].code,'LIVE_CHANGED');assert.match(abandoned[1].message,/LIVE_CHANGED/);
+ const {retry}=await mod('deploy/vigia/approve.mjs'),dir=tmp(t),id='o11-11.55.95-odc-1.7.31',inputs={head:'h',studios:{odc:'1.7.31.1'}};
+ const write=(code,status)=>{fs.mkdirSync(path.join(dir,id),{recursive:true});fs.writeFileSync(path.join(dir,id,'attempt.json'),JSON.stringify({id,status:'closed',code,cause:'LIVE_CHANGED',inputs,pair:{lanes:['odc'],odc:'1.7.31',o11:'11.55.95'},at:'then'}));fs.writeFileSync(path.join(dir,id,'deployment.json'),JSON.stringify({status}));};
+ write('abandoned','abandoned');assert.equal(retry({outDir:dir},id).status,'retry');
+ const reopened=JSON.parse(fs.readFileSync(path.join(dir,id,'attempt.json'),'utf8'));
+ assert.equal(decide({manifest:baseline,observed:[{lane:'odc',version:'1.7.31',fullVersion:'1.7.31.1'}],attempts:{[id]:reopened},inputs:()=>inputs}).action,'run');
+ write('idle','idle');assert.throws(()=>retry({outDir:dir},id),/abandoned/);
+});
+test('R5-6 accepted unsigned main is a notification every round (toast, webhook and VPS journal)',async t=>{
+ const dir=tmp(t),events=[],secrets={synthetic:true};
+ const runtime={secrets:async()=>secrets,executionSource:async()=>{},cleanupSsh:async()=>{},pause:async()=>{},event:async(n,v,s)=>events.push([n,v,s]),liveBaseline:async()=>({manifest:baseline}),manifest:()=>baseline,detect:async()=>[],observe:async x=>x,head:async()=> 'head'};
+ for(let i=0;i<2;i++)await round({automatic:true,acceptUnsignedMain:true,outDir:dir},runtime);
+ assert.equal(events.filter(([n])=>n==='unsigned-main').length,2);assert.equal(events[0][2],secrets);
+ events.length=0;await round({automatic:true,ownerSigningPublicKey:'ssh-ed25519 AAAA',outDir:dir},runtime);assert.equal(events.length,0);
+ // The event channel itself reaches the toast, the VPS journal (logger over SSH) and the optional webhook.
+ const {createAutoRuntime}=await mod('deploy/vigia/auto-runtime.mjs'),priv=path.join(dir,'priv'),reached=[],fetched=[];
+ const auto=createAutoRuntime({workspace:dir,tempRoot:priv,outDir:dir,automaticDeployment:{ssh:{host:'vps.invalid',knownHosts:path.join(dir,'known_hosts'),executable:'ssh-fake'}}},{log:()=>{},notify:async(title)=>reached.push(['toast',title]),run:async(command,args,options)=>{if(command==='ssh-fake'){reached.push(['vps',JSON.parse(options.input)]);return {code:0,stdout:'{"ok":true}'};}return {code:0,stdout:''};}});
+ const original=globalThis.fetch;globalThis.fetch=async(url,options)=>{fetched.push([String(url),JSON.parse(options.body)]);return {ok:true};};
+ try{await auto.event('unsigned-main',{id:'main',message:'unsigned'},{sshPrivateKey:Buffer.from('PRIVATE KEY').toString('base64'),webhookUrl:'https://hook.invalid/vigia'});}finally{globalThis.fetch=original;}
+ assert.ok(reached.some(([k,v])=>k==='toast'&&/unsigned-main/.test(v)));assert.ok(reached.some(([k,v])=>k==='vps'&&v.action==='event'&&v.event==='unsigned-main'));assert.equal(fetched[0]?.[1].event,'unsigned-main');
+});
+test('R5-7 the scheduled task may start and keep running on batteries (real Windows, in-memory settings only)',{skip:!onWindows},()=>{
+ const r=powershell(`$ast=[Management.Automation.Language.Parser]::ParseFile(${psq(path.join(server,'deploy/vigia/install-task.ps1'))},[ref]$null,[ref]$null); $assign=@($ast.FindAll({param($n) $n -is [Management.Automation.Language.AssignmentStatementAst] -and $n.Left.Extent.Text -eq '$settings'},$true))[0]; $settings=& ([scriptblock]::Create($assign.Right.Extent.Text)); [pscustomobject]@{disallow=$settings.DisallowStartIfOnBatteries;stop=$settings.StopIfGoingOnBatteries;instances=[string]$settings.MultipleInstances} | ConvertTo-Json -Compress`);
+ assert.equal(r.status,0,r.stderr);const v=lastJson(r.stdout);assert.equal(v.disallow,false);assert.equal(v.stop,false);assert.equal(v.instances,'IgnoreNew');
+});

@@ -170,6 +170,12 @@ class RemoteTests(unittest.TestCase):
         self.assertIn("old-90", self.inputs)
         self.assertNotIn("new-92", self.inputs)
 
+    def test_r5_5_event_journal_line_carries_only_a_bounded_cause_code(self):
+        self.request("event", event="abandoned", id="o11-11.55.95-odc-1.7.31", code="LIVE_CHANGED")
+        self.request("event", event="abandoned", id="pair", code="not a code; rm -rf /")
+        lines = [call[3] for call in self.calls if call[:3] == ("logger", "-t", "ssam-vigia")]
+        self.assertEqual(lines, ["abandoned o11-11.55.95-odc-1.7.31 LIVE_CHANGED", "abandoned pair"])
+
 
 if __name__ == "__main__":
     unittest.main()

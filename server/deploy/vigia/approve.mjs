@@ -76,7 +76,9 @@ export function reject(config,selector,reason){
 }
 // -Retry also takes a proposal (its local image was pruned, say): the next round builds it again.
 export function retry(config,selector){
- const a=findAttempt(config.outDir,selector,['failed','rejected','deferred','proposed']);
+ const a=findAttempt(config.outDir,selector,['failed','rejected','deferred','proposed','closed']);
+ // A closed attempt reopens only when its deferred release was abandoned; an idle one is already served.
+ if(a.status==='closed'&&a.code!=='abandoned')throw Error(`${a.id} was closed as ${a.code??'unknown'} (the pair is served or nothing is left to do); only an abandoned attempt can be reopened.`);
  const journal=path.join(config.outDir,a.id,'deployment.json');
  if(fs.existsSync(journal)){const state=readJournal(journal);if(state.status==='rollback-failed'&&config.acknowledgeRollback!==a.id)throw Error('Use -AcknowledgeRollback '+a.id+' after manually checking and restoring production.');}
  if(a.published)throw Error(`${a.id} is already published (${a.published.digest}); finish it with -Approve ${a.id}.`);

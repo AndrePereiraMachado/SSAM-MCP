@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import {artifactEvidence} from './artifact-evidence.mjs';
-import {cleanupArtifacts,assertDisk} from './artifact-retention.mjs';
+import {cleanupArtifacts,assertDisk,recordLivePairs,readLivePairs} from './artifact-retention.mjs';
 import {captureProvenance,verifyProvenance,verifyBundleCustody,verifyInstallerCustody} from './provenance.mjs';
 import {configureJournals,requireJournalKey,readJournal,writeJournal} from './journal.mjs';
 import path from 'node:path';
@@ -74,7 +74,7 @@ export function createAutoRuntime(config,runtime) {
   async verifyRelease(release){for(const b of Object.values(release.bundles??{})){verifyBundleCustody(b,config.bundlePins?.[`${b.lane}-${b.version}`]);if(b.provenance)await this.verifyInput(b.provenance);}if(!release.bundles)throw Error('Release provenance is missing.');},
   pause(){assertPause();if(config.pauseFile)assertPause(config.pauseFile);},
   deploymentBudget(){assertTime(config.roundDeadline??Date.now()+(config.roundHours??7)*3600000,Math.max(180,config.deploymentMaxMinutes??180));},
-  cleanupSsh(){cleanupSsh(priv);cleanupRollback(priv,config.outDir);cleanupArtifacts(config);},
+  cleanupSsh(){cleanupSsh(priv);cleanupRollback(priv,config.outDir);cleanupArtifacts({...config,livePairs:readLivePairs(config.outDir)});},
   capacityPreflight:async manifest=>ssh(await secrets(),{action:'capacity',backendCount:manifest.odc.length}),
   async assertRollbackSafe(s,baseline,ownedHash){const live=(await api(s,'GET',resource())).docker_compose_raw;const old=(await load(baseline)).compose;if(![ownedHash,canonicalComposeHash(old)].includes(canonicalComposeHash(live)))throw Error('Rollback refused: another writer changed the compose.');},
   preflightRemote:(s,pinned)=>ssh(s,{action:'preflight',backendCount:pinned.odc.length}),
@@ -194,7 +194,7 @@ export function createAutoRuntime(config,runtime) {
    if(typeof value.docker_compose_raw!=='string'||!value.docker_compose_raw)throw Error('Coolify live compose is missing.');
    const observed=await ssh(s,{action:'snapshot',checkSource:checkSource(readListingBudget(root),[],true)});
    const snapshot={compose:value.docker_compose_raw,...observed};const baseline=liveBaseline(snapshot);
-   runtime.liveKernels=baseline.kernels;
+   runtime.liveKernels=baseline.kernels;recordLivePairs(config.outDir,Object.keys(baseline.kernels));
    const file=path.join(priv,'rollback',randomUUID()+'.dpapi');fs.mkdirSync(path.dirname(file),{recursive:true});
    fs.writeFileSync(file,await protect(JSON.stringify(snapshot)),{mode:0o600});
    return {file,hash:composeHash(snapshot.compose),manifest:baseline.manifest,kernels:baseline.kernels,telemetry:baseline.telemetry};
@@ -219,7 +219,7 @@ export function createAutoRuntime(config,runtime) {
   async event(name,value,s){
    runtime.log(`release ${name}: ${value.id}`);
    await runtime.notify('SSAM: '+name,value.message);
-   await ssh(s,{action:'event',event:name,id:value.id}).catch(()=>{});
+   await ssh(s,{action:'event',event:name,id:value.id,...(value.code?{code:value.code}:{})}).catch(()=>{});
    if(s.webhookUrl)try{await fetch(s.webhookUrl,{method:'POST',redirect:'error',headers:{'content-type':'application/json'},body:JSON.stringify({event:name,...value}),signal:AbortSignal.timeout(15000)});}catch{}
   }
  };

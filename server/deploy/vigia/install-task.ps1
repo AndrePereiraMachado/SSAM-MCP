@@ -31,7 +31,7 @@ $user=[Security.Principal.WindowsIdentity]::GetCurrent().Name
 $action=New-ScheduledTaskAction -Execute $configuration.powershell -Argument "-NoProfile -NonInteractive -ExecutionPolicy Bypass -File `"$(Join-Path $Workspace 'server\deploy\vigia\vigia.ps1')`" -Config `"$Config`"" -WorkingDirectory $Workspace
 $every=New-ScheduledTaskTrigger -Once -At ((Get-Date).AddMinutes(10)) -RepetitionInterval (New-TimeSpan -Hours $Hours)
 $logon=New-ScheduledTaskTrigger -AtLogOn -User $user;$logon.Delay='PT15M'
-$settings=New-ScheduledTaskSettingsSet -MultipleInstances IgnoreNew -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Hours 8)
+$settings=New-ScheduledTaskSettingsSet -MultipleInstances IgnoreNew -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Hours 8)
 $principal=New-ScheduledTaskPrincipal -UserId $user -LogonType Password -RunLevel Limited
 $task=New-ScheduledTask -Action $action -Trigger @($every,$logon) -Settings $settings -Principal $principal
 if($Show){[pscustomobject]@{Task=$TaskName;User=$user;LogonType='Password';Hours=$Hours};return}

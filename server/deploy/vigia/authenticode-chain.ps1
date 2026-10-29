@@ -37,7 +37,9 @@ function Get-AuthenticodeSigningTime([string]$File,$Signature) {
             $time=Read-DerValue $content ([ref]$at)
             if($time.Tag -ne 24){throw 'Missing timestamp generation time.'}
             $text=[Text.Encoding]::ASCII.GetString($content,$time.Start,$time.Length)
-            return [DateTime]::ParseExact($text,@('yyyyMMddHHmmssZ','yyyyMMddHHmmss.FFFFFFFZ'),[Globalization.CultureInfo]::InvariantCulture,[Globalization.DateTimeStyles]::AssumeUniversal).ToUniversalTime()
+            # Windows PowerShell binds an untyped array to the single-format overload; the formats must be a typed string[].
+            [string[]]$formats=@('yyyyMMddHHmmss\Z','yyyyMMddHHmmss.FFFFFFF\Z')
+            return [DateTime]::ParseExact($text,$formats,[Globalization.CultureInfo]::InvariantCulture,[Globalization.DateTimeStyles]::AdjustToUniversal -bor [Globalization.DateTimeStyles]::AssumeUniversal)
         }}
     }
     throw 'Timestamp certificate exists without a verifiable signing time.'

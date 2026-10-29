@@ -22,13 +22,13 @@ export const AUTOMATIC_PLAN=[
  'Notify per attempt, always notify rollback failure'
 ];
 const atomic=(file,value)=>{const tmp=file+'.next';fs.writeFileSync(tmp,JSON.stringify(value,null,2)+'\n');fs.renameSync(tmp,file);};
-export async function releaseEvent(directory,ops,name,id,message,secrets,attempt='legacy'){
+export async function releaseEvent(directory,ops,name,id,message,secrets,attempt='legacy',code=null){
  const file=path.join(directory,'release-events.json');let events={};
  if(fs.existsSync(file))events=JSON.parse(fs.readFileSync(file,'utf8'));
  const key=id+':'+attempt+':'+name;
  if(name!=='rollback-failed'&&events[key])return;
  events[key]=new Date().toISOString();atomic(file,events);
- await ops.event(name,{id,attempt,message},secrets).catch(()=>{});
+ await ops.event(name,{id,attempt,message,...(code?{code}:{})},secrets).catch(()=>{});
 }
 export async function releaseAutomatically(config,ops,release){
  const {id,dir,built,manifest,kernel,bridges,features}=release;
@@ -43,7 +43,7 @@ export async function releaseAutomatically(config,ops,release){
  if(!state.mutationStarted){await ops.pause();await ops.deploymentBudget();}
  state.deploySent??=!!state.steps.deploy||['deploy','checks'].includes(state.activeStep);
  const save=()=>writeJournal(file,state);
- const event=(name,message)=>releaseEvent(config.outDir??dir,ops,name,id,message,secrets,state.attempt);
+ const event=(name,message,code)=>releaseEvent(config.outDir??dir,ops,name,id,message,secrets,state.attempt,code);
  if(['idle','abandoned'].includes(state.status))return {status:state.status,id};
  if(state.status==='live')return {status:'live',id,commit:state.pin};
  if(state.status==='rollback-failed'){await event('rollback-failed',`${id}: rollback still requires owner attention.`);return {status:'rollback-failed',id};}
@@ -54,7 +54,9 @@ export async function releaseAutomatically(config,ops,release){
  let proposed=state.proposed??manifest;
  if(state.status==='deferred'){
   if((state.deferrals??0)>=(config.maxDeploymentDeferrals??3)||Date.now()-Date.parse(state.firstDeferredAt??state.attempt)>(config.maxDeferredHours??48)*3600000){
-   state.status='abandoned';save();await event('failed',`${id}: deferred release expired; later rounds may proceed.`);return {status:'abandoned',id};
+   // Its own event with the last deferral cause; -Retry reopens the closed attempt.
+   const cause=state.failure?.code??'DEFERRED';state.status='abandoned';state.abandoned={at:new Date().toISOString(),code:cause,deferrals:state.deferrals??0};save();
+   await event('abandoned',`${id}: deferred release abandoned after ${state.deferrals??0} deferrals (${cause}); later rounds may proceed. -Retry ${id} reopens it.`,cause);return {status:'abandoned',id,code:cause};
   }
   try {
   baseline=await ops.liveBaseline(secrets);
@@ -62,7 +64,7 @@ export async function releaseAutomatically(config,ops,release){
   catch(e){if(e.code!=='ALREADY_SERVED')throw e;state.status='idle';save();return {status:'idle',id};}
   proposed=rotateWindow(baseline.manifest,{odc:built.odc??kernel.odc,o11:built.o11??kernel.o11,image:built.image,tag:built.tag},{...baseline.telemetry,maxWindow:config.maxWindow??4}).manifest;
   if(baseline.hash!==state.baseline?.hash){delete state.steps.pin;delete state.steps.backup;delete state.steps.prepared;}
-  }catch(error){state.deferrals=(state.deferrals??0)+1;state.firstDeferredAt??=new Date().toISOString();save();await event('failed',`${id}: live baseline refresh deferred.`);return {status:'deferred',id,code:error.code??'BASELINE_UNAVAILABLE'};}
+  }catch(error){state.failure={step:'baseline-refresh',code:/^[A-Z_]+$/.test(error.code??'')?error.code:'BASELINE_UNAVAILABLE'};state.deferrals=(state.deferrals??0)+1;state.firstDeferredAt??=new Date().toISOString();save();await event('failed',`${id}: live baseline refresh deferred.`);return {status:'deferred',id,code:error.code??'BASELINE_UNAVAILABLE'};}
  }
  state.baseline=baseline;state.proposed=proposed;if(state.status!=='rolling-back')state.status='preparing';save();
  try{if(!state.mutationStarted)assertUnserved(baseline,{odc:built.odc??kernel.odc,o11:built.o11??kernel.o11});}

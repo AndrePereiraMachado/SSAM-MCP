@@ -45,7 +45,7 @@ export function decide({manifest,observed,state,attempts,inputs,now=Date.now(),r
  const skipped=[];
  while(ready.length){
   const pair=pairFor(manifest,ready),id=pairId(pair),a=attempts[id],want=inputs(pair);
-  if(a?.status==='closed'){
+  if(a?.status==='closed'&&!a.retry){
    if(!sameInputs(a.inputs,want))return {action:'run',plan,waiting,pair,id,inputs:want,previous:a,skipped};
    return {action:'idle',plan,waiting,pair,id,attempt:a,skipped};
   }

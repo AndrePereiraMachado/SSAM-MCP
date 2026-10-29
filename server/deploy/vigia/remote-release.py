@@ -116,7 +116,9 @@ def dispatch(request):
         return {"ok": True, "backends": rows, "telemetry": telemetry}
     if action == "event":
         # The system journal is available even without a console ingestion API.
-        command(["logger", "-t", "ssam-vigia", request["event"] + " " + request["id"]])
+        code = request.get("code")
+        words = [request["event"], request["id"]] + ([code] if isinstance(code, str) and re.fullmatch(r"[A-Z_]{1,40}", code) else [])
+        command(["logger", "-t", "ssam-vigia", " ".join(words)])
         return {"ok": True}
     if action == "backup":
         backup_space(base, settings)

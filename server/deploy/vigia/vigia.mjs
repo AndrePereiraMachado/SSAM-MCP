@@ -52,7 +52,12 @@ export function baseWindow(mainManifest,outDir){
  return {...r,branchBase:last?.pinCommit??last?.approved?.commit??null};
 }
 export async function round(config,runtime,{dryRun=false}={}){
- if(config.automatic&&!dryRun){await runtime.executionSource();await runtime.secrets();await runtime.cleanupSsh();await runtime.pause();}
+ if(config.automatic&&!dryRun){
+  await runtime.executionSource();const secrets=await runtime.secrets();
+  // The owner's acceptUnsignedMain is a standing risk: every round says so on every channel (toast, webhook, VPS journal).
+  if(config.acceptUnsignedMain===true&&!config.ownerSigningPublicKey)await runtime.event('unsigned-main',{id:'main',attempt:new Date().toISOString(),message:'This round runs main without owner commit-signature verification (acceptUnsignedMain is true). Configure ownerSigningPublicKey to close this risk.'},secrets).catch(()=>{});
+  await runtime.cleanupSsh();await runtime.pause();
+ }
  // A process interrupted after publication resumes its journal before any new build.
  if(config.automatic&&!dryRun)for(const a of Object.values(readAttempts(config.outDir))){
   const file=path.join(config.outDir,a.id,'release.json'),journal=path.join(config.outDir,a.id,'deployment.json');
@@ -72,14 +77,14 @@ export async function round(config,runtime,{dryRun=false}={}){
   if(['rolled-back','preparation-failed'].includes(state.status)&&a.status==='running'){
    const {writeAttempt}=await import('./pipeline.mjs');writeAttempt(config.outDir,{...a,status:'failed',built:release.built,rollbackLatch:state.status==='rolled-back',failedLanes:a.pair.lanes,code:state.status});
   }
-  if(['idle','abandoned'].includes(state.status)){const {writeAttempt}=await import('./pipeline.mjs');writeAttempt(config.outDir,{...a,status:'closed',code:state.status});continue;}
+  if(['idle','abandoned'].includes(state.status)){const {writeAttempt}=await import('./pipeline.mjs');writeAttempt(config.outDir,{...a,status:'closed',code:state.status,cause:state.abandoned?.code??null});continue;}
   if(!['live','idle','abandoned','rolled-back','rollback-failed','preparation-failed'].includes(state.status)){
    const result=await releaseAutomatically(config,runtime,release);
    if(result.status==='live'){
     const {writeAttempt}=await import('./pipeline.mjs');
     writeAttempt(config.outDir,{...a,status:'approved',built:release.built,pinCommit:result.commit,approved:{at:new Date().toISOString(),digest:'sha256:'+release.built.sha256,commit:result.commit}});
    }
-   if(['idle','abandoned'].includes(result.status)){const {writeAttempt}=await import('./pipeline.mjs');writeAttempt(config.outDir,{...a,status:'closed',code:result.status});continue;}
+   if(['idle','abandoned'].includes(result.status)){const {writeAttempt}=await import('./pipeline.mjs');writeAttempt(config.outDir,{...a,status:'closed',code:result.status,cause:result.status==='abandoned'?result.code??null:null});continue;}
    return result;
   }
  }
