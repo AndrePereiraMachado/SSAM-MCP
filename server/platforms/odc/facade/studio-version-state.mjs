@@ -26,11 +26,13 @@ function summarize(data) {
   return data;
 }
 export function recordStudioVersions(dir, state, compatible, seen, version = process.env.SSAM_BACKEND_NAME) {
+  if(state.verification===true)return;
   const folder = versionStateDir(dir, version);
   fs.mkdirSync(folder, {recursive:true});
   const file = path.join(folder, 'studio-versions.json');
   const data = read(file);
   const token = {customer:state.customer, seen, agent:threePart(state.hello?.agent?.version),
+    bridges:state.hello?.bridges??[],
     packBridges:[state.hello?.pack?.odcBridge, state.hello?.pack?.o11BuiltFor].filter(v => typeof v === 'string' && /^[v\d.]+$/.test(v))};
   const versions = studioVersions(state.hello?.studios);
   for (const lane of ['odc','o11']) {
@@ -48,7 +50,9 @@ export function recordStudioVersions(dir, state, compatible, seen, version = pro
     fs.renameSync(temp,file);
   } finally { fs.rmSync(temp,{force:true}); }
 }
-export function readStudioVersions(dir) {
+export function readStudioVersions(dir, records) {
+  if(!records){try{records=JSON.parse(fs.readFileSync(path.join(dir,'tokens.json'),'utf8')).tokens;}catch(e){if(e.code!=='ENOENT')throw e;}}
+  const revoked=new Set((records??[]).filter(r=>r.revokedAt||r.state==='revoked').map(r=>r.id));
   const files = [path.join(dir,'state','studio-versions.json')];
   try { for (const entry of fs.readdirSync(path.join(dir,'versions'),{withFileTypes:true})) {
     if (entry.isDirectory()) files.push(path.join(versionStateDir(dir,entry.name),'studio-versions.json'));
@@ -57,6 +61,7 @@ export function readStudioVersions(dir) {
   for (const file of files) {
     const data = read(file);
     for (const [id,token] of Object.entries(data.tokens)) {
+      if(revoked.has(id)||token.revokedAt||token.verification||token.customer==='Version verification')continue;
       if (!result.tokens[id] || result.tokens[id].seen < token.seen) result.tokens[id] = token;
     }
     if (!result.updated || data.updated > result.updated) result.updated = data.updated;

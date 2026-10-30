@@ -1,0 +1,7 @@
+{
+  "comment": "The hosted tools/list a release image must serve: tool count and byte ceilings (toolListingBytes), all tools and the fixed core. One source for the release rehearsal (rehearse.mjs) and the Studio watcher smoke (vigia/smoke.mjs); vigia/vigia.test.mjs checks that the facade budget test (hosted-listing-budget.test.mjs) has the same numbers.",
+  "tools": 90,
+  "totalBytes": 261330,
+  "coreBytes": 34097,
+  "core": ["ssam_doctor", "ssam_connect", "ssam_discover", "ssam_map", "ssam_code", "ssam_reference", "ssam_evidence", "ssam_task", "o11_inspect", "o11_deliver", "o11_publish", "o11_studio", "studio_deliver", "studio_inspect", "studio_status"]
+}

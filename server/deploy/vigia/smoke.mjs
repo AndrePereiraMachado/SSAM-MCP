@@ -2,10 +2,18 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {randomUUID} from 'node:crypto';
 const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
-export async function smokeImage({pair,bundle,dir,root,docker,served,pack={odcBridge:'v97',o11BuiltFor:'11.55.92',o11Hook:'dev'}}){
- const name='ssam-vigia-'+randomUUID().slice(0,12),secret=path.resolve(dir,'segredo'),state=path.join(secret,'state'),features=path.join(secret,'features'),cache=path.join(secret,'cache');
- for(const folder of [state,features,cache])fs.mkdirSync(folder,{recursive:true});
- const kernel={o11:pair.o11,odc:pair.odc,odcBridge:pack.odcBridge,odcBridgeAccepted:['v96','v48','v45']};
+// The listing every release image must serve (coolify/listing-budget.json, shared with the release rehearsal).
+export const readListingBudget=root=>JSON.parse(fs.readFileSync(path.join(root,'server/deploy/coolify/listing-budget.json'),'utf8'));
+const DEFAULT_PACK={odcBridge:'v97',o11BuiltFor:'11.55.92',o11Hook:'dev',odcBridgeAccepted:['v96','v48','v45']};
+// privateDir: where the test server's state, its features and its cache live during the smoke (private, outside C:/t;
+// removed in finally). dir keeps only the evidence (kernel.json, the server log without credentials, the commands).
+export async function smokeImage({pair,bundle,dir,root,docker,served,pack=DEFAULT_PACK,budget,privateDir}){
+ if(!budget||!Number.isInteger(budget.tools)||!Number.isInteger(budget.totalBytes))throw Error('The smoke test needs the listing budget.');
+ if(!privateDir||/^c:[\\/]t(?:[\\/]|$)/i.test(path.resolve(privateDir)))throw Error('The smoke test needs a private folder outside C:/t for the test server state.');
+ pack={...DEFAULT_PACK,...pack};const hello={odcBridge:pack.odcBridge,o11BuiltFor:pack.o11BuiltFor,o11Hook:pack.o11Hook};
+ const name='ssam-vigia-'+randomUUID().slice(0,12),home=path.resolve(privateDir??''),secret=path.join(home,'segredo-'+name),state=path.join(secret,'state'),features=path.join(secret,'features'),cache=path.join(secret,'cache');
+ for(const folder of [dir,state,features,cache])fs.mkdirSync(folder,{recursive:true});
+ const kernel={o11:pair.o11,odc:pair.odc,odcBridge:pack.odcBridge,odcBridgeAccepted:pack.odcBridgeAccepted,...(pack.o11Hook?{o11Hook:pack.o11Hook}:{}),...(pack.o11BridgeAccepted?{o11BridgeAccepted:pack.o11BridgeAccepted}:{})};
  fs.writeFileSync(path.join(state,'kernel.json'),JSON.stringify(kernel));fs.writeFileSync(path.join(dir,'kernel.json'),JSON.stringify(kernel,null,2));fs.copyFileSync(bundle.features,path.join(features,'Features.plain.xml'));
  const image=pair.image+':'+pair.tag,mount=(from,to)=>['-v',from.replaceAll('\\','/')+':'+to];
  let created=false,credentials=null;
@@ -25,7 +33,7 @@ export async function smokeImage({pair,bundle,dir,root,docker,served,pack={odcBr
   if(!credentials.token||!credentials.agentCredential)throw Error('Smoke credentials could not be issued.');
   const script=`import {toolListingBytes} from './platforms/odc/facade/tool-listing.mjs';
 try {
-const credentials=${JSON.stringify(credentials)},pair=${JSON.stringify(pair)},pack=${JSON.stringify(pack)};
+const credentials=${JSON.stringify(credentials)},pair=${JSON.stringify(pair)},pack=${JSON.stringify(hello)},budget=${JSON.stringify({tools:budget.tools,totalBytes:budget.totalBytes,coreBytes:budget.coreBytes??null,core:budget.core??[]})};
 const parse=text=>{const line=text.split('\\n').find(x=>x.startsWith('data:'));return JSON.parse(line?line.slice(5):text);};
 async function post(route,token,body,headers={}){const r=await fetch('http://127.0.0.1:7310'+route,{method:'POST',headers:{authorization:'Bearer '+token,'content-type':'application/json',accept:'application/json, text/event-stream',...headers},body:JSON.stringify(body)});const text=await r.text();return {status:r.status,sid:r.headers.get('mcp-session-id'),data:text?parse(text):null};}
 const hello=await post('/agent/v1/hello',credentials.agentCredential,{t:'hello',protocol:'ssam-agent/1',instance:'smoke',agent:{version:'0.3.1'},pack:{id:'smoke',lanes:['odc','o11'],...pack},studios:{odc:{installed:{version:pair.odc,dir:'C:/Smoke'}},o11:{installed:{version:pair.o11,dir:'C:/Smoke'}}}});
@@ -34,9 +42,10 @@ const init=await post('/mcp',credentials.token,{jsonrpc:'2.0',id:1,method:'initi
 if(init.status!==200||!init.sid)throw Error('MCP initialization failed.');
 const headers={'mcp-session-id':init.sid};await post('/mcp',credentials.token,{jsonrpc:'2.0',method:'notifications/initialized'},headers);
 const listed=await post('/mcp',credentials.token,{jsonrpc:'2.0',id:2,method:'tools/list',params:{}},headers),tools=listed.data?.result?.tools;
-if(listed.status!==200||!Array.isArray(tools)||tools.length!==92)throw Error('Unexpected hosted tool listing.');
-const totalBytes=tools.reduce((n,t)=>n+toolListingBytes(t),0);if(totalBytes>261330)throw Error('Hosted listing grew beyond its approved size.');
-console.log(JSON.stringify({ok:true,healthy:true,agentAccepted:true,tools:tools.length,totalBytes}));
+if(listed.status!==200||!Array.isArray(tools)||tools.length!==budget.tools)throw Error('Unexpected hosted tool listing: '+(tools?.length??0)+' tools, expected '+budget.tools+'.');
+const totalBytes=tools.reduce((n,t)=>n+toolListingBytes(t),0);if(totalBytes>budget.totalBytes)throw Error('Hosted listing grew beyond its approved size: '+totalBytes+' B > '+budget.totalBytes+' B.');
+const coreBytes=tools.filter(t=>budget.core.includes(t.name)).reduce((n,t)=>n+toolListingBytes(t),0);if(budget.coreBytes&&coreBytes>budget.coreBytes)throw Error('Hosted core listing grew beyond its approved size: '+coreBytes+' B > '+budget.coreBytes+' B.');
+console.log(JSON.stringify({ok:true,healthy:true,agentAccepted:true,tools:tools.length,totalBytes,coreBytes}));
 } catch(error) { console.error('SMOKE_CHECK:'+error.message); process.exitCode=1; }`;
   const checked=await docker(['exec','-i',name,'node','--input-type=module'],{input:script,dir,secret:true,allowFailure:true});
   if(checked.code!==0)throw Error(checked.stderr.split('\n').find(x=>x.startsWith('SMOKE_CHECK:'))??'Image smoke script failed.');
@@ -47,7 +56,7 @@ console.log(JSON.stringify({ok:true,healthy:true,agentAccepted:true,tools:tools.
    if(!credentials||![credentials.token,credentials.agentCredential].some(v=>v&&text.includes(v)))fs.writeFileSync(path.join(dir,'smoke-server.log'),text);
    await docker(['rm','-f','-v',name],{allowFailure:true});
   }
-  if(secret!==path.resolve(dir,'segredo'))throw Error('Unexpected smoke cleanup path.');
+  if(path.dirname(secret)!==home||!path.basename(secret).startsWith('segredo-ssam-vigia-'))throw Error('Unexpected smoke cleanup path.');
   fs.rmSync(secret,{recursive:true,force:true});
  }
 }

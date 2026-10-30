@@ -77,6 +77,11 @@ ARG BUILD_DATE=unknown
 
 # ---- The installers: the named build context `installers` replaces this empty stage ------------------------------------------
 FROM scratch AS installers
+FROM scratch AS studio-provenance
+COPY deploy/vigia/no-provenance.json /provenance.json
+
+FROM scratch AS client-bridges
+COPY docker/ssam-server/empty-bridges/ /
 
 # ---- The reader of the installers and bundles (build only) -------------------------------------------------------------------
 FROM ${PYTHON_IMAGE} AS studio-reader
@@ -216,6 +221,8 @@ WORKDIR /app
 # platforms/odc/facade/tests/hosted-image-denylist.test.mjs reads exactly this context against
 # docker/ssam-server/client-denylist.json, which never ships itself).
 COPY . /app
+COPY --from=client-bridges / /app/bridges/
+COPY --from=studio-provenance /provenance.json /app/studio-provenance.json
 COPY --from=js /src/node_modules /app/node_modules
 COPY --from=js /src/platforms/odc/node_modules /app/platforms/odc/node_modules
 COPY --from=kernel-o11 /out/ /app/

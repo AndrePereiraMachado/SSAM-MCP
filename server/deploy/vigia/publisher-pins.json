@@ -1,0 +1,8 @@
+{
+  "schema": 1,
+  "outsystems": [{
+    "subject": "CN=\"OutSystems, Inc.\", O=\"OutSystems, Inc.\", L=Boston, S=Massachusetts, C=US",
+    "ca": "7B0F360B775F76C94A12CA48445AA2D2A875701C"
+  }],
+  "microsoftRoots": ["8F43288AD272F3103B6FB1428485EA3014C0BCFE"]
+}

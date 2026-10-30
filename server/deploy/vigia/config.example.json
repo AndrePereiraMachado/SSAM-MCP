@@ -1,39 +1,90 @@
 {
-  "workspace": "C:/path/to/SSAM-worktree",
-  "tempRoot": "C:/path/to/SSAM-worktree/.test-tmp/vigia",
-  "outDir": "C:/t/vigia",
-  "bundleRoot": "C:/t/studio-bundles",
+  "workspace": "C:/ssam-priv/vigia-run",
+  "updateFrom": "main",
+  "tempRoot": "C:/ssam-priv/vigia-tmp",
+  "featuresRoot": "C:/ssam-priv/vigia-tmp/features",
+  "outDir": "C:/ssam-priv/vigia",
+  "bundleRoot": "C:/ssam-priv/studio-bundles",
+  "bundlePins": {
+    "odc-1.7.29": "b64f5381439e1fcc3be1f0cc298bd86c71ae8ffaeec2a704e2c21f1ec7e112ca",
+    "o11-11.55.93": "ad4f23b53db20ff9d5ae4d6899cbe9c41bab9f7a7b88c41be3d6b2ee47b0de95"
+  },
   "dockerContext": "desktop-linux",
   "builder": "ssam-multiver-impl",
   "image": "docker.io/andrepereiramachado/ssam-server",
   "notify": true,
+  "domains": {
+    "ssam": "mcp.ssam.pro",
+    "console": "panel.ssam.pro"
+  },
   "studios": {
     "odc": "C:/Program Files/OutSystems/ODC Studio/ODC Studio",
     "o11": "C:/Program Files/OutSystems/Service Studio 11/Service Studio"
   },
-  "previousStudios": {
-    "odc": "C:/t/odc1729/studio-1.7.29.10940/ODC Studio",
-    "o11": "C:/t/studio-bundles/o11-11.55.93/snapshot/files"
-  },
-  "previousFeaturesDir": "C:/private/current-default-features",
   "featuresSource": "C:/Users/OWNER/AppData/Local/OutSystems/ODC Studio/Features.xml",
-  "featuresFile": "C:/t/odc1729/features/Features.plain.xml",
-  "bundles": {
-    "odc": {
-      "version": "1.7.29",
-      "file": "C:/t/odc1729/installers/odc-studio-1.7.29.10940.tar.gz",
-      "sha256": "b64f5381439e1fcc3be1f0cc298bd86c71ae8ffaeec2a704e2c21f1ec7e112ca"
-    },
-    "o11": {
-      "version": "11.55.93",
-      "file": "C:/t/studio-bundles/o11-11.55.93/o11-studio-11.55.93.65289.tar.gz",
-      "sha256": "ad4f23b53db20ff9d5ae4d6899cbe9c41bab9f7a7b88c41be3d6b2ee47b0de95"
-    }
-  },
+  "featuresDefaultsFallback": false,
+  "installersDir": "C:/ssam-priv/vigia-installers",
   "agentPack": {
+    "runtime": "net8.0",
     "odcBridge": "v97",
+    "odcBridgeAccepted": [
+      "v96",
+      "v48",
+      "v45"
+    ],
     "o11BuiltFor": "11.55.92",
     "o11Hook": "dev"
   },
-  "installersDir": "C:/t/comb/installers"
+  "agentPackByRuntime": {},
+  "node": "C:/ssam-priv/tools/node/node.exe",
+  "minFreeGb": 25,
+  "retryHours": 12,
+  "dotnetWaitMinutes": 180,
+  "dockerWaitMinutes": 8,
+  "laneWaitHours": 24,
+  "roundHours": 7,
+  "busyNoticeHours": 10,
+  "automatic": true,
+  "executionBranch": "server/vigia-run",
+  "automaticDeployment": {
+    "coolify": {
+      "url": "https://COOLIFY_HOST",
+      "resource": "RESOURCE_UUID"
+    },
+    "ssh": {
+      "user": "root",
+      "knownHosts": "C:/Users/OWNER/.ssh/known_hosts",
+      "host": "VPS_HOST",
+      "executable": "C:/Windows/System32/OpenSSH/ssh.exe"
+    },
+    "timestampServer": "http://timestamp.digicert.com",
+    "remote": {
+      "healthUrl": "https://mcp.ssam.pro/health",
+      "warmTimeoutSeconds": 300,
+      "composeProject": "RESOURCE_UUID",
+      "directory": "/var/lib/ssam-vigia",
+      "postgresContainer": "POSTGRES_CONTAINER",
+      "backupMinFreeMiB": 2048
+    }
+  },
+  "agentReleaseCommit": "REVIEWED_40_HEX_AGENT_COMMIT",
+  "agentReleaseRef": "agent/release",
+  "deploymentMaxMinutes": 180,
+  "pauseFile": "C:/ssam-priv/vigia/PAUSE",
+  "vault": "C:/ssam-priv/vigia/secrets.dpapi.json",
+  "trustedRemote": "https://GIT_HOST/OWNER/SSAM-MCP.git",
+  "ownerSigningPublicKey": null,
+  "maxWindow": 4,
+  "python": "C:/ssam-priv/tools/python/python.exe",
+  "dotnet": "C:/Program Files/dotnet/dotnet.exe",
+  "git": "C:/Program Files/Git/cmd/git.exe",
+  "bash": "C:/Program Files/Git/bin/bash.exe",
+  "powershell": "C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe",
+  "tar": "C:/Windows/System32/tar.exe",
+  "docker": "C:/Program Files/Docker/Docker/resources/bin/docker.exe",
+  "sshKeygen": "C:/Windows/System32/OpenSSH/ssh-keygen.exe",
+  "acceptUnsignedMain": false,
+  "maxDeploymentDeferrals": 3,
+  "maxDeferredHours": 48,
+  "keepArtifacts": 2
 }
