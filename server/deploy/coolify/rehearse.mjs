@@ -12,7 +12,7 @@ const images=process.env.SSAM_REHEARSAL_IMAGES?JSON.parse(process.env.SSAM_REHEA
 // SSAM_REHEARSAL_IMAGES: the window, newest (the default) first, two or three pairs: [{name?, image, features, odc?, o11?,
 // odcBuild?, o11Build?, odcBridge?, odcBridgeAccepted?}]. odc/o11 (three numbers) and their builds (four) default to the two
 // pairs of the initial window (1.7.29/11.55.93, 1.7.28/11.55.92); odcBridge (kernel.json) defaults to v97 with v96, v48, v45
-// accepted. A pair whose odcBridge is not v97 (the .NET 10 Studios: v100) also proves that a pack of v97 is refused there.
+// accepted. A pair whose odcBridge is not v97 (the .NET 10 Studios: v101) also proves that a pack of v97 is refused there.
 if(images&&(images.length<2||images.length>3))throw Error('The window takes two or three images.');
 const INITIAL=[{odc:'1.7.29',o11:'11.55.93',odcBuild:'1.7.29.10940',o11Build:'11.55.93.65289'},{odc:'1.7.28',o11:'11.55.92',odcBuild:'1.7.28.10850',o11Build:'11.55.92.65269'}];
 const image=images?.[0].image??process.env.SSAM_REHEARSAL_IMAGE??'ssam-server:prod-20261021-ac614ad';
@@ -70,7 +70,7 @@ try{
  const post=async(endpoint,token,body,extra={})=>{const r=await fetch(url+endpoint,{method:'POST',headers:{authorization:'Bearer '+token,'content-type':'application/json',accept:'application/json, text/event-stream',...extra},body:JSON.stringify(body)});return {status:r.status,text:await r.text(),sid:r.headers.get('mcp-session-id')};};
  // A hello whose ODC Studio is the one of pair odcOf and Service Studio the one of o11Of, with the pack an agent of this release
  // reports for them (the bridge built for that ODC Studio's runtime, the thin bridge built for that Service Studio).
- const hello=(odcOf,o11Of,id,pack={})=>({t:'hello',protocol:'ssam-agent/1',instance:id,agent:{version:'0.1.3',machine:{id,name:'Rehearsal',user:'Test'}},pack:{id:'rehearsal',lanes:['odc','o11'],odcBridge:odcOf.odcBridge==='v100'?'v98':odcOf.odcBridge,o11BuiltFor:o11Of.o11,o11Hook:'dev',...pack},studios:{odc:{installed:{version:odcOf.odcBuild,dir:'C:/Synthetic'}},o11:{installed:{version:o11Of.o11Build,dir:'C:/Synthetic'}}}});
+ const hello=(odcOf,o11Of,id,pack={})=>({t:'hello',protocol:'ssam-agent/1',instance:id,agent:{version:'0.1.3',machine:{id,name:'Rehearsal',user:'Test'}},pack:{id:'rehearsal',lanes:['odc','o11'],odcBridge:odcOf.odcBridge==='v101'?'v98':odcOf.odcBridge,o11BuiltFor:o11Of.o11,o11Hook:'dev',...pack},studios:{odc:{installed:{version:odcOf.odcBuild,dir:'C:/Synthetic'}},o11:{installed:{version:o11Of.o11Build,dir:'C:/Synthetic'}}}});
  const ha=await post('/agent/v1/hello',a.agentCredential,hello(pairs[0],pairs[1],'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'));assert.equal(ha.status,200);assert.equal(JSON.parse(ha.text).compatible.odc.ok,true);assert.equal(JSON.parse(ha.text).compatible.o11.ok,false);assert.match(JSON.stringify(JSON.parse(ha.text).compatible.o11),/Update Service Studio to 11\.55\.94/);checks.push({name:'mixed pair gives the O11 upgrade while ODC works',ok:true});
  const hb=await post('/agent/v1/hello',b.agentCredential,hello(pairs[1],pairs[1],'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'));assert.equal(hb.status,200);assert.equal(JSON.parse(hb.text).compatible.odc.ok,true);assert.equal(JSON.parse(hb.text).compatible.o11.ok,true);
  const routing=JSON.parse(fs.readFileSync(path.join(out,'segredo/runtime/state/routing.json'),'utf8'));assert.equal(routing.routes[a.id].backend,'v1');assert.equal(routing.routes[b.id].backend,'v2');
@@ -114,7 +114,7 @@ try{
   assert.ok(agent.connected());assert.equal(agent.welcome().kernel.odc,pairs[1].odc);
   const prior=await post('/mcp',b.token,init);assert.equal(prior.status,200);
   await post('/mcp',b.token,{jsonrpc:'2.0',method:'notifications/initialized'},{'mcp-session-id':prior.sid});
-  changing.studios.odc.installed.version=pairs[0].odcBuild;changing.pack.odcBridge=pairs[0].odcBridge==='v100'?'v98':pairs[0].odcBridge;
+  changing.studios.odc.installed.version=pairs[0].odcBuild;changing.pack.odcBridge=pairs[0].odcBridge==='v101'?'v98':pairs[0].odcBridge;
   for(let i=0;i<400&&!(connections>=2&&agent.connected()&&agent.welcome().kernel.odc===pairs[0].odc);i++)await wait(100);
   assert.ok(connections>=2&&agent.connected());assert.equal(agent.welcome().kernel.odc,pairs[0].odc);
   const stale=await post('/mcp',b.token,{jsonrpc:'2.0',id:40,method:'tools/list',params:{}},{'mcp-session-id':prior.sid});assert.equal(stale.status,409);assert.match(stale.text,/SESSION_REROUTED/);

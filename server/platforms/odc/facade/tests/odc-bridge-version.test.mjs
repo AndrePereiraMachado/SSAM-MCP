@@ -10,8 +10,9 @@
 // file with CRLF turned into LF, as SHARED.md computes them). v97: computed from git show 3c2c73e:<path>. v100 (2026-10-27): the v97 code built for the net10 ODC Studios (1.7.30 on);
 // only the three version marks changed (Bridge.csproj also names its runtime, OdcBridgeRuntime net10.0; the client attaches
 // v97 to a net8 Studio and v100 to a net10 one, by the Studio's own runtimeconfig.json).
-// v98 (the agent box): the data-root protocol of the packaged agent (AgentDataRoot.cs), which v100 does not have; kept here as the record of the agent's bridge.
-// The same test, with the same table, guards the agent box (tests/odc-bridge-version.test.mjs).
+// v98 (the agent box): the data root of the packaged agent (AgentDataRoot.cs, the agent-root command), kept as the record of the agent's bridge.
+// v101 (2026-10-30): v100 plus that data root, because the agent sends agent-root to every bridge from v98 on (agent/lib/kinds.mjs hasDataRootProtocol).
+// The agent box guards its own v98 with a copy of this test (tests/odc-bridge-version.test.mjs); the family test below is of this box.
 import './fixtures/isolated-profile.mjs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -22,6 +23,10 @@ import { fileURLToPath } from 'node:url';
 
 const BOX = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..');
 const BRIDGE = 'platforms/odc/studio/bridge';
+
+// A name that was built and must not come back with other bytes. v100: the v97 code for the net10 ODC Studios, without the
+// agent's data root; the agent refuses to work with it (ODC_DATA_ROOT_FAILED). It was never offered to an agent, and no kernel of a release that carries v101 accepts it.
+const RETIRED = Object.freeze({ v100: 'no agent-root' });
 
 const RECORDED = {
   v97: {
@@ -97,14 +102,15 @@ const RECORDED = {
     'platforms/odc/studio/shared/Journal.cs': 'e0cc116aec478a3092b9e31c04f470b6d5a47f7af72974234a3d7fa93586185e',
     'platforms/odc/studio/shared/Manifest.cs': 'bcc45f95c3b541739dad91211be17df8d2dfe1f59398ed579d5672f095b3788b',
   },
-  v100: {
+  v101: {
     'kernel/query-test/NativeQueryTest.cs': '89e2889b8a6c05380124c98239a1b4bb16eed266f031466444b76e06b4f39177',
     'kernel/query-test/QueryTestContract.cs': 'a778e457aba47971224e4a48e1a7c2ea69541a3bd8dc246527cb147218bdf7f3',
     'kernel/query-test/QueryTestOutput.cs': 'a9bb3f539accf807984d6798355ae648642568d43950b2ec01ff51784568eebf',
     'kernel/query-test/QueryTestRunner.cs': 'b9f96ac09f1aeb20493843df77a6ff6f4a59d26e485de0f603922fcfd464844c',
     'kernel/src/Anvil.Bridge/PrivateHttpContext.cs': '73785bbd6483074d865848ef9bc4f13423aabc7d371d8931e2936ffe85fdbca8',
+    'platforms/odc/studio/bridge/AgentDataRoot.cs': 'dad2cf57b23e27c6dd49070fe38268cab5670bf5d7aba8404899c2ddf9c1e68e',
     'platforms/odc/studio/bridge/AppCreationCommands.cs': '416c95f5bf1a86476109aa07d4950d12c05c72450a6d860a9dec4924b1341ccf',
-    'platforms/odc/studio/bridge/Bridge.csproj': 'be0cc814196fba67deb34938563f46188b861a98baac34ac3e2b611e9f378198',
+    'platforms/odc/studio/bridge/Bridge.csproj': '8f7d97a0aa64cdf1c83a53b3d5b93f0119665d7834a6874223675aba37f178f5',
     'platforms/odc/studio/bridge/DataCommands.cs': '2c8eb954b4b1d1ccace550179399a4418f43fee308f3014fe1490a30f4196aa6',
     'platforms/odc/studio/bridge/MergeDiagnostics.cs': '8a1d4b6206278e146729c6a3515d0962d0db6b64156dc9cee313dd9adf3b8573',
     'platforms/odc/studio/bridge/MergeOrderCopy.cs': '4e7a187554154662f5ffcecf401904eb4b59ef656192f7fa57afc73b13a4d2d9',
@@ -121,13 +127,13 @@ const RECORDED = {
     'platforms/odc/studio/bridge/PublicSignatureReader.cs': '2caccb3e657b84f750af2a1ba2723509b2775c9a4ffbd79f431fba100d6a1567',
     'platforms/odc/studio/bridge/PublishLogCommands.cs': '3f2b097bb4837e7f0a3e19a9534f5adb9dec6ec61129b9106133037bf96c8c56',
     'platforms/odc/studio/bridge/PublishLogCore.cs': '33b820a24c909f5528e3aaa50d5ac7410ae3721d3e0f819d3c4dd586cf9db730',
-    'platforms/odc/studio/bridge/QueryTestCommands.cs': '97be6ecf1e5f05c2c047b03852cab69c632e580d187d6e3186932d080fd2906d',
+    'platforms/odc/studio/bridge/QueryTestCommands.cs': '0aafe20f964fea6c0dc7e9ee0599b1b5828dc6d1451eaf26175383be9a286c36',
     'platforms/odc/studio/bridge/ReferenceCommands.cs': '615e55dec013036b12270e55ec8eea2a723cce753eb367cd232884b65adf9db0',
     'platforms/odc/studio/bridge/SecurityWarningsCopy.cs': '9994c72f57a32b74fd8ca92299198e44dea11efed1023d5526f72eeb5307b698',
-    'platforms/odc/studio/bridge/StartupHook.cs': '32e5995e50c5519296b86519f56a2f7330cdbb1420c325200dcddab8503931f0',
+    'platforms/odc/studio/bridge/StartupHook.cs': '66880384dd000149d1a0dc6297c01bbedf0be105600b79e06b320a3811db556b',
     'platforms/odc/studio/bridge/TemplateCache.cs': 'a57ef89f222983393d3249c75d543e6a2fc06aef456340a63272d8f127b3f20c',
     'platforms/odc/studio/bridge/client/Client.csproj': 'a5b9c2d9640b4df751a052075cd5b2bf9b568b7b2e00f72b160acb9ebdc953f2',
-    'platforms/odc/studio/bridge/client/Program.cs': '5c21180708bbceff05a19af82baee14287ce96f73c287200eb7813b012017d34',
+    'platforms/odc/studio/bridge/client/Program.cs': '38dfc296b8cdaca85c3ee5a4c271630917e3134aa2527809d90d62533c605eac',
     'platforms/odc/studio/engine/NativeMergeOrder.cs': '3ec32ca130504f0375a12704b58123e88539fc0472dd8174945430ac10c7e127',
     'platforms/odc/studio/engine/NativeMergeVerification.cs': 'b7b797836070709672c57d3bdeb0ebed8571e06c4dfba172b9a5a0ab7ce4aede',
     'platforms/odc/studio/shared/Journal.cs': 'e0cc116aec478a3092b9e31c04f470b6d5a47f7af72974234a3d7fa93586185e',
@@ -201,4 +207,84 @@ test('the ODC bridge sources are the ones recorded for the version they declare 
   assert.deepEqual(problems, [], `the ODC bridge code changed and it is still ${version}. Revert the change, or raise the version in `
     + 'StartupHook.cs, Bridge.csproj and client/Program.cs of both boxes (and kernel.json of the server) and record its hashes here:\n'
     + problems.join('\n'));
+});
+
+// The agent speaks the data-root protocol to every bridge from v98 on (agent/lib/kinds.mjs hasDataRootProtocol): before any
+// command it sends agent-root, and a bridge that does not answer fails every call with ODC_DATA_ROOT_FAILED. So no bridge from
+// v98 on may be declared, recorded or served without it.
+const DATA_ROOT_FROM = 98;
+const AGENT_DATA_ROOT = BRIDGE + '/AgentDataRoot.cs';
+const fromDataRoot = version => /^v\d+$/.test(version ?? '') && Number(version.slice(1)) >= DATA_ROOT_FROM;
+
+// The C# without its comments: a word in a comment is not code. Strings stay, the protocol's words are strings.
+function codeOf(file) {
+  const s = fs.readFileSync(file, 'utf8').replace(/\r\n/g, '\n');
+  let out = '';
+  for (let i = 0; i < s.length;) {
+    if (s.startsWith('//', i)) { while (i < s.length && s[i] !== '\n') i++; continue; }
+    if (s.startsWith('/*', i)) { const end = s.indexOf('*/', i + 2); i = end < 0 ? s.length : end + 2; continue; }
+    if (s[i] === '"') {
+      const verbatim = s[i - 1] === '@' || (s[i - 1] === '$' && s[i - 2] === '@') || (s[i - 1] === '@' && s[i - 2] === '$');
+      let j = i + 1;
+      while (j < s.length) {
+        if (verbatim && s[j] === '"' && s[j + 1] === '"') { j += 2; continue; }
+        if (!verbatim && s[j] === '\\') { j += 2; continue; }
+        if (s[j] === '"') break;
+        j++;
+      }
+      out += s.slice(i, j + 1); i = j + 1; continue;
+    }
+    if (s[i] === "'" && (s[i + 2] === "'" || (s[i + 1] === '\\' && s[i + 3] === "'"))) { const n = s[i + 1] === '\\' ? 4 : 3; out += s.slice(i, i + n); i += n; continue; }
+    out += s[i++];
+  }
+  return out;
+}
+
+// What the agent requires of the answer (agent/lib/kinds.mjs bindOdcRoot): ok, protocol 1 and the same folder, and no command before it.
+function dataRootProblems(version) {
+  const problems = [], hook = codeOf(path.join(BOX, BRIDGE, 'StartupHook.cs'));
+  const answer = /if\s*\(\s*command\s*==\s*"agent-root"\s*\)/.exec(hook);
+  if (!answer) problems.push(version + ': StartupHook.cs does not answer agent-root');
+  const gate = hook.indexOf('DataRoot.Use()'), dispatch = hook.indexOf('Dispatch(command');
+  if (gate < 0) problems.push(version + ': no DataRoot.Use() gate before the commands');
+  if (dispatch < 0) problems.push(version + ': the dispatch of the commands was not found');
+  if (answer && gate >= 0 && !(answer.index < gate)) problems.push(version + ': the gate comes before the agent-root answer');
+  if (gate >= 0 && dispatch >= 0 && !(gate < dispatch)) problems.push(version + ': a command can run before the gate');
+  if (answer && gate > answer.index) {
+    const branch = hook.slice(answer.index, gate);
+    if (!/DataRoot\.Bind\s*\(/.test(branch)) problems.push(version + ': the agent-root answer does not bind the folder');
+    if (!/\bprotocol\s*=\s*1\b/.test(branch)) problems.push(version + ': the agent-root answer is not protocol 1');
+    if (!/\bcontinue\s*;/.test(branch)) problems.push(version + ': the agent-root answer falls through to the commands');
+  }
+  if (!hook.includes('"agent-root:1"')) problems.push(version + ': StartupHook.cs does not advertise agent-root:1');
+  if (!sources().includes(AGENT_DATA_ROOT)) problems.push(version + ': AgentDataRoot.cs is not compiled into the bridge');
+  else if (!/AGENT_ROOT_REQUIRED/.test(codeOf(path.join(BOX, AGENT_DATA_ROOT)))) problems.push(version + ': AgentDataRoot.Use() does not refuse an unbound bridge');
+  // A static initializer runs when the assembly loads, before the binding: a path it builds stays on the installed copy.
+  const reads = /\b(Root|Snapshots|Log|DataDir|PortalDir|DataRoot\.Value)\b/;
+  for (const rel of sources().filter(file => file.endsWith('.cs'))) {
+    const code = codeOf(path.join(BOX, rel));
+    for (const m of code.matchAll(/\bstatic\s+(?:readonly\s+)?[^;{}()=]*?\b(\w+)\s*(?:\{\s*get;[^}]*\}\s*)?=(?![=>])\s*([^;]*);/g))
+      if (reads.test(m[2]) && !m[2].includes('=>')) problems.push(rel + ': the static ' + m[1] + ' reads a path of the data root before the binding');
+  }
+  return problems;
+}
+
+test('every ODC bridge from v98 on that this box declares or records implements agent-root', () => {
+  const declared = versions()['StartupHook.cs'];
+  const problems = [];
+  if (Object.hasOwn(RETIRED, declared)) problems.push(declared + ' is retired (' + RETIRED[declared] + ') and is declared again');
+  if (fromDataRoot(declared)) problems.push(...dataRootProblems(declared));
+  for (const [version, table] of Object.entries(RECORDED))
+    if (fromDataRoot(version) && !Object.hasOwn(table, AGENT_DATA_ROOT)) problems.push(version + ': recorded without AgentDataRoot.cs');
+  assert.deepEqual(problems, []);
+});
+
+// The window of the server box (the line has no deploy folder): a kernel may only name or accept a bridge recorded with agent-root.
+const WINDOW = path.join(BOX, 'deploy', 'coolify', 'r1-kernels.json');
+test('every ODC bridge from v98 on that a kernel of the window names or accepts is recorded with agent-root', { skip: !fs.existsSync(WINDOW) }, () => {
+  const problems = [];
+  for (const [name, kernel] of Object.entries(JSON.parse(fs.readFileSync(WINDOW, 'utf8'))))
+    for (const version of [kernel.odcBridge, ...(kernel.odcBridgeAccepted ?? [])])
+      if (fromDataRoot(version) && !Object.hasOwn(RECORDED[version] ?? {}, AGENT_DATA_ROOT)) problems.push(name + ': ' + version);
+  assert.deepEqual(problems, []);
 });

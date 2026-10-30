@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import http from 'node:http';
 import {fileURLToPath} from 'node:url';
+const CLIENT_BRIDGE=/const string Version = "(v\d+)"/.exec(fs.readFileSync(fileURLToPath(new URL('../../platforms/odc/studio/bridge/client/Program.cs',import.meta.url)),'utf8'))[1];
 import {generateKeyPairSync,createHash,sign,verify} from 'node:crypto';
 import {configureJournals,readJournal,writeJournal} from './journal.mjs';
 import {releaseAutomatically,AUTOMATIC_PLAN} from './automatic.mjs';
@@ -151,7 +152,7 @@ test('bridge builder targets the Studio runtime, signs through the vault entry p
   if(args.includes('-getProperty:TargetPath'))return {stdout:builds.at(-1).output};
   if(args[0]==='build'){
    builds.push(args);const out=args[args.indexOf('-o')+1];fs.mkdirSync(out,{recursive:true});
-   const name=args[1].endsWith('Client.csproj')?'ODC3.Bridge.Client.dll':args[1].includes('Anvil.RuntimeHook')?'Anvil.RuntimeHook.Agent.dll':args[1].includes('Anvil.Bridge.Thin')?'Anvil.Bridge.dll':'ODC3.Bridge.v100.dll';
+   const name=args[1].endsWith('Client.csproj')?'ODC3.Bridge.Client.dll':args[1].includes('Anvil.RuntimeHook')?'Anvil.RuntimeHook.Agent.dll':args[1].includes('Anvil.Bridge.Thin')?'Anvil.Bridge.dll':`ODC3.Bridge.${CLIENT_BRIDGE}.dll`;
    fs.writeFileSync(path.join(out,name),'fake signed binary');args.output=path.join(out,name);
    const assets=path.join(path.dirname(args[1]),'obj/project.assets.json');fs.mkdirSync(path.dirname(assets),{recursive:true});fs.writeFileSync(assets,JSON.stringify({packageFolders:{},libraries:{}}));
    if(name==='ODC3.Bridge.Client.dll')fs.writeFileSync(path.join(out,'ODC3.Bridge.Client.runtimeconfig.json'),JSON.stringify({runtimeOptions:{tfm:'net10.0'}}));

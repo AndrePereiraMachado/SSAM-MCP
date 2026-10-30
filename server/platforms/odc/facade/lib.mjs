@@ -42,7 +42,7 @@ function bridgeRuntime() {
 export const paths = {
   client: bridgeClientPath(),
   builder: path.join(root, 'studio', 'builder', 'bin', 'Release', 'net10.0', 'ODC3.Builder.dll'),
-  // The bridge's runtime folder: the OdcBridgeRuntime of Bridge.csproj (v100: net10.0; the bridges before it: net8.0).
+  // The bridge's runtime folder: the OdcBridgeRuntime of Bridge.csproj (v100 on: net10.0; the bridges before it: net8.0).
   get bridgeBin() { return path.join(root, 'studio', 'bridge', 'bin', 'Release', bridgeRuntime()); },
   get tenants() { return dataPath('tenants.json'); },
   get catalog() { return dataPath('snapshots', 'modules.json'); },

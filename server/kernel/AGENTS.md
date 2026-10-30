@@ -189,7 +189,7 @@ normalizacao); bytes que contradizem o escrito ou formato que o Studio nao guard
 modulo Service e recusada antes do 1o op (`ACTION_KIND_NODE`, com a alternativa).
 `N1_ABBREVIATION` (aviso, nunca recusa; `Preflight/AbbreviationRules.cs`, dicionario `Preflight/EnglishWords.txt`): nome novo de
 logica abreviado em relacao ao proprio contexto (callee lido como a R2-A le, tipo, fonte); uma leitura alinhada ao callee/tipo/fonte
-da o nome inteiro com patch certo `ABBREVIATION_EXPANDED`; varias leituras sao `ABBREVIATION_CHOICE` com `candidates`, sem patch.
+da o nome inteiro com patch certo `ABBREVIATION_EXPANDED`; varias leituras sao `ABBREVIATION_CHOICE` com `candidates` (cada um com o seu patch), nunca certo; sem leitura alinhada, candidato sem patch.
 `nativeRenames` (`NativeNames.cs`, `MergeContentProof`): quando o Studio renomeia sozinho no merge (aggregate de nome padrao que
 ganha filtro por atributo vira `Get<Plural>By<Atributo>`), a prova de conteudo aceita so os pares previstos, e a entrega devolve
 `nativeRenames` e `nativeRenamesNote`: escreva os nomes novos nos jobs seguintes.

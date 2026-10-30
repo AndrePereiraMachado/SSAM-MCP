@@ -1,14 +1,15 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <!-- The runtime of the Studio it compiles against (kernel/StudioRuntime.props): v100 runs inside the net10 ODC Studios
+    <!-- The runtime of the Studio it compiles against (kernel/StudioRuntime.props): v101 runs inside the net10 ODC Studios
          (1.7.30 on) only, see OdcBridgeRuntime below. -->
     <TargetFramework>$(AnvilOdcTargetFramework)</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <!-- One assembly name per bridge version. A loaded DLL is never replaced: a new version is a new name and a new pipe.
-         v100 (D3: the server line's numbers v100-v199) is the v97 code built for the net10 ODC Studios; the net8 ODC Studios
+         v101 (D3: the server line's numbers v100-v199) is the v97 code built for the net10 ODC Studios plus the agent's data root
+         (agent-root, the protocol every bridge from v98 on must speak to the agent); v100 was the same code without it; the net8 ODC Studios
          (up to 1.7.29) keep the v97 binary of the agent pack (sources 3c2c73e), which the client still attaches. -->
-    <AssemblyName>ODC3.Bridge.v100</AssemblyName>
+    <AssemblyName>ODC3.Bridge.v101</AssemblyName>
     <OdcBridgeRuntime>net10.0</OdcBridgeRuntime>
     <!-- IncrementalClean must never treat a prior resident version as an orphan. -->
     <CleanFile>$(MSBuildProjectFile).$(AssemblyName).FileListAbsolute.txt</CleanFile>
@@ -47,6 +48,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="StartupHook.cs" />
+    <Compile Include="AgentDataRoot.cs" />
     <Compile Include="QueryTestCommands.cs" />
     <Compile Include="../../../../kernel/query-test/*.cs" Link="QueryTest/%(Filename)%(Extension)" />
     <Compile Include="DataCommands.cs" />

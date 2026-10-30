@@ -1,5 +1,6 @@
 // R3-C (K2): the answer of an applied delivery names the elements the Studio renamed on its own during the merge (the
 // kernel's nativeRenames, accepted by the content proof only as NativeNames predicted them), with a note; nothing otherwise.
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { deliveryFields, nativeRenamesOf } from '../o11-cycle.mjs';

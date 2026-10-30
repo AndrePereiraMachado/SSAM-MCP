@@ -1,3 +1,4 @@
+import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 const api = await import(process.env.SSAM_TEST_STUDIO_IDENTITY ?? '../studio-identity.mjs');
