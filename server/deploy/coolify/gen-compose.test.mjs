@@ -14,6 +14,9 @@ test('compose has a fixed pair window, only router Traefik labels, shared data a
  assert.equal(source(a,'/data/friction'),source(b,'/data/friction'));
  assert.notEqual(source(a,'/data/cache'),source(b,'/data/cache'));
  assert.notEqual(source(a,'/data/odc-features'),source(b,'/data/odc-features'));
+ // The platform stylesheets: one private read-only store, by lane and version; never inside the image.
+ assert.equal(source(a,'/data/runtime-css'),'runtime-css');assert.equal(source(b,'/data/runtime-css'),'runtime-css');
+ assert.equal(a.volumes.find(v=>v.target==='/data/runtime-css').read_only,true);
  assert.deepEqual(JSON.parse(a.environment.SSAM_SERVED_VERSIONS),{odc:['1.7.29','1.7.28'],o11:['11.55.93','11.55.92']});
  assert.equal(c.services['ssam-router'].labels['traefik.http.services.ssam.loadbalancer.server.port'],'7300');
  assert.equal(c.services['ssam-router'].environment.SSAM_VERSION_WINDOW,'3');

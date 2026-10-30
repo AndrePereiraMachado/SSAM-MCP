@@ -23,7 +23,7 @@ export function versionPairs(manifest,window=manifest.window??3){
 export function generateCompose(manifest,{window=manifest.window??3}={}){
  // Coolify 4.4.6 corrupts image@sha256 references. Immutable tags are checked against the recorded digest.
  const pairs=versionPairs(manifest,window).map(p=>({...p,digest:p.image.split('@')[1]??null,image:p.image.split('@')[0]})),c=structuredClone(template),source=c.services['ssam-server'];
- delete c.name;c.networks.default={};c.volumes={'server-state':{},friction:{}};
+ delete c.name;c.networks.default={};c.volumes={'server-state':{},friction:{},'runtime-css':{}};
  const served=JSON.stringify({odc:[...new Set(pairs.map(p=>p.odc))],o11:[...new Set(pairs.map(p=>p.o11))]});
  const routing=pairs.map((p,i)=>({name:p.name,url:`http://ssam-server-v${i+1}:7310`,odc:p.odc,o11:p.o11,default:i===0}));
  delete c.services['ssam-server'];

@@ -135,7 +135,7 @@ test('workspace paths and the root rule follow the hosted context only', () => {
 test('hostedSpawnEnv is a closed list: the workspace, the relay, and nothing else of this process', () => {
   const saved = { ...process.env };
   Object.assign(process.env, { ANVIL_BRIDGE_PORT: '4516', ANVIL_AUTHORITY_DIR: 'C:\\owner\\authority', ANVIL_CSHARP_RUNTIME_REGISTRATION: 'C:\\owner\\reg.json',
-    SSAM_HYBRID_ODC_TENANT: 'owner.outsystems.dev', ODC_CLIENT_SECRET: 'owner-secret', ANVIL_ODC_FEATURES_DIR: 'C:\\server\\features',
+    SSAM_HYBRID_ODC_TENANT: 'owner.outsystems.dev', ODC_CLIENT_SECRET: 'owner-secret', ANVIL_ODC_FEATURES_DIR: 'C:\\server\\features', ANVIL_RUNTIME_CSS_DIR: 'C:\\server\\runtime-css',
     ANVIL_BRIDGE_FLAVOR: 'owner-flavor', ANVIL_BRIDGE_TIMEOUT_SECONDS: '7' });
   try {
     assert.throws(() => hostedSpawnEnv('odc'), code('HOSTED_CONTEXT_LOST'));
@@ -163,6 +163,7 @@ test('hostedSpawnEnv is a closed list: the workspace, the relay, and nothing els
       assert.equal(env.TMPDIR, env.TEMP, 'TMPDIR: the temp folder of .NET on Linux');
       assert.equal(env.ANVIL_AUTHORITY_DIR, path.join(none.workspace, 'state', 'relay-authority'));
       assert.equal(env.ANVIL_ODC_FEATURES_DIR, 'C:\\server\\features');
+      assert.equal(env.ANVIL_RUNTIME_CSS_DIR, 'C:\\server\\runtime-css', 'the visual verifier reads the private platform stylesheets from here');
       assert.equal(env.ANVIL_BRIDGE_PORT, undefined);
       assert.equal(env.ANVIL_BRIDGE_FLAVOR, undefined); assert.equal(env.ANVIL_BRIDGE_TIMEOUT_SECONDS, undefined);
     });

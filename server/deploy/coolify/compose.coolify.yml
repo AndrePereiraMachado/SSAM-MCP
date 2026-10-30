@@ -286,6 +286,13 @@
           "target": "/data/cache",
           "type": "volume",
           "volume": {}
+        },
+        {
+          "source": "runtime-css",
+          "target": "/data/runtime-css",
+          "read_only": true,
+          "type": "volume",
+          "volume": {}
         }
       ]
     },
@@ -387,6 +394,13 @@
           "target": "/data/cache",
           "type": "volume",
           "volume": {}
+        },
+        {
+          "source": "runtime-css",
+          "target": "/data/runtime-css",
+          "read_only": true,
+          "type": "volume",
+          "volume": {}
         }
       ]
     },
@@ -486,6 +500,13 @@
         {
           "source": "cache-o11-11-55-92-odc-1-7-28",
           "target": "/data/cache",
+          "type": "volume",
+          "volume": {}
+        },
+        {
+          "source": "runtime-css",
+          "target": "/data/runtime-css",
+          "read_only": true,
           "type": "volume",
           "volume": {}
         }
@@ -609,6 +630,7 @@
   "volumes": {
     "server-state": {},
     "friction": {},
+    "runtime-css": {},
     "odc-features-o11-11-55-94-odc-1-7-30": {},
     "cache-o11-11-55-94-odc-1-7-30": {},
     "odc-features-o11-11-55-93-odc-1-7-29": {},

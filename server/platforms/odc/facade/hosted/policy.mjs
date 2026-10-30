@@ -619,7 +619,7 @@ const END = `(?=$|[\\\\/\\s"'<>|*?,;:)\\]}]|\\.(?:\\s|$))`;
 // /data/server with the customers' workspaces, tokens and logs, /data/friction, /data/odc-features, /data/cache, the Studio
 // folders /studio/o11 and /studio/odc). The presenter resolves each one with its own path flavor.
 export const SERVER_ROOT_VARIABLES = Object.freeze(['SSAM_MODULE_INDEX_ROOT', 'SSAM_READER_CACHE_ROOT', 'SSAM_SERVER_DIR', 'SSAM_FRICTION_DIR',
-  'ANVIL_STUDIO_DIR', 'ANVIL_ODC_STUDIO_DIR', 'ANVIL_ODC_FEATURES_DIR']);
+  'ANVIL_STUDIO_DIR', 'ANVIL_ODC_STUDIO_DIR', 'ANVIL_ODC_FEATURES_DIR', 'ANVIL_RUNTIME_CSS_DIR']);
 export const serverDataRoots = (env = process.env) => SERVER_ROOT_VARIABLES.map(name => env[name])
   .filter(root => typeof root === 'string' && root.trim()).map(root => root.trim());
 // Every root of this server: the code (workspaceRoot: /app in the image), the home and the temp folder of the process (HOME

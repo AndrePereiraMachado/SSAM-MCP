@@ -257,7 +257,7 @@ RUN node /app/platforms/odc/facade/kernel-image.mjs check-image "/studio/o11=${S
 # (owner's lab, client app logic), so Builder.csproj's `features\*.cs` compiled nothing; without the folder lib.mjs
 # builderNeedsBuild() takes the builder for stale (missing glob folder), the warm skips the resident builder and a
 # hosted call that needs it answers COMPONENT_STALE.
-RUN install -d -o ssam -g ssam -m 0750 /data/server /data/friction /data/odc-features /data/cache /app/.local /app/platforms/odc/.local \
+RUN install -d -o ssam -g ssam -m 0750 /data/server /data/friction /data/odc-features /data/runtime-css /data/cache /app/.local /app/platforms/odc/.local \
  && install -d -o ssam -g ssam -m 0700 /app/.local/authority \
  && install -d -m 0755 /app/platforms/odc/studio/builder/features \
  && chown root:ssam /app/kernel/.local /app/kernel/.local/lane-odc \
@@ -297,6 +297,8 @@ EOF
 # State lives in volumes, never in the image:
 #   /data/server        tokens.json (SHA-256 of each token only), kernel.json, customers' workspaces, audit, server.log
 #   /data/friction      the friction store
+#   /data/runtime-css   the platform stylesheets of the visual verifier (<lane>-<version>/ of the runtime-css store), extracted on a
+#                       private machine and written into this read-only volume by its owner: OutSystems files, never in Git or in an image
 #   /data/odc-features  Features.plain.xml: the feature cache of an ODC Studio that signed in once, decrypted on its Windows
 #                       machine by deploy/odc-features-export.ps1 (the Windows Features.xml is DPAPI, unreadable here; the
 #                       kernel encrypts the plain file with the Studio's Linux service, OdcFeatures.cs). The ODC model asks
@@ -314,6 +316,7 @@ ENV HOME=/tmp \
     ANVIL_STUDIO_DIR=/studio/o11 \
     ANVIL_ODC_STUDIO_DIR=/studio/odc \
     ANVIL_ODC_FEATURES_DIR=/data/odc-features \
+    ANVIL_RUNTIME_CSS_DIR=/data/runtime-css \
     ANVIL_AUTHORITY_DIR=/app/.local/authority \
     SSAM_MODULE_INDEX_ROOT=/data/cache/module-index \
     SSAM_READER_CACHE_ROOT=/data/cache/readers \

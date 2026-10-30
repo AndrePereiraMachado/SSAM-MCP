@@ -321,6 +321,13 @@
           "target": "/data/cache",
           "type": "volume",
           "volume": {}
+        },
+        {
+          "source": "runtime-css",
+          "target": "/data/runtime-css",
+          "read_only": true,
+          "type": "volume",
+          "volume": {}
         }
       ]
     }
@@ -334,6 +341,9 @@
     },
     "odc-features": {
       "name": "ssam-multiver-template_odc-features"
+    },
+    "runtime-css": {
+      "name": "ssam-multiver-template_runtime-css"
     },
     "server-state": {
       "name": "ssam-multiver-template_server-state"

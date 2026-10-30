@@ -226,7 +226,7 @@ export function usesWorkspace(root, ...defaults) {
 // From this process only the runtime and the server's code locations; everything else is set here.
 export const SPAWN_ALLOWED = Object.freeze(['SystemRoot', 'windir', 'ComSpec', 'PATH', 'PATHEXT', 'OS', 'PROCESSOR_ARCHITECTURE',
   'NUMBER_OF_PROCESSORS', 'ProgramFiles', 'ProgramFiles(x86)', 'ProgramW6432', 'ProgramData', 'CommonProgramFiles', 'USERPROFILE',
-  'APPDATA', 'LOCALAPPDATA', 'HOMEDRIVE', 'HOMEPATH', 'DOTNET_ROOT', 'ANVIL_ODC_STUDIO_DIR', 'ANVIL_ODC_FEATURES_DIR']);
+  'APPDATA', 'LOCALAPPDATA', 'HOMEDRIVE', 'HOMEPATH', 'DOTNET_ROOT', 'ANVIL_ODC_STUDIO_DIR', 'ANVIL_ODC_FEATURES_DIR', 'ANVIL_RUNTIME_CSS_DIR']);
 // O11: the bridge port is the relay of the customer's record. Without a record it is still this customer's relay, so a
 // run that never calls the bridge (apply without captures, reference, access plan, environment references) works, and
 // a bridge call there ends at this customer's relay and agent, which refuse it (O11_NOT_CONNECTED, AGENT_NOT_CONNECTED):
