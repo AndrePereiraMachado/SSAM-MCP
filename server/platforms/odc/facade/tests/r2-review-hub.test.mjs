@@ -31,7 +31,7 @@ test('review 5 real hub uploads only for an explicitly capable agent',{timeout:1
       if(!supported){assert.equal(link.supports('file.upload'),false);await assert.rejects(uploadLocalFile(context,'local:C:\\Approved\\file.csv'),{code:'HOSTED_UNAVAILABLE'});await assert.rejects(link.call('file.upload',{}),{code:'KIND_NOT_ALLOWED'});continue;}
       const uploading=uploadLocalFile(context,'local:C:\\Approved\\file.csv');
       let buffer='',call;const decoder=new TextDecoder();
-      while(!call){const chunk=await reader.read();assert.equal(chunk.done,false);buffer+=decoder.decode(chunk.value);for(const line of buffer.split('\n').slice(0,-1)){const message=JSON.parse(line);if(message.t==='call')call=message;}buffer=buffer.slice(buffer.lastIndexOf('\n')+1);}
+      while(!call){const chunk=await reader.read();assert.equal(chunk.done,false);buffer+=decoder.decode(chunk.value);for(const line of buffer.split('\n').slice(0,-1)){if(!line)continue;const message=JSON.parse(line);if(message.t==='call')call=message;}buffer=buffer.slice(buffer.lastIndexOf('\n')+1);}
       assert.equal(call.kind,'file.upload');assert.equal(call.params.path,'C:\\Approved\\file.csv');
       const bytes=Buffer.from('uploaded rows'),sha=createHash('sha256').update(bytes).digest('hex'),transfer=randomBytes(16).toString('hex');
       const result=await fetch(base+'/agent/v1/blobs/'+transfer+'/0?channel='+channel,{method:'PUT',body:bytes,headers:{authorization:headers.authorization,'content-type':'application/octet-stream','x-ssam-part-sha256':sha,'x-ssam-total-sha256':sha,'x-ssam-total-size':String(bytes.length),'x-ssam-parts':'1'}});assert.equal(result.status,204);

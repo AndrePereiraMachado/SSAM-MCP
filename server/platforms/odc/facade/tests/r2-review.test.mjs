@@ -1,3 +1,4 @@
+import { customerStateDir } from '../hosted/storage.mjs';
 import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -61,7 +62,7 @@ test('review 1: hosted publisher uses the hub lock directory and cannot overlap 
   await runWithExecutor(context, async () => {
     const args = { module: 'Sample', pid: 7 };
     const hub = { tool: 'studio_deliver', args, lane: 'odc', deps: {} };
-    assert.equal(studioWriteTarget(hub).dir, path.join(workspace, 'state', 'locks'));
+    assert.equal(studioWriteTarget(hub).dir, path.join(customerStateDir(workspace), 'locks'));
     const holder = withStudioWriteLock(hub, async () => { ready.resolve(); await release.promise; }); await ready.promise;
     let published = false, seen;
     const manifest = path.join(workspace, 'odc', 'manifest.json');
