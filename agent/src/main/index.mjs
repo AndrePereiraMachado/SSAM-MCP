@@ -21,6 +21,7 @@ import { resolveDataLocation } from './core/data-location.mjs';
 import { serviceAddress } from './core/service-address.mjs';
 import { verifyPack } from './core/pack-sync.mjs';
 import { INITIAL } from './core/update-model.mjs';
+import { isRenderWorker, runRenderWorker } from './render/worker.mjs';
 
 // out/main -> the app folder (the agent box: assets/, build/, pack/ in a checkout; the asar when packaged).
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -30,7 +31,10 @@ const service = serviceAddress();
 // --hidden: started by the system at login (the login item passes it): no panel, even when not set up.
 const startedHidden = process.argv.includes('--hidden');
 
-if (!app.requestSingleInstanceLock()) app.quit();
+// --ssam-render-worker: the agent's short-lived render worker (render/worker.mjs, screen.render). It branches before the
+// single instance lock (it must never take nor quit the running app) and never touches the app's data, tray or agent.
+if (isRenderWorker()) void runRenderWorker();
+else if (!app.requestSingleInstanceLock()) app.quit();
 else void run();
 
 async function run() {

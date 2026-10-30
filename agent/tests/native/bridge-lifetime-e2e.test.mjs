@@ -11,7 +11,7 @@ import { lockBridgeSnapshot } from '../../agent/lib/bridge-lock.mjs';
 const enabled = process.env.SSAM_CLIENT_E2E === '1';
 const code = process.env.SSAM_REVIEW_BASE ? path.join(process.env.SSAM_REVIEW_BASE, 'agent') : path.resolve(import.meta.dirname, '../..');
 const { createAgent } = await import(pathToFileURL(path.join(code, 'agent/lib/agent.mjs')));
-const output = 'C:/t/vigia-auto/round2-e2e';
+const output = process.env.SSAM_E2E_OUTPUT ?? 'C:/t/vigia-auto/round2-e2e';
 const hash = b => createHash('sha256').update(b).digest('hex');
 // Same identity/status predicate as server/vigia-auto agent-hub.mjs compatibility().
 const accepted = hello => hello.bridges?.some(r => r.lane === 'odc' && r.studioVersion === '1.7.30' && r.protocol === 'v100' && r.sequence === 1 && ['active', 'installed'].includes(r.status));
@@ -43,7 +43,9 @@ async function fixture(t, mode, badBind = false) {
       bridgeTrust: { anchors: { publicKey, thumbprint }, authenticode: async () => {}, seal: dir => lockBridgeSnapshot(root, dir, root) } } }); agent.run();
   } else {
     const variant = process.env.SSAM_REVIEW_BASE ? 'base' : 'head';
-    child = spawn('dotnet', [`C:/t/vigia-auto/agent-r4-channel-${variant}/bin/Release/net10.0/NativeProtocol.Tests.dll`], { windowsHide: true });
+    // With SSAM_E2E_OUTPUT the head harness is the one prepare.mjs generated there (channel-head).
+    const harness = process.env.SSAM_E2E_OUTPUT && variant === 'head' ? path.join(output, 'channel-head') : `C:/t/vigia-auto/agent-r4-channel-${variant}`;
+    child = spawn('dotnet', [path.join(harness, 'bin/Release/net10.0/NativeProtocol.Tests.dll')], { windowsHide: true });
     child.stderr.on('data', bytes => { nativeError += bytes; }); child.stdout.on('data', bytes => { buffered += bytes; let at; while ((at = buffered.indexOf('\n')) >= 0) { const line = buffered.slice(0, at); buffered = buffered.slice(at + 1); if (line.trim()) { const data = JSON.parse(line); const waiter = waiting.shift(); if (waiter) waiter(data); else queue.push(data); } } });
     child.stdin.end(JSON.stringify({ root, server: hub.url + '/', credential, pack, publicKey, thumbprint, installed: { odc: { installed: { dir: path.join(output, 'host/bin/Release/net10.0'), version: '1.7.30', runtime: 'net10.0' } } } }));
   }

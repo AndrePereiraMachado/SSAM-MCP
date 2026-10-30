@@ -29,6 +29,43 @@ internal static class Program
             }
             if (args is ["mac-inspect"]) { Console.WriteLine((await MacPlatform.InspectHost()).ToJsonString(new() { WriteIndented = true })); return 0; }
             if (args.Length > 0 && args[0] is "run" or "setup" or "doctor") return await NativeHost.Command(args);
+            // roots add --folder <folder> --root <data> | roots remove --folder <folder> --root <data> | roots list --root <data> [--json]:
+            // the folders file.upload may read, changed only by the person (UploadRoots.cs).
+            if (args is ["roots", var op, ..])
+            {
+                var options = Options(args[2..], "--json");
+                var dataRoot = options.GetValueOrDefault("--root") ?? throw new ArgumentException("roots needs --root <agent folder>");
+                if (options.Keys.Except(["--root", "--runtime-root", "--folder", "--json"]).Any() || (options.ContainsKey("--json") && op != "list"))
+                    throw new ArgumentException("Use roots add --folder <folder> --root <folder> | roots remove --folder <folder> --root <folder> | roots list --root <folder> [--json]");
+                return UploadRoots.Command(op, options.GetValueOrDefault("--folder"), Path.GetFullPath(dataRoot), Path.GetFullPath(options.GetValueOrDefault("--runtime-root") ?? AppContext.BaseDirectory),
+                    options.ContainsKey("--json"), Console.Out, Console.Error);
+            }
+            // check-upload --root <data> [--runtime-root <dir>]: stdin [{path, maxBytes, deadline?, beforeOpen?}] -> [{decision} | {error}],
+            // every check of file.upload without the transport (tests/native/upload.test.mjs compares it with the Node agent).
+            // beforeOpen {move: [[from, to], ...]} renames links between the checks and the open, as a test hook.
+            if (args is ["check-upload", "--root", var uploadRoot, ..])
+            {
+                var runtimeRoot = args is [_, _, _, "--runtime-root", var given] ? given : AppContext.BaseDirectory;
+                var kinds = new UploadKinds(Path.GetFullPath(uploadRoot), Path.GetFullPath(runtimeRoot), null, () => 0);
+                var requests = JsonNode.Parse(await Console.In.ReadToEndAsync()) as JsonArray ?? throw new ArgumentException("Expected a JSON array");
+                var answers = new JsonArray();
+                foreach (var request in requests.OfType<JsonObject>())
+                {
+                    Action? hook = request["beforeOpen"]?["move"] is JsonArray moves ? () => {
+                        foreach (var move in moves.OfType<JsonArray>()) Directory.Move(move[0]!.GetValue<string>(), move[1]!.GetValue<string>());
+                    } : null;
+                    long? deadline = request["deadline"] is JsonValue due && due.TryGetValue<long>(out var at) ? at : null;
+                    try
+                    {
+                        var prepared = kinds.Prepare(request, deadline, null, hook);
+                        answers.Add((JsonNode)new JsonObject { ["decision"] = new JsonObject { ["size"] = prepared.Size, ["sha256"] = prepared.Sha256 } });
+                    }
+                    catch (AgentFault e) { answers.Add((JsonNode)new JsonObject { ["error"] = e.Code }); }
+                    catch (PathRefusal e) { answers.Add((JsonNode)new JsonObject { ["error"] = e.Code }); }
+                }
+                Console.WriteLine(answers.ToJsonString());
+                return 0;
+            }
             if (args is ["check-policy", "--root", var policyRoot])
             {
                 var policy = new StudioKinds(policyRoot, AppContext.BaseDirectory, new(), () => null);
@@ -72,6 +109,28 @@ internal static class Program
                 Console.WriteLine(answers.ToJsonString());
                 return 0;
             }
+            // check-render-request: stdin [request] -> [{ok:true} | {error}], the checks of screen.render (tests/native/render.test.mjs
+            // compares them with the Node agent's).
+            // check-inside: stdin [[child, parent]] -> [bool], the path comparison of LocalPaths.Inside (tests/native/upload.test.mjs
+            // compares it with the Node agent's insidePath on every character pair of a table).
+            if (args is ["check-inside"])
+            {
+                var pairs = JsonNode.Parse(await Console.In.ReadToEndAsync()) as JsonArray ?? throw new ArgumentException("Expected a JSON array");
+                Console.WriteLine(new JsonArray(pairs.Select(pair => (JsonNode?)JsonValue.Create(LocalPaths.Inside(pair![0]!.GetValue<string>(), pair[1]!.GetValue<string>()))).ToArray()).ToJsonString());
+                return 0;
+            }
+            if (args is ["check-render-request"])
+            {
+                var requests = JsonNode.Parse(await Console.In.ReadToEndAsync()) as JsonArray ?? throw new ArgumentException("Expected a JSON array");
+                var answers = new JsonArray();
+                foreach (var request in requests)
+                {
+                    try { RenderRequest.Validate(request); answers.Add((JsonNode)new JsonObject { ["ok"] = true }); }
+                    catch (AgentFault e) { answers.Add((JsonNode)new JsonObject { ["error"] = e.Code }); }
+                }
+                Console.WriteLine(answers.ToJsonString());
+                return 0;
+            }
             if (args is ["version"])
             {
                 Console.WriteLine("{\"runtime\":\"native-aot\",\"protocol\":\"ssam-agent/1\",\"productionReady\":false}");
@@ -79,9 +138,12 @@ internal static class Program
             }
             // Qualification is deliberately loopback-only until all existing kinds are ported.
             // No production credentials or installed Studio session are used by this mode.
+            // --runtime-root <folder>: a test installation whose pack.json names a renderer (screen.render); nothing else is read there.
+            var renderRuntime = args is [.., "--runtime-root", var testRuntime] && args.Length == 9 ? testRuntime : null;
+            if (renderRuntime != null) args = args[..7];
             if (args is not ["qualify", "--root", var root, "--server", var server, "--bridge-port", var portText]
                 || !int.TryParse(portText, out var port) || port is < 1 or > 65535)
-                throw new ArgumentException("Use qualify --root <empty test directory> --server http://127.0.0.1:<port> --bridge-port <port>");
+                throw new ArgumentException("Use qualify --root <empty test directory> --server http://127.0.0.1:<port> --bridge-port <port> [--runtime-root <test installation>]");
             var uri = new Uri(server);
             if (uri.Scheme != "http" || uri.Host != "127.0.0.1" || uri.AbsolutePath != "/" || uri.Query != "" || uri.UserInfo != "")
                 throw new ArgumentException("Qualification accepts only an IPv4 loopback HTTP server");
@@ -90,7 +152,8 @@ internal static class Program
             if (credential != "ssam_native_qualification") throw new ArgumentException("Qualification credential required on stdin");
             using var lifetime = new CancellationTokenSource();
             Console.CancelKeyPress += (_, e) => { e.Cancel = true; lifetime.Cancel(); };
-            using var transport = new AgentChannel(uri, credential, state, port);
+            var render = new RenderKinds(renderRuntime, renderRuntime == null ? null : O11Connection.Read(Path.Combine(renderRuntime, "pack.json")), state.Root);
+            using var transport = new AgentChannel(uri, credential, state, port, render: render);
             var run = transport.RunAsync(lifetime.Token);
             while (!run.IsCompleted && !lifetime.IsCancellationRequested)
             {
@@ -104,6 +167,18 @@ internal static class Program
             Console.Error.WriteLine(e is ArgumentException ? e.Message : e.GetType().Name);
             return 1;
         }
+    }
+
+    // --name value pairs (flags: options without a value).
+    private static Dictionary<string, string> Options(string[] args, params string[] flags)
+    {
+        var options = new Dictionary<string, string>();
+        for (var i = 0; i < args.Length; i++)
+        {
+            if (flags.Contains(args[i])) { options[args[i]] = "true"; continue; }
+            if (!args[i].StartsWith("--") || i + 1 >= args.Length || !options.TryAdd(args[i], args[++i])) throw new ArgumentException("Invalid command options");
+        }
+        return options;
     }
 }
 

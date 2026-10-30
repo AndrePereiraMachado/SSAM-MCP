@@ -42,7 +42,8 @@ export function validateRef(ref, { partBytes = PART_BYTES, maxFileBytes = MAX_FI
 
 // Uploads a file (path) or a Buffer. put(transfer, index, body, headers, {timeoutMs, fresh}) -> HTTP status. Returns the
 // BlobRef the result carries; the server checks each part on arrival and the whole file when it assembles it.
-export async function uploadBlob(source, { put, partBytes = PART_BYTES, retries = RETRIES, sleep = delay, partMs = PART_MS, log = () => {} } = {}) {
+// beforePart(index) runs before each part is sent (file.upload checks the call's deadline there and may throw).
+export async function uploadBlob(source, { put, partBytes = PART_BYTES, retries = RETRIES, sleep = delay, partMs = PART_MS, log = () => {}, beforePart = () => {} } = {}) {
   const isBuffer = Buffer.isBuffer(source);
   const size = isBuffer ? source.length : fs.statSync(source).size;
   const total = isBuffer ? sha256(source) : await fileSha256(source);
@@ -51,6 +52,7 @@ export async function uploadBlob(source, { put, partBytes = PART_BYTES, retries 
   const fd = isBuffer ? null : fs.openSync(source, 'r');
   try {
     for (let index = 0; index < parts; index++) {
+      await beforePart(index);
       const length = Math.min(partBytes, size - index * partBytes);
       let body;
       if (isBuffer) body = source.subarray(index * partBytes, index * partBytes + length);
@@ -78,6 +80,26 @@ export async function uploadBlob(source, { put, partBytes = PART_BYTES, retries 
   return { transfer, sha256: total, size, parts, partBytes };
 }
 
+// One part of a download, checked against its own sha256 and asked again up to `retries` times.
+async function fetchPart(ref, index, { get, retries, sleep, partMs, log }) {
+  const timeoutMs = partTimeoutMs(Math.min(ref.partBytes, ref.size - index * ref.partBytes), partMs);
+  let last = ''; let fresh = false;
+  for (let attempt = 0; ; attempt++) {
+    let reply = null;
+    const started = Date.now();
+    try { reply = await get(ref.transfer, index, { timeoutMs, fresh }); } catch (error) { last = reasonOf(error, timeoutMs); }
+    if (reply?.status === 200 && reply.body.length <= ref.partBytes && sha256(reply.body) === String(reply.partSha ?? '').toLowerCase()) return reply.body;
+    if (reply) last = reply.status === 200 ? 'part sha256 mismatch' : 'HTTP ' + reply.status;
+    if ([401, 403, 404].includes(reply?.status) || attempt >= retries)
+      throw new AgentError(last === 'part sha256 mismatch' ? 'BLOB_HASH_MISMATCH' : 'BLOB_TRANSFER_FAILED',
+        `Part ${index} of a file from the server failed (${last}); nothing was written`, { executed: false });
+    // No answer at all (deadline, connection lost): the next try goes on a connection of its own.
+    fresh = !reply;
+    log('blob-retry', { direction: 'down', transfer: ref.transfer, index, attempt: attempt + 1, reason: last, ms: Date.now() - started, fresh });
+    await sleep(250 * (attempt + 1));
+  }
+}
+
 // Downloads a BlobRef to dest. get(transfer, index, {timeoutMs, fresh}) -> {status, body: Buffer, partSha}. Each part is
 // checked against its own sha256 (asked again up to `retries` times); the whole file against ref.sha256 and ref.size
 // before the rename.
@@ -89,22 +111,7 @@ export async function downloadBlob(ref, dest, { get, limits = {}, retries = RETR
   let size = 0; let fd = fs.openSync(temp, 'wx');
   try {
     for (let index = 0; index < ref.parts; index++) {
-      const timeoutMs = partTimeoutMs(Math.min(ref.partBytes, ref.size - index * ref.partBytes), partMs);
-      let body = null; let last = ''; let fresh = false;
-      for (let attempt = 0; ; attempt++) {
-        let reply = null;
-        const started = Date.now();
-        try { reply = await get(ref.transfer, index, { timeoutMs, fresh }); } catch (error) { last = reasonOf(error, timeoutMs); }
-        if (reply?.status === 200 && reply.body.length <= ref.partBytes && sha256(reply.body) === String(reply.partSha ?? '').toLowerCase()) { body = reply.body; break; }
-        if (reply) last = reply.status === 200 ? 'part sha256 mismatch' : 'HTTP ' + reply.status;
-        if ([401, 403, 404].includes(reply?.status) || attempt >= retries)
-          throw new AgentError(last === 'part sha256 mismatch' ? 'BLOB_HASH_MISMATCH' : 'BLOB_TRANSFER_FAILED',
-            `Part ${index} of a file from the server failed (${last}); nothing was written`, { executed: false });
-        // No answer at all (deadline, connection lost): the next try goes on a connection of its own.
-        fresh = !reply;
-        log('blob-retry', { direction: 'down', transfer: ref.transfer, index, attempt: attempt + 1, reason: last, ms: Date.now() - started, fresh });
-        await sleep(250 * (attempt + 1));
-      }
+      const body = await fetchPart(ref, index, { get, retries, sleep, partMs, log });
       fs.writeSync(fd, body); total.update(body); size += body.length;
     }
     fs.closeSync(fd); fd = null;
@@ -117,4 +124,16 @@ export async function downloadBlob(ref, dest, { get, limits = {}, retries = RETR
     fs.rmSync(temp, { force: true });
     throw error;
   }
+}
+
+// A BlobRef of at most maxBytes into memory (0.3.4: the parameters of a call, so a screen.render request and the style
+// sheets it carries never touch the disk), with the same checks as downloadBlob.
+export async function downloadBuffer(ref, { get, limits = {}, maxBytes = 16 * 1024 * 1024, retries = RETRIES, sleep = delay, partMs = PART_MS, log = () => {} } = {}) {
+  validateRef(ref, { ...limits, maxFileBytes: Math.min(maxBytes, limits.maxFileBytes ?? maxBytes) });
+  const parts = [];
+  for (let index = 0; index < ref.parts; index++) parts.push(await fetchPart(ref, index, { get, retries, sleep, partMs, log }));
+  const body = Buffer.concat(parts);
+  if (body.length !== ref.size || sha256(body) !== ref.sha256)
+    throw new AgentError('BLOB_HASH_MISMATCH', 'The data assembled from the server does not match its sha256', { executed: false });
+  return body;
 }

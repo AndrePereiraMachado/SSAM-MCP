@@ -21,7 +21,7 @@ export const LAYOUT = Object.freeze(['odc/snapshots', 'odc/journal/staging', 'od
 export const MANIFEST_PATH_FIELDS = Object.freeze({ basepath: 'read', candidatepath: 'read', producerpath: 'read',
   builderreceipt: 'read', evidencedir: 'write' });
 
-const DEVICE = /^(con|prn|aux|nul|conin\$|conout\$|com[0-9¹²³]|lpt[0-9¹²³])( *\..*)?$/i;
+export const DEVICE = /^(con|prn|aux|nul|conin\$|conout\$|com[0-9¹²³]|lpt[0-9¹²³])( *\..*)?$/i;
 export const DOT_SEGMENT = /(^|[\\/])\.\.([\\/]|$)/;
 const forbidden = message => refuse('PATH_FORBIDDEN', message);
 

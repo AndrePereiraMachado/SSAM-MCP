@@ -12,9 +12,16 @@ import { validateRef, fileSha256, TEMP_SUFFIX } from './blobs.mjs';
 import { IMAGES } from './studios.mjs';
 import { connectO11, selectedO11, readConnection, readBridgeKey } from './o11-connect.mjs';
 import { netProbe, NET_PROBE_KIND } from './net-probe.mjs';
+import { createUploads, UPLOAD_KIND } from './upload.mjs';
+import { createRenderer } from './render.mjs';
+import { RENDER_KIND } from './render-request.mjs';
 
+// file.upload (0.3.4): one file of a folder the person approved (upload.mjs); the hub sends it only to an agent whose hello
+// lists it.
 export const KINDS = Object.freeze(['studio.processes', 'odc.pipe', 'odc.attach', 'o11.bridge', 'o11.connect', 'o11.selected',
-  'file.put', 'file.get', 'file.list', 'file.sync', NET_PROBE_KIND]);
+  'file.put', 'file.get', 'file.list', 'file.sync', NET_PROBE_KIND, UPLOAD_KIND]);
+// The kinds of the hello: KINDS, and screen.render (0.3.4, render.mjs) only when this installation has a renderer.
+export const helloKinds = renderer => [...KINDS, ...(renderer?.path ? [RENDER_KIND] : [])];
 // file.sync (C14, fase4): at most this many files per call, at most this many downloads at a time.
 export const SYNC_MAX_FILES = 256;
 export const SYNC_PARALLEL = 4;
@@ -67,7 +74,7 @@ function odcPositions(words) {
 // platform: 'darwin' attaches the ODC bridge without the pack's .NET client (deps.attachOdc speaks the diagnostic IPC,
 // attach-unix.mjs) and names the Studios without an image name; deps.pipeCall replaces the Windows pipe (odc-pipe-unix.mjs).
 export function createKinds({ root, runtimeRoot = root, ws, pack = {}, kernel = () => null, deps = {}, blobs = null, limits = () => ({}), o11Port = 4516,
-  onConnection = () => {}, probe = null, platform = process.platform }) {
+  onConnection = () => {}, probe = null, platform = process.platform, renderer = null }) {
   const lanes = Array.isArray(pack.lanes) ? pack.lanes : [];
   const pids = new Map(); // pid -> {image, version}, from the last listing
   const maxFileBytes = () => limits().maxFileBytes ?? 512 * 1024 * 1024;
@@ -467,17 +474,25 @@ export function createKinds({ root, runtimeRoot = root, ws, pack = {}, kernel = 
     return { processes: await listing(image) };
   }
 
+  // file.upload: deps.uploadFiles and deps.uploadHooks are the tests' file system and hooks (upload.mjs).
+  const uploads = createUploads({ dataRoot: root, runtimeRoot, platform, blobs, limits, now: deps.now ?? Date.now, files: deps.uploadFiles, hooks: deps.uploadHooks });
+  // screen.render: renderer is agent.mjs's resolveRenderer answer; without one the kind answers RENDER_UNAVAILABLE.
+  const screens = createRenderer({ renderer, tempRoot: path.join(root, 'private', 'tmp'), platform, now: deps.now ?? Date.now, ...(deps.renderSpawn ? { spawn: deps.renderSpawn } : {}) });
+
   const handlers = { 'studio.processes': studioProcesses, 'odc.pipe': odcPipe, 'odc.attach': odcAttach, 'o11.bridge': o11Bridge,
     'o11.connect': o11ConnectKind, 'o11.selected': o11Selected, 'file.put': filePut, 'file.get': fileGet, 'file.list': fileList, 'file.sync': fileSync,
     // net.probe (fase4-24, docs/FASE2-AGENTE.md 2.10): throwaway uploads on new connections for ssam_doctor {network:true};
     // probe is channel.probePut (agent.mjs). Nothing of the machine is read or written.
-    [NET_PROBE_KIND]: params => netProbe(params, { put: probe }) };
+    [NET_PROBE_KIND]: params => netProbe(params, { put: probe }),
+    [UPLOAD_KIND]: (params, context) => uploads.upload(params, context),
+    [RENDER_KIND]: (params, context) => screens.render(params, context) };
 
   return {
-    async execute(kind, params) {
+    // context: {deadline} of the call in this machine's clock (agent.mjs), or none.
+    async execute(kind, params, context = {}) {
       if (typeof kind !== 'string' || !Object.hasOwn(handlers, kind)) throw refuse('KIND_NOT_ALLOWED', `The SSAM agent does not run ${JSON.stringify(kind ?? null)}`);
       if (!params || typeof params !== 'object' || Array.isArray(params)) throw invalid('params must be an object');
-      return handlers[kind](params);
+      return handlers[kind](params, { deadline: Number.isFinite(context.deadline) ? context.deadline : null });
     },
     pidVersion: pid => pids.get(Number(pid)) ?? null,
   };

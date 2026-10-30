@@ -9,6 +9,8 @@ internal sealed class AgentFault(string code, string message, bool? executed = f
     public string Code { get; } = code;
     public bool? Executed { get; } = executed;
     public bool? Sent { get; init; }
+    // sent: null on the wire (a part may have reached the server), as the Node agent reports it.
+    public bool SentUnknown { get; init; }
     public bool AttachAttempted { get; init; }
     public bool BridgeLoadFailure { get; init; }
 }
@@ -44,7 +46,8 @@ internal sealed class Blobs(AgentChannel channel)
         return Convert.ToHexStringLower(await SHA256.HashDataAsync(stream, token));
     }
 
-    public async Task<BlobRef> Upload(Stream source, CancellationToken token)
+    // beforePart(index) runs before each part is sent (file.upload checks the call's deadline there and may throw).
+    public async Task<BlobRef> Upload(Stream source, CancellationToken token, Action<int>? beforePart = null)
     {
         var size = source.Length;
         if (size > channel.MaxFileBytes) throw new AgentFault("FILE_TOO_LARGE", "File exceeds the negotiated limit");
@@ -56,6 +59,7 @@ internal sealed class Blobs(AgentChannel channel)
             Math.Max(1, (int)Math.Ceiling((double)size / bytes)), bytes);
         for (var index = 0; index < reference.Parts; index++)
         {
+            beforePart?.Invoke(index);
             var part = new byte[(int)Math.Min(bytes, size - (long)index * bytes)];
             await source.ReadExactlyAsync(part, token);
             var headers = new Dictionary<string, string> {
@@ -117,6 +121,38 @@ internal sealed class Blobs(AgentChannel channel)
             File.Move(temporary, destination, true);
         }
         finally { if (File.Exists(temporary)) File.Delete(temporary); }
+    }
+
+    // A blob into memory, with the same checks (0.4.1: the parameters of a call, so a screen.render request and the style
+    // sheets it carries never touch the disk).
+    public async Task<byte[]> DownloadBytes(BlobRef reference, CancellationToken token)
+    {
+        using var stream = new MemoryStream();
+        using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        for (var index = 0; index < reference.Parts; index++)
+        {
+            var fresh = false;
+            for (var attempt = 0; ; attempt++)
+            {
+                PartReply? reply = null;
+                try { reply = await channel.Part(HttpMethod.Get, reference.Transfer, index, null, null, reference.PartBytes, fresh, token); }
+                catch (Exception e) when (e is HttpRequestException || e is OperationCanceledException && !token.IsCancellationRequested) { }
+                if (reply?.Status == 200 && reply.Body.Length <= reference.PartBytes && Hash(reply.Body) == reply.PartSha?.ToLowerInvariant())
+                {
+                    if (stream.Length + reply.Body.Length > reference.Size) throw new AgentFault("BLOB_HASH_MISMATCH", "The downloaded data exceeds its declared size");
+                    hash.AppendData(reply.Body);
+                    stream.Write(reply.Body);
+                    break;
+                }
+                if (reply?.Status is 401 or 403 or 404 || attempt >= 3)
+                    throw new AgentFault(reply?.Status == 200 ? "BLOB_HASH_MISMATCH" : "BLOB_TRANSFER_FAILED", "A data part could not be verified");
+                fresh = reply == null;
+                await Task.Delay(250 * (attempt + 1), token);
+            }
+        }
+        if (stream.Length != reference.Size || Convert.ToHexStringLower(hash.GetHashAndReset()) != reference.Sha256)
+            throw new AgentFault("BLOB_HASH_MISMATCH", "The downloaded data does not match its hash");
+        return stream.ToArray();
     }
 }
 

@@ -11,9 +11,10 @@ import { execFileSync } from 'node:child_process';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { createChannel, PROTOCOL } from './channel.mjs';
 import { createOutbox } from './outbox.mjs';
-import { createKinds, KINDS } from './kinds.mjs';
+import { createKinds, helloKinds } from './kinds.mjs';
+import { resolveRenderer } from './render.mjs';
 import { createWorkspace } from './workspace.mjs';
-import { uploadBlob, downloadBlob, PART_BYTES, MAX_FILE_BYTES } from './blobs.mjs';
+import { uploadBlob, downloadBlob, downloadBuffer, PART_BYTES, MAX_FILE_BYTES } from './blobs.mjs';
 import { createHttp } from './net.mjs';
 import { listProcesses, fileVersion, locateInstalled, installedStudios, macFileVersion, macLocate } from './studios.mjs';
 import { attachOdc } from './odc-attach.mjs';
@@ -39,9 +40,14 @@ import { completeInstances } from './studio-instance.mjs';
 // 0.3.3 (server/agent-mac): the macOS side (bundles, the diagnostic IPC attach, the Unix bridge pipe, POSIX paths,
 // install.sh and ssam-agent.sh); Windows, the kinds and the wire are those of 0.3.2. The server only shows and logs this
 // version (agent-hub.mjs info().agentVersion and agent-connected, 87e12565): no server change.
-export const AGENT_VERSION = '0.3.3';
+// 0.3.4 (agent/preview-upload): file.upload (one file of a folder the person approved, upload.mjs) and screen.render (the
+// app's Electron render worker, render.mjs), both announced in the hello only when they run here; the call's deadline
+// in this machine's clock. The other kinds and the wire are those of 0.3.3. The native core of the same change is
+// 0.4.1-native.
+export const AGENT_VERSION = '0.3.4';
 const INLINE_MAX_BYTES = 524288;
 const MAX_VALUE_BYTES = 16 * 1024 * 1024;
+const PARAMS_MEMORY_BYTES = 64 * 1024 * 1024;
 const STUDIOS_REFRESH_MS = 5 * 60000;
 const clip = text => String(text ?? '').slice(0, 4000);
 const readJson = file => JSON.parse(fs.readFileSync(file, 'utf8').replace(/^﻿/, ''));
@@ -77,7 +83,7 @@ export function readPack(root) {
     const pack = readJson(path.join(root, 'pack.json'));
     return { id: pack.id ?? null, lanes: Array.isArray(pack.lanes) ? pack.lanes : [], odcBridge: pack.odcBridge ?? null, o11BuiltFor: pack.o11BuiltFor ?? null,
       o11Hook: typeof pack.o11Hook === 'string' ? pack.o11Hook : null, o11Bridge: bridgeOf(pack.o11Bridge),
-      ...Object.fromEntries(['studioBuilds', 'odcBuiltFor', 'odcRuntime', 'o11Runtime'].filter(key => pack[key] !== undefined).map(key => [key, pack[key]])) };
+      ...Object.fromEntries(['studioBuilds', 'odcBuiltFor', 'odcRuntime', 'o11Runtime', 'renderer'].filter(key => pack[key] !== undefined).map(key => [key, pack[key]])) };
   } catch { return { id: null, lanes: [], odcBridge: null, o11BuiltFor: null, o11Hook: null, o11Bridge: null }; }
 }
 
@@ -101,6 +107,8 @@ export function createAgent({ root, runtimeRoot = root, config = {}, deps = {}, 
 
   const credential = config.credential ?? fs.readFileSync(credentialFile(base), 'utf8').trim();
   const pack = readPack(runtimeRoot);
+  // The render worker of this installation (render.mjs): deps.renderer in tests, else pack.json renderer, checked.
+  const renderer = deps.renderer ?? resolveRenderer({ runtimeRoot: path.resolve(runtimeRoot), dataRoot: base, pack, platform });
   const bridgeAbort = new AbortController();
   const processSnapshot = deps.bridgeProcessSnapshot ?? (deps.processes ? async () => {
     try { const rows = (await Promise.all(['ODCStudio.exe', 'ServiceStudio.exe'].map(image => d.processes(image)))).flat(); return completeInstances(rows) ? rows : null; }
@@ -128,8 +136,9 @@ export function createAgent({ root, runtimeRoot = root, config = {}, deps = {}, 
       maxValueBytes: welcome?.maxValueBytes ?? MAX_VALUE_BYTES };
   };
   const blobs = {
-    upload: source => uploadBlob(source, { put: channel.blobPut, partBytes: limits().partBytes, sleep: d.sleep, partMs: d.partMs, log }),
+    upload: (source, options = {}) => uploadBlob(source, { put: channel.blobPut, partBytes: limits().partBytes, sleep: d.sleep, partMs: d.partMs, log, ...options }),
     download: (ref, dest) => downloadBlob(ref, dest, { get: channel.blobGet, limits: limits(), sleep: d.sleep, partMs: d.partMs, log }),
+    downloadBuffer: ref => downloadBuffer(ref, { get: channel.blobGet, limits: limits(), maxBytes: PARAMS_MEMORY_BYTES, sleep: d.sleep, partMs: d.partMs, log }),
   };
 
   const view = record => (record ? { pid: record.pid, startedUtc: record.startedUtc, port: record.port, studioVersion: record.studioVersion ?? null } : null);
@@ -158,8 +167,9 @@ export function createAgent({ root, runtimeRoot = root, config = {}, deps = {}, 
     catch { /* Bridge maintenance is never a prerequisite for opening the channel. */ }
     return { t: 'hello', protocol: PROTOCOL, instance,
       // root (C26): the folder of this agent, so the server names its inbox exactly; kinds: what this agent runs (file.sync
-      // since 0.2.0), so the server never asks an older agent for a kind it does not have.
-      agent: { version: AGENT_VERSION, node: process.version, platform, startedAt, root: base, kinds: [...KINDS], machine },
+      // since 0.2.0; file.upload and, with a renderer, screen.render since 0.3.4), so the server never asks an older agent for a
+      // kind it does not have.
+      agent: { version: AGENT_VERSION, node: process.version, platform, startedAt, root: base, kinds: helloKinds(renderer), machine },
       pack: { id: pack.id, lanes: pack.lanes, odcBridge: pack.odcBridge, o11BuiltFor: pack.o11BuiltFor, o11Hook: pack.o11Hook },
       capabilities: { bridgeOffer: platform !== 'darwin', ...(platform === 'darwin' ? { bridgeOfferReason: MAC_BRIDGE_REASON } : {}) },
       bridges: updates.reports(), bridgeUpdate: updates.wireStatus(), studios, o11Connection: connection };
@@ -178,7 +188,7 @@ export function createAgent({ root, runtimeRoot = root, config = {}, deps = {}, 
   // probe: the uploads of the network check (kind net.probe, net-probe.mjs); a kinds.mjs without that kind ignores it.
   const kinds = createKinds({ root: base, runtimeRoot: path.resolve(runtimeRoot), ws, pack, kernel: () => channel.welcome()?.kernel ?? null, deps: d, blobs, limits,
     o11Port: Number.isInteger(config.o11Port) ? config.o11Port : 4516, onConnection: record => { connection = view(record); },
-    probe: (id, body, options) => channel.probePut(id, body, options), platform });
+    probe: (id, body, options) => channel.probePut(id, body, options), platform, renderer });
 
   // One call -> its result message. A value above inlineMaxBytes (measured on the whole serialized message) goes as
   // a blob, up to maxValueBytes (the server assembles a value in memory and refuses a larger one: VALUE_TOO_LARGE, sent
@@ -187,12 +197,19 @@ export function createAgent({ root, runtimeRoot = root, config = {}, deps = {}, 
     const started = d.now();
     try {
       let params = call.params;
-      if (call.paramsBlob) {
+      // Parameters above the inline limit come as a blob, read into memory up to 64 MiB (0.3.4: a screen.render request and
+      // the style sheets it carries never touch the disk); a larger one of another kind goes through private\tmp as before.
+      if (call.paramsBlob && (call.kind === 'screen.render' || Number(call.paramsBlob.size) <= PARAMS_MEMORY_BYTES))
+        params = JSON.parse((await blobs.downloadBuffer(call.paramsBlob)).toString('utf8').replace(/^\uFEFF/, ''));
+      else if (call.paramsBlob) {
         const temporary = path.join(base, 'private', 'tmp', randomBytes(8).toString('hex') + '.json');
         try { await blobs.download(call.paramsBlob, temporary); params = readJson(temporary); }
         finally { fs.rmSync(temporary, { force: true }); }
       }
-      const value = await kinds.execute(call.kind, params ?? {});
+      // deadline: the server's time when it stops waiting for this call (a hub of servidor/fase4 and later), here in this
+      // machine's clock (channel.localTime); the kinds that take long (file.upload) stop at it.
+      const deadline = Number.isFinite(call.deadline) ? channel.localTime(call.deadline) : null;
+      const value = await kinds.execute(call.kind, params ?? {}, { deadline });
       let message = { t: 'result', id: call.id, ok: true, value };
       if (Buffer.byteLength(JSON.stringify(message)) > limits().inlineMaxBytes) {
         const bytes = Buffer.from(JSON.stringify(value));
@@ -229,7 +246,7 @@ export function createAgent({ root, runtimeRoot = root, config = {}, deps = {}, 
     // After the channel's own goodbye (DELETE /agent/v1/channel), the pooled connections are closed.
     stop: async () => { bridgeAbort.abort(); await channel.stop(); await updates.dispose(); transport?.close(); },
     // One kind run locally exactly as a call would run it (tests, diagnostics): the result message.
-    execute: (kind, params) => execute({ id: randomUUID(), kind, params }),
+    execute: (kind, params, { deadline } = {}) => execute({ id: randomUUID(), kind, params, ...(deadline === undefined ? {} : { deadline }) }),
     outbox,
     channel,
   };

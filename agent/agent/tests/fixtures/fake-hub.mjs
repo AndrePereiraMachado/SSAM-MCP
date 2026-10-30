@@ -28,6 +28,8 @@ export async function fakeHub({ credential, kernel = { odc: '1.7.28', o11: '11.5
     bridges: new Map(), // authenticated bridge route -> bytes, or null to interrupt the download
     holdBridges: false, bridgeWaiters: [],
     uploads: new Map(),    // transfer -> {parts: [], headers}
+    delayPuts: 0,          // ms each blob PUT waits before it is answered (a slow uplink)
+    activePuts: 0, maxActivePuts: 0, // blob PUTs being answered now, and the most at one time
   };
   const notify = () => { for (const w of [...waiters]) if (w.check()) { waiters.splice(waiters.indexOf(w), 1); w.done(); } };
   hub.until = (check, ms = 15000) => new Promise((resolve, reject) => {
@@ -96,6 +98,11 @@ export async function fakeHub({ credential, kernel = { odc: '1.7.28', o11: '11.5
     if (blob && req.method === 'GET' && hub.holdGets > 0) { hub.blobGets++; hub.holdGets--; notify(); return; }
     if (blob && req.method === 'PUT') {
       hub.blobPuts++;
+      if (hub.delayPuts > 0) {
+        hub.activePuts++; hub.maxActivePuts = Math.max(hub.maxActivePuts, hub.activePuts);
+        await new Promise(resolve => setTimeout(resolve, hub.delayPuts));
+        hub.activePuts--;
+      }
       if (hub.corruptPuts > 0) { hub.corruptPuts--; return json(400, { code: 'PART_HASH_MISMATCH' }); }
       if (sha256(body) !== req.headers['x-ssam-part-sha256']) return json(400, { code: 'PART_HASH_MISMATCH' });
       const upload = hub.uploads.get(blob[1]) ?? { parts: [], total: req.headers['x-ssam-total-sha256'], size: Number(req.headers['x-ssam-total-size']), count: Number(req.headers['x-ssam-parts']) };

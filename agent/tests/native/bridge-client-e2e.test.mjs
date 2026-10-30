@@ -13,7 +13,7 @@ const enabled = process.env.SSAM_CLIENT_E2E === '1';
 const code = process.env.SSAM_REVIEW_BASE ? path.join(process.env.SSAM_REVIEW_BASE, 'agent') : path.resolve(import.meta.dirname, '../..');
 const { createAgent } = await import(pathToFileURL(path.join(code, 'agent/lib/agent.mjs')));
 const { attachOdc } = await import(pathToFileURL(path.join(code, 'agent/lib/odc-attach.mjs')));
-const outputs = 'C:/t/vigia-auto/round2-e2e';
+const outputs = process.env.SSAM_E2E_OUTPUT ?? 'C:/t/vigia-auto/round2-e2e';
 test('R3.2 real client classifies an invalid DLL as an attempted bridge failure', { skip: !enabled, timeout: 30000 }, async t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'invalid-hook-'));
   const host = spawn(path.join(outputs, 'host/bin/Release/net10.0/ODCStudio.exe'), [], { windowsHide: true });

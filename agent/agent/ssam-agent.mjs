@@ -6,6 +6,10 @@
 //   node agent\ssam-agent.mjs run [--root <dir>] [--log-file <file>]
 //   node agent\ssam-agent.mjs status [--root <dir>]
 //   node agent\ssam-agent.mjs doctor [--root <dir>] [--json]
+//   node agent\ssam-agent.mjs roots add --folder <folder> [--root <dir>] | roots remove --folder <folder> [--root <dir>]
+//                                | roots list [--root <dir>] [--json]
+// roots: the folders of this computer SSAM may read a file from (file.upload, lib/upload-roots.mjs); only the person
+// changes them, never the server.
 // The credential (ssam_agent_...) is read from the standard input or a file, written to private\credential and never
 // printed. Nothing here imports from platforms/.
 // macOS (docs/AGENTE-MAC.md): the same commands, behind agent/ssam-agent.sh and install.sh; the root is POSIX
@@ -23,6 +27,8 @@ import { installedStudios } from './lib/studios.mjs';
 import { readConnection } from './lib/o11-connect.mjs';
 import { macDoctor } from './lib/mac-doctor.mjs';
 import { writeInstallRecord, INSTALL_RECORD } from './lib/launcher.mjs';
+import { readRoots, rootsCommand } from './lib/upload-roots.mjs';
+import { resolveRenderer, rendererLine } from './lib/render.mjs';
 
 export { createAgent } from './lib/agent.mjs';
 
@@ -381,6 +387,9 @@ export async function doctor({ root, runtimeRoot = root, stdout = process.stdout
       add(Boolean(installed), lane === 'odc' ? 'ODC Studio' : 'Service Studio', installed ? `${installed.version ?? 'unknown version'} in ${installed.dir}` : 'not found on this machine', false);
     }
   }
+  add(true, 'screen render', rendererLine(resolveRenderer({ runtimeRoot, dataRoot: target, pack, platform })), false);
+  const approved = readRoots(target).length;
+  add(true, 'upload folders', `${approved} approved`, false);
   if (config?.server && !badServer) {
     let reached = false; let detail = '';
     try { const reply = await (deps.fetch ?? fetch)(config.server.replace(/\/+$/, '') + '/health', { signal: AbortSignal.timeout(10000) }); reached = reply.ok; detail = 'HTTP ' + reply.status; }
@@ -395,31 +404,37 @@ export async function doctor({ root, runtimeRoot = root, stdout = process.stdout
 }
 
 function parse(argv) {
-  const [command, ...rest] = argv;
+  const [command, ...words] = argv;
+  // roots <add|remove|list>: the operation is the word after the command.
+  const op = command === 'roots' ? words[0] : undefined;
+  const rest = command === 'roots' ? words.slice(1) : words;
   const options = {};
   for (let i = 0; i < rest.length; i++) {
     const name = rest[i];
     if (!name.startsWith('--')) throw new Error('unexpected argument: ' + name);
     const key = name.slice(2);
-    if (key === 'json' && command === 'doctor') { options.json = true; continue; }
-    if (!['server', 'root', 'runtime-root', 'credential-file', 'log-file', 'o11-port'].includes(key)) throw new Error('unknown option: ' + name);
+    if (key === 'json' && (command === 'doctor' || (command === 'roots' && op === 'list'))) { options.json = true; continue; }
+    const known = command === 'roots' ? ['root', 'runtime-root', 'folder'] : ['server', 'root', 'runtime-root', 'credential-file', 'log-file', 'o11-port'];
+    if (!known.includes(key)) throw new Error('unknown option: ' + name);
     if (i + 1 >= rest.length) throw new Error('missing value for ' + name);
     options[key] = rest[++i];
   }
-  return { command, options };
+  return { command, op, options };
 }
 
 export async function main(argv = process.argv.slice(2)) {
   let parsed;
   try { parsed = parse(argv); } catch (error) { process.stderr.write('Error: ' + error.message + '\n'); return 1; }
-  const { command, options } = parsed;
+  const { command, op, options } = parsed;
   const root = options.root ?? process.env.SSAM_AGENT_ROOT ?? defaultRoot();
   const runtimeRoot = options['runtime-root'] ?? root;
   if (command === 'setup') return setup({ root, server: options.server, credentialFile: options['credential-file'], o11Port: options['o11-port'] });
   if (command === 'run') return runAgent({ root, runtimeRoot, logFile: options['log-file'] ?? null });
   if (command === 'status') return status({ root, runtimeRoot });
   if (command === 'doctor') return doctor({ root, runtimeRoot, json: options.json === true });
-  process.stderr.write('Usage: ssam-agent.mjs setup --server <url> [--root <folder>] [--credential-file <file>] [--o11-port <port>] | run | status | doctor [--json]\n');
+  if (command === 'roots') return rootsCommand({ op, folder: options.folder, dataRoot: path.resolve(root), runtimeRoot: path.resolve(runtimeRoot), json: options.json === true });
+  process.stderr.write('Usage: ssam-agent.mjs setup --server <url> [--root <folder>] [--credential-file <file>] [--o11-port <port>] | run | status | doctor [--json]'
+    + ' | roots add --folder <folder> | roots remove --folder <folder> | roots list [--json]\n');
   return 1;
 }
 
