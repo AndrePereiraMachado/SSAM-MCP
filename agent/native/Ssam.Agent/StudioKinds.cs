@@ -182,6 +182,14 @@ internal sealed class StudioKinds(string root, string runtime, JsonObject pack, 
         }
         return node?.DeepClone();
     }
+    // The bridge loaded in a Studio is the one this agent knows per process. When the kernel serves both the version asked for and
+    // the one loaded, the call goes to the one loaded: nothing else can answer it (agent/lib/kinds.mjs servedTogether).
+    internal static bool ServedTogether(JsonNode? kernel, string? asked, string? loaded)
+    {
+        var served = new List<string?> { Text(kernel?["odcBridge"]) };
+        if (kernel?["odcBridgeAccepted"] is JsonArray accepted) served.AddRange(accepted.Select(Text));
+        return asked != null && loaded != null && served.Contains(asked) && served.Contains(loaded);
+    }
     internal async Task Bind(int pid, string version, CancellationToken token, bool? executed = false)
     {
         if (!Regex.IsMatch(version, @"^v\d+$") || !int.TryParse(version[1..], out var number) || number < 98) throw new AgentFault("BRIDGE_VERSION_MISMATCH", "Native installed runtimes require ODC bridge v98 or newer");
@@ -294,7 +302,7 @@ internal sealed class StudioKinds(string root, string runtime, JsonObject pack, 
         if (kind == "odc.attach" && selectedBridge == null) CheckExactBuild(pack, "odc", Text(target["version"]));
         var version = selectedBridge?.Protocol ?? (kind == "odc.pipe" ? bridges?.ProtocolFor("odc", Text(target["version"]), context) : null) ?? Text(pack["odcBridge"]) ?? "";
         if (!Regex.IsMatch(version, @"^v\d+$") || Integer(JsonValue.Create(int.TryParse(version[1..], out var n) ? n : 0)) < 98) throw new AgentFault("BRIDGE_VERSION_MISMATCH", "ODC bridge v98 or newer is required");
-        if (kind == "odc.pipe" && Text(p["version"]) != version) throw new AgentFault("BRIDGE_VERSION_MISMATCH", "The requested bridge version differs from the installed pack");
+        if (kind == "odc.pipe" && Text(p["version"]) != version && !ServedTogether(kernel(), Text(p["version"]), version)) throw new AgentFault("BRIDGE_VERSION_MISMATCH", "This Studio runs another ODC bridge than the server asked for");
         var words = kind == "odc.pipe" ? MapOdc(p) : [];
         var pid = Integer(target["pid"]);
         if (kind == "odc.attach")

@@ -187,7 +187,13 @@ export function createKinds({ root, runtimeRoot = root, ws, pack = {}, kernel = 
     try { return { line: JSON.stringify(ws.relativize(JSON.parse(line), paths)), paths }; } catch { return { line, paths: [] }; }
   }
 
-  async function odcPipe({ pid, version, args, connectMs }) {
+  // The bridge loaded in a Studio is the one this agent knows per process; the server only knows the package it carries. When the
+  // kernel serves both the version asked for and the one loaded, the call goes to the one loaded: nothing else can answer it.
+  const servedTogether = (asked, loaded) => {
+    const k = kernel() ?? {}, served = [k.odcBridge, ...(Array.isArray(k.odcBridgeAccepted) ? k.odcBridgeAccepted : [])];
+    return served.includes(asked) && served.includes(loaded);
+  };
+  async function odcPipe({ pid, version: asked, args, connectMs }) {
     requireLane('odc');
     if (!Array.isArray(args) || args.length === 0 || args.some(a => typeof a !== 'string' && typeof a !== 'number')) throw invalid('args must be a non-empty array of strings');
     const texts = args.map(String);
@@ -198,9 +204,9 @@ export function createKinds({ root, runtimeRoot = root, ws, pack = {}, kernel = 
     checkFinalLine(mapped);
     if (MANIFEST_COMMANDS.has(mapped[0]) && mapped[1]) checkManifestFile(mapped[1]);
     const target = await checkPid('odc', pid);
-    const expectedVersion = deps.bridgeUpdates?.protocolFor('odc', target.version, target) ?? pack.odcBridge;
-    if (!expectedVersion || version !== expectedVersion)
-      throw refuse('BRIDGE_VERSION_MISMATCH', `The agent pack carries the ODC bridge ${pack.odcBridge ?? '(none)'}; the server asked for ${version}`);
+    const version = deps.bridgeUpdates?.protocolFor('odc', target.version, target) ?? pack.odcBridge;
+    if (!version || (asked !== version && !servedTogether(asked, version)))
+      throw refuse('BRIDGE_VERSION_MISMATCH', `This Studio runs the ODC bridge ${version ?? '(none)'}; the server asked for ${asked}`);
     const connect = Number.isFinite(Number(connectMs)) ? Math.min(Math.max(Number(connectMs), 1), 120000) : undefined;
     try {
       await bindOdcRoot(target.pid, version);
