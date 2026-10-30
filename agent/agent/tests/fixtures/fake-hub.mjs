@@ -25,6 +25,8 @@ export async function fakeHub({ credential, kernel = { odc: '1.7.28', o11: '11.5
     corruptParts: new Set(), // "transfer/index" served with wrong bytes (right header)
     stream: null, channel: null, instance: null,
     downloads: new Map(),  // transfer -> {buffer, partBytes}
+    bridges: new Map(), // authenticated bridge route -> bytes, or null to interrupt the download
+    holdBridges: false, bridgeWaiters: [],
     uploads: new Map(),    // transfer -> {parts: [], headers}
   };
   const notify = () => { for (const w of [...waiters]) if (w.check()) { waiters.splice(waiters.indexOf(w), 1); w.done(); } };
@@ -40,8 +42,18 @@ export async function fakeHub({ credential, kernel = { odc: '1.7.28', o11: '11.5
     const url = new URL(req.url, 'http://hub');
     const body = await readBody(req);
     hub.requests.push({ method: req.method, path: url.pathname });
+    if (req.method === 'GET' && url.pathname === '/health') {
+      res.writeHead(hub.unhealthy ? 503 : 200, { 'content-type': 'application/json' }).end(JSON.stringify({ ok: !hub.unhealthy })); return;
+    }
     if (req.headers.authorization !== 'Bearer ' + credential) { res.writeHead(401).end(); return; }
     const json = (status, value) => res.writeHead(status, { 'content-type': 'application/json' }).end(JSON.stringify(value));
+    if (req.method === 'GET' && url.pathname.startsWith('/agent/bridges/')) {
+      if (hub.holdBridges) await new Promise(resolve => { hub.bridgeWaiters.push(resolve); notify(); });
+      if (!hub.bridges.has(url.pathname)) return json(404, { code: 'NOT_FOUND' });
+      const bytes = hub.bridges.get(url.pathname);
+      if (bytes === null) { res.writeHead(200, { 'content-length': 999 }); res.write('partial'); res.destroy(); return; }
+      res.writeHead(200, { 'content-length': bytes.length }).end(bytes); return;
+    }
     if (req.method === 'POST' && url.pathname === '/agent/v1/messages' && hub.holdPosts > 0) {
       hub.holdPosts--;
       await new Promise(resolve => { hub.held.push(resolve); notify(); });
@@ -57,14 +69,14 @@ export async function fakeHub({ credential, kernel = { odc: '1.7.28', o11: '11.5
       hub.channel = randomBytes(16).toString('hex');
       return json(200, { t: 'welcome', channel: hub.channel, customer: 'Cliente Teste', resumed, heartbeatMs: 15000, deadAfterMs: 45000,
         maxMessageBytes: 1048576, inlineMaxBytes: 524288, partBytes: 4194304, maxFileBytes: 536870912, kernel,
-        compatible: { odc: { ok: true }, o11: { ok: true } }, ...welcome });
+        compatible: { odc: { ok: true }, o11: { ok: true } }, ...(typeof welcome === 'function' ? welcome(hello) : welcome) });
     }
     if (url.searchParams.get('channel') !== hub.channel) return json(404, { code: 'CHANNEL_UNKNOWN' });
     if (req.method === 'GET' && url.pathname === '/agent/v1/stream' && hub.holdStreams > 0) { hub.holdStreams--; hub.heldStreams = (hub.heldStreams ?? 0) + 1; notify(); return; }
     if (req.method === 'GET' && url.pathname === '/agent/v1/stream') {
       res.writeHead(200, { 'content-type': 'application/x-ndjson', 'cache-control': 'no-store' });
       res.flushHeaders();
-      hub.stream = res; hub.streams++;
+      hub.stream = res; hub.streamChannel = url.searchParams.get('channel'); hub.streams++;
       req.on('close', () => { if (hub.stream === res) hub.stream = null; });
       notify();
       return;
@@ -132,6 +144,7 @@ export async function fakeHub({ credential, kernel = { odc: '1.7.28', o11: '11.5
     const buffer = Buffer.concat(upload.parts);
     return sha256(buffer) === ref.sha256 && buffer.length === ref.size ? buffer : null;
   };
-  hub.close = () => new Promise(resolve => { hub.endStream(); server.closeAllConnections(); server.close(resolve); });
+  hub.releaseBridges = () => { hub.holdBridges = false; for (const resolve of hub.bridgeWaiters.splice(0)) resolve(); };
+  hub.close = () => new Promise(resolve => { hub.releaseBridges(); hub.endStream(); server.closeAllConnections(); server.close(resolve); });
   return hub;
 }

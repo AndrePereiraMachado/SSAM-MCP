@@ -46,7 +46,7 @@ function mac() {
 }
 
 // The attach of one test: every fake records its calls.
-function attachFor(m, { ps, info = pid => ({ pid, clrVersion: '8.0.31+abc', arch: 'arm64', os: 'MacOS' }), apply = async () => ({ applied: true }), readers, lsof = [] } = {}) {
+function attachFor(m, { ps, factory = createMacAttach, info = pid => ({ pid, clrVersion: '8.0.31+abc', arch: 'arm64', os: 'MacOS' }), apply = async () => ({ applied: true }), readers, lsof = [] } = {}) {
   const calls = { apply: [], info: 0 };
   const run = async (file, args) => {
     if (file === '/usr/bin/getconf') throw new Error('no getconf here');
@@ -55,13 +55,26 @@ function attachFor(m, { ps, info = pid => ({ pid, clrVersion: '8.0.31+abc', arch
   };
   const chosen = readers ?? { fake: async () => ({ sec: START, usec: 123456 }) };
   // Every reader here passed the check on processes of the agent (mac-start-check.test.mjs covers that check).
-  const attach = createMacAttach({ run, env: { TMPDIR: m.tmp }, home: m.home, ps: typeof ps === 'function' ? ps : async () => ps,
+  const attach = factory({ run, env: { TMPDIR: m.tmp }, home: m.home, ps: typeof ps === 'function' ? ps : async () => ps,
     readers: chosen, calibrate: async () => ({ trusted: Object.keys(chosen), results: Object.keys(chosen).map(name => ({ name, ok: true, offsetsMs: [0.5], error: null })) }),
     ipc: { processInfo2: async (endpoint) => { calls.info++; const pid = Number(/dotnet-diagnostic-(\d+)-/.exec(endpoint)[1]); const exe = parsePs(typeof ps === 'function' ? await ps() : ps).find(p => p.pid === pid).exe; return { entrypoint: exe.endsWith('/ODC Studio') ? 'ODCStudio' : 'ServiceStudio', commandLine: '"' + fs.realpathSync(exe) + '"', ...info(pid) }; },
       applyStartupHook: async (endpoint, file) => { calls.apply.push([endpoint, file]); return apply(endpoint, file); } } });
   return { attach, calls };
 }
 const refused = (promise, pattern) => assert.rejects(promise, error => { assert.equal(error.code, 'ATTACH_FAILED', error.message); assert.equal(error.executed, false, error.message); assert.match(error.message, pattern); return true; });
+
+test('R2.9 macOS accepts the verified generic ODC3.Bridge.dll entrypoint', async () => {
+  const m = mac();
+  try {
+    const studio = m.bundle('ODC Studio.app'); m.socket(501, START);
+    const bridge = m.top + '/ODC3.Bridge.dll'; fs.writeFileSync(bridge, 'bridge');
+    const factory = process.env.SSAM_REVIEW_BASE
+      ? (await import('file:///' + process.env.SSAM_REVIEW_BASE.replaceAll('\\', '/') + '/agent/agent/lib/attach-unix.mjs')).createMacAttach : createMacAttach;
+    const { attach, calls } = attachFor(m, { factory, ps: m.psLine(501, START, studio.exe) });
+    assert.equal((await attach.attachOdc({ pid: 501, bridge, version: 'v100' })).attached, true);
+    assert.equal(calls.apply.length, 1);
+  } finally { m.remove(); }
+});
 
 test('ODC attach on macOS: the installed bundle executable, its own diagnostic socket, .NET 8+, the pack bridge; one ApplyStartupHook', async () => {
   const m = mac();

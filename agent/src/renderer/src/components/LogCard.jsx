@@ -11,7 +11,6 @@ export function LogCard({ lines, onRefresh }) {
       <pre className="report" ref={box}>{lines.length ? lines.join('\n') : 'No log yet.'}</pre>
       <div className="row">
         <button onClick={onRefresh}>Refresh</button>
-        <button onClick={() => ssam.openAppLog()}>Open app log</button>
       </div>
     </section>
   );

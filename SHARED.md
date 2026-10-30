@@ -163,7 +163,7 @@ duas caixas, e a checagem acima não o lista.
 | Arquivo (relativo à caixa) | sha256 (conteúdo com fim de linha LF) |
 | --- | --- |
 | `platforms/odc/studio/bridge/AppCreationCommands.cs` | `416c95f5bf1a86476109aa07d4950d12c05c72450a6d860a9dec4924b1341ccf` |
-| `platforms/odc/studio/bridge/Bridge.csproj` | `3b228be57045a7a2777b9a0a2baf371c5e77c01ef119ff5ce8d4f0ed203a80ed` |
+| `platforms/odc/studio/bridge/Bridge.csproj` | `c47d07d4360f820a7e66dffc3a4e5d42ce467026638d5263cb5d6a771bde2ace` |
 | `platforms/odc/studio/bridge/DataCommands.cs` | `2c8eb954b4b1d1ccace550179399a4418f43fee308f3014fe1490a30f4196aa6` |
 | `platforms/odc/studio/bridge/MergeDiagnostics.cs` | `8a1d4b6206278e146729c6a3515d0962d0db6b64156dc9cee313dd9adf3b8573` |
 | `platforms/odc/studio/bridge/MergeOrderCopy.cs` | `4e7a187554154662f5ffcecf401904eb4b59ef656192f7fa57afc73b13a4d2d9` |
@@ -184,11 +184,11 @@ duas caixas, e a checagem acima não o lista.
 | `platforms/odc/studio/bridge/README.md` | `722510d95bca5db8cced9ed3560f8dbb31dd2681c17c9514f01bd7a332efef9b` |
 | `platforms/odc/studio/bridge/ReferenceCommands.cs` | `615e55dec013036b12270e55ec8eea2a723cce753eb367cd232884b65adf9db0` |
 | `platforms/odc/studio/bridge/SecurityWarningsCopy.cs` | `9994c72f57a32b74fd8ca92299198e44dea11efed1023d5526f72eeb5307b698` |
-| `platforms/odc/studio/bridge/StartupHook.cs` | `3c90b44f10511f06b9f369ff4b2499fa54b57a030563a4d2e582a3337a748b0b` |
+| `platforms/odc/studio/bridge/StartupHook.cs` | `b64bd090619c9c16b15f039c6c9e50888a8062ed957693393b8810264245d8f5` |
 | `platforms/odc/studio/bridge/TemplateCache.cs` | `a57ef89f222983393d3249c75d543e6a2fc06aef456340a63272d8f127b3f20c` |
 | `platforms/odc/studio/bridge/client/Client.csproj` | `a5b9c2d9640b4df751a052075cd5b2bf9b568b7b2e00f72b160acb9ebdc953f2` |
-| `platforms/odc/studio/bridge/client/Program.cs` | `371ac5aff49a07d71b307252b6305165f9bf258c678e9ffdc20e7e5190482f87` |
-| `platforms/odc/studio/bridge/tests/Bridge.Tests.csproj` | `2f27778179dacdba7026cb7fea8fa46cfdf79e53cec590833ddaf303062c9696` |
+| `platforms/odc/studio/bridge/client/Program.cs` | `e07fb297d38e00b8beb41b3b961c33a3a2d3bee21eea17e13d902b4632f81606` |
+| `platforms/odc/studio/bridge/tests/Bridge.Tests.csproj` | `a0e4954372063753e33e0c7375dcb0b88ea5d7634490830a8f7cf0bf15b48957` |
 
 ## platforms/odc/studio/ e platforms/odc/.gitattributes: fontes que a bridge ODC linka e regras de build e eol (dono: server)
 
@@ -207,3 +207,11 @@ duas caixas, e a checagem acima não o lista.
 | Arquivo (relativo à caixa) | sha256 (conteúdo com fim de linha LF) |
 | --- | --- |
 | `scripts/release/client-content.json` | `7160794a2c584cb90f310cb86878fbd573b5677da85fb25d1fc5df1895615ec4` |
+
+## Migração do Agent para runtime instalado (27/10/2026)
+
+A bridge ODC v98 introduz o vínculo local `agent-root` antes de qualquer comando em pacote. As três marcas de versão e as cópias compartilhadas foram atualizadas juntas. A validação viva e a promoção do servidor continuam pendentes.
+
+| Arquivo (relativo à caixa) | sha256 (conteúdo com fim de linha LF) |
+| --- | --- |
+| `platforms/odc/studio/bridge/AgentDataRoot.cs` | `dad2cf57b23e27c6dd49070fe38268cab5670bf5d7aba8404899c2ddf9c1e68e` |

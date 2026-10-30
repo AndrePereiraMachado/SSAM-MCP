@@ -11,6 +11,7 @@ export function Header({ view, busy, setUp, onStart, onStop }) {
       <div>
         <h1>{view.text}</h1>
         <p className="muted">{view.detail}</p>
+        {view.bridgeUpdate && <p className="muted" role="status">{view.bridgeUpdate}</p>}
       </div>
       <div className="spacer" />
       {running

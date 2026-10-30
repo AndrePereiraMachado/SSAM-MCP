@@ -66,12 +66,30 @@ function odcPositions(words) {
 
 // platform: 'darwin' attaches the ODC bridge without the pack's .NET client (deps.attachOdc speaks the diagnostic IPC,
 // attach-unix.mjs) and names the Studios without an image name; deps.pipeCall replaces the Windows pipe (odc-pipe-unix.mjs).
-export function createKinds({ root, ws, pack = {}, kernel = () => null, deps = {}, blobs = null, limits = () => ({}), o11Port = 4516,
+export function createKinds({ root, runtimeRoot = root, ws, pack = {}, kernel = () => null, deps = {}, blobs = null, limits = () => ({}), o11Port = 4516,
   onConnection = () => {}, probe = null, platform = process.platform }) {
   const lanes = Array.isArray(pack.lanes) ? pack.lanes : [];
   const pids = new Map(); // pid -> {image, version}, from the last listing
   const maxFileBytes = () => limits().maxFileBytes ?? 512 * 1024 * 1024;
   const requireLane = lane => { if (!lanes.includes(lane)) throw refuse('LANE_DISABLED', `The agent pack does not carry the ${lane} lane`); };
+  const hasDataRootProtocol = version => /^v\d+$/.test(version ?? '') && Number(version.slice(1)) >= 98;
+  function requireDataRootProtocol(version) {
+    if (path.resolve(root) !== path.resolve(runtimeRoot) && !hasDataRootProtocol(version))
+      throw refuse('BRIDGE_VERSION_MISMATCH', 'An installed runtime requires ODC bridge v98 or newer with the agent data-root protocol.');
+  }
+  async function bindOdcRoot(pid, version, executed = false) {
+    requireDataRootProtocol(version);
+    if (!hasDataRootProtocol(version)) return;
+    const dataRoot = path.join(root, 'odc');
+    let reply;
+    try { reply = JSON.parse(await (deps.pipeCall ?? pipeCall)(pid, version, ['agent-root', JSON.stringify({ root: dataRoot })], { timeoutMs: 10000 })); }
+    catch (error) {
+      if (error instanceof PipeError) throw new AgentError(error.code, error.message, { executed, sent: false });
+      throw new AgentError('ODC_DATA_ROOT_FAILED', 'The ODC bridge did not confirm its data directory; no application command was sent.', { executed });
+    }
+    if (reply?.ok !== true || reply.protocol !== 1 || reply.root !== dataRoot)
+      throw new AgentError('ODC_DATA_ROOT_FAILED', 'The ODC bridge refused or returned another data directory; no application command was sent.', { executed });
+  }
 
   async function listing(image) {
     const processes = [];
@@ -81,7 +99,7 @@ export function createKinds({ root, ws, pack = {}, kernel = () => null, deps = {
       const pid = Number(p?.pid);
       if (!Number.isSafeInteger(pid) || pid < 1) continue;
       const version = p.version ?? (p.path ? await deps.fileVersion(p.path) : null) ?? null;
-      pids.set(pid, { image, version });
+      pids.set(pid, { image, version, path: p.path, startedUtc: p.startedUtc });
       processes.push({ pid, path: p.path ?? null, version });
     }
     return processes;
@@ -169,14 +187,16 @@ export function createKinds({ root, ws, pack = {}, kernel = () => null, deps = {
     if (texts.some(a => /[\r\n\0]/.test(a))) throw refuse('COMMAND_NOT_ALLOWED', 'A bridge argument may not contain a line break or NUL');
     if (!ODC_COMMANDS.includes(texts[0]))
       throw refuse('COMMAND_NOT_ALLOWED', texts[0] === 'attach' ? 'attach never goes through odc.pipe; the agent attaches its own bridge (odc.attach)' : `The ODC bridge command ${JSON.stringify(texts[0])} is not allowed on this agent`);
-    if (!pack.odcBridge || version !== pack.odcBridge)
-      throw refuse('BRIDGE_VERSION_MISMATCH', `The agent pack carries the ODC bridge ${pack.odcBridge ?? '(none)'}; the server asked for ${version}`);
     const mapped = mapOdcArgs(texts);
     checkFinalLine(mapped);
     if (MANIFEST_COMMANDS.has(mapped[0]) && mapped[1]) checkManifestFile(mapped[1]);
     const target = await checkPid('odc', pid);
+    const expectedVersion = deps.bridgeUpdates?.protocolFor('odc', target.version, target) ?? pack.odcBridge;
+    if (!expectedVersion || version !== expectedVersion)
+      throw refuse('BRIDGE_VERSION_MISMATCH', `The agent pack carries the ODC bridge ${pack.odcBridge ?? '(none)'}; the server asked for ${version}`);
     const connect = Number.isFinite(Number(connectMs)) ? Math.min(Math.max(Number(connectMs), 1), 120000) : undefined;
     try {
+      await bindOdcRoot(target.pid, version);
       const line = await (deps.pipeCall ?? pipeCall)(target.pid, version, mapped, connect === undefined ? {} : { connectMs: connect });
       return relativizeLine(line);
     } catch (error) {
@@ -185,17 +205,61 @@ export function createKinds({ root, ws, pack = {}, kernel = () => null, deps = {
     }
   }
 
-  async function odcAttach({ pid }) {
+  const attachingOdc = new Map();
+  function odcAttach(params) {
+    const key = Number(params.pid);
+    if (attachingOdc.has(key)) return attachingOdc.get(key);
+    const task = attachOdcOnce(params).finally(() => attachingOdc.delete(key)); attachingOdc.set(key, task); return task;
+  }
+  async function attachOdcOnce({ pid }) {
     requireLane('odc');
     const target = await checkPid('odc', pid);
-    const version = pack.odcBridge;
+    const selected = await selectedBridge('odc', target);
+    if (selected && deps.bridgeUpdates.isActive?.(selected, target)) {
+      await bindOdcRoot(target.pid, selected.protocol, null);
+      return { ok: true, attached: true, reused: true, pid: target.pid, version: selected.protocol };
+    }
+    const version = selected?.protocol ?? pack.odcBridge;
+    requireDataRootProtocol(version);
     if (!/^v\d+$/.test(version ?? '')) throw refuse('BRIDGE_VERSION_MISMATCH', 'The agent pack carries no ODC bridge');
-    const client = path.join(root, 'odc', 'studio', 'bridge', 'client', 'bin', 'Release', 'net10.0', 'ODC3.Bridge.Client.dll');
-    const bridge = path.join(root, 'odc', 'studio', 'bridge', 'bin', 'Release', 'net8.0', 'ODC3.Bridge.' + version + '.dll');
+    const lease = selected ? await deps.bridgeUpdates.prepareAttach(selected, target) : null;
+    let client, bridge;
+    try {
+    client = lease ? selectedFile(lease, ['ODC3.Bridge.Client.dll']) : path.join(runtimeRoot, 'odc', 'studio', 'bridge', 'client', 'bin', 'Release', 'net10.0', 'ODC3.Bridge.Client.dll');
+    bridge = lease ? selectedFile(lease, ['ODC3.Bridge.' + version + '.dll']) : path.join(runtimeRoot, 'odc', 'studio', 'bridge', 'bin', 'Release', 'net8.0', 'ODC3.Bridge.' + version + '.dll');
     // macOS: no .NET client, the agent itself speaks the diagnostic IPC (the client is not in the macOS pack).
     for (const file of platform === 'darwin' ? [bridge] : [client, bridge]) if (!fs.existsSync(file)) throw refuse('ATTACH_FAILED', 'The agent pack is missing ' + path.relative(root, file));
-    const result = await deps.attachOdc(platform === 'darwin' ? { pid: target.pid, bridge, version } : { pid: target.pid, client, bridge });
-    return { ok: result?.ok === true, attached: result?.attached === true, pid: target.pid, version, note: result?.note ?? result?.error ?? null };
+    } catch (error) { await lease?.release(); throw error; }
+    let result;
+    try {
+      if (lease?.mayBeLoaded) throw new AgentError('ATTACH_FAILED', 'A previous attach may have executed; restart the Studio before retrying.', { executed: null });
+      lease?.retain?.();
+      result = await deps.attachOdc(platform === 'darwin' ? { pid: target.pid, bridge, version } : { pid: target.pid, client, bridge });
+      if (result?.ok !== true || result?.attached !== true) {
+        if (!selected) return { ok: result?.ok === true, attached: result?.attached === true, pid: target.pid, version, note: result?.note ?? result?.error ?? null };
+        throw Object.assign(new AgentError('ATTACH_FAILED', result?.error ?? result?.note ?? 'Bridge load was not confirmed', { executed: null }),
+          { attachAttempted: false, bridgeLoadFailure: false });
+      }
+    } catch (error) {
+      await lease?.release();
+      if (selected && deps.bridgeUpdates.rejectLoad(selected, error.message, { ...target, attempted: error.attachAttempted === true, bridgeFailure: error.bridgeLoadFailure === true })) deps.bridgeChanged?.();
+      error.message = String(error.message).replaceAll(root, '[data]').replaceAll(runtimeRoot, '[runtime]');
+      throw error;
+    }
+    if (lease) deps.bridgeUpdates.markActive(selected, target);
+    // Binding, authentication and pipe failures are transient and never quarantine a DLL.
+    try { await bindOdcRoot(target.pid, version, null); } catch (error) { error.message = String(error.message).replaceAll(root, '[data]').replaceAll(runtimeRoot, '[runtime]'); throw error; }
+    return { ok: true, attached: true, pid: target.pid, version, note: result?.note ?? null };
+  }
+
+  async function selectedBridge(lane, target) {
+    if (!deps.bridgeUpdates || !target.path) return null;
+    return deps.bridgeUpdates.select(lane, target.version, await deps.studioRuntime(target.path, lane), target);
+  }
+  function selectedFile(selected, names) {
+    const candidates = selected.files.filter(f => names.includes(path.posix.basename(f.path)));
+    if (candidates.length !== 1) throw refuse('ATTACH_FAILED', 'The downloaded bridge layout is missing or ambiguous');
+    return path.join(selected.root, candidates[0].path);
   }
 
   // ---- o11.bridge: allowlist, positions, the local key and the port of this agent's own connection record.
@@ -256,11 +320,15 @@ export function createKinds({ root, ws, pack = {}, kernel = () => null, deps = {
     if (candidates.length === 0) throw refuse('STUDIO_NOT_SELECTED', 'No matching Service Studio is open. Open it normally, then connect.');
     if (candidates.length > 1) throw refuse('STUDIO_NOT_SELECTED', 'Several Service Studios are open (' + candidates.map(p => p.pid).join(', ') + '); select one with pid.');
     const target = await checkPid('o11', candidates[0].pid);
+    if (deps.bridgeUpdates) target.startedUtc = (await deps.describe(target.pid)).startedUtc;
+    const selected = await selectedBridge('o11', target);
+    const activePack = selected ? { ...pack, o11BuiltFor: selected.studioVersion, o11Hook: 'd1',
+      o11Bridge: { sha256: selected.files.find(f => path.posix.basename(f.path) === 'Anvil.Bridge.dll')?.sha256 } } : pack;
     // The server's version window (servedVersions of the hello reply) decides, not the pack alone: a bridge built for one
     // served version is loaded into another served Service Studio with a warning. Without a window from the server, or
     // with either version outside it, the built-for version must match as before.
     let warning;
-    if (pack.o11BuiltFor && !sameVersion(target.version, pack.o11BuiltFor)) {
+    if (!selected && pack.o11BuiltFor && !sameVersion(target.version, pack.o11BuiltFor)) {
       const window = windowOf(kernel(), 'o11');
       const inWindow = version => window.some(v => sameVersion(v, version));
       if (!(inWindow(target.version) || newerThanWindow(target.version, window)) || !inWindow(pack.o11BuiltFor))
@@ -271,10 +339,22 @@ export function createKinds({ root, ws, pack = {}, kernel = () => null, deps = {
           + (inWindow(target.version) ? 'the server serves both versions. ' : 'this Service Studio is newer than the versions the server serves (' + window.join(', ') + '). ') + 'Check the result in Service Studio before publishing.' };
     }
     // pack.json decides the hook (o11Hook "h1": the signed release layout) and the bridge file of the version handshake.
-    const record = await connectO11({ root, pid: target.pid, port: o11Port, studioVersion: target.version, describe: deps.describe,
-      attach: deps.attachO11, sleep: deps.sleep, now: deps.now, pack, warning, ...(deps.env ? { env: deps.env } : {}) });
-    onConnection(record);
-    return record;
+    let lease;
+    try {
+      const record = await connectO11({ root, runtimeRoot: selected?.root ?? runtimeRoot, pid: target.pid, port: o11Port, studioVersion: target.version, describe: deps.describe,
+        attach: deps.attachO11, sleep: deps.sleep, now: deps.now, pack: activePack, installedBridge: selected,
+        prepareBridge: selected ? async () => (lease = await deps.bridgeUpdates.prepareAttach(selected, { ...target, port: o11Port })) : null,
+        beforeAttach: () => lease?.retain?.(),
+        warning, ...(deps.env ? { env: deps.env } : {}) });
+      if (selected) deps.bridgeUpdates.markActive(selected, target);
+      onConnection(record);
+      return record;
+    } catch (error) {
+      await lease?.release();
+      if (selected && deps.bridgeUpdates.rejectLoad(selected, error.message, { ...target, attempted: error.attachAttempted === true, bridgeFailure: error.bridgeLoadFailure === true })) deps.bridgeChanged?.();
+      error.message = String(error.message).replaceAll(root, '[data]').replaceAll(runtimeRoot, '[runtime]');
+      throw error;
+    }
   }
 
   async function o11Selected() {

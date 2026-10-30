@@ -10,7 +10,7 @@ using Microsoft.Diagnostics.NETCore.Client;
 //           | merge <manifest> | publish <manifest> | publish-status <manifest> | data <Module> <Entity> ...
 //           | portal-call <request.json> [--tenant <host>] | portal-session status|open|close|fetch ... | auth-status | stop
 // A client timeout never cancels the native operation: inspect the evidence directory instead of retrying.
-const string Version = "v97";
+const string Version = "v98";
 if (args.Length < 2) throw new ArgumentException("Usage: <pid> attach <dll> | <pid> <command> [argument]");
 var pid = int.Parse(args[0]);
 var process = Process.GetProcessById(pid);

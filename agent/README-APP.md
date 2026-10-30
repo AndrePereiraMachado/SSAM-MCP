@@ -1,5 +1,11 @@
 # A app Electron do agente (para o dono)
 
+O candidato Windows agora usa o núcleo Native AOT em `native/Ssam.Agent`. Gere-o com
+`npm run native:build -- win-x64` e informe `--native <ssam-agent.exe>` ao build Windows.
+O pacote gerado contém apenas o executável, bridges, helpers e metadados; o runtime
+permanece na instalação e os dados permanecem na raiz configurada. Situação, comandos
+e limitações de homologação: [NUCLEO-NATIVO.md](docs/NUCLEO-NATIVO.md).
+
 O agente de `docs/AGENTE-CLIENTE.md` e `docs/AGENTE-MAC.md` entregue como app de desktop em segundo plano: ícone na
 bandeja (Windows) ou na barra de menus (macOS), sem janela até a pessoa abrir o painel, o agente iniciado junto e
 mantido no ar, e a app atualizada a partir de um update server do dono. Guia do cliente: `docs/AGENTE-APP.md` (em
@@ -132,8 +138,7 @@ oculta da home, porque o setup do agente recusa `/var/folders`).
 - A app: `%LOCALAPPDATA%\Programs\ssam-agent-app` (NSIS por usuário, sem administrador) ou `/Applications/SSAM Agent.app`.
 - Dados da app (`settings.json`: pasta do agente, autostart, update server; `app.log`): `app.getPath('userData')`,
   `%APPDATA%\ssam-agent-app` ou `~/Library/Application Support/ssam-agent-app`.
-- A pasta do agente: a dos guias (`%USERPROFILE%\SSAM-Agent`, `~/SSAM-Agent`), escolhida no painel; as regras do
-  `setup` do agente valem (sem espaço, fora de `%LOCALAPPDATA%`, no Mac fora das pastas guardadas).
+- Dados gerenciados: `%APPDATA%/SSAM-Agent/data` no Windows e `~/Library/SSAM-Agent/data` no Mac. A interface n�o exp�e a pasta. A vers�o 0.1.2 migra a pasta padr�o anterior quando reconhecida, inativa e sem conflito no destino; preserva pastas personalizadas.
 
 ## Testes e prova
 

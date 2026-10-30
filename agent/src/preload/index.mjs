@@ -11,6 +11,7 @@ contextBridge.exposeInMainWorld('ssam', {
   start: () => invoke('agent:start'),
   stop: () => invoke('agent:stop'),
   doctor: () => invoke('agent:doctor'),
+  checkConnection: () => invoke('agent:check-connection'),
   readLog: () => invoke('agent:log'),
   checkUpdates: () => invoke('updates:check'),
   installUpdate: () => invoke('updates:install'),

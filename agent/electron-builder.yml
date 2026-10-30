@@ -1,5 +1,5 @@
 # electron-builder: the installers of SSAM Agent (scripts/build.mjs runs it; see README.md of this folder).
-#   - resources/pack: the agent pack of the platform, synced into the agent root by the app (extraResources);
+#   - resources/pack: the agent pack of the platform, executed in place (extraResources);
 #   - Windows: a per-user NSIS installer (no administrator), one click, the app started at the end;
 #   - macOS: a DMG for the person and a ZIP for the updater (electron-updater needs the ZIP), no Dock icon
 #     (LSUIElement), hardened runtime (signing and notarization are the owner's step: README.md);
@@ -29,6 +29,10 @@ files:
   - "!scripts/**"
   - "!pack/**"
   - "!dist/**"
+  - "!**/*.map"
+  - "!**/*.pdb"
+  - "!**/*.dbg"
+  - "!**/*.dSYM/**"
   - "!*.md"
 extraResources:
   - from: pack

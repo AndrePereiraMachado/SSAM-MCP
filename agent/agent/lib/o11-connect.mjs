@@ -153,8 +153,8 @@ const nonThin = (port, executed = false) =>
 
 const failedReceipt = hook => { try { return readJson(hook + '.receipt.json').ok === false; } catch { return false; } };
 
-export async function connectO11({ root, pid, port, studioVersion = null, describe, attach, probe = probeBridge, request = bridgeRequest,
-  sleep = delay, now = Date.now, pack = null, env = process.env, warning = null }) {
+export async function connectO11({ root, runtimeRoot = root, pid, port, studioVersion = null, describe, attach, probe = probeBridge, request = bridgeRequest,
+  sleep = delay, now = Date.now, pack = null, env = process.env, warning = null, installedBridge = null, prepareBridge = null, beforeAttach = null }) {
   const folder = path.join(root, 'private', 'runtime-connect');
   fs.mkdirSync(folder, { recursive: true });
   const lock = path.join(folder, 'port-' + port + '.lock');
@@ -176,22 +176,34 @@ export async function connectO11({ root, pid, port, studioVersion = null, descri
         throw fail(`Anvil is already loaded in this Studio but its bridge did not respond on port ${port}. Loading another DLL is refused.`);
       const pending = path.join(folder, createHash('sha256').update(target.pid + ':' + target.startedUtc + ':' + port).digest('hex') + '.json');
       if (fs.existsSync(pending)) throw fail('A previous attach of this Studio may already have executed; it is never repeated. Restart Service Studio to connect again.');
+      if (installedBridge && prepareBridge) {
+        installedBridge = await prepareBridge(); runtimeRoot = installedBridge.root;
+        if (installedBridge.context.startedUtc !== target.startedUtc) throw fail('The Studio changed before the verified snapshot was prepared.');
+      }
       const id = randomUUID().replaceAll('-', '');
       let hook, receiptFile = null, exchange = null;
       if (releaseHook) {
         // The release hook is attached in place (it writes nothing beside its DLL); its request goes to the exchange folder.
-        verifyReleaseCoverage(root);
+        verifyReleaseCoverage(runtimeRoot);
         exchange = hookExchangeDir(target.pid, target.startedUtc, env);
         receiptFile = path.join(exchange, 'receipt-' + RELEASE_BRIDGE_ID + '.json');
         if (fs.existsSync(receiptFile)) throw fail('The release hook already answered for this Studio (' + receiptFile + '); a load is never repeated. Restart Service Studio to connect again.');
-        hook = hookH1Dll(root);
+        hook = hookH1Dll(runtimeRoot);
+      } else if (installedBridge) {
+        hook = path.join(runtimeRoot, 'hook/Anvil.RuntimeHook.Agent.dll');
+        const config = readJson(hook + '.json');
+        if (config.pid !== target.pid || config.startedUtc !== target.startedUtc || config.port !== port || config.bridgePath !== path.join(runtimeRoot, 'bridge/Anvil.Bridge.dll'))
+          throw fail('The protected hook configuration does not match the selected Studio.');
       } else {
         const evidence = path.join(folder, id);
         fs.mkdirSync(evidence, { recursive: true });
         hook = path.join(evidence, 'Anvil.RuntimeHook.Agent.dll');
-        fs.copyFileSync(path.join(root, 'bin', 'o11', 'hook', 'Anvil.RuntimeHook.Agent.dll'), hook);
+        const sourceHook = installedBridge ? path.join(runtimeRoot, 'hook/Anvil.RuntimeHook.Agent.dll') : path.join(runtimeRoot, 'bin', 'o11', 'hook', 'Anvil.RuntimeHook.Agent.dll');
+        fs.copyFileSync(sourceHook, hook);
+        if (installedBridge && sha256(fs.readFileSync(hook)) !== installedBridge.files.find(f => f.path === 'hook/Anvil.RuntimeHook.Agent.dll')?.sha256)
+          throw fail('The verified hook changed while preparing the attach. Nothing was sent.');
         fs.writeFileSync(hook + '.json', JSON.stringify({ pid: target.pid, startedUtc: target.startedUtc, port,
-          bridgePath: path.join(root, 'bin', 'o11', 'bridge', 'Anvil.Bridge.dll'), authorityDir: path.join(root, 'private', 'authority') }));
+          bridgePath: installedBridge ? path.join(runtimeRoot, 'bridge/Anvil.Bridge.dll') : path.join(runtimeRoot, 'bin', 'o11', 'bridge', 'Anvil.Bridge.dll'), authorityDir: path.join(root, 'private', 'authority') }));
       }
       // Identity and port again after preparing, right before the single attach request.
       const current = await describe(target.pid);
@@ -203,12 +215,13 @@ export async function connectO11({ root, pid, port, studioVersion = null, descri
         fs.mkdirSync(exchange, { recursive: true });
         const requestFile = path.join(exchange, 'request-' + RELEASE_BRIDGE_ID + '.json');
         const staged = requestFile + '.' + process.pid + '.tmp';
-        fs.writeFileSync(staged, JSON.stringify({ pid: target.pid, startedUtc: target.startedUtc, bridgeId: RELEASE_BRIDGE_ID, bridgeDir: releaseBridgeDir(root),
+        fs.writeFileSync(staged, JSON.stringify({ pid: target.pid, startedUtc: target.startedUtc, bridgeId: RELEASE_BRIDGE_ID, bridgeDir: releaseBridgeDir(runtimeRoot),
           port, dataDir: bridgeDataDir(root), authorityDir: path.join(root, 'private', 'authority') }));
         fs.renameSync(staged, requestFile);
       }
       fs.writeFileSync(pending, JSON.stringify({ evidence: id, pid: target.pid, startedUtc: target.startedUtc, hook: releaseHook ? HOOK_ABI : 'dev' }));
       let attachError = null;
+      beforeAttach?.();
       try { await attach(target.pid, target.startedUtc, hook); } catch (error) { attachError = error.message; }
       const refusedReceipt = () => { try { const receipt = readJson(receiptFile); return receipt.ok === false ? receipt : null; } catch { return null; } };
       await pollWithBackoff(async () => {
@@ -217,9 +230,11 @@ export async function connectO11({ root, pid, port, studioVersion = null, descri
       }, { deadlineMs: 30000, sleep, now });
       if (probed.thin === false) throw nonThin(port, null);
       const refusal = releaseHook && !probed.connected ? refusedReceipt() : null;
-      if (refusal) throw fail('The release hook refused the bridge of this pack: ' + (refusal.error ?? 'no reason') + '. It is not repeated; reinstall the pack and restart Service Studio.', null);
+      if (refusal) throw Object.assign(fail('The release hook refused the bridge of this pack: ' + (refusal.error ?? 'no reason') + '. It is not repeated; reinstall the pack and restart Service Studio.', null), { attachAttempted: true, bridgeLoadFailure: true });
+      if (!releaseHook && failedReceipt(hook)) throw Object.assign(fail('The hook refused the bridge. Restart Service Studio before retrying.', null), { attachAttempted: true, bridgeLoadFailure: true });
       if (!probed.connected || probed.pid !== target.pid) throw fail('Attach not confirmed; do not repeat it. ' + (attachError ?? ''), null);
-      handshake(probed.manifest, { pack, port, executed: null });
+      try { handshake(probed.manifest, { pack, port, executed: null }); }
+      catch (error) { throw Object.assign(error, { attachAttempted: true, bridgeLoadFailure: true }); }
     }
     // The bridge creates the key when it starts (BridgeAccess.Initialize) in the authority folder the hook gave it.
     const key = readBridgeKey(root);
@@ -230,7 +245,7 @@ export async function connectO11({ root, pid, port, studioVersion = null, descri
     if (confirmed.startedUtc !== target.startedUtc) throw fail('The Studio changed before the connection was confirmed.', null);
     const record = { ok: true, lane: 'o11', connected: true, reused, pid: target.pid, startedUtc: target.startedUtc,
       studioVersion: studioVersion ?? target.version ?? null, port, uiResponsive: alive.data?.alive === true, connectedAt: new Date(now()).toISOString(),
-      hook: releaseHook ? HOOK_ABI : 'dev', bridgeId: probed.manifest?.bridgeId ?? null, bridgeSha256: probed.manifest?.bridgeSha256 ?? null,
+      hook: installedBridge ? 'd1' : releaseHook ? HOOK_ABI : 'dev', bridgeId: probed.manifest?.bridgeId ?? null, bridgeSha256: probed.manifest?.bridgeSha256 ?? null,
       ...(warning ? { warning } : {}) };
     const file = connectionFile(root);
     const temporary = file + '.' + process.pid + '.tmp';

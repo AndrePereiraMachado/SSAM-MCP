@@ -32,22 +32,28 @@ public static class StartupHook { public static void Initialize() => Bridge.Star
 // model directly: every mutation goes through the native CompareAndMerge with a hash-checked base
 // and an immutable candidate, and every command appends one line to the operations journal.
 internal static partial class Bridge {
-    public const string Version = "v97";
+    public const string Version = "v98";
     // A command that outlives its timeout is reported as uncertain and keeps running; the loop stays
     // available for status, and every other command is refused until the late command completes.
     private static volatile string? busyCommand;
     private static DateTimeOffset busySince;
     // The SSAM Hybrid-ODC repository root: SSAM_HYBRID_ODC_ROOT or ODC3_ROOT when set, otherwise found from this
     // assembly's location (studio\bridge\bin\Release\net8.0). A checkout is recognized by its studio folder and README.
-    private static readonly string Root = ResolveRoot();
+    private static readonly AgentDataRoot DataRoot = new(ResolveRoot(), IsPackaged());
+    private static string Root => DataRoot.Value;
+    private static bool IsPackaged() {
+        for (var d = Path.GetDirectoryName(typeof(Bridge).Assembly.Location); d != null; d = Path.GetDirectoryName(d))
+            if (File.Exists(Path.Combine(d, "pack.json"))) return true;
+        return false;
+    }
     private static string ResolveRoot() {
         foreach (var name in new[] { "SSAM_HYBRID_ODC_ROOT", "ODC3_ROOT" }) { var v = Environment.GetEnvironmentVariable(name); if (!string.IsNullOrWhiteSpace(v) && Directory.Exists(v)) return v; }
         var start = Path.GetDirectoryName(typeof(Bridge).Assembly.Location);
         for (var d = start; d != null; d = Path.GetDirectoryName(d)) if (Directory.Exists(Path.Combine(d, "studio")) && File.Exists(Path.Combine(d, "README.md"))) return d;
         return start ?? Environment.CurrentDirectory;
     }
-    private static readonly string Snapshots = Path.Combine(Root, "snapshots");
-    private static readonly Journal Log = new(Path.Combine(Root, "journal", "operations.jsonl"));
+    private static string Snapshots => Path.Combine(Root, "snapshots");
+    private static Journal Log => new(Path.Combine(Root, "journal", "operations.jsonl"));
     private static readonly JsonSerializerOptions Json = new() { WriteIndented = true };
     // The catalog is read and copied by people and LLMs, so keys are written with '+' as is, never as +.
     private static readonly JsonSerializerOptions CatalogJson = new() { WriteIndented = true, Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
@@ -69,7 +75,6 @@ internal static partial class Bridge {
 
     internal static void Start() {
         if (Interlocked.Exchange(ref started, 1) != 0) return;
-        Directory.CreateDirectory(Snapshots);
         _ = Task.Run(Serve);
     }
 
@@ -85,6 +90,23 @@ internal static partial class Bridge {
                 var space = line.IndexOf(' ');
                 var command = space < 0 ? line : line[..space];
                 var argument = space < 0 ? "" : line[(space + 1)..].Trim();
+                // Internal bootstrap on a CurrentUserOnly pipe, never a hosted command.
+                // No journal may be written before the data root is known.
+                if (command == "agent-root") {
+                    object binding;
+                    try {
+                        using var request = JsonDocument.Parse(argument);
+                        var root = DataRoot.Bind(request.RootElement.GetProperty("root").GetString() ?? "");
+                        binding = new { ok = true, protocol = 1, root };
+                    } catch (Exception error) { binding = new { ok = false, error = error.Message }; }
+                    await writer.WriteLineAsync(JsonSerializer.Serialize(binding));
+                    continue;
+                }
+                try { DataRoot.Use(); }
+                catch (Exception error) {
+                    await writer.WriteLineAsync(JsonSerializer.Serialize(new { ok = false, error = error.Message }));
+                    continue;
+                }
                 var start = DateTimeOffset.UtcNow;
                 var context = new Context();
                 object response; Exception? failure = null;
@@ -149,7 +171,7 @@ internal static partial class Bridge {
                 await writer.WriteLineAsync(JsonSerializer.Serialize(response));
             }
         } catch (Exception error) {
-            TryWrite(Path.Combine(Root, "journal", "bridge-server-error-" + Environment.ProcessId + ".txt"), error.ToString());
+            if (DataRoot.CanWrite) TryWrite(Path.Combine(Root, "journal", "bridge-server-error-" + Environment.ProcessId + ".txt"), error.ToString());
         }
     }
 
@@ -862,7 +884,7 @@ internal static partial class Bridge {
     // I10: what this build does that older bridges do not; the facade uses each behavior only when it is here (status, brief).
     // merge:normalized: a merge proven equal but for the Studio's own rewrites answers ok:true, merged:true, normalized (G-1);
     // template-download:have: a template whose revision the caller already has answers cached:true without bytes (C25).
-    private static readonly string[] Capabilities = { "merge:normalized", "template-download:have" };
+    private static readonly string[] Capabilities = { "merge:normalized", "template-download:have", "agent-root:1" };
     private static object Status() {
         var providers = ProvidersState();
         object? topState = null;

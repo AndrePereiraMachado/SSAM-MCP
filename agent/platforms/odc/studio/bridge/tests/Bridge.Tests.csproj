@@ -20,6 +20,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="..\PortalCore.cs" Link="PortalCore.cs" />
+    <Compile Include="..\AgentDataRoot.cs" Link="AgentDataRoot.cs" />
     <Compile Include="..\PortalPrivateHttp.cs" Link="PortalPrivateHttp.cs" />
     <Compile Include="..\PortalApiClientSecret.cs" Link="PortalApiClientSecret.cs" />
     <Compile Include="..\PortalApiClientCleanup.cs" Link="PortalApiClientCleanup.cs" />

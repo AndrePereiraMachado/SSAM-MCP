@@ -4,7 +4,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <!-- One assembly name per bridge version. A loaded DLL is never replaced: a new version is a new name and a new pipe. -->
-    <AssemblyName>ODC3.Bridge.v97</AssemblyName>
+    <AssemblyName>ODC3.Bridge.v98</AssemblyName>
     <!-- IncrementalClean must never treat a prior resident version as an orphan. -->
     <CleanFile>$(MSBuildProjectFile).$(AssemblyName).FileListAbsolute.txt</CleanFile>
     <DefineConstants>$(DefineConstants);QUERY_TEST_ODC</DefineConstants>
@@ -42,6 +42,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="StartupHook.cs" />
+    <Compile Include="AgentDataRoot.cs" />
     <Compile Include="QueryTestCommands.cs" />
     <Compile Include="../../../../kernel/query-test/*.cs" Link="QueryTest/%(Filename)%(Extension)" />
     <Compile Include="DataCommands.cs" />
