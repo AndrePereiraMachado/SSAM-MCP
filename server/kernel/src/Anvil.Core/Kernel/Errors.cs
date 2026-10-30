@@ -65,12 +65,23 @@ public static class Errors
         {
             envelope["code"] = coded.Code;
             if (coded.Problems is { } problems) envelope["problems"] = problems.DeepClone();
+            // R2-B (rule 2): what the apply left out (APPLY_SKIPPED, each with the problem it waits for, dependsOn) is said with
+            // the problems, as warnings: before, a refusal's warnings never left the kernel, and the parts it could not judge
+            // vanished from the answer (the facade folds them into one entry).
+            if (coded is JobPreflightException { Warnings: { Count: > 0 } warnings }
+                && warnings.OfType<JsonObject>().Where(w => w["code"]?.ToString() == "APPLY_SKIPPED").ToList() is { Count: > 0 } skipped)
+            {
+                var list = envelope["problems"] as JsonArray ?? (JsonArray)(envelope["problems"] = new JsonArray());
+                foreach (var w in skipped) list.Add(w.DeepClone());
+            }
         }
         // primeira-certa A2/A7: whether the Verify ran before the refusal (and why not), its phases and, for a refusal of
-        // one phase alone that keeps its own exception, the problems in the same form.
+        // one phase alone that keeps its own exception, the problems in the same form. An empty list is no problems (R2-H).
         if (Diagnosis(ex) is { } diagnosis)
             foreach (var (key, value) in diagnosis)
-                if (key != "problems" || envelope["problems"] == null) envelope[key] = value?.DeepClone();
+                if (key != "problems" || envelope["problems"] is not JsonArray { Count: > 0 }) envelope[key] = value?.DeepClone();
+        // R2-H: a lone coded refusal without problems of its own still says its problem (code, op, pointer, phase).
+        if (envelope["problems"] is not JsonArray { Count: > 0 } && AttachedProblems(ex) is { } attached) envelope["problems"] = attached;
         // lentidao 2026-10-12: what the kernel rewrote instead of refusing comes with the refusal of what stayed.
         if (Normalizations(ex) is { } normalizations) envelope["normalizations"] = normalizations;
         envelope["stack"] = stack;
@@ -94,6 +105,31 @@ public static class Errors
             if (e.Data.Contains(NormalizationsKey) && e.Data[NormalizationsKey] is JsonArray list) return list.DeepClone().AsArray();
         return null;
     }
+
+    /// <summary>Where <see cref="AttachProblems"/> keeps the problems of a coded refusal that carries none of its own.</summary>
+    public const string ProblemsKey = "anvil.problems";
+
+    /// <summary>R2-H: a coded refusal raised without problems (KernelRefusalException(code, message):
+    /// ROLE_ACTION_REQUIRES_SERVER, ...) keeps the problems its caller knows (its code, op, pointer and phase), so no lone
+    /// refusal answers problems:[]. Nothing changes when the refusal has problems of its own.</summary>
+    public static void AttachProblems(Exception ex, IEnumerable<JsonObject> problems)
+    {
+        if (FindCoded(ex)?.Problems is { Count: > 0 }) return;
+        var list = new JsonArray(problems.Select(p => (JsonNode)p.DeepClone()).ToArray());
+        if (list.Count > 0) ex.Data[ProblemsKey] = list;
+    }
+
+    /// <summary>The problems <see cref="AttachProblems"/> kept with a refusal (outermost first), or null.</summary>
+    public static JsonArray? AttachedProblems(Exception ex)
+    {
+        for (var e = ex; e != null; e = e.InnerException)
+            if (e.Data.Contains(ProblemsKey) && e.Data[ProblemsKey] is JsonArray list) return list.DeepClone().AsArray();
+        return null;
+    }
+
+    /// <summary>The problems of a coded refusal: its own when it has some, else the attached ones (empty when neither).</summary>
+    public static JsonArray ProblemsOf(Exception ex)
+        => FindCoded(ex)?.Problems is { Count: > 0 } own ? own : AttachedProblems(ex) ?? new JsonArray();
 
     /// <summary>Where <see cref="Annotate"/> keeps the fields of a refusal whose exception is not a JobPreflightException.</summary>
     public const string DiagnosisKey = "anvil.diagnosis";

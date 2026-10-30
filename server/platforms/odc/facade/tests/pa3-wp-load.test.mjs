@@ -12,7 +12,7 @@ import { InMemoryTransport } from '@modelcontextprotocol/server';
 import { Client } from '@modelcontextprotocol/client';
 import { createSsamServer } from '../ssam.mjs';
 import { createBuildPool } from '../build-pool.mjs';
-import { fakeAnvil } from './fixtures/fake-anvil.mjs';
+import { fakeAnvil, validPreflight } from './fixtures/fake-anvil.mjs';
 
 const BUILD_MS = 300, MERGE_MS = 60;
 const MODULES = ['Orders', 'Customers', 'Catalog', 'Billing'];
@@ -43,7 +43,7 @@ async function bench(t) {
       return { ok: true, data: { delivered: true, taskId, writeState: 'applied', apply: { isValid: true, accepted: true, prebuilt: { reused: true } } } };
     },
   });
-  const server = await createSsamServer({ odc: false, deps: { cycle: { root, env: { USERPROFILE: root, LOCALAPPDATA: root }, runAnvil, assertSelected: async () => {},
+  const server = await createSsamServer({ odc: false, deps: { cycle: { checkRunner: validPreflight, root, env: { USERPROFILE: root, LOCALAPPDATA: root }, runAnvil, assertSelected: async () => {},
     tasksDir: path.join(root, 'tasks'), bridge, lastPublication: async () => null, lock: { connection: () => null },
     buildPool: createBuildPool({ dir: path.join(root, 'pool'), size: 4, queueMs: 60000 }), buildRunner: () => runAnvil },
     lock: { o11Root: root, odcRoot: root, connection: () => null } } });

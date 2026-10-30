@@ -42,7 +42,9 @@ public sealed partial class ModelSession
         _handles["@espace"] = espace;
     }
 
-    public IReadOnlyDictionary<string, string> Handles => _handles.Where(h => h.Value is IObjectSignature).ToDictionary(h => h.Key, h => ((IObjectSignature)h.Value).ObjectKey?.ToString() ?? "");
+    // R2-D: the aliases the author wrote; the kernel's own ($ssam.html.N, the html op's plan) are no name the author can use.
+    public IReadOnlyDictionary<string, string> Handles => _handles.Where(h => h.Value is IObjectSignature && !h.Key.StartsWith("$ssam.", StringComparison.Ordinal))
+        .ToDictionary(h => h.Key, h => ((IObjectSignature)h.Value).ObjectKey?.ToString() ?? "");
 
     /// <summary>JobPreflight.OpsPointer of the job the next Apply runs ("/ops", "" for an array job, null for a composite):
     /// the pointers of the problems Apply reports. A property, so Apply keeps its one signature (tests and tools find it by name).</summary>
@@ -73,9 +75,9 @@ public sealed partial class ModelSession
             AutomaticLayouts = [];
             var retiredTypes=ops.OfType<JsonObject>().Any(op=>op["op"]?.ToString()=="delete")?ReferencedManagedCSharpTypes():null;
             var failures = new List<ApplyFailure>();
-            var skipped = new List<(int Op, int Because, string Uses)>();
+            var skipped = new List<(int Op, int Because, string Uses, string? At)>();
             var isolationWarnings = new List<JsonObject>();
-            var blocked = new Blocked();
+            var blocked = new Blocked { OpsPointer = opsPointer };
             Kept = null;
             BeginOwnerRules(ops);
             // The screens an html edit of the job names, as the capture has them before any op, when an earlier op may change them.
@@ -107,8 +109,9 @@ public sealed partial class ModelSession
                 var flowTexts = kind == "logic" && op["data"]?["flow"] != null;
                 if (!flowTexts && (failures.Count > 0 || refusedBefore) && blocked.UsedBy(op) is { } uses)
                 {
-                    skipped.Add((i, uses.Op, uses.Name));
-                    blocked.Mark(op, uses.Op);
+                    var usedAt = blocked.PointerOf(uses.Name);
+                    skipped.Add((i, uses.Op, uses.Name, usedAt));
+                    blocked.MarkAt(op, uses.Op, usedAt);
                     log?.Invoke($"#{i} {kind} skipped: it uses {uses.Name} of failed op #{uses.Op}");
                     continue;
                 }
@@ -116,15 +119,19 @@ public sealed partial class ModelSession
                 _applyOps = ops; _applyIndex = i;
                 if (kind == "logic") PrepareUiForLogic(op);
                 _flowBlocked = flowTexts ? blocked : null;
-                _flowDependencySkipped = flowTexts ? (pointer, origin, name) => {
+                _flowDependencySkipped = flowTexts ? (pointer, origin, name, usedAt) => {
                     var at = opsPointer == null ? null : $"{opsPointer}/{i}/data{pointer}";
-                    isolationWarnings.Add(JobPreflight.Problem(i, at, "APPLY_SKIPPED", "warning",
-                        $"skipped: it uses {name}, which failed op #{origin} would have created", $"fix op #{origin}; this text runs with it"));
+                    // R2-B: the op and the part it waits for; JobRunner.ResolveDependsOn names that part's problem in the refusal.
+                    isolationWarnings.Add(Skipped(i, at, name, origin, usedAt, $"fix op #{origin}; this text runs with it"));
                     log?.Invoke($"#{i} {kind} {pointer} skipped: it uses {name} of failed op #{origin}");
                 } : null;
                 BeginAnchors(i);
                 _ranOps.Add(i);
                 var opFailed = true;
+                // R2-B: a logic op in the text form keeps going after a failed text (its stub, Verbs.FlowStubs.cs) and hands its
+                // refusal back (TakeFlowRefusal below): the rest of the op is applied, and judged by the Verify.
+                _flowKeepFailures = KeepFailures && flowTexts;
+                _flowKeptRefusal = null; _flowLeftOut = null;
                 try { r = ApplyOne(op); opFailed = false; }
                 catch (Exception ex)
                 {
@@ -138,8 +145,9 @@ public sealed partial class ModelSession
                     // consequence, not a fault of its own: the op is skipped, never a second problem.
                     if (!flowTexts && (failures.Count > 0 || refusedBefore) && Blocked.MissingName(ex, msg) is { } missing && blocked.Mentioned(missing) is { } origin)
                     {
-                        skipped.Add((i, origin, missing));
-                        blocked.Mark(op, origin);
+                        var missingAt = blocked.PointerOf(missing);
+                        skipped.Add((i, origin, missing, missingAt));
+                        blocked.MarkAt(op, origin, missingAt);
                         log?.Invoke($"#{i} {kind} skipped: {missing} would come from failed op #{origin}");
                         continue;
                     }
@@ -149,7 +157,14 @@ public sealed partial class ModelSession
                     {
                         failures.AddRange(isolated.Failures);
                         isolationWarnings.AddRange(isolated.Warnings);
-                        blocked.Mark(isolated.Broken, i);
+                        // Each action left out blocks its name with its own place in the op as written.
+                        var declared = op["data"]?["actions"] as JsonArray ?? new JsonArray();
+                        foreach (var left in (isolated.Broken["data"]?["actions"] as JsonArray ?? new JsonArray()).OfType<JsonObject>())
+                        {
+                            var j = Enumerable.Range(0, declared.Count).FirstOrDefault(k => declared[k]?["name"]?.ToString() == left["name"]?.ToString(), -1);
+                            blocked.MarkAt(new JsonObject { ["op"] = "logic", ["data"] = new JsonObject { ["actions"] = new JsonArray(left.DeepClone()) } }, i,
+                                opsPointer == null ? null : j >= 0 ? $"{opsPointer}/{i}/data/actions/{j}" : $"{opsPointer}/{i}");
+                        }
                         if (isolated.Result != null)
                         {
                             opFailed = false;
@@ -160,11 +175,27 @@ public sealed partial class ModelSession
                         continue;
                     }
                     failures.Add(new ApplyFailure(i, kind, op, new InvalidOperationException(msg, ex)));
+                    // R2-B: a logic op that failed whole is written as its stub (each new action with its signature and no
+                    // body, Verbs.FlowStubs.cs): the later ops that call it are applied against it and judged for their own
+                    // faults, never skipped for it. Without a stub, what it would declare is blocked, as before.
+                    if (KeepFailures && kind == "logic" && !flowTexts && StubOp(op) is { } stub && RollbackAttempt() && ApplyStub(stub))
+                    {
+                        log?.Invoke($"#{i} {kind} failed: {Unwrap(ex)}; written as its stub for the ops that use it");
+                        continue;
+                    }
                     blocked.Mark(op, i);
                     log?.Invoke($"#{i} {kind} failed: {Unwrap(ex)}");
                     continue;
                 }
-                finally { _flowBlocked = null; _flowDependencySkipped = null; EndAnchors(opFailed); }
+                finally { _flowBlocked = null; _flowDependencySkipped = null; _flowKeepFailures = false; EndAnchors(opFailed); }
+                if (TakeFlowRefusal() is { } partial)
+                {
+                    // The failed texts are this op's failure (each problem at its text); what no stub stands for is blocked for
+                    // the later ops, the stubs are not (they are judged against the declared signature).
+                    failures.Add(new ApplyFailure(i, kind, op, new InvalidOperationException($"op #{i} ({kind} ): {Unwrap(partial.Refusal)}", partial.Refusal)));
+                    foreach (var (text, pointer) in partial.LeftOut) blocked.MarkFlowAt(text, i, opsPointer == null ? null : $"{opsPointer}/{i}/data{pointer}");
+                    log?.Invoke($"#{i} {kind} applied without its failed text(s): {partial.LeftOut.Count} left out, the others as their stub");
+                }
                 executed.Add(i);
                 results.Add(new JsonObject { ["op"] = kind, ["result"] = r });
                 log?.Invoke($"#{i} {kind} ok");
@@ -633,14 +664,16 @@ public sealed partial class ModelSession
         var name = op["name"]?.GetValue<string>();
         var args = op["args"]?.AsObject();
         // D2 (atritos 3, C21): an attribute or index name longer than the Studio keeps is written as the Studio keeps it (the
-        // first 28 characters, numbered when taken), so the data proof expects that name; reported in nameTruncations.
+        // first 28 characters, numbered when taken), so the data proof expects that name; reported in nameTruncations. R3-B: the
+        // limit is the table's (PlatformLimits name.maxLength), the one the preflight lists as PLATFORM_NAME_KEPT before the build.
         var shortType = typeName.Split('.').Last();
-        if (name is { Length: > NameTruncation.MaxLength } && shortType is "IEntityAttribute" or "EntityIndex" or "IEntityIndex")
+        if (name != null && shortType is "IEntityAttribute" or "EntityIndex" or "IEntityIndex" && PlatformLimits.MaxName(shortType) is { } maxName && name.Length > maxName)
         {
             var siblings = shortType == "IEntityAttribute"
                 ? (parent as IObjectSignature)?.Children.Where(c => Implements(c, "IEntityAttribute")).Select(c => TypeResolver.Name(c)).OfType<string>() ?? []
                 : EntityIndexes.Names(parent);
-            var kept = NameTruncation.Truncate(name, siblings);
+            // The preflight's own function (PlatformLimitRules.Check names the same cut from the same siblings).
+            var kept = PlatformLimits.Kept(shortType, name, siblings);
             Report("nameTruncations", (PathOf(parent as IObjectSignature ?? (IObjectSignature)_es) is { Length: > 0 } owner ? owner + "/" : "") + name, name, kept);
             op["name"] = kept; name = kept;
         }
@@ -676,6 +709,10 @@ public sealed partial class ModelSession
         if (name != null && options.Count > 1 && options.Where(o => o.Method.Name.Equals("Create" + name + "Callback", StringComparison.OrdinalIgnoreCase)
                 || o.Method.Name.Equals("Create" + name, StringComparison.OrdinalIgnoreCase)).ToList() is { Count: 1 } named)
             options = named;
+        // R3-B (PlatformLimits asset.format): the format, width and height of an image are facts of its bytes, filled where the
+        // Create form takes them and the job left them out (the Studio's own reading failed on PNGs: "Image format could not be
+        // determined"), and listed; a value the bytes contradict, or bytes of no format this Studio stores, refused.
+        if (args != null) ImageFactsFromBytes(args, options.Select(o => o.Method).ToList(), typeName);
         // Every arg must reach a parameter of the Create form that runs: an arg nobody consumes was dropped in silence before.
         if (args is { Count: > 0 })
         {
@@ -2236,6 +2273,10 @@ public sealed partial class ModelSession
         // Um indice renomeia-se pela classe nativa (SetName), igual nas duas faixas; nada o cita, nada e reescrito.
         if (EntityIndexes.TypeName(target) == "EntityIndex") { var indexBefore = SnapshotAssertions(); var renamedIndex = EntityIndexes.Rename(target, name); AbsorbPlatformRewrites(indexBefore, "rename", renamedIndex["from"]?.ToString(), name); return renamedIndex; }
         var ao = target as ServiceStudio.Model.AbstractObject ?? throw new InvalidOperationException($"{Describe(target)} is not a model object");
+        // R3-B: the name of an attribute is cut as an index's is (PlatformLimits name.attribute); a rename is the author's own
+        // choice of a name, so it is refused with the name the platform would keep, as the index rename is (and the preflight).
+        if (Implements(target, "IEntityAttribute") && PlatformLimits.MaxName("EntityAttribute") is { } maxName && name.Length > maxName)
+            throw new InvalidOperationException(PlatformLimits.RenameMessage("EntityAttribute", name, maxName));
         var prop = NameProperty(target);
         var oldName = NameOf(target, prop) ?? "";
         // A colisao so existe onde o nome e unico entre irmaos. Um Label (If, Assign, ForEach...) repete-se a vontade, e o

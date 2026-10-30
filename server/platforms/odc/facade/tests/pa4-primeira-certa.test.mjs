@@ -56,7 +56,9 @@ test('fitProblems keeps every problem whole when it fits, and groups identical o
   assert.deepEqual(refusalFields(UNION, refusedEnvelope).phases, ['preflight', 'apply', 'verify']);
 });
 
-test('studio_deliver: no job preflight before the capture; the apply over it refuses once with every phase, nothing merged', async t => {
+// R2-F rule 1 (fase4-28/r2-speed, R2-H): the job-alone check runs first, before the capture and the Studio queue; it is the
+// only check-job of the delivery, and what the apply path may add to joins the one refusal (joinPrecheck: phase static).
+test('studio_deliver: the job-alone check precedes the capture; the apply over it refuses once with every phase, nothing merged', async t => {
   const root = tmp(t);
   fs.writeFileSync(path.join(root, 'job.json'), JSON.stringify({ ops: [{ op: 'logic', data: { actions: [] } }] }));
   const calls = [];
@@ -66,12 +68,13 @@ test('studio_deliver: no job preflight before the capture; the apply over it ref
     apply: async () => { calls.push('apply'); return { ok: false, code: 'PREFLIGHT_REFUSED', problems: UNION, verifyRan: true, phases: ['preflight', 'apply', 'verify'], error: 'every phase' }; },
     prepareManifest: async () => { calls.push('manifest'); return { ok: true, manifest: path.join(root, 'm.json') }; } };
   const result = await deliverKernel({ module: 'App', feature: 'pa4', job: 'job.json', owners: ['A'], changes: ['C'] }, deps);
-  assert.deepEqual(calls, ['snapshot', 'apply'], 'captured and applied; neither the job alone nor the Studio write');
+  assert.deepEqual(calls, ['check-job', 'snapshot', 'apply'], 'checked once, captured and applied; never the Studio write');
   assert.equal(result.ok, false); assert.equal(result.failed, 'preflight'); assert.equal(result.code, 'PREFLIGHT_REFUSED');
   assert.deepEqual(result.problems.map(p => p.phase), ['preflight', 'apply', 'verify']);
   assert.deepEqual(result.problems[0].patch, UNION[0].patch);
   assert.equal(result.problems[2].key, 'k1');
-  assert.equal(result.verifyRan, true); assert.deepEqual(result.phases, ['preflight', 'apply', 'verify']);
+  assert.equal(result.verifyRan, true); assert.deepEqual(result.phases, ['preflight', 'apply', 'verify', 'static']);
+  assert.equal(result.problems.length, 3, 'the job-alone problem is one the apply says too: said once'); assert.equal(result.static.joined, 0);
 });
 
 test('studio_deliver: without a capture the job alone answers, with verifyRan false and the reason', async t => {
@@ -83,7 +86,7 @@ test('studio_deliver: without a capture the job alone answers, with verifyRan fa
     check: async () => { calls.push('check-job'); return { ok: false, code: 'PREFLIGHT_REFUSED', problems: [UNION[0]], error: 'pure', verifyRan: false }; },
     apply: async () => { calls.push('apply'); return { ok: true }; }, prepareManifest: async () => ({ ok: true }) };
   const result = await deliverKernel({ module: 'App', feature: 'pa4', job: 'job.json', owners: ['A'], changes: ['C'] }, deps);
-  assert.deepEqual(calls, ['snapshot', 'check-job']);
+  assert.deepEqual(calls, ['check-job', 'snapshot'], 'the check-job before the capture is the one this answer reads');
   assert.equal(result.failed, 'preflight'); assert.equal(result.code, 'PREFLIGHT_REFUSED');
   assert.equal(result.verifyRan, false); assert.match(result.verifyReason, /could not be captured \(App is not attached/);
   assert.equal(result.problems[0].code, 'EXPR_UNKNOWN_IDENTIFIER');

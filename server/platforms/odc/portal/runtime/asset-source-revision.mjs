@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import {authorizationContext} from '../../facade/authorization-context.mjs';
+import {approvalOf,sameGrant,recorded} from './written-approval.mjs';
 import {ASSET_CREATE} from './asset-creation-approval.mjs';
 import {fail} from './errors.mjs';
 const digest=bytes=>crypto.createHash('sha256').update(bytes).digest('hex');
@@ -36,7 +36,7 @@ export async function prepareSourceRevision({input,host,directory,lookup,read}) 
    ||evidence.byteLength!==bytes.length||bytes.subarray(0,3).toString()!=='OML')bad();
  const origin=lookup(originOperationUuid);
  if(!origin||!['accepted','confirmed'].includes(origin.state)||origin.identity?.tenant!==host
-   ||origin.identity.operationId!==ASSET_CREATE||origin.response?.assetKey!==assetKey||!origin.authorization?.source)bad();
+   ||origin.identity.operationId!==ASSET_CREATE||origin.response?.assetKey!==assetKey||!recorded(origin))bad();
  const current=await read(assetKey);
  if(!current?.ok||current.data?.assetKey!==assetKey||current.data.revision!==expectedRevision)
    fail('REVISION_BASE_CHANGED','The latest asset revision differs from the expected source revision. Nothing was sent.');
@@ -56,9 +56,11 @@ export async function prepareSourceRevision({input,host,directory,lookup,read}) 
    if(digest(payload)!==input.candidateSha256||payload.subarray(0,3).toString()!=='OML'||digest(payload)===sha)bad();
    candidateBinding={candidateSha256:input.candidateSha256,candidateProofSha256:digest(proofBytes)};
  }else if(input.candidateSha256)bad();
- const approval=authorizationContext(context,authorize,{lane:'odc',host,operation:ASSET_CREATE,targets:[current.data.name],
+ // R2-I (owner's rule, 28/10): a context file, or the written words naming the asset; the creation receipt, the exact
+ // current revision and the source proof bind the upload as before, and the receipt records the approval.
+ const approval=approvalOf(context,authorize,{lane:'odc',host,operation:ASSET_CREATE,targets:[current.data.name],
    constraints:{assetKey,expectedRevision,sourceSha256:sha,originOperationUuid,...candidateBinding,...(uploadFormat!=='binary'?{uploadFormat}: {})}});
- if(!approval||approval.source.threadId!==origin.authorization.source.threadId||approval.source.messageId!==origin.authorization.source.messageId)bad();
+ if(!approval||!sameGrant(origin.authorization,approval))bad();
  const binary={$base64:payload.toString('base64')};
  return {approval,assetKey,expectedRevision,uploadFormat,
    body:uploadFormat==='multipart'?{creationRequest:{},assetFile:{...binary,filename:'source.oml'}}:binary,

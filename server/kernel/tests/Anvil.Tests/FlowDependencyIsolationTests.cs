@@ -124,11 +124,11 @@ public sealed class FlowDependencyIsolationTests
         Assert.True(refusal.VerifyRan);
         Assert.Contains(refusal.Problems.OfType<JsonObject>(), p => p["phase"]?.ToString() == "verify"
             && p["code"]?.ToString() == "ExpressionInvalidExpressionType" && p["pointer"]?.ToString() == "/ops/1/data/flow/1");
-        var skipped = refusal.Warnings.OfType<JsonObject>().Where(p => p["code"]?.ToString() == "APPLY_SKIPPED").ToList();
-        Assert.Contains(skipped, p => p["pointer"]?.ToString() == "/ops/1/data/flow/0");
-        Assert.Contains(skipped, p => p["pointer"]?.ToString() == "/ops/1/data/flow/2");
-        Assert.Contains(skipped, p => p["pointer"]?.ToString() == "/ops/2/data/flow");
-        Assert.DoesNotContain(skipped, p => p["pointer"]?.ToString() is "/ops/1/data/flow/1" or "/ops/1/data/flow/3");
+        // R2-B (one round): the malformed MissingDependency is written as its stub (its header), so the texts that call it,
+        // directly or through DependentFlow, are written and judged against it: none is skipped, none has a problem of its own.
+        Assert.Contains(refusal.Problems.OfType<JsonObject>(), p => p["code"]?.ToString() == "FLOW_SYNTAX" && p["pointer"]?.ToString() == "/ops/0/data/flow");
+        Assert.DoesNotContain(refusal.Warnings.OfType<JsonObject>(), p => p["code"]?.ToString() == "APPLY_SKIPPED");
+        Assert.DoesNotContain(refusal.Problems.OfType<JsonObject>(), p => p["pointer"]?.ToString() is "/ops/1/data/flow/0" or "/ops/1/data/flow/2" or "/ops/1/data/flow/3" or "/ops/2/data/flow");
         Assert.DoesNotContain(refusal.Problems.OfType<JsonObject>(), p => p["code"]?.ToString() == "CHILD_NOT_FOUND");
         Assert.False(File.Exists(output));
     }
@@ -159,7 +159,7 @@ public sealed class FlowDependencyIsolationTests
         Assert.Contains(problems, p => p["code"]?.ToString() == "FLOW_SYNTAX" && p["pointer"]?.ToString() == "/ops/1/data/flow/0");
         var required = Assert.Single(problems, p => p["code"]?.ToString() == "ArgumentRequiredExpression");
         Assert.Equal("/ops/1/data/flow/2", required["pointer"]?.ToString());
-        Assert.True(required["afterPatch"]?.GetValue<bool>() == true, required.ToJsonString());
+        // R2-B (one round): found by the first round itself (BrokenBody written as its stub), no longer by the patch round.
         Assert.Equal("/ops/1/data/flow/2", required["patch"]![0]!["path"]!.ToString());
         Assert.Contains("Reset=False", required["patch"]![0]!["value"]!.ToString());
         Assert.DoesNotContain(problems, p => p["pointer"]?.ToString() == "/ops/1/data/flow/1");

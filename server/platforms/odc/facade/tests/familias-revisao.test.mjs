@@ -3,7 +3,7 @@
 //      undo the first): each such problem says patchOmitted and why, no verified call is written, and a verified file that
 //      has such a union is refused when it is applied;
 //   4. removal goes the other way of creation: a data text that only drops goes after the parts that change its consumers,
-//      in any order the model wrote them, both lanes; a data text that drops and creates keeps the order it was given.
+//      in any order the model wrote them, both lanes; mixed data with distinct created/dropped names follows dependencies and ranks.
 // Fakes only: no Studio, no worker, no CLI.
 import { isolatedProfile } from './fixtures/isolated-profile.mjs';
 import test from 'node:test';
@@ -71,9 +71,13 @@ test('a data text that only drops goes after the parts that change its consumers
   // A data text that creates goes first, as before.
   const creates = orderParts([{ part: 'logic', text: logic }, { part: 'ddl', text: 'create entity FamBar (\n  Id Long Integer identifier auto required\n);' }]);
   assert.deepEqual(creates.parts.map(p => p.part), ['ddl', 'logic']);
-  // A data text that drops and creates: two places, two readings: the order as given.
+  // Mixed data splits so the consumer rewrite still precedes the drop.
   const mixed = [{ part: 'logic', text: logic }, { part: 'ddl', text: 'create entity FamBar (\n  Id Long Integer identifier auto required\n);\ndrop entity FamFoo;' }];
-  assert.deepEqual(orderParts(mixed), { parts: mixed, moved: false });
+  const split = orderParts(mixed).parts;
+  assert.match(split[0].text, /^create entity FamBar/);
+  assert.equal(split[1], mixed[0]);
+  assert.match(split[2].text, /drop entity FamFoo/);
+  assert.equal(orderParts(mixed).moved, true);
   // A comment that says drop is no drop.
   assert.deepEqual(orderParts([{ part: 'logic', text: logic }, { part: 'ddl', text: '-- drop entity X\ncreate entity FamBar (\n  Id Long Integer identifier auto required\n);' }]).parts.map(p => p.part), ['ddl', 'logic']);
 });

@@ -126,7 +126,7 @@ test('B5 root friction preserves historical small answers and keeps large answer
   };
   const before=store.issues({limit:100,scope:all});assert.ok(Buffer.byteLength(JSON.stringify(before))<4096);
   const small=await client.callTool({name:'ssam_friction',arguments:{view:'issues',limit:100,session:'all'}});
-  assert.deepEqual(small.structuredContent,before);assert.equal(small.content[0].text,JSON.stringify(before));
+  assert.deepEqual(small.structuredContent,before);assert.deepEqual(JSON.parse(small.content[0].text),before);
   for(let i=1;i<10;i++)fixture(i);
   const medium=store.issues({limit:100,scope:all});const mediumBytes=Buffer.byteLength(JSON.stringify(medium));assert.ok(mediumBytes>4096&&mediumBytes<30720);
   await verifyRecovered(await client.callTool({name:'ssam_friction',arguments:{view:'issues',limit:100,session:'all'}}),medium);

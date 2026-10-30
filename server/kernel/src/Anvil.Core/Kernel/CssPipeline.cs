@@ -19,7 +19,10 @@ namespace Anvil.Core;
 /// is never an error.</item>
 /// </list>
 /// The extension point (<see cref="Register"/>) is where T5 (CSS against the predicted runtime DOM) and T10 (the Traditional
-/// vocabulary translated) add their stages: a stage that throws is skipped, never a failed write.
+/// vocabulary translated) add their stages: a stage that throws is skipped, never a failed write. The first stage is R2-D's
+/// "shadowed" (<see cref="CssShadowedRules"/>): a rule that a later rule of the same selectors and context overrides property by
+/// property goes, so a sheet sent again whole (an edit that resends its reading) never doubles, and one already inflated is
+/// cleaned at its next write; each removal is said in cssStages.
 /// </summary>
 public static class CssPipeline
 {
@@ -50,7 +53,7 @@ public static class CssPipeline
     public delegate IEnumerable<Finding> Linter(string css, Context context);
 
     private static readonly object Gate = new();
-    private static List<(string Name, Normalizer? Normalize, Linter? Lint)> _stages = [];
+    private static List<(string Name, Normalizer? Normalize, Linter? Lint)> _stages = [(CssShadowedRules.Stage, CssShadowedRules.Normalize, null)];
 
     /// <summary>The extension point: a named stage (registering the same name again replaces it).</summary>
     public static void Register(string name, Normalizer? normalize = null, Linter? lint = null)
@@ -67,8 +70,10 @@ public static class CssPipeline
 
     /// <summary>The one normalization. <paramref name="canvas"/>: the caller writes the author half of a theme with Theme Editor
     /// CSS of a reactive module (the only place the platform's composition rewrote #reactContainer before); never a Traditional
-    /// sheet, a screen or block of its own, a native-widget install or a verbatim write.</summary>
-    public static Outcome Normalize(string css, Context context, bool canvas = false)
+    /// sheet, a screen or block of its own, a native-widget install or a verbatim write. <paramref name="keepRules"/>: the
+    /// prototype importer's verbatim write (its CSS is the capture's, rule for rule: the fidelity measure counts them), where
+    /// the shadowed stage does not run.</summary>
+    public static Outcome Normalize(string css, Context context, bool canvas = false, bool keepRules = false)
     {
         css ??= "";
         var (text, hoisted, merged, kept) = TopImports(css);
@@ -77,7 +82,7 @@ public static class CssPipeline
         var changes = new List<JsonObject>();
         foreach (var (name, normalize, _) in _stages)
         {
-            if (normalize == null) continue;
+            if (normalize == null || keepRules && name == CssShadowedRules.Stage) continue;
             // A stage that fails is said by name only: its exception text is not the user's business.
             try { if (normalize(text, context, changes) is { } next) text = next; }
             catch (Exception) { changes.Add(new JsonObject { ["stage"] = name, ["skipped"] = true }); }

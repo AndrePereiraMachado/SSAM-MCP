@@ -342,21 +342,25 @@ test('E1/E2 hosted: a licensee\'s ssam_job refusal brings the screen\'s text and
   } finally { await s.close(); }
 });
 
-test('E1 hosted: a screen above the ceiling: the problem names the exact read of its text in the customer\'s workspace, and ssam_evidence returns it', async () => {
+test('E1 hosted: a screen above the ceiling retains an exact text read in the customer workspace', async () => {
   const A = customer();
   const capture = path.join(A.workspace, 'o11', 'snapshots', 'Login.oml');
   const text = screen(Array.from({ length: 900 }, (_, i) => `<div k="w${100 + i}">Linha ${i} do relatorio de pedidos</div>\n`).join(''));
   const s = await jobSession(A, [baseChanged(capture, text)], 'op #0 (html Login): KernelRefusalException: Login is not the reading');
   try {
     const { body, text: raw } = await s.call('ssam_job', { lane: 'o11', job: { ops: [{ op: 'get', target: 'Screen:Login' }] } });
-    assert.ok(Buffer.byteLength(raw) <= 30720, 'under the ceiling: ' + Buffer.byteLength(raw));
-    const marker = body.problems?.[0]?.current?.text;
-    assert.equal(marker?.omitted, true, said(body));
-    assert.match(marker.read.arguments.file, /^ws:o11\//, said(marker));
+    assert.ok(Buffer.byteLength(raw) <= 9216, 'under the ceiling: ' + Buffer.byteLength(raw));
+    const marker = body.problems[0].current.text;
+    assert.equal(marker.omitted, true, said(body));
+    const read = marker.read;
+    assert.equal(read?.tool, 'ssam_evidence', said(body));
+    assert.equal(read.arguments.pointer, '/problems/0/current/text');
+    assert.match(read.arguments.file, /^ws:o11\//, said(read));
     assertNothingReal(raw, A.workspace);
-    let page = (await s.call(marker.read.tool, marker.read.arguments)).body, got = page.value;
+    const textRead = read.arguments;
+    let page = (await s.call(read.tool, textRead)).body, got = page.value;
     assert.equal(page.ok, true, said(page));
-    while (page.next !== undefined) { page = (await s.call(marker.read.tool, { ...marker.read.arguments, offset: page.next })).body; assert.equal(page.ok, true, said(page)); got += page.value; }
+    while (page.next !== undefined) { page = (await s.call(read.tool, { ...textRead, offset: page.next })).body; assert.equal(page.ok, true, said(page)); got += page.value; }
     assert.equal(got, text, 'the exact text of the screen, from the customer\'s own kept answer');
   } finally { await s.close(); }
 });

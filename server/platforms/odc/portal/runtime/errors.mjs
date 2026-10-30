@@ -58,6 +58,8 @@ export class OdcError extends Error {
 }
 
 export function publicError(error) {
+  // R2-I: a written authorization that does not name a target keeps its code, message and the targets it misses.
+  if (error?.name === 'WrittenAuthorizationError' && typeof error.code === 'string') return { code: error.code, message: error.message, ...(error.details ?? {}) };
   if (error?.code === 'AUTHORIZATION_CONTEXT_INVALID')
     return { code: 'AUTHORIZATION_CONTEXT_INVALID', message: 'The approval record does not cover this exact proposal, environment, operation and target. Nothing was sent.' };
   if (['AbortError', 'TimeoutError'].includes(error?.name) || error?.code === 'READ_DEADLINE_EXCEEDED')

@@ -3,6 +3,7 @@ import {APPLICATION_ROLE_GRANT,APPLICATION_ROLE_REVOKE} from './application-role
 import {groupRoleSnapshot} from './group-role-assignment-approval.mjs';
 import {ASSET_CREATE} from './asset-creation-approval.mjs';import {GROUP_CREATE} from './group-approval.mjs';import {USER_CREATE} from './inactive-user-approval.mjs';
 import {fingerprint,isUuid} from './write-journal.mjs';import {ipFilterHash as hash} from './ip-filter-approval.mjs';import {fail} from './errors.mjs';
+import {recorded,sameGrant} from './written-approval.mjs';
 const root='user-access-management-api-v1:',same=(a,b)=>fingerprint(a)===fingerprint(b);
 const complete=p=>Array.isArray(p?.results)&&p.page?.totalResults===p.results.length&&p.page.offset===0&&p.page.nextPageOffset==null;
 const configuration=group=>{const {updatedAt,...value}=group;return value;};
@@ -48,7 +49,7 @@ export async function applicationRoleOverlapApproval({file,words,host,operationI
  if(![APPLICATION_ROLE_GRANT,APPLICATION_ROLE_REVOKE].includes(operationId)||input.body!==undefined||input.query||Object.keys(p).length!==2||!isUuid(p.key)||!isUuid(p.roleKey))bad();
  const origins=[lookup(originOperationUuid),lookup(groupOriginOperationUuid),lookup(userOriginOperationUuid)];
  for(const [i,op,key]of [[0,ASSET_CREATE,'assetKey'],[1,GROUP_CREATE,'key'],[2,USER_CREATE,'key']]){
-  const r=origins[i];if(!r||!['accepted','confirmed'].includes(r.state)||r.identity?.tenant!==host||r.identity.operationId!==op||!isUuid(r.response?.[key])||!r.authorization?.source)bad();
+  const r=origins[i];if(!r||!['accepted','confirmed'].includes(r.state)||r.identity?.tenant!==host||r.identity.operationId!==op||!isUuid(r.response?.[key])||!recorded(r))bad();
  }
  const [appOrigin,groupOrigin,userOrigin]=origins;if(userOrigin.response.key!==p.key)bad();
  const result=await applicationRoleOverlapSnapshot({assetKey:appOrigin.response.assetKey,roleKey:p.roleKey,groupKey:groupOrigin.response.key,userKey:p.key,read});if(!result.ok)bad();
@@ -59,7 +60,7 @@ export async function applicationRoleOverlapApproval({file,words,host,operationI
   ||directKeys.includes(p.roleKey)===assigned)bad();
  const constraints={bodySha256:hash(null),originOperationUuid,groupOriginOperationUuid,userOriginOperationUuid,assetKey:s.app.assetKey,roleKey:p.roleKey,environmentKey:s.group.environmentKey,expectedConfigurationSha256:hash(s)};
  const approval=authorizationContext(file,words,{lane:'odc',host,operation:operationId,environmentKey:s.group.environmentKey,targets:[s.app.name,role.name,s.group.name,s.user.name],constraints});
- if(!approval)bad();for(const r of origins)if(approval.source.threadId!==r.authorization.source.threadId||approval.source.messageId!==r.authorization.source.messageId)bad();
+ if(!approval)bad();for(const r of origins)if(!sameGrant(r.authorization,approval))bad();
  const expectedDirectKeys=assigned?[...directKeys,p.roleKey].sort():directKeys.filter(k=>k!==p.roleKey);
  return{...approval,applicationRoleOverlapExpectation:{before:structuredClone(s),expectedDirectKeys,assigned}};
 }

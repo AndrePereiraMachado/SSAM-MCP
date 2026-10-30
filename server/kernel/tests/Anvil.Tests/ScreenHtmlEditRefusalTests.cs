@@ -154,20 +154,40 @@ public class ScreenHtmlEditRefusalTests(ITestOutputHelper output)
     }
 
     // "set Destination: A OutSystems.Model.IObject cannot be used as the value for the ...Destination property" (15/10): the
-    // name of the event resolved to the server action Login of a reference, nearer than the screen Login. Refused before the
-    // build, on an element of the reading and on a new one, with the screen written as the reading writes it (the patch).
+    // name of the event resolved to the server action Login of a reference, nearer than the screen Login, and was refused with
+    // the screen as the patch. R2-A (NameResolution): the destination is searched among what an event runs or opens, so the
+    // name reaches the screen Login, on an element of the reading and on a new one; the answer lists the form the reading
+    // writes (REFERENCE_CANONICAL), and the platform takes it.
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public void AnEventThatNamesWhatNoEventRunsIsRefusedBeforeTheBuild(bool read)
+    public void AnEventNamesTheScreenOfItsNameBesideANearerActionAndTheAnswerSaysHowTheReadingWritesIt(bool read)
     {
         var edit = read ? new JsonObject { ["set"] = "w11", ["attributes"] = new JsonObject { ["onclick"] = "Login" } } : Insert("after", "w4", "<a onclick=\"Login\">x</a>");
         var (host, bytes, data) = Edit("reactive-ui.oml", "InvalidPermissions", edit);
-        var problem = Assert.Single(Problems(Apply(host, bytes, data, "destination-" + read)));
+        var answer = Apply(host, bytes, data, "destination-" + read);
+        Assert.True(answer["accepted"]!.GetValue<bool>(), answer.ToJsonString());
+        // w11 of the reading already opens the screen Login: the short form names what it has, and nothing is written.
+        if (read) { Assert.Empty(answer["result"]!["ops"]!.AsArray()); return; }
+        Assert.Contains("onclick=\"MobileScreen:Login\"", ReadBack(host, "destination-" + read, "InvalidPermissions"));
+        var note = Assert.Single(Normalized(answer).OfType<JsonObject>(), n => n["code"]?.ToString() == "REFERENCE_CANONICAL");
+        Assert.Equal("Login", note["from"]!.ToString());
+        Assert.Equal("MobileScreen:Login", note["to"]!.ToString());
+        Assert.Contains("ServerActionSignature", note["note"]!.ToString());
+    }
+
+    // R2-A (the review's coverage): an event that names a server action of a reference and no screen or screen action of that
+    // name is still refused before the build, with the nearest destinations, each with its exact attribute.
+    [Fact]
+    public void AnEventThatNamesAServerActionOfAReferenceAndNoDestinationIsRefusedBeforeTheBuild()
+    {
+        var (host, bytes, data) = Edit("reactive-ui.oml", "InvalidPermissions", Insert("after", "w4", "<a onclick=\"User_GetUnifiedLoginUrl\">x</a>"));
+        var problem = Assert.Single(Problems(Apply(host, bytes, data, "destination-server-action")));
         Assert.Equal(ScreenHtmlEdit.NameUnknown, problem["code"]!.ToString());
-        Assert.Contains("'Login' is the ServerActionSignature Login, which an event cannot run", problem["message"]!.ToString());
-        Assert.StartsWith("write onclick=\"MobileScreen:Login\"", problem["fix"]!.ToString());
-        AssertPatchApplies(host, bytes, data, problem, "destination-" + read + "-patched");
+        Assert.Contains("'User_GetUnifiedLoginUrl' is the ServerActionSignature User_GetUnifiedLoginUrl, which an event cannot run", problem["message"]!.ToString());
+        var candidates = Assert.IsType<JsonArray>(problem["candidates"]).OfType<JsonObject>().ToList();
+        Assert.NotEmpty(candidates);
+        Assert.All(candidates, c => Assert.Equal("onclick", c["attribute"]!.ToString()));
     }
 
     // "k="w19" holds a widget the edit does not write" (7 receipts of 12-19/10, still live on 24/10): an element moved into another

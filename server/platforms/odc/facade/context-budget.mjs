@@ -16,3 +16,16 @@ export const maxAnswerBytes = (env = process.env) => {
   return Number.isInteger(n) && n >= 4096 ? Math.min(n, ANSWER_CEILING_BYTES) : ANSWER_CEILING_BYTES;
 };
 export const budgetCeiling = (maxBytes = maxAnswerBytes()) => Math.max(4096, maxBytes - BUDGET_MARGIN_BYTES);
+// The client's cut (BankDash scenario, 2026-10-28): Claude Code keeps an error result of more than 10000 characters as its
+// first and last 5000, so the middle of a long refusal (its problems) never reached the model.
+export const CLIENT_CUT_CHARACTERS = 10000;
+// The one place of the visible ceiling (answer-size.mjs fitAnswer): a refusal, and the content lists
+// (messages, problems, errors, warnings) of any answer, end at most here, below the client's cut with room for its marker.
+// Isolated tests and an operator may lower it through the environment, never raise it.
+export const VISIBLE_ANSWER_BYTES = 9216;
+export const visibleAnswerBytes = (env = process.env) => {
+  const n = Number(env.SSAM_VISIBLE_ANSWER_BYTES);
+  return Number.isInteger(n) && n >= 2048 ? Math.min(n, VISIBLE_ANSWER_BYTES) : VISIBLE_ANSWER_BYTES;
+};
+// A value this small (or any number, boolean or null) is never moved out of an answer: its pointer would cost more than it.
+export const POINTER_FLOOR_BYTES = 256;

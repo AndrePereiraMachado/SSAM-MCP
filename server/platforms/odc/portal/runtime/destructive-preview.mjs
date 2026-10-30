@@ -24,6 +24,7 @@ import * as destructiveOperations from '../../facade/destructive-operations.mjs'
 // the common module; read through the namespace so this file loads with a module that does not have it yet).
 const previewError = (error, items) => (typeof destructiveOperations.withPreviewNote === 'function' ? destructiveOperations.withPreviewNote(error, items) : error);
 import { withValidatedReply } from './owned-cleanup-approval.mjs';
+import { unnamedTargets } from '../../facade/authorization-context.mjs';
 import crypto from 'node:crypto';
 import { DEPLOY, REMOVAL_NAMES, TARGET_NAMES, effectOf, removalsOf } from './effects.mjs';
 import { PORTAL_WRITES } from './portal-routes.mjs';
@@ -130,6 +131,19 @@ function targetNamed(words, names) {
   return [problem('DESTRUCTIVE_TARGET_NOT_NAMED', 'A destructive write needs the owner\'s words to name its target: ' + candidates.join(' | '),
     'the owner\'s reply naming ' + candidates[0], { candidates })];
 }
+
+// R2-I round 2 (the family of the deletes of several items): without an authorizationContext the owner's reply is the
+// approval, so it names, as a whole word, every name the preview told the owner to name (mustName): the target and each
+// item that leaves. One WORDS_MUST_NAME lists what is missing, as removalWrite does. A
+// spec with its own nameRule keeps it; a context file keeps today's rule (its scope covers the names).
+const namesEveryItem = spec => (preview, words) => {
+  if (trimmed(spec.input?.authorizationContext)) return [];
+  // R2-I round 3: the predicate of the tool's written approval (unnamedTargets): each name by its own whole-word occurrence,
+  // longest first, and by its name only (a key the tool would not take never passes here and burns the token there).
+  const missing = unnamedTargets(text(words), (preview.mustName ?? []).map(text));
+  return missing.length ? [problem('WORDS_MUST_NAME', `The owner's reply does not name ${missing.length} of the ${(preview.mustName ?? []).length} name(s) of this preview: ${missing.join(', ')}.`,
+    'the owner\'s reply that states the number and names every listed item', { targets: missing, missing })] : [];
+};
 
 export const unguarded = access => access?.[UNGUARDED] ?? access;
 // CX15 r3 (CT-4): the ends of records this process could not write, by operationId (written at the next call of the token).
@@ -257,7 +271,7 @@ export function destructiveGuard(access, deps = {}) {
           const e = seen?.error && typeof seen.error === 'object' ? seen.error : { code: seen?.code, message: text(seen?.error) };
           extra.push(problem(seen?.code ?? e.code ?? 'TARGET_UNREADABLE', (e.message || 'The target could not be read again') + ' Nothing was sent.', 'read the target again; a new preview when it changed'));
         }
-        check = checkExecute({ ...common, current, nameRule: spec.nameRule ?? null, ...(record ? { begun: record } : {}) });
+        check = checkExecute({ ...common, current, nameRule: spec.nameRule ?? namesEveryItem(spec), ...(record ? { begun: record } : {}) });
       }
       const problems = [...check.problems, ...extra];
       const known = check.preview;
@@ -430,11 +444,11 @@ export function destructiveGuard(access, deps = {}) {
       operation: summarizeOperation(record, { root }),
       ...(record.state === 'completed' ? {} : { continuation: previewStep(spec, host, 'A new preview lists what is left; the owner confirms it with a new token.', known) }) };
   }
-  // The typed deletes of own fixtures run only with their contextual approval: missing, the execution refuses before the
-  // token is spent (the unguarded tool would refuse it too, after the token was spent).
-  const contextRequired = (clean, what, { origin = false } = {}) => () => [
-    ...(clean.authorizationContext ? [] : [problem('AUTHORIZATION_CONTEXT_INVALID', what + ' runs only with the contextual approval of the owned fixture (authorizationContext). Nothing was sent.',
-      'authorizationContext: the approval written after this preview, whose words are the owner\'s reply', { path: '/authorizationContext' })]),
+  // The typed deletes of own fixtures (R2-I, owner's rule of 28/10): the owner's reply to the preview is the approval (the
+  // unguarded tool records it, bound to the creation receipt); a context file is still accepted, never required. Without
+  // one, the reply also passes the tenant guard here. A missing origin refuses before the token is spent.
+  const contextRequired = (clean, what, { origin = false } = {}) => (host, words) => [
+    ...(clean.authorizationContext ? [] : tenantProblems(raw.tenantInfo(host), words, clean.confirmTenant)),
     ...(!origin || /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(text(clean.originOperationUuid)) ? []
       : [problem('INPUT_INVALID', what + ' needs originOperationUuid, the receipt that created the fixture.', 'originOperationUuid of its successful test/create receipt', { path: '/originOperationUuid' })])];
 
@@ -756,9 +770,10 @@ export function destructiveGuard(access, deps = {}) {
     };
     return run({ tool: 'odc_portal_write', input, operation: clean.operationId, target: keyOf(clean.input), request,
       base: without(clean, CALL_ONLY), read,
-      tenantRule: () => (clean.authorizationContext || options.externalLibraryParent || options.preparedConnectionApproval ? []
-        : [problem('DESTRUCTIVE_TARGET_NOT_NAMED', 'odc_portal_write has no target argument: ' + clean.operationId + ' runs only with the contextual approval of an own fixture (authorizationContext).',
-          'authorizationContext: the approval of this own fixture, bound to its creation receipt', { candidates: [] })]),
+      // R2-I: the owner's reply is the approval of an own fixture's delete (the unguarded tool binds it to the creation
+      // receipt and the target's names); without a context file it also passes the tenant guard here.
+      tenantRule: (host, words) => (clean.authorizationContext || options.externalLibraryParent || options.preparedConnectionApproval ? []
+        : tenantProblems(raw.tenantInfo(host), words, clean.confirmTenant)),
       backup: async (item, { host, operationId, preview }) => {
         const seen = await read(host, preview);
         if (!seen?.ok || !seen.detail) throw new OdcError('DETAIL_UNREADABLE', 'The detail of ' + item.name + ' could not be read again.');

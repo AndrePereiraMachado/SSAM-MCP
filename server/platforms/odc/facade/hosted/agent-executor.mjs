@@ -21,8 +21,9 @@ import { startRelay } from './o11-relay.mjs';
 import { studioIdentity, studioRefusal } from '../studio-identity.mjs';
 import { studioScope } from './studio-scope.mjs';
 
-// The machine kinds of 4.4 this executor forwards; file.* stay between the mirror and the agent.
-export const AGENT_KINDS = Object.freeze(['studio.processes', 'odc.pipe', 'odc.attach', 'o11.bridge', 'o11.connect', 'o11.selected']);
+// The machine kinds of 4.4 this executor forwards (call-kinds.mjs MACHINE_KINDS); file.* stay between the mirror and the agent.
+import { MACHINE_KINDS } from '../call-kinds.mjs';
+export const AGENT_KINDS = MACHINE_KINDS;
 // servidor/fase4-24 (R3 of PLANO-24-PRODUCAO): the private transports of the 24th release never cross machines. Their
 // bridge commands hand a session or a vault secret over a local pipe of the machine that runs SSAM (Ssam.PrivateTransport)
 // or read the vault of that machine: refused here, before anything is staged or sent, whatever path asked for them

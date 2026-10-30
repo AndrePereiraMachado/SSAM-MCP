@@ -15,3 +15,8 @@ export function fakeAnvil(handlers = {}) {
   runAnvil.calls = calls;
   return runAnvil;
 }
+
+// R2-F (rule 1): a phased o11_deliver runs the kernel's pure check-job before the module guard and the Studio queue, through
+// the cycle's checkRunner, and refuses a check without a verdict (PREFLIGHT_UNAVAILABLE). A fixture whose job the static check
+// accepts passes this as the cycle's checkRunner (R2-F's own fixtures do the same: hosted-fix-continuation.test.mjs).
+export const validPreflight = async () => ({ ok: true, exitCode: 0, envelope: { ok: true, command: 'check-job', data: { valid: true } } });

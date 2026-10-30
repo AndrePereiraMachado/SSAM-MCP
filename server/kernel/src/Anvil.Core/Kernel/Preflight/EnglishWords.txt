@@ -1,0 +1,71 @@
+# EnglishWords.txt: the fixed dictionary of N1_ABBREVIATION (AbbreviationRules.Dictionary), shipped as data.
+# Common, whole English words (general and business vocabulary, lower case, whitespace separated), written for SSAM on
+# 2026-10-29. A word of a name found here is a word, never an abbreviation (Add of Address, Log of Login, Pay of Payment).
+# What is NOT here on purpose: shortenings, even common ones (info, app, admin, config, temp, max, min, doc, calc), and
+# letters alone. Adding a shortening here would hide real abbreviations; adding a whole word is always safe (the rule
+# then says less, never something wrong).
+a able about above accept access account act action active activity actual add address adjust admit adopt advance
+advice affect after again against age agency agent ago agree agreement ahead aid aim air alarm alert alias align alive
+all allow almost alone along already also alter always amount an analysis and animal annual another answer any anyone
+anything apart appear apply approach approve area argue arm army around arrange arrival arrive art article artist as ask
+assess asset assign assist assume at attach attack attempt attend attention attribute audit author available avoid
+await award aware away back background bad bag balance ball band bank bar base basic basis batch be bear beat because
+become bed before begin behind being belief believe bell belong below benefit best better between big bill bind bird
+birth bit black blank block blood blue board boat body bond book boot border born borrow both bottom bound box branch
+brand break brief bright bring broad broken brother brown budget build building bulk bundle burn business busy but buy
+by cache call calm camera camp campaign can cancel capital car card care career carry case cash cast catch category
+cause cell center central century certain chain chair challenge chance change channel chapter charge chart chat cheap
+check child choice choose church circle citizen city civil claim class clean clear client climb clock close cloud club
+coach coast code coin cold collect college color column combine come comfort command comment commit common community
+company compare complete complex compute concern condition confirm connect consider contact contain content context
+continue contract control convert cook cool copy core corner correct cost could count counter country county couple
+course court cover create credit crew crime cross crowd cup current customer cut cycle daily damage dark data date
+daughter day dead deal dear death debit debt decide decision declare deep default defend define degree delay delete
+deliver delivery demand deny depend deposit describe design desk detail detect develop device die differ digit dinner
+direct direction director dirty discount discover display distance divide do doctor dog door double doubt down draft
+draw dream dress drink drive drop due during duty each early earn earth east easy eat edge edit effect effort eight
+either elect element else email empty enable end energy engine enjoy enough ensure enter entire entity entry equal
+error escape estate even evening event ever every exact exam example except exchange exist exit expand expect expense
+expert expire explain export express extend extra eye face fact factor fail fair fall false family far farm fast fat
+father fault fear feature fee feed feel female few field fight figure file fill film filter final find fine finger
+finish fire firm first fish fit five fix flag flat flight floor flow fly focus folder follow food foot for force
+foreign forget form format former forward four frame free fresh friend from front fruit fuel full fun fund future gain
+game gap garden gas gate gather general generate get gift girl give glass global go goal gold good grade grant graph
+great green ground group grow growth guard guess guest guide gun hair half hall hand handle hang happen happy hard has
+hat have he head health hear heart heat heavy hello help her here hide high hint hire his history hit hold hole holiday
+home hope horse host hot hotel hour house how huge human hundred hurt idea identity if ignore image impact import in
+include income increase index indicate industry inform initial input insert inside install instance instead insure
+intent interest into invite invoice involve iron is issue it item its job join joint judge jump just keep key kid kind
+king kitchen know label labor lack lady land language large last late later launch law lay layer lead leader learn
+least leave left leg legal less lesson let letter level library license lie life lift light like limit line link list
+listen little live load loan local lock log login long look loop lose loss lost lot love low machine main maintain
+major make male man manage manager many map mark market master match material matter may me mean measure media medium
+meet meeting member memory mention menu merge message metal method middle might mile military milk mind minute miss
+mobile mode model modern modify module moment money month more morning most mother motion mount mouse move movie much
+music must my name nation natural nature near need network never new news next nice night nine no node none nor normal
+north not note nothing notice now null number object occur of off offer office officer often oil old on once one only
+onto open operate option or order other our out output outside over owner own pack package page pain paint pair panel
+paper parcel parent park part partner party pass past path patient pattern pay payment peace people per percent
+perform period permit person phone photo pick picture piece pin place plan plant plate play player please plus point
+police policy pool poor popular port position post pound power practice prepare present press pressure price print
+prior private problem process produce product profile profit program project promise proof property protect prove
+provide public publish pull purchase purpose push put quality quarter query question queue quick quiet quite quote race
+radio raise range rank rate rather reach read ready real reason receive recent record red reduce region register reject
+release remain remember remote remove render renew rent repair repeat replace reply report request require reserve reset
+resolve resource respond rest result retail retry return reveal review reward rich ride right ring rise risk road rock
+role roll room root round route row rule run safe sale same sample save say scale scan scene school score screen search
+season seat second secret section sector security see seek select sell send sense series serve server service session
+set settle seven several shape share she sheet shift ship shop short shot should show side sign signal simple since
+single sister sit site six size skill skip sky sleep slow small smart smile so social soft soldier some son song soon
+sort sound source south space speak special speed spend split sport spot spring staff stage stand standard star start
+state statement station status stay step still stock stone stop store story street strong student study style subject
+submit success such suggest suit summary summer sun supply support sure surface switch system table tag take talk
+target task tax teach team tell ten term test text than thank that the their them then theory there these they thing
+think third this those though thought three through throw ticket tie time tip title to today together token too tool
+top topic total touch tour toward town track trade train transfer tree trial trip true trust try turn twice two type
+under unit until up update upon upload us use user valid value very view visit voice vote wait walk wall want war warm
+warn wash watch water way we wear week weight well west what when where whether which while white who whole why wide
+wife will win window winter wish with within without woman word work worker world worry would write wrong yard year yes
+yet you young your zero zone
+sum net tab cart bid zip sync hash cap cat bin bus cab fax hub jar kit lab lap lid mat mix pad pen pet pot ray rod rug tap tea toy van web wire
+bet bow bulk cable chip clip cost crop dial disk dock dot dump fold fork gear grid hook hub icon jet lane lens mail mesh mint mode nest pact peer pile pipe plot poll pump rack rail reel rib ride rim ring seal shelf slot snap spin stack stamp step stub swap tank tile toll tray tube vault wage wave yield

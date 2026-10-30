@@ -652,12 +652,22 @@ sem regra nenhuma (o CSS do protótipo foi dado só no primeiro documento), e as
 chaves. Código: `ScreenDocument.Fidelity.cs` (sem módulo) e `Verbs.ScreenDocument.Fidelity.cs` (o compilador e as conferências);
 a regra das ligações é uma só, `ScreenHtml.Run`/`Unsugar`, a mesma da forma documento e do decodificador (C1, C2).
 
-- **CSS.** Todo `<style>` do documento, onde estiver (filho da raiz, dentro de um `div`, dentro de um `<Block>`), e o
-  `data.css` do op vão para a folha da própria tela ou bloco, na ordem do documento, como escritos (um bloco só é exatamente o
-  seu texto: a leitura o escreve de volta como um `<style>`). `<style scope="theme">` vai para o tema padrão do módulo, como
+- **CSS.** Sem `data.css`, todo `<style>` do documento, onde estiver (filho da raiz, dentro de um `div`, dentro de um
+  `<Block>`), vai para a folha da própria tela ou bloco, na ordem do documento, como escrito (um bloco só é exatamente o seu
+  texto: a leitura o escreve de volta como um `<style>`). **Mudança de contrato (R2-D, decisão do dono de 28/10/2026):** o
+  `data.css`, quando vem, É a folha inteira, como escrito: substitui os `<style>` do documento (nunca é somado a eles; quando
+  diferem, `CSS_STYLE_REPLACED` em `normalized`) e, numa edição, substitui a folha que a tela tem (reenviar a folha lida não a
+  dobra; uma regra omitida sai). Um op de edição só com `css` (sem `edit`/`edits`) é válido e muda só a folha. A resposta traz
+  `styleSheet: {bytesBefore, bytesAfter, rulesAdded, rulesRemoved}`. Toda gravação de folha passa pela etapa `shadowed` do
+  `CssPipeline`: uma regra sai quando uma regra POSTERIOR com os mesmos seletores e o mesmo contexto de at-rules repete
+  cada declaração dela (o mesmo valor, ou o mesmo exceto o que as URLs nomeiam; custom property; inherit/initial/unset) com
+  importância maior ou igual: a regra estrita, que não muda o resultado em nenhum navegador (`cssStages` diz quais regras
+  saíram). Um `data.css` vazio ou só de espaços é ausência de `data.css`. Uma imagem
+  `data:` em base64 no CSS vira imagem do módulo, referenciada pela URL dela (O11; no ODC fica como escrita, com o motivo).
+  `<style scope="theme">` vai para o tema padrão do módulo, como
   escrito, entre os marcadores da raiz (`/* anvil:html <Raiz> */`, uma segunda compilação troca o bloco). `type="text/css"`,
-  `id` e `nonce` não mudam nada. Outro atributo não tem lugar: `HTML_STYLE_UNPLACED`; com `media` o patch leva o CSS para o fim
-  do `data.css` como o seu bloco `@media`. CSS que o tema não renderiza (`light-dark()`, `color-mix()`), no `<style>` ou no
+  `id` e `nonce` não mudam nada. Outro atributo não tem lugar: `HTML_STYLE_UNPLACED`; com `media` o patch escreve o CSS como o
+  seu bloco `@media`: no fim do `data.css` quando o op traz um, senão num `<style>` simples. CSS que o tema não renderiza (`light-dark()`, `color-mix()`), no `<style>` ou no
   `data.css`, é `CSS_FUNCTION_UNSUPPORTED` com a folha renderizada no patch (o mesmo do `data.css` e do `set StyleSheet`). O
   patch é um só (o documento corrigido e o `data.css`) e é conferido antes de ser oferecido.
 - **Ligações.** Uma linha com texto e ligações é uma Expression, a concatenação: o literal entre aspas (aspas dobradas), a

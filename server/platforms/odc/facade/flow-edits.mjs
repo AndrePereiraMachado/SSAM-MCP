@@ -150,7 +150,10 @@ export function expandEditPart(p, lane, { readReading = loadFlowReading } = {}) 
     { continuation: { tool: 'ssam_code', arguments: { lane, action: 'read', part: 'logic', ...(p.module ? { target: p.module } : {}), element: p.element ?? 'X' }, why: 'read the action before editing its lines' } });
   if (!reading) return { part: null, problems, notes };
   const a = reading.action, e = p.element;
-  if (e != null && !(typeof e === 'string' && [a.key, '@' + a.key, a.name].includes(e) || typeof e === 'string' && (e.endsWith('/' + a.name) || e.endsWith('.' + a.name)))) add(`element does not match read action ${a.name} (@${a.key})`);
+  const normalizedName = value => String(value).replaceAll('.', '/');
+  const suffixMatches = typeof e === 'string' && normalizedName(a.name).endsWith('/' + normalizedName(e));
+  if (suffixMatches) notes.push({ rule: 'action-path', at: '/' + baseAt + 'element', note: 'The action suffix was resolved against the pinned reading: ' + a.name });
+  if (e != null && !suffixMatches && !(typeof e === 'string' && [a.key, '@' + a.key, a.name].includes(e) || typeof e === 'string' && (e.endsWith('/' + a.name) || e.endsWith('.' + a.name)))) add(`element does not match read action ${a.name} (@${a.key})`);
   const result = applyFlowEdits(reading.text, p.edits);
   problems.push(...result.problems.map(q => ({ ...q, at: baseAt + q.at })));
   if (problems.length) return { part: null, problems, notes };

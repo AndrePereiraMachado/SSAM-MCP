@@ -394,7 +394,7 @@ const ROUTES = {
     rules: ['Write the screen as ssam_map view html reads one: the same tags, attributes, names and os-<Property>; data by <aggregate> or a data action (filter, sort, join and max in the aggregate), never JavaScript or JSON.',
       'U1: a condition is <div if>/<div else>, never os-Visible; a new Visible, script or foreign iteration (v-for...) is refused with the patch.',
       'Reuse the app\'s blocks and the OutSystems UI classes first; a table first, no ornament (no card or icon tiles unless asked).',
-      'CSS: a <style> of the document is that screen\'s style sheet, as written (or data.css); CSS several screens share goes once in <style scope="theme">. A line of text with bindings ("Hoje · {{ X }}") is one Expression; a class without a rule comes back as a warning.',
+      'CSS: the <style> of the document is that screen\'s style sheet, as written; data.css, when sent, IS the whole sheet and replaces the <style> (never added to it); CSS several screens share goes once in <style scope="theme">. A line of text with bindings ("Hoje · {{ X }}") is one Expression; a class without a rule comes back as a warning.',
       'Several screens: one html op per screen in the same job; navigation between them resolves by name.'],
   },
   'ui.screen-html-edit': {
@@ -407,7 +407,8 @@ const ROUTES = {
     slots: { Screen: 'the screen or block read (name, Kind:Name or @key)', edit: 'only the elements that changed, each whole with its k (an If with its <div else>; the <style> alone); a new element has no k; a removed one is left out of its parent; an element with its k under another parent moves there' },
     rules: ['Read once, edit in context: two calls (the read and this delivery); never resend the whole screen to change one element.',
       'Everything not sent keeps its ObjectKey; the answer brings the next basedOn for a second correction.',
-      'An existing Visible, ForEach or JavaScript is kept and listed; a new one is refused with the patch (an If, a List action, a named client action).'],
+      'An existing Visible, ForEach or JavaScript is kept and listed; a new one is refused with the patch (an If, a List action, a named client action).',
+      'CSS: data.css is the whole style sheet of the screen, as written: it replaces the sheet the screen has (send the whole sheet; a rule left out is removed), and an op with only css (no edit) changes only the sheet; the answer\'s styleSheet says bytesBefore, bytesAfter, rulesAdded and rulesRemoved.'],
   },
   'data.ddl': {
     title: 'Data of the module (entities, attributes, static entities, structures, indexes, variables, timers) as ssam-ddl/1 text',

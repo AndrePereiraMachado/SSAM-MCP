@@ -93,7 +93,9 @@ test('hosted o11_deliver: the fix call is the explicit patch over the same based
   const runAnvil = fakeAnvil({ deliver: () => replies.shift() });
   const server = await runWithExecutor(context, () => createSsamServer({ odc: false, hosted: { context, session: { agent: context.agent, lanes: context.lanes },
     presentation: { workspace: context.workspace, serverRoots: serverRoots({ tmp: '' }) } },
-    deps: { cycle: { root: context.workspace, env: { USERPROFILE: root, LOCALAPPDATA: root }, runAnvil, assertSelected: async () => {}, tasksDir: path.join(context.workspace, 'o11', 'tasks'), lastPublication: async () => null },
+    deps: { cycle: { root: context.workspace, env: { USERPROFILE: root, LOCALAPPDATA: root }, runAnvil,
+      checkRunner: async () => ({ envelope: { ok: true, data: { valid: true } } }),
+      assertSelected: async () => {}, tasksDir: path.join(context.workspace, 'o11', 'tasks'), lastPublication: async () => null },
       lock: { o11Root: root, odcRoot: root, connection: () => null } } }));
   const call = await connect(t, server);
   // the job as a file of the customer's workspace, as a hosted model sends it

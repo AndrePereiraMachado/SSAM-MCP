@@ -257,6 +257,29 @@ internal static class ScreenHtmlNative
     }
 
     public const string ImageFileName = "IMG_FILE_IMAGE", ImageFileUnknown = "HTML_IMAGE_FILE", ImageBindingType = "HTML_IMAGE_BINDING";
+    public const string ImagePathImage = "IMG_PATH_IMAGE", ImagePathExpression = "IMG_PATH_EXPRESSION";
+
+    private static readonly Regex Dotted = new(@"^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)+$", RegexOptions.Compiled);
+
+    /// <summary>The names of a path with dots (two or more identifiers), else null.</summary>
+    internal static string[]? DottedPath(string value) => Dotted.IsMatch(value.Trim()) ? value.Trim().Split('.') : null;
+
+    /// <summary>Why a name is a root an expression of the page reads there (null when it is none): data of the page (a variable,
+    /// input or aggregate of the document, a data action its root names in data-actions, the alias of a list around the element)
+    /// or a root of the module's values in this lane, any case (Anvil.Core.Preflight.ExpressionRoots: Client, Session, Entities,
+    /// Site in O11, Settings in ODC...; never Images, the image reading, nor a word of the language).</summary>
+    private static string? ExpressionRoot(string name, ScreenHtml.Node node, Context context)
+    {
+        if (Anvil.Core.Preflight.ExpressionRoots.IsValueRoot(name, Anvil.Core.ElementWidgetMap.CurrentPlatform)) return name + " is a root of the module's values";
+        if (context.Data(name) != null) return name + " is data of the page";
+        for (var up = context.Parent(node); up != null; up = context.Parent(up))
+        {
+            if (string.Equals(up.Get("as"), name, StringComparison.OrdinalIgnoreCase)) return name + " is the row of a list around it";
+            if ((up.Get("data-actions") ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Any(n => string.Equals(n, name, StringComparison.OrdinalIgnoreCase))) return name + " is data of the page";
+        }
+        return null;
+    }
 
     private static void Image(ScreenHtml.Node node, ScreenHtml.Node? read, Func<string, bool> isReference, Outcome outcome, Context context)
     {
@@ -283,6 +306,39 @@ internal static class ScreenHtmlNative
             // Said once: the compile does not read the file name again as a name of the module.
             node.Attributes.RemoveAll(a => a.Key == "src");
             return;
+        }
+        // R2-C: a path with dots (Images.Logo, GetData.Photo, Client.Logo, Rows.List.Current.Row.LogoUrl) is no file name, no URL
+        // and no name of one element. It has two readings: the module image its last name names, and the expression it is when
+        // its first name is a root an expression reads there (data of the page, or a qualifier of the module's values: Client,
+        // Site, Settings). Exactly one: written so and listed (IMG_PATH_IMAGE, IMG_PATH_EXPRESSION; the expression then goes on as
+        // a binding of src, chosen by its type); both: refused with the two; none: the compile says what is unknown.
+        if (!ScreenHtml.HasBinding(src) && type == null && !isReference(src.Trim()) && DottedPath(src) is { } segments)
+        {
+            var path = src.Trim();
+            var images = context.Images?.Invoke()?.Distinct(StringComparer.OrdinalIgnoreCase).Where(i => string.Equals(i, segments[^1], StringComparison.OrdinalIgnoreCase)).ToList() ?? [];
+            var image = images.Count == 1 ? images[0] : isReference("Image:" + segments[^1]) ? segments[^1] : null;
+            var root = ExpressionRoot(segments[0], node, context);
+            if (image != null && root != null)
+            {
+                outcome.Problems.Add((Anvil.Core.ScreenDocument.NameAmbiguous, node.Line, node.Column,
+                    $"<img src=\"{Clip(path)}\"> has two readings: the module image {image} (its last name) and the expression {{{{ {Clip(path)} }}}} ({root})",
+                    $"write src=\"{image}\" for the image, or src=\"{{{{ {Clip(path)} }}}}\" for the expression"));
+                node.Attributes.RemoveAll(a => a.Key == "src");
+                return;
+            }
+            if (image != null)
+            {
+                node.Attributes[node.Attributes.FindIndex(a => a.Key == "src")] = new("src", image);
+                Note(outcome, ImagePathImage, node, "src", src, image, $"a path with dots in src names the module image of its last name ({image}), and no expression here reads {segments[0]}");
+                return;
+            }
+            if (root != null)
+            {
+                var binding = "{{ " + path + " }}";
+                node.Attributes[node.Attributes.FindIndex(a => a.Key == "src")] = new("src", binding);
+                Note(outcome, ImagePathExpression, node, "src", src, binding, $"a path with dots in src whose first name is read by an expression here ({root}) is that expression, and no module image is named {segments[^1]}: src binds it");
+                src = binding;
+            }
         }
         var reference = !ScreenHtml.HasBinding(src) && isReference(src.Trim());
         if (reference) {

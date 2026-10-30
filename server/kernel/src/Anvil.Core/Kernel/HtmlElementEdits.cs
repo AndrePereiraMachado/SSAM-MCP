@@ -174,7 +174,14 @@ public static class HtmlElementEdits
     /// <summary><see cref="Apply(string, JsonArray, IReadOnlyDictionary{string, string}?)"/> with the edit that touched each k
     /// (<paramref name="editOf"/>: k of the base -> index of the edit), for the problems of the plan that name a k.</summary>
     public static (string Document, List<JsonObject> Problems, List<string> Touched) Apply(string baseText, JsonArray edits, IReadOnlyDictionary<string, string>? keyTable, out Dictionary<string, int> editOf)
+        => Apply(baseText, edits, keyTable, out editOf, out _);
+
+    /// <summary>The same, with the with texts of find edits whose loose &amp; or &lt; were written as their entity where they land
+    /// (R2-C, HTML_TEXT_ESCAPED: the index of the edit and what was escaped).</summary>
+    public static (string Document, List<JsonObject> Problems, List<string> Touched) Apply(string baseText, JsonArray edits, IReadOnlyDictionary<string, string>? keyTable,
+        out Dictionary<string, int> editOf, out List<(int Edit, Anvil.Core.Preflight.HtmlLooseText.Escaped Escaped)> escapedWith)
     {
+        var escapes = escapedWith = [];
         var problems = new List<JsonObject>();
         var read = Read(edits, problems);
         var touched = new List<string>();
@@ -193,11 +200,11 @@ public static class HtmlElementEdits
             if (edit == null) continue;
             var before = problems.Count;
             var mark = touched.Count;
-            try { Plan(b, edit, spans, claims, keysWritten, touched, problems, setBesideMove); }
+            try { Plan(b, edit, spans, claims, keysWritten, touched, problems, setBesideMove, escapes); }
             catch (FormatException error) {
                 problems.Add(Problem(At(edit), ScreenHtmlEdit.Invalid, error.Message, "every element closes (or is <x/>), every attribute value is quoted, & is written &amp; and < inside text &lt;"));
             }
-            if (problems.Count > before) { spans.RemoveAll(s => s.Edit == edit.Index); claims.RemoveAll(c => c.Edit == edit.Index); touched.RemoveRange(mark, touched.Count - mark); }
+            if (problems.Count > before) { spans.RemoveAll(s => s.Edit == edit.Index); claims.RemoveAll(c => c.Edit == edit.Index); touched.RemoveRange(mark, touched.Count - mark); escapes.RemoveAll(e => e.Edit == edit.Index); }
             else foreach (var k in touched.Skip(mark)) editOf.TryAdd(k, edit.Index);
         }
         Overlaps(b, claims, problems);
@@ -374,8 +381,23 @@ public static class HtmlElementEdits
 
     // ---- the plan of one edit -------------------------------------------------------------------------------------------
 
+    // R2-C: whether [start, end) of the reading touches raw text, where HTML reads no character reference and no tag: the inside
+    // of a <style> or a <script>, or a comment. A with written there is kept as written (valid CSS such as &:hover, a range
+    // query (width < 600px) or content: "R & D" means what it says).
+    private static bool TouchesRawText(Base b, int start, int end)
+    {
+        foreach (var e in b.Text.Elements())
+            if ((e.Tag.Equals("style", StringComparison.OrdinalIgnoreCase) || e.Tag.Equals("script", StringComparison.OrdinalIgnoreCase)) && !SelfClosed(b, e)
+                && start < CloseStart(b, e) + 2 && end > e.OpenEnd - 1) return true;
+        for (var open = b.Source.IndexOf("<!--", StringComparison.Ordinal); open >= 0 && open < end; open = b.Source.IndexOf("<!--", open + 4, StringComparison.Ordinal)) {
+            var close = b.Source.IndexOf("-->", open + 4, StringComparison.Ordinal);
+            if (close < 0 || close + 3 > start) return true;
+        }
+        return false;
+    }
+
     private static void Plan(Base b, Edit edit, List<Span> spans, List<Claim> claims, List<(int, string)> keysWritten, List<string> touched, List<JsonObject> problems,
-        Dictionary<HtmlText.Element, Edit> setBesideMove)
+        Dictionary<HtmlText.Element, Edit> setBesideMove, List<(int Edit, Anvil.Core.Preflight.HtmlLooseText.Escaped Escaped)> escapes)
     {
         var j = edit.Index;
         var order = 0;
@@ -399,6 +421,12 @@ public static class HtmlElementEdits
                     if (found.Count > 10) problem["occurrences"] = found.Count;
                     problems.Add(problem);
                     return;
+                }
+                // R2-C (HTML_TEXT_ESCAPED): the with lands where the find is; there, and only when that place is HTML (text or a
+                // tag), a loose & or < is the character and is written as its entity. Raw text keeps the with as written.
+                if (!TouchesRawText(b, found[0], found[0] + find.Length) && Anvil.Core.Preflight.HtmlLooseText.Escape(with) is { } escaped) {
+                    escapes.Add((j, escaped));
+                    with = escaped.Text;
                 }
                 // CX16 r2 (M2): the k of an element is its identity. A with that drops, adds or changes a k of the text it replaces
                 // would make a new element (another ObjectKey: a change the Studio made there is lost on a rebase). CX16 r3 (M5): the

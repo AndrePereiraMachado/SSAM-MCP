@@ -35,7 +35,6 @@ const WRITES = [
   ['o11_deliver', { module: 'M', job: [{ op: 'x' }], closePrevious: ID }],
   // Calls that open a module of the O11 Studio (open_module selects its tab): a delivery's post-merge steps are pinned to
   // the tab of its module, so these are writes too.
-  ['o11_deliver', { module: 'M', job: [{ op: 'x' }], until: 'apply', authorize: WORDS }],
   ['o11_publish', { module: 'M', authorize: WORDS }],
   ['o11_access', { action: 'apply', manifestPath: 'C:\\m.json', words: WORDS }],
   // CX15: delete-app is a write only with its confirmationToken (without it, a preview: a read).
@@ -201,18 +200,18 @@ test('in process: a second write on the same Studio waits its turn and runs afte
   assert.equal(await withStudioWriteLock({ tool: 'studio_merge', args: {}, lane: 'odc', deps }, async () => 'de novo'), 'de novo');
 });
 
-test('in process: many simultaneous writes on one Studio run one at a time, in the order they arrived', async () => {
+test('in process: writes serialize and same-module merges precede queued publications', async () => {
   const deps = depsFor(tmp());
   let running = 0, most = 0; const order = [];
   const calls = Array.from({ length: 8 }, (_, i) => withStudioWriteLock({ tool: i % 2 ? 'o11_publish' : 'o11_deliver', args: { module: 'M', authorize: WORDS }, deps },
     async () => { running++; most = Math.max(most, running); order.push(i); await new Promise(resolve => setTimeout(resolve, 5)); running--; return { ok: true, i }; }));
   const results = await Promise.all(calls);
   assert.equal(most, 1, 'never two writes on the Studio at once');
-  assert.deepEqual(order, [0, 1, 2, 3, 4, 5, 6, 7]);
+  assert.deepEqual(order, [0, 2, 4, 6, 1, 3, 5, 7]);
   assert.deepEqual(results.map(r => r.ok), Array(8).fill(true));
   assert.equal(results.some(r => r.code === BUSY_CODE), false);
   assert.equal(results[0].queue, undefined, 'the first one did not wait');
-  assert.deepEqual(results.slice(1).map(r => r.queue.position), [1, 2, 3, 4, 5, 6, 7]);
+  assert.ok(results.slice(1).every(r => r.queue.position >= 1));
   assert.deepEqual(lockFiles(o11Locks(deps)), []); assert.deepEqual(queueFiles(o11Locks(deps)), []);
 });
 

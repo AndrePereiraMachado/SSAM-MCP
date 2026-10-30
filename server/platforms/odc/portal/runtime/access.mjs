@@ -69,7 +69,7 @@ import path from 'node:path';
 // tenant guard, and is never resent: an uncertain outcome is reconciled by a read (odc_receipt).
 // All collaborators are injected (lib.mjs wires the live ones; tests pass fakes of the bridge, vault and prompt).
 import crypto from 'node:crypto';
-import { authorizationContext as readAuthorizationContext } from '../../facade/authorization-context.mjs';
+import { authorizationContext as readAuthorizationContext, contextOrWritten } from '../../facade/authorization-context.mjs';
 import { boundedRead, readCheckpoint, readOptions } from '../../facade/read-budget.mjs';
 import { currentSignal, wordsGiven } from '../../facade/destructive-operations.mjs';
 import { prepareRequest } from './request.mjs';
@@ -96,6 +96,7 @@ import {a2aDeleteApproval} from './a2a-delete-approval.mjs';
 import { CONNECTION_NAME_AVAILABILITY_READS, connectionNameAvailabilityInput, connectionNameAvailabilityResult } from './connection-name-availability.mjs';
 import { connectionHeaderPlan } from './connection-header-plan.mjs';
 import { editConnectionHeader } from './connection-header-edit.mjs';
+import { readGrant } from './written-approval.mjs';
 import { datasetCreationOutcome, datasetReconciliationInput, datasetCreationObservation } from './dataset-receipt.mjs';
 import {EVALUATION_CREATE,EVALUATION_RUN,EVALUATION_DELETE,evaluationCreateApproval,evaluationOperationApproval,observeEvaluationCreation} from './evaluation-fixture.mjs';
 import { DATASET_DELETE, datasetDeleteApproval } from './dataset-delete-approval.mjs';
@@ -458,9 +459,11 @@ export class OdcAccess {
   // (SSAM/ODC3/<host>/Setting/<name> at /settings/<i>/value), and only the Studio path (bridge portal-call) sends it.
   async write(input, options) { return projectForAgent(() => this.writeRaw(input, options)); }
 
-  async writeRaw({ tenant, auth = 'auto', operationId, authorize, operationUuid, confirmTenant, ...input }, { secretRefs = [], authorizationContext, timerConfigurationContext, settingsConfigurationContext, mobileConfigurationContext, assetCreationContext, assetRevisionContext, revisionPrecondition, preparedSourceRevision, assetBuildContext, ipFilterContext, groupContext, organizationRoleContext, portfolioRenameContext, organizationRenameContext, stageRenameContext, environmentDefaultsContext, inactiveUserContext, groupMembershipContext, emptyRoleAssignmentContext, applicationRoleAssignmentContext, applicationRoleOverlapContext, groupRoleAssignmentContext, groupOriginOperationUuid, userOriginOperationUuid, originOperationUuid, externalLibraryParent, externalLibraryDiscard } = {}) {
+  async writeRaw({ tenant, auth = 'auto', operationId, authorize, operationUuid, confirmTenant, ...input }, { secretRefs = [], authorizationContext, timerConfigurationContext, settingsConfigurationContext, mobileConfigurationContext, assetCreationContext, assetRevisionContext, revisionPrecondition, preparedSourceRevision, assetBuildContext, ipFilterContext, groupContext, organizationRoleContext, portfolioRenameContext, organizationRenameContext, stageRenameContext, environmentDefaultsContext, inactiveUserContext, groupMembershipContext, emptyRoleAssignmentContext, applicationRoleAssignmentContext, applicationRoleOverlapContext, groupRoleAssignmentContext, groupOriginOperationUuid, userOriginOperationUuid, originOperationUuid, externalLibraryParent, externalLibraryDiscard, mobileConfiguration = false } = {}) {
     const start = new Date(this.now()).toISOString();
     let host, receipt;
+    // R2-I: the own mobile fixture's configuration is approved by its context file or by the written words (mobileConfiguration).
+    const mobileMode = Boolean(mobileConfigurationContext) || mobileConfiguration === true;
     try {
       host = await this.pickTenant(tenant);
       const info = this.tenantInfo(host);
@@ -531,7 +534,7 @@ export class OdcAccess {
         return answerExisting(existing, operationId, host);
       }
         if (revisionPrecondition && !assetRevisionContext) fail('AUTHORIZATION_CONTEXT_INVALID', 'Revision preconditions require a bound approval context. Nothing was sent.');
-      if (!externalLibraryDiscard && !externalLibraryParent && !authorizationContext && !timerConfigurationContext && !settingsConfigurationContext && !mobileConfigurationContext && !assetCreationContext && !assetRevisionContext && !preparedSourceRevision && !assetBuildContext && !ipFilterContext && !groupContext && !organizationRoleContext && !portfolioRenameContext && !organizationRenameContext && !stageRenameContext && !environmentDefaultsContext && !inactiveUserContext && !groupMembershipContext && !emptyRoleAssignmentContext && !applicationRoleAssignmentContext && !groupRoleAssignmentContext && !applicationRoleOverlapContext) guardTenant(info, authorize, confirmTenant);
+      if (!externalLibraryDiscard && !externalLibraryParent && !authorizationContext && !timerConfigurationContext && !settingsConfigurationContext && !mobileMode && !assetCreationContext && !assetRevisionContext && !preparedSourceRevision && !assetBuildContext && !ipFilterContext && !groupContext && !organizationRoleContext && !portfolioRenameContext && !organizationRenameContext && !stageRenameContext && !environmentDefaultsContext && !inactiveUserContext && !groupMembershipContext && !emptyRoleAssignmentContext && !applicationRoleAssignmentContext && !groupRoleAssignmentContext && !applicationRoleOverlapContext) guardTenant(info, authorize, confirmTenant);
       else if (authorizationContext && operationId !== 'asset-repository-api-v1:delete:/assets/{assetKey}') fail('AUTHORIZATION_CONTEXT_INVALID', 'Context approval is currently supported only by the typed asset deletion.');
       const resolved = await this.resolvePublic(host, auth);
       if (resolved.ok === false) return { ...resolved, operationId, tenant: host, sent: false };
@@ -542,7 +545,7 @@ export class OdcAccess {
           input:{screenVariables:{appid:applicationKey,stageid:environmentKey,id:timerKey,_appidInDataFetchStatus:1,_stageidInDataFetchStatus:1,_idInDataFetchStatus:1}}})}) : null;
       if(settingsConfigurationContext)approval=await settingsConfigurationApproval({file:settingsConfigurationContext,words:authorize,host,operationId,input,originOperationUuid,secretRefs:refs,
         lookup:id=>this.receipts.lookup(id),read:(id,path)=>this.send(host,resolved,id,{path},{write:false})});
-      if(mobileConfigurationContext)approval=await mobileConfigurationApproval({file:mobileConfigurationContext,words:authorize,host,operationId,input,originOperationUuid,secretRefs:refs,
+      if(mobileMode)approval=await mobileConfigurationApproval({file:mobileConfigurationContext,words:authorize,host,operationId,input,originOperationUuid,secretRefs:refs,
         lookup:id=>this.receipts.lookup(id),read:(id,path)=>this.send(host,resolved,id,{path},{write:false})});
       if (assetCreationContext) approval = await assetCreationApproval({file:assetCreationContext,words:authorize,host,operationId,input,
         readTemplate:async assetKey=>{
@@ -565,7 +568,7 @@ export class OdcAccess {
         if(operationId!=='asset-repository-api-v1:post:/assets')fail('AUTHORIZATION_CONTEXT_INVALID','Source revision approval is restricted to asset revision creation.');
         approval=preparedSourceRevision.approval;
       }
-      if(ipFilterContext)approval=await ipFilterApproval({file:ipFilterContext,words:authorize,host,operationId,input,originOperationUuid,
+      if(ipFilterContext)approval=await ipFilterApproval({file:ipFilterContext,words:authorize,host,operationId,input,originOperationUuid,find:predicate=>this.receipts.find(predicate),
         lookup:id=>this.receipts.lookup(id),read:(id,path)=>this.send(host,resolved,id,{path},{write:false})});
       if(groupContext)approval=await groupApproval({file:groupContext,words:authorize,host,operationId,input,originOperationUuid,
         lookup:id=>this.receipts.lookup(id),read:(id,path,query)=>this.send(host,resolved,id,{path,...(query?{query}:{})},{write:false})});
@@ -609,14 +612,14 @@ export class OdcAccess {
         approval = readAuthorizationContext(authorizationContext, authorize, { lane: 'odc', host, operation: operationId, targets: [names[0]] });
         if (!approval) guardTarget(authorize, names);
       }
-      if (authorizationContext || timerConfigurationContext || settingsConfigurationContext || mobileConfigurationContext || assetCreationContext || assetRevisionContext || preparedSourceRevision || assetBuildContext || ipFilterContext || groupContext || organizationRoleContext || portfolioRenameContext || organizationRenameContext || stageRenameContext || environmentDefaultsContext || inactiveUserContext || groupMembershipContext || emptyRoleAssignmentContext || applicationRoleAssignmentContext || groupRoleAssignmentContext || applicationRoleOverlapContext) guardTenant(info, authorize, confirmTenant, approval);
+      if (authorizationContext || timerConfigurationContext || settingsConfigurationContext || mobileMode || assetCreationContext || assetRevisionContext || preparedSourceRevision || assetBuildContext || ipFilterContext || groupContext || organizationRoleContext || portfolioRenameContext || organizationRenameContext || stageRenameContext || environmentDefaultsContext || inactiveUserContext || groupMembershipContext || emptyRoleAssignmentContext || applicationRoleAssignmentContext || groupRoleAssignmentContext || applicationRoleOverlapContext) guardTenant(info, authorize, confirmTenant, approval);
       const wordsSha256 = sha256(authorize);
       writeCheckpoint('before the write was reserved');
       receipt = this.receipts.reserve({ operationUuid, identity, wordsSha256, requestSha256,
         ...(applicationRoleOverlapContext?{reconciliation:{applicationRoleOverlap:approval.applicationRoleOverlapExpectation}}:{}),
         ...(groupRoleAssignmentContext?{reconciliation:{groupRoleAssignment:approval.groupRoleExpectation}}:{}),
         ...(applicationRoleAssignmentContext?{reconciliation:{applicationRoleAssignment:approval.applicationRoleExpectation}}:{}),
-        ...(mobileConfigurationContext ? {reconciliation:{mobileConfiguration:approval.extensibilityExpectation??mobileConfigurationExpectation(input.body)}} : {}),
+        ...(mobileMode ? {reconciliation:{mobileConfiguration:approval.extensibilityExpectation??mobileConfigurationExpectation(input.body)}} : {}),
         ...(stagePrepared?{reconciliation:{stageRename:{expected:stagePrepared.expected,before:stagePrepared.before}}}:{}),
         ...(defaultsPrepared?{reconciliation:{environmentDefaults:{expected:defaultsPrepared.expected,before:defaultsPrepared.before}}}:{}),
         ...(portfolioPrepared?{reconciliation:{portfolioRename:{expected:portfolioPrepared.expected,before:portfolioPrepared.before}}}:{}),
@@ -674,7 +677,7 @@ export class OdcAccess {
         const proof=await this.reconcileOrganizationRename(receipt,auth);receipt=proof.receipt;state=receipt.state;output={...output,readBack:proof.readBack};
         if(state==='confirmed'){output.ok=true;if(output.error){output.writeError=output.error;delete output.error;}}
       }
-      if(mobileConfigurationContext && ['accepted','uncertain'].includes(state)){
+      if(mobileMode && ['accepted','uncertain'].includes(state)){
         const proof=await this.reconcileMobileConfiguration(receipt,auth);
         receipt=proof.receipt;state=receipt.state;output={...output,readBack:proof.readBack};
       }
@@ -977,9 +980,10 @@ export class OdcAccess {
     if(!input||Object.keys(input).join(',')!=='saveOperationUuid'||!isUuid(input.saveOperationUuid))bad();
     const saved=this.receipts.lookup(input.saveOperationUuid),e=saved?.reconciliation?.mobileBinarySave;
     if(saved?.state!=='confirmed'||saved.identity?.tenant!==host||saved.identity.operationId!==MOBILE_FILE_SAVE||!e
-      ||!isUuid(saved.authorization?.source?.threadId)||!isUuid(saved.authorization?.source?.messageId)||!/^[a-f0-9]{64}$/.test(saved.authorization?.wordsSha256??''))bad();
+      ||!readGrant(saved))bad();
     const upload=this.receipts.lookup(e.uploadOperationUuid),origin=this.receipts.lookup(e.originOperationUuid),u=upload?.reconciliation?.mobileBinaryUpload;
-    const sameGrant=r=>r?.authorization?.source&&saved.authorization?.source&&r.authorization.source.threadId===saved.authorization.source.threadId&&r.authorization.source.messageId===saved.authorization.source.messageId&&r.authorization.wordsSha256===saved.authorization.wordsSha256;
+    // R2-I round 3: the save's grant on its upload and creation (readGrant: a file's conversation, or SSAM's own records).
+    const sameGrant=r=>readGrant(saved,[r]);
     if(upload?.state!=='confirmed'||upload.identity?.tenant!==host||upload.identity.operationId!==(u?.transportMode==='base64'?MOBILE_FILE_CONVERT:MOBILE_FILE_UPLOAD)||!u||!sameGrant(upload)
       ||origin?.state!=='confirmed'||origin.identity?.tenant!==host||origin.identity.operationId!=='asset-repository-api-v1:post:/assets'||origin.response?.assetKey!==e.applicationKey||!sameGrant(origin)
       ||!['applicationKey','environmentKey','settingKey','portfolioKey','originOperationUuid'].every(k=>isUuid(e[k])&&e[k]===u[k])
@@ -992,7 +996,9 @@ export class OdcAccess {
     if(!asset.ok||asset.data?.assetKey!==e.applicationKey||asset.data.assetType!=='MobileApplication'||asset.data.portfolioKey!==e.portfolioKey)bad();
     if(e.libraryKey){
       if(e.libraryKey!==u.libraryKey||e.libraryRevision!==u.libraryRevision||e.libraryOriginOperationUuid!==u.libraryOriginOperationUuid)bad();
-      await ownedBinaryLibrary({scope:e,origin,host,lookup:id=>this.receipts.lookup(id),read:(operationId,path)=>this.read({tenant:host,auth:'api-client',operationId,path})});
+      // R2-I round 2: content an upload bound with the written words alone is read under the same rule.
+      await ownedBinaryLibrary({scope:e,origin,host,lookup:id=>this.receipts.lookup(id),read:(operationId,path)=>this.read({tenant:host,auth:'api-client',operationId,path}),
+        strict:upload.authorization?.source?.kind!=='human-words'});
     }else if(u.libraryKey||e.libraryOriginOperationUuid||u.libraryOriginOperationUuid)bad();
     const current=await this.read({tenant:host,auth:'api-client',operationId:MOBILE_EXTENSIBILITY_GET,path:{applicationKey:e.applicationKey,environmentKey:e.environmentKey}});
     const field=binarySetting(current.data,e),native=await this.portalRead({tenant:host,auth,operationId:'mobileExtensibility.setting',input:{screenVariables:e.screenVariables}});
@@ -1014,10 +1020,7 @@ export class OdcAccess {
     if(!receipt||receipt.identity?.tenant!==host||receipt.identity.operationId!==KB_UPLOAD||!['accepted','confirmed','uncertain'].includes(receipt.state)||!isUuid(e?.originOperationUuid))bad();
     const origin=this.receipts.lookup(e.originOperationUuid);
     if(!origin||origin.state!=='confirmed'||origin.identity?.tenant!==host||origin.identity.operationId!==KB_CREATE||origin.response?.KnowledgeBaseId!==e.knowledgeBaseId
-      ||!origin.authorization?.source||!receipt.authorization?.source||!isUuid(receipt.authorization.source.threadId)||!isUuid(receipt.authorization.source.messageId)
-      ||!/^([a-f0-9]{64})$/.test(receipt.authorization.wordsSha256??'')||!/^([a-f0-9]{64})$/.test(receipt.authorization.proposalSha256??'')
-      ||origin.authorization.source.threadId!==receipt.authorization.source.threadId||origin.authorization.source.messageId!==receipt.authorization.source.messageId
-      ||origin.authorization.wordsSha256!==receipt.authorization.wordsSha256||origin.authorization.proposalSha256!==receipt.authorization.proposalSha256)bad();
+      ||!readGrant(receipt,[origin],{proposal:true}))bad(); // R2-I round 3: a file's conversation and proposal, or SSAM's own records
     const resolved=await this.resolvePortal(host,auth);if(resolved.ok===false)return{...resolved,tenant:host,operationId:KNOWLEDGE_FILE_DOWNLOAD};
     if(typeof resolved.privateKnowledgeDownload!=='function'||typeof resolved.broker?.downloadKnowledgeFile!=='function')
       fail('HEADLESS_AUTH_UNAVAILABLE','Bridge v66 or later and a matching authenticated private profile are required for typed file download. No URL is requested.');
@@ -1271,10 +1274,14 @@ export class OdcAccess {
   }
   async portalWrite(input, options) { return projectForAgent(() => OdcAccess.prototype.portalWriteRaw.call(this, input, options)); }
 
-  async portalWriteRaw({ tenant, auth = 'auto', operationId, input = {}, authorize, operationUuid, confirmTenant, target, authorizationContext, vaultFile }, { secretRefs = [], preparedConnectionApproval, preparedMcpImport, preparedEntityImport, preparedHeaderEdit, externalLibraryParent } = {}) {
+  async portalWriteRaw({ tenant, auth = 'auto', operationId, input = {}, authorize, operationUuid, confirmTenant, target, authorizationContext, vaultFile, scope }, { secretRefs = [], preparedConnectionApproval, preparedMcpImport, preparedEntityImport, preparedHeaderEdit, externalLibraryParent } = {}) {
     const start = new Date(this.now()).toISOString();
     let host, receipt;
+    // R2-I (owner's rule, 28/10): without a context file the user's written words are the approval; the keys the input lacks
+    // come from scope and the receipts a step binds from this tenant's own journal (find), never from a file.
+    const find = predicate => this.receipts.find(predicate);
     try {
+      if (scope !== undefined && (!scope || typeof scope !== 'object' || Array.isArray(scope))) fail('INPUT_INVALID', 'scope is an object of the keys the input does not carry.');
       host = await this.pickTenant(tenant);
       const info = this.tenantInfo(host);
       routeOf(operationId, true);
@@ -1299,7 +1306,7 @@ export class OdcAccess {
       if(binarySaveTarget&&(!Object.values(binarySaveTarget).every(isUuid)||refs.length))fail('INPUT_INVALID','Native binary save needs exact UUIDs and no secretRefs.');
       const timerTarget = operationId === 'timers.run' || activation ? { environmentKey: raw.inputParameters.StageKey,
         applicationKey: raw.inputParameters.ApplicationKey, timerKey: raw.inputParameters.TimerKey } : null;
-      const identity = { kind: 'odc-portal', tenant: host, operationId, target: operationId===API_CLIENT_CREATE?{apiClientFixtureName:raw.inputParameters?.OIDCClientCreate?.Name}:operationId===API_CLIENT_DELETE?{apiClientKey:raw.inputParameters?.Key}:binarySaveTarget??([MOBILE_FILE_UPLOAD,MOBILE_FILE_CONVERT].includes(operationId)?mobileBinaryUploadTarget(authorizationContext):operationId===BASELINE_SAVE
+      const identity = { kind: 'odc-portal', tenant: host, operationId, target: operationId===API_CLIENT_CREATE?{apiClientFixtureName:raw.inputParameters?.OIDCClientCreate?.Name}:operationId===API_CLIENT_DELETE?{apiClientKey:raw.inputParameters?.Key}:binarySaveTarget??([MOBILE_FILE_UPLOAD,MOBILE_FILE_CONVERT].includes(operationId)?mobileBinaryUploadTarget(authorizationContext,scope):operationId===BASELINE_SAVE
         ?{environmentKey:raw.inputParameters?.EnvironmentId,portfolioKey:raw.inputParameters?.PortfolioKey}
         :operationId===GUARDRAILS_SAVE
         ?{applicationKey:raw.inputParameters?.AppId,environmentKey:raw.inputParameters?.EnvironmentId,agentElementId:raw.inputParameters?.AgentElementId}
@@ -1371,15 +1378,15 @@ export class OdcAccess {
         return answerExisting(existing, operationId, host);
       }
       if(reconciling)fail('OPERATION_UUID_REUSED','This operationUuid already belongs to another target or operation; use a new UUID.');
-      const discoveryPrepared=operationId===A2A_DISCOVER?await a2aDiscoveryApproval({file:authorizationContext,words:authorize,host,raw,
+      const discoveryPrepared=operationId===A2A_DISCOVER?await a2aDiscoveryApproval({file:authorizationContext,words:authorize,host,raw,scope,
         read:(id,input)=>this.portalRead({tenant:host,auth,operationId:id,input})}):null;
-      const a2aPrepared=[A2A_TEST,A2A_SAVE].includes(operationId)?await a2aConnectionApproval({file:authorizationContext,words:authorize,host,operationId,raw,
+      const a2aPrepared=[A2A_TEST,A2A_SAVE].includes(operationId)?await a2aConnectionApproval({file:authorizationContext,words:authorize,host,operationId,raw,scope,find,
         lookup:id=>this.receipts.lookup(id),read:(id,input)=>this.portalRead({tenant:host,auth,operationId:id,input})}):null;
-      const customSearchPrepared=[CUSTOM_SEARCH_TEST,CUSTOM_SEARCH_SAVE].includes(operationId)?await customSearchConnectionApproval({file:authorizationContext,words:authorize,host,operationId,raw,
+      const customSearchPrepared=[CUSTOM_SEARCH_TEST,CUSTOM_SEARCH_SAVE].includes(operationId)?await customSearchConnectionApproval({file:authorizationContext,words:authorize,host,operationId,raw,scope,find,
         lookup:id=>this.receipts.lookup(id),read:(id,input)=>this.portalRead({tenant:host,auth,operationId:id,input}),
         readPublic:(id,path)=>this.read({tenant:host,auth:'api-client',operationId:id,path})}):null;
       const customSearchDeletion=operationId==='connections.delete'&&raw.inputParameters?.ProviderId==='customAISearch'
-        ?await customSearchDeleteApproval({file:authorizationContext,words:authorize,host,raw,lookup:id=>this.receipts.lookup(id),
+        ?await customSearchDeleteApproval({file:authorizationContext,words:authorize,host,raw,find,lookup:id=>this.receipts.lookup(id),
           read:(id,input)=>this.portalRead({tenant:host,auth,operationId:id,input}),
           readPublic:(id,path)=>this.read({tenant:host,auth:'api-client',operationId:id,path}),
           dependencies:assetKey=>readAssetConsumers(assetKey,(id,input)=>this.read({tenant:host,auth:'api-client',operationId:id,...input}))}):null;
@@ -1387,37 +1394,37 @@ export class OdcAccess {
         ? dbConnectionApproval(authorizationContext, authorize, { host, operationId, raw, target })
         : ['connections.delete', 'connections.importEntities'].includes(operationId) ? preparedConnectionApproval : null);
       const nativeLibraryApproval=operationId===LIBRARY_RELEASE ? await libraryReleaseApproval({file:authorizationContext,words:authorize,host,raw,
-        lookup:id=>this.receipts.lookup(id),read:(id,path)=>this.read({tenant:host,auth:'api-client',operationId:id,path})}) : null;
+        lookup:id=>this.receipts.lookup(id),read:(id,path,query)=>this.read({tenant:host,auth,operationId:id,path,query})}) : null;
       const libraryApproval=nativeLibraryApproval ?? (externalLibraryParent ? externalLibraryStepApproval({parentOperationUuid:externalLibraryParent,
         lookup:id=>this.receipts.lookup(id),words:authorize,host,operationId,operationUuid,input:raw}) : null);
-      const datasetApproval=operationId===DATASET_DELETE ? await datasetDeleteApproval({file:authorizationContext,words:authorize,host,raw,
+      const datasetApproval=operationId===DATASET_DELETE ? await datasetDeleteApproval({file:authorizationContext,words:authorize,host,raw,find,
         lookup:id=>this.receipts.lookup(id),read:(id,screenVariables)=>this.portalRead({tenant:host,auth,operationId:id,input:{screenVariables}})})
         : operationId===DATASET_CREATE&&authorizationContext ? await datasetCreateApproval({file:authorizationContext,words:authorize,host,raw,
           readAsset:assetKey=>this.read({tenant:host,operationId:'asset-repository-api-v1:get:/assets/{assetKey}',path:{assetKey}}),
           readApps:PortfolioKey=>this.portalRead({tenant:host,auth,operationId:'agents.agenticApps',input:{screenVariables:{PortfolioKey,_portfolioKeyInDataFetchStatus:1}}})}) : null;
-      const kbApproval=[KB_CREATE,KB_DELETE].includes(operationId)?await knowledgeBaseApproval({file:authorizationContext,words:authorize,host,operationId,raw,
+      const kbApproval=[KB_CREATE,KB_DELETE].includes(operationId)?await knowledgeBaseApproval({file:authorizationContext,words:authorize,host,operationId,raw,find,
         lookup:id=>this.receipts.lookup(id),read:(id,screenVariables)=>this.portalRead({tenant:host,auth,operationId:id,input:{screenVariables}})}):null;
-      const filePrepared=operationId===KB_UPLOAD?await knowledgeFileApproval({file:authorizationContext,words:authorize,host,raw,
+      const filePrepared=operationId===KB_UPLOAD?await knowledgeFileApproval({file:authorizationContext,words:authorize,host,raw,scope,find,
         lookup:id=>this.receipts.lookup(id),read:(id,input)=>this.portalRead({tenant:host,auth,operationId:id,input})}):null;
-      const mobileFilePrepared=[MOBILE_FILE_UPLOAD,MOBILE_FILE_CONVERT].includes(operationId)?await mobileBinaryUploadApproval({file:authorizationContext,words:authorize,host,raw,operationId,secretRefs:refs.map(({pointer,target,field})=>({pointer,target,field})),
+      const mobileFilePrepared=[MOBILE_FILE_UPLOAD,MOBILE_FILE_CONVERT].includes(operationId)?await mobileBinaryUploadApproval({file:authorizationContext,words:authorize,host,raw,operationId,scope,secretRefs:refs.map(({pointer,target,field})=>({pointer,target,field})),
         lookup:id=>this.receipts.lookup(id),read:(operationId,path)=>this.read({tenant:host,auth:'api-client',operationId,path}),
         portalRead:(operationId,input)=>this.portalRead({tenant:host,auth,operationId,input})}):null;
-      const mobileSavePrepared=operationId===MOBILE_FILE_SAVE?await mobileBinarySaveApproval({file:authorizationContext,words:authorize,host,raw,
+      const mobileSavePrepared=operationId===MOBILE_FILE_SAVE?await mobileBinarySaveApproval({file:authorizationContext,words:authorize,host,raw,find,scope,
         lookup:id=>this.receipts.lookup(id),read:(operationId,path)=>this.read({tenant:host,auth:'api-client',operationId,path}),
         portalRead:(operationId,input)=>this.portalRead({tenant:host,auth,operationId,input})}):null;
-      const aiTrialApproval = [AI_TRIAL_CREATE, AI_TRIAL_DELETE].includes(operationId) ? await aiModelTrialApproval({ file: authorizationContext, words: authorize, host, operationId, raw,
+      const aiTrialApproval = [AI_TRIAL_CREATE, AI_TRIAL_DELETE].includes(operationId) ? await aiModelTrialApproval({ file: authorizationContext, words: authorize, host, operationId, raw, scope, find,
         lookup: id => this.receipts.lookup(id), read: (id, input) => this.portalRead({ tenant: host, auth, operationId: id, input }) }) : null;
-      const evaluationPrepared=operationId===EVALUATION_CREATE&&authorizationContext?await evaluationCreateApproval({file:authorizationContext,words:authorize,host,raw,
+      const evaluationPrepared=operationId===EVALUATION_CREATE&&(authorizationContext||scope?.originOperationUuid!==undefined)?await evaluationCreateApproval({file:authorizationContext,words:authorize,host,raw,scope,find,
         lookup:id=>this.receipts.lookup(id),read:(id,input)=>this.portalRead({tenant:host,auth,operationId:id,input})}):null;
-      const evaluationOperation=[EVALUATION_RUN,EVALUATION_DELETE].includes(operationId)?await evaluationOperationApproval({file:authorizationContext,words:authorize,host,raw,operationId,
+      const evaluationOperation=[EVALUATION_RUN,EVALUATION_DELETE].includes(operationId)?await evaluationOperationApproval({file:authorizationContext,words:authorize,host,raw,operationId,find,
         lookup:id=>this.receipts.lookup(id),read:(id,input)=>this.portalRead({tenant:host,auth,operationId:id,input})}):null;
-      const guardrailsPrepared=operationId===GUARDRAILS_SAVE?await guardrailsApproval({file:authorizationContext,words:authorize,host,raw,
+      const guardrailsPrepared=operationId===GUARDRAILS_SAVE?await guardrailsApproval({file:authorizationContext,words:authorize,host,raw,find,
         lookup:id=>this.receipts.lookup(id),readAsset:assetKey=>this.read({tenant:host,auth:'api-client',operationId:'asset-repository-api-v1:get:/assets/{assetKey}',path:{assetKey}}),
         read:(id,input)=>this.portalRead({tenant:host,auth,operationId:id,input})}):null;
       if(guardrailsPrepared)raw={...raw,inputParameters:{...raw.inputParameters,Policies:guardrailsPrepared.expected.policies}};
-      const baselinePrepared=operationId===BASELINE_SAVE?await baselineApproval({file:authorizationContext,words:authorize,host,raw,
+      const baselinePrepared=operationId===BASELINE_SAVE?await baselineApproval({file:authorizationContext,words:authorize,host,raw,find,
         lookup:id=>this.receipts.lookup(id),read:(id,input)=>this.portalRead({tenant:host,auth,operationId:id,input})}):null;
-      const apiClientPrepared=[API_CLIENT_CREATE,API_CLIENT_DELETE].includes(operationId)?await apiClientWriteApproval({file:authorizationContext,words:authorize,host,operationId,operationUuid,raw,lookup:id=>this.receipts.lookup(id),
+      const apiClientPrepared=[API_CLIENT_CREATE,API_CLIENT_DELETE].includes(operationId)?await apiClientWriteApproval({file:authorizationContext,words:authorize,host,operationId,operationUuid,raw,find,lookup:id=>this.receipts.lookup(id),
         readInventory:()=>this.portalRead({tenant:host,auth,operationId:'apiClients.list',input:{screenVariables:{StartIndex:0,MaxRecords:100,Filter:{NameContains:'',Status:''}}},maxPages:10}),
         readDetail:key=>this.portalRead({tenant:host,auth,operationId:'apiClients.detail',input:{screenVariables:{id:key,_idInDataFetchStatus:1}}})}):null;
       const fixtureApproval=apiClientPrepared?.approval ?? mobileSavePrepared?.approval ?? mobileFilePrepared?.approval ?? filePrepared?.approval ?? aiTrialApproval ?? evaluationPrepared?.approval ?? evaluationOperation?.approval ?? guardrailsPrepared?.approval ?? baselinePrepared?.approval;
@@ -1455,6 +1462,9 @@ export class OdcAccess {
       const secrets = refs.length ? { count: refs.length, entries: [...new Set(refs.map(r => r.target))], resolvedBy: 'bridge, inside the ODC Studio' } : null;
       writeCheckpoint('before the write was reserved');
       receipt = this.receipts.reserve({ operationUuid, identity, wordsSha256,
+        ...(nativeLibraryApproval?{reconciliation:{libraryRelease:{input:raw.inputParameters,
+          publicationKey:nativeLibraryApproval.constraints.publicationKey,proposalSha256:nativeLibraryApproval.proposalSha256,
+          inputSha256:nativeLibraryApproval.constraints.inputSha256,expectedTag:null}}}:{}),
         ...(apiClientPrepared?{reconciliation:{apiClientFixture:apiClientPrepared.expected}}:{}),
         ...(mobileFilePrepared?{reconciliation:{mobileBinaryUpload:mobileFilePrepared.expected}}:{}),
         ...(mobileSavePrepared?{reconciliation:{mobileBinarySave:mobileSavePrepared.expected}}:{}),
@@ -1470,7 +1480,7 @@ export class OdcAccess {
         ...(customSearchPrepared?{reconciliation:{customSearchConnection:customSearchPrepared.expected}}:{}),
         ...(customSearchDeletion?{reconciliation:{customSearchDeletion:customSearchDeletion.expected}}:{}),
         ...(discoveryPrepared?{reconciliation:{a2aDiscovery:discoveryPrepared.expected}}:{}),
-        ...(kbApproval?{reconciliation:{knowledgeBase:operationId===KB_CREATE?{name:raw.inputParameters.KnowledgeBaseCreate.Name}:{key:raw.inputParameters.KnowledgeBaseId}}}:{}),
+        ...(kbApproval?{reconciliation:{knowledgeBase:operationId===KB_CREATE?{name:raw.inputParameters.KnowledgeBaseCreate.Name,portfolioKey:raw.inputParameters.KnowledgeBaseCreate.PortfolioKey}:{key:raw.inputParameters.KnowledgeBaseId}}}:{}),
         ...(operationId === 'connections.relationalSave' && preparedHeaderEdit ? { reconciliation: { connectionHeader: preparedHeaderEdit.expected } } : {}),
         ...(operationId === 'connections.importActions' && preparedMcpImport ? { reconciliation: { mcpImport: preparedMcpImport } } : {}),
         ...(operationId === 'connections.importEntities' && preparedEntityImport ? { reconciliation: { entityImport: preparedEntityImport } } : {}),
@@ -1618,7 +1628,7 @@ export class OdcAccess {
       }
       if(operationId===LIBRARY_RELEASE && state==='accepted'){
         let verified=false;
-        try {verified=await verifyLibraryRelease(raw.inputParameters,(id,path)=>this.read({tenant:host,auth:'api-client',operationId:id,path}));}catch{}
+        try {verified=await verifyLibraryRelease(raw.inputParameters,(id,path)=>this.read({tenant:host,auth,operationId:id,path}));}catch{}
         output={...output,releaseConfirmed:verified};
         if(verified){receipt=this.receipts.reconcile(receipt,{state:'confirmed',observation:{assetKey:raw.inputParameters.ApplicationKey,revision:raw.inputParameters.Revision,tag:raw.inputParameters.Version,releaseNotesVerified:true}});state='confirmed';}
       }
@@ -1839,7 +1849,7 @@ export class OdcAccess {
   // Deploy (or undeploy, apply configs) between stages, then follow the operation to a terminal state.
   async deploy({ tenant, auth = 'auto', assetKey, environmentKey, revision, buildKey, operation = 'Deploy', authorize, operationUuid, confirmTenant, waitSeconds = 300, authorizationContext, originOperationUuid }) {
     const body = { operation, assetKey, environmentKey, ...(revision !== undefined ? { revision } : {}), ...(buildKey ? { buildKey } : {}) };
-    const started = await this.write({ tenant, auth, operationId: DEPLOY, body, authorize, operationUuid, confirmTenant }, originOperationUuid ? {settingsConfigurationContext:authorizationContext,originOperationUuid} : {timerConfigurationContext:authorizationContext});
+    const started = await this.write({ tenant, auth, operationId: DEPLOY, body, authorize, operationUuid, confirmTenant }, originOperationUuid ? {settingsConfigurationContext:contextOrWritten(authorizationContext,true),originOperationUuid} : {timerConfigurationContext:authorizationContext});
     const key = started.data?.key ?? started.receipt?.response?.key;
     if (!started.ok || !key || !waitSeconds) return { ...started, ...(started.ok && !key ? { warning: 'The answer carries no operation key; find it with odc_read deployments-api-v1:get:/deployment-operations.' } : {}) };
     const deployment = await this.operationStatus({ tenant: started.tenant, auth, kind: 'deployment', operationKey: key, waitSeconds, messages: true });
@@ -1859,7 +1869,7 @@ export class OdcAccess {
     const ids = CONFIGURATIONS[scope];
     if (!ids) return { ok: false, error: { code: 'INPUT_INVALID', message: 'scope must be application, agent, environment or mobile-extensibility.' } };
     const mobile=scope==='mobile-extensibility';
-    if(mobile&&(revision!==undefined||action==='set'&&(!originOperationUuid||!authorizationContext)))return {ok:false,sent:false,error:{code:'INPUT_INVALID',message:'Mobile extensibility has no revision selector; writes require the own fixture origin and exact contextual approval.'}};
+    if(mobile&&(revision!==undefined||action==='set'&&!originOperationUuid))return {ok:false,sent:false,error:{code:'INPUT_INVALID',message:'Mobile extensibility has no revision selector; writes require the own fixture origin (originOperationUuid) and the user\'s written words naming the app.'}};
     const path = { environmentKey, ...(scope === 'environment' ? {} : { [ids.param]: assetKey }) };
     const get = () => this.read({ tenant, auth, operationId: scope !== 'environment' && revision !== undefined ? ids.revision : ids.get,
       path: { ...path, ...(scope !== 'environment' && revision !== undefined ? { baselineRevision: String(revision) } : {}) } });
@@ -1921,9 +1931,9 @@ export class OdcAccess {
       const current=await this.read({tenant,auth,operationId:ids.get,path});if(!current.ok)return current;
       try{const plan=(mobile?mobileExtensibilityVaultPlan:configurationVaultPlan)(host,current.data,body,nestedSelectors);body=plan.body;secretRefs.push(...plan.refs);nestedLocations=plan.locations;}catch(error){return {ok:false,sent:false,error:publicError(error)};}
     }
-    if(mobile)return this.write({tenant,auth,operationId:ids.patch,path,body,authorize,operationUuid,confirmTenant},{secretRefs,mobileConfigurationContext:authorizationContext,originOperationUuid});
+    if(mobile)return this.write({tenant,auth,operationId:ids.patch,path,body,authorize,operationUuid,confirmTenant},{secretRefs,mobileConfigurationContext:authorizationContext,mobileConfiguration:true,originOperationUuid});
     if (scope !== 'environment' && body.key === undefined) body = { key: assetKey, ...body };
-    const written = await this.write({ tenant, auth, operationId: ids.patch, path, body, authorize, operationUuid, confirmTenant }, { secretRefs, ...(originOperationUuid ? {settingsConfigurationContext:authorizationContext,originOperationUuid} : {timerConfigurationContext:authorizationContext}) });
+    const written = await this.write({ tenant, auth, operationId: ids.patch, path, body, authorize, operationUuid, confirmTenant }, { secretRefs, ...(originOperationUuid ? {settingsConfigurationContext:contextOrWritten(authorizationContext,true),originOperationUuid} : {timerConfigurationContext:authorizationContext}) });
     if (!written.ok) return written;
     const after = await this.read({ tenant: written.tenant, auth, operationId: ids.get, path });
     const secretKeys = new Set(secretRefs.filter(r=>r.pointer.startsWith('/settings/')).map(r => body.settings[Number(r.pointer.split('/')[2])].key));
@@ -2319,19 +2329,21 @@ export class OdcAccess {
     if (new Set(objects).size !== objects.length || objects.some(o => typeof o !== 'string' || !o.trim())) fail('INPUT_INVALID', 'objects must contain unique, nonempty names.');
     const remove = action === 'remove-entities';
     const custom = objectContracts !== undefined;
-    if(custom && (!authorizationContext || !/^[a-f0-9]{64}$/.test(expectedPlanSha256??'')))fail('INPUT_INVALID','Custom entity import requires contextual approval and the reviewed expectedPlanSha256.');
+    // R2-I: a custom import and a removal bind the own temporary connection (originOperationUuid) and the user's written
+    // words naming it (approvalOf); a context file is still accepted, never required.
+    if(custom && !/^[a-f0-9]{64}$/.test(expectedPlanSha256??''))fail('INPUT_INVALID','Custom entity import requires the reviewed expectedPlanSha256.');
     if(!custom && expectedPlanSha256!==undefined)fail('INPUT_INVALID','expectedPlanSha256 requires objectContracts.');
-    if (remove && !authorizationContext) fail('AUTHORIZATION_CONTEXT_INVALID', 'Removal requires contextual approval of the owned temporary connection.');
     const screenVariables = elementVariables(connectionId);
     const target = { connectionId, step: remove ? 'remove' : 'import', objects: [...objects].sort(), ...(custom?{planSha256:expectedPlanSha256,contractsSha256:sha256(JSON.stringify(objectContracts))}:{}) };
     const existing = this.receipts.lookup(operationUuid, { kind: 'odc-portal', tenant: host, operationId: 'connections.importEntities', target });
     if (existing) return this.dbEntityReadBack(host, auth, { connectionId, objects, remove, operationUuid }, answerExisting(existing, 'connections.importEntities', host));
     let approval;
-    if (authorizationContext) {
+    if (authorizationContext || remove || custom) {
       if (!isUuid(originOperationUuid)) fail('INPUT_INVALID', 'Entity changes require the original connection test/create receipt.');
       const detail = await this.portalRead({ tenant: host, auth, operationId: 'connections.detail', input: { connectionId, providerId: 'mssql' } });
       if (!detail.ok) return detail;
-      approval = dbEntityApproval(authorizationContext, authorize, { host, detail: detail.data, origin: this.receipts.lookup(originOperationUuid) });
+      // R2-I round 5: the entities a removal unselects or a custom import selects are named in the written words, each one.
+      approval = dbEntityApproval(authorizationContext, authorize, { host, detail: detail.data, origin: this.receipts.lookup(originOperationUuid), changed: objects });
     }
     if(custom){
       const planned=await this.dbEntityPlan(host,auth,{connectionId,objects,objectContracts});if(!planned.ok)return planned;
@@ -2515,7 +2527,10 @@ export function guardTenant(info, authorize, confirmTenant, approval = null) {
   if (info.readOnly) fail('TENANT_READ_ONLY', 'Tenant ' + info.host + ' is read-only in tenants.json; no write is sent.');
   if (info.class !== 'personal') {
     const label = info.host.split('.')[0].toLowerCase();
-    if (confirmTenant !== info.host || !(approval?.host === info.host || authorize.toLowerCase().includes(label))) {
+    // R2-I: a context file that covers this host stands for the tenant in the words; a written approval (the words
+    // themselves) does not, so its words must still name the tenant.
+    const covered = approval?.host === info.host && approval?.source?.kind !== 'human-words';
+    if (confirmTenant !== info.host || !(covered || authorize.toLowerCase().includes(label))) {
       fail('CORPORATE_TENANT_GUARD', 'Tenant ' + info.host + ' (' + info.class + ') needs the user\'s explicit instruction for this operation: confirmTenant:"' + info.host + '" and words that name ' + label + '.');
     }
   }

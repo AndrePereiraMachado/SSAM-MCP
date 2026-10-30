@@ -2,6 +2,7 @@ import {authorizationContext} from '../../facade/authorization-context.mjs';
 import {mobileConfigurationHash,mobileConfigurationStateHash} from './mobile-configuration-approval.mjs';
 import {ASSET_CREATE} from './asset-creation-approval.mjs';
 import {fail} from './errors.mjs';
+import {recorded,sameGrant} from './written-approval.mjs';
 export const NATIVE_MOBILE_BUILD='native-application-orchestration-service-api-v1:post:/build-operations';
 const uuid=x=>typeof x==='string'&&/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(x);
 export async function nativeMobileBuildApproval({file,words,host,input,originOperationUuid,lookup,read}){
@@ -13,7 +14,7 @@ export async function nativeMobileBuildApproval({file,words,host,input,originOpe
   ||!/^\d+\.\d+\.\d+$/.test(b.mobileVersionNumber??''))bad();
  const origin=lookup(originOperationUuid);
  if(!origin||!['accepted','confirmed'].includes(origin.state)||origin.identity?.tenant!==host
-  ||origin.identity.operationId!==ASSET_CREATE||origin.response?.assetKey!==b.applicationKey||!origin.authorization?.source)bad();
+  ||origin.identity.operationId!==ASSET_CREATE||origin.response?.assetKey!==b.applicationKey||!recorded(origin))bad();
  const asset=await read('asset-repository-api-v1:get:/assets/{assetKey}',{path:{assetKey:b.applicationKey}});
  if(!asset?.ok||asset.data?.assetKey!==b.applicationKey||asset.data.assetType!=='MobileApplication'||!asset.data.name)bad();
  const build=await read('build-operations-api-v1:get:/build-operations/{operationKey}',{path:{operationKey:b.buildKey}});
@@ -25,7 +26,7 @@ export async function nativeMobileBuildApproval({file,words,host,input,originOpe
  if(!config?.ok||config.data?.buildType?.isSecret!==false||config.data.buildType.value!==(platform==='android'?'Debug':'Simulator'))bad();
  const approval=authorizationContext(file,words,{lane:'odc',host,operation:NATIVE_MOBILE_BUILD,targets:[asset.data.name],environmentKey:b.environmentKey,
   constraints:{originOperationUuid,bodySha256:mobileConfigurationHash(b),expectedConfigurationSha256:mobileConfigurationStateHash(config.data)}});
- if(!approval||approval.source.threadId!==origin.authorization.source.threadId||approval.source.messageId!==origin.authorization.source.messageId)bad();
+ if(!approval||!sameGrant(origin.authorization,approval))bad();
  const {mobileVersionNumber,mobileVersionCode,...validationBody}=b;
  const validation=await read('native-application-orchestration-service-api-v1:post:/build-operations/native-build-validation',{body:validationBody});
  if(!validation?.ok||validation.data?.platformResults?.[b.mobilePlatform]!=='NativeBuildNeeded')

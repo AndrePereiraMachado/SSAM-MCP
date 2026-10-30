@@ -20,10 +20,11 @@
 // keyed its hot module by another identity is named there (hot.identity.same:false), never hidden.
 // S9 (rascunho com candidato): a draft's write (code-draft.mjs) delivers inside withCheckedCandidate(offer): the candidate
 // its joint check built on a local capture. When that capture has the model of the capture this build takes, the job the
-// delivery runs is the job the check applied (the same JSON), the producer files are the same and the kernel accepted it,
-// the manifest is written from that candidate and no `anvil apply` runs here; anything else builds as always and the offer
-// says why it was not used (offer.outcome {reused:false, reason}). The kernel (PrebuiltCandidate) stays the last word: its own
-// snapshot, the job's sources, the producers and the kernel that built it, else it rebuilds (phases.rebased).
+// delivery runs is the job the check applied (the same JSON, and the bytes its kernel read: the source hash), the producer
+// files are the same and the kernel accepted it, the manifest is written from that candidate and no `anvil apply` runs here;
+// anything else builds as always and the offer says why it was not used (offer.outcome {reused:false, reason}). The kernel
+// (PrebuiltCandidate) stays the last word: its own snapshot, the job's sources, the producers and the kernel that built it,
+// else it rebuilds (phases.rebased).
 // Affinity (build-pool.mjs): a build prefers the slot whose worker last held its model (a check on the lane's worker, slot 0,
 // or an earlier build), and records the slot it ran on.
 // The build phase is skipped (the delivery runs as before, wholly under the lock) outside a phased call, once the call
@@ -42,6 +43,8 @@ import { phaseOfCall, notePhase, phaseGuard } from './studio-write-lock.mjs';
 import { pooledBuild, sharedBuildPool, BuildQueueRefused, slotWorkerPort, preferredSlots, rememberSlotModel } from './build-pool.mjs';
 import { workspaceRoot } from './workspace.mjs';
 import { hostedContext } from './executor.mjs';
+import { keepCandidate, sweepVerified } from './hosted/verified-store.mjs';
+import { customerStateDir } from './hosted/storage.mjs';
 import { findCapture, isModelSha, modelSha256, rememberCapture, rememberDelivery } from './o11-capture-store.mjs';
 
 export const PREBUILT_SCHEMA = 'ssam-prebuilt/1';
@@ -91,11 +94,12 @@ export function jobNeedsStudio(jobFile) {
 // snapshot of the previous delivery, the capture of a refused call, an o11_studio snapshot), it is copied to the build's
 // file and nothing is captured or uploaded: {..., reused: {from, modelSha256}}. Any other case captures as before, and the
 // new capture is recorded for the next call.
-export async function captureByKey(module, { bridge, local, now = () => new Date(), signal }) {
+export async function captureByKey(module, { bridge, local, now = () => new Date(), signal, expectedEnvironment }) {
   const client = bridge();
   const listed = await client.ok('list_open_modules', { model_sha256_of: String(module) }, { timeoutMs: 10000, ...(signal ? { signal } : {}) });
   const wanted = String(module).toLowerCase();
-  const tabs = (Array.isArray(listed?.modules) ? listed.modules : []).filter(m => typeof m?.name === 'string' && m.name.toLowerCase() === wanted && m.hasESpace !== false);
+  const tabs = (Array.isArray(listed?.modules) ? listed.modules : []).filter(m => typeof m?.name === 'string' && m.name.toLowerCase() === wanted && m.hasESpace !== false
+    && (!expectedEnvironment || String(m.environment ?? '').toLowerCase() === String(expectedEnvironment).trim().toLowerCase()));
   if (tabs.length !== 1) return null;
   const tab = tabs[0];
   if (typeof tab.key !== 'string' || !tab.key || tab.serverSilentMode === true || tab.hasOpenedActiveESpace === false) return null;
@@ -108,7 +112,7 @@ export async function captureByKey(module, { bridge, local, now = () => new Date
       fs.copyFileSync(known.path, file);
       if (modelSha256(file) === fingerprint) {
         rememberCapture(local, { moduleKey: tab.key, module: tab.name, file, model: fingerprint, source: 'build-reused', now: now() });
-        return { path: file, key: tab.key, module: tab.name, modelSha256: fingerprint, reused: { from: known.path, modelSha256: fingerprint } };
+        return { path: file, key: tab.key, module: tab.name, environment: tab.environment ?? null, modelSha256: fingerprint, reused: { from: known.path, modelSha256: fingerprint } };
       }
     } catch { /* captured below */ }
     try { fs.rmSync(file, { force: true }); } catch { /* the capture below writes it again */ }
@@ -118,7 +122,7 @@ export async function captureByKey(module, { bridge, local, now = () => new Date
   const captured = typeof data?.path === 'string' && data.path ? data.path : file;
   if (!isFile(captured)) return null;
   const model = rememberCapture(local, { moduleKey: tab.key, module: tab.name, file: captured, source: 'build', now: now() });
-  return { path: captured, key: tab.key, module: tab.name, modelSha256: isModelSha(model) ? model : modelSha256(captured) };
+  return { path: captured, key: tab.key, module: tab.name, environment: tab.environment ?? null, modelSha256: isModelSha(model) ? model : modelSha256(captured) };
 }
 
 // R3: the kernel's hot module of a build (JobRunner hot), with the identity check against the capture's model hash.
@@ -153,6 +157,33 @@ export const checkedCandidateOffer = () => checkedCandidates.getStore() ?? null;
 
 const readJsonFile = file => { try { return JSON.parse(fs.readFileSync(file, 'utf8').replace(/^﻿/, '')); } catch { return null; } };
 const sameFile = (a, b) => path.resolve(String(a)).toLowerCase() === path.resolve(String(b)).toLowerCase();
+// R2-H (a): the one rule of a kept candidate, where it is stored (the build phase, the until=apply validation) and where it is
+// reused (fromCheckedCandidate): the bytes the kernel read for the job (its result's sources entry for one of `jobs`) are the
+// bytes of `kept`, the job the candidate is kept with. A job file changed while it was built built another job's candidate.
+export function candidateReadJob(result, { jobs, kept }) {
+  const read = (Array.isArray(result?.sources) ? result.sources : []).find(source => jobs.some(job => sameFile(source?.path ?? '', job)));
+  return Boolean(read) && isFile(kept) && read.sha256 === sha256Of(kept);
+}
+// R2-H (a): where a hosted build or until=apply validation writes its candidate: the customer's private state (builds/<task>),
+// never the mirrored workspace; retention is sweepVerified's (an hour without use, the size cap of verified/); locally `local`.
+export function candidateFolder(taskId, local) {
+  const workspace = hostedContext()?.workspace;
+  if (!workspace) return { workspace: null, folder: local };
+  sweepVerified(workspace);
+  return { workspace, folder: path.join(customerStateDir(workspace), 'builds', taskId) };
+}
+// R2-H (a): keep an accepted candidate in the private state of the hosted customer (hosted/verified-store.mjs) under the one
+// rule above: {candidateRef}, or {retention}, the note of why it was not kept (the call itself still stands).
+export function retainCandidate({ workspace, module, candidate, result, job, kept, base, producers = [], via, passed = 'The build passed' }) {
+  if (!candidateReadJob(readJsonFile(result), { jobs: [job, kept], kept }))
+    return { retention: passed + '; its candidate was not retained because the job changed while it was built.' };
+  try {
+    return { candidateRef: keepCandidate(workspace, { lane: 'o11', module, candidate: {
+      path: candidate, sha256: sha256Of(candidate), result, job: kept, sourceJob: job, base,
+      baseSha256: sha256Of(base), baseModelSha256: modelSha256(base), producers: Object.fromEntries(producers), via,
+    } }) };
+  } catch { return { retention: passed + '; its candidate could not be retained.' }; }
+}
 // The prebuilt manifest from a checked candidate, or {reason} when it cannot serve this build (see the header).
 function fromCheckedCandidate(offer, { input, job, shot, folder, producers }) {
   const c = offer?.candidate;
@@ -173,9 +204,12 @@ function fromCheckedCandidate(offer, { input, job, shot, folder, producers }) {
   if (!document || !applied || JSON.stringify(document) !== JSON.stringify(applied)) return no('job-differs');
   const sources = Array.isArray(checked.sources) ? checked.sources : null;
   if (!sources || sources.length !== 1 || !sameFile(sources[0]?.path ?? '', c.job)) return no('job-reads-files');
+  // The bytes the kernel read are the job the check kept: a candidate built while its job file held another job (the file
+  // was changed during the build) is that other job's.
+  if (!candidateReadJob(checked, { jobs: [c.job], kept: c.job })) return no('job-changed');
   // The producers the check bound are the delivery's own (the kernel compares the manifest with the delivery's bindings).
   const bound = Object.entries(c.producers ?? {});
-  if (bound.length !== producers.length || !producers.every(([name, file]) => bound.some(([n, f]) => n.toLowerCase() === String(name).toLowerCase() && sameFile(f, file))))
+  if (bound.length !== producers.length || !producers.every(([name, file]) => bound.some(([n, f]) => n.toLowerCase() === String(name).toLowerCase() && sameFile(typeof f === 'string' ? f : f.path, file) && (typeof f === 'string' ? !hostedContext() : isFile(file) && sha256Of(file) === f.sha256))))
     return no('producers-differ');
   fs.mkdirSync(folder, { recursive: true });
   const candidate = path.join(folder, 'candidate.oml');
@@ -290,7 +324,12 @@ export async function buildBeforeApply({ input, job, ctx, lane, task, signal }) 
   if (!shot) return null;
   const folder = path.join(lane.work, 'build', task.id);
   fs.mkdirSync(folder, { recursive: true });
-  const candidate = path.join(folder, 'candidate.oml');
+  const { workspace: privateWorkspace, folder: outputFolder } = candidateFolder(task.id, folder);
+  fs.mkdirSync(outputFolder, { recursive: true });
+  const candidate = path.join(outputFolder, 'candidate.oml');
+  const checkedJob = privateWorkspace ? path.join(outputFolder, 'job.json') : job;
+  const checkedBase = privateWorkspace ? path.join(outputFolder, 'base.oml') : shot.path;
+  if (privateWorkspace) { fs.copyFileSync(job, checkedJob); fs.copyFileSync(shot.path, checkedBase); }
   const pool = ctx.buildPool ?? sharedBuildPool({ root: ctx.root, env: ctx.env });
   const producers = Object.entries(input.producers ?? {});
   const offer = checkedCandidateOffer();
@@ -306,7 +345,8 @@ export async function buildBeforeApply({ input, job, ctx, lane, task, signal }) 
   let prefer = [];
   if (baseModel) { try { const ports = await Promise.all(Array.from({ length: pool.size ?? 1 }, (_, i) => slotPort(i, lanePorts))); prefer = preferredSlots(baseModel, ports.length, i => ports[i]); } catch { prefer = []; } }
   let ranOn = null;
-  const argv = ['apply', '--job', job, '--base', shot.path, '--out', candidate, '--work', path.join(folder, 'model'),
+  // Keep the job's directory for relative job: dependencies. The kernel pins every source hash.
+  const argv = ['apply', '--job', job, '--base', checkedBase, '--out', candidate, '--work', path.join(outputFolder, 'model'),
     ...(input.autoPatch === false ? ['--auto-patch', 'off'] : []),
     ...producers.flatMap(([name, file]) => ['--producer', name + '=' + file]),
     // the job a patched delivery corrects (o11-cycle.mjs BASED_ON): the preflight refuses CSS the correction dropped
@@ -339,13 +379,28 @@ export async function buildBeforeApply({ input, job, ctx, lane, task, signal }) 
   const result = candidate.replace(/\.oml$/i, '.result.json');
   // Anything else (no candidate, an exception, a timeout): the delivery builds inside the Studio lock, as before.
   if (!(run?.envelope?.ok === true && data?.isValid === true && data?.accepted === true && isFile(candidate) && isFile(result))) return null;
+  let candidateRef = null, retention = null;
+  if (privateWorkspace) {
+    const checkedResult = readJsonFile(result);
+    // The kernel read the delivery's job file, which the agent can write: the candidate is kept as the private copy's only
+    // when the bytes the kernel read are that copy (a job changed during the build built another candidate).
+    ({ candidateRef = null, retention = null } = retainCandidate({ workspace: privateWorkspace, module: input.module, candidate, result, job,
+      kept: checkedJob, base: checkedBase, producers, via: 'preview' }));
+    // Existing staging reads visible files. Its manifest pins these copied bytes.
+    fs.copyFileSync(candidate, path.join(folder, 'candidate.oml'));
+    fs.writeFileSync(path.join(folder, 'candidate.result.json'), JSON.stringify({ ...checkedResult,
+      sources: checkedResult.sources?.map(source => sameFile(source.path, checkedJob)
+        ? { ...source, path: path.resolve(job), sha256: sha256Of(job) } : source) }));
+  }
+  const deliveredCandidate = privateWorkspace ? path.join(folder, 'candidate.oml') : candidate;
+  const deliveredResult = privateWorkspace ? path.join(folder, 'candidate.result.json') : result;
   const manifest = path.join(folder, 'prebuilt.json');
   const baseModelSha256 = isModelSha(shot.modelSha256) ? shot.modelSha256 : modelSha256(shot.path);
   const hot = hotOfBuild(data, baseModelSha256);
   fs.writeFileSync(manifest, JSON.stringify({ schema: PREBUILT_SCHEMA, module: shot.module, moduleKey: shot.key, job, base: shot.path, baseSha256: sha256Of(shot.path),
     // R3: the model the build applied to, the identity of the capture store and of the kernel's hot module
     baseModelSha256, ...(hot ? { hot } : {}),
-    candidate, candidateSha256: sha256Of(candidate), result,
+    candidate: deliveredCandidate, candidateSha256: sha256Of(candidate), result: deliveredResult,
     producers: Object.fromEntries(producers.map(([name, file]) => [name, { path: file, sha256: isFile(file) ? sha256Of(file) : null }])),
     builtAt: new Date().toISOString(), buildMs: run.wallMs ?? null,
     // vel-entrega: the base is a copy of a capture the server held with the same model (nothing was captured or uploaded)
@@ -353,7 +408,7 @@ export async function buildBeforeApply({ input, job, ctx, lane, task, signal }) 
     // S9: a draft's checked candidate that could not serve this build, and why
     ...(offer?.outcome ? { checkedCandidate: offer.outcome } : {}) }, null, 2));
   notePhase({ built: true });
-  return { args: ['--prebuilt', manifest], manifest, ...(hot ? { hot } : {}) };
+  return { args: ['--prebuilt', manifest], manifest, ...(candidateRef ? { candidateRef } : {}), ...(retention ? { retention } : {}), ...(hot ? { hot } : {}) };
 }
 
 // After the apply phase: a candidate the kernel did not reuse (the module changed after the build) is a rebase; the

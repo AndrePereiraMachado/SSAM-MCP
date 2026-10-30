@@ -786,6 +786,11 @@ public static partial class Delivery
                             catch (Exception proofError) when (proofError is not OutOfMemoryException and not BridgeCallException) { result["contentProofError"] = Errors.Text(proofError); }
                             finally { Timings()["contentProofMs"] = proofClock.ElapsedMilliseconds; }
                         }
+                        // R3-C (K2): the names the Studio gave on its own in this merge, which the proof accepted only as NativeNames
+                        // predicted them from the candidate, are said in the answer: the module now has them.
+                        if (result["contentProof"] is JsonObject proved && proved["accepted"]?.GetValue<bool>() == true
+                            && proved["nativeNames"]?["renames"] is JsonArray { Count: > 0 } nativeRenames)
+                            result["nativeRenames"] = nativeRenames.DeepClone();
                     }
                     // Deferred defaults are checked on the delivered module itself: logic parameters have no data assertion.
                     var lost = deferred is { Count: > 0 } && mergePlanner != null ? mergePlanner.Missing(deliveredPath, deferred) : new JsonArray();

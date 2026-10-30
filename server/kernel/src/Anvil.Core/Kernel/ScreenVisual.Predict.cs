@@ -105,12 +105,12 @@ public static partial class ScreenVisual
     }
 
     /// <summary>The predicted runtime DOM of one root (a screen or a block) of a model.</summary>
-    public static Prediction Predict<T>(ModelReader<T> reader, T root, string platform) where T : class
+    public static Prediction Predict<T>(ModelReader<T> reader, T root, string platform, RenderMode? render = null) where T : class
     {
         platform = RuntimeDomTable.IsOdc(platform) ? "odc" : "o11";
         var model = PrototypeRender.ReadRoot(reader, root);
         var prediction = new Prediction();
-        var predictor = new Predictor<T>(reader, platform, prediction);
+        var predictor = new Predictor<T>(reader, platform, prediction, render);
         var top = prediction.Root.Add(DomNode.Element("div"));
         top.SetAttr("data-ssam-root", model.Name);
         predictor.Emit(model.Widgets, top, null, 0);
@@ -175,7 +175,19 @@ public static partial class ScreenVisual
         return m.Success ? m.Groups[1].Value : text.Length > 12 ? text[..12] : text;
     }
 
-    private sealed class Predictor<T>(ModelReader<T> reader, string platform, Prediction prediction) where T : class
+    /// <summary>R3-A piece C: the prediction as a page to render (render-document) rather than the superset the check matches:
+    /// an If shows its true branch only, a List repeats its row <see cref="Rows"/> times (deterministic stand-ins), a block of
+    /// another module is read from its producer when <see cref="ExternalBlock"/> finds it, else it stays an empty block instance
+    /// marked data-ssam-unexpanded and listed in <see cref="Unexpanded"/>; the blocks read are in <see cref="Blocks"/>.</summary>
+    public sealed class RenderMode
+    {
+        public int Rows { get; init; } = 3;
+        public Func<object, object?>? ExternalBlock { get; init; }
+        public List<string> Unexpanded { get; } = [];
+        public List<object> Blocks { get; } = [];
+    }
+
+    private sealed class Predictor<T>(ModelReader<T> reader, string platform, Prediction prediction, RenderMode? render = null) where T : class
     {
         // Inside the widgets of a block instance the counts are the block's (counted once, in the block's own prediction);
         // a placeholder's content inside it is the page's again.
@@ -194,7 +206,7 @@ public static partial class ScreenVisual
             {
                 // Both branches: what either may show (the check sees every element the document wrote).
                 Emit(widget.Children, parent, placeholders, depth + 1);
-                if (widget.Else != null) Emit(widget.Else, parent, placeholders, depth + 1);
+                if (widget.Else != null && render == null) Emit(widget.Else, parent, placeholders, depth + 1);
                 return;
             }
             if (widget.Basic == "PlaceholderContent") { Emit(widget.Children, parent, placeholders, depth + 1); return; }
@@ -286,7 +298,7 @@ public static partial class ScreenVisual
                         if (owned && RowGroupTags.Contains(tag)) prediction.LayoutListsWithSentinels++;
                         Sentinel(node);
                     }
-                    Emit(Kids(widget), node, placeholders, depth + 1);
+                    for (var copy = 0; copy < (render?.Rows ?? 1); copy++) Emit(Kids(widget), node, placeholders, depth + 1);
                     if (!allRows) Sentinel(node);
                     return;
             }
@@ -367,7 +379,15 @@ public static partial class ScreenVisual
             {
                 host.SetAttr("data-block", reader.NameOf(block));
                 var blockModel = PrototypeRender.ReadRoot(reader, block);
-                if (blockModel.Widgets.Count > 0 && blockDepth < 4) { blockDepth++; try { Emit(blockModel.Widgets, host, contents, depth + 1); } finally { blockDepth--; } return; }
+                var read = block;
+                // a block of another module: its producer's capture, when the render was given it
+                if (blockModel.Widgets.Count == 0 && render?.ExternalBlock?.Invoke(block) is T producer) { blockModel = PrototypeRender.ReadRoot(reader, producer); read = producer; }
+                if (blockModel.Widgets.Count > 0 && blockDepth < 4)
+                {
+                    if (render != null && !render.Blocks.Contains(read)) render.Blocks.Add(read);
+                    blockDepth++; try { Emit(blockModel.Widgets, host, contents, depth + 1); } finally { blockDepth--; } return;
+                }
+                if (render != null) { host.SetAttr("data-ssam-unexpanded", ""); render.Unexpanded.Add("@" + (widget.Key ?? "") + " (block " + reader.NameOf(block) + " of another module)"); }
             }
             // A block of another module (its widgets are not in this model): the placeholder contents in place.
             foreach (var (_, content) in widget.Contents) Emit(content, host, null, depth + 1);

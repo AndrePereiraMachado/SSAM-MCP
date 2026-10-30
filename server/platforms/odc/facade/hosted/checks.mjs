@@ -14,6 +14,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { keepCandidate, candidateOffer, sweepVerified, withPrivateChecks } from './verified-store.mjs';
 
 export const CANDIDATE_MAX_AGE_MS = 60 * 60000;
 const SWEEP_EVERY_MS = 10 * 60000;
@@ -106,15 +107,32 @@ export function sweepCandidates(workspace, { now = Date.now(), maxAgeMs = CANDID
   return removed;
 }
 
-/** The ssam_code check of a hosted customer: the old candidates swept, a slot taken, the check run, its candidate removed. */
+/** Sweep expired state, validate in a slot, retain one optional content ref, and remove the temporary check tree in finally. */
 export function hostedCheck(context, check, { slots = null, now = () => Date.now(), maxAgeMs = CANDIDATE_MAX_AGE_MS } = {}) {
   const workspace = path.resolve(context.workspace);
   return async input => {
     sweepCandidates(workspace, { now: now(), maxAgeMs });
-    return (slots ?? sharedCheckSlots()).run(workspace, async () => {
+    sweepVerified(workspace, { now: now(), maxAgeMs });
+    return (slots ?? sharedCheckSlots()).run(workspace, () => withPrivateChecks(workspace, async () => {
       const answer = await check(input);
+      try { if (answer?.ok && answer[Symbol.for('ssam.check.candidate')]) {
+        const candidateRef = keepCandidate(workspace, { lane: input.lane, module: input.module, candidate: answer[Symbol.for('ssam.check.candidate')] });
+        if (candidateRef) {
+          answer.candidateRef = candidateRef;
+          // Most checks only return a ref. Materialize once only if an internal draft or a delivery uses it.
+          let retained;
+          Object.defineProperty(answer, Symbol.for('ssam.check.candidate'), { configurable: true,
+            get: () => retained ??= candidateOffer(workspace, candidateRef, { lane: input.lane, module: input.module }).candidate });
+          if (!input.stubs?.length) {
+          const { base, stubs, action, ...write } = input;
+          answer.write = { tool: 'ssam_code', arguments: { ...write, action: 'write', candidateRef } };
+          answer.next = 'Send write with this candidateRef; the same base reuses the checked candidate, a changed base is validated again.';
+          }
+        }
+      }
+      } catch { delete answer.candidateRef; delete answer.write; answer.retention = 'The check passed; its candidate could not be retained. The delivery will validate again.'; }
       discardCandidate(workspace, answer?.job);
       return answer;
-    });
+    }));
   };
 }

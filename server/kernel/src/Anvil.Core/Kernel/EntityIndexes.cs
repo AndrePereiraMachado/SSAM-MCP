@@ -58,8 +58,9 @@ public static class EntityIndexes
     public const int MaxNameLength = NameTruncation.MaxLength;
     private static void CheckName(Entity entity, string name, EntityIndex? self = null)
     {
-        if (name.Length > MaxNameLength)
-            throw new InvalidOperationException($"EntityIndex name '{name}' has {name.Length} characters; the Studio truncates index names to {MaxNameLength} (it would become '{name[..MaxNameLength]}'); pick a shorter name");
+        // R3-B: the limit and the words are the table's (PlatformLimits name.index), the preflight's too.
+        if (PlatformLimits.MaxName("EntityIndex") is { } max && name.Length > max)
+            throw new InvalidOperationException(PlatformLimits.RenameMessage("EntityIndex", name, max));
         if (entity.EntityIndices.Any(i => !ReferenceEquals(i, self) && string.Equals(i.Name, name, StringComparison.OrdinalIgnoreCase)))
             throw new InvalidOperationException($"EntityIndex '{name}' already exists on {entity.Name}");
     }

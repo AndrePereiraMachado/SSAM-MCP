@@ -19,6 +19,7 @@ import { runJob } from '../job-runner.mjs';
 import { codeCheck } from '../code-check.mjs';
 import { createSsamServer } from '../ssam.mjs';
 import { fitAnswer, ANSWER_BUDGETS } from '../answer-size.mjs';
+import { VISIBLE_ANSWER_BYTES } from '../context-budget.mjs';
 import { withStudioWriteLock, phaseOfCall, phaseGuard } from '../studio-write-lock.mjs';
 import { BUILD_VERBS } from '../o11-build-phase.mjs';
 import { uiPrecheck, isUiJob, continuationOf, producerFresh, referencedLibraries, moduleOfCapture, joinPrecheck } from '../ui-precheck.mjs';
@@ -509,7 +510,9 @@ test('in a phased call the precheck never takes the Studio: no index is built, t
   assert.ok(v.static.skipped.some(s => s.class === 'module-index' && /never builds/.test(s.reason)));
 });
 
-test('a refusal with many problems stays within 8192 bytes as the MCP client measures it', async t => {
+// R1-B (fase4-28/r1-answers, R2-H): the ceiling of a refusal and of its problems is the visible one, VISIBLE_ANSWER_BYTES
+// (9216, below the client's cut of 10000 characters), as R1-B's own tests measure it; the editorial 8192 no longer bounds it.
+test('a refusal with many problems stays within the visible ceiling as the MCP client measures it', async t => {
   const box = await o11Harness(t, { handlers: { 'check-job': checkJob(Array.from({ length: 48 }, (_, i) => ({ ...TYPE_AS_VALUE,
     message: TYPE_AS_VALUE.message + ' #' + i, edit: { element: i % 2 ? 'Stations' : 'StationCard', find: 'value="Entity' + i + '.Id"', with: 'value="LoadOptions.Entity' + i + 's.Current.Id"' } }))) } });
   storeIndex(box.store, 'o11', CAPTURE_TEXT);
@@ -518,7 +521,7 @@ test('a refusal with many problems stays within 8192 bytes as the MCP client mea
   assert.equal(v.code, 'PREFLIGHT_REFUSED'); assert.equal(v.problems.length, 48);
   const fitted = fitAnswer('o11_deliver', { module: 'Shop_UI', authorize: WORDS }, v, { root: box.base });
   t.diagnostic('raw ' + bytes(v) + ' B -> fitted ' + bytes(fitted) + ' B');
-  assert.ok(bytes(fitted) <= ANSWER_BUDGETS.refusal, bytes(fitted) + ' bytes');
+  assert.ok(bytes(fitted) <= VISIBLE_ANSWER_BYTES, bytes(fitted) + ' bytes');
   assert.equal(fitted.code, 'PREFLIGHT_REFUSED');
 });
 

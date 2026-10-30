@@ -1,6 +1,7 @@
-import {authorizationContext} from '../../facade/authorization-context.mjs';
+import {authorizationContext,WRITTEN_CONTEXT} from '../../facade/authorization-context.mjs';
 import {ipFilterHash as hash} from './ip-filter-approval.mjs';
 import {fail} from './errors.mjs';
+import {recorded,sameGrant} from './written-approval.mjs';
 const root='user-access-management-api-v1:',collection='/organization-roles';
 export const ORG_ROLE_CREATE=root+'post:'+collection,ORG_ROLE_PATCH=root+'patch:'+collection+'/{key}',ORG_ROLE_DELETE=root+'delete:'+collection+'/{key}';
 export const ORG_ROLE_WRITES=new Set([ORG_ROLE_CREATE,ORG_ROLE_PATCH,ORG_ROLE_DELETE]);
@@ -10,7 +11,7 @@ export async function organizationRoleApproval({file,words,host,operationId,inpu
  const permissionsPatch=operationId===ORG_ROLE_PATCH&&b&&Array.isArray(b.permissions)
   &&Object.keys(b).length===2&&typeof b.name==='string';
  if(!ORG_ROLE_WRITES.has(operationId)||input.query||Object.keys(p).some(k=>k!=='key')||(create&&Object.keys(p).length))bad();
- let name,origin,current;
+ let name,origin,current;const permissionNames=new Map();
  if(create){
   if(!b||typeof b.name!=='string'||!b.name.trim()||!Array.isArray(b.permissions)||b.permissions.length
     ||Object.keys(b).some(k=>!['name','permissions'].includes(k)))bad();
@@ -18,7 +19,7 @@ export async function organizationRoleApproval({file,words,host,operationId,inpu
  }else{
   origin=lookup(originOperationUuid);
   if(typeof p.key!=='string'||!origin||!['accepted','confirmed'].includes(origin.state)||origin.identity?.tenant!==host
-    ||origin.identity.operationId!==ORG_ROLE_CREATE||origin.response?.orgRoleKey!==p.key||!origin.authorization?.source)bad();
+    ||origin.identity.operationId!==ORG_ROLE_CREATE||origin.response?.orgRoleKey!==p.key||!recorded(origin))bad();
   name=origin.identity.target?.name;
   const seen=await read(root+'get:'+collection+'/{key}',p);
   if(!seen.ok||seen.data?.key!==p.key)bad();current=seen.data;
@@ -33,6 +34,7 @@ export async function organizationRoleApproval({file,words,host,operationId,inpu
     keys.add(item.permissionKey);
     const permission=await read(root+'get:/permissions/{key}',{key:item.permissionKey});
     if(!permission.ok||permission.data?.key!==item.permissionKey||!permission.data.allowedScopes?.includes('Organization'))bad();
+    permissionNames.set(item.permissionKey,permission.data.name);
     for(const [field,allowed] of [['environmentKeys','allowStages'],['portfolioKeys','allowPortfolios']]){
      if(item[field]!==undefined&&(!Array.isArray(item[field])||item[field].some(k=>typeof k!=='string'||!uuid.test(k))
       ||new Set(item[field]).size!==item[field].length||item[field].length&&!permission.data[allowed]))bad();
@@ -50,7 +52,23 @@ export async function organizationRoleApproval({file,words,host,operationId,inpu
    ||list.data.results.some(r=>typeof r.name!=='string'||r.name.toLowerCase()===b.name.toLowerCase()&&r.key!==p.key))bad();
  }
  const constraints={bodySha256:hash(b??null),...(create?{}:{originOperationUuid,expectedConfigurationSha256:hash(current)})};
- const approval=authorizationContext(file,words,{lane:'odc',host,operation:operationId,targets:[name],constraints});
- if(!approval||origin&&(approval.source.threadId!==origin.authorization.source.threadId||approval.source.messageId!==origin.authorization.source.messageId))bad();
+ // R2-I round 5: with the written words alone, a permissions patch names the role and every permission whose grant changes
+ // (granted now, revoked, or with other stages/portfolios), by its catalogued name. A context file keeps its scope.
+ const targets=[name];
+ if(permissionsPatch&&file===WRITTEN_CONTEXT){
+  const scopeOf=item=>JSON.stringify([[...(item.environmentKeys??[])].sort(),[...(item.portfolioKeys??[])].sort()]);
+  const before=new Map(current.permissions.map(item=>[item?.permissionKey,item])),after=new Map(b.permissions.map(item=>[item.permissionKey,item]));
+  if(before.has(undefined))bad();
+  for(const key of new Set([...before.keys(),...after.keys()])){
+   const was=before.get(key),now=after.get(key);
+   if(was&&now&&scopeOf(was)===scopeOf(now))continue;
+   let label=now?permissionNames.get(key):was.name;
+   if(typeof label!=='string'||!label.trim()){const read1=await read(root+'get:/permissions/{key}',{key});label=read1.ok&&read1.data?.key===key?read1.data.name:undefined;}
+   if(typeof label!=='string'||!label.trim())bad();
+   targets.push(label);
+  }
+ }
+ const approval=authorizationContext(file,words,{lane:'odc',host,operation:operationId,targets,constraints});
+ if(!approval||origin&&(!sameGrant(origin.authorization,approval)))bad();
  return approval;
 }

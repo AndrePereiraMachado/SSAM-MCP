@@ -36,8 +36,11 @@ public sealed partial class ModelSession
         if (target == null) Shape("/screen", "html edit: 'screen' is required (the screen or block read: name, Kind:Name or @key)", "\"screen\": \"<the name ssam_map view html read>\"");
         List<string> edits; string pointer;
         // CX16: element edits of the reading (HtmlElementEdits): the whole document they make is the one edit of today's path.
-        var elementEdits = data["edits"] != null ? data["edits"] as JsonArray ?? new JsonArray() : null;
-        if (data["edits"] != null) {
+        // R2-D: data.css alone is an edit of the style sheet only (the elements stay as they are).
+        var cssOnly = ScreenHtmlEdit.CssOnly(data);
+        var elementEdits = data["edits"] != null && !cssOnly ? data["edits"] as JsonArray ?? new JsonArray() : null;
+        if (cssOnly) { edits = []; pointer = "/css"; }
+        else if (data["edits"] != null) {
             edits = []; pointer = "/edits";
             if (data["edit"] != null || data["html"] != null)
                 Shape("/edits", "html edit: 'edits' (element edits of the reading) goes alone, without 'edit' or 'html'", "keep edits, or send the changed elements whole in edit");
@@ -45,7 +48,7 @@ public sealed partial class ModelSession
         }
         else if (data["edit"] is JsonArray list) { edits = list.Select(e => e is JsonValue v && v.TryGetValue<string>(out var t) ? t : "").ToList(); pointer = "/edit"; }
         else if (data["html"] is JsonValue whole && whole.TryGetValue<string>(out var document)) { edits = [document]; pointer = "/html"; }
-        else { edits = []; pointer = "/edit"; Shape("/edit", "html edit: 'edit' (the changed elements, each with its k) or 'html' (the whole document) is required", "\"edit\": [\"<div k=\\\"w7\\\" ...>...</div>\"]"); }
+        else { edits = []; pointer = "/edit"; Shape("/edit", "html edit: 'edit' (the changed elements, each with its k), 'html' (the whole document) or 'css' (the whole style sheet) is required", "\"edit\": [\"<div k=\\\"w7\\\" ...>...</div>\"]"); }
         var basedOn = data["basedOn"] as JsonObject;
         var baseHtml = basedOn?["html"]?.ToString();
         if (baseHtml is not { Length: > 0 }) Shape("/basedOn", "html edit: 'basedOn' {capture, html} is the reading the edit was written on (ssam_map view html answers it)", "\"basedOn\": {\"capture\": \"<sourceSha256>\", \"html\": \"<htmlSha256>\"}");
@@ -55,6 +58,7 @@ public sealed partial class ModelSession
         var reading = module.Read(target!);
         var notes = new JsonArray();
         JsonObject? elementNote = null;
+        JsonArray? escapes = null;
         Dictionary<string, int>? editOf = null;
         Dictionary<string, string>? baseKeys = null;
         if (elementEdits != null) {
@@ -66,7 +70,7 @@ public sealed partial class ModelSession
                 baseKeys = (stored["keys"] as JsonObject)?.Where(p => p.Value is JsonValue).ToDictionary(p => p.Key, p => p.Value!.ToString(), StringComparer.Ordinal);
             }
             else throw BaseChanged(reading, baseHtml!, StoredReading(basedOn!)?["keys"] as JsonObject, elementEdits);
-            var applied = HtmlElementEdits.Apply(baseText, elementEdits, baseKeys, out editOf);
+            var applied = HtmlElementEdits.Apply(baseText, elementEdits, baseKeys, out editOf, out var escapedWith);
             if (applied.Problems.Count > 0)
                 throw new KernelRefusalException(applied.Problems.Select(p => p["code"]!.ToString()).Distinct().Count() == 1 ? applied.Problems[0]["code"]!.ToString() : "HTML_EDIT_REFUSED",
                     "html edits of " + reading.Root + " refused: " + string.Join(" | ", applied.Problems.Take(6).Select(p => "[" + p["code"] + "] " + p["message"])),
@@ -74,6 +78,13 @@ public sealed partial class ModelSession
             edits = [applied.Document];
             elementNote = new JsonObject { ["rule"] = "html-element-edits", ["at"] = "/edits", ["from"] = baseHtml![..Math.Min(12, baseHtml.Length)],
                 ["edits"] = elementEdits.Count, ["touched"] = new JsonArray(applied.Touched.Select(k => (JsonNode)k).ToArray()) };
+            // R2-C: the loose & or < of a with written as its entity where it landed (HTML text or a tag of the reading).
+            var opAt = OpsPointer != null && _applyOps != null && _applyIndex < _applyOps.Count ? $"{OpsPointer}/{_applyIndex}/data" : null;
+            foreach (var (j, escaped) in escapedWith) {
+                var entry = Preflight.HtmlLooseText.Entry(opAt == null ? $"/edits/{j}/with" : $"{opAt}/edits/{j}/with", escaped);
+                Normalized([entry]);
+                (escapes ??= new JsonArray()).Add(entry.DeepClone());
+            }
             // "id": null in a set removes the name (written id=""), as the contract of set says; said here, since the text it makes
             // writes id="" where the edit wrote null (the review of round 2, A2).
             var cleared = elementEdits.OfType<JsonObject>().Where(e => e["set"] is JsonValue && e["attributes"] is JsonObject a && a.ContainsKey("id") && a["id"] == null)
@@ -82,23 +93,65 @@ public sealed partial class ModelSession
                 elementNote["names"] = new JsonObject { ["cleared"] = new JsonArray(cleared),
                     ["note"] = "\"id\": null removes the name: written id=\"\" (an element whose text leaves its id out keeps the name it has)" };
         }
+        var readSheet = ScreenHtmlEdit.OwnSheetOf(reading.Html) ?? "";
+        JsonObject? style = null;
         if (data.ContainsKey("css"))
         {
             try
             {
-                if (data["css"] is not JsonValue cssValue || !cssValue.TryGetValue<string>(out var css))
+                if (data["css"] is not JsonValue cssValue || !cssValue.TryGetValue<string>(out _))
                     throw new FormatException("data.css must be a string");
-                // After the page's <style> (the edit's, else the reading's), as the document form writes it.
-                edits = ScreenHtmlEdit.WithCss(edits, css, reading.Html);
+                // R2-D: data.css IS the page's whole style sheet: it replaces the <style> the edit or the reading has.
+                if (ScreenHtmlEdit.DataCss(data) is { } css)
+                {
+                    var placed = ScreenHtmlEdit.PlaceCss(edits, css, reading.Html);
+                    edits = placed.Edits;
+                    style = new JsonObject();
+                    if (placed.ReplacedTheEdits && placed.Replaced is { } was && Squeezed(was) != Squeezed(css))
+                        style["replaced"] = $"data.css is the whole style sheet of {reading.Root}: it replaced the <style> the edit sent ({System.Text.Encoding.UTF8.GetByteCount(was)} bytes), which was not written";
+                }
             }
             catch (FormatException ex)
             {
                 throw new KernelRefusalException(ScreenHtmlEdit.Invalid, ex.Message,
-                    new JsonArray(JobPreflight.Problem(null, "/css", ScreenHtmlEdit.Invalid, "error", ex.Message, "send data.css as CSS text without a closing style tag; it follows the page's <style> in its style sheet")));
+                    new JsonArray(JobPreflight.Problem(null, "/css", ScreenHtmlEdit.Invalid, "error", ex.Message, "send data.css as CSS text without a closing style tag; it is the page's whole style sheet (it replaces the <style> the screen has)")));
             }
         }
-        try { return HtmlEditPlanned(module, reading, data, basedOn!, baseHtml!, edits, pointer, notes, elementNote); }
+        // The sheet the edit writes (data.css, a <style> edit, a whole document's <style> that is not the reading's) takes the one
+        // normalization before the plan (CssPipeline: shadowed rules out, imports up), then its base64 data: images become module
+        // images: what the plan writes and verifies is what the platform keeps.
+        if (ScreenHtmlEdit.OwnSheet(edits) is { } own && (style != null || own.Css != readSheet))
+        {
+            style ??= new JsonObject();
+            var outcome = CssPipeline.Normalize(own.Css, new CssPipeline.Context("own <style> of " + reading.Root));
+            if (outcome.StageChanges.Count > 0) style["cssStages"] = new JsonArray(outcome.StageChanges.Select(c => (JsonNode)c.DeepClone()).ToArray());
+            if (outcome.ImportsHoisted.Count > 0) style["cssImportsHoisted"] = new JsonArray(outcome.ImportsHoisted.Select(x => (JsonNode)x.Statement).ToArray());
+            var written = CssDataImages(outcome.Css, reading.Root, style);
+            if (written != own.Css) edits = ScreenHtmlEdit.WithOwnSheet(edits, own.Edit, written);
+        }
+        try { return HtmlEditPlanned(module, reading, data, basedOn!, baseHtml!, edits, pointer, notes, elementNote, readSheet, style, escapes); }
         catch (KernelRefusalException refusal) when (elementEdits != null) { throw ForElementEdits(refusal, reading, editOf, baseKeys); }
+    }
+
+    private static string Squeezed(string text) => new(text.Where(c => !char.IsWhiteSpace(c)).ToArray());
+
+    /// <summary>R2-D: what an html op did to the root's own style sheet, from the first call: its bytes before and after, the
+    /// rules added and removed (a fragment that replaced the rest of the sheet shows here), and what the write said
+    /// (<paramref name="said"/>: replaced, cssStages, images).</summary>
+    internal static JsonObject StyleSheetReport(string before, string after, JsonObject? said)
+    {
+        var report = new JsonObject
+        {
+            ["bytesBefore"] = System.Text.Encoding.UTF8.GetByteCount(before), ["bytesAfter"] = System.Text.Encoding.UTF8.GetByteCount(after),
+        };
+        if (CssShadowedRules.Diff(before, after) is { } diff)
+        {
+            report["rulesAdded"] = diff.Added; report["rulesRemoved"] = diff.Removed;
+            // The rules removed, by name (context and selectors), so a fragment that replaced the rest of the sheet says what went.
+            CssShadowedRules.Listed(report, "removedRules", "removedRulesMore", diff.RemovedNames);
+        }
+        if (said != null) foreach (var (key, value) in said) report[key] = value?.DeepClone();
+        return report;
     }
 
     // A problem of the element edits engine (pointers relative to op.data) as the kernel publishes it.
@@ -174,7 +227,8 @@ public sealed partial class ModelSession
     }
 
     private JsonNode HtmlEditPlanned(ScreenHtmlModule<IObjectSignature> module, ScreenHtmlDocument reading, JsonObject data, JsonObject basedOn, string baseHtml,
-        List<string> edits, string pointer, JsonArray notes, JsonObject? elementNote)
+        List<string> edits, string pointer, JsonArray notes, JsonObject? elementNote, string readSheet = "", JsonObject? style = null,
+        JsonArray? escapes = null)
     {
         if (reading.HtmlSha256 != baseHtml) {
             // The screen is not the one the edit was written on: rebased through the key table of that reading.
@@ -186,15 +240,19 @@ public sealed partial class ModelSession
         // (review 4, N1: a block, the themes of the screens that show it, read now).
         ScreenVisual.PageTheme? pageTheme = null;
         try { if (Resolve("@" + reading.RootKey) is IObjectSignature shown) pageTheme = RootThemeOf(shown); } catch (KeyNotFoundException) { }
-        var plan = module.Edit(reading, edits, pointer, pageTheme);
+        var plan = module.Edit(reading, edits, pointer, pageTheme, () => EditLiteralNames(reading, edits));
+        EditLiterals(plan.Result, pointer);
         if (plan.Refused) throw Refusal(plan.Result);
         var writer = new ScreenHtmlNativeWriter(this);
         plan.Apply(writer);
+        EditLiterals(plan.Result, pointer);
         if (plan.Refused) throw Refusal(plan.Result);
         var after = module.Refresh(reading.RootKey);
         ScreenHtmlAfter = after;
-        plan.Verify(after.Read("@" + reading.RootKey));
+        var afterReading = after.Read("@" + reading.RootKey);
+        plan.Verify(afterReading);
         if (plan.Refused) throw Refusal(plan.Result);
+        var afterSheet = ScreenHtmlEdit.OwnSheetOf(afterReading.Html) ?? "";
         // A page that carries markers of the engine (its own as the plan wrote them, or a marked block it places) needs the native
         // layout block in every theme it shows now (written once per theme, said; a theme of another module said with the markers
         // that have no effect there): review 4, N2, whoever wrote the markers and whatever theme they were written for.
@@ -212,8 +270,37 @@ public sealed partial class ModelSession
         answer["screen"] = reading.Root;
         if (iconTheme != null) answer["iconTheme"] = iconTheme;
         if (notes.Count > 0) answer["rebased"] = notes;
-        if (elementNote != null) answer["normalizations"] = new JsonArray(elementNote);
+        if (elementNote != null) answer["normalizations"] = new JsonArray(new JsonNode?[] { elementNote }.Concat((escapes ?? new JsonArray()).Select(e => e?.DeepClone())).ToArray());
+        // R2-D: the style sheet the op wrote, from the first call (bytes before and after, rules added and removed).
+        if (style != null || afterSheet != readSheet) answer["styleSheet"] = StyleSheetReport(readSheet, afterSheet, style);
         return answer;
+    }
+
+    // R2-C: the literals the plan wrote for prose (TEXT_LITERAL_QUOTED), in the job's normalizations too, so a refusal of another
+    // part of the job still says them (each once: the plan's list grows between its checks).
+    private void EditLiterals(ScreenHtmlEditResult result, string pointer)
+    {
+        var at = OpsPointer != null && _applyOps != null && _applyIndex < _applyOps.Count ? $"{OpsPointer}/{_applyIndex}/data{pointer}" : null;
+        foreach (var note in result.Normalized.Where(n => n["code"]?.ToString() == ScreenDocument.TextLiteralQuoted))
+            Normalized([Preflight.JobNormalizer.Entry(ScreenDocument.TextLiteralQuoted, at, $"{note["attribute"]}=\"{note["from"]}\"", $"{note["attribute"]}='{note["to"]}'",
+                (note["k"] is { } k ? $"k=\"{k}\": " : "a new element: ") + note["note"])]);
+    }
+
+    // R2-C: what decides the certainty of a literal in an edit, the rule of the document form (DocumentCompiler.LiteralNames):
+    // every name of the module, its references and the job (scope), and the names the job, the page and the edited text declare.
+    // Null when an op of the job cannot be read: every literal is then a choice.
+    private (IReadOnlySet<string> Scope, IReadOnlySet<string> Declared)? EditLiteralNames(ScreenHtmlDocument reading, IReadOnlyList<string> edits)
+    {
+        try {
+            var jobs = _applyOps == null ? null : LiteralJobNames(_applyOps);
+            if (_applyOps != null && jobs == null) return null;
+            var declared = new HashSet<string>(jobs ?? Enumerable.Empty<string>(), StringComparer.OrdinalIgnoreCase);
+            foreach (var text in edits)
+                foreach (var (element, _) in ScreenHtmlText.Elements(ScreenHtml.Parse(text)))
+                    foreach (var key in new[] { "name", "id" }) if (element.Get(key) is { Length: > 0 } name) declared.Add(name);
+            if (Resolve("@" + reading.RootKey) is IObjectSignature root) declared.UnionWith(LiteralPageNames(root));
+            return (LiteralScopeNames(jobs), declared);
+        } catch (Exception) { return null; }
     }
 
     // The patch of a plan replaces the edit list at the op's pointer; at /html (the html form: the whole document) that list is the
@@ -236,8 +323,8 @@ public sealed partial class ModelSession
                 HtmlFormPatch(p["patch"]));
             if (p["k"] is JsonValue k) problem["k"] = k.DeepClone();
             // F2: what a refusal of a property says of it (the element's kind, the property and its attribute, expected and actual,
-            // the one next call; the Verify's differences one by one).
-            foreach (var field in new[] { "kind", "property", "attribute", "expected", "actual", "next", "differences" })
+            // the one next call; the Verify's differences one by one; R2-A: the candidates of a name, each with its exact attribute).
+            foreach (var field in new[] { "kind", "property", "attribute", "expected", "actual", "next", "differences", "candidates" })
                 if (p[field] is { } value) problem[field] = value.DeepClone();
             return (JsonNode)JobPreflight.PublicProblem(problem);
         }).ToArray());

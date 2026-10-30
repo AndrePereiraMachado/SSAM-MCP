@@ -180,9 +180,17 @@ public class MergeCoverageTests
         File.WriteAllText(path, job.ToJsonString());
         var candidate = Path.Combine(work, "invalid.oml");
         var error = Assert.ThrowsAny<Exception>(() => JobRunner.Run(host, Path.Combine(root, "tests/fixtures/reactive-ui.oml"), path, candidate));
-        var refusal = Errors.FindCoded(error);
-        Assert.Equal("PREFLIGHT_REFUSED", refusal?.Code);
-        Assert.Contains(refusal!.Problems.OfType<JsonObject>(), p => p["code"]?.ToString() == "ROLE_ACTION_REQUIRES_SERVER");
+        // R2-B (one round) writes the failed logic op as its stub, so nothing cascades from it: the apply is the one phase that
+        // refuses and keeps its own code (primeira-certa A7). R2-H: with its problem in the envelope (op, pointer, phase apply),
+        // never problems:[] (it was PREFLIGHT_REFUSED only through the cascade of the failed op).
+        var envelope = Errors.Envelope("apply", error, 0);
+        Assert.Equal("ROLE_ACTION_REQUIRES_SERVER", envelope["code"]?.ToString());
+        var problems = Assert.IsType<JsonArray>(envelope["problems"]).OfType<JsonObject>().ToList();
+        var role = Assert.Single(problems, p => p["code"]?.ToString() == "ROLE_ACTION_REQUIRES_SERVER");
+        Assert.Equal("apply", role["phase"]?.ToString());
+        Assert.NotNull(role["op"]);
+        Assert.StartsWith("/ops/", role["pointer"]?.ToString());
+        Assert.DoesNotContain(problems, p => p["code"]?.ToString() is "REFERENCE_UNRESOLVED" or "CHILD_NOT_FOUND");
         Assert.False(File.Exists(candidate));
     }
 

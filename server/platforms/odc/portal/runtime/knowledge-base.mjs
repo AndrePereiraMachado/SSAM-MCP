@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-import {authorizationContext} from '../../facade/authorization-context.mjs';
+import {approvalOf,contextValues,originId,ownedBy,sameGrant,recorded} from './written-approval.mjs';
 import {fail} from './errors.mjs';
 import {isUuid,sha256} from './write-journal.mjs';
 export const KB_CREATE='knowledgeBases.create',KB_DELETE='knowledgeBases.delete';
@@ -12,8 +12,10 @@ export function knowledgeBaseInventory(result){
   ||new Set(list.map(x=>x.KnowledgeBaseId)).size!==list.length)fail('KNOWLEDGE_BASE_INVENTORY_INCOMPLETE','Complete knowledge-base inventory could not be verified.');
  return list;
 }
-export async function knowledgeBaseApproval({file,words,host,operationId,raw,lookup,read}){
- if(!file||Object.keys(raw.screenVariables??{}).length||Object.keys(raw.clientVariables??{}).length)bad();
+// R2-I (owner's rule, 28/10): the written words naming the base (and its data source) are the approval; a context file is
+// still accepted. Without one, a delete finds its own creation in SSAM's journal (the receipt that returned this base).
+export async function knowledgeBaseApproval({file,words,host,operationId,raw,lookup,read,find}){
+ if(Object.keys(raw.screenVariables??{}).length||Object.keys(raw.clientVariables??{}).length)bad();
  const p=raw.inputParameters;
  if(operationId===KB_CREATE){
   const k=p?.KnowledgeBaseCreate,d=k?.DataSources?.List?.[0],c=d?.ChunkingConfig;
@@ -22,7 +24,7 @@ export async function knowledgeBaseApproval({file,words,host,operationId,raw,loo
    ||!keys(d,'Name,Description,Type,ChunkingConfig')||typeof d.Name!=='string'||!d.Name.trim()||typeof d.Description!=='string'||d.Type!=='upload_files'
    ||!keys(c,'ChunkingMethod,ChunkSize,ChunkOverlap,Separators,KeepSeparator')||!Number.isSafeInteger(c.ChunkSize)||c.ChunkSize<=0
    ||!Number.isSafeInteger(c.ChunkOverlap)||c.ChunkOverlap<0||c.ChunkOverlap>=c.ChunkSize||typeof c.Separators!=='string'||typeof c.KeepSeparator!=='boolean')bad();
-  const approved=authorizationContext(file,words,{lane:'odc',host,operation:KB_CREATE,targets:[k.Name,d.Name],constraints:{inputSha256:sha256(JSON.stringify(p)),portfolioKey:k.PortfolioKey}});
+  const approved=approvalOf(file,words,{lane:'odc',host,operation:KB_CREATE,targets:[k.Name,d.Name],constraints:{inputSha256:sha256(JSON.stringify(p)),portfolioKey:k.PortfolioKey}});
   const methods=await read('knowledgeBases.chunkingMethods',{}),stages=await read('knowledgeBases.createStages',{});
   if(!approved||methods?.ok!==true||!methods.data?.ChunkingMethods?.List?.some(x=>x.Id===c.ChunkingMethod)
    ||stages?.ok!==true||!stages.data?.Stages?.List?.some(x=>x.PortfolioKey===k.PortfolioKey))bad();
@@ -31,17 +33,18 @@ export async function knowledgeBaseApproval({file,words,host,operationId,raw,loo
   return approved;
  }
  if(operationId!==KB_DELETE||!keys(p,'KnowledgeBaseId')||!isUuid(p.KnowledgeBaseId))bad();
- let c;try{if(fs.statSync(file).size>32768)bad();c=JSON.parse(fs.readFileSync(file,'utf8')).constraints;}catch{bad();}
+ let c;try{c={...contextValues(file)};}catch{bad();}
+ c.originOperationUuid=originId(c,'originOperationUuid',{written:!file,find,what:'The knowledge-base cleanup',
+  predicate:r=>ownedBy(host,KB_CREATE)(r)&&r.response?.KnowledgeBaseId===p.KnowledgeBaseId});
  if(!isUuid(c?.originOperationUuid))bad();
  const origin=lookup(c.originOperationUuid);
  if(!origin||!['accepted','confirmed'].includes(origin.state)||origin.identity?.tenant!==host||origin.identity.operationId!==KB_CREATE
-  ||origin.response?.KnowledgeBaseId!==p.KnowledgeBaseId||!origin.authorization?.source)bad();
+  ||origin.response?.KnowledgeBaseId!==p.KnowledgeBaseId||!recorded(origin))bad();
  const list=knowledgeBaseInventory(await read('knowledgeBases.list',{})),found=list.find(x=>x.KnowledgeBaseId===p.KnowledgeBaseId);
  if(!found||!['Ready','Error'].includes(found.Status))bad();
- const approved=authorizationContext(file,words,{lane:'odc',host,operation:KB_DELETE,targets:[found.Name],constraints:{
+ const approved=approvalOf(file,words,{lane:'odc',host,operation:KB_DELETE,targets:[found.Name],constraints:{
   originOperationUuid:c.originOperationUuid,knowledgeBaseId:p.KnowledgeBaseId,expectedKnowledgeBaseSha256:sha256(JSON.stringify(found))}});
- if(!approved||approved.wordsSha256!==origin.authorization.wordsSha256||approved.proposalSha256!==origin.authorization.proposalSha256
-  ||approved.source.threadId!==origin.authorization.source.threadId||approved.source.messageId!==origin.authorization.source.messageId)bad();
+ if(!approved||!sameGrant(origin.authorization,approved,{words:true,proposal:true}))bad();
  const deps=await read('knowledgeBases.consumers',{KnowledgeBaseId:p.KnowledgeBaseId,_knowledgeBaseIdInDataFetchStatus:1});
  if(deps?.ok!==true||!Array.isArray(deps.data?.ApplicationConsumers?.List)||deps.data.ApplicationConsumers.List.length)
   fail('KNOWLEDGE_BASE_CONSUMERS_UNVERIFIED','Knowledge-base consumers must be verified empty. Nothing was sent.');

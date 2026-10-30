@@ -22,8 +22,7 @@ namespace Anvil.Core.Preflight;
 /// </summary>
 public static class ExpressionRules
 {
-    private static readonly HashSet<string> Globals = new(StringComparer.OrdinalIgnoreCase)
-        { "Entities", "Site", "Session", "Roles", "Resources", "Settings", "Request", "Client", "BuiltinClientVariables", "True", "False", "and", "or", "not" };
+    private static readonly HashSet<string> Globals = new(ExpressionRoots.Values.Concat(["True", "False", "and", "or", "not"]), StringComparer.OrdinalIgnoreCase);
     private static readonly Regex RoleCheck = new(@"^Check\w+Role$", RegexOptions.Compiled);
     private static readonly HashSet<string> Numeric = new(StringComparer.OrdinalIgnoreCase) { "Integer", "Long Integer", "Decimal", "Currency" };
 

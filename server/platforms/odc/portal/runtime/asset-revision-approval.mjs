@@ -2,6 +2,7 @@ import {createHash} from 'node:crypto';
 import {authorizationContext} from '../../facade/authorization-context.mjs';
 import {ASSET_CREATE} from './asset-creation-approval.mjs';
 import {fail} from './errors.mjs';
+import {recorded,sameGrant} from './written-approval.mjs';
 export const ASSET_REVISION_PATCH='asset-repository-api-v1:patch:/assets/{assetKey}/revisions/{revisionNumber}';
 export async function verifyRevisionPatch({path,body,read,readNotes}) {
  const revision=await read(path);
@@ -34,15 +35,14 @@ export async function assetRevisionApproval({file,words,host,operationId,input,p
  const origin=lookup(precondition.originOperationUuid);
  if(!origin || !['accepted','confirmed'].includes(origin.state) || origin.identity?.tenant!==host
    || origin.identity?.operationId!==ASSET_CREATE || origin.response?.assetKey!==p.assetKey
-   || !origin.authorization?.source)bad();
+   || !recorded(origin))bad();
  const seen=await read(p);
  if(!seen?.ok || seen.data?.assetKey!==p.assetKey || seen.data?.revision!==p.revisionNumber || typeof seen.data?.name!=='string')
    fail('REVISION_PREREQUISITE_UNAVAILABLE','Exact revision could not be read. Nothing was sent.');
  const approval=authorizationContext(file,words,{lane:'odc',host,operation:operationId,targets:[seen.data.name],
    constraints:{assetKey:p.assetKey,revisionNumber:p.revisionNumber,originOperationUuid:precondition.originOperationUuid,
     bodySha256:sha(body),expectedMetadataSha256:sha(expected)}});
- if(!approval || origin.authorization.source.threadId!==approval.source.threadId
-   || origin.authorization.source.messageId!==approval.source.messageId)bad();
+ if(!approval || !sameGrant(origin.authorization,approval))bad();
  if(seen.data.tag!==expected.tag || seen.data.commitMessage!==expected.commitMessage)
    fail('REVISION_BASE_CHANGED','Revision metadata differs from the recorded baseline. Nothing was sent.');
  if(notesBound){

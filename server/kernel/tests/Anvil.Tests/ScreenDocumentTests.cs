@@ -436,10 +436,12 @@ public sealed class ScreenDocumentTests
         // What nothing corrects stays: the bindings and the empty expressions; no CSS problem is left.
         var again = Assert.Throws<KernelRefusalException>(() => ScreenDocument.Preflight(corrected, "/data/html", css)).Problems!.Select(p => p!["code"]!.ToString()).Order().ToList();
         Assert.Equal(["HTML_BINDING_INVALID", "HTML_BINDING_INVALID", "HTML_EXPRESSION_EMPTY", "HTML_EXPRESSION_EMPTY"], again);
-        // Placed: the root's <style>, the nested one and data.css, in that order, each as written.
+        // Placed: the root's <style>, the nested one, in that order, each as written; data.css, when sent, IS the sheet in their
+        // place (R2-D: the contract was the <style> blocks then data.css).
         var top = ScreenHtml.Parse("<screen name=\"S\"><style>.a{}</style><div><style>.b{}</style></div><style scope=\"theme\">.t{}</style><style type=\"text/css\" id=\"x\">.c{}</style></screen>").Children[0];
         var blocks = ScreenDocument.Styles(top);
-        Assert.Equal(".a{}\n.b{}\n.c{}\n.d{}", ScreenDocument.OwnSheet(blocks, ".d{}"));
+        Assert.Equal(".a{}\n.b{}\n.c{}", ScreenDocument.OwnSheet(blocks, null));
+        Assert.Equal(".d{}", ScreenDocument.OwnSheet(blocks, ".d{}"));
         Assert.Equal(".t{}", ScreenDocument.ThemeSheet(blocks));
         Assert.Equal([false, true, false, false], blocks.Select(b => b.Nested));
         Assert.Equal(".only{ }", ScreenDocument.OwnSheet(ScreenDocument.Styles(ScreenHtml.Parse("<screen name=\"S\"><style>.only{ }</style></screen>").Children[0]), null));
@@ -465,7 +467,8 @@ public sealed class ScreenDocumentTests
     {
         if (!StudioAvailable()) return;
         // The shape of the FolhaPonto_UI documents of 2026-10-12 over the reactive fixture: the CSS in a <style> of the screen
-        // (and one nested, and data.css), lines of text with bindings, classes by expression.
+        // (and one nested, and a third one: R2-D, data.css would replace the three, so the page's CSS goes in <style> blocks),
+        // lines of text with bindings, classes by expression.
         var html = "<screen name=\"Ponto\" roles=\"Registered\">\n<var name=\"Data\" type=\"Date\"/>\n<var name=\"Pendentes\" type=\"Integer\"/>\n<var name=\"Feito\" type=\"Boolean\"/>\n"
             + "<Block name=\"LayoutBlank\"><slot name=\"Content\"><div class=\"fp-app\"><style>.fp-row{display:flex}</style>\n"
             + "<div class=\"fp-section-title\">Hoje · {{ FormatDateTime(Data,\"dd/MM/yyyy\") }}</div>\n"
@@ -473,21 +476,21 @@ public sealed class ScreenDocumentTests
             + "<div class='{{ If(Feito, \"fp-row fp-done\", \"fp-row\") }}'>de {{ IntegerToText(Pendentes + 1) }}</div>\n"
             + "<div class=\"fp-caption\">{{ Pendentes }}{{ Pendentes }} itens</div>\n"
             + "<div class=\"zz-sem-regra btn\">x</div>\n"
-            + "</div></slot></Block><style>\n.fp-app{max-width:402px}\n.fp-section-title{font-size:11px}</style></screen>";
+            + "</div></slot></Block><style>\n.fp-app{max-width:402px}\n.fp-section-title{font-size:11px}</style><style>.fp-caption{opacity:.8}\n.fp-done{font-weight:600}</style></screen>";
         var dir = Path.Combine(Work, "fidelity");
         Directory.CreateDirectory(dir);
         var path = Path.Combine(dir, "job.json");
         File.WriteAllText(path, new JsonObject { ["base"] = "reactive-ui.oml", ["ops"] = new JsonArray(new JsonObject { ["op"] = "html",
-            ["data"] = new JsonObject { ["html"] = html, ["css"] = ".fp-caption{opacity:.8}\n.fp-done{font-weight:600}" } }) }.ToJsonString());
+            ["data"] = new JsonObject { ["html"] = html } }) }.ToJsonString());
         var host = Host("fidelity");
         var output = Path.Combine(dir, "out.oml");
         var result = JsonSerializer.SerializeToNode(JobRunner.Run(host, null, path, output))!.AsObject();
         Assert.True(result["accepted"]!.GetValue<bool>(), result["details"]?.ToJsonString());
         var report = result["results"]!.AsArray().Select(r => r!["result"]!).First(r => r["form"]?.ToString() == "document").AsObject();
         Assert.Equal(4, report["bindingsJoined"]!.GetValue<int>());
-        Assert.Equal(2, report["styleSheet"]!["blocks"]!.GetValue<int>());
+        Assert.Equal(3, report["styleSheet"]!["blocks"]!.GetValue<int>());
         Assert.Equal(1, report["styleSheet"]!["nested"]!.GetValue<int>());
-        Assert.True(report["styleSheet"]!["dataCss"]!.GetValue<bool>());
+        Assert.False(report["styleSheet"]!["dataCss"]!.GetValue<bool>());
         // Only the class no rule defines is named (btn is OutSystems UI's), in the op's report and in the delivery's warnings.
         Assert.Equal(["zz-sem-regra"], report["classesWithoutRule"]!["classes"]!.AsArray().Select(c => c!["class"]!.ToString()));
         Assert.Contains(result["highWarnings"]!.AsArray(), w => w!["code"]!.ToString() == "HTML_CLASS_NO_RULE" && w["message"]!.ToString().Contains("zz-sem-regra", StringComparison.Ordinal));

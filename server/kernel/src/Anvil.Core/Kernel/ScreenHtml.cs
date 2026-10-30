@@ -676,7 +676,12 @@ public static class ScreenHtml
         private string Entity()
         {
             var semicolon = text.IndexOf(';', i);
-            if (semicolon < 0 || semicolon - i > 10) throw Error("bare '&': write &amp;");
+            // R2-C: a loose & (no letter, digit or # after it) is written &amp; before the parse (HTML_TEXT_ESCAPED); one a letter,
+            // digit or # follows has two readings, both named.
+            if (semicolon < 0 || semicolon - i > 10)
+                throw Error(i + 1 < text.Length && (char.IsAsciiLetterOrDigit(text[i + 1]) || text[i + 1] == '#')
+                    ? "bare '&' before '" + text[i + 1] + "': two readings, the character & (write &amp;) or a character reference that ends with ';' (&name;)"
+                    : "bare '&': write &amp;");
             var name = text.Substring(i + 1, semicolon - i - 1);
             string value = name switch {
                 "amp" => "&", "lt" => "<", "gt" => ">", "quot" => "\"", "apos" => "'",

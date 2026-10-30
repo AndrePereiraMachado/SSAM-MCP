@@ -1,13 +1,16 @@
 import fs from 'node:fs';
-import {authorizationContext} from '../../facade/authorization-context.mjs';
+import {approvalOf,contextValues,originId,ownedBy,sameGrant} from './written-approval.mjs';
 import {CUSTOM_SEARCH_TEST} from './custom-search-connection-approval.mjs';
 import {isUuid,sha256,fingerprint} from './write-journal.mjs';
 import {fail} from './errors.mjs';
 import {ownedCleanupApproval} from './owned-cleanup-approval.mjs';
-export async function customSearchDeleteApproval({file,words,host,raw,lookup,read,readPublic,dependencies}){
+export async function customSearchDeleteApproval({file,words,host,raw,lookup,read,readPublic,dependencies,find}){
  const bad=()=>fail('AUTHORIZATION_CONTEXT_INVALID','Custom search cleanup requires the originating test, unchanged own connection and complete empty consumer scope. Nothing was sent.');
- let constraints;try{if(!file||fs.statSync(file).size>32768)bad();constraints=JSON.parse(fs.readFileSync(file,'utf8')).constraints;}catch{bad();}
- const p=raw.inputParameters,originOperationUuid=constraints?.originOperationUuid;
+ // R2-I: the test receipt comes from the context file or, with the written words alone, from SSAM's own journal (the test
+ // that returned this connection).
+ let constraints;try{constraints=contextValues(file);}catch{bad();}
+ const p=raw.inputParameters,originOperationUuid=originId(constraints,'originOperationUuid',{written:!file,find,what:'The custom search cleanup',
+  predicate:r=>ownedBy(host,CUSTOM_SEARCH_TEST)(r)&&r.response?.Out_ConnectionId===p?.ConnectionId});
  if(Object.keys(raw.screenVariables??{}).length||Object.keys(raw.clientVariables??{}).length
   ||!isUuid(p?.ConnectionId)||p.ProviderId!=='customAISearch'||p.ConsoleProviderId!==''
   ||Object.keys(p).sort().join(',')!=='ConnectionId,ConsoleProviderId,ProviderId'||!isUuid(originOperationUuid))bad();
@@ -25,9 +28,8 @@ export async function customSearchDeleteApproval({file,words,host,raw,lookup,rea
  // CX15 r3 (N3): after the guard validated the owner's reply to the preview, a new approval of that reply (proposal = the
  // preview) bound to this test receipt replaces the creation's words and message.
  const fresh=ownedCleanupApproval({file,words,...scope,origin,key:p.ConnectionId,what:'The custom search cleanup'});
- const approval=fresh??authorizationContext(file,words,scope);
- if(!approval||!fresh&&(origin.authorization?.wordsSha256!==sha256(words)||origin.authorization.proposalSha256!==approval.proposalSha256
-  ||origin.authorization.source?.threadId!==approval.source.threadId||origin.authorization.source?.messageId!==approval.source.messageId))bad();
+ const approval=fresh??approvalOf(file,words,scope);
+ if(!approval||!fresh&&(origin.authorization?.wordsSha256!==sha256(words)||!sameGrant(origin.authorization,approval,{proposal:true})))bad();
  const consumers=await dependencies(p.ConnectionId);
  let provisional=false;
  // Native testing can leave a provisional header before any asset is generated.

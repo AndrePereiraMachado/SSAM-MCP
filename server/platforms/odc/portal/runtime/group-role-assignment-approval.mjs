@@ -5,6 +5,7 @@ import {GROUP_CREATE} from './group-approval.mjs';
 import {USER_CREATE} from './inactive-user-approval.mjs';
 import {isUuid} from './write-journal.mjs';
 import {fail} from './errors.mjs';
+import {recorded,sameGrant} from './written-approval.mjs';
 const root='user-access-management-api-v1:';
 export const GROUP_ROLE_ASSIGNMENT=root+'patch:/groups/{key}/application-roles';
 const configuration=group=>{const {updatedAt,...value}=group??{};return value;};
@@ -68,7 +69,7 @@ export async function groupRoleAssignmentApproval({file,words,host,operationId,i
  const origins=[lookup(originOperationUuid),lookup(groupOriginOperationUuid),lookup(userOriginOperationUuid)];
  for(const [index,operation,field]of [[0,ASSET_CREATE,'assetKey'],[1,GROUP_CREATE,'key'],[2,USER_CREATE,'key']]){
   const receipt=origins[index];if(!receipt||!['accepted','confirmed'].includes(receipt.state)||receipt.identity?.tenant!==host
-   ||receipt.identity.operationId!==operation||!isUuid(receipt.response?.[field])||!receipt.authorization?.source)bad();
+   ||receipt.identity.operationId!==operation||!isUuid(receipt.response?.[field])||!recorded(receipt))bad();
  }
  const [appOrigin,groupOrigin,userOrigin]=origins,assetKey=appOrigin.response.assetKey,userKey=userOrigin.response.key;
  if(groupOrigin.response.key!==p.key)bad();
@@ -90,7 +91,7 @@ export async function groupRoleAssignmentApproval({file,words,host,operationId,i
  if(!confinedReverseUsers(snapshot,!assigned))bad();
  const constraints={bodySha256:hash(b),originOperationUuid,groupOriginOperationUuid,userOriginOperationUuid,assetKey,roleKey,environmentKey:role.environmentKey,expectedConfigurationSha256:hash(snapshot)};
  const approval=authorizationContext(file,words,{lane:'odc',host,operation:operationId,environmentKey:role.environmentKey,targets:[app.name,role.name,group.name,user.name],constraints});
- if(!approval)bad();for(const receipt of origins)if(approval.source.threadId!==receipt.authorization.source.threadId||approval.source.messageId!==receipt.authorization.source.messageId)bad();
+ if(!approval)bad();for(const receipt of origins)if(!sameGrant(receipt.authorization,approval))bad();
  return{...approval,groupRoleExpectation:{app:structuredClone(app),role:structuredClone(role),group:structuredClone(group),user:structuredClone(user),assigned}};
 }
 

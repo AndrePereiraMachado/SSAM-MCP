@@ -32,6 +32,7 @@
     <EmbeddedResource Include="../Anvil.Core/Kernel/TemporalRuntime.js" LogicalName="Anvil.Core.Kernel.TemporalRuntime.js" />
     <EmbeddedResource Include="../Anvil.Core/Kernel/UploadValidationRuntime.js" LogicalName="Anvil.Core.Kernel.UploadValidationRuntime.js" />
     <EmbeddedResource Include="../Anvil.Core/Kernel/OutSystemsUiClasses.txt" LogicalName="Anvil.Core.Kernel.OutSystemsUiClasses.txt" />
+    <EmbeddedResource Include="../Anvil.Core/Kernel/Preflight/EnglishWords.txt" LogicalName="Anvil.Core.Kernel.Preflight.EnglishWords.txt" />
   </ItemGroup>
 
   <ItemGroup>

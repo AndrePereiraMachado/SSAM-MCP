@@ -12,8 +12,8 @@ namespace Anvil.Tests;
 /// The kernel review of the Traditional html port (findings 3 and 5), on both lanes, without a Studio model: an html edit
 /// (the whole document with screen and basedOn) is judged DEFAULT_NOT_LITERAL against the reading the store keeps (a
 /// default new or changed from the reading and no literal is refused; one the reading had is kept; a Traditional root takes
-/// expression defaults), and data.css on an edit follows the page's &lt;style&gt; in its style sheet, as on a create
-/// (docs/SSAM-HTML.md, Fidelity, CSS). Synthetic names.
+/// expression defaults), and data.css on an edit IS the page's whole style sheet, as on a create: it replaces the page's
+/// &lt;style&gt; (R2-D, the owner's decision of 2026-10-28; docs/SSAM-HTML.md, Fidelity, CSS). Synthetic names.
 /// </summary>
 public sealed class ScreenHtmlEditReviewTests
 {
@@ -90,21 +90,26 @@ public sealed class ScreenHtmlEditReviewTests
         Assert.Empty(Defaults(edited, new string('e', 64)));
     }
 
+    // R2-D: the contract changed (it was DataCssOnAnEditFollowsThePagesStyleAsOnACreate: the page's <style>, then data.css).
     [Fact]
-    public void DataCssOnAnEditFollowsThePagesStyleAsOnACreate()
+    public void DataCssOnAnEditIsThePagesWholeStyleAsOnACreate()
     {
         const string css = ".probe-b { color: blue; }";
-        // The whole document: its <style> first, then data.css (never one in place of the other).
+        // The whole document: data.css in place of its <style> (never one after the other).
         var whole = ScreenHtmlEdit.WithCss(["<screen name=\"Page\">\n<style>.probe-a { color: red; }</style>\n<div k=\"w1\"/>\n</screen>\n"], css);
-        Assert.Equal(".probe-a { color: red; }\n" + css, Sheet(whole[0]));
+        Assert.Equal(css, Sheet(whole[0]));
+        Assert.DoesNotContain("probe-a", whole[0]);
         // A <style> edit beside element edits: the same.
         var styleEdit = ScreenHtmlEdit.WithCss(["<div k=\"w1\" class=\"x\"/>", "<style>.probe-a { color: red; }\n</style>"], css);
         Assert.Equal(2, styleEdit.Count);
-        Assert.Equal(".probe-a { color: red; }\n" + css, Sheet(styleEdit[1]));
-        // Element edits alone: the reading's <style> stays, data.css after it.
-        var elements = ScreenHtmlEdit.WithCss(["<div k=\"w1\" class=\"x\"/>"], css, "<screen name=\"Page\">\n<style>.read { margin: 0; }</style>\n<div k=\"w1\"/>\n</screen>\n");
+        Assert.Equal(css, Sheet(styleEdit[1]));
+        // Element edits alone: data.css replaces the reading's <style>.
+        var reading = "<screen name=\"Page\">\n<style>.read { margin: 0; }</style>\n<div k=\"w1\"/>\n</screen>\n";
+        var elements = ScreenHtmlEdit.WithCss(["<div k=\"w1\" class=\"x\"/>"], css, reading);
         Assert.Equal(2, elements.Count);
-        Assert.Equal(".read { margin: 0; }\n" + css, Sheet(elements[1]));
+        Assert.Equal(css, Sheet(elements[1]));
+        // The reading sent back whole with its own sheet in data.css: the sheet once, never twice.
+        Assert.Equal(".read { margin: 0; }", Sheet(ScreenHtmlEdit.WithCss([reading], ".read { margin: 0; }", reading)[0]));
         // No <style> anywhere: data.css alone (the create's rule, ScreenDocument.OwnSheet).
         Assert.Equal(css, Sheet(ScreenHtmlEdit.WithCss(["<screen name=\"Page\"><div k=\"w1\"/></screen>"], css)[0]));
         Assert.Equal(css, Sheet(ScreenHtmlEdit.WithCss(["<div k=\"w1\"/>"], css, "<screen name=\"Page\"><div k=\"w1\"/></screen>")[1]));

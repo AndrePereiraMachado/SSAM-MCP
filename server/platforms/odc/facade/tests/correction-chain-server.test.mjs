@@ -12,7 +12,7 @@ import * as z from 'zod/v4';
 import { McpServer, InMemoryTransport } from '@modelcontextprotocol/server';
 import { Client } from '@modelcontextprotocol/client';
 import { createSsamServer } from '../ssam.mjs';
-import { fakeAnvil } from './fixtures/fake-anvil.mjs';
+import { fakeAnvil, validPreflight } from './fixtures/fake-anvil.mjs';
 
 const MARKER = "<the user's own words>";
 const WORDS = 'pode entregar no Orders';
@@ -37,7 +37,7 @@ test('hub: the words marker is WORDS_REQUIRED on every call, a correction of the
   const replies = [{ ok: false, command: 'deliver', data: { taskId: 'a'.repeat(32), module: 'Orders', delivered: false, writeState: 'not-sent', stage: 'preflight', error: 'op #0 [TEXT_TOO_LONG]: x', problems: [PROBLEM] } },
     { ok: true, command: 'deliver', data: { delivered: true, taskId: 'b'.repeat(32), writeState: 'applied', validation: { newErrors: 0 } } }];
   const runAnvil = fakeAnvil({ deliver: () => replies.shift() });
-  const server = await createSsamServer({ odc: false, deps: { cycle: { root, env: { USERPROFILE: root, LOCALAPPDATA: root }, runAnvil, assertSelected: async () => {}, tasksDir: path.join(root, 'tasks'), lastPublication: async () => null },
+  const server = await createSsamServer({ odc: false, deps: { cycle: { checkRunner: validPreflight, root, env: { USERPROFILE: root, LOCALAPPDATA: root }, runAnvil, assertSelected: async () => {}, tasksDir: path.join(root, 'tasks'), lastPublication: async () => null },
     lock: { o11Root: root, odcRoot: root, connection: () => null } } });
   const call = await connect(t, server);
   const refused = await call('o11_deliver', { module: 'Orders', job: JOB, authorize: WORDS });
@@ -60,7 +60,7 @@ test('a choice (patchCertain false) is never applied for the author: no fix call
   const choice = { ...PROBLEM, code: 'CREATE_USES_EXISTING', patchCertain: false, patchChoice: 'use the existing element' };
   const replies = [{ ok: false, command: 'deliver', data: { taskId: 'c'.repeat(32), module: 'Orders', delivered: false, writeState: 'not-sent', stage: 'preflight', error: 'op #0 [CREATE_USES_EXISTING]: x', problems: [choice] } }];
   const runAnvil = fakeAnvil({ deliver: () => replies.shift() });
-  const server = await createSsamServer({ odc: false, deps: { cycle: { root, env: { USERPROFILE: root, LOCALAPPDATA: root }, runAnvil, assertSelected: async () => {}, tasksDir: path.join(root, 'tasks'), lastPublication: async () => null },
+  const server = await createSsamServer({ odc: false, deps: { cycle: { checkRunner: validPreflight, root, env: { USERPROFILE: root, LOCALAPPDATA: root }, runAnvil, assertSelected: async () => {}, tasksDir: path.join(root, 'tasks'), lastPublication: async () => null },
     lock: { o11Root: root, odcRoot: root, connection: () => null } } });
   const call = await connect(t, server);
   const refused = await call('o11_deliver', { module: 'Orders', job: JOB, authorize: WORDS });

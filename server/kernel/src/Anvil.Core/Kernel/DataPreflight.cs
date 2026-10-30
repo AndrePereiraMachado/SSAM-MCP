@@ -11,6 +11,10 @@ public static class DataPreflight
     private static readonly HashSet<string> Basic = new(StringComparer.OrdinalIgnoreCase) {
         "Text", "String", "Integer", "Int", "Long Integer", "Long", "Decimal", "Boolean", "Bool", "Date", "Time",
         "Date Time", "DateTime", "Currency", "Email", "Phone Number", "Phone", "Binary Data", "Binary", "Object", "User Identifier" };
+
+    /// <summary>A basic type of the platform (Text, Integer, Date Time...), by its name as a job writes it.</summary>
+    internal static bool IsBasic(string type) => Basic.Contains(type.Trim());
+
     public static JsonObject Analyze(JsonArray source)
     {
         var errors = new JsonArray(); var unresolved = new JsonArray();

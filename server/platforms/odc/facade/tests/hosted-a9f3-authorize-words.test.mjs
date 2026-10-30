@@ -97,7 +97,7 @@ test('N1 W3 (control): the input layer answers studio_authorize as before: corre
       const r = await s.call('studio_authorize', args);
       assert.equal(r.body.code, 'INPUT_INVALID', said(r.body));
       assertNoWords(r, words);
-      assert.deepEqual(Object.keys(r.body), ['ok', 'code', 'error', 'violations', 'corrected', 'continuation'], said(r.body));
+      assert.deepEqual(Object.keys(r.body), ['ok', 'code', 'error', 'violations', 'continuation', 'corrected'], said(r.body));
       assert.equal(r.body.corrected.text, MARKER);
       assert.equal(r.body.continuation.arguments.text, MARKER);
       assert.equal(r.body.continuation.askOwner, undefined, 'the input layer\'s own step, as before');

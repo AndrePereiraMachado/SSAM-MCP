@@ -22,6 +22,7 @@ public sealed class BaseModelCacheTests : IDisposable
     private readonly List<string> log = new();
     private DateTime now = new(2026, 9, 30, 12, 0, 0, DateTimeKind.Utc);
     private string profile = "developerId=a";
+    private string ideVersion = "1.0", studio = "studio", kernel = "kernel";
     private long heap;
     private int loads;
     private Func<byte[], CancellationToken, Model>? loadOverride;
@@ -31,7 +32,7 @@ public sealed class BaseModelCacheTests : IDisposable
     public void Dispose() { try { Directory.Delete(dir, true); } catch (IOException) { } }
 
     private BaseModelCache<Model> Cache(BaseCacheOptions? options = null) => new(options ?? BaseCacheOptions.Default,
-        () => new BaseRuntime("test", "1.0", "studio", "kernel", profile),
+        () => new BaseRuntime("test", ideVersion, studio, kernel, profile),
         (bytes, cancel) => { loads++; return loadOverride?.Invoke(bytes, cancel) ?? new Model { Bytes = bytes }; },
         (model, cancel) => walkOverride?.Invoke(model, cancel) ?? 100,
         released.Add, log.Add, () => now, () => heap, () => 0, () => { });
@@ -110,6 +111,23 @@ public sealed class BaseModelCacheTests : IDisposable
         profile = "developerId=b";                          // ODC stamps the developer id at load
         Assert.Null(Take(cache, a).Model);
         Assert.Single(released);
+    }
+
+    [Fact]
+    public void AnotherStudioVersionFolderOrKernelMisses()
+    {
+        // R2-F rule 3: a worker that loaded one Studio or kernel never hands its spare to a request of another, even for the
+        // same bytes (the hosted pool also retires such a worker: its fingerprint names the Studio build and the CLI build).
+        foreach (var change in new Action[] { () => ideVersion = "2.0", () => studio = "studio-11.55.94", () => kernel = "kernel-2" })
+        {
+            ideVersion = "1.0"; studio = "studio"; kernel = "kernel"; released.Clear();
+            var cache = Cache(); var a = Base("a");
+            Take(cache, a); cache.Idle(CancellationToken.None);
+            Assert.Equal(1, cache.Held);
+            change();
+            Assert.Null(Take(cache, a).Model);
+            Assert.Single(released);                        // the spare of the other runtime is released, never handed out
+        }
     }
 
     [Fact]

@@ -78,7 +78,7 @@ Sem saída, está tudo igual.
 | Arquivo (relativo à caixa) | sha256 (conteúdo com fim de linha LF) |
 | --- | --- |
 | `docs/DISTRIBUICAO.md` | `bc87ebe53ef2230f89d4ceb1162e5e84b9eecc0e2563e93905eccb78fbc9d5b1` |
-| `docs/FASE2-AGENTE.md` | `ef5553307db095cd887d71dfdf88dee9ce5fa630edcfb53280981d07d77dd80f` |
+| `docs/FASE2-AGENTE.md` | `9e90737902c40e3a53d4b856bce3ab3254e50df19ffd7e87735ff1ef469351ec` |
 | `docs/O11-BRIDGE-FINA.md` | `5300a92480c3f0393d2adb217321ed06cfb888f5da5f19f71225a86515362a3b` |
 | `docs/PROVAS-AO-VIVO.md` | `b66c259ac7cb293fbc7c7165794885ac6462598a2e65e2753c85f3646d99979a` |
 | `docs/exemplos/mcp-cliente-hospedado.json` | `cabbe38805716878f03def98527dd5234b2dcfd9187df8c773305f80d8d6fa28` |

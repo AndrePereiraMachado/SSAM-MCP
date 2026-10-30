@@ -310,14 +310,13 @@ public sealed partial class ScreenHtmlModule<T> where T : class
     // action). The first non-empty tier answers.
     private bool TopLevel(int i) => parent[i] >= 0 && (parent[parent[i]] < 0 || role[parent[i]] == "flow" || kind[parent[i]] == "Reference");
     private int Tier(int i, int scopeRoot) => root[i] == scopeRoot && i != scopeRoot ? 0 : root[i] < 0 && TopLevel(i) ? 1 : root[i] < 0 ? 2 : 3;
-    private List<string> Candidates(string name, string? ofKind, string? owner, Scope scope, bool destinations = false, bool blocks = false)
+    private List<string> Candidates(string name, string? ofKind, string? owner, Scope scope, bool blocks = false)
     {
         var tiers = new List<string>[5] { [], [], [], [], [] };
         if (byName.TryGetValue(name, out var list))
             foreach (var i in list) {
                 if (ofKind != null && kind[i] != ofKind) continue;
                 if (owner != null && (parent[i] < 0 || !string.Equals(display[parent[i]], owner, StringComparison.OrdinalIgnoreCase))) continue;
-                if (destinations && !IsDestinationKind(kind[i], role[i])) continue;
                 if (blocks && !IsBlockKind(kind[i])) continue;
                 var tier = Tier(i, scope.Root);
                 // two list types of one type answer once (SameTypes)
@@ -325,7 +324,7 @@ public sealed partial class ScreenHtmlModule<T> where T : class
             }
         if (owner == null && outsideByName.TryGetValue(name, out var others))
             foreach (var o in others)
-                if (scope.Outside.Contains(o) && (ofKind == null || outside[o].Kind == ofKind) && (!destinations || IsDestinationKind(outside[o].Kind, null)) && (!blocks || IsBlockKind(outside[o].Kind))) tiers[4].Add(o);
+                if (scope.Outside.Contains(o) && (ofKind == null || outside[o].Kind == ofKind) && (!blocks || IsBlockKind(outside[o].Kind))) tiers[4].Add(o);
         return tiers.FirstOrDefault(t => t.Count > 0) ?? [];
     }
 
@@ -351,25 +350,84 @@ public sealed partial class ScreenHtmlModule<T> where T : class
         target = hits[0]; return true;
     }
 
-    // What an event can name: an action or a screen (in the walk by role, outside it by kind).
-    private static bool IsDestinationKind(string kindName, string? nodeRole) =>
-        nodeRole is "action" or "screen" || kindName.Contains("Action", StringComparison.Ordinal) || kindName.Contains("Screen", StringComparison.Ordinal);
-
-    // The destination of an event (C2): the name as any reference first; when that is ambiguous or names nothing, among the
-    // actions and screens only (onclick="Save" names the screen action Save even when a widget or a variable of the screen is
-    // also called Save). Never changes what a reading wrote: its references resolve on the first try.
+    // The destination of an event (C2; R2-A, NameResolution): among what an event runs or opens only (a screen of the module
+    // or of a reference, a screen action of this page, a destination of the System), in the order of a call: the page's own
+    // (0), the module's (1), the references' (2); so a parameter, a variable, a widget or a server action named like the screen
+    // or the screen action is no candidate, however near (onclick="Save" names the screen action Save beside a widget Save;
+    // onclick="Login" opens the screen Login beside the server action Login of a reference), and the module's screen comes
+    // before a reference's screen of its name. A name nothing of that kind has stays the reference it is, and the event's
+    // checks say what it names (CheckDestinations). The reading writes a destination in a form this resolves back to it
+    // (DestinationNameOf).
     internal bool TryResolveDestination(string form, Scope scope, out string target)
     {
-        if (TryResolve(form, scope, out target)) return true;
-        if (form.Length == 0 || form[0] == '@') return false;
-        string? ofKind = null; var rest = form;
-        var colon = form.IndexOf(':');
-        if (colon > 0) { ofKind = form[..colon]; rest = form[(colon + 1)..]; }
-        string? owner = null; var dot = rest.LastIndexOf('.');
-        if (dot > 0) { owner = rest[..dot]; rest = rest[(dot + 1)..]; }
-        var hits = Candidates(rest, ofKind, owner, scope, destinations: true);
-        if (hits.Count != 1) { target = ""; return false; }
-        target = hits[0]; return true;
+        target = "";
+        if (form.Length == 0) return false;
+        if (form[0] == '@') return TryResolve(form, scope, out target);
+        var answer = Destination(form, scope, full: false);
+        if (answer.Outcome == NameOutcome.Resolved) { target = (string)answer.Chosen!.Element!; return true; }
+        return answer.Outcome == NameOutcome.Unknown && TryResolve(form, scope, out target);
+    }
+
+    /// <summary>R2-A: what an event's destination written <paramref name="form"/> reaches from this scope (NameResolution over
+    /// the reading's names), the chosen one with the form this reading writes for it (DestinationNameOf) and, when nothing
+    /// fits, the nearest destinations, each in its form. <paramref name="full"/> false: the element only (the decoder of a text
+    /// asks for nothing more).</summary>
+    internal NameAnswer Destination(string form, Scope scope, bool full = true)
+    {
+        var name = NameResolution.Parse(form).Name;
+        IEnumerable<NameCandidate> Named()
+        {
+            if (byName.TryGetValue(name, out var list)) foreach (var i in list) yield return DestinationCandidate(i, scope);
+            if (outsideByName.TryGetValue(name, out var others))
+                foreach (var o in others) if (scope.Outside.Contains(o)) yield return new(outside[o].Name, outside[o].Kind, "", 3, outside[o].Kind + ":" + outside[o].Name, null, false, o);
+        }
+        IEnumerable<NameCandidate> Pool()
+        {
+            for (var i = 0; i < nodes.Count; i++)
+                if (display[i].Length > 0 && (role[i] is "screen" or "action" || kind[i].EndsWith("ScreenSignature", StringComparison.Ordinal))) yield return DestinationCandidate(i, scope);
+        }
+        var answer = NameResolution.Resolve(form, Named(), NameResolution.EventDestination, full ? Pool : null);
+        if (!full) return answer;
+        NameCandidate Formed(NameCandidate c) => c.Element is string id ? c with { Canonical = DestinationNameOf(id, scope) } : c;
+        return answer with { Chosen = answer.Chosen is { } chosen ? Formed(chosen) : null,
+            Candidates = answer.Outcome == NameOutcome.Unknown ? answer.Candidates.Select(Formed).ToList() : answer.Candidates };
+    }
+
+    /// <summary>The scope of the names of the screen or block <paramref name="root"/> (the one its reading and its edit use).</summary>
+    internal Scope ScopeOf(string root) => new(RootIndexes().FirstOrDefault(i => string.Equals(display[i], root, StringComparison.OrdinalIgnoreCase), -1));
+
+    // The tier of a destination from a scope, the order of a call: the scope's own (0), the module's (1), a reference's (2).
+    private int DestinationTier(int i, Scope scope)
+    {
+        if (root[i] == scope.Root && i != scope.Root) return 0;
+        for (var p = parent[i]; p >= 0; p = parent[p]) if (kind[p] == "Reference") return 2;
+        return 1;
+    }
+
+    // An element of the reading as a candidate of an event's destination: its tier from the scope, Kind:Name as its patch.
+    private NameCandidate DestinationCandidate(int i, Scope scope) =>
+        new(display[i], kind[i], role[i], DestinationTier(i, scope), kind[i] + ":" + display[i], parent[i] >= 0 ? display[parent[i]] : null,
+            root[i] == scope.Root && i != scope.Root, id[same[i]]);
+
+    /// <summary>R2-A: the form a reading writes for the destination <paramref name="target"/> of an event: the first of Name,
+    /// Kind:Name, Owner.Name, Kind:Owner.Name that the destination's own rule (TryResolveDestination) resolves back to it, the
+    /// one the reading wrote before when that one still does (it also resolves back as any reference), else @id. A reference's
+    /// screen beside a screen of the module of its name is written with its kind.</summary>
+    internal string DestinationNameOf(string target, Scope scope)
+    {
+        string name, k; string? owner = null;
+        if (byId.TryGetValue(target, out var i)) { i = same[i]; target = id[i]; name = display[i]; k = kind[i]; if (parent[i] >= 0) owner = display[parent[i]]; }
+        else if (outside.TryGetValue(target, out var o)) { name = o.Name; k = o.Kind; }
+        else return "@" + target;
+        if (!SafeName(name)) return "@" + target;
+        var forms = new List<string> { name };
+        if (ScreenHtml.IsIdentifier(k)) forms.Add(k + ":" + name);
+        if (owner != null && SafeName(owner)) forms.Add(owner + "." + name);
+        if (ScreenHtml.IsIdentifier(k) && owner != null && SafeName(owner)) forms.Add(k + ":" + owner + "." + name);
+        bool Destines(string form) => TryResolveDestination(form, scope, out var back) && back == target;
+        foreach (var form in forms) if (Destines(form) && TryResolve(form, scope, out var any) && any == target) return form;
+        foreach (var form in forms) if (Destines(form)) return form;
+        return "@" + target;
     }
 
     // The scope of the names of one document: its root, and the elements outside the walk that the document refers to (so
@@ -993,7 +1051,7 @@ public sealed partial class ScreenHtmlModule<T> where T : class
                 if (destination.Length == 0 && arguments.Count == 0) continue;
                 element.Facts[prefix] = destination;
                 foreach (var (param, value) in arguments) element.Facts[prefix + ":a:" + param] = value;
-                Func<string> target = destination.Length == 0 ? Const("") : () => m.NameOf(destination, Scope);
+                Func<string> target = destination.Length == 0 ? Const("") : () => m.DestinationNameOf(destination, Scope);
                 // A target name never holds '(' or ','; whether the arguments survive the call form depends on them only.
                 node.Events.Add(attribute);
                 if (ScreenHtml.TryCall(ScreenHtml.Call("X", arguments), out var back, out var parsed) && back == "X" && parsed.SequenceEqual(arguments))

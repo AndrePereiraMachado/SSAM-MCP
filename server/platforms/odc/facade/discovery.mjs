@@ -2644,7 +2644,7 @@ export function exactDiscoveryCalls(answer, input = {}) {
   return answer;
 }
 
-async function discoverCore({ lane = 'odc', intent = '', app = null, detail = null, expand = null, type = null, limit = 8, rebuild = false, budgetBytes = DEFAULT_BUDGET_BYTES, ceilingBytes = null, inspect = null, map = null, sources = laneSources(lane), descriptorFile = sources.descriptor, outsystemsUi = true, packet = false, digest = null, operations = null, textRoutes = true, components = null, producerCache = undefined, kinds = null, kindFilter = true, owner = undefined } = {}) {
+async function discoverCore({ lane = 'odc', intent = '', app = null, detail = null, expand = null, type = null, limit = 8, rebuild = false, budgetBytes = DEFAULT_BUDGET_BYTES, ceilingBytes = null, inspect = null, map = null, sources = laneSources(lane), descriptorFile = sources.descriptor, outsystemsUi = true, packet = false, packetRef = null, parallel = false, digest = null, operations = null, textRoutes = true, components = null, producerCache = undefined, kinds = null, kindFilter = true, owner = undefined } = {}) {
   // ceilingBytes: the entry's answer ceiling (discoverAll; atEntry): a budget below the minimal answer is raised to it, and
   // a minimal above the ceiling answers in pages. Without it the budget is the hard limit it always was (engine, tests).
   const started = performance.now();
@@ -2798,7 +2798,7 @@ async function discoverCore({ lane = 'odc', intent = '', app = null, detail = nu
     // servidor/fase4-25: hosted, no producer cache of the server is read (the O11 cache is off hosted: no .local above ws:o11/work).
     const producers = lane === 'o11' && !(await import('./executor.mjs')).hostedContext() ? packetProducers(producerCache === undefined ? path.join(anvilRoot, '.local', 'producer-cache') : producerCache,
       { intent: said, module: found?.ok ? found.digest?.module?.name ?? null : null }) : null;
-    return workPacket({ lane, intent, app, limit, basis: { index: index.key }, kind: packetKind(kind), scope: true, readings, matches, unavailable: q.unavailable, functions, text, environment, textRoute, producers,
+    return workPacket({ lane, intent, app, limit, packetRef, parallel, basis: { index: index.key }, kind: packetKind(kind), scope: true, readings, matches, unavailable: q.unavailable, functions, text, environment, textRoute, producers,
       categories: new Map(index.capabilities.map(c => [c.id, c.category])),
       slices: (pointers, form) => contractSlice(index, pointers, { full: form === 'full', capBytes: 3072 }),
       steps: steps ? { kinds: steps.kinds, shape: steps.shape, grammar: steps.grammar } : null,

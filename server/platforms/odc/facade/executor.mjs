@@ -22,11 +22,10 @@ import { signedRuntime, bridgeClientError } from './signed-runtime.mjs';
 import { classify } from './hosted/mirror.mjs';
 import { runtimeDir } from './hosted/storage.mjs';
 
-// The closed list of 4.4: the six kinds that touch a machine, and the file kinds that exist only between the server and
-// the agent (the local executor refuses them).
-export const CALL_KINDS = Object.freeze(['studio.processes', 'odc.pipe', 'odc.attach', 'o11.bridge', 'o11.connect', 'o11.selected',
-  'file.put', 'file.get', 'file.list', 'file.sync']);
-export const MACHINE_KINDS = Object.freeze(CALL_KINDS.slice(0, 6));
+// The closed list of 4.4 (call-kinds.mjs, the one the hub sends; R2-H review H4): the six kinds that touch a machine, and
+// the kinds that exist only between the server and the agent (the local executor refuses them).
+import { CALL_KINDS, MACHINE_KINDS } from './call-kinds.mjs';
+export { CALL_KINDS, MACHINE_KINDS };
 
 // Codes that only the seam, the hub, the AgentExecutor or the agent produce. Tool answers that flatten an error to its
 // message keep these codes (seamFields), so a refusal stays recognizable; local errors never carry them.

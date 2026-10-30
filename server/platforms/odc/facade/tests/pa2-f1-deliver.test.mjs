@@ -144,9 +144,12 @@ test('DATA_PROOF_DIFFERS answers the differences (20 plus differencesTotal) and 
   // A proof that did not fail, or names nothing, adds no field.
   assert.equal(dataProofOf({ dataProof: { accepted: true, differences } }), null);
   assert.equal(dataProofOf({ dataProof: { accepted: false, differences: [] } }), null);
-  // Another kernel code keeps its own continuation; the differences still come.
+  // Another kernel code keeps its own continuation; the differences still come. fase4-28/r1 (fde82f59, delivery lineage): a
+  // refusal with no continuation of its own reads the recorded delivery (ssam_task {id}), never repeats an unconfirmed write.
   const other = deliverOutcome({ envelope: { ok: false, command: 'deliver', data: { ...state, code: 'VERIFY_UNAVAILABLE' } } }, { trackId: 't', work: box.work, job: null, input: {} });
-  assert.equal(other.code, 'VERIFY_UNAVAILABLE'); assert.equal(other.dataProof.differences.length, 20); assert.equal(other.continuation, undefined);
+  assert.equal(other.code, 'VERIFY_UNAVAILABLE'); assert.equal(other.dataProof.differences.length, 20);
+  assert.deepEqual(other.continuation, { tool: 'ssam_task', arguments: { id: TASK }, why: other.continuation.why });
+  assert.ok(!JSON.stringify(other.continuation).includes('ssam_evidence'), 'the data-proof continuation is DATA_PROOF_DIFFERS only');
 });
 
 // ---- A28
@@ -162,10 +165,15 @@ test('a module reserved by another SSAM root, or by a task this root does not ha
   const b = await (await serve(t, orphan.deps))({ module: 'Orders', job: orphan.job('d.json', { ops: [{ op: 'get', target: 'X:Y' }] }), authorize: WORDS });
   assert.equal(b.continuation.tool, 'ssam_doctor'); assert.deepEqual(b.continuation.arguments, { lane: 'o11' });
   assert.ok(!JSON.stringify(b).includes('"resume"'), 'never resume a task this root does not have');
-  // A holder of this root is still resumed (uncertain) or closed with the corrected job (refused).
-  writeKernelTask(orphan.work, HOLDER, { moduleKey: 'k1', writeState: 'unknown', stage: 'merge', error: 'timed out' });
-  const c = await (await serve(t, orphan.deps))({ module: 'Orders', job: orphan.job('e.json', { ops: [{ op: 'get', target: 'X:Y' }] }), authorize: WORDS });
+  // A holder of this root is resumed (uncertain) or closed with the corrected job (refused) only when the delivery proves its
+  // lineage (fase4-28/r1 fde82f59: the same job bytes, its basedOn job or its taskId); another job reads the holder instead.
+  const own = orphan.job('e.json', { ops: [{ op: 'get', target: 'X:Y' }] });
+  writeKernelTask(orphan.work, HOLDER, { moduleKey: 'k1', writeState: 'unknown', stage: 'merge', error: 'timed out', request: { Module: 'Orders', JobPath: own } });
+  const c = await (await serve(t, orphan.deps))({ module: 'Orders', job: own, authorize: WORDS });
   assert.deepEqual(c.continuation.arguments, { resume: HOLDER });
+  const other = await (await serve(t, orphan.deps))({ module: 'Orders', job: orphan.job('f.json', { ops: [{ op: 'get', target: 'Z:W' }] }), authorize: WORDS });
+  assert.equal(other.continuation.tool, 'ssam_task'); assert.deepEqual(other.continuation.arguments, { id: HOLDER });
+  assert.ok(!JSON.stringify(other).includes('"resume"'), 'never resume a holder whose lineage is not proven');
 });
 
 // ---- A17

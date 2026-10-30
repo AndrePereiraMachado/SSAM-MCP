@@ -116,7 +116,10 @@ test('classification: a map, discover or inspect naming an O11 module is not a w
     assert.equal(isWrite(name, args), false, name + ' ' + JSON.stringify(args));
   assert.equal(isWrite('o11_studio', { command: 'open-module', args: { name: 'Orders' } }), true);
   assert.equal(isWrite('o11_studio', { command: 'snapshot', args: { module: 'Orders' } }), true);
-  assert.equal(isWrite('o11_deliver', { module: 'Orders', until: 'apply' }), true);
+  // R2-F rule 2 (fase4-28/r2-speed, R2-H): until=apply validates on a capture by key and never takes the Studio, so it is not a
+  // write of the wrapper; the delivery that merges still is.
+  assert.equal(isWrite('o11_deliver', { module: 'Orders', until: 'apply' }), false);
+  assert.equal(isWrite('o11_deliver', { module: 'Orders' }), true);
 });
 
 test('two concurrent ssam_map calls by open module name both answer; neither opens nor locks anything', async t => {

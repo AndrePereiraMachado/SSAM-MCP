@@ -1,4 +1,4 @@
-import {authorizationContext} from '../../facade/authorization-context.mjs';
+import {approvalOf,sameGrant} from './written-approval.mjs';
 import {connectionHeaderPlan} from './connection-header-plan.mjs';
 import {fail,publicError} from './errors.mjs';
 import {isUuid} from './write-journal.mjs';
@@ -25,11 +25,13 @@ export async function editConnectionHeader(input,{read,write,receipts}) {
    ||(origin.response?.Out_ConnectionId??origin.response?.ConnectionId)!==connectionId
    ||baseline.stageConfigurations.length!==1||baseline.externalMetadata.selectedObjectCount!==0
    ||baseline.externalMetadata.selectedActionCount!==0||!stage.host||!stage.database||!/^\d+$/.test(String(stage.port)))reject();
- const approval=authorizationContext(input.authorizationContext,input.authorize,{lane:'odc',host,operation:operationId,
+
+ // R2-I: a context file of the creation's proposal, or the written words naming the connection and its new name.
+ const approval=approvalOf(input.authorizationContext,input.authorize,{lane:'odc',host,operation:operationId,
    targets:[origin.identity.target.connectionName,baseline.name,plan.input.inputParameters.ConnectionDetails.ConnectionDetails_Header.ConnectionName],
    environmentKey:stage.stageKey,constraints:{originOperationUuid,planSha256:plan.planSha256,noStageChanges:true,
     server:stage.host,port:Number(stage.port),database:stage.database,noDdl:true,noDataWrites:true,noBusinessDataReads:true}});
- if(!approval||approval.proposalSha256!==origin.authorization?.proposalSha256)reject();
+ if(!approval||!sameGrant(origin.authorization,approval,{proposal:true,conversation:false}))reject();
  if(!plan.changed)return {ok:true,sent:false,changed:false};
  const available=await read('availability',plan.input.inputParameters.ConnectionDetails.ConnectionDetails_Header.ConnectionName);
  if(available!==true)fail('CONNECTION_NAME_UNAVAILABLE','The proposed name is unavailable for this connection. Nothing was sent.');

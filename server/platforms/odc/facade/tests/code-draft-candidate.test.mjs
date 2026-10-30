@@ -18,7 +18,7 @@ import { CHECK_CANDIDATE } from '../code-check.mjs';
 import { modelSha256 } from '../o11-capture-store.mjs';
 import { anvilRoot, o11Lane } from '../workspace.mjs';
 import { o11LaneOf } from '../o11-lane.mjs';
-import { fakeAnvil } from './fixtures/fake-anvil.mjs';
+import { fakeAnvil, validPreflight } from './fixtures/fake-anvil.mjs';
 
 const words = 'pode entregar, Ana 0912';
 const sha = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -70,7 +70,7 @@ async function serve(t, { model = 'ORDERS-MODEL', checkModel = model } = {}) {
     },
   });
   const server = await createSsamServer({ odc: false, deps: { codeCheck: fakeCheck(root, checkModel),
-    cycle: { root, env: { USERPROFILE: root, LOCALAPPDATA: root }, runAnvil, assertSelected: async () => {}, tasksDir: path.join(root, 'tasks'), bridge, lastPublication: async () => null,
+    cycle: { checkRunner: validPreflight, root, env: { USERPROFILE: root, LOCALAPPDATA: root }, runAnvil, assertSelected: async () => {}, tasksDir: path.join(root, 'tasks'), bridge, lastPublication: async () => null,
       lock: { connection: () => null }, buildPool: createBuildPool({ dir: path.join(root, 'pool'), size: 1, queueMs: 10000 }), buildRunner: () => runAnvil },
     lock: { o11Root: root, odcRoot: root, connection: () => null } } });
   const [serverSide, clientSide] = InMemoryTransport.createLinkedPair();

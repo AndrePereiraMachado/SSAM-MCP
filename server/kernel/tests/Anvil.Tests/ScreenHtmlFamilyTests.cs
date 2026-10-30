@@ -283,7 +283,7 @@ public sealed class ScreenHtmlFamilyTests(ITestOutputHelper output)
     }
 
     [Fact]
-    public void ProseInAnAttributeOfAnEditIsRefusedBeforeAnythingIsWrittenWithItsAttributeNamed()
+    public void ProseInAnAttributeOfAnEditIsItsLiteralListedWithItsAttributeNamed()
     {
         if (!StudioAvailable()) return;
         var bytes = File.ReadAllBytes(Path.Combine(Root, "tests", "fixtures", "reactive-ui.oml"));
@@ -294,10 +294,12 @@ public sealed class ScreenHtmlFamilyTests(ITestOutputHelper output)
         var text = ScreenHtmlText.Write(container).TrimEnd('\n');
         var edit = text.EndsWith("/>", StringComparison.Ordinal) ? text[..^2] + "><input placeholder=\"Buscar por nome, cidade\"/></div>" : text[..^"</div>".Length] + "<input placeholder=\"Buscar por nome, cidade\"/></div>";
         var answer = host.HtmlEdit(bytes, new JsonObject { ["screen"] = "@" + read["rootKey"], ["basedOn"] = new JsonObject { ["html"] = read["htmlSha256"]!.ToString() }, ["edit"] = new JsonArray(edit) });
-        Assert.False(answer["accepted"]!.GetValue<bool>());
-        var problem = Assert.Single(answer["problems"]!.AsArray().Select(p => p!.AsObject()).Where(p => p["severity"]?.ToString() != "warning"));
-        Assert.StartsWith("placeholder=\"Buscar por nome, cidade\" on a new Input is no expression", problem["message"]!.ToString());
-        Assert.Contains("placeholder='\"Buscar por nome, cidade\"'", problem["fix"]!.ToString());
+        // R2-C: prose with one reading in a property that shows text is its literal, written by the plan and listed
+        // (TEXT_LITERAL_QUOTED, the rule of the document form); a choice keeps the refusal (NormalizationFamiliesTests).
+        Assert.True(answer["accepted"]!.GetValue<bool>(), answer.ToJsonString());
+        var note = Assert.Single((answer["result"]?["normalized"] as JsonArray ?? []).OfType<JsonObject>(), n => n["code"]?.ToString() == "TEXT_LITERAL_QUOTED");
+        Assert.Equal("placeholder", note["attribute"]!.ToString());
+        Assert.Equal("\"Buscar por nome, cidade\"", note["to"]!.ToString());
     }
 
     [Fact]

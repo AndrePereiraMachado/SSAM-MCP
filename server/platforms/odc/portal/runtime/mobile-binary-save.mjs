@@ -1,4 +1,4 @@
-import fs from 'node:fs';import {authorizationContext} from '../../facade/authorization-context.mjs';
+import {approvalOf,contextValues,sameGrant,recorded,ownReceipt} from './written-approval.mjs';
 import {fail} from './errors.mjs';import {fingerprint,isUuid} from './write-journal.mjs';
 import {extensibilityStateHash} from './mobile-extensibility.mjs';
 import {MOBILE_FILE_UPLOAD,MOBILE_FILE_CONVERT,MOBILE_FILE_SAVE,mobileUploadObservation} from './mobile-binary-upload.mjs';
@@ -6,12 +6,23 @@ import {mobileBinaryTransport} from './mobile-binary-transport.mjs';
 import {binarySetting,ownedBinaryLibrary,binaryLibraryConstraints,binaryNativeLibraryMatches} from './mobile-binary-library.mjs';
 export const MOBILE_EXTENSIBILITY_GET='native-application-orchestration-service-api-v1:get:/environments/{environmentKey}/applications/{applicationKey}/configurations/extensibility-settings';
 const bad=()=>fail('AUTHORIZATION_CONTEXT_INVALID','Native binary save requires its confirmed own upload, exact current setting and opaque private URI binding. Nothing was sent.');
-export async function mobileBinarySaveApproval({file,words,host,raw,lookup,read,portalRead}){
- let constraints;try{if(fs.statSync(file).size>32768)bad();constraints=JSON.parse(fs.readFileSync(file,'utf8')).constraints;}catch{bad();}
+// R2-I (owner's rule, 28/10): the written words naming the app, library and setting are the approval; a context file is
+// still accepted. Without one, the upload is the one confirmed own upload of this exact setting that no save of SSAM's
+// journal used yet: none or several refuse (the call's scope may name it, uploadOperationUuid, checked as before).
+export async function mobileBinarySaveApproval({file,words,host,raw,lookup,read,portalRead,find,scope}){
+ let constraints;try{constraints={...contextValues(file,scope)};}catch{bad();}
+ if(!file&&constraints.uploadOperationUuid===undefined&&typeof find==='function'){
+  const p=raw.inputParameters,key=p?.ExtensibilitySettingInfo?.Setting?.Key;
+  const used=new Set(find(r=>r?.identity?.tenant===host&&r.identity.operationId===MOBILE_FILE_SAVE)
+   .map(r=>r.reconciliation?.mobileBinarySave?.uploadOperationUuid).filter(Boolean));
+  constraints.uploadOperationUuid=ownReceipt(find,r=>r?.state==='confirmed'&&r.identity?.tenant===host&&[MOBILE_FILE_UPLOAD,MOBILE_FILE_CONVERT].includes(r.identity.operationId)
+   &&r.reconciliation?.mobileBinaryUpload?.applicationKey===p?.ApplicationKey&&r.reconciliation.mobileBinaryUpload.environmentKey===p?.EnvironmentKey
+   &&r.reconciliation.mobileBinaryUpload.settingKey===key&&!used.has(r.operationUuid),'The mobile binary save').operationUuid;
+ }
  if(!isUuid(constraints?.uploadOperationUuid)||Object.keys(raw.screenVariables??{}).length||Object.keys(raw.clientVariables??{}).length)bad();
  const upload=lookup(constraints.uploadOperationUuid),e=upload?.reconciliation?.mobileBinaryUpload;
  const proof=e&&mobileUploadObservation(e,{UploadProof:upload.response?.mobileUploadProof},constraints.uploadOperationUuid);
- if(!upload||upload.identity?.tenant!==host||upload.identity.operationId!==(e?.transportMode==='base64'?MOBILE_FILE_CONVERT:MOBILE_FILE_UPLOAD)||upload.state!=='confirmed'||!proof||!upload.authorization?.source)bad();
+ if(!upload||upload.identity?.tenant!==host||upload.identity.operationId!==(e?.transportMode==='base64'?MOBILE_FILE_CONVERT:MOBILE_FILE_UPLOAD)||upload.state!=='confirmed'||!proof||!recorded(upload))bad();
  const p=raw.inputParameters,info=p?.ExtensibilitySettingInfo,meta=info?.Setting?.Metadata;
  if(!p||Object.keys(p).sort().join(',')!=='ApplicationKey,EnvironmentKey,ExtensibilitySettingInfo,RequiresDecoding'
   ||p.ApplicationKey!==e.applicationKey||p.EnvironmentKey!==e.environmentKey||p.RequiresDecoding!==false
@@ -19,7 +30,7 @@ export async function mobileBinarySaveApproval({file,words,host,raw,lookup,read,
   ||!/^[A-Za-z0-9_.-]{1,128}$/.test(meta.Name)||!/^[A-Za-z0-9]{1,16}$/.test(meta.Filetype))bad();
  const asset=await read('asset-repository-api-v1:get:/assets/{assetKey}',{assetKey:e.applicationKey});
  if(!asset.ok||asset.data?.assetKey!==e.applicationKey||asset.data.assetType!=='MobileApplication'||asset.data.portfolioKey!==e.portfolioKey)bad();
- const library=await ownedBinaryLibrary({scope:e,origin:lookup(e.originOperationUuid),host,lookup,read});
+ const library=await ownedBinaryLibrary({scope:e,origin:lookup(e.originOperationUuid),host,lookup,read,strict:Boolean(file)});
  const current=await read(MOBILE_EXTENSIBILITY_GET,{applicationKey:e.applicationKey,environmentKey:e.environmentKey});
  const field=binarySetting(current.data,e);
  if(!current.ok||field?.dataType!=='BinaryUrl'||field.isSecret!==(e.isSecret===true))bad();
@@ -34,9 +45,9 @@ export async function mobileBinarySaveApproval({file,words,host,raw,lookup,read,
   ||observed.Setting.DataType!=='BinaryUrl'||observed.Setting.Name!==field.name)bad();
  const expected=structuredClone(observed);Object.assign(expected.Setting,{Value:'',ValueOrigin:'Override',IsSecret:field.isSecret,Metadata:meta});
  if(fingerprint(expected)!==fingerprint(info))bad();
- const approved=authorizationContext(file,words,{lane:'odc',host,operation:MOBILE_FILE_SAVE,environmentKey:e.environmentKey,targets:[asset.data.name,...(library?[library.name]:[]),field.name],
+ const approved=approvalOf(file,words,{lane:'odc',host,operation:MOBILE_FILE_SAVE,environmentKey:e.environmentKey,targets:[asset.data.name,...(library?[library.name]:[]),field.name],
   constraints:{uploadOperationUuid:constraints.uploadOperationUuid,originOperationUuid:e.originOperationUuid,...binaryLibraryConstraints(e),inputSha256:fingerprint(p),expectedConfigurationSha256:extensibilityStateHash(current.data)}});
- if(!approved||approved.source.threadId!==upload.authorization.source.threadId||approved.source.messageId!==upload.authorization.source.messageId)bad();
+ if(!approved||!sameGrant(upload.authorization,approved))bad();
  return {approval:approved,expected:{...e,uploadOperationUuid:constraints.uploadOperationUuid,objectUri:proof.objectUri,metadata:structuredClone(meta),screenVariables}};
 }
 export function mobileBinarySaveObservation(expected,publicRead,nativeRead){

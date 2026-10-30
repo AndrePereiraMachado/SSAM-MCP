@@ -17,14 +17,18 @@ async function harness(t, handlers) {
 }
 
 test('a block the catalog does not have is UI_BLOCK_NOT_FOUND with the closest names, and its continuation searches by text', async t => {
-  const ask = await harness(t, { 'ui-block': args => ({ ok: false, command: 'ui-block', code: 'UI_BLOCK_NOT_FOUND', candidates: ['Popup', 'Upload'],
-    error: `KernelRefusalException: block '${args[args.indexOf('--name') + 1]}' not in OutSystemsUI 2.28.1; try --find; closest: Popup, Upload\n   at ...` }) });
-  const refused = await ask('o11', 'ui-block', 'html widgets popup upload select switch');
+  const asked = [];
+  const ask = await harness(t, { 'ui-block': args => { asked.push(args); return { ok: false, command: 'ui-block', code: 'UI_BLOCK_NOT_FOUND', candidates: ['Popup', 'Upload'],
+    error: `KernelRefusalException: block '${args[args.indexOf('--name') + 1]}' not in OutSystemsUI 2.28.1; try --find; closest: Popup, Upload\n   at ...` }; } });
+  // R2-E (fase4-28/r2-order-inputs, R2-H): a name of several words is searched as text from the start (--find, with a note),
+  // so the sentence of the original report never reaches --name; the name the catalog does not have is one word here.
+  const refused = await ask('o11', 'ui-block', 'PopupUploadSwitch');
+  assert.ok(asked[0].includes('--name'), asked[0].join(' '));
   assert.equal(refused.ok, false);
   assert.equal(refused.code, 'UI_BLOCK_NOT_FOUND');
   assert.doesNotMatch(refused.error, /\n/);
   assert.deepEqual(refused.candidates, ['Popup', 'Upload']);
-  assert.deepEqual(refused.continuation.arguments, { lane: 'o11', kind: 'ui-block', query: { find: 'html widgets popup upload select switch' } });
+  assert.deepEqual(refused.continuation.arguments, { lane: 'o11', kind: 'ui-block', query: { find: 'PopupUploadSwitch' } });
   const library = await ask('o11', 'ui-block', { catalog: 'RichWidgets', name: 'ChartXAxis' });
   assert.equal(library.code, 'UI_BLOCK_NOT_FOUND');
   assert.deepEqual(library.continuation.arguments.query, { catalog: 'RichWidgets', find: 'ChartXAxis' });

@@ -1,3 +1,4 @@
+import { executableCorrection } from './corrected-call.mjs';
 // ssam_evidence: reads the JSON/JSONL evidence SSAM wrote (inspect `out` files, deliver result.json, receipts, lab
 // receipts/checks/manifests, snapshot sidecars, journals) so the model never writes a python -c / node -e /
 // ConvertFrom-Json script to look inside them. Measured in the transcripts (tests/bench/baseline/
@@ -239,7 +240,7 @@ const bytes = value => Buffer.byteLength(JSON.stringify(value));
 const size = bytes;
 
 // ---- refusals: code + continuation {tool, arguments, why}; never a shell command.
-const refusal = (code, error, continuation, extra = {}) => ({ ok: false, code, error, ...extra, continuation });
+const refusal = (code, error, continuation, extra = {}) => ({ ok: false, code, error, ...extra, continuation, ...(executableCorrection(continuation, code) ? { corrected: continuation } : {}) });
 const again = (args, why) => ({ tool: 'ssam_evidence', arguments: args, why });
 const firstLine = text => String(text ?? '').split(/\r?\n/)[0].slice(0, 300);
 
@@ -367,7 +368,7 @@ export function createEvidenceReader({ roots = evidenceRoots(), maxBytes = MAX_F
       if (!clause || clause.invalid) malformed.push('"' + String(text).slice(0, 80) + '": ' + (clause?.invalid ?? 'neither "field op value" nor a bare field'));
       else clauses.push(clause);
     }
-    const sameReading = where => ({ file: input.file, ...(input.pointer ? { pointer: input.pointer } : {}), ...(input.deep ? { deep: true } : {}),
+    const sameReading = where => ({ ...input, file: input.file, ...(input.pointer ? { pointer: input.pointer } : {}), ...(input.deep ? { deep: true } : {}),
       ...(input.depth ? { depth: input.depth } : {}), ...(input.fields ? { fields: input.fields } : {}), where });
     const filterInvalid = (problems, rows) => {
       const facts = rowFacts(rows ?? []);
@@ -409,6 +410,26 @@ export function createEvidenceReader({ roots = evidenceRoots(), maxBytes = MAX_F
     else if (isObject(base.value) && listing) rows = Object.keys(base.value).map(k => ({ ref: { key: k }, value: base.value[k] }));
     else if (malformed.length) return filterInvalid(malformed, []);
     else return valueAnswer(base.value, { ...input, baseKeys: base.keys }, budget, meta);
+    // Text evidence has lines, not object fields. The familiar display fields all
+    // refer to the complete line, with an explicit normalization note.
+    if (rows.length && rows.every(r => typeof r.value === 'string')) {
+      const notes = [];
+      for (const clause of clauses) {
+        if (clause.op === 'present' || clause.op === 'absent') {
+          clause.value = clause.field; clause.lower = clause.field.toLowerCase();
+          clause.op = clause.op === 'present' ? '~' : '!~';
+          clause.keys = null; clause.field = '';
+          notes.push({ rule: 'text-line-filter', at: '/where', note: 'A bare term was accepted as a text-line search' });
+          continue;
+        }
+        if (!clause.field) continue;
+        const field = clause.field;
+        clause.field = ''; clause.keys = null;
+        if (clause.any) clause.any = clause.any.map(value => value.replace(/^[^~|]+~/, ''));
+        notes.push({ rule: 'text-line-filter', at: '/where', note: field + ' was accepted as the complete text line' });
+      }
+      if (notes.length) meta.normalizations = notes;
+    }
     // A compared field that no row has is a misspelled field, never "0 items" (the negations and !field stay valid).
     const absent = rows.length ? clauses.filter(c => c.keys && !['!=', '!~', 'absent'].includes(c.op) && c.op !== 'present'
       && !rows.some(r => resolve(r.value, c.keys).found)).map(c => 'no row has the field "' + c.field + '"') : [];
@@ -452,7 +473,8 @@ export function createEvidenceReader({ roots = evidenceRoots(), maxBytes = MAX_F
 
 // C29: what the rows hold (the first 50): their fields, the kinds they name and one where clause they answer.
 function rowFacts(rows) {
-  const sample = rows.slice(0, 50).map(r => r.value).filter(isObject);
+  const values = rows.slice(0, 50).map(r => r.value);
+  const sample = values.filter(isObject);
   const fields = [...new Set(sample.flatMap(v => Object.keys(v)))].slice(0, 40);
   const kinds = [...new Set(sample.map(v => v.kind).filter(k => typeof k === 'string' && k))].slice(0, 20);
   const escape = text => String(text).replace(/\|/g, '\\|');
@@ -465,7 +487,7 @@ function rowFacts(rows) {
       if (typeof x === 'number' || typeof x === 'boolean') { example = f + '=' + x; break; }
     }
   }
-  return { fields, kinds, example: example ?? fields[0] ?? 'error' };
+  return { fields, kinds, example: example ?? fields[0] ?? (values.find(v => typeof v === 'string' && v.trim()) ? '~' + escape(values.find(v => typeof v === 'string' && v.trim()).trim().slice(0, 24)) : '~error') };
 }
 
 // Every object node below `base` in document order. Arrays are transparent (an array's items are at the array's
@@ -602,7 +624,7 @@ export function registerSsamEvidence(server, deps = {}) {
       file: z.string().min(1).max(1024).describe('Absolute path of the .json/.jsonl evidence, as an SSAM tool returned it'),
       pointer: pathSpec.optional().describe('JSON Pointer or dotted path of the part to read; default the whole file'),
       select: z.array(pathSpec).min(1).max(40).optional().describe('Paths read at once from the pointer target'),
-      where: z.union([z.string().min(1).max(500), z.array(z.string().min(1).max(500)).min(1).max(10)]).optional().describe('field op value, e.g. kind=JavaScriptNode, name~Pin, kind~Container|Button (| alternates in = ~ !~), ts_start>=2026-09-16; or a bare field: error, !error'),
+      where: z.union([z.string().min(1).max(500), z.array(z.string().min(1).max(500)).max(10)]).optional().describe('field op value, e.g. kind=JavaScriptNode, name~Pin, kind~Container|Button (| alternates in = ~ !~), ts_start>=2026-09-16; or a bare field: error, !error'),
       fields: z.array(pathSpec).min(1).max(40).optional().describe('Fields of each item to show (dotted paths)'),
       deep: z.boolean().optional().describe('List every object below pointer (tree search), each with its `at` pointer'),
       depth: z.number().int().min(1).max(64).optional().describe('With deep: object levels to descend'),

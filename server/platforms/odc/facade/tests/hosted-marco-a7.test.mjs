@@ -104,7 +104,8 @@ test('CX11 P: a hosted session serves the profile all (every tool of hosted/tool
     for (const debug of ['ssam_debug', 'ssam_debug_run', 'ssam_debug_invoke', 'ssam_debug_client', 'ssam_debug_server', 'ssam_debug_matrix']) assert.ok(names.includes(debug), debug);
     assert.deepEqual(names.filter(n => !hostedTools()[n]), [], 'every listed tool has a hosted class');
     // The hosted catalog is these, ssam_friction (added by the served mode) and the four hook tools (SSAM_APP_HOOK_TOOLS=1 only).
-    assert.equal(Object.keys(hostedTools()).length - names.length, 7, 'ssam_friction, the four hook tools and two local previews');
+    // fase4-28 r2-preview: + ssam_render, listed only while the switch, the kernel and the agent's Hello allow it (not here).
+    assert.equal(Object.keys(hostedTools()).length - names.length, 8, 'ssam_friction, the four hook tools, two local previews and the conditional ssam_render');
   } finally { await asked.close(); await local.close(); }
 });
 

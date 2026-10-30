@@ -104,10 +104,14 @@ public static partial class ScreenDocument
             var why = scope != null && !scope.Equals("theme", StringComparison.OrdinalIgnoreCase) && !scope.Equals(top.Tag, StringComparison.OrdinalIgnoreCase)
                 ? $"scope=\"{scope}\" is not a place of the CSS (the {top.Tag}'s own style sheet, or scope=\"theme\")"
                 : $"{string.Join(", ", odd.Select(a => a.Key))} on a <style> is not a property of a style sheet: the CSS cannot go to the {top.Tag}'s style sheet as written";
+            // R2-D: data.css is the whole sheet when the op sends it, so the media CSS goes to its end; without data.css the
+            // document's <style> blocks are the sheet, so it stays a <style> of the document, written as its @media block.
+            var inPlace = Anvil.Reading.ScreenHtmlEdit.DataCss(css) == null;
             problems.Add(onlyMedia
                 ? new(StyleUnplaced, style.Line, style.Column, $"<style {said}>: {why}",
-                    $"the patch moves the CSS to data.css as @media {media!.Trim()} {{ ... }} (data.css goes to the {top.Tag}'s style sheet after the <style> blocks)",
-                    Correct: new MoveStyle($"@media {media!.Trim()} {{\n{text.Trim('\r', '\n')}\n}}"))
+                    inPlace ? $"the patch writes it as <style>@media {media!.Trim()} {{ ... }}</style> (the {top.Tag}'s style sheet)"
+                        : $"the patch moves the CSS to the end of data.css as @media {media!.Trim()} {{ ... }} (data.css is the {top.Tag}'s whole style sheet)",
+                    Correct: new MoveStyle($"@media {media!.Trim()} {{\n{text.Trim('\r', '\n')}\n}}", inPlace))
                 : new(StyleUnplaced, style.Line, style.Column, $"<style {said}>: {why}",
                     $"write <style> (the {top.Tag}'s own style sheet) or <style scope=\"theme\"> (the module theme), or move the CSS to data.css; a media query is a @media block inside the CSS"));
         }
@@ -345,12 +349,15 @@ public static partial class ScreenDocument
         return outSystemsUi.Contains(name);
     }
 
-    /// <summary>The CSS of the root's own style sheet: its &lt;style&gt; blocks without scope="theme" in document order, then
-    /// data.css, each as written (one block alone is exactly its text, the reading's &lt;style&gt;); null when there is none.</summary>
+    /// <summary>The CSS of the root's own style sheet. R2-D (the owner's decision of 2026-10-28): data.css, when the op sends it,
+    /// IS the sheet, as written (the &lt;style&gt; blocks of the document are replaced, never added to it: a reading sent back
+    /// with its sheet in data.css never doubles); without data.css, the &lt;style&gt; blocks without scope="theme" in document
+    /// order, each as written (one block alone is exactly its text, the reading's &lt;style&gt;); null when there is none. A data.css
+    /// that is empty or only whitespace is no data.css (ScreenHtmlEdit.DataCss, the one predicate).</summary>
     internal static string? OwnSheet(IReadOnlyList<StyleBlock> blocks, string? css)
     {
+        if (Anvil.Reading.ScreenHtmlEdit.DataCss(css) is { } sheet) return sheet;
         var parts = blocks.Where(b => !b.Theme).Select(b => b.Css).ToList();
-        if (!string.IsNullOrEmpty(css)) parts.Add(css);
         parts = parts.Where(p => p.Length > 0).ToList();
         if (parts.Count == 0) return null;
         if (parts.Count == 1) return parts[0];
@@ -361,6 +368,16 @@ public static partial class ScreenDocument
             sb.Append(part);
         }
         return sb.ToString();
+    }
+
+    /// <summary>R2-D: the CSS of the document's own &lt;style&gt; blocks that data.css replaced (null: none, or the same CSS).</summary>
+    internal static string? ReplacedSheet(IReadOnlyList<StyleBlock> blocks, string? css)
+    {
+        if (Anvil.Reading.ScreenHtmlEdit.DataCss(css) == null) return null;
+        var own = OwnSheet(blocks, null);
+        if (own == null || Squeeze(own) == Squeeze(css)) return null;
+        return own;
+        static string Squeeze(string text) => new(text.Where(c => !char.IsWhiteSpace(c)).ToArray());
     }
 
     /// <summary>The CSS of the theme block of the document (its &lt;style scope="theme"&gt; blocks, in order), null when none.</summary>

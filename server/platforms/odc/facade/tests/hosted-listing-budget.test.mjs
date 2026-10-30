@@ -20,6 +20,7 @@ import { toolListingBytes } from '../tool-listing.mjs';
 import { frictionTool } from '../../../../facade/friction-boundary.mjs';
 
 const HOSTED_LISTING_CEILING = 261330;
+// The owner ceiling stays fixed, including optional reference fields.
 const HOSTED_CORE_CEILING = 34097;
 const CORE = ['ssam_doctor', 'ssam_connect', 'ssam_discover', 'ssam_map', 'ssam_code', 'ssam_reference', 'ssam_evidence', 'ssam_task', 'o11_inspect',
   'o11_deliver', 'o11_publish', 'o11_studio', 'studio_deliver', 'studio_inspect', 'studio_status'];

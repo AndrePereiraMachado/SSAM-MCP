@@ -684,9 +684,20 @@ controlador (`<ws>/state/relay-authority/bridge.key`, lida pelo worker na partid
   e `ANVIL_WORKER_IDLE_MINUTES`. Vêm do servidor (`SSAM_O11_WORKER_BASE_CACHE` padrão `off`, `SSAM_O11_WORKER_HEAP_MB`
   padrão 1536, `SSAM_O11_WORKER_MAX_COMMANDS` padrão 1000). Um valor do cliente nunca as substitui.
 - A primeira chamada de cada cliente roda fria na hora; o worker sobe em segundo plano e serve a próxima. Os builds do
-  `o11_deliver` (`o11-build-phase.mjs slotRunner`) também usam esse worker: uma chamada por vez, as outras frias.
-- Chave por `tokenId`, nunca compartilhado; impressão digital (ambiente, pasta, CLI, chave) conferida a cada chamada: um
-  contexto novo (porta e chave de relay novas) aposenta o worker ocioso e a chamada roda fria.
+  `o11_deliver` (`o11-build-phase.mjs slotRunner`) e, desde a R2-F regra 3, o apply do `ssam_code check`
+  (`code-check.mjs checkWorkerOf`) também usam esse worker: uma chamada por worker; com todos ocupados, a chamada roda
+  fria e, se `SSAM_O11_WORKERS_PER_TOKEN` (padrão 1) permitir e houver vaga livre, mais um worker do cliente sobe em
+  segundo plano. O worker extra (o cliente tem outro) nunca toma a vaga de outro cliente e é o primeiro a ceder a sua; o
+  único worker de um cliente só cede após a residência mínima. Um apply vai ao worker
+  ocioso que serviu a mesma base por último (sha256 do conteúdo ou dos bytes); quem decide se a base serve é o kernel.
+- Memória (medida em `C:\t\r2\RESULTADO-WORKER-QUENTE.md`): nenhum worker sobe se o `MemAvailable` do host menos
+  `SSAM_O11_WORKER_START_MB` ficar abaixo de `SSAM_O11_WORKER_MIN_AVAILABLE_MB` (padrão 3072; 0 desliga), ou se a soma
+  dos `VmRSS` dos workers (os que ainda não serviram uma chamada reservados por esse tamanho, num livro único lido antes
+  de cada partida) mais esse tamanho passar `SSAM_O11_WORKERS_RSS_TOTAL_MB` (padrão máximo × RSS). Depois de uma
+  chamada, o worker sai se o host ficou abaixo do piso ou o total passou. Sem `/proc` (Windows) nada disso decide.
+- Chave por `tokenId`, nunca compartilhado; impressão digital (ambiente, pasta, CLI, build do Studio, chave) conferida a
+  cada chamada: um contexto novo (porta e chave de relay novas) ou um Studio trocado na mesma pasta (tamanho e data do
+  `ServiceStudio.Framework.dll`) aposenta o worker ocioso e a chamada roda fria.
 - Teto `SSAM_O11_WORKERS_MAX` (padrão 2; 0 desliga), contando os que ainda saem. Sem vaga, sai o ocioso usado há mais
   tempo, só depois de `SSAM_O11_WORKER_MIN_IDLE_MS` (padrão 2 min) sem uso; senão a chamada só roda fria. Parada após
   `SSAM_O11_WORKER_IDLE_MS` (padrão 10 min), quando o contexto fecha, ou depois da chamada em que o `VmRSS` passou de

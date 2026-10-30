@@ -12,6 +12,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as op from '../prototype-op.mjs';
 import { fitAnswer, ANSWER_BUDGETS } from '../answer-size.mjs';
+import { VISIBLE_ANSWER_BYTES, POINTER_FLOOR_BYTES } from '../context-budget.mjs';
 import { kernelReport } from './fixtures/prototype-surface/fakes.mjs';
 
 const root = fileURLToPath(new URL('../../../../', import.meta.url));
@@ -90,13 +91,21 @@ test('the receipt says what the import did beyond the counts: the theme block of
     assert.ok(!Object.hasOwn(plain, key), key);
 });
 
-test('a job answer with the theme block of F1 in its receipt fits the receipt budget, and the receipt is recovered exactly with nativeLayout', t => {
+// R1-B (fase4-28/r1-answers, answer-size.mjs rules 1 and 3): a warnings list at any depth is content (here
+// resources.images[0].warnings), so the receipt that holds one is entered, never dropped whole, and a value under
+// POINTER_FLOOR_BYTES never leaves for a pointer of its own. The receipt budget (ANSWER_BUDGETS.receipt) now bounds only what
+// can leave: every larger part of the receipt goes to the exact read, and the answer ends under the visible ceiling.
+test('a job answer with the theme block of F1 in its receipt keeps only its small fields inline (R1-B), and the receipt is recovered exactly with nativeLayout', t => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'proto-receipt-')); t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const report = fullReport(emittedKeys());
   const receipt = op.prototypeReceipt(report, {});
   const full = { ok: true, lane: 'o11', job: 'C:\\jobs\\job.json', accepted: true, isValid: true, prototype: receipt };
   const fitted = fitAnswer('o11_job', {}, full, { root: dir });
-  assert.ok(Buffer.byteLength(JSON.stringify(fitted), 'utf8') <= ANSWER_BUDGETS.receipt, JSON.stringify(fitted).length + ' bytes');
+  const size = value => Buffer.byteLength(JSON.stringify(value), 'utf8');
+  assert.ok(size(full) > ANSWER_BUDGETS.receipt, 'the fixture is above the receipt budget: ' + size(full));
+  assert.ok(size(fitted) <= VISIBLE_ANSWER_BYTES, size(fitted) + ' bytes');
+  const inline = Object.entries(fitted.prototype ?? {}).filter(([, v]) => size(v) > POINTER_FLOOR_BYTES).map(([k, v]) => k + ' ' + size(v));
+  assert.deepEqual(inline, [], 'every part of the receipt larger than the pointer floor left for the read');
   const calls = [fitted.omitted, ...(fitted.omitted?.more ?? [])].filter(Boolean);
   const call = calls.find(c => c.arguments.pointer === '/prototype' || c.arguments.pointer === '/prototype/nativeLayout');
   assert.ok(call, 'one call recovers the receipt: ' + JSON.stringify(calls.map(c => c.arguments.pointer)));

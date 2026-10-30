@@ -43,13 +43,29 @@ const hosted = (exec = fakeExecutor(), workspace = fs.mkdtempSync(path.join(os.t
   tokenId: 'tok_test', customer: 'Test', lanes: ['odc', 'o11'], workspace, agent: null, executor: exec, o11: { studioDir: 'C:\\server\\Service Studio', lane: 'ss4' }, close: async () => {} });
 const code = expected => error => { assert.equal(error.code, expected, error.message); return true; };
 
-test('the closed list: 10 kinds, 6 that touch a machine, both frozen', () => {
-  assert.equal(CALL_KINDS.length, 10);
+test('the closed list: 13 kinds, 6 that touch a machine, both frozen', () => {
+  assert.equal(CALL_KINDS.length, 13);
   assert.ok(Object.isFrozen(CALL_KINDS) && Object.isFrozen(MACHINE_KINDS));
   // file.sync (C14, servidor/fase4): several file.put in one call, between the mirror and an agent 0.2.0+.
-  assert.deepEqual([...CALL_KINDS], ['studio.processes', 'odc.pipe', 'odc.attach', 'o11.bridge', 'o11.connect', 'o11.selected', 'file.put', 'file.get', 'file.list', 'file.sync']);
+  // net.probe (fase4-24): the network check; file.upload (R2-G, fase4-28/r2): an approved local file of the user's machine;
+  // screen.render (fase4-28 r2-preview): the render of a design document. The last three only to an agent that lists them.
+  assert.deepEqual([...CALL_KINDS], ['studio.processes', 'odc.pipe', 'odc.attach', 'o11.bridge', 'o11.connect', 'o11.selected', 'file.put', 'file.get', 'file.list', 'file.sync',
+    'net.probe', 'file.upload', 'screen.render']);
   assert.deepEqual([...MACHINE_KINDS], CALL_KINDS.slice(0, 6));
   assert.throws(() => { CALL_KINDS.push('agent.info'); });
+});
+
+// R2-H review H4: the executor's list was its own copy (11 kinds) while the hub sends 13; one list now, read by the hub,
+// the executor seam and the hosted executor, so a new kind cannot reach one of them and miss the others.
+test('one list of call kinds: the hub, the executor seam and the hosted executor read the same one', async () => {
+  const hub = await import('../agent-hub.mjs');
+  const { AGENT_KINDS } = await import('../hosted/agent-executor.mjs');
+  const shared = await import('../call-kinds.mjs');
+  assert.equal(hub.CALL_KINDS, CALL_KINDS, 'the hub and the executor seam hold one list, not two copies');
+  assert.equal(shared.CALL_KINDS, CALL_KINDS);
+  assert.equal(AGENT_KINDS, MACHINE_KINDS, 'the hosted executor forwards exactly the machine kinds');
+  for (const kind of hub.HELLO_ONLY_KINDS) assert.ok(CALL_KINDS.includes(kind), kind + ' is a call kind');
+  assert.deepEqual([...shared.PROTOCOL1_KINDS], CALL_KINDS.slice(0, 9));
 });
 
 test('the local executor dispatches each machine kind to its low-level function and refuses the file kinds', async () => {

@@ -170,7 +170,11 @@ const UNC_PATH = /\\\\[\w.$-]+\\(?:[^\\"'`<>|*?\r\n]*\\)*[^\\\s"'`<>|*?,;)\]]*(?
 // image). Only the volumes of /data: a JSON pointer of SSAM's own prose (/data/results, /data/html) is no path.
 // (review no-internals-7, item 6: the name of a root ends its segment, so a JSON pointer such as /options/0, /applicationKey
 // or /apps is no server path; a path at the end of a sentence leaves its period, as WIN_PATH does)
-const POSIX_PATH = /(?<![\w.:/~-])\/(?:studio|opt|srv|var|home|root|usr|etc|mnt|app|workspace|customers|tmp|data\/(?:server|cache|friction|odc-features))(?=$|[\\/\s"'`<>|,;:)\]]|\.(?:\s|$))(?:\/[^\s"'`<>|,;)\]]*(?<!\.))?/g;
+// Shared with oneLine: only server roots are paths, never arbitrary JSON
+// pointers. A quoted path requires its closing quote on the same line.
+// Unquoted paths always end at whitespace; a following filename is client text.
+// Dots inside a segment stay in the path; sentence and clause boundaries do not.
+export const POSIX_PATH = /(?<![\w.:/~-])(?=\/(?:studio|opt|srv|var|home|root|usr|etc|mnt|app|workspace|customers|tmp|data\/(?:server|cache|friction|odc-features))(?=$|[\\/\s"'`<>|,;:)\]]|\.(?:\s|$)))(?:(?<=")\/[^"\r\n]*(?=")|(?<=')\/[^'\r\n]*(?=')|(?<=`)\/[^`\r\n]*(?=`)|\/(?:[^\s.:"'`<>|,;)\]]|[.:](?!\s|$))*)/g;
 const DOC_REPO_PATH = /(?<![\w./\\-])(?:kernel|platforms|facade|scripts|publisher|tools|docs|src|\.local)[\\/][\w.*\\/-]+(?<!\.)(?::\d+(?:-\d+)?)?/g;
 const RUNTIME_REPO_PATH = /(?<![\w./\\-])(?:kernel|platforms|\.local)[\\/][\w.*\\/-]+(?<!\.)(?::\d+(?:-\d+)?)?|(?<![\w./\\-])docs[\\/][\w.-]+\.md\b/g;
 const SOURCE_FILE = /\b[\w.*-]+\.(?:cs|mjs|py|ps1|csproj|sln)\b(?::line \d+|:\d+(?:-\d+)?|#L\d+|\(\d+(?:,\d+)?\))?/g;

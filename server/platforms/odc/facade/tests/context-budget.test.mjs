@@ -65,8 +65,8 @@ test('B5c: all answer families, including evidence and native SQL, obey the ceil
     ['ssam_discover', { expand: 'logic' }, 'other'], ['ssam_map', {}, 'read'],
     ['o11_deliver', {}, 'receipt'], ['studio_deliver', {}, 'receipt'], ['budget_probe', {}, 'other'],
     ['ssam_code', { lane: 'odc', action: 'plan', items: [] }, 'plan'],
-    ['ssam_evidence', { file: path.join(root, 'fixture.json') }, 'other'],
-    ['ssam_query_test', { lane: 'o11', op: 'status', operationId: '72df438d-5510-41e8-9839-66247a99e13b' }, 'other'],
+    ['ssam_evidence', { file: path.join(root, 'fixture.json') }, 'read'],
+    ['ssam_query_test', { lane: 'o11', op: 'status', operationId: '72df438d-5510-41e8-9839-66247a99e13b' }, 'read'],
   ];
   for (const [name, args, kind] of cases) {
     full = { ok: true, rows };
@@ -166,5 +166,8 @@ test('B5 explicit expansion keeps every named part while a late model envelope f
   const refusal = { ok: false, code: 'ALL_PROBLEMS', problems: Array.from({ length: 100 }, (_, i) => ({ code: 'P' + i, message: 'Unique problem ' + i + ' ' + 'x'.repeat(100) })) };
   const refused = fitAnswer('ssam_discover', { expand: 'ui.fixture:contract', budgetBytes: 4096 }, refusal, { root });
   assert.equal(refused.code, refusal.code);
-  assert.deepEqual(refused.problems.map(p => p.code).sort(), refusal.problems.map(p => p.code).sort());
+  assert.ok(bytes(refused) <= 9216);
+  assert.equal(refused.problems.length + (refused.problemsLeft ?? 0), refusal.problems.length);
+  assert.deepEqual(refused.problems.map(p => p.code), refusal.problems.slice(0, refused.problems.length).map(p => p.code));
+  assert.equal(refused.omitted.arguments.pointer, '/problems');
 });

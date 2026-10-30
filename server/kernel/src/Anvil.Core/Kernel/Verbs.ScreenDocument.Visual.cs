@@ -32,10 +32,13 @@ public sealed partial class ModelSession
             return authorMap.TryGetValue(node, out var element) ? element : null;
         }
 
-        /// <summary>The style rules that reach this page: its own &lt;style&gt; blocks (theme parts included), data.css and the
+        /// <summary>The style rules that reach this page: its own sheet (data.css when sent, else its &lt;style&gt; blocks; R2-D), its theme parts and the
         /// author CSS of the themes the page shows (review 3, M7: its flow's, else the module's default, and their bases).</summary>
         private List<CssRule> PageRules() =>
-            pageRules ??= ScreenVisual.RulesOf(styles.Select(b => b.Css).Append(options.Css).Concat(Theme().Css));
+            pageRules ??= ScreenVisual.RulesOf(PageCss().Concat(Theme().Css));
+
+        // R2-D: the CSS of the page itself: the theme parts of the document, then its own sheet (data.css replaces its <style>).
+        private IEnumerable<string?> PageCss() => styles.Where(b => b.Theme || Anvil.Reading.ScreenHtmlEdit.DataCss(options.Css) == null).Select(b => (string?)b.Css).Append(Anvil.Reading.ScreenHtmlEdit.DataCss(options.Css));
 
         // The theme the page shows (ModelSession.PageThemeOf, review 3, M7; a block: the themes of the screens that show it,
         // RootThemeOf, review 4, N1), read once per compile.
@@ -162,7 +165,7 @@ public sealed partial class ModelSession
             if (!spacingOf.TryGetValue(theme, out var ofTheme)) spacingOf[theme] = ofTheme = new(ReferenceEqualityComparer.Instance);
             if (ofTheme.TryGetValue(parent, out var known)) return known;
             if (!spacingReaders.TryGetValue(theme, out var reader))
-                spacingReaders[theme] = reader = ScreenVisual.PageSpacing(theme, styles.Select(b => (string?)b.Css).Append(options.Css));
+                spacingReaders[theme] = reader = ScreenVisual.PageSpacing(theme, PageCss());
             return ofTheme[parent] = reader.Of(parent);
         }
         private readonly Dictionary<ScreenVisual.PageTheme, ScreenVisual.SpacingReader> spacingReaders = new(ReferenceEqualityComparer.Instance);
@@ -243,6 +246,9 @@ public sealed partial class ModelSession
             foreach (var layout in s.InstallNativeLayouts(root!)) normalized.Add(layout);
         }
 
+        /// <summary>R3-A: what the last visual check said of the platform's cascade it judged (RuntimeCss: present, partial, missing).</summary>
+        internal System.Text.Json.Nodes.JsonObject? Platform { get; private set; }
+
         /// <summary>CX17 F8: the visual check of the page this compile wrote (ScreenVisual.Check over the author's DOM, the DOM the
         /// runtime will publish and the CSS that reaches the page), with its time and the counts of the prediction.</summary>
         internal (List<ScreenVisual.Finding> Findings, ScreenVisual.Prediction Prediction, long Ms)? VisualCheck()
@@ -261,13 +267,16 @@ public sealed partial class ModelSession
                 foreach (var (key, predicted) in prediction.ByKey)
                     if (nodeOf.TryGetValue(key, out var node) && authorMap.TryGetValue(node, out var authored) && !counterparts.ContainsKey(authored)) counterparts[authored] = predicted;
                 var authorRoot = authorMap[top];
-                var sheets = new List<ScreenVisual.Sheet>();
+                // R3-A: the platform's real sheets first (RuntimeCss, the private store of this Studio version), then the author's.
+                var platformSheets = RuntimeCss.Load(platform);
+                var sheets = new List<ScreenVisual.Sheet>(ScreenVisual.PlatformSheetsOf(platformSheets));
                 if (ownSheet is { Length: > 0 } own) sheets.Add(new(own, "page"));
                 // Review 3, M7: the themes the page shows, read now (with the theme part this compile wrote).
                 var shown = s.RootThemeOf(root);
                 foreach (var theme in shown.Css) if (theme.Length > 0) sheets.Add(new(theme, "theme"));
                 var findings = ScreenVisual.Check(new ScreenVisual.CheckInput(TypeResolver.Name(root) ?? top.Get("name") ?? "", authorRoot, authorNodes, prediction, counterparts, sheets, platform, source)
                     { BaseRules = ScreenVisual.BaseRuleKeys(shown.Base) });
+                Platform = platformSheets.Describe();
                 return (findings, prediction, watch.ElapsedMilliseconds);
             }
             catch (Exception error) { s.Note("HTML_VISUAL_CHECK", $"the visual check of {TypeResolver.Name(root)} could not run: {Unwrap(error)}"); return null; }
@@ -326,6 +335,8 @@ public sealed partial class ModelSession
             foreach (var f in items.Where(f => examples.Count < 5))
                 examples.Add(new JsonObject { ["root"] = f.Root, ["line"] = f.Line, ["kind"] = f.Kind, ["subject"] = f.Subject, ["right"] = f.Right, ["why"] = f.Why,
                     ["candidates"] = f.Candidates.Count > 0 ? new JsonArray(f.Candidates.Select(c => (JsonNode)c).ToArray()) : null,
+                    ["property"] = f.Property, ["expect"] = f.Expect, ["winner"] = f.Winner, ["key"] = f.Key,
+                    ["viewports"] = f.Viewports.Count > 0 && f.Viewports.Count < ScreenVisual.Viewports.Count ? new JsonArray(f.Viewports.Select(v => (JsonNode)v).ToArray()) : null,
                     ["carriedBy"] = f.Sheet == "theme" && f.RuleText != null && StyleSheetHolding(f.RuleText) is { } carrier
                         ? new JsonObject { ["op"] = carrier.Op, ["pointer"] = carrier.Pointer, ["line"] = carrier.Line } : null });
             // Every finding by its kind and subject (the examples show five with their why).
@@ -347,7 +358,7 @@ public sealed partial class ModelSession
     /// needs after it), in the op of this job whose html holds it once; the HTML edits in the document's own op.</summary>
     private IEnumerable<JsonObject> VisualEdits(List<(ScreenVisual.Finding Finding, int? Op)> pairs)
     {
-        foreach (var group in pairs.Where(x => x.Finding.RuleText != null && (x.Finding.Right != null && x.Finding.Code == ScreenVisual.SelectorMissesRuntime || x.Finding.Append != null))
+        foreach (var group in pairs.Where(x => x.Finding.RuleText != null && (x.Finding.Right != null && Rewrites(x.Finding.Code) || x.Finding.Append != null))
                      .GroupBy(x => (x.Finding.RuleText!, x.Finding.Sheet, x.Finding.Sheet == "page" ? x.Op : null)))
         {
             var rule = group.Select(x => x.Finding).ToList();
@@ -359,7 +370,7 @@ public sealed partial class ModelSession
             // Each selector of the list rewritten (wrapper, runtime span) or kept with the selector that wins beside it (specificity).
             var replaced = new string?[selectors.Count];
             var added = new List<string>?[selectors.Count];
-            foreach (var f in rule.Where(f => f.Right != null && f.Code == ScreenVisual.SelectorMissesRuntime && f.Append == null))
+            foreach (var f in rule.Where(f => f.Right != null && Rewrites(f.Code) && f.Append == null))
             {
                 var i = selectors.FindIndex(x => HtmlNode.CollapseSpaces(x) == HtmlNode.CollapseSpaces(f.Subject));
                 if (i < 0) continue;
@@ -368,7 +379,7 @@ public sealed partial class ModelSession
             for (var i = 0; i < selectors.Count; i++) selectors[i] = (replaced[i] ?? selectors[i]) + (added[i] is { } extra ? "," + string.Join(",", extra) : "");
             var written = string.Join(",", selectors) + text[brace..];
             var tokens = rule.FirstOrDefault(f => f.Code == ScreenVisual.ThemeTokenScoped);
-            foreach (var append in rule.Where(f => f.Append != null && f.Code == ScreenVisual.SelectorMissesRuntime).Select(f => f.Append!).Distinct(StringComparer.Ordinal)) written += "\n" + append;
+            foreach (var append in rule.Where(f => f.Append != null && f.Code != ScreenVisual.ThemeTokenScoped).Select(f => f.Append!).Distinct(StringComparer.Ordinal)) written += "\n" + append;
             var (index, html) = group.Key.Sheet == "page" && op is int own && _applyOps?[own]?["data"]?["html"]?.ToString() is { } page && page.Contains(text, StringComparison.Ordinal) ? (own, page) : OpHolding(text);
             if (index == null)
             {
@@ -408,6 +419,9 @@ public sealed partial class ModelSession
                     if (PatchCompiles(document, find, replace, null))
                         yield return new JsonObject { ["op"] = self, ["path"] = $"/ops/{self}/data/html", ["find"] = find, ["replace"] = replace };
     }
+
+    // The codes whose Right rewrites (or, with AddSelector, joins) a selector of the author's rule.
+    private static bool Rewrites(string code) => code is ScreenVisual.SelectorMissesRuntime or ScreenVisual.PlatformSpecificity or ScreenVisual.PlatformPositional;
 
     private static int Occurrences(string text, string part)
     {
@@ -459,6 +473,11 @@ public sealed partial class ModelSession
         ScreenVisual.SelectorMissesRuntime => "style the runtime element (api --op html, key document.runtime): the suggestion's patch rewrites each selector to the one the predicted runtime DOM matches",
         ScreenVisual.ThemeTokenScoped => "declare the tokens in :root: the suggestion's patch adds <style scope=\"theme\" id=\"brand-tokens\">:root{...}</style> to the document that declares them (the original rule stays)",
         ScreenVisual.TextJoined => "write a space between the two (the space beside an inline element is kept): the suggestion's patch",
+        ScreenVisual.PlatformSpecificity => "raise the selector over the platform rule that wins (the example's winner): the suggestion's patch adds the selector that wins beside the author's",
+        ScreenVisual.PlatformInherited => "give the runtime element that holds the text the author's value back (inherit): the suggestion's patch appends the rule after the author's",
+        ScreenVisual.PlatformPositional => "count the List's rows only: the suggestion's patch rewrites :first-child/:last-child/:nth-child as :nth-child(... of :not(script))",
+        ScreenVisual.PlatformInjected => "give the item the value the page meant over the runtime class (or change the widget's Width/margin property): the example's candidate",
+        ScreenVisual.PlatformFixedLayout => "leave the content room beside the fixed layout element at that breakpoint, or keep the element on screen: the example's candidates (a fact of the theme, not an error of the page)",
         _ => "put list= (and as=) on the grid or flex container itself, so its rows are the layout's items: the suggestion's patch",
     };
 
@@ -467,6 +486,11 @@ public sealed partial class ModelSession
         ScreenVisual.SelectorMissesRuntime => "the runtime renders wrappers and classes the document does not write (span.input-<type>, div.dropdown-container, the span of {{ }}) and OutSystems UI styles its controls with its own selectors",
         ScreenVisual.ThemeTokenScoped => "OutSystems UI reads its tokens from :root; declared in another selector they reach only that subtree",
         ScreenVisual.TextJoined => "two inline elements with no space between show their texts glued",
+        ScreenVisual.PlatformSpecificity => "the platform's sheets (the runtime's base sheet, OutSystems UI) load before the page and win by specificity or !important on the element the runtime publishes",
+        ScreenVisual.PlatformInherited => "a platform rule sets the text property on the runtime element that holds the text (span[data-expression]), so it no longer inherits the author's",
+        ScreenVisual.PlatformPositional => "the runtime renders a <script> sentinel first and last among a List's rows: :first-child and :last-child are the sentinels",
+        ScreenVisual.PlatformInjected => "the runtime adds classes the document never wrote (OSFillParent, ThemeGrid_MarginGutter, OSInline) and the platform sizes them",
+        ScreenVisual.PlatformFixedLayout => "the platform's layout fixes the menu and the header and moves them per device class (desktop, tablet, phone)",
         _ => "the List is one element between the container and its rows: a grid or flex container sees one item",
     };
 
@@ -478,6 +502,11 @@ public sealed partial class ModelSession
             ScreenVisual.SelectorMissesRuntime => $"{count} selector(s) in {roots} page(s) do not reach the element the runtime publishes (first: {first})",
             ScreenVisual.ThemeTokenScoped => $"OutSystems UI tokens declared outside :root in {count} rule(s) (first: {first})",
             ScreenVisual.TextJoined => $"{count} text(s) in {roots} page(s) glued to their neighbor (first: {first})",
+            ScreenVisual.PlatformSpecificity => $"{count} author rule(s) in {roots} page(s) lose a property to a platform rule (first: {first})",
+            ScreenVisual.PlatformInherited => $"{count} text propert(ies) in {roots} page(s) set again by a platform rule on the element of the text (first: {first})",
+            ScreenVisual.PlatformPositional => $"{count} positional selector(s) in {roots} page(s) count the List's sentinels (first: {first})",
+            ScreenVisual.PlatformInjected => $"{count} width or margin(s) in {roots} page(s) come from a runtime class (first: {first})",
+            ScreenVisual.PlatformFixedLayout => $"{count} fixed layout element(s) in {roots} page(s) cover the content or leave the screen at a breakpoint (first: {first})",
             _ => $"{count} List(s) in {roots} page(s) are the only element of a grid or flex container (first: {first})",
         };
     }
@@ -574,6 +603,8 @@ public sealed partial class ModelSession
                         : $": {reached.Count} of the {others.Count} other screen(s)/block(s) of the module carry markers of earlier html ops (otherRootsReached), the block reaches those elements only; the others carry none (measured) and keep their CSS"),
             };
             if (reached.Count > 0) note["otherRootsReached"] = new JsonArray(reached.Take(10).Select(x => (JsonNode)x.ToString()).ToArray());
+            // R2-D: the theme's write took the one normalization (shadowed rules, imports): what it changed is said here.
+            ThemeCss.SayChanged(sheet, note);
             return note;
         }
         catch (Exception error) { Note(ScreenVisual.ThemeNativeLayout, $"the native layout block could not be written: {Unwrap(error)}"); return null; }

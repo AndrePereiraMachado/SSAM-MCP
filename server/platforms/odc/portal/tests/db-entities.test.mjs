@@ -121,3 +121,28 @@ test('new access instance reconciles lost custom-save reply from durable expecta
  const resumed=new OdcAccess({receipts:new WriteJournal(access.receipts.dir),tenants:access.tenants});resumed.portalRead=access.portalRead;resumed.resolvePortal=async()=>assert.fail('No write transport during reconciliation');
  const result=await resumed.externalDbConnection(args);assert.equal(result.receipt.state,'confirmed');assert.equal(result.readBack.metadataVerified,true);assert.equal(state.requests.length,1);
 });
+
+// R2-I (owner's rule, 28/10): the removal of entities of an own temporary connection takes the user's written words naming
+// it (and the corporate tenant); no approval file. Words that do not name it send nothing.
+test('entity removal of an own temporary connection takes the written words naming it, without an approval file',async t=>{
+ const {access,state,args}=fixture(t);
+ const imported=await access.externalDbConnection(args);assert.equal(imported.receipt?.state,'confirmed',JSON.stringify(imported));
+ const removing={...args,authorizationContext:undefined,action:'remove-entities',operationUuid:randomUUID(),authorize:'Remove dbo.Test from the connection Fixture on corp'};
+ const refused=await access.externalDbConnection({...removing,authorize:'Remove dbo.Test on corp'});
+ assert.equal(refused.ok,false);assert.equal(refused.error?.code,'WORDS_MUST_NAME',JSON.stringify(refused));assert.equal(state.requests.length,1);
+ const removed=await access.externalDbConnection(removing);assert.equal(removed.receipt?.state,'confirmed',JSON.stringify(removed));assert.equal(removed.readBack.allRemoved,true);
+ const receipt=JSON.parse(fs.readFileSync(path.join(path.dirname(removed.receipt.file),removing.operationUuid+'.json'),'utf8'));
+ assert.equal(receipt.authorization.source.kind,'human-words');assert.equal(JSON.stringify(receipt).includes('Remove dbo.Test'),false);
+});
+
+// R2-I round 5: a custom import with the written words alone names the own temporary connection and every entity it
+// selects (as a removal names every entity it unselects); a context file keeps its scope.
+test('a custom import with the written words names the connection and every entity it selects',async t=>{
+ const {access,state,args}=await custom(t);
+ const written={...args,authorizationContext:undefined,operationUuid:randomUUID()};
+ const refused=await access.externalDbConnection({...written,authorize:'Import into the connection Fixture on corp'});
+ assert.equal(refused.ok,false);assert.equal(refused.error?.code,'WORDS_MUST_NAME',JSON.stringify(refused));
+ assert.deepEqual(refused.error?.missing,['dbo.Test'],JSON.stringify(refused));assert.equal(state.requests.length,0);
+ const imported=await access.externalDbConnection({...written,authorize:'Import dbo.Test into the connection Fixture on corp'});
+ assert.equal(imported.receipt?.state,'confirmed',JSON.stringify(imported));assert.equal(state.requests.length,1);
+});

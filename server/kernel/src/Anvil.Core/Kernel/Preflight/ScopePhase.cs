@@ -58,6 +58,8 @@ public static class ScopePhase
         Collect(problems, warnings, () => ScopeRules.Kinds(ops, prefix, job, facts.ModuleType ?? index?.ModuleType, lane));
         Collect(problems, warnings, () => ScopeRules.Destinations(ops, prefix, job));
         Collect(problems, warnings, () => ScopeRules.Properties(ops, prefix, job, facts, lane));
+        // R3-B (PlatformLimits element.requiresOp): a user exception nothing declares, which no text form can declare.
+        Collect(problems, warnings, () => PlatformLimitRules.OwnOps(ops, prefix, job, facts));
         // L3c: what the ODC platform refuses on every module of a kind (PreflightRules/OdcScopeRules).
         if (lane == "odc") Collect(problems, warnings, () => PreflightRules.OdcScopeRules.Check(ops, prefix, job, facts));
         foreach (var p in problems.Concat(warnings)) p["phase"] = Phase;
@@ -118,6 +120,9 @@ public static class ScopePhase
     {
         var done = new List<JsonObject>();
         if (Off) return done;
+        // R2-A: REFERENCE_CANONICAL, a call of a producer's action written without its producer (NameResolution over the index):
+        // written Producer.Action, the form the apply resolves, before the scope rules judge the job.
+        try { ScopeRules.Canonicalize(ops, prefix, lane, facts, done); } catch { /* a normalization never refuses */ }
         var job = ScopeJob.Of(ops);
         var inserts = new List<(int At, string Alias, string Type, string Use)>();
         var created = new HashSet<(string, string)>();
@@ -172,12 +177,19 @@ public static class ScopePhase
 
     /// <summary>The ops the apply never builds for the scope phase (JobRunner): each op a scope error names, and every op such
     /// an op blocks (SCOPE_BLOCKED_BY_REFUSED_OP's blockedOps).</summary>
-    public static IReadOnlySet<int> SkippedOps(IEnumerable<JsonObject> baseProblems)
+    public static IReadOnlySet<int> SkippedOps(IEnumerable<JsonObject> baseProblems) => SkippedOps(baseProblems, null);
+
+    /// <summary>R2-B: the same, but an op <paramref name="runs"/> accepts is built anyway (a logic op: what of it fails is
+    /// refused, and what it declares is written as its stub), and so are the ops that are blocked only by it: they are judged
+    /// against the signature it declares, never left out with "need no change".</summary>
+    public static IReadOnlySet<int> SkippedOps(IEnumerable<JsonObject> baseProblems, Func<int, bool>? runs)
     {
         var skipped = new HashSet<int>();
         foreach (var p in baseProblems.Where(p => p["phase"]?.ToString() == Phase && p["severity"]?.ToString() is null or "error"))
         {
-            if (p["op"] is JsonValue v && v.TryGetValue<int>(out var op)) skipped.Add(op);
+            var root = p["op"] is JsonValue v && v.TryGetValue<int>(out var op) ? op : (int?)null;
+            if (root is { } r && runs?.Invoke(r) == true) continue;
+            if (root is { } at) skipped.Add(at);
             foreach (var blocked in (p["blockedOps"] as JsonArray ?? []).OfType<JsonValue>())
                 if (blocked.TryGetValue<int>(out var b)) skipped.Add(b);
         }
@@ -242,7 +254,7 @@ public static class ScopePhase
             var blockedOps = group.Select(b => b.Key).Order().ToList();
             var problem = JobPreflight.Problem(root, prefix == null ? null : $"{prefix}/{root}", Blocked, "error",
                 $"op #{root} ({job.Ops[root].Kind}) is refused, and {blockedOps.Count} op(s) after it need what it declares ({Short(names)}): ops {Short(blockedOps.Select(o => "#" + o))}; none of them can be built until op #{root} is",
-                $"fix the problems of op #{root}; the ops it blocks need no change", null, "scope");
+                $"fix the problems of op #{root}; the ops it blocks are judged, with their own problems, once it builds", null, "scope");
             problem["phase"] = Phase;
             problem["rule"] = Blocked;
             problem["blocks"] = blockedOps.Count;

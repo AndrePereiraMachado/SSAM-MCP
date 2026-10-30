@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using Anvil.Reading;
 
 namespace Anvil.Core.Preflight;
 
@@ -229,6 +230,38 @@ internal sealed class ScopeJob
                 }
             }
         }
+    }
+
+    /// <summary>R2-A: every action the logic ops of a job declare, as (owner, name, kind): the headers of the text form
+    /// (`action Home.Save` is the screen action Save of Home, `server action Pay` the module's) and the actions of the JSON form.
+    /// The preflight and the apply count the same declarations (an action the job creates is a candidate of a call before it
+    /// exists in the model).</summary>
+    internal static List<(string? Owner, string Name, string Kind)> DeclaredActions(JsonArray ops)
+    {
+        var found = new List<(string? Owner, string Name, string Kind)>();
+        foreach (var op in ops.OfType<JsonObject>().Where(o => o["op"]?.ToString() == "logic"))
+        {
+            if (op["data"] is not JsonObject data) continue;
+            foreach (var action in (data["actions"] as JsonArray ?? []).OfType<JsonObject>())
+            {
+                if (action["name"]?.ToString() is not { Length: > 0 } name) continue;
+                string kind;
+                try { kind = NameResolution.Bare(LogicOrder.ActionType(action)); } catch { kind = ""; }
+                found.Add((OwnerName(JobFacts.Owner(action)), name, kind));
+            }
+            foreach (var (_, text) in DocumentNameRules.Texts(data))
+                foreach (Match header in FlowHeader.Matches(text))
+                {
+                    var owner = header.Groups[2].Success ? header.Groups[2].Value.Split('/').Last() : null;
+                    var kind = header.Groups[1].Value switch
+                    {
+                        "server action" => "ServerAction", "service action" => "ServiceAction", "client action" => "ClientAction",
+                        "data action" => "DataAction", "preparation" => "Preparation", _ => owner != null ? "ScreenAction" : "",
+                    };
+                    found.Add((owner, header.Groups[3].Value, kind));
+                }
+        }
+        return found;
     }
 
     /// <summary>The root names of an expression (no member, no call, no literal).</summary>

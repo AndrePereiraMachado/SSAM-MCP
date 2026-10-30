@@ -60,8 +60,10 @@ public sealed class PatchCertaintyTableTests
         foreach (var name in references) Assert.True(PatchCertainty.Rules.ContainsKey(name), "unregistered source rule: " + name);
         Assert.All(PatchCertainty.Rules, pair => Assert.False(string.IsNullOrWhiteSpace(pair.Value.Reason), pair.Key));
         // 15: T12 added SECURITY_ACCEPTANCE (the acceptance of a security warning, never certain); T16 added CREATE_USES_EXISTING
-        // and DELETE_RECONNECTS (offered, never certain).
-        Assert.Equal(15, PatchCertainty.Rules.Count);
+        // and DELETE_RECONNECTS (offered, never certain). R2-B added CHILD_BY_NAME and PLATFORM_NAME_KEPT (the one correction the
+        // refusal already wrote, certain) and CHILD_KIND_CHOICE (the same patch when the kind written contradicts it: a choice).
+        // R3-C added ABBREVIATION_EXPANDED (one reading, certain) and ABBREVIATION_CHOICE (several, never certain).
+        Assert.Equal(20, PatchCertainty.Rules.Count);
     }
 
     [Theory]
@@ -78,6 +80,11 @@ public sealed class PatchCertaintyTableTests
     [InlineData("FLOW_TEXT_READING", false)]
     [InlineData("OWNER_RULE_REWRITE", false)]
     [InlineData("SECURITY_ACCEPTANCE", false)]
+    [InlineData("CHILD_BY_NAME", true)]
+    [InlineData("PLATFORM_NAME_KEPT", true)]
+    [InlineData("CHILD_KIND_CHOICE", false)]
+    [InlineData("ABBREVIATION_EXPANDED", true)]
+    [InlineData("ABBREVIATION_CHOICE", false)]
     [InlineData("NEW_UNCLASSIFIED_RULE", false)]
     [InlineData(null, false)]
     public void OnlyRegisteredSingleReadingRulesAreCertain(string? rule, bool expected)

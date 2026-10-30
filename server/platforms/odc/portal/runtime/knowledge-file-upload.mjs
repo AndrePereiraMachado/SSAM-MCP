@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-import {authorizationContext} from '../../facade/authorization-context.mjs';
+import {approvalOf,contextValues,originId,ownedBy,sameGrant,recorded} from './written-approval.mjs';
 import {fail} from './errors.mjs';
 import {isUuid,fingerprint} from './write-journal.mjs';
 import {knowledgeFileUploadPlan} from './knowledge-file-plan.mjs';
@@ -8,13 +8,21 @@ import {KB_CREATE} from './knowledge-base.mjs';
 
 export const KB_UPLOAD='knowledgeBases.uploadFile';
 const bad=()=>fail('AUTHORIZATION_CONTEXT_INVALID','File upload requires an exact owned base, source, stage and approved content. Nothing was sent.');
-export async function knowledgeFileApproval({file,words,host,raw,lookup,read}){
- if(!file||Object.keys(raw.screenVariables??{}).length||Object.keys(raw.clientVariables??{}).length)bad();
- let constraints;try{if(fs.statSync(file).size>32768)bad();constraints=JSON.parse(fs.readFileSync(file,'utf8')).constraints;}catch{bad();}
+// R2-I (owner's rule, 28/10): the written words naming the base, its data source and the file are the approval; a context
+// file is still accepted. Without one, SSAM finds the base's own creation in its journal and the portfolio it kept there (or
+// the call's scope names it).
+export async function knowledgeFileApproval({file,words,host,raw,lookup,read,scope,find}){
+ if(Object.keys(raw.screenVariables??{}).length||Object.keys(raw.clientVariables??{}).length)bad();
+ let constraints;try{constraints={...contextValues(file,scope)};}catch{bad();}
+ if(!file){
+  constraints.originOperationUuid=originId(constraints,'originOperationUuid',{written:true,find,what:'The knowledge-base upload',
+   predicate:r=>r?.state==='confirmed'&&ownedBy(host,KB_CREATE)(r)&&r.response?.KnowledgeBaseId===raw.inputParameters?.KnowledgeBaseId});
+  constraints.portfolioKey??=lookup(constraints.originOperationUuid)?.reconciliation?.knowledgeBase?.portfolioKey;
+ }
  if(!isUuid(constraints?.originOperationUuid))bad();
  const origin=lookup(constraints.originOperationUuid),p=raw.inputParameters,m=p?.FileMetaData;
  if(!origin||origin.state!=='confirmed'||origin.identity?.tenant!==host||origin.identity.operationId!==KB_CREATE
-  ||origin.response?.KnowledgeBaseId!==p?.KnowledgeBaseId||!origin.authorization?.source)bad();
+  ||origin.response?.KnowledgeBaseId!==p?.KnowledgeBaseId||!recorded(origin))bad();
  const limits=await read('knowledgeBases.uploadLimits',{});
  const plan=knowledgeFileUploadPlan({knowledgeBaseId:p.KnowledgeBaseId,dataSourceId:p.DataSourceId,environmentKey:p.EnvironmentId,
   filename:m?.Filename,mimeType:m?.ContentType,base64:p.FileContent,limits});
@@ -42,12 +50,11 @@ export async function knowledgeFileApproval({file,words,host,raw,lookup,read}){
  if(!files.ok)bad();const page=knowledgeFilePage(files.data);
  if(!page.complete||page.rows.some(x=>x.Filename.toLowerCase()===m.Filename.toLowerCase()))
   fail('KNOWLEDGE_FILE_INVENTORY_UNVERIFIED','A complete file inventory without the proposed filename is required. Nothing was sent.');
- const approved=authorizationContext(file,words,{lane:'odc',host,operation:KB_UPLOAD,environmentKey:p.EnvironmentId,
+ const approved=approvalOf(file,words,{lane:'odc',host,operation:KB_UPLOAD,environmentKey:p.EnvironmentId,
   targets:[b.Name,source.Name,m.Filename],constraints:{originOperationUuid:constraints.originOperationUuid,portfolioKey:b.PortfolioKey,
    knowledgeBaseId:p.KnowledgeBaseId,dataSourceId:p.DataSourceId,environmentKey:p.EnvironmentId,
    inputSha256:plan.inputSha256,contentSha256:plan.contentSha256}});
- if(!approved||approved.wordsSha256!==origin.authorization.wordsSha256||approved.proposalSha256!==origin.authorization.proposalSha256
-  ||approved.source.threadId!==origin.authorization.source.threadId||approved.source.messageId!==origin.authorization.source.messageId)bad();
+ if(!approved||!sameGrant(origin.authorization,approved,{words:true,proposal:true}))bad();
  return {approval:approved,expected:{originOperationUuid:constraints.originOperationUuid,knowledgeBaseId:p.KnowledgeBaseId,dataSourceId:p.DataSourceId,environmentKey:p.EnvironmentId,
   filename:m.Filename,mimeType:m.ContentType,byteLength:plan.byteLength,contentSha256:plan.contentSha256,
   previousFileIds:page.rows.map(x=>x.FileId),screenVariables}};

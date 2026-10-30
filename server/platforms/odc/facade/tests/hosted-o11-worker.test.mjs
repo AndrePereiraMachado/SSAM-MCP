@@ -15,7 +15,7 @@ import { randomUUID } from 'node:crypto';
 import { HostedO11Workers, hostedWorkerClient, hostedWorkerSettings, hostedWorkerSpec, hostedFingerprint, hostedO11Workers,
   hostedWorkerProfile, hostedWorkerEnv, residentMb, createWorkerFirstRunner, workerDisabled, workerRequest,
   HOSTED_O11_WORKERS_MAX, HOSTED_O11_WORKER_IDLE_MS, HOSTED_O11_WORKER_MIN_IDLE_MS, HOSTED_O11_WORKER_HEAP_MB,
-  HOSTED_O11_WORKER_MAX_COMMANDS, HOSTED_O11_WORKER_RSS_MB, HOSTED_O11_WORKER_VARIABLES } from '../anvil-worker.mjs';
+  HOSTED_O11_WORKER_MAX_COMMANDS, HOSTED_O11_WORKER_RSS_MB, HOSTED_O11_WORKER_VARIABLES, HOSTED_O11_WORKER_START_MB } from '../anvil-worker.mjs';
 import { runWithExecutor, prepareWorkspace, hostedSpawnEnv, createHostedContext, onHostedContextClose } from '../executor.mjs';
 import { o11LaneOf } from '../o11-lane.mjs';
 import { runJob } from '../job-runner.mjs';
@@ -117,11 +117,14 @@ async function warmUp(workers, spec) {
 test('settings: cap, idle, minimum residency and the memory profile from the server environment; invalid values keep the defaults', () => {
   assert.deepEqual([HOSTED_O11_WORKERS_MAX, HOSTED_O11_WORKER_IDLE_MS, HOSTED_O11_WORKER_MIN_IDLE_MS, HOSTED_O11_WORKER_HEAP_MB,
     HOSTED_O11_WORKER_MAX_COMMANDS, HOSTED_O11_WORKER_RSS_MB], [2, 600000, 120000, 1536, 1000, 1200]);
-  const defaults = { max: 2, idleMs: 600000, minIdleMs: 120000, heapMb: 1536, maxCommands: 1000, rssMb: 1200, baseCacheMb: 0, disabled: false };
+  // R2-F rule 3 added the per-token pool and the memory guards (r2-warm.test.mjs proves them).
+  const defaults = { max: 2, idleMs: 600000, minIdleMs: 120000, heapMb: 1536, maxCommands: 1000, rssMb: 1200, baseCacheMb: 0,
+    perToken: 1, minAvailableMb: 3072, startMb: HOSTED_O11_WORKER_START_MB, totalRssMb: 2400, disabled: false };
   assert.deepEqual(hostedWorkerSettings({}), defaults);
   assert.deepEqual(hostedWorkerSettings({ SSAM_O11_WORKERS_MAX: '3', SSAM_O11_WORKER_IDLE_MS: '120000', SSAM_O11_WORKER_MIN_IDLE_MS: '0',
     SSAM_O11_WORKER_HEAP_MB: '2048', SSAM_O11_WORKER_MAX_COMMANDS: '50', SSAM_O11_WORKER_RSS_MB: '0', SSAM_O11_WORKER_BASE_CACHE: '512' }),
-  { max: 3, idleMs: 120000, minIdleMs: 0, heapMb: 2048, maxCommands: 50, rssMb: 0, baseCacheMb: 512, disabled: false });
+  { max: 3, idleMs: 120000, minIdleMs: 0, heapMb: 2048, maxCommands: 50, rssMb: 0, baseCacheMb: 512,
+    perToken: 1, minAvailableMb: 3072, startMb: HOSTED_O11_WORKER_START_MB, totalRssMb: 0, disabled: false });
   assert.equal(hostedWorkerSettings({ SSAM_O11_WORKERS_MAX: '0' }).disabled, true);
   assert.equal(hostedWorkerSettings({ ANVIL_WORKER: '0' }).disabled, true);
   assert.deepEqual(hostedWorkerSettings({ SSAM_O11_WORKERS_MAX: '-1', SSAM_O11_WORKER_IDLE_MS: 'soon', SSAM_O11_WORKER_MIN_IDLE_MS: '-5',

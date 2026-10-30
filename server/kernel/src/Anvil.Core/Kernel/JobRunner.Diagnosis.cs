@@ -181,7 +181,9 @@ public static partial class JobRunner
                     new JsonArray(UpgradeProblems(upgrade, opsPointer).Select(p => (JsonNode)JobPreflight.PublicProblem(p)).ToArray()));
                 return refused;
             }
-            if (kept?.Refusal != null && upgrade.Count == 0)
+            // R2-B (rule 2): never when the apply left parts out (APPLY_SKIPPED, with what each waits for) that the lone refusal
+            // does not carry: the union below says them.
+            if (kept?.Refusal != null && upgrade.Count == 0 && kept.Warnings.Count <= ((kept.Refusal as JobPreflightException)?.Warnings.Count ?? 0))
             {
                 Errors.Annotate(kept.Refusal, verifyFailed == null, verifyReason, phases,
                     new JsonArray(FoldCascade(kept.Problems.ToList(), ops, opsPointer).Select(p => (JsonNode)JobPreflight.PublicProblem(p)).ToArray()));
@@ -217,6 +219,9 @@ public static partial class JobRunner
             verifyNotes.Add(folded);
             foldedLine = JobPreflight.Text(folded);
         }
+        // R2-B (rule 2): the one refusal is ordered by op (within an op, in the order of the phases that found them: stable), the
+        // problems of no op last; each keeps the phase that found it.
+        problems = problems.OrderBy(p => p["op"] is JsonValue v && v.TryGetValue<int>(out var at) ? at : int.MaxValue).ToList();
         // The text: the lines of the preflight and of the base as tools read them, then the failures of the apply that are
         // not the same place again, the database upgrade and the Verify.
         var lines = new List<string>();
@@ -232,6 +237,7 @@ public static partial class JobRunner
         if (foldedLine != null) lines.Add(foldedLine);
         var warnings = new JsonArray((preflight?["warnings"] as JsonArray ?? new JsonArray()).Select(w => w?.DeepClone())
             .Concat((kept?.Warnings ?? []).Select(w => (JsonNode?)w)).Concat(verifyNotes.Select(w => (JsonNode?)JobPreflight.PublicProblem(w))).ToArray());
+        ResolveDependsOn(warnings.OfType<JsonObject>(), problems, ops, opsPointer);
         // The Verify of this model may add problems to the refusal of the job's own failure, never replace its code: a lone coded
         // apply failure (DELETE_HAS_CONSUMERS, CONSUMERS_CHANGED, a refused data text) keeps it, with every problem.
         var primary = !preflightInvalid && baseCheck.Problems.Count == 0 && upgrade.Count == 0 && kept?.Refusal is { } lone
@@ -243,6 +249,26 @@ public static partial class JobRunner
             VerifyReason = verifyReason,
             Phases = phases,
         };
+    }
+
+    /// <summary>R2-B (rule 2, review A2): each APPLY_SKIPPED says the problem it waits for (dependsOn, "CODE at pointer"), chosen
+    /// among the problems this refusal publishes, after the union and the translation to the job as sent: one at the part that
+    /// declares what the skipped part uses (_becauseAt) or under it, else one of the failed op (_because). The internal fields
+    /// go. <paramref name="ops"/>/<paramref name="opsPointer"/>: the job the part's pointer is translated in (null: as it is).</summary>
+    internal static void ResolveDependsOn(IEnumerable<JsonObject> warnings, IReadOnlyList<JsonObject> published, JsonArray? ops, string? opsPointer)
+    {
+        var errors = published.Where(p => p["severity"]?.ToString() is null or "error" && p["pointer"] is JsonValue).ToList();
+        foreach (var w in warnings)
+        {
+            var because = w["_because"] is JsonValue v && v.TryGetValue<int>(out var op) ? op : (int?)null;
+            var at = w["_becauseAt"]?.ToString();
+            w.Remove("_because"); w.Remove("_becauseAt");
+            if (because == null || w["code"]?.ToString() != "APPLY_SKIPPED") continue;
+            if (at != null && ops != null && opsPointer != null) at = Preflight.SentJob.ToSent(at, ops, opsPointer).Pointer;
+            var root = (at == null ? null : errors.FirstOrDefault(p => p["pointer"]!.ToString() is var pointer && (pointer == at || pointer.StartsWith(at + "/", StringComparison.Ordinal))))
+                ?? errors.FirstOrDefault(p => p["op"] is JsonValue o && o.TryGetValue<int>(out var po) && po == because);
+            w["dependsOn"] = root != null ? $"{root["code"]} at {root["pointer"]}" : $"the refusal of op #{because}";
+        }
     }
 
     // The failures of an op that names nothing of the module: it wrote nothing, and the job as sent never applies it.

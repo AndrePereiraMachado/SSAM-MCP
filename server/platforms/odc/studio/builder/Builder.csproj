@@ -47,6 +47,7 @@
     <Compile Include="..\..\..\..\kernel\src\Anvil.Core\Kernel\ModuleRichIndex.cs" Link="shared\ModuleRichIndex.cs" />
     <Compile Include="..\..\..\..\kernel\src\Anvil.Core\Kernel\ScreenHtml.cs" Link="shared\ScreenHtml.cs" />
     <Compile Include="..\..\..\..\kernel\src\Anvil.Core\Kernel\ScreenHtmlModule.cs" Link="shared\ScreenHtmlModule.cs" />
+    <Compile Include="..\..\..\..\kernel\src\Anvil.Core\Kernel\NameResolution.cs" Link="shared\NameResolution.cs" />
     <Compile Include="..\..\..\..\kernel\src\Anvil.Core\Kernel\DataDdl.cs" Link="shared\DataDdl.cs" />
     <Compile Include="..\..\..\..\kernel\src\Anvil.Core\Kernel\ModuleFlow.cs" Link="shared\ModuleFlow.cs" />
     <Compile Include="..\..\..\..\kernel\src\Anvil.Core\Kernel\FlowText.cs" Link="shared\FlowText.cs" />

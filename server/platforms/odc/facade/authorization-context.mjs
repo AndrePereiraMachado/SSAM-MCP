@@ -6,6 +6,7 @@ import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { hostedContext } from './executor.mjs';
 import { appendJsonLine } from './correlation.mjs';
+import { wordsGiven } from './destructive-operations.mjs';
 const sha = value => createHash('sha256').update(value).digest('hex');
 const uuid = value => typeof value === 'string' && /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(value);
 const text = value => typeof value === 'string' && value.trim().length > 0;
@@ -37,8 +38,13 @@ function inWorkspace(file) {
   return abs;
 }
 
-export function authorizationContext(file, words, { lane, host, operation, targets = [], environmentKey, constraints }) {
+// R2-I: the internal marker of a contextual mode the call selected with its written words alone (an own-fixture origin, a
+// revision precondition): never an argument (a Symbol never travels in JSON), it makes every contextual validator build the
+// record from the words (writtenApproval) instead of reading a file.
+export const WRITTEN_CONTEXT = Symbol.for('ssam.written-authorization');
+export function authorizationContext(file, words, { lane, host, operation, targets = [], environmentKey, constraints, proposalSha256 } = {}) {
   if (file === undefined || file === null) return null;
+  if (file === WRITTEN_CONTEXT) return writtenApproval(words, { lane, host, operation, targets, environmentKey, constraints, proposalSha256 });
   if (!text(file) || !text(words) || !['odc', 'o11'].includes(lane) || !text(host) || !text(operation)) bad();
   file = inWorkspace(file);
   if (!file) bad();
@@ -67,6 +73,85 @@ export function authorizationContext(file, words, { lane, host, operation, targe
   return { file, sha256: sha(bytes), wordsSha256: sha(words), proposalSha256: record.proposal.sha256,
     source: { threadId: record.source.threadId, messageId: record.source.messageId }, lane, host, operation,
     targets: [...targets], ...(environmentKey === undefined ? {} : { environmentKey }), ...(constraints ? { constraints: { ...constraints } } : {}) };
+}
+
+// ---- R2-I (owner's rule, 2026-10-28): "A aprovação deve ser expressa por escrito no chat. Qualquer registro técnico deve
+// ser gerado internamente pelo MCP, sem exigir arquivo do usuário." The user's written words in the call (authorize/words),
+// naming every exact target, are the approval. A context file is still ACCEPTED where it was (authorizationContext above),
+// never REQUIRED: without one, approvalOf builds the same record from the words and the plan the caller resolved
+// (writtenApproval). The record keeps only hashes (the words' sha256, the plan's proposalSha256, its own sha256) and the
+// scope; the receipt stores it as it stores a file's. Every other check stays with its caller: the exact target, host and
+// tenant (the corporate guard still needs the words to name the tenant), dependencies and consumers, previews of deletes,
+// the no-resend of an uncertain call and the receipts.
+export const WRITTEN = 'human-words';
+export const isWritten = approval => approval?.source?.kind === WRITTEN;
+const fold = value => value.normalize('NFD').replace(/\p{Diacritic}/gu, '');
+// The same rule as namesWhole (studio-create-app.mjs, portal access.mjs): a whole word, without case or accents, any run of
+// spaces for a space ("OldApp2" does not name "OldApp").
+export function namesTarget(words, name) {
+  if (typeof words !== 'string' || typeof name !== 'string' || !name.trim()) return false;
+  const pattern = fold(name.trim()).replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
+  return new RegExp('(?<![\\p{L}\\p{N}_])' + pattern + '(?![\\p{L}\\p{N}_])', 'iu').test(fold(words));
+}
+// R2-I round 3: the names a text leaves unnamed when every name needs its own occurrence. The longest names consume their
+// occurrence first (as countProblem does), so a name counts as named only by a whole-word occurrence that is not inside
+// a longer listed name ("dbo.Order" inside "dbo.Order Lines" does not name "dbo.Order"). -> the names left unnamed.
+export function unnamedTargets(words, names) {
+  const list = [...new Set((names ?? []).filter(n => typeof n === 'string' && n.trim()))];
+  if (typeof words !== 'string') return list;
+  const folded = fold(words), taken = new Array(folded.length).fill(false), missing = [];
+  for (const name of [...list].sort((a, b) => fold(b.trim()).length - fold(a.trim()).length)) {
+    const pattern = fold(name.trim()).replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
+    const re = new RegExp('(?<![\\p{L}\\p{N}_])' + pattern + '(?![\\p{L}\\p{N}_])', 'giu');
+    let hit = null;
+    for (const m of folded.matchAll(re)) if (!taken.slice(m.index, m.index + m[0].length).some(Boolean)) { hit = m; break; }
+    if (!hit) { missing.push(name); continue; }
+    for (let i = hit.index; i < hit.index + hit[0].length; i++) taken[i] = true;
+  }
+  return list.filter(n => missing.includes(n));
+}
+const stable = value => Array.isArray(value) ? '[' + value.map(stable).join(',') + ']'
+  : value && typeof value === 'object' ? '{' + Object.keys(value).sort().filter(k => value[k] !== undefined).map(k => JSON.stringify(k) + ':' + stable(value[k])).join(',') + '}'
+    : JSON.stringify(value ?? null);
+export class WrittenAuthorizationError extends Error {
+  constructor(code, message, details = {}) { super(message); this.name = 'WrittenAuthorizationError'; this.code = code; this.details = details; }
+}
+// words: the call's literal words. scope: {lane, host, operation, targets, environmentKey?, constraints?}; proposalSha256:
+// the plan the words approve when several steps share it (a test and its save, a preview and its delete), else the scope's own.
+export function writtenApproval(words, { lane, host, operation, targets = [], environmentKey, constraints, proposalSha256 } = {}) {
+  if (!['odc', 'o11'].includes(lane) || !text(host) || !text(operation) || !Array.isArray(targets) || !targets.length
+    || targets.some(t => !text(t) || t.includes('*'))) bad();
+  if (!wordsGiven(words)) throw new WrittenAuthorizationError('WORDS_REQUIRED', 'This write needs the user\'s own written authorization (authorize), quoted verbatim; it is its approval. Nothing was sent.');
+  const missing = unnamedTargets(words, targets);
+  if (missing.length) throw new WrittenAuthorizationError('WORDS_MUST_NAME', 'The user\'s written authorization must name every target of this operation: '
+    + missing.join(', ') + '. Nothing was sent.', { targets: [...new Set(targets)], missing });
+  const record = { schema: 'ssam-written-authorization/1', lane, host, operation, targets: [...targets], environmentKey, constraints };
+  const recordSha256 = sha(stable(record));
+  return { file: null, sha256: recordSha256, wordsSha256: sha(words), proposalSha256: /^[a-f0-9]{64}$/.test(proposalSha256 ?? '') ? proposalSha256 : recordSha256,
+    source: { kind: WRITTEN }, lane, host, operation, targets: [...targets], ...(environmentKey === undefined ? {} : { environmentKey }),
+    ...(constraints ? { constraints: { ...constraints } } : {}) };
+}
+// The approval of a call: the context file when one is given (unchanged), else the written words.
+export function approvalOf(file, words, scope) {
+  return file === undefined || file === null || file === '' || file === WRITTEN_CONTEXT ? writtenApproval(words, scope) : authorizationContext(file, words, scope);
+}
+// The marker when the call selected a contextual mode with its words alone, else the file as given.
+export const contextOrWritten = (file, selected) => file ?? (selected ? WRITTEN_CONTEXT : undefined);
+// The values a context file carried besides its approval (its constraints: an origin receipt, a portfolio...), or, without a
+// file, the call's own scope object (never a file). A file that cannot be read is refused as before.
+export function contextValues(file, scope) {
+  if (file === undefined || file === null || file === '' || file === WRITTEN_CONTEXT) return scope && typeof scope === 'object' && !Array.isArray(scope) ? { ...scope } : {};
+  try { if (fs.statSync(file).size > 32768) bad(); return JSON.parse(fs.readFileSync(file, 'utf8')).constraints ?? {}; } catch { bad(); }
+}
+// Is the approval of this step the same grant as the recorded one (an origin receipt's authorization)? A context file binds
+// its conversation (threadId/messageId) and, as each caller asks, the same words and proposal. Written words carry no
+// conversation IDs: the binding is the MCP's own receipt of that origin (the caller verified its identity) and these words,
+// which name the target now.
+export function sameGrant(recorded, approval, { words = false, proposal = false, conversation = true } = {}) {
+  if (!recorded || !approval) return false;
+  if (isWritten(approval)) return true;
+  return (!conversation || (recorded.source?.threadId === approval.source?.threadId && recorded.source?.messageId === approval.source?.messageId))
+    && (!words || recorded.wordsSha256 === approval.wordsSha256) && (!proposal || recorded.proposalSha256 === approval.proposalSha256);
 }
 
 // ---- R1 (plan of 2026-10-24, "the correction loop has no friction of its own"): the correction chain of a write.

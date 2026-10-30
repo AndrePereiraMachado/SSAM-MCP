@@ -138,8 +138,8 @@ test('published: the answer is "published" with lastPublication, after select, a
   assert.equal(reply.isError, undefined);
   // The gate first, then the bridge in order, publish exactly once.
   assert.equal(h.events[0], 'assertSelected');
-  assert.deepEqual(h.events.slice(1,4).sort(), ['bridge_manifest', 'ping', 'windows']);
-  assert.deepEqual(h.events.slice(4), ['open_module', 'get_active_module', 'get_errors', 'ping', 'windows', 'publish']);
+  assert.deepEqual(h.events.slice(3,6).sort(), ['bridge_manifest', 'ping', 'windows']);
+  assert.deepEqual(h.events.slice(6), ['open_module', 'get_active_module', 'get_errors', 'ping', 'windows', 'publish']);
   assert.deepEqual(h.sent('open_module')[0].params, { name: 'Orders', environment: HOST, timeout: 120, silent: true });
   assert.deepEqual(h.sent('get_errors')[0].params, { max: 60, module_key: 'k-orders' });
   assert.deepEqual(h.sent('publish')[0].params, { message: DEFAULT_MESSAGE, timeout: 600, module_key: 'k-orders', environment: HOST });
@@ -172,8 +172,8 @@ test('another module active after the selection: refused, nothing read further, 
   assert.deepEqual(value.continuation.arguments, { command: 'open-module', args: { name: 'Orders' } });
   // Package 3, MB2 (DCIPS): the tabs of every window are read once for a tab of Orders to publish by key; none here.
   assert.equal(h.events[0], 'assertSelected');
-  assert.deepEqual(h.events.slice(1,4).sort(), ['bridge_manifest', 'ping', 'windows']);
-  assert.deepEqual(h.events.slice(4), ['open_module', 'get_active_module', 'list_open_modules']);
+  assert.deepEqual(h.events.slice(3,6).sort(), ['bridge_manifest', 'ping', 'windows']);
+  assert.deepEqual(h.events.slice(6), ['open_module', 'get_active_module', 'list_open_modules']);
   assert.deepEqual(h.journal(), []); assert.deepEqual(h.tasks(), []);
 });
 
@@ -184,8 +184,8 @@ test('the Studio on another environment: refused before TrueChange and publish',
   assert.deepEqual(value.continuation, { tool: 'o11_studio', arguments: { command: 'status' }, why: value.continuation.why });
   assert.equal(h.sent('open_module')[0].params.environment, 'prod.example.com');
   assert.equal(h.events[0], 'assertSelected');
-  assert.deepEqual(h.events.slice(1,4).sort(), ['bridge_manifest', 'ping', 'windows']);
-  assert.deepEqual(h.events.slice(4), ['open_module', 'get_active_module', 'list_open_modules']);
+  assert.deepEqual(h.events.slice(3,6).sort(), ['bridge_manifest', 'ping', 'windows']);
+  assert.deepEqual(h.events.slice(6), ['open_module', 'get_active_module', 'list_open_modules']);
 });
 
 test('a pending dialog in the Studio: refused with the wait for the person', async t => {
@@ -210,8 +210,8 @@ test('TrueChange errors come back and publish is NOT called', async t => {
   assert.deepEqual(value.continuation.arguments, { command: 'errors' });
   assert.equal(h.sent('publish').length, 0);
   assert.equal(h.events[0], 'assertSelected');
-  assert.deepEqual(h.events.slice(1,4).sort(), ['bridge_manifest', 'ping', 'windows']);
-  assert.deepEqual(h.events.slice(4), ['open_module', 'get_active_module', 'get_errors']);
+  assert.deepEqual(h.events.slice(3,6).sort(), ['bridge_manifest', 'ping', 'windows']);
+  assert.deepEqual(h.events.slice(6), ['open_module', 'get_active_module', 'get_errors']);
   assert.deepEqual(h.journal(), []); assert.deepEqual(h.tasks(), []);
 });
 

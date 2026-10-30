@@ -3,10 +3,30 @@ import {createHash} from 'node:crypto';
 import {authorizationContext} from '../../facade/authorization-context.mjs';
 import {fail} from './errors.mjs';
 import {isUuid} from './write-journal.mjs';
+import {approvalOf,sameGrant,recorded} from './written-approval.mjs';
 export const LIBRARY_RELEASE='libraries.release';
 export const LIBRARY_PUBLISH='deployments-api-v1:post:/publish-operations';
 const sha=value=>createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const bad=()=>fail('AUTHORIZATION_CONTEXT_INVALID','Library release requires a bound proposal (an agent-created library by originOperationUuid, or an existing library by preExisting:true with scope targets naming the library and the tenant host), its published revision and exact version/notes. Nothing was sent.');
+// R2-I (ported from the proto, 28/10): the owner's written authorization in the call is the consent and the receipt its
+// internal record; no approval file and no conversation IDs. The words name the library, the tenant host and the version
+// (approvalOf: whole words), say release and name the revision; the completed publication of this exact revision is found
+// by a read (the file named it before) and verified again below.
+const version=value=>new RegExp('(?<![\\p{L}\\p{N}_.])'+String(value).replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'(?![\\p{L}\\p{N}_]|\\.[\\p{L}\\p{N}])','iu');
+async function chatReleaseApproval(words,host,input,revision,read) {
+ const required={library:revision.name,tenant:host,version:input.Version,revision:input.Revision};
+ if(typeof words!=='string'||!version(input.Version).test(words)||!version(host).test(words)
+   ||!/(?:release|liber(?:ar|e|a[çc][aã]o)|lan[çc](?:ar|e)|versionar)/iu.test(words)
+   ||!new RegExp('(?<![\\p{L}\\p{N}_])(?:revis[a\\u00e3]o|revision|rev\\.?|r)\\s*'+input.Revision+'(?![\\p{N}])','iu').test(words))
+  fail('WORDS_MUST_NAME','The written authorization must say release and name the library, tenant, release version and revision. Nothing was sent.',{requiredAuthorization:required});
+ const publications=await read('deployments-api-v1:get:/publish-operations',undefined,
+  {assetKey:input.ApplicationKey,revision:input.Revision,status:'Finished',limit:100});
+ const publication=publications?.ok&&publications.data?.results?.find(p=>isUuid(p.key)&&p.assetKey===input.ApplicationKey
+  &&p.revision===input.Revision&&p.status==='Finished'&&p.operation==='Publish');
+ if(!publication)fail('LIBRARY_PUBLICATION_UNVERIFIED','No completed publication was verified for this exact library revision. Nothing was sent.');
+ const constraints={preExisting:true,publicationKey:publication.key,expectedTag:null,inputSha256:sha(input)};
+ return {...approvalOf(null,words,{lane:'odc',host,operation:LIBRARY_RELEASE,targets:[revision.name,host,input.Version],constraints}),preExisting:true};
+}
 
 export async function libraryPublicationApproval({file,words,host,input,originOperationUuid,lookup,read}) {
  const bad=()=>fail('AUTHORIZATION_CONTEXT_INVALID','Publication requires a bound proposal for an agent-created supported asset, exact revision and environment. Nothing was sent.');
@@ -15,35 +35,35 @@ export async function libraryPublicationApproval({file,words,host,input,originOp
    ||body.operation!=='Publish'||!isUuid(body.assetKey)||!isUuid(body.environmentKey)||!Number.isInteger(body.revision)||body.revision<1)bad();
  const origin=lookup(originOperationUuid);
  if(!origin||!['accepted','confirmed'].includes(origin.state)||origin.identity?.tenant!==host
-   ||origin.identity.operationId!=='asset-repository-api-v1:post:/assets'||origin.response?.assetKey!==body.assetKey||!origin.authorization?.source)bad();
+   ||origin.identity.operationId!=='asset-repository-api-v1:post:/assets'||origin.response?.assetKey!==body.assetKey||!recorded(origin))bad();
  const revision=await read({assetKey:body.assetKey,revisionNumber:body.revision});
  if(!revision?.ok||revision.data?.assetKey!==body.assetKey||revision.data.revision!==body.revision
    ||!['LowCodeLibrary','MobileLibrary','WebApplication','MobileApplication','Agent'].includes(revision.data.assetType)||!revision.data.name)bad();
  const approved=authorizationContext(file,words,{lane:'odc',host,operation:LIBRARY_PUBLISH,targets:[revision.data.name],environmentKey:body.environmentKey,
   constraints:{originOperationUuid,bodySha256:sha(body)}});
- if(!approved||approved.source.threadId!==origin.authorization.source.threadId||approved.source.messageId!==origin.authorization.source.messageId)bad();
+ if(!approved||!sameGrant(origin.authorization,approved))bad();
  return approved;
 }
 
 export async function libraryReleaseApproval({file,words,host,raw,lookup,read}) {
  const input=raw.inputParameters;
- if(!file||!input||Object.keys(input).sort().join(',')!=='ApplicationKey,ReleaseNotes,Revision,Version'
+ if(!input||Object.keys(input).sort().join(',')!=='ApplicationKey,ReleaseNotes,Revision,Version'
    ||Object.keys(raw.screenVariables??{}).length||Object.keys(raw.clientVariables??{}).length
    ||!isUuid(input.ApplicationKey)||!Number.isInteger(input.Revision)||input.Revision<1
    ||typeof input.Version!=='string'||!/^\d+\.\d+\.\d+$/.test(input.Version)
    ||typeof input.ReleaseNotes!=='string'||input.ReleaseNotes.length>10000)bad();
  let constraints;
- try {if(fs.statSync(file).size>32768)bad();constraints=JSON.parse(fs.readFileSync(file,'utf8')).constraints;}catch{bad();}
+ if(file)try {if(fs.statSync(file).size>32768)bad();constraints=JSON.parse(fs.readFileSync(file,'utf8')).constraints;}catch{bad();}
  // Owner decision 2026-10-14: a library SSAM did not create (preExisting:true, no origin receipt) is released only with the
- // user's explicit approval recorded in the context file, whose scope names the library AND the tenant host; the base
- // revision and its publication are verified exactly as for an own library.
- const preExisting=constraints?.preExisting===true&&constraints.originOperationUuid===undefined;
- if((!preExisting&&!isUuid(constraints?.originOperationUuid))||!isUuid(constraints?.publicationKey)
-   ||constraints.expectedTag!==null)bad();
+ // user's explicit approval whose scope names the library AND the tenant host (a context file, or, R2-I, the written words
+ // themselves); the base revision and its publication are verified exactly as for an own library.
+ const preExisting=!file||(constraints?.preExisting===true&&constraints.originOperationUuid===undefined);
+ if(file&&((!preExisting&&!isUuid(constraints?.originOperationUuid))||!isUuid(constraints?.publicationKey)
+   ||constraints.expectedTag!==null))bad();
  const origin=preExisting?null:lookup(constraints.originOperationUuid);
  if(!preExisting&&(!origin||!['accepted','confirmed'].includes(origin.state)||origin.identity?.tenant!==host
    ||origin.identity.operationId!=='asset-repository-api-v1:post:/assets'
-   ||origin.response?.assetKey!==input.ApplicationKey||!origin.authorization?.source))bad();
+   ||origin.response?.assetKey!==input.ApplicationKey||!recorded(origin)))bad();
  const path={assetKey:input.ApplicationKey,revisionNumber:input.Revision};
  const revision=await read('asset-repository-api-v1:get:/assets/{assetKey}/revisions/{revisionNumber}',path);
  const current=await read('asset-repository-api-v1:get:/assets/{assetKey}',{assetKey:input.ApplicationKey});
@@ -52,17 +72,19 @@ export async function libraryReleaseApproval({file,words,host,raw,lookup,read}) 
    ||revision.data.tag!==null||!revision.data.name||current.data?.assetKey!==input.ApplicationKey
    ||current.data.revision!==input.Revision||current.data.name!==revision.data.name)
    fail('LIBRARY_RELEASE_BASE_UNVERIFIED','Exact current untagged low-code or mobile library revision was not verified. Nothing was sent.');
- const approval=preExisting
+ const approval=!file?await chatReleaseApproval(words,host,input,revision.data,read):preExisting
   ?authorizationContext(file,words,{lane:'odc',host,operation:LIBRARY_RELEASE,targets:[revision.data.name,host],
     constraints:{preExisting:true,publicationKey:constraints.publicationKey,expectedTag:null,inputSha256:sha(input)}})
   :authorizationContext(file,words,{lane:'odc',host,operation:LIBRARY_RELEASE,targets:[revision.data.name],
     constraints:{originOperationUuid:constraints.originOperationUuid,publicationKey:constraints.publicationKey,expectedTag:null,inputSha256:sha(input)}});
- if(!approval||(!preExisting&&(approval.source.threadId!==origin.authorization.source.threadId||approval.source.messageId!==origin.authorization.source.messageId)))bad();
- const publication=await read('deployments-api-v1:get:/publish-operations/{operationKey}',{operationKey:constraints.publicationKey});
- if(!publication?.ok||publication.data?.key!==constraints.publicationKey||publication.data.status!=='Finished'
+ if(!approval||(!preExisting&&(!sameGrant(origin.authorization,approval))))bad();
+ const publicationKey=approval.constraints.publicationKey;
+ const publication=await read('deployments-api-v1:get:/publish-operations/{operationKey}',{operationKey:publicationKey});
+ if(!publication?.ok||publication.data?.key!==publicationKey||publication.data.status!=='Finished'
    ||publication.data.assetKey!==input.ApplicationKey||publication.data.revision!==input.Revision||publication.data.operation!=='Publish')
    fail('LIBRARY_PUBLICATION_UNVERIFIED','The same library revision must have a verified successful publication before this release. Nothing was sent.');
- // The receipt plan keeps the approval (plan.authorizationContext): an existing library's release stays marked as such.
+ // The receipt plan keeps the approval (plan.authorizationContext) and the dispatcher the exact release and publication in
+ // its durable reconciliation: an existing library's release stays marked as such.
  return preExisting?{...approval,preExisting:true}:approval;
 }
 

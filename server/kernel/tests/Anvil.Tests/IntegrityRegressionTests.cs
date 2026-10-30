@@ -43,9 +43,13 @@ public class IntegrityRegressionTests
         var document = ScreenHtmlEdit.WithCss(["<screen name=\"Page\"><div k=\"w1\"/></screen>"], "");
         Assert.Single(document);
         Assert.Contains("<style", document[0]);
-        // The document's <style> stays, data.css after it (the rule of the create: ScreenDocument.OwnSheet).
+        // R2-D: data.css is the page's whole style sheet and replaces the document's <style> (the rule of the create:
+        // ScreenDocument.OwnSheet). The contract was: the document's <style> stays, data.css after it.
         var previous = ScreenHtmlEdit.WithCss(["<screen name=\"Page\"><style>.old{}</style><div k=\"w1\"/></screen>"], ".new{}");
-        Assert.Contains(".old{}\n.new{}", previous[0]);
-        Assert.Contains(".old{}\n.new{}", Assert.Single(ScreenHtmlEdit.WithCss(["<style>.old{}</style>"], ".new{}")));
+        Assert.Contains("<style>.new{}</style>", previous[0]);
+        Assert.DoesNotContain(".old{}", previous[0]);
+        var styleEdit = Assert.Single(ScreenHtmlEdit.WithCss(["<style>.old{}</style>"], ".new{}"));
+        Assert.Contains(".new{}", styleEdit);
+        Assert.DoesNotContain(".old{}", styleEdit);
     }
 }

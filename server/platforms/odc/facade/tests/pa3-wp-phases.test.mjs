@@ -66,12 +66,13 @@ test('wp: two deliveries to different modules of one Studio overlap their builds
   assert.deepEqual(files(path.join(deps.o11Root, '.local', 'locks'), '.guard'), []);
 });
 
-test('wp: two deliveries of the same module: the second builds only after the first applied (module guard)', async () => {
+test('wp: two deliveries of the same module build concurrently and serialize application', async () => {
   const deps = depsFor(tmp());
   const log = { builds: [], applies: [] };
   const [first, second] = await Promise.all([delivery(deps, 'Orders', { log }), delivery(deps, 'orders', { log })]);
   assert.equal(log.builds.length, 2);
-  assert.ok(log.builds[1].start >= log.applies[0].end, 'the second build starts on the module the first one applied: ' + JSON.stringify(log));
+  assert.ok(overlap(log.builds[0], log.builds[1]), 'builds overlap; the kernel revalidates a stale candidate');
+  assert.ok(!overlap(log.applies[0], log.applies[1]));
   assert.ok(second.phases.moduleQueue, 'the second answer says it waited for the module: ' + JSON.stringify(second.phases));
   assert.equal(first.phases.moduleQueue, undefined);
 });
@@ -119,10 +120,10 @@ test('wp: a guarded Studio call whose turn does not come refuses the call with n
 test('wp: the module guard that does not come refuses BUILD_QUEUE_TIMEOUT with the holder and nothing run', async () => {
   const deps = depsFor(tmp());
   const gate = deferred(); const building = deferred();
-  const first = withStudioWriteLock({ tool: 'o11_deliver', args: { module: 'A', job: [] }, lane: 'o11', deps, phased: true }, async () => { building.resolve(); await gate.promise; return { ok: true }; });
+  const first = withStudioWriteLock({ tool: 'o11_deliver', args: { module: 'A', job: [] }, lane: 'o11', deps, phased: true }, async () => { await enterApplyPhase(); building.resolve(); await gate.promise; return { ok: true }; });
   await building.promise;
   let ran = false;
-  const second = await withStudioWriteLock({ tool: 'o11_deliver', args: { module: 'A', job: [] }, lane: 'o11', deps: { ...deps, queueMs: 50 }, phased: true }, async () => { ran = true; return { ok: true }; });
+  const second = await withStudioWriteLock({ tool: 'o11_deliver', args: { module: 'A', job: [] }, lane: 'o11', deps: { ...deps, queueMs: 50 }, phased: true }, async () => { const turn = await enterApplyPhase(); if (!turn.ok) return turn; ran = true; return { ok: true }; });
   assert.equal(ran, false);
   assert.deepEqual([second.ok, second.code, second.outcome, second.waitedFor, second.position, second.queueMs], [false, BUILD_QUEUE_TIMEOUT_CODE, 'not-sent', 'module', 1, 50]);
   assert.ok(second.waitedMs >= 50);

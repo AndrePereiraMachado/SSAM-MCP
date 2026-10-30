@@ -3,6 +3,7 @@ import {ipFilterHash as hash} from './ip-filter-approval.mjs';
 import {ORG_ROLE_CREATE} from './organization-role-approval.mjs';
 import {USER_CREATE} from './inactive-user-approval.mjs';
 import {fail} from './errors.mjs';
+import {recorded,sameGrant} from './written-approval.mjs';
 const root='user-access-management-api-v1:',route='/users/{key}/organization-roles/{roleKey}';
 export const EMPTY_ROLE_GRANT=root+'post:'+route,EMPTY_ROLE_REVOKE=root+'delete:'+route;
 export const EMPTY_ROLE_ASSIGNMENTS=new Set([EMPTY_ROLE_GRANT,EMPTY_ROLE_REVOKE]);
@@ -13,7 +14,7 @@ export async function emptyRoleAssignmentApproval({file,words,host,operationId,i
   ||!b||Array.isArray(b)||Object.keys(b).length)bad();
  const ro=lookup(originOperationUuid),uo=lookup(userOriginOperationUuid);
  for(const [r,op,key,field] of [[ro,ORG_ROLE_CREATE,p.roleKey,'orgRoleKey'],[uo,USER_CREATE,p.key,'key']])
-  if(!r||!['accepted','confirmed'].includes(r.state)||r.identity?.tenant!==host||r.identity.operationId!==op||r.response?.[field]!==key||!r.authorization?.source)bad();
+  if(!r||!['accepted','confirmed'].includes(r.state)||r.identity?.tenant!==host||r.identity.operationId!==op||r.response?.[field]!==key||!recorded(r))bad();
  const snapshot={};
  async function get(label,op,key,isList=false){const r=await read(root+op,{key},isList?{limit:100,offset:0}:undefined);if(!r.ok)bad();snapshot[label]=r.data;
   if(isList&&(!Array.isArray(r.data?.results)||r.data.page?.totalResults!==r.data.results.length))bad();return r.data;}
@@ -29,6 +30,6 @@ export async function emptyRoleAssignmentApproval({file,words,host,operationId,i
  const constraints={bodySha256:hash(b),originOperationUuid,userOriginOperationUuid,expectedConfigurationSha256:hash(snapshot)};
  const approval=authorizationContext(file,words,{lane:'odc',host,operation:operationId,targets:[ro.identity.target.name,uo.identity.target.name],constraints});
  if(!approval)bad();
- for(const r of [ro,uo])if(approval.source.threadId!==r.authorization.source.threadId||approval.source.messageId!==r.authorization.source.messageId)bad();
+ for(const r of [ro,uo])if(!sameGrant(r.authorization,approval))bad();
  return approval;
 }

@@ -209,7 +209,7 @@ public static class JobPreflight
                 }
                 if (kind == "spec")
                 {
-                    try { expansions.Add(new(i, null, SpecExpander.Expand(op["data"]!.AsObject()))); }
+                    try { expansions.Add(new(i, null, SpecExpander.ExpandInJob(op["data"]!.AsObject(), PlatformLimits.JobSiblings(ops, i, MessageExpectations.Lane)))); }
                     catch (Exception ex) { Refused(ex, i, kind, code, Pointer(i, "/data")); }
                 }
                 if (kind == "html")
@@ -578,6 +578,21 @@ public static class JobPreflight
         var kind = p["_kind"]?.ToString() ?? "op";
         var fix = p["fix"]?.ToString();
         return (op is { } i ? $"op #{i} ({kind}) [{p["code"]}]: " : $"[{p["code"]}]: ") + p["message"] + (string.IsNullOrEmpty(fix) ? "" : " Fix: " + fix);
+    }
+
+    /// <summary>R3-B review C1: the sentence of a refusal (errors, one line per problem, in the problems' order: Analyze) written
+    /// again from the problems after a later phase rewrote them (PlatformLimitRules.JudgeCutsWithModule), with each line's own
+    /// op kind; never a text kept from before. Lines and problems that do not correspond one to one are left alone.</summary>
+    public static void Republish(JsonObject analysis)
+    {
+        if (analysis["problems"] is not JsonArray problems || analysis["errors"] is not JsonArray errors || problems.Count != errors.Count) return;
+        for (var n = 0; n < problems.Count; n++)
+        {
+            if (problems[n] is not JsonObject problem) continue;
+            var copy = problem.DeepClone().AsObject();
+            if (OpPrefix.Match(errors[n]?.ToString() ?? "") is { Success: true, Groups: var g } && g[2].Success) copy["_kind"] = g[2].Value;
+            errors[n] = Text(copy);
+        }
     }
 
     /// <summary>The problem as it is published (I2): the internal kind is dropped.</summary>

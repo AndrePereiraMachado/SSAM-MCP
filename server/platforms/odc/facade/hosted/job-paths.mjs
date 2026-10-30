@@ -480,6 +480,10 @@ export async function confineJobs(name, resolved, { workspace, resolve, prototyp
 export const CODE_TOOL = 'ssam_code';
 async function confineCodeJobs(resolved, { workspace, resolve, prototype = false, generator = null } = {}) {
   const copy = structuredClone(resolved ?? {});
+  if (copy.patch != null) {
+    const patched = await confineJobs('o11_deliver', copy, { workspace, resolve, prototype, generator });
+    if (patched.refusal || patched.prototype || patched.generator) return patched;
+  }
   const walk = new JobWalk({ workspace, resolve, prototype, generator });
   if (Array.isArray(copy.ops)) {
     const shaped = shapedJob({ ops: copy.ops });

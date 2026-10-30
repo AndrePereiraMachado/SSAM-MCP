@@ -4,6 +4,7 @@ import {ASSET_CREATE} from './asset-creation-approval.mjs';
 import {USER_CREATE} from './inactive-user-approval.mjs';
 import {isUuid} from './write-journal.mjs';
 import {fail} from './errors.mjs';
+import {recorded,sameGrant} from './written-approval.mjs';
 const root='user-access-management-api-v1:',route='/users/{key}/application-roles/{roleKey}';
 export const APPLICATION_ROLE_GRANT=root+'post:'+route,APPLICATION_ROLE_REVOKE=root+'delete:'+route;
 export const APPLICATION_ROLE_ASSIGNMENTS=new Set([APPLICATION_ROLE_GRANT,APPLICATION_ROLE_REVOKE]);
@@ -17,7 +18,7 @@ export async function applicationRoleAssignmentApproval({file,words,host,operati
  const appOrigin=lookup(originOperationUuid),userOrigin=lookup(userOriginOperationUuid);
  for(const [receipt,operation,key,field]of [[appOrigin,ASSET_CREATE,null,'assetKey'],[userOrigin,USER_CREATE,p.key,'key']])
   if(!receipt||!['accepted','confirmed'].includes(receipt.state)||receipt.identity?.tenant!==host||receipt.identity.operationId!==operation
-   ||!isUuid(receipt.response?.[field])||key&&receipt.response[field]!==key||!receipt.authorization?.source)bad();
+   ||!isUuid(receipt.response?.[field])||key&&receipt.response[field]!==key||!recorded(receipt))bad();
  const assetKey=appOrigin.response.assetKey,snapshot={};
  async function get(label,id,path,query){const result=await read(id,path,query);if(!result.ok)bad();snapshot[label]=result.data;return result.data;}
  const app=await get('app','asset-repository-api-v1:get:/assets/{assetKey}',{assetKey});
@@ -44,7 +45,7 @@ export async function applicationRoleAssignmentApproval({file,words,host,operati
  const approval=authorizationContext(file,words,{lane:'odc',host,operation:operationId,environmentKey:role.environmentKey,
   targets:[app.name,role.name,user.name],constraints});
  if(!approval)bad();
- for(const receipt of [appOrigin,userOrigin])if(approval.source.threadId!==receipt.authorization.source.threadId||approval.source.messageId!==receipt.authorization.source.messageId)bad();
+ for(const receipt of [appOrigin,userOrigin])if(!sameGrant(receipt.authorization,approval))bad();
  return {...approval,applicationRoleExpectation:{app:structuredClone(app),role:structuredClone(role),user:structuredClone(user),assigned:grant}};
 }
 

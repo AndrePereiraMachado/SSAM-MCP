@@ -39,6 +39,7 @@ import { trackTask, tasksDir } from './ssam-task.mjs';
 import { o11Studio, ASK_PERSON, publishFixContinuation, publishCompilerDiagnosis, readInventory, allDialogs, moduleTab, tabAmbiguous, dependenciesCandidate,
   closeDependenciesDialog, refreshAfterDialog, answerDependenciesDialog, dependenciesFields } from './o11-studio.mjs';
 import * as writeLock from './studio-write-lock.mjs';
+import { coalescePublication } from './studio-work-order.mjs';
 import { clean, WORDS_MARKER } from './o11-cycle.mjs';
 import { RESULT } from './result-values.mjs';
 import * as standingGrants from './standing-grants.mjs';
@@ -59,6 +60,7 @@ export const TOOL = 'o11_publish';
 export const PUBLISHED = Object.freeze({ ok: true, result: RESULT.published });
 // The bridge's own default comment says "publish de prova"; a product publication names its origin instead.
 export const DEFAULT_MESSAGE = 'SSAM Hybrid o11_publish';
+const authorizationKey = (words, authorization) => createHash('sha256').update(JSON.stringify({ words, authorization })).digest('hex');
 const annotations = { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true };
 const HOST = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$/; // ScGuard.Host of the bridge
 const TRANSPORT = new Set(['BRIDGE_NOT_LISTENING', 'BRIDGE_TRANSPORT', 'BRIDGE_PROTOCOL', 'BRIDGE_NO_REPLY']);
@@ -232,6 +234,8 @@ async function publish(input, ctx, options = {}) {
   const resolved = standingGrants.wordsFor({ authorize: input.authorize, lane: 'o11', module: input.module, app: ctx.appOf(input.module), verb: 'publish' }, ctx.grants, { file: ctx.grantsFile });
   const words = resolved.words;
   const authorization = options.authorization ?? resolved.authorization;
+  if (options.expectedAuthorization && options.expectedAuthorization !== authorizationKey(words, authorization))
+    return refusal('PUBLISH_AUTHORIZATION_CHANGED', 'The publication authorization changed while it was queued; nothing was published.', STATUS_BEFORE);
   // Blank words, or a placeholder such as the continuation marker, are not the user's words.
   if (!wordsGiven(words)) return refusal('WORDS_REQUIRED', 'o11_publish needs the user\'s own words in authorize, verbatim (or a standing grant of this module for publish).',
     { tool: TOOL, arguments: { module: input.module, authorize: WORDS_MARKER }, why: 'Ask the user for the words that authorize this publication and pass them verbatim in authorize.' });
@@ -240,6 +244,12 @@ async function publish(input, ctx, options = {}) {
   catch (error) { return refusal('STUDIO_NOT_SELECTED', clean(error?.message) || 'The selected Studio is not confirmed.', connect('Select again the Service Studio open on the O11 lane.')); }
   let bridge;
   try { bridge = ctx.bridge(); } catch (error) { return readFailure(error); }
+
+  if (options.expectedIdentity) {
+    const found = await moduleTab(bridge, input.module, { environment: input.expectedEnvironment });
+    if (!found.tab || found.ambiguous || found.tab.key !== options.expectedIdentity.key || !same(found.tab.environment, options.expectedIdentity.environment))
+      return refusal('PUBLISH_TARGET_CHANGED', 'The module identity or environment changed while publication was queued; nothing was published.', STATUS_BEFORE);
+  }
 
   // 1. Select the tab. The selection was just checked, so the open-module runner does not check it again.
   const opened = await o11Studio({ bridge: () => bridge, assertSelected: async () => {}, lane: ctx.laneName, root: ctx.root, env: ctx.env })({
@@ -473,7 +483,29 @@ function appendJournal(now) {
 // moduleKey, host}). Returns run(input, {signal, authorization}) -> value.
 export function createO11Publish(deps = {}) {
   const ctx = context(deps);
-  return (input, options = {}) => publish(input ?? {}, ctx, options);
+  return async (input = {}, options = {}) => {
+    // A delivery already owns its merge/publish sequence; it must never join a different queued publication.
+    if (writeLock.ownsStudioWrite({ tool: TOOL, args: input, lane: 'o11', deps: { o11Root: ctx.root, o11Lane: ctx.laneName, env: ctx.env, ...ctx.lock } })) return publish(input, ctx, options);
+    const resolved = standingGrants.wordsFor({ authorize: input.authorize, lane: 'o11', module: input.module,
+      app: ctx.appOf(input.module), verb: 'publish' }, ctx.grants, { file: ctx.grantsFile });
+    if (!wordsGiven(resolved.words)) return publish(input, ctx, options);
+    let identity = null;
+    try {
+      await ctx.assertSelected();
+      const found = await moduleTab(ctx.bridge(), input.module, { environment: input.expectedEnvironment });
+      if (found.tab?.key && found.tab?.environment && !found.ambiguous) identity = { key: found.tab.key, environment: found.tab.environment };
+    } catch { /* the locked publisher returns its usual connection or target refusal */ }
+    const args = { ...input, ...(identity ? { moduleKey: identity.key, expectedEnvironment: identity.environment } : {}) };
+    const lock = { tool: TOOL, args, lane: 'o11', deps: { o11Root: ctx.root, o11Lane: ctx.laneName, env: ctx.env, ...ctx.lock } };
+    const target = writeLock.studioWriteTarget(lock);
+    const key = identity ? createHash('sha256').update(JSON.stringify({ target, identity,
+      authorization: options.authorization ?? resolved.authorization, words: resolved.words,
+      options: Object.fromEntries(Object.entries(input).sort(([a], [b]) => a.localeCompare(b))) })).digest('hex') : null;
+    return coalescePublication(key, (started, signal) => writeLock.withStudioWriteLock({ ...lock, signal }, () => {
+      started();
+      return publish(args, ctx, { ...options, signal, expectedAuthorization: authorizationKey(resolved.words, options.authorization ?? resolved.authorization), ...(identity ? { expectedIdentity: identity } : {}) });
+    }), { signal: options.signal });
+  };
 }
 
 function context(deps = {}) {
@@ -482,7 +514,7 @@ function context(deps = {}) {
   const laneName = deps.lane ?? o11Lane.lane;
   const now = deps.now ?? (() => new Date());
   const ctx = {
-    root, env, laneName, now,
+    root, env, laneName, now, lock: deps.lock ?? {},
     lane: () => o11LaneOf(laneName, { root, env }),
     bridge: () => (typeof deps.bridge === 'function' ? deps.bridge() : deps.bridge ?? o11Bridge(bridgeTarget({ lane: laneName, root, env }))),
     assertSelected: deps.assertSelected ?? assertSelectedO11,
@@ -549,9 +581,9 @@ export function registerO11Publish(server, deps = {}) {
       + 'consumers:true then refreshes and publishes every consumer of the module, one outcome per consumer. '
       + 'outcome "uncertain" (timeout, lost reply, cancellation, unconfirmed end) is never repeated: check o11_studio status before '
       + 'retry. refreshReferences:true refreshes; answers when it ends.',
-    inputSchema: publishSchema, annotations,
+    inputSchema: publishSchema, annotations, _meta: { [writeLock.MANAGED_QUEUE_META]: true },
   }, async (input, extra) => {
-    try { const value = await run(input ?? {}, { signal: extra?.signal }); return value === PUBLISHED ? reply(value, value.result) : reply(value); }
+    try { const value = await run(input ?? {}, { signal: extra?.mcpReq?.signal ?? extra?.signal }); return value === PUBLISHED ? reply(value, value.result) : reply(value); }
     catch (error) { return reply(refusal('PUBLISH_ERROR', clean(error?.message ?? String(error)) || 'o11_publish failed', STATUS_AFTER)); }
   });
   if (deps.registerGrant !== false) registerSsamGrant(server, deps);

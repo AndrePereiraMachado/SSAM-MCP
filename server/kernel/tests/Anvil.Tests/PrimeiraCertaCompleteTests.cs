@@ -67,8 +67,10 @@ public sealed class PrimeiraCertaCompleteTests
         var verify = Assert.Single(problems, p => p["phase"]!.GetValue<string>() == "verify");
         Assert.Equal("ExpressionInvalidExpressionType", verify["code"]!.GetValue<string>());
         Assert.Equal("/ops/0/data/actions/0/steps/0/assign/Code", verify["pointer"]!.GetValue<string>());
-        // The action that calls the failed one is left out, and said.
-        Assert.Contains(refused.Warnings, w => w!["code"]!.GetValue<string>() == "APPLY_SKIPPED" && w["pointer"]!.GetValue<string>() == "/ops/0/data/actions/2");
+        // R2-B (one round): the action that calls the failed one is applied against its stub (the declared signature) and
+        // judged for its own faults (none here): never left out.
+        Assert.DoesNotContain(refused.Warnings, w => w!["code"]!.GetValue<string>() == "APPLY_SKIPPED");
+        Assert.DoesNotContain(problems, p => p["pointer"]?.GetValue<string>()?.StartsWith("/ops/0/data/actions/2", StringComparison.Ordinal) == true);
         Assert.False(File.Exists(output));
     }
 

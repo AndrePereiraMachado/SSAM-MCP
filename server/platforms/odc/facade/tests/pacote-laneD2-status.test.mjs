@@ -67,14 +67,15 @@ test('studio_publish: a manifest without words takes the standing grant of its a
   const grants = { findGrant: async q => (q.app === 'Fixture' && q.verb === 'publish' ? { grantId: 'g-9', words: 'publique o Fixture quando quiser' } : null) };
   const publish = async () => ({ ok: true, published: { revision: 12 }, completedAt: '2026-10-05T03:00:00Z' });
   const answer = await publishWithGrant({ manifest: 'm.json', pid: 7 }, { studio, readManifest: () => ({ module: 'Fixture', publishAuthorization: null }), grants, publish });
-  // CX15 r5 (N-2, converted): the authorize line carries sha256:<hex> of the grant's words (before: the words).
-  assert.deepEqual(seen[0], ['authorize', 'm.json', 'publish', hashedWords('publique o Fixture quando quiser')]);
+  // CX15 r5 (N-2, converted): the authorize line carries sha256:<hex> of the grant's words (before: the words). R2-F rule 4
+  // (R2-H): the live identity read (status) comes first; this fake Studio lists no module, so there is no second one.
+  assert.deepEqual(seen.slice(0, 2), [['status'], ['authorize', 'm.json', 'publish', hashedWords('publique o Fixture quando quiser')]]);
   assert.deepEqual(answer.authorization, { source: 'standing-grant', grantId: 'g-9' });
   assert.deepEqual(answer.lastPublication, { at: '2026-10-05T03:00:00Z', status: 'succeeded', version: 12, author: null, by: 'ssam', source: 'publish-result' });
   // Recorded words: no grant lookup, no second authorize.
   const words = [];
   const own = await publishWithGrant({ manifest: 'm.json' }, { studio: async a => { words.push(a); return { ok: true }; }, readManifest: () => ({ module: 'Fixture', publishAuthorization: 'pode publicar [recorded]' }), grants, publish });
-  assert.deepEqual(own.authorization, { source: 'words' }); assert.equal(words.length, 0);
+  assert.deepEqual(own.authorization, { source: 'words' }); assert.deepEqual(words, [['status']], 'only the identity read, no authorize');
   // Neither: the bridge refuses as before (the fake publish stands for it).
   const none = await publishWithGrant({ manifest: 'm.json' }, { studio, readManifest: () => ({ module: 'Other' }), grants,
     publish: async () => ({ ok: false, outcome: 'gate_refused', gate: 'none', error: 'publish requires manifest.publishAuthorization' }) });

@@ -1,0 +1,14 @@
+{
+ "description": "R2-C (TYPE_SIZE_DROPPED, the ODC end-to-end proof that replaced the negative setting-size-odc.json): a setting of the data text written with a size. An ODC setting keeps no Length nor Decimals (ISiteProperty writes DataType, DefaultValue, IsSecret...), so the preflight writes the type without its size, lists TYPE_SIZE_DROPPED in normalizations, and the setting applies and verifies (it was refused ODC_SETTING_SIZE before).",
+ "base": "tests/fixtures/odc/insurance-reactive-r8.oml",
+ "expectValid": true,
+ "expectedMessages": [],
+ "ops": [
+  {
+   "op": "spec",
+   "data": {
+    "ddl": "setting WfCovApiBaseUrl: Text(250) = \"https://example.test\"\n"
+   }
+  }
+ ]
+}

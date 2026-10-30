@@ -191,6 +191,8 @@ public static class Program
                 "html-edit" => HtmlEdit(args),
                 "html-edit-battery" => HtmlEditBattery(args),
                 "html-recreate" => HtmlRecreate(args),
+                "runtime-css" => RuntimeCssCmd(args),
+                "render-document" => RenderDocumentCmd(args),
                 "delete-app" => DeleteApp(args),
                 "create-app" => CreateApp(args),
                 "update-app" => UpdateApp(args),
@@ -613,6 +615,105 @@ public static class Program
         var report = Anvil.Core.ScreenRecreationProof.Run(Host(args), File.ReadAllBytes(Need(args, "--oml")), Opt(args, "--path"), args.Contains("--blocks"), args.Contains("--verify"), Log);
         if (Opt(args, "--out") is { } outFile) { File.WriteAllText(outFile, report.ToJsonString(new System.Text.Json.JsonSerializerOptions { WriteIndented = true })); return new { roots = report["roots"]!.GetValue<int>(), outcomes = report["outcomes"]!.ToJsonString(), @out = Path.GetFullPath(outFile) }; }
         return report;
+    }
+
+    /// <summary>R3-A, the private store of the platform's real stylesheets (RuntimeCss):
+    /// `runtime-css extract --lane o11|odc [--version 11.55.92] [--root &lt;dir&gt;] [--osui-oml &lt;OutSystemsUI.oml&gt;] [--osui-theme OutSystemsUI]
+    /// [--osui-version 2.28.1] [--page &lt;published page URL&gt;] [--sheet runtime=&lt;file.css&gt;] [--sheet osui=&lt;file.css&gt;]` reads each
+    /// sheet from the Studio side (the OutSystems UI module), the environment (a published page: only the platform's sheets are
+    /// fetched) or a bundle file and writes the version folder with its index; `runtime-css show --lane o11 [--version] [--root]`
+    /// says what the store serves for that Studio version. The folder is refused inside a Git working tree.</summary>
+    private static object RuntimeCssCmd(string[] args)
+    {
+        var action = args.Length > 1 && !args[1].StartsWith("--", StringComparison.Ordinal) ? args[1] : "show";
+        var lane = Opt(args, "--lane") ?? "o11";
+        var root = Opt(args, "--root") ?? RuntimeCss.Root;
+        if (action == "show")
+            return RuntimeCss.Load(lane, Opt(args, "--version"), root) is var shown
+                ? new JsonObject { ["root"] = root, ["folder"] = shown.Folder, ["platform"] = shown.Describe(),
+                    ["sheets"] = new JsonArray(shown.Sheets.Select(s => (JsonNode)new JsonObject { ["id"] = s.Id, ["file"] = s.File, ["origin"] = s.Origin, ["sha256"] = s.Sha256, ["chars"] = s.Css.Length }).ToArray()) }
+                : null!;
+        if (action != "extract") throw new ArgumentException("runtime-css: extract | show");
+        var version = Opt(args, "--version") ?? FunctionCatalog.StudioVersion;
+        var sheets = new List<PlatformSheet>();
+        var sources = new Dictionary<string, string>(StringComparer.Ordinal);
+        if (Opt(args, "--osui-oml") is { } oml)
+        {
+            var osui = RuntimeCss.FromOml(Host(args), oml, Opt(args, "--osui-theme"), Opt(args, "--osui-version"));
+            sheets.Add(osui); sources["osui"] = "oml:" + Path.GetFileName(oml) + " theme " + (Opt(args, "--osui-theme") ?? "OutSystemsUI");
+        }
+        if (Opt(args, "--page") is { } page)
+        {
+            var uri = new Uri(page);
+            if (uri.Scheme != Uri.UriSchemeHttps) throw new ArgumentException("--page: an https URL of a published page");
+            using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
+            string Fetch(Uri u) => http.GetStringAsync(u).GetAwaiter().GetResult();
+            foreach (var sheet in RuntimeCss.FromPage(Fetch(uri), uri, Fetch, version))
+            {
+                sheets.RemoveAll(s => s.Id == sheet.Id);
+                sheets.Add(sheet); sources[sheet.Id] = "page:" + uri.GetLeftPart(UriPartial.Path);
+            }
+        }
+        for (var i = 0; i < args.Length - 1; i++)
+        {
+            if (args[i] != "--sheet") continue;
+            var pair = args[i + 1].Split('=', 2);
+            if (pair.Length != 2) throw new ArgumentException("--sheet <id>=<file.css>");
+            var sheet = RuntimeCss.FromFile(pair[0], pair[1]);
+            sheets.RemoveAll(s => s.Id == sheet.Id);
+            sheets.Add(sheet); sources[sheet.Id] = "file:" + Path.GetFileName(pair[1]);
+        }
+        if (sheets.Count == 0) throw new ArgumentException("runtime-css extract: name a source (--osui-oml, --page, --sheet)");
+        return RuntimeCss.Write(root, lane, version, sheets, sources);
+    }
+
+    /// <summary>R3-A piece C (ssam-render-document/1): `render-document --lane o11|odc --oml &lt;capture&gt; --screen &lt;name|@key&gt;
+    /// [--screen ...] [--viewports desktop,tablet,phone] [--producer &lt;producer.oml&gt; ...] [--root &lt;store&gt;] --out &lt;dir&gt;`
+    /// writes render-document.json: per screen a document with no script and no external URL, the runtime's DOM with
+    /// data-ssam-key, the List sentinels as &lt;template data-ssam-sentinel&gt;, the platform's real sheets in the runtime's order
+    /// and the visual check's warnings as probes. `render-document --capabilities` answers the contract it serves (the hosted
+    /// ssam_render asks it once per lane before listing the tool) and what the store holds for the lane. `--probes {"keys":[...]}`
+    /// keeps the probes of those keys only.</summary>
+    private static object RenderDocumentCmd(string[] args)
+    {
+        if (args.Contains("--capabilities"))
+            return new JsonObject
+            {
+                ["schema"] = RenderDocument.Schema,
+                ["keyForm"] = RenderDocument.KeyForm,
+                ["viewports"] = new JsonArray(ScreenVisual.Viewports.Select(v => (JsonNode)v.Name).ToArray()),
+                ["warnings"] = new JsonArray(ScreenVisual.PlatformCodes.Select(c => (JsonNode)c).ToArray()),
+                ["limits"] = new JsonObject { ["documents"] = RenderDocument.MaxDocuments, ["htmlBytes"] = RenderDocument.MaxHtmlBytes, ["styles"] = RenderDocument.MaxStyles, ["styleBytes"] = RenderDocument.MaxStyleBytes, ["totalBytes"] = RenderDocument.MaxTotalBytes },
+                ["platform"] = RuntimeCss.Load(Opt(args, "--lane") ?? "o11", Opt(args, "--version"), Opt(args, "--root")).Describe(),
+            };
+        var screens = new List<string>();
+        var producers = new List<string>();
+        for (var i = 0; i < args.Length - 1; i++)
+        {
+            if (args[i] == "--screen") screens.Add(args[i + 1]);
+            if (args[i] == "--producer") producers.Add(args[i + 1]);
+        }
+        if (screens.Count == 0) throw new ArgumentException("render-document: --screen <name|@key> (1 to 8)");
+        var lane = Opt(args, "--lane") ?? "o11";
+        var viewports = (Opt(args, "--viewports") ?? "desktop,tablet,phone").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var sheets = RuntimeCss.Load(lane, Opt(args, "--version"), Opt(args, "--root"));
+        var document = RenderDocument.FromOml(Host(args), Need(args, "--oml"), lane, screens, viewports, sheets, producers);
+        if (Opt(args, "--probes") is { Length: > 0 } wanted && JsonNode.Parse(wanted)?["keys"] is JsonArray keys && keys.Count > 0)
+        {
+            var only = keys.Select(k => RenderDocument.SafeKey(k?.ToString() ?? "")).ToHashSet(StringComparer.Ordinal);
+            var kept = new JsonArray(document["probes"]!.AsArray().Where(p => only.Contains(p?["key"]?.ToString() ?? "")).Select(p => p!.DeepClone()).ToArray());
+            document["probes"] = kept;
+        }
+        var outDir = Need(args, "--out");
+        Directory.CreateDirectory(outDir);
+        var file = Path.Combine(outDir, "render-document.json");
+        File.WriteAllText(file, document.ToJsonString(new System.Text.Json.JsonSerializerOptions { WriteIndented = false }));
+        return new JsonObject
+        {
+            ["out"] = Path.GetFullPath(file), ["bytes"] = new FileInfo(file).Length, ["platform"] = document["platform"]?.DeepClone(),
+            ["documents"] = new JsonArray(document["documents"]!.AsArray().Select(d => (JsonNode)new JsonObject { ["id"] = d!["id"]!.ToString(), ["screen"] = d["screen"]?.ToString(), ["sha256"] = d["sha256"]?.ToString(), ["unexpanded"] = d["unexpanded"]?.DeepClone() }).ToArray()),
+            ["probes"] = document["probes"]!.AsArray().Count,
+        };
     }
 
     /// <summary>`html-check --oml &lt;capture&gt; [--html-dir &lt;dir&gt;] [--out &lt;report.json&gt;]`: the fixed point of the

@@ -18,9 +18,12 @@ public sealed partial class ModelSession
     private JsonNode DdlSpec(JsonObject data)
     {
         var text = data["ddl"]!.GetValue<string>();
-        // The same checks as the job's preflight (the closed keys, the syntax, what the text names), all at once.
-        _ = SpecExpander.DdlCreation(data);
         var lane = MessageExpectations.Lane;
+        // The same checks as the job's preflight (the closed keys, the syntax, what the text names), all at once; a cut name is
+        // judged against the module too (R3-B review A2: its exclusive correspondence), the module read once for round 1.
+        DataDdl initial;
+        using (NativePerformanceCapture.Measure("ddl.build")) initial = DataDdl.Build((IObjectSignature)_espace, new KernelModelReader(), lane, "", 0);
+        _ = SpecExpander.DdlCreation(data, null, DdlParser.Parse(initial.Text));
         var edit = SpecExpander.DdlParse(text);
         // The plural a NEW entity's text leaves out is the platform's (its own naming of the label), not the reader's English
         // fallback: "AdvApontamentoHoras" stays itself, never renamed or re-pluralized. An explicit LabelPlural and every
@@ -37,7 +40,8 @@ public sealed partial class ModelSession
         for (var round = 1; ; round++)
         {
             DataDdl built;
-            using (NativePerformanceCapture.Measure("ddl.build")) built = DataDdl.Build((IObjectSignature)_espace, new KernelModelReader(), lane, "", 0);
+            if (round == 1) built = initial;
+            else using (NativePerformanceCapture.Measure("ddl.build")) built = DataDdl.Build((IObjectSignature)_espace, new KernelModelReader(), lane, "", 0);
             var current = DdlParser.Parse(built.Text);
             if (round == 1)
             {
@@ -60,7 +64,7 @@ public sealed partial class ModelSession
                 // The elements the first round created, by their place and name in the module now: their keys.
                 var lost = KeyCreated(first!.Created, current, known);
                 if (lost.Count > 0)
-                    throw SpecExpander.DdlRefusal("DDL_NOT_CONVERGED", lost.Select(l => Renamed(l.Element, l.Became, text)).ToList());
+                    throw SpecExpander.DdlRefusal("DDL_NOT_CONVERGED", RenamedAll(lost, text));
                 if (round == 2)
                     foreach (var element in edit.Elements.Where(e => nativePlurals.Contains((e.Kind, e.Name))))
                         if (current.Elements.FirstOrDefault(e => e.Key == element.Key) is { } actual
@@ -296,6 +300,8 @@ public sealed partial class ModelSession
     private static List<(DdlElement Element, DdlElement? Became)> KeyCreated(List<DdlElement> created, DdlDocument current, HashSet<string> known)
     {
         var lost = new List<(DdlElement, DdlElement?)>();
+        // R2-B: the elements not found by name, with the new elements of their kind and place, judged once every name matched.
+        var pending = new List<(DdlElement Element, List<DdlElement> SameKind)>();
         foreach (var element in created.OrderBy(e => e.Parent == null ? 0 : 1))
         {
             if (element.Key.Length > 0) continue;
@@ -305,20 +311,24 @@ public sealed partial class ModelSession
             else { lost.Add((element, null)); continue; }
             var sameKind = candidates.Where(c => (c.Kind == element.Kind || c.Kind is "Record" or "StaticEntityRecord" && element.Kind is "Record" or "StaticEntityRecord") && !known.Contains(c.Key)).ToList();
             var match = sameKind.FirstOrDefault(c => c.Name == element.Name);
-            if (match == null)
-            {
-                // Goal list of 2026-10-20, item 8 (report 875d39c3): what the platform made of it, when it can be told: the one new
-                // element of that kind there, or the one whose name is the start of the name sent (a name cut to the length
-                // the platform keeps: an index of 32 to 36 characters came back shorter).
-                var became = sameKind.Count == 1 ? sameKind[0]
-                    : sameKind.FirstOrDefault(c => c.Name.Length > 0 && element.Name.StartsWith(c.Name, StringComparison.Ordinal))
-                    ?? sameKind.FirstOrDefault(c => c.Name.Length > 0 && c.Name.StartsWith(element.Name, StringComparison.Ordinal));
-                lost.Add((element, became)); continue;
-            }
+            if (match == null) { pending.Add((element, sameKind)); continue; }
             element.Key = match.Key;
             known.Add(match.Key);
         }
+        // Goal list of 2026-10-20, item 8 (report 875d39c3): what the platform made of it, when it can be told: the one new
+        // element of that kind there, or the one whose name is the start of the name sent (a name cut to the length the platform
+        // keeps: an index of 32 to 36 characters came back shorter). R2-B (review A4): the correspondence is exclusive. An
+        // element of the module is what at most one lost element became; two candidates for one, or one candidate for two (two
+        // long names that share the characters the platform keeps), is no answer: the platform named it otherwise.
+        var options = pending.Select(p => (p.Element, Candidates: Became(p.Element, p.SameKind.Where(c => !known.Contains(c.Key)).ToList()))).ToList();
+        var claims = options.SelectMany(o => o.Candidates).GroupBy(c => c, ReferenceEqualityComparer.Instance).ToDictionary(g => g.Key, g => g.Count(), ReferenceEqualityComparer.Instance);
+        foreach (var (element, candidates) in options)
+            lost.Add((element, candidates is [var only] && claims[only] == 1 ? only : null));
         return lost;
+
+        static List<DdlElement> Became(DdlElement element, List<DdlElement> sameKind) => sameKind.Count == 1 ? sameKind
+            : sameKind.Where(c => c.Name.Length > 0 && element.Name.StartsWith(c.Name, StringComparison.Ordinal)).ToList() is { Count: > 0 } cut ? cut
+            : sameKind.Where(c => c.Name.Length > 0 && c.Name.StartsWith(element.Name, StringComparison.Ordinal)).ToList();
     }
 
     /// <summary>The type the set verb converts <paramref name="property"/> of a data text element to (FindProperty on the element):
@@ -364,7 +374,34 @@ public sealed partial class ModelSession
             $"{element.Name} was created and the module has no {element.Name} there now: the platform named it {became.Name}"
             + (cut ? $" ({became.Name.Length} characters; the name sent has {element.Name.Length}: the platform keeps at most {became.Name.Length} for a {element.Kind})" : ""),
             cut ? $"give it a name of at most {became.Name.Length} characters, or write {became.Name} in the text" : $"write {became.Name} in the text, or give it another name",
-            cut ? became.Name : null);
+            cut ? became.Name : null)
+            // R2-B (F18): the cut name is what the module already has: the patch that writes it is the one correction.
+            { Data = cut ? new JsonObject { ["patchRule"] = PlatformLimits.NameKept } : null };
+    }
+
+    /// <summary>R2-B (F18): the problems of one data text whose names the platform cut, each with the same corrected value: the
+    /// text with every cut name as the platform kept it (one patch for all of them, never one rename per round).</summary>
+    internal static List<DdlProblem> RenamedAll(IReadOnlyList<(DdlElement Element, DdlElement? Became)> lost, string text)
+    {
+        var problems = lost.Select(l => Renamed(l.Element, l.Became, text)).ToList();
+        var cuts = lost.Select(l => (l.Element, Cut: Renamed(l.Element, l.Became).Corrected)).Where(c => c.Cut != null).ToList();
+        if (cuts.Count == 0) return problems;
+        var all = cuts.Aggregate(text, (current, c) => RenamedText(current, c.Element.Name, c.Cut!));
+        // R2-B (review A4): the corrected text converges only when no two elements of one kind and place share a name in it; else
+        // the cut names are no correction at all (no patch, no rule), and the fix says the choice of a name.
+        if (!DistinctNames(all))
+            return problems.Select((p, n) => p.Corrected == null || Renamed(lost[n].Element, lost[n].Became).Corrected is not { } cut ? p
+                : p with { Corrected = null, Data = null, Fix = $"give it a name of at most {cut.Length} characters that no other {lost[n].Element.Kind} there starts with (the platform keeps the first {cut.Length})" }).ToList();
+        return problems.Select(p => p.Corrected == null ? p : p with { Corrected = all }).ToList();
+    }
+
+    /// <summary>Whether a data text names every element once in its kind and place (an index on its entity, an attribute in its
+    /// entity, a top-level element among its kind); false for a text that does not read.</summary>
+    internal static bool DistinctNames(string text)
+    {
+        DdlDocument document;
+        try { document = DdlParser.Parse(text); } catch { return false; }
+        return document.All().Where(e => e.Name.Length > 0).GroupBy(e => (e.Kind, Place: e.Parent?.Name ?? e.Of ?? "", Name: e.Name.ToUpperInvariant())).All(g => g.Count() == 1);
     }
 
     private static DdlDocument WithoutDrops(DdlDocument edit)

@@ -15,6 +15,9 @@ import { Client } from '@modelcontextprotocol/client';
 import { deliveryMerges, publishWithGrant } from '../studio-publish-log.mjs';
 import { hashedWords } from '../destructive-operations.mjs';
 import { compactDelivery, shapeToolResult } from '../responses.mjs';
+// R2-F rule 4 (fase4-28/r2-speed, R2-H): studio_publish resolves the live identity of its module (status) before the queue and
+// confirms it (status) inside it, before the publication's own steps.
+const IDENTITY = ['status', 'status'];
 
 const TENANT = 'personal-test.outsystems.dev';
 const WORDS = 'pode publicar o GameStore agora';
@@ -70,7 +73,7 @@ test('A2: studio_publish {module, authorize} publishes the manifest of the last 
   const answer = await publishWithGrant({ module: 'GameStore', authorize: WORDS, pid: STUDIO_PID }, deps(box, b));
   assert.equal(answer.ok, true, JSON.stringify(answer));
   // CX15 r5 (N-2, converted): the authorize line carries sha256:<hex> of the words (before: the words).
-  assert.deepEqual(b.calls, [['status'], ['authorize', last.manifest, 'publish', hashedWords(WORDS)], ['publish', last.manifest, '--wait', '10']]);
+  assert.deepEqual(b.calls, [...IDENTITY.map(step => [step]), ['status'], ['authorize', last.manifest, 'publish', hashedWords(WORDS)], ['publish', last.manifest, '--wait', '10']]);
   assert.equal(answer.resolvedFrom.manifest, last.manifest);
   assert.equal(answer.resolvedFrom.mergedAt, '2026-10-06T10:00:00Z');
   assert.deepEqual(answer.authorization, { source: 'words' });
@@ -97,7 +100,7 @@ test('A2: a last merge that is not clean is refused before anything, with its re
   const refused = await publishWithGrant({ module: 'GameStore', authorize: WORDS }, deps(box, b));
   assert.equal(refused.ok, false); assert.equal(refused.code, 'LAST_DELIVERY_NOT_CLEAN'); assert.equal(refused.outcome, 'incomplete');
   assert.equal(refused.continuation.tool, 'studio_deliver'); assert.equal(refused.continuation.arguments.job, path.join(incomplete.dir, 'repair.json'));
-  assert.deepEqual(b.calls, [['status']], 'nothing authorized or published');
+  assert.deepEqual(b.calls, [...IDENTITY.map(step => [step]), ['status']], 'nothing authorized or published');
   const uncertain = delivery(box.lab, '03-AddGenres', { mergedAt: '2026-10-06T10:00:00Z', receipt: 'none', job: false });
   const second = await publishWithGrant({ module: 'GameStore', authorize: WORDS }, deps(box, bridge()));
   assert.equal(second.code, 'LAST_DELIVERY_NOT_CLEAN'); assert.equal(second.outcome, 'uncertain');

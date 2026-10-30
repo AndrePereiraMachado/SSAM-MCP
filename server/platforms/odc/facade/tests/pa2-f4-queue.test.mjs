@@ -16,7 +16,7 @@ import { Client } from '@modelcontextprotocol/client';
 import { odcRoot } from '../workspace.mjs';
 import * as lock from '../studio-write-lock.mjs';
 import { createSsamServer } from '../ssam.mjs';
-import { fakeAnvil } from './fixtures/fake-anvil.mjs';
+import { fakeAnvil, validPreflight } from './fixtures/fake-anvil.mjs';
 
 const { withStudioWriteLock, busyToolResult } = lock;
 const QUEUE_TIMEOUT = 'STUDIO_WRITE_QUEUE_TIMEOUT';
@@ -196,7 +196,7 @@ test('through the ssam server: a second o11_deliver on the same Studio waits for
     return { ok: true, command: 'deliver', data: { delivered: true, taskId: 't' + n, writeState: 'applied' } }; } });
   // No bridge at all: a fake that refuses every call, and no last-publication read (nothing reaches a lane port).
   const bridge = { ok: async method => { throw Object.assign(new Error('no bridge in this test: ' + method), { code: 'BRIDGE_NOT_LISTENING' }); } };
-  const server = await createSsamServer({ odc: false, deps: { cycle: { root, env: { USERPROFILE: root, LOCALAPPDATA: root }, runAnvil, assertSelected: async () => {},
+  const server = await createSsamServer({ odc: false, deps: { cycle: { checkRunner: validPreflight, root, env: { USERPROFILE: root, LOCALAPPDATA: root }, runAnvil, assertSelected: async () => {},
     tasksDir: path.join(root, 'tasks'), bridge, lastPublication: async () => null, lock: { connection: () => null } },
     lock: { o11Root: root, odcRoot: root, connection: () => null } } });
   const [serverSide, clientSide] = InMemoryTransport.createLinkedPair();

@@ -117,17 +117,17 @@ const shapes = file => [['whole', { file, budgetBytes: 28672 }], ['deep', { file
 const readsOf = async (s, file) => { const out = []; for (const [label, args] of shapes(file)) out.push([label, await s.call('ssam_evidence', args)]); return out; };
 // A read that names no filter answers ok; a filter or a count may refuse (no row has the field), its echo still clean.
 const mustAnswer = label => /^(?:whole|deep|table|fields|omitted|continuation)\b/.test(label);
-test('live: the omitted part of ssam_doctor is read back as a state report, in every shape of the reader (MEDIUM 2)', { skip, timeout: 900000 }, async () => {
+test('live: the kept ssam_doctor answer is read back as a state report, in every shape of the reader (MEDIUM 2)', { skip, timeout: 900000 }, async () => {
   const out = {};
   for (const exposure of ['owner', 'licensee']) {
-    const s = await session(exposure);
+    const s = await session(exposure, {}, { maxAnswerBytes: 600 });
     try {
       out[exposure] = [];
       for (const args of [{}, { lane: 'odc' }]) {
         const doctor = await s.call('ssam_doctor', args);
-        const file = doctor.omitted?.arguments?.file;
+        const file = doctor.omitted?.arguments?.file ?? doctor.paged?.file;
         assert.ok(file && fs.existsSync(file), exposure + ' ' + JSON.stringify(args) + ' ' + JSON.stringify(doctor).slice(0, 300));
-        const calls = [doctor.omitted, ...(doctor.omitted.more ?? [])];
+        const calls = doctor.omitted ? [doctor.omitted, ...(doctor.omitted.more ?? [])] : [doctor.continuation];
         for (const call of calls) out[exposure].push(['omitted ' + JSON.stringify(args) + ' ' + JSON.stringify(call.arguments).slice(-60), await s.call(call.tool, call.arguments)]);
         for (const [label, read] of await readsOf(s, file)) out[exposure].push([label + ' ' + JSON.stringify(args), read]);
       }
@@ -182,4 +182,24 @@ test('live: a paged answer and the final answer of a detached call are read back
     assert.equal((await detached.call('ssam_reference', { lane: 'o11', kind: 'recipe', query: 'timer' })).code, 'REFERENCE_DAY_LIMIT');
     assert.equal((await detached.call('ssam_evidence', { file: kept, budgetBytes: 28672 })).code, 'REFERENCE_DAY_LIMIT');
   } finally { await detached.close(); }
+});
+// Deterministic omitted -> evidence origin regression, without a Studio or CLI.
+test('MEDIUM 2: an omitted state report keeps its origin through evidence reads', async t => {
+  const { fitAnswer } = await import('../answer-size.mjs');
+  const { createEvidenceReader } = await import('../ssam-evidence.mjs');
+  const { answerFolders, fileOrigin } = await import('../reference-files.mjs');
+  const { exposedValue } = await import('../exposure.mjs');
+  const root = fs.mkdtempSync(path.join(tmp, 'omitted-state-'));
+  const status = { ok: true, lanes: { o11: { path: 'C:\\server\\kernel\\.local\\cli\\anvil.dll', detail: 'Status detail. '.repeat(3000) } } };
+  const result = fitAnswer('ssam_doctor', {}, status, { root, origin: { tool: 'ssam_doctor' } });
+  assert.equal(result.omitted?.tool, 'ssam_evidence', JSON.stringify(result));
+  const reader = createEvidenceReader({ roots: [root] });
+  for (const call of [result.omitted, ...(result.omitted.more ?? [])]) {
+    const origin = fileOrigin(call.arguments.file, { answers: answerFolders({ root }) });
+    assert.deepEqual(origin, { tool: 'ssam_doctor' });
+    const page = reader.read(call.arguments);
+    assert.equal(page.ok, true);
+    const visible = exposedValue(page, { exposure: 'licensee', tool: 'ssam_evidence', args: call.arguments, origin, handleRoots: [root] });
+    assert.deepEqual(guard(visible), []);
+  }
 });

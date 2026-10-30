@@ -66,7 +66,8 @@ function fakeAccess({ apiClient = true, sourceFails = false, consumers = ['Order
     return { ok: true, receipt, ...answer };
   };
   // The approvals of own fixtures stay with the unguarded tool: a wrong approval is refused there, nothing sent.
-  const approved = (input, kind, answer) => (input.authorizationContext === APPROVAL ? sendOnce(kind, input, answer)
+  // R2-I: the unguarded tool takes the written words alone (no file) or the right context file; another file is refused.
+  const approved = (input, kind, answer) => ([APPROVAL, undefined].includes(input.authorizationContext) ? sendOnce(kind, input, answer)
     : { ok: false, sent: false, code: 'AUTHORIZATION_CONTEXT_INVALID', error: { code: 'AUTHORIZATION_CONTEXT_INVALID', message: 'The approval record does not cover this exact proposal.' } });
   const json = data => ({ ok: true, status: 200, data });
   const access = {
@@ -341,7 +342,7 @@ const ROUTES = {
   'agents.datasetDelete': [{ DatasetId: 'ds-1' }, 'SSAM dataset fixture'],
   'agents.evaluationDelete': [{ EvaluationId: 'ev-1' }, null],
 };
-test('odc_portal_write: every destructive route previews (0 writes) and runs once with its own approval; without it, or with a wrong one, nothing is sent; other routes unchanged', async () => {
+test('odc_portal_write: every destructive route previews (0 writes) and runs once with the written reply of the owner (no approval file needed) or with a context file; a wrong file sends nothing; other routes unchanged', async () => {
   assert.deepEqual(Object.keys(ROUTES).sort(), Object.entries(PORTAL_WRITES).filter(([, r]) => r.effect === 'destructive').map(([id]) => id).sort());
   const h = harness();
   for (const [operationId, [inputParameters, name]] of Object.entries(ROUTES)) {
@@ -351,11 +352,22 @@ test('odc_portal_write: every destructive route previews (0 writes) and runs onc
     assert.equal(preview.items[0].backup.possible, name !== null, operationId);
     const sent = h.sends.length;
     h.clock.wait();
-    const missing = await h.call('odc_portal_write', confirm(preview, args, 'sim, apaga os 1 fixtures sem aprovação, ' + operationId));
-    assert.deepEqual(codes(missing), ['DESTRUCTIVE_TARGET_NOT_NAMED'], operationId); assert.equal(h.sends.length, sent);
-    const done = await h.call('odc_portal_write', confirm(preview, { ...args, authorizationContext: APPROVAL }, 'sim, apaga os 1 fixtures, ' + operationId));
-    assert.equal(done.ok, true, operationId + ' ' + JSON.stringify(done)); assert.equal(h.sends.length, sent + 1, operationId);
-    assert.deepEqual([h.sends.at(-1).input.authorizationContext, h.sends.at(-1).input.operationUuid], [APPROVAL, preview.operationId], operationId);
+    // R2-I (owner's rule, 28/10): without a file the owner's reply reaches the unguarded tool, which binds it to the own
+    // fixture itself; nothing at the guard asks for a file.
+    // R2-I round 2: without a file the reply also names every item the preview listed (mustName), as a whole word.
+    const unnamed = await h.call('odc_portal_write', confirm(preview, args, 'sim, apaga os 1 sem arquivo, ' + operationId));
+    if (name) { assert.deepEqual(codes(unnamed), ['WORDS_MUST_NAME'], operationId); assert.equal(h.sends.length, sent, operationId); }
+    const again0 = name ? await h.call('odc_portal_write', args) : preview;
+    if (name) h.clock.wait();
+    const written = name ? await h.call('odc_portal_write', confirm(again0, args, 'sim, apaga os 1 sem arquivo: ' + name + ', ' + operationId)) : unnamed;
+    assert.equal(written.ok, true, operationId + ' ' + JSON.stringify(written)); assert.equal(h.sends.length, sent + 1, operationId);
+    assert.deepEqual([h.sends.at(-1).input.authorizationContext, h.sends.at(-1).input.operationUuid], [undefined, again0.operationId], operationId);
+    // A context file is still accepted.
+    const again = await h.call('odc_portal_write', args);
+    h.clock.wait();
+    const done = await h.call('odc_portal_write', confirm(again, { ...args, authorizationContext: APPROVAL }, 'sim, apaga os 1 fixtures, ' + operationId));
+    assert.equal(done.ok, true, operationId + ' ' + JSON.stringify(done)); assert.equal(h.sends.length, sent + 2, operationId);
+    assert.deepEqual([h.sends.at(-1).input.authorizationContext, h.sends.at(-1).input.operationUuid], [APPROVAL, again.operationId], operationId);
   }
   // The approval itself is still decided by the unguarded tool: a wrong one refuses there, nothing sent, the token spent.
   const args = { tenant: PERSONAL, operationId: 'agents.datasetDelete', input: { inputParameters: { DatasetId: 'ds-1' } } };
@@ -370,7 +382,7 @@ test('odc_portal_write: every destructive route previews (0 writes) and runs onc
   assert.equal((await h.call('odc_portal_write', timer)).ok, true); assert.equal(h.sends.length, sent + 1); assert.equal(h.sends.at(-1).input.operationId, 'timers.run');
 });
 
-test('odc_a2a_connection_delete: the owned connection previews by its detail; the reply with the approval deletes once; another connection is refused', async () => {
+test('odc_a2a_connection_delete: the owned connection previews by its detail; the reply of the owner deletes once without any file; another connection is refused', async () => {
   const h = harness();
   const args = { tenant: PERSONAL, connectionId: A2A, originOperationUuid: ORIGIN };
   const preview = await h.call('odc_a2a_connection_delete', args);
@@ -378,9 +390,8 @@ test('odc_a2a_connection_delete: the owned connection previews by its detail; th
   h.clock.wait();
   const other = await h.call('odc_a2a_connection_delete', confirm(preview, { ...args, connectionId: CONN, authorizationContext: APPROVAL }, 'sim, apaga os 1: SSAM agent fixture'));
   assert.ok(codes(other).includes('PREVIEW_OTHER_TARGET')); assert.deepEqual(h.sends, []);
-  const noApproval = await h.call('odc_a2a_connection_delete', confirm(preview, args, 'sim, apaga os 1: SSAM agent fixture'));
-  assert.deepEqual(codes(noApproval), ['AUTHORIZATION_CONTEXT_INVALID']); assert.deepEqual(h.sends, []);
-  const done = await h.call('odc_a2a_connection_delete', confirm(preview, { ...args, authorizationContext: APPROVAL }, 'sim, apaga os 1: SSAM agent fixture'));
+  // R2-I: no approval file: the reply reaches the unguarded tool, which binds it to the origin receipt itself.
+  const done = await h.call('odc_a2a_connection_delete', confirm(preview, args, 'sim, apaga os 1: SSAM agent fixture'));
   assert.equal(done.ok, true, JSON.stringify(done)); assert.equal(h.sends.length, 1); assert.equal(h.sends[0].input.operationUuid, preview.operationId);
   assert.deepEqual(JSON.parse(fs.readFileSync(done.backup[0].files[0].path, 'utf8')), { Connection: { name: 'SSAM agent fixture', providerId: 'a2a' } });
 });

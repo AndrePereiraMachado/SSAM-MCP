@@ -63,6 +63,8 @@ public static class JobNormalizer
         // VisitaCerta (tx-visitacerta): the certain edits of the ssam-flow/1 texts of the logic ops (FlowTextNormalizer).
         try { FlowTexts(ops, prefix, done, JobSchema(ops)); }
         catch { /* a normalization never refuses: the checks judge what stays */ }
+        // R3-B (PlatformLimits asset.format): the format, width and height of an image read from its bytes (IMAGE_FACTS_FROM_BYTES).
+        try { PlatformLimitRules.NormalizeImages(ops, prefix, lane, done); } catch { }
         // motor2 review: each path is one of the job as sent (a step the kernel inserted shifts nothing the author wrote).
         SentJob.TranslateEntries(done, ops, prefix);
         return done;
@@ -181,7 +183,12 @@ public static class JobNormalizer
         // Familias (2026-10-12): the lines of the text forms the grammar rejects with one reading (DDL_DECLARATION_NORMALIZED,
         // FLOW_END_AFTER_TERMINATOR, FLOW_ASSIGN_WRITTEN), then the literal-only slots written as a constant (LITERAL_FOLDED,
         // before the defaults motor2 moves), and the CSS the theme does not render with one rendering (CSS_FUNCTION_REWRITTEN).
+        // R2-C: a loose & or < of the html, which HTML reads as text, written as its entity first (HTML_TEXT_ESCAPED), so every
+        // rule after this one and the compilers read the html.
+        try { HtmlLooseText.Normalize(ops, prefix, done); } catch { }
         try { TextForms.Normalize(ops, prefix, lane, done); } catch { }
+        // R2-C: a size on a kind that keeps none (a site property or setting, a parameter, a local) is dropped (TYPE_SIZE_DROPPED).
+        try { TypeSizes.Normalize(ops, prefix, lane, done); } catch { }
         try { LiteralFolding.Normalize(ops, prefix, lane, done); } catch { }
         try { StyleSheetNormalizer.Normalize(ops, prefix, done); } catch { }
         try { SharedStyleNormalizer.Normalize(ops, prefix, done); } catch { }
@@ -189,6 +196,8 @@ public static class JobNormalizer
         try { HtmlDocumentRules.Normalize(ops, prefix, lane, done); } catch { }
         try { ScopeRenames.Normalize(ops, prefix, lane, model == null ? null : model.ScreenNames, done); } catch { }
         try { SystemCalls.Normalize(ops, prefix, lane, model, done); } catch { }
+        // R2-C: N.Record.Attr of a Get<E>[ForUpdate] node is N.Record.E.Attr (RECORD_ENTITY_MEMBER_ADDED), both lanes.
+        try { EntityRecords.Normalize(ops, prefix, model, done); } catch { }
         try { SpecTexts.Normalize(ops, prefix, done); } catch { }
     }
 

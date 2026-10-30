@@ -30,7 +30,10 @@ const O11_DATA_WRITES = new Set(['insert', 'update', 'delete']);          // o11
 // The close preview of a file load (close:{preview:true}, or close without previewSha256) reads its journal and writes
 // no data, like a dryRun (CX13 review 5, F12); its confirmation (close.previewSha256) is a write.
 const closePreviewOnly = a => a?.close != null && typeof a.close === 'object' && (a.close.preview === true || !a.close.previewSha256);
-const o11DataWrites = request => (!request?.dryRun && !closePreviewOnly(request) && O11_DATA_WRITES.has(request?.operation))
+// R2-E: request.preview:true (inline records, never in a batch item, which o11_data refuses) runs the kernel's checker
+// (--check --no-write-fields) and never the data writer: a read, like a dryRun.
+const inlinePreview = request => request?.preview === true && !Array.isArray(request?.batch);
+const o11DataWrites = request => (!request?.dryRun && !inlinePreview(request) && !closePreviewOnly(request) && O11_DATA_WRITES.has(request?.operation))
   || (Array.isArray(request?.batch) && request.batch.some(op => !op?.dryRun && O11_DATA_WRITES.has(op?.operation)));
 const SC_SESSION_WRITES = new Set(['sign-in', 'web-sign-in', 'close']);   // Studio login dialog / Service Center window
 // The Service Center deletes (CX15 DESTRUCTIVE_TOOLS): previewed, then executed with the confirmationToken.
@@ -42,7 +45,7 @@ const always = () => true;
 // o11_inspect {module}, ssam_map and ssam_discover with an O11 module name are reads (see the header): their capture takes
 // this lock itself only to select an open module.
 export const STUDIO_WRITE_TOOLS = Object.freeze({
-  o11_deliver: always, // merge, resume, close, closePrevious, and until=apply (open_module to capture the module)
+  o11_deliver: a => a.until !== 'apply' || a.close != null || a.resume != null || a.closePrevious != null,
   o11_publish: always,
   o11_access: a => a.action === 'apply',
   o11_environment: a => ENVIRONMENT_WRITES.has(a.action) && (a.action !== 'delete-app' || Boolean(a.confirmationToken)), // CX15: a delete-app without token previews
@@ -76,11 +79,14 @@ export const STUDIO_WRITE_TOOLS = Object.freeze({
 export const TOOL_CLASSIFICATIONS = new Map();
 const pureReads = ['ssam_discover', 'ssam_map', 'ssam_reference', 'ssam_evidence', 'ssam_app_url',
   'o11_inspect', 'studio_status', 'studio_doctor', 'studio_inspect', 'studio_data', 'studio_consumers',
-  'studio_check_base', 'studio_preview', 'hybrid_tenants'];
+  'studio_check_base', 'studio_preview', 'hybrid_tenants',
+  // fase4-28 r2-preview: ssam_render renders on the agent and changes nothing (hosted/screen-render.mjs): outside the Studio queue.
+  'ssam_render'];
 for (const name of pureReads) TOOL_CLASSIFICATIONS.set(name, Object.freeze({ mode: 'pure-read', annotations: Object.freeze({ readOnlyHint: true }) }));
 const actionReads = values => a => values.includes(a.action);
 // Only named read operations are exceptions. An invalid/new operation remains a mutation even before its handler refuses it.
 export const PURE_READ_OPERATIONS = Object.freeze({
+  o11_deliver: a => a.until === 'apply' && a.close == null && a.resume == null && a.closePrevious == null,
   ssam_task: a => a.close == null && a.stop !== true,
   ssam_doctor: a => a.release == null && a.task?.close == null && a.task?.stop !== true,
   ssam_grant: a => (a.action ?? 'list') === 'list',
@@ -93,7 +99,7 @@ export const PURE_READ_OPERATIONS = Object.freeze({
   o11_extension: actionReads(['read']),
   o11_data: a => {
     const ops = Array.isArray(a.request?.batch) ? a.request.batch : [a.request];
-    return ops.length > 0 && ops.every(op => ['read', 'read-all'].includes(op?.operation) || (!Array.isArray(a.request?.batch) && (op?.dryRun === true || closePreviewOnly(op))));
+    return ops.length > 0 && ops.every(op => ['read', 'read-all'].includes(op?.operation) || (!Array.isArray(a.request?.batch) && (op?.dryRun === true || inlinePreview(op) || closePreviewOnly(op))));
   },
   studio_data_insert: a => a.dryRun === true || closePreviewOnly(a), // CX13 F12: a dryRun and a close preview write no data
   studio_data_update: a => a.dryRun === true || closePreviewOnly(a),

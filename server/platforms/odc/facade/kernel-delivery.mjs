@@ -26,6 +26,7 @@ import { prototypeAppUrl, prototypeScreenLinks } from './next-steps.mjs';
 import { kernelStart } from './quality-meter.mjs';
 import { removedOf } from './ssam-code.mjs';
 import { RESULT } from './result-values.mjs';
+import { joinPrecheck } from './ui-precheck.mjs';
 // F5, the family rule of producer signatures (producer-signatures.mjs): reference snapshots reused by revision.
 import { reuseOdcReference, rememberOdcReference, forgetOdcReference, recordPublished, recordPublicationEnded, publicationOpen,
   reuseOdcCapture, odcSignatureIdentity, sameOdcIdentity, rememberOdcCaptureAnswer } from './producer-signatures.mjs';
@@ -207,15 +208,14 @@ export async function applyKernel({ job, snapshot, output, producers = {}, autoP
 
 // C31: the job's own preflight (anvil-odc check-job: no Studio, no model). primeira-certa A3: only a shortcut for when no
 // base can be had (the module could not be captured); with a capture the apply over it refuses once with every phase. On
-// the worker when it serves, else cold.
+// a process of its own: it must never queue behind the worker's current apply.
 // -> {ok:true} | {ok:true, skipped} (the check could not say: the apply reports it) | {ok:false, code, problems, error, verifyRan:false}.
 export async function checkJobKernel({ job }, deps = {}) {
   const cli = deps.cli ?? kernelCli();
   if (!fs.existsSync(cli)) return { ok: true, skipped: 'the ODC kernel CLI is not built' };
-  const argv = ['check-job', '--job', job];
-  const onWorker = await (deps.runOnWorker ?? runOnWorker)(argv, deps.worker !== undefined ? { worker: deps.worker } : {});
-  let envelope = onWorker.used ? onWorker.envelope : null;
-  if (!onWorker.used) {
+  const argv = ['check-job', '--job', job, '--basis-fresh', 'false'];
+  let envelope = null;
+  {
     // Hosted: cold in the customer's closed environment and folder (C01: the verify ids never depend on this cwd).
     const hosted = hostedContext() ? hostedSpawnEnv('odc') : null;
     const response = await coldKernel(() => (deps.exec ?? exec)('dotnet', [cli, ...argv], { cwd: hosted ? hosted.cwd : path.dirname(cli), windowsHide: true, maxBuffer: 16 * 1024 * 1024,
@@ -228,7 +228,7 @@ export async function checkJobKernel({ job }, deps = {}) {
   const errors = problems.filter(p => p?.severity !== 'warning');
   if (envelope.ok === true || (envelope.data?.valid !== false && !errors.length)) return { ok: true };
   if (!errors.length) return { ok: true, skipped: withoutStack(envelope.error) ?? 'check-job refused without problems' };
-  return { ok: false, code: errors.length === 1 && errors[0].code ? errors[0].code : 'PREFLIGHT_REFUSED', problems: errors,
+  return { ok: false, static: envelope.data?.static ?? envelope.static ?? { complete: false }, code: errors.length === 1 && errors[0].code ? errors[0].code : 'PREFLIGHT_REFUSED', problems: errors,
     error: (Array.isArray(envelope.data?.errors) && envelope.data.errors.length ? envelope.data.errors : errors.map(p => p.message + (p.fix ? ' Fix: ' + p.fix : ''))).join('\n'),
     verifyRan: false, ...(typeof envelope.data?.verifyReason === 'string' ? { verifyReason: envelope.data.verifyReason } : {}) };
 }
@@ -1068,6 +1068,8 @@ const warmIndex = (file, lane) => import('./module-map.mjs').then(m => m.prefetc
 const readCatalogOf = root => () => { try { return JSON.parse(fs.readFileSync(path.join(root, 'snapshots', 'modules.json'), 'utf8').replace(/^\uFEFF/, '')); } catch { return null; } };
 const standingGrants = async () => import('./standing-grants.mjs').catch(() => null);
 export async function deliverKernel(input, deps) {
+  let carriedPreflight = null;
+  const completed = value => joinPrecheck(value, carriedPreflight);
   const { root, studio, prepareManifest, nextLabDir, journal, apply = applyKernel, guide = catalogGuidance, prefetch = warmIndex,
     catalog = readCatalogOf(root), publishStep = publishDelivered } = deps;
   // F5: the workspace's producer cache (producer-signatures.mjs); null turns the reuse off.
@@ -1101,6 +1103,24 @@ export async function deliverKernel(input, deps) {
     const { ok: _ok, ...fields } = disabled;
     return { ok: false, source: 'kernel-job', module, feature, job, until, steps: [], merged: false, publishInvoked: false, ...fields, failed: 'prototype',
       ...(publish === true ? { publish: { requested: true, outcome: 'skipped' } } : {}) };
+  }
+  // The pure preflight precedes capture, the module guard and the Studio queue. A static refusal never waits for a merge.
+  // R2-H: it is the job-alone check of this delivery; the shortcut without a capture (C31) and the refusal of an unpublished
+  // producer (A5) reuse its verdict while the job file is the same bytes, so check-job runs once.
+  let preflighted = null;
+  const jobAlone = async () => {
+    let bytes = null; try { bytes = fs.readFileSync(job); } catch { /* check reads it again and says so */ }
+    if (preflighted && preflighted.job === job && bytes && preflighted.sha256 === sha256(bytes)) return preflighted.verdict;
+    return check({ job });
+  };
+  if (check) {
+    const checked = await check({ job });
+    try { preflighted = { job, sha256: sha256(fs.readFileSync(job)), verdict: checked }; } catch { preflighted = null; }
+    if (checked?.ok === false) {
+      if (checked.static?.complete === true) return { ...checked, ok: false, source: 'kernel-job', module, feature, job, until,
+        failed: 'preflight', code: checked.code ?? 'PREFLIGHT_REFUSED', merged: false, publishInvoked: false, steps: [] };
+      carriedPreflight = { carry: true, problems: checked.problems ?? [], static: checked.static ?? { complete: false }, local: root, lane: 'odc', mode: 'deliver' };
+    }
   }
   // fix/a5-lows (B10): with the job's producer names, a binding name with / or \ binds only the ops that write exactly that
   // text (producer-names.mjs separatorKeyProblems): "..\System" never binds the op "(System)". ONE refusal with every problem.
@@ -1314,7 +1334,7 @@ export async function deliverKernel(input, deps) {
     if (prepare) {
       stage = 'documents';
       const prepared = await prepare(job, { lane: 'odc', words: authorize ?? '', localRoot: path.join(root, '.local') });
-      if (prepared?.ok !== true) { refuse('documents', prepared ?? { error: 'The integration documents of the job could not be prepared.' }); return report; }
+      if (prepared?.ok !== true) { refuse('documents', prepared ?? { error: 'The integration documents of the job could not be prepared.' }); return completed(report); }
       if (typeof prepared.job === 'string' && prepared.job && path.resolve(prepared.job) !== job) {
         job = path.resolve(prepared.job); report.job = job; jobDocument = readJob(job); requestedProducers = producersOf(jobDocument);
       }
@@ -1332,7 +1352,7 @@ export async function deliverKernel(input, deps) {
         const { ok: _ok, failed: _failed, ...fields } = expanded.refusal;
         Object.assign(report, fields, { failed: 'prototype' });
         if (publish === true) report.publish = { requested: true, outcome: 'skipped' };
-        return report;
+        return completed(report);
       }
       if (expanded?.path) {
         proto = { ...expanded.expansion, original: job, measure: deps.measureFidelity ?? null };
@@ -1343,15 +1363,16 @@ export async function deliverKernel(input, deps) {
     // (bridge snapshot = SaveToMemoryStream of the live ESpace, hash-named), never a cached candidate or the manifest of an
     // earlier delivery. An edit the person made in the Studio, or an earlier uncertain merge, is in this capture; the merge
     // proves natively that the open module still equals it before CompareAndMerge.
-    // primeira-certa A3: no preflight of the job alone before it. The capture is a read; the apply over it (the build)
-    // refuses once with every problem of every phase (preflight, base, apply, Verify), before the merge, the only write.
+    // primeira-certa A3: the capture is a read; the apply over it (the build) refuses once with every problem of every phase
+    // (preflight, base, apply, Verify), before the merge, the only write. R2-F rule 1 runs the job-alone check before the
+    // capture (above); its problems the apply path may add to join this refusal (joinPrecheck).
     const snapshot = await call('snapshot', () => studio(['snapshot', module], pid));
     if (!snapshot) {
       // C31, now only a shortcut: no base could be had, so the job alone (anvil-odc check-job) is read and its problems
       // answer, with verifyRan false and the reason; the failure of the capture stays in refusal and continuation.
       if (check) {
         let checked = null;
-        try { checked = await check({ job }); } catch (error) { checked = { ok: true, skipped: withoutStack(error.message) }; }
+        try { checked = await jobAlone(); } catch (error) { checked = { ok: true, skipped: withoutStack(error.message) }; }
         if (checked?.ok === false) {
           const capture = report.error;
           report.failed = 'preflight'; report.code = checked.code ?? 'PREFLIGHT_REFUSED';
@@ -1361,7 +1382,7 @@ export async function deliverKernel(input, deps) {
           if (publish === true) report.publish = { requested: true, outcome: 'skipped' };
         }
       }
-      return report;
+      return completed(report);
     }
     // The open module the capture names: the request may carry the app name the person sees ("QuizLive Web").
     if (typeof snapshot.module === 'string' && snapshot.module && snapshot.module !== module) {
@@ -1370,7 +1391,7 @@ export async function deliverKernel(input, deps) {
     report.snapshot = { path: snapshot.path, sha256: snapshot.sha256, host: snapshot.host, ...(snapshot.capturedAt ? { capturedAt: snapshot.capturedAt } : {}) };
     if (snapshot.appLinks) report.appLinks = snapshot.appLinks;
     warm(snapshot.path);
-    if (until === 'snapshot') { report.ok = true; return report; }
+    if (until === 'snapshot') { report.ok = true; return completed(report); }
     // Refusals before any build, all at once: what the Studio itself would not keep, and a publication without words.
     stage = 'preflight';
     const kind = typeof snapshot.kind === 'string' ? snapshot.kind : catalogKind(catalog(), snapshot.moduleKey);
@@ -1388,7 +1409,7 @@ export async function deliverKernel(input, deps) {
       report.failed = 'preflight'; report.code = problems.length === 1 ? problems[0].code : 'PREFLIGHT_REFUSED'; report.problems = problems;
       report.error = problems.map(p => p.message + ' Fix: ' + p.fix).join('\n');
       if (publish === true) report.publish = { requested: true, outcome: 'skipped' };
-      return report;
+      return completed(report);
     }
     fs.mkdirSync(path.dirname(output), { recursive: true });
     // Atomic claim. Two deliveries of one customer at once (lane wp: builds in parallel) may have computed the same next lab
@@ -1480,12 +1501,12 @@ export async function deliverKernel(input, deps) {
     if (unbindable.length) {
       const refused = await call('reference-snapshot', async () => unknownProducer({ value: null, listing: await listProducers(studio, module, pid), key: null, studioName: unbindable[0],
         written: unbindable, module, feature, owners, changes, pid, job, jobDocument, publish, authorize, until, producers: input.producers }));
-      if (!refused) { if (publish === true) report.publish = { requested: true, outcome: 'skipped' }; return report; }
+      if (!refused) { if (publish === true) report.publish = { requested: true, outcome: 'skipped' }; return completed(report); }
     }
     // Round 3 (H1-R, M5): the listing of the consumer session, read at most once per delivery.
     let listingRead = null;
     const listingOnce = async () => (listingRead ??= await listProducers(studio, module, pid));
-    const refuseWith = async value => { await call('reference-snapshot', async () => value); if (publish === true) report.publish = { requested: true, outcome: 'skipped' }; return report; };
+    const refuseWith = async value => { await call('reference-snapshot', async () => value); if (publish === true) report.publish = { requested: true, outcome: 'skipped' }; return completed(report); };
     const sameText = (a, b) => typeof a === 'string' && typeof b === 'string' && a.trim().toLowerCase() === b.trim().toLowerCase();
     // fix/unpublished-library: the producers whose published revision lacks what the job's reference ops ask, each with what
     // its open model says of every missing element; null when none (or when nothing proves an open model and every producer
@@ -1599,7 +1620,7 @@ export async function deliverKernel(input, deps) {
       // Round 2 (A5): the job-alone check (anvil-odc check-job) runs before this refusal, as the build would have run it first:
       // its problems are this refusal's too, so nothing is published or refreshed before the job's own problems are seen.
       let jobCheck = null;
-      if (check) { try { jobCheck = await check({ job }); } catch (error) { jobCheck = { ok: true, skipped: withoutStack(error.message) }; } }
+      if (check) { try { jobCheck = await jobAlone(); } catch (error) { jobCheck = { ok: true, skipped: withoutStack(error.message) }; } }
       // Round 3 (review C:\t\revisoes\unpublished-lib-2, N2): the first step runs. studio_publish {module} only when its own
       // handler would take the library now (read only: the status and lab evidence of the publication, and the open module's
       // hash against the merge receipt); otherwise the person publishes it in that Studio, then the same refresh and delivery.
@@ -1623,7 +1644,7 @@ export async function deliverKernel(input, deps) {
       if (refusal.jobCheck) report.jobCheck = refusal.jobCheck;
       if (refusal.sequence) report.sequence = refusal.sequence;
       if (publish === true) report.publish = { requested: true, outcome: 'skipped' };
-      return report;
+      return completed(report);
     };
     for (const group of requestedProducers) {
       const { key, written } = group;
@@ -1666,7 +1687,7 @@ export async function deliverKernel(input, deps) {
         if (identity) {
           const entry = { name: key, studioName, path: bound, sha256: sha, identity, source: 'given' };
           if (until === 'merge') reusedProducers.push(entry);
-          else if (!(await recheck(entry, 'beforeBuild'))) return report;
+          else if (!(await recheck(entry, 'beforeBuild'))) return completed(report);
         }
         continue;
       }
@@ -1710,7 +1731,7 @@ export async function deliverKernel(input, deps) {
         if (noPublicElements(again)) { empty = again; return { ok: true }; }
         return again;
       });
-      if (!captured) return report;
+      if (!captured) return completed(report);
       if (empty) {
         const step = report.steps[report.steps.length - 1];
         if (step) { step.ok = false; step.publishedElements = 0; }
@@ -1901,14 +1922,14 @@ export async function deliverKernel(input, deps) {
         for (const key of ['ssamDefect', 'patch', 'correctedJob', 'degraded']) if (protoRefusal[key] != null) report[key] = protoRefusal[key];
         report.problems = protoRefusal.problems; report.code = 'VALIDATION_REFUSED'; report.error = protoRefusal.error;
         if (publish === true) report.publish = { requested: true, outcome: 'skipped' };
-        return report;
+        return completed(report);
       }
       if (kernelRefused && guide) {
         try { const g = await guide({ lane: 'odc', job, run: { ok: false, result: { error: kernelRefused.error }, resultFile: kernelRefused.receipt ?? null } }); if (g) report.discovery = g; }
         catch { /* guidance never changes the delivery answer */ }
       }
       if (publish === true) report.publish = { requested: true, outcome: 'skipped' };
-      return report;
+      return completed(report);
     }
     warm(candidate);
     report.manifest = built.manifest;
@@ -1928,12 +1949,12 @@ export async function deliverKernel(input, deps) {
       if (proto.receipt.timings.expandMs == null && proto.timings?.expandMs != null) proto.receipt.timings.expandMs = proto.timings.expandMs;
       report.prototype = proto.receipt;
     }
-    if (until === 'build') { report.ok = true; return report; }
+    if (until === 'build') { report.ok = true; return completed(report); }
     // F5: each reference snapshot the build reused is acquired again before the merge; another revision (the producer was
     // published since) stops here with PRODUCER_CHANGED, nothing merged, its observation dropped, and the same delivery again.
     // (A build reuses only when this call merges, so every reused snapshot is acquired again here.)
     if (until === 'merge' && reusedProducers.length) {
-      for (const reused of reusedProducers) if (!(await recheck(reused, 'beforeMerge'))) return report;
+      for (const reused of reusedProducers) if (!(await recheck(reused, 'beforeMerge'))) return completed(report);
     }
     if (order) {
       // Merge order, pass 1: the candidate without its deferred defaults creates the elements (the bridge's own plan finds
@@ -1950,7 +1971,7 @@ export async function deliverKernel(input, deps) {
         nameDivergences();
         report.error = 'Merge order pass 1 of 2 (the candidate without its deferred defaults): ' + (report.error ?? 'merge refused');
         if (publish === true) report.publish = { requested: true, outcome: 'skipped' };
-        return report;
+        return completed(report);
       }
       report.merged = true;
       report.mergeOrder.firstPass = { manifest: report.manifest, equivalence: first.equivalence ?? (first.strictlyEqual ? 'strict' : null),
@@ -1958,7 +1979,7 @@ export async function deliverKernel(input, deps) {
       // Pass 2: the full candidate over the module as pass 1 left it, a new capture; the elements exist now, so the bridge's
       // plan is empty again and the defaults are merged onto them.
       const again = await call('snapshot', () => studio(['snapshot', module], pid), { pass: 2 });
-      if (!again) { secondPassFailed(); return report; }
+      if (!again) { secondPassFailed(); return completed(report); }
       const rebuilt = await call('build', async () => {
         const prepared = withManifestCode(await prepareManifest({ base: again.path, candidate, output: path.join(output, 'delivery'), feature, owners, changes }));
         return prepared?.ok === false ? { ...prepared, code: prepared.code ?? 'CANDIDATE_REFUSED' } : prepared;
@@ -1970,7 +1991,7 @@ export async function deliverKernel(input, deps) {
           report.mergeOrder.secondPass = 'no change: the module equals the candidate after pass 1';
           report.merge = first; report.strictlyEqual = first.strictlyEqual === true; report.equivalence = report.mergeOrder.firstPass.equivalence ?? 'strict';
           report.result = RESULT.delivered; report.ok = true;
-        } else { secondPassFailed(); return report; }
+        } else { secondPassFailed(); return completed(report); }
       } else report.manifest = rebuilt.manifest;
     }
     for (const step of (report.ok && order ? [] : studioSteps(until))) {
@@ -1983,13 +2004,13 @@ export async function deliverKernel(input, deps) {
           if (order) secondPassFailed();
         }
         if (publish === true) report.publish = { requested: true, outcome: 'skipped' };
-        return report;
+        return completed(report);
       }
       report[step === 'check-base' ? 'checkBase' : step] = value;
       if (step === 'preview' && (value.conflicts || value.noDifferences)) {
         report.failed = step; report.error = value.conflicts ? 'Preview has conflicts; merge stopped.' : 'Candidate has no changes; merge stopped.';
         report.code = value.conflicts ? 'MERGE_CONFLICT' : 'NO_CHANGE';
-        return report;
+        return completed(report);
       }
       if (step === 'merge') {
         report.merged = value.merged === true; report.strictlyEqual = value.strictlyEqual === true;
@@ -2008,7 +2029,7 @@ export async function deliverKernel(input, deps) {
           if (!(!order && report.merged && await reconciledAfterMerge())) {
             if (order) secondPassFailed();
             if (publish === true) report.publish = { requested: true, outcome: 'skipped' };
-            return report;
+            return completed(report);
           }
         }
         report.result = RESULT.delivered;
@@ -2079,14 +2100,14 @@ export async function deliverKernel(input, deps) {
         } catch { /* informative only */ }
       }
     }
-    return report;
+    return completed(report);
   } catch (error) {
     report.failed = stage; report.error = withoutStack(error.message);
     if (stage === 'merge') { report.outcome = 'uncertain'; report.code = 'MERGE_UNCERTAIN'; mergeTimedOut(error); mergedHonestly(); }
     if (order && stage !== 'publish' && report.mergeOrder?.firstPass) secondPassFailed();
     else if (order && stage === 'merge') { report.mergeOrder.failedPass = 1; report.error = 'Merge order pass 1 of 2 (the candidate without its deferred defaults): ' + report.error; }
     if (stage === 'publish') { report.outcome = 'uncertain'; report.code = 'PUBLISH_UNCERTAIN'; report.ok = false; }
-    return report;
+    return completed(report);
   } finally {
     report.totalSeconds = (Date.now() - started) / 1000;
     if (claimed) {

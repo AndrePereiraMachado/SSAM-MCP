@@ -12,7 +12,7 @@ export const PLAN_VERSION = 1;
 export const PLAN_MIN_ITEMS = 6;
 export const KIND_BYTES = Object.freeze({ action: 700, screen: 2500, block: 1800, data: 250 });
 export const BATCH_TARGET_BYTES = 6000;
-export const PACKET_TARGET_BYTES = 8192;
+export const PACKET_TARGET_BYTES = 65536;
 const bytes = text => Buffer.byteLength(String(text ?? ''), 'utf8');
 const escape = text => String(text).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const canonical = value => Array.isArray(value) ? value.map(canonical) : value && typeof value === 'object'
@@ -122,6 +122,43 @@ export function planSize(intent, digest) {
   return Math.max(count, names.size);
 }
 
+// An explicit division of work does not require six newly named elements.
+export function dividedWork(intent, { workers, items, parallel } = {}) {
+  const text = String(intent ?? '');
+  return parallel === true || workers > 1 || (Array.isArray(items) && items.length > 1)
+    || /\b(?:sub[ -]?agents?|subagentes?|parallel|paralel[oa]s?|delegate|delegar)\b/i.test(text)
+    || /\b(?:multiple|several|many|varias|várias|varios|vários|diversas|diversos)\s+(?:(?:server|client|service|data)\s+)?(?:actions|screens|pages|blocks|aç[õo]es|acoes|telas|paginas|páginas|blocos)\b/i.test(text)
+    || workItemCount(text) > 1;
+}
+
+export function workItemCount(intent) {
+  const text = String(intent ?? '');
+  const numbers = { one:1,two:2,three:3,four:4,five:5,six:6,seven:7,eight:8,nine:9,ten:10,eleven:11,twelve:12,
+    thirteen:13,fourteen:14,fifteen:15,sixteen:16,seventeen:17,eighteen:18,nineteen:19,twenty:20,thirty:30,forty:40,fifty:50,sixty:60,seventy:70,eighty:80,ninety:90,hundred:100,
+    um:1,uma:1,dois:2,duas:2,'três':3,tres:3,quatro:4,cinco:5,seis:6,sete:7,oito:8,nove:9,dez:10,onze:11,doze:12,
+    treze:13,catorze:14,quatorze:14,quinze:15,dezesseis:16,dezasseis:16,dezessete:17,dezassete:17,dezoito:18,dezenove:19,dezanove:19,vinte:20,trinta:30,quarenta:40,cinquenta:50,sessenta:60,setenta:70,oitenta:80,noventa:90,cem:100,cento:100 };
+  let count = 0;
+  const word = '(?:\\d+|' + Object.keys(numbers).join('|') + ')';
+  const target = /\s+(?:(?:server|client|service|data)\s+)?(?:actions?|screens?|pages?|blocks?|entities|structures|ações|acoes|ação|acao|telas?|blocos?|entidades?|estruturas?)\b/;
+  const re = new RegExp('\\b(' + word + '(?:[ -]+(?:and|e|' + word + '))*)' + target.source, 'gi');
+  for (const m of text.matchAll(re)) {
+    let value = 0;
+    for (const token of m[1].toLowerCase().split(/[ -]+/).filter(t => !['and', 'e'].includes(t))) {
+      const n = numbers[token] ?? Number(token); value = n === 100 ? Math.max(1, value) * 100 : value + n;
+    }
+    count += value;
+  }
+  if (count) return count;
+  if (/^\s*(?:rename|renomear)\b/i.test(text)) return 1;
+  const named = /\b(?:create|build|add|criar|adicionar)\s+([\w ,]+?)\s+(?:actions|screens|blocks|entities|structures|telas|blocos|entidades|estruturas)\b/i.exec(text);
+  if (named) {
+    const names = named[1].split(/\s*(?:,|\band\b|\be\b)\s*/i).filter(Boolean);
+    if (names.length > 1) return names.length;
+  }
+  const list = /\b(?:create|build|add|implement|criar|adicionar|update)\s+(?:[A-Za-z_]\w*\s*(?:,|\band\b|\be\b)\s*)+[A-Za-z_]\w*[.!?]?$/i.test(text);
+  return list || /^\s*(?:actions?|screens?|blocks?|blocos?|telas?)\s*:/i.test(text) ? planSize(text) : 0;
+}
+
 const call = args => ({ tool: 'ssam_code', arguments: args });
 const launchPrompt = file => `Read ${file} and do exactly what it says; answer only the path(s)`;
 // feat/ssam-code-hosted: deps.place, where the session that runs a plan meets its files, for a server whose subagents run on
@@ -157,6 +194,26 @@ const stubOf = item => {
   const tag = item.kind === 'block' ? 'block' : 'screen';
   return signature.replace(new RegExp(`<${tag}([^>]*?)/>`), `<${tag}$1>`) + `\n</${tag}>\n`;
 };
+
+// Use the same extracted kernel contract and catalog guidance as discovery.
+export async function planBriefing(lane, parts, { briefingIndex, sources } = {}) {
+  const { buildIndex, laneSources, contractSlice } = await import('./discovery.mjs');
+  const source = sources ?? laneSources(lane);
+  let index = briefingIndex;
+  if (!index) {
+    try { index = (await buildIndex(lane, { sources: source })).index; }
+    catch { throw new Error('The kernel contracts for the plan are unavailable.'); }
+  }
+  const pointers = { ddl: 'spec.ddl', logic: 'logic.flow', html: 'html.document' };
+  const chosen = new Set(parts.map(p => pointers[p]));
+  const contract = contractSlice(index, [...chosen], { full: true, capBytes: Infinity });
+  if ([...chosen].some(p => !(p in contract))) throw new Error('A required kernel contract is missing from the plan index.');
+  const capabilities = (index.capabilities ?? []).filter(c => (c.contract ?? []).some(p => [...chosen].some(w => p.split('.')[0] === w.split('.')[0])));
+  return {
+    contract,
+    pitfalls: capabilities.map(c => ({ id: c.id, limits: c.limits ?? [], guidance: c.guidance ?? null, alternatives: c.alternatives ?? [] })),
+  };
+}
 
 export async function codePlan(input = {}, deps = {}) {
   const lane = input.lane ?? 'o11', module = input.module ?? input.target, items = input.items;
@@ -214,6 +271,9 @@ export async function codePlan(input = {}, deps = {}) {
   const outputs = new Set(dataFile ? [dataFile] : []);
   const nameOf = file => (outputs.has(file) ? place.output(file) : place.shown(file));
   const artifacts = [], fullSections = {}, prompts = [];
+  let briefing;
+  try { briefing = await planBriefing(lane, [...new Set(valid.map(i => i.kind === 'action' ? 'logic' : i.kind === 'data' ? 'ddl' : 'html'))], deps); }
+  catch { return { ok: false, code: 'DIGEST_UNAVAILABLE', error: 'The kernel contracts for the plan are unavailable.', continuation: { tool: 'ssam_discover', arguments: { lane, intent: 'read the contracts for this plan', app: module, packet: true } } }; }
   const makePrompt = (id, own, files, stubs = []) => {
     const intent = own.map(item => `${item.name} ${item.intent} ${item.signature ?? ''} ${(item.calls ?? []).join(' ')}`).join('\n');
     const check = call({ lane, action: 'check', module, base: shownCapture.path, files: [...(id === 'data' ? shared : baseFiles), ...files].map(nameOf), ...(stubs.length ? { stubs: stubs.map(place.shown) } : {}), ...(input.ops ? { ops: input.ops } : {}) });
@@ -221,10 +281,12 @@ export async function codePlan(input = {}, deps = {}) {
     const actionIndex = new Map(found.digest.actions.map(action => [action.key, action]));
     const context = moduleItems(found.digest, intent).items.filter(item => item.score >= 10 && !['bodies', 'screens'].includes(item.group))
       .map(item => item.group === 'actions' && actionIndex.has(item.key) ? indexLine(actionIndex.get(item.key)) : item.text).join('\n');
-    const cards = parts.map(part => { const { rules, slots, forms } = grammarCard(part, lane).card; return { part, rules, slots, forms }; });
+    const cards = parts.map(part => grammarCard(part, lane).card);
     const sections = [['work', `Write UTF-8 files: ${files.map(nameOf).join(', ')}. Keep EXACTLY these signatures.\n${own.map(item => `${item.kind} ${item.name}: ${item.intent}${item.calls?.length ? `\nCalls: ${item.calls.join(', ')}` : ''}\n${item.signature ? signatureOf(item.signature) : ''}`).join('\n\n')}`],
       ['check', JSON.stringify(check)], ['stubs', stubs.map(file => fs.readFileSync(file, 'utf8')).join('\n') || 'None.'],
       ['grammar', place.document('grammar', cards).map(card => JSON.stringify(card)).join('\n')],
+      ['contract', JSON.stringify(place.document('contract', briefing.contract))],
+      ['pitfalls', JSON.stringify(place.document('pitfalls', briefing.pitfalls))],
       ['module', context || 'No named existing elements.'], ['rules', JSON.stringify(place.document('rules', rulesSection({ intent, matches: [], categories: new Map(), textForms: parts }, 2000, { lane }).value))]];
     fullSections[id] = Object.fromEntries(sections);
     const prompt = promptOf(sections, `${place.input(planFile)} (sections.${id})`), promptFile = path.join(dir, `${id === 'data' ? 'data' : `batch-${id}`}.prompt.md`);

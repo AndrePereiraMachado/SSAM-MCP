@@ -1,4 +1,5 @@
 import { authorizationContext } from '../../facade/authorization-context.mjs';
+import { approvalOf, sameGrant } from './written-approval.mjs';
 import { fail } from './errors.mjs';
 import { temporaryTlsPolicy } from './connection-tls-policy.mjs';
 
@@ -37,14 +38,17 @@ export function dbDeleteApproval(file, words, { host, detail, origin }) {
   return ownedConnectionApproval(file, words, { host, detail, origin, operation: 'connections.delete', empty: true });
 }
 
-export function dbEntityApproval(file, words, { host, detail, origin }) {
-  return ownedConnectionApproval(file, words, { host, detail, origin, operation: 'connections.importEntities', empty: false });
+// changed: the entities the write changes (a removal unselects them, a custom import selects them). With the written words
+// alone they are targets too (each named; a removal's guard asks for them after the preview); a context file keeps its scope
+// (the connection).
+export function dbEntityApproval(file, words, { host, detail, origin, changed = [] }) {
+  return ownedConnectionApproval(file, words, { host, detail, origin, operation: 'connections.importEntities', empty: false, changed });
 }
 
-function ownedConnectionApproval(file, words, { host, detail, origin, operation, empty }) {
+function ownedConnectionApproval(file, words, { host, detail, origin, operation, empty, changed = [] }) {
   const reject = () => fail('AUTHORIZATION_CONTEXT_INVALID', 'Temporary connection deletion requires its exact creation receipt, unchanged endpoint, one approved stage and zero imported objects/actions. Nothing was sent.');
   const connection = detail?.Connection;
-  if (!file || !connection || detail.NotFound !== false || connection.providerId !== 'mssql'
+  if (!connection || detail.NotFound !== false || connection.providerId !== 'mssql'
       || !Number.isInteger(connection.externalMetadata?.selectedObjectCount) || connection.externalMetadata.selectedObjectCount < 0
       || (empty && connection.externalMetadata.selectedObjectCount !== 0) || connection.externalMetadata?.selectedActionCount !== 0
       || !Array.isArray(connection.stageConfigurations) || connection.stageConfigurations.length !== 1
@@ -59,7 +63,10 @@ function ownedConnectionApproval(file, words, { host, detail, origin, operation,
   const constraints = { server: stage.host, port: Number(stage.port), database: stage.database,
     ...(stage.hasAdditionalParameters ? {encryptedTransport:true,trustServerCertificate:true} : {}),
     noDdl: true, noDataWrites: true, noBusinessDataReads: true, deleteTemporaryConnections: true, requiresTestedHeadlessTransport: true };
-  const approval = authorizationContext(file, words, { lane: 'odc', host, operation, targets: [connection.name], environmentKey: stage.stageKey, constraints });
-  if (origin.authorization?.proposalSha256 !== approval.proposalSha256) reject();
+  // R2-I: a context file of the creation's proposal, or the written words naming this own temporary connection (its own
+  // creation receipt, unchanged endpoint and stage, zero objects/actions bind it as before).
+  const targets = file ? [connection.name] : [...new Set([connection.name, ...changed.map(String)])];
+  const approval = approvalOf(file, words, { lane: 'odc', host, operation, targets, environmentKey: stage.stageKey, constraints });
+  if (!sameGrant(origin.authorization, approval, { proposal: true, conversation: false })) reject();
   return approval;
 }

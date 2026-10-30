@@ -1,4 +1,4 @@
-import {authorizationContext} from '../../facade/authorization-context.mjs';
+import {approvalOf,sameGrant} from './written-approval.mjs';
 import {fingerprint,isUuid,sha256} from './write-journal.mjs';
 import {A2A_TEST} from './a2a-connection-approval.mjs';
 import {fail} from './errors.mjs';
@@ -40,8 +40,9 @@ export function a2aDeleteApproval({file,words,host,origin,originOperationUuid,co
  // preview) bound to this test receipt replaces the creation's words and message.
  const fresh=ownedCleanupApproval({file,words,...scope,origin,key:connectionId,what:'The A2A cleanup'});
  if(fresh)return fresh;
- const approval=authorizationContext(file,words,scope);
- if(!approval||origin.authorization?.wordsSha256!==sha256(words)||origin.authorization.proposalSha256!==approval.proposalSha256
-  ||origin.authorization.source?.threadId!==approval.source.threadId||origin.authorization.source?.messageId!==approval.source.messageId)reject();
+ // Outside the guard (an internal cleanup of the same request): the creation's own words, a file of the same proposal or,
+ // R2-I, those written words naming the connection again.
+ const approval=approvalOf(file,words,scope);
+ if(!approval||origin.authorization?.wordsSha256!==sha256(words)||!sameGrant(origin.authorization,approval,{proposal:true}))reject();
  return approval;
 }

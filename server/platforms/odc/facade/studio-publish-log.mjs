@@ -17,6 +17,9 @@ import { hashedWords, wordsGiven, wordsRequired } from './destructive-operations
 import { recordPublished, recordPublicationEnded, publicationOpen } from './producer-signatures.mjs';
 import { mergeState, reconcilable, reconcileCall } from './merge-reconcile.mjs';
 import { securityRefusal, publishSecurityRefusal } from './security-after-merge.mjs';
+import { createHash } from 'node:crypto';
+import { withStudioWriteLock, studioWriteTarget, ownsStudioWrite } from './studio-write-lock.mjs';
+import { coalescePublication } from './studio-work-order.mjs';
 
 const isObject = v => v !== null && typeof v === 'object' && !Array.isArray(v);
 
@@ -194,7 +197,40 @@ function changedSinceDelivery(value, merge, module, pid) {
 // the standing grant of its app, recorded the same way; the answer says which (authorization) and carries lastPublication
 // (section 3) from the receipt, or from the log of a publication that did not succeed. Without words and without a grant
 // the bridge refuses as before. deps.grants: tests pass a fake; absent, ./standing-grants.mjs if present.
-export async function publishWithGrant({ manifest, module: requested, authorize, wait = true, minutes = 10, pid, reconcile: reconcileOnly = false } = {}, deps) {
+export async function publishWithGrant(input = {}, deps, { signal } = {}) {
+  if (typeof input.authorize === 'string' && input.authorize.trim() && !wordsGiven(input.authorize))
+    return wordsRequired([{ path: 'authorize', value: input.authorize }], { tool: 'studio_publish' });
+  if (ownsStudioWrite({ tool: 'studio_publish', args: input, lane: 'odc', deps: deps.lock ?? {} })) return publishWithGrantLocked(input, deps);
+  let document = null;
+  if (input.manifest) try { document = deps.readManifest(input.manifest); } catch { /* the locked handler returns the refusal */ }
+  const module = input.module ?? document?.module;
+  let identity = null;
+  try {
+    const status = await deps.studio(['status'], input.pid);
+    const matches = (status?.modules ?? []).filter(row => String(row.name).toLowerCase() === String(module).toLowerCase());
+    if (matches.length === 1 && matches[0].key && matches[0].host)
+      identity = { module: matches[0].name, key: matches[0].key, environment: matches[0].host, pid: status.pid ?? input.pid };
+  } catch { /* no identified target: serialize without joining */ }
+  const args = { ...input, module: identity?.module ?? module, moduleKey: identity?.key, pid: identity?.pid ?? input.pid };
+  const lock = { tool: 'studio_publish', args, lane: 'odc', deps: deps.lock ?? {} };
+  // Only explicit words or a recorded manifest authorization identify a grant without writing it. Other calls stay separate.
+  const authorization = input.authorize ?? document?.publishAuthorization;
+  const key = identity && typeof authorization === 'string' && wordsGiven(authorization) && !input.reconcile
+    ? createHash('sha256').update(JSON.stringify({ target: studioWriteTarget(lock), identity, authorization,
+      manifest: input.manifest ?? null, wait: input.wait ?? true, minutes: input.minutes ?? 10 })).digest('hex') : null;
+  return coalescePublication(key, (started, activeSignal) => withStudioWriteLock({ ...lock, signal: activeSignal }, async () => {
+    started();
+    if (identity) {
+      const status = await deps.studio(['status'], identity.pid);
+      if (!(status?.modules ?? []).some(row => row.key === identity.key && row.host === identity.environment && row.name === identity.module))
+        return refused('PUBLISH_TARGET_CHANGED', 'The module identity or environment changed while publication was queued; nothing was published.',
+          { tool: 'studio_status', arguments: { view: 'brief' }, why: 'Resolve the current publication target.' });
+    }
+    return publishWithGrantLocked(input, deps);
+  }), { signal });
+}
+
+async function publishWithGrantLocked({ manifest, module: requested, authorize, wait = true, minutes = 10, pid, reconcile: reconcileOnly = false } = {}, deps) {
   const { studio, readManifest, grants, publish = publishWithLog, lab, root, catalog, reconcile = null } = deps;
   if ((manifest == null) === (requested == null) || (reconcileOnly === true && requested == null))
     return refused('PUBLISH_TARGET', manifest == null ? 'studio_publish needs module (the open module) or manifest' : reconcileOnly === true ? 'studio_publish {reconcile:true} takes module, not manifest' : 'studio_publish takes module or manifest, not both',

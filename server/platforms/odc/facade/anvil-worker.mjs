@@ -530,7 +530,20 @@ export function createWorkerFirstRunner({ root = anvilRoot, env = process.env, o
 //   - The fingerprint (environment, folder, CLI path and time, key) is checked at every call. Another one (a new hosted
 //     context brings a new relay port and a new relay key; a rebuilt CLI) retires the idle worker and the call is a miss;
 //     a busy one is left to finish and the call runs cold.
-//   - One call at a time: a worker busy with another call, or starting, sends this call cold.
+//   - One call at a time per worker. A customer may keep up to SSAM_O11_WORKERS_PER_TOKEN workers (default 1): when all of
+//     its workers are busy and a place is free (never another customer's place), its next worker starts in the background
+//     and the call runs cold. An extra worker (one whose customer keeps another worker, whatever the slot) is the first to
+//     give its place to another customer, without the minimum residency; a customer's only worker waits for it. An idle worker that last served the same base (its content sha256, or the
+//     bytes' sha256) is preferred, so its spare of that base is the one taken; the kernel still checks every base itself
+//     (BaseModelCache keys: bytes, model, Studio, kernel, load profile), so the choice only routes, it never serves a base.
+//   - Memory (measured: C:\t\r2\RESULTADO-WORKER-QUENTE.md): no worker starts when the host's MemAvailable (Linux
+//     /proc/meminfo) minus a worker's start size (SSAM_O11_WORKER_START_MB) would fall below SSAM_O11_WORKER_MIN_AVAILABLE_MB
+//     (default 3072, the VPS floor; 0 is off), or when the resident sets of this server's workers plus that start size would
+//     pass SSAM_O11_WORKERS_RSS_TOTAL_MB (default 0: max x SSAM_O11_WORKER_RSS_MB). One admission ledger (ledger()), read
+//     synchronously before any spawn: a worker that has not served a call yet is reserved at max(VmRSS, start size) in both
+//     guards, its growth still to come subtracted from MemAvailable; once it served one, its VmRSS replaces the reservation.
+//     After a call, a worker is retired when
+//     the host is below the floor or the pool above its total. Where these cannot be read (Windows) nothing is decided by them.
 //   - SSAM_O11_WORKERS_MAX (default 2, the KVM 2; 0 is off) processes at most, stopping ones included: a new worker is
 //     spawned only once the workers it replaces have exited. SSAM_O11_WORKER_IDLE_MS (default 10 min) without a call
 //     retires a worker; ANVIL_WORKER_IDLE_MINUTES makes it exit by itself 5 min after that, should this process lose it.
@@ -553,6 +566,10 @@ export const HOSTED_O11_WORKER_MIN_IDLE_MS = 2 * 60 * 1000;
 export const HOSTED_O11_WORKER_HEAP_MB = 1536;
 export const HOSTED_O11_WORKER_MAX_COMMANDS = 1000;
 export const HOSTED_O11_WORKER_RSS_MB = 1200;
+export const HOSTED_O11_WORKERS_PER_TOKEN = 1;
+export const HOSTED_O11_WORKER_MIN_AVAILABLE_MB = 3072;
+// The resident set of a worker that has just started and served its first apply (measured, see the head of this section).
+export const HOSTED_O11_WORKER_START_MB = 400;
 // The variables the pool sets in a customer's worker (hostedWorkerProfile and the idle exit), the only ones besides the
 // customer's cold environment. The kernel reads them: ANVIL_BASE_CACHE (=off) and ANVIL_BASE_CACHE_ENTRIES/_MB
 // (BaseModelCache.cs BaseCacheOptions.FromEnvironment), ANVIL_WORKER_MAX_COMMANDS (Anvil.Cli Program.cs, serve),
@@ -576,20 +593,53 @@ const megabytesOf = (value, fallback) => { const n = settingOf(value, fallback, 
 //   SSAM_O11_WORKER_HEAP_MB: the GC heap hard limit of a worker (default 1536; 0 leaves the runtime's own).
 //   SSAM_O11_WORKER_MAX_COMMANDS: commands before a worker recycles itself (default 1000).
 //   SSAM_O11_WORKER_RSS_MB: resident set above which a worker is retired after its call (default 1200; 0 is off).
+//   SSAM_O11_WORKERS_PER_TOKEN: workers one customer may keep when its calls overlap (default 1, at most max).
+//   SSAM_O11_WORKER_MIN_AVAILABLE_MB: the host's MemAvailable a worker start never goes below (default 3072; 0 is off).
+//   SSAM_O11_WORKER_START_MB: the resident set a new worker is counted with before it runs (default 400, >= 256).
+//   SSAM_O11_WORKERS_RSS_TOTAL_MB: the resident sets of all workers of this server (default 0: max x rss; 0 with rss 0 is off).
 export function hostedWorkerSettings(env = process.env) {
   const max = settingOf(env.SSAM_O11_WORKERS_MAX, HOSTED_O11_WORKERS_MAX, 0);
   const cache = String(env.SSAM_O11_WORKER_BASE_CACHE ?? '').trim();
   const baseCacheMb = /^\d+$/.test(cache) && Number(cache) >= 64 ? Number(cache) : 0;
+  const rssMb = megabytesOf(env.SSAM_O11_WORKER_RSS_MB, HOSTED_O11_WORKER_RSS_MB);
+  const startMb = settingOf(env.SSAM_O11_WORKER_START_MB, HOSTED_O11_WORKER_START_MB, 256);
+  const total = megabytesOf(env.SSAM_O11_WORKERS_RSS_TOTAL_MB, 0);
   return {
     max,
     idleMs: settingOf(env.SSAM_O11_WORKER_IDLE_MS, HOSTED_O11_WORKER_IDLE_MS, 1000),
     minIdleMs: settingOf(env.SSAM_O11_WORKER_MIN_IDLE_MS, HOSTED_O11_WORKER_MIN_IDLE_MS, 0),
     heapMb: megabytesOf(env.SSAM_O11_WORKER_HEAP_MB, HOSTED_O11_WORKER_HEAP_MB),
     maxCommands: settingOf(env.SSAM_O11_WORKER_MAX_COMMANDS, HOSTED_O11_WORKER_MAX_COMMANDS, 1),
-    rssMb: megabytesOf(env.SSAM_O11_WORKER_RSS_MB, HOSTED_O11_WORKER_RSS_MB),
+    rssMb,
     baseCacheMb,
+    perToken: Math.max(1, Math.min(settingOf(env.SSAM_O11_WORKERS_PER_TOKEN, HOSTED_O11_WORKERS_PER_TOKEN, 1), Math.max(1, max))),
+    minAvailableMb: settingOf(env.SSAM_O11_WORKER_MIN_AVAILABLE_MB, HOSTED_O11_WORKER_MIN_AVAILABLE_MB, 0),
+    startMb,
+    totalRssMb: total > 0 ? total : max * rssMb,
     disabled: env.ANVIL_WORKER === '0' || max === 0,
   };
+}
+
+// The host's MemAvailable in MB (Linux /proc/meminfo: in a container, the host's), or null where it cannot be read.
+export function availableMb({ platform = process.platform, readFile = fs.readFileSync } = {}) {
+  if (platform !== 'linux') return null;
+  try {
+    const match = /^MemAvailable:\s+(\d+)\s+kB/m.exec(readFile('/proc/meminfo', 'utf8'));
+    return match ? Math.round(Number(match[1]) / 1024) : null;
+  } catch { return null; }
+}
+
+// The base an apply works on, to route it to the worker that last served it: the content identity the call names
+// (--base-content-sha256), else the sha256 of the bytes of --base (read here, never trusted to serve: the kernel keys every
+// base itself). null for any other command or an unreadable base.
+export function baseAffinity(argv) {
+  const args = argv.map(String);
+  if (args[0] !== 'apply') return null;
+  const named = args.indexOf('--base-content-sha256');
+  if (named >= 0 && /^[a-f0-9]{64}$/i.test(args[named + 1] ?? '')) return 'content:' + args[named + 1].toLowerCase();
+  const at = args.indexOf('--base');
+  if (at < 0 || !args[at + 1]) return null;
+  try { return 'bytes:' + createHash('sha256').update(fs.readFileSync(args[at + 1])).digest('hex'); } catch { return null; }
 }
 
 // The memory profile of a customer's worker, set by the pool: the base cache off (or one spare within its budget), the GC
@@ -623,11 +673,18 @@ export function residentMb(pid, { platform = process.platform, readFile = fs.rea
 }
 
 const sha256 = text => createHash('sha256').update(String(text), 'utf8').digest('hex');
-// What a customer's worker is started with: the same value means the same environment, folder, kernel build and key.
+// The installation a worker loaded: size and time of the Studio's ServiceStudio.Framework.dll, so a Studio replaced in the
+// same folder (another version) is another worker, as the worker's assemblies stay those it loaded. null when unreadable.
+export function studioBuild(studioDir) {
+  if (typeof studioDir !== 'string' || !studioDir) return null;
+  try { const s = fs.statSync(path.join(studioDir, 'ServiceStudio.Framework.dll')); return [s.size, s.mtimeMs]; } catch { return null; }
+}
+// What a customer's worker is started with: the same value means the same environment, folder, kernel build, Studio
+// build and key.
 export function hostedFingerprint({ env, cwd, cli, key }) {
   let built = null;
   try { built = fs.statSync(cli).mtimeMs; } catch { built = null; }
-  return sha256(JSON.stringify({ cli, built, cwd, env: Object.keys(env).sort().map(name => [name, env[name]]), key: sha256(key) }));
+  return sha256(JSON.stringify({ cli, built, studio: studioBuild(env?.ANVIL_STUDIO_DIR), cwd, env: Object.keys(env).sort().map(name => [name, env[name]]), key: sha256(key) }));
 }
 
 // The worker the hosted call in progress may use: the customer's spawn environment and folder (hostedSpawnEnv, which
@@ -703,9 +760,12 @@ function hookExit(pool) {
 export class HostedO11Workers {
   constructor({ max = HOSTED_O11_WORKERS_MAX, idleMs = HOSTED_O11_WORKER_IDLE_MS, minIdleMs = HOSTED_O11_WORKER_MIN_IDLE_MS,
     rssMb = HOSTED_O11_WORKER_RSS_MB, profile = hostedWorkerProfile(), waitMs = 25000, pingMs = 3000, stopMs = 10000,
-    spawnFn = spawn, now = Date.now, freePort = loopbackPort, rssOf = pid => residentMb(pid) } = {}) {
-    Object.assign(this, { max, idleMs, minIdleMs, rssMb, profile: Object.freeze({ ...profile }), waitMs, pingMs, stopMs, spawnFn, now, freePort, rssOf });
-    this.entries = new Map(); // tokenId -> that customer's worker, starting or ready
+    perToken = 1, minAvailableMb = 0, startMb = HOSTED_O11_WORKER_START_MB, totalRssMb = 0,
+    spawnFn = spawn, now = Date.now, freePort = loopbackPort, rssOf = pid => residentMb(pid), availableOf = () => availableMb() } = {}) {
+    Object.assign(this, { max, idleMs, minIdleMs, rssMb, profile: Object.freeze({ ...profile }), waitMs, pingMs, stopMs, spawnFn, now, freePort, rssOf,
+      perToken: Math.max(1, perToken), minAvailableMb, startMb, totalRssMb, availableOf });
+    // slot -> a customer's worker, starting or ready: its first worker under its tokenId, the extra ones under tokenId#n.
+    this.entries = new Map();
     this.stopping = new Set(); // retired, process not gone yet
     this.failed = new Map(); // tokenId -> {fingerprint, at, note} of its last failed start
     this.starts = new Map(); // tokenId -> its last start in the background (resolves to {ok, note})
@@ -714,7 +774,41 @@ export class HostedO11Workers {
 
   // What the cap counts: workers starting or ready, and those whose process has not exited yet.
   get size() { return this.entries.size + this.stopping.size; }
-  workerOf(tokenId) { return this.entries.get(tokenId) ?? null; }
+  // The first worker of a customer (its slot is its tokenId), or the worker of an extra slot (tokenId#n).
+  workerOf(slot) { return this.entries.get(slot) ?? null; }
+  // Every worker of a customer, its first one first.
+  workersOf(tokenId) { return [...this.entries.values()].filter(e => e.tokenId === tokenId).sort((a, b) => a.index - b.index); }
+  // What the memory guards say of one more worker now: null when it may start, else why not. Unreadable values decide nothing.
+  memoryRefusal() {
+    const ledger = this.ledger();
+    if (this.minAvailableMb > 0) {
+      let free = null;
+      try { free = this.availableOf(); } catch { free = null; }
+      if (Number.isFinite(free) && free - ledger.pending - this.startMb < this.minAvailableMb)
+        return `the host has ${free} MB available${ledger.pending ? ` (${ledger.pending} MB of it already reserved by workers still starting)` : ''}; one more worker (${this.startMb} MB) would leave less than the ${this.minAvailableMb} MB floor`;
+    }
+    if (this.totalRssMb > 0 && ledger.total + this.startMb > this.totalRssMb)
+      return `this server's workers use or have reserved ${ledger.total} MB; one more (${this.startMb} MB) would pass their ${this.totalRssMb} MB total`;
+    return null;
+  }
+  // The admission ledger of this pool, computed synchronously from its entries (a start enters them before any spawn): every
+  // worker with a place (starting with or without a process, ready, or stopping and not exited yet) counts. One that has not
+  // served a call yet (not warmed) is reserved at max(its readable VmRSS, startMb); once warmed, its readable VmRSS replaces
+  // the reservation (startMb when unreadable). total: the per-backend sum; pending: what a not-warmed worker still has to grow
+  // (startMb minus its VmRSS), which the host's MemAvailable does not show yet. measured: the readable VmRSS of all of them.
+  ledger() {
+    let total = 0, pending = 0, measured = 0;
+    for (const e of [...this.entries.values(), ...this.stopping]) {
+      if (e.exitCode !== undefined) continue;
+      let rss = null;
+      try { rss = e.pid ? this.rssOf(e.pid) : null; } catch { rss = null; }
+      const known = Number.isFinite(rss) ? rss : null;
+      if (known !== null) measured += known;
+      if (e.warmed) total += known ?? this.startMb;
+      else { total += Math.max(known ?? 0, this.startMb); pending += Math.max(0, this.startMb - (known ?? 0)); }
+    }
+    return { total, pending, measured };
+  }
   // The last start in the background of a customer's worker ({ok:true} or {ok:false, note}), or null.
   starting(tokenId) { return this.starts.get(tokenId) ?? null; }
   processes(except = null) {
@@ -723,7 +817,8 @@ export class HostedO11Workers {
   ports() { return new Set([...this.entries.values(), ...this.stopping].map(e => e.port).filter(Number.isInteger)); }
 
   async run(spec, argv, { timeoutMs = 900000 } = {}) {
-    const claim = this.claim(spec);
+    const base = this.perToken > 1 ? baseAffinity(argv) : null;
+    const claim = this.claim(spec, base);
     if (!claim.entry) return { used: false, note: claim.note };
     const entry = claim.entry;
     let written = false; // from the request on, a failure is an unknown outcome
@@ -750,6 +845,7 @@ export class HostedO11Workers {
       if (r.reply.recycling === true || recycling) this.retire(entry, 'recycling', { mode: 'drain', drainMs: this.stopMs });
       else if (r.reply.executed === false) this.retire(entry, 'refused the request', { mode: 'kill' });
       if (recycling) return { used: false, note: `${THE_WORKER} was recycling before executing the request; ran cold` };
+      if (r.reply.executed !== false) { entry.lastBase = base; entry.warmed = true; }
       return { used: true, envelope: r.reply };
     } catch (error) {
       return written ? unknown(error.message) : { used: false, note: `${THE_WORKER} failed before the request was written (${error.message}); ran cold` };
@@ -758,49 +854,85 @@ export class HostedO11Workers {
 
   // Synchronous, so two calls never take one worker: the entry this call uses (busy from now on), or why it runs cold (a
   // miss starts the customer's worker in the background when there is a place).
-  claim(spec) {
+  claim(spec, base = null) {
     if (this.closed) return { note: 'the hosted O11 workers are closed; ran cold' };
     const freeing = [];
-    let entry = this.entries.get(spec.tokenId) ?? null;
-    if (entry && entry.fingerprint !== spec.fingerprint) {
-      if (entry.busy) return { note: `${THE_WORKER} still serves its earlier environment (relay, key or kernel changed) and is busy; ran cold` };
+    let staleBusy = false;
+    const live = [];
+    for (const entry of this.workersOf(spec.tokenId)) {
+      if (entry.fingerprint === spec.fingerprint) { live.push(entry); continue; }
+      if (entry.busy) { staleBusy = true; continue; }
       this.retire(entry, 'environment changed');
       freeing.push(entry);
-      entry = null;
     }
+    // An idle worker of this customer: the one that last served this base, else the most recently used one (the others
+    // reach their idle time and give their place back).
+    const idle = live.filter(e => e.state === 'ready' && !e.busy).sort((a, b) => b.lastUsed - a.lastUsed);
+    const entry = (base && idle.find(e => e.lastBase === base)) || idle[0];
     if (entry) {
-      if (entry.state === 'starting') return { note: `${THE_WORKER} is starting in the background; ran cold` };
-      if (entry.busy) return { note: `${THE_WORKER} is busy with another call; ran cold` };
       entry.busy = true; clearTimeout(entry.idleTimer); entry.idleTimer = null;
       return { entry };
     }
-    return { note: this.warm(spec, freeing) };
+    if (!live.length) {
+      if (staleBusy) return { note: `${THE_WORKER} still serves its earlier environment (relay, key or kernel changed) and is busy; ran cold` };
+      return { note: this.warm(spec, freeing) };
+    }
+    const starting = live.some(e => e.state === 'starting');
+    const why = starting ? `${THE_WORKER} is starting in the background; ran cold` : `${THE_WORKER} is busy with another call; ran cold`;
+    // Every worker of this customer is busy: one more when it may keep more and a place is free.
+    if (!starting && !staleBusy && live.length < this.perToken) {
+      const more = this.warm(spec, [], { extra: true, index: this.freeIndex(spec.tokenId) });
+      return { note: more ?? why };
+    }
+    return { note: why };
+  }
+
+  // The lowest free slot index of a customer (0 .. perToken - 1): its first slot again when that worker has gone.
+  freeIndex(tokenId) {
+    const used = new Set(this.workersOf(tokenId).map(e => e.index));
+    for (let i = 0; i < this.perToken; i++) if (!used.has(i)) return i;
+    return null;
   }
 
   // A miss: this call runs cold; the customer's worker starts in the background, in a free place or in the place of the
-  // least recently used worker idle for at least minIdleMs. freeing: the customer's own earlier worker, just retired.
-  // Returns the note of the cold call. Never waits.
-  warm(spec, freeing = []) {
+  // least recently used worker idle for at least minIdleMs (an idle extra worker of another customer first, at any age).
+  // freeing: the customer's own earlier worker, just retired. extra: one more worker of a customer whose workers are all
+  // busy, only in a free place (it never takes another customer's place); null when it cannot start (the caller keeps its
+  // own note). The memory guards apply to both. Returns the note of the cold call. Never waits.
+  warm(spec, freeing = [], { extra = false, index = 0 } = {}) {
+    if (extra && index === null) return null;
     const failed = this.failed.get(spec.tokenId);
-    if (failed && failed.fingerprint === spec.fingerprint && this.now() - failed.at < this.minIdleMs)
+    if (!extra && failed && failed.fingerprint === spec.fingerprint && this.now() - failed.at < this.minIdleMs)
       return `${THE_WORKER} did not start a moment ago (${failed.note}); ran cold`;
     // The places taken once the workers retired for this customer have exited (the cap counts stopping processes).
     const taken = this.size - freeing.filter(e => this.stopping.has(e)).length;
     const waits = freeing.map(e => e.stopped);
     if (taken >= this.max) {
+      if (extra) return null;
       const now = this.now();
-      const idle = [...this.entries.values()].filter(e => e.state === 'ready' && !e.busy && now - e.lastUsed >= this.minIdleMs)
-        .sort((a, b) => a.lastUsed - b.lastUsed)[0];
+      const ready = [...this.entries.values()].filter(e => e.state === 'ready' && !e.busy);
+      // An extra worker: its customer keeps another worker (starting or ready), whatever the slots; a customer's only worker
+      // gives its place only after the minimum residency.
+      const hasAnother = e => this.workersOf(e.tokenId).length > 1;
+      const idle = ready.filter(hasAnother).sort((a, b) => a.lastUsed - b.lastUsed)[0]
+        ?? ready.filter(e => now - e.lastUsed >= this.minIdleMs).sort((a, b) => a.lastUsed - b.lastUsed)[0];
       // Only a victim whose exit leaves a place for this customer.
       if (!idle || taken - 1 >= this.max)
         return `no place for ${THE_WORKER} now (the ${this.max} place(s) of this server are busy, starting, stopping or used in the last ${Math.round(this.minIdleMs / 1000)} s); ran cold`;
-      waits.push(this.retire(idle, 'least recently used'));
+      const memory = this.memoryRefusal();
+      if (memory) return `${THE_WORKER} did not start: ${memory}; ran cold`;
+      const isExtra = hasAnother(idle);
+      waits.push(this.retire(idle, isExtra ? 'an extra worker gives its place' : 'least recently used'));
+    } else {
+      const memory = this.memoryRefusal();
+      if (memory) return extra ? null : `${THE_WORKER} did not start: ${memory}; ran cold`;
     }
-    const entry = { tokenId: spec.tokenId, contextId: spec.contextId ?? null, fingerprint: spec.fingerprint, env: spec.env, cwd: spec.cwd, cli: spec.cli,
+    const slot = index > 0 ? `${spec.tokenId}#${index}` : spec.tokenId;
+    const entry = { tokenId: spec.tokenId, slot, index, contextId: spec.contextId ?? null, fingerprint: spec.fingerprint, env: spec.env, cwd: spec.cwd, cli: spec.cli,
       key: spec.key, studioDir: spec.studioDir ?? null, local: spec.local, state: 'starting', busy: true, lastUsed: this.now(), port: null,
-      child: null, pid: null, instanceId: null, exitCode: undefined, exited: null, idleTimer: null, stopped: null, closeAfter: false, warming: null };
-    this.entries.set(spec.tokenId, entry);
-    this.failed.delete(spec.tokenId);
+      child: null, pid: null, instanceId: null, exitCode: undefined, exited: null, idleTimer: null, stopped: null, closeAfter: false, warming: null, lastBase: null, warmed: false };
+    this.entries.set(slot, entry);
+    if (!extra) this.failed.delete(spec.tokenId);
     entry.warming = this.start(entry, waits)
       .catch(error => { this.retire(entry, 'startup failed', { mode: 'kill' }); return { ok: false, failed: true, note: `could not be started (${error.message})` }; })
       .then(result => {
@@ -808,8 +940,10 @@ export class HostedO11Workers {
         else if (!this.closed && result.failed) this.failed.set(entry.tokenId, { fingerprint: entry.fingerprint, at: this.now(), note: result.note });
         return result;
       });
-    this.starts.set(spec.tokenId, entry.warming);
-    return `${THE_WORKER} is not running: this call ran cold and the worker starts in the background for the next call`;
+    this.starts.set(slot, entry.warming);
+    return extra
+      ? `${THE_WORKER} is busy with another call: this call ran cold and another worker of this customer (${index + 1} of ${this.perToken}) starts in the background`
+      : `${THE_WORKER} is not running: this call ran cold and the worker starts in the background for the next call`;
   }
 
   // The worker of a new entry, once the workers it replaces are gone: {ok:true} when its ping answers as the process
@@ -818,7 +952,7 @@ export class HostedO11Workers {
     await Promise.all(waits);
     const fail = note => { this.forget(entry); return { ok: false, failed: true, note }; };
     const gone = when => ({ ok: false, note: `${THE_WORKER} was retired ${when}` });
-    if (this.entries.get(entry.tokenId) !== entry) return gone('before it started');
+    if (this.entries.get(entry.slot) !== entry) return gone('before it started');
     // A worker that did not exit yet keeps its place: never a process beyond the cap (a matter of places, not remembered
     // as a failed start of this customer's worker).
     if (this.processes(entry) >= this.max) { this.forget(entry); return { ok: false, note: `the ${this.max} hosted O11 worker(s) of this server were still running` }; }
@@ -827,7 +961,7 @@ export class HostedO11Workers {
       return fail('the kernel Studio installation has no ServiceStudio.Framework.dll');
     try { entry.port = await this.freePort(this.ports()); }
     catch (error) { return fail(`no loopback port (${error.message})`); }
-    if (this.entries.get(entry.tokenId) !== entry) return gone('before it started');
+    if (this.entries.get(entry.slot) !== entry) return gone('before it started');
     let child;
     try { child = launchHosted(entry, this.spawnFn, Math.ceil((this.idleMs + SELF_EXIT_MARGIN_MS) / 60000), this.profile); }
     catch (error) { return fail(`could not be started (${error.message})`); }
@@ -848,7 +982,7 @@ export class HostedO11Workers {
       ? `exited during startup (exit ${entry.exitCode}); see ${path.join(entry.local, `worker-${entry.port}-startup.log`)}`
       : `did not start within ${Math.round(this.waitMs / 1000)} s`) : this.foreign(entry, status) ?? this.unready(status);
     if (why) return failedStart(why);
-    if (this.entries.get(entry.tokenId) !== entry) return gone('while it started');
+    if (this.entries.get(entry.slot) !== entry) return gone('while it started');
     entry.instanceId = status.instanceId ?? null; entry.state = 'ready';
     return { ok: true, started: true };
   }
@@ -887,22 +1021,32 @@ export class HostedO11Workers {
   // when its resident set passed rssMb (read after the call, never during one).
   release(entry) {
     entry.busy = false; entry.lastUsed = this.now();
-    if (this.entries.get(entry.tokenId) !== entry || entry.state !== 'ready') return;
+    if (this.entries.get(entry.slot) !== entry || entry.state !== 'ready') return;
     if (entry.closeAfter) { this.retire(entry, 'its hosted context closed'); return; }
     if (this.rssMb > 0) {
       let rss = null;
       try { rss = this.rssOf(entry.pid); } catch { rss = null; }
       if (Number.isFinite(rss) && rss > this.rssMb) { this.retire(entry, `its resident set (${rss} MB) passed ${this.rssMb} MB`); return; }
     }
+    // The host below its floor, or this server's workers above their total: this worker gives its memory back now.
+    if (this.minAvailableMb > 0) {
+      let free = null;
+      try { free = this.availableOf(); } catch { free = null; }
+      if (Number.isFinite(free) && free < this.minAvailableMb) { this.retire(entry, `the host has ${free} MB available, below the ${this.minAvailableMb} MB floor`); return; }
+    }
+    if (this.totalRssMb > 0) {
+      const used = this.ledger().total;
+      if (used > this.totalRssMb) { this.retire(entry, `this server's workers use or have reserved ${used} MB, above their ${this.totalRssMb} MB total`); return; }
+    }
     clearTimeout(entry.idleTimer);
-    entry.idleTimer = setTimeout(() => { if (!entry.busy && this.entries.get(entry.tokenId) === entry) this.retire(entry, 'idle'); }, this.idleMs);
+    entry.idleTimer = setTimeout(() => { if (!entry.busy && this.entries.get(entry.slot) === entry) this.retire(entry, 'idle'); }, this.idleMs);
     entry.idleTimer.unref?.();
   }
 
   // An entry that never got a process.
   forget(entry) {
     clearTimeout(entry.idleTimer); entry.idleTimer = null;
-    if (this.entries.get(entry.tokenId) === entry) this.entries.delete(entry.tokenId);
+    if (this.entries.get(entry.slot) === entry) this.entries.delete(entry.slot);
     if (entry.state !== 'stopping') entry.state = 'gone';
   }
 
@@ -910,7 +1054,7 @@ export class HostedO11Workers {
   gone(entry) {
     clearTimeout(entry.idleTimer); entry.idleTimer = null;
     this.stopping.delete(entry);
-    if (this.entries.get(entry.tokenId) === entry) this.entries.delete(entry.tokenId);
+    if (this.entries.get(entry.slot) === entry) this.entries.delete(entry.slot);
     if (entry.state !== 'stopping') entry.state = 'gone';
   }
 
@@ -923,7 +1067,7 @@ export class HostedO11Workers {
   //     ChildProcess is terminated and nothing is sent to the port.
   retire(entry, why, { mode = 'graceful', drainMs = this.stopMs } = {}) {
     clearTimeout(entry.idleTimer); entry.idleTimer = null;
-    if (this.entries.get(entry.tokenId) === entry) this.entries.delete(entry.tokenId);
+    if (this.entries.get(entry.slot) === entry) this.entries.delete(entry.slot);
     entry.state = 'stopping'; entry.why ??= why;
     if (entry.stopped) return entry.stopped;
     if (!entry.child || entry.exitCode !== undefined) return (entry.stopped = Promise.resolve());
@@ -964,9 +1108,10 @@ export class HostedO11Workers {
   // A closed hosted context: its relay is gone, so its worker serves nothing more (retired now, or after the call it runs
   // or the start in progress).
   contextClosed(tokenId, contextId) {
-    const entry = this.entries.get(tokenId);
-    if (!entry || entry.contextId !== contextId) return;
-    if (entry.busy) entry.closeAfter = true; else this.retire(entry, 'its hosted context closed');
+    for (const entry of this.workersOf(tokenId)) {
+      if (entry.contextId !== contextId) continue;
+      if (entry.busy) entry.closeAfter = true; else this.retire(entry, 'its hosted context closed');
+    }
   }
 
   async close() {
@@ -987,7 +1132,8 @@ export function hostedO11Workers() {
   if (!processWorkers) {
     const settings = hostedWorkerSettings(process.env);
     processWorkers = new HostedO11Workers({ max: settings.max, idleMs: settings.idleMs, minIdleMs: settings.minIdleMs, rssMb: settings.rssMb,
-      profile: hostedWorkerProfile(settings) });
+      profile: hostedWorkerProfile(settings), perToken: settings.perToken, minAvailableMb: settings.minAvailableMb, startMb: settings.startMb,
+      totalRssMb: settings.totalRssMb });
     onHostedContextClose(context => processWorkers.contextClosed(context.tokenId, context.id));
   }
   return processWorkers;

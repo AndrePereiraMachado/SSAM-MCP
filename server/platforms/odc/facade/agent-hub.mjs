@@ -50,10 +50,11 @@ export const LIMITS = Object.freeze({ heartbeatMs: 15000, deadAfterMs: 45000, ma
   partBytes: 4194304, maxFileBytes: 536870912, maxValueBytes: 16777216, maxTransfers: 4, maxPending: 32, transferIdleMs: 600000,
   ratePerMinute: 3000, sweepMs: 500, callTimeoutMs: 60000, acceptMs: 15000, reconnectGraceMs: 60000, reconnectWaitMs: 45000, recentMs: 300000,
   probeMaxBytes: 2097152, probeRecords: 64, uploadWindowMs: 1800000, uploadSlowMs: 3000 });
-// The closed list of call kinds (section 4.4). The agent refuses anything else; the hub never sends anything else.
-// net.probe (fase4-24, 2.10): the network check of ssam_doctor {network:true}; only to an agent whose Hello lists it.
-export const CALL_KINDS = Object.freeze(['studio.processes', 'odc.pipe', 'odc.attach', 'o11.bridge', 'o11.connect', 'o11.selected',
-  'file.put', 'file.get', 'file.list', 'file.sync', 'net.probe']);
+// The closed list of call kinds (section 4.4). The agent refuses anything else; the hub never sends anything else. One list
+// for the hub, the executor seam and the hosted executor (call-kinds.mjs, R2-H review H4); HELLO_ONLY_KINDS: the kinds sent
+// only to an agent whose Hello lists them (call() refuses KIND_NOT_ALLOWED before anything is written, connected or not).
+import { CALL_KINDS, HELLO_ONLY_KINDS, PROTOCOL1_KINDS } from './call-kinds.mjs';
+export { CALL_KINDS, HELLO_ONLY_KINDS };
 const LANES = ['odc', 'o11'];
 const STUDIO = { odc: 'ODC Studio', o11: 'Service Studio' };
 const HEX32 = /^[0-9a-f]{32}$/;
@@ -282,9 +283,10 @@ export function createAgentHub({ dir, store, kernel, kernelRefused = null, log =
   }
   // A written call that is not accepted in acceptMs (C03): the stream is taken as dead and closed, so a live agent reconnects
   // now instead of after the whole deadline; the call stays pending, is written again on the resumed stream and gets one
-  // reconnectGraceMs more.
+  // reconnectGraceMs more. The line carries the deadline the hub waits for NOW (fase4-28 r2-preview): a call written again
+  // after the grace says so on its line, so the agent never refuses AGENT_TIMEOUT a call the hub still waits for.
   function writeCall(state, pending) {
-    if (!write(state.channel, pending.line)) return;
+    if (!write(state.channel, JSON.stringify({ ...pending.message, deadline: pending.deadline }))) return;
     pending.written = true;
     clearTimeout(pending.acceptTimer);
     const channel = state.channel;
@@ -472,11 +474,13 @@ export function createAgentHub({ dir, store, kernel, kernelRefused = null, log =
       // C03: true when the agent is connected now or a Hello opens its channel within ms.
       waitConnected: ms => waitConnected(state, ms),
       // The kinds the connected agent runs (Hello agent.kinds, agent 0.2.0+); an older agent runs the nine of protocol 1.
-      supports: kind => (Array.isArray(state.hello?.agent?.kinds) ? state.hello.agent.kinds.includes(kind) : CALL_KINDS.slice(0, 9).includes(kind)),
+      supports: kind => (Array.isArray(state.hello?.agent?.kinds) ? state.hello.agent.kinds.includes(kind) : PROTOCOL1_KINDS.includes(kind)),
       // A server->agent transfer the agent will never fetch (file.put answered skipped): released now, not after 10 min.
       releaseTransfer(ref) { const transfer = typeof ref?.transfer === 'string' ? state.transfers.get(ref.transfer) : null; if (transfer?.direction === 'down') dropTransfer(state, transfer); },
       call(kind, params = {}, { timeoutMs } = {}) {
         if (!CALL_KINDS.includes(kind)) return Promise.reject(callError('KIND_NOT_ALLOWED', 'Not an agent call kind: ' + String(kind).slice(0, 64)));
+        if (HELLO_ONLY_KINDS.has(kind) && !(Array.isArray(state.hello?.agent?.kinds) && state.hello.agent.kinds.includes(kind)))
+          return Promise.reject(callError('KIND_NOT_ALLOWED', 'The agent does not advertise ' + kind + '.'));
         if (!state.channel) {
           if (!recentlySeen(state)) return Promise.reject(callError('AGENT_NOT_CONNECTED', 'The SSAM agent of this account is not connected.'));
           // C03: a recently seen agent reconnects by itself; the call waits for its Hello instead of failing at once.
@@ -486,15 +490,15 @@ export function createAgentHub({ dir, store, kernel, kernelRefused = null, log =
         if (state.pending.size >= limits.maxPending) return Promise.reject(callError('AGENT_BUSY', 'The agent already has ' + limits.maxPending + ' calls pending.'));
         const id = randomUUID();
         const deadline = nowMs() + (Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : limits.callTimeoutMs);
-        let line = JSON.stringify({ t: 'call', id, kind, params, deadline });
+        let message = { t: 'call', id, kind, params };
         let blob = null;
         // Measured on the whole serialized message: escaped JSON and non-ASCII text count as they travel.
-        if (Buffer.byteLength(line) > limits.inlineMaxBytes) {
+        if (Buffer.byteLength(JSON.stringify({ ...message, deadline })) > limits.inlineMaxBytes) {
           blob = registerDown(state, { buffer: Buffer.from(JSON.stringify(params), 'utf8'), held: true });
-          line = JSON.stringify({ t: 'call', id, kind, paramsBlob: { ...blob.ref }, deadline });
+          message = { t: 'call', id, kind, paramsBlob: { ...blob.ref } };
         }
         return new Promise((resolve, reject) => {
-          const pending = { id, kind, line, written: false, accepted: false, blob, resolve, reject, timer: null, acceptTimer: null, deadline, graced: false, startedAt: nowMs(),
+          const pending = { id, kind, message, written: false, accepted: false, blob, resolve, reject, timer: null, acceptTimer: null, deadline, graced: false, startedAt: nowMs(),
             verbs: callVerbs(kind, params),
             callKey: currentCall(), bytes: bytesDown(kind, params, blob) };
           pending.timer = setTimeout(() => fail(state, pending, 'AGENT_TIMEOUT', 'The agent did not answer ' + kind + ' before the deadline.'),

@@ -298,12 +298,13 @@ test('jobIdentity names an array job (jobShape), whose patch paths are /<i>/...'
   assert.equal(jobIdentity(s.job).jobShape, undefined);
 });
 
-test('the JSON Schemas of patch and basedOn match the zod shape the tools declare', () => {
+test('the compact patch listing preserves bounds while applyJobPatch validates operations', () => {
   // A written patch (at most 500 since 20/10/2026, meta item 4), or "verified": every verified patch of the refusal of that job.
   const written = patchJsonSchema.anyOf.find(x => x.type === 'array');
   assert.deepEqual(patchJsonSchema.anyOf.find(x => x.type === 'string').enum, ['verified']);
-  assert.equal(written.maxItems, 500); assert.equal(PATCH_MAX_OPS, 500); assert.deepEqual(written.items.properties.op.enum, ['add', 'remove', 'replace', 'test']);
-  assert.equal(written.items.additionalProperties, false); assert.deepEqual(written.items.required, ['op', 'path']);
+  assert.equal(written.maxItems, 500); assert.equal(PATCH_MAX_OPS, 500);
+  for (const patch of [[{op:'move',path:'/x'}],[{op:'add',value:1}],[{op:'remove',path:''}],[{op:'remove',path:'/x',extra:true}]])
+    assert.throws(()=>applyJobPatch({x:1},patch));
   assert.deepEqual(basedOnJsonSchema.anyOf.map(s => s.required), [['job', 'sha256'], ['taskId']]);
   assert.ok(basedOnJsonSchema.anyOf.every(s => s.additionalProperties === false));
 });

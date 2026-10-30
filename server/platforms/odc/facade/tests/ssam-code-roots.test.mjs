@@ -10,6 +10,7 @@
 // - R5 createSsamServer deps.code(): the deps of each ssam_code check, plan and write of a server (the roots of the call).
 // Injected runners only: no Studio, no kernel process.
 import './fixtures/isolated-profile.mjs';
+import { planIndex } from './fixtures/plan-index.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -81,7 +82,7 @@ test('R1 with roots the check reads the session captures and producers only, and
   put(checkout.odcRoot, 'snapshots/producers/NeutralLibrary-20261018T090000Z.avsig', 'checkout odc producer');
   const before = listing(checkout.root);
   const seen = [];
-  const deps = { ...checkout, roots, runJob: async request => { seen.push(request); return { ok: true, job: request.job }; } };
+  const deps = { briefingIndex: planIndex, ...checkout, roots, runJob: async request => { seen.push(request); return { ok: true, job: request.job }; } };
   for (const [lane, capture] of [['o11', own.o11], ['odc', own.odc]]) {
     const result = await codeCheck({ lane, module: 'Neutral', part: 'logic', text: goodFlow }, deps);
     assert.equal(result.ok, true, JSON.stringify(result));
@@ -118,7 +119,7 @@ test('R2 with roots a base is only a capture of the lane\'s capture folder; with
   const inSessionNotCapture = put(roots.o11, 'work/Other.oml', 'a work file of the session');
   const odcInO11 = own.o11;
   const runJob = async request => ({ ok: true, job: request.job });
-  const deps = { ...checkout, roots, runJob };
+  const deps = { briefingIndex: planIndex, ...checkout, roots, runJob };
   for (const [lane, base] of [['o11', elsewhere], ['o11', inSessionNotCapture], ['odc', odcInO11], ['odc', put(checkout.odcRoot, 'snapshots/Neutral-' + 'e'.repeat(64) + '.oml', 'x')]]) {
     const refused = await codeCheck({ lane, module: 'Neutral', part: 'logic', text: goodFlow, base }, deps);
     assert.equal(refused.ok, false, lane + ' ' + base);
@@ -151,7 +152,7 @@ test('R3 with roots the plan reads the session capture and writes its folder und
   const own = sessionCaptures(roots);
   const before = listing(checkout.root);
   for (const [lane, capture, under] of [['o11', own.o11, roots.o11], ['odc', own.odc, roots.odcWork]]) {
-    const plan = await codePlan({ lane, module: 'Neutral', items: items(), workers: 2 }, { ...checkout, roots, moduleDigest: async () => ({ ok: true, digest: digestOf(lane) }) });
+    const plan = await codePlan({ lane, module: 'Neutral', items: items(), workers: 2 }, { briefingIndex: planIndex, ...checkout, roots, moduleDigest: async () => ({ ok: true, digest: digestOf(lane) }) });
     assert.equal(plan.ok, true, JSON.stringify(plan));
     assert.equal(plan.capture.path, capture);
     assert.ok(within(path.join(under, 'plans'), plan.dir), lane + ': ' + plan.dir);
@@ -159,7 +160,7 @@ test('R3 with roots the plan reads the session capture and writes its folder und
   }
   assert.deepEqual(listing(checkout.root), before, 'the checkout is untouched');
   // a base that is no capture of the session
-  const refused = await codePlan({ lane: 'o11', module: 'Neutral', items: items(), base: put(checkout.local, 'x/Any.oml', 'any') }, { ...checkout, roots, moduleDigest: async () => ({ ok: true, digest: digestOf() }) });
+  const refused = await codePlan({ lane: 'o11', module: 'Neutral', items: items(), base: put(checkout.local, 'x/Any.oml', 'any') }, { briefingIndex: planIndex, ...checkout, roots, moduleDigest: async () => ({ ok: true, digest: digestOf() }) });
   assert.equal(refused.ok, false);
   assert.match(JSON.stringify(refused.problems), /base must be a capture/);
 });
@@ -175,7 +176,7 @@ test('R3 deps.place: shown, output, input, document and publish name and deliver
     document: (section, value) => (section === 'grammar' ? value.map(card => ({ ...card, rules: ['[doc] grammar'] })) : { ...value, chosen: '[doc] rules' }),
     publish: async files => { for (const f of files) assert.ok(fs.existsSync(f), 'published after it was written: ' + f); published.push(...files); },
   };
-  const deps = { ...checkout, roots, place, moduleDigest: async () => ({ ok: true, digest: digestOf() }) };
+  const deps = { briefingIndex: planIndex, ...checkout, roots, place, moduleDigest: async () => ({ ok: true, digest: digestOf() }) };
   const shared = put(roots.o11, 'shared/types.ddl', 'type Common = { Code: Text; }\n');
   const plan = await codePlan({ lane: 'o11', module: 'Neutral', items: items(), workers: 2, shared: [shared] }, deps);
   assert.equal(plan.ok, true, JSON.stringify(plan));
@@ -237,7 +238,7 @@ test('R4 the read an edit of logic expands is the server\'s to give: registerSsa
   const { checkout, roots } = layout(t);
   sessionCaptures(roots);
   const checked = [];
-  const deps = { ...checkout, roots, readReading: (lane, sha) => { checked.push(sha); return null; }, runJob: async request => ({ ok: true, job: request.job }) };
+  const deps = { briefingIndex: planIndex, ...checkout, roots, readReading: (lane, sha) => { checked.push(sha); return null; }, runJob: async request => ({ ok: true, job: request.job }) };
   const check = await codeCheck({ lane: 'o11', module: 'Neutral', part: 'logic', element: 'Neutral', basedOn: textSha(readText), edits: edit.edits }, deps);
   assert.equal(check.ok, false); assert.match(JSON.stringify(check.problems), /no read of this textSha is kept/);
   assert.deepEqual(checked, [textSha(readText)]);

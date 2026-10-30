@@ -36,6 +36,7 @@ for(const hooks of [false,true]) test('B2 every app listing meets its computed l
  // parameters served whole (a token-named parameter cannot be projected) and the CX15 tools outside the projection.
  // a5-final (CX12 r4, CX16, CX15 r4 under the CX11 listing): +4615 B, the continueTask input of every tool and the
  // tools those junctions changed (measured: root app + hooks 160927 -> 165542 B).
+ // The owner ceiling is unchanged; reference validation belongs to the gate.
  assert.ok([...short.tools,frictionTool].reduce((sum,t)=>sum+toolListingBytes(t),0)<=167747);
  const fixedCore=['ssam_doctor','ssam_connect','ssam_discover','ssam_map','ssam_code','ssam_reference','ssam_evidence','ssam_task','o11_inspect','o11_deliver','o11_publish','o11_studio','studio_deliver','studio_inspect','studio_status'];
  assert.ok(fixedCore.reduce((sum,name)=>{const tool=short.tools.find(t=>t.name===name);assert.ok(tool,name);return sum+toolListingBytes(tool);},0)<=34178);

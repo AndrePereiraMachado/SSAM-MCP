@@ -1,7 +1,7 @@
 import {createHash} from 'node:crypto';
 import fs from 'node:fs';
 import {binaryPatchProvenance} from './mobile-binary-upload.mjs';
-import {authorizationContext} from '../../facade/authorization-context.mjs';
+import {approvalOf,contextValues,sameGrant,recorded} from './written-approval.mjs';
 import {fail} from './errors.mjs';
 import {checkSecretRefs} from './portal-routes.mjs';
 import {MOBILE_EXTENSIBILITY_PATCH,extensibilityChanges,extensibilityStateHash,extensibilityExpectation} from './mobile-extensibility.mjs';
@@ -26,19 +26,20 @@ export async function mobileConfigurationApproval({file,words,host,operationId,i
  }
  const origin=lookup(originOperationUuid);
  if(!origin||!['accepted','confirmed'].includes(origin.state)||origin.identity?.tenant!==host
-  ||origin.identity.operationId!=='asset-repository-api-v1:post:/assets'||origin.response?.assetKey!==p.applicationKey||!origin.authorization?.source)bad();
+  ||origin.identity.operationId!=='asset-repository-api-v1:post:/assets'||origin.response?.assetKey!==p.applicationKey||!recorded(origin))bad();
  const asset=await read('asset-repository-api-v1:get:/assets/{assetKey}',{assetKey:p.applicationKey});
  if(!asset?.ok||asset.data?.assetKey!==p.applicationKey||asset.data.assetType!=='MobileApplication'||!asset.data.name)bad();
  const current=await read(operationId.replace(':patch:',':get:'),p);
  if(!current?.ok||!current.data)bad();
  if(extensibility){
   extensibilityChanges(b,current.data,refs);
-  let constraints;try{if(fs.statSync(file).size>32768)bad();constraints=JSON.parse(fs.readFileSync(file,'utf8')).constraints;}catch{bad();}
+  let constraints;try{constraints=contextValues(file);}catch{bad();}
   binaryPatchProvenance({constraints,body:b,current:current.data,lookup,host,...p,originOperationUuid});
  }
  else for(const key of Object.keys(b))if(current.data[key]?.isSecret!==false||!Object.hasOwn(current.data[key],'value'))bad();
- const approval=authorizationContext(file,words,{lane:'odc',host,operation:operationId,targets:[asset.data.name],environmentKey:p.environmentKey,
+ // R2-I (owner's rule, 28/10): a context file, or the written words naming the own mobile app (its creation receipt binds it).
+ const approval=approvalOf(file,words,{lane:'odc',host,operation:operationId,targets:[asset.data.name],environmentKey:p.environmentKey,
   constraints:{originOperationUuid,bodySha256:mobileConfigurationHash(b),expectedConfigurationSha256:extensibility?extensibilityStateHash(current.data):mobileConfigurationStateHash(current.data),...(refs.length?{secretRefsSha256:mobileConfigurationHash(refs)}:{})}});
- if(!approval||approval.source.threadId!==origin.authorization.source.threadId||approval.source.messageId!==origin.authorization.source.messageId)bad();
+ if(!approval||!sameGrant(origin.authorization,approval))bad();
  return extensibility ? {...approval,extensibilityExpectation:extensibilityExpectation(b,current.data)} : approval;
 }

@@ -45,7 +45,7 @@ public sealed partial class ModelSession
 
     // Scoped to one Apply logic op. The full text list and its indices remain intact for patches and diagnostics.
     private Blocked? _flowBlocked;
-    private Action<string, int, string>? _flowDependencySkipped;
+    private Action<string, int, string, string?>? _flowDependencySkipped;
 
     // A logic-text op changes actions, not named entities, structures or module variables: their name indexes are shared by
     // the passes of one op (ModelFlowTypes), never across ops (a spec or reference op between two logic ops adds or renames
@@ -60,7 +60,7 @@ public sealed partial class ModelSession
     {
         var previous = _flowScreenJavaScript;
         var previousBatch = _flowRecordBatch; var previousRecords = _flowRecordNames; var previousVariables = _flowModuleVariables;
-        var previousSignatures = _flowDeclaredSignatures; var previousTypes = _logicTypes;
+        var previousSignatures = _flowDeclaredSignatures; var previousTypes = _logicTypes; var previousDeclared = _flowDeclared;
         var (previousWatch, previousFacts) = (_flowWriteWatch, _flowWriteFacts);
         _flowScreenJavaScript = op;
         // S12: the names every verb of the op touches, from before its planning index is built (FlowOpCore writes with it).
@@ -71,7 +71,7 @@ public sealed partial class ModelSession
         finally {
             _flowScreenJavaScript = previous;
             _flowRecordBatch = previousBatch; _flowRecordNames = previousRecords; _flowModuleVariables = previousVariables;
-            _flowDeclaredSignatures = previousSignatures; _logicTypes = previousTypes;
+            _flowDeclaredSignatures = previousSignatures; _logicTypes = previousTypes; _flowDeclared = previousDeclared;
             EndNameWatch(_flowWriteWatch); (_flowWriteWatch, _flowWriteFacts) = (previousWatch, previousFacts);
         }
     }
@@ -104,13 +104,26 @@ public sealed partial class ModelSession
                 for (var i = 0; i < texts.Count; i++) {
                     if (excluded.ContainsKey(i) || _flowBlocked.UsedByText(texts[i].Text) is not { } used) continue;
                     excluded.Add(i, used);
-                    _flowBlocked.MarkFlow(texts[i].Text, used.Op);
+                    _flowBlocked.MarkFlowAt(texts[i].Text, used.Op, _flowBlocked.PointerOf(used.Name));
                     changed = true;
                 }
             } while (changed);
             foreach (var (index, used) in excluded.OrderBy(e => e.Key))
-                _flowDependencySkipped?.Invoke(texts[index].Pointer, used.Op, used.Name);
+                _flowDependencySkipped?.Invoke(texts[index].Pointer, used.Op, used.Name, _flowBlocked.PointerOf(used.Name));
         }
+        // R2-A: the canonical form of each call of a text the op writes (NameResolution over the model and over the actions the
+        // job declares, the candidates the preflight counts): a producer's action written without its producer, a name written
+        // in another case than its element's, is written as the reading writes it before the texts are planned (the action is
+        // read back against that text), and listed (REFERENCE_CANONICAL). An action this job creates (this op's texts, any op)
+        // is a candidate before it exists, so a call is never bound to a producer's action of the name of one the job makes.
+        // The blocked texts above were judged on the text the author wrote.
+        _flowDeclared = Preflight.ScopeJob.DeclaredActions(_applyOps ?? new JsonArray(op.DeepClone()));
+        var fresh = false;
+        for (var t = 0; t < texts.Count; t++)
+            if (!excluded.ContainsKey(t) && CanonicalCalls(texts[t].Text, texts[t].Pointer, ref fresh) is { } canonical) {
+                texts[t] = (canonical.Text, texts[t].BasedOn, texts[t].Pointer);
+                Normalized(canonical.Notes);
+            }
         // Every text is read and compared first: one refusal with every problem of every text, before anything is written.
         var problems = new List<(string Pointer, FlowProblem Problem)>();
         var plans = new List<FlowPlan>();
@@ -129,6 +142,10 @@ public sealed partial class ModelSession
         // index of the whole module per new action. The apply writes, so it reads them again.
         var planningFacts = _flowPlanningFacts = new Preflight.ModelBaseFacts(this, _espace);
         var planning = NativePerformanceCapture.Measure("flow.op.plan");
+        // R2-B: the refusal of the plans, the stub written for a refused text (by index) and the texts left out.
+        KernelRefusalException? planned = null;
+        var stubs = new string?[texts.Count];
+        var leftOut = new SortedSet<int>();
         try {
         for (var index = 0; index < texts.Count; index++) {
             var (text, basedOn, pointer) = texts[index];
@@ -149,15 +166,21 @@ public sealed partial class ModelSession
                 problems.Add((pointer, new("FLOW_ACTION_NAME_TAKEN", "two texts of this op create an action named " + createdName + " (" + created[createdScope] + " and " + pointer + ")",
                     null, "give each new action its own name, or send one text")));
         }
-        } finally { _flowPlanningFacts = null; _flowActionTaken = null; planning.Dispose(); }
         if (problems.Count > 0) {
             // The patch of the op: every text with the certain fixes of its problems, the new action texts they need after them
             // (one patch for the whole op, the same on each problem it fixes: applying it twice writes the same job).
             var corrected = plans.Select(p => p.Problems.FirstOrDefault(q => q.Corrected != null)?.Corrected).ToList();
             var added = plans.SelectMany(p => p.Problems.FirstOrDefault(q => q.Corrected != null)?.Added ?? []).ToList();
             var rebased = plans.Select(p => p.RebasedOn).ToList();
-            throw Refusal(problems, corrected.Any(c => c != null) ? FlowTextForm.Patch(data, texts, corrected, added, rebased) : null);
+            planned = Refusal(problems, corrected.Any(c => c != null) ? FlowTextForm.Patch(data, texts, corrected, added, rebased) : null);
+            if (!_flowKeepFailures) throw planned;
+            // R2-B: under KeepFailures the op goes on: a text with problems is refused and written as its stub (Verbs.FlowStubs.cs),
+            // planned here with the others, or left out when no stub stands for it; the texts without problems are written as usual.
+            foreach (var index in Enumerable.Range(0, texts.Count).Where(i => problems.Any(p => p.Pointer == texts[i].Pointer)))
+                if (StubText(texts[index].Text) is { } stub && PlanFlowText(stub, null, FlowDiff.AliasPrefix + "0.") is { Problems.Count: 0 } stubPlan) { stubs[index] = stub; plans[index] = stubPlan; }
+                else leftOut.Add(index);
         }
+        } finally { _flowPlanningFacts = null; _flowActionTaken = null; planning.Dispose(); }
         var results = new JsonNode?[texts.Count];
         // Texts that trade the names of two actions (A -> B and B -> A), or one that takes the name another text gives up: the
         // action whose name another text takes goes through a free name first, and its text reads it with the name it was read
@@ -177,13 +200,21 @@ public sealed partial class ModelSession
         // A text the read back refuses (a mapping the platform keeps in another form, FLOW_NOT_EXACT) does not stop the others:
         // every text is written and read back, and the op refuses once with the problems of each (nothing of it is kept).
         var refusals = new List<KernelRefusalException>();
+        if (planned != null) refusals.Add(planned);
         using var writing = NativePerformanceCapture.Measure("flow.op.write");
         // Planning wrote nothing: its index, with the names the renames above touched (the watch began before it), serves the
         // writes too.
         if (_flowWriteWatch != null) _flowWriteFacts = planningFacts;
         try {
             foreach (var i in CreationOrder(plans)) {
-                if (excluded.ContainsKey(i)) continue;
+                if (excluded.ContainsKey(i) || leftOut.Contains(i)) continue;
+                if (stubs[i] is { } planStub) {
+                    if (WriteStub(planStub, texts[i].Pointer, null) is { } stubKey) results[i] = new JsonObject { ["key"] = stubKey, ["stub"] = true };
+                    else leftOut.Add(i);
+                    continue;
+                }
+                var mark = _anchorJournal.Count;
+                var number = _flowTexts;
                 try {
                     results[i] = ApplyFlowText(texts[i].Text, texts[i].BasedOn, texts[i].Pointer);
                     // The name caches of the op may hold a same-named action of another owner: the action this text
@@ -197,17 +228,40 @@ public sealed partial class ModelSession
                             ["severity"] = "high", ["pointer"] = texts[i].Pointer, ["flow"] = edited.Owner + "." + edited.Name,
                             ["message"] = "Screen JavaScript explicitly allowed for this action: " + why, ["why"] = why });
                 }
-                catch (KernelRefusalException error) when (error.Problems is { Count: > 0 }) { refusals.Add(error); }
-                catch (Exception) when (refusals.Count > 0) { break; }
+                catch (KernelRefusalException error) when (error.Problems is { Count: > 0 }) {
+                    refusals.Add(error);
+                    if (_flowKeepFailures) StubFailedText(i, mark, number, plans[i], texts[i], stubs, leftOut, results);
+                }
+                // R2-B (one round): a text that fails without a coded refusal (a parameter of an unknown type) is refused at its
+                // own pointer, with the code its message names, and the next texts still run; a failure of no known kind is kept
+                // and stops the op. Before, the first one ended the op with no text to point at, and one after a refusal was
+                // dropped: its problem came one round later.
+                catch (Exception error) {
+                    refusals.Add(TextFailure(error, texts[i].Pointer, out var known));
+                    if (!known) { if (_flowKeepFailures) FailSince(mark); break; }
+                    if (_flowKeepFailures) StubFailedText(i, mark, number, plans[i], texts[i], stubs, leftOut, results);
+                }
             }
         } finally { _flowNameAsRead.Clear(); }
-        if (refusals.Count == 1) System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(refusals[0]).Throw();
-        if (refusals.Count > 1)
-            throw new KernelRefusalException(refusals[0].Code, string.Join(Environment.NewLine, refusals.Select(r => r.Message)),
-                new JsonArray(refusals.SelectMany(r => r.Problems!).Select(p => p?.DeepClone()).ToArray()));
+        if (refusals.Count == 0 || !_flowKeepFailures)
+        {
+            if (refusals.Count == 1) System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(refusals[0]).Throw();
+            if (refusals.Count > 1) throw Combined(refusals);
+        }
         var answer = new JsonObject { ["flow"] = new JsonArray(results) };
         if (through.Count > 0) answer["renamedThrough"] = through;
+        // R2-B: the texts failed, and the rest of the op is written (each failed one as its stub, or left out): the refusal goes
+        // back to Apply, which keeps it as this op's failure and judges the rest of the job, the Verify included.
+        if (refusals.Count > 0) {
+            _flowKeptRefusal = refusals.Count == 1 ? refusals[0] : Combined(refusals);
+            _flowLeftOut = leftOut.Select(i => (texts[i].Text, texts[i].Pointer)).ToList();
+            answer["stubs"] = new JsonArray(Enumerable.Range(0, texts.Count).Where(i => results[i]?["stub"] is JsonValue).Select(i => (JsonNode)texts[i].Pointer).ToArray());
+        }
         return answer;
+
+        static KernelRefusalException Combined(List<KernelRefusalException> all) =>
+            new(all[0].Code, string.Join(Environment.NewLine, all.Select(r => r.Message)),
+                new JsonArray(all.SelectMany(r => r.Problems ?? []).Select(p => p?.DeepClone()).ToArray()));
     }
 
     // While the texts of an op are written: an action renamed through a free name (FlowOp), by key, and the name its text read.
@@ -1085,6 +1139,18 @@ public sealed partial class ModelSession
         return new KernelRefusalException(error.Code, error.Message, problems);
     }
 
+    /// <summary>R2-B: the refusal of one text whose write failed: a coded failure at the text's pointer, else the code its message
+    /// names (TYPE_UNRESOLVED, REFERENCE_UNRESOLVED, ...); <paramref name="known"/> is false for a failure of no known kind.</summary>
+    private static KernelRefusalException TextFailure(Exception error, string pointer, out bool known)
+    {
+        if (Errors.FindCoded(error) is KernelRefusalException coded) { known = true; return AtText(coded, pointer); }
+        var message = Errors.Describe(error).Message;
+        var code = Errors.FindCoded(error)?.Code is { Length: > 0 } own ? own : ApplyCode(error, message);
+        known = code != "APPLY_FAILED";
+        var problem = JobPreflight.Problem(null, pointer, code, "error", message, JobPreflight.CodeFix(code) ?? "correct the text as the message says");
+        return new KernelRefusalException(code, "logic: " + message, new JsonArray(JobPreflight.PublicProblem(problem)));
+    }
+
     // patch: the op's patch (paths relative to op.data, FlowTextForm.Patch), on every problem whose fix it writes.
     private static KernelRefusalException Refusal(IReadOnlyList<(string Pointer, FlowProblem Problem)> problems, JsonArray? patch = null) =>
         new(problems[0].Problem.Code, "logic: the text of the action is refused: " + string.Join(" | ", problems.Select(p => p.Problem.Code + ": " + p.Problem.Message)),
@@ -1230,9 +1296,8 @@ public sealed partial class ModelSession
             using var indexing = NativePerformanceCapture.Measure("lookup.callee.index");
             _flowCallees = new(StringComparer.Ordinal);
             var extractor = new FlowExtractor<IObjectSignature>(reader, (IObjectSignature)_es);
-            foreach (var element in reader.Walk((IObjectSignature)_es))
-                if (Implements(element, "IActionSignature") || reader.KindOf(element).EndsWith("Action", StringComparison.Ordinal))
-                    (_flowCallees.TryGetValue(extractor.Callee(element), out var list) ? list : _flowCallees[extractor.Callee(element)] = []).Add(element);
+            foreach (var element in NameResolution.ModelCallables(reader, (IObjectSignature)_es))
+                (_flowCallees.TryGetValue(extractor.Callee(element), out var list) ? list : _flowCallees[extractor.Callee(element)] = []).Add(element);
         }
         var found = _flowCallees.GetValueOrDefault(text)?.Where(e => !e.WasDeleted).ToList() ?? [];
         // A screen or block action belongs to one owner: a same-named one of another screen or block is never the callee, even
@@ -1245,11 +1310,31 @@ public sealed partial class ModelSession
         if (local.Count > 0 && call != "Server") found = local;
         // An action created after the names were gathered (an earlier text or op of the job): gathered again once.
         if (found.Count == 0 && !again) { _flowCallees = null; _flowCalls = null; return Callee(text, action, call, out shared, true); }
+        // R2-A: no action has the text as its form (the module's, the caller's owner's, Producer.Action): the one rule of the
+        // preflight and the apply (NameResolution over the model's callables) says what the name reaches. One action of that
+        // name, of one producer, is that action (FlowOpCore wrote its canonical form in the texts of the op); two or more at the
+        // same distance, or none, are refused with each candidate's form.
+        // A name written in another case (bare, or qualified by its producer) is the element of that name too; one the job
+        // declares and has not created yet is no action here.
+        NameAnswer? typed = null;
+        if (found.Count == 0 && text.IndexOfAny([':', '/', '@']) < 0) {
+            typed = ResolveModelCall(text, uiOwner != null ? reader.DisplayOf(uiOwner) : null);
+            if (typed is { Outcome: NameOutcome.Resolved, Chosen: { } chosen })
+                found = (_flowCallees!.GetValueOrDefault(chosen.Canonical) ?? []).Where(e => !e.WasDeleted).ToList() is { Count: > 0 } byForm ? byForm
+                    : chosen.Element is IObjectSignature element ? [element] : [];
+        }
         shared = found.Count > 1;
+        if (typed is { Outcome: NameOutcome.Ambiguous })
+            throw new KernelRefusalException("FLOW_NAME_AMBIGUOUS", $"logic: {typed.Candidates.Count} actions answer {text} at the same distance: " + string.Join(", ", typed.Candidates.Select(NameResolution.Describe)),
+                new JsonArray(JobPreflight.PublicProblem(Choices(JobPreflight.Problem(null, null, "FLOW_NAME_AMBIGUOUS", "error",
+                    $"{typed.Candidates.Count} actions answer {text} at the same distance: {string.Join(", ", typed.Candidates.Select(NameResolution.Describe))}",
+                    "write the one you mean: " + string.Join(", ", typed.Candidates.Select(c => c.Canonical)) + " (candidates: the form of each)"), text, typed))));
         if (found.Count == 0)
             throw new KernelRefusalException("FLOW_NAME_UNKNOWN", $"logic: no callable action is named {text} in this scope or its module references; a screen or block action must belong to the caller's owner",
-                new JsonArray(JobPreflight.PublicProblem(JobPreflight.Problem(null, null, "FLOW_NAME_UNKNOWN", "error", $"no action {text}",
-                    "define the action on the caller's screen or block, or name an action of the module or of a producer it references (Producer.Action, (System).Action)"))));
+                new JsonArray(JobPreflight.PublicProblem(Choices(JobPreflight.Problem(null, null, "FLOW_NAME_UNKNOWN", "error", $"no action {text}"
+                    + (typed is { Unfit.Count: > 0 } ? " (" + string.Join(", ", typed.Unfit.Take(3).Select(NameResolution.Describe)) + " of that name is no action)" : ""),
+                    "define the action on the caller's screen or block, or name an action of the module or of a producer it references (Producer.Action, (System).Action)"
+                    + (typed is { Candidates.Count: > 0 } ? "; the nearest: " + string.Join(", ", typed.Candidates.Select(c => c.Canonical)) : "")), text, typed))));
         bool IsClient(IObjectSignature e) => Implements(e, "IClientAction") || Implements(e, "IClientActionSignature") || Implements(e, LogicOrder.MobileScreenAction);
         var flowClient = action != null && ClientFlow(action);
         // The kind of call: the text's (Call=), else the flow's: a client flow calls the client action of a name both kinds
@@ -1274,6 +1359,63 @@ public sealed partial class ModelSession
                 new JsonArray(JobPreflight.PublicProblem(JobPreflight.Problem(null, null, "FLOW_NAME_AMBIGUOUS", "error", $"{found.Count} actions are named {text}",
                     "write the kind of call on the node's @{...} line: Call=Client or Call=Server"))));
         return found[0];
+    }
+
+    // R2-A: the actions the job declares (ScopeJob.DeclaredActions over the job being applied), set by FlowOpCore for its op:
+    // the candidates of a call the preflight counts and the model may not hold yet.
+    private List<(string? Owner, string Name, string Kind)>? _flowDeclared;
+
+    // R2-A: what a call written `name` reaches from an action of `owner` (a screen or block, or null), by the one rule of the
+    // preflight and the apply (NameResolution) over the model's callables, as FlowExtractor names them, and the actions the
+    // job declares. `fresh`: the callables gathered again from the model first (an op that is no text adds actions the
+    // gathered names do not have).
+    private NameAnswer ResolveModelCall(string name, string? owner, bool fresh = false)
+    {
+        var reader = new KernelModelReader();
+        if (fresh) { _flowCallees = null; _flowCalls = null; }
+        if (_flowCallees == null) {
+            _flowCallees = new(StringComparer.Ordinal);
+            var extractor = new FlowExtractor<IObjectSignature>(reader, (IObjectSignature)_es);
+            foreach (var element in NameResolution.ModelCallables(reader, (IObjectSignature)_es))
+                (_flowCallees.TryGetValue(extractor.Callee(element), out var list) ? list : _flowCallees[extractor.Callee(element)] = []).Add(element);
+        }
+        var callables = _flowCallees.Values.SelectMany(l => l).Where(e => !e.WasDeleted).Distinct(ReferenceEqualityComparer.Instance).Cast<IObjectSignature>().ToList();
+        return NameResolution.ModelCall(reader, callables, name, owner, _flowDeclared);
+    }
+
+    // R2-A: the text with the callee of every call that is not in its canonical form written in it (a producer's action written
+    // without its producer, a name written in another case than its element's; ScopeRules.RewriteCalls: only the callee of the
+    // call line changes), and the REFERENCE_CANONICAL notes; null when there is none (or the text does not parse: the planner
+    // says why). Built-ins and functions of the System keep their bare names, as in the preflight.
+    private (string Text, List<JsonNode?> Notes)? CanonicalCalls(string text, string pointer, ref bool fresh)
+    {
+        FlowItem parsed;
+        try { parsed = FlowParser.Parse(text); } catch (Exception) { return null; }   // the planner refuses it with its pointer
+        var owner = parsed.Owner.Length > 0 ? parsed.Owner.Split('/').Last() : null;
+        owner = owner?[(owner.IndexOf(':') + 1)..];
+        var forms = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var callee in Preflight.ScopeRules.Executes(parsed).Distinct(StringComparer.Ordinal)) {
+            if (callee.IndexOfAny([':', '/', '@', '$', '(']) >= 0 || callee.Count(c => c == '.') > 1) continue;
+            if (!callee.Contains('.') && Preflight.ScopeRules.NeverCanonical(callee, MessageExpectations.Lane)) continue;
+            if (ResolveModelCall(callee, owner) is not { Outcome: NameOutcome.Resolved, Canonicalized: true }) continue;
+            // Decided on the callables as the module has them now (gathered again once per op), never on stale names.
+            var again = ResolveModelCall(callee, owner, fresh: !fresh);
+            fresh = true;
+            if (again is not { Outcome: NameOutcome.Resolved, Canonicalized: true, Chosen: { } chosen }) continue;
+            // A qualified name keeps its qualifier when the element is no producer's (Owner.Action is the apply's to bind).
+            if (callee.Contains('.') && chosen.Qualifier == null) continue;
+            forms[callee] = chosen.Canonical;
+        }
+        if (forms.Count == 0 || Preflight.ScopeRules.RewriteCalls(text, forms) is not { } written) return null;
+        return (written, forms.Select(f => (JsonNode?)Preflight.ScopeRules.CanonicalNote(pointer, f.Key, f.Value, "the apply resolved")).ToList());
+    }
+
+    // R2-A: a refused call's candidates, each with its form (the text's patch is the preflight's: the scope phase writes it).
+    private static JsonObject Choices(JsonObject problem, string written, NameAnswer? answer)
+    {
+        if (answer is not { Candidates.Count: > 0 }) return problem;
+        problem["candidates"] = new JsonArray(answer.Candidates.Select(c => (JsonNode)new JsonObject { ["name"] = c.Canonical, ["kind"] = c.Kind, ["replaces"] = written }).ToArray());
+        return problem;
     }
 
     private Dictionary<(IObjectSignature, bool), int>? _flowCalls;

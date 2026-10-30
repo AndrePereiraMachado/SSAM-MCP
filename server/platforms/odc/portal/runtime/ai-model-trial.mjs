@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-import { authorizationContext } from '../../facade/authorization-context.mjs';
+import { approvalOf, contextValues, originId, ownedBy, sameGrant, recorded } from './written-approval.mjs';
 import { fail } from './errors.mjs';
 import { isUuid, sha256 } from './write-journal.mjs';
 
@@ -21,10 +21,19 @@ export function aiModelInventory(result, portfolioKey) {
     fail('AI_MODEL_INVENTORY_INCOMPLETE', 'A complete AI model inventory for the exact portfolio is required.');
   return list;
 }
-export async function aiModelTrialApproval({ file, words, host, operationId, raw, lookup, read }) {
-  if (!file || Object.keys(raw.screenVariables).length || Object.keys(raw.clientVariables).length) bad();
+// R2-I (owner's rule, 28/10): the written words naming the trial (create) or the model (delete) are the approval; a context
+// file is still accepted. Without one, the portfolio of a creation comes from the call's scope, and a delete finds its own
+// creation in SSAM's journal (the receipt that returned this model), with the portfolio that creation kept.
+export async function aiModelTrialApproval({ file, words, host, operationId, raw, lookup, read, scope, find }) {
+  if (Object.keys(raw.screenVariables).length || Object.keys(raw.clientVariables).length) bad();
+  const written = !file;
   let constraints;
-  try { if (fs.statSync(file).size > 32768) bad(); constraints = JSON.parse(fs.readFileSync(file, 'utf8')).constraints; } catch { bad(); }
+  try { constraints = { ...contextValues(file, scope) }; } catch { bad(); }
+  if (written && operationId === AI_TRIAL_DELETE && exact(raw.inputParameters, 'AIModelId') && isUuid(raw.inputParameters.AIModelId)) {
+    constraints.originOperationUuid = originId(constraints, 'originOperationUuid', { written, find, what: 'The trial model cleanup',
+      predicate: r => ownedBy(host, AI_TRIAL_CREATE)(r) && r.response?.AIModelId === raw.inputParameters.AIModelId });
+    constraints.portfolioKey ??= lookup(constraints.originOperationUuid)?.reconciliation?.aiModelTrial?.portfolioKey;
+  }
   if (!isUuid(constraints?.portfolioKey)) bad();
   const portfolioKey = constraints.portfolioKey, p = raw.inputParameters;
   const list = aiModelInventory(await read('aiModels.list', aiModelInventoryInput(portfolioKey)), portfolioKey);
@@ -35,7 +44,8 @@ export async function aiModelTrialApproval({ file, words, host, operationId, raw
     const matches = trials?.data?.AIModelTrials?.List?.filter(x => x.Id === p.TrialId);
     if (trials?.ok !== true || !matches || matches.length !== 1 || matches[0].CurrentAIModelId !== '')
       fail('AI_TRIAL_ALREADY_CONFIGURED_OR_UNAVAILABLE', 'The exact trial must be available and unconfigured. Nothing was sent.');
-    const approval = authorizationContext(file, words, { lane: 'odc', host, operation: operationId, targets: [p.TrialId],
+    // R2-I round 2: the place the write lands in, which only the scope gives, is named in the written words too.
+    const approval = approvalOf(file, words, { lane: 'odc', host, operation: operationId, targets: written ? [p.TrialId, portfolioKey] : [p.TrialId],
       constraints: { portfolioKey, inputSha256: sha256(JSON.stringify(p)), expectedInventorySha256: sha256(JSON.stringify(list)) } });
     if (!approval) bad();
     return approval;
@@ -44,16 +54,15 @@ export async function aiModelTrialApproval({ file, words, host, operationId, raw
   const origin = lookup(constraints.originOperationUuid);
   if (!origin || !['accepted', 'confirmed'].includes(origin.state) || origin.identity?.tenant !== host
     || origin.identity.operationId !== AI_TRIAL_CREATE || origin.response?.AIModelId !== p.AIModelId
-    || origin.reconciliation?.aiModelTrial?.portfolioKey !== portfolioKey || !origin.authorization?.source) bad();
+    || origin.reconciliation?.aiModelTrial?.portfolioKey !== portfolioKey || !recorded(origin)) bad();
   const found = list.find(x => x.Id === p.AIModelId);
   if (!found || found.IsTrial !== true) bad();
   const detail = await read('aiModels.detail', { screenVariables: { id: found.Id, _idInDataFetchStatus: 1, ActivePortfolioKey: portfolioKey } });
   if (!modelDetailMatches(detail, found, portfolioKey)) bad();
-  const approval = authorizationContext(file, words, { lane: 'odc', host, operation: operationId, targets: [found.Name],
+  const approval = approvalOf(file, words, { lane: 'odc', host, operation: operationId, targets: [found.Name],
     constraints: { portfolioKey, originOperationUuid: constraints.originOperationUuid, aiModelId: p.AIModelId,
       expectedModelSha256: sha256(JSON.stringify(found)), inputSha256: sha256(JSON.stringify(p)) } });
-  if (!approval || approval.wordsSha256 !== origin.authorization.wordsSha256 || approval.proposalSha256 !== origin.authorization.proposalSha256
-    || approval.source.threadId !== origin.authorization.source.threadId || approval.source.messageId !== origin.authorization.source.messageId) bad();
+  if (!approval || !sameGrant(origin.authorization, approval, { words: true, proposal: true })) bad();
   return approval;
 }
 function modelDetailMatches(detail, found, portfolioKey) {

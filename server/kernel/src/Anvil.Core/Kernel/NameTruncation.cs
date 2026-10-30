@@ -7,22 +7,26 @@ namespace Anvil.Core;
 /// 'SignatureAuthenticationMethod', 29 characters, refused only by the data proof). The kernel writes the name the Studio
 /// would keep, so the data proof expects that one: the first 28 characters; when that name is taken by a sibling, its end
 /// gives way to a number (…2, …3) as a copy is numbered. Every truncation is reported in nameTruncations. Pure.
+/// R3-B: the limit is a row of PlatformLimits (name.maxLength), where the preflight reads it too.
 /// </summary>
 public static class NameTruncation
 {
-    public const int MaxLength = 28;
+    public const int MaxLength = PlatformLimits.MeasuredNameLength;
 
     /// <summary>The name the Studio keeps for <paramref name="name"/> among <paramref name="siblings"/> (case-insensitive);
     /// the name itself when it fits.</summary>
-    public static string Truncate(string name, IEnumerable<string> siblings)
+    public static string Truncate(string name, IEnumerable<string> siblings) => Truncate(name, siblings, MaxLength);
+
+    /// <summary>The same with the limit of the kind (PlatformLimits.MaxName).</summary>
+    public static string Truncate(string name, IEnumerable<string> siblings, int max)
     {
-        if (name.Length <= MaxLength) return name;
+        if (name.Length <= max) return name;
         var taken = new HashSet<string>(siblings, StringComparer.OrdinalIgnoreCase);
-        var cut = name[..MaxLength];
+        var cut = name[..max];
         for (var n = 2; taken.Contains(cut); n++)
         {
             var suffix = n.ToString(System.Globalization.CultureInfo.InvariantCulture);
-            cut = name[..(MaxLength - suffix.Length)] + suffix;
+            cut = name[..(max - suffix.Length)] + suffix;
         }
         return cut;
     }

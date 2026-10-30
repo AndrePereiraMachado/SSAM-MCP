@@ -36,7 +36,10 @@ namespace Anvil.Core;
 /// <para>A local key is never the identity of a node. A reference value is compared through its target's identity, so a
 /// reference retargeted to another element still differs. Every property value, ordered children list, set, binding target,
 /// expression text and reference, and payload is compared under these identities: a lost element, a changed value, a
-/// rename, a reordered ordered list or a retargeted reference refuses and names the element.</para></summary>
+/// rename, a reordered ordered list or a retargeted reference refuses and names the element.</para>
+/// <para>One rename is not the merge's loss: the one the Studio makes on its own as a rule of NativeNames predicts it from the
+/// candidate (<see cref="NativeNamesRule"/>); the proof then compares the candidate renamed that way, and any other difference
+/// still refuses.</para></summary>
 public static class MergeContentProof
 {
     /// <summary>The identity rule this proof applies, named in its receipt.</summary>
@@ -60,8 +63,14 @@ public static class MergeContentProof
             actual = host.Load(actualBytes);
             var omittedExpected = new JsonArray(); var omittedActual = new JsonArray();
             var expectedLabels = new Dictionary<string, string>(StringComparer.Ordinal); var actualLabels = new Dictionary<string, string>(StringComparer.Ordinal);
-            var expectedValues = Read(expected, omittedExpected, expectedLabels); var actualValues = Read(actual, omittedActual, actualLabels);
+            var identitiesOfExpected = new Dictionary<IObjectSignature, string>(ReferenceEqualityComparer.Instance);
+            var expectedValues = Read(expected, omittedExpected, expectedLabels, identitiesOfExpected); var actualValues = Read(actual, omittedActual, actualLabels);
             var proof = Compare(expectedValues, actualValues, expectedLabels, actualLabels);
+            // R3-C (K2): a name the Studio gave on its own in the merge is accepted only as NativeNames predicted it from the
+            // candidate (NativeRenamed); anything else keeps this refusal.
+            if (proof["accepted"]?.GetValue<bool>() != true
+                && NativeRenamed(expected, expectedValues, actualValues, identitiesOfExpected, expectedLabels, actualLabels, proof) is { } renamed)
+                proof = renamed;
             proof["inputs"] = new JsonObject {
                 ["expected"] = new JsonObject { ["path"] = Path.GetFullPath(expectedPath), ["sha256"] = Convert.ToHexString(SHA256.HashData(expectedBytes)).ToLowerInvariant() },
                 ["actual"] = new JsonObject { ["path"] = Path.GetFullPath(actualPath), ["sha256"] = Convert.ToHexString(SHA256.HashData(actualBytes)).ToLowerInvariant() },
@@ -80,7 +89,10 @@ public static class MergeContentProof
         finally { ModelHost.Release(expected); ModelHost.Release(actual); }
     }
 
-    internal static Dictionary<(string Key, string Property), string> Read(ESpace model, JsonArray? omissions = null, Dictionary<string, string>? labels = null)
+    /// <summary><paramref name="identityMap"/>: when given, receives the identity of every element read (NativeRenamed reads the
+    /// identity of an element a rule renames).</summary>
+    internal static Dictionary<(string Key, string Property), string> Read(ESpace model, JsonArray? omissions = null, Dictionary<string, string>? labels = null,
+        Dictionary<IObjectSignature, string>? identityMap = null)
     {
         var values = new Dictionary<(string, string), string>();
         var identities = new Dictionary<IObjectSignature, string>(ReferenceEqualityComparer.Instance);
@@ -426,7 +438,54 @@ public static class MergeContentProof
             }
             foreach (var child in node.Children.OfType<IObjectSignature>().Concat(EntityIndexes.NativeChildren(node))) pending.Push(child);
         }
+        if (identityMap != null) foreach (var (element, identity) in identities) identityMap[element] = identity;
         return values;
+    }
+
+    /// <summary>The rule of the proof for the names the Studio gives on its own (NativeNames), named in its receipt.</summary>
+    public const string NativeNamesRule = "ssam-native-names/1: a rename is accepted only as NativeNames predicts it from the candidate: the old name gone and the predicted one present under the same owner and of the same kind, and, with the candidate renamed by the Studio's own SetName, no other difference";
+
+    /// <summary>
+    /// R3-C (K2): the proof again, when the Studio renamed an element on its own exactly as a rule of NativeNames predicts from
+    /// the candidate (an aggregate named Get + plural that received a filter by an attribute became Get + plural + By + the
+    /// attribute). A predicted pair counts only when the module shows it: the identity of the old name is gone from the merged
+    /// module and the identity with the predicted name (same owner, same kind) is there, and not in the candidate. Those pairs
+    /// are applied to the candidate with the Studio's own SetName (which rewrites the expressions that name the element, as
+    /// the merge did), and the candidate is read and compared again. The answer is that comparison: accepted only with no
+    /// difference at all; refused with the differences left (the renames are named in nativeNames either way). Null when no
+    /// predicted pair is in the merged module, or when a rename does not take: the first comparison stands.
+    /// </summary>
+    private static JsonObject? NativeRenamed(ESpace expected, Dictionary<(string Key, string Property), string> expectedValues,
+        Dictionary<(string Key, string Property), string> actualValues, IReadOnlyDictionary<IObjectSignature, string> identities,
+        IReadOnlyDictionary<string, string> expectedLabels, IReadOnlyDictionary<string, string> actualLabels, JsonObject plain)
+    {
+        List<NativeNames.Rename> predicted;
+        try { predicted = NativeNames.Predict(expected); }
+        catch { return null; }
+        var seen = new List<(NativeNames.Rename Rename, string From, string To)>();
+        foreach (var rename in predicted)
+        {
+            // A named element told by its name alone (identity rule 4 without a discriminator): owner/kind:name.
+            if (!identities.TryGetValue(rename.Element, out var from) || !from.EndsWith(":" + rename.From, StringComparison.Ordinal)) continue;
+            var to = from[..^rename.From.Length] + rename.To;
+            if (actualValues.ContainsKey((to, "$kind")) && !actualValues.ContainsKey((from, "$kind")) && !expectedValues.ContainsKey((to, "$kind")))
+                seen.Add((rename, from, to));
+        }
+        if (seen.Count == 0) return null;
+        // The Studio's SetName changes the model only inside a command (the merge ran it inside its own): one command for all.
+        var applied = true;
+        try { StudioAdapter.Runtime.Mutate(expected, "SSAM: native names of the merge", _ => { foreach (var (rename, _, _) in seen) applied &= NativeNames.Apply(rename.Element, rename.To); }); }
+        catch { return null; }
+        if (!applied) return null;
+        var labels = new Dictionary<string, string>(StringComparer.Ordinal);
+        var proof = Compare(Read(expected, null, labels), actualValues, labels, actualLabels);
+        proof["nativeNames"] = new JsonObject
+        {
+            ["rule"] = NativeNamesRule,
+            ["renames"] = new JsonArray(seen.Select(s => (JsonNode)NativeNames.Json(s.Rename, expectedLabels.GetValueOrDefault(s.From) ?? s.From)).ToArray()),
+            ["differencesWithoutRenames"] = (plain["differences"] as JsonArray)?.Count ?? 0,
+        };
+        return proof;
     }
 
     /// <summary>The identity of an auto-generated index (rule 3): its entity's identity and the identities of its attributes,

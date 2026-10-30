@@ -65,7 +65,7 @@ public sealed partial class ModelSession
         if (plan.Problems.Count > 0)
             throw new KernelRefusalException(CssEdits.Refused, $"css: {plan.Problems.Count} problem(s) in the edits of {Describe(target)}: " + string.Join("; ", plan.Problems.Select(p => p["message"]?.ToString())),
                 new JsonArray(plan.Problems.Select(p => (JsonNode)JobPreflight.PublicProblem(p)).ToArray()));
-        ThemeCss.Write(target, plan.Css);
+        var settled = ThemeCss.Write(target, plan.Css);
         ThemeWritten(target);
         var written = ThemeCss.AuthorOf(target) ?? plan.Css;
         foreach (var group in lints.GroupBy(f => f.Code))
@@ -76,8 +76,9 @@ public sealed partial class ModelSession
             ["chars"] = written.Length, ["charsBefore"] = current.Length,
             ["edits"] = new JsonArray(plan.Applied.Select(a => (JsonNode)a.DeepClone()).ToArray()),
         };
-        if (ThemeCss.Of(target) is { } sheet && ThemeCss.Changed(sheet) is { } change)
-            foreach (var (key, value) in change) result[key] = value?.DeepClone();
+        // What the one normalization changed (R2-D: a target reached through its property too).
+        if (settled != null)
+            foreach (var (key, value) in settled) result[key] = value?.DeepClone();
         if (lints.Count > 0) result["lints"] = new JsonArray(lints.Select(f => (JsonNode)new JsonObject { ["code"] = f.Code, ["severity"] = f.Severity, ["line"] = f.Line, ["subject"] = f.Subject }).ToArray());
         return result;
     }
@@ -112,7 +113,10 @@ public sealed partial class ModelSession
             foreach (var (key, value) in change) landing[key] = value?.DeepClone();
         var author = ThemeCss.Author(sheet);
         landing["basedOn"] = ThemeCss.Sha256(author);
-        if (op["basedOn"] == null && !string.IsNullOrWhiteSpace(before) && before != author)
+        // A set the kernel makes itself (an html op's plan writes the page's <style> through an internal alias, $ssam.html.N) is no
+        // set of the author's: what that write did is in the op's own answer (styleSheet), never a note naming the alias.
+        var internalWrite = op["target"]?.ToString()?.StartsWith("$ssam.", StringComparison.Ordinal) == true;
+        if (op["basedOn"] == null && !internalWrite && !string.IsNullOrWhiteSpace(before) && before != author)
             Note("CSS_SET_WHOLE", $"set StyleSheet on {Describe(target)} replaced {before!.Length} chars of author CSS with {author.Length}: to change a rule, the css op edits it alone "
                 + $"({{\"op\":\"css\",\"target\":\"{op["target"]}\",\"basedOn\":\"{landing["basedOn"]}\",\"edits\":[{{\"replaceRule\":\"<selector>\",\"body\":\"<declarations>\"}}]}})");
         return landing;

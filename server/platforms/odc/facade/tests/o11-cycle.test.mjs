@@ -20,6 +20,21 @@ const sha256 = text => createHash('sha256').update(text).digest('hex');
 const WORDS = 'sim, pode entregar o SaveOrder no Orders';
 const SHELL = /dotnet build|python|\.ps1|ssam (connect|doctor|deliver|inspect)|odc /i;
 
+test('review: direct O11 delivery stages keyed deletes in native dependency order', async t => {
+  let applied;
+  const box = setup(t, { handlers: { deliver: args => {
+    const file = args[args.indexOf('--job') + 1];
+    applied = JSON.parse(fs.readFileSync(file, 'utf8')).ops;
+    return envelopes.delivered;
+  } }, deps: { dependencyMap: async input => ({ ok: true, usages: input.usageTargets.map(target => ({ target, resolved: { key: target.slice(1), path: 'ServerAction:' + target.slice(1) }, entries: target === '@A' ? [{ consumer: { key: 'B', path: 'ServerAction:B' } }] : [] })) }) } });
+  const original = { ops: [{ op: 'delete', target: '@A' }, { op: 'delete', target: '@B' }] };
+  fs.writeFileSync(box.job, JSON.stringify(original));
+  const h = await serve(box.deps); t.after(h.close);
+  await h.call('o11_deliver', { module: 'Orders', job: box.job, authorize: 'Apply the requested test changes' });
+  assert.deepEqual(applied.map(op => op.target), ['@B', '@A']);
+  assert.deepEqual(JSON.parse(fs.readFileSync(box.job, 'utf8')), original);
+});
+
 function sandbox() {
   const base = fs.mkdtempSync(path.join(os.tmpdir(), 'o11-cycle-'));
   const root = path.join(base, 'anvil'), home = path.join(base, 'home'), auth = path.join(base, 'authority'), studio = path.join(base, 'Studio');
@@ -74,15 +89,13 @@ test('the three tools are exposed with the distribution schema', async t => {
   assert.equal(inspect.additionalProperties, false);
   assert.equal(tools.o11_inspect.annotations.readOnlyHint, true);
   const deliver = tools.o11_deliver.inputSchema;
-  assert.deepEqual(Object.keys(deliver.properties).sort(), ['authorize', 'autoPatch', 'basedOn', 'captureProducers', 'checks', 'close', 'closePrevious', 'expectedEnvironment', 'fix', 'job',
+  assert.deepEqual(Object.keys(deliver.properties).sort(), ['authorize', 'autoPatch', 'basedOn', 'candidateRef', 'captureProducers', 'checks', 'close', 'closePrevious', 'expectedEnvironment', 'fix', 'job',
     'module', 'patch', 'producers', 'publish', 'resume', 'until']);
   // A written patch (at most 500 since 20/10/2026, meta item 4), or "verified" (every verified patch of the refusal of that job).
   const patch = deliver.properties.patch.anyOf.find(x => x.type === 'array');
   assert.ok(deliver.properties.patch.anyOf.some(x => x.const === 'verified' || x.enum?.includes('verified')));
   assert.equal(patch.maxItems, 500);
-  assert.deepEqual(patch.items.properties.op.enum, ['add', 'remove', 'replace', 'test']);
-  assert.equal(patch.items.additionalProperties, false);
-  assert.deepEqual(patch.items.required, ['op', 'path'], 'remove takes no value');
+  assert.deepEqual(patch.items, {}, 'operation details are enforced by the parser, not repeated in the listing');
   assert.equal(deliver.properties.basedOn.anyOf.length, 2);
   assert.equal(deliver.properties.fix.const ?? deliver.properties.fix.enum?.[0], 'apply');
   assert.deepEqual(Object.keys(deliver.properties.close.properties).sort(), ['reason', 'taskId']);
@@ -413,9 +426,8 @@ test('failures before any task are plain refusals and carry no shell hint', asyn
 
 test('until=apply snapshots through the bridge, applies on that capture and never calls deliver', async t => {
   const bridge = await fakeBridge(request => {
-    if (request.method === 'open_module') return { success: true, data: { opened: true } };
-    if (request.method === 'get_active_module') return { success: true, data: { name: 'Orders', key: 'k1', environment: 'personal-x.outsystemscloud.com' } };
-    if (request.method === 'snapshot_module') return { success: true, data: { path: request.params.path, key: 'k1', snapshot_id: 's1' } };
+    if (request.method === 'list_open_modules') return { success: true, data: { modules: [{ name: 'Orders', key: 'k1', environment: 'personal-x.outsystemscloud.com' }] } };
+    if (request.method === 'snapshot_module') { fs.writeFileSync(request.params.path, 'captured model'); return { success: true, data: { path: request.params.path, key: 'k1', snapshot_id: 's1' } }; }
     return { success: false, error: 'unexpected ' + request.method };
   });
   t.after(() => bridge.close());
@@ -425,13 +437,11 @@ test('until=apply snapshots through the bridge, applies on that capture and neve
     deps: { bridge: o11Bridge({ port: bridge.port, authorization: 'TESTKEY' }) } });
   const { call, close } = await serve(box.deps); t.after(close);
   const valid = await call('o11_deliver', { module: 'Orders', job: box.job, until: 'apply', expectedEnvironment: 'personal-x.outsystemscloud.com', authorize: WORDS });
-  assert.deepEqual(valid.structuredContent, { ok: true, valid: true, nextBasedOn: { job: box.job, sha256: sha256(fs.readFileSync(box.job)) } });
-  assert.deepEqual(bridge.seen.slice(0, 3).map(r => r.method).sort(), ['bridge_manifest', 'ping', 'windows']);
-  assert.deepEqual(bridge.seen.slice(3).map(r => r.method), ['open_module', 'get_active_module', 'snapshot_module']);
-  assert.deepEqual(bridge.seen[3].params, { name: 'Orders', environment: 'personal-x.outsystemscloud.com' });
-  const snapshot = bridge.seen[5].params.path;
-  assert.equal(path.dirname(snapshot), path.join(box.local, 'snapshots')); assert.match(path.basename(snapshot), /^Orders-\d{8}T\d{9}Z\.oml$/);
-  assert.equal(bridge.seen[5].params.module_key, 'k1'); assert.equal(bridge.seen[5].authorization, 'TESTKEY');
+  assert.deepEqual(valid.structuredContent, { ok: true, valid: true, capture: { path: bridge.seen.at(-1).params.path, sha256: sha256('captured model'), modelSha256: sha256('captured model'), moduleKey: 'k1' }, nextBasedOn: { job: box.job, sha256: sha256(fs.readFileSync(box.job)) } });
+  assert.deepEqual(bridge.seen.map(r => r.method), ['list_open_modules', 'snapshot_module']);
+  const snapshot = bridge.seen[1].params.path;
+  assert.equal(path.dirname(snapshot), path.join(box.local, 'snapshots')); assert.match(path.basename(snapshot), /^build-Orders-\d{14}-[a-f0-9]{8}\.oml$/);
+  assert.equal(bridge.seen[1].params.module_key, 'k1'); assert.equal(bridge.seen[1].authorization, 'TESTKEY');
   const argv = box.runAnvil.calls[0].args;
   assert.equal(argv[0], 'apply');
   assert.equal(argv[argv.indexOf('--job') + 1], box.job); assert.equal(argv[argv.indexOf('--base') + 1], snapshot);
@@ -448,16 +458,14 @@ test('until=apply snapshots through the bridge, applies on that capture and neve
   assert.equal(box.runAnvil.calls.length, 2);
 });
 
-test('until=apply stops when the active module is another one, before any capture', async t => {
-  const bridge = await fakeBridge(request => request.method === 'open_module' ? { success: true, data: { alreadyOpen: true } }
-    : request.method === 'get_active_module' ? { success: true, data: { name: 'Billing', key: 'k2' } } : { success: false, error: 'no' });
+test('until=apply refuses an unavailable keyed capture without selecting another tab', async t => {
+  const bridge = await fakeBridge(request => request.method === 'list_open_modules' ? { success: true, data: { modules: [{ name: 'Billing', key: 'k2' }] } } : { success: false, error: 'no' });
   t.after(() => bridge.close());
   const box = setup(t, { handlers: {}, deps: { bridge: o11Bridge({ port: bridge.port, authorization: 'TESTKEY' }) } });
   const { call, close } = await serve(box.deps); t.after(close);
   const result = (await call('o11_deliver', { module: 'Orders', job: box.job, until: 'apply', authorize: WORDS })).structuredContent;
-  assert.equal(result.code, 'ACTIVE_MODULE_CHANGED');
-  assert.deepEqual(bridge.seen.slice(0, 3).map(r => r.method).sort(), ['bridge_manifest', 'ping', 'windows']);
-  assert.deepEqual(bridge.seen.slice(3).map(r => r.method), ['open_module', 'get_active_module']);
+  assert.equal(result.code, 'VALIDATION_CAPTURE_UNAVAILABLE');
+  assert.deepEqual(bridge.seen.map(r => r.method), ['list_open_modules']);
   assert.equal(box.runAnvil.calls.length, 0);
 });
 
@@ -963,4 +971,19 @@ test('R1 resume (T16): an uncertain write is resumed with the user\'s words; wit
   assert.equal(resumed.result, 'delivered', JSON.stringify(resumed));
   assert.notEqual(resumed.authorization?.source, 'inherited');
   assert.deepEqual(box.runAnvil.calls.at(-1).args.slice(0, 3), ['deliver', '--resume', UNCERTAIN]);
+});
+
+test('round2 7: direct O11 delivery reads the module usage index once for all deletes', async t => {
+  const { deletionIndex } = await import('./fixtures/r2-delete-index.mjs');
+  let native, applied;
+  const box = setup(t, { handlers: { deliver: args => {
+    applied = JSON.parse(fs.readFileSync(args[args.indexOf('--job') + 1], 'utf8')).ops;
+    return envelopes.delivered;
+  } }, deps: { dependencyMap: input => native.map(input) } });
+  native = deletionIndex(box.base, 3);
+  fs.writeFileSync(box.job, JSON.stringify({ ops: [0,1,2].map(i => ({ op: 'delete', path: 'ServerAction:Action' + i })) }));
+  const h = await serve(box.deps); t.after(h.close);
+  await h.call('o11_deliver', { module: 'Orders', job: box.job, authorize: 'Apply the requested test changes' });
+  assert.deepEqual(applied.map(op => op.path), ['ServerAction:Action2','ServerAction:Action1','ServerAction:Action0']);
+  assert.deepEqual(native.counts(), { calls: 1, reads: 1 });
 });

@@ -48,6 +48,12 @@ public static class SpecExpander
 
     public static List<JsonObject> Expand(JsonObject data) => Expand(data, null);
 
+    /// <summary>R3-B (review A2): the expansion the preflight reads, a data text judged with the names the job's other ops give.</summary>
+    public static List<JsonObject> ExpandInJob(JsonObject data, IReadOnlyList<PlatformLimits.Sibling> outside)
+        => data["ddl"] != null ? DdlCreation(CheckedKeys(data), outside, null).Expanded : Expand(data, null);
+
+    private static JsonObject CheckedKeys(JsonObject data) { Keys(data, "data"); return data; }
+
     /// <summary>C21 (atritos 3): <paramref name="rewrites"/> hears every value written otherwise than the spec gives it, with its
     /// pointer relative to the data: a default given as JSON (true, 3) or as a bare word is the literal the Studio stores
     /// ("True", 3, "\"Pending\""), a JSON boolean of a static record is True/False.</summary>
@@ -246,7 +252,12 @@ public static class SpecExpander
     /// <summary>The creation a data text declares (DL2), compiled without the module: the spec of its new types, their ops
     /// (expanded) and the creates of new parts of the elements it keeps. A text that does not parse, or names what it cannot,
     /// is refused with every problem (DDL_SYNTAX, DDL_INVALID), each with its line.</summary>
-    public static (Anvil.Reading.DdlCompilation Compilation, List<JsonObject> Expanded) DdlCreation(JsonObject data)
+    public static (Anvil.Reading.DdlCompilation Compilation, List<JsonObject> Expanded) DdlCreation(JsonObject data) => DdlCreation(data, null, null);
+
+    /// <summary>The same, with the names the job's other ops (<paramref name="outside"/>, PlatformLimits.JobSiblings: the
+    /// preflight) and the module (<paramref name="module"/>: the apply) give the entities the text names, for the exclusive
+    /// correspondence of a cut name (PlatformLimits.DdlNames).</summary>
+    public static (Anvil.Reading.DdlCompilation Compilation, List<JsonObject> Expanded) DdlCreation(JsonObject data, IReadOnlyList<PlatformLimits.Sibling>? outside, Anvil.Reading.DdlDocument? module)
     {
         if (data["ddl"] is not JsonValue v || !v.TryGetValue<string>(out var text)) throw new InvalidOperationException("spec: 'ddl' is the data text (a string)");
         var extra = data.Select(kv => kv.Key).Where(k => k is not ("ddl" or "basedOn") && !k.StartsWith('_')).ToArray();
@@ -256,7 +267,10 @@ public static class SpecExpander
         // statements): the static checks read the values the records will have, and refuse a required one none gives.
         var conventions = Anvil.Reading.DdlConventions.Apply(document, null);
         var compilation = Anvil.Reading.DdlCompiler.Compile(document, null, MessageExpectations.Lane, "$ddl", text);
-        var problems = conventions.Problems.Concat(compilation.Problems).OrderBy(p => p.Line).ToList();
+        // R3-B: a name longer than the platform keeps (PlatformLimits name.maxLength), said here, before the first round, with
+        // the text of every cut name when that is the one correction (PLATFORM_NAME_KEPT), never found by the second round.
+        var limits = PlatformLimits.DdlNames(document, text, MessageExpectations.Lane, module, outside);
+        var problems = conventions.Problems.Concat(compilation.Problems).Concat(limits).OrderBy(p => p.Line).ToList();
         if (problems.Count > 0) throw DdlRefusal("DDL_INVALID", problems);
         var expanded = compilation.Spec != null ? Expand(compilation.Spec) : new List<JsonObject>();
         expanded.AddRange(compilation.Steps.Select(s => s.Op));
@@ -283,6 +297,21 @@ public static class SpecExpander
 
         static List<string> Names(Anvil.Reading.DdlDocument document)
             => document.All().Where(e => e.Name.Length > 0).Select(e => e.Name).Distinct(StringComparer.Ordinal).ToList();
+    }
+
+    /// <summary>R2-B: what a data text names, each with the element it is a part of (an attribute or a record its entity, an
+    /// index the entity it is on), null for a top-level element; what reads of a text that does not parse whole.</summary>
+    public static IEnumerable<(string Name, string? Owner)> DdlDeclarations(JsonObject? data)
+    {
+        if (data?["ddl"] is not JsonValue v || !v.TryGetValue<string>(out var text)) return [];
+        try { return Of(Anvil.Reading.DdlParser.Parse(text, MessageExpectations.Lane)); }
+        catch (Anvil.Reading.DdlParseException error) { return error.Partial == null ? [] : Of(error.Partial); }
+        catch { return []; }
+
+        static List<(string, string?)> Of(Anvil.Reading.DdlDocument document)
+            => document.All().Where(e => e.Name.Length > 0)
+                .Select(e => (e.Name, e.Parent?.Name is { Length: > 0 } parent ? parent : e.Kind == "EntityIndex" && e.Of is { Length: > 0 } of ? of : null))
+                .Distinct().ToList();
     }
 
     /// <summary>The data text parsed, every syntax problem at once (DDL_SYNTAX), each with its line.</summary>

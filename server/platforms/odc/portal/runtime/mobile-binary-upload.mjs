@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import {createHash} from 'node:crypto';
-import {authorizationContext} from '../../facade/authorization-context.mjs';
+import {approvalOf,contextValues,originId,ownedBy,sameGrant,recorded} from './written-approval.mjs';
 import {fail} from './errors.mjs';
 import {fingerprint,isUuid} from './write-journal.mjs';
 import {extensibilityStateHash} from './mobile-extensibility.mjs';
@@ -10,8 +10,11 @@ export const MOBILE_FILE_UPLOAD='mobileExtensibility.uploadFile';
 export const MOBILE_FILE_CONVERT='mobileExtensibility.convertFile';
 export const MOBILE_FILE_SAVE='mobileExtensibility.saveFile';
 const bad=()=>fail('AUTHORIZATION_CONTEXT_INVALID','Binary upload requires an owned mobile fixture, exact binary setting, current state and approved content. Nothing was sent.');
-export function mobileBinaryUploadTarget(file){
- let c;try{if(fs.statSync(file).size>32768)bad();c=JSON.parse(fs.readFileSync(file,'utf8')).constraints;}catch{bad();}
+// R2-I (owner's rule, 28/10): the native upload input carries only the content, so the setting it fills comes from the
+// context file or, with the written words alone, from the call's scope; the words name the app, the library (if any) and the
+// setting either way.
+export function mobileBinaryUploadTarget(file,scope){
+ let c;try{c=contextValues(file,scope);}catch{bad();}
  if(!['applicationKey','environmentKey','settingKey'].every(k=>isUuid(c?.[k])))bad();
  return {applicationKey:c.applicationKey,environmentKey:c.environmentKey,settingKey:c.settingKey,...(c.libraryKey?{libraryKey:c.libraryKey}:{})};
 }
@@ -20,19 +23,23 @@ export function mobileBinaryContent(value){
  const bytes=Buffer.from(value,'base64');if(!bytes.length||bytes.length>1048576||bytes.toString('base64')!==value)bad();
  return {contentSha256:createHash('sha256').update(bytes).digest('hex'),byteLength:bytes.length};
 }
-export async function mobileBinaryUploadApproval({file,words,host,raw,lookup,read,portalRead,secretRefs=[],operationId=MOBILE_FILE_UPLOAD}){
+export async function mobileBinaryUploadApproval({file,words,host,raw,lookup,read,portalRead,secretRefs=[],operationId=MOBILE_FILE_UPLOAD,scope,find}){
  const conversion=operationId===MOBILE_FILE_CONVERT,key=conversion?'BinaryData':'FileContent';
  if(![MOBILE_FILE_UPLOAD,MOBILE_FILE_CONVERT].includes(operationId))bad();
- let limits;try{if(fs.statSync(file).size>32768)bad();limits=JSON.parse(fs.readFileSync(file,'utf8')).constraints;}catch{bad();}
+ let limits;try{limits={...contextValues(file,scope)};}catch{bad();}
+ if(!file&&isUuid(limits.applicationKey))limits.originOperationUuid=originId(limits,'originOperationUuid',{written:true,find,what:'The mobile binary upload',
+  predicate:r=>ownedBy(host,'asset-repository-api-v1:post:/assets')(r)&&r.response?.assetKey===limits.applicationKey});
+ if(!file&&isUuid(limits.libraryKey))limits.libraryOriginOperationUuid=originId(limits,'libraryOriginOperationUuid',{written:true,find,what:'The mobile binary upload',
+  predicate:r=>ownedBy(host,'asset-repository-api-v1:post:/assets')(r)&&r.response?.assetKey===limits.libraryKey});
  if(!limits||Object.keys(raw.screenVariables??{}).length||Object.keys(raw.clientVariables??{}).length
   ||Object.keys(raw.inputParameters??{}).join(',')!==key||!isUuid(limits.originOperationUuid)
   ||!['applicationKey','environmentKey','settingKey','portfolioKey'].every(k=>isUuid(limits[k])))bad();
  const origin=lookup(limits.originOperationUuid);
  if(!origin||!['accepted','confirmed'].includes(origin.state)||origin.identity?.tenant!==host
-  ||origin.identity.operationId!=='asset-repository-api-v1:post:/assets'||origin.response?.assetKey!==limits.applicationKey||!origin.authorization?.source)bad();
+  ||origin.identity.operationId!=='asset-repository-api-v1:post:/assets'||origin.response?.assetKey!==limits.applicationKey||!recorded(origin))bad();
  const asset=await read('asset-repository-api-v1:get:/assets/{assetKey}',{assetKey:limits.applicationKey});
  if(!asset?.ok||asset.data?.assetKey!==limits.applicationKey||asset.data.assetType!=='MobileApplication'||asset.data.portfolioKey!==limits.portfolioKey)bad();
- const library=await ownedBinaryLibrary({scope:limits,origin,host,lookup,read});
+ const library=await ownedBinaryLibrary({scope:limits,origin,host,lookup,read,strict:Boolean(file)});
  const current=await read('native-application-orchestration-service-api-v1:get:/environments/{environmentKey}/applications/{applicationKey}/configurations/extensibility-settings',{applicationKey:limits.applicationKey,environmentKey:limits.environmentKey});
  const field=binarySetting(current?.data,limits);
  if(!current?.ok||field?.dataType!=='BinaryUrl'||typeof field.isSecret!=='boolean'||!['Default','Override'].includes(field.valueOrigin))bad();
@@ -55,8 +62,8 @@ export async function mobileBinaryUploadApproval({file,words,host,raw,lookup,rea
  const constraints={originOperationUuid:limits.originOperationUuid,applicationKey:limits.applicationKey,environmentKey:limits.environmentKey,settingKey:limits.settingKey,portfolioKey:limits.portfolioKey,
   ...binaryLibraryConstraints(limits),inputSha256:fingerprint(raw.inputParameters),expectedConfigurationSha256:extensibilityStateHash(current.data),...content,
   ...(conversion?{transportMode:'base64'}:{}),...(field.isSecret?{isSecret:true,secretRefsSha256:fingerprint(secretRefs)}:{})};
- const approval=authorizationContext(file,words,{lane:'odc',host,operation:operationId,environmentKey:limits.environmentKey,targets:[asset.data.name,...(library?[library.name]:[]),field.name],constraints});
- if(!approval||approval.source.threadId!==origin.authorization.source.threadId||approval.source.messageId!==origin.authorization.source.messageId)bad();
+ const approval=approvalOf(file,words,{lane:'odc',host,operation:operationId,environmentKey:limits.environmentKey,targets:[asset.data.name,...(library?[library.name]:[]),field.name],constraints});
+ if(!approval||!sameGrant(origin.authorization,approval))bad();
  return {approval,expected:constraints};
 }
 export function binaryDownloadUrl(value){

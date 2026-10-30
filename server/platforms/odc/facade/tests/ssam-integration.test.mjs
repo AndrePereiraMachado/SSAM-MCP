@@ -10,7 +10,7 @@ import * as z from 'zod/v4';
 import { InMemoryTransport, McpServer } from '@modelcontextprotocol/server';
 import { Client } from '@modelcontextprotocol/client';
 import { createSsamServer, createAppSessionServer, writeInlineJob } from '../ssam.mjs';
-import { fakeAnvil } from './fixtures/fake-anvil.mjs';
+import { fakeAnvil, validPreflight } from './fixtures/fake-anvil.mjs';
 
 const sha256 = data => createHash('sha256').update(data).digest('hex');
 
@@ -25,7 +25,7 @@ const temp = prefix => fs.mkdtempSync(path.join(os.tmpdir(), prefix));
 test('one server answers an O11 delivery with "delivered" and the job it used (nextBasedOn), through the shared response shaper', async () => {
   const root = temp('ssam-int-root-');
   const runAnvil = fakeAnvil({ deliver: () => ({ ok: true, command: 'deliver', data: { delivered: true, taskId: 't1', writeState: 'applied' } }) });
-  const server = await createSsamServer({ odc: false, deps: { cycle: { root, env: { USERPROFILE: root, LOCALAPPDATA: root }, runAnvil, assertSelected: async () => {}, tasksDir: path.join(root, 'tasks') },
+  const server = await createSsamServer({ odc: false, deps: { cycle: { checkRunner: validPreflight, root, env: { USERPROFILE: root, LOCALAPPDATA: root }, runAnvil, assertSelected: async () => {}, tasksDir: path.join(root, 'tasks') },
     lock: { o11Root: root, odcRoot: root, connection: () => null } } });
   const client = await connect(server);
   try {
@@ -68,7 +68,7 @@ test('two writes on one Studio never overlap through the ssam server: the second
     throw new Error('unexpected bridge call ' + method);
   } };
   const server = await createSsamServer({ odc: false, deps: {
-    cycle: { root, env: { USERPROFILE: root, LOCALAPPDATA: root }, runAnvil, assertSelected: async () => {}, tasksDir: path.join(root, 'tasks'), bridge,
+    cycle: { checkRunner: validPreflight, root, env: { USERPROFILE: root, LOCALAPPDATA: root }, runAnvil, assertSelected: async () => {}, tasksDir: path.join(root, 'tasks'), bridge,
       lock: { connection: () => null } },
     lock: { o11Root: root, odcRoot: root, connection: () => null }, evidence: { roots: [path.join(root, '.local')] } } });
   const client = await connect(server);

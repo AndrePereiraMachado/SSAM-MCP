@@ -51,6 +51,7 @@ const jsonBytes = text => Buffer.byteLength(JSON.stringify(text), 'utf8') - 2;
 
 // The blocks an element names: its @key, or its name (case-insensitive); a name two elements share answers both.
 export function selectBlocks(ddl, element) {
+  if (Array.isArray(element)) return ddl.blocks.filter(block => element.some(item => selectBlocks({ blocks: [block] }, item).length));
   if (element.startsWith('@')) return ddl.blocks.filter(b => b.key === element.slice(1));
   const name = element.toLowerCase();
   return ddl.blocks.filter(b => b.name.toLowerCase() === name);
@@ -103,7 +104,7 @@ function layout(head, blocks, cap) {
 // budget.
 const laidOut = new Map();
 export function ddlPages(ddl, { budgetBytes, element = null, key = null }) {
-  const cacheKey = key != null ? key + '|' + (element ?? '') + '|' + budgetBytes : null;
+  const cacheKey = key != null ? key + '|' + JSON.stringify(element ?? '') + '|' + budgetBytes : null;
   if (cacheKey && laidOut.has(cacheKey)) return laidOut.get(cacheKey);
   const blocks = element == null ? ddl.blocks : selectBlocks(ddl, element);
   const head = ddlHeader(ddl).split('\n').slice(0, -1);

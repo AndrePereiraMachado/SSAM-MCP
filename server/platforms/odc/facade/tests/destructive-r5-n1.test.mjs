@@ -46,7 +46,8 @@ test('N-1: every validation refusal of the probe (C1-C4, E1-E6, D1-D3) gives no 
   assert.deepEqual(leaks, [], 'no answer carries the owner words');
   assert.equal(refused.length, Object.keys(N1_CASES('x', W)).length, 'every case is a refusal: ' + JSON.stringify(refused));
   assert.deepEqual(runs, [], 'nothing ran');
-  assert.ok(filesUnder(path.join(answersRoot, '.local', 'answers')).length >= 1, 'the fitter kept at least one long refusal (D3)');
+  // R1-B (fase4-28/r1-answers): D3 is no longer kept (no 300-character error clip); D4 is above the visible ceiling.
+  assert.ok(filesUnder(path.join(answersRoot, '.local', 'answers')).length >= 1, 'the fitter kept at least one long refusal (D4)');
   assert.deepEqual(filesWithMark([work, process.env.USERPROFILE]), [], '.local\\answers and the profile keep no owner words');
 });
 

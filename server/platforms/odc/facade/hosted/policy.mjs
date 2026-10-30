@@ -36,6 +36,9 @@ import { createHash } from 'node:crypto';
 import { anvilRoot, workspaceRoot } from '../workspace.mjs';
 import { proposedPatch, namedPatch } from '../job-patch.mjs';
 import { readVerifiedPatch } from '../verified-patch.mjs';
+import { resolveVerifiedPatch, candidateOffer } from './verified-store.mjs';
+import { withCheckedCandidate } from '../o11-build-phase.mjs';
+import { localUploadEnabled, uploadLocalFile } from './local-upload.mjs';
 import { scrubDiscover, scrubEvidence, thirdPartyJobs } from './evidence.mjs';
 import { agentReadable, agentSegments, insideVisible } from './mirror.mjs';
 import { agentPath, outsideWorkspaceRefusal, isAgentMachinePath } from '../agent-paths.mjs';
@@ -43,7 +46,7 @@ import { CODE_TOOL, JOB_TOOLS, JobTextError, PathRefusal, confineJobs, jobTextPo
 import { generatorApproval, offered } from '../generators.mjs';
 import { holdPointers, pointersOf, scrubText } from '../exposure.mjs';
 import { hostedCatalog } from './served.mjs';
-import { withoutHostedPreview } from './availability.mjs';
+import { withoutHostedPreview, hiddenTools } from './availability.mjs';
 import { causeOf, studioIdentity, studioRefusal, studioWarningOf } from '../studio-identity.mjs';
 import { destructiveUnavailable, hostedDestructive, hostedDestructiveFiles } from './destructive.mjs';
 import { withStudioScope } from './studio-scope.mjs';
@@ -377,8 +380,14 @@ const pathOnlyWhen = (name, entry, pointer, args, value) => {
   return true;
 };
 
+// R2-H (f): a refused local upload keeps the outcome the agent gave (not-sent: nothing left the user's machine).
+const uploadRefused = error => Object.assign(new PathRefusal(error.code, error.message), error.outcome ? { fields: { outcome: error.outcome } } : {});
 async function resolveValue(value, role, lane, context, agentRoot = null) {
   const workspace = path.resolve(context.workspace);
+  if (role === 'in' && value.startsWith('local:')) {
+    try { return await uploadLocalFile(context, value); }
+    catch (error) { throw uploadRefused(error); }
+  }
   // C26: an absolute path of the user's machine under the agent's own folders (the root the agent reports in its Hello) is
   // that agent: path, e.g. C:\SSAM-Agent\inbox\job.json -> agent:inbox/job.json; on a Mac (a POSIX agent folder,
   // fase4-26/a8-mac) /Users/ana/SSAM-Agent/inbox/job.json -> agent:inbox/job.json.
@@ -408,7 +417,13 @@ async function resolveValue(value, role, lane, context, agentRoot = null) {
   }
   if (path.isAbsolute(value) || /^[A-Za-z]:/.test(value) || /^[\\/]/.test(value)) {
     const abs = path.resolve(value);
-    if (!insideVisible(workspace, abs)) throw outside(value);
+    if (!insideVisible(workspace, abs)) {
+      if (role === 'in' && localUploadEnabled(context)) {
+        try { return await uploadLocalFile(context, value); }
+        catch (error) { throw uploadRefused(error); }
+      }
+      throw outside(value);
+    }
     return abs;
   }
   // Relative: inputs under ws:<lane>/, outputs under ws:odc/lab/ (ODC) or ws:o11/ (O11). A tool without a lane takes
@@ -818,7 +833,7 @@ export const withStudioWarning = (answer, warning) => withStudioFields(answer, w
 // it was shown (studioNoticeMemory, one per MCP session); without it every answer carries them.
 export function wrapHostedTool(name, config, handler, { context, link = context?.agent, lanes = context?.lanes ?? [], run = (ctx, fn) => fn(),
   tools = hostedTools(), serverRoots, waitMs = RECONNECT_WAIT_MS, argsOf = null, prototypeOp = HOSTED_PROTOTYPE_OP, generatorOps = HOSTED_GENERATOR_OPS,
-  kernelRefused = null, destructive = HOSTED_DESTRUCTIVE, presentation = null, studioNotices = null } = {}) {
+  kernelRefused = null, destructive = HOSTED_DESTRUCTIVE, presentation = null, studioNotices = null, conditional = null } = {}) {
   const entry = tools[name];
   // presentation (a7 phase 4, tests): {workspace, serverRoots, pathApi} of the presenter only (the Linux image's layout with
   // path.posix on another machine); the call itself keeps the context's workspace.
@@ -839,6 +854,24 @@ export function wrapHostedTool(name, config, handler, { context, link = context?
     if (early.refusal) return refusal(early.refusal);
     args = early.args;
     const { lane, need } = early;
+    // Only server-owned handles are expanded; the ordinary gate then checks the
+    // complete resulting job, including its paths, prototype and generators.
+    const unexpandedArgs = args;
+    try {
+      if (['o11_job', 'ssam_job', 'o11_deliver', 'studio_deliver', 'ssam_code'].includes(name)) args = resolveVerifiedPatch(context.workspace, args);
+      else if (name === 'ssam_reference' && args.kind === 'check-job' && args.query && typeof args.query === 'object') {
+        const query = resolveVerifiedPatch(context.workspace, args.query);
+        if (query !== args.query) args = { ...args, query };
+      }
+    } catch (error) {
+      const inQuery = name === 'ssam_reference';
+      const recovery = verifiedPatchUnavailable(name, lane, args, inQuery ? '/query/patch' : '/patch', { workspace: context.workspace });
+      return refusal({ ...recovery, code: error.code, error: error.message });
+    }
+    if (args !== unexpandedArgs) {
+      const expanded = refusalBeforeAgent(name, args, { entry, config, raw: args, hasArgs, lanes, kernelRefused, prototypeOp, generatorOps, destructive, workspace: context.workspace });
+      if (expanded.refusal) return refusal(expanded.refusal);
+    }
     let info = null, skipped = [];
     try { info = link?.info?.() ?? null; } catch { info = null; }
     if (need === 'always') {
@@ -878,7 +911,7 @@ export function wrapHostedTool(name, config, handler, { context, link = context?
             refused: value => pathOnlyWhen(name, entry, error.pointer, args, value) && outsideValue(value, role, lane, context, agentRoot) } : {}) }) });
         }
         // (a9 follow-up, review vps-a9 L1: a copy from the agent that failed names its destination in the workspace)
-        return refusal(pathRefused(error.code, present.string(String(error.message ?? ''))));
+        return refusal({ ...pathRefused(error.code, present.string(String(error.message ?? ''))), ...(error.fields ?? {}) });
       }
       // D2 and item 1: the jobs of the call (inline, a job file, the job of basedOn and the job a patch makes of it) with
       // every composite part and job:<name> target they reach, read strictly inside the workspace: first the prototype op
@@ -887,7 +920,12 @@ export function wrapHostedTool(name, config, handler, { context, link = context?
       const jobs = await confineJobs(name, resolved, { workspace: context.workspace, prototype: refusesPrototype,
         generator: refusesGenerators ? pendingGenerator : null, resolve: value => resolveValue(value, 'in', lane, context, info?.agentRoot ?? null) });
       if (jobs.prototype) return refusal(prototypeUnavailable(name, lane));
-      if (jobs.refusal) return refusal(jobPathRefused(jobs.refusal, info?.agentRoot ?? null, text => present.string(String(text ?? ''))));
+      if (jobs.refusal) {
+        const answer = jobPathRefused(jobs.refusal, info?.agentRoot ?? null, text => present.string(String(text ?? '')));
+        if (answer.corrected) answer.corrected = name === 'ssam_reference'
+          ? { ...args, query: { ...args.query, ...answer.corrected } } : { ...args, ...answer.corrected };
+        return refusal(answer);
+      }
       // servidor/fase4-25: after the paths (a part the gate refused is named by its own refusal, never as 'unreadable').
       if (jobs.generator) return refusal(generatorUnavailable(name, lane, jobs.generator));
       resolved = jobs.resolved;
@@ -902,13 +940,29 @@ export function wrapHostedTool(name, config, handler, { context, link = context?
         if (files) return refusal(destructiveUnavailable(name, files));
       }
     }
-    const { scope, result } = await withStudioScope(() => run(context, () => handler(...(hasArgs ? [resolved, ...params.slice(1)] : params))));
+    let offer = null;
+    if (resolved.candidateRef != null) {
+      if (!(name === 'o11_deliver' || name === 'ssam_code' && resolved.action === 'write') || lane !== 'o11')
+        return refusal({ ok: false, code: 'PATCH_INVALID', error: 'A checked candidate is used only by an O11 delivery.', outcome: 'not-sent' });
+      try { offer = candidateOffer(context.workspace, resolved.candidateRef, { lane, module: resolved.module }); }
+      catch (error) { return refusal({ ok: false, code: error.code, error: error.message, outcome: 'not-sent' }); }
+      const { candidateRef, ...rest } = resolved; resolved = rest;
+    }
+    const invoke = () => run(context, () => handler(...(hasArgs ? [resolved, ...params.slice(1)] : params)));
+    const { scope, result } = await withStudioScope(() => offer ? withCheckedCandidate(offer, invoke) : invoke());
     if (result?.resultType === 'input_required') return result;
     // A-M1 + E2, round 2 (A1, A2): the Studio of every lane the call touched, never silent when it is not the server's build.
     const verdict = studioVerdict({ name, lane, need, info, context, lanes, scope, skipped, link });
     if (verdict.refusal) return refusal(verdict.refusal);
     // fase4-28 R1 (F3): once per session and lane touched, again when the lane's verdict changes (studioNoticeMemory).
-    const documentation = ['ssam_discover', 'ssam_reference'].includes(name) ? withoutHostedPreview(result) : result;
+    // fase4-28 r2-preview: conditional() -> {available: [tool], project(name, args, result)}: the conditional tools served now
+    // (ssam_render) are named; the others stay hidden like the local previews. Without it, every conditional tool is hidden.
+    let documentation = result;
+    if (['ssam_discover', 'ssam_reference'].includes(name)) {
+      const shown = conditional ? await Promise.resolve().then(conditional).catch(() => null) : null;
+      documentation = withoutHostedPreview(result, hiddenTools(shown?.available ?? []));
+      if (shown?.project) documentation = shown.project(name, args, documentation);
+    }
     return withStudioFields(present.result(name === 'ssam_discover' ? scrubDiscover(documentation, thirdPartyJobs()) : scrubEvidence(documentation, thirdPartyJobs())),
       studioNotices ? studioNotices.fields(name, verdict) : verdict.fields);
   };

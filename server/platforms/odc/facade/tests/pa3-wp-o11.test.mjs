@@ -13,7 +13,7 @@ import { InMemoryTransport } from '@modelcontextprotocol/server';
 import { Client } from '@modelcontextprotocol/client';
 import { createSsamServer } from '../ssam.mjs';
 import { createBuildPool } from '../build-pool.mjs';
-import { fakeAnvil } from './fixtures/fake-anvil.mjs';
+import { fakeAnvil, validPreflight } from './fixtures/fake-anvil.mjs';
 
 const tmp = () => fs.mkdtempSync(path.join(isolatedProfile, 'pa3-wp-o11-'));
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -56,7 +56,7 @@ function lane(root, { open = ['Orders', 'Customers'], buildMs = 150, deliverMs =
 }
 
 async function serve(t, root, fake, pool = createBuildPool({ dir: path.join(root, 'pool'), size: 4, queueMs: 10000 })) {
-  const server = await createSsamServer({ odc: false, deps: { cycle: { root, env: { USERPROFILE: root, LOCALAPPDATA: root }, runAnvil: fake.runAnvil, assertSelected: async () => {},
+  const server = await createSsamServer({ odc: false, deps: { cycle: { checkRunner: validPreflight, root, env: { USERPROFILE: root, LOCALAPPDATA: root }, runAnvil: fake.runAnvil, assertSelected: async () => {},
     tasksDir: path.join(root, 'tasks'), bridge: fake.bridge, lastPublication: async () => null, lock: { connection: () => null },
     buildPool: pool, buildRunner: fake.buildRunner },
     lock: { o11Root: root, odcRoot: root, connection: () => null } } });

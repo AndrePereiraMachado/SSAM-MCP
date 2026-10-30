@@ -26,6 +26,7 @@ import { solutionDownload, solutionDownloadAbandon, solutionDownloadStatus } fro
 import { timerLogSnapshot, compareTimerLogs, observeTimerErrors } from './timer-observation.mjs';
 import { selectIntegrationRecord, exactIntegrationRow, integrationPayloadControl, integrationPayloadPage, payloadFailure } from './integration-payload.mjs';
 import { OwnerSelectionStore } from './owner-selection.mjs';
+import { connectionTestCleanupApproval } from './db-approval.mjs';
 
 // The Timers log is Cyclic_Job_Logs.aspx (Monitoring > Timers, live on 11.42); Timer_Logs.aspx does not exist.
 export const LOG_PAGES = { error: 'Error_Logs.aspx', general: 'General_Logs.aspx', integration: 'Integration_Logs.aspx', timer: 'Cyclic_Job_Logs.aspx' };
@@ -2049,8 +2050,14 @@ export class Client {
       if (approve) await approve(plan);
       // An unknown connection-test result must not prevent explicitly approved
       // cleanup. This never repeats the test or calls its outcome successful.
-      if (action === 'db-connection-delete' && plan.authorizationContext && journal)
-        journal.supersedeTestForCleanup(identity, plan, operationId);
+      // R2-I (owner's rule, 28/10): without a context file, the user's written words that name this connection (the page
+      // delete already checked them against its preview) are that approval: SSAM records it on the plan itself when the
+      // pending receipt of this target is a connection test, and the cleanup keeps every check (same connection and plan,
+      // no consumers, the test not being sent).
+      if (action === 'db-connection-delete' && journal) {
+        const approval = connectionTestCleanupApproval(journal, identity, plan, userWords, Journal.targetOf);
+        if (approval) { plan.authorizationContext = approval; journal.supersedeTestForCleanup(identity, plan, operationId); }
+      }
     };
     return runWrite(identity, () => prepare.call(this, args), run, { execute, words: userWords, operationId, journal,
       authorizing: (id, sha, fn) => this.http.authorizing(id, sha, fn), approve: gate, beforeSend });

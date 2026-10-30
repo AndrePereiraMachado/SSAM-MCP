@@ -347,11 +347,14 @@ public sealed class PatchCertaintyLiteralRevisionTests(ITestOutputHelper output)
     }
 
     [Fact]
-    public void OrdinaryProseWithoutScopeNamesStillAcceptsWithADisclosedLiteralPatch()
+    public void OrdinaryProseWithoutScopeNamesStillAcceptsWithADisclosedLiteral()
     {
         var result = Run("Buscar por nome", "<var name='Hint' type='Text'/>");
         Assert.True(result["accepted"]!.GetValue<bool>(), result.ToJsonString());
-        Assert.Contains(result["patchesApplied"]!.AsArray().OfType<JsonObject>(), p => p["patchRule"]?.ToString() == "TEXT_LITERAL_QUOTED");
+        // R2-C: the certain literal is written in the compile and disclosed as its normalization (TEXT_LITERAL_QUOTED), never a
+        // patch applied after a refusal.
+        Assert.True(result["patchesApplied"] is not JsonArray { Count: > 0 }, result["patchesApplied"]?.ToJsonString());
+        Assert.Contains("\"code\":\"TEXT_LITERAL_QUOTED\"", result.ToJsonString());
     }
 
     private static JsonObject Run(string expression, string declarations)

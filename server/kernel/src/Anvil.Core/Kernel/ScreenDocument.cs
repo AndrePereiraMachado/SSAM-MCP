@@ -27,6 +27,40 @@ public static partial class ScreenDocument
     public const string RootExists = "HTML_ROOT_EXISTS";
     public const string Traditional = "HTML_TRADITIONAL";
     public const string DefaultsMissing = "HTML_STUDIO_DEFAULTS";
+    /// <summary>R2-C: prose in an expression attribute whose value is the text it says, written as its literal (the certain patch
+    /// TEXT_LITERAL_QUOTED applied in the same compile, never a refusal).</summary>
+    public const string TextLiteralQuoted = "TEXT_LITERAL_QUOTED";
+
+    /// <summary>R2-C: the expression properties whose value is a text the page shows (placeholder, label, the value and example of
+    /// an Expression, the title of a screen): prose written there is that text, one reading (ScreenHtml.CertainLiteral). Any other
+    /// expression property (a condition, a source, a number) keeps its refusal: a literal would only move it to a type error.</summary>
+    public static bool ShowsText(string kind, string property) => property switch
+    {
+        "Prompt" or "Labels" or "Title" or "Example" => true,
+        "Value" => kind is "Expression" or "ExpressionWidget",
+        _ => false,
+    };
+
+    /// <summary>R2-C: the literal prose stands for in an expression attribute that shows text, or null: the property shows text,
+    /// the value is no expression, holds no binding and is no literal already, and its certainty (scope and declared names) says
+    /// only the prose reading is left. One rule for the document form and the edit form.</summary>
+    public static string? ProseLiteral(string kind, string property, string value, (IReadOnlySet<string> Scope, IReadOnlySet<string> Declared)? names)
+    {
+        if (!ShowsText(kind, property) || value.Trim().Length == 0 || value.TrimStart().StartsWith('"') || ScreenHtml.HoldsBraces(value) || !ScreenHtml.NotAnExpression(value)) return null;
+        if (names is not { } known || !ScreenHtml.CertainLiteral(value, known.Scope, known.Declared)) return null;
+        return ScreenHtml.Literal(value);
+    }
+
+    /// <summary>R2-C: the readings of prose whose literal is a choice: the literal, and the names in scope or declared that the text
+    /// writes (an expression meant), for the refusal's candidates.</summary>
+    public static System.Text.Json.Nodes.JsonArray ProseReadings(string value, (IReadOnlySet<string> Scope, IReadOnlySet<string> Declared)? names)
+    {
+        var readings = new System.Text.Json.Nodes.JsonArray(ScreenHtml.Literal(value));
+        if (names is { } known)
+            foreach (var word in ScreenHtml.LiteralIdentifiers(value).Distinct(StringComparer.OrdinalIgnoreCase))
+                if (known.Scope.Contains(word) || known.Declared.Contains(word)) readings.Add("an expression that names " + word);
+        return readings;
+    }
 
     private static readonly Regex Leading = new(@"^\s*(?:<!--.*?-->\s*)*<(screen|block)[\s/>]", RegexOptions.Singleline | RegexOptions.Compiled);
 
@@ -45,7 +79,7 @@ public static partial class ScreenDocument
         ["actions"] = "actions=\"A, B\" names screen actions; any logic op in the same job declares each one (flow \"action <Name>.A\", or kind screen with owner IMobileScreen:<Name>). All UI roots, inputs, placeholders and action signatures are prepared before UI bodies, regardless of document order; data-actions=\"D\" with \"data action <Name>.D\" (or kind data)",
         ["migrationAdapters"] = "v1, expanded before compilation in whole documents: migration-popup(id,show,save,success,refresh?) + data-popup-open/cancel/save; migration-tabs(id,active) with tab(value,label); migration-accordion(id,active) with item(value,label); migration-upload(id,content,filename,accept?); migration-download(id,content,filename,mime?); migration-pager(id,offset,total,size,source); migration-time(id,value,semantics=date|client-local|instant,zone?,format?). Native widgets and typed handlers are emitted in the same job. Preserve appearance with component classes; certify rendered equivalence with ssam_preview compare/accept. Unknown or incomplete adapters are refused.",
         ["names"] = "every name resolves as the reading's: the page, the module and its references, the other screens, the types; Kind:Name or Owner.Name when one is not enough",
-        ["css"] = "every <style> of the document, wherever it is, then data.css: the screen's or block's own style sheet, as written (the reading writes it back as one <style>); <style scope=\"theme\">: the module's default theme, between the markers of the root, as written; <style scope=\"theme\" id=\"name\"> is a named theme part: written once to the module theme, any document of any delivery may send it; the others leave those rules out; a <style> with another attribute (media...) is refused, a media one with the patch that moves it to data.css as its @media block; CSS the theme does not render (light-dark(), color-mix()) is refused with the rendered stylesheet as the patch",
+        ["css"] = "data.css, when sent, IS the screen's or block's own style sheet, as written: it replaces every <style> of the document (never added to them; CSS_STYLE_REPLACED in normalized when they differ), and on an edit it replaces the sheet the screen has (an op with only css changes only the sheet); without data.css, every <style> of the document, wherever it is, in document order, is that sheet, as written (the reading writes it back as one <style>); a rule goes when a later rule of the same selectors and context repeats each of its declarations (the same value, or the same but for what its urls name) with an importance at least as high (cssStages: shadowed, with the rules removed; the same CSS in every browser); a data.css that is empty or only whitespace is no data.css; a base64 data: image becomes an image of the module named by its URL (O11); the answer's styleSheet says bytesBefore, bytesAfter, rulesAdded and rulesRemoved; <style scope=\"theme\">: the module's default theme, between the markers of the root, as written; <style scope=\"theme\" id=\"name\"> is a named theme part: written once to the module theme, any document of any delivery may send it; the others leave those rules out; a <style> with another attribute (media...) is refused, a media one with the patch that writes it as its @media block (at the end of data.css when the op sends one, else as a plain <style>); CSS the theme does not render (light-dark(), color-mix()) is refused with the rendered stylesheet as the patch",
         ["bindings"] = "a line of text with bindings (\"Hoje · {{ X }}\", \"{{ N }} dias\") is one Expression, their concatenation (\"Hoje · \" + X), read back as {{ \"Hoje · \" + X }}; an attribute the same (class=\"a {{ X }}\"); a {{ that never closes, a }} with no {{ and {{ }} are refused (literal braces go in <text>)",
         ["checks"] = "before the op answers, the model it wrote is read again: the style sheet is the CSS of the document, no text keeps {{ or }}, no new Expression is empty (else nothing is written, one refusal); a class no rule defines (the page's CSS, the module themes, OutSystems UI) is the warning HTML_CLASS_NO_RULE, with the patch that puts another document's <style> in the theme when it has them",
         ["native"] = "what has one native reading is written in it and listed in normalized: an inline <svg> in currentColor or one color (nothing written is the SVG's black, #000) is a span.ssam-icon with its mask class (the rule in the page's style sheet; the svg and span selectors widened to it), any other svg (two colors, currentColor beside a color: noted, it is black in an image) the External image of its markup, a <use> of an element of the page copied in; <img src> with a URL with its scheme, a data URL or an absolute path is the External image of that Url, a file name (logo.png) the module image of its base name, a {{ }} by its type (Binary Data: Type Binary with that content; a text: External); style with a binding on a widget is the attribute style (ext:style); a constant binding in a property that takes a literal is the literal; an inline number with a fraction is calc(n) (the runtime keeps it); the whitespace beside an inline element on its line is kept; an event inside a Popup is at the Popup's Transition (Fade)",
@@ -53,7 +87,7 @@ public static partial class ScreenDocument
         ["runtime"] = ScreenVisual.RuntimeContract(MessageExpectations.Lane),
         ["refusals"] = new JsonObject
         {
-            [StyleUnplaced] = "a <style> that cannot go to the style sheet as written (media, an unknown scope, another attribute): media gets the patch that moves its CSS to data.css as its @media block",
+            [StyleUnplaced] = "a <style> that cannot go to the style sheet as written (media, an unknown scope, another attribute): media gets the patch that writes its CSS as its @media block (at the end of data.css when the op sends one, else a plain <style>)",
             [StyleDropped] = "the style sheet or the theme does not hold the CSS of the document after the write (nothing is written)",
             [BindingInvalid] = "a {{ that never closes, a }} with no {{, {{ }} with no expression, in a line of text or an attribute",
             [BindingLeft] = "a text widget keeps {{ or }} after the write (nothing is written)",
@@ -151,8 +185,10 @@ public static partial class ScreenDocument
     /// <summary>The value of one attribute written again whole (an expression that does not parse, as its string literal).</summary>
     internal sealed record SetAttribute(string Attribute, string Value) : Correction;
     /// <summary>A &lt;style&gt; the document cannot place as written leaves the html and its CSS (<paramref name="Css"/>, what it
-    /// means written plain: a media attribute becomes its @media block) goes to the end of data.css.</summary>
-    internal sealed record MoveStyle(string Css) : Correction;
+    /// means written plain: a media attribute becomes its @media block) goes to the end of data.css; <paramref name="InPlace"/>
+    /// (the op sends no data.css, so the document's &lt;style&gt; blocks are the sheet: R2-D): the element is written again as a
+    /// plain &lt;style&gt; with that CSS, where it was.</summary>
+    internal sealed record MoveStyle(string Css, bool InPlace = false) : Correction;
     /// <summary>The CSS of a &lt;style&gt; written again (the rendered stylesheet of CssCompat).</summary>
     internal sealed record RewriteStyle(string Css) : Correction;
     /// <summary>data.css written again (the rendered stylesheet of CssCompat); the html stays.</summary>
@@ -163,7 +199,8 @@ public static partial class ScreenDocument
 
     internal sealed record Problem(string Code, int Line, int Column, string Message, string? Fix,
         IReadOnlyList<string>? Candidates = null, (string Attribute, string Wrong, string Right)? Replace = null, JsonArray? Patch = null,
-        Correction? Correct = null, bool InCss = false, string? PatchRule = null, IReadOnlyList<string>? LiteralIdentifiers = null)
+        Correction? Correct = null, bool InCss = false, string? PatchRule = null, IReadOnlyList<string>? LiteralIdentifiers = null,
+        JsonObject? Extra = null)
     {
         public Correction? Correction => Correct ?? (Replace is { } r ? new ReplaceName(r.Attribute, r.Wrong, r.Right) : null);
     }
@@ -486,6 +523,8 @@ public static partial class ScreenDocument
             if (p.Correction is SetAttribute attribute) problem["patchFocus"] = new JsonObject { ["attribute"] = attribute.Attribute };
             if (p.LiteralIdentifiers is { Count: > 0 }) problem["literalIdentifiers"] = new JsonArray(p.LiteralIdentifiers.Select(n => (JsonNode)JsonValue.Create(n)!).ToArray());
             if (p.Candidates is { Count: > 0 }) problem["candidates"] = new JsonArray(p.Candidates.Select(c => (JsonNode)c).ToArray());
+            // R2-A: what a problem carries besides (the wrapping of a client action an event names).
+            foreach (var (key, value) in p.Extra ?? new JsonObject()) problem[key] = value?.DeepClone();
             list.Add(JobPreflight.PublicProblem(problem));
         }
         var codes = problems.Select(p => p.Code).Distinct().ToList();
@@ -510,7 +549,7 @@ public static partial class ScreenDocument
     {
         var result = css;
         foreach (var p in problems) if (p.Correction is RewriteDataCss rewrite) result = rewrite.Css;
-        foreach (var p in problems.Where(p => p.Correction is MoveStyle).OrderBy(p => p.Line).ThenBy(p => p.Column))
+        foreach (var p in problems.Where(p => p.Correction is MoveStyle { InPlace: false }).OrderBy(p => p.Line).ThenBy(p => p.Column))
         {
             var moved = ((MoveStyle)p.Correction!).Css;
             result = string.IsNullOrEmpty(result) ? moved : result.TrimEnd('\r', '\n') + "\n" + moved;
@@ -611,6 +650,11 @@ public static partial class ScreenDocument
                     var name = Regex.Match(tag, @"^<([A-Za-z][A-Za-z0-9-]*)").Groups[1].Value;
                     if (name.Length > 0 && ElementEnd(html, start) is var close and > 0)
                         edits.Add((close, 0, string.Concat(Enumerable.Repeat("<" + name + "></" + name + ">", count - 1)), 2));
+                    break;
+                }
+                case MoveStyle { InPlace: true } inPlace:
+                {
+                    if (ElementEnd(html, start) is var close and > 0) edits.Add((start, close - start, "<style>" + inPlace.Css + "</style>", 1));
                     break;
                 }
                 case RemoveElement:

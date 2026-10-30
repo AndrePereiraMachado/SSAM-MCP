@@ -46,12 +46,12 @@ public static partial class JobRunner
         public readonly List<JsonObject> LiteralProblems = [];
     }
 
+    // R2-B (one round): a malformed text without a patch no longer hides the Verify of the independent texts of its op in the
+    // first round (the failed text is written as its stub there, Verbs.FlowStubs.cs), so it no longer calls for this round: the
+    // round only runs for what a patch may change, never a second build that can only say the same.
     private static bool PatchRoundApplies(Exception refusal)
         => (Errors.FindCoded(refusal)?.Problems ?? new JsonArray()).OfType<JsonObject>()
-            .Any(p => p["patch"] is JsonArray { Count: > 0 } || OwnerRuleCodes.Contains(p["code"]?.ToString() ?? "")
-                // A malformed text without a patch must not hide the Verify of independent texts of the same op.
-                // Plan already leaves out texts whose non-Verify problem has no patch, while retaining original indices.
-                || p["phase"]?.ToString() != "verify" && Regex.IsMatch(p["pointer"]?.ToString() ?? "", @"/data/flow(?:/\d+)?$"));
+            .Any(p => p["patch"] is JsonArray { Count: > 0 } || OwnerRuleCodes.Contains(p["code"]?.ToString() ?? ""));
 
     private static Exception PatchRound(Exception refusal, ModelHost host, string basePath, JsonArray ops, Action<string>? log,
         IReadOnlyList<ExpectedMessage> expected, bool expectedValid, bool builtBase, string opsPointer)

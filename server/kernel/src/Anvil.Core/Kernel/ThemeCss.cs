@@ -65,12 +65,13 @@ public static class ThemeCss
     /// Editor block. <paramref name="canvas"/>: the write is the author's own CSS on a reactive element; only then, and only in a
     /// theme with Theme Editor CSS (where the platform's composition did it before), a <c>#reactContainer X</c> descendant
     /// selector also selects in the Studio canvas. What changed is reported by <see cref="Changed"/> (<c>cssImportsHoisted</c>,
-    /// <c>cssImportsMerged</c>, <c>cssImportsKept</c>, <c>cssRewrites</c>, <c>cssStages</c>).</summary>
-    public static void Settle(WebStyleSheet sheet, bool canvas = false)
+    /// <c>cssImportsMerged</c>, <c>cssImportsKept</c>, <c>cssRewrites</c>, <c>cssStages</c>). <paramref name="keepRules"/>: the
+    /// prototype importer's verbatim write, which keeps every rule of the capture (no shadowed stage).</summary>
+    public static void Settle(WebStyleSheet sheet, bool canvas = false, bool keepRules = false)
     {
         var split = IsSplit(sheet);
         var author = Author(sheet);
-        var outcome = CssPipeline.Normalize(author, new CssPipeline.Context(split ? "/UserStyleSheet" : "/StyleSheet"), canvas && split);
+        var outcome = CssPipeline.Normalize(author, new CssPipeline.Context(split ? "/UserStyleSheet" : "/StyleSheet"), canvas && split, keepRules);
         if (outcome.Changed)
         {
             if (split) sheet.UserEffectiveValue = outcome.Css; else sheet.EffectiveValue = outcome.Css;
@@ -140,12 +141,27 @@ public static class ThemeCss
     public static string? BasedOn(object? target) => target != null && AuthorOf(target) is { } css ? Sha256(css) : null;
 
     /// <summary>Writes the author CSS of an element through the one path (<see cref="WriteAuthor"/>); an element whose stylesheet
-    /// the kernel cannot reach as a WebStyleSheet gets the same normalization through its Model API property.</summary>
-    public static void Write(object target, string css)
+    /// the kernel cannot reach as a WebStyleSheet gets the same normalization through its Model API property. Returns what the
+    /// normalization changed (<see cref="Changed"/>: cssStages, cssImportsHoisted...), null when nothing: R2-D, every writer says
+    /// it in the answer of the op that wrote, never a silent change.</summary>
+    public static JsonObject? Write(object target, string css)
     {
-        if (Of(target) is { } sheet) { WriteAuthor(sheet, css, canvas: Reactive(target)); return; }
+        if (Of(target) is { } sheet) { WriteAuthor(sheet, css, canvas: Reactive(target)); return Changed(sheet); }
         var property = StyleSheetProperty(target) ?? throw new InvalidOperationException("the element has no stylesheet of its own (a theme, a screen or a block has one)");
-        property.SetValue(target, CssPipeline.Normalize(css, new CssPipeline.Context("/StyleSheet")).Css);
+        var outcome = CssPipeline.Normalize(css, new CssPipeline.Context("/StyleSheet"));
+        property.SetValue(target, outcome.Css);
+        var change = new JsonObject();
+        if (outcome.ImportsHoisted.Count > 0) change["cssImportsHoisted"] = new JsonArray(outcome.ImportsHoisted.Select(x => (JsonNode)x.Statement).ToArray());
+        if (outcome.StageChanges.Count > 0) change["cssStages"] = new JsonArray(outcome.StageChanges.Select(c => (JsonNode)c.DeepClone()).ToArray());
+        return change.Count > 0 ? change : null;
+    }
+
+    /// <summary>R2-D: copies what the last write of <paramref name="sheet"/> changed (<see cref="Changed"/>) into the answer of the
+    /// op that wrote it.</summary>
+    public static void SayChanged(WebStyleSheet? sheet, JsonObject into)
+    {
+        if (sheet != null && Changed(sheet) is { } change)
+            foreach (var (key, value) in change) into[key] = value?.DeepClone();
     }
 
     /// <summary>T18: the refusal of a write that brings an absolute url to an OutSystems environment host the element's CSS did
@@ -177,10 +193,10 @@ public static class ThemeCss
     public static void WriteAuthor(WebStyleSheet sheet, string css) => WriteAuthor(sheet, css, canvas: false);
 
     /// <summary><paramref name="canvas"/>: the text is the author's own CSS of a reactive element (see <see cref="Settle"/>).</summary>
-    public static void WriteAuthor(WebStyleSheet sheet, string css, bool canvas)
+    public static void WriteAuthor(WebStyleSheet sheet, string css, bool canvas, bool keepRules = false)
     {
         if (IsSplit(sheet)) sheet.UserEffectiveValue = css; else sheet.EffectiveValue = css;
-        Settle(sheet, canvas);
+        Settle(sheet, canvas, keepRules);
     }
 
     /// <summary>Grava o CSS do autor TAL COMO VEIO, sem <c>CodeFormat</c>: o desvio explicito e exclusivo do importador de
@@ -191,7 +207,7 @@ public static class ThemeCss
     public static JsonObject WriteVerbatim(WebStyleSheet sheet, string css)
     {
         // The one path, without the canvas rewrite: the importer's CSS is verbatim by construction (its @import statements first).
-        WriteAuthor(sheet, css, canvas: false);
+        WriteAuthor(sheet, css, canvas: false, keepRules: true);
         var author = Author(sheet);
         var effective = sheet.EffectiveValue ?? "";
         var (first, statement) = ImportsFirst(effective);

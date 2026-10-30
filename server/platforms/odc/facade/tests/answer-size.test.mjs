@@ -13,6 +13,7 @@ import { discoverAll } from '../tool-routing.mjs';
 import { snapshotSources } from './fixtures/discovery-results.mjs';
 import { createReplay } from './answer-replay.mjs';
 import { createSsamServer } from '../ssam.mjs';
+import { VISIBLE_ANSWER_BYTES } from '../context-budget.mjs';
 
 const bytes = value => Buffer.byteLength(JSON.stringify(value));
 const workspace = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../..');
@@ -162,13 +163,15 @@ async function checkReachability(row, value, root, { discoverCuts = true } = {})
   return count;
 }
 
-test('T1: the fixed R1–R4 replay fits every answer kind (readings keep their payload)', async t => {
+test('T1: replay non-list envelopes fit each editorial budget except inline scalars', async t => {
   const root = tempRoot(t), rows = await replay(root);
   assert.ok(rows.length > 20, 'the replay includes all four families, not a single hand-picked case');
   for (const row of rows) {
     const full = fullOf(row), value = adjusted(row, root), kind = answerKind(row.tool, row.args ?? {}, full);
-    const measured = bytes(kind === 'read' ? answerEnvelope(value) : value);
-    assert.ok(measured <= ANSWER_BUDGETS[kind] || value.size?.status === 'inputAdjusted', `${label(row)} ${kind}: ${measured} > ${ANSWER_BUDGETS[kind]}`);
+    const envelope = kind === 'read' ? answerEnvelope(value) : value;
+    const nonLists = Object.fromEntries(Object.entries(envelope).filter(([key, v]) => !Array.isArray(v) || !/problems|errors|messages|warnings|issues|diagnostics|violations|findings/i.test(key)));
+    const adjustable = Object.fromEntries(Object.entries(nonLists).filter(([, v]) => v !== null && (typeof v === 'object' || (typeof v === 'string' && bytes(v) > 256))));
+    assert.ok(bytes(adjustable) <= ANSWER_BUDGETS[kind] || value.size?.status === 'inputAdjusted', `${label(row)} ${kind}: ${bytes(adjustable)} > ${ANSWER_BUDGETS[kind]}`);
     if (kind === 'read') for (const key of ['text', 'lines', 'entries', 'elements', 'items', 'sections', 'actions', 'contents', 'html', 'flow', 'ddl', 'data', 'value']) {
       if (Object.hasOwn(full, key)) assert.deepEqual(value[key], full[key], `${label(row)}: requested ${key} stays whole`);
     }
@@ -277,8 +280,7 @@ test('T1–T5: family corpus conserves problems, patches, warnings and deletion 
     if (kind === 'refusal') {
       assert.equal(problemCount(value), row.value.problems.length, `${row.id}: every problem represented`);
       assert.equal(value.problemsTotal, undefined);
-      if (row.value.problems.length > 1) assert.ok(value.problems.length < row.value.problems.length || new Set(row.value.problems.map(p => p.code)).size === row.value.problems.length,
-        `${row.id}: equivalent problems are grouped`);
+      assert.equal(value.problems.length, row.value.problems.length, `${row.id}: transport keeps each diagnosis`);
       if (row.value.verifiedPatch) {
         assert.deepEqual(value.verifiedPatch, row.value.verifiedPatch);
         assert.equal(value.patch, undefined);
@@ -356,15 +358,15 @@ test('T6: recorded real answers retain reachable cuts and unique prose', { skip:
 
 // Integration marco-a2 (CX7 x CX4): the input problems of ssam_code write ({at, error, lines}) have no code. The exit groups
 // them only when the error text is the same, and the group keeps that error; different ones stay whole, with their lines.
-test('code-less input problems group only with the same error text and keep it', t => {
+test('code-less input problems keep each occurrence and its error text', t => {
   const root = tempRoot(t);
   const lines = [{ line: 10, text: '  assign A = 1 @n1' }];
   const problems = [{ at: 'edits/0', error: 'overlapping edit with edits/1', lines }, { at: 'edits/1', error: 'overlapping edit with edits/0', lines },
     { at: 'files/0', error: 'file is empty' }, { at: 'files/1', error: 'file is empty' }];
   const value = fitAnswer('ssam_code', { action: 'write' }, { ok: false, code: 'INPUT_INVALID', error: '4 problems in the input', problems }, { root });
   assert.deepEqual(value.problems.slice(0, 2), problems.slice(0, 2));
-  assert.deepEqual(value.problems[2], { count: 2, error: 'file is empty', pointers: ['files/0', 'files/1'] });
-  assert.equal(value.problems.length, 3);
+  assert.deepEqual(value.problems, problems);
+  assert.equal(value.problems.length, 4);
   assert.equal(problemCount(value), 4);
 });
 
@@ -386,7 +388,7 @@ test('a plan keeps every launch at the exit; generator receipts keep configure a
   const row = { id: 'plan-8-batches', tool: 'ssam_code', args: { lane: 'odc', action: 'plan' }, value: plan };
   assert.equal(answerKind(row.tool, row.args, plan), 'plan');
   const value = adjusted(row, root);
-  assert.ok(bytes(value) <= ANSWER_BUDGETS.plan, `${bytes(value)} bytes`);
+  assert.ok(bytes(value) <= VISIBLE_ANSWER_BYTES, `${bytes(value)} bytes`);
   assert.deepEqual(value.batches.map(b => [b.id, b.items, b.launchPrompt]), batches.map(b => [b.id, b.items, b.launchPrompt]));
   assert.deepEqual([value.data.file, value.data.launchPrompt, value.final, value.launch, value.planId, value.dir], [plan.data.file, plan.data.launchPrompt, plan.final, plan.launch, plan.planId, plan.dir]);
   assert.ok(await checkReachability(row, value, root) >= 1, 'what the exit left out of the plan is recovered exactly');

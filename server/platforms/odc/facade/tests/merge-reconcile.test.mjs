@@ -13,6 +13,9 @@ import path from 'node:path';
 import { publishWithGrant, publishPrecheck } from '../studio-publish-log.mjs';
 import { mergeState, reconcileMerge, RECONCILIATION_SCHEMA } from '../merge-reconcile.mjs';
 import { deliverKernel } from '../kernel-delivery.mjs';
+// R2-F rule 4 (fase4-28/r2-speed, R2-H): studio_publish resolves the live identity of its module (status) before the queue and
+// confirms it (status) inside it, before the publication's own steps.
+const IDENTITY = ['status', 'status'];
 
 const TENANT = 'personal-test.outsystems.dev';
 const WORDS = 'pode publicar o OrderPortal agora';
@@ -83,7 +86,7 @@ test('studio_publish {module}: an uncertain merge whose content the SSAM proves 
   const b = bridge(box); const p = prover();
   const answer = await publishWithGrant({ module: 'OrderPortal', authorize: WORDS, pid: PID }, deps(box, b, p));
   assert.equal(answer.ok, true, JSON.stringify(answer));
-  assert.deepEqual(b.calls.map(c => c[0]), ['status', 'snapshot', 'authorize', 'publish']);
+  assert.deepEqual(b.calls.map(c => c[0]), [...IDENTITY, 'status', 'snapshot', 'authorize', 'publish']);
   assert.ok(!b.calls.some(c => c[0] === 'merge' || c[0] === 'reconcile-merge'), 'never another merge');
   assert.deepEqual(p.runs, [{ expected: last.candidatePath, actual: b.capturePath }]);
   // The receipt the bridge's dispatch reads: the capture's own hash, the proof beside it.
@@ -112,7 +115,7 @@ test('the proof finds differences: refused before anything, no receipt written, 
   assert.equal(fs.existsSync(path.join(last.evidence, 'receipt.json')), false, 'never clean without the proof');
   assert.equal(answer.continuation.tool, 'ssam_evidence'); assert.equal(answer.continuation.arguments.pointer, '/proof/differences');
   assert.equal(answer.then.tool, 'studio_deliver');
-  assert.deepEqual(b.calls.map(c => c[0]), ['status', 'snapshot'], 'nothing authorized or published');
+  assert.deepEqual(b.calls.map(c => c[0]), [...IDENTITY, 'status', 'snapshot'], 'nothing authorized or published');
 });
 
 test('a proof of another capture or another candidate is never accepted', async t => {
@@ -132,7 +135,7 @@ test('the explicit call studio_publish {module, reconcile:true} reconciles witho
   const b = bridge(box); const p = prover();
   const answer = await publishWithGrant({ module: 'OrderPortal', reconcile: true, pid: PID }, deps(box, b, p));
   assert.equal(answer.ok, true, JSON.stringify(answer)); assert.equal(answer.reconciled, true); assert.equal(answer.publishInvoked, false);
-  assert.deepEqual(b.calls.map(c => c[0]), ['status', 'snapshot']);
+  assert.deepEqual(b.calls.map(c => c[0]), [...IDENTITY, 'status', 'snapshot']);
   assert.deepEqual(answer.continuation, { tool: 'studio_publish', arguments: { module: 'OrderPortal', pid: PID }, why: answer.continuation.why });
   assert.equal(mergeState(last.evidence).clean, true);
   // Again: already clean, nothing captured or proven again.
@@ -147,7 +150,7 @@ test('a bridge receipt normalized by the Studio is clean for studio_publish {mod
   const b = bridge(box);
   const answer = await publishWithGrant({ module: 'OrderPortal', authorize: WORDS, pid: PID }, deps(box, b, null));
   assert.equal(answer.ok, true, JSON.stringify(answer));
-  assert.deepEqual(b.calls.map(c => c[0]), ['status', 'authorize', 'publish']);
+  assert.deepEqual(b.calls.map(c => c[0]), [...IDENTITY, 'status', 'authorize', 'publish']);
 });
 
 test('a non-strict bridge receipt is reconciled by the proof without rewriting the bridge receipt', async t => {
@@ -183,7 +186,7 @@ test('known losses are never reconciled; a capture refused (merge pending) and a
   const b = bridge(box); const p = prover();
   const incomplete = await publishWithGrant({ module: 'OrderPortal', authorize: WORDS, pid: PID }, deps(box, b, p));
   assert.equal(incomplete.code, 'LAST_DELIVERY_NOT_CLEAN'); assert.equal(incomplete.outcome, 'incomplete');
-  assert.deepEqual(b.calls.map(c => c[0]), ['status']); assert.equal(p.runs.length, 0);
+  assert.deepEqual(b.calls.map(c => c[0]), [...IDENTITY, 'status']); assert.equal(p.runs.length, 0);
   const box2 = sandbox(t);
   delivery(box2.lab, '71-FEATURE-1');
   const pending = await publishWithGrant({ module: 'OrderPortal', authorize: WORDS, pid: PID },

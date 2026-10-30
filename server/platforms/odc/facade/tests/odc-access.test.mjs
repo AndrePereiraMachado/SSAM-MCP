@@ -315,7 +315,7 @@ test('odc_asset_delete states the consumers rule and forwards CONSUMERS_WOULD_BR
     // Library release (live demo 2026-10-14: the model did not find it): the routes, the exact input and the prerequisites.
     const write = tools.find(t => t.name === 'odc_portal_write').description, read = tools.find(t => t.name === 'odc_portal_read').description;
     assert.match(write, /libraries\.release \(/); assert.match(write, /ApplicationKey, Revision, Version:"x\.y\.z", ReleaseNotes/);
-    assert.match(write, /untagged revision/); assert.match(write, /Finished publication/); assert.match(write, /preExisting:true/);
+    assert.match(write, /untagged revision/); assert.match(write, /Finished publication/); assert.match(write, /written authorization naming the library, tenant, version and revision/); // R2-I: no file needed
     assert.match(read, /libraries\.releaseSettings/); assert.match(read, /libraries\.releaseRevision/);
     const out = await client.callTool({ name: 'odc_asset_delete', arguments: { assetKey: 'lib-1', authorize: 'delete SSAMTextTools now', operationUuid: '11111111-1111-4111-8111-111111111111' } });
     assert.equal(out.isError, true); assert.equal(out.structuredContent.code, 'CONSUMERS_WOULD_BREAK'); assert.deepEqual(out.structuredContent.consumers, ['OrdersApp']);

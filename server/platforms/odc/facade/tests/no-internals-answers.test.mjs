@@ -12,11 +12,14 @@ import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { GUARD_KEYS, findings } from './fixtures/internal-text.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
+const privateTasks = fs.mkdtempSync(path.join(os.tmpdir(), 'no-internals-answer-tasks-'));
+process.on('exit', () => fs.rmSync(privateTasks, { recursive: true, force: true }));
 const kernel = path.resolve(here, '..', '..', '..', '..', 'kernel');
 const cliBuilt = fs.existsSync(path.join(kernel, '.local', 'cli', 'anvil.dll')) && fs.existsSync(path.join(kernel, '.local', 'lane-odc', 'cli', 'anvil-odc.dll'));
 
@@ -64,7 +67,7 @@ async function answersOf(exposure) {
     const { createSsamServer } = await import('../ssam.mjs');
     const { InMemoryTransport } = await import('@modelcontextprotocol/server');
     const { Client } = await import('@modelcontextprotocol/client');
-    const server = await createSsamServer({ profile: 'all' });
+    const server = await createSsamServer({ profile: 'all', deps: { tasksDir: path.join(privateTasks, exposure) } });
     const client = new Client({ name: 'no-internals-' + exposure, version: '1' });
     const [a, b] = InMemoryTransport.createLinkedPair();
     await Promise.all([server.connect(a), client.connect(b)]);
@@ -138,6 +141,8 @@ test('the licensee answers keep what using SSAM needs', { timeout: 1800000 }, as
   for (const lane of ['o11', 'odc']) {
     const o = bodyOf(of(owner, 'ssam_job', a => a.lane === lane).result);
     const l = bodyOf(of(licensee, 'ssam_job', a => a.lane === lane).result);
+    assert.ok(Array.isArray(o.problems), 'owner ' + lane + ': ' + JSON.stringify(o));
+    assert.ok(Array.isArray(l.problems), 'licensee ' + lane + ': ' + JSON.stringify(l));
     assert.equal(l.code, o.code);
     assert.deepEqual(l.problems.map(p => [p.code, p.pointer, p.fix, p.patch ?? null]), o.problems.map(p => [p.code, p.pointer, p.fix, p.patch ?? null]));
     // the job to patch over: the same content (an inline job gets a new file per call), a path the next call takes back
@@ -181,7 +186,7 @@ test('a licensee\'s refusal still leads to the delivery: the patch over nextBase
   const { createSsamServer } = await import('../ssam.mjs');
   const { InMemoryTransport } = await import('@modelcontextprotocol/server');
   const { Client } = await import('@modelcontextprotocol/client');
-  const server = await createSsamServer({ profile: 'all' });
+  const server = await createSsamServer({ profile: 'all', deps: { tasksDir: path.join(privateTasks, 'patch'), callDeadlineMs: 300000 } });
   const client = new Client({ name: 'no-internals-patch', version: '1' });
   const [a, b] = InMemoryTransport.createLinkedPair();
   try {
@@ -189,7 +194,7 @@ test('a licensee\'s refusal still leads to the delivery: the patch over nextBase
     for (const [lane, base] of [['o11', o11Base], ['odc', odcBase]]) {
       const job = { description: 'synthetic probe', base, ops: [{ op: 'spec', data: { entities: [{ name: 'Customer', attributes: [{ name: 'Name', type: 'Txt' }] }] } }] };
       const refused = (await client.callTool({ name: 'ssam_job', arguments: { lane, job } }, undefined, { timeout: 300000 })).structuredContent;
-      assert.equal(refused.code, 'PREFLIGHT_REFUSED');
+      assert.equal(refused.code, 'PREFLIGHT_REFUSED', JSON.stringify(refused));
       assert.ok(refused.problems.every(p => p.fix), JSON.stringify(refused.problems));
       assert.deepEqual(findings(refused), [], 'the refusal itself carries no internals');
       const patched = (await client.callTool({ name: 'ssam_job', arguments: { lane, basedOn: refused.nextBasedOn,

@@ -248,7 +248,10 @@ public sealed partial class ModelSession
         var before = sheet != null ? ThemeCss.Author(sheet) : theme.StyleSheet ?? "";
         if (ThemeCss.Introduced(before, css, $"html {blockKey}: the theme {TypeResolver.Name(theme)}") is { } refusal) throw refusal;
         // The author's CSS of a reactive theme: the one write path (a theme with Theme Editor CSS also selects in the canvas).
-        if (sheet != null) ThemeCss.WriteAuthor(sheet, css, canvas: true); else ThemeCss.Write(theme, css);
+        JsonObject? written = null;
+        if (sheet != null) ThemeCss.WriteAuthor(sheet, css, canvas: true); else written = ThemeCss.Write(theme, css);
+        // R2-D: what the one normalization changed in a theme the kernel reaches only through its property, said too.
+        if (written != null) foreach (var (key, value) in written) report[key] = value?.DeepClone();
         report["installed"] = true; report["scopedChars"] = scopedCss.Length;
         // The basedOn of the theme now: a css op later in the same job names it.
         report["basedOn"] = ThemeCss.BasedOn(theme);

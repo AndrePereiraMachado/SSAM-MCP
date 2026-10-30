@@ -39,6 +39,16 @@ public static partial class ScreenVisual
         public string? Append { get; init; }
         /// <summary><see cref="Right"/> goes beside <see cref="Subject"/> in its selector list (the original keeps the other elements it styles).</summary>
         public bool AddSelector { get; init; }
+        /// <summary>R3-A: the model key of the runtime element (its nearest ancestor's for a runtime element), the property the
+        /// finding is about, the value the author meant there, the platform rule that wins (file and selector) and the
+        /// breakpoints where it is seen (render-document's probes).</summary>
+        public string? Key { get; init; }
+        public string? Property { get; init; }
+        public string? Expect { get; init; }
+        /// <summary>F5: the value the element must not compute to (the platform's), when the author declared none to expect.</summary>
+        public string? ExpectNot { get; init; }
+        public string? Winner { get; init; }
+        public List<string> Viewports { get; init; } = [];
     }
 
     /// <summary>One CSS text that reaches the page, and where it is written ("page", "theme").</summary>
@@ -121,7 +131,10 @@ public static partial class ScreenVisual
     {
         var findings = new List<Finding>();
         var rules = new List<(CssRule Rule, Sheet Sheet, string Text, List<(string Text, ComplexSelector Complex)> Selectors)>();
-        foreach (var sheet in input.Sheets)
+        // R3-A: the platform's sheets (platform:<file>) are the cascade the author's rules meet, never the author's own rules.
+        // F3: the OutSystems UI rules written by hand stand for the OutSystems UI sheet only, never for the runtime's base sheet
+        var hasPlatform = input.Sheets.Any(s => s.Where == OsuiSheet);
+        foreach (var sheet in input.Sheets.Where(s => !IsPlatformSheet(s)))
         {
             var text = WithoutNativeLayout(sheet.Css);
             foreach (var (rule, selectors) in Parsed(text)) rules.Add((rule, sheet, text, selectors));
@@ -134,7 +147,8 @@ public static partial class ScreenVisual
         var authorOf = predictedOf.ToDictionary(p => p.Value, p => p.Key, ReferenceEqualityComparer.Instance);
         var seen = new HashSet<string>(StringComparer.Ordinal);
         bool Layout(DomNode element) => layoutRules.Any(r => r.Selectors.Any(x => M(element, x.Complex)));
-        void Add(Finding f) { if (seen.Add(f.Code + "|" + f.Kind + "|" + f.Subject + (f.Code is TextJoined or ListNotLayoutContainer ? "|" + f.Line : ""))) findings.Add(f); }
+        void Add(Finding f) { if (seen.Add(f.Code + "|" + f.Kind + "|" + f.Subject + (f.Code is TextJoined or ListNotLayoutContainer ? "|" + f.Line : "")
+            + (PlatformCodes.Contains(f.Code) ? "|" + f.Property + "|" + f.Winner + "|" + f.Key : ""))) findings.Add(f); }
         // The tokens :root already declares (with their value): a scoped copy of them is no news.
         var rootTokens = new HashSet<string>(StringComparer.Ordinal);
         foreach (var (rule, _, _, _) in rules)
@@ -142,6 +156,10 @@ public static partial class ScreenVisual
                 foreach (var d in rule.Declarations) rootTokens.Add(d.Property + ":" + d.Value.Trim());
 
         var runtimeOnly = predictedElements.Where(p => p.Runtime != null && !authorOf.ContainsKey(p)).ToList();
+        // (c) R3-A: the positional selectors the List's sentinels move are their own family (the wrapper branch leaves them).
+        var positional = PositionalFindings(input, rules);
+        var positionalSelectors = positional.Select(f => f.Subject).ToHashSet(StringComparer.Ordinal);
+        foreach (var f in positional) Add(f);
         foreach (var (rule, sheet, sheetText, ruleSelectors) in rules)
         {
             var ruleText = RuleSource(sheetText, rule);
@@ -152,7 +170,7 @@ public static partial class ScreenVisual
                 var matched = authorElements.Where(a => predictedOf.ContainsKey(a) && M(a, complex)).ToList();
                 // (a) a wrapper breaks a child or sibling combinator: the author's element is matched, its runtime element is not.
                 var missed = matched.Where(a => !M(predictedOf[a], complex)).ToList();
-                if (missed.Count > 0)
+                if (missed.Count > 0 && !positionalSelectors.Contains(selector))
                 {
                     var right = SeeThroughWrappers(selector, input);
                     var ok = right != null && missed.All(a => SafeMatches(predictedOf[a], right));
@@ -195,8 +213,9 @@ public static partial class ScreenVisual
                             ? "\n" + right + " > " + subject + "{width:100%;min-width:0;max-width:none;flex:none}" : "") : null });
                         break;
                     }
-                // (d) a control OutSystems UI styles with a more specific rule.
-                foreach (var a in matched)
+                // (d) a control OutSystems UI styles with a more specific rule. R3-A: with the platform's real sheets the cascade
+                // judges every rule (PlatformSpecificity); these rules written by hand are the answer without them only.
+                foreach (var a in hasPlatform ? new List<DomNode>() : matched)
                 {
                     var p = predictedOf[a];
                     var control = OutSystemsUiControlRules.FirstOrDefault(c => c.Widget == p.Widget && SafeMatches(p, c.Selector));
@@ -283,6 +302,8 @@ public static partial class ScreenVisual
                 { Edits = edits ?? [] });
             }
         }
+        // R3-A (a), (b), (d), (e): the page against the platform's cascade, per breakpoint.
+        foreach (var f in PlatformFindings(input)) Add(f);
         return findings;
     }
 

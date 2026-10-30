@@ -1,6 +1,7 @@
 import {authorizationContext} from '../../facade/authorization-context.mjs';
 import {ipFilterHash as hash} from './ip-filter-approval.mjs';
 import {fail} from './errors.mjs';
+import {recorded,sameGrant} from './written-approval.mjs';
 const root='user-access-management-api-v1:';
 export const GROUP_CREATE=root+'post:/groups',GROUP_PATCH=root+'patch:/groups/{key}',GROUP_DELETE=root+'delete:/groups/{key}';
 export const GROUP_WRITES=new Set([GROUP_CREATE,GROUP_PATCH,GROUP_DELETE]);
@@ -21,7 +22,7 @@ export async function groupApproval({file,words,host,operationId,input,originOpe
   if(typeof p.key!=='string')bad();
   origin=lookup(originOperationUuid);
   if(!origin||!['accepted','confirmed'].includes(origin.state)||origin.identity?.tenant!==host
-    ||origin.identity.operationId!==GROUP_CREATE||origin.response?.key!==p.key||!origin.authorization?.source)bad();
+    ||origin.identity.operationId!==GROUP_CREATE||origin.response?.key!==p.key||!recorded(origin))bad();
   const seen=await read(root+'get:/groups/{key}',p);
   if(!seen.ok||seen.data?.key!==p.key)bad();
   current=seen.data;name=current.name;environmentKey=current.environmentKey;
@@ -37,6 +38,6 @@ export async function groupApproval({file,words,host,operationId,input,originOpe
  }
  const constraints={bodySha256:hash(b??null),...(create?{}:{originOperationUuid,expectedConfigurationSha256:hash(current)})};
  const approval=authorizationContext(file,words,{lane:'odc',host,operation:operationId,environmentKey,targets:[name],constraints});
- if(!approval||origin&&(approval.source.threadId!==origin.authorization.source.threadId||approval.source.messageId!==origin.authorization.source.messageId))bad();
+ if(!approval||origin&&(!sameGrant(origin.authorization,approval)))bad();
  return approval;
 }

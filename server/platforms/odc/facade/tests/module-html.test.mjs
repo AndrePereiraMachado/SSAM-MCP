@@ -6,6 +6,7 @@ import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { fitAnswer, answerEnvelope, ANSWER_BUDGETS } from '../answer-size.mjs';
+import { VISIBLE_ANSWER_BYTES, POINTER_FLOOR_BYTES } from '../context-budget.mjs';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -60,7 +61,14 @@ test('transport keeps pinned HTML edit and pagination routes for both lanes', as
     assert.deepEqual(answer.continuations.next, full.continuations.next);
     assert.equal(answer.html, full.html);
     assert.deepEqual(answer.basedOn, full.basedOn);
-    assert.ok(bytes(answerEnvelope(answer)) <= ANSWER_BUDGETS.read);
+    // R1-B (fase4-28/r1-answers, answer-size.mjs): every route under continuations is atomic (review 5: no cut descends into
+    // a next key) and the identity scalars of a read (target, file, the hashes) stay inline (rule 3), as in its T1 replay
+    // ("except inline scalars"). The read budget bounds the rest of the envelope; the whole envelope is under the visible ceiling.
+    const envelope = answerEnvelope(answer);
+    assert.ok(bytes(envelope) <= VISIBLE_ANSWER_BYTES, bytes(envelope) + ' bytes');
+    const editorial = Object.fromEntries(Object.entries(envelope).filter(([k, v]) => k !== 'continuations' && v !== null && (typeof v === 'object' || (typeof v === 'string' && bytes(v) > POINTER_FLOOR_BYTES))));
+    assert.ok(bytes(editorial) <= ANSWER_BUDGETS.read, bytes(editorial) + ' bytes: ' + Object.keys(editorial).join(', '));
+    assert.equal(answer.note, undefined, 'the long note left for the read');
     assert.ok(answer.omitted, 'optional metadata has an evidence continuation');
   }
 });

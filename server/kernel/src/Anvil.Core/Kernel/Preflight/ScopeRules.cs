@@ -24,6 +24,7 @@ namespace Anvil.Core.Preflight;
 internal static class ScopeRules
 {
     public const string CallUnknown = "CALL_UNKNOWN";
+    public const string CallAmbiguous = "CALL_AMBIGUOUS";
     public const string ChildExists = "OWNER_CHILD_EXISTS";
     public const string KindNode = "ACTION_KIND_NODE";
     public const string Required = "WIDGET_REQUIRED_PROPERTY";
@@ -48,6 +49,19 @@ internal static class ScopeRules
     {
         public string? Module;
         public readonly Dictionary<string, HashSet<string>> Producers = new(StringComparer.OrdinalIgnoreCase);
+        /// <summary>R2-A: each element of a producer once, by producer and name: its name as the producer has it and its kinds,
+        /// one identity whatever source lists it (the index writes MobileScreenSignature, the digest MobileScreen, a reference
+        /// op IMobileScreen: all are MobileScreenSignature, the kind of the reference's own element; "" for an element a
+        /// reference op writes without its kind).</summary>
+        public readonly Dictionary<string, Dictionary<string, (string Name, HashSet<string> Kinds)>> ProducerKinds = new(StringComparer.OrdinalIgnoreCase);
+        /// <summary>R2-A: the module's own actions by name: the name as the module has it and the kinds (index rows of role
+        /// action or actionRef outside every reference, screen and block), the candidates of tier 1 of a call.</summary>
+        public readonly Dictionary<string, (string Name, HashSet<string> Kinds)> ModuleActions = new(StringComparer.OrdinalIgnoreCase);
+        /// <summary>R2-A: the actions the logic ops of the job declare (ScopeJob.DeclaredActions; the apply counts the same).</summary>
+        public List<(string? Owner, string Name, string Kind)> Declared = [];
+        /// <summary>The names of the module's own elements of any kind (not a reference's): what a call may still name that only
+        /// the apply judges (a screen, a block).</summary>
+        public readonly HashSet<string> Local = new(StringComparer.OrdinalIgnoreCase);
         /// <summary>Producers whose names are not all known here (an element imported by key, a clipped digest list).</summary>
         public readonly HashSet<string> Open = new(StringComparer.OrdinalIgnoreCase);
         public IndexBaseFacts Index = null!;
@@ -80,32 +94,57 @@ internal static class ScopeRules
         public bool IsRecord(string name) => Index.KindsOf(name).Any(k => k.Contains("Entity", StringComparison.Ordinal) || k.Contains("Structure", StringComparison.Ordinal)) || JobDeclares(name);
     }
 
+    /// <summary>R2-A: the kind of an element of a producer as the reference holds it: without namespace and I prefix, and with
+    /// the Signature suffix the digest leaves out (MobileScreen, IMobileScreen and MobileScreenSignature are one kind).</summary>
+    internal static string ProducerKind(string kind)
+    {
+        var bare = NameResolution.Bare(kind);
+        return bare.Length == 0 || bare.EndsWith("Signature", StringComparison.Ordinal) ? bare : bare + "Signature";
+    }
+
     internal static Callables Known(IndexBaseFacts index, ScopeJob job, JsonArray ops, string lane)
     {
-        var known = new Callables { Module = index.Basis.Module?.ModuleName, Index = index, Job = job, Builtins = Builtins.For(lane) };
+        var known = new Callables { Module = index.Basis.Module?.ModuleName, Index = index, Job = job, Builtins = Builtins.For(lane), Declared = ScopeJob.DeclaredActions(ops) };
         // Both lanes bind navigate RedirectToURL to the System's destination with no reference of the module (ODC: labs 228
         // and 242; O11 Reactive: SecurityNativeMessageTests, the open-redirect proof of the candidate): never CALL_UNKNOWN.
         known.SystemDestinations = PreflightRules.OdcScopeRules.SystemDestinations;
-        void Add(string producer, string name)
+        void Add(string producer, string name, string? kind = null)
         {
             if (!known.Producers.TryGetValue(producer, out var set)) known.Producers[producer] = set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             set.Add(name);
+            if (kind == null) return;
+            if (!known.ProducerKinds.TryGetValue(producer, out var byName)) known.ProducerKinds[producer] = byName = new(StringComparer.OrdinalIgnoreCase);
+            if (!byName.TryGetValue(name, out var element)) byName[name] = element = (name, new HashSet<string>(StringComparer.Ordinal));
+            element.Kinds.Add(ProducerKind(kind));
+        }
+        void Own(string name, string kind)
+        {
+            if (!known.ModuleActions.TryGetValue(name, out var element)) known.ModuleActions[name] = element = (name, new HashSet<string>(StringComparer.Ordinal));
+            element.Kinds.Add(NameResolution.Bare(kind));
+        }
+        // The index first: its rows have the names and kinds as the module holds them (the digest and a reference op may write
+        // them otherwise); an element another source lists again is the same one.
+        if (index.Basis.Module is { } module)
+        {
+            var rows = module.Rows().ToList();
+            foreach (var reference in rows.Where(r => r.Role == "reference" && r.Name.Length > 0))
+                foreach (var row in rows.Where(r => r.Parent == reference.Index && r.Name.Length > 0)) Add(reference.Name, row.Name, reference.Kind == "Reference" ? row.Kind : null);
+            foreach (var row in rows.Where(r => r.Name.Length > 0))
+            {
+                var holder = Holder(rows, row);
+                if (holder == "reference") continue;
+                if (row.Kind.Contains("Action", StringComparison.Ordinal) || IndexBaseFacts.ScreenKind.IsMatch(row.Kind) || IndexBaseFacts.BlockKind.IsMatch(row.Kind)) known.Local.Add(row.Name);
+                if (holder == null && row.Role is "action" or "actionRef") Own(row.Name, row.Kind);
+            }
         }
         if (index.Basis.Digest is { } digest)
         {
-            foreach (var (producer, _, name) in IndexBaseFacts.DigestReferences(digest)) Add(producer, name);
+            foreach (var (producer, kind, name) in IndexBaseFacts.DigestReferences(digest)) Add(producer, name, kind);
             // A reference block whose lists the digest clipped (…) does not list every name.
             foreach (var section in (digest["sections"] as JsonArray ?? []).OfType<JsonObject>().Where(s => s["id"]?.ToString() == "module"))
                 foreach (var block in (section["blocks"] as JsonArray ?? []).OfType<JsonObject>().Where(b => b["kind"]?.ToString() == "Reference"))
                     if ((block["text"]?.ToString() ?? "").Contains('…') && Regex.Match(block["text"]!.ToString(), @"^reference\s+(.+?)\s+@") is { Success: true } head)
                         known.Open.Add(head.Groups[1].Value.Trim());
-        }
-        // The references of the index (rows of role reference and what is under them).
-        if (index.Basis.Module is { } module)
-        {
-            var rows = module.Rows().ToList();
-            foreach (var reference in rows.Where(r => r.Role == "reference" && r.Name.Length > 0))
-                foreach (var row in rows.Where(r => r.Parent == reference.Index && r.Name.Length > 0)) Add(reference.Name, row.Name);
         }
         foreach (var op in ops.OfType<JsonObject>().Where(o => o["op"]?.ToString() == "reference"))
         {
@@ -114,16 +153,114 @@ internal static class ScopeRules
             if (!known.Producers.ContainsKey(producer)) known.Producers[producer] = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var element in (op["elements"] as JsonArray ?? []).Select(e => e?.ToString() ?? ""))
             {
-                var name = element[(element.IndexOf(':') + 1)..].Trim();
+                var colon = element.IndexOf(':');
+                var name = element[(colon + 1)..].Trim();
                 if (name.StartsWith('@') || name.Length == 0) known.Open.Add(producer);
-                else Add(producer, name);
+                else Add(producer, name, colon > 0 ? element[..colon] : "");
             }
         }
         return known;
     }
 
-    /// <summary>Null when the callee resolves (or cannot be judged); else why not and the candidates.</summary>
-    internal static (string Why, List<string> Candidates)? Resolve(string callee, string? owner, Callables k, bool screen = false)
+    /// <summary>What a row of the index is inside: "reference" (a reference, at any depth), "owner" (a screen, a block, an
+    /// action, a record: its screen actions and nodes are no module action), or null (the module's own).</summary>
+    private static string? Holder(List<ModuleIndex.Row> rows, ModuleIndex.Row row)
+    {
+        var seen = 0;
+        for (var p = row.Parent; p >= 0 && p < rows.Count && seen++ < 64; p = rows[p].Parent)
+        {
+            if (rows[p].Kind == "Reference") return "reference";
+            if (rows[p].Role is "screen" or "block" or "action" or "actionRef" or "entity" or "staticEntity" or "structure") return "owner";
+        }
+        return null;
+    }
+
+    /// <summary>R2-A: the role of a kind a producer's element has in the index, a digest line or a reference op (a server
+    /// action of a reference is its action, written with or without Signature).</summary>
+    internal static string RoleOfKind(string kind) =>
+        kind.Length == 0 ? "" : IndexBaseFacts.ScreenKind.IsMatch(kind) ? "screen" : IndexBaseFacts.BlockKind.IsMatch(kind) ? "block"
+        : kind.Contains("Action", StringComparison.Ordinal) ? "actionRef" : NameResolution.IsRecord(kind, null) ? "entity" : "other";
+
+    /// <summary>R2-A: the candidates of a call written <paramref name="name"/> (its last segment) from an action of
+    /// <paramref name="owner"/>, from the index and the job (NameResolution decides; the apply asks the same of the model with
+    /// the same declarations): the owner's own screen and data actions and those the job declares under it (tier 0), the
+    /// module's own actions and those the job declares (1), every element of that name of a producer the module or the job
+    /// references (2, written Producer.Name). Each with its name as the element has it (a name written in another case is
+    /// written as the element is named). A producer's element written without its kind fits (its kind is not known here).</summary>
+    internal static IEnumerable<NameCandidate> CallCandidates(string name, string? owner, Callables k)
+    {
+        if (owner != null)
+        {
+            foreach (var block in new[] { false, true })
+                if (k.Index.Root(owner, block) is { } root)
+                {
+                    foreach (var (kind, names) in root.Children)
+                        if (kind.Contains("Action", StringComparison.Ordinal) || kind.Contains("Preparation", StringComparison.Ordinal))
+                            foreach (var own in names.Where(n => string.Equals(n, name, StringComparison.OrdinalIgnoreCase)))
+                                yield return new(own, kind, "action", 0, own, owner, true);
+                    break;
+                }
+        }
+        foreach (var candidate in NameResolution.Declared(k.Declared.Where(d => string.Equals(d.Name, name, StringComparison.OrdinalIgnoreCase)), owner))
+            yield return candidate;
+        if (k.ModuleActions.TryGetValue(name, out var mine))
+            foreach (var kind in mine.Kinds) yield return new(mine.Name, kind, kind.EndsWith("ActionSignature", StringComparison.Ordinal) ? "actionRef" : "action", 1, mine.Name);
+        foreach (var (producer, elements) in k.ProducerKinds)
+            if (elements.TryGetValue(name, out var element))
+                foreach (var kind in element.Kinds) yield return new(element.Name, kind, RoleOfKind(kind), 2, producer + "." + element.Name, producer);
+    }
+
+    /// <summary>R2-A: every candidate of a call from <paramref name="owner"/> whatever its name (the nearest names of a refusal).</summary>
+    private static IEnumerable<NameCandidate> CallPool(string? owner, Callables k)
+    {
+        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        names.UnionWith(k.ModuleActions.Keys);
+        foreach (var elements in k.ProducerKinds.Values) names.UnionWith(elements.Keys);
+        names.UnionWith(k.Declared.Select(d => d.Name));
+        if (owner != null) names.UnionWith(k.OwnerActions(owner) ?? []);
+        return names.SelectMany(n => CallCandidates(n, owner, k));
+    }
+
+    /// <summary>R2-A: the element a call written <paramref name="callee"/> reaches from an action of <paramref name="owner"/>
+    /// (NameResolution over the index's candidates); the same rule decides it at apply with the model's candidates.</summary>
+    internal static NameAnswer ResolveCall(string callee, string? owner, Callables k)
+        => NameResolution.Resolve(callee, CallCandidates(NameResolution.Parse(callee).Name, owner, k), NameResolution.Call, () => CallPool(owner, k));
+
+    /// <summary>R2-A: what a call never gets a canonical form for, in the preflight and the apply alike: a built-in and a
+    /// function of the System (their texts name them bare).</summary>
+    internal static bool NeverCanonical(string callee, string lane) =>
+        Builtins.For(lane)?.ContainsKey(callee) == true || SystemCalls.Inputs.ContainsKey(callee);
+
+    /// <summary>R2-A: the canonical form of a call (NameResolution over the index), or null when the text already writes it:
+    /// a producer's action written without its producer (one action of that name, of one producer, nothing of the module's,
+    /// of the owner's or of the job's), and any call written in another case than its element's name (bare, or qualified by
+    /// its producer). A producer this reader does not see whole (clipped, imported by key) may hold the name too: never
+    /// rewritten then.</summary>
+    internal static string? CanonicalCall(string callee, string? owner, Callables k, string lane)
+    {
+        callee = callee.Trim();
+        if (callee.Length == 0 || callee.IndexOfAny([':', '/', '@', '$', '(']) >= 0) return null;
+        var dot = callee.IndexOf('.');
+        if (dot >= 0 && (callee.LastIndexOf('.') != dot || !k.ProducerKinds.ContainsKey(callee[..dot]))) return null;
+        if (dot < 0 && NeverCanonical(callee, lane)) return null;
+        if (dot < 0 && EntityAction.Match(callee) is { Success: true } entity && k.IsRecord(entity.Groups[1].Value)) return null;
+        var answer = ResolveCall(callee, owner, k);
+        if (answer is not { Outcome: NameOutcome.Resolved, Canonicalized: true, Chosen: { } chosen }) return null;
+        if (chosen.Qualifier is { } producer && chosen.Canonical.StartsWith(producer + ".", StringComparison.Ordinal)
+            && k.Open.Any(o => !string.Equals(o, producer, StringComparison.OrdinalIgnoreCase))) return null;
+        return chosen.Canonical;
+    }
+
+    /// <summary>Why a callee does not resolve, with its candidates (each the form that names it: Producer.Action for a
+    /// producer's), and whether it is ambiguous (two or more actions at the same distance) rather than unknown.</summary>
+    internal sealed record Unresolved(string Why, List<string> Candidates, bool Ambiguous = false);
+
+    /// <summary>Null when the callee resolves (or cannot be judged); else why not and the candidates. R2-A: a call is
+    /// resolved by NameResolution over the candidates of the index (the apply decides with the same rule over the model's):
+    /// the kind of a call (an action) enters the search, the nearest tier answers, one candidate resolves (a producer's action
+    /// written without its producer too: JobNormalizer.WithBase wrote its canonical form before this phase), two or more at
+    /// the same distance are refused with each one's form.</summary>
+    internal static Unresolved? Resolve(string callee, string? owner, Callables k, bool screen = false)
     {
         callee = callee.Trim();
         if (callee.Length == 0 || callee.StartsWith('$') || callee.StartsWith('@') || callee.StartsWith("(System)", StringComparison.Ordinal)) return null;
@@ -140,10 +277,21 @@ internal static class ScopeRules
         if (screen && !callee.Contains('.') && !callee.Contains('/')) callee = "/" + callee;
         if (callee.Contains('/'))
         {
-            // Flow/Screen (a navigate): the screen.
+            // Flow/Screen (a navigate): a screen of the module, of a reference or of the job, or a destination of the System.
+            // R2-A (NameResolution, the slot Navigation): the kind enters the search, so a name only an action, a block or a
+            // record has is no destination. A navigate has no tiers here: two screens of the name are the apply's to pick.
             var target = callee.Split('/').Last();
-            if (k.IsOwner(target) || k.JobDeclares(target) || k.ModuleHas(target) || k.SystemDestinations.Contains(target)) return null;
-            return ($"no screen of the module or of this job is named '{target}'", Candidates(target, k.Index.Roots("screen").Concat(k.Job.Roots.Keys)));
+            if (k.SystemDestinations.Contains(target) || k.JobDeclares(target)) return null;
+            var named = k.Index.KindsOf(target).Select(kind => new NameCandidate(target, kind, RoleOfKind(kind), 1, target)).ToList();
+            if (k.Job.Roots.TryGetValue(target, out var rootKind))
+                named.Add(rootKind.Contains("block", StringComparison.OrdinalIgnoreCase) ? new(target, "Block", "block", 1, target) : new(target, "Screen", "screen", 1, target));
+            if (k.Index.Root(target, false) != null) named.Add(new(target, "Screen", "screen", 1, target));
+            var place = NameResolution.Resolve(target, named, NameResolution.Navigation);
+            if (place.Outcome != NameOutcome.Unknown) return null;
+            var screens = k.Index.Roots("screen").Concat(k.Job.Roots.Where(r => !r.Value.Contains("block", StringComparison.OrdinalIgnoreCase)).Select(r => r.Key))
+                .Concat(k.Index.NamesOf(kind => IndexBaseFacts.ScreenKind.IsMatch(kind)));
+            return new(place.Unfit.Count > 0 ? $"'{target}' is {string.Join(", ", place.Unfit.Select(x => "a " + NameResolution.Bare(x.Kind)).Distinct())} of the module or of a reference, and a navigate goes to a screen"
+                : $"no screen of the module or of this job is named '{target}'", Candidates(target, screens));
         }
         var dot = callee.IndexOf('.');
         if (dot > 0)
@@ -158,29 +306,43 @@ internal static class ScopeRules
                 var actions = k.OwnerActions(qualifier);
                 if (actions == null || actions.Contains(name)) return null;
                 var mine = k.Job.Ops.SelectMany(o => o.Declares).Where(d => d.StartsWith(qualifier + ".", StringComparison.OrdinalIgnoreCase)).Select(d => d[(qualifier.Length + 1)..]);
-                return ($"'{qualifier}' has no screen action or data action '{name}', and no logic op of this job declares {qualifier}.{name}", Candidates(name, actions.Concat(mine)));
+                return new($"'{qualifier}' has no screen action or data action '{name}', and no logic op of this job declares {qualifier}.{name}", Candidates(name, actions.Concat(mine)));
             }
             if (k.Open.Contains(qualifier)) return null;
             if (k.Producers.TryGetValue(qualifier, out var names))
-                return names.Contains(name) ? null
-                    : ($"'{name}' is not an element of {qualifier} that this module references or that a reference op of this job imports", Candidates(name, names));
+            {
+                if (!names.Contains(name))
+                    return new($"'{name}' is not an element of {qualifier} that this module references or that a reference op of this job imports", Candidates(name, names).Select(n => qualifier + "." + n).ToList());
+                // R2-A: an element of the producer of another kind (a structure, a screen) is no call.
+                var typed = ResolveCall(callee, owner, k);
+                return typed.Outcome != NameOutcome.Unknown || typed.Unfit.Count == 0 ? null
+                    : new($"{string.Join(", ", typed.Unfit.Select(NameResolution.Describe))} is no action, and a call executes an action", typed.Candidates.Select(c => c.Canonical).ToList());
+            }
             // A qualifier that is no module, owner or producer of the base or of the job.
             if (k.Index.TopLevel(qualifier)) return null;
-            return ($"'{qualifier}' is no module this module references, no reference op of this job imports it, and no screen or block is named so",
+            return new($"'{qualifier}' is no module this module references, no reference op of this job imports it, and no screen or block is named so",
                 Candidates(qualifier, k.Producers.Keys.Concat(k.Index.Roots("screen")).Concat(k.Index.Roots("block"))));
         }
-        // Bare: an action of the owner, of the module, of the job, an entity action, a built-in, a screen.
-        if (k.JobDeclares(callee) || owner != null && k.JobDeclares(owner + "." + callee)) return null;
-        if (owner != null && k.OwnerActions(owner)?.Contains(callee) == true) return null;
-        if (k.ModuleHas(callee) || k.IsOwner(callee) || k.Builtins?.ContainsKey(callee) == true || SystemCalls.Inputs.ContainsKey(callee)) return null;
+        // Bare: a built-in, a function of the System, an entity action; else the actions the call can name (NameResolution): of
+        // the owner, of the module and of the job, then of the producers (written Producer.Action).
+        if (k.Builtins?.ContainsKey(callee) == true || SystemCalls.Inputs.ContainsKey(callee)) return null;
         if (EntityAction.Match(callee) is { Success: true } entity && k.IsRecord(entity.Groups[1].Value)) return null;
-        // A producer element written without its qualifier, of one producer only: the qualifier it means.
-        var owners = k.Producers.Where(p => p.Value.Contains(callee)).Select(p => p.Key).ToList();
-        if (owners.Count >= 1) return null;
+        var answer = ResolveCall(callee, owner, k);
+        if (answer.Outcome == NameOutcome.Resolved) return null;
+        // Two or more at the same distance, in the text form and in the JSON form alike (the JSON form writes the one it means
+        // as Producer.Action too: LogicOrder.CallCandidates).
+        if (answer.Outcome == NameOutcome.Ambiguous)
+            return new($"{answer.Candidates.Count} actions answer '{callee}' at the same distance ({string.Join(", ", answer.Candidates.Select(NameResolution.Describe))}), and the call names none of them",
+                answer.Candidates.Select(c => c.Canonical).Distinct(StringComparer.OrdinalIgnoreCase).ToList(), true);
+        // No action has the name: an element of the module of another kind (a screen, a block), a function, a name the job
+        // declares by another op (a raw create, a reference op), a producer this reader does not see whole or a generator op
+        // is the apply's to judge.
+        if (k.Local.Contains(callee) || k.IsOwner(callee) || k.Index.IsFunction(callee) || k.JobDeclares(callee)
+            || owner != null && k.JobDeclares(owner + "." + callee)) return null;
         if (k.Open.Count > 0 || k.Job.Generators) return null;
-        var pool = k.Index.NamesOf(kind => kind.Contains("Action", StringComparison.Ordinal)).Concat(k.Job.Ops.SelectMany(o => o.Declares).Where(d => !d.StartsWith('$')))
-            .Concat(owner != null ? k.OwnerActions(owner) ?? [] : []);
-        return ($"no action of the module, of its references or of this job is named '{callee}'", Candidates(callee, pool));
+        return new($"no action of the module, of its references or of this job is named '{callee}'"
+            + (answer.Unfit.Count > 0 ? $" ({string.Join(", ", answer.Unfit.Take(3).Select(NameResolution.Describe))} of that name is no action)" : ""),
+            answer.Candidates.Select(c => c.Canonical).ToList());
     }
 
     internal static List<string> Candidates(string name, IEnumerable<string> pool)
@@ -204,32 +366,108 @@ internal static class ScopeRules
                 {
                     if (Resolve(call.Target, owner, known) is not { } why || !seen.Add(call.Target)) continue;
                     var at = prefix == null ? null : $"{prefix}/{i}/data/actions/{a}{call.Pointer}";
-                    yield return CallProblem(i, at, call.Target, why, at == null ? null : at + "/call", call.Target, "LOGIC_INVALID");
+                    var problem = CallProblem(i, at, call.Target, why, at == null ? null : at + "/call", call.Target, "LOGIC_INVALID");
+                    if (at != null) Choices(problem, why, call.Target, form => new JsonArray(new JsonObject { ["op"] = "replace", ["path"] = at + "/call", ["value"] = form }));
+                    yield return problem;
                 }
             }
-            var flow = data["flow"] ?? data["text"];
             foreach (var (index, text) in DocumentNameRules.Texts(data))
             {
                 FlowItem parsed;
                 try { parsed = FlowParser.Parse(text); } catch { continue; }   // a text the grammar refuses is the preflight's
                 var owner = parsed.Owner.Length > 0 ? parsed.Owner.Split('/').Last() : null;
-                var at = prefix == null ? null : $"{prefix}/{i}/" + (flow is JsonArray ? $"{(data["flow"] != null ? "data/flow" : "data/text")}/{index}" : data["flow"] != null ? "data/flow" : "data/text");
+                var at = prefix == null ? null : $"{prefix}/{i}/" + TextPath(data, index);
                 foreach (var (callee, screen) in Callees(parsed))
                 {
                     if (Resolve(callee, owner, known, screen) is not { } why || !seen.Add(callee)) continue;
-                    var problem = CallProblem(i, at, callee, why, null, null, "FLOW_NAME_UNKNOWN");
-                    // The certain correction (one candidate the name can mean), written in the text of the action.
-                    if (at != null && Meant(callee, why.Candidates) is { } meant)
-                        problem["patch"] = new JsonArray(new JsonObject { ["op"] = "replace", ["path"] = at, ["value"] = Regex.Replace(text, @"(?<![\w.])" + Regex.Escape(callee) + @"(?=\s*\()", Qualified(callee, meant)) });
+                    var problem = CallProblem(i, at, callee, why, null, null, why.Ambiguous ? "FLOW_NAME_AMBIGUOUS" : "FLOW_NAME_UNKNOWN");
+                    if (at != null)
+                    {
+                        // The certain correction (one candidate the name can mean), written in the text of the action; and the
+                        // patch of each candidate (R2-A: the exact text with that one, only the call changed).
+                        if (!why.Ambiguous && Meant(callee, why.Candidates) is { } meant && RewriteCalls(text, new Dictionary<string, string> { [callee] = Form(callee, meant) }) is { } corrected)
+                            problem["patch"] = new JsonArray(new JsonObject { ["op"] = "replace", ["path"] = at, ["value"] = corrected });
+                        Choices(problem, why, callee, form => RewriteCalls(text, new Dictionary<string, string> { [callee] = form }) is { } chosen
+                            ? new JsonArray(new JsonObject { ["op"] = "replace", ["path"] = at, ["value"] = chosen }) : null);
+                    }
                     yield return problem;
                 }
             }
         }
     }
 
+    /// <summary>The path of a text of the text form under the op (data/flow, data/flow/N, data/flow/N/text, data/text...).</summary>
+    private static string TextPath(JsonObject data, int index)
+    {
+        var key = data["flow"] != null ? "flow" : "text";
+        return data[key] is JsonArray list ? $"data/{key}/{index}" + (list[index] is JsonObject ? "/text" : "") : $"data/{key}";
+    }
+
+    private static readonly Regex CallLine = new(@"^(\s*(?:[A-Za-z_]\w*\s*=\s*)?)(\S+?)(?=\s*\()", RegexOptions.Compiled);
+
+    /// <summary>R2-A: the text with the callee of its Execute nodes written as <paramref name="forms"/> says (callee as written →
+    /// its form), and nothing else: only the name before the parenthesis of a call line, never a literal, a comment, a
+    /// description or an expression (an assignment that calls the same name as a function keeps it). Each line is checked by
+    /// parsing: the action read from the new text is the action of the old one with those callees in their forms, or the line
+    /// is left as it was. Null when no call changed (or a call of those names stays as it was written).</summary>
+    internal static string? RewriteCalls(string text, IReadOnlyDictionary<string, string> forms)
+    {
+        FlowItem before;
+        try { before = FlowParser.Parse(text); } catch { return null; }
+        var target = Retargeted(before, forms).Canon();
+        var lines = text.Split('\n');
+        var changed = false;
+        for (var n = 0; n < lines.Length; n++)
+        {
+            var line = lines[n];
+            var trimmed = line.TrimStart();
+            if (trimmed.StartsWith("//", StringComparison.Ordinal) || trimmed.StartsWith('#')) continue;
+            if (CallLine.Match(line) is not { Success: true } call || !forms.TryGetValue(call.Groups[2].Value, out var form)) continue;
+            var trial = (string[])lines.Clone();
+            trial[n] = call.Groups[1].Value + form + line[call.Length..];
+            FlowItem parsed;
+            try { parsed = FlowParser.Parse(string.Join('\n', trial)); } catch { continue; }
+            // The line is a call of the action when the new text means the old one with its callees retargeted.
+            if (Retargeted(parsed, forms).Canon() != target) continue;
+            lines = trial;
+            changed = true;
+        }
+        if (!changed) return null;
+        var after = string.Join('\n', lines);
+        FlowItem result;
+        try { result = FlowParser.Parse(after); } catch { return null; }
+        return Executes(result).Any(forms.ContainsKey) || Retargeted(result, forms).Canon() != target ? null : after;
+    }
+
+    // The action with every Execute of a name in forms calling its form instead; the name of such a node is left out of the
+    // comparison (a call written without a name is named after its callee's last segment, which a typo's patch changes).
+    private static FlowItem Retargeted(FlowItem item, IReadOnlyDictionary<string, string> forms)
+    {
+        var copy = item.Clone();
+        var targets = forms.Values.ToHashSet(StringComparer.Ordinal);
+        void Visit(FlowItem node)
+        {
+            if (node.Role == "node" && node.Kind == "Execute" && node.Prop("Action") is { } action)
+            {
+                if (forms.TryGetValue(action, out var form)) { node.Props["Action"] = node.Props["Action"] with { Text = form }; action = form; }
+                if (targets.Contains(action)) node.Name = "";
+            }
+            foreach (var child in node.Items) Visit(child);
+        }
+        Visit(copy);
+        return copy;
+    }
+
+    /// <summary>R2-A: the candidates of a refused call, each with its form and the patch that writes it (the author chooses).</summary>
+    private static void Choices(JsonObject problem, Unresolved why, string callee, Func<string, JsonArray?> patch)
+    {
+        if (why.Candidates.Count == 0) return;
+        problem["candidates"] = new JsonArray(why.Candidates.Select(c => (JsonNode)new JsonObject { ["name"] = Form(callee, c), ["patch"] = patch(Form(callee, c)) }).ToArray());
+        if (why.Ambiguous) problem["patch"] = null;
+    }
+
     private static string Last(string name) => name.Split('.', '/').Last();
 
-    /// <summary>The one candidate a name can mean (NameSuggestions.OnlyMatch over their last segments), or null.</summary>
     /// <summary>Two neighbouring letters swapped (Fitler for Filter): the commonest typo, two edits apart.</summary>
     private static bool Transposed(string a, string b)
     {
@@ -238,6 +476,7 @@ internal static class ScopeRules
         return diff.Count == 2 && diff[1] == diff[0] + 1 && char.ToUpperInvariant(a[diff[0]]) == char.ToUpperInvariant(b[diff[1]]) && char.ToUpperInvariant(a[diff[1]]) == char.ToUpperInvariant(b[diff[0]]);
     }
 
+    /// <summary>The one candidate a name can mean (NameSuggestions.OnlyMatch over their last segments), or null.</summary>
     internal static string? Meant(string callee, IReadOnlyList<string> candidates)
     {
         var name = Last(callee);
@@ -247,15 +486,19 @@ internal static class ScopeRules
             .DistinctBy(Last, StringComparer.OrdinalIgnoreCase).ToList();
         return close.Count == 1 ? close[0] : null;
     }
-    private static string Qualified(string written, string candidate) => written.Contains('.') ? written[..(written.LastIndexOf('.') + 1)] + Last(candidate) : Last(candidate);
 
-    private static JsonObject CallProblem(int op, string? pointer, string callee, (string Why, List<string> Candidates) why, string? patchPath, string? written, string predicts)
+    /// <summary>How a candidate is written in place of <paramref name="written"/>: with the written qualifier (Producer.Typo is
+    /// Producer.Name), or whole when the text had none (a producer's action is Producer.Name).</summary>
+    private static string Form(string written, string candidate) => written.Contains('.') ? written[..(written.LastIndexOf('.') + 1)] + Last(candidate) : candidate;
+
+    private static JsonObject CallProblem(int op, string? pointer, string callee, Unresolved why, string? patchPath, string? written, string predicts)
     {
-        var meant = Meant(callee, why.Candidates);
+        var meant = why.Ambiguous ? null : Meant(callee, why.Candidates);
         var patch = patchPath != null && written != null && meant != null
-            ? new JsonArray(new JsonObject { ["op"] = "replace", ["path"] = patchPath, ["value"] = Qualified(written, meant) }) : null;
-        return Problem(op, pointer, CallUnknown, predicts, $"the call {callee}(...): {why.Why}",
-            why.Candidates.Count > 0 ? $"call one of: {string.Join(", ", why.Candidates)}; or declare it earlier in this job (a logic op), or import it (a reference op)"
+            ? new JsonArray(new JsonObject { ["op"] = "replace", ["path"] = patchPath, ["value"] = Form(written, meant) }) : null;
+        return Problem(op, pointer, why.Ambiguous ? CallAmbiguous : CallUnknown, predicts, $"the call {callee}(...): {why.Why}",
+            why.Ambiguous ? $"write the one you mean: {string.Join(", ", why.Candidates.Select(c => Form(callee, c)))} (candidates: the patch of each)"
+            : why.Candidates.Count > 0 ? $"call one of: {string.Join(", ", why.Candidates.Select(c => Form(callee, c)))}; or declare it earlier in this job (a logic op), or import it (a reference op)"
                 : "declare the action in a logic op of this job, import it with a reference op, or name an action of the module (ssam_map)", patch, "logic");
     }
 
@@ -271,6 +514,64 @@ internal static class ScopeRules
             foreach (var callee in Callees(child)) yield return callee;
     }
 
+    /// <summary>The actions the Execute nodes of a parsed action call (the calls of its text, never a destination).</summary>
+    internal static IEnumerable<string> Executes(FlowItem item)
+    {
+        if (item.Role == "node" && item.Kind == "Execute" && item.Prop("Action") is { Length: > 0 } action) yield return action;
+        foreach (var child in item.Items)
+            foreach (var callee in Executes(child)) yield return callee;
+    }
+
+    // ---- REFERENCE_CANONICAL (a normalization, with the base) -------------------------------------------------------------
+
+    /// <summary>R2-A: a call of a producer's action written without its producer (one action of that name, of one producer,
+    /// nothing of the module's, of the owner's or of the job's: NameResolution over the index), and a call written in another
+    /// case than its element's name, is written in its canonical form (Producer.Action, the element's own spelling), the form
+    /// the reading writes and the apply resolves; only the callee of the call line changes (RewriteCalls). Listed as
+    /// REFERENCE_CANONICAL (JobNormalizer.WithBase, through ScopePhase.Normalize). The text form's calls only: the JSON form
+    /// binds a bare name by Kind:Name over the whole module and Producer.Action by its reference (LogicOrder.CallCandidates).</summary>
+    internal static void Canonicalize(JsonArray ops, string? prefix, string lane, IBaseFacts facts, List<JsonObject> done)
+    {
+        if (!ops.OfType<JsonObject>().Any(o => o["op"]?.ToString() == "logic" && o["data"] is JsonObject d && (d["flow"] ?? d["text"]) != null)) return;
+        var index = facts as IndexBaseFacts ?? (facts as ModelBaseFacts)?.Indexed(ops, lane);
+        if (index == null) return;
+        var known = Known(index, ScopeJob.Of(ops), ops, lane);
+        for (var i = 0; i < ops.Count; i++)
+        {
+            if (ops[i] is not JsonObject op || op["op"]?.ToString() != "logic" || op["data"] is not JsonObject data) continue;
+            foreach (var (n, text) in DocumentNameRules.Texts(data))
+            {
+                FlowItem parsed;
+                try { parsed = FlowParser.Parse(text); } catch { continue; }
+                var owner = parsed.Owner.Length > 0 ? parsed.Owner.Split('/').Last() : null;
+                var forms = new Dictionary<string, string>(StringComparer.Ordinal);
+                foreach (var callee in Executes(parsed).Distinct(StringComparer.Ordinal))
+                    if (CanonicalCall(callee, owner, known, lane) is { } form) forms[callee] = form;
+                if (forms.Count == 0 || RewriteCalls(text, forms) is not { } written) continue;
+                WriteText(data, n, written);
+                var path = prefix == null ? null : $"{prefix}/{i}/" + TextPath(data, n);
+                foreach (var (callee, form) in forms) done.Add(CanonicalNote(path, callee, form, "the apply resolves"));
+            }
+        }
+    }
+
+    /// <summary>The REFERENCE_CANONICAL entry of a call written <paramref name="callee"/> and now <paramref name="form"/>.</summary>
+    internal static JsonObject CanonicalNote(string? path, string callee, string form, string who) => JobNormalizer.Entry(NameResolution.CanonicalRule, path, callee + "(", form + "(",
+        string.Equals(callee, Last(form), StringComparison.OrdinalIgnoreCase) && !form.Contains('.') || string.Equals(callee, form, StringComparison.OrdinalIgnoreCase)
+            ? $"{callee} names the action {form} (the names of a module have no case): written {form}, as the action is named and as {who}"
+            : $"{callee} is the action {form} of a producer the module references (the only action of that name, and neither the module, the caller's owner nor this job has one): written {form}, the form the reading writes and {who}");
+
+    private static void WriteText(JsonObject data, int index, string text)
+    {
+        var key = data["flow"] != null ? "flow" : "text";
+        switch (data[key])
+        {
+            case JsonArray list when list[index] is JsonObject entry: entry["text"] = text; break;
+            case JsonArray list: list[index] = text; break;
+            default: data[key] = text; break;
+        }
+    }
+
     // ---- ACTION_KIND_NODE -------------------------------------------------------------------------------------------------
 
     /// <summary>What the platform refuses to create, by module type, read from the creation maps of the fixtures
@@ -283,13 +584,8 @@ internal static class ScopeRules
 
     internal static WhereCan? MapFor(string? moduleType)
     {
-        var fixture = moduleType switch
-        {
-            "CrossDevice" or "ReactiveLibrary" => "reactive-ui",
-            "Mobile" or "MobileLibrary" => "mobile-ui",
-            "WebResponsive" or "WebResponsiveLibrary" => "traditional-ui",
-            _ => null,
-        };
+        // R3-B: the module types and their maps are the table's (PlatformLimits parent.map), a Service module's included.
+        var fixture = PlatformLimits.MapFixture(moduleType);
         if (fixture == null) return null;
         lock (Maps)
         {
@@ -335,12 +631,24 @@ internal static class ScopeRules
     {
         // The maps are the O11 Studio's (its fixtures): an ODC module (its widgets, a placeholder of a block under a container
         // of that block) is not judged by them.
-        if (lane != "o11" || MapFor(moduleType) is not { } map) yield break;
+        if (lane != "o11") yield break;
+        var map = MapFor(moduleType);
         for (var i = 0; i < ops.Count; i++)
         {
             if (ops[i] is not JsonObject op || op["op"]?.ToString() != "create") continue;
             var type = KindNames.Normalize(op["type"]?.ToString() ?? "");
             var at = prefix == null ? null : $"{prefix}/{i}/type";
+            // R3-B: a parent the table measured beyond the maps (an image in a Service module: the map's probe had no binary).
+            var atModule = op["parent"]?.ToString() == "@espace";
+            if (PlatformLimits.RefusedParent(lane, moduleType, type, atModule ? "IESpace" : ParentType(op["parent"]?.ToString(), job, i)) is { } measured)
+            {
+                yield return Problem(i, prefix == null ? null : $"{prefix}/{i}/parent", KindNode, "APPLY_FAILED", $"{type} under the module of a {moduleType} module: {measured.Message}", measured.Fix, null, "create");
+                continue;
+            }
+            if (map == null) continue;
+            // The Service map (new with R3-B) is read at the module too (`@espace`: a client variable, a client action, a theme, a
+            // UI flow, a script); the UI maps keep the reach they had (a parent named by kind or by an alias of the job).
+            var parentType = atModule && moduleType == "Service" ? "IESpace" : ParentType(op["parent"]?.ToString(), job, i);
             if (map.NoClass.Contains(type))
             {
                 var other = Counterpart(type, map);
@@ -349,10 +657,10 @@ internal static class ScopeRules
                     other != null && at != null ? new JsonArray(new JsonObject { ["op"] = "replace", ["path"] = at, ["value"] = other }) : null, "create");
                 continue;
             }
-            var parentType = ParentType(op["parent"]?.ToString(), job, i);
             if (parentType != null && map.NotChild.TryGetValue((type, parentType), out var refusal))
                 yield return Problem(i, prefix == null ? null : $"{prefix}/{i}/parent", KindNode, "APPLY_FAILED", $"{type} under a {parentType}: {refusal}",
-                    $"create the {type} under a container the {parentType} holds, or use a widget a {parentType} accepts", null, "create");
+                    parentType == "IESpace" ? $"a {moduleType} module has no {type}: create it in a module of a kind that has one (docs/mapa/criar-{map.Fixture}.json lists what this one takes)"
+                        : $"create the {type} under a container the {parentType} holds, or use a widget a {parentType} accepts", null, "create");
         }
     }
 
@@ -423,8 +731,7 @@ internal static class ScopeRules
     /// Value); a literal text (Text, Name, Label...) and the per-element expressions of a list (Labels, Values) are not read.</summary>
     private static readonly HashSet<string> ScopedProperties = new(StringComparer.Ordinal) { "Value", "Variable", "Visible", "Enabled", "Condition", "Source", "SourceRecord", "List", "Style" };
 
-    private static readonly HashSet<string> ScopeGlobals = new(StringComparer.OrdinalIgnoreCase)
-        { "True", "False", "and", "or", "not", "like", "Entities", "Site", "Session", "Roles", "Resources", "Settings", "Request", "Client", "BuiltinClientVariables", "Images", "Themes", "NullObject", "NullTextIdentifier" };
+    private static readonly HashSet<string> ScopeGlobals = new(ExpressionRoots.All.Append("NullTextIdentifier"), StringComparer.OrdinalIgnoreCase);
 
     /// <summary>The roots of the expressions a raw `set` writes on an element the job creates inside a screen or block:
     /// each is a name of that owner (an input, a variable, an aggregate, a data action or a widget of the base's owner, or

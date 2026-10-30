@@ -1,19 +1,20 @@
 import {createHash} from 'node:crypto';
 import fs from 'node:fs';
-import {authorizationContext} from '../../facade/authorization-context.mjs';
+import {authorizationContext,WRITTEN_CONTEXT} from '../../facade/authorization-context.mjs';
 import {fail} from './errors.mjs';
+import {recorded,sameGrant} from './written-approval.mjs';
 const root='environment-configurations-api-v1:', collection='/environments/{environmentKey}/ip-filter-groups';
 export const IP_FILTER_CREATE=root+'post:'+collection;
 export const IP_FILTER_PATCH=root+'patch:'+collection+'/{ipFilterGroupKey}';
 export const IP_FILTER_DELETE=root+'delete:'+collection+'/{ipFilterGroupKey}';
 export const IP_FILTER_WRITES=new Set([IP_FILTER_CREATE,IP_FILTER_PATCH,IP_FILTER_DELETE]);
 export const ipFilterHash=value=>createHash('sha256').update(JSON.stringify(value)).digest('hex');
-export async function ipFilterApproval({file,words,host,operationId,input,originOperationUuid,lookup,read}) {
+export async function ipFilterApproval({file,words,host,operationId,input,originOperationUuid,lookup,read,find}) {
  const bad=()=>fail('AUTHORIZATION_CONTEXT_INVALID','IP filter approval must bind the own group, own application receipts, stage, current configuration and exact change. Nothing was sent.');
  const create=operationId===IP_FILTER_CREATE, p=input.path??{},b=input.body;
  if(!IP_FILTER_WRITES.has(operationId)||input.query||typeof p.environmentKey!=='string'
    ||Object.keys(p).some(k=>!['environmentKey',...(create?[]:['ipFilterGroupKey'])].includes(k)))bad();
- let name,origin,current,bindingOriginsJson;
+ let name,origin,current,bindingOriginsJson;const appNames=new Map();
  if(create){
   if(!b||typeof b.name!=='string'||!b.name.trim()||!['DENYLIST','ALLOWLIST'].includes(b.accessType)
     ||!Array.isArray(b.appKeys)||b.appKeys.length||!Array.isArray(b.ipRules)||b.ipRules.length)bad();
@@ -26,7 +27,7 @@ export async function ipFilterApproval({file,words,host,operationId,input,origin
   origin=lookup(originOperationUuid);
   if(!origin||!['accepted','confirmed'].includes(origin.state)||origin.identity?.tenant!==host
     ||origin.identity.operationId!==IP_FILTER_CREATE||origin.identity.target?.environmentKey!==p.environmentKey
-    ||origin.response?.key!==p.ipFilterGroupKey||!origin.authorization?.source)bad();
+    ||origin.response?.key!==p.ipFilterGroupKey||!recorded(origin))bad();
   const seen=await read(root+'get:'+collection+'/{ipFilterGroupKey}',p);
   if(!seen.ok||seen.data?.key!==p.ipFilterGroupKey)fail('IP_FILTER_PREREQUISITE_UNAVAILABLE','Exact IP filter group could not be read; nothing was sent.');
   current=seen.data;name=current.name;
@@ -45,9 +46,18 @@ export async function ipFilterApproval({file,words,host,operationId,input,origin
   if(keys.length){
    let bindings;
    try{
-    if(!file||fs.statSync(file).size>32768)bad();
-    bindingOriginsJson=JSON.parse(fs.readFileSync(file,'utf8')).constraints?.bindingOriginsJson;
-    bindings=JSON.parse(bindingOriginsJson);
+    // R2-I: with the written words alone (the own-fixture mode SSAM selected), the creation receipt of each bound app comes
+    // from SSAM's own journal; a context file still names them.
+    if(file===WRITTEN_CONTEXT&&typeof find==='function'){
+     bindings=keys.map(assetKey=>{const own=find(r=>['accepted','confirmed'].includes(r?.state)&&r.identity?.tenant===host
+      &&r.identity.operationId==='asset-repository-api-v1:post:/assets'&&r.response?.assetKey===assetKey);
+      return own.length===1?{assetKey,operationUuid:own[0].operationUuid}:null;});
+     bindingOriginsJson=JSON.stringify(bindings);
+    }else{
+     if(!file||fs.statSync(file).size>32768)bad();
+     bindingOriginsJson=JSON.parse(fs.readFileSync(file,'utf8')).constraints?.bindingOriginsJson;
+     bindings=JSON.parse(bindingOriginsJson);
+    }
    }catch{bad();}
    if(!Array.isArray(bindings)||bindings.length!==keys.length)bad();
    for(let i=0;i<keys.length;i++){
@@ -56,16 +66,21 @@ export async function ipFilterApproval({file,words,host,operationId,input,origin
     const assetOrigin=lookup(entry.operationUuid);
     if(!assetOrigin||!['accepted','confirmed'].includes(assetOrigin.state)||assetOrigin.identity?.tenant!==host
      ||assetOrigin.identity.operationId!=='asset-repository-api-v1:post:/assets'||assetOrigin.response?.assetKey!==entry.assetKey
-     ||assetOrigin.authorization?.source?.threadId!==origin.authorization.source.threadId
-     ||assetOrigin.authorization?.source?.messageId!==origin.authorization.source.messageId)bad();
+     ||(origin.authorization?.source?.kind==='human-words'?!recorded(assetOrigin):(assetOrigin.authorization?.source?.threadId!==origin.authorization?.source?.threadId||assetOrigin.authorization?.source?.messageId!==origin.authorization?.source?.messageId)))bad();
     const asset=await read('asset-repository-api-v1:get:/assets/{assetKey}',{assetKey:entry.assetKey});
     if(!asset.ok||asset.data?.assetKey!==entry.assetKey||!['WebApplication','MobileApplication'].includes(asset.data.assetType)
      ||asset.data.name!==assetOrigin.identity.target?.name)bad();
+    appNames.set(entry.assetKey,asset.data.name);
    }
   }
  }
  const constraints={bodySha256:ipFilterHash(b??null),...(create?{}:{originOperationUuid,expectedConfigurationSha256:ipFilterHash(current)}),...(bindingOriginsJson===undefined?{}:{bindingOriginsJson})};
- const approval=authorizationContext(file,words,{lane:'odc',host,operation:operationId,environmentKey:p.environmentKey,targets:[name],constraints});
- if(!approval||origin&&(approval.source.threadId!==origin.authorization.source.threadId||approval.source.messageId!==origin.authorization.source.messageId))bad();
+ // R2-I round 5: with the written words alone, a write that changes several items names each one that changes: the group
+ // and every app whose binding changes (bound now or unbound: the symmetric difference of the current and requested
+ // appKeys), by the name SSAM read. An app that stays bound unchanged needs no name. A context file keeps its scope.
+ const changed=!create&&b&&'appKeys' in b?[...current.appKeys.filter(k=>!b.appKeys.includes(k)),...b.appKeys.filter(k=>!current.appKeys.includes(k))]:[];
+ const targets=file===WRITTEN_CONTEXT?[name,...changed.map(k=>appNames.get(k))]:[name];
+ const approval=authorizationContext(file,words,{lane:'odc',host,operation:operationId,environmentKey:p.environmentKey,targets,constraints});
+ if(!approval||origin&&(!sameGrant(origin.authorization,approval)))bad();
  return approval;
 }

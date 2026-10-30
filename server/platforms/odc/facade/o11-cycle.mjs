@@ -1,3 +1,4 @@
+import { prepareDeleteJob } from './delete-dependencies.mjs';
 // The O11 cycle over MCP, so the model reads and delivers without the shell (`ssam inspect|deliver --lane o11` cost ~17 s
 // a call and a quarter of those invocations failed before running):
 //   o11_inspect  the resident O11 reader (kernel-reading.mjs: `read-serve` of the lane CLI) over a capture .oml;
@@ -77,9 +78,9 @@ import { taskWarnings, warningFields, producerHashWarningsOf } from './delivery-
 import { jobSummary } from './job-summary.mjs';
 import { mergeNormalizations } from './normalizations.mjs';
 // Lane wp (atritos 3): the build phase of a phased delivery, outside the Studio lock (o11-build-phase.mjs).
-import { phaseGuards, buildBeforeApply, afterApply, validationContract, contractProblems } from './o11-build-phase.mjs';
+import { phaseGuards, buildBeforeApply, afterApply, validationContract, contractProblems, captureByKey, candidateFolder, retainCandidate } from './o11-build-phase.mjs';
 import { refusalFields, diagnosisOf, normalizationsOf, patchesAppliedOf, continuationOf } from './refusal-problems.mjs';
-import { PHASES_META, noteStudioHolder, pendingOperationOf } from './studio-write-lock.mjs';
+import { PHASES_META, noteStudioHolder, pendingOperationOf, phaseOfCall, awaitReservation } from './studio-write-lock.mjs';
 import { watchPendingOperation } from './studio-pending-operation.mjs';
 import { stallRecovery } from './studio-recovery.mjs';
 import { cleanStall } from './bridge-stall.mjs';
@@ -103,6 +104,7 @@ import { prototypeAppUrl, prototypeScreenLinks } from './next-steps.mjs';
 import { openProducerBindings } from './o11-open-producer.mjs';
 import { RESULT, resultIs } from './result-values.mjs';
 import { accessRestoreAfter, restoreScope, temporaryClose, temporaryRefusal } from './o11-access.mjs';
+import { joinPrecheck, uiPrecheckJudges } from './ui-precheck.mjs';
 
 const readOnly = { readOnlyHint: true, destructiveHint: false, openWorldHint: false };
 const mutating = { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false };
@@ -309,8 +311,8 @@ const ops = z.array(z.record(z.string(), z.unknown())).min(1);
 const TASK_ID = /^[0-9a-fA-F]{32}$/;
 const SHA = /^[a-fA-F0-9]{64}$/;
 // JSON Patch (job-patch.mjs): the same shape as its patchJsonSchema / basedOnJsonSchema.
-const patchSchema = z.union([z.array(z.object({ op: z.enum(['add', 'remove', 'replace', 'test']), path: z.string().min(1), value: z.unknown().optional() }).strict())
-  .min(1).max(PATCH_MAX_OPS), z.literal('verified')]);
+// patchJob validates complete operations and returns a repair; keep malformed operations past schema parsing.
+const patchSchema = z.union([z.array(z.unknown()).max(PATCH_MAX_OPS), z.literal('verified'), z.record(z.string(), z.unknown())]);
 const basedOnSchema = z.union([z.object({ job: z.string().min(1), sha256: z.string().regex(SHA) }).strict(),
   z.object({ taskId: z.string().regex(TASK_ID), sha256: z.string().regex(SHA).optional() }).strict()]);
 const deliverSchema = z.object({
@@ -321,6 +323,8 @@ const deliverSchema = z.object({
   patch: patchSchema.optional().describe('Instead of job: JSON Patch (add, remove, replace, test; at most 500) over the job of basedOn, or "verified" (every verified patch of its refusal: verifiedPatch.call), '
     + 'paths /ops/<i>/... (/<i>/... for an array job) or by name: actions/<Action>/steps/<as>/...; the patched job is a new file'),
   basedOn: basedOnSchema.optional().describe('With patch or a partial job: {job, sha256} as an answer returned them (nextBasedOn), or {taskId} of a refused delivery'),
+  // Listed without a text: the check's write and until:'apply' give it ready.
+  candidateRef: z.string().optional(),
   autoPatch: z.boolean().optional().describe('false: offer verified repairs without applying them automatically.'),
   // The correction loop's fix (R1): sent as a refusal's fixCall gives it, so it is listed without a text (the listing budget).
   fix: z.literal('apply').optional(),
@@ -783,7 +787,19 @@ export function deliveryFields(state) {
     ...normalizationsOf(state?.apply),
     ...patchesAppliedOf(state?.apply),
     // fam-deps review (finding 1): the dialogs the bridge closed for this delivery.
-    ...dialogsOf(state) };
+    ...dialogsOf(state),
+    // R3-C (K2): the names the Studio gave on its own in the merge, which the content proof accepted only as predicted.
+    ...nativeRenamesOf(state) };
+}
+// R3-C (K2, Delivery.cs nativeRenames): the elements the Studio renamed on its own during the merge (NativeNames: an aggregate
+// named Get + plural that received a filter by an attribute), short, with a note; absent when none. The merge applied them and
+// the content proof accepted exactly these predicted pairs, nothing else.
+export function nativeRenamesOf(state) {
+  const list = (Array.isArray(state?.nativeRenames) ? state.nativeRenames : []).filter(r => r && typeof r === 'object' && r.from && r.to);
+  if (!list.length) return {};
+  return { nativeRenames: list.slice(0, 10).map(r => ({ element: r.element ?? null, from: r.from, to: r.to, rule: r.rule ?? null })),
+    ...(list.length > 10 ? { nativeRenamesTotal: list.length } : {}),
+    nativeRenamesNote: 'Applied. The Studio renamed ' + (list.length === 1 ? 'this element' : 'these elements') + ' on its own during the merge, as the candidate predicted (NativeNames); the content proof accepted only these renames. The module now uses the new names: write them in later jobs.' };
 }
 // MB2 (Delivery.cs, DeliveryDependenciesDialog.cs): the receipt's referencesRefreshed, short; absent when none.
 export function referencesRefreshedOf(state) {
@@ -1356,22 +1372,22 @@ async function prototypeSeedAfter(value, proto, { input, module, words, authoriz
 // A prototype job (proto) rebuilds once without the generated items a build problem names (1.4.1).
 async function applyOnly(input, job, ctx, task, proto = null) {
   const lane = ctx.lane();
-  const bridge = ctx.bridge();
   try {
-    const opened = await bridge.ok('open_module', { name: input.module, ...(input.expectedEnvironment ? { environment: input.expectedEnvironment } : {}) });
-    if (opened?.opened !== true && opened?.alreadyOpen !== true)
-      return refusal('OPEN_BLOCKED', clean('open_module is blocked: ' + (opened?.hint ?? JSON.stringify(opened?.blockedBy ?? null))), doctor('Shows which Studio and dialogs hold the lane.'));
-    const active = await bridge.ok('get_active_module');
-    if (String(active?.name ?? '').toLowerCase() !== input.module.toLowerCase())
-      return refusal('ACTIVE_MODULE_CHANGED', 'The active module is ' + (active?.name ?? 'none') + ', not ' + input.module + '; nothing was captured.', doctor('Shows the module open in the selected Studio.'));
-    if (input.expectedEnvironment && String(active?.environment ?? '').toLowerCase() !== input.expectedEnvironment.trim().toLowerCase())
-      return refusal('ENVIRONMENT_MISMATCH', 'The selected Studio is connected to ' + (active?.environment ?? 'no environment') + ', not ' + input.expectedEnvironment + '.', doctor('Shows the environment of the selected Studio.'));
-    const snapshot = path.join(lane.local, 'snapshots', safeName(input.module) + '-' + stamp(ctx.now()) + '.oml');
-    fs.mkdirSync(path.dirname(snapshot), { recursive: true });
-    const captured = await bridge.ok('snapshot_module', { path: snapshot, ...(active?.key ? { module_key: active.key } : {}) });
-    if (captured?.key && active?.key && captured.key !== active.key) return refusal('ACTIVE_MODULE_CHANGED', 'The active module changed during the snapshot; nothing was applied.', doctor('Shows the module open in the selected Studio.'));
-    const folder = path.join(lane.work, 'apply', task.id);
-    const applyOnce = file => ctx.runAnvil(['apply', '--job', file, '--base', snapshot, '--out', path.join(folder, 'candidate.oml'), '--work', path.join(folder, 'model'),
+    const captured = await captureByKey(input.module, { bridge: ctx.bridge, local: lane.local, now: ctx.now,
+      expectedEnvironment: input.expectedEnvironment });
+    if (!captured) return refusal('VALIDATION_CAPTURE_UNAVAILABLE', 'The requested module has no unique, available open capture in the expected environment; no tab was selected and nothing was applied.',
+      { tool: 'o11_studio', arguments: { command: 'open-module', args: { name: input.module, ...(input.expectedEnvironment ? { environment: input.expectedEnvironment } : {}) } },
+        why: 'Open the requested module in the selected Studio through SSAM, then repeat the keyed validation.' });
+    const snapshot = captured.path;
+    const capture = { path: snapshot, sha256: sha256(fs.readFileSync(snapshot)), modelSha256: captured.modelSha256, moduleKey: captured.key };
+    // R2-H (a): hosted, the validation writes its candidate in the customer's private state (builds/<task>), beside private
+    // copies of the job and of the capture, so an accepted candidate is kept as the candidateRef a delivery reuses (R2-G);
+    // the kernel still reads the job where it is (its relative job: sources). Locally, as before.
+    const { workspace: privateWorkspace, folder } = candidateFolder(task.id, path.join(lane.work, 'apply', task.id));
+    const keptJob = privateWorkspace ? path.join(folder, 'job.json') : null;
+    const base = privateWorkspace ? path.join(folder, 'base.oml') : snapshot;
+    if (privateWorkspace) { fs.mkdirSync(folder, { recursive: true }); fs.copyFileSync(job, keptJob); fs.copyFileSync(snapshot, base); }
+    const applyOnce = file => ctx.runAnvil(['apply', '--job', file, '--base', base, '--out', path.join(folder, 'candidate.oml'), '--work', path.join(folder, 'model'),
       ...producerArgs(input.producers, [], { names: null }), ...(input.autoPatch === false ? ['--auto-patch', 'off'] : []), ...(input[BASED_ON] ? ['--based-on', input[BASED_ON]] : [])], { timeoutMs: ctx.applyTimeoutMs });
     let run;
     if (proto) {
@@ -1383,13 +1399,21 @@ async function applyOnly(input, job, ctx, task, proto = null) {
       run = b.result; proto.kernelData = run?.envelope?.data ?? null;
     } else run = await applyOnce(job);
     const data = run?.envelope?.data;
-    if (run?.envelope?.ok === true && data?.isValid === true && data?.accepted === true) return { ok: true, valid: true, ...normalizationsOf(data), ...patchesAppliedOf(data) };
+    if (run?.envelope?.ok === true && data?.isValid === true && data?.accepted === true) {
+      // The accepted candidate of the job as given (a degraded prototype rebuild is another job): candidateRef, or the
+      // retention note of why it was not kept. Nothing was promoted, opened, merged or published.
+      const kept = privateWorkspace && !proto ? retainCandidate({ workspace: privateWorkspace, module: input.module, candidate: path.join(folder, 'candidate.oml'),
+        result: path.join(folder, 'candidate.result.json'), job, kept: keptJob, base, via: 'validation', passed: 'The validation passed',
+        producers: Object.entries(input.producers ?? {}).filter(([, file]) => typeof file === 'string') }) : {};
+      return { ok: true, valid: true, capture, ...normalizationsOf(data), ...patchesAppliedOf(data),
+        ...(kept.candidateRef ? { candidateRef: kept.candidateRef } : {}), ...(kept.retention ? { retention: kept.retention } : {}) };
+    }
     if (data && typeof data === 'object' && 'isValid' in data) {
       const { messages, omitted } = validationMessages({ apply: data });
       // The part of the contract that refused and every problem (as deliverOutcome answers a delivery), never only messages;
       // the op the errors name, when one, is the op the correction patches.
       const refused = contractRefusal(data);
-      return { ok: false, valid: false, code: 'VALIDATION_REFUSED', stage: 'apply',
+      return { ok: false, valid: false, capture, code: 'VALIDATION_REFUSED', stage: 'apply',
         error: clean('Job rejected by the validation contract' + (refused.summary ? ' (' + refused.summary + ')' : '') + '; nothing was merged.', 400),
         ...refused.fields, ...(refused.ops.length === 1 ? { failedOp: refused.ops[0] } : {}),
         ...(messages.length ? { messages } : {}), ...(omitted ? { messagesOmitted: omitted } : {}) };
@@ -1837,7 +1861,9 @@ async function deliverWith(input, auth, ctx, lane, signal) {
 
 async function deliverRun(input, { words, authorization, wordsSha256 = words ? sha256(words) : null }, ctx, lane, signal) {
   const until = input.until ?? 'merge';
+  let carriedPreflight = null;
   let resolved = null; // the job file this call runs {path, sha256}, named by its refusals
+  const run = async () => {
   try {
     if (input.close) return await closeTask(input, words, ctx, lane);
     if (input.publish === true && until === 'apply')
@@ -1882,18 +1908,60 @@ async function deliverRun(input, { words, authorization, wordsSha256 = words ? s
     }
     if (!input.resume) resolved = resolveJob(input, lane);
     // WIRED (text-routes.mjs): a text form whose way back is not wired is refused before the Studio or the build is touched.
+    let document = null;
     if (!input.resume && resolved?.path) {
-      let document = null;
       try { document = JSON.parse(fs.readFileSync(resolved.path, 'utf8').replace(/^\uFEFF/, '')); } catch { /* the kernel reports an unreadable job */ }
       // The prototype import is turned off (prototype-disabled.mjs): refused here, before the Studio or the build is touched.
       const disabled = prototypeImportRefusal(document, { lane: 'o11', module: input.module ?? null, readPart: partReader(resolved.path, fs, path) });
       if (disabled) return withJob(disabled, resolved);
       const unwired = textFormRefusal(document, undefined, { readPart: partReader(resolved.path, fs, path) });
       if (unwired) return withJob(unwired, resolved);
+      if (document) {
+        const planned = await prepareDeleteJob(document, { lane: 'o11', module: input.module, map: ctx.dependencyMap });
+        if (planned.document !== document) {
+          const original = resolved; const staged = resolveJob({ job: planned.document }, lane);
+          resolved = { ...original, path: staged.path, sha256: staged.sha256 };
+        }
+        if (planned.notes.length) resolved.normalizations = [...(resolved.normalizations ?? []), ...planned.notes.map(note => ({ rule: 'delete-order', at: '/ops', note }))];
+      }
+    }
+    // The pure kernel preflight precedes the module guard and every Studio queue. It never uses the busy worker. R2-H (c): it
+    // judges the job that runs, the one the delete order (prepareDeleteJob) staged, never the job as received. R2-H (e): a job
+    // the CX16 UI precheck judges (local, a job of screens, SSAM_UI_PRECHECK on) is left to it: its check-job reads the module
+    // index, runs alongside the build, stops a complete verdict before the Studio and joins the rest; one check-job, one join.
+    // R2-F rule 1, the static check: null when it passes (its problems of an incomplete verdict are carried into the answer),
+    // else the refusal that stops before the Studio: PREFLIGHT_REFUSED (a complete verdict) or PREFLIGHT_UNAVAILABLE (none).
+    const staticCheck = async () => {
+      const run = await (ctx.checkRunner ?? ctx.runAnvil)(['check-job', '--job', resolved.path, '--basis-fresh', 'false'], { timeoutMs: ctx.applyTimeoutMs, read: true });
+      const checked = run?.envelope?.data ?? run?.envelope;
+      if (checked?.valid === false || checked?.problems?.some(p => p.severity !== 'warning')) {
+        if (checked.static?.complete === true) return preflightRefusal(checked, {}, 'PREFLIGHT_REFUSED', resolved.path);
+        carriedPreflight = { carry: true, problems: checked.problems ?? [], static: checked.static ?? { complete: false }, local: lane.local, lane: 'o11', mode: 'deliver' };
+        return null;
+      }
+      if (checked?.valid !== true) return refusal('PREFLIGHT_UNAVAILABLE', 'The static job check did not return a verdict; nothing was sent to the Studio.',
+        doctor('Check the compiled kernel and repeat the delivery.'));
+      return null;
+    };
+    const judgedByPrecheck = !input.resume && resolved?.path && phaseOfCall()
+      && uiPrecheckJudges({ lane: 'o11', module: input.module, job: resolved.path, mode: 'deliver', input }, ctx);
+    let preflightRan = false;
+    if (!input.resume && resolved?.path && phaseOfCall() && !judgedByPrecheck) {
+      preflightRan = true;
+      const stop = await staticCheck();
+      if (stop) return withJob(stop, resolved);
+    }
+    if (!input.resume && resolved?.path) {
       // T12: a temporary access change holds only the writes whose before-state SSAM records (o11-access.mjs).
       const temporary = temporaryRefusal(document, { scope: restoreScope(), environment: input.expectedEnvironment ?? null });
       if (temporary) return withJob(temporary, resolved);
-      // {"temporary":{"close":"<id>"}}: the user keeps the screens as they are; answered here, nothing reaches the Studio.
+    }
+    const reservation = await awaitReservation();
+    if (!reservation.ok) return reservation;
+    // {"temporary":{"close":"<id>"}}: the user keeps the screens as they are; answered here, nothing reaches the Studio.
+    // R2-H (d): it writes the module's restore journal, so only once the module's reservation is confirmed (never while
+    // another owner holds the module).
+    if (!input.resume && resolved?.path) {
       const closed = temporaryClose(document, { local: lane.local, words, scope: restoreScope(), now: ctx.now });
       if (closed) return withJob(closed, resolved);
     }
@@ -1956,12 +2024,22 @@ async function deliverRun(input, { words, authorization, wordsSha256 = words ? s
     // CX16 r3 (M3): after the capture by key (which the build phase shares), check-job runs alongside the build; the Studio
     // step waits for its verdict and static.complete stops it there (precheckGate); otherwise its problems join the answer
     // of the delivery below (one refusal with everything). SSAM_UI_PRECHECK_STOP=error (r1) stops here, in series.
-    const started = input.resume || proto ? null : await (await import('./ui-precheck.mjs')).startUiPrecheck({ lane: 'o11', module: input.module, job: resolved.path, mode: 'deliver', input, signal }, ctx);
+    // R2-H (review H3): a job the precheck took over from the static check (judgedByPrecheck) is never delivered without a
+    // verdict: when the precheck reaches none (no base, no answer of its check-job, an error), the static check of R2-F runs
+    // before the Studio, with the same PREFLIGHT_REFUSED and PREFLIGHT_UNAVAILABLE.
+    const started = input.resume || proto || preflightRan ? null : await (await import('./ui-precheck.mjs')).startUiPrecheck({ lane: 'o11', module: input.module, job: resolved.path, mode: 'deliver', input, signal,
+      ...(judgedByPrecheck ? { reportUndecided: true } : {}) }, ctx);
     if (started?.stop) return withJob(started.stop, resolved);
+    if (started?.undecided) { const stop = await staticCheck(); if (stop) return withJob(stop, resolved); }
     const precheck = started?.pending ?? null;
     let stoppedByPrecheck = false;
     const precheckGate = async () => {
       const pre = precheck ? await precheck : null;
+      if (pre?.undecided) {
+        const stop = await staticCheck();
+        if (stop) stoppedByPrecheck = true;
+        return stop;
+      }
       if (!pre?.stop) return null;
       stoppedByPrecheck = true;
       return pre.stop;
@@ -2099,6 +2177,8 @@ async function deliverRun(input, { words, authorization, wordsSha256 = words ? s
       ?? { tool: 'o11_deliver', arguments: input.module ? { module: input.module } : {}, why: 'Call again with the arguments fixed as the error says, and the user\'s words in authorize.' }, error.extra), resolved);
     throw error;
   }
+  };
+  return joinPrecheck(await run(), carriedPreflight);
 }
 
 function appendJournal(now) {
@@ -2140,6 +2220,10 @@ export function registerO11Cycle(server, deps = {}) {
   const connection = () => { try { return readConnection(root, laneName); } catch { return null; } };
   const ctx = {
     root, env, now, connection,
+    dependencyMap: deps.dependencyMap ?? (async input => (await import('./module-map.mjs')).moduleMap(input, {
+      env, o11: { root, lane: laneName, assertSelected: deps.assertSelected ?? assertSelectedO11,
+        bridge: () => deps.bridge ?? o11Bridge(bridgeTarget({ lane: laneName, root, env })) },
+    })),
     lane: () => o11LaneOf(laneName, { root, env }),
     read: deps.read ?? kernelReading,
     // F1: the reader of served stylesheets: none unless the caller hands one (only the person's own SSAM, runStdio, does);
@@ -2196,7 +2280,7 @@ export function registerO11Cycle(server, deps = {}) {
   // Lane wp: in a phased delivery every Studio access of this context takes the Studio first (o11-build-phase.mjs).
   phaseGuards(ctx);
   const guard = fn => async (input, extra) => {
-    try { const value = await fn(input ?? {}, { signal: extra?.signal }); return value === DELIVERED || value === CLOSED ? reply(value, value.result) : reply(value); }
+    try { const value = await fn(input ?? {}, { signal: extra?.mcpReq?.signal ?? extra?.signal }); return value === DELIVERED || value === CLOSED ? reply(value, value.result) : reply(value); }
     catch (error) { return reply({ ok: false, ...seamFields(error), error: clean(error.message) }); }
   };
 

@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import {createHash} from 'node:crypto';
 import {authorizationContext} from '../../facade/authorization-context.mjs';
+import {approvalOf,contextValues,ownReceipt,sameGrant,recorded} from './written-approval.mjs';
 import {fail} from './errors.mjs';
 import {isUuid} from './write-journal.mjs';
 export const GUARDRAILS_SAVE='agents.guardrailsSave';
@@ -51,18 +52,36 @@ export function validateGuardrailPolicies(before,requested){
  }
  return p;
 }
-export async function guardrailsApproval({file,words,host,raw,lookup,readAsset,read}){
+// R2-I (owner's rule, 28/10): the written words naming the agent and its element are the approval; a context file is still
+// accepted. Without one, the mode and the receipts follow from SSAM's own journal and the state read now: the agent's own
+// creation; create when no guardrail exists, else the own guardrail creation and reset/restore/update by the requested
+// policies; orphan-reset when SSAM's own delete of the agent is in the journal (the creation kept its approved targets and
+// the state before it, so no original file is read again).
+export async function guardrailsApproval({file,words,host,raw,lookup,readAsset,read,find}){
  const bad=()=>fail('GUARDRAIL_BASELINE_UNVERIFIED','The own agent, exact stage/element, current configuration and original grant must be verified before saving. Nothing was sent.');
  const p=raw.inputParameters;
- if(!file||!exact(p,'AppId,AgentElementId,EnvironmentId,EnvironmentName,GuardrailId,Policies,PortfolioId')
+ if(!exact(p,'AppId,AgentElementId,EnvironmentId,EnvironmentName,GuardrailId,Policies,PortfolioId')
   ||Object.keys(raw.screenVariables??{}).length||Object.keys(raw.clientVariables??{}).length
   ||[p.AppId,p.AgentElementId,p.EnvironmentId,p.PortfolioId].some(x=>!isUuid(x))||p.EnvironmentName!=='Development')bad();
- let c;try{if(fs.statSync(file).size>32768)bad();c=JSON.parse(fs.readFileSync(file,'utf8')).constraints;}catch{bad();}
+ const written=!file;
+ let c;try{c={...contextValues(file)};}catch{bad();}
+ if(written){
+  c.originOperationUuid=ownReceipt(find,r=>['accepted','confirmed'].includes(r?.state)&&r.status===201&&r.identity?.tenant===host
+   &&r.identity.operationId==='asset-repository-api-v1:post:/assets'&&r.response?.assetKey===p.AppId,'The guardrail save').operationUuid;
+  const deleted=find(r=>r?.state==='confirmed'&&r.status===204&&r.identity?.tenant===host
+   &&r.identity.operationId==='asset-repository-api-v1:delete:/assets/{assetKey}'&&r.identity.target?.assetKey===p.AppId);
+  if(deleted.length){
+   const initial=ownReceipt(find,r=>r?.state==='confirmed'&&r.identity?.tenant===host&&r.identity.operationId===GUARDRAILS_SAVE
+    &&r.reconciliation?.guardrails?.creation&&r.response?.SavedGuardrailId===p.GuardrailId,'The orphan guardrail reset');
+   if(deleted.length!==1)bad();
+   Object.assign(c,{mode:'orphan-reset',deleteOperationUuid:deleted[0].operationUuid,guardrailOriginOperationUuid:initial.operationUuid});
+  }else c.mode='written';
+ }
  if(c?.mode==='orphan-reset')return orphanResetApproval({file,words,host,p,c,lookup,readAsset,read,bad});
- if(!isUuid(c?.originOperationUuid)||!['create','update','restore','reset'].includes(c.mode))bad();
+ if(!isUuid(c?.originOperationUuid)||!['create','update','restore','reset',...(written?['written']:[])].includes(c.mode))bad();
  const origin=lookup(c.originOperationUuid);
  if(!['accepted','confirmed'].includes(origin?.state)||origin.status!==201||origin.identity?.tenant!==host
-  ||origin.identity.operationId!=='asset-repository-api-v1:post:/assets'||origin.response?.assetKey!==p.AppId||!origin.authorization?.source)bad();
+  ||origin.identity.operationId!=='asset-repository-api-v1:post:/assets'||origin.response?.assetKey!==p.AppId||!recorded(origin))bad();
  const asset=await readAsset(p.AppId);
  if(!asset?.ok||asset.data?.assetKey!==p.AppId||asset.data.assetType!=='Agent'||asset.data.portfolioKey!==p.PortfolioId||!asset.data.name||!Number.isSafeInteger(asset.data.revision)||asset.data.revision<1)bad();
  const stages=await read('agents.revisionStages',{screenVariables:{id:p.AppId,_idInDataFetchStatus:1,stageid:p.EnvironmentId,_stageidInDataFetchStatus:1,ActivePortfolioKey:p.PortfolioId}});
@@ -76,10 +95,18 @@ export async function guardrailsApproval({file,words,host,raw,lookup,readAsset,r
  const readInput=guardrailReadInput(p),seen=await read(GUARDRAILS_READ,readInput);if(seen?.ok!==true)bad();
  const before=guardrailState(seen.data),policies=validateGuardrailPolicies(before.Policies,p.Policies);
  if(p.GuardrailId!==before.GuardrailId)bad();
+ if(c.mode==='written'){
+  if(before.GuardrailId==='')c.mode='create';
+  else{
+   const initial=ownReceipt(find,r=>r?.state==='confirmed'&&r.identity?.tenant===host&&r.identity.operationId===GUARDRAILS_SAVE
+    &&r.reconciliation?.guardrails?.creation&&r.response?.SavedGuardrailId===before.GuardrailId,'The guardrail save'),e=initial.reconciliation.guardrails;
+   c.guardrailOriginOperationUuid=initial.operationUuid;
+   c.mode=e.originalPolicies&&guardrailHash(policies)===guardrailHash(e.originalPolicies)?'reset':guardrailHash(policies)===guardrailHash(e.policies)?'restore':'update';
+  }
+ }
  const constraints={originOperationUuid:c.originOperationUuid,mode:c.mode,inputSha256:guardrailHash(p),expectedGuardrailSha256:guardrailHash(before)};
- let approval=authorizationContext(file,words,{lane:'odc',host,operation:GUARDRAILS_SAVE,environmentKey:p.EnvironmentId,targets:[asset.data.name,matches[0].Name],constraints});
- if(!approval||approval.wordsSha256!==origin.authorization.wordsSha256||approval.proposalSha256!==origin.authorization.proposalSha256
-  ||approval.source.threadId!==origin.authorization.source.threadId||approval.source.messageId!==origin.authorization.source.messageId)bad();
+ let approval=approvalOf(file,words,{lane:'odc',host,operation:GUARDRAILS_SAVE,environmentKey:p.EnvironmentId,targets:[asset.data.name,matches[0].Name],constraints});
+ if(!approval||!sameGrant(origin.authorization,approval,{words:true,proposal:true}))bad();
  let originalPolicies;
  if(c.mode==='create'){
   if(before.GuardrailId!==''||before.Policies.List.some(x=>x.IsActive||x.HasActiveAdminPolicy)||c.guardrailOriginOperationUuid!==undefined)bad();
@@ -89,19 +116,19 @@ export async function guardrailsApproval({file,words,host,raw,lookup,readAsset,r
   const initial=lookup(c.guardrailOriginOperationUuid),e=initial?.reconciliation?.guardrails;
   if(initial?.state!=='confirmed'||initial.identity?.tenant!==host||initial.identity.operationId!==GUARDRAILS_SAVE||!e?.creation
    ||initial.response?.SavedGuardrailId!==before.GuardrailId||e.originOperationUuid!==c.originOperationUuid
-   ||guardrailHash(e.readInput)!==guardrailHash(readInput)||initial.authorization?.proposalSha256!==approval.proposalSha256
-   ||initial.authorization?.wordsSha256!==approval.wordsSha256||initial.authorization?.source?.threadId!==approval.source.threadId
-   ||initial.authorization?.source?.messageId!==approval.source.messageId)bad();
+   ||guardrailHash(e.readInput)!==guardrailHash(readInput)||!sameGrant(initial.authorization,approval,{words:true,proposal:true}))bad();
   constraints.guardrailOriginOperationUuid=c.guardrailOriginOperationUuid;
   // Bind this extra constraint too, rather than trusting an unvalidated field.
-  approval=authorizationContext(file,words,{lane:'odc',host,operation:GUARDRAILS_SAVE,environmentKey:p.EnvironmentId,targets:[asset.data.name,matches[0].Name],constraints});
+  approval=approvalOf(file,words,{lane:'odc',host,operation:GUARDRAILS_SAVE,environmentKey:p.EnvironmentId,targets:[asset.data.name,matches[0].Name],constraints});
   if(c.mode==='restore'&&guardrailHash(policies)!==guardrailHash(e.policies))bad();
   if(c.mode==='reset'){
    if(!e.originalPolicies||guardrailHash(policies)!==guardrailHash(e.originalPolicies))bad();
    originalPolicies=guardrailValues(e.originalPolicies);
   }
  }
+ // A creation keeps its approved targets and the state before it: the evidence a later orphan reset needs (no file).
  return {approval,expected:{readInput,policies,creation:c.mode==='create',requestedGuardrailId:p.GuardrailId,originOperationUuid:c.originOperationUuid,
+  ...(c.mode==='create'?{approvedTargets:[asset.data.name,matches[0].Name],beforeGuardrailSha256:guardrailHash(before)}:{}),
   ...(originalPolicies?{originalPolicies}:{}),...(c.mode==='reset'?{originalRestoration:true}:{})},target:{applicationKey:p.AppId,environmentKey:p.EnvironmentId,agentElementId:p.AgentElementId}};
 }
 export function guardrailObservation(receipt,read){
@@ -127,26 +154,33 @@ async function orphanResetApproval({file,words,host,p,c,lookup,readAsset,read,ba
   ||deleted?.state!=='confirmed'||deleted.status!==204||deleted.identity?.tenant!==host
   ||deleted.identity.operationId!=='asset-repository-api-v1:delete:/assets/{assetKey}'||deleted.identity.target?.assetKey!==p.AppId)bad();
  const gone=await readAsset(p.AppId);if(gone?.ok!==false||gone.status!==404)bad();
- let originalBytes,original;
- try{if(fs.statSync(c.originalApprovalFile).size>32768)bad();originalBytes=fs.readFileSync(c.originalApprovalFile);original=JSON.parse(originalBytes);}catch{bad();}
- const originalSha=createHash('sha256').update(originalBytes).digest('hex');
- if(originalSha!==initial.authorization?.contextSha256||original.constraints?.mode!=='create')bad();
- const targets=original.scope?.filter(s=>s.lane==='odc'&&s.host===host&&s.operation===GUARDRAILS_SAVE&&s.environmentKey===p.EnvironmentId).flatMap(s=>s.targets??[]);
- if(targets?.length!==2)bad();
- const old=authorizationContext(c.originalApprovalFile,words,{lane:'odc',host,operation:GUARDRAILS_SAVE,environmentKey:p.EnvironmentId,targets,
-  constraints:{originOperationUuid:c.originOperationUuid,mode:'create',inputSha256:guardrailHash({...p,GuardrailId:'',Policies:e.policies})}});
- if(old.proposalSha256!==initial.authorization.proposalSha256||old.proposalSha256!==origin.authorization?.proposalSha256)bad();
+ let originalSha,targets,expectedSha;
+ if(file){
+  let originalBytes,original;
+  try{if(fs.statSync(c.originalApprovalFile).size>32768)bad();originalBytes=fs.readFileSync(c.originalApprovalFile);original=JSON.parse(originalBytes);}catch{bad();}
+  originalSha=createHash('sha256').update(originalBytes).digest('hex');
+  if(originalSha!==initial.authorization?.contextSha256||original.constraints?.mode!=='create')bad();
+  targets=original.scope?.filter(s=>s.lane==='odc'&&s.host===host&&s.operation===GUARDRAILS_SAVE&&s.environmentKey===p.EnvironmentId).flatMap(s=>s.targets??[]);
+  if(targets?.length!==2)bad();
+  const old=authorizationContext(c.originalApprovalFile,words,{lane:'odc',host,operation:GUARDRAILS_SAVE,environmentKey:p.EnvironmentId,targets,
+   constraints:{originOperationUuid:c.originOperationUuid,mode:'create',inputSha256:guardrailHash({...p,GuardrailId:'',Policies:e.policies})}});
+  if(old.proposalSha256!==initial.authorization.proposalSha256||old.proposalSha256!==origin.authorization?.proposalSha256)bad();
+  expectedSha=original.constraints.expectedGuardrailSha256;
+ }else{
+  // R2-I: the evidence the creation kept in its own receipt replaces the original approval file.
+  targets=e.approvedTargets;expectedSha=e.beforeGuardrailSha256;
+  if(!Array.isArray(targets)||targets.length!==2||!/^[a-f0-9]{64}$/.test(expectedSha??''))bad();
+ }
  const policies=guardrailValues(p.Policies);
  if(policies?.List?.some(x=>x.IsActive||x.HasActiveAdminPolicy||['WordsConfig','TopicsConfig','RegexesConfig'].some(k=>x[k]?.List?.length))
-  ||guardrailHash({GuardrailId:'',Policies:policies})!==original.constraints.expectedGuardrailSha256)bad();
+  ||guardrailHash({GuardrailId:'',Policies:policies})!==expectedSha)bad();
  const seen=await read(GUARDRAILS_READ,e.readInput);if(seen?.ok!==true)bad();const before=guardrailState(seen.data);
  if(before.GuardrailId!==p.GuardrailId)bad();validateGuardrailPolicies(before.Policies,policies);
  const constraints={mode:'orphan-reset',originOperationUuid:c.originOperationUuid,guardrailOriginOperationUuid:c.guardrailOriginOperationUuid,
-  deleteOperationUuid:c.deleteOperationUuid,originalApprovalFile:c.originalApprovalFile,originalApprovalSha256:originalSha,
+  deleteOperationUuid:c.deleteOperationUuid,...(file?{originalApprovalFile:c.originalApprovalFile,originalApprovalSha256:originalSha}:{}),
   inputSha256:guardrailHash(p),expectedGuardrailSha256:guardrailHash(before)};
- const approval=authorizationContext(file,words,{lane:'odc',host,operation:GUARDRAILS_SAVE,environmentKey:p.EnvironmentId,targets,constraints});
- for(const r of [initial,origin,deleted])if(r.authorization?.wordsSha256!==approval.wordsSha256
-  ||r.authorization?.source?.threadId!==approval.source.threadId||r.authorization?.source?.messageId!==approval.source.messageId)bad();
+ const approval=approvalOf(file,words,{lane:'odc',host,operation:GUARDRAILS_SAVE,environmentKey:p.EnvironmentId,targets,constraints});
+ for(const r of [initial,origin,deleted])if(!sameGrant(r.authorization,approval,{words:true}))bad();
  return {approval,expected:{readInput:e.readInput,policies,reset:true,creation:false,requestedGuardrailId:p.GuardrailId,originOperationUuid:c.originOperationUuid},
   target:{applicationKey:p.AppId,environmentKey:p.EnvironmentId,agentElementId:p.AgentElementId}};
 }

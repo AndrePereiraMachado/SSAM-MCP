@@ -357,7 +357,7 @@ export function registerSsamTask(server, deps = {}) {
         }
         if (typeof deps.close !== 'function') return reply({ ok: false, code: 'CLOSE_UNAVAILABLE', error: 'This server does not serve the O11 delivery close.',
           continuation: { tool: 'ssam_doctor', arguments: { lane: 'o11' }, why: 'Shows the O11 lane of this server.' } });
-        const answer = await deps.close(kernelId, close.reason, { signal: extra?.signal });
+        const answer = await deps.close(kernelId, close.reason, { signal: extra?.mcpReq?.signal ?? extra?.signal });
         if (answer?.ok === true) releaseKernelFacadeTasks(kernelId, { dir, reason: close.reason, outcome: 'not-applied' });
         return reply(answer);
       }

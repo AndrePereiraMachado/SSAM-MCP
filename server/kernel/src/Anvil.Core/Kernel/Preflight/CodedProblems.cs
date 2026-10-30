@@ -58,7 +58,17 @@ public static class CodedProblems
         if (relative == null || relative.Length == 0) return swapTo ?? basePointer;
         if (swapFrom != null && swapTo != null && swapFrom.Length > 0 && (relative == swapFrom || relative.StartsWith(swapFrom + "/", StringComparison.Ordinal)))
             return swapTo + relative[swapFrom.Length..];
+        // R2-B (review A2): a pointer that already points into the job at this op (/ops/<i>/...) is the job's, never rebased again
+        // (a lone apply refusal rebases its own exception's problems in place; reading them again gave /ops/0/data/ops/0/data/...).
+        if (OpRoot(basePointer) is { } root && (relative == root || relative.StartsWith(root + "/", StringComparison.Ordinal))) return relative;
         return basePointer + relative;
+    }
+
+    // The pointer of the op a base pointer is under (/ops/3 of /ops/3/data), or null.
+    private static string? OpRoot(string basePointer)
+    {
+        var parts = basePointer.Split('/');
+        return parts.Length >= 3 && parts[0].Length == 0 && parts[1].Length > 0 && int.TryParse(parts[2], out _) ? $"/{parts[1]}/{parts[2]}" : null;
     }
 
     private static JsonArray RebasePatch(JsonArray patch, string basePointer, string? swapFrom, string? swapTo)

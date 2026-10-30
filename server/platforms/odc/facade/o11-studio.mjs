@@ -1165,7 +1165,7 @@ export function registerO11Studio(server, deps = {}) {
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
   }, async (input, extra) => {
     let value;
-    try { value = await run(input, { signal: extra?.signal }); } catch (error) { value = { ok: false, error: translateDialogHint(error?.message ?? String(error)) }; }
+    try { value = await run(input, { signal: extra?.mcpReq?.signal ?? extra?.signal }); } catch (error) { value = { ok: false, error: translateDialogHint(error?.message ?? String(error)) }; }
     return result(value);
   });
 }

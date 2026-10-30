@@ -10,7 +10,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { hostedContext } from './executor.mjs';
-import { namedPatch } from './job-patch.mjs';
+import { keepVerified } from './hosted/verified-store.mjs';
 
 export const VERIFIED_PATCH_SCHEMA = 'ssam-verified-patch/1';
 export const verifiedPatchFile = file => path.resolve(file) + '.verified-patch.json';
@@ -54,11 +54,11 @@ export function writeVerifiedPatch(jobFile, ops) {
     // servidor/fase4-27 a12: hosted, the call is the explicit patch, by name (the gate refuses patch "verified" there: it
     // cannot read this file); every problem keeps its own patch there too (answer-size.mjs, refusal-problems.mjs fitProblems).
     if (hostedContext()) {
-      let named = null;
-      try { named = namedPatch(JSON.parse(bytes.toString('utf8').replace(/^﻿/, '')), ops); } catch { named = null; }
-      return { verifiedPatch: { ops: ops.length, call: { basedOn: { job, sha256: jobSha256 }, patch: named ?? ops },
-        note: 'every verified patch of this refusal, whole: send this basedOn with this patch to apply them all' } };
+      const ref = keepVerified(hostedContext().workspace, 'patch', { jobSha256, patch: ops });
+      return { verifiedPatch: { ops: ops.length, call: { basedOn: { job, sha256: jobSha256 }, patch: { verified: ref } },
+        note: 'Server-owned verified patches; send this hash with basedOn. The resulting job is checked before delivery.' } };
     }
+
     return { verifiedPatch: { ops: ops.length, call: { basedOn: { job, sha256: jobSha256 }, patch: 'verified' },
       note: 'every verified patch of this refusal, whole (a problem may say patchOmitted): send this basedOn with patch "verified" to apply them all' } };
   } catch { return {}; }

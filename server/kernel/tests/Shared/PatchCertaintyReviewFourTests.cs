@@ -51,10 +51,12 @@ public sealed class PatchCertaintyReviewFourTests
     {
         var (result, _) = PatchCertaintyJobProbe.Run("page-form-scope", PatchCertaintyJobProbe.Flow("MixFlow"), PageOp("MixPage"),
             PatchCertaintyJobProbe.Screen("MixProbe", "MixFlow", "<var name='MixValue' type='Text'/><input bind='MixValue' placeholder=\"Buscar por nome\"/>"));
-        var literals = (result["patchesApplied"] as JsonArray ?? []).Concat(result["problems"] as JsonArray ?? []).OfType<JsonObject>()
+        // R2-C: the certain literal is written in the compile and listed (TEXT_LITERAL_QUOTED); never a choice, never a patch.
+        var choices = (result["patchesApplied"] as JsonArray ?? []).Concat(result["problems"] as JsonArray ?? []).OfType<JsonObject>()
             .Where(p => p["patchRule"]?.ToString() is "TEXT_LITERAL_QUOTED" or "TEXT_LITERAL_CHOICE").ToList();
-        Assert.True(literals.Count > 0, result.ToJsonString());
-        Assert.All(literals, p => Assert.Equal("TEXT_LITERAL_QUOTED", p["patchRule"]?.ToString()));
+        Assert.Empty(choices);
+        // Listed even when another part of the job is refused (the job's normalizations).
+        Assert.Contains("\"rule\":\"TEXT_LITERAL_QUOTED\"", result.ToJsonString());
     }
 
     [Fact]

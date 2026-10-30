@@ -271,32 +271,47 @@ export async function uiPrecheck(request = {}, deps = {}) { return precheck(requ
 // the apply) | {pending: Promise<null | {carry: true, ..., static.complete, stop?}>}: the base is found first (on an O11
 // delivery the capture by key, which the build phase shares), check-job then runs alongside the apply path; the promise
 // never rejects. With static.complete the carried object holds `stop`, the refusal alone, for a hook with a step to spare.
+// With request.reportUndecided, a precheck that reaches no verdict answers {undecided: {undecided, outcome, reason}} at
+// once, or resolves its pending promise to that object (never a stop, never carried).
 export async function startUiPrecheck(request = {}, deps = {}) {
   const value = await precheck(request, deps, true);
   if (!value) return null;
+  if (value.undecided === true) return { undecided: value };
   if (value.pending) return { pending: value.pending.catch(() => null) };
   return value.carry ? { pending: Promise.resolve(value) } : { stop: value };
 }
 
-async function precheck(request, deps, parallel) {
-  deps = deps ?? {};
+// The job the precheck judges, or null when it judges none (the rules below, before any base is looked for).
+function judgedJob(request, deps) {
   // servidor/fase4-26 (M5): never on a hosted server, whatever its SSAM_UI_PRECHECK says: check-job would read the module index
   // the server shares with every customer and write its job beside the server's lane; the delivery runs as before CX16.
   if (hostedContext()) return null;
-  const lane = request.lane === 'odc' ? 'odc' : 'o11';
   const input = plain(request.input) ? request.input : {};
   if (input.resume != null || input.close != null) return null;
   let document = plain(request.document) || Array.isArray(request.document) ? request.document : null;
-  let jobFile = typeof request.job === 'string' && request.job ? path.resolve(request.job) : null;
+  const jobFile = typeof request.job === 'string' && request.job ? path.resolve(request.job) : null;
   if (!document && request.job != null && typeof request.job === 'object') document = request.job;
   if (!document && jobFile) document = readJson(jobFile);
   const ops = opsOf(document);
   if (!ops || !ops.some(op => UI_OPS.has(op?.op)) || ops.some(op => op?.op === 'prototype')) return null;
-  if (request.signal?.aborted) return null;
   const env = deps.env ?? process.env;
   // CX16 r4: ON by default again (b6e8c45c: check-job never queues behind the apply on the resident worker; e894f3ed had it
   // off). SSAM_UI_PRECHECK=0 (or off, false) turns it off: every call runs as before CX16.
   if (PRECHECK_OFF.test(String(env.SSAM_UI_PRECHECK ?? process.env.SSAM_UI_PRECHECK ?? '').trim())) return null;
+  return { input, document, jobFile, ops, env };
+}
+// R2-H (e): whether this precheck judges the call's job. A hook with a static preflight of its own (o11-cycle.mjs, R2-F rule
+// 1) leaves such a job to this precheck, whose check-job (with the module index) then runs once and joins once.
+export const uiPrecheckJudges = (request = {}, deps = {}) => judgedJob(request, deps ?? {}) !== null;
+
+async function precheck(request, deps, parallel) {
+  deps = deps ?? {};
+  const judged = judgedJob(request, deps);
+  if (!judged) return null;
+  const { input, document, ops, env } = judged;
+  let { jobFile } = judged;
+  const lane = request.lane === 'odc' ? 'odc' : 'o11';
+  if (request.signal?.aborted) return null;
   const started = performance.now();
   const mode = ['deliver', 'check', 'job'].includes(request.mode) ? (request.mode === 'job' && /[\\/]jobs[\\/]check[\\/]/i.test(jobFile ?? '') ? 'check' : request.mode) : 'job';
   const { anvilRoot, odcRoot } = await import('./workspace.mjs');
@@ -307,6 +322,10 @@ async function precheck(request, deps, parallel) {
   const odcCli = deps.odcCli ?? path.join(root, '.local', 'lane-odc', 'cli', 'anvil-odc.dll');
   const module = typeof request.module === 'string' && request.module.trim() ? request.module.trim() : null;
   const note = entry => journalTo(local, { lane, mode, module, ...(jobFile ? { job: jobFile } : {}), ...entry, elapsedMs: Math.round(performance.now() - started) });
+  // R2-H (review H3): no verdict (no base, no lane CLI, a check-job without an answer, an error) is journaled; a hook that
+  // asks (reportUndecided, o11_deliver with its own static preflight) is told so, {undecided, reason}, to fall back on its
+  // check; every other caller still reads null, "nothing judged", as before.
+  const undecided = entry => { note(entry); return request.reportUndecided === true ? { undecided: true, outcome: entry.outcome, reason: entry.reason ?? entry.outcome } : null; };
   // SSAM_UI_PRECHECK_STOP=error (r1, opt-in): any error stops before the apply, so it runs in series.
   const stopOnError = String(env.SSAM_UI_PRECHECK_STOP ?? process.env.SSAM_UI_PRECHECK_STOP ?? '').trim().toLowerCase() === 'error';
   try {
@@ -329,15 +348,15 @@ async function precheck(request, deps, parallel) {
       if (newest?.path) base = { path: newest.path, fresh: false, source: lane === 'odc' ? 'newest-snapshot' : 'newest-capture' };
     }
     const captureMs = Math.round(performance.now() - captureBegin);
-    if (!base) { note({ outcome: 'no-basis', captureMs }); return null; }
-    if (lane === 'odc' && !isFile(odcCli)) { note({ outcome: 'undecided', reason: 'the ODC lane CLI is not built: ' + odcCli, captureMs }); return null; }
+    if (!base) return undecided({ outcome: 'no-basis', reason: 'no capture of the module to judge the job on', captureMs });
+    if (lane === 'odc' && !isFile(odcCli)) return undecided({ outcome: 'undecided', reason: 'the ODC lane CLI is not built: ' + odcCli, captureMs });
     if (request.signal?.aborted) return null;
     // CX16 r3 (M3): from here on, alongside the apply path (startUiPrecheck), unless the r1 stop is asked.
     const judge = async () => { try {
     base.sha256 = sha256(fs.readFileSync(base.path));
     // the job file (a job given as an object is written once, beside the inline jobs of the lane)
     if (!jobFile || !isFile(jobFile)) {
-      if (!local) return null;
+      if (!local) return undecided({ outcome: 'undecided', reason: 'no lane folder to write the job given as an object' });
       const dir = path.join(local, 'jobs', 'precheck');
       fs.mkdirSync(dir, { recursive: true });
       jobFile = path.join(dir, randomUUID() + '.json');
@@ -382,7 +401,7 @@ async function precheck(request, deps, parallel) {
     const data = run?.envelope?.data;
     const timings = { captureMs, indexMs: index.ms, checkMs, checkVia };
     const basisNote = { capture: base.path, sha256: base.sha256, fresh: base.fresh, source: base.source, index: index.file ?? null, indexSource: index.source ?? null };
-    if (!plain(data)) { note({ outcome: 'undecided', reason: clip(undecidedReason(run, checkTimeout), 300), ...(run?.timedOut ? { timedOut: true } : {}), basis: basisNote, timings }); return null; }
+    if (!plain(data)) return undecided({ outcome: 'undecided', reason: clip(undecidedReason(run, checkTimeout), 300), ...(run?.timedOut ? { timedOut: true } : {}), basis: basisNote, timings });
     const listed = Array.isArray(data.problems) ? data.problems : [];
     let problems = listed.filter(p => !plain(p) || p.severity !== 'warning').map(problemOf);
     if (!problems.length && data.valid === false && Array.isArray(data.errors)) problems = data.errors.map(problemOf);
@@ -429,14 +448,12 @@ async function precheck(request, deps, parallel) {
       basis: basisNote, timings });
     return refusal;
     } catch (error) {
-      note({ outcome: 'undecided', reason: clip(String(error?.message ?? error), 200) });
-      return null;
+      return undecided({ outcome: 'undecided', reason: clip(String(error?.message ?? error), 200) });
     } };
     if (parallel && !stopOnError) return { pending: judge() };
     return await judge();
   } catch (error) {
-    note({ outcome: 'undecided', reason: clip(String(error?.message ?? error), 200) });
-    return null;
+    return undecided({ outcome: 'undecided', reason: clip(String(error?.message ?? error), 200) });
   }
 }
 

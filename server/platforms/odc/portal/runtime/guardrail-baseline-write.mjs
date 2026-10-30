@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-import {authorizationContext} from '../../facade/authorization-context.mjs';
+import {approvalOf,contextValues,sameGrant} from './written-approval.mjs';
 import {fail} from './errors.mjs';
 import {isUuid} from './write-journal.mjs';
 import {guardrailHash,guardrailValues} from './guardrails.mjs';
@@ -45,19 +45,35 @@ export function baselineRequestedPolicies(before,wire){
  }
  return guardrailValues(requested);
 }
-export async function baselineApproval({file,words,host,raw,lookup,read}){
+// R2-I (owner's rule, 28/10): the written words naming the stage and the portfolio (its key: no portfolio name is read here)
+// are the approval; a context file is still accepted. Without one, the mode follows from SSAM's own journal and the state
+// read now: restore when the requested policies are the ones an own configure receipt of this exact stage replaced (and
+// the current ones are what it saved), else configure; a configure that creates the baseline acknowledges the retained id
+// the native save keeps (allowRetainedId), as the receipt records.
+export async function baselineApproval({file,words,host,raw,lookup,read,find}){
  const p=raw.inputParameters;
- if(!file||!exact(p,'EnvironmentId,EnvironmentName,GuardrailId,PortfolioKey,Policies')||!isUuid(p.EnvironmentId)||!isUuid(p.PortfolioKey)
+ if(!exact(p,'EnvironmentId,EnvironmentName,GuardrailId,PortfolioKey,Policies')||!isUuid(p.EnvironmentId)||!isUuid(p.PortfolioKey)
   ||p.EnvironmentName!=='Development'||Object.keys(raw.screenVariables??{}).length||Object.keys(raw.clientVariables??{}).length)bad();
- let c;try{if(fs.statSync(file).size>32768)bad();c=JSON.parse(fs.readFileSync(file,'utf8')).constraints;}catch{bad();}
- if(!['configure','restore'].includes(c?.mode)||typeof c.allowRetainedId!=='boolean')bad();
+ const written=!file;
+ let c;try{c={...contextValues(file)};}catch{bad();}
+ if(written)c.mode='written';
+ if(!['configure','restore',...(written?['written']:[])].includes(c?.mode)||!written&&typeof c.allowRetainedId!=='boolean')bad();
  const stages=await read('guardrails.stages',{screenVariables:{portfolioid:p.PortfolioKey,ActivePortfolioKey:p.PortfolioKey,_portfolioidInDataFetchStatus:1}});
  const matches=stages?.ok===true?stages.data?.Stages?.List?.filter(x=>x.Stage?.Key===p.EnvironmentId):[];
  if(matches?.length!==1||matches[0].OptionsItems?.IsDisabled!==false||matches[0].Stage.PortfolioKey!==p.PortfolioKey
   ||matches[0].Stage.Name!==p.EnvironmentName||matches[0].Stage.Purpose!=='Development'||matches[0].Stage.Status!=='Ready')bad();
  const readInput=baselineReadInput(p),seen=await read(BASELINE_READ,readInput);if(seen?.ok!==true)bad();
  const before=baselineState(seen.data);if(before.GuardrailId!==p.GuardrailId)bad();
- const policies=baselineRequestedPolicies(before,p.Policies),constraints={mode:c.mode,allowRetainedId:c.allowRetainedId,inputSha256:guardrailHash(p),expectedBaselineSha256:guardrailHash(before)};
+ const policies=baselineRequestedPolicies(before,p.Policies);
+ if(c.mode==='written'){
+  const restores=typeof find==='function'?find(r=>{const e=r?.reconciliation?.guardrailBaseline;return r.state==='confirmed'&&r.identity?.tenant===host
+   &&r.identity.operationId===BASELINE_SAVE&&e?.mode==='configure'&&guardrailHash(e.readInput)===guardrailHash(readInput)
+   &&guardrailHash(before.Policies)===guardrailHash(e.policies)&&r.response?.Id===before.GuardrailId&&guardrailHash(policies)===guardrailHash(e.beforeState?.Policies);}):[];
+  if(restores.length>1)bad();
+  if(restores.length===1){c.mode='restore';c.originOperationUuid=restores[0].operationUuid;c.allowRetainedId=restores[0].reconciliation.guardrailBaseline.allowRetainedId;}
+  else{c.mode='configure';c.allowRetainedId=before.GuardrailId==='';}
+ }
+ const constraints={mode:c.mode,allowRetainedId:c.allowRetainedId,inputSha256:guardrailHash(p),expectedBaselineSha256:guardrailHash(before)};
  if(c.mode==='configure'&&before.GuardrailId===''&&!c.allowRetainedId)bad();
  let initial;
  if(c.mode==='restore'){
@@ -67,11 +83,10 @@ export async function baselineApproval({file,words,host,raw,lookup,read}){
    ||initial.response?.Id!==before.GuardrailId||c.allowRetainedId!==e.allowRetainedId||guardrailHash(policies)!==guardrailHash(e.beforeState.Policies))bad();
   constraints.originOperationUuid=c.originOperationUuid;
  }
- const approval=authorizationContext(file,words,{lane:'odc',host,operation:BASELINE_SAVE,environmentKey:p.EnvironmentId,
-  targets:[p.EnvironmentName,'Guardrail baseline '+p.PortfolioKey],constraints});
+ const approval=approvalOf(file,words,{lane:'odc',host,operation:BASELINE_SAVE,environmentKey:p.EnvironmentId,
+  targets:written?[p.EnvironmentName,p.PortfolioKey]:[p.EnvironmentName,'Guardrail baseline '+p.PortfolioKey],constraints});
  if(!approval)bad();
- if(initial&&(initial.authorization?.wordsSha256!==approval.wordsSha256||initial.authorization?.proposalSha256!==approval.proposalSha256
-  ||initial.authorization?.source?.threadId!==approval.source.threadId||initial.authorization?.source?.messageId!==approval.source.messageId))bad();
+ if(initial&&!sameGrant(initial.authorization,approval,{words:true,proposal:true}))bad();
  return {approval,expected:{readInput,policies,beforeState:before,originalGuardrailId:initial?.reconciliation.guardrailBaseline.beforeState.GuardrailId??before.GuardrailId,requestedGuardrailId:p.GuardrailId,mode:c.mode,allowRetainedId:c.allowRetainedId}};
 }
 export function baselineObservation(receipt,read){

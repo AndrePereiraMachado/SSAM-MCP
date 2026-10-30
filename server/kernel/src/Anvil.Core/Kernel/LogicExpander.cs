@@ -1408,6 +1408,11 @@ public sealed partial class ModelSession
         var signature = resolved as IObjectSignature;
         if (signature == null || signature.ObjectKey == null)
             throw new InvalidOperationException("logic: call target is not a native action: " + candidate.Reference);
+        // R2-A: a bare name (Kind:Name over the module) that only references have, and two or more of them: refused with each
+        // one's form (Producer.Action), never the first of the traversal (the rule of NameResolution, as the preflight's).
+        if (!candidate.Reference.Contains('/') && signature.Parent is IObjectSignature holder && new KernelModelReader().KindOf(holder) == "Reference"
+            && TiedReferences(new KernelModelReader().DisplayOf(signature)) is { Count: > 1 } tied)
+            throw new InvalidOperationException($"logic: call '{candidate.Reference[(candidate.Reference.IndexOf(':') + 1)..]}' names an action of {tied.Count} references at the same distance ({string.Join(", ", tied)}), and the call names none of them. Fix: write the one you mean as Producer.Action: {string.Join(", ", tied)}");
         if (Implements(resolved, "IDataAction") || Implements(resolved, "IPreparation"))
             throw new InvalidOperationException("logic: 'call' cannot invoke a data action or preparation: " + candidate.Reference);
         // O11 role actions exclude screen/client contexts in the native scope. Verify
@@ -1441,5 +1446,17 @@ public sealed partial class ModelSession
         // validated; never initialize a partial index or rebind the call by name.
         if (_byKey != null) _byKey[signature.ObjectKey.ToString()!] = signature;
         return target;
+    }
+
+    // The actions of the module's references named `name` (Producer.Action), one per reference: more than one is a tie.
+    private List<string> TiedReferences(string name)
+    {
+        var reader = new KernelModelReader();
+        var tied = new List<string>();
+        foreach (var reference in ((IObjectSignature)_es).Children.OfType<IObjectSignature>().Where(c => !c.WasDeleted && reader.KindOf(c) == "Reference"))
+            if (reference.Children.OfType<IObjectSignature>().Any(c => !c.WasDeleted && Implements(c, "IActionSignature")
+                    && string.Equals(reader.DisplayOf(c), name, StringComparison.OrdinalIgnoreCase)))
+                tied.Add(reader.DisplayOf(reference) + "." + name);
+        return tied;
     }
 }

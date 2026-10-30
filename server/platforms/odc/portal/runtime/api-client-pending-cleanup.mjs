@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import {authorizationContext} from '../../facade/authorization-context.mjs';
+import {approvalOf,ownedBy,sameGrant,recorded} from './written-approval.mjs';
 import {apiClientFixtureApproval,API_CLIENT_CREATE,API_CLIENT_DELETE} from './api-client-fixture.mjs';
 import {apiClientAbsent,apiClientInventoryComplete} from './api-client-inventory.mjs';
 import {fingerprint,isUuid,sha256} from './write-journal.mjs';
@@ -13,9 +13,30 @@ function read(file,max=32768){
 // This is an explicit cleanup mode, never a substitute for a successful vault
 // capture. List rows contain defaults: actual state must come from detail.
 export async function apiClientWriteApproval(args){
- const {file,words,host,operationId,raw,lookup,readInventory,readDetail}=args;
- const constraints=file?read(file).value.constraints:null;
- if(constraints?.cleanupMode!=='pending-header')return apiClientFixtureApproval(args);
+ const {file,words,host,operationId,raw,lookup,readInventory,readDetail,find}=args;
+ let constraints=file?read(file).value.constraints:null;
+ // R2-I: with the written words alone, the delete of a key no proven creation holds, whose native name is the one fixture
+ // name of an uncertain own creation without its private proof, is this cleanup; the baseline inventory is the one SSAM
+ // kept in that creation's receipt before the send (never a file).
+ if(!file&&operationId===API_CLIENT_DELETE&&typeof find==='function'&&isUuid(raw.inputParameters?.Key)
+  &&!find(r=>ownedBy(host,API_CLIENT_CREATE)(r)&&String(r.response?.ApiClientProof?.key).toLowerCase()===raw.inputParameters.Key.toLowerCase()).length){
+  const named=typeof readDetail==='function'?(await readDetail(raw.inputParameters.Key))?.data?.ApiClientDetails?.Name:undefined;
+  const pending=typeof named==='string'?find(r=>r.state==='uncertain'&&r.identity?.tenant===host&&r.identity.operationId===API_CLIENT_CREATE
+   &&r.identity.target?.apiClientFixtureName===named&&!r.response?.ApiClientProof&&r.reconciliation?.apiClientFixture?.baseline):[];
+  if(pending.length===1)constraints={cleanupMode:'pending-header',creationOperationUuid:pending[0].operationUuid,
+   baselineSha256:sha256(JSON.stringify(pending[0].reconciliation.apiClientFixture.baseline))};
+ }
+ if(constraints?.cleanupMode!=='pending-header'){
+  const prepared=apiClientFixtureApproval(args);
+  // R2-I: a creation with the written words alone keeps the complete inventory read before its send (the MCP's own
+  // evidence; a file-based creation names its baseline file), so an uncertain creation is cleaned up later without any file.
+  if(!file&&operationId===API_CLIENT_CREATE&&typeof readInventory==='function'){
+   let before=null;try{before=await readInventory();}catch{before=null;}
+   if(before?.tenant===host&&apiClientInventoryComplete(before))prepared.expected.baseline={ok:true,tenant:host,complete:true,
+    requestedPageConsistencyVerified:true,requestedOffset:0,scope:{NameContains:'',Status:''},totalResults:before.totalResults,rows:before.rows};
+  }
+  return prepared;
+ }
  if(operationId!==API_CLIENT_DELETE||!isUuid(constraints.creationOperationUuid)
   ||Object.keys(raw.inputParameters).join(',')!=='Key'||!isUuid(raw.inputParameters.Key)
   ||Object.keys(raw.screenVariables).length||Object.keys(raw.clientVariables).length)bad();
@@ -23,8 +44,9 @@ export async function apiClientWriteApproval(args){
  if(origin?.schema!=='ssam-odc-write/1'||origin.operationUuid!==constraints.creationOperationUuid
   ||origin.state!=='uncertain'||origin.identity?.tenant!==host||origin.identity.operationId!==API_CLIENT_CREATE
   ||origin.identity.target?.apiClientFixtureName!==name||!/^SSAMApiClientProof\d{8}[A-Za-z0-9]{0,16}$/.test(name??'')
-  ||origin.response?.ApiClientProof||!origin.authorization?.source)bad();
- const baseline=read(constraints.baselineFile,1048576);
+  ||origin.response?.ApiClientProof||!recorded(origin))bad();
+ const kept=!file?origin?.reconciliation?.apiClientFixture?.baseline:undefined;
+ const baseline=kept?{bytes:Buffer.from(JSON.stringify(kept)),value:kept}:read(constraints.baselineFile,1048576);
  if(sha256(baseline.bytes.toString('utf8'))!==constraints.baselineSha256||baseline.value.tenant!==host
   ||!apiClientAbsent({key,name},baseline.value))bad();
  const bound={creationOperationUuid:origin.operationUuid,inputSha256:sha256(JSON.stringify(raw.inputParameters)),
@@ -32,9 +54,8 @@ export async function apiClientWriteApproval(args){
  // CX15 r3 (N3): after the guard validated the owner's reply to the preview, a new approval of that reply (proposal = the
  // preview) bound to creationOperationUuid replaces the creation's words and message.
  const fresh=ownedCleanupApproval({file,words,host,operation:operationId,targets:[name],constraints:bound,origin,key,what:'The pending API Client cleanup'});
- const approval=fresh??authorizationContext(file,words,{lane:'odc',host,operation:operationId,targets:[name],constraints:bound});
- if(!approval||!fresh&&(approval.wordsSha256!==origin.authorization.wordsSha256
-  ||approval.source.threadId!==origin.authorization.source.threadId||approval.source.messageId!==origin.authorization.source.messageId))bad();
+ const approval=fresh??approvalOf(file,words,{lane:'odc',host,operation:operationId,targets:[name],constraints:bound});
+ if(!approval||!fresh&&(approval.wordsSha256!==origin.authorization.wordsSha256||!sameGrant(origin.authorization,approval)))bad();
  const current=await readInventory();
  if(current?.tenant!==host||!apiClientInventoryComplete(current)
   ||current.rows.length!==baseline.value.rows.length+1)bad();

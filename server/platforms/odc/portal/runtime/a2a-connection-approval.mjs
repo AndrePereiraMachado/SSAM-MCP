@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-import {authorizationContext} from '../../facade/authorization-context.mjs';
+import {approvalOf,contextValues,originId,ownedBy,ownReceipt,sameGrant} from './written-approval.mjs';
 import {a2aConnectionPlan,a2aSaveInput} from './a2a-connection-plan.mjs';
 import {fail} from './errors.mjs';
 import {isUuid,sha256,fingerprint} from './write-journal.mjs';
@@ -24,21 +24,28 @@ async function currentStage(plan,read){
  const observed=rows.find(s=>s.Key===plan.stageKey),wanted=plan.details.ConnectionDetail_StageConfig.List[0].TenantStage;
  if(observed.Name!==wanted.Name||observed.Purpose!==wanted.Purpose)reject();
 }
-function constraintsFrom(file){
- try{if(!file||fs.statSync(file).size>32768)reject();return JSON.parse(fs.readFileSync(file,'utf8')).constraints;}catch{reject();}
+// R2-I: the receipts a step binds come from the context file or the call's scope; with the written words alone, SSAM finds
+// them in its own journal: the one confirmed discovery of this agent URL and stage (several refuse: the scope names one,
+// discoveryOperationUuid) and the test that returned this connection.
+function constraintsFrom(file,scope){
+ try{return contextValues(file,scope);}catch{reject();}
 }
 // No send/reservation occurs here. The caller must durably store expected before
 // dispatch and use its normal UUID journal. Only new, single-stage no_auth
 // connections are covered; URL mode additionally binds a confirmed discovery.
 // Edits and secret transports stay refused.
-export async function a2aConnectionApproval({file,words,host,operationId,raw,lookup,read}){
- if(!file||Object.keys(raw.screenVariables??{}).length||Object.keys(raw.clientVariables??{}).length)reject();
+export async function a2aConnectionApproval({file,words,host,operationId,raw,lookup,read,scope,find}){
+ if(Object.keys(raw.screenVariables??{}).length||Object.keys(raw.clientVariables??{}).length)reject();
+ const written=!file;
  const p=raw.inputParameters;
  let plan,origin,originOperationUuid,discovery,discoveryOperationUuid;
  if(operationId===A2A_TEST){
-  const constraints=constraintsFrom(file);
+  const constraints=constraintsFrom(file,scope);
   if(p?.ValidStageConfigs?.List?.[0]?.ConfigurationType==='url'||constraints?.discoveryOperationUuid!==undefined){
-   discoveryOperationUuid=constraints?.discoveryOperationUuid;
+   const config=p?.ValidStageConfigs?.List?.[0];
+   discoveryOperationUuid=constraints?.discoveryOperationUuid??(written&&typeof find==='function'?ownReceipt(find,r=>r.state==='confirmed'&&r.identity?.tenant===host
+    &&r.identity.operationId==='connections.a2aDiscover'&&r.reconciliation?.a2aDiscovery?.agentUrl===config?.AgentUrl
+    &&r.reconciliation.a2aDiscovery.stageKey===config?.TenantStage?.Key,'The A2A test').operationUuid:undefined);
    if(!isUuid(discoveryOperationUuid)||typeof lookup!=='function')reject();
    discovery=lookup(discoveryOperationUuid);
    if(discovery?.state!=='confirmed'||discovery.identity?.kind!=='odc-portal'||discovery.identity.tenant!==host
@@ -55,7 +62,9 @@ export async function a2aConnectionApproval({file,words,host,operationId,raw,loo
   }
   if(fingerprint(p)!==fingerprint(plan.testInput.inputParameters))reject();
  }else if(operationId===A2A_SAVE){
-  const constraints=constraintsFrom(file);originOperationUuid=constraints?.originOperationUuid;
+  const constraints=constraintsFrom(file,scope);
+  originOperationUuid=originId(constraints,'originOperationUuid',{written,find,what:'The A2A save',
+   predicate:r=>ownedBy(host,A2A_TEST)(r)&&r.response?.Out_ConnectionId===p?.ConnectionId});
   if(!isUuid(originOperationUuid))reject();origin=lookup(originOperationUuid);
   if(!origin||!['accepted','confirmed'].includes(origin.state)||origin.identity?.kind!=='odc-portal'||origin.identity.tenant!==host
     ||origin.identity.operationId!==A2A_TEST||!isUuid(origin.response?.Out_ConnectionId)||origin.response.Out_ConnectionId!==p?.ConnectionId)reject();
@@ -64,13 +73,12 @@ export async function a2aConnectionApproval({file,words,host,operationId,raw,loo
   if(expected.planSha256!==plan.planSha256||fingerprint(p)!==fingerprint(a2aSaveInput(plan,p.ConnectionId,plan.planSha256).inputParameters))reject();
  }else reject();
  const name=plan.details.ConnectionDetails_Header.ConnectionName;
- const approval=authorizationContext(file,words,{lane:'odc',host,operation:operationId,environmentKey:plan.stageKey,targets:[name],constraints:{
-  planSha256:plan.planSha256,inputSha256:sha256(JSON.stringify(p)),...(origin?{originOperationUuid,connectionId:p.ConnectionId}:{}),...(discovery?{discoveryOperationUuid}:{})}});
+ const approval=approvalOf(file,words,{lane:'odc',host,operation:operationId,environmentKey:plan.stageKey,targets:[name],constraints:{
+  planSha256:plan.planSha256,inputSha256:sha256(JSON.stringify(p)),...(origin?{originOperationUuid,connectionId:p.ConnectionId}:{}),...(discovery?{discoveryOperationUuid}:{})},
+  proposalSha256:plan.planSha256});
  if(!approval)reject();
- if(origin&&(origin.authorization?.wordsSha256!==approval.wordsSha256||origin.authorization.proposalSha256!==approval.proposalSha256
-  ||origin.authorization.source?.threadId!==approval.source.threadId||origin.authorization.source?.messageId!==approval.source.messageId))reject();
- if(discovery&&(discovery.authorization?.wordsSha256!==approval.wordsSha256||discovery.authorization.proposalSha256!==approval.proposalSha256
-  ||discovery.authorization.source?.threadId!==approval.source.threadId||discovery.authorization.source?.messageId!==approval.source.messageId))reject();
+ if(origin&&!sameGrant(origin.authorization,approval,{words:true,proposal:true}))reject();
+ if(discovery&&!sameGrant(discovery.authorization,approval,{words:true,proposal:true}))reject();
  await currentStage(plan,read);
  if(operationId===A2A_TEST){
   const inventory=await read('connections.list',{});

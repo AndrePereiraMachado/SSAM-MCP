@@ -63,9 +63,9 @@ public sealed class PatchCertaintyDeclaredNameTests
             PatchCertaintyJobProbe.Screen("ControlProbe", "ControlFlow", Declarations + Input(text)));
         Assert.True(result["accepted"]?.GetValue<bool>() == true, result.ToJsonString());
         Assert.True(saved);
-        var applied = Assert.IsType<JsonArray>(result["patchesApplied"]).OfType<JsonObject>().ToList();
-        Assert.Single(applied);
-        Assert.Equal("TEXT_LITERAL_QUOTED", applied[0]["patchRule"]?.ToString());
+        // R2-C: a certain literal is written in the compile and listed (TEXT_LITERAL_QUOTED), never a patch applied after a refusal.
+        Assert.True(result["patchesApplied"] is not JsonArray { Count: > 0 }, result["patchesApplied"]?.ToJsonString());
+        Assert.Contains("\"code\":\"TEXT_LITERAL_QUOTED\"", result.ToJsonString());
     }
 
     [Theory]
@@ -167,7 +167,8 @@ internal static class PatchCertaintyJobProbe
         catch (Exception error) {
             var coded = Errors.FindCoded(error);
             Assert.True(coded != null, Errors.Text(error));
-            return (new JsonObject { ["accepted"] = false, ["code"] = coded!.Code, ["problems"] = coded.Problems?.DeepClone() }, File.Exists(output));
+            return (new JsonObject { ["accepted"] = false, ["code"] = coded!.Code, ["problems"] = coded.Problems?.DeepClone(),
+                ["normalizations"] = Errors.Normalizations(error) }, File.Exists(output));
         }
     }
 }

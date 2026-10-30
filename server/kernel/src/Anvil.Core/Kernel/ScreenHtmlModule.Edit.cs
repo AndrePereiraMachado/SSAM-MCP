@@ -22,8 +22,11 @@ public sealed partial class ScreenHtmlModule<T>
     // otherwise Apply writes it and Verify compares what the module reads back with the edited text.
     // theme: the theme the page shows (CX17 review 3, M6/M7), which lets the plan decide the markers of the engine again on a
     // screen of the op; null: no marker is decided (as before).
-    public EditPlan Edit(ScreenHtmlDocument reading, IReadOnlyList<string> edits, string pointer = "/edit", Anvil.Core.ScreenVisual.PageTheme? theme = null)
-        => new(this, reading, edits, pointer, theme: theme);
+    // literalNames (R2-C): what decides the certainty of a literal (the names of the module, its references and the job; the names
+    // the job and the page declare), read when a prose value needs it; null: every literal is a choice (refused, as before).
+    public EditPlan Edit(ScreenHtmlDocument reading, IReadOnlyList<string> edits, string pointer = "/edit", Anvil.Core.ScreenVisual.PageTheme? theme = null,
+        Func<(IReadOnlySet<string> Scope, IReadOnlySet<string> Declared)?>? literalNames = null)
+        => new(this, reading, edits, pointer, theme: theme, literalNames: literalNames);
 
     // What uses the element at `index` (or anything under it) from outside the removed set `gone`: the paths, for
     // HTML_DELETE_IN_USE (and the battery, which removes only what nothing uses).
@@ -131,9 +134,14 @@ public sealed partial class ScreenHtmlModule<T>
         private ScreenDefaults? defaults;
         private ScreenDefaults Defaults => defaults ??= m.DefaultsOfRoot(state.Root);
 
-        internal EditPlan(ScreenHtmlModule<T> m, ScreenHtmlDocument reading, IReadOnlyList<string> edits, string pointer, bool patches = true, Anvil.Core.ScreenVisual.PageTheme? theme = null)
+        // R2-C: the names that decide a literal's certainty (ScreenDocument.ProseLiteral), read once when a prose value needs them.
+        private readonly Lazy<(IReadOnlySet<string> Scope, IReadOnlySet<string> Declared)?> literalNames;
+
+        internal EditPlan(ScreenHtmlModule<T> m, ScreenHtmlDocument reading, IReadOnlyList<string> edits, string pointer, bool patches = true, Anvil.Core.ScreenVisual.PageTheme? theme = null,
+            Func<(IReadOnlySet<string> Scope, IReadOnlySet<string> Declared)?>? literalNames = null)
         {
             this.m = m; this.reading = reading; this.edits = edits; this.pointer = pointer; this.patches = patches; this.theme = theme;
+            this.literalNames = new(() => { try { return literalNames?.Invoke(); } catch (Exception) { return null; } });
             state = reading.State as ReadingState ?? throw new InvalidOperationException("ssam-html edit: the reading has no state of this module");
             Result.Root = reading.Root; Result.RootKey = reading.RootKey; Result.RootKind = reading.RootKind; Result.BasedOnHtml = reading.HtmlSha256;
             foreach (var (k, objectKey) in reading.Keys) keys[k] = objectKey;
@@ -1302,43 +1310,75 @@ public sealed partial class ScreenHtmlModule<T>
             }
         }
         // L3d: an event runs a screen action of its page or opens a screen. A name that resolves to anything else (a server or a
-        // client action of the module or of a reference, a role, nearer than the screen of that name) was refused by the platform
-        // at the set, after the build ("A OutSystems.Model.IObject cannot be used as the value for the ...Destination property",
-        // 15/10, and onclick="Login" on the fixtures today). The plan says it first, with the screen or screen action of that
-        // name as the patch when there is one, written as the reading writes it.
+        // client action of the module or of a reference, a role) was refused by the platform at the set, after the build ("A
+        // OutSystems.Model.IObject cannot be used as the value for the ...Destination property", 15/10). R2-A: the destination is
+        // searched among what an event runs (TryResolveDestination, NameResolution), so a nearer element of another kind never
+        // hides the screen or screen action of that name: the name reaches it, and when the reading writes it otherwise
+        // (MobileScreen:Login beside the server action Login of a reference) that is listed (REFERENCE_CANONICAL). What is left
+        // here is a name no screen or screen action has: refused before the build, with the nearest destinations. Two of them at
+        // the same distance are refused with each one's form.
         private void CheckDestinations()
         {
             foreach (var (id, element) in edited.Elements) {
                 if (!idNodes.TryGetValue(id, out var node)) continue;
                 var before = IsNew(id) ? null : model.Elements.GetValueOrDefault(id);
+                var where = id.StartsWith('+') ? "a new " + element.Kind + " (line " + node.Line.ToString(CultureInfo.InvariantCulture) + ")" : element.Kind + " k=\"" + id + "\"";
                 foreach (var (fact, value) in element.Facts) {
                     // A new element's events are its HTML events until it exists (hev:, the native ones known only after the create).
                     if (!(fact.StartsWith("ev:", StringComparison.Ordinal) || fact.StartsWith("h:", StringComparison.Ordinal) || fact.StartsWith("hev:", StringComparison.Ordinal)) || fact.Contains(":a:", StringComparison.Ordinal)
-                        || fact.Contains(":p:", StringComparison.Ordinal) || value.Length == 0 || value[0] == '?' || before?.Facts.GetValueOrDefault(fact) == value) continue;
-                    if (m.IndexOf(value) is not (var i and >= 0) || Runs(i)) continue;
+                        || fact.Contains(":p:", StringComparison.Ordinal) || value.Length == 0 || before?.Facts.GetValueOrDefault(fact) == value) continue;
+                    if (value[0] == '?') { Ambiguous(id, node, where, value[1..]); continue; }
+                    if (m.IndexOf(value) is not (var i and >= 0)) continue;
                     var written = node.Attributes.FirstOrDefault(a => (a.Key.StartsWith("on", StringComparison.Ordinal) && !a.Key.Contains('.') || a.Key.StartsWith('@'))
                         && ScreenHtml.TryCall(a.Value, out var called, out _) && m.TryResolveDestination(called.Trim(), state.Scope, out var hit) && hit == value);
                     if (written.Key == null || !ScreenHtml.TryCall(written.Value, out var name, out _)) continue;
                     name = name.Trim();
-                    var bare = name[(name.LastIndexOfAny([':', '.']) + 1)..];
-                    // What the name may mean here: a screen, or a screen action of this page.
-                    var meant = new List<string>();
-                    for (var j = 0; j < m.nodes.Count; j++)
-                        if (Runs(j) && string.Equals(m.display[j], bare, StringComparison.OrdinalIgnoreCase)
-                            && m.TryResolveDestination(m.kind[j] + ":" + m.display[j], state.Scope, out var back) && back == m.id[j])
-                            meant.Add(m.kind[j] + ":" + m.display[j]);
-                    var where = id.StartsWith('+') ? "a new " + element.Kind + " (line " + node.Line.ToString(CultureInfo.InvariantCulture) + ")" : element.Kind + " k=\"" + id + "\"";
+                    if (Runs(i)) {
+                        if (m.Destination(name, state.Scope) is { Canonicalized: true, Chosen: { } chosen } answer && !Noted.Contains(id + "|" + written.Key)) {
+                            Noted.Add(id + "|" + written.Key);
+                            Result.Normalized.Add(new JsonObject { ["code"] = NameResolution.CanonicalRule, ["k"] = id.StartsWith('+') ? null : id, ["element"] = where, ["attribute"] = written.Key,
+                                ["from"] = name, ["to"] = chosen.Canonical,
+                                ["note"] = "'" + name + "' is the " + NameResolution.Describe(chosen with { Canonical = chosen.Name }) + ", the only " + NameResolution.EventDestination.Word + " of that name from " + reading.Root
+                                    + (answer.Unfit.Count > 0 ? " (" + string.Join(", ", answer.Unfit.Take(3).Select(NameResolution.Describe)) + " of that name " + (answer.Unfit.Count == 1 ? "is" : "are") + " no event destination)" : "")
+                                    + "; the reading writes it " + chosen.Canonical });
+                        }
+                        continue;
+                    }
+                    // The nearest destinations, each in the form the reading writes it (R2-A: the attribute of each, as an
+                    // ambiguous name's); a client action is run through a screen action that calls it (its exact wrapping).
+                    var near = m.Destination(name, state.Scope).Candidates.Select(c => c.Canonical).Distinct(StringComparer.Ordinal).ToList();
+                    var tail = written.Value[(written.Value.IndexOf(name, StringComparison.Ordinal) + name.Length)..];
+                    (string Logic, string Destination)? wrap = NameResolution.Bare(m.kind[i]) is "ClientAction" or "ClientActionSignature" ? ScreenHtmlEdit.ClientActionWrap(reading.Root, name, tail) : null;
                     if (ProblemOnce(ScreenHtmlEdit.NameUnknown, AtId(id), id.StartsWith('+') ? null : id,
-                            written.Key + "=\"" + Clip(written.Value) + "\" on " + where + ": '" + name + "' is the " + m.kind[i] + " " + m.display[i] + ", which an event cannot run (an event runs a screen action of " + reading.Root + " or opens a screen)",
-                            meant.Count == 1 ? "write " + written.Key + "=\"" + meant[0] + written.Value[written.Value.IndexOf(name, StringComparison.Ordinal)..][name.Length..] + "\""
-                            : meant.Count > 1 ? "name one of: " + string.Join(", ", meant) : "name a screen action of " + reading.Root + " (a logic op in the same job creates it) or a screen") is { } wrong && meant.Count == 1) {
-                        corrections[wrong] = "property";
-                        attributeFixes.Add((node, written.Key, meant[0] + written.Value[written.Value.IndexOf(name, StringComparison.Ordinal)..][name.Length..], null));
+                            written.Key + "=\"" + Clip(written.Value) + "\" on " + where + ": '" + name + "' is the " + m.kind[i] + " " + m.display[i] + ", which an event cannot run (an event runs a screen action of " + reading.Root + " or opens a screen), and no screen or screen action has that name",
+                            (wrap != null ? "run it from a screen action of " + reading.Root + ": " + wrap.Value.Logic.Replace("\n", " / ").Trim() + " (a logic op in the same job), and write " + written.Key + "=\"" + wrap.Value.Destination + "\"; or " : "")
+                            + "name a screen action of " + reading.Root + " (a logic op in the same job creates it) or a screen" + (near.Count > 0 ? "; the nearest: " + string.Join(", ", near) : "")) is { } refused) {
+                        var choices = new JsonArray();
+                        if (wrap != null) choices.Add(new JsonObject { ["attribute"] = written.Key, ["value"] = wrap.Value.Destination, ["logic"] = wrap.Value.Logic });
+                        foreach (var form in near) choices.Add(new JsonObject { ["attribute"] = written.Key, ["value"] = form + tail });
+                        if (choices.Count > 0) refused["candidates"] = choices;
                     }
                 }
             }
-            // What an event runs: a screen (of the module or of a reference), or a screen action of this page.
-            bool Runs(int j) => m.role[j] == "screen" || m.kind[j].EndsWith("ScreenSignature", StringComparison.Ordinal) || m.role[j] == "action" && m.root[j] == state.Root;
+            // What an event runs: a screen (of the module or of a reference), a screen action of this page, a System destination.
+            bool Runs(int j) => NameResolution.IsEventDestination(m.kind[j], m.role[j], m.root[j] == state.Root && j != state.Root, m.display[j]);
+        }
+
+        private readonly HashSet<string> Noted = new(StringComparer.Ordinal);
+
+        // R2-A: a destination two screens or screen actions answer at the same distance (a screen of two references, say) is
+        // refused once with each one's form (an attribute that writes exactly it); a name none has is the problem of the names
+        // that resolve to nothing (CheckNames).
+        private void Ambiguous(string id, ScreenHtml.Node node, string where, string name)
+        {
+            if (m.Destination(name, state.Scope) is not { Outcome: NameOutcome.Ambiguous } answer) return;
+            var attribute = node.Attributes.FirstOrDefault(a => (a.Key.StartsWith("on", StringComparison.Ordinal) && !a.Key.Contains('.') || a.Key.StartsWith('@'))
+                && ScreenHtml.TryCall(a.Value, out var called, out _) && string.Equals(called.Trim(), name, StringComparison.Ordinal)).Key ?? "onclick";
+            var forms = answer.Candidates.Select(c => c.Kind + ":" + (c.Qualifier is { Length: > 0 } q ? q + "." : "") + c.Name).Distinct(StringComparer.Ordinal).ToList();
+            if (ProblemOnce(Anvil.Core.ScreenDocument.NameAmbiguous, AtId(id), id.StartsWith('+') ? null : id,
+                    attribute + "=\"" + name + "\" on " + where + ": " + forms.Count + " " + NameResolution.EventDestination.Word + "s of that name are at the same distance from " + reading.Root + ": " + string.Join(", ", answer.Candidates.Select(NameResolution.Describe)),
+                    "write one of: " + string.Join(", ", forms.Select(f => attribute + "=\"" + f + "\""))) is { } problem)
+                problem["candidates"] = new JsonArray(forms.Select(f => (JsonNode)new JsonObject { ["attribute"] = attribute, ["value"] = f }).ToArray());
         }
 
         // L3d: an argument (:Name) of a block instance that is no input of its block was refused by the platform after the build
@@ -1449,11 +1489,23 @@ public sealed partial class ScreenHtmlModule<T>
                         : (fact.StartsWith("ev:", StringComparison.Ordinal) || fact.StartsWith("h:", StringComparison.Ordinal) || fact.StartsWith("hev:", StringComparison.Ordinal))
                           && !fact.Contains(":a:", StringComparison.Ordinal) && !fact.Contains(":p:", StringComparison.Ordinal) && value.StartsWith('?') ? value[1..] : null;
                     if (unresolved == null) continue;
+                    // R2-A: a destination two screens or screen actions answer at the same distance is ambiguous, not unknown
+                    // (CheckDestinations refuses it with each one's form).
+                    if (!fact.StartsWith("p:", StringComparison.Ordinal) && m.Destination(unresolved, state.Scope, full: false).Outcome == NameOutcome.Ambiguous) continue;
                     var candidates = Candidates(fact);
                     var certain = ScreenHtmlEdit.Certain(unresolved, candidates);
-                    Problem(ScreenHtmlEdit.NameUnknown, AtId(id), id.StartsWith('+') ? null : id,
+                    var nameless = Problem(ScreenHtmlEdit.NameUnknown, AtId(id), id.StartsWith('+') ? null : id,
                         "'" + unresolved + "' names nothing " + (fact.StartsWith("p:", StringComparison.Ordinal) ? "for " + fact[2..] : "as the destination of " + fact) + " from " + reading.Root,
                         certain != null ? "write '" + certain + "'" : "closest: " + string.Join(", ", ScreenHtmlEdit.Closest(unresolved, candidates)));
+                    // R2-A: a destination's nearest destinations, each with its exact attribute (as an ambiguous name's).
+                    if (nameless != null && !fact.StartsWith("p:", StringComparison.Ordinal) && idNodes.TryGetValue(id, out var holder)
+                        && holder.Attributes.FirstOrDefault(a => (a.Key.StartsWith("on", StringComparison.Ordinal) && !a.Key.Contains('.') || a.Key.StartsWith('@'))
+                            && ScreenHtml.TryCall(a.Value, out var called, out _) && string.Equals(called.Trim(), unresolved, StringComparison.Ordinal)) is { Key: not null } written) {
+                        var tail = written.Value[(written.Value.IndexOf(unresolved, StringComparison.Ordinal) + unresolved.Length)..];
+                        var near = m.Destination(unresolved, state.Scope).Candidates.Select(c => c.Canonical).Distinct(StringComparer.Ordinal)
+                            .Select(form => (JsonNode)new JsonObject { ["attribute"] = written.Key, ["value"] = form + tail }).ToArray();
+                        if (near.Length > 0) nameless["candidates"] = new JsonArray(near);
+                    }
                 }
             }
         }
@@ -1550,9 +1602,20 @@ public sealed partial class ScreenHtmlModule<T>
                     if ((created || !IsNew(id)) && fact.StartsWith("p:", StringComparison.Ordinal) && value.StartsWith("e:", StringComparison.Ordinal) && !BindingText.BracesInCode(value[2..])
                         && ScreenHtml.NotAnExpression(value[2..]) && !(before != null && before.Facts.TryGetValue(fact, out var said) && said == value)) {
                         var attribute = ScreenHtmlTables.AttributeOf(element.Kind, fact[2..], IsData(element.Kind) ? ScreenHtmlModuleMode.Data : ScreenHtmlModuleMode.Widget, element.Facts.ContainsKey("p:StyleClasses"));
-                        ProblemOnce(ScreenHtmlEdit.Invalid, AtId(id), id.StartsWith('+') ? null : id,
+                        // R2-C: a property that shows text, whose prose has one reading (ScreenDocument.ProseLiteral, the rule of the
+                        // document form): its literal, written and listed (TEXT_LITERAL_QUOTED), never refused.
+                        if (Anvil.Core.ScreenDocument.ProseLiteral(element.Kind, fact[2..], value[2..], literalNames.Value) is { } literal) {
+                            element.Facts[fact] = "e:" + literal;
+                            Result.Normalized.Add(new JsonObject { ["code"] = Anvil.Core.ScreenDocument.TextLiteralQuoted, ["k"] = id.StartsWith('+') ? null : id, ["property"] = fact[2..],
+                                ["attribute"] = attribute, ["from"] = value[2..], ["to"] = literal,
+                                ["note"] = fact[2..] + " takes an expression and shows text; the prose names nothing in scope: it is the text it says, written as its literal" });
+                            continue;
+                        }
+                        var refused = ProblemOnce(ScreenHtmlEdit.Invalid, AtId(id), id.StartsWith('+') ? null : id,
                             attribute + "=\"" + Clip(value[2..]) + "\" on " + (id.StartsWith('+') ? "a new " + element.Kind : "k=\"" + id + "\"") + " is no expression (two words with no operator between them, a character no expression has, a ':' or a number mask): " + fact[2..] + " takes an expression",
                             "as text, write its string literal: " + attribute + "='" + ScreenHtml.Literal(value[2..]) + "'");
+                        // Two readings (a name in scope, a slip of a declared name, a code shape, or a property that shows no text): both.
+                        if (refused != null) refused["candidates"] = Anvil.Core.ScreenDocument.ProseReadings(value[2..], literalNames.Value);
                         continue;
                     }
                     // Integration 24-1 familias (review): an expression typed wrong (a parenthesis or a quote not closed, an operator
@@ -2589,6 +2652,14 @@ public sealed partial class ScreenHtmlModule<T>
                             continue;
                         }
                         if (fact == "p:StyleSheet" && a != null && b != null && Squeeze(a) == Squeeze(b)) { Result.Normalized.Add(new JsonObject { ["k"] = e, ["property"] = "StyleSheet", ["note"] = "the CSS was formatted (spaces and lines only)" }); continue; }
+                        // The one normalization every stylesheet write takes (CssPipeline: shadowed rules out, imports up), when the
+                        // edit's sheet reached the plan without it (a rebased sheet): the same CSS in every browser, said.
+                        if (fact == "p:StyleSheet" && a is { Length: >= 2 } && b is { Length: >= 2 } && a.StartsWith("t:", StringComparison.Ordinal)
+                            && Anvil.Core.CssPipeline.Normalize(a[2..], new Anvil.Core.CssPipeline.Context("verify")) is { Changed: true } normal && Squeeze("t:" + normal.Css) == Squeeze(b)) {
+                            Result.Normalized.Add(new JsonObject { ["k"] = e, ["property"] = "StyleSheet", ["note"] = "the CSS went through the stylesheet normalization (the same CSS in every browser)",
+                                ["cssStages"] = new JsonArray(normal.StageChanges.Select(c => (JsonNode)c.DeepClone()).ToArray()) });
+                            continue;
+                        }
                         differences.Add(Difference(e, r, want.Kind, fact, a, b));
                     }
                     // Identity: what the edit kept keeps its key.

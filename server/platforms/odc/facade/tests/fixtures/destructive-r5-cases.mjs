@@ -19,6 +19,12 @@ export const N1_CASES = (oml, W) => ({
   D1_o11_data_many_problems: ['o11_data', { module: 1, oml: 2, request: { batch: [{ step: 's1', operation: 'insert', entity: 3, records: [{ Name: 'x' }], authorization: W }, { step: 's2', operation: 'zap', entity: 4 }] } }],
   D2_odc_receipt_two_problems: ['odc_receipt', { operationUuid: 'not-a-uuid', reconcile: { state: 'zz', read: { operationId: 'zzRead' }, authorize: W } }],
   D3_odc_asset_delete_many_problems: ['odc_asset_delete', { tenant: 7, assetKey: 12345, auth: 'zz', operationUuid: 'nope', ownerRequest: W }],
+  // R1-B (fase4-28/r1-answers, answer-size.mjs): the fitter keeps a refusal only when it reduces it (above the visible ceiling,
+  // VISIBLE_ANSWER_BYTES, or a long error); it no longer clips an error at 300 characters, which is what kept D3. D4 is D3 with
+  // 60 unknown fields: its 50 violations take the refusal above the ceiling, so the fitter keeps it (with the words' place in
+  // corrected) and the sweep of .local\answers still sees a kept refusal.
+  D4_odc_asset_delete_refusal_over_the_ceiling: ['odc_asset_delete', { tenant: 7, assetKey: 12345, auth: 'zz', operationUuid: 'nope', ownerRequest: W,
+    ...Object.fromEntries(Array.from({ length: 60 }, (_, i) => ['zzUnknown' + i, 'zz value ' + i])) }],
 });
 // CX15 r6 (M-2): the studio_command forms of the review (C:\t\revisoes\cx15-5\verify-1\probe\repro-m2.mjs), with the words W.
 export const M2_CASES = (manifest, W) => ({

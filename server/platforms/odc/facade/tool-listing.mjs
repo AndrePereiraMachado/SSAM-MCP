@@ -337,7 +337,7 @@ export const PROTECTED_PARAMETER_CLAUSES = Object.freeze({
   "studio_create_app": {
     "/properties/tenant": { host: { clause: "Tenant host among Studio signed-in sessions", review: "18653d65ccf6a99dacf5d63fffdd49fd7728b396b125fbbc8375225247da6d77" } },
     "/properties/authorize": { authorization: { clause: "User words verbatim naming the app", review: "fddda58d9c9646dcdf35c1cac7a69a73ead2c544fba99e7157ed878afeb28263" } },
-    "/properties/authorizationContext": { authorization: { clause: "authorize remains exact human words", review: "11945d2be964471a2117e7eb1c1c79f20b39c3c21f941763b90ba4ecf1386d50" } },
+    "/properties/authorizationContext": { authorization: { clause: "authorize remains exact human words", review: "6c25e66b55b5078fe196f764585d0d8d791a1b98cf9a012e51963bcf11d6809a" } },
   },
   "studio_deliver": {
     "/properties/authorize": { authorization: { clause: "user words verbatim naming the app; else standing grant", review: "948d7122bcca12762605aba072098d7dce16372e9d5ab5bd46f2b71ec10f0342" } },
@@ -352,14 +352,14 @@ export const PROTECTED_PARAMETER_CLAUSES = Object.freeze({
     "/properties/tenant": { host: { clause: "Tenant host", review: "0b45294b8455632367fed23b4f92550b4508b1de75d326fdff05e13ab02de346" } },
     "/properties/authorize": { authorization: { clause: "User words verbatim", review: "cb293a07a8d5621e9b788564c53d249d755e70a2d95883d84d52ce1c412f53b2" } },
     "/properties/confirmTenant": { host: { clause: "Exact corporate/unknown tenant", review: "61fe4e2a8b719dff240d3d5491147d29c6955b13a860f1f24c3fb9372b6ed133" } },
-    "/properties/uploadFormat": { authorization: { clause: "uploadFormat in approval constraints", review: "59d6949b181579a96e3121ff86a24bda433e19032b79ce1ee1e153ddfa40efa9" } },
+    "/properties/uploadFormat": { authorization: { clause: "bound in the approval SSAM records", review: "f03dc45b4d433b59f4e7904babebb172c63ebc2dc3c138211794535c5fb1e755" } },
   },
   "odc_write": {
     "/properties/tenant": { host: { clause: "Tenant host", review: "0b45294b8455632367fed23b4f92550b4508b1de75d326fdff05e13ab02de346" } },
     "/properties/authorize": { authorization: { clause: "User words verbatim", review: "cb293a07a8d5621e9b788564c53d249d755e70a2d95883d84d52ce1c412f53b2" } },
     "/properties/confirmTenant": { host: { clause: "Exact corporate/unknown tenant", review: "61fe4e2a8b719dff240d3d5491147d29c6955b13a860f1f24c3fb9372b6ed133" } },
     "/properties/auth": { credential: { clause: "api-client: vault API Client only", review: "187e7fd909796ac21688d630db3b75279cb0bbcdce2c9b3a4a19c5a2ccf90649" } },
-    "/properties/authorizationContext": { destructive: { clause: "restore before deletion; deletion needs no app bindings", review: "287d1ad545f3d1b2fbb4b5238d9f2f9439d1e96c43f44a7169f0b9a5a191c94d" }, authorization: { clause: "Exact proposal-bound human approval", review: "1bc15a1ba5b6320dbf1a6470db403f5fa0deb5b478f7dff01d5233cd8c443116" } },
+    "/properties/authorizationContext": { destructive: { clause: "restore before deletion; deletion needs no app bindings", review: "bc1bf373b163952c422e2a47e7dc77db829f14e88fd4a65bf4aca7251b509cd2" }, authorization: { clause: "Exact proposal-bound human approval", review: "5b8e76614ec3c4711fef096a29400f67fc3ace148d2bc90c537ae6930c613843" } },
     "/properties/userOriginOperationUuid": { authorization: { clause: "role grant/revoke needs exact owned role/stage", review: "5074e2471fec8c107ea8707ab1865d2cf69088440d79bddc5aed7e31e3c42d48" } },
     "/properties/originOperationUuid": { destructive: { clause: "IP filter update/delete", review: "49dcaf44ce17f95980b0f11ea40ac0c29b885b6b03457cc9636e3f10c32a95f8" } },
   },
@@ -372,7 +372,7 @@ export const PROTECTED_PARAMETER_CLAUSES = Object.freeze({
     "/properties/auth": { credential: { clause: "Portal vault profile", review: "1de5d5d86ac9669ee841bbb481b7d1c5ed7aeb63159a794d2720027b6514aa69" } },
     "/properties/authorize": { authorization: { clause: "User words verbatim", review: "cb293a07a8d5621e9b788564c53d249d755e70a2d95883d84d52ce1c412f53b2" } },
     "/properties/confirmTenant": { host: { clause: "Exact corporate/unknown tenant", review: "61fe4e2a8b719dff240d3d5491147d29c6955b13a860f1f24c3fb9372b6ed133" } },
-    "/properties/authorizationContext": { destructive: { clause: "delete binds origin receipt and expected hash", review: "8057f99e9b442723a0942860b9d2e4c3b633a73c7352dff71aa3e2dca78a4bfe" }, authorization: { clause: "Exact human response + proposal scope", review: "3c9f5285285501409c24cb997d646cc34f539fa72e79ab23b6cb9f7de272ed89" } },
+    "/properties/authorizationContext": { destructive: { clause: "delete binds origin receipt and expected hash", review: "58a699941a36333539e2c831f62f1d88698d2e7e3059c77f74ad7d9d03ed4c13" }, authorization: { clause: "Optional file, never required (words suffice)", review: "5e9015b021083fd347f9153db2153651e63f24c2cc945babf63d467364dc8865" } },
   },
   "odc_deploy": {
     "/properties/tenant": { host: { clause: "Tenant host", review: "0b45294b8455632367fed23b4f92550b4508b1de75d326fdff05e13ab02de346" } },
@@ -403,7 +403,7 @@ export const PROTECTED_PARAMETER_CLAUSES = Object.freeze({
     "/properties/confirmTenant": { host: { clause: "Exact corporate/unknown tenant", review: "61fe4e2a8b719dff240d3d5491147d29c6955b13a860f1f24c3fb9372b6ed133" } },
     "/properties/auth": { credential: { clause: "Portal vault", review: "d19818dc6cabeedb12033162a701fc8ffc394e496b62dd2bbba80dd4eabafee3" } },
     "/properties/credential": { credential: { clause: "never the account or password", review: "c4ffe57c65ed8a5af02e322c49f6e5b2608f3f31fd71cfa8c6aff8929a5ba13f" } },
-    "/properties/authorizationContext": { destructive: { clause: "required for delete", review: "3b1d87703e3f97144d5c3f31db99cbc75c5a953f73bed997dc90e1047668653a" }, authorization: { clause: "approval", review: "7cc716903a6434370b3f72d4aa0b0e4ef86a8a72da94a6c3c4086e3f476ebe85" } },
+    "/properties/authorizationContext": { authorization: { clause: "words name connection and entities", review: "5309b31e6b034face22b137a9da461a54e00a91777b2b595248ba23cca9cd197" } },
     "/properties/originOperationUuid": { destructive: { clause: "Entity changes/delete", review: "1268c43d215b26bd850e3f1a516c6d15d72e28792d5c688d97b576162a100325" } },
   },
   "odc_external_library": {
@@ -630,8 +630,10 @@ export const PROTECTED_TOOL_CLAUSES = Object.freeze({
       clauses: ["Interrupted/CANCELLED/local failure/rejected/no answer: read ssam_task {id:<preview operationId>} before telling owner; never say nothing happened without it."], review: "0da575fe215c0a06ecfcf4be6ae8f2dc3f7d90f1ab5ba05eeb914a713bdc7300" },
     { sentence: "With confirmationToken, operationUuid is the preview's operationId (never a new one, never omitted).",
       clauses: ["With confirmationToken, operationUuid=preview operationId, never new/omitted."], review: "a6d99b8207dd866dd5f949e9e4d33d5cdf5dc46e24527a3d22e6b5d15e5fff8a" },
-    { sentence: "An own fixture is cleaned up in the same two calls: after the preview, authorizationContext is a NEW approval whose wordsSha256 is the sha256 (64 hex of the UTF-8 bytes) of the owner's reply to that list exactly as it goes in authorize (the file never keeps the words) and whose proposal is the preview file (previews\\<previewId>.json under the destructive root), bound to the creation receipt of this target; the creation's words and message are not needed.",
-      clauses: ["Own fixture: same 2 calls; authorizationContext=NEW approval (wordsSha256: sha256, 64 hex of UTF-8, of the owner reply to the list exactly as in authorize, the file never keeps the words; proposal: preview file) bound to creation receipt; creation words not needed."], review: "f445f6b1763d4572b840a48dd0d6f0356b2454d13b2e670634ce4410b7190968" },
+    { sentence: "An own fixture is cleaned up in the same two calls: after the preview, the owner's reply in authorize is the approval: SSAM records it (only its sha256) with the preview as its proposal, bound to the creation receipt of this target; no file is required and the creation's words and message are not needed.",
+      clauses: ["Own fixture: same 2 calls; owner reply=approval, bound to preview and creation receipt; no file."], review: "175d0353470b588f981915f09ca640a119f0d42df3c4eb94fd2baa2f942aa990" },
+    { sentence: "An authorizationContext stays accepted: a NEW approval whose wordsSha256 is the sha256 (64 hex of the UTF-8 bytes) of that reply exactly as it goes in authorize (the file never keeps the words) and whose proposal is the preview file (previews\\<previewId>.json under the destructive root).",
+      clauses: ["Optional file: wordsSha256 of reply, never the words; proposal=preview file."], review: "7068edb0ac44197fb18a4381b6d4dd7dcb7022c0cc78f2c241021606ecbb1fe0" },
   ],
   "odc_write": [
     { sentence: "[odc] Any catalogued mutation: deploy, publish, build, code analyses, configurations/settings, assets create/upload (an asset delete is refused here: odc_asset_delete), users/groups/roles, domains, IP filters, private gateway, native builds, external libraries.",
@@ -656,8 +658,14 @@ export const PROTECTED_TOOL_CLAUSES = Object.freeze({
       clauses: ["downloadFile never infers ingestion"], review: "1e1c3710fa7faf4d56ced8aa948fd15bb0bc5ace1ec03f1195b53c20f3fb06b7" },
   ],
   "odc_portal_write": [
-    { sentence: "[odc] Listed internal writes: aiModels.trialCreate (only {TrialId}; complete empty portfolio inventory, available unconfigured trial and proposal-bound approval), aiModels.trialDelete (only {AIModelId}; original own creation receipt, unchanged header, detail-confirmed portfolio and same grant/proposal), knowledgeBases.uploadFile (native file input, exact contextual approval linked to owned base creation; receipt confirms only after native acceptance and Indexed observation; generic JSON budget 256 KiB), timers.pause/resume (same three UUID inputs as run; native SaveAndApply with clean configuration preflight and deployment/state verification), timers.run (inputParameters {StageKey, ApplicationKey, TimerKey}, UUIDs only; verifies deployed app/timer identity and idle active state; words must name both app and timer; acceptance does not prove execution), connections.relationalTest/relationalSave/importEntities/mcpTest/mcpSave (importEntities/importActions only when the save unselects nothing: every entity, attribute and action selected and all selected now named, read first; else refused with odc_external_db_connection as continuation), agents.datasetCreate/datasetDelete/evaluationCreate/evaluationRunCreate/evaluationDelete/guardrailsSave, externalLibraries.publishJob (input {inputParameters:{JobKey}}; odc_external_library deploy runs it inside the whole deploy), libraries.release (release/tag a low-code or mobile library: input {inputParameters:{ApplicationKey, Revision, Version:\"x.y.z\", ReleaseNotes}}; requires the current untagged revision, a Finished publication of it (publicationKey) and authorizationContext with the user's explicit approval: constraints {publicationKey, expectedTag:null, inputSha256} plus originOperationUuid for a library SSAM created, or preExisting:true with scope targets naming the library and the tenant host for an existing one).",
-      clauses: ["user words and operationUuid","delete binds origin receipt and expected hash","importEntities/importActions only when the save unselects nothing, else refused (odc_external_db_connection)","libraries.release: current untagged revision, Finished publication, authorizationContext with the user's explicit approval","existing library: scope targets naming the library and tenant host","timers.run words name both app and timer"], review: "595ded96202c7923a1a106a4eaa089f986764f097ef7400ade5d77f7cd36a2bb" },
+    { sentence: "[odc] Listed internal writes: aiModels.trialCreate (only {TrialId}, scope {portfolioKey}; complete empty portfolio inventory and available unconfigured trial), aiModels.trialDelete (only {AIModelId}; own creation receipt, unchanged header and detail-confirmed portfolio), knowledgeBases.uploadFile (native file input of an owned base; receipt confirms only after native acceptance and Indexed observation; generic JSON budget 256 KiB), timers.pause/resume (same three UUID inputs as run; native SaveAndApply with clean configuration preflight and deployment/state verification), timers.run (inputParameters {StageKey, ApplicationKey, TimerKey}, UUIDs only; verifies deployed app/timer identity and idle active state; words must name both app and timer; acceptance does not prove execution), connections.relationalTest/relationalSave/importEntities/mcpTest/mcpSave (importEntities/importActions only when the save unselects nothing: every entity, attribute and action selected and all selected now named, read first; else refused with odc_external_db_connection as continuation), agents.datasetCreate/datasetDelete/evaluationCreate/evaluationRunCreate/evaluationDelete/guardrailsSave, externalLibraries.publishJob (input {inputParameters:{JobKey}}; odc_external_library deploy runs it inside the whole deploy), libraries.release (release/tag a low-code or mobile library: input {inputParameters:{ApplicationKey, Revision, Version:\"x.y.z\", ReleaseNotes}}; requires the current untagged revision and a Finished publication.",
+      clauses: ["user words and operationUuid","delete binds origin receipt and expected hash","importEntities/importActions only when the save unselects nothing, else refused (odc_external_db_connection)","timers.run words name both app and timer","libraries.release: current untagged revision, Finished publication"], review: "646a79bba6c8ea586d94f4ba83864b5654b331ed5586c2e719ec6d06b263476f" },
+    { sentence: "Pass the user's exact written authorization naming the library, tenant, version and revision in authorize; SSAM verifies the publication and records approval hashes in the receipt, without requiring an approval file.",
+      clauses: ["words name library/tenant/version/revision; receipt hashes approval"], review: "5ec210b4564cdbe508e4a64f41fd3bba917b1a5db42b8727002553495741a75c" },
+    { sentence: "Existing authorizationContext files remain supported).",
+      clauses: ["Optional file, never required (words suffice)"], review: "248dbf6164bb0341cc47fc0a07c1627a15b68eaad9f09cdae2810c7f906a7646" },
+    { sentence: "Without authorizationContext the user's written words naming every target are the approval: SSAM records it (hashes only), takes the keys the input lacks from scope and the receipts a step binds from its own journal.",
+      clauses: ["Words naming every target are the approval; no file needed"], review: "fd1a711b3d57c6de3ce91a72273422f00f94108c2f74178df4444c6a9ccaa6fd" },
     { sentence: "Same safety as odc_write (words, operationUuid, receipt before the send, tenant guard, no replay).",
       clauses: ["user words and operationUuid, tenant guard, receipt before send, no replay"], review: "9069d9d3ec76ff21b108f25a1d4b704f2ad204c82821678139eae4af00b98cf4" },
     { sentence: "Credentials are never arguments: external DB connections go through odc_external_db_connection.",
@@ -674,8 +682,10 @@ export const PROTECTED_TOOL_CLAUSES = Object.freeze({
       clauses: ["Interrupted/CANCELLED/local failure/rejected/no answer: read ssam_task {id:<preview operationId>} before telling owner; never say nothing happened without it."], review: "0da575fe215c0a06ecfcf4be6ae8f2dc3f7d90f1ab5ba05eeb914a713bdc7300" },
     { sentence: "With confirmationToken, operationUuid is the preview's operationId (never a new one, never omitted).",
       clauses: ["With confirmationToken, operationUuid=preview operationId, never new/omitted."], review: "a6d99b8207dd866dd5f949e9e4d33d5cdf5dc46e24527a3d22e6b5d15e5fff8a" },
-    { sentence: "An own fixture is cleaned up in the same two calls: after the preview, authorizationContext is a NEW approval whose wordsSha256 is the sha256 (64 hex of the UTF-8 bytes) of the owner's reply to that list exactly as it goes in authorize (the file never keeps the words) and whose proposal is the preview file (previews\\<previewId>.json under the destructive root), bound to the creation receipt of this target; the creation's words and message are not needed.",
-      clauses: ["Own fixture: same 2 calls; authorizationContext=NEW approval (wordsSha256: sha256, 64 hex of UTF-8, of the owner reply to the list exactly as in authorize, the file never keeps the words; proposal: preview file) bound to creation receipt; creation words not needed."], review: "f445f6b1763d4572b840a48dd0d6f0356b2454d13b2e670634ce4410b7190968" },
+    { sentence: "An own fixture is cleaned up in the same two calls: after the preview, the owner's reply in authorize is the approval: SSAM records it (only its sha256) with the preview as its proposal, bound to the creation receipt of this target; no file is required and the creation's words and message are not needed.",
+      clauses: ["Own fixture: same 2 calls; owner reply=approval, bound to preview and creation receipt; no file."], review: "175d0353470b588f981915f09ca640a119f0d42df3c4eb94fd2baa2f942aa990" },
+    { sentence: "An authorizationContext stays accepted: a NEW approval whose wordsSha256 is the sha256 (64 hex of the UTF-8 bytes) of that reply exactly as it goes in authorize (the file never keeps the words) and whose proposal is the preview file (previews\\<previewId>.json under the destructive root).",
+      clauses: ["Optional file: wordsSha256 of reply, never the words; proposal=preview file."], review: "7068edb0ac44197fb18a4381b6d4dd7dcb7022c0cc78f2c241021606ecbb1fe0" },
   ],
   "odc_deploy": [
     { sentence: "A deployment that ends FinishedWithError is refused as DEPLOYMENT_FAILED with every message (deployment.log: type, text, element, stage) and a continuation that says what to fix; it is never resent.",
@@ -716,24 +726,28 @@ export const PROTECTED_TOOL_CLAUSES = Object.freeze({
       clauses: ["Interrupted/CANCELLED/local failure/rejected/no answer: read ssam_task {id:<preview operationId>} before telling owner; never say nothing happened without it."], review: "0da575fe215c0a06ecfcf4be6ae8f2dc3f7d90f1ab5ba05eeb914a713bdc7300" },
     { sentence: "With confirmationToken, operationUuid is the preview's operationId (never a new one, never omitted).",
       clauses: ["With confirmationToken, operationUuid=preview operationId, never new/omitted."], review: "a6d99b8207dd866dd5f949e9e4d33d5cdf5dc46e24527a3d22e6b5d15e5fff8a" },
-    { sentence: "An own fixture is cleaned up in the same two calls: after the preview, authorizationContext is a NEW approval whose wordsSha256 is the sha256 (64 hex of the UTF-8 bytes) of the owner's reply to that list exactly as it goes in authorize (the file never keeps the words) and whose proposal is the preview file (previews\\<previewId>.json under the destructive root), bound to the creation receipt of this target; the creation's words and message are not needed.",
-      clauses: ["Own fixture: same 2 calls; authorizationContext=NEW approval (wordsSha256: sha256, 64 hex of UTF-8, of the owner reply to the list exactly as in authorize, the file never keeps the words; proposal: preview file) bound to creation receipt; creation words not needed."], review: "f445f6b1763d4572b840a48dd0d6f0356b2454d13b2e670634ce4410b7190968" },
+    { sentence: "An own fixture is cleaned up in the same two calls: after the preview, the owner's reply in authorize is the approval: SSAM records it (only its sha256) with the preview as its proposal, bound to the creation receipt of this target; no file is required and the creation's words and message are not needed.",
+      clauses: ["Own fixture: same 2 calls; owner reply=approval, bound to preview and creation receipt; no file."], review: "175d0353470b588f981915f09ca640a119f0d42df3c4eb94fd2baa2f942aa990" },
+    { sentence: "An authorizationContext stays accepted: a NEW approval whose wordsSha256 is the sha256 (64 hex of the UTF-8 bytes) of that reply exactly as it goes in authorize (the file never keeps the words) and whose proposal is the preview file (previews\\<previewId>.json under the destructive root).",
+      clauses: ["Optional file: wordsSha256 of reply, never the words; proposal=preview file."], review: "7068edb0ac44197fb18a4381b6d4dd7dcb7022c0cc78f2c241021606ecbb1fe0" },
   ],
   "odc_external_db_connection": [
     { sentence: "plan-header {connectionId, providerId, headerPatch, expectedUpdatedOn} prepares a metadata-only edit and checks name availability with the existing ID; it never sends a write.",
       clauses: ["plan-header never writes"], review: "5aeec295a97401fdec0b9f1ad3c46815a2d921ba8c9eb5cce9473a019e3b92e1" },
-    { sentence: "edit-header applies the reviewed expectedPlanSha256 to its own temporary connection with originOperationUuid and contextual authorization; repeated UUIDs only reconcile durable expectations.",
-      clauses: ["authorized test/create/import/remove/edit"], review: "551f79f46852e63153e9969adf68d5a6b22c7452d4dc6cf0f8695149c4a6c1c9" },
-    { sentence: "Custom import requires objectContracts, reviewed expectedPlanSha256, contextual approval and the original creation receipt; it verifies full metadata and persists expectations for read-only reconciliation; test | create {name, native providerId (e.g. mssql, postgresql), server, port, database, credential?, stageKey?, description?, additionalParameters?, privateGateway?, privateGatewayPort?} and import-entities {connectionId, objects[]} (writes, odc_write safety).",
-      clauses: ["never the account or password"], review: "492a309742522e22b12221c9b5775f3975c57ee9f3a4bcca507e5014593cef7c" },
+    { sentence: "edit-header applies the reviewed expectedPlanSha256 to its own temporary connection with originOperationUuid and words naming the connection and its new name; repeated UUIDs only reconcile durable expectations.",
+      clauses: ["authorized test/create/import/remove/edit"], review: "f06f3ceb67b832e0f2508dbcd9e7e9ae0b78ead47c40cbddac67946271d85cd7" },
+    { sentence: "Custom import requires objectContracts, reviewed expectedPlanSha256, the original creation receipt and words naming the connection; it verifies full metadata and persists expectations for read-only reconciliation; test | create {name, native providerId (e.g. mssql, postgresql), server, port, database, credential?, stageKey?, description?, additionalParameters?, privateGateway?, privateGatewayPort?} and import-entities {connectionId, objects[]} (writes, odc_write safety).",
+      clauses: ["never the account or password","authorized test/create/import/remove/edit"], review: "352f989c9a1c18376227a99e3eb355c70c7752f33e657c977b2697fa2d4534b4" },
+    { sentence: "remove-entities uses the same native metadata service with IsSelected=false; requires the original connection receipt and words naming the connection (an owned temporary SQL connection).",
+      clauses: ["authorized test/create/import/remove/edit"], review: "3903fef33b8eb1a63c3576a0abf64912341dc8e1467f2fd0e5ea087091582a54" },
     { sentence: "No database records or tables are deleted.",
       clauses: ["no records/tables deleted"], review: "bc0c20aafe27ffe1bd7d2662cd8f9698cccc0851b714cd92a8587860853d1206" },
     { sentence: "The database account lives only in the vault entry SSAM/ODC3/<tenant>/DB/<credential> (default: the connection name); when it is missing the tool returns a refusal without opening a prompt.",
       clauses: ["Vault entry name SSAM/ODC3/<tenant>/DB/<credential> (default: connection name); never the account or password."], review: "de09ecc604d2682f2fc7c67d4ca58f5bd2042019761d9eb99f89149b7afbadd3" },
     { sentence: "It reaches the request as secretRefs: through a native headless Portal transport the bridge resolves it inside the ODC Studio (it never enters this process); without native headless secretRefs support test and create are refused (STUDIO_REQUIRED).",
       clauses: ["Secrets:vault+native secretRefs.","They never enter this process."], review: "8faada768c19ca549e5730cd15aa98bd76f52c2cb04d9331d2c6ba50246fb9bd" },
-    { sentence: "delete {connectionId, providerId, originOperationUuid, authorizationContext}: only the approved temporary SQL Server connection from its own successful test receipt, with unchanged endpoint/stage and no imported objects/actions; confirms absence by detail and complete list.",
-      clauses: ["delete only approved own temporary SQL Server fixture from unchanged receipt","Exact temporary connection/endpoint/stage approval; required for delete"], review: "3fed15f21ed9528df4c39ddf967c5c2c955aa230f023bfae7144e3c125bb2985" },
+    { sentence: "delete {connectionId, providerId, originOperationUuid}: only the approved temporary SQL Server connection from its own successful test receipt, with unchanged endpoint/stage and no imported objects/actions; confirms absence by detail and complete list.",
+      clauses: ["delete only approved own temporary SQL Server fixture from unchanged receipt","words name connection and entities"], review: "077cfa47e604dd1ecda0928b010d8c4fd1b9d6cd26e31408f5fe3965a1511466" },
     { sentence: "General agent/MCP connection deletion is not implemented.",
       clauses: ["no general delete"], review: "47b8de5f9526fed6c81182cdc24f640c21a9b6adc107583d9467fc96458f22f0" },
     { sentence: "delete and remove-entities are deletes.",
@@ -760,8 +774,10 @@ export const PROTECTED_TOOL_CLAUSES = Object.freeze({
       clauses: ["Interrupted/CANCELLED/local failure/rejected/no answer: read ssam_task {id:<preview operationId>} before telling owner; never say nothing happened without it."], review: "0da575fe215c0a06ecfcf4be6ae8f2dc3f7d90f1ab5ba05eeb914a713bdc7300" },
     { sentence: "With confirmationToken, operationUuid is the preview's operationId (never a new one, never omitted).",
       clauses: ["With confirmationToken, operationUuid=preview operationId, never new/omitted."], review: "a6d99b8207dd866dd5f949e9e4d33d5cdf5dc46e24527a3d22e6b5d15e5fff8a" },
-    { sentence: "An own fixture is cleaned up in the same two calls: after the preview, authorizationContext is a NEW approval whose wordsSha256 is the sha256 (64 hex of the UTF-8 bytes) of the owner's reply to that list exactly as it goes in authorize (the file never keeps the words) and whose proposal is the preview file (previews\\<previewId>.json under the destructive root), bound to the creation receipt of this target; the creation's words and message are not needed.",
-      clauses: ["Own fixture: same 2 calls; authorizationContext=NEW approval (wordsSha256: sha256, 64 hex of UTF-8, of the owner reply to the list exactly as in authorize, the file never keeps the words; proposal: preview file) bound to creation receipt; creation words not needed."], review: "f445f6b1763d4572b840a48dd0d6f0356b2454d13b2e670634ce4410b7190968" },
+    { sentence: "An own fixture is cleaned up in the same two calls: after the preview, the owner's reply in authorize is the approval: SSAM records it (only its sha256) with the preview as its proposal, bound to the creation receipt of this target; no file is required and the creation's words and message are not needed.",
+      clauses: ["Own fixture: same 2 calls; owner reply=approval, bound to preview and creation receipt; no file."], review: "175d0353470b588f981915f09ca640a119f0d42df3c4eb94fd2baa2f942aa990" },
+    { sentence: "An authorizationContext stays accepted: a NEW approval whose wordsSha256 is the sha256 (64 hex of the UTF-8 bytes) of that reply exactly as it goes in authorize (the file never keeps the words) and whose proposal is the preview file (previews\\<previewId>.json under the destructive root).",
+      clauses: ["Optional file: wordsSha256 of reply, never the words; proposal=preview file."], review: "7068edb0ac44197fb18a4381b6d4dd7dcb7022c0cc78f2c241021606ecbb1fe0" },
     { sentence: "Credentials are never arguments: the ODC Studio session first, then the vault, then a private prompt.",
       clauses: ["Credentials never arguments: Studio, vault, then private prompt"], review: "cb3355a96bd769407145b966607f29e17ab30e32c9b4579b0eac38ae60f39e12" },
     { sentence: "A lost answer is never resent: the same call with the same operationUuid reads the exact state and continues.",
@@ -812,9 +828,9 @@ export const PROTECTED_TOOL_CLAUSES = Object.freeze({
 export const TOOL_LISTING_REVIEWS = Object.freeze({
   // CX13 review 6: reprojected with the file-load sentences and parameters, inside the listing budget.
   "o11_data": {
-    "description": "e3396270ce10286ac9fe4e44fb02ca6009bfe6ece18eba5d7686c9c8c8734513",
+    "description": "9ea426eda6fc50d2fbf087aa2faff1cb73f9a3a56b590bd621ba8223893c76a8",
     "/properties/request/anyOf/0/properties/limit": "61a938abd618769b1c65fbe941ffe63a62ff98a10d8acdca9fb7621a8b20e91a",
-    "/properties/request/anyOf/0/properties/deadlineMs": "9ea7f1299e3667be10ec3dc58b2299a5e744e01fc57497928467baad5b10cca6",
+    "/properties/request/anyOf/0/properties/deadlineMs": "4ddcd4de594e97eb19b49459513a6cbd17e4b137fe557c7810d00fb5dca608fe",
     "/properties/request/anyOf/0/properties/confirmUpdates": "0f5b31e9192b0f5bde1f8c5b1334a5daf715dac5c65f9d134a87b5be1552b199",
     "/properties/request/anyOf/1/properties/authorization": "38df65e07e7cef29a3d8759ad33f14f63ea0ed011683358ee5413cc413556925",
     "/properties/request/anyOf/1/properties/batch/items/properties/operation": "bbf334a12a1203ec69d3fe56e25de9085bea6bfe7f1556d5e4ecd4e4f2348127",
@@ -822,7 +838,7 @@ export const TOOL_LISTING_REVIEWS = Object.freeze({
     "/properties/request/anyOf/1/properties/batch/items/properties/ownerRequest": "64bc702c172bfc0e3b023ee5947a97dd5042dee9569f05b3ff2a4eedc07b294a",
     "/properties/request/anyOf/1/properties/batch/items/properties/ids/items/anyOf/1": "6056d8e3dbde1ed74a27d24a795c67ff720ce5b636d912fffd0e0c6f201fdf8d",
     "/properties/request/anyOf/1/properties/batch/items/properties/limit": "61a938abd618769b1c65fbe941ffe63a62ff98a10d8acdca9fb7621a8b20e91a",
-    "/properties/request/anyOf/1/properties/batch/items/properties/deadlineMs": "9ea7f1299e3667be10ec3dc58b2299a5e744e01fc57497928467baad5b10cca6",
+    "/properties/request/anyOf/1/properties/batch/items/properties/deadlineMs": "4ddcd4de594e97eb19b49459513a6cbd17e4b137fe557c7810d00fb5dca608fe",
     "/properties/request/anyOf/1/properties/batch/items/properties/step": "8bd4843ea83a275e6d0233d1e7ce776b4dfaeeb6917cde20dc1adcb27a5eed0c"
   },
   "studio_data_insert": {
@@ -993,10 +1009,10 @@ export const TOOL_LISTING_REVIEWS = Object.freeze({
     "/properties/confirmHost": "bb17132a97c7512735d5a05b4de1de8bb6ec7a38f5294e88f27d05075157a4d7"
   },
   "ssam_reference": {
-    "description": "6a2a9977d1f38258e8a86f54ec2ddc6250cde934ba92a65b3c1e45a2e53d8ee5"
+    "description": "5c30ebe9ae21d498769b52753d4dc44b46f559c782f650c9e082aa14170c53a6"
   },
   "ssam_evidence": {
-    "description": "84fffae0f33f13e73d50d99d657c9a5d572403b469087df795a6f4e30fc99e6f",
+    "description": "9acb16ae624252009883d3fe051304b286f80bc73399fc55f48f544785d0361e",
     "/properties/offset": "b3a9da84e7b7a7b1dafb24ea0f490efea672daa8b9b3a041de6a366aaca54fd0",
     "/properties/max": "887aa61e6dbcd8c5101ac73e49cac405d5781c3c4c7cd620ed02ed03bf008381",
     "/properties/budgetBytes": "50963ffed52dd8d5e8773220817e5648bb56725d0cc87e2d8b6745b66a25e642"
@@ -1007,7 +1023,7 @@ export const TOOL_LISTING_REVIEWS = Object.freeze({
   },
   "ssam_map": {
     "description": "b72f35a1b03c1f7451b4c8086e65330ebd48173c3166133699f5ca905da57f43",
-    "/properties/target": "1b1f6e7f8d4bdb11dd1b43b18034db4788fd5bec7df6fe416ae288d71bfac8f8",
+    "/properties/target": "e60ae9c8a6409208b2ec20b38a2c331586d54a84bcb73287000aa535149c5842",
     "/properties/view": "95c1f978c9426e510351028d15f3cb57f907e738ba848d0cb7ea135acf8b30c1",
     "/properties/screen": "3ffb7722507cee7f8c274ee14d74744d1afc2cd9f53907ddc4d00e8420b2c7b8",
     "/properties/keys": "131675aa40c6bb02c3a5871ca6c0e70ff4bb99a9500176cd61a559dd7bb5c19a",
@@ -1042,7 +1058,7 @@ export const TOOL_LISTING_REVIEWS = Object.freeze({
     "/properties/publish": "c0f98e25f8de541dc607a28376bdf6c5a270361e2702ba4fa6346c6c11891d47",
     "/properties/tenant": "31d0e72cbd6f4e9c76bc00acdbc2ddf576a4359b454d1c97692d0852878be35c",
     "/properties/authorize": "cc3a69a9a442519cd8f0303a1f76a8e164a21d1e77437872b79d42d8f7456db2",
-    "/properties/authorizationContext": "4405b6357c2c3ce7ac78b854e10e643312de2ba3ccb57db12be94b767356460f",
+    "/properties/authorizationContext": "d165219facefcdd4fa6a582e80ff2345e4e4e4bf061eaebd4ff5292a5abdcb40",
     "/properties/pid": "9405b7e9036be8125c6f9d3dfe0b41b680ea65f2716c98548d51f169ff86724e"
   },
   "studio_deliver": {
@@ -1056,7 +1072,7 @@ export const TOOL_LISTING_REVIEWS = Object.freeze({
     "/properties/producers": "948b9be060a9f844b7d4e0f0aca912a15bfa8c1cc10e64fe35c9f748aed904cf"
   },
   "odc_a2a_connection_delete": {
-    "description": "bba196b4b221d0457e1bc0bf6a5d3c66092d0316d6f8e0b7f106e32806547e3b",
+    "description": "4730239699083da6d938a6937a0d03aa83cfcb824558faa0a5b6aac700d11f56",
     "/properties/tenant": "2cc93596e81fa81886c55b6a7f608bebcb16b95c1ee4e9b389edb3d4cb136f2c",
     "/properties/auth": "c7a776af5576d4e64129fca0a82b276ecacb7418f4fa2ddd724312eb7515829e",
     "/properties/authorize": "dfb8a63e22a0d414bcb23261094c422f8f9f3b9034fa6927916304724cd33ec9",
@@ -1066,7 +1082,7 @@ export const TOOL_LISTING_REVIEWS = Object.freeze({
   "odc_asset_revision": {
     "description": "bd6c1a7da511080daf003eebb11fba9fed74a3b98ce8675b65e09db04385a9a4",
     "/properties/tenant": "2cc93596e81fa81886c55b6a7f608bebcb16b95c1ee4e9b389edb3d4cb136f2c",
-    "/properties/uploadFormat": "1bc50e56d5ca2e8b6b86f7c46cb6f9e30d20ead674fd0ec26d2b7cfc9cdd012c",
+    "/properties/uploadFormat": "ef364691979b42f5a3af17b94fe424948f4de6014e97ed8547e1108e443fcf36",
     "/properties/candidateProof": "b9e11dea18a7b0abe9e7ec926efa2e31d8aed63e386859c3ba98c041d22ed6e8",
     "/properties/originOperationUuid": "c59965622fe7f1b7868a4700e42320090326f561cc70f4ca31a662325a88c093",
     "/properties/authorize": "dfb8a63e22a0d414bcb23261094c422f8f9f3b9034fa6927916304724cd33ec9",
@@ -1081,7 +1097,7 @@ export const TOOL_LISTING_REVIEWS = Object.freeze({
     "/properties/authorize": "0ae87e52741d64399e856feb245250158c1ab03dcb1999c605b66cb23a01b385",
     "/properties/operationUuid": "f99af9d4c682eecb198bba1e428b203e25490a2c66a0a60914092c44ebedd920",
     "/properties/confirmTenant": "0d46ea4c4c34b77239df450f04ed5da38d81898c2010e393a4dda83687ca4405",
-    "/properties/authorizationContext": "cfeb571822c619a0306554b50d9666524d4c1c844cf830ca1f7008a6f6df35dd",
+    "/properties/authorizationContext": "ca15abdd1d2db28d0dd8b72e9c0fccaea27cd7164c8bbbd22865b684a51fab84",
     "/properties/revisionPrecondition/properties/originOperationUuid": "ac1fa97da23f1486239e15f0d8bb7524c8aee81deb43686ef4820d1370c9694b",
     "/properties/groupOriginOperationUuid": "819dd16e5f8dac261a54f67f8c6ac42f505c20d4fdbcc10d1601bc200e529896",
     "/properties/userOriginOperationUuid": "0577938558aa47592cc2024e03c1d090f144a242fb8f37c205463b58af8a0052",
@@ -1094,13 +1110,14 @@ export const TOOL_LISTING_REVIEWS = Object.freeze({
     "/properties/maxPages": "7f4351d0f34912143666d2d9a0b6ef7cb7b36b11b5db0050bfac21286969991b"
   },
   "odc_portal_write": {
-    "description": "750d06609a5657f5165e850f308e821b97386741c27f991b1a0d9b8d7f65bc6a",
+    "/properties/scope": "6db771de9d63219c48d51d4e21f843c328fa0cb9b6c23c9aa3ca6aca992b20bc",
+    "description": "de3634c80d988bcb2febc4bf7de12c82fbe8fbe5d095ded6513a8ce2341a1cef",
     "/properties/tenant": "2cc93596e81fa81886c55b6a7f608bebcb16b95c1ee4e9b389edb3d4cb136f2c",
     "/properties/auth": "c7a776af5576d4e64129fca0a82b276ecacb7418f4fa2ddd724312eb7515829e",
     "/properties/authorize": "dfb8a63e22a0d414bcb23261094c422f8f9f3b9034fa6927916304724cd33ec9",
     "/properties/operationUuid": "a5796425eb52e94c3b5776da42ba7654affb7bcb7708621755a759900d4d377d",
     "/properties/confirmTenant": "0d46ea4c4c34b77239df450f04ed5da38d81898c2010e393a4dda83687ca4405",
-    "/properties/authorizationContext": "6fab3d1dc7c5fda4e6ba6ce3c93455fb2cfe74233f2abc6af4c24d62e1a32a10"
+    "/properties/authorizationContext": "70714e4ceb0a8bf86c759d67556e68c973d26cc8d6d4011843d6379d22816b92"
   },
   "odc_deploy": {
     "description": "1459395f5be83c14a83eb24a391f886a26280799488e47d08f0e37642033c53c",
@@ -1127,7 +1144,7 @@ export const TOOL_LISTING_REVIEWS = Object.freeze({
     "/properties/authorizationContext": "a04b2627e3bc022c50e52deeed3aee36f730a7770636a429d2e2c9cb067bb1fd"
   },
   "odc_asset_delete": {
-    "description": "5514677cc4953e81917a91a13c4f8de65f4147d836c35f10a1db29fba196bf08",
+    "description": "bfbf41563f63cee50a73f0d31cfc7d2e4fe4d5f63262dca3919469fabde2f062",
     "/properties/tenant": "2cc93596e81fa81886c55b6a7f608bebcb16b95c1ee4e9b389edb3d4cb136f2c",
     "/properties/auth": "a21ce637b4a3b4baaa99901e5c42579b60d53c18201e7c113c9148d7c509d8e7",
     "/properties/authorize": "dfb8a63e22a0d414bcb23261094c422f8f9f3b9034fa6927916304724cd33ec9",
@@ -1136,7 +1153,7 @@ export const TOOL_LISTING_REVIEWS = Object.freeze({
     "/properties/authorizationContext": "faf95c2186fbc8877ffdce44e0e84e2f2b95dd841b213ba323338940cd821e3d"
   },
   "odc_external_db_connection": {
-    "description": "684015950295ebabe20670169e19a605404c75bb60ca6708898a0a9809fbcf38",
+    "description": "ac1e9cd6e04007a216720e510801f9d7964b40ce1fda14f47613242f3fba883c",
     "/properties/tenant": "2cc93596e81fa81886c55b6a7f608bebcb16b95c1ee4e9b389edb3d4cb136f2c",
     "/properties/auth": "b7d4840b085890aa06c7958dfd7efcc74a3025125e3a30913b03b84027081e85",
     "/properties/headerPatch": "5861ea79a3a6f5aa18d91f7ce45f7941a092c905c17beb08c82c020cde0cabef",
@@ -1146,11 +1163,11 @@ export const TOOL_LISTING_REVIEWS = Object.freeze({
     "/properties/authorize": "0ae87e52741d64399e856feb245250158c1ab03dcb1999c605b66cb23a01b385",
     "/properties/operationUuid": "f99af9d4c682eecb198bba1e428b203e25490a2c66a0a60914092c44ebedd920",
     "/properties/confirmTenant": "0d46ea4c4c34b77239df450f04ed5da38d81898c2010e393a4dda83687ca4405",
-    "/properties/authorizationContext": "159f3ec61a0a565467d8e7f801af1861fac3394bca7f88ec4754283f6bd43f50",
+    "/properties/authorizationContext": "2e91633ffc4015c15b24648e588af53f5427e0048f227c4f59c6081b0183471d",
     "/properties/originOperationUuid": "b2cf807bc0c633e39f36a0cdbdfbf0ba7fbbd30887c56bf3083cbd64e181cdef"
   },
   "odc_external_library": {
-    "description": "e5fff989a23a64c6572b52cc3c22a9acba8ec695519354e8f1d253e59495ffd7",
+    "description": "f71fbc4606509b270b199142d28ded392598a39f038829544e928226a2bd0ec3",
     "/properties/spec": "c015b8e40f7b07859cda1724ba983e9479910e9b2611429469b347be0e33431a",
     "/properties/specFile": "04a5a70801e464b0425926540dce56ab43417b36d84ce4a16d6a67c862c6d5e0",
     "/properties/releaseTag": "a4dd1c31c17e60c46013b315025e4b90b93b7e4d2719d33b01f240f7c529bc4e",
@@ -1243,29 +1260,29 @@ export const TOOL_LISTING_OVERRUN_BYTES = Object.freeze({
   "o11_deliver": 572, // integ/proto-into-product: -25 B, the proto line's fix parameter listed without a text (a refusal's fixCall gives it) and its close text shortened; marco-a6 (X3): +83 B, the autoPatch parameter's rule served whole ("false: offer verified repairs without applying them automatically."); fix/prototype-off: -103 B, the prototype import clause out (the op is turned off); integ/proto-traditional: -3 B, "max 500" patches in place of "at most 50"
   "o11_extension": 1633,
   "studio_deliver": 293, // fix/system-reference: +109 B, the producers bindings O11 already has ({Name: capture}), shortened; marco-a6 (X3): +83 B, the autoPatch parameter's rule served whole; fix/prototype-off: -104 B, the prototype import clause out (the op is turned off); integ/proto-traditional: -3 B, "max 500" patches in place of "at most 50"
-  "odc_asset_revision": 165,
+  "odc_asset_revision": 162,
   "odc_write": 1550,
   "odc_configurations": 197,
-  "odc_external_db_connection": 1242,
-  "odc_external_library": 1233,
+  "odc_external_db_connection": 1215,
+  "odc_external_library": 1141,
   "ssam_code": 898, // integ/proto-into-product: +87 B, the proto line's incremental write (actions draft and part, the draft parameter) and its fix parameter without a text
-  "o11_data": 1272, // CX13 review 7 (R7-6: missing rows insert, update too unless insertMissing:false); review 6: file-load clauses in, the batch op's repeated texts out, load options listed with their cheapest schema (was 1850)
+  "o11_data": 1205, // CX13 review 7 (R7-6: missing rows insert, update too unless insertMissing:false); review 6: file-load clauses in, the batch op's repeated texts out, load options listed with their cheapest schema (was 1850)
   "o11_environment": 822,
-  "odc_a2a_connection_delete": 820,
+  "odc_a2a_connection_delete": 671,
   "odc_a2a_connection_plan": 441,
-  "odc_portal_write": 1429,
+  "odc_portal_write": 1418,
   "odc_deploy": 695,
-  "odc_asset_delete": 347,
+  "odc_asset_delete": 255,
 });
 
 export const TOOL_LISTING = Object.freeze({
   // CX13 review 6: reprojected with the file-load sentences and parameters, inside the listing budget.
   "o11_data": {
     "sourceSha256": "8fa929bf3f2c0e03fb19511e8c43a0f420d14df108f9cb4a34861ddd13a15b0e",
-    "description": "Published O11 records through Studio login, no credential/vault. read/read-all/insert/update/delete; System/Users refused. Writes need user authorization and stable operationId; reuse reconciles, never replays. Batch $ref selects earlier insert IDs. Batch confirmationToken: as the request's, a preview token, never a credential. files+natural keys: missing rows insert (update too unless insertMissing:false); changed rows wait for confirmUpdates; same operationId resumes. close:{preview:true} then close:{previewSha256,authorize}: owner's verbatim reply. Follow continuation. Full text:ssam_reference kind tool.",
+    "description": "Published O11 records through Studio login, no credential/vault. read/read-all/insert/update/delete; System/Users refused. Writes need user authorization and stable operationId; reuse reconciles, never replays. Batch $ref selects earlier insert IDs. Batch confirmationToken: as the request's, a preview token, never a credential. files+natural keys: missing rows insert (update too unless insertMissing:false); changed rows wait for confirmUpdates; same operationId resumes. close:{preview:true} then close:{previewSha256,authorize}: owner's verbatim reply. Full text:ssam_reference kind tool.",
     "params": {
       "/properties/request/anyOf/0/properties/limit": "read-all: at most these rows per call, default 2000; follow continuation.offset.",
-      "/properties/request/anyOf/0/properties/deadlineMs": "read/read-all: stops at these ms, default 60000; follow continuation.",
+      "/properties/request/anyOf/0/properties/deadlineMs": "read/read-all:ms, default 60000; continuation.",
       "/properties/request/anyOf/0/properties/confirmUpdates": "Overwrite consent: updatePreview sha256 + owner's verbatim reply, row count.",
       "/properties/request/anyOf/1/properties/authorization": "User words for every batch write.",
       "/properties/request/anyOf/1/properties/batch/items/properties/operation": "read/read-all/insert/update/delete.",
@@ -1273,7 +1290,7 @@ export const TOOL_LISTING = Object.freeze({
       "/properties/request/anyOf/1/properties/batch/items/properties/ownerRequest": null,
       "/properties/request/anyOf/1/properties/batch/items/properties/ids/items/anyOf/1": "\"<step>\" or \"<step>#<i>\" (base 0): the id an earlier batch insert created.",
       "/properties/request/anyOf/1/properties/batch/items/properties/limit": "read-all: at most these rows per call, default 2000; follow continuation.offset.",
-      "/properties/request/anyOf/1/properties/batch/items/properties/deadlineMs": "read/read-all: stops at these ms, default 60000; follow continuation.",
+      "/properties/request/anyOf/1/properties/batch/items/properties/deadlineMs": "read/read-all:ms, default 60000; continuation.",
       "/properties/request/anyOf/1/properties/batch/items/properties/step": "Batch name for later {$ref:\"<step>\"}."
     }
   },
@@ -1475,12 +1492,12 @@ export const TOOL_LISTING = Object.freeze({
   },
   "ssam_reference": {
     "sourceSha256": "5972fe80c151d3f4b43a25bf27fba9f9e2167570defe2028d39b05153f6e054f",
-    "description": "Read exact SSAM references: api, functions, ui-block, types, where-can, recipe, check-job, check-delivery, verify-message, example, rules, tool. rules query session returns all session rules (or a section number/heading words); tool query <tool> returns its complete original description/schema. Use lane and the discovered contract; unsupported lane kinds name the available route.",
+    "description": "Read-only api/functions/ui-block/types/where-can/recipe/check-job/check-delivery/verify-message/example/rules/tool. rules query session returns all session rules (or a section number/heading words); tool query: complete original description/schema. Use lane and discovered contract; unsupported kinds give the route.",
     "params": {}
   },
   "ssam_evidence": {
     "sourceSha256": "f8f6d6eb4ce1effbc107ee8e22da7aefb1268af5dc73abbdee6fe1fdcd6cb850",
-    "description": "Read JSON evidence, receipts, result.json and journals without scripts. Select pointers/tables and follow the exact continuation for omitted content. Read-only, bounded and deterministic; paths come from tool receipts. Secrets/authorize words come back [redacted].",
+    "description": "Read-only JSON evidence/receipts/result.json/journals; no scripts. Pointers/tables, exact continuations; bounded deterministic. Secrets/authorize words come back [redacted].",
     "params": {
       "/properties/offset": "First list item of continuation.",
       "/properties/max": "Items per page, default 50; 0 = only the total.",
@@ -1498,7 +1515,7 @@ export const TOOL_LISTING = Object.freeze({
     "sourceSha256": "0978d6ad93c6cdcdf6fc376f12e0a424e172c41375606c49927ef31fd3399d7d",
     "description": "Read capture/open module; search/uses also module lists. map @keys/kinds/children; digest/ddl pages:1 overview+contents; flow=logic action(s); html screen/block name/Kind:Name/@key or list, k->ObjectKey always keysFile, keys adds inline. search case-insensitive text/JS regex/property; uses references. Detail adds expressions/references/anonymous types. Follow hashed continuations. name(exact)/prefix:case-insensitive; kind:I-less e.g. MobileScreen, list or *; parent:direct children; pid:auto if exactly one. ssam_code writes these forms (flow text: a line left out is deleted). Full text:ssam_reference kind tool.",
     "params": {
-      "/properties/target": "Capture/module; search/uses also module lists.",
+      "/properties/target": "Capture/module; search/uses: lists.",
       "/properties/view": null,
       "/properties/screen": null,
       "/properties/keys": null,
@@ -1530,7 +1547,7 @@ export const TOOL_LISTING = Object.freeze({
     }
   },
   "studio_create_app": {
-    "sourceSha256": "83eee893b16d74794efcdb46e96b77a2d40a97a530a2246e194a81afd44dacd3",
+    "sourceSha256": "c933184ebd4825b76dba1954edbb5f49140f8ed7d3a8b670aa46f61c25c1c80b",
     "description": "Create an ODC app or library from the tenant template, then upload/open it. Default publish:false; publish revision 1 only when the user requested it. Creation words name the app; corporate tenant must be explicit and named in those words. Uncertain result: never repeat, read studio_assets first. App deletion stays with the user (Portal).",
     "params": {
       "/properties/kind": "App kind: reactive, mobile, library, mobile-library or agentic.",
@@ -1539,7 +1556,7 @@ export const TOOL_LISTING = Object.freeze({
       "/properties/publish": "Also publish revision 1 after opening; false by default, only if the user asked.",
       "/properties/tenant": "Tenant host among Studio signed-in sessions; explicit for corporate tenant.",
       "/properties/authorize": "User words verbatim naming the app, sha256 only; required for create.",
-      "/properties/authorizationContext": "Optional absolute scoped approval record; authorize remains exact human words; requires explicit tenant.",
+      "/properties/authorizationContext": "Optional absolute scoped approval record, explicit tenant; authorize remains exact human words.",
       "/properties/pid": "Studio process ID; inferred when exactly one."
     }
   },
@@ -1557,8 +1574,8 @@ export const TOOL_LISTING = Object.freeze({
     }
   },
   "odc_a2a_connection_delete": {
-    "sourceSha256": "480143f5653e4709b4bf2212781af1d7820ddd7a126b18dad732451ca566a508",
-    "description": "Delete only an owned no_auth A2A connection from its original test receipt and unchanged plan, with contextual approval binding originOperationUuid, connectionId, planSha256 and expectedStateSha256. Saved connections need empty consumers and zero actions or verified SendMessage. Uncarded failed tests need empty never-generated metadata and proven asset absence. No SQL/MCP connections. Same UUID reconciles only. Deletes: 2 calls; no confirmationToken=preview only (exact list+count, nothing sent): show owner that EXACT list, ask; then confirmationToken+owner reply stating count, naming targets. Words=owner's next message after the list, copied whole; never write/complete/translate/reuse words; none: ask owner, stop. Interrupted/CANCELLED/local failure/rejected/no answer: read ssam_task {id:<preview operationId>} before telling owner; never say nothing happened without it. With confirmationToken, operationUuid=preview operationId, never new/omitted. Own fixture: same 2 calls; authorizationContext=NEW approval (wordsSha256: sha256, 64 hex of UTF-8, of the owner reply to the list exactly as in authorize, the file never keeps the words; proposal: preview file) bound to creation receipt; creation words not needed.",
+    "sourceSha256": "1538d28a2264f7507822b5dcae46f0c0181e822fa8af8f48d739d379bcfa1106",
+    "description": "Delete only an owned no_auth A2A connection from its original test receipt and unchanged plan; SSAM binds planSha256 and expectedStateSha256. Saved connections need empty consumers and zero actions or verified SendMessage. Uncarded failed tests need empty never-generated metadata and proven asset absence. No SQL/MCP connections. Same UUID reconciles only. Deletes: 2 calls; no confirmationToken=preview only (exact list+count, nothing sent): show owner that EXACT list, ask; then confirmationToken+owner reply stating count, naming targets. Words=owner's next message after the list, copied whole; never write/complete/translate/reuse words; none: ask owner, stop. Interrupted/CANCELLED/local failure/rejected/no answer: read ssam_task {id:<preview operationId>} before telling owner; never say nothing happened without it. With confirmationToken, operationUuid=preview operationId, never new/omitted. Own fixture: same 2 calls; owner reply=approval, bound to preview and creation receipt; no file. Optional file: wordsSha256 of reply, never the words; proposal=preview file.",
     "params": {
       "/properties/tenant": "Tenant host, e.g. personal-xxxx.outsystems.dev; default: only Studio session, else configured.",
       "/properties/auth": "auto: native headless Studio, else compatible Portal vault profile. studio requires native support; no prompt/window.",
@@ -1568,11 +1585,11 @@ export const TOOL_LISTING = Object.freeze({
     }
   },
   "odc_asset_revision": {
-    "sourceSha256": "bba65d5e7d74a4f8a37c447fdc837006cbe875e11155e31f59857540fa70bb61",
+    "sourceSha256": "a66d7c6f777a24efe045b4d0b8fe49cd0b9633446ac80bf86d5f52427928da97",
     "description": "Upload downloaded OML or a native ssam_job candidate bound to that base by candidateProof/candidateSha256. Only the same new fixture with its creation receipt and exact current revision. API Client only; max 8 MiB. One dispatch per UUID; readback distinguishes new revision/deduplication. No publication.",
     "params": {
       "/properties/tenant": "Tenant host, e.g. personal-xxxx.outsystems.dev; default: only Studio session, else configured.",
-      "/properties/uploadFormat": "binary by default; source-uri (exact revision, private hash-verified URL)/staged need uploadFormat in approval constraints; staged keeps receipt boundaries, never replays uncertain stages.",
+      "/properties/uploadFormat": "binary by default; source-uri (exact revision, private hash-verified URL)/staged are bound in the approval SSAM records; staged keeps receipt boundaries, never replays uncertain stages.",
       "/properties/candidateProof": "Native job proof bound to base/candidate hashes.",
       "/properties/originOperationUuid": "Own fixture creation/build receipt UUID as required by operation; reuse never resends.",
       "/properties/authorize": "User words verbatim for this write, never paraphrased, sha256 only; destructive: owner reply after the preview naming target+item count; corporate tenant: words also name it.",
@@ -1581,7 +1598,7 @@ export const TOOL_LISTING = Object.freeze({
     }
   },
   "odc_write": {
-    "sourceSha256": "d4333b0b3968d51b6270671551b96bb50c01360a38a31f9bf2f6e14b1c91b156",
+    "sourceSha256": "e13d18aa9531796ac22cefdaba0e3e207bba9fcc077915fd4520722415ecff6f",
     "description": "[odc] Native write (deploy, publish, build, settings, asset create/upload...; asset delete refused here: odc_asset_delete): operationId catalog entry; operationUuid write UUID. user's words verbatim (authorize) naming corporate tenant + tenant guard; vault secrets only. Destructive=a delete: DELETE, or PATCH with non-empty *ToRemove (group userKeysToRemove/applicationRoleKeysToRemove: preview lists count and every key, owner reply names group and each). Deletes: 2 calls; no confirmationToken=preview only (exact list+count, nothing sent): show owner that EXACT list, ask; then confirmationToken+owner reply stating count, naming targets. Words=owner's next message after the list, copied whole; never write/complete/translate/reuse words; none: ask owner, stop. Interrupted/CANCELLED/local failure/rejected/no answer: read ssam_task {id:<preview operationId>} before telling owner; never say nothing happened without it. With confirmationToken, operationUuid=preview operationId, never new/omitted. Reuse receipt, never resend; odc_receipt reconciles. Scoped approval. Full text:ssam_reference kind tool.",
     "params": {
       "/properties/operationId": "Exact ID from odc_search_operations.",
@@ -1608,15 +1625,16 @@ export const TOOL_LISTING = Object.freeze({
     }
   },
   "odc_portal_write": {
-    "sourceSha256": "7dccef488e360698da20a017ea435e645cda4bac026d9a95cc4a0a811b3f5372",
-    "description": "Allow-listed internal Portal writes; user words and operationUuid, tenant guard, receipt before send, no replay. Credentials are never arguments: use odc_external_db_connection. Connection deletion uses its typed helper with identity/consumer preflight; specific operations require exact contextual approval. importEntities/importActions only when the save unselects nothing, else refused (odc_external_db_connection). libraries.release: current untagged revision, Finished publication, authorizationContext with the user's explicit approval (existing library: scope targets naming the library and tenant host). timers.run words name both app and timer. Deletes: aiModels.trialDelete, agents.datasetDelete/evaluationDelete, knowledgeBases.delete, apiClients.delete, connections.delete. Deletes: 2 calls; no confirmationToken=preview only (exact list+count, nothing sent): show owner that EXACT list, ask; then confirmationToken+owner reply stating count, naming targets. Words=owner's next message after the list, copied whole; never write/complete/translate/reuse words; none: ask owner, stop. Interrupted/CANCELLED/local failure/rejected/no answer: read ssam_task {id:<preview operationId>} before telling owner; never say nothing happened without it. With confirmationToken, operationUuid=preview operationId, never new/omitted. Own fixture: same 2 calls; authorizationContext=NEW approval (wordsSha256: sha256, 64 hex of UTF-8, of the owner reply to the list exactly as in authorize, the file never keeps the words; proposal: preview file) bound to creation receipt; creation words not needed.",
+    "sourceSha256": "a6cb41aad389995b2339712172aa071b1cff049267492764af725107c5ed2f69",
+    "description": "Allow-listed internal Portal writes; user words and operationUuid, tenant guard, receipt before send, no replay. Credentials are never arguments: use odc_external_db_connection. Connection deletion uses its typed helper with identity/consumer preflight; Words naming every target are the approval; no file needed. importEntities/importActions only when the save unselects nothing, else refused (odc_external_db_connection). libraries.release: current untagged revision, Finished publication; words name library/tenant/version/revision; receipt hashes approval. timers.run words name both app and timer. Deletes: aiModels.trialDelete, agents.datasetDelete/evaluationDelete, knowledgeBases.delete, apiClients.delete, connections.delete. Deletes: 2 calls; no confirmationToken=preview only (exact list+count, nothing sent): show owner that EXACT list, ask; then confirmationToken+owner reply stating count, naming targets. Words=owner's next message after the list, copied whole; never write/complete/translate/reuse words; none: ask owner, stop. Interrupted/CANCELLED/local failure/rejected/no answer: read ssam_task {id:<preview operationId>} before telling owner; never say nothing happened without it. With confirmationToken, operationUuid=preview operationId, never new/omitted. Own fixture: same 2 calls; owner reply=approval, bound to preview and creation receipt; no file. Optional file: wordsSha256 of reply, never the words; proposal=preview file.",
     "params": {
+      "/properties/scope": "Keys the input lacks.",
       "/properties/tenant": "Tenant host, e.g. personal-xxxx.outsystems.dev; default: only Studio session, else configured.",
       "/properties/auth": "auto: native headless Studio, else compatible Portal vault profile. studio requires native support; no prompt/window.",
       "/properties/authorize": "User words verbatim for this write, never paraphrased, sha256 only; destructive: owner reply after the preview naming target+item count; corporate tenant: words also name it.",
       "/properties/operationUuid": "New UUID per write (destructive execution: preview operationId); reuse reads existing receipt, never resends.",
       "/properties/confirmTenant": "Exact corporate/unknown tenant, required and explicitly authorized.",
-      "/properties/authorizationContext": "Exact human response + proposal scope; delete binds origin receipt and expected hash; see full contract."
+      "/properties/authorizationContext": "Optional file, never required (words suffice); delete binds origin receipt and expected hash; see full contract."
     }
   },
   "odc_deploy": {
@@ -1650,8 +1668,8 @@ export const TOOL_LISTING = Object.freeze({
     }
   },
   "odc_asset_delete": {
-    "sourceSha256": "a1edb21013ecf3aa73f55c2c9083debac2382711562059000b1ca9247e51eaac",
-    "description": "Delete exact ODC asset after identity/consumer checks across visible environments. User words name target and every affected consumer; tenant guard and operationUuid required. Owned-fixture breakage needs exact contextual proofs; ordinary contextual approval never waives consumers. Readback confirms absence; never replay. Deletes: 2 calls; no confirmationToken=preview only (exact list+count, nothing sent): show owner that EXACT list, ask; then confirmationToken+owner reply stating count, naming targets. Words=owner's next message after the list, copied whole; never write/complete/translate/reuse words; none: ask owner, stop. Interrupted/CANCELLED/local failure/rejected/no answer: read ssam_task {id:<preview operationId>} before telling owner; never say nothing happened without it. With confirmationToken, operationUuid=preview operationId, never new/omitted. Own fixture: same 2 calls; authorizationContext=NEW approval (wordsSha256: sha256, 64 hex of UTF-8, of the owner reply to the list exactly as in authorize, the file never keeps the words; proposal: preview file) bound to creation receipt; creation words not needed.",
+    "sourceSha256": "8c27d51a32c2f290de10cef546583a9c5f74b77652ec9299b3d4014bc8a31a4c",
+    "description": "Delete exact ODC asset after identity/consumer checks across visible environments. User words name target and every affected consumer; tenant guard and operationUuid required. Owned-fixture breakage needs exact contextual proofs; ordinary contextual approval never waives consumers. Readback confirms absence; never replay. Deletes: 2 calls; no confirmationToken=preview only (exact list+count, nothing sent): show owner that EXACT list, ask; then confirmationToken+owner reply stating count, naming targets. Words=owner's next message after the list, copied whole; never write/complete/translate/reuse words; none: ask owner, stop. Interrupted/CANCELLED/local failure/rejected/no answer: read ssam_task {id:<preview operationId>} before telling owner; never say nothing happened without it. With confirmationToken, operationUuid=preview operationId, never new/omitted. Own fixture: same 2 calls; owner reply=approval, bound to preview and creation receipt; no file. Optional file: wordsSha256 of reply, never the words; proposal=preview file.",
     "params": {
       "/properties/tenant": "Tenant host, e.g. personal-xxxx.outsystems.dev; default: only Studio session, else configured.",
       "/properties/auth": "auto: Studio then compatible vault; missing: refusal, no prompt; api-client: vault API Client only.",
@@ -1662,7 +1680,7 @@ export const TOOL_LISTING = Object.freeze({
     }
   },
   "odc_external_db_connection": {
-    "sourceSha256": "4e6070d8365fe918e96f19bc25cdf23c2257dbcf96cee0b0036042f39b78c26c",
+    "sourceSha256": "2d3dab57ec53a31aa9e81a10b5eb58049c515204d3d4441d2e2e75728d6139b1",
     "description": "ODC DB metadata:read/plan, plan-header never writes; authorized test/create/import/remove/edit, receipt/tenant guards; no records/tables deleted. Secrets:vault+native secretRefs. They never enter this process. delete only approved own temporary SQL Server fixture from unchanged receipt, no imported objects/actions; no general delete. delete and remove-entities are deletes. Deletes: 2 calls; no confirmationToken=preview only (exact list+count, nothing sent): show owner that EXACT list, ask; then confirmationToken+owner reply stating count, naming targets. Words=owner's next message after the list, copied whole; never write/complete/translate/reuse words; none: ask owner, stop. Interrupted/CANCELLED/local failure/rejected/no answer: read ssam_task {id:<preview operationId>} before telling owner; never say nothing happened without it. With confirmationToken, operationUuid=preview operationId, never new/omitted.",
     "params": {
       "/properties/tenant": "Tenant host, e.g. personal-xxxx.outsystems.dev; default: only Studio session, else configured.",
@@ -1675,13 +1693,13 @@ export const TOOL_LISTING = Object.freeze({
       "/properties/authorize": "User words verbatim, never paraphrased, sha256 only; destructive: owner reply after preview naming target+item count; corporate tenant: words also name it.",
       "/properties/operationUuid": "New write UUID (destructive execution: preview operationId); reuse reads, never resends.",
       "/properties/confirmTenant": "Exact corporate/unknown tenant, required and explicitly authorized.",
-      "/properties/authorizationContext": "Exact temporary connection/endpoint/stage approval; required for delete.",
+      "/properties/authorizationContext": "Optional; words name connection and entities.",
       "/properties/originOperationUuid": "Entity changes/delete: successful test/create receipt proves temporary connection."
     }
   },
   "odc_external_library": {
-    "sourceSha256": "e3dc2b6af736569c83e079f12b00175257c28d7e0531f1d0ccb89e7a87e5102a",
-    "description": "ODC C# library:build net10 zip; deploy build/upload/generate/publish/tag/readback; status reads; discard deletes open job. User words name library/breaking consumers; UUID reads/continues, never resend. Credentials never arguments: Studio, vault, then private prompt. specFile:absolute JSON; status/discard:library/jobKey; pid:auto if exactly one Studio. Deletes: 2 calls; no confirmationToken=preview only (exact list+count, nothing sent): show owner that EXACT list, ask; then confirmationToken+owner reply stating count, naming targets. Words=owner's next message after the list, copied whole; never write/complete/translate/reuse words; none: ask owner, stop. Interrupted/CANCELLED/local failure/rejected/no answer: read ssam_task {id:<preview operationId>} before telling owner; never say nothing happened without it. With confirmationToken, operationUuid=preview operationId, never new/omitted. Own fixture: same 2 calls; authorizationContext=NEW approval (wordsSha256: sha256, 64 hex of UTF-8, of the owner reply to the list exactly as in authorize, the file never keeps the words; proposal: preview file) bound to creation receipt; creation words not needed. Full text:ssam_reference kind tool.",
+    "sourceSha256": "b90e326cc4416462db518de03c211052d507d4246365b402199db63b68113d59",
+    "description": "ODC C# library:build net10 zip; deploy build/upload/generate/publish/tag/readback; status reads; discard deletes open job. User words name library/breaking consumers; UUID reads/continues, never resend. Credentials never arguments: Studio, vault, then private prompt. specFile:absolute JSON; status/discard:library/jobKey; pid:auto if exactly one Studio. Deletes: 2 calls; no confirmationToken=preview only (exact list+count, nothing sent): show owner that EXACT list, ask; then confirmationToken+owner reply stating count, naming targets. Words=owner's next message after the list, copied whole; never write/complete/translate/reuse words; none: ask owner, stop. Interrupted/CANCELLED/local failure/rejected/no answer: read ssam_task {id:<preview operationId>} before telling owner; never say nothing happened without it. With confirmationToken, operationUuid=preview operationId, never new/omitted. Own fixture: same 2 calls; owner reply=approval, bound to preview and creation receipt; no file. Optional file: wordsSha256 of reply, never the words; proposal=preview file. Full text:ssam_reference kind tool.",
     "params": {
       "/properties/spec": "{name,structures?:[{name,attributes:[{name,type,default?}]}],actions:[{name,inputs?,outputs?,body}],packages?,usings?}; typed names (incl. \"<T> List\")/exact versions.",
       "/properties/specFile": null,

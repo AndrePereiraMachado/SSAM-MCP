@@ -92,15 +92,30 @@ public sealed partial class ModelSession
         _anchorOp = null;
     }
 
-    private static KeptApply KeptFailures(List<ApplyFailure> failures, List<(int Op, int Because, string Uses)> skipped, string? opsPointer)
+    /// <summary>R2-B (rule 2): an APPLY_SKIPPED warning that says what it waits for: the failed op and the part of it that
+    /// declares what the skipped part uses (_because, _becauseAt); JobRunner.ResolveDependsOn turns them into dependsOn, a problem
+    /// the refusal publishes, once every phase is united.</summary>
+    internal static JsonObject Skipped(int op, string? pointer, string uses, int because, string? at, string fix)
     {
-        var warnings = skipped.Select(s => JobPreflight.PublicProblem(JobPreflight.Problem(s.Op, opsPointer == null ? null : $"{opsPointer}/{s.Op}",
-            "APPLY_SKIPPED", "warning", $"skipped: it uses {s.Uses}, which failed op #{s.Because} would have created", $"fix op #{s.Because}; this op runs with it"))).ToList();
+        var warning = JobPreflight.PublicProblem(JobPreflight.Problem(op, pointer, "APPLY_SKIPPED", "warning",
+            $"skipped: it uses {uses}, which failed op #{because} would have created", fix));
+        warning["_because"] = because;
+        if (at != null) warning["_becauseAt"] = at;
+        return warning;
+    }
+
+    private static KeptApply KeptFailures(List<ApplyFailure> failures, List<(int Op, int Because, string Uses, string? At)> skipped, string? opsPointer)
+    {
+        // R2-B (rule 2): what could only be judged once another problem is fixed says which problem it waits for (dependsOn,
+        // written by JobRunner.ResolveDependsOn after the union), never only "fix op #N".
+        var warnings = skipped.Select(s => Skipped(s.Op, opsPointer == null ? null : $"{opsPointer}/{s.Op}", s.Uses, s.Because, s.At, $"fix op #{s.Because}; this op runs with it")).ToList();
         var lines = failures.Select(f => f.Error.Message).Concat(skipped.Select(s => $"op #{s.Op} skipped: it uses {s.Uses} of failed op #{s.Because}")).ToList();
         if (failures.Count == 0) return new([], warnings, lines, null);
         var refusal = ApplyRefusal(failures, skipped, opsPointer);
         var problems = new List<JsonObject>();
-        foreach (var p in (Errors.FindCoded(refusal)?.Problems ?? new JsonArray()).OfType<JsonObject>())
+        // R2-H: the refusal's own problems, or the ones ApplyRefusal attached to a lone coded failure that has none (its code,
+        // op, pointer and phase), never an empty list.
+        foreach (var p in Errors.ProblemsOf(refusal).OfType<JsonObject>())
         {
             var copy = p.DeepClone().AsObject();
             copy["phase"] ??= "apply";
@@ -208,6 +223,8 @@ public sealed partial class ModelSession
         var attempt = op;
         var error = first;
         var broken = new SortedSet<int>(); var dependents = new SortedSet<int>();
+        // R2-B: the failed actions written as their stubs (Verbs.FlowStubs.cs): what calls them is judged against them.
+        var stubbed = new SortedSet<int>();
         var failures = new List<ApplyFailure>(); var warnings = new List<JsonObject>();
         var at = opsPointer == null ? null : $"{opsPointer}/{index}";
         for (var round = 0; round <= all.Count; round++)
@@ -224,18 +241,24 @@ public sealed partial class ModelSession
             }
             failures.Add(Failure(culprits));
             broken.UnionWith(culprits);
-            // The actions of the op that use a failed one (by name, in any of their texts), transitively.
+            if (StubOp(op, culprits) is { } stub && ApplyStub(stub)) stubbed.UnionWith(culprits);
+            // The actions of the op that use a failed one no stub stands for (by name, in any of their texts), transitively.
             for (var grew = true; grew;)
             {
                 grew = false;
-                var names = broken.Concat(dependents).Select(j => all[j]!["name"]!.ToString()).ToList();
+                var names = broken.Except(stubbed).Concat(dependents).Select(j => all[j]!["name"]!.ToString()).ToList();
                 for (var j = 0; j < all.Count; j++)
                 {
                     if (broken.Contains(j) || dependents.Contains(j) || Uses(all[j]!.AsObject(), names) is not { } used) continue;
                     dependents.Add(j); grew = true;
-                    warnings.Add(JobPreflight.Problem(index, at == null ? null : $"{at}/data/actions/{j}", "APPLY_SKIPPED", "warning",
+                    var skip = JobPreflight.Problem(index, at == null ? null : $"{at}/data/actions/{j}", "APPLY_SKIPPED", "warning",
                         $"action '{all[j]!["name"]}' was left out of op #{index}: it uses '{used}', an action of the same op that failed",
-                        $"fix '{used}'; this action applies with it", null, "logic"));
+                        $"fix '{used}'; this action applies with it", null, "logic");
+                    // R2-B: the problem it waits for is the failure of the action it uses (JobRunner.ResolveDependsOn).
+                    skip["_because"] = index;
+                    var usedAt = Enumerable.Range(0, all.Count).FirstOrDefault(k => string.Equals(all[k]?["name"]?.ToString(), used, StringComparison.OrdinalIgnoreCase), -1);
+                    if (at != null && usedAt >= 0) skip["_becauseAt"] = $"{at}/data/actions/{usedAt}";
+                    warnings.Add(skip);
                 }
             }
             map = Enumerable.Range(0, all.Count).Where(j => !broken.Contains(j) && !dependents.Contains(j)).ToList();
@@ -248,8 +271,8 @@ public sealed partial class ModelSession
         }
         return new(failures, warnings, BrokenOp(), null, new JsonArray());
 
-        // What later ops must not use: the failed actions and those left out with them.
-        JsonObject BrokenOp() => new() { ["op"] = "logic", ["data"] = new JsonObject { ["actions"] = new JsonArray(broken.Concat(dependents).Order().Select(j => all[j]!.DeepClone()).ToArray()) } };
+        // What later ops must not use: the failed actions no stub stands for and those left out with them.
+        JsonObject BrokenOp() => new() { ["op"] = "logic", ["data"] = new JsonObject { ["actions"] = new JsonArray(broken.Except(stubbed).Concat(dependents).Order().Select(j => all[j]!.DeepClone()).ToArray()) } };
 
         // One round's failure: the problems of the attempt (pointers relative to the attempt) moved to the actions of the op
         // as written; a problem of the op as a whole is the failed action's.

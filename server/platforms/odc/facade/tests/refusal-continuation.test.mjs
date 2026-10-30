@@ -127,20 +127,16 @@ for (const exposure of ['owner', 'licensee']) {
     assert.deepEqual((body.problems ?? []).map(p => p.k).sort(), ['w42', 'w43']);
   });
 
-  test(`E1 (${exposure}): two problems on the same screen are one group with the screen's text once; each k is read back exactly`, async t => {
+  // R1-B (fase4-28/r1-answers, answer-size.mjs): the transport no longer groups problems (the producer owns grouping, and
+  // fitProblems groups only above its own budget), so two problems on the same screen stay two, in the kernel's order, each with
+  // its pointer, its k and the screen's text whole; nothing is hidden under a group's items, so no read is needed for a k.
+  test(`E1 (${exposure}): two problems on the same screen stay two (R1-B: no transport grouping), each with its k and the screen's text exactly`, async t => {
     const text = screenOf('Audit');
     const s = await session(t, exposure, [keyForeign('Audit', 'w42', text), { ...keyForeign('Audit', 'w43', text), pointer: '/ops/0/data/edit/1' }]);
     const { body } = await s.run();
-    assert.equal(body.problems?.length, 1, brief(body));
-    const [g] = body.problems;
-    assert.equal(g.count, 2);
-    assert.equal(g.current?.text, text, 'the screen text, once: ' + brief(g));
-    assert.equal(g.k, 'w42', 'the first member\'s k, as its message');
-    // the members (each with its k) are in the kept answer, by the omitted call
-    const reader = createEvidenceReader({ roots: [s.root] });
-    const read = body.omitted?.tool === 'ssam_evidence' ? reader.read({ ...body.omitted.arguments, budgetBytes: 28672 }) : null;
-    assert.ok(read?.ok, 'the omitted read: ' + brief(body.omitted));
-    assert.match(JSON.stringify(read), /"k":"w42"[\s\S]*"k":"w43"/, brief(read));
+    assert.equal(body.problems?.length, 2, brief(body));
+    assert.deepEqual(body.problems.map(p => [p.code, p.pointer, p.k, p.count]), [['HTML_KEY_FOREIGN', '/ops/0/data/edit/0', 'w42', undefined], ['HTML_KEY_FOREIGN', '/ops/0/data/edit/1', 'w43', undefined]], brief(body));
+    for (const p of body.problems) assert.equal(p.current?.text, text, 'the screen text, whole: ' + brief(p));
   });
 
   test(`E1 (${exposure}): a screen longer than the answer's ceiling: the answer stays under it and the problem says the exact read that returns the text`, async t => {

@@ -1,3 +1,4 @@
+import { executableCorrection } from './corrected-call.mjs';
 // ssam_reference: the kernel's own references, read-only, for either lane, from that lane's CLI (anvil.dll for O11,
 // anvil-odc.dll for ODC): Model API (api), built-in functions, UI blocks of a UI catalog, Studio types, where an
 // object can be created (where-can), recipes, Verify messages, and the two offline checks (check-job, check-delivery);
@@ -71,7 +72,7 @@ const FIND_CAP = 50;
 
 const reply = value => ({ content: [{ type: 'text', text: JSON.stringify(value) }], structuredContent: value, ...(value.ok === false ? { isError: true } : {}) });
 const firstLine = text => String(text ?? '').split(/\r?\n/)[0].slice(0, 500);
-const refusal = (code, error, continuation, extra = {}) => ({ ok: false, code, error, ...extra, continuation });
+const refusal = (code, error, continuation, extra = {}) => ({ ok: false, code, error, ...extra, continuation, ...(executableCorrection(continuation, code) ? { corrected: continuation } : {}) });
 const canonical = value => (Array.isArray(value) ? value.map(canonical) : value && typeof value === 'object'
   ? Object.fromEntries(Object.keys(value).sort().map(k => [k, canonical(value[k])])) : value);
 const again = (lane, kind, query, why) => ({ tool: 'ssam_reference', arguments: { lane, kind, query }, why });
@@ -548,7 +549,7 @@ const NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const clipText = (text, max) => { const s = String(text).replace(/\s+/g, ' ').trim(); return s.length > max ? s.slice(0, max - 1) + '…' : s; };
 export function functionList(query) {
   let raw;
-  if (typeof query === 'string') raw = query;
+  if (typeof query === 'string' || Array.isArray(query)) raw = query;
   else if (query && typeof query === 'object' && !Array.isArray(query)) {
     const keys = Object.keys(query);
     if (keys.length !== 1 || !['name', 'names'].includes(keys[0])) return null;
@@ -819,11 +820,18 @@ export function registerSsamReference(server, deps = {}) {
   }
 
   async function reference({ lane, kind, query }) {
+    const queryText = typeof query === 'string' ? query : query?.id ?? query?.name;
+    if (['example', 'ui-block'].includes(kind) && typeof queryText === 'string' && /\s/.test(queryText.trim()) && !(query && typeof query === 'object' && query.find)) {
+      const shaped = typeof query === 'object' ? { ...query } : {};
+      delete shaped.id; delete shaped.name; shaped.find = queryText;
+      const result = await reference({ lane, kind, query: shaped });
+      return { ...result, normalizations: [...(result.normalizations ?? []), { rule: 'query-search', at: '/query', note: 'A multi-word name was accepted as a search query' }] };
+    }
     if (kind === 'tool') {
       if (typeof query !== 'string' || !query.trim()) return refusal('BAD_VALUE', 'tool query is the exact tool name', again(lane, 'tool', '<tool>', 'the complete original tool description and schema'));
       const definition = await deps.toolDetails?.(query.trim());
       return definition ? { ok: true, lane, kind, schemaVersion: 'ssam-tool-definition/1', query: query.trim(), definition }
-        : refusal('TOOL_NOT_AVAILABLE', 'This server does not serve ' + query.trim(), { tool: 'ssam_doctor', arguments: {}, why: 'Confirm the server profile; connect ssam for app tools or ssam-debug for debugging.' });
+        : refusal('TOOL_NOT_AVAILABLE', 'This server does not serve ' + query.trim(), { tool: 'ssam_discover', arguments: { lane, intent: query.trim() }, why: 'Find tools and examples matching the requested task' });
     }
     // The code parts of ssam_code (ddl, logic, html; also flow and the ssam-* form names): their grammar card, from any kind.
     const part = codePartOf(kind, query);
@@ -976,7 +984,7 @@ export function registerSsamReference(server, deps = {}) {
     inputSchema: z.object({
       lane: z.enum(['o11', 'odc']),
       kind: z.enum(REFERENCE_KINDS),
-      query: z.union([z.string().min(1), z.record(z.string(), z.unknown())]).describe('Text or an object, per kind'),
+      query: z.union([z.string().min(1), z.array(z.string().min(1)).min(1).max(FUNCTIONS_MAX), z.record(z.string(), z.unknown())]).describe('Text or an object, per kind'),
     }).strict(),
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   }, async input => {

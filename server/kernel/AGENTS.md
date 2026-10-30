@@ -157,6 +157,52 @@ funcao do modulo viram o nulo do tipo alvo de assign, argumento, campo de record
 nada; qualquer outra propriedade segue `PROPERTY_NOT_WRITABLE`). Ambiguo continua recusa: chave de sort vazia, segmento que
 pode ser atributo, `NullDateTime()` sem tipo alvo (dentro de If, argumento de builtin) ou com tipo que nao e data/hora. Job com
 `expectValid:false` nao e normalizado. Provas: `tests/Anvil.Tests/JobNormalizerTests.cs`.
+Normalizacoes R2-C (29/10/2026, recusas de correcao unica do cenario de 28/10; provas `tests/Anvil.Tests/NormalizationFamiliesTests.cs`):
+`HTML_TEXT_ESCAPED` (`Preflight/HtmlLooseText.cs`, antes de toda regra de html: `&` sem referencia possivel depois e `<` que nao
+abre tag viram `&amp;`/`&lt;` em data.html, html, data.edit e insert/replace de data.edits; o with de um find, so onde ele cai no HTML da
+leitura (`HtmlElementEdits`, nunca no texto cru de `<style>`/`<script>` ou de comentario); `<style>`/`<script>`, comentarios e `find`
+ficam; `&` antes de letra, digito ou `#` e `<` antes de letra continuam recusa, a mensagem do parser nomeia as duas leituras),
+`TYPE_SIZE_DROPPED` (`Preflight/TypeSizes.cs`: `Text(n)`/`Decimal(p,s)` em site property O11, setting ODC, `in`/`out`/`local`/`binding`
+de texto de logica e inputs/outputs/vars de logic JSON viram o tipo sem tamanho; atributo de entidade ou structure guarda o tamanho;
+o job ODC positivo `setting-size-dropped-odc.json` prova o apply, no lugar do negativo do ODC_SETTING_SIZE), `RECORD_ENTITY_MEMBER_ADDED`
+(`Preflight/EntityRecords.cs`, as duas faixas, a forma que `FlowGeneral` escreve: `N.Record.Attr` vira `N.Record.E.Attr` quando N chama
+`GetE[ForUpdate]` de uma entidade de servidor do job ou da base, o chamador roda no servidor (server, service ou data action),
+nenhuma action do job ou do modulo, de qualquer tipo, tem esse nome, a base, quando resolve o chamado, diz que e a action da entidade,
+no texto de logica o nome do no vale so na sua action, Attr e atributo de E e E nao tem atributo E), `IMG_PATH_IMAGE`/`IMG_PATH_EXPRESSION` (`ScreenHtmlNative.Image`: src com pontos e a imagem do modulo do ultimo nome
+ou a expressao cujo primeiro nome uma expressao ali le (dado da pagina, `Client`, `Site` no O11, `Settings` no ODC), quando so uma existe; as duas: `HTML_NAME_AMBIGUOUS` com as duas) e
+`TEXT_LITERAL_QUOTED` como normalizacao (`ScreenDocument.ProseLiteral`, no compile do documento e no plano da edicao: prosa num
+atributo-expressao que mostra texto, Prompt/Labels/Title/Example/Value de Expression, com a certeza do `TEXT_LITERAL_QUOTED`; escolha
+continua recusa, a da edicao com `candidates`).
+R3 (29/10/2026, limites da plataforma, nomes e cascata real; provas `tests/Anvil.Tests/PlatformLimits*Tests.cs`,
+`NameAbbreviation*Tests.cs`, `NativeNamesContentProofTests.cs`, `ScreenVisualPlatform*Tests.cs`, `RenderDocumentTests.cs`, `RuntimeCssTests.cs`):
+uma tabela de limites (`PlatformLimits.Rows`, `PlatformLimits.Describe(lane)`) que o preflight e o apply leem igual.
+`PLATFORM_NAME_LIMIT` (nome de atributo ou indice com mais de 28 caracteres, o que os dois Studios guardam: no texto de dados recusa antes
+da 1a rodada com todos os nomes de uma vez; patch `PLATFORM_NAME_KEPT` certo so quando o corte e exclusivo, e a decisao de cada nome
+sai em `cutDecision`: certain, candidate:module-not-read, dropped:collision...; na forma JSON create/spec o corte vira aviso e
+normalizacao `PLATFORM_NAME_KEPT`, igual ao `nameTruncations` do apply; rename para nome longo e recusado). `type.size.none` lista
+site property/setting, input, output, local e parametro de SQL (`binding`): `TYPE_SIZE_DROPPED` (R2-C, `TypeSizes.Kinds`) le essa linha.
+`ELEMENT_REQUIRES_OP` (fase de escopo: excecao de usuario levantada ou tratada, `raise X(`/`on exception X:`/passo `raise`, que nao
+e do modulo, das referencias nem do job: o fix traz o op exato `{"op":"create","parent":"@espace","type":"IUserException",...}`).
+Imagem (`AssetFacts.cs`, PNG, JPEG, GIF, WebP, ICO, BMP, SVG): sem format/width/height, os bytes os dao (`IMAGE_FACTS_FROM_BYTES`,
+normalizacao); bytes que contradizem o escrito ou formato que o Studio nao guarda sao recusa (`IMAGE_FACTS_MISMATCH`,
+`IMAGE_FORMAT_UNKNOWN`); com os tres fatos escritos vence o autor e a contradicao e aviso (`IMAGE_FACTS_DECLARED`); imagem num
+modulo Service e recusada antes do 1o op (`ACTION_KIND_NODE`, com a alternativa).
+`N1_ABBREVIATION` (aviso, nunca recusa; `Preflight/AbbreviationRules.cs`, dicionario `Preflight/EnglishWords.txt`): nome novo de
+logica abreviado em relacao ao proprio contexto (callee lido como a R2-A le, tipo, fonte); uma leitura alinhada ao callee/tipo/fonte
+da o nome inteiro com patch certo `ABBREVIATION_EXPANDED`; varias leituras sao `ABBREVIATION_CHOICE` com `candidates`, sem patch.
+`nativeRenames` (`NativeNames.cs`, `MergeContentProof`): quando o Studio renomeia sozinho no merge (aggregate de nome padrao que
+ganha filtro por atributo vira `Get<Plural>By<Atributo>`), a prova de conteudo aceita so os pares previstos, e a entrega devolve
+`nativeRenames` e `nativeRenamesNote`: escreva os nomes novos nos jobs seguintes.
+Verificador visual com as folhas reais (`ScreenVisual.Platform.cs`, avisos em `highWarnings`, patch so quando unico):
+`HTML_PLATFORM_SPECIFICITY`, `HTML_PLATFORM_INHERITED`, `HTML_PLATFORM_POSITIONAL`, `HTML_PLATFORM_INJECTED`,
+`HTML_PLATFORM_FIXED_LAYOUT`; `visual.platform` diz `present`, `partial` ou `missing`. As folhas da OutSystems ficam numa loja
+privada (`ANVIL_RUNTIME_CSS_DIR`; sem ela `%USERPROFILE%\.ssam-hybrid\runtime-css`), nunca no Git nem numa imagem publica:
+`dotnet kernel/.local/cli/anvil.dll runtime-css extract --lane o11 --version 11.55.92 --root <pasta privada>` com
+`--osui-oml <OutSystemsUI.oml>`, `--page <url publicada>` ou `--sheet runtime=<arquivo.css>`; `runtime-css show` diz o que e servido.
+`dotnet kernel/.local/cli/anvil.dll render-document --lane o11 --oml <captura> --screen <nome|@key> [--viewports desktop,tablet,phone]
+[--producer <oml>] [--probes <json>] --out <pasta>` grava as telas como documentos para renderizar (sem script nem URL externa;
+`RENDER_PLATFORM_SHEETS_MISSING` sem folhas); `render-document --capabilities` e o que o `ssam_render` pergunta. So existe na CLI
+do O11; na faixa ODC e pendencia.
 Motor 2 (12/10/2026, classes que so o apply ou o Verify achavam, uma por rodada; FolhaPonto_UI: 6 entregas): normalizacoes
 listadas, no mesmo passe: `PROPERTY_ALIASED` (`Preflight/PropertyAliases.cs`: `Handler` num evento de ciclo de vida e
 `Destination`, `Destination` num evento de widget e `Handler`, `Name` numa extended property e `Property`; so quando o Model API

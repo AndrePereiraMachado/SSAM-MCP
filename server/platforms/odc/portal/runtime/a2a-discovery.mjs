@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-import {authorizationContext} from '../../facade/authorization-context.mjs';
+import {approvalOf,contextValues} from './written-approval.mjs';
 import {validateA2aCard} from './a2a-connection-plan.mjs';
 import {fingerprint,isUuid,sha256} from './write-journal.mjs';
 import {fail} from './errors.mjs';
@@ -12,18 +12,20 @@ export function a2aDiscoveryContinuation(operationUuid,expected){
   why:'Prepare the plan using the confirmed receipt. Supply the explicit portfolioKey and configurationType; omit card.'};
 }
 
-export async function a2aDiscoveryApproval({file,words,host,raw,read}){
+export async function a2aDiscoveryApproval({file,words,host,raw,read,scope}){
  const reject=()=>fail('AUTHORIZATION_CONTEXT_INVALID','Agent card discovery requires an exact approved HTTPS base URL, connection name and live stage. Nothing was sent.');
- let record,url;try{
-  if(!file||fs.statSync(file).size>32768)reject();record=JSON.parse(fs.readFileSync(file,'utf8'));
+ // R2-I: the connection name comes from the context file or, with the written words alone, from the call's scope; the words
+ // name it either way.
+ let values,url;try{
+  values=contextValues(file,scope);
   url=new URL(raw.inputParameters?.AgentDiscovery?.url);
  }catch{reject();}
- const agent=raw.inputParameters.AgentDiscovery,name=record.constraints?.connectionName;
+ const agent=raw.inputParameters.AgentDiscovery,name=values?.connectionName;
  if(url.protocol!=='https:'||url.username||url.password||url.hash||url.search||!isUuid(agent.environmentId)
   ||typeof name!=='string'||!name.trim()||name.length>100
   ||fingerprint(raw.inputParameters)!==fingerprint({AgentDiscovery:{url:url.href,environmentId:agent.environmentId}})
   ||Object.keys(raw.screenVariables??{}).length||Object.keys(raw.clientVariables??{}).length)reject();
- const approval=authorizationContext(file,words,{lane:'odc',host,operation:A2A_DISCOVER,environmentKey:agent.environmentId,targets:[name],
+ const approval=approvalOf(file,words,{lane:'odc',host,operation:A2A_DISCOVER,environmentKey:agent.environmentId,targets:[name],
   constraints:{connectionName:name,agentUrl:url.href,inputSha256:sha256(JSON.stringify(raw.inputParameters))}});
  const stages=await read('monitoring.stages',{});
  if(!stages?.ok||stages.truncated===true||!Array.isArray(stages.rows)||stages.rows.filter(s=>s.Key===agent.environmentId).length!==1)reject();

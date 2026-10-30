@@ -5,8 +5,8 @@ using OutSystems.Model;
 namespace Anvil.Core;
 
 /// <summary>
-/// The document form writes what the document says (the owner's report of 2026-10-12, FolhaPonto_UI): every &lt;style&gt; and
-/// data.css land in the root's own style sheet as written (the theme with scope="theme"), a line of text with bindings is one
+/// The document form writes what the document says (the owner's report of 2026-10-12, FolhaPonto_UI): every &lt;style&gt;, or
+/// data.css in their place (R2-D), lands in the root's own style sheet as written (the theme with scope="theme"), a line of text with bindings is one
 /// Expression, and the model the compile wrote is read again in the same apply before anything is reported: the style sheet
 /// is that CSS, no text keeps a brace pair, no new Expression is empty. Any failure: nothing is written (the root goes, the
 /// theme is put back) and the refusal has every problem. The classes the page uses without a rule come as a warning.
@@ -33,7 +33,10 @@ public sealed partial class ModelSession
             var widened = ScreenHtmlNative.WidenIconSelectors(author);
             if (widened == author) return (null, null, null);
             if (sheet != null) ThemeCss.WriteAuthor(sheet, widened); else theme.StyleSheet = widened;
-            return (new JsonObject { ["theme"] = TypeResolver.Name(theme), ["widened"] = true }, theme, new WebStyleSheetBackup(sheet, author));
+            var report = new JsonObject { ["theme"] = TypeResolver.Name(theme), ["widened"] = true };
+            // R2-D: the theme's write took the one normalization (shadowed rules, imports): what it changed is said here.
+            ThemeCss.SayChanged(sheet, report);
+            return (report, theme, new WebStyleSheetBackup(sheet, author));
         }
         catch (Exception error) { return (new JsonObject { ["widened"] = false, ["why"] = Unwrap(error) }, null, null); }
     }
@@ -57,6 +60,8 @@ public sealed partial class ModelSession
     {
         private List<ScreenDocument.StyleBlock> styles = [];
         private string? ownSheet;
+        private string sheetBefore = "";                                        // R2-D: the root's own sheet before this compile
+        private JsonObject? sheetSaid;                                          // R2-D: what the write of the sheet said (replaced, cssStages, images)
         private int joined;                                                     // lines of text with bindings joined in one Expression
         private int spaced;                                                     // runs that keep the whitespace beside an inline element
         private readonly JsonArray normalized = [];                             // what the compile wrote in the one form a value has (ScreenHtmlNative)
@@ -79,7 +84,7 @@ public sealed partial class ModelSession
             var sheet = SheetOf(root);
             if ((ownSheet ?? "") != sheet)
                 problems.Add(new(ScreenDocument.StyleDropped, top.Line, top.Column,
-                    $"the {top.Tag}'s style sheet holds {sheet.Length} characters, the document's CSS ({styles.Count(b => !b.Theme)} <style> block(s){(options.Css != null ? " and data.css" : "")}) {(ownSheet ?? "").Length}: the CSS was not written as it is",
+                    $"the {top.Tag}'s style sheet holds {sheet.Length} characters, the document's CSS ({styles.Count(b => !b.Theme)} <style> block(s){(Anvil.Reading.ScreenHtmlEdit.DataCss(options.Css) != null ? " (data.css in their place)" : "")}) {(ownSheet ?? "").Length}: the CSS was not written as it is",
                     "nothing was written; send the document again (a defect of the engine if it repeats: the CSS is written as given)"));
             foreach (var (run, expression, at, read) in madeRuns)
             {
@@ -205,7 +210,8 @@ public sealed partial class ModelSession
             {
                 try
                 {
-                    if (iconThemeBefore.Sheet != null) ThemeCss.WriteAuthor(iconThemeBefore.Sheet, iconThemeBefore.Author);
+                    // Put back as it was: no stage removes a rule of the theme a refused document never changed.
+                    if (iconThemeBefore.Sheet != null) ThemeCss.WriteAuthor(iconThemeBefore.Sheet, iconThemeBefore.Author, canvas: false, keepRules: true);
                     else if (iconTheme is OutSystems.Model.UI.ITheme widenedTheme) widenedTheme.StyleSheet = iconThemeBefore.Author;
                 }
                 catch (Exception) { /* the apply refuses anyway; the candidate is never saved */ }
@@ -214,7 +220,7 @@ public sealed partial class ModelSession
             if (themeWritten == null || themeBefore == null) return;
             try
             {
-                if (themeBefore.Sheet != null) ThemeCss.WriteAuthor(themeBefore.Sheet, themeBefore.Author);
+                if (themeBefore.Sheet != null) ThemeCss.WriteAuthor(themeBefore.Sheet, themeBefore.Author, canvas: false, keepRules: true);
                 else if (themeWritten is OutSystems.Model.UI.ITheme theme) theme.StyleSheet = themeBefore.Author;
             }
             catch (Exception) { /* the apply refuses anyway; the candidate is never saved */ }
@@ -228,9 +234,11 @@ public sealed partial class ModelSession
             var report = new JsonObject
             {
                 ["placed"] = (rootKind == "MobileScreen" ? "screen" : "block") + " style sheet",
-                ["blocks"] = styles.Count(b => !b.Theme), ["nested"] = styles.Count(b => b.Nested && !b.Theme), ["dataCss"] = options.Css != null,
+                ["blocks"] = styles.Count(b => !b.Theme), ["nested"] = styles.Count(b => b.Nested && !b.Theme), ["dataCss"] = Anvil.Reading.ScreenHtmlEdit.DataCss(options.Css) != null,
                 ["chars"] = ownSheet?.Length ?? 0,
             };
+            // R2-D: bytes before and after, the rules added and removed, and what the write said.
+            foreach (var (key, value) in StyleSheetReport(sheetBefore, root == null ? ownSheet ?? "" : SheetOf(root), sheetSaid)) report[key] = value?.DeepClone();
             if (theme != null) report["theme"] = theme;
             return report;
         }

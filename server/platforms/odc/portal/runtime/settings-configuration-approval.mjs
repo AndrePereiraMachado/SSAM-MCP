@@ -3,6 +3,7 @@ import {authorizationContext} from '../../facade/authorization-context.mjs';
 import {TIMER_PATCH,assertOnlyTimerOverrides} from './timer-configuration-approval.mjs';
 import {TIMER_CONFIGURATION,TIMER_APPLICATION_REVISION} from './portal-timer.mjs';
 import {fail} from './errors.mjs';
+import {recorded,sameGrant} from './written-approval.mjs';
 import {checkSecretRefs} from './portal-routes.mjs';
 
 export const SETTINGS_APPLY='deployments-api-v1:post:/deployment-operations';
@@ -32,7 +33,7 @@ export async function settingsConfigurationApproval({file,words,host,operationId
   ||!(b.settings?.length||b.libraries?.length||b.systemConfigurations?.length||b.integrations?.length))bad();
  const origin=lookup(originOperationUuid);
  if(!origin||!['accepted','confirmed'].includes(origin.state)||origin.identity?.tenant!==host
-  ||origin.identity.operationId!=='asset-repository-api-v1:post:/assets'||origin.response?.assetKey!==applicationKey||!origin.authorization?.source)bad();
+  ||origin.identity.operationId!=='asset-repository-api-v1:post:/assets'||origin.response?.assetKey!==applicationKey||!recorded(origin))bad();
  const asset=await read('asset-repository-api-v1:get:/assets/{assetKey}',{assetKey:applicationKey});
  if(!asset?.ok||asset.data?.assetKey!==applicationKey||!['Agent','WebApplication','MobileApplication'].includes(asset.data.assetType))bad();
  const agent=asset.data.assetType==='Agent';
@@ -122,6 +123,6 @@ export async function settingsConfigurationApproval({file,words,host,operationId
  if(usedRefs.size!==refs.length)bad();
  const approval=authorizationContext(file,words,{lane:'odc',host,operation:'settings.configuration',environmentKey,targets,
   constraints:{originOperationUuid,revision:data.revisionDeployed,bodySha256:settingsBodyHash(b),expectedConfigurationSha256:settingsConfigurationHash(data),...(secretTouched?{secretRefsSha256:settingsBodyHash(refs)}:{})}});
- if(!approval||approval.source.threadId!==origin.authorization.source.threadId||approval.source.messageId!==origin.authorization.source.messageId)bad();
+ if(!approval||!sameGrant(origin.authorization,approval))bad();
  return approval;
 }

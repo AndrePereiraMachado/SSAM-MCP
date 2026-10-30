@@ -3,6 +3,7 @@ import {ipFilterHash as hash} from './ip-filter-approval.mjs';
 import {GROUP_CREATE} from './group-approval.mjs';
 import {USER_CREATE} from './inactive-user-approval.mjs';
 import {fail} from './errors.mjs';
+import {recorded,sameGrant} from './written-approval.mjs';
 const root='user-access-management-api-v1:';
 export const GROUP_MEMBERSHIP=root+'patch:/groups/{key}/users';
 export async function groupMembershipApproval({file,words,host,operationId,input,originOperationUuid,userOriginOperationUuid,lookup,read}) {
@@ -14,7 +15,7 @@ export async function groupMembershipApproval({file,words,host,operationId,input
  const adding=b.userKeysToAdd.length===1,userKey=(adding?b.userKeysToAdd:b.userKeysToRemove)[0];
  const groupOrigin=lookup(originOperationUuid),userOrigin=lookup(userOriginOperationUuid);
  for(const [r,operation,key] of [[groupOrigin,GROUP_CREATE,p.key],[userOrigin,USER_CREATE,userKey]])
-  if(!r||!['accepted','confirmed'].includes(r.state)||r.identity?.tenant!==host||r.identity.operationId!==operation||r.response?.key!==key||!r.authorization?.source)bad();
+  if(!r||!['accepted','confirmed'].includes(r.state)||r.identity?.tenant!==host||r.identity.operationId!==operation||r.response?.key!==key||!recorded(r))bad();
  const snapshot={};
  async function get(label,op,path,query){const r=await read(root+op,path,query);if(!r.ok)bad();snapshot[label]=r.data;return r.data;}
  async function list(label,op,path){const d=await get(label,op,path,{limit:100,offset:0});
@@ -35,6 +36,6 @@ export async function groupMembershipApproval({file,words,host,operationId,input
  const approval=authorizationContext(file,words,{lane:'odc',host,operation:operationId,environmentKey:group.environmentKey,
   targets:[groupOrigin.identity.target.name,userOrigin.identity.target.name],constraints});
  if(!approval)bad();
- for(const r of [groupOrigin,userOrigin])if(approval.source.threadId!==r.authorization.source.threadId||approval.source.messageId!==r.authorization.source.messageId)bad();
+ for(const r of [groupOrigin,userOrigin])if(!sameGrant(r.authorization,approval))bad();
  return approval;
 }

@@ -18,8 +18,9 @@ const kernel = path.join(repo, 'kernel');
 // translation: count and the ids listed.
 const BB12D2B3 = JSON.parse(fs.readFileSync(new URL('./fixtures/example-find-bb12d2b3.json', import.meta.url), 'utf8'));
 // Suite jobs added after bb12d2b3 (integ/proto-traditional: the Traditional html frontend example): a query that finds them
-// is compared without them, so the snapshot keeps meaning what bb12d2b3 answered.
-const ADDED_AFTER_BB12D2B3 = new Set(['jobs/traditional-html-frontend']);
+// is compared without them, so the snapshot keeps meaning what bb12d2b3 answered. fase4-28/r2 (R2-C): the ODC setting-size job
+// moved from the negative suite to jobs-odc/setting-size-dropped-odc (a size is now dropped with a note, not refused).
+const ADDED_AFTER_BB12D2B3 = new Set(['jobs/traditional-html-frontend', 'jobs-odc/setting-size-dropped-odc']);
 
 async function reference(t) {
   const out = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'example-find-'));

@@ -113,6 +113,23 @@ Servidor:
 
 - `SSAM_O11_WORKER_RSS_MB` (padrão 1200; 0 desliga): depois de cada chamada o servidor lê o `VmRSS` do worker em
   `/proc/<pid>/status`. Acima do limite, o worker sai depois da chamada, nunca no meio. No Windows não há leitura.
+- R2-F regra 3 (worker quente; medições e proposta em `C:\t\r2\RESULTADO-WORKER-QUENTE.md`):
+  - o apply do `ssam_code check` hospedado também vai ao worker do cliente (antes, todo check rodava frio);
+  - `SSAM_O11_WORKERS_PER_TOKEN` (padrão 1; no máximo `SSAM_O11_WORKERS_MAX`): workers de um mesmo cliente quando as
+    chamadas se sobrepõem. O extra só sobe em vaga livre, nunca tira a vaga de outro cliente e, enquanto o cliente tiver outro worker, é o primeiro a ceder a sua; o único
+    worker de um cliente, em qualquer slot, só cede depois da residência mínima.
+    Um apply vai ao worker ocioso que serviu a mesma base por último;
+  - `SSAM_O11_WORKER_MIN_AVAILABLE_MB` (padrão 3072; 0 desliga): nenhum worker sobe se o `MemAvailable` do host
+    (`/proc/meminfo`) menos `SSAM_O11_WORKER_START_MB` ficar abaixo do piso; depois de uma chamada abaixo do piso, o worker
+    sai;
+  - `SSAM_O11_WORKERS_RSS_TOTAL_MB` (padrão máximo × `SSAM_O11_WORKER_RSS_MB`): soma dos `VmRSS` dos workers deste
+    backend, com a mesma regra (não sobe além; acima, sai depois da chamada);
+  - `SSAM_O11_WORKER_START_MB` (padrão 400, medido): a reserva de cada worker que ainda não serviu uma chamada (partindo,
+    com ou sem processo), contada nos dois guardas (o piso desconta o que ele ainda vai crescer); depois da 1ª chamada, o
+    `VmRSS` medido substitui a reserva. Um livro único, lido antes de qualquer partida: duas partidas simultâneas nunca
+    passam juntas pelo piso;
+  - a impressão digital do worker inclui o build do Studio (tamanho e data do `ServiceStudio.Framework.dll`): um Studio
+    trocado na mesma pasta aposenta o worker ocioso.
 - Saída de um worker: se o ping ainda mostra o processo que o servidor subiu, ele recebe `shutdown`. Se não mostra (outro
   pid, sem ping, falha na partida), o servidor termina o próprio processo e não manda nada com a chave do cliente.
 - Resultado desconhecido (pedido escrito sem resposta): nunca é repetido. O worker não recebe mais nada, o servidor espera o

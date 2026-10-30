@@ -48,6 +48,20 @@ export class WriteJournal {
     return receipt;
   }
 
+  // R2-I: this journal's receipts that match (the MCP finds its own record of a target, e.g. the creation of what a written
+  // authorization deletes), oldest first. An unreadable file is skipped; nothing is written.
+  find(predicate) {
+    let names = [];
+    try { names = fs.readdirSync(this.dir).filter(name => /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\.json$/i.test(name)); } catch { return []; }
+    const found = [];
+    for (const name of names) {
+      let receipt = null;
+      try { receipt = this.lookup(name.slice(0, 36)); } catch { receipt = null; }
+      try { if (receipt && predicate(receipt)) found.push(receipt); } catch { /* a predicate that cannot read it does not match */ }
+    }
+    return found.sort((a, b) => String(a.createdAt ?? '').localeCompare(String(b.createdAt ?? '')));
+  }
+
   reserve({ operationUuid, identity, wordsSha256, plan, reconciliation, requestSha256, once = false, removes }) {
     fs.mkdirSync(this.dir, { recursive: true });
     const file = this.file(operationUuid), lock = this.lockFile(identity);

@@ -111,6 +111,8 @@ export function problemOf(p, limit = 600) {
     ...(p.bothChoices === true ? { bothChoices: true } : {}),
     // A summary of a cascade (summarizeCascade) keeps what it counts.
     ...(Number.isInteger(p.blocks) ? { blocks: p.blocks } : {}), ...(Number.isInteger(p.count) && p.cascade ? { count: p.count } : {}),
+    // R2-B (one round): what can only be judged once another problem is fixed names that problem (kernel dependsOn).
+    ...(typeof p.dependsOn === 'string' && p.dependsOn ? { dependsOn: clip(p.dependsOn, 300) } : {}),
     ...(p.cascade ? { cascade: true, ops: p.ops, codes: p.codes, because: p.because, ...(Number.isInteger(p.patchesLeftOut) ? { patchesLeftOut: p.patchesLeftOut } : {}) } : {}),
     ...continuationOf(p) };
 }
@@ -190,17 +192,19 @@ export function summarizeCascade(problems, job = null) {
     for (const p of skipped) {
       const failed = Number(/failed op #(\d+)|fix op #(\d+)/.exec(`${p.message ?? ''} ${p.fix ?? ''}`)?.slice(1).find(Boolean) ?? NaN);
       const key = Number.isInteger(failed) ? failed : null;
-      if (!because.has(key)) because.set(key, { op: key, ops: [], uses: new Set() });
+      if (!because.has(key)) because.set(key, { op: key, ops: [], uses: new Set(), dependsOn: null });
       const entry = because.get(key);
+      if (!entry.dependsOn && typeof p.dependsOn === 'string' && p.dependsOn) entry.dependsOn = clip(p.dependsOn, 300);
       if (Number.isInteger(p.op)) entry.ops.push(p.op);
       const uses = /it uses (.+?)(?:,| which| of failed)/.exec(String(p.message ?? ''))?.[1]; if (uses) entry.uses.add(uses.trim());
     }
     const failedOps = [...because.keys()].filter(Number.isInteger);
     const summary = { phase: skipped[0].phase ?? 'apply', op: null, pointer: null, code: 'APPLY_SKIPPED', severity: 'warning', cascade: true, count: skipped.length,
-      message: `${skipped.length} ops were skipped: each uses what a failed op would have created (${failedOps.map(o => '#' + o).join(', ') || 'see the errors'}); they run once those are fixed`,
-      fix: 'fix the failed ops; the skipped ops run with them, unchanged',
+      message: `${skipped.length} ops were skipped: each uses what a failed op would have created (${failedOps.map(o => '#' + o).join(', ') || 'see the errors'}); they are judged once those are fixed`,
+      fix: 'fix the failed ops (dependsOn names the problem each waits for); the skipped ops are judged, with their own problems, when they run',
       ops: [...new Set(skipped.map(p => p.op).filter(Number.isInteger))], codes: { APPLY_SKIPPED: skipped.length },
-      because: [...because.values()].map(b => ({ op: b.op, blocks: b.ops.length, ops: b.ops, ...(b.uses.size ? { names: [...b.uses].slice(0, MAX_NAMES) } : {}) })) };
+      because: [...because.values()].map(b => ({ op: b.op, blocks: b.ops.length, ops: b.ops, ...(b.uses.size ? { names: [...b.uses].slice(0, MAX_NAMES) } : {}),
+        ...(b.dependsOn ? { dependsOn: b.dependsOn } : {}) })) };
     const first = list.findIndex(p => p?.code === 'APPLY_SKIPPED');
     list = [...list.slice(0, first).filter(p => p?.code !== 'APPLY_SKIPPED'), summary, ...list.slice(first).filter(p => p?.code !== 'APPLY_SKIPPED')];
     for (const b of because.values()) if (Number.isInteger(b.op)) blockers.push({ op: b.op, blocks: b.ops.length });

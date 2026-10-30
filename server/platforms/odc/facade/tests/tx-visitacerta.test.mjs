@@ -16,7 +16,7 @@ import { createBuildPool } from '../build-pool.mjs';
 import { validationContract, contractProblems } from '../o11-build-phase.mjs';
 import { deliverOutcome, problemCodes } from '../o11-cycle.mjs';
 import { receiptOutcome } from '../o11-access.mjs';
-import { fakeAnvil } from './fixtures/fake-anvil.mjs';
+import { fakeAnvil, validPreflight } from './fixtures/fake-anvil.mjs';
 
 const tmp = () => fs.mkdtempSync(path.join(isolatedProfile, 'tx-visitacerta-'));
 const words = 'pode entregar, Ana 0912';
@@ -88,7 +88,7 @@ function lane(root, applyData) {
 
 async function serve(t, root, fake) {
   const pool = createBuildPool({ dir: path.join(root, 'pool'), size: 2, queueMs: 10000 });
-  const server = await createSsamServer({ odc: false, deps: { cycle: { root, env: { USERPROFILE: root, LOCALAPPDATA: root }, runAnvil: fake.runAnvil, assertSelected: async () => {},
+  const server = await createSsamServer({ odc: false, deps: { cycle: { checkRunner: validPreflight, root, env: { USERPROFILE: root, LOCALAPPDATA: root }, runAnvil: fake.runAnvil, assertSelected: async () => {},
     tasksDir: path.join(root, 'tasks'), bridge: fake.bridge, lastPublication: async () => null, lock: { connection: () => null },
     buildPool: pool, buildRunner: fake.buildRunner },
     lock: { o11Root: root, odcRoot: root, connection: () => null } } });

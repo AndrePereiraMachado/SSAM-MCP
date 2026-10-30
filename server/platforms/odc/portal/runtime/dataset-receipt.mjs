@@ -15,10 +15,21 @@ const invalid=()=>fail('DATASET_RECONCILIATION_UNVERIFIED','Dataset reconciliati
 export function datasetReconciliationInput(receipt,{state,read,authorize}) {
  const p=read?.creationInput,d=p?.Dataset,vars=read?.input?.screenVariables;
  if(state!=='confirmed'||receipt.identity?.operationId!=='agents.datasetCreate'
-   ||!receipt.authorization?.source||hash(authorize)!==receipt.authorization.wordsSha256
+   ||!/^[a-f0-9]{64}$/.test(receipt.authorization?.wordsSha256??'')||hash(authorize)!==receipt.authorization.wordsSha256
    ||read.operationId!=='agents.dataset'||read.tenant&&read.tenant!==receipt.identity.tenant
    ||!isUuid(vars?.id)||vars._idInDataFetchStatus!==1||Object.keys(vars).sort().join(',')!=='_idInDataFetchStatus,id'
    ||!d||hash(JSON.stringify(p))!==receipt.identity.target?.inputSha256)invalid();
+ // R2-I (owner's rule, 28/10): the receipt SSAM reserved before the send is the evidence of the approved content: the
+ // sha256 of the original words and of the exact creation input. The original context file is no longer needed again; one
+ // given is still checked against the receipt as before.
+ if(read.authorizationContext===undefined||read.authorizationContext===null){
+  if(receipt.response?.DatasetId&&receipt.response.DatasetId!==vars.id)invalid();
+  let content;try{content=JSON.parse(d.Content);}catch{invalid();}
+  const cases=Array.isArray(content)?content:content?.testCases;
+  if(!Array.isArray(cases)||!cases.length)invalid();
+  return {datasetId:vars.id,expected:d,cases};
+ }
+ if(!receipt.authorization?.source)invalid();
  let record;
  try{if(fs.statSync(read.authorizationContext).size>32768)invalid();record=JSON.parse(fs.readFileSync(read.authorizationContext,'utf8'));}catch{invalid();}
  const approval=authorizationContext(read.authorizationContext,authorize,{lane:'odc',host:receipt.identity.tenant,operation:'agents.datasetCreate',

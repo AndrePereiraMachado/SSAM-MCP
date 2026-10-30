@@ -28,7 +28,7 @@
 // arguments; this is Studio serialization scope, not the mutation classification of cancellation and outcomes. Selecting a module tab is such a state: every kernel step after a
 // merge (get_errors, find_element, snapshot_module in Delivery.cs) is pinned to the module key it merged
 // (RequireTarget), so a tab switched mid-delivery fails a delivery whose merge is already applied. So every call that
-// opens a module of the O11 Studio is a write: o11_deliver (until=apply opens it to capture it) and o11_studio snapshot
+// opens a module of the O11 Studio is a write: a merging o11_deliver and o11_studio snapshot
 // {module}. Opening a system module (Users, OutSystemsUI, System) is refused before the Studio is asked (A29), so that
 // call is not a write and never waits.
 //
@@ -93,6 +93,7 @@ import { stallRecovery } from './studio-recovery.mjs';
 import { isErrorReportTitle } from './bridge-stall.mjs';
 import { isStudioWrite } from './tool-classification.mjs';
 import { moduleReservation, sameDeliveryLineage, reservationContinuation } from './delivery-lineage.mjs';
+import { pendingMerge, hasPendingMerge, INTENT_GRACE_MS } from './studio-work-order.mjs';
 import { laneLocalDir, laneWorkDir } from './lane-folders.mjs';
 const APP_TOOLS = new Set(['context', 'propose', 'continue', 'status']);
 const O11_STUDIO_BARRIER_WAITS = new Set(['idle', 'no-dialogs']);
@@ -104,7 +105,7 @@ export const BUSY_CODE = 'STUDIO_WRITE_BUSY';
 export const QUEUE_TIMEOUT_CODE = 'STUDIO_WRITE_QUEUE_TIMEOUT';
 export const STALE_MS = 3 * 60 * 60 * 1000;
 export const DEFAULT_QUEUE_MS = 240000;
-const GRACE_MS = 30000; // an unreadable lock, queue or breaker file younger than this is a creation in flight
+const GRACE_MS = INTENT_GRACE_MS; // unreadable lock, queue, intent or breaker: shared creation grace
 const NAP_FIRST = 25, NAP_MAX = 400;
 
 // The bounded wait of a queued write: SSAM_WRITE_QUEUE_MS (ms, 0 = no wait), else 240000.
@@ -559,10 +560,31 @@ function aheadOf(target, waiter, ctx) {
   // C07: an earlier write blocked by a module lock this one does not conflict with is passed (see the header).
   let locks = null;
   const ahead = other => conflicting(other, target) && !(other.module && target.module && passable(other, target, locks ??= moduleLocks(target, ctx)));
-  const earlier = o => o !== waiter && ahead(o.target) && (!waiter || (o.priority!==waiter.priority ? o.priority : o.order < waiter.order));
+  const isPublish = tool => tool === 'o11_publish' || tool === 'studio_publish';
+  const isMerge = tool => ['o11_deliver', 'studio_deliver', 'studio_merge'].includes(tool);
+  const orderedBefore = (tool, module, normally) => {
+    if (waiter && module && target.module && sameModule(module, target.module)) {
+      if (isPublish(waiter.tool) && isMerge(tool)) return true;
+      if (isMerge(waiter.tool) && isPublish(tool)) return false;
+    }
+    return normally;
+  };
+  // R2-H: a publication queued before a merge of its own module waits for that merge (the rule above). For any other waiter
+  // it is not ahead while it waits so: its FIFO place would hold every write between it and the merge, and so the merge
+  // itself, until the publication's own timeout (ui-freeze pattern 4). A publication of the same module keeps the order of
+  // the publications.
+  const heldBehind = (tool, module, merges) => Boolean(waiter) && isPublish(tool) && Boolean(module) && merges()
+    && !(isPublish(waiter.tool) && target.module && sameModule(module, target.module));
+  const later = (a, b) => (a.priority !== b.priority ? !a.priority : a.position > b.position);
+  const earlier = o => o !== waiter && ahead(o.target) && (!waiter || orderedBefore(o.tool, o.target.module, o.priority!==waiter.priority ? o.priority : o.order < waiter.order))
+    && !heldBehind(o.tool, o.target.module, () => [...local].some(x => x !== o && isMerge(x.tool) && x.target.module && sameModule(x.target.module, o.target.module)
+      && later({ priority: x.priority, position: x.order }, { priority: o.priority, position: o.order })));
   if (waiter && !waiter.file) return [...local].filter(earlier).map(inProcess);
-  return [...queueEntries(target, ctx)
-    .filter(e => (!waiter || (e.record?.token !== waiter.token && (e.priority!==waiter.priority ? e.priority : e.seq < waiter.seq)))
+  const entries = queueEntries(target, ctx);
+  return [...entries
+    .filter(e => (!waiter || (e.record?.token !== waiter.token && orderedBefore(e.record?.tool, moduleOfRecord(e.record?.module), e.priority!==waiter.priority ? e.priority : e.seq < waiter.seq)
+      && !heldBehind(e.record?.tool, moduleOfRecord(e.record?.module), () => entries.some(x => x !== e && isMerge(x.record?.tool) && moduleOfRecord(x.record?.module)
+        && sameModule(moduleOfRecord(x.record.module), moduleOfRecord(e.record.module)) && later({ priority: x.priority, position: x.seq }, { priority: e.priority, position: e.seq })))))
       && ahead({ dir: target.dir, lane: target.lane, id: typeof e.record?.studio === 'string' ? e.record.studio : null,
         module: moduleOfRecord(e.record?.module) }))
     .map(e => ({ tool: e.record?.tool ?? null, pid: Number.isSafeInteger(e.record?.pid) ? e.record.pid : null, startedAt: null, waitingMs: Math.max(0,ctx.now()-(Date.parse(e.record?.enqueuedAt)||ctx.now())) })),
@@ -668,23 +690,32 @@ export function narrowStudioWrite({ module, moduleKey } = {}) {
 // null when nothing was waited for), or {ok:false, value} when the call was cancelled or the bounded wait ran out (value is
 // the refusal, not yet shaped by onBusy). Nothing of the write has run either way.
 async function takeTurn({ target, tool, args = {}, ctx, limit, signal, studio, priority=false }) {
+  const publication = Boolean(target.module) && (tool === 'o11_publish' || tool === 'studio_publish');
   const cancelled = extra => ({ ok: false, value: { ok: false, code: CANCELLED_CODE, outcome: 'not-sent', ...extra, continuation: busyContinuation(studio) } });
   if (signal?.aborted) return cancelled({ error: 'The call was cancelled before it started; nothing ran.' });
   // Nobody waits ahead and the Studio is free: run at once, without a queue entry.
-  if (!aheadOf(target, null, ctx).length) {
+  if (!(publication && hasPendingMerge(target)) && !aheadOf(target, null, ctx).length) {
     const lock = acquire(target, tool, ctx);
     if (lock.ok) return { ok: true, lock, queue: null };
   }
   const started = Date.now();
-  const waiter = enter(target, tool, ctx, priority);
+  let waiter = null;
   let position = null, holder = null, step = NAP_FIRST;
   try {
     for (;;) {
       if (signal?.aborted)
         return cancelled({ error: 'The call was cancelled while it waited in the write queue of this Studio; nothing ran.', position: position ?? 1, waitedMs: Date.now() - started });
+      if (publication && hasPendingMerge(target)) {
+        // An intent is not a queued write. Keeping our FIFO position here could block the intent's own merge.
+        leave(waiter); waiter = null;
+        const left = started + limit - Date.now();
+        if (left <= 0) return { ok: false, value: queueTimeoutRefusal({ holder: holderFor(target, ctx), position: 1, waitedMs: Date.now() - started, queueMs: limit, studio, ahead: [] }) };
+        await nap(Math.min(step, left), signal); step = Math.min(step * 2, NAP_MAX); continue;
+      }
+      waiter ??= enter(target, tool, ctx, priority);
       const ahead = aheadOf(target, waiter, ctx);
       let current = null;
-      if (!ahead.length) {
+      if (!ahead.length && !(publication && hasPendingMerge(target))) {
         const lock = acquire(target, tool, ctx);
         if (lock.ok) {
           leave(waiter);
@@ -743,7 +774,7 @@ async function bypassRecovery({target,tool,ctx,signal,studio},fn) {
  }
  try{return {result:await owned.run([...(owned.getStore()??[]),{slot,lock:turn}],fn)}}finally{turn.release()}
 }
-export async function withStudioWriteLock({ tool, args = {}, lane, studioKey, deps = {}, onBusy, signal, write, phased, queue: _queue } = {}, fn) {
+export async function withStudioWriteLock({ tool, args = {}, lane, studioKey, deps = {}, onBusy, signal, write, phased, deferReservation = false, queue: _queue } = {}, fn) {
   if (!(write === true || isWrite(tool, args))) return fn();
   const ctx = { now: clock(deps.now), alive: deps.alive ?? processAlive, staleMs: deps.staleMs ?? STALE_MS };
   const key = studioWriteTarget({ tool, args, lane, studioKey, deps });
@@ -788,7 +819,7 @@ export async function withStudioWriteLock({ tool, args = {}, lane, studioKey, de
     return fn();
   }
   if (phased === true && isPhased(tool, args) && !target.lane.startsWith(DATA_LANE_PREFIX))
-    return runPhased({ target, tool, args, deps, ctx, limit, signal, studio, refuse }, fn);
+    return runPhased({ target, tool, args, deps, ctx, limit, signal, studio, refuse, deferReservation }, fn);
   const turn = await takeTurn({ target, tool, args, ctx, limit, signal, studio, priority:mode==='first' });
   if (!turn.ok && turn.bypass) return bypass();
   if (!turn.ok) return refuse(turn.value);
@@ -810,9 +841,9 @@ export async function withStudioWriteLock({ tool, args = {}, lane, studioKey, de
 // withStudioWriteLock of the same Studio. From then on the call holds the Studio as any write does. A short Studio read
 // that must not run beside a write of the same Studio (the ODC bridge serves one command at a time) runs in
 // studioMoment(fn): it takes the Studio lock for fn only and gives it back.
-// Two deliveries of the same module never build at the same time: a phased call first takes the build guard of its
-// module (<lane>~b-<module tag>.guard beside the locks, FIFO in this process, the stale rules of the locks between
-// processes) and keeps it to its end. The second one builds on top of the first one applied. The apply still checks the
+// Deliveries of the same module build concurrently. A phased call takes the module guard only when applying
+// (<lane>~b-<module tag>.guard beside the locks, FIFO in this process, the stale rules of the locks between
+// processes) and keeps it to its end. The apply checks the
 // base its build saw: a module changed meanwhile (the person in the Studio) is rebuilt on the fresh capture in the same
 // call (O11: Anvil.Core.Delivery.PrebuiltCandidate; ODC: odc-build-phase.mjs on BASE_DRIFT), never merged blind.
 // The answer of a phased call that built carries phases {buildMs, queuedMs, applyMs, buildQueue?, moduleQueue?,
@@ -822,8 +853,8 @@ export const BUILD_QUEUE_TIMEOUT_CODE = 'BUILD_QUEUE_TIMEOUT';
 export const GUARD_SCHEMA = 'ssam-module-build-guard/1';
 export const BUILD_WHY = 'another delivery of the same module (or the build pool) did not end within the limit; none of this one ran: read the Studio state and repeat the same delivery';
 export const PHASED_TOOLS = Object.freeze({
-  // A new delivery (and resume, closePrevious): its first Studio write takes the Studio. close alone and until=apply are
-  // writes from their first call, so they keep the lock of the whole call.
+  // A new delivery (and resume, closePrevious): its first Studio write takes the Studio. close alone keeps the lock
+  // of the whole call; until=apply is a keyed capture and a headless validation, without a write lock.
   o11_deliver: a => a.close == null && (a.until ?? 'merge') === 'merge',
   studio_deliver: a => (a.until ?? 'merge') === 'merge',
 });
@@ -831,6 +862,12 @@ export const PHASED_TOOLS = Object.freeze({
 // reads it in process, and through the ODC proxy from the listed tool). A handler that does not declare it holds the
 // Studio for its whole call, as before: a write never runs unlocked because its handler does not know the phases.
 export const PHASES_META = 'ssam/phases';
+// This trusted handler acquires its own write lock after per-caller authorization and target resolution.
+export const MANAGED_QUEUE_META = 'ssam/managed-queue';
+export function ownsStudioWrite(options) {
+  const target = options ? studioWriteTarget(options) : null;
+  return (owned.getStore() ?? []).some(entry => entry.lock && (!target || conflicting(entry.slot, target)));
+}
 export const declaresPhases = config => config?._meta?.[PHASES_META] === true;
 export function isPhased(name, args = {}) {
   const a = args && typeof args === 'object' ? args : {};
@@ -843,7 +880,7 @@ const guardOwners = new Map(); // guard file -> {tool, pid, startedAt} of the de
 const guardLines = new Map(); // guard file -> waiters of this process, in arrival order
 const reservationWaiters = new Map(); // reporting only; these callers never hold or queue for the module guard
 let guardExitHooked = false;
-async function takeGuard({ target, tool, ctx, limit, signal, studio, reservation }) {
+async function takeGuard({ target, tool, ctx, limit, signal, studio, reservation, reservationOnly = false }) {
   const module = target.module;
   if (!module) return { ok: true, release: () => {}, waitedMs: 0, queue: null };
   const file = path.join(target.dir, target.lane + '~b-' + safe(module.key ?? module.name) + '.guard');
@@ -923,6 +960,7 @@ async function takeGuard({ target, tool, ctx, limit, signal, studio, reservation
       // Leaving the reservation wait never resets its deadline, even if the reservation disappeared at the last instant.
       if (lastReservation && (signal?.aborted || Date.now() - started >= Math.min(limit, reservation.waitMs)))
         return reservationRefusal(lastReservation);
+      if (reservationOnly) { taken = true; break; }
       joinGuardLine();
       if (take()) {
         const changedReservation = reservation?.();
@@ -995,7 +1033,7 @@ function stampReceipts(files, phases) {
   }
 }
 
-async function runPhased({ target, tool, args, deps, ctx, limit, signal, studio, refuse }, fn) {
+async function runPhased({ target, tool, args, deps, ctx, limit, signal, studio, refuse, deferReservation }, fn) {
   if (signal?.aborted) return refuse({ ok: false, code: CANCELLED_CODE, outcome: 'not-sent', error: 'The call was cancelled before it started; nothing ran.', continuation: busyContinuation(studio) });
   const startedAt = Date.now();
   let reservation = null;
@@ -1014,14 +1052,37 @@ async function runPhased({ target, tool, args, deps, ctx, limit, signal, studio,
     const configured = Number(deps.env?.SSAM_RESERVATION_QUEUE_MS ?? process.env.SSAM_RESERVATION_QUEUE_MS ?? 120000);
     reservation.waitMs = Number.isFinite(configured) && configured >= 0 ? configured : 120000;
   }
-  const guard = await takeGuard({ target, tool, ctx, limit, signal, studio, reservation });
-  if (!guard.ok) return refuse(guard.value);
-  const phase = { startedAt, guardWaitMs: guard.waitedMs, poolWaitMs: 0, promoteAt: null, acquiredAt: null, queue: null, refusal: null,
-    built: false, rebased: null, buildQueue: null, moduleQueue: guard.queue ? { position: guard.queue.position, waitedMs: guard.queue.waitedMs,
-      ...(guard.queue.queueMs != null ? { queueMs: guard.queue.queueMs } : {}) } : null, receipts: [] };
+  let initialReservation = { ok: true, waitedMs: 0, queue: null };
+  let guard = null;
+  let finishIntent = () => {};
+  const phase = { startedAt, guardWaitMs: initialReservation.waitedMs, poolWaitMs: 0, promoteAt: null, acquiredAt: null, queue: null, refusal: null,
+    built: false, rebased: null, buildQueue: null, moduleQueue: initialReservation.queue, receipts: [] };
   const entry = { slot: target, lock: null, deferred: true, tool: String(tool), phase };
+  let reservationPromise;
+  entry.awaitReservation = () => reservationPromise ??= (async () => {
+    initialReservation = await takeGuard({ target, tool, ctx, limit, signal, studio, reservation, reservationOnly: true });
+    if (!initialReservation.ok) return initialReservation.value;
+    initialReservation.release();
+    phase.guardWaitMs += initialReservation.waitedMs;
+    phase.moduleQueue = initialReservation.queue;
+    finishIntent = pendingMerge(target);
+    return { ok: true };
+  })();
+  // Legacy callers have no pure preflight. MCP deliveries opt in and call awaitReservation after theirs.
+  if (!deferReservation) {
+    const checked = await entry.awaitReservation();
+    if (!checked.ok) return refuse(checked);
+  }
   let promoting = null;
   entry.promote = () => promoting ??= (async () => {
+    const checked = await entry.awaitReservation();
+    if (!checked.ok) { phase.refusal = checked; return checked; }
+    phase.promoteAt = Date.now();
+    // Only application is serialized. The final guard still rechecks reservations, including a race after preflight.
+    guard = await takeGuard({ target, tool, ctx, limit, signal, studio, reservation });
+    if (!guard.ok) { phase.refusal = guard.value; return guard.value; }
+    phase.guardWaitMs += guard.waitedMs;
+    phase.moduleQueue ??= guard.queue;
     phase.promoteAt = Date.now();
     const turn = await takeTurn({ target, tool, ctx, limit, signal, studio });
     if (!turn.ok) { phase.refusal = turn.value; return turn.value; }
@@ -1039,15 +1100,20 @@ async function runPhased({ target, tool, args, deps, ctx, limit, signal, studio,
   };
   let value;
   try { value = await owned.run([...(owned.getStore() ?? []), entry], fn); }
-  finally { entry.lock?.release(); guard.release(); }
+  finally { entry.lock?.release(); guard?.release?.(); finishIntent(); }
   const phases = phasesOf(phase, Date.now());
   if (phase.built || phase.rebased) stampReceipts(phase.receipts, phases);
   // The Studio turn did not come: nothing after the build reached the Studio, whatever fn made of the refusal.
   if (phase.refusal) return refuse({ ...phase.refusal, ...(phase.built ? { phases } : {}) });
-  return withFields(value, { queue: phase.queue ?? guard.queue, phases: phase.built || phase.rebased ? phases : null });
+  return withFields(value, { queue: phase.queue ?? guard?.queue ?? initialReservation.queue, phases: phase.built || phase.rebased ? phases : null });
 }
 
 const currentPhased = () => [...(owned.getStore() ?? [])].reverse().find(e => e?.deferred) ?? null;
+// Pure checks run first; this wait creates no module guard or Studio queue entry.
+export async function awaitReservation() {
+  const entry = currentPhased();
+  return entry ? entry.awaitReservation() : { ok: true };
+}
 // The phase of the current call: null outside a phased call; else {promoted, tool}.
 export function phaseOfCall() {
   const entry = currentPhased();

@@ -69,7 +69,7 @@ import { keepAnswer, fitResult } from './answer-size.mjs';
 import { MAX_ANSWER_BYTES, maxAnswerBytes, budgetCeiling } from './context-budget.mjs';
 export { MAX_ANSWER_BYTES, maxAnswerBytes, budgetCeiling } from './context-budget.mjs';
 import { boundedRead, readOptions, readCheckpoint } from './read-budget.mjs';
-import { withStudioWriteLock, busyToolResult, isWrite, isPhased, declaresPhases, PHASES_META, processAlive } from './studio-write-lock.mjs';
+import { withStudioWriteLock, busyToolResult, isWrite, isPhased, declaresPhases, PHASES_META, MANAGED_QUEUE_META, processAlive } from './studio-write-lock.mjs';
 import { pendingAccessRestores, registerO11Access, restoreScope } from './o11-access.mjs';
 import { registerO11Publish } from './o11-publish.mjs';
 import { registerO11Extension } from './o11-extension.mjs';
@@ -383,7 +383,7 @@ export async function doctor(laneName, { lanes: laneDoctors = {}, reservations, 
 // fase4-24 (2.10): network:true adds the network check (hosted/network-check.mjs: the agent's uploads on new connections,
 // per exit of the user's internet, in plain words; about 5 s); without it, slow upload parts the hub saw lately add
 // agent.uploads and the hint to run it. Neither changes ok: the doctor's ok stays about the lanes.
-export async function hostedDoctor(laneName, { context, session }, { network = false } = {}) {
+export async function hostedDoctor(laneName, { context, session, render = null }, { network = false } = {}) {
   const link = session?.agent ?? context.agent;
   const { agentNotConnected } = await import('./hosted/policy.mjs');
   let info = {}, connected = false;
@@ -421,6 +421,17 @@ export async function hostedDoctor(laneName, { context, session }, { network = f
   const enabledLanes = Object.values(lanes).filter(l => l.enabled);
   const report = { ok: connected && enabledLanes.length > 0 && enabledLanes.every(l => l.ok === true), hosted: true, customer: context.customer ?? null, agent, lanes,
     studiosOpen: Object.fromEntries(Object.entries(lanes).map(([k, v]) => [k, v.studio.open])) };
+  // fase4-28 r2-preview: whether ssam_render is served now and why not (answer fields only: the doctor's listing does not
+  // change), and whether the agent runs file.upload (its Hello).
+  try {
+    const { renderAvailability } = await import('./hosted/screen-render.mjs');
+    const state = await renderAvailability({ env: render?.env ?? process.env, link, lanes: (context.lanes ?? []).filter(l => !laneName || l === laneName),
+      ...(render?.kernelHas ? { kernelHas: render.kernelHas } : {}) });
+    report.render = { available: state.available, ...(state.available ? { lanes: state.lanes } : { code: state.code, reason: state.reason }) };
+  } catch (error) { report.render = { available: false, code: 'RENDER_STATE_UNKNOWN', reason: String(error?.message ?? error).slice(0, 200) }; }
+  let uploadKind = false;
+  try { uploadKind = connected && link?.supports?.('file.upload') === true; } catch { uploadKind = false; }
+  report.uploads = { agentKind: uploadKind };
   const { networkCheck, uploadsHint } = await import('./hosted/network-check.mjs');
   const slow = uploadsHint(link);
   if (slow) agent.uploads = slow.uploads;
@@ -523,15 +534,25 @@ const servedGates = new WeakMap();
 // tools: the hosted classification (default hosted/tools.json); tests pass another one.
 // presentation (a7 phase 4, tests): the presenter's view of the server layout ({workspace, serverRoots, pathApi}: the Linux
 // image's paths with path.posix on another machine); without it, this server's own roots and path flavor.
-async function hostedGate({ context, session, run, kernelRefused = null, tools, presentation = null }) {
+async function hostedGate({ context, session, run, kernelRefused = null, tools, presentation = null, render = null }) {
   const { wrapHostedTool, studioNoticeMemory } = await import('./hosted/policy.mjs');
   const runner = run ?? (await import('./executor.mjs')).runWithExecutor;
   const link = session?.agent ?? context.agent;
   const lanes = session?.lanes ?? context.lanes ?? [];
   // fase4-28 R1 (F3): this gate is made once per MCP session, so its memory of the Studio warnings shown is the session's.
   const studioNotices = studioNoticeMemory();
+  // fase4-28 r2-preview: the conditional tools served now (ssam_render), for the texts of ssam_discover and ssam_reference.
+  const { withRenderRoute } = await import('./hosted/screen-render.mjs');
+  const conditional = async () => ((await hostedRenderShown({ link, lanes, render }))
+    ? { available: ['ssam_render'], project: (name, args, result) => (name === 'ssam_discover' ? withRenderRoute(result, args) : result) } : { available: [] });
   return (name, config, handler, { argsOf = null } = {}) => wrapHostedTool(name, config, handler, { context, link, lanes, run: runner, argsOf, kernelRefused,
-    studioNotices, ...(tools ? { tools } : {}), ...(presentation ? { presentation } : {}) });
+    studioNotices, conditional, ...(tools ? { tools } : {}), ...(presentation ? { presentation } : {}) });
+}
+// ssam_render is served now (hosted/screen-render.mjs renderAvailability): the switch, the lane's kernel and the agent's Hello.
+// render (tests): {env, kernelHas, renderDocument, capture}.
+export async function hostedRenderShown({ link, lanes, render = null }) {
+  const { renderAvailability } = await import('./hosted/screen-render.mjs');
+  return (await renderAvailability({ env: render?.env ?? process.env, link, lanes, ...(render?.kernelHas ? { kernelHas: render.kernelHas } : {}) })).available;
 }
 // The lanes the hosted server warms at start: the served lanes, without a lane its image refused (its kernel never runs).
 export const hostedWarmLanes = (lanes = {}, refused = null) => ['odc', 'o11'].filter(l => lanes[l] !== false && !refused?.[l]);
@@ -593,6 +614,7 @@ const DATA_DEFAULT_ROWS = 2000; const DATA_ROW_CAP = 10000;
 const dataOp = (batch) => ({ type: 'object', required: ['operation', 'entity'], properties: {
   operation: batch ? { type: 'string', pattern: '^(' + DATA_OPERATIONS.join('|') + ')$', description: DATA_OPERATIONS.join(' | ') } : { type: 'string', enum: DATA_OPERATIONS },
   entity: { type: 'string' },
+  preview: { type: 'boolean' },
   operationId: { type: 'string' }, authorization: { type: 'string' }, records: { type: 'array', items: { type: 'object' } },
   confirmationToken: { type: 'string', minLength: 1, description: 'delete: the token of its preview (the execution, without ids; the owner\'s reply names the entity and states the number of records). ' + DESTRUCTIVE_SUFFIX }, ownerRequest: { type: 'string', minLength: 1, description: "delete preview: the owner's request, verbatim (kept only as a sha256)" },
   ids: { type: 'array', items: batch ? { anyOf: [{ type: 'string' }, dataRef] } : { type: 'string' } }, offset: { type: 'integer', minimum: 0 }, tenantId: { type: 'integer' },
@@ -1191,6 +1213,7 @@ export async function createSsamServer({ o11 = true, odc = true, profile = 'app'
     // Lane wp: only a handler that declares its build and apply phases (config._meta, studio-write-lock.mjs PHASES_META)
     // builds without the Studio lock; any other write holds the Studio for its whole call.
     const phases = declaresPhases(config);
+    const managedQueue = config._meta?.[MANAGED_QUEUE_META] === true;
     // The ceiling also holds a budget the input layer renamed or coerced ({budget_bytes}, "100000"), before the tool's schema.
     const prepare = name === 'ssam_evidence' ? undefined : args => clampBudget(args, maxBytes);
     let argsOf = null;
@@ -1268,7 +1291,8 @@ export async function createSsamServer({ o11 = true, odc = true, profile = 'app'
       const execute = () => {
         const budget = bounded ? readOptions('queue') : {};
         const combined = signal && budget.signal ? AbortSignal.any([signal, budget.signal]) : signal ?? budget.signal;
-        return writeLock({ tool: name, args, lane, deps: deps.lock ?? {}, onBusy: onBusy(lane), signal: combined, phased: phases && isPhased(name, args) }, () => {
+        if (managedQueue) return handler(...params);
+        return writeLock({ tool: name, args, lane, deps: deps.lock ?? {}, onBusy: onBusy(lane), signal: combined, phased: phases && isPhased(name, args), deferReservation: name === 'o11_deliver' }, () => {
           if (bounded) readCheckpoint('preflight');
           return handler(...params);
         });
@@ -1359,10 +1383,12 @@ export async function createSsamServer({ o11 = true, odc = true, profile = 'app'
       request: o11DataRequestSchema,
     } }),
   }, async ({ host, module, oml, request }, ctx) => {
+    if (request.batch?.some(op => Object.hasOwn(op, 'preview'))) return reply({ ok: false, code: 'INPUT_INVALID', error: 'preview is not supported in batch items', written: 0 });
     // merge: file loads (files/close) before the CX15 words gate
     // Hosted: the lane's local folder of the context (<ws>/o11), never the server's own lane folder (nor deps.dataRoot).
     const work = hosted ? path.join(o11LaneOf(LANES.o11.lane).local, 'data')
       : path.join(deps.dataRoot ?? LANES.o11.root, LANES.o11.lane === 'ss5' ? '.local/lane-ss5/data' : '.local/data');
+    if (request.preview === true && (Object.hasOwn(request, 'files') || Object.hasOwn(request, 'close'))) return reply({ ok: false, code: 'INPUT_INVALID', error: 'preview is for inline records; file loads use dryRun', written: 0 });
     if (Object.hasOwn(request, 'files') || Object.hasOwn(request,'close')) {
       const call = { host, module, oml };
       const token = ctx?.mcpReq?._meta?.progressToken;
@@ -1375,9 +1401,18 @@ export async function createSsamServer({ o11 = true, odc = true, profile = 'app'
         { journalRoot: path.join(work, 'loads'), now: deps.dataNow ?? Date.now, progress, signal: ctx?.mcpReq?.signal, destructive: deps.destructive,
           continuation: { tool: 'o11_data', arguments: { ...call, request }, why: 'Resume the same load with the same operationId.' } }));
     }
+    // Inline preview runs the kernel checker, never the data writer.
+    if (request.preview === true) {
+      const { preview, ...checked } = request;
+      const result = await o11DataChannel({ runAnvil: o11Runner, call: { host, module, oml, entity: request.entity }, work }).check(checked, { dryRun: true });
+      return reply({ ...result, preview: true, written: 0 });
+    }
     const fileFields = ['columns', 'references', 'keys', 'insertMissing', 'batchSize', 'delimiter', 'dryRun', 'confirmUpdates'].filter(field => Object.hasOwn(request, field));
+    const { dryRun, ...inline } = request;
+    const corrected = fileFields.length === 1 && fileFields[0] === 'dryRun'
+      ? { tool: 'o11_data', arguments: { host, module, oml, request: { ...inline, ...(dryRun ? { preview: true } : {}) } }, why: 'Inline preview validates the same records without writing' } : null;
     if (fileFields.length) return reply({ ok: false, code: 'INPUT_INVALID', written: 0,
-      error: 'File-load options require files; no records were sent.', problemCount: fileFields.length,
+      error: 'File-load options require files; no records were sent.', ...(corrected ? { corrected } : {}), continuation: { tool: 'ssam_reference', arguments: { lane: 'o11', kind: 'tool', query: 'o11_data' }, why: 'Read the supported inline and file-load forms' }, problemCount: fileFields.length,
       problems: fileFields.map(field => ({ code: 'INPUT_INVALID', at: field, reason: `${field} requires files` })) });
     const gate = await import('./data-delete-gate.mjs');
     const noWords = gate.dataWordsRefusal(request); if (noWords) return reply(noWords); // CX15 r6 (M-1)
@@ -1470,7 +1505,7 @@ export async function createSsamServer({ o11 = true, odc = true, profile = 'app'
 
   if (odc) {
     // deps.odcFacade: a factory of the ODC MCP server (tests: a fake studio_deliver; never a Studio).
-    const facade = deps.odcFacade ? await deps.odcFacade() : await (await import('./mcp.mjs')).createFacadeServer();
+    const facade = deps.odcFacade ? await deps.odcFacade() : await (await import('./mcp.mjs')).createFacadeServer({ deps: { lock: deps.lock ?? {} } });
     configureRelayFacade(facade);
     const [serverSide, clientSide] = InMemoryTransport.createLinkedPair();
     const client = new Client({ name: 'ssam-odc-proxy', version: '0.1.0' });
@@ -1545,7 +1580,7 @@ export async function createSsamServer({ o11 = true, odc = true, profile = 'app'
         inputSchema: fromJsonSchema(exposed ?? { type: 'object' }), annotations: tool.annotations,
         ...(tool.outputSchema ? { outputSchema: fromJsonSchema(tool.outputSchema) } : {}),
         // Lane wp: the lane's handler declares its phases in the listing; the declaration travels with the proxy.
-        ...((declaresPhases(tool) || tool._meta?.canRequestInput === true) ? { _meta: { ...(declaresPhases(tool) ? { [PHASES_META]: true } : {}), ...(tool._meta?.canRequestInput === true ? { canRequestInput: true } : {}) } } : {}),
+        ...((declaresPhases(tool) || tool._meta?.canRequestInput === true || tool._meta?.[MANAGED_QUEUE_META] === true) ? { _meta: { ...(declaresPhases(tool) ? { [PHASES_META]: true } : {}), ...(tool._meta?.[MANAGED_QUEUE_META] === true ? { [MANAGED_QUEUE_META]: true } : {}), ...(tool._meta?.canRequestInput === true ? { canRequestInput: true } : {}) } } : {}),
       }, async (args = {}, ctx) => {
         const { lane: chosen, ...rest } = args;
         const client = clients[needsLane ? chosen : laneName];
@@ -1701,7 +1736,7 @@ export async function createSsamServer({ o11 = true, odc = true, profile = 'app'
     const check = deps.codeCheck ?? (async input => (await import('./code-check.mjs')).codeCheck(input, codeDeps()));
     const plan = deps.codePlan ?? (async input => (await import('./code-plan.mjs')).codePlan(input, codeDeps()));
     const checks = hosted ? await import('./hosted/checks.mjs') : null;
-    registerSsamCode(server, { fromJsonSchema, map: readMap, lanes: laneNames,
+    registerSsamCode(server, { fromJsonSchema, map: readMap, lanes: laneNames, o11PlansDeletes: true,
       check: hosted ? checks.hostedCheck(hosted.context, check, { slots: hosted.checkSlots ?? null }) : check,
       plan: hosted ? async input => { checks.sweepCandidates(hosted.context.workspace); return plan(input); } : plan,
       write: () => codeDeps(),
@@ -1826,6 +1861,13 @@ export async function createSsamServer({ o11 = true, odc = true, profile = 'app'
       return { content: [{ type: 'text', text: JSON.stringify(value) }], structuredContent: value, ...(value.ok === false ? { isError: true } : {}) };
     });
 
+  // fase4-28 r2-preview: ssam_render, served only hosted (the agent renders; a local SSAM has ssam_preview), listed only while
+  // hostedRenderShown holds (the tools/list projection below). hosted.render (tests): {env, kernelHas, renderDocument, capture}.
+  if (hosted) {
+    const render = await import('./hosted/screen-render.mjs');
+    server.registerTool('ssam_render', render.renderToolConfig(), render.renderHandler({ context: hosted.context, link: hosted.session?.agent ?? hosted.context.agent,
+      env: hosted.render?.env ?? process.env, deps: hosted.render ?? {} }));
+  }
   // A server whose tools a caller registers itself (deps.registerTool: the deadline tests of CX12) has no SDK tools/list
   // to project; the originals recorded above still answer ssam_reference.
   const sdkList = typeof server.server?._getRequestHandler?.('tools/list') === 'function';
@@ -1840,14 +1882,18 @@ export async function createSsamServer({ o11 = true, odc = true, profile = 'app'
   const sdkDetails = sdkList || !deps.registerTool ? installToolListing(server, { full: deps.listing === 'full',
     ...(presentTool && !hostedProjection ? { present: presentTool } : {}) }) : async () => null;
   if (hosted && sdkList) {
-    const { LOCAL_PREVIEWS, hostedDocumentation } = await import('./hosted/availability.mjs');
+    const { hiddenTools, hostedDocumentation } = await import('./hosted/availability.mjs');
     const { hostedListed } = await import('./hosted/destructive.mjs');
     const projected = server.server._getRequestHandler('tools/list');
     server.server.removeRequestHandler('tools/list');
+    // fase4-28 r2-preview: every tools/list judges the conditional tools again (ssam_render: switch, kernel, the agent's Hello).
+    const renderLink = hosted.session?.agent ?? hosted.context.agent;
+    const renderLanes = hosted.session?.lanes ?? hosted.context.lanes ?? [];
     server.server.setRequestHandler('tools/list', async (request, context) => {
       const result = await projected(request, context);
-      return { ...result, tools: result.tools.filter(tool => !LOCAL_PREVIEWS.has(tool.name)).map(tool => {
-        const listed = hostedDocumentation(hostedProjection ? hostedListed(tool, listedTool) : tool);
+      const hidden = hiddenTools((await hostedRenderShown({ link: renderLink, lanes: renderLanes, render: hosted.render ?? null }).catch(() => false)) ? ['ssam_render'] : []);
+      return { ...result, tools: result.tools.filter(tool => !hidden.has(tool.name)).map(tool => {
+        const listed = hostedDocumentation(hostedProjection ? hostedListed(tool, listedTool) : tool, hidden);
         return presentTool ? presentTool(listed) : listed;
       }) };
     });

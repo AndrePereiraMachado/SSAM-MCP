@@ -23,6 +23,19 @@ public sealed partial class ModelSession
         private readonly Dictionary<string, int> _names = new(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, (string Owner, string Name, int Origin)> _scopedNames = new(StringComparer.OrdinalIgnoreCase);
         private readonly List<(int Origin, string Text)> _texts = [];
+        // R2-B (review A2): the part of the job that declares each blocked name, alias or Owner.Name (the text in data/flow/<i>,
+        // the action in data/actions/<j>, the data text, the document, the op): what a skip waits for is that part's problem.
+        private readonly Dictionary<string, string> _at = new(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>The pointer of the job's ops (the parts' pointers are under it); null: no pointers are kept.</summary>
+        public string? OpsPointer { get; init; }
+
+        /// <summary>The pointer of the part that declares a name UsedBy returned, or null.</summary>
+        public string? PointerOf(string name) => _at.TryGetValue(name, out var at) ? at : null;
+
+        private string? OpAt(int origin) => OpsPointer == null ? null : $"{OpsPointer}/{origin}";
+
+        private void At(string key, string? at) { if (at != null) _at.TryAdd(key, at); }
 
         /// <summary>The failed op (or the failed op behind a skipped one) whose JSON writes this name as a word: an html
         /// fragment, a screen or a spec creates names no alias announces.</summary>
@@ -50,19 +63,24 @@ public sealed partial class ModelSession
             return named.Success ? named.Groups[1].Value : null;
         }
 
-        public void Mark(JsonObject op, int origin)
+        /// <summary>Blocks what <paramref name="op"/> declares, for the failure of op <paramref name="origin"/>; <paramref name="at"/>:
+        /// the part that failed when it is not the op itself (an op skipped for a failed one keeps that one's part).</summary>
+        public void Mark(JsonObject op, int origin) => MarkAt(op, origin, null);
+
+        public void MarkAt(JsonObject op, int origin, string? at)
         {
             var kind = op["op"]?.ToString();
             if (kind == "html" && ScreenDocument.IsDocumentOp(op)) {
-                MarkDocument(op["data"]!.AsObject(), origin);
+                MarkDocument(op["data"]!.AsObject(), origin, at ?? (OpAt(origin) is { } documentAt ? documentAt + "/data/html" : null));
                 return;
             }
             if (kind == "logic") {
-                foreach (var action in (op["data"]?["actions"] as JsonArray ?? new JsonArray()).OfType<JsonObject>())
-                    if (action["name"]?.ToString() is { Length: > 0 } actionName)
-                        MarkName(actionName, action["owner"]?.ToString() ?? "", origin);
+                var actions = op["data"]?["actions"] as JsonArray ?? new JsonArray();
+                for (var j = 0; j < actions.Count; j++)
+                    if (actions[j] is JsonObject action && action["name"]?.ToString() is { Length: > 0 } actionName)
+                        MarkName(actionName, action["owner"]?.ToString() ?? "", origin, at ?? (OpAt(origin) is { } actionAt ? $"{actionAt}/data/actions/{j}" : null));
                 if (op["data"] is JsonObject flowData && flowData["flow"] != null) {
-                    try { foreach (var text in FlowTextForm.Texts(flowData)) MarkFlow(text.Text, origin); }
+                    try { foreach (var text in FlowTextForm.Texts(flowData)) MarkFlowAt(text.Text, origin, at ?? (OpAt(origin) is { } textAt ? textAt + "/data" + text.Pointer : null)); }
                     catch (KernelRefusalException) { /* The invalid container is already the primary refusal. */ }
                 }
                 return;
@@ -73,49 +91,61 @@ public sealed partial class ModelSession
             // widgets by their ids, which its text carries.
             if (kind == "html" && op["parent"] == null && op["data"] is JsonObject page && page["components"] == null && !Anvil.Reading.ScreenHtmlEdit.IsEdit(op) && !ScreenDocument.IsDocumentOp(op))
             {
-                foreach (var createdName in HtmlExpander.CreatedNames(page)) MarkName(createdName, "", origin);
+                foreach (var createdName in HtmlExpander.CreatedNames(page)) MarkName(createdName, "", origin, at ?? OpAt(origin));
                 return;
             }
+            var part = at ?? (kind == "spec" && op["data"]?["ddl"] is JsonValue && OpAt(origin) is { } ddlAt ? ddlAt + "/data/ddl" : OpAt(origin));
             // The op's own texts, unescaped: ToJsonString escapes the quote of id="Pa2Botao" as a backslash-u0022 sequence, whose
             // digits glued to the name hid every widget an html fragment names (the Cardapio UI replay: 92 REFERENCE_UNRESOLVED
             // behind one failure).
             _texts.Add((origin, string.Join("\n", Texts(op))));
-            if (op["as"]?.ToString() is { Length: > 0 } alias) _aliases.TryAdd(alias, origin);
-            if (kind is "create" or "rename" && op["name"]?.ToString() is { Length: > 0 } name) _names.TryAdd(name, origin);
+            if (op["as"]?.ToString() is { Length: > 0 } alias) { _aliases.TryAdd(alias, origin); At(alias, part); }
+            if (kind is "create" or "rename" && op["name"]?.ToString() is { Length: > 0 } name) { _names.TryAdd(name, origin); At(name, part); }
             if (kind == "spec")
             {
                 foreach (var section in new[] { "entities", "clientEntities", "static", "structures" })
                     foreach (var record in (SpecExpander.Sections(op["data"] as JsonObject)[section] as JsonArray ?? new JsonArray()).OfType<JsonObject>())
-                        if (record["name"]?.ToString() is { Length: > 0 } recordName) { _names.TryAdd(recordName, origin); _aliases.TryAdd("$" + recordName, origin); }
-                // DL2: everything a data text names (what it creates and the new names it gives).
-                if (op["data"] is JsonObject data) foreach (var written in SpecExpander.DdlNames(data)) _names.TryAdd(written, origin);
+                        if (record["name"]?.ToString() is { Length: > 0 } recordName)
+                        { _names.TryAdd(recordName, origin); _aliases.TryAdd("$" + recordName, origin); At(recordName, part); At("$" + recordName, part); }
+                // DL2: what a data text names. R2-B (review A5): its top-level elements (an entity, a structure, a static entity)
+                // by their names and aliases; a part of one (an attribute, an index, a record) only qualified, Owner.Name or
+                // Owner/Name: a bare attribute name (Id, Name) is a word of any text, never a use of the failed data.
+                if (op["data"] is JsonObject data)
+                    foreach (var (written, owner) in SpecExpander.DdlDeclarations(data))
+                        if (owner == null) { _names.TryAdd(written, origin); _aliases.TryAdd("$" + written, origin); At(written, part); At("$" + written, part); }
+                        else MarkName(written, owner, origin, part);
             }
             if (kind == "reference")
                 foreach (var element in (op["elements"] as JsonArray ?? new JsonArray()).OfType<JsonValue>())
-                    if (element.TryGetValue<string>(out var typed) && typed.Split(':', 2) is [_, var elementName] && elementName.Length > 0) _names.TryAdd(elementName, origin);
+                    if (element.TryGetValue<string>(out var typed) && typed.Split(':', 2) is [_, var elementName] && elementName.Length > 0)
+                    { _names.TryAdd(elementName, origin); At(elementName, part); }
         }
 
         // A skipped text blocks only the action it would declare, not the independent texts of the same logic op.
-        public void MarkFlow(string text, int origin)
+        public void MarkFlow(string text, int origin) => MarkFlowAt(text, origin, null);
+
+        public void MarkFlowAt(string text, int origin, string? at)
         {
             if (FlowTextForm.Header(text) is not { Name.Length: > 0 } header) return;
-            MarkName(header.Name, header.Owner, origin);
+            MarkName(header.Name, header.Owner, origin, at);
         }
 
-        private void MarkName(string name, string owner, int origin)
+        private void MarkName(string name, string owner, int origin, string? at = null)
         {
             if (owner.Length == 0) {
                 _names.TryAdd(name, origin);
                 _aliases.TryAdd("$" + name, origin);
                 _texts.Add((origin, name));
+                At(name, at); At("$" + name, at);
                 return;
             }
             if (owner.StartsWith("$html.", StringComparison.Ordinal)) owner = owner[6..];
             if (owner.IndexOf(':') is var colon && colon >= 0) owner = owner[(colon + 1)..];
             _scopedNames.TryAdd(owner + "." + name, (owner, name, origin));
+            At(owner + "." + name, at);
         }
 
-        private void MarkDocument(JsonObject data, int origin)
+        private void MarkDocument(JsonObject data, int origin, string? at = null)
         {
             var html = data["html"]!.GetValue<string>();
             Anvil.Reading.ScreenHtml.Node document;
@@ -129,12 +159,12 @@ public sealed partial class ModelSession
             }
             var root = document.Children.FirstOrDefault(n => !n.IsText && n.Tag is "screen" or "block");
             if (root?.Get("name") is not { Length: > 0 } name) return;
-            MarkName(name, "", origin);
+            MarkName(name, "", origin, at);
             foreach (var attribute in new[] { "actions", "data-actions" })
                 foreach (var action in (root.Get(attribute) ?? "").Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
-                    MarkName(action, name, origin);
+                    MarkName(action, name, origin, at);
             void Members(Anvil.Reading.ScreenHtml.Node node) {
-                if (node.Tag is "var" or "input" or "aggregate" or "event" && node.Get("name") is { Length: > 0 } member) MarkName(member, name, origin);
+                if (node.Tag is "var" or "input" or "aggregate" or "event" && node.Get("name") is { Length: > 0 } member) MarkName(member, name, origin, at);
                 if (!node.IsText && node.Tag is not ("screen" or "block" or "var" or "aggregate" or "event" or "style" or "slot")) {
                     // Widget names are only evidence for a concrete missing-reference error. A homonymous local
                     // variable in another action must not make that action a dependency of this failed document.
@@ -148,8 +178,27 @@ public sealed partial class ModelSession
             Members(root);
         }
 
-        /// <summary>The first blocked alias or name this op uses (and the op that blocked it), or null.</summary>
-        public (string Name, int Op)? UsedBy(JsonObject op) => UsedBy(Texts(op));
+        /// <summary>The first blocked alias or name this op uses (and the op that blocked it), or null. R2-B (review A5): in the
+        /// markup of an html op only its expressions and bindings use a name ({{ }}, bind=, source=, on...=, actions=, ...),
+        /// never the name of a tag or of an attribute.</summary>
+        public (string Name, int Op)? UsedBy(JsonObject op) => UsedBy(Texts(op, null, op["op"]?.ToString() == "html"));
+
+        private static readonly Regex Mustache = new(@"\{\{(.*?)\}\}", RegexOptions.Compiled | RegexOptions.Singleline);
+        private static readonly Regex MarkupAttribute = new(@"\s([:@]?[A-Za-z][\w-]*)\s*=\s*(?:""([^""]*)""|'([^']*)')", RegexOptions.Compiled);
+        private static readonly HashSet<string> BindingAttributes = new(StringComparer.OrdinalIgnoreCase)
+            { "bind", "source", "actions", "data-actions", "if", "list", "options", "value", "values", "destination", "handler" };
+
+        /// <summary>The expressions and bindings of a piece of markup: the only text of it a dependency is read in.</summary>
+        internal static IEnumerable<string> MarkupUses(string html)
+        {
+            foreach (Match m in Mustache.Matches(html)) yield return m.Groups[1].Value;
+            foreach (Match m in MarkupAttribute.Matches(html))
+            {
+                var attribute = m.Groups[1].Value;
+                if (BindingAttributes.Contains(attribute) || attribute.StartsWith("on", StringComparison.OrdinalIgnoreCase) || attribute[0] is ':' or '@')
+                    yield return m.Groups[2].Success ? m.Groups[2].Value : m.Groups[3].Value;
+            }
+        }
 
         public (string Name, int Op)? UsedByText(string text)
         {
@@ -195,23 +244,24 @@ public sealed partial class ModelSession
             return null;
         }
 
-        private static IEnumerable<string> Texts(JsonNode? node, string? key = null)
+        private static IEnumerable<string> Texts(JsonNode? node, string? key = null, bool markup = false)
         {
             switch (node)
             {
                 case JsonValue v when v.TryGetValue<string>(out var s):
-                    // A description or a label is no use of a name.
-                    if (key is not ("description" or "label" or "_why")) yield return s;
+                    // A description or a label is no use of a name; the markup of an html op is read for its expressions only.
+                    if (markup && key is "html" or "edit" or "edits" or "with" or "find") { foreach (var use in MarkupUses(s)) yield return use; }
+                    else if (key is not ("description" or "label" or "_why")) yield return s;
                     break;
                 case JsonObject o:
                     foreach (var (k, child) in o)
                     {
                         if (k is "args" or "assign" && child is JsonObject pairs) foreach (var (name, _) in pairs) yield return name;
-                        foreach (var s in Texts(child, k)) yield return s;
+                        foreach (var s in Texts(child, k, markup)) yield return s;
                     }
                     break;
                 case JsonArray a:
-                    foreach (var child in a) foreach (var s in Texts(child, key)) yield return s;
+                    foreach (var child in a) foreach (var s in Texts(child, key, markup)) yield return s;
                     break;
             }
         }
@@ -222,7 +272,7 @@ public sealed partial class ModelSession
     /// phases add problems to it (JobRunner.Diagnosis); otherwise, and with several, PREFLIGHT_REFUSED with every problem.
     /// The message keeps each failure's own text (`op #i (verb name): ...`), the first failure is the inner exception (the
     /// error text keeps the type of its root).</summary>
-    private static Exception ApplyRefusal(List<ApplyFailure> failures, List<(int Op, int Because, string Uses)> skipped, string? opsPointer)
+    private static Exception ApplyRefusal(List<ApplyFailure> failures, List<(int Op, int Because, string Uses, string? At)> skipped, string? opsPointer)
     {
         var problems = new List<JsonObject>();
         foreach (var failure in failures) problems.AddRange(ApplyProblems(failure, opsPointer));
@@ -246,10 +296,21 @@ public sealed partial class ModelSession
                     Preflight.PatchCertainty.Publish(p);
                 }
             }
+            // R2-H: a coded failure raised without problems of its own (KernelRefusalException(code, message):
+            // ROLE_ACTION_REQUIRES_SERVER) still says its problem: its code, op, pointer and phase, as several failures do.
+            if (own.Count == 0)
+                Errors.AttachProblems(failures[0].Error, rebased.Select(p =>
+                {
+                    p["phase"] ??= "apply";
+                    if (p["op"] == null) p["op"] = failures[0].Op;
+                    return JobPreflight.PublicProblem(p);
+                }));
             return failures[0].Error;
         }
-        var warnings = new JsonArray(skipped.Select(s => (JsonNode)JobPreflight.PublicProblem(JobPreflight.Problem(s.Op, opsPointer == null ? null : $"{opsPointer}/{s.Op}",
-            "APPLY_SKIPPED", "warning", $"skipped: it uses {s.Uses}, which failed op #{s.Because} would have created", $"fix op #{s.Because}; this op runs with it"))).ToArray());
+        // R2-B (rule 2): each skipped op says the problem of this refusal it waits for (dependsOn).
+        var skips = skipped.Select(s => Skipped(s.Op, opsPointer == null ? null : $"{opsPointer}/{s.Op}", s.Uses, s.Because, s.At, $"fix op #{s.Because}; this op runs with it")).ToList();
+        JobRunner.ResolveDependsOn(skips, problems.Select(JobPreflight.PublicProblem).ToList(), null, null);
+        var warnings = new JsonArray(skips.Select(w => (JsonNode)w).ToArray());
         var lines = failures.Select(f => f.Error.Message).Concat(notes).ToList();
         return new JobPreflightException(string.Join(Environment.NewLine, lines),
             new JsonArray(problems.Select(p => (JsonNode)JobPreflight.PublicProblem(p)).ToArray()), warnings, failures[0].Error);

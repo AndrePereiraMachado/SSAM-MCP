@@ -897,6 +897,40 @@ test('native library release dispatches once, verifies metadata and preserves un
  const count=sends;await h.access.portalWrite(lostArgs);assert.equal(sends,count);
 });
 
+test('a library release with the written authorization records the approval in its receipt and never replays a lost write',async t=>{
+ for(const lost of [false,true]){
+  const h=harness();t.after(()=>fs.rmSync(h.dir,{recursive:true,force:true}));
+  const publicationKey=uuid(),operationUuid=uuid();let tag=null,sends=0;
+  const input={ApplicationKey:ASSET1,Revision:131,Version:'0.1.9',ReleaseNotes:'Proof'};
+  const pub={key:publicationKey,status:'Finished',assetKey:ASSET1,revision:131,operation:'Publish'};
+  h.access.read=async({operationId,auth,query})=>{
+   assert.equal(auth,'studio');
+   if(operationId.endsWith('/publish-operations')){assert.equal(query.revision,131);return {ok:true,data:{results:[pub]}};}
+   return {ok:true,data:operationId.includes('publish-operations')?pub:operationId.endsWith('release-notes')
+    ?{tag,content:'Proof'}:{assetKey:ASSET1,revision:131,tag,name:'FloodServices',assetType:'LowCodeLibrary'}};
+  };
+  h.access.resolvePortal=async()=>({ok:true,path:'studio-http',broker:{callScreenservice:async()=>{
+   sends++;const receipt=JSON.parse(fs.readFileSync(h.access.receipts.file(operationUuid),'utf8'));
+   assert.equal(receipt.state,'sending');
+   assert.equal(receipt.authorization.source.kind,'human-words');
+   assert.equal(receipt.reconciliation.libraryRelease.publicationKey,publicationKey);
+   assert.deepEqual(receipt.reconciliation.libraryRelease.input,input);
+   assert.equal(JSON.stringify(receipt).includes('Faça o release'),false);
+   if(lost)throw new OdcError('UNCERTAIN','Lost response',{sent:true});
+   tag='0.1.9';return {data:{IsValid:true}};
+  }}});
+  const args={tenant:CORPORATE,confirmTenant:CORPORATE,auth:'studio',operationId:'libraries.release',input:{inputParameters:input},operationUuid,
+   authorize:'Faça o release 0.1.9 da revisão 131 do FloodServices em '+CORPORATE};
+  const refused=await h.access.portalWrite({...args,authorize:'Release FloodServices'});
+  assert.equal(refused.error.code,'WORDS_MUST_NAME');assert.equal(sends,0);
+  assert.equal(h.access.receipts.lookup(operationUuid),null);
+  const first=await h.access.portalWrite(args);
+  assert.equal(first.receipt.state,lost?'uncertain':'confirmed',JSON.stringify(first));
+  if(!lost)assert.equal(first.releaseConfirmed,true);
+  await h.access.portalWrite(args);assert.equal(sends,1);
+ }
+});
+
 test('bulk synthetic users send once and clean only inserted records of that receipt',async t=>{
  const records=['BulkA','BulkB'].map(name=>({name,email:name.toLowerCase()+'@ssam-proof.invalid',isActive:false,addToBuiltInIdentityProvider:false}));
  let users=[],status='Finished',itemStatus='Inserted',roles=[];

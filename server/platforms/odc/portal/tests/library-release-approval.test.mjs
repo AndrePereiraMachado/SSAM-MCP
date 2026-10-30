@@ -64,6 +64,44 @@ test('release confirmation requires exact revision, tag and notes, not acceptanc
  assert.equal(await verifyLibraryRelease(input,async id=>id.endsWith('release-notes')?{ok:true,data:{tag:input.Version,content:'Other'}}:read(id)),false);
  assert.equal(await verifyLibraryRelease(input,async()=>({ok:false})),false);
 });
+// R2-I (ported from the proto, 28/10): the chat authorization alone, no file and no invented conversation IDs; the publication
+// of this exact revision is found by a read and verified again.
+test('a library release takes the written authorization naming the library, tenant, version and revision and binds the verified publication',async()=>{
+ const host='wrightflood.outsystems.dev',assetKey=crypto.randomUUID(),publicationKey=crypto.randomUUID();
+ const input={ApplicationKey:assetKey,Revision:131,Version:'0.1.9',ReleaseNotes:'Release current integrations'};
+ const revision={assetKey,revision:131,assetType:'LowCodeLibrary',tag:null,name:'FloodServices'};
+ const pub={key:publicationKey,status:'Finished',assetKey,revision:131,operation:'Publish'};
+ const words='Faça o release 0.1.9 da revisão 131 do FloodServices em wrightflood.outsystems.dev.';
+ const read=async(id,p,q)=>{
+  if(id.endsWith('/publish-operations')){
+   assert.deepEqual(q,{assetKey,revision:131,status:'Finished',limit:100});
+   return {ok:true,data:{results:[{...pub,assetKey:crypto.randomUUID()},pub]}};
+  }
+  return {ok:true,data:id.includes('publish-operations')?pub:revision};
+ };
+ const args={words,host,raw:{inputParameters:input},lookup:()=>assert.fail('No creation receipt needed'),read};
+ const approved=await libraryReleaseApproval(args);
+ assert.deepEqual(approved.source,{kind:'human-words'});
+ assert.equal(approved.file,null);assert.equal(approved.preExisting,true);
+ assert.equal(approved.wordsSha256,crypto.createHash('sha256').update(words).digest('hex'));
+ assert.equal(approved.constraints.publicationKey,publicationKey);
+ assert.equal(approved.constraints.inputSha256,crypto.createHash('sha256').update(JSON.stringify(input)).digest('hex'));
+ for(const other of ['',words.replace('FloodServices','FloodServicesOther'),words.replace(host,'other.outsystems.dev'),
+   words.replace('0.1.9','0.1.90'),words.replace('131','1310'),words.replace('release','observe')])
+  await assert.rejects(libraryReleaseApproval({...args,words:other}),e=>e.code==='WORDS_MUST_NAME');
+ for(const patch of [{Version:'0.1.8'},{Revision:132}])
+  await assert.rejects(libraryReleaseApproval({...args,raw:{inputParameters:{...input,...patch}}}));
+ for(const change of [{status:'Running'},{assetKey:crypto.randomUUID()},{revision:130},{operation:'Deploy'}])
+  await assert.rejects(libraryReleaseApproval({...args,read:async(id,p,q)=>id.endsWith('/publish-operations')
+   ?{ok:true,data:{results:[{...pub,...change}]}}:read(id,p,q)}),e=>e.code==='LIBRARY_PUBLICATION_UNVERIFIED');
+ await assert.rejects(libraryReleaseApproval({...args,read:async(id,p,q)=>id.endsWith('/publish-operations')
+  ?{ok:false}:read(id,p,q)}),e=>e.code==='LIBRARY_PUBLICATION_UNVERIFIED');
+ for(const change of [{tag:'0.1.9'},{assetType:'WebApplication'},{revision:132}])
+  await assert.rejects(libraryReleaseApproval({...args,read:async()=>({ok:true,data:{...revision,...change}})}),e=>e.code==='LIBRARY_RELEASE_BASE_UNVERIFIED');
+ // A list is not enough: the publication itself must still match at the final read.
+ await assert.rejects(libraryReleaseApproval({...args,read:async(id,p,q)=>id.endsWith('/{operationKey}')
+  ?{ok:true,data:{...pub,status:'Running'}}:read(id,p,q)}),e=>e.code==='LIBRARY_PUBLICATION_UNVERIFIED');
+});
 test('an existing library (preExisting) is released only with explicit approval naming library and tenant, verified base and publication',async t=>{
  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'release-existing-'));t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
  const file=path.join(dir,'approval.json'),proposal=path.join(dir,'proposal.md');fs.writeFileSync(proposal,'Release the existing library Shared');
@@ -82,8 +120,9 @@ test('an existing library (preExisting) is released only with explicit approval 
  const approved=await libraryReleaseApproval(args);
  assert.equal(approved.operation,LIBRARY_RELEASE);assert.equal(approved.preExisting,true);assert.deepEqual(approved.targets,['Shared',host]);
  assert.equal(approved.constraints.preExisting,true);assert.equal(lookups.length,0);
- // No context file, or a context that does not name the tenant / the library: refused before any send.
- await assert.rejects(libraryReleaseApproval({...args,file:undefined}),e=>e.code==='AUTHORIZATION_CONTEXT_INVALID');
+ // R2-I: no context file means the written words are the approval: words that do not say release and name the library,
+ // tenant, version and revision are refused before any send; a context that does not name the tenant / the library too.
+ await assert.rejects(libraryReleaseApproval({...args,file:undefined}),e=>e.code==='WORDS_MUST_NAME');
  fs.writeFileSync(file,JSON.stringify(record(['Shared'])));
  await assert.rejects(libraryReleaseApproval(args),e=>e.code==='AUTHORIZATION_CONTEXT_INVALID');
  fs.writeFileSync(file,JSON.stringify(record([host])));

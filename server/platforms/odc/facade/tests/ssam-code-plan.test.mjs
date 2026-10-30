@@ -1,4 +1,5 @@
 import './fixtures/isolated-profile.mjs';
+import { planIndex } from './fixtures/plan-index.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -50,7 +51,7 @@ function digestOf(lane = 'o11', module = 'Neutral') {
 }
 function fakeDeps(dir, lane = 'o11') {
   const base = put(dir, 'base.oml', 'fake capture');
-  return { root: dir, local: path.join(dir, 'local'), odcRoot: path.join(dir, 'odc'),
+  return { briefingIndex: planIndex, root: dir, local: path.join(dir, 'local'), odcRoot: path.join(dir, 'odc'),
     now: () => 1791849600000,
     newestCapture: () => ({ path: base, sha256: sha('fake capture'), model: sha('fake capture'), at: '2026-10-13T00:00:00.000Z', ageSeconds: 0 }),
     moduleDigest: async () => ({ ok: true, digest: digestOf(lane) }) };
@@ -103,7 +104,7 @@ test('P6 exact context uses FK/type neighbours, explicit calls and complete reco
   const saved = read(path.join(plan.dir, 'plan.json')), context = saved.sections[1].module;
   for (const name of ['Order', 'Customer', 'ExistingLookup', 'OrderResult']) assert.ok(context.includes(name), name + ': ' + context);
   assert.ok(!context.includes('Unrelated') && !context.includes('BodyShouldNotBeIncluded'));
-  const huge = await codePlan({ lane: 'o11', module: 'Neutral', items: [{ ...action('LargeWork'), intent: 'x'.repeat(30000) }] }, deps);
+  const huge = await codePlan({ lane: 'o11', module: 'Neutral', items: [{ ...action('LargeWork'), intent: 'x'.repeat(PACKET_TARGET_BYTES * 2) }] }, deps);
   assert.equal(huge.ok, true, JSON.stringify(huge));
   const record = read(path.join(huge.dir, 'plan.json')), prompt = fs.readFileSync(huge.batches[0].promptFile, 'utf8');
   assert.ok(bytes(prompt) <= PACKET_TARGET_BYTES);
@@ -169,7 +170,7 @@ test('P2 trigger corpus and grammar/write guidance never blocks a large direct w
   for (const [intent, count] of corpus) {
     assert.equal(planSize(intent, digestOf()), count, intent);
     const packet = workPacket({ lane: 'o11', intent, matches: [], categories: new Map(), module: { ok: true, digest: digestOf(), module: { name: 'Neutral' } } });
-    assert.equal(Boolean(packet.next.plan), count >= PLAN_MIN_ITEMS, intent);
+    assert.equal(Boolean(packet.next.plan), count >= 2, intent);
   }
   let handler, delivered = 0, planned = 0;
   registerSsamCode({ registerTool: (_name, _schema, fn) => { handler = fn; } }, {
@@ -225,7 +226,7 @@ test('P6/P7 compact file prompts and deterministic plan in a fresh process', asy
   assert.equal(first.ok, true, JSON.stringify(first)); assert.deepEqual(first, second); assert.equal(JSON.stringify(input), before);
   const files = fs.readdirSync(first.dir).filter(name => /prompt|stubs|plan\.json/.test(name));
   const snapshot = Object.fromEntries(files.map(name => [name, fs.readFileSync(path.join(first.dir, name), 'utf8')]));
-  const script = `import {codePlan} from ${JSON.stringify(pathToFileURL(path.join(here, '../code-plan.mjs')).href)};\nconst input=${JSON.stringify(input)};const deps=${JSON.stringify({ root: deps.root, local: deps.local, odcRoot: deps.odcRoot })};deps.newestCapture=()=>(${JSON.stringify(deps.newestCapture())});deps.moduleDigest=async()=>(${JSON.stringify(await deps.moduleDigest())});process.stdout.write(JSON.stringify(await codePlan(input,deps)));`;
+  const script = `import {codePlan} from ${JSON.stringify(pathToFileURL(path.join(here, '../code-plan.mjs')).href)};\nconst input=${JSON.stringify(input)};const deps=${JSON.stringify({ root: deps.root, local: deps.local, odcRoot: deps.odcRoot, briefingIndex: planIndex })};deps.newestCapture=()=>(${JSON.stringify(deps.newestCapture())});deps.moduleDigest=async()=>(${JSON.stringify(await deps.moduleDigest())});process.stdout.write(JSON.stringify(await codePlan(input,deps)));`;
   const spawned = spawnSync(process.execPath, ['--input-type=module', '-e', script], { encoding: 'utf8', env: process.env, windowsHide: true });
   assert.equal(spawned.status, 0, spawned.stderr); assert.deepEqual(JSON.parse(spawned.stdout), first);
   for (const [name, text] of Object.entries(snapshot)) assert.equal(fs.readFileSync(path.join(first.dir, name), 'utf8'), text, name);

@@ -18,8 +18,12 @@ public static class PreflightChecks
     {
         var found = new Found([], []);
         Run(found, nameof(PropertyRules), () => PropertyRules.Check(ops, prefix, lane, expansions));
+        // R3-B: the platform's limits (PlatformLimits) over the JSON forms: no Verify predicts them, so they run for every job.
+        Run(found, nameof(PlatformLimitRules), () => PlatformLimitRules.Check(ops, prefix, lane, expansions));
         // T9: what runs in a Reactive or ODC client by its form (no Verify predicts it, so it runs for every job).
         foreach (var (rule, check) in ReactiveClientRules.Register(ops, prefix, lane)) Run(found, rule, check);
+        // R3-C (K9): N1, whole words in every new name of the logic, against the element's own context (warnings, A03).
+        Run(found, nameof(AbbreviationRules), () => AbbreviationRules.Check(ops, prefix));
         if (!verifyRules) return found;
         var job = JobFacts.From(ops);
         Run(found, nameof(NameRules), () => NameRules.Check(ops, prefix, lane, job));

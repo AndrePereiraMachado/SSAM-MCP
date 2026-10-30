@@ -82,8 +82,7 @@ public static class DocumentNameRules
         public bool Unplanned { get; init; }
     }
 
-    private static readonly HashSet<string> Globals = new(StringComparer.OrdinalIgnoreCase)
-        { "True", "False", "and", "or", "not", "like", "Entities", "Site", "Session", "Roles", "Resources", "Settings", "Request", "Client", "BuiltinClientVariables", "Images", "Themes", "NullObject" };
+    private static readonly IReadOnlySet<string> Globals = ExpressionRoots.All;
     private static readonly HashSet<string> SystemRoles = new(StringComparer.OrdinalIgnoreCase) { "Anonymous", "Registered" };
     // The attributes whose value is an expression in ssam-html/1 (the rest is text, a literal of the Model API or a name).
     private static readonly HashSet<string> ExpressionAttributes = new(StringComparer.OrdinalIgnoreCase) { "if", "list", "bind", "value", "show", "enabled", "default", "options", "label", "visible" };
@@ -366,14 +365,28 @@ public static class DocumentNameRules
     private static IEnumerable<JsonObject> Events(Context c)
     {
         c.Checked.Add("S3");
-        var screens = new HashSet<string>(c.Documents.Where(d => d.Kind == "screen").Select(d => d.Name), StringComparer.OrdinalIgnoreCase);
-        foreach (var name in c.Facts.Roots("screen")) screens.Add(name);
-        // The screens the module imports (reference rows of the index, digest, reference ops) and the producers'.
-        foreach (var name in c.Facts.NamesOf(IndexBaseFacts.ScreenKind.IsMatch)) screens.Add(name);
-        foreach (var name in c.Facts.ProducerNames("screen")) screens.Add(name);
+        // R2-A: the destination of an event by the one rule of the preflight and the apply (NameResolution): among what an event
+        // runs or opens, in the order of a call (ScreenHtmlModule.DestinationTier): this document's screen actions (0), the
+        // screens of the module and of the job (1), the screens of the references (2), the producers' the job may import (3); so
+        // an element of another kind named like a screen (a parameter, a server action) never decides, and the module's screen
+        // comes before a reference's. A name only the job may create is the apply's; a client action is never a destination.
+        var screens = new List<NameCandidate>();
+        var ui = c.Basis.Digest is { } digest ? IndexBaseFacts.DigestUi(digest).Where(x => IndexBaseFacts.ScreenKind.IsMatch(x.Kind)).Select(x => x.Name) : Enumerable.Empty<string>();
+        foreach (var name in c.Documents.Where(d => d.Kind == "screen").Select(d => d.Name).Concat(c.Facts.Roots("screen")).Concat(ui))
+            screens.Add(new(name, "Screen", "screen", 1, name));
+        // The screens the module imports, once each by producer (the index, the digest and a reference op list one element: two
+        // producers' screens of one name are two candidates, as at apply).
+        var known = ScopeRules.Known(c.Facts, ScopeJob.Of(c.Ops), c.Ops, c.Basis.Lane);
+        foreach (var (producer, elements) in known.ProducerKinds)
+            foreach (var (_, element) in elements)
+                foreach (var kind in element.Kinds.Where(k => IndexBaseFacts.ScreenKind.IsMatch(k)))
+                    screens.Add(new(element.Name, kind, "screen", 2, kind + ":" + producer + "." + element.Name, producer));
+        foreach (var name in c.Facts.ProducerNames("screen")) screens.Add(new(name, "Screen", "screen", 3, name));
         foreach (var d in c.Documents) {
-            // A screen action of actions=, or (in a block) an event the block declares (its handler is the caller's).
-            var actions = new HashSet<string>(d.Facts.Actions.Concat(d.Facts.Declared.Where(x => x.Kind == "event").Select(x => x.Name)), StringComparer.OrdinalIgnoreCase);
+            // A screen action of actions=, or (in a block) an event the block declares (its handler is the caller's: of a kind
+            // this rule does not judge).
+            var own = d.Facts.Actions.Select(x => new NameCandidate(x, "ScreenAction", "action", 0, x, d.Name, true))
+                .Concat(d.Facts.Declared.Where(x => x.Kind == "event").Select(x => new NameCandidate(x.Name, "", "", 0, x.Name, d.Name, true))).ToList();
             foreach (var e in d.Text.Elements())
                 foreach (var a in e.Attributes) {
                     if (!(a.Name.StartsWith("on", StringComparison.OrdinalIgnoreCase) || a.Name.StartsWith('@')) || a.Name.Contains('.')) continue;
@@ -381,15 +394,39 @@ public static class DocumentNameRules
                     var open = value.IndexOf('(');
                     var target = (open < 0 ? value : value[..open]).Trim().TrimEnd(';');
                     if (target.Length == 0 || !Regex.IsMatch(target, @"^[A-Za-z_]\w*$")) continue;   // qualified or not a destination: the apply judges it
-                    if (actions.Contains(target) || screens.Contains(target) || JobPreflight.PossiblyCreated(target, c.Words, c.Whole)) continue;
+                    // Every other element of that name (of any kind) is what a scope-first search would have answered: unfit. The
+                    // actions the job declares are among them with their kinds (a client action of this job).
+                    var others = c.Facts.KindsOf(target).Where(k => !IndexBaseFacts.ScreenKind.IsMatch(k)).Select(k => new NameCandidate(target, k, ScopeRules.RoleOfKind(k), 2, k + ":" + target))
+                        .Concat(known.Declared.Where(x => string.Equals(x.Name, target, StringComparison.OrdinalIgnoreCase) && x.Owner == null).Select(x => new NameCandidate(x.Name, x.Kind, "action", 1, x.Kind + ":" + x.Name)));
+                    var answer = NameResolution.Resolve(target, own.Concat(screens).Concat(others).Where(x => string.Equals(x.Name, target, StringComparison.OrdinalIgnoreCase)), NameResolution.EventDestination);
+                    if (answer.Outcome == NameOutcome.Ambiguous && !JobPreflight.PossiblyCreated(target, c.Words, c.Whole)) {
+                        yield return Problem(c, d, e, ScreenDocument.NameAmbiguous, $"{a.Name}=\"{target}\": {answer.Candidates.Count} screens or screen actions of that name are at the same distance ({string.Join(", ", answer.Candidates.Select(NameResolution.Describe))})",
+                            "write one of: " + string.Join(", ", answer.Candidates.Select(x => $"{a.Name}=\"{x.Canonical}\"")), "module-index", absence: true, candidates: answer.Candidates.Select(x => x.Canonical));
+                        continue;
+                    }
+                    if (answer.Outcome != NameOutcome.Unknown || NameResolution.SystemDestinations.Contains(target)) continue;
+                    // A client action (of the module or of this job) and nothing an event runs of that name: its wrapping.
+                    if (answer.Unfit.FirstOrDefault(u => NameResolution.Bare(u.Kind) is "ClientAction" or "ClientActionSignature") is { } client
+                        && !c.Documents.Any(x => x.Kind == "screen" && string.Equals(x.Name, target, StringComparison.OrdinalIgnoreCase))) {
+                        var (logic, wrapper) = ScreenHtmlEdit.ClientActionWrap(d.Name, client.Name, open < 0 ? "" : value[open..]);
+                        var problem = Problem(c, d, e, ScreenHtmlEdit.NameUnknown, $"{a.Name}=\"{target}\": '{target}' is the {NameResolution.Describe(client)}, which an event cannot run (an event runs a screen action of {d.Name} or opens a screen; the platform refuses a client action as the destination)",
+                            $"run it from a screen action of {d.Name}: a logic op with the text \"{logic.Replace("\n", "\\n")}\", {wrapper} in actions= of {d.Name}, and {a.Name}=\"{wrapper}\"",
+                            "job+module-index", absence: false, candidates: [wrapper]);
+                        problem["wrap"] = new JsonObject { ["logic"] = logic, ["actions"] = wrapper, ["attribute"] = a.Name, ["value"] = wrapper };
+                        yield return problem;
+                        continue;
+                    }
+                    if (JobPreflight.PossiblyCreated(target, c.Words, c.Whole)) continue;
+                    var actions = own.Select(x => x.Name).ToList();
                     var certain = ScreenHtmlEdit.Certain(target, actions);
                     var start = a.ValueStart + a.Value.IndexOf(target, StringComparison.Ordinal);
-                    yield return Problem(c, d, e, ScreenHtmlEdit.NameUnknown, $"{a.Name}=\"{target}\": no screen action of actions= and no screen is named '{target}'",
+                    yield return Problem(c, d, e, ScreenHtmlEdit.NameUnknown, $"{a.Name}=\"{target}\": no screen action of actions= and no screen is named '{target}'"
+                        + (answer.Unfit.Count > 0 ? $" ({string.Join(", ", answer.Unfit.Take(3).Select(NameResolution.Describe))} is no event destination)" : ""),
                         certain != null ? $"{a.Name}=\"{certain}\"" : $"list it in actions= and write action {d.Name}.{target} in a logic text of this job, or name a screen",
                         // absence: a name the basis lacks (a warning unless the index is the module the job is applied to, Problem). Before
                         // 20/10/2026 this passed HasIndex, so WITHOUT an index the problem was an error: the opposite of the skip note.
                         "job+module-index", absence: true, certain == null || start < a.ValueStart ? null : EditOf(d, e, start, start + target.Length, certain),
-                        ScreenHtmlEdit.Closest(target, actions.Concat(screens)));
+                        ScreenHtmlEdit.Closest(target, actions.Concat(screens.Select(x => x.Name).Distinct(StringComparer.OrdinalIgnoreCase))));
                 }
         }
     }

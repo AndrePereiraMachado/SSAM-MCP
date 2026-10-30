@@ -47,7 +47,7 @@ import { isScreenIntent, screenWords } from './osui-catalog.mjs';
 import { functionNames } from './builtin-functions.mjs';
 import { coveredBy, FLOW_BASED_ON, HTML_BASED_ON } from './text-packet.mjs';
 import { fitComponents } from './environment-components.mjs';
-import { planSize, PLAN_MIN_ITEMS } from './code-plan.mjs';
+import { workItemCount, dividedWork, PLAN_MIN_ITEMS } from './code-plan.mjs';
 import { hostedContext } from './executor.mjs';
 import { codeServedHosted } from './hosted/served.mjs';
 import { osuiAppTypes, APP_KINDS } from './app-kinds.mjs';
@@ -85,7 +85,7 @@ export const WORK_RULE = 'Rounds: this packet, ONE read only if needsReading is 
 // 2026-10-12 (production test): the packet described the mechanics of one delivery and its example was one step of a chain
 // of jobs, so the session delivered one action per call (three deliveries and a rewrite of the batch: about 2 minutes).
 export const BATCH_RULE = 'ALL the changes of this request for this module go in ONE job and ONE call (user exceptions, site properties or settings, structures, entities and every action together, in any order: the actions may call each other); separate jobs only for different modules, never one job per action or per step; a refusal brings every problem of the whole job at once';
-export const PARALLEL_RULE = 'With 6 or more elements: ssam_code plan gives each subagent its prompt file and check; launch its batches in parallel, then send its final write. Each subagent writes its UTF-8 .flow/.html file, runs the given check until ok (shared data and stubs included; no Studio), and answers only the paths. Write shared data first. The main agent sends ONE ssam_code write with all files, never copying text; refusals name problems by file (files/<i>).';
+export const PARALLEL_RULE = 'For divided work: ssam_code plan gives each subagent its prompt file and check; launch its batches in parallel, then send its final write. Each subagent writes its UTF-8 .flow/.html file, runs the given check until ok (shared data and stubs included; no Studio), and answers only the paths. Write shared data first. The main agent sends ONE ssam_code write with all files, never copying text; refusals name problems by file (files/<i>).';
 
 const bytes = value => Buffer.byteLength(JSON.stringify(value), 'utf8');
 const clip = (text, max) => { const s = String(text ?? ''); return s.length <= max ? s : s.slice(0, max) + '…(+' + (s.length - max) + ')'; };
@@ -520,7 +520,7 @@ function withCompanions(write, text, { readings = [], module = null }) {
   });
   return also.length ? { ...write, arguments: { ...write.arguments, also } } : write;
 }
-export function nextSection({ lane, intent = '', module = null, operations = null, expand = null, textForms = [], textRoute = null, text = null, readings = [] }) {
+export function nextSection({ lane, intent = '', module = null, operations = null, expand = null, textForms = [], textRoute = null, text = null, readings = [], parallel, workers, items }) {
   const name = module?.ok !== false && module?.digest?.module?.name ? module.digest.module.name : '<Module>';
   // With a text section the ops are those of text.call (the text forms) and the JSON ops of what no text covers.
   const ops = textForms.length ? ['<the ops of text.call, in its order>', '<JSON ops only for what no text form covers>'] : ['<ops written from this packet>'];
@@ -542,11 +542,13 @@ export function nextSection({ lane, intent = '', module = null, operations = nul
   const summary = '"delivered" brings a summary of what it created (each action with its inputs and outputs): no map after it';
   // Six or more elements written by hand are split by ssam_code plan; a generator writes its whole family in one op, so a
   // generated intent never asks for a plan.
-  const planned = generator || hosted ? 0 : planSize(intent, module?.digest);
+  const planned = generator || hosted ? 0 : workItemCount(intent);
+  const offerPlan = !hosted && (planned >= PLAN_MIN_ITEMS || dividedWork(intent, { parallel, workers, items })
+    || !generator && workItemCount(intent) >= 2);
   return { work: WORK_RULE,
     ...(generator ? { generator: { ...generatorCard(generator, lane, name), why: generator.why } } : {}),
-    ...(planned >= PLAN_MIN_ITEMS ? { plan: { tool: 'ssam_code', arguments: { lane, action: 'plan', module: name, items: '<one per element: kind, name, intent, signature>' }, why: `${planned} elements: ssam_code splits them into parallel batches with prompts, context and checks; launch what it returns, then send its final write` } } : {}),
-    deliver: { ...deliver, batch: BATCH_RULE, ...(!hosted && planned >= PLAN_MIN_ITEMS ? { parallel: PARALLEL_RULE } : {}), why: generator ? `one call: the ${generator.op} op is the job (put the other changes of this module in the same job); ${summary}` : code ? `one call: ssam_code writes the ${code.form} text through ${json.tool} (it captures the live module, validates and merges; ${summary})` : `one call: it captures the live module, validates and merges; ${summary}` },
+    ...(offerPlan ? { plan: { tool: 'ssam_code', arguments: { lane, action: 'plan', module: name, items: '<one per element: kind, name, intent, signature>' }, why: `Divided work: ssam_code splits the elements into parallel batches with prompts, context and checks; launch what it returns, then send its final write` } } : {}),
+    deliver: { ...deliver, batch: BATCH_RULE, ...(offerPlan ? { parallel: PARALLEL_RULE } : {}), why: generator ? `one call: the ${generator.op} op is the job (put the other changes of this module in the same job); ${summary}` : code ? `one call: ssam_code writes the ${code.form} text through ${json.tool} (it captures the live module, validates and merges; ${summary})` : `one call: it captures the live module, validates and merges; ${summary}` },
     ...(code ? { code: { id: code.id, form: code.form, part: code.part, grammar: code.grammar, read: code.read, json: { tool: json.tool, why: 'the JSON ops, for what the code forms do not write' } } } : {}),
     fix: { how: 'a refusal comes once with every problem of every phase (problems[]: phase, pointer, fix, patch when certain, also by name in patchByName) and names its job in nextBasedOn {job, sha256}: correct all of them in one call with patch (paths by name: actions/<Action>/steps/<as>/...) + basedOn, or with only the changed actions as a partial job + basedOn; never resend the whole job' + (lane === 'o11' ? '; on O11 also closePrevious with the refused taskId' : ''),
       arguments: { patch: ['<the patches returned (patchByName) plus your fixes>'], basedOn: { job: '<nextBasedOn.job>', sha256: '<nextBasedOn.sha256>' } } },
@@ -689,11 +691,14 @@ export function workPacket(input, { budgetBytes = PACKET_DEFAULT_BYTES, read = g
   const full = json({ module: build.module(Infinity).value, ...(scoped ? { scope: scopeOf(Infinity) } : {}), ...(input.text?.value ? { text: input.text.value } : {}),
     ...(environmentFull ? { environment: environmentFull } : {}),
     capabilities: build.capabilities(Infinity).value, example: build.example(Infinity).value, rules: build.rules(Infinity).value });
+  // Hash the complete semantic packet, including sections that do not fit the answer.
+  const packetRef = createHash('sha256').update(JSON.stringify({ lane, intent, app: input.app ?? null, basis: input.basis, full, next, budgetBytes })).digest('hex');
+  if (!recover && input.packetRef === packetRef) return { ok: true, unchanged: true, packetRef };
   const order = PACKET_ORDER.filter(id => id === 'next' || id in full);
   // The scope's room: its share of the budget, before the shares of the other sections (like text).
   const scopeCap = Math.floor(budgetBytes * ((input.readings ?? []).length ? EDIT_SCOPE_SHARE : SCOPE_SHARE));
   const scope = scopeOf(scopeCap);
-  const envelope = { ok: true, schemaVersion: PACKET_SCHEMA, lane, intent, ...(input.kind ? { kind: input.kind } : {}), ...(input.app ? { app: input.app } : {}), basis: input.basis ?? null,
+  const envelope = { ok: true, packetRef, schemaVersion: PACKET_SCHEMA, lane, intent, ...(input.kind ? { kind: input.kind } : {}), ...(input.app ? { app: input.app } : {}), basis: input.basis ?? null,
     ...needOf(full.scope, scopeInput, input),
     packet: { order, rule: ORDER_RULE },
     module: withModule ? null : full.module, ...(scope ? { scope } : {}), ...(text ? { text } : {}), ...(environment ? { environment } : {}),

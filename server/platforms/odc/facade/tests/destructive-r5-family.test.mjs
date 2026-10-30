@@ -58,6 +58,7 @@ test('CX15 r5 family: validation refusals, publication, creation and the debugge
     for (const [, [tool, args]] of Object.entries(N1_CASES(path.join(family, 'x.oml'), W))) if ((await call(tool, args))?.ok === false) refused++;
     expect(refused === Object.keys(N1_CASES('x', W)).length, 'N-1: every case is a refusal (' + refused + ')');
     expect(runs.length === 0, 'N-1: nothing ran');
+    // R1-B (fase4-28/r1-answers): the case kept is D4, above the visible ceiling (fixtures/destructive-r5-cases.mjs).
     expect(filesUnder(path.join(answersRoot, '.local', 'answers')).length >= 1, 'N-1: the fitter kept a long refusal (the sweep sees .local\\answers)');
     // ---- CX15 r6 (M-2): the studio_command forms of the r5 review, through the same hub.
     let refusedM2 = 0;

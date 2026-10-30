@@ -104,6 +104,14 @@ public static class LogicOrder
     internal static LogicCallCandidate[] CallCandidates(string target, JsonObject caller)
     {
         if (target.Contains(':') || target.StartsWith('@') || target.StartsWith('$')) return [new(target)];
+        // R2-A: Producer.Action, the form the text form and the reading write for an action of a reference, names that
+        // reference's own signature (IReference:Producer/I<Kind>Signature:Action), never the first of its name in the module.
+        if (target.IndexOf('.') is var dot and > 0 && target.LastIndexOf('.') == dot && !target.Contains('/'))
+        {
+            var (producer, name) = (target[..dot], target[(dot + 1)..]);
+            var kinds = (IsClient(caller) ? new[] { "IClientActionSignature" } : Array.Empty<string>()).Concat(new[] { "IServerActionSignature", "IActionSignature", "IExtensionActionSignature" });
+            return [.. kinds.Select(kind => new LogicCallCandidate("IReference:" + producer + "/" + kind + ":" + name))];
+        }
         var owner = Owner(caller);
         var global = new[] { "IServerAction:" + target, "IServiceAction:" + target, "IClientAction:" + target,
             "IServerActionSignature:" + target, "IEntityActionSignature:" + target, "IActionSignature:" + target,

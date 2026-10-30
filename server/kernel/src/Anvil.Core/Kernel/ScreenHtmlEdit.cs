@@ -13,52 +13,95 @@ namespace Anvil.Reading;
 // Free of Studio types: the native moves go through IScreenHtmlWriter (ModelSession implements it over the Model API).
 public static class ScreenHtmlEdit
 {
-    // data.css in an edit goes to the root's own style sheet after the page's <style>, the rule of the document form
-    // (docs/SSAM-HTML.md, Fidelity, CSS: every <style> of the document, then data.css, in document order, as written;
-    // ScreenDocument.OwnSheet), through the same verified <style> edit path. The page's <style> is the one the edit writes:
-    // the <style> of a whole document (the one element edits make included), else a <style> edit, else the reading's
-    // (readingHtml), kept as it is and followed by data.css. Nothing the author wrote is dropped.
-    public static List<string> WithCss(IReadOnlyList<string> edits, string css, string? readingHtml = null)
+    // R2-D (the owner's decision of 2026-10-28): data.css in an edit IS the root's own style sheet, as written: it replaces the
+    // page's <style> instead of following it (docs/SSAM-HTML.md, Fidelity, CSS; ScreenDocument.OwnSheet, the same rule on a
+    // create), through the same verified <style> edit path. The page's <style> it replaces is the one the edit writes: the
+    // <style> of a whole document (the one element edits make included), else a <style> edit, else the reading's. A sheet sent
+    // again whole is then the sheet, never twice the sheet; a rule left out of it is removed.
+    public static List<string> WithCss(IReadOnlyList<string> edits, string css, string? readingHtml = null) => PlaceCss(edits, css, readingHtml).Edits;
+
+    /// <summary>What <see cref="WithCss"/> did: the edits with data.css as the page's &lt;style&gt;; the text of the &lt;style&gt; it
+    /// replaced (null: none) and whether that one was the edit's own (a &lt;style&gt; the author sent that is not the reading's).</summary>
+    public sealed record CssPlacement(List<string> Edits, string? Replaced, bool ReplacedTheEdits);
+
+    public static CssPlacement PlaceCss(IReadOnlyList<string> edits, string css, string? readingHtml = null)
     {
         if (css.Contains("</style>", StringComparison.OrdinalIgnoreCase))
             throw new FormatException("data.css cannot contain a closing style tag");
+        var reading = readingHtml == null ? null : OwnSheetOf(readingHtml);
         var result = edits.ToList();
         for (var i = 0; i < result.Count; i++)
         {
             var tree = ScreenHtml.Parse(result[i]);
             var root = tree.Children.FirstOrDefault(n => !n.IsText);
-            if (root?.Tag is "screen" or "block" && OwnStyle(root) is var own)
+            if (root?.Tag is "screen" or "block" or "style")
             {
-                if (own != null) Append(own, css); else root.Children.Insert(0, Style(css));
+                var own = root.Tag == "style" ? root : OwnStyle(root);
+                var was = own == null ? null : StyleText(own);
+                if (own != null) { own.Children.Clear(); own.Children.Add(new ScreenHtml.Node { Text = css }); }
+                else root.Children.Insert(0, Style(css));
                 result[i] = ScreenHtmlText.Write(tree);
-                return result;
-            }
-            if (root?.Tag == "style")
-            {
-                Append(root, css);
-                result[i] = ScreenHtmlText.Write(tree);
-                return result;
+                return new CssPlacement(result, was ?? reading, was != null && was != reading);
             }
         }
-        var read = readingHtml == null ? null : ScreenHtml.Parse(readingHtml).Children.FirstOrDefault(n => !n.IsText) is { } top ? OwnStyle(top) : null;
-        var sheet = Style(read == null ? "" : StyleText(read));
-        Append(sheet, css);
-        result.Add(ScreenHtmlText.Write(sheet));
-        return result;
-
-        // The root's own <style> (the first child <style> without scope="theme": the one the edit plan writes as its sheet).
-        static ScreenHtml.Node? OwnStyle(ScreenHtml.Node root) => root.Children.FirstOrDefault(n => !n.IsText && n.Tag == "style" && n.Get("scope") != "theme");
-        static string StyleText(ScreenHtml.Node style) => string.Concat(style.Children.Select(c => c.Text));
-        static ScreenHtml.Node Style(string text) { var node = new ScreenHtml.Node { Tag = "style" }; node.Children.Add(new ScreenHtml.Node { Text = text }); return node; }
-        // ScreenDocument.OwnSheet's join: one part alone is its text; two parts, a line break between them when the first has none.
-        static void Append(ScreenHtml.Node style, string extra)
-        {
-            var text = StyleText(style);
-            var joined = extra.Length == 0 ? text : text.Length == 0 ? extra : text + (text.EndsWith('\n') ? "" : "\n") + extra;
-            style.Children.Clear();
-            style.Children.Add(new ScreenHtml.Node { Text = joined });
-        }
+        result.Add(ScreenHtmlText.Write(Style(css)));
+        return new CssPlacement(result, reading, false);
     }
+
+    /// <summary>The CSS of the root's own &lt;style&gt; of a document (a reading or a whole edit), or null when it has none.</summary>
+    public static string? OwnSheetOf(string html)
+    {
+        try { return ScreenHtml.Parse(html).Children.FirstOrDefault(n => !n.IsText) is { } top && (top.Tag == "style" ? top : OwnStyle(top)) is { } style ? StyleText(style) : null; }
+        catch (FormatException) { return null; }
+    }
+
+    /// <summary>The page's own &lt;style&gt; the edits write (a whole document's, else a &lt;style&gt; edit): its edit and its CSS.</summary>
+    public static (int Edit, string Css)? OwnSheet(IReadOnlyList<string> edits)
+    {
+        for (var i = 0; i < edits.Count; i++)
+        {
+            ScreenHtml.Node? root;
+            try { root = ScreenHtml.Parse(edits[i]).Children.FirstOrDefault(n => !n.IsText); } catch (FormatException) { continue; }
+            if (root?.Tag is "screen" or "block" && OwnStyle(root) is { } own) return (i, StyleText(own));
+            if (root?.Tag == "style") return (i, StyleText(root));
+        }
+        return null;
+    }
+
+    /// <summary>The edits with the CSS of the page's own &lt;style&gt; of edit <paramref name="edit"/> written as <paramref name="css"/>.</summary>
+    public static List<string> WithOwnSheet(IReadOnlyList<string> edits, int edit, string css)
+    {
+        var result = edits.ToList();
+        var tree = ScreenHtml.Parse(result[edit]);
+        var root = tree.Children.First(n => !n.IsText);
+        var own = root.Tag == "style" ? root : OwnStyle(root)!;
+        own.Children.Clear();
+        own.Children.Add(new ScreenHtml.Node { Text = css });
+        result[edit] = ScreenHtmlText.Write(tree);
+        return result;
+    }
+
+    /// <summary>data.css of an html op: its text, or null when it is absent, empty or only whitespace (such a data.css is no
+    /// data.css: it never replaces a sheet; an empty &lt;style&gt; edit clears the sheet). A css that is not a string is the
+    /// shape's problem (Preflight, HtmlEdit).</summary>
+    public static string? DataCss(JsonObject data) =>
+        data["css"] is JsonValue value && value.TryGetValue<string>(out var css) ? DataCss(css) : null;
+
+    /// <summary>The one predicate of an absent data.css, for the edit and the document form (ScreenDocument.OwnSheet, the visual
+    /// checks): the text, or null when it is null, empty or only whitespace.</summary>
+    public static string? DataCss(string? css) => string.IsNullOrWhiteSpace(css) ? null : css;
+
+    /// <summary>An edit that changes only the style sheet: data.css and nothing else to edit (no html; edit and edits absent or
+    /// empty). Valid: data.css is the page's whole sheet, the elements stay as they are.</summary>
+    public static bool CssOnly(JsonObject data) =>
+        DataCss(data) != null && data["html"] == null
+        && (data["edit"] == null || data["edit"] is JsonArray { Count: 0 })
+        && (data["edits"] == null || data["edits"] is JsonArray { Count: 0 });
+
+    // The root's own <style> (the first child <style> without scope="theme": the one the edit plan writes as its sheet).
+    private static ScreenHtml.Node? OwnStyle(ScreenHtml.Node root) => root.Children.FirstOrDefault(n => !n.IsText && n.Tag == "style" && n.Get("scope") != "theme");
+    private static string StyleText(ScreenHtml.Node style) => string.Concat(style.Children.Select(c => c.Text));
+    private static ScreenHtml.Node Style(string text) { var node = new ScreenHtml.Node { Tag = "style" }; node.Children.Add(new ScreenHtml.Node { Text = text }); return node; }
 
     // An html op is an edit of a reading when it carries the edit list, or the base of a reading with the screen it edits (the
     // whole document as the edit), or a base without a document. Everything else that holds a <screen>/<block> is the document
@@ -84,9 +127,11 @@ public static class ScreenHtmlEdit
         if (data["basedOn"] is not JsonObject basedOn || basedOn["html"] is not JsonValue)
             Add("/basedOn", Invalid, "html edit: 'basedOn' {capture, html} is the reading the edit was written on (ssam_map view html answers it)", "\"basedOn\": {\"capture\": \"<sourceSha256>\", \"html\": \"<htmlSha256>\"}");
         if (data.ContainsKey("css") && (data["css"] is not JsonValue cssValue || !cssValue.TryGetValue<string>(out _)))
-            Add("/css", Invalid, "html edit: css must be a string", "send CSS text (it follows the page's <style> in its style sheet), or omit css");
+            Add("/css", Invalid, "html edit: css must be a string", "send CSS text (it is the page's whole style sheet: it replaces the <style> the screen has), or omit css");
         var texts = new List<(string Pointer, string Text)>();
-        if (data["edits"] != null) {
+        // R2-D: data.css alone (no element to edit) changes only the style sheet: nothing else is required.
+        if (CssOnly(data)) { }
+        else if (data["edits"] != null) {
             // CX16: element edits of the reading. Their shape here; their addresses too when the store keeps the reading (ms, no
             // module), then the document they make is judged as the whole document would be.
             if (data["edit"] != null || data["html"] != null) Add("/edits", Invalid, "html edit: 'edits' (element edits of the reading) goes alone, without 'edit' or 'html'", "keep edits, or send the changed elements whole in edit");
@@ -105,7 +150,7 @@ public static class ScreenHtmlEdit
                 else Add("/edit/" + j, Invalid, "each edit is a string: one element of the reading with its k", "\"<div k=\\\"w7\\\" ...>...</div>\"");
             if (list.Count == 0) Add("/edit", Invalid, "html edit: 'edit' is empty", "send the changed elements, each with its k");
         } else if (data["html"] is JsonValue whole && whole.TryGetValue<string>(out var document)) texts.Add(("/html", document));
-        else Add("/edit", Invalid, "html edit: 'edit' (the changed elements, each with its k) or 'html' (the whole document) is required", "\"edit\": [\"<div k=\\\"w7\\\" ...>...</div>\"]");
+        else Add("/edit", Invalid, "html edit: 'edit' (the changed elements, each with its k), 'html' (the whole document) or 'css' (the whole style sheet) is required", "\"edit\": [\"<div k=\\\"w7\\\" ...>...</div>\"]");
         foreach (var (pointer, text) in texts) {
             try {
                 var parsed = ScreenHtml.Parse(text);
@@ -176,6 +221,17 @@ public static class ScreenHtmlEdit
         var close = candidates.Where(c => c.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase)
             .Where(c => Distance(name, c) <= Math.Min(2, Math.Max(1, Math.Min(name.Length, c.Length) / 4))).ToList();
         return close.Count == 1 ? close[0] : null;
+    }
+
+    /// <summary>R2-A: an event never runs a client action (the platform refuses it as the Destination, both lanes); it runs a
+    /// screen action of its page that calls it. The exact wrapping of an event written `action` + `call` (its arguments, "" for
+    /// none) on <paramref name="root"/>: the logic text of the screen action and the destination the event then writes. One
+    /// rule for the edit form, the document form and the static check.</summary>
+    public static (string Logic, string Destination) ClientActionWrap(string root, string action, string call = "")
+    {
+        var args = call.Trim() is { Length: > 0 } written && written.StartsWith('(') ? written : "()";
+        var wrapper = action + "Click";
+        return ($"action {root}.{wrapper}\n  {action}{args}\n  end\n", wrapper);
     }
 }
 

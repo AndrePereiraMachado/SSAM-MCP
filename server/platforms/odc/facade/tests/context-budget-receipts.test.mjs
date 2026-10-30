@@ -11,6 +11,7 @@ import { fitAnswer, fitResult, normalizeOutputWarnings, ANSWER_BUDGETS } from '.
 import { createSsamServer } from '../ssam.mjs';
 import { createReplay } from './answer-replay.mjs';
 import { warningFields } from '../delivery-warnings.mjs';
+import { VISIBLE_ANSWER_BYTES } from '../context-budget.mjs';
 
 const workspace = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../..');
 const rootOf = t => {
@@ -126,22 +127,28 @@ test('B6: every output family applies the rule before early returns and keeps HI
   }
 });
 
-test('B6: warning cuts preserve total and recover the original source; HIGH is never prose-deduplicated', t => {
+// R1 answers (rule 1, 2026-10-28): the warnings of a receipt are its content, never cut as prose for the receipt's editorial
+// budget: every one stays, in one line each when the list does not fit whole, under the visible ceiling; the read of the whole
+// original list is the answer's one omitted call. (Before R1 the list left the receipt for a pointer and warningsTotal.)
+test('B6: warning cuts keep every warning in one line and recover the original source; HIGH is never prose-deduplicated', t => {
   const root = rootOf(t);
   const full = { ...source(), warnings: [...high, ...Array.from({ length: 40 }, (_, index) => ({ id: `LOW_${index}`, detail: `${index}: ` + 'non-blocking warning content '.repeat(20) }))] };
   const snapshot = structuredClone(full);
   const value = fitAnswer('o11_deliver', {}, full, { root });
   assertWarningContract(value);
-  assert.equal(value.warnings, undefined);
-  assert.equal(value.warningsTotal, 42);
-  assert.ok(Buffer.byteLength(JSON.stringify(value)) <= ANSWER_BUDGETS.receipt);
-  assert.ok(value.omitted?.arguments?.file);
+  assert.deepEqual(value.warnings.map(w => w.code), full.warnings.slice(2).map(w => w.id), 'every LOW warning, by its id');
+  assert.ok(value.warnings.every(w => w.message.startsWith(w.code.slice(4) + ': ') && w.message.length <= 240), 'one line each');
+  assert.equal(value.warningsLeft, undefined);
+  assert.equal(value.warnings.length + value.highWarnings.length, 42, 'all 42 are represented by warnings plus highWarnings');
+  assert.ok(Buffer.byteLength(JSON.stringify(value)) <= VISIBLE_ANSWER_BYTES);
+  assert.ok(Buffer.byteLength(JSON.stringify({ ...value, warnings: [] })) <= ANSWER_BUDGETS.receipt, 'the rest of the receipt keeps its budget');
+  assert.equal(value.omitted?.arguments?.pointer, '/warnings');
   assert.deepEqual(JSON.parse(fs.readFileSync(value.omitted.arguments.file, 'utf8')), full, 'evidence keeps the unmodified input');
   assert.equal(fitAnswer('o11_deliver', {}, value, { root }), value);
   assert.deepEqual(full, snapshot);
 });
 
-test('B6: HIGH prose still removes duplicate LOW prose, with exact original recovery', t => {
+test('B6: HIGH prose preserves distinct LOW messages even when their text repeats', t => {
   const root = rootOf(t);
   const lowDistinct = { id: 'LOW_DISTINCT', severity: 'warning', detail: message, fix: 'Review the distinct LOW condition.' };
   const full = { ok: false, error: message, highWarnings: structuredClone(high), warnings: [...structuredClone(high), lowDistinct] };
@@ -149,10 +156,8 @@ test('B6: HIGH prose still removes duplicate LOW prose, with exact original reco
   const value = fitAnswer('o11_deliver', {}, full, { root });
   assertWarningContract(value);
   assert.equal(value.warnings[0].id, 'LOW_DISTINCT');
-  assert.equal(value.warnings[0].detail, undefined, 'LOW repeats HIGH prose and follows the existing CX7 rule');
+  assert.equal(value.warnings[0].detail, message, 'message lists are content, even when text repeats');
   assert.equal(value.error, undefined, 'repeated error prose follows the existing CX7 rule');
-  assert.ok(value.omitted?.arguments?.file);
-  assert.deepEqual(JSON.parse(fs.readFileSync(value.omitted.arguments.file, 'utf8')), full);
   assert.equal(fitAnswer('o11_deliver', {}, value, { root }), value);
   assert.deepEqual(full, snapshot);
   const argumentText = 'A call argument is executable data and must not be seeded as editorial prose from HIGH warnings.';
@@ -162,10 +167,7 @@ test('B6: HIGH prose still removes duplicate LOW prose, with exact original reco
   assert.equal(argumentsKept.warnings[0].detail, argumentText, 'HIGH call arguments are excluded from the seed');
   const indexed = { ok: true, highWarnings: structuredClone(high), warnings: [...structuredClone(high), { id: 'LOW_DESCRIPTION', description: message }] };
   const indexedResult = fitAnswer('o11_deliver', {}, indexed, { root });
-  assert.equal(indexedResult.warnings[0].description, undefined);
-  assert.equal(indexedResult.omitted.arguments.pointer, '/warnings', 'recovery indexes address the original warning list');
-  const indexedSource = JSON.parse(fs.readFileSync(indexedResult.omitted.arguments.file, 'utf8'));
-  assert.deepEqual(indexedSource.warnings, indexed.warnings);
+  assert.equal(indexedResult.warnings[0].description, message);
 });
 
 test('prebudgeted packet parts pass through exactly and idempotently', t => {

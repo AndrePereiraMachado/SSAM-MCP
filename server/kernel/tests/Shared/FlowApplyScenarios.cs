@@ -541,7 +541,8 @@ public static class FlowApplyScenarios
         Assert.IsType<JsonArray>(rule["patch"]);
         var verify = Assert.Single(problems, p => p!["phase"]?.ToString() == "verify")!;
         Assert.Equal("/ops/0/data/flow/1", verify["pointer"]!.ToString());
-        Assert.True(verify["afterPatch"]!.GetValue<bool>());
+        // R2-B (one round): found by the first round itself (the refused text written as its stub), no longer only by the
+        // patch round (afterPatch), which may still say it.
         Assert.Contains("FaMissing", verify["message"]!.ToString());
         // The patch applied, only the error of FaWrong is left; with it fixed, the job is written and FaBig reads as the List action.
         var patched = Patched(job, new JsonArray(rule.DeepClone()));

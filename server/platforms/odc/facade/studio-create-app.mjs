@@ -384,7 +384,7 @@ export function registerStudioCreateApp(server, deps = {}) {
       publish: z.boolean().describe('create: also publish revision 1 after opening (default false: only when the user asked to publish)').optional(),
       tenant: text('Tenant host among the Studio\'s signed-in sessions').optional(),
       authorize: z.string().describe('create: the user\'s literal words naming the app; only their sha256 is kept').optional(),
-      authorizationContext: z.string().describe('Optional absolute path to a scoped ssam-authorization-context/1 record of the verified human approval of the concrete proposal; authorize remains the exact human words. Requires explicit tenant.').optional(),
+      authorizationContext: z.string().describe('Optional absolute path to a scoped ssam-authorization-context/1 record of the verified human approval of the concrete proposal, with an explicit tenant; authorize remains the exact human words.').optional(),
       pid: z.number().int().positive().describe('ODC Studio process id; detected when there is exactly one.').optional(),
     }).strict(),
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },

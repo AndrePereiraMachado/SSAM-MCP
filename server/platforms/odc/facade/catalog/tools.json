@@ -20221,7 +20221,6 @@
        ]
       },
       "originOperationUuid": "<own asset creation receipt UUID>",
-      "authorizationContext": "<recorded exact approval file>",
       "authorize": "<user's words>",
       "operationUuid": "<new uuid>"
      },
@@ -24193,7 +24192,7 @@
        "baseline"
       ]
      ],
-     "next": "guardrails.baselineSave is implemented with exact contextual approval; its corporate mutation and restoration remain unproved live.",
+     "next": "guardrails.baselineSave is implemented with the written words naming the stage and portfolio (a context file stays accepted); its corporate mutation and restoration remain unproved live.",
      "intents": {
       "en": [
        "read administrative guardrail baseline"
@@ -24833,7 +24832,7 @@
       ]
      ],
      "preconditions": [
-      "Exact contextual approval binds the own app creation receipt, stage, portfolio, public BinaryUrl setting, baseline, canonical Base64 and SHA256 of the file. Maximum 1 MiB. Active native flag must be false."
+      "The written words naming the app and setting are the approval (scope carries the setting keys; a context file stays accepted); SSAM binds the own app creation receipt, stage, portfolio, public BinaryUrl setting, baseline, canonical Base64 and SHA256 of the file. Maximum 1 MiB. Active native flag must be false."
      ],
      "args": {
       "tenant": "<tenant host>",
@@ -24841,7 +24840,12 @@
       "operationUuid": "<new UUID>",
       "authorize": "<human words>",
       "confirmTenant": "<tenant host>",
-      "authorizationContext": "<approval.json>",
+      "scope": {
+       "applicationKey": "<own app UUID>",
+       "environmentKey": "<stage UUID>",
+       "settingKey": "<binary setting UUID>",
+       "portfolioKey": "<portfolio UUID>"
+      },
       "input": {
        "inputParameters": {
         "FileContent": "<approved canonical Base64>"
@@ -24868,7 +24872,7 @@
       ]
      ],
      "preconditions": [
-      "Bridge v65 or later. Exact contextual approval binds uploadOperationUuid, own app creation receipt, fresh full native setting, baseline and metadata. Keep Setting.Value empty; the signed URL is inserted privately inside Studio. The resident upload expires after at most ten minutes and is consumed once."
+      "Bridge v65 or later. The written words naming the app and setting are the approval; SSAM binds the own confirmed upload, own app creation receipt, fresh full native setting, baseline and metadata. Keep Setting.Value empty; the signed URL is inserted privately inside Studio. The resident upload expires after at most ten minutes and is consumed once."
      ],
      "args": {
       "tenant": "<tenant host>",
@@ -24876,7 +24880,6 @@
       "operationUuid": "<new UUID>",
       "authorize": "<human words>",
       "confirmTenant": "<tenant host>",
-      "authorizationContext": "<approval.json>",
       "input": {
        "inputParameters": {
         "ApplicationKey": "<own app UUID>",
@@ -25363,7 +25366,7 @@
      "field": "operationId",
      "value": "agents.evaluationCreate",
      "selector": "documented",
-     "when": "Create an agent evaluation. The owned fixture context binds a confirmed dataset, its exact current hash and one native Correctness judge; readback must confirm the persisted evaluation before running.",
+     "when": "Create an agent evaluation. The written words name the evaluation and its dataset; SSAM binds the own fixture's confirmed dataset, its exact current hash and one native Correctness judge, and records the approval (an authorizationContext stays accepted, optional); readback must confirm the persisted evaluation before running.",
      "preconditions": [
       "tenant per call; auth order: ODC Studio session, then vault credential, then a private Windows prompt (never in chat); odc_auth_status shows the path",
       "authorize = the user's own words + a NEW operationUuid; corporate tenant: confirmTenant + words naming the tenant; destructive: words naming the target"
@@ -25417,9 +25420,9 @@
      "field": "operationId",
      "value": "agents.evaluationDelete",
      "selector": "documented",
-     "when": "Delete an owned confirmed evaluation after exact current evaluation/dataset and native idle-state checks. Requires authorizationContext with originOperationUuid, evaluationId, portfolioKey, inputSha256 and expectedEvaluationSha256. Confirm absence by current detail; never replay an uncertain delete.",
+     "when": "Delete an owned confirmed evaluation after exact current evaluation/dataset and native idle-state checks. Requires the written words naming the evaluation; SSAM binds its own creation receipt, evaluationId, portfolioKey and the current evaluation hash (a context file stays accepted). Confirm absence by current detail; never replay an uncertain delete.",
      "preconditions": [
-      "authorizationContext with originOperationUuid, evaluationId, portfolioKey, inputSha256 and expectedEvaluationSha256",
+      "the owner's reply names the evaluation; SSAM binds its own confirmed creation receipt, evaluationId, portfolioKey and the current evaluation hash itself (an authorizationContext stays accepted, optional)",
       "execution: confirmationToken + authorize = the owner's reply after the preview, with the count, naming the evaluation (operationUuid = the preview's operationId); corporate tenant: confirmTenant + words naming the tenant"
      ],
      "next": "Confirm absence by current detail; never replay an uncertain delete. Destructive: {{destructive.twoCalls.odc}}",
@@ -25430,8 +25433,7 @@
        "inputParameters": {
         "EvaluationId": "<owned evaluation UUID>"
        }
-      },
-      "authorizationContext": "<private approved context JSON>"
+      }
      },
      "triggers": [
       [
@@ -25452,7 +25454,7 @@
      "field": "operationId",
      "value": "agents.evaluationRunCreate",
      "selector": "documented",
-     "when": "Submit the single owned synthetic evaluation run. Requires authorizationContext bound to its confirmed creation receipt, exact current evaluation and unchanged dataset with one or two cases. Native idle/Development checks precede submission; the durable claim prevents a second UUID from resending even after a lost response.",
+     "when": "Submit the single owned synthetic evaluation run. Requires the written words naming the evaluation, its confirmed creation receipt, exact current evaluation and unchanged dataset with one or two cases. Native idle/Development checks precede submission; the durable claim prevents a second UUID from resending even after a lost response.",
      "preconditions": [
       "tenant per call; auth order: ODC Studio session, then vault credential, then a private Windows prompt (never in chat); odc_auth_status shows the path",
       "authorize = the user's own words + a NEW operationUuid; corporate tenant: confirmTenant + words naming the tenant; destructive: words naming the target"
@@ -25469,8 +25471,7 @@
       },
       "tenant": "<tenant host>",
       "authorize": "<user's words>",
-      "operationUuid": "<new uuid>",
-      "authorizationContext": "<private approved context JSON>"
+      "operationUuid": "<new uuid>"
      },
      "triggers": [
       [
@@ -25511,8 +25512,8 @@
      "selector": "documented",
      "when": "Configure or restore the administrative guardrail baseline in Development. Affects every agent in the stage. Offline tested; not yet live proved.",
      "preconditions": [
-      "Exact contextual human approval for the preexisting corporate baseline, fresh native state hash and full six-policy v5 wire list; no secretRefs.",
-      "constraints: mode=configure|restore, allowRetainedId, inputSha256, expectedBaselineSha256; restore also originOperationUuid of the confirmed configuration receipt and the same proposal/authorization.",
+      "The written words name the stage and the portfolio of the preexisting corporate baseline and SSAM records the approval (an authorizationContext stays accepted, optional); fresh native state hash and full six-policy v5 wire list; no secretRefs.",
+      "SSAM takes mode=configure|restore from its journal and the state read now, and records allowRetainedId, inputSha256 and expectedBaselineSha256; a restore binds the confirmed configuration receipt of this stage, which SSAM finds in its journal (a file naming it with originOperationUuid and the same proposal stays accepted, optional).",
       "An initially absent ID requires an explicit retained inactive ID exception; original policies must be restored exactly. Never repeat an uncertain POST."
      ],
      "next": "guardrails.baseline; reconcile the original receipt if uncertain",
@@ -25532,8 +25533,7 @@
        }
       },
       "authorize": "<user's words>",
-      "operationUuid": "<new uuid>",
-      "authorizationContext": "<recorded exact approval file>"
+      "operationUuid": "<new uuid>"
      },
      "triggers": [
       [
@@ -25560,11 +25560,11 @@
      "field": "operationId",
      "value": "agents.guardrailsSave",
      "selector": "documented",
-     "when": "Save current v5 guardrails on an owned Agent fixture in Development. Requires exact current state hash, complete native policy list, asset creation receipt and recorded authorizationContext. create requires no existing guardrail; update/restore/reset bind the original confirmed guardrail creation receipt. restore equals the created test policies; reset equals originalPolicies captured before creation and refuses old receipts without that snapshot. Readback confirmation and original receipt reconciliation never resend uncertain writes.",
+     "when": "Save current v5 guardrails on an owned Agent fixture in Development. Requires the written words naming the agent and element, exact current state hash, complete native policy list and asset creation receipt (a context file stays accepted). create requires no existing guardrail; update/restore/reset bind the original confirmed guardrail creation receipt. restore equals the created test policies; reset equals originalPolicies captured before creation and refuses old receipts without that snapshot. Readback confirmation and original receipt reconciliation never resend uncertain writes.",
      "preconditions": [
       "Fully headless; same approved saved Portal profile and explicit tenant. No interactive prompt or secretRefs.",
-      "Bind AppId, AgentElementId, EnvironmentId/Name, PortfolioId, GuardrailId and complete Policies to the native current read and original own-fixture grant/proposal. Preserve administrative and read-only policies. readBack verificationScope=saved-configuration and runtimeEnforcementVerified=false; runtime behavior needs separate case/log evidence.",
-      "Context constraints: originOperationUuid, mode=create|update|restore|reset, inputSha256 and expectedGuardrailSha256; update/restore/reset also guardrailOriginOperationUuid. Reset confirms policy restoration, not physical internal-ID removal."
+      "SSAM binds AppId, AgentElementId, EnvironmentId/Name, PortfolioId, GuardrailId and complete Policies to the native current read and the own agent's creation receipt (a file's original grant/proposal stays accepted, optional). Preserve administrative and read-only policies. readBack verificationScope=saved-configuration and runtimeEnforcementVerified=false; runtime behavior needs separate case/log evidence.",
+      "SSAM records originOperationUuid, inputSha256 and expectedGuardrailSha256 and takes mode=create|update|restore|reset from its journal and the state read now (an authorizationContext that states them stays accepted, optional); update/restore/reset also bind guardrailOriginOperationUuid. Reset confirms policy restoration, not physical internal-ID removal."
      ],
      "next": "agents.guardrailsV5",
      "args": {
@@ -25585,8 +25585,7 @@
        }
       },
       "authorize": "<user's words>",
-      "operationUuid": "<new uuid>",
-      "authorizationContext": "<recorded exact approval file>"
+      "operationUuid": "<new uuid>"
      },
      "triggers": [
       [
@@ -25809,7 +25808,7 @@
      "selector": "documented",
      "when": "knowledgeBases.delete: use its typed Portal capability contract for inputs.",
      "preconditions": [
-      "authorizationContext binding originOperationUuid, knowledgeBaseId and expectedKnowledgeBaseSha256",
+      "the owner's reply names the knowledge base; SSAM binds its own creation receipt, knowledgeBaseId and the current base hash itself (an authorizationContext stays accepted, optional)",
       "execution: confirmationToken + authorize = the owner's reply after the preview, with the count, naming the knowledge base (operationUuid = the preview's operationId); corporate tenant: confirmTenant + words naming the tenant"
      ],
      "args": {
@@ -25838,7 +25837,7 @@
      "when": "Release (tag) an ODC low-code or mobile library revision through the Portal: libraries.release with input {inputParameters:{ApplicationKey, Revision, Version:'x.y.z', ReleaseNotes}}. Reads libraries.releaseSettings/libraries.releaseRevision (odc_portal_read) show the current state.",
      "preconditions": [
       "The revision is the library's current untagged revision and has a Finished publication (publicationKey of deployments-api-v1 publish-operations).",
-      "authorizationContext file: the user's explicit approval of a proposal; constraints {publicationKey, expectedTag:null, inputSha256} plus originOperationUuid for a library SSAM created, or preExisting:true for an existing library (scope targets name the library AND the tenant host).",
+      "authorize: the user's written words say release and name the library, the tenant host, the version and the revision; SSAM verifies the publication and records the approval hashes in the receipt (an authorizationContext stays accepted, optional)",
       "authorize = the user's own words, a NEW operationUuid; corporate tenant: confirmTenant."
      ],
      "args": {
@@ -25853,8 +25852,7 @@
        }
       },
       "authorize": "<user authorization words>",
-      "operationUuid": "<new operation UUID>",
-      "authorizationContext": "<absolute path of the approved authorization context file>"
+      "operationUuid": "<new operation UUID>"
      },
      "triggers": [
       [
@@ -25945,7 +25943,7 @@
      "selector": "documented",
      "when": "create own trial AI model.",
      "preconditions": [
-      "Exact contextual approval, original human grant and corporate confirmTenant. Creation requires a complete empty portfolio inventory and unconfigured live trial. Deletion requires own creation receipt and unchanged header with detail-confirmed portfolio."
+      "The written words naming the trial or model (scope {portfolioKey} for a creation) and corporate confirmTenant; a context file stays accepted. Creation requires a complete empty portfolio inventory and unconfigured live trial. Deletion requires own creation receipt and unchanged header with detail-confirmed portfolio."
      ],
      "next": "Read receipt and inventory; same UUID only reconciles and never sends again.",
      "args": {
@@ -25959,7 +25957,9 @@
       "authorize": "<user's words>",
       "operationUuid": "<new uuid>",
       "confirmTenant": "<tenant host>",
-      "authorizationContext": "<absolute approval path>"
+      "scope": {
+       "portfolioKey": "<portfolio UUID>"
+      }
      },
      "intents": {
       "pt": [
@@ -25988,7 +25988,7 @@
      "selector": "documented",
      "when": "delete own trial AI model.",
      "preconditions": [
-      "Exact contextual approval, original human grant and corporate confirmTenant. Creation requires a complete empty portfolio inventory and unconfigured live trial. Deletion requires own creation receipt and unchanged header with detail-confirmed portfolio.",
+      "The written words naming the trial or model (scope {portfolioKey} for a creation) and corporate confirmTenant; a context file stays accepted. Creation requires a complete empty portfolio inventory and unconfigured live trial. Deletion requires own creation receipt and unchanged header with detail-confirmed portfolio.",
       "execution: confirmationToken + authorize = the owner's reply after the preview, with the count, naming the model (operationUuid = the preview's operationId)"
      ],
      "next": "Read receipt and inventory; same UUID only reconciles and never sends again. Destructive: {{destructive.twoCalls.odc}}",
@@ -26000,8 +26000,7 @@
         "AIModelId": "<own model id>"
        }
       },
-      "confirmTenant": "<tenant host>",
-      "authorizationContext": "<absolute approval path>"
+      "confirmTenant": "<tenant host>"
      },
      "intents": {
       "pt": [
@@ -26065,7 +26064,7 @@
      "when": "Delete an own API Client fixture by its exact key, with the words naming it.",
      "preconditions": [
       "odc_portal_capabilities: the bounded native contract of its inputs and approval",
-      "execution: confirmationToken + authorize = the owner's reply after the preview, with the count, naming the API Client (operationUuid = the preview's operationId); corporate tenant: confirmTenant + words naming the tenant An own fixture: authorizationContext is a NEW approval whose wordsSha256 is the sha256 (64 hex of the UTF-8 bytes) of the owner's reply to the preview exactly as it goes in authorize (the file never keeps the words) and whose proposal is the preview file (previews\\<previewId>.json under the destructive root), bound to the creation receipt of this target; the creation's words and message are not needed."
+      "execution: confirmationToken + authorize = the owner's reply after the preview, with the count, naming the API Client (operationUuid = the preview's operationId); corporate tenant: confirmTenant + words naming the tenant An own fixture: the owner's reply to the preview is the approval, bound to the creation receipt of this target; the creation's words and message are not needed and no file is required. An authorizationContext stays accepted: a NEW approval whose wordsSha256 is the sha256 (64 hex of the UTF-8 bytes) of the owner's reply to the preview exactly as it goes in authorize (the file never keeps the words) and whose proposal is the preview file (previews\\<previewId>.json under the destructive root)."
      ],
      "triggers": [
       [
@@ -27350,10 +27349,10 @@
      "selector": "enum",
      "when": "Set a secret mobile extensibility Text setting from the private vault; observe secret metadata and origin only.",
      "preconditions": [
-      "scope mobile-extensibility; exact own MobileApplication creation receipt, stage and authorizationContext. No revision selector.",
-      "Context binds originOperationUuid, bodySha256 of the expanded empty-placeholder patch, expectedConfigurationSha256 of current extensibility GET, and secretRefsSha256 of exact vault pointers and entry names.",
+      "scope mobile-extensibility; exact own MobileApplication creation receipt (originOperationUuid), stage and the written words naming the app (an authorizationContext stays accepted, optional). No revision selector.",
+      "SSAM records the approval bound to originOperationUuid, bodySha256 of the expanded empty-placeholder patch, expectedConfigurationSha256 of current extensibility GET, and secretRefsSha256 of exact vault pointers and entry names (an authorizationContext stays accepted, optional).",
       "Studio in the same tenant is required. Secret contents never enter arguments, facade or receipt hashes; valueVerified remains false. Library selectors use libraryKey/settingKey/entry, with no integrationKey.",
-      "Restore with patch.settings [{key:<observed key>,value:null}], a fresh baseline and context; verify Default origin and original full configuration before deleting the fixture."
+      "Restore with patch.settings [{key:<observed key>,value:null}], a fresh baseline and the written words naming the app (an authorizationContext stays accepted, optional); verify Default origin and original full configuration before deleting the fixture."
      ],
      "next": "Read receipt and secret metadata; uncertain writes reconcile by read only, never resend.",
      "args": {
@@ -27368,8 +27367,7 @@
       "originOperationUuid": "<creation receipt uuid>",
       "authorize": "<user's words>",
       "operationUuid": "<new uuid>",
-      "confirmTenant": "<tenant host>",
-      "authorizationContext": "<absolute approval path>"
+      "confirmTenant": "<tenant host>"
      },
      "triggers": [
       [
@@ -27404,7 +27402,7 @@
    "preconditions": [
     "tenant per call; auth order: ODC Studio session, then vault credential, then a private Windows prompt (never in chat); odc_auth_status shows the path",
     "execution: confirmationToken + authorize = the owner's reply after the preview, with the count (operationUuid = the preview's operationId); corporate tenant: confirmTenant + words naming the tenant",
-    "the words name the asset and every consumer: consumers are read first and a delete that would break one not named is refused (CONSUMERS_WOULD_BREAK) An own fixture: authorizationContext is a NEW approval whose wordsSha256 is the sha256 (64 hex of the UTF-8 bytes) of the owner's reply to the preview exactly as it goes in authorize (the file never keeps the words) and whose proposal is the preview file (previews\\<previewId>.json under the destructive root), bound to the creation receipt of this target; the creation's words and message are not needed."
+    "the words name the asset and every consumer: consumers are read first and a delete that would break one not named is refused (CONSUMERS_WOULD_BREAK) An own fixture: the owner's reply to the preview is the approval, bound to the creation receipt of this target; the creation's words and message are not needed and no file is required. An authorizationContext stays accepted: a NEW approval whose wordsSha256 is the sha256 (64 hex of the UTF-8 bytes) of the owner's reply to the preview exactly as it goes in authorize (the file never keeps the words) and whose proposal is the preview file (previews\\<previewId>.json under the destructive root)."
    ],
    "next": "{{destructive.twoCalls.odc}} Then studio_assets to confirm.",
    "args": {
@@ -27623,7 +27621,7 @@
      "selector": "enum",
      "when": "Discard a pending generation job of the library (destructive, in two calls: the preview, then confirmationToken).",
      "preconditions": [
-      "execution: confirmationToken + authorize = the owner's reply after the preview naming the library, with the count An own fixture: authorizationContext is a NEW approval whose wordsSha256 is the sha256 (64 hex of the UTF-8 bytes) of the owner's reply to the preview exactly as it goes in authorize (the file never keeps the words) and whose proposal is the preview file (previews\\<previewId>.json under the destructive root), bound to the creation receipt of this target; the creation's words and message are not needed."
+      "execution: confirmationToken + authorize = the owner's reply after the preview naming the library, with the count An own fixture: the owner's reply to the preview is the approval, bound to the creation receipt of this target; the creation's words and message are not needed and no file is required. An authorizationContext stays accepted: a NEW approval whose wordsSha256 is the sha256 (64 hex of the UTF-8 bytes) of the owner's reply to the preview exactly as it goes in authorize (the file never keeps the words) and whose proposal is the preview file (previews\\<previewId>.json under the destructive root)."
      ],
      "next": "{{destructive.twoCalls.odc}} Then odc_external_library {action:\"status\"}.",
      "args": {
@@ -28071,7 +28069,7 @@
      "selector": "enum",
      "when": "Delete the approved temporary SQL connection of its own test receipt, in two calls (preview, then confirmationToken); a read confirms its absence.",
      "preconditions": [
-      "only the temporary SQL Server connection of its own successful test receipt (originOperationUuid), unchanged endpoint/stage, no imported objects/actions, with its verified authorizationContext",
+      "only the temporary SQL Server connection of its own successful test receipt (originOperationUuid), unchanged endpoint/stage, no imported objects/actions; the owner's reply names the connection (an authorizationContext stays accepted, optional)",
       "execution: confirmationToken + authorize = the owner's reply after the preview, with the count, naming the connection (operationUuid = the preview's operationId); corporate tenant: confirmTenant + words naming the tenant"
      ],
      "next": "{{destructive.twoCalls.odc}} Then list confirms it.",
@@ -28079,8 +28077,7 @@
       "action": "delete",
       "connectionId": "<id>",
       "providerId": "<providerId>",
-      "originOperationUuid": "<test receipt UUID>",
-      "authorizationContext": "<absolute approval path>"
+      "originOperationUuid": "<test receipt UUID>"
      },
      "triggers": [
       [
@@ -28192,7 +28189,7 @@
      "selector": "enum",
      "when": "remove imported entity metadata (destructive, in two calls: the preview, then confirmationToken)",
      "preconditions": [
-      "the owned temporary SQL connection: its original connection receipt (originOperationUuid) and contextual approval (authorizationContext); objects = the entities to unselect",
+      "the owned temporary SQL connection: its original connection receipt (originOperationUuid) and the words naming the connection (a context file stays accepted); objects = the entities to unselect",
       "execution: confirmationToken + authorize = the owner's reply after the preview, with the count, naming the entities (operationUuid = the preview's operationId); corporate tenant: confirmTenant + words naming the tenant"
      ],
      "next": "{{destructive.twoCalls.odc}} Then entities confirms it.",
@@ -28202,8 +28199,7 @@
       "objects": [
        "<entity>"
       ],
-      "originOperationUuid": "<connection receipt UUID>",
-      "authorizationContext": "<absolute approval path>"
+      "originOperationUuid": "<connection receipt UUID>"
      },
      "triggers": [
       [
@@ -29423,7 +29419,7 @@
    "title": "Create a revision from downloaded source",
    "when": "Send downloaded source or a native validated candidate as an ODC asset revision; prove a new revision separately from content deduplication.",
    "preconditions": [
-    "Exact source file and SHA256 from odc_asset_source, expected current revision, origin creation receipt, proposal-bound authorization and explicit tenant.",
+    "Exact source file and SHA256 from odc_asset_source, expected current revision, origin creation receipt, the user's words naming the asset and explicit tenant (an authorizationContext stays accepted, optional).",
     "API Client only; no publication. One send per operationUuid; read existing receipts for uncertain outcomes.",
     "For changed content, candidateProof is a current ssam_job result binding base/job/candidate hashes and native module identity, with zero validation messages; candidateSha256 and approval bind it exactly."
    ],
@@ -29437,8 +29433,7 @@
     "originOperationUuid": "<creation uuid>",
     "authorize": "<user's words>",
     "operationUuid": "<new uuid>",
-    "confirmTenant": "<tenant>",
-    "authorizationContext": "<absolute approval file>"
+    "confirmTenant": "<tenant>"
    },
    "triggers": [
     [
@@ -29492,7 +29487,7 @@
    "title": "Delete an owned unused A2A connection",
    "when": "Delete an owned unused A2A connection in two calls (preview, then confirmationToken). Use the typed MCP contract and returned continuation.",
    "preconditions": [
-    "Use the explicit tenant and authorized private profile; no browser or credential prompt. execution: confirmationToken + authorize = the owner's reply after the preview, with the count, naming the connection (operationUuid = the preview's operationId). An own fixture: authorizationContext is a NEW approval whose wordsSha256 is the sha256 (64 hex of the UTF-8 bytes) of the owner's reply to the preview exactly as it goes in authorize (the file never keeps the words) and whose proposal is the preview file (previews\\<previewId>.json under the destructive root), bound to the creation receipt of this target; the creation's words and message are not needed."
+    "Use the explicit tenant and authorized private profile; no browser or credential prompt. execution: confirmationToken + authorize = the owner's reply after the preview, with the count, naming the connection (operationUuid = the preview's operationId). An own fixture: the owner's reply to the preview is the approval, bound to the creation receipt of this target; the creation's words and message are not needed and no file is required. An authorizationContext stays accepted: a NEW approval whose wordsSha256 is the sha256 (64 hex of the UTF-8 bytes) of the owner's reply to the preview exactly as it goes in authorize (the file never keeps the words) and whose proposal is the preview file (previews\\<previewId>.json under the destructive root)."
    ],
    "next": "{{destructive.twoCalls.odc}} Follow the returned continuation; reconcile uncertain writes before another operation.",
    "args": {

@@ -58,11 +58,13 @@ public class ScreenHtmlEditRefusalOdcTests(ITestOutputHelper output)
         Assert.Contains("GridColumns takes a value", fresh["message"]!.ToString());
     }
 
-    // The link of the relato written onclick="Login" (the name of the screen): in this module the name resolves first to what
+    // The link of the relato written onclick="Login" (the name of the screen): in this module the name resolved first to what
     // an event cannot run, and the platform refused the set after the build ("A OutSystems.Model.IObject cannot be used as the
-    // value for the ...Destination property"). Refused before the build, the screen as the reading writes it in the patch.
+    // value for the ...Destination property"); then it was refused before the build with the screen as the patch. R2-A
+    // (NameResolution): the destination is searched among what an event runs or opens, so the name reaches the screen Login,
+    // and the answer lists the form the reading writes (REFERENCE_CANONICAL).
     [Fact]
-    public void ALinkThatNamesWhatNoEventRunsIsRefusedBeforeTheBuild()
+    public void ALinkNamesTheScreenOfItsNameBesideANearerElementAndTheAnswerSaysHowTheReadingWritesIt()
     {
         if (!StudioAvailable()) { output.WriteLine("WARNING: no ODC Studio: skipped."); return; }
         var host = Host();
@@ -70,11 +72,86 @@ public class ScreenHtmlEditRefusalOdcTests(ITestOutputHelper output)
         var data = Data(host, bytes, "Menu");
         data.Remove("edits");
         data["edit"] = new JsonArray("<div k=\"w7\" id=\"PageLinks\" class=\"app-menu-links\" role=\"menubar\"><a onclick=\"Login\" role=\"menuitem\">Conversões</a></div>");
-        var problem = Assert.Single(Problems(Apply(host, bytes, data, "destination")));
+        var answer = Apply(host, bytes, data, "destination");
+        Assert.True(answer["accepted"]!.GetValue<bool>(), answer.ToJsonString());
+        var note = Assert.Single(answer["result"]!["normalized"]!.AsArray(), n => n!["code"]?.ToString() == "REFERENCE_CANONICAL")!;
+        Assert.Equal("Login", note["from"]!.ToString());
+        Assert.Equal("MobileScreen:Login", note["to"]!.ToString());
+    }
+
+    // R2-A (the review's coverage): a link that names a server action of a reference and no screen or screen action of that name
+    // is still refused before the build, with the nearest destinations, each with its exact attribute.
+    [Fact]
+    public void ALinkThatNamesAServerActionOfAReferenceAndNoDestinationIsRefusedBeforeTheBuild()
+    {
+        if (!StudioAvailable()) { output.WriteLine("WARNING: no ODC Studio: skipped."); return; }
+        var host = Host();
+        var bytes = File.ReadAllBytes(Insurance);
+        var name = ReferenceServerAction(host, bytes);
+        output.WriteLine("server action of a reference: " + name);
+        var data = Data(host, bytes, "Menu");
+        data.Remove("edits");
+        data["edit"] = new JsonArray("<div k=\"w7\" id=\"PageLinks\" class=\"app-menu-links\" role=\"menubar\"><a onclick=\"" + name + "\" role=\"menuitem\">x</a></div>");
+        var problem = Assert.Single(Problems(Apply(host, bytes, data, "destination-server-action")));
         Assert.Equal(ScreenHtmlEdit.NameUnknown, problem["code"]!.ToString());
-        Assert.Contains("which an event cannot run", problem["message"]!.ToString());
-        Assert.StartsWith("write onclick=\"MobileScreen:Login\"", problem["fix"]!.ToString());
-        PatchApplies(host, bytes, data, problem, "destination-patched");
+        // A server action the reading resolves is "which an event cannot run"; one of the System the reading does not hold
+        // names nothing: refused before the build either way, with the nearest destinations.
+        Assert.Matches("which an event cannot run|names nothing as the destination", problem["message"]!.ToString());
+        var candidates = Assert.IsType<JsonArray>(problem["candidates"]).OfType<JsonObject>().ToList();
+        Assert.NotEmpty(candidates);
+        Assert.All(candidates, c => Assert.Equal("onclick", c["attribute"]!.ToString()));
+    }
+
+    // R2-A, 3b on the ODC lane: a document's event that names a client action. The platform refuses a client action as the
+    // Destination (O11: "A OutSystems.Model.Logic.IClientAction cannot be used as the value for the ...Destination property"; the
+    // output of this test at 990dce2c is the ODC Studio's answer); the document form refuses it before the set, with its
+    // wrapping (a screen action that calls it).
+    [Fact]
+    public void ADocumentEventNamingAClientActionIsRefusedBeforeTheSet()
+    {
+        if (!StudioAvailable()) { output.WriteLine("WARNING: no ODC Studio: skipped."); return; }
+        var dir = Path.Combine(Work, "client-destination-" + Guid.NewGuid().ToString("N")[..8]);
+        Directory.CreateDirectory(dir);
+        var job = Path.Combine(dir, "job.json");
+        File.WriteAllText(job, new JsonObject
+        {
+            ["base"] = Insurance,
+            ["expectedMessages"] = new JsonArray(new JsonObject { ["id"] = "AnonymousAccess_NoPermissions", ["all"] = true, ["why"] = "a test screen without a role" }),
+            ["ops"] = new JsonArray(
+                new JsonObject { ["op"] = "logic", ["data"] = new JsonObject { ["flow"] = new JsonArray("/// Goes.\nclient action ReviewGo\n  out Value: Integer\n  assign Value = 1\n  end\n") } },
+                new JsonObject { ["op"] = "html", ["data"] = new JsonObject { ["html"] = "<screen name=\"ReviewDest\">\n<a onclick=\"ReviewGo\">Go</a>\n</screen>" } }),
+        }.ToJsonString());
+        JsonObject answer;
+        try { answer = System.Text.Json.JsonSerializer.SerializeToNode(JobRunner.Run(new ModelHost(Path.Combine(dir, "work")), null, job, Path.Combine(dir, "out.oml")))!.AsObject(); }
+        catch (Exception error)
+        {
+            var coded = Errors.FindCoded(error);
+            answer = new JsonObject { ["accepted"] = false, ["code"] = coded?.Code, ["text"] = Errors.Text(error), ["problems"] = coded?.Problems?.DeepClone() };
+        }
+        output.WriteLine("client-destination: " + answer.ToJsonString()[..Math.Min(3000, answer.ToJsonString().Length)]);
+        Assert.NotEqual(true, answer["accepted"]?.GetValue<bool>());
+        var problems = (answer["problems"] as JsonArray ?? []).OfType<JsonObject>().ToList();
+        Assert.DoesNotContain(problems, p => p["code"]?.ToString() == "HTML_INVALID");
+        var refused = Assert.Single(problems, p => p["code"]?.ToString() == "HTML_NAME_UNKNOWN");
+        Assert.Contains("is the ClientAction ReviewGo, which an event cannot run", refused["message"]!.ToString());
+        Assert.Equal("action ReviewDest.ReviewGoClick\n  ReviewGo()\n  end\n", refused["wrap"]!["logic"]!.ToString());
+    }
+
+    // A server action of a reference of the fixture whose name no screen and no action of the module has.
+    private static string ReferenceServerAction(ModelHost host, byte[] bytes)
+    {
+        var espace = host.Load(bytes);
+        try
+        {
+            var reader = new KernelModelReader();
+            var all = reader.Walk((OutSystems.Model.IObjectSignature)espace).ToList();
+            var names = all.Where(n => reader.ParentOf(n) is not { } p || reader.KindOf(p) != "Reference").Select(reader.DisplayOf).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var actions = all.Where(n => reader.KindOf(n) == "ServerActionSignature" && reader.ParentOf(n) is { } p && reader.KindOf(p) == "Reference")
+                .Select(n => (Name: reader.DisplayOf(n), System: reader.DisplayOf(reader.ParentOf(n)!).StartsWith('(')))
+                .Where(n => n.Name.Length > 0 && !names.Contains(n.Name) && !n.Name.Equals("RedirectToURL", StringComparison.OrdinalIgnoreCase)).ToList();
+            return actions.OrderBy(n => n.System).ThenBy(n => n.Name, StringComparer.Ordinal).First().Name;
+        }
+        finally { ModelHost.Release(espace); }
     }
 
     // Relato e21fa130: "adding var type Boolean in the edit calls nonexistent native Type setter". The variable is created with

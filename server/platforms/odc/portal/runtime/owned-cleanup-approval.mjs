@@ -15,8 +15,8 @@
 import fs from 'node:fs';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { createHash } from 'node:crypto';
-import { authorizationContext } from '../../facade/authorization-context.mjs';
 import { fail } from './errors.mjs';
+import { approvalOf } from './written-approval.mjs';
 
 const replies = new AsyncLocalStorage();
 const sha = value => createHash('sha256').update(value).digest('hex');
@@ -25,7 +25,8 @@ const text = value => (value === null || value === undefined ? '' : String(value
 export const withValidatedReply = (reply, fn) => replies.run(reply && typeof reply === 'object' ? Object.freeze({ ...reply, keys: Object.freeze([...(reply.keys ?? [])]) }) : null, fn);
 export const validatedReply = () => replies.getStore() ?? null;
 // The text of the tools whose cleanups go through this rule (a2a, asset delete with own consumers, Portal deletes, discard).
-export const OWNED_CLEANUP = "An own fixture is cleaned up in the same two calls: after the preview, authorizationContext is a NEW approval whose wordsSha256 is the sha256 (64 hex of the UTF-8 bytes) of the owner's reply to that list exactly as it goes in authorize (the file never keeps the words) and whose proposal is the preview file (previews\\<previewId>.json under the destructive root), bound to the creation receipt of this target; the creation's words and message are not needed.";
+// R2-I (owner's rule, 28/10): the reply is the approval and no file is required; a file stays accepted as before.
+export const OWNED_CLEANUP = "An own fixture is cleaned up in the same two calls: after the preview, the owner's reply in authorize is the approval: SSAM records it (only its sha256) with the preview as its proposal, bound to the creation receipt of this target; no file is required and the creation's words and message are not needed. An authorizationContext stays accepted: a NEW approval whose wordsSha256 is the sha256 (64 hex of the UTF-8 bytes) of that reply exactly as it goes in authorize (the file never keeps the words) and whose proposal is the preview file (previews\\<previewId>.json under the destructive root).";
 
 // file/words/host/operation/targets/environmentKey/constraints: the approval's own scope (as authorizationContext takes
 // it). origin: the creation receipt the caller matched to this target; key: the target's key (an item of the preview).
@@ -40,7 +41,10 @@ export function ownedCleanupApproval({ file, words, host, operation, targets, en
   if (!origin || text(origin.identity?.tenant).toLowerCase() !== text(host).toLowerCase()) bad('the creation receipt of this target on this tenant');
   let preview;
   try { preview = fs.readFileSync(reply.previewFile); } catch { bad('the preview file the owner was shown'); }
-  const approval = authorizationContext(file, words, { lane: 'odc', host, operation, targets, ...(environmentKey === undefined ? {} : { environmentKey }), ...(constraints ? { constraints } : {}) });
+  // R2-I: without a file, the owner's reply the guard validated IS the new approval: SSAM records it with the preview file as
+  // its proposal (the record keeps only hashes); a file given is still checked as before.
+  const approval = approvalOf(file, words, { lane: 'odc', host, operation, targets, ...(environmentKey === undefined ? {} : { environmentKey }), ...(constraints ? { constraints } : {}),
+    proposalSha256: sha(preview) });
   if (!approval) bad('a new approval (authorizationContext)');
   if (approval.proposalSha256 !== sha(preview)) bad('a new approval whose proposal is the preview file the owner was shown (' + reply.previewFile + ')');
   return { ...approval, afterPreview: { previewId: reply.previewId, operationId: reply.operationId } };

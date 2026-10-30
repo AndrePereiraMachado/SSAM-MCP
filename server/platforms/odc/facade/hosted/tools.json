@@ -57,6 +57,8 @@
 
     "ssam_doctor": { "class": "agent", "lane": "none", "agent": "report",
       "paths": { "in": [], "out": [] }, "reason": "Agent state, versions and the user's Studios; answers without the agent and says it is missing. task {id, stop|close} reads, stops or closes a call of this user's own ws:o11/tasks, never another user's." },
+    "ssam_render": { "class": "agent", "lane": "arg:o11", "agent": { "when": "module-target", "arg": "target" },
+      "paths": { "in": ["/target"], "out": [] }, "reason": "Hosted only: the kernel builds a design document of each screen from the capture; the user's SSAM agent renders it in a sandbox and answers layout facts per @key and viewport, never text. Listed only while this server, its kernel and the user's agent can render. A module name captures through the agent; a capture of the workspace needs no Studio, and without the agent the answer gives the static warnings and the publish-and-open step." },
     "studio_doctor": { "class": "agent", "lane": "odc", "agent": "report",
       "paths": { "in": [], "out": [] }, "reason": "The same on the ODC side; never dotnet, builds or the owner's vault." },
     "ssam_connect": { "class": "agent", "lane": "arg:none", "agent": "always",

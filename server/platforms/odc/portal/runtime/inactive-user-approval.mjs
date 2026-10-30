@@ -1,6 +1,7 @@
 import {authorizationContext} from '../../facade/authorization-context.mjs';
 import {ipFilterHash as hash} from './ip-filter-approval.mjs';
 import {fail} from './errors.mjs';
+import {recorded,sameGrant} from './written-approval.mjs';
 const root='user-access-management-api-v1:',collection='/users';
 export const USER_CREATE=root+'post:'+collection,USER_PATCH=root+'patch:'+collection+'/{key}',USER_DELETE=root+'delete:'+collection+'/{key}';
 export const USER_BULK_CREATE=root+'post:'+collection+'/bulk';
@@ -23,7 +24,7 @@ export async function inactiveUserApproval({file,words,host,operationId,input,or
  }else{
   origin=lookup(originOperationUuid);
   if(typeof p.key!=='string'||!origin||!['accepted','confirmed'].includes(origin.state)||origin.identity?.tenant!==host
-    ||![USER_CREATE,USER_BULK_CREATE].includes(origin.identity.operationId)||!origin.authorization?.source)bad();
+    ||![USER_CREATE,USER_BULK_CREATE].includes(origin.identity.operationId)||!recorded(origin))bad();
   if(origin.identity.operationId===USER_BULK_CREATE){
    const batch=await read(root+'get:/users/bulk/{key}',{key:origin.response?.key});
    if(!batch.ok||batch.data?.key!==origin.response?.key||!['Finished','FinishedWithErrors'].includes(batch.data.status)
@@ -62,6 +63,6 @@ export async function inactiveUserApproval({file,words,host,operationId,input,or
  }
  const constraints={bodySha256:hash(b??null),...(create?{}:{originOperationUuid,expectedConfigurationSha256:hash(current)})};
  const approval=authorizationContext(file,words,{lane:'odc',host,operation:operationId,targets:bulk?records.map(r=>r.name):[name],constraints});
- if(!approval||origin&&(approval.source.threadId!==origin.authorization.source.threadId||approval.source.messageId!==origin.authorization.source.messageId))bad();
+ if(!approval||origin&&(!sameGrant(origin.authorization,approval)))bad();
  return approval;
 }

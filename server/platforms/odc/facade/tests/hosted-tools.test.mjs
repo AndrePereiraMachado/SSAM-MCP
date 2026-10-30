@@ -4,7 +4,7 @@
 import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { InMemoryTransport } from '@modelcontextprotocol/server';
+import { InMemoryTransport, McpServer } from '@modelcontextprotocol/server';
 import { Client } from '@modelcontextprotocol/client';
 import { createSsamServer } from '../ssam.mjs';
 import { hostedTools } from '../hosted/policy.mjs';
@@ -27,8 +27,19 @@ async function liveTools() {
   const client = new Client({ name: 'hosted-tools-test', version: '1.0.0' });
   await Promise.all([server.connect(serverSide), client.connect(clientSide)]);
   // ssam_friction is added by the served mode (and the stdio launch boundary), not by createSsamServer.
-  try { live = new Map([...(await client.listTools()).tools, frictionTool].map(t => [t.name, t])); return live; }
+  try { live = new Map([...(await client.listTools()).tools, frictionTool, ...(await hostedOnlyTools())].map(t => [t.name, t])); return live; }
   finally { await client.close(); await server.close(); }
+}
+// fase4-28 r2-preview: ssam_render is registered only by a hosted session (hosted/screen-render.mjs) and listed there only under
+// its conditions; catalog/tools.json (the local routes) does not have it. Its definition is taken from its own config.
+async function hostedOnlyTools() {
+  const { RENDER_TOOL, renderToolConfig } = await import('../hosted/screen-render.mjs');
+  const bare = new McpServer({ name: 'hosted-only', version: '1' });
+  bare.registerTool(RENDER_TOOL, renderToolConfig(), async () => ({ content: [] }));
+  const [a, b] = InMemoryTransport.createLinkedPair();
+  const client = new Client({ name: 'hosted-only', version: '1' });
+  await Promise.all([bare.connect(a), client.connect(b)]);
+  try { return (await client.listTools()).tools; } finally { await client.close(); await bare.close(); }
 }
 
 // 6.4 grammar: JSON Pointer segments; a named segment must be in `properties` (of any anyOf/oneOf alternative) or the
@@ -62,7 +73,8 @@ test('every tool registered by createSsamServer() plus ssam_friction is classifi
   const names = await liveTools();
   // servidor/fase4-24: the 24th release adds 12 (catalog/tools.json 83 -> 95, none removed): 90 of createSsamServer, the 4
   // hook tools (SSAM_APP_HOOK_TOOLS=1) and ssam_friction. servidor/fase4-25: marco-a5 adds ssam_code (95 -> 96).
-  assert.equal(names.size, 96, 'the 91 tools of createSsamServer of marco-a5, the 4 hook tools (SSAM_APP_HOOK_TOOLS=1) and ssam_friction');
+  // fase4-28 r2-preview: + ssam_render, a hosted-only tool (96 -> 97).
+  assert.equal(names.size, 97, 'the 91 tools of createSsamServer of marco-a5, the 4 hook tools (SSAM_APP_HOOK_TOOLS=1), ssam_friction and the hosted-only ssam_render');
   assert.deepEqual([...names.keys()].filter(n => !tools[n]), [], 'live tools without a hosted class');
   assert.deepEqual(Object.keys(tools).filter(n => !names.has(n)), [], 'stale hosted classes');
 });
@@ -131,7 +143,7 @@ test('every in/out pointer exists in the tool schema under the 6.4 grammar', asy
 test('the hosted catalog classifies both local previews as unavailable', () => {
   const count = klass => Object.values(tools).filter(t => t.class === klass).length;
   assert.deepEqual({ server: count('server'), agent: count('agent'), tenant: count('tenant-agent'), unavailable: count('unavailable') },
-    { server: 24, agent: 32, tenant: 22, unavailable: 18 });
+    { server: 24, agent: 33, tenant: 22, unavailable: 18 }); // fase4-28 r2-preview: + ssam_render (agent)
   assert.equal(Object.values(tools).filter(t => t.class === 'server' && typeof t.agent === 'object').length, 11);
   assert.deepEqual(Object.entries(tools).filter(([, t]) => t.agent === 'report').map(([n]) => n).sort(), ['hybrid_tenants', 'odc_auth_status', 'ssam_doctor', 'studio_doctor']);
 });

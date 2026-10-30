@@ -172,12 +172,30 @@ public static partial class JobRunner
             // it has a problem, and the refusal lists the preflight's, the base check's and the scope's problems once.
             var scope = expectedValid ? Preflight.ScopePhase.Run(ops, opsPointer, MessageExpectations.Lane, baseFacts, preflight) : null;
             var scopeMs = scope?.Ms;
+            // R3-B review B1: a cut name of a data text on an entity of the module, a candidate for the job alone, judged with
+            // the module's names now that the base is read (certain, or no patch).
+            Preflight.PlatformLimitRules.JudgeCutsWithModule(preflight, ops, MessageExpectations.Lane,
+                () => Anvil.Reading.DdlParser.Parse(Anvil.Reading.DataDdl.Build((OutSystems.Model.IObjectSignature)espace, new KernelModelReader(), MessageExpectations.Lane, "", 0).Text));
             if (scope != null) baseCheck.Problems.AddRange(scope.Problems.Where(p => !baseCheck.Problems.Contains(p)));
             // T16 over R1 (integ/proto-into-product): one refusal carries the problems of every phase, never a chain. The scope
             // phase does not stop the job before its first op: the ops it refuses, and the ops they block, are never built
             // (no cascade of what can only fail), and every other op runs, so what the apply and the Verify find there joins the
             // same refusal (the candidate's A2 rule; PatchCertaintyUnreadableJobScopeTests).
-            var scopeSkips = scope != null && Preflight.ScopePhase.Stops(baseCheck.Problems) ? Preflight.ScopePhase.SkippedOps(baseCheck.Problems) : null;
+            // R2-B (one round): a logic op the scope phase refuses is built anyway (what of it fails is refused at apply, with the
+            // same problem said once, and what it declares is written as its stub), and so are the ops it blocks: judged against
+            // the signature it declares, so their own problems join this refusal. SCOPE_BLOCKED_BY_REFUSED_OP is then no problem.
+            var unreadable = RefusedWholeButDocuments(preflight, ops);
+            bool Runs(int op) => op < ops.Count && ops[op] is JsonObject o && o["op"]?.ToString() == "logic" && o["data"] is JsonObject && unreadable?.Contains(op) != true;
+            var scopeSkips = scope != null && Preflight.ScopePhase.Stops(baseCheck.Problems) ? Preflight.ScopePhase.SkippedOps(baseCheck.Problems, Runs) : null;
+            if (scopeSkips != null)
+                for (var n = baseCheck.Problems.Count - 1; n >= 0; n--)
+                    if (baseCheck.Problems[n] is var p && p["code"]?.ToString() == Preflight.ScopePhase.Blocked && p["op"] is JsonValue v && v.TryGetValue<int>(out var root) && Runs(root)
+                        && (p["blockedOps"] as JsonArray ?? []).OfType<JsonValue>().All(b => b.TryGetValue<int>(out var blockedOp) && !scopeSkips.Contains(blockedOp)))
+                    {
+                        // CheckAgainstBase wrote one line per problem, in order: the line goes with its problem.
+                        baseCheck.Problems.RemoveAt(n);
+                        if (n < baseCheck.Lines.Count) baseCheck.Lines.RemoveAt(n);
+                    }
             phase = sw.ElapsedMilliseconds;
             // A02 item 6: every failing op is recorded (its dependents skipped). primeira-certa A2: kept, not thrown, so the
             // Verify of what did apply joins the refusal; an op the preflight refused whole is never run.
@@ -500,6 +518,10 @@ public static partial class JobRunner
             try { owner = session.Resolve(first.Root); }
             catch { continue; }
             string? why = null; string? fix = null; var path = first.Root;
+            // R2-B (F18): the child the segment names by a kind it is not, when exactly one child has that name: the patch writes
+            // it by its name. It is certain only with one reading (ChildPatch): a kind the model does not have, the corrected path
+            // resolving to that very child, and an op that is no delete.
+            (string Segment, string Bare, string Prefix, object Child, bool UnknownKind)? byName = null;
             foreach (var segment in first.Segments)
             {
                 path += "/" + segment;
@@ -508,12 +530,16 @@ public static partial class JobRunner
                 {
                     why = ex.Message;
                     var parent = owner as OutSystems.Model.IObjectSignature;
-                    var children = parent?.Children.Select(c => TypeResolver.Name(c)).OfType<string>().Where(n => n.Length > 0).Distinct(StringComparer.Ordinal).ToList() ?? [];
+                    var named = parent?.Children.Select(c => TypeResolver.Name(c)).OfType<string>().Where(n => n.Length > 0).ToList() ?? [];
+                    var children = named.Distinct(StringComparer.Ordinal).ToList();
                     var bare = segment[(segment.IndexOf(':') + 1)..];
                     fix = segment.Contains(':') && children.Contains(bare, StringComparer.OrdinalIgnoreCase)
                         ? $"write the child by its name: {first.Reference.Replace("/" + segment, "/" + bare)}"
                         : children.Count > 0 ? $"use one of the children: {string.Join(", ", NameSuggestions.Closest(bare, children))}; or create it earlier in this job"
                         : "create it earlier in this job, or fix the path (ssam_map lists the children)";
+                    var colon = segment.IndexOf(':');
+                    if (colon > 0 && parent?.Children.Where(c => string.Equals(TypeResolver.Name(c), bare, StringComparison.OrdinalIgnoreCase)).ToList() is [var only])
+                        byName = (segment, bare, path[..^segment.Length] + bare, only, !Preflight.KindNames.Known(Preflight.KindNames.Normalize(segment[..colon].Trim())));
                     break;
                 }
                 catch { break; }   // anything else is the op's own business at apply
@@ -521,7 +547,9 @@ public static partial class JobRunner
             if (why == null) continue;
             foreach (var p in group)
             {
-                var problem = JobPreflight.Problem(p.Op, p.Pointer, "CHILD_NOT_FOUND", "error", $"{p.Reference} does not resolve in the base module: {why}", fix, null, p.Kind);
+                var (patch, rule) = byName is { } child ? ChildPatch(session, ops, p.Op, p.Pointer, opsPointer, child.Segment, child.Bare, child.Prefix, child.Child, child.UnknownKind) : (null, null);
+                var problem = JobPreflight.Problem(p.Op, p.Pointer, "CHILD_NOT_FOUND", "error", $"{p.Reference} does not resolve in the base module: {why}", fix, patch, p.Kind,
+                    patchRule: rule);
                 problems.Add(problem);
                 lines.Add(JobPreflight.Text(problem));
             }
@@ -664,6 +692,42 @@ public static partial class JobRunner
         // I6: what only the base could answer.
         foreach (var problem in problems) problem["phase"] ??= "base";
         return new(problems, lines);
+    }
+
+    /// <summary>R2-B (F18): the certainty rules of a child written by its name (PatchCertainty): certain with one reading, a
+    /// choice when the kind written is a kind of the model, or the op is a delete.</summary>
+    internal const string ChildByName = "CHILD_BY_NAME";
+    internal const string ChildKindChoice = "CHILD_KIND_CHOICE";
+
+    /// <summary>The patch that writes a child by its name, and its rule: none unless the corrected path resolves, in this
+    /// session, to exactly the child counted (a segment also answers to an argument, an attribute or an event of another child);
+    /// certain (CHILD_BY_NAME) only when the kind written is no kind of the model and the op is no delete; otherwise offered as
+    /// the author's choice (CHILD_KIND_CHOICE): the kind written and the name point at different elements, and what a delete
+    /// removes is the author's decision.</summary>
+    private static (JsonArray? Patch, string? Rule) ChildPatch(ModelSession session, JsonArray ops, int? op, string? pointer, string? opsPointer,
+        string segment, string bare, string prefix, object child, bool unknownKind)
+    {
+        if (op is not { } index || pointer == null || opsPointer == null || ByName(ops, pointer, opsPointer, segment, bare) is not { } corrected) return (null, null);
+        object? resolved;
+        try { resolved = session.Resolve(prefix); } catch { return (null, null); }
+        if (!ReferenceEquals(resolved, child)) return (null, null);
+        var delete = index < ops.Count && ops[index]?["op"]?.ToString() == "delete";
+        return (new JsonArray(new JsonObject { ["op"] = "replace", ["path"] = pointer, ["value"] = corrected }), unknownKind && !delete ? ChildByName : ChildKindChoice);
+    }
+
+    /// <summary>The reference field at <paramref name="pointer"/> (/ops/i/field) with the segment written by its bare name, as
+    /// the job wrote the rest of it; null when the field does not hold that segment once.</summary>
+    internal static string? ByName(JsonArray ops, string pointer, string opsPointer, string segment, string bare)
+    {
+        var parts = pointer.StartsWith(opsPointer + "/", StringComparison.Ordinal) ? pointer[(opsPointer.Length + 1)..].Split('/') : [];
+        if (parts.Length != 2 || !int.TryParse(parts[0], out var op) || op < 0 || op >= ops.Count) return null;
+        if (ops[op]?[parts[1]] is not JsonValue v || !v.TryGetValue<string>(out var text)) return null;
+        text = text.Trim();
+        var at = text.IndexOf("/" + segment, StringComparison.Ordinal);
+        if (at < 0 || text.IndexOf("/" + segment, at + 1, StringComparison.Ordinal) >= 0) return null;
+        var end = at + 1 + segment.Length;
+        if (end < text.Length && text[end] != '/') return null;
+        return text[..(at + 1)] + bare + text[end..];
     }
 
     private static readonly Regex MissingElement = new(@"signature: (\S+)\s*$", RegexOptions.Compiled);

@@ -13,7 +13,7 @@ namespace Anvil.Tests;
 /// The kernel review of the Traditional html port on the O11 fixtures, through the job (the apply a delivery runs):
 /// finding 3, DEFAULT_NOT_LITERAL on an html edit (refused by the preflight when the store keeps the reading, by the edit
 /// plan when it does not; a literal default and a Traditional root are not affected); finding 5, data.css on an edit
-/// follows the page's &lt;style&gt; as on a create; finding 9a, the page marker is decided again only on a widget the edit
+/// is the page's whole style sheet as on a create (R2-D: it replaces the page's &lt;style&gt;); finding 9a, the page marker is decided again only on a widget the edit
 /// moves. Synthetic names; needs the Service Studio.
 /// </summary>
 public class ScreenHtmlEditReviewJobTests(ITestOutputHelper output)
@@ -68,8 +68,9 @@ public class ScreenHtmlEditReviewJobTests(ITestOutputHelper output)
         }
     }
 
+    // R2-D: the contract changed (it was DataCssOnAnEditKeepsTheEditedStyleAndFollowsItAsOnACreate: the <style>, then data.css).
     [Fact]
-    public void DataCssOnAnEditKeepsTheEditedStyleAndFollowsItAsOnACreate()
+    public void DataCssOnAnEditReplacesTheEditedStyleAsOnACreate()
     {
         var host = Host("css");
         var source = Fixture("reactive-ui.oml");
@@ -85,16 +86,22 @@ public class ScreenHtmlEditReviewJobTests(ITestOutputHelper output)
         var result = Run(host, source, job, "css-edit");
         Assert.True(result["accepted"]!.GetValue<bool>(), result.ToJsonString());
         var edited = Sheet(Read(host, Path.Combine(host.WorkDirectory, "css-edit.oml"), "Login").Html);
-        Assert.Contains(own, edited);
-        Assert.Contains(css, edited);
-        Assert.True(edited.IndexOf(own, StringComparison.Ordinal) < edited.IndexOf(css, StringComparison.Ordinal), edited);
+        Assert.DoesNotContain(own, edited);
+        Assert.Equal(css, edited.Trim());
+        // The <style> data.css replaced is said, with the sheet's bytes before and after.
+        var said = Answer(result)?["styleSheet"]?.AsObject();
+        Assert.True(said != null, result.ToJsonString());
+        Assert.Contains("replaced", said!["replaced"]?.ToString() ?? "");
+        Assert.Equal(System.Text.Encoding.UTF8.GetByteCount(edited), said["bytesAfter"]!.GetValue<int>());
         // The same <style> and data.css on a new screen: the same sheet.
         var create = new JsonObject { ["ops"] = new JsonArray(new JsonObject { ["op"] = "html", ["data"] = new JsonObject {
             ["html"] = "<screen name=\"ReviewCss\" roles=\"Registered\">\n<style>" + own + "</style>\n<div class=\"x\">x</div>\n</screen>", ["css"] = css } }) };
         var created = Run(host, source, create, "css-create");
         Assert.True(created["accepted"]!.GetValue<bool>(), created.ToJsonString());
+        Assert.Contains(Answer(created)?["normalized"] as JsonArray ?? new JsonArray(), n => n?["code"]?.ToString() == "CSS_STYLE_REPLACED");
+        Assert.Contains("replaced", Answer(created)?["styleSheet"]?["replaced"]?.ToString() ?? "");
         Assert.Equal(Sheet(Read(host, Path.Combine(host.WorkDirectory, "css-create.oml"), "ReviewCss").Html), edited);
-        // Element edits with data.css: the reading's <style> stays, data.css after it.
+        // Element edits with data.css: data.css replaces the reading's <style>.
         var (read2, html2, sha2) = Read(host, Path.Combine(host.WorkDirectory, "css-edit.oml"), "Login");
         var w8 = Element(ScreenHtml.Parse(html2), "w8");
         Attribute(w8, "class", "login-logo review");
@@ -103,9 +110,9 @@ public class ScreenHtmlEditReviewJobTests(ITestOutputHelper output)
         var again = Run(host, Path.Combine(host.WorkDirectory, "css-edit.oml"), elements, "css-elements");
         Assert.True(again["accepted"]!.GetValue<bool>(), again.ToJsonString());
         var after = Sheet(Read(host, Path.Combine(host.WorkDirectory, "css-elements.oml"), "Login").Html);
-        Assert.Contains(own, after);
-        Assert.Contains(css, after);
-        Assert.EndsWith(".probe-c { color: green; }", after.TrimEnd());
+        Assert.DoesNotContain(own, after);
+        Assert.DoesNotContain(css, after);
+        Assert.Equal(".probe-c { color: green; }", after.Trim());
     }
 
     [Fact]
@@ -217,6 +224,8 @@ public class ScreenHtmlEditReviewJobTests(ITestOutputHelper output)
     }
 
     private static JsonArray Problems(JsonObject result) => result["problems"] as JsonArray ?? new JsonArray();
+    // The answer of the job's last op (the html op's).
+    private static JsonObject? Answer(JsonObject result) => (result["results"] as JsonArray)?.Select(r => r?["result"]).OfType<JsonObject>().LastOrDefault();
     private static ScreenHtml.Node Element(ScreenHtml.Node tree, string k) => ScreenHtmlText.Elements(tree).First(x => x.Node.Get("k") == k).Node;
     private static void Attribute(ScreenHtml.Node node, string name, string value)
     {

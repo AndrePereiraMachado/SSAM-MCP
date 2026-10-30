@@ -134,6 +134,10 @@ function jobShape(input, note) {
 
 /** {args, normalizations}: the arguments of a call with every shape of one meaning written as the tool takes it. */
 export function shapeCall(tool, args) {
+  if (tool === 'ssam_evidence' && isObject(args) && typeof args.text === 'string') {
+    const { text, ...rest } = args;
+    return { args: { ...rest, where: args.where == null ? '~' + text : [...[].concat(args.where), '~' + text] }, normalizations: [{ rule: 'text-filter', at: '/text', note: 'text was accepted as a whole-line contains filter' }] };
+  }
   const normalizations = [];
   if (!isObject(args)) return { args, normalizations };
   const note = (rule, at, text) => normalizations.push({ rule, at, note: text });

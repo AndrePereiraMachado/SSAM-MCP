@@ -248,18 +248,34 @@ const integer = (name, value, min, max, fallback) => {
 // keeps for next steps (2048 bytes, ssam.mjs budgetCeiling): a map never answers more than a client takes in one piece,
 // and the ceiling never has to page it.
 export const DEFAULT_MAP_BUDGET = (env = process.env) => Math.min(1048576, budgetCeiling(maxAnswerBytes(env)));
+// Public list forms and contextual aliases share one normalization boundary.
+export function normalizeMapInput(input) {
+  const args = { ...input }, normalizations = [];
+  const note = (field, message) => normalizations.push({ rule: 'map-input', at: '/' + field, note: message });
+  if (args.view === 'html' && args.name != null && args.screen == null) {
+    args.screen = args.name; delete args.name; note('name', 'name was accepted as screen for the HTML view');
+  }
+  if (Array.isArray(args.kind)) { args.kind = args.kind.join('|'); note('kind', 'The kind list was joined as alternatives'); }
+  for (const field of ['target', 'element']) {
+    if (typeof args[field] === 'string' && args[field].includes(',') && (field === 'element' ? ['ddl', 'flow', 'logic'].includes(args.view) : RICH_VIEWS.includes(args.view))) {
+      args[field] = args[field].split(',').map(x => x.trim()); note(field, 'CSV was accepted as a list');
+    }
+  }
+  return { args, normalizations };
+}
 function mapRequest(input) {
   const lane = input.lane ?? 'odc';
   if (!['odc', 'o11'].includes(lane)) throw new Error('Unknown lane ' + lane + '; lanes: odc, o11');
   const view = VIEW_ALIASES[input.view] ?? input.view ?? 'map';
   if (!VIEWS.includes(view)) throw new Error('view must be one of: ' + VIEWS.join(', ') + ' (map: the elements with their @keys; digest: the whole module as text, in pages; ddl: the module data as DDL with @keys, in pages; flow: one action as text, whole; search: text in expressions and values; uses: who uses an element; html: one screen or block as ssam-html/1)');
+  if (view === 'uses' && typeof input.element === 'string' && input.element.includes(',')) throw new Error('element in view uses takes one name or @key; use separate reads for several elements');
   const rich = RICH_VIEWS.includes(view);
   const targets = Array.isArray(input.target) ? input.target : [input.target];
   if (Array.isArray(input.target) && !rich) throw new Error('a list of targets belongs to views "search" and "uses"; view "' + view + '" reads one capture or module');
   if (!targets.length || targets.length > MAX_TARGETS || targets.some(t => typeof t !== 'string' || !t.trim()))
     throw new Error('target is required: a capture .oml or an open module name' + (rich ? ', or a list of 1 to ' + MAX_TARGETS + ' of them (the modules of one app)' : '') + '. ' + MAP_USAGE);
   for (const name of ['kind', 'name', 'prefix', 'role', 'parent', 'key', 'text', 'property', 'element'])
-    if (input[name] != null && (typeof input[name] !== 'string' || !input[name]) && !(name === 'element' && view === 'flow' && Array.isArray(input[name])))
+    if (input[name] != null && (typeof input[name] !== 'string' || !input[name]) && !(['element', 'kind'].includes(name) && (view === 'flow' || view === 'ddl') && Array.isArray(input[name])))
       throw new Error(name + ' must be a non-empty string');
   const hashes = input.expectedSourceSha256 == null ? [] : Array.isArray(input.expectedSourceSha256) ? input.expectedSourceSha256 : [input.expectedSourceSha256];
   if (hashes.some(h => typeof h !== 'string' || !/^[a-fA-F0-9]{64}$/.test(h))) throw new Error('expectedSourceSha256 must be 64 hexadecimal characters' + (rich ? ' (or a list of them, one per target)' : ''));
@@ -268,9 +284,10 @@ function mapRequest(input) {
   const offset = integer('offset', input.offset, 0, Number.MAX_SAFE_INTEGER, 0);
   const richOnly = ['text', 'property', ...(view === 'ddl' || view === 'flow' ? [] : ['element'])].filter(k => input[k] != null);
   // A list of elements is one answer of whole actions (view flow); every other view reads one element.
-  if (Array.isArray(input.element) && view !== 'flow') throw new Error('element as a list belongs to view "flow" (several actions read whole in one answer); view "' + view + '" takes one element');
+  if (Array.isArray(input.element) && !['flow', 'ddl'].includes(view)) throw new Error('element as a list belongs to view "flow" (several actions read whole in one answer); view "' + view + '" takes one element');
   if (input.regex === true) richOnly.push('regex');
   if (!rich && richOnly.length) throw new Error(richOnly.join(', ') + ' belong to views "search" (text, regex, property) and "uses" (element)');
+  if (view === 'ddl' && Array.isArray(input.element) && (!input.element.length || input.element.length > MAX_FLOW_ELEMENTS || input.element.some(e => typeof e !== 'string' || !e.trim()))) throw new Error('element must contain 1 to ' + MAX_FLOW_ELEMENTS + ' non-empty names');
   if (view === 'flow') {
     // One action by element (its text, in pages when it is larger than the budget), else the list of the actions.
     const mapOnly = ['kind', 'name', 'prefix', 'role', 'parent', 'key'].filter(k => input[k] != null);
@@ -492,7 +509,18 @@ export function mapRefusal(error, q, input = {}) {
     return { code: 'PAGE_NOT_FOUND', pages, ...(pages > 0 ? { corrected: { tool: 'ssam_map', arguments: { lane, ...asked, page: pages }, why: 'the last page (' + pages + ') of the same read' } } : {}), error: message };
   }
   if (/^page \d+ does not exist\b/.test(message)) return { code: 'PAGE_NOT_FOUND', error: message };
-  if (!q) return { code: 'INPUT_INVALID', error: message };
+  if (!q) {
+    const args = { ...input };
+    // Repair only fields named by validation, preserving the target and view.
+    for (const field of ['includeDetail', 'name', 'prefix', 'parent', 'key', 'page', 'offset', 'max', 'budgetBytes', 'kind', 'text', 'property', 'element', 'regex']) {
+      if ((/; ([^;]+?) belong/.exec(message)?.[1]?.split(', ').includes(field) || message.startsWith(field + ' ')) && field in args) delete args[field];
+    }
+    let valid = false;
+    try { mapRequest(args); valid = true; } catch { /* Required information cannot be guessed. */ }
+    const corrected = valid ? { tool: 'ssam_map', arguments: args, why: 'The same reading with incompatible fields removed' }
+      : { tool: 'ssam_discover', arguments: { ...(['o11', 'odc'].includes(lane) ? { lane } : {}), intent: 'read a module map' }, why: 'The accepted map arguments and an example; required information cannot be inferred' };
+    return { code: 'INPUT_INVALID', error: message, ...(valid ? { corrected } : { continuation: corrected }) };
+  }
   if (/\bkernel reader that writes .* is not built\b|\bits binaries predate\b|\bmissing or invalid after the reader built it\b/.test(message)) return { code: 'READER_UNAVAILABLE', error: message };
   return { error: message };
 }
@@ -516,12 +544,18 @@ export function storedModuleKind(lane, name, env = process.env) {
 }
 
 export async function moduleMap(input = {}, deps = {}) {
+  const { args, normalizations } = normalizeMapInput(input);
+  const result = await moduleMapCore(args, deps);
+  if (result.ok && typeof args.parent === 'string' && !args.parent.startsWith('@') && args.parent.includes(':')) normalizations.push({ rule: 'parent-path', at: '/parent', note: 'The parent path was resolved in the same capture' });
+  return normalizations.length ? { ...result, normalizations: [...normalizations, ...(result.normalizations ?? [])] } : result;
+}
+async function moduleMapCore(input = {}, deps = {}) {
   const { read = readSnapshot, prepare = ensureBuilder, reader = {}, env = process.env } = deps;
   const started = performance.now();
   let q, file;
   try {
     q = mapRequest(input);
-    if (RICH_VIEWS.includes(q.view)) return await richAnswer(q, { deps, read, capture: deps.capture ?? studio, reader, env, started });
+    if (RICH_VIEWS.includes(q.view)) return await richAnswer(q, { deps: { ...deps, usageTargets: input.usageTargets }, read, capture: deps.capture ?? studio, reader, env, started });
     const target = await captureOf(q, deps);
     if (target.refused) return target.refused;
     file = target.file;
@@ -566,6 +600,9 @@ export async function moduleMap(input = {}, deps = {}) {
 // deps.o11: options of captureO11Module (bridge, assertSelected, download, lockDeps, ...). C15: a capture of an unchanged
 // module differs from the previous one only in volatile header fields; the first intact capture of the same content
 // answers the read, so its index (keyed by its raw sha256) and its keys serve again.
+// ssam_render (hosted/screen-render.mjs) reads its target the same way: a capture as it is, a module name captured first.
+export const captureModuleTarget = (target, { lane, pid } = {}, deps = {}) =>
+  captureTarget(target, { lane, pid }, { deps, capture: deps.capture ?? studio, env: deps.env ?? process.env });
 async function captureTarget(target, q, { deps, capture, env }) {
   let snapshot = null, file;
   if (/\.oml$/i.test(target)) file = path.resolve(target);
@@ -635,6 +672,19 @@ async function richAnswer(q, { deps, read, capture, reader, env, started }) {
     rich: { file: c.store, bytes: c.bytes, extractor: c.rich.extractor, elements: c.rich.rows.length, complete: c.rich.complete === true, readErrors: c.rich.readErrors ?? 0 },
     cache: c.cache, inspect: inspectOf(c) }));
   const built = captures.filter(c => c.cache.rich === 'ensured').map(c => ({ module: c.rich.module.name, built: c.cache.built, ensureMs: c.cache.ensureMs }));
+  // Internal deletion planning reads the capture/index once, then queries all targets in memory.
+  if (Array.isArray(deps.usageTargets)) {
+    if (captures.some(c => c.rich.complete !== true || c.rich.readErrors)) return { ok: false, code: 'USAGES_INCOMPLETE' };
+    const usages = deps.usageTargets.map(target => {
+      let resolved = resolveElement(captures, { ...q, element: target });
+      if (!resolved.ok && target.includes('/')) {
+        const matches = captures.flatMap((capture, c) => capture.rich.rows.map((_, i) => describeRow(captures, { c, i })).filter(row => row.path === target));
+        if (matches.length === 1) resolved = resolveElement(captures, { ...q, element: '@' + matches[0].key });
+      }
+      return resolved.ok ? { target, resolved: describeRow(captures, resolved.home), entries: usesRich(captures, resolved).edges.map(edge => usesEntry(captures, edge)) } : { target, error: 'Element missing or ambiguous' };
+    });
+    return { ok: usages.every(x => x.resolved), usages, captures: capturesOut };
+  }
   let all, head, entryOf, extra = {};
   if (q.view === 'search') {
     const found = searchRich(captures, q);
@@ -995,19 +1045,23 @@ async function ddlAnswer(q, { file, sha256, canonical, captured, snapshot, start
   const { loaded, served, cache, ensureMs } = await ensureDdl(q.lane, { file, sha256, read, reader, env });
   const { ddl, stamp } = loaded;
   const pin = { lane: q.lane, target: file, view: 'ddl', budgetBytes: q.budgetBytes, expectedSourceSha256: sha256 };
+  let aliasNote;
+  if (typeof q.element === 'string' && /^(data|entities|all)$/i.test(q.element) && !selectBlocks(ddl, q.element).length) {
+    q = { ...q, element: undefined };
+    aliasNote = { rule: 'map-input', at: '/element', note: 'The section alias was accepted as the complete data text' };
+  }
   if (q.element != null) {
-    const found = selectBlocks(ddl, q.element);
-    if (!found.length) {
-      // Those whose name contains it, else the nearest by edit distance (at most NEAR_MAX); one dominant: the read of it.
-      const contain = ddl.blocks.filter(b => b.name.toLowerCase().includes(q.element.replace(/^@/, '').toLowerCase()));
-      const ranked = nearest(q.element, contain.length ? contain : ddl.blocks);
-      const near = (contain.length ? [...ranked.candidates, ...contain.filter(b => !ranked.candidates.includes(b))].slice(0, NEAR_MAX) : ranked.candidates)
-        .map(b => ({ section: b.section, kind: b.kind, name: b.name, key: b.key }));
-      const dominant = ranked.dominant ?? (contain.length === 1 ? contain[0] : null);
-      const corrected = dominant ? { tool: 'ssam_map', arguments: { ...pin, element: dominant.name }, why: dominant.name + ' is the one element near "' + q.element + '"' } : null;
-      return { ok: false, code: 'ELEMENT_NOT_FOUND', lane: q.lane, view: 'ddl', target: q.target, file, sourceSha256: sha256, element: q.element,
-        error: 'element "' + q.element + '" names no entity, structure, variable or timer of this capture (' + ddl.module.name + ')',
-        ...(near.length ? { candidates: near } : {}), ...(corrected ? { corrected } : {}), continuation: corrected ?? { tool: 'ssam_map', arguments: pin, why: 'the whole data text, page 1' } };
+    const requested = Array.isArray(q.element) ? q.element : [q.element];
+    const missing = requested.filter(element => !selectBlocks(ddl, element).length);
+    if (missing.length) {
+      const corrections = missing.map(element => ({ element, ...nearest(element, ddl.blocks) }));
+      const replacement = new Map(corrections.filter(c => c.dominant).map(c => [c.element, c.dominant.name]));
+      const fixed = requested.map(element => replacement.get(element) ?? element);
+      const corrected = replacement.size === missing.length ? { tool: 'ssam_map', arguments: { ...pin, element: Array.isArray(q.element) ? fixed : fixed[0] }, why: 'Correct only missing names; keep every found element' } : null;
+      return { ok: false, code: 'ELEMENT_NOT_FOUND', lane: q.lane, view: 'ddl', target: q.target, file, sourceSha256: sha256,
+        element: q.element, missing, error: 'No data element named ' + missing.join(', '),
+        candidates: corrections.flatMap(c => c.candidates), ...(corrected ? { corrected } : {}),
+        continuation: corrected ?? { tool: 'ssam_map', arguments: pin, why: 'Read the available data element names' } };
     }
   }
   const laid = ddlPages(ddl, { budgetBytes: q.budgetBytes, element: q.element ?? null, key: served + '|' + stamp });
@@ -1020,7 +1074,7 @@ async function ddlAnswer(q, { file, sha256, canonical, captured, snapshot, start
   const answer = { ok: true, schema: DDL_PAGE_SCHEMA, lane: q.lane, target: q.target, file, sourceSha256: sha256, contentSha256: canonical.contentSha256,
     ...(snapshot ? { snapshotSha256: snapshot.sha256 } : {}),
     ...(snapshot?.capturedBy === PUBLISHED_CAPTURE ? { capturedBy: PUBLISHED_CAPTURE, versionId: snapshot.versionId ?? null } : {}),
-    module: ddl.module, answeredBy: 'data-ddl', ...(q.element != null ? { element: q.element } : {}),
+    module: ddl.module, answeredBy: 'data-ddl', ...(aliasNote ? { normalizations: [aliasNote] } : {}), ...(q.element != null ? { element: q.element } : {}),
     store: { file: served, adapter: ddl.adapter, extractor: ddl.extractor, createdAt: ddl.createdAt ?? null },
     ...ddlBody(ddl, laid, q.page), cache,
     ...(canonical.reused ? { capture: { file: captured, reused: true, note: 'same content as the capture this answer reads (volatile header fields aside): its keys and index serve' } } : {}),
@@ -1251,7 +1305,17 @@ function present(index, q, { file, sha256, stored, cache, snapshot }) {
   // capture whose hash it gave.
   const resolve = reference => {
     const key = reference.startsWith('@') ? reference.slice(1) : reference;
-    const at = keys.get(key) ?? ancestorKeys.get(key);
+    let at = keys.get(key) ?? ancestorKeys.get(key);
+    if (at == null && !reference.startsWith('@') && reference.includes(':')) {
+      const wanted = reference.toLowerCase();
+      const matches = rows.flatMap((row, i) => {
+        const segments = []; let cursor = i; const seen = new Set();
+        while (cursor !== -1 && !seen.has(cursor)) { seen.add(cursor); segments.unshift(types[typeOf(index, cursor)].kind + ':' + nameOf(index, cursor)); cursor = parentOf(index, cursor); }
+        const path = segments.join('/').toLowerCase();
+        return path === wanted || path.endsWith('/' + wanted) ? [i] : [];
+      });
+      if (matches.length === 1) at = matches[0];
+    }
     if (at == null) throw refusal('KEY_UNRESOLVED', 'Unresolved key in this capture: @' + key + '. No element of it has this key, as a row or as an element above one ('
       + (q.expectedSourceSha256 ? 'the hash given is this capture\'s: none of its answers has this key' : 'sourceSha256 ' + sha256)
       + '): the element was removed, or the key is from another module or mistyped. Find the element by name (name, prefix) or with view "search"');

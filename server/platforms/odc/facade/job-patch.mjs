@@ -67,7 +67,8 @@ export class PatchError extends Error {
   }
 }
 // The fields of a refusal for a PatchError: at (the operation index) and the candidates of a name.
-export const patchErrorFields = error => ({ ...(error.at != null ? { at: error.at } : {}), ...(error.candidates ? { candidates: error.candidates } : {}) });
+export const patchErrorFields = error => ({ ...(error.at != null ? { at: error.at } : {}), ...(error.candidates ? { candidates: error.candidates } : {}),
+  ...(error.corrected ? { corrected: error.corrected } : {}), ...(error.expected ? { expected: error.expected } : {}) });
 
 // The identity of an element: its first non-empty text among IDENTITY_KEYS; null when it has none.
 export function identityOf(element) {
@@ -81,10 +82,9 @@ const toPointer = tokens => '/' + tokens.map(escapeToken).join('/');
 // The JSON Schema of the two arguments, for tools registered from JSON Schema (ssam.mjs o11_job / ssam_job and the
 // studio_deliver proxy). o11-cycle.mjs declares the same shape in zod.
 export const patchJsonSchema = Object.freeze({
-  anyOf: [{ type: 'array', minItems: 1, maxItems: PATCH_MAX_OPS,
-    items: { type: 'object', additionalProperties: false, required: ['op', 'path'],
-      properties: { op: { type: 'string', enum: [...PATCH_OPS] }, path: { type: 'string', minLength: 1 }, value: {} } } },
-  { type: 'string', enum: ['verified'] }],
+  // patchJob validates each operation; the listing need not repeat its fields in every tool.
+  anyOf: [{ type: 'array', maxItems: PATCH_MAX_OPS },
+  { type: 'string', enum: ['verified'] }, { type: 'object' }],
   description: 'JSON Patch (RFC 6902: add, remove, replace, test; at most 500) over the job of basedOn, paths /ops/<i>/... '
     + '(or /<i>/... of an array job) and /expectedMessages/- (a declaration {id, element, why} a refusal asked for). '
     + 'A path may name elements instead of counting them: actions/<Action>/steps/<as>/assign/<Var> (a list of the ops\' data '
@@ -265,7 +265,7 @@ function applyOne(job, operation, at, resolved, notes = null) {
 
 // The patched copy of a job (the job given is never changed) and the numeric patch it resolved to. All operations or
 // none: the first failure throws a PatchError {code, message, at, candidates?}.
-export function patchJob(job, patch, { max = PATCH_MAX_OPS } = {}) {
+function checkedPatch(job, patch, { max = PATCH_MAX_OPS } = {}) {
   if (!Array.isArray(patch) || patch.length === 0) throw new PatchError('PATCH_INVALID', 'patch is a non-empty array of {op, path, value?}');
   if (patch.length > max) throw new PatchError('PATCH_INVALID', `patch has ${patch.length} operations; at most ${PATCH_MAX_OPS} (send only the changed elements as a partial job with basedOn instead)`);
   if (!opsOf(job)) throw new PatchError('PATCH_PATH_FORBIDDEN', 'only a job with ops ({ops:[...]} or an array of ops) is patched; a composite {jobs} job is patched in its part file');
@@ -277,6 +277,18 @@ export function patchJob(job, patch, { max = PATCH_MAX_OPS } = {}) {
   const bad = ops.findIndex(o => !o || typeof o !== 'object' || Array.isArray(o));
   if (bad >= 0) throw new PatchError('PATCH_INVALID', `the patched job's op #${bad} is not an object`);
   return { job: copy, resolved, named: resolved.some((r, i) => r.path !== toPointer(pointer(patch[i].path, i, ''))), notes };
+}
+export function patchJob(job, patch, options) {
+  try { return checkedPatch(job, patch, options); }
+  catch (error) {
+    if (!(error instanceof PatchError) || error.code !== 'PATCH_INVALID') throw error;
+    const candidate = Array.isArray(patch) ? patch.map(item => isObject(item)
+      ? Object.fromEntries(Object.entries(item).filter(([key]) => OP_KEYS.has(key))) : item) : null;
+    // Only offer an executable repair when preserving op/path/value is sufficient and the whole patch validates.
+    try { if (candidate) { checkedPatch(job, candidate, options); error.corrected = { patch: candidate }; } } catch { /* no unambiguous repair */ }
+    if (!error.corrected) error.expected = { patch: [{ op: '<add|remove|replace|test>', path: '<JSON pointer or named path>', value: '<required except for remove>' }] };
+    throw error;
+  }
 }
 export const applyJobPatch = (job, patch) => patchJob(job, patch).job;
 

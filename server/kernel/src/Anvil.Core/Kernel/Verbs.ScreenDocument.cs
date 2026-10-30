@@ -101,7 +101,7 @@ public sealed partial class ModelSession
         /// <summary>The check of a corrected document before it is offered as a patch: the Verify's word on its expressions is
         /// read even when nothing else is wrong (a name the correction wrote that the module does not have).</summary>
         public bool CheckExpressions;
-        /// <summary>The op's data.css: the end of the root's own style sheet, after the &lt;style&gt; blocks of the document.</summary>
+        /// <summary>The op's data.css: the root's whole own style sheet; it replaces the &lt;style&gt; blocks of the document (R2-D).</summary>
         public string? Css;
         /// <summary>F5: the compile of a root's signature before the first op (JobComposition.Signature: the root, its inputs
         /// and events), which the document's own op fills later: no theme, no visual notes.</summary>
@@ -346,7 +346,7 @@ public sealed partial class ModelSession
             if (suggestion != null) { warning["suggestion"] = suggestion; report["classesWithoutRule"]!["suggestion"] = suggestion.DeepClone(); }
             Report("highWarnings", warning);
         }
-        if (compiler.VisualCheck() is { } visual) VisualReport(report, visual, inJob ? _applyIndex : null);   // CX17 F8: one warning per family per job
+        if (compiler.VisualCheck() is { } visual) { VisualReport(report, visual, inJob ? _applyIndex : null); if (compiler.Platform is { } platformCss && report["visual"] is JsonObject seen) seen["platform"] = platformCss; }   // CX17 F8: one warning per family per job
         return report;
     }
 
@@ -783,6 +783,16 @@ public sealed partial class ModelSession
                 if (dataCss != null) dataCss = ScreenHtmlNative.WidenIconSelectors(dataCss);
             }
             ownSheet = ScreenDocument.OwnSheet(styles, dataCss);
+            // R2-D: data.css is the whole sheet; the document's own <style> it replaced (another CSS) is said, never added to it.
+            sheetBefore = ThemeCss.AuthorOf(root) ?? "";
+            sheetSaid = new JsonObject();
+            if (ScreenDocument.ReplacedSheet(styles, dataCss) is { } replaced)
+            {
+                var count = styles.Count(b => !b.Theme && b.Css.Length > 0);
+                sheetSaid["replaced"] = $"data.css is the whole style sheet of the {top.Tag}: it replaced the document's {count} <style> block(s) ({System.Text.Encoding.UTF8.GetByteCount(replaced)} bytes), which were not written";
+                normalized.Add(new JsonObject { ["code"] = "CSS_STYLE_REPLACED", ["line"] = top.Line, ["element"] = "style", ["property"] = "StyleSheet",
+                    ["note"] = sheetSaid["replaced"]!.ToString() + "; send the CSS once: data.css, or the <style> without data.css" });
+            }
             // The mask rules of the icons, after the document's CSS (each class once).
             if (iconRules.Count > 0) ownSheet = (ownSheet is { Length: > 0 } sheet ? sheet.TrimEnd('\r', '\n') + "\n" : "") + string.Join("\n", iconRules);
             // T18: the root's own sheet takes the one normalization before it is written, so what is compared after the compile
@@ -794,12 +804,20 @@ public sealed partial class ModelSession
                 if (outcome.Changed)
                 {
                     ownSheet = outcome.Css;
+                    var moved = outcome.ImportsHoisted.Count > 0 || outcome.ImportsMerged > 0;
                     normalized.Add(new JsonObject { ["code"] = "CSS_NORMALIZED", ["line"] = top.Line, ["element"] = top.Tag, ["property"] = "StyleSheet",
                         ["cssImportsHoisted"] = outcome.ImportsHoisted.Count > 0 ? new JsonArray(outcome.ImportsHoisted.Select(x => (JsonNode)x.Statement).ToArray()) : null,
                         ["cssImportsMerged"] = outcome.ImportsMerged > 0 ? outcome.ImportsMerged : null,
-                        ["note"] = "an @import after a rule (which the browser ignores) moved up, keeping the order of the imports; the rest as written" });
+                        ["cssStages"] = outcome.StageChanges.Count > 0 ? new JsonArray(outcome.StageChanges.Select(c => (JsonNode)c.DeepClone()).ToArray()) : null,
+                        ["note"] = (moved ? "an @import after a rule (which the browser ignores) moved up, keeping the order of the imports" : "")
+                            + (moved && outcome.StageChanges.Count > 0 ? "; " : "")
+                            + (outcome.StageChanges.Count > 0 ? "the rules a later rule of the same selectors overrides went (cssStages: the same CSS in every browser)" : "")
+                            + "; the rest as written" });
+                    if (outcome.StageChanges.Count > 0) sheetSaid!["cssStages"] = new JsonArray(outcome.StageChanges.Select(c => (JsonNode)c.DeepClone()).ToArray());
                 }
                 if (outcome.ImportsKept != null) normalized.Add(new JsonObject { ["code"] = "CSS_IMPORTS_KEPT", ["line"] = top.Line, ["note"] = outcome.ImportsKept });
+                // R2-D: its base64 data: images become images of the module, named by their URL (a check never creates one).
+                if (!options.CheckExpressions && !options.Declaration) ownSheet = s.CssDataImages(ownSheet!, name, sheetSaid!);
                 if (ThemeCss.Introduced(ThemeCss.AuthorOf(root), ownSheet, $"the {top.Tag}'s <style>") is { } refusal)
                     Problem(CssPipeline.EnvUrl, top, refusal.Message, refusal.Problems?[0]?["fix"]?.ToString());
             }
@@ -1617,7 +1635,7 @@ public sealed partial class ModelSession
                 var t = Nullable.GetUnderlyingType(pi.PropertyType) ?? pi.PropertyType;
                 if (IsExpression(t) || !pi.CanWrite && SafeGet(pi, target) is IExpression)
                 {
-                    WriteExpression(target, property, ExpressionOf(raw, sugared, at, attribute));
+                    WriteExpression(target, property, ProseLiteral(raw, sugared, at, attribute, kind, property) ?? ExpressionOf(raw, sugared, at, attribute));
                     return;
                 }
                 // A property that takes a literal (the Model API's type is no expression) written with a binding: the literal of a
@@ -1696,7 +1714,17 @@ public sealed partial class ModelSession
                 else setter!.Invoke(target, [value]);
                 // T18: the own stylesheet of a screen or block (its <style>) settles through the one normalization too (already
                 // normalized by the compile, so this writes nothing more: what PostChecks compares is what is stored).
-                if (property == "StyleSheet" && ThemeCss.Of(target) is { } sheet) ThemeCss.Settle(sheet);
+                if (property == "StyleSheet" && ThemeCss.Of(target) is { } sheet)
+                {
+                    ThemeCss.Settle(sheet);
+                    // R2-D: never a silent change (nothing is expected here: the compile normalized the sheet already).
+                    if (ThemeCss.Changed(sheet) is { } settled)
+                    {
+                        var said = new JsonObject { ["code"] = "CSS_NORMALIZED", ["line"] = at.Line, ["element"] = at.Tag, ["property"] = "StyleSheet" };
+                        foreach (var (key, change) in settled) said[key] = change?.DeepClone();
+                        normalized.Add(said);
+                    }
+                }
             }
             catch (Exception error) when (error is not OutOfMemoryException)
             {
@@ -1706,6 +1734,25 @@ public sealed partial class ModelSession
 
         // An element of the reading the document is based on (its k): what it already has is kept as it is.
         private bool Read(ScreenHtml.Node node) => node.Get("k") is { } k && options.ReadKeys?.ContainsKey(k) == true;
+
+        /// <summary>R2-C: prose written where a property that shows text takes an expression (placeholder="Search for something"):
+        /// the literal of what it says, written in this compile and listed (TEXT_LITERAL_QUOTED), when its certainty leaves only
+        /// that reading (ScreenDocument.ProseLiteral). Null otherwise: the expression as written, and the Verify's word on it (a
+        /// choice keeps its refusal with the two readings). An element of the reading keeps what it had.</summary>
+        private string? ProseLiteral(string raw, bool sugared, ScreenHtml.Node at, string attribute, string kind, string property)
+        {
+            if (sugared || attribute.Length == 0 || Read(at)) return null;
+            if (!ScreenDocument.ShowsText(kind, property) || ScreenHtml.HoldsBraces(raw) || !ScreenHtml.NotAnExpression(raw)) return null;
+            if (ScreenDocument.ProseLiteral(kind, property, raw, LiteralNames()) is not { } literal) return null;
+            var note = $"{kind}.{property} takes an expression and shows text; '{Clip(raw)}' is no expression (words with no operator between them, or a character no expression has) and names nothing in scope: it is the text it says, written as its literal";
+            normalized.Add(new JsonObject { ["code"] = ScreenDocument.TextLiteralQuoted, ["line"] = at.Line, ["column"] = at.Column, ["element"] = at.Tag, ["attribute"] = attribute,
+                ["from"] = ScreenDocument.ClipText(raw), ["to"] = ScreenDocument.ClipText(literal), ["note"] = note });
+            // In the job's normalizations too, so a refusal of another part of the job still says it.
+            var html = s.OpsPointer != null && s._applyOps != null && s._applyIndex < s._applyOps.Count ? $"{s.OpsPointer}/{s._applyIndex}/data/html" : null;
+            s.Normalized([Anvil.Core.Preflight.JobNormalizer.Entry(ScreenDocument.TextLiteralQuoted, html, $"{attribute}=\"{raw}\"", $"{attribute}='{literal}'",
+                $"html: line {at.Line} col {at.Column}: {note}")]);
+            return literal;
+        }
 
         /// <summary>The expression an attribute writes: as written, or (a class, or any value with a binding) the expression of its
         /// bindings ("Buscar {{ X }}" is "Buscar " + X, {{ x }} is x; ScreenHtml.Unsugar). A brace pair that is no binding is a problem
@@ -1793,37 +1840,57 @@ public sealed partial class ModelSession
                 Problem(ScreenDocument.NameUnknown, at, $"{attribute}=\"{form}\": no element of the module has this key", "name the element (Name, Kind:Name or Owner.Name)");
                 return null;
             }
-            var hits = Own(form);
-            List<List<IObjectSignature>> tiers;
-            if (hits.Count > 0) tiers = [hits];
-            else
-            {
-                var found = index.Lookup(form, options.Exclude);
-                // The root itself answers as a screen or block does in the reading (the tier of the other roots): a link of a
-                // screen to itself.
-                if (Root(form)) found.Add((root, rootKind, 3));
-                tiers = found.GroupBy(f => f.Tier).OrderBy(g => g.Key).Select(g => g.Select(f => f.Node).ToList()).ToList();
-            }
-            foreach (var tier in tiers)
-            {
-                // The reading's rule (the nearest tier answers) among the elements of the kind the property takes.
-                // One element answers once, whatever tiers or lookups name it (the root of a recreation is both the index's new
-                // root and the root itself: "names 2 elements" with one path, integ/proto-into-product).
-                var compatible = tier.Where(n => expected.IsInstanceOfType(n) && FitsReference(n, what)).Distinct(ReferenceEqualityComparer.Instance).Cast<IObjectSignature>().ToList();
-                if (compatible.Count == 1) return compatible[0];
-                // Two list types of one name and one element are one type (ODC Studio 1.7.29 adds the list types of its system
-                // records beside the module's: ScreenHtmlModule.SameTypes): the one the type text of every op gives (TypeResolver).
-                if (compatible.Count > 1 && OneListType(compatible) is { } list) return list;
-                if (compatible.Count > 1)
-                {
-                    Problem(ScreenDocument.NameAmbiguous, at, $"{attribute}=\"{form}\" names {compatible.Count} elements: {string.Join(", ", compatible.Take(6).Select(h => ShortType(h) + " " + ModelHost.PathOf(h)))}",
-                        "qualify it: Kind:Name or Owner.Name");
-                    return null;
-                }
-            }
-            if (Type(form, expected) is { } type) return type;
             var name = form[(form.IndexOf(':') + 1)..];
             name = name[(name.LastIndexOf('.') + 1)..];
+            // R2-A (NameResolution, the rule of every text form and of the preflight): the kind the property takes enters the
+            // search before the tiers. The root's own elements (tier 0), then the module, its references and the other roots,
+            // nearest first (the reading's tiers; an event's destination in the order of a call: the root's own, the module's,
+            // the references'); the root itself answers as a screen or block does in the reading (the tier of the other roots: a
+            // link of a screen to itself). An element of the root of another kind (an output parameter named like the screen an
+            // event opens) no longer hides the elements of the outer tiers that fit.
+            var destination = what == "destination";
+            var named = Own(form).Select(n => DocumentCandidate(n, 0, destination)).ToList();
+            foreach (var (node, _, tier) in index.Lookup(form, options.Exclude)) named.Add(DocumentCandidate(node, tier, destination));
+            if (Root(form)) named.Add(DocumentCandidate(root, 3, destination));
+            var answer = NameResolution.Resolve(name, named, new NameSlot(Wanted(expected), c => c.Element is IObjectSignature n && expected.IsInstanceOfType(n) && FitsReference(n, what)));
+            if (answer is { Outcome: NameOutcome.Resolved, Chosen.Element: IObjectSignature chosen })
+            {
+                // The short form reached what a nearer element of another kind would have answered by scope: listed, with the
+                // form that names it whatever is nearer.
+                if (answer.Unfit.Any(u => u.Tier <= answer.Chosen.Tier) && !Read(at))
+                    normalized.Add(new JsonObject { ["code"] = NameResolution.CanonicalRule, ["line"] = at.Line, ["column"] = at.Column, ["element"] = at.Tag, ["attribute"] = attribute,
+                        ["from"] = form, ["to"] = answer.Chosen.Canonical,
+                        ["note"] = $"'{form}' is the {NameResolution.Describe(answer.Chosen with { Canonical = answer.Chosen.Name })}, the only {Wanted(expected)} of that name here; "
+                            + string.Join(", ", answer.Unfit.Where(u => u.Tier <= answer.Chosen.Tier).Take(3).Select(NameResolution.Describe)) + " is no " + Wanted(expected) + " (the kind the property takes is searched first)" });
+                return chosen;
+            }
+            if (answer.Outcome == NameOutcome.Ambiguous)
+            {
+                // One element answers once, whatever tiers or lookups name it (the root of a recreation is both the index's new
+                // root and the root itself, integ/proto-into-product). Two list types of one name and one element are one type
+                // (ODC Studio 1.7.29 adds the list types of its system records beside the module's: ScreenHtmlModule.SameTypes):
+                // the one the type text of every op gives (TypeResolver).
+                var compatible = answer.Candidates.Select(c => (IObjectSignature)c.Element!).Distinct(ReferenceEqualityComparer.Instance).Cast<IObjectSignature>().ToList();
+                if (compatible.Count == 1) return compatible[0];
+                if (OneListType(compatible) is { } list) return list;
+                Problem(ScreenDocument.NameAmbiguous, at, $"{attribute}=\"{form}\" names {compatible.Count} elements: {string.Join(", ", compatible.Take(6).Select(h => ShortType(h) + " " + ModelHost.PathOf(h)))}",
+                    "qualify it: Kind:Name or Owner.Name: " + string.Join(", ", answer.Candidates.Take(6).Select(c => $"{attribute}=\"{c.Canonical}\"")),
+                    answer.Candidates.Select(c => c.Canonical).Distinct(StringComparer.Ordinal).ToList());
+                return null;
+            }
+            // R2-A: a client action is no event's destination (the platform refuses it at the set, both lanes): refused before the
+            // set, with its exact wrapping (a screen action of the root that calls it, and the event naming that).
+            if (destination && answer.Unfit.FirstOrDefault(u => NameResolution.Bare(u.Kind) is "ClientAction" or "ClientActionSignature") is { } client)
+            {
+                var owner = TypeResolver.Name(root) ?? Display(root);
+                var (logic, wrapper) = ScreenHtmlEdit.ClientActionWrap(owner, client.Name);
+                problems.Add(new(ScreenDocument.NameUnknown, at.Line, at.Column,
+                    $"{attribute}=\"{form}\": '{form}' is the {NameResolution.Describe(client with { Canonical = client.Name })}, which an event cannot run (an event runs a screen action of {owner} or opens a screen; the platform refuses a client action as the destination)",
+                    $"run it from a screen action of {owner}: a logic op with the text \"{logic.Replace("\n", "\\n")}\", {wrapper} in actions= of {owner}, and {attribute}=\"{wrapper}\"",
+                    [wrapper], Extra: new JsonObject { ["wrap"] = new JsonObject { ["logic"] = logic, ["actions"] = wrapper, ["attribute"] = attribute, ["value"] = wrapper } }));
+                return null;
+            }
+            if (Type(form, expected) is { } type) return type;
             var candidates = Candidates(expected, what).ToList();
             var near = ScreenDocument.Nearest(name, candidates);
             var known = near.Count > 0 ? near : [];
@@ -1874,13 +1941,30 @@ public sealed partial class ModelSession
                 foreach (var basic in BasicTypes) yield return basic;
         }
 
-        // A destination is a screen, a client action, an action of this root, or a destination of the System (RedirectToURL:
-        // the reading writes onclick="RedirectToURL" for the System's, which binds with no reference of the module; the
-        // candidate's recreation corpus on ODC, integ/proto-into-product).
-        private bool FitsReference(IObjectSignature node, string what) => what != "destination" || Role(node) == "screen"
-                || PreflightRules.OdcScopeRules.SystemDestinations.Contains(TypeResolver.Name(node) ?? "")
-                || ModelHost.Kind(node.GetInterface()?.Name ?? "") is "ClientAction" or "ClientActionSignature"
-                || Role(node) == "action" && Inside(node, root);
+        // A destination is what an event runs or opens by the one rule of both forms and the preflight (R2-A,
+        // NameResolution.IsEventDestination: a screen of the module or of a reference, an action of this root, a destination of
+        // the System: the reading writes onclick="RedirectToURL" for the System's, which binds with no reference of the module;
+        // the candidate's recreation corpus on ODC, integ/proto-into-product). Never a client action: the platform refuses it
+        // as the destination (ReferenceCore refuses it before the set, with its wrapping).
+        private bool FitsReference(IObjectSignature node, string what) => what != "destination"
+                || NameResolution.IsEventDestination(r.KindOf(node), Role(node), !ReferenceEquals(node, root) && Inside(node, root), TypeResolver.Name(node) ?? "");
+
+        // An element of the module as a candidate of a name of the document (NameResolution): its tier, its kind, the form that
+        // names it whatever is nearer (Kind:Name), its parent as the qualifier of an Owner.Name form. An event's destination takes
+        // the tiers of a call (ScreenHtmlModule.DestinationTier): the root's own (0), the module's (1), a reference's (2).
+        private NameCandidate DocumentCandidate(IObjectSignature node, int tier, bool destination = false)
+        {
+            var kind = r.KindOf(node);
+            var name = Display(node);
+            var own = Inside(node, root) && !ReferenceEquals(node, root);
+            if (destination)
+            {
+                tier = own ? 0 : 1;
+                for (var up = node.Parent as IObjectSignature; up != null && !own; up = up.Parent as IObjectSignature)
+                    if (r.KindOf(up) == "Reference") { tier = 2; break; }
+            }
+            return new(name, kind, Role(node), tier, kind + ":" + name, node.Parent is IObjectSignature holder ? Display(holder) : null, own, node);
+        }
 
         private static readonly string[] BasicTypes = ["Text", "Integer", "Long Integer", "Decimal", "Boolean", "Date", "Time", "Date Time", "Currency", "Email", "Phone Number", "Binary Data"];
 

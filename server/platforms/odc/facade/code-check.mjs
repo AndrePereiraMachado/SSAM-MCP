@@ -10,10 +10,13 @@ import { canonicalKeyOf, sameProducer, studioNameOf } from './producer-names.mjs
 import { writeCall } from './ssam-code.mjs';
 import { runJob, withJobIdentity } from './job-runner.mjs';
 import { createAnvilRunner } from './anvil-cli.mjs';
-import { residentWorkerClient, workerDisabled } from './anvil-worker.mjs';
+import { residentWorkerClient, hostedWorkerClient, workerDisabled } from './anvil-worker.mjs';
 import { mergeNormalizations } from './normalizations.mjs';
 import { prototypeImportRefusal } from './prototype-disabled.mjs';
 import { rememberSlotModel } from './build-pool.mjs';
+import { hostedContext } from './executor.mjs';
+import { customerStateDir } from './hosted/storage.mjs';
+import { registerPrivateCheck } from './hosted/verified-store.mjs';
 
 // S9: what a check built, for the draft's write (code-draft.mjs): a symbol key, so no answer the model reads carries it.
 export const CHECK_CANDIDATE = Symbol.for('ssam.check.candidate');
@@ -200,10 +203,18 @@ function withOrigin(problem, origins = []) {
 // The worker keeps the module hot by the model hash of the capture (R3, BaseModelCache): the next check or build of the same
 // model skips load and walk. Without such a worker, with ANVIL_WORKER=0 (ANVIL_ODC_NO_WORKER on odc), or with an injected
 // runner (tests, the bench), the check runs cold as before. deps.worker: a client of that shape, or null for cold.
+// R2-F rule 3: hosted, the O11 lane has no lane worker (workerDisabled), so every check ran cold (BankDash: 11 of 11,
+// 267 s). The check's apply goes to the calling customer's own worker instead (anvil-worker.mjs hostedWorkerClient: the
+// same spawn environment as the cold process, that customer's key, cold when busy or starting, never replayed after an
+// unknown outcome); its first check starts that worker in the background, as a delivery does.
 function checkWorkerOf(lane, deps, root) {
   if (deps.worker !== undefined) return deps.worker;
   const env = deps.env ?? process.env;
-  if (deps.runAnvil || deps.runJob || deps.execFileFn || workerDisabled(lane, env)) return null;
+  // An injected runner (tests, the bench) runs cold, unless the customers' workers are injected too (deps.hostedWorkers).
+  if (lane === 'o11' && hostedContext() && (deps.hostedWorkers || !(deps.runAnvil || deps.runJob || deps.execFileFn)))
+    return hostedWorkerClient({ root, env, o11: deps.o11Lane ?? o11Lane.lane, pool: deps.hostedWorkers });
+  if (deps.runAnvil || deps.runJob || deps.execFileFn) return null;
+  if (workerDisabled(lane, env)) return null;
   try {
     return residentWorkerClient(lane, { root, env, o11: deps.o11Lane ?? o11Lane.lane, ...(deps.workspace ? { workspace: deps.workspace } : {}),
       // the lane's own environment, never the connection record (74087239: a check reads no Studio connection)
@@ -308,10 +319,19 @@ export async function codeCheck(input = {}, deps = {}) {
     : { tool: 'ssam_code', arguments: { ...input, lane, action: 'check' } };
   if (problems.length) return { ok: false, code: problems.some(p => p.code === 'INPUT_INVALID') ? 'INPUT_INVALID' : !capture ? 'CAPTURE_MISSING' : 'PRODUCER_NOT_CAPTURED', lane, module, action: 'check', problems, ...(capture ? { capture } : {}), continuation };
   const { root, local, odcWork, odc: odcData, confined } = locations(deps);
-  const dir = path.join(lane === 'o11' ? local : odcWork, 'jobs', 'check', (deps.uuid ?? randomUUID)());
+  const checkId = (deps.uuid ?? randomUUID)();
+  const privateWorkspace = hostedContext()?.workspace;
+  const publicDir = path.join(lane === 'o11' ? local : odcWork, 'jobs', 'check', privateWorkspace ? hash(JSON.stringify(call.arguments.job, null, 2)) : checkId);
+  const dir = privateWorkspace ? path.join(customerStateDir(privateWorkspace), 'checks', checkId) : publicDir;
   fs.mkdirSync(dir, { recursive: true });
+  if (privateWorkspace) registerPrivateCheck(dir);
   const job = path.join(dir, 'job.json');
   fs.writeFileSync(job, JSON.stringify(call.arguments.job, null, 2));
+  const checkedCapture = privateWorkspace ? { ...capture, path: path.join(dir, 'base.oml') } : capture;
+  if (privateWorkspace) {
+    fs.copyFileSync(capture.path, checkedCapture.path);
+    if (hash(fs.readFileSync(checkedCapture.path)) !== capture.sha256) return { ok: false, code: 'BASE_CHANGED', error: 'The capture changed before validation.' };
+  }
   const start = nowMs(deps);
   let result;
   const env = { ...(deps.env ?? process.env), ANVIL_WORKER: '0', ANVIL_ODC_NO_WORKER: '1' };
@@ -325,7 +345,7 @@ export async function codeCheck(input = {}, deps = {}) {
   const runAnvil = keepingKernelResult(worker ? onWorker(worker, cold, seen) : cold);
   try {
     // With roots, the producers a job runner binds by itself (an ODC job's captures) are the session's too.
-    result = await (deps.runJob ?? runJob)({ lane, job, base: capture.path, out: path.join(dir, 'candidate.oml'), work: path.join(dir, 'work'), producers: bindings, quiet: true },
+    result = await (deps.runJob ?? runJob)({ lane, job, base: checkedCapture.path, out: path.join(dir, 'candidate.oml'), work: path.join(dir, 'work'), producers: bindings, quiet: true },
       { ...deps, env, runAnvil, ...(confined ? { odcRoot: odcData } : {}) });
     if (!result.ok && result.stage !== 'static') { // CX16 (c): a static refusal carries its own correction; guidance measured ~0.2 s, ~2.9 KB
       if (deps.guidance) result = await deps.guidance(lane, result.job ?? job, result);
@@ -342,6 +362,13 @@ export async function codeCheck(input = {}, deps = {}) {
     }
     result = withJobIdentity(result);
   } catch (error) { result = { ok: false, error: error.message }; }
+  const candidateJob = result.job ?? job;
+  if (privateWorkspace) {
+    fs.mkdirSync(publicDir, { recursive: true });
+    const publicJob = path.join(publicDir, 'job.json');
+    fs.copyFileSync(candidateJob, publicJob);
+    result = { ...result, job: publicJob, jobSha256: hash(fs.readFileSync(publicJob)), nextBasedOn: { job: publicJob, sha256: hash(fs.readFileSync(publicJob)) } };
+  }
   const resultFile = path.join(dir, 'candidate.result.json');
   const timings = timingsOf(readJson(resultFile), seen.via);
   const common = { lane, module, action: 'check', capture, ...(Object.keys(receipts).length ? { producers: receipts } : {}), wallMs: nowMs(deps) - start, ...(timings ? { timings } : {}) };
@@ -356,8 +383,8 @@ export async function codeCheck(input = {}, deps = {}) {
     const answer = { ok: true, ...common, valid: true, verifyRan: result.verifyRan ?? true, job: result.job ?? job, jobSha256: result.jobSha256 ?? hash(fs.readFileSync(job)),
       ...normalizations, next: 'answer only the file path; the main agent delivers ONE ssam_code write {module, files}' };
     const candidate = path.join(dir, 'candidate.oml'), kernelResult = path.join(dir, 'candidate' + KERNEL_RESULT);
-    if (stat(candidate) && stat(kernelResult)) answer[CHECK_CANDIDATE] = { path: candidate, sha256: hash(fs.readFileSync(candidate)), result: kernelResult, job: result.job ?? job,
-      base: capture.path, baseSha256: capture.sha256, baseModelSha256: capture.model ?? null, producers: bindings, via: seen.via };
+    if (stat(candidate) && stat(kernelResult)) answer[CHECK_CANDIDATE] = { path: candidate, sha256: hash(fs.readFileSync(candidate)), result: kernelResult, job: candidateJob,
+      base: checkedCapture.path, baseSha256: capture.sha256, baseModelSha256: capture.model ?? null, producers: bindings, via: seen.via };
     return answer;
   }
   return { ok: false, code: 'CHECK_REFUSED', refusalCode: result.code, ...common, ...refusalFields(result, job), problems: (result.problems ?? []).map(p => withOrigin(p, call.origins)),

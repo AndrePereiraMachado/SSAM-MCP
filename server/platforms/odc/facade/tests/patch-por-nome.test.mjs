@@ -20,7 +20,7 @@ import * as jobRunner from '../job-runner.mjs';
 import { compactDelivery } from '../responses.mjs';
 import { registerSsamReference } from '../ssam-reference.mjs';
 import { createSsamServer } from '../ssam.mjs';
-import { fakeAnvil } from './fixtures/fake-anvil.mjs';
+import { fakeAnvil, validPreflight } from './fixtures/fake-anvil.mjs';
 import { tempKernel, linked } from './fixtures/o11env-kernel.mjs';
 
 const sha256 = data => createHash('sha256').update(data).digest('hex');
@@ -335,7 +335,7 @@ test('o11_deliver: a partial job + basedOn delivers the whole job; success and r
   const replies = [{ ok: true, command: 'deliver', data: { delivered: true, taskId: 't1', writeState: 'applied' } },
     { ok: false, command: 'deliver', code: 'PREFLIGHT_REFUSED', error: 'op #1 (logic) [EXPR_UNKNOWN_IDENTIFIER]: x', problems: [PROBLEM], verifyRan: true, phases: ['preflight'] }];
   const runAnvil = fakeAnvil({ deliver: () => replies.shift() });
-  const server = await createSsamServer({ odc: false, deps: { cycle: { root, env: { USERPROFILE: root, LOCALAPPDATA: root }, runAnvil, assertSelected: async () => {}, tasksDir: path.join(root, 'tasks') },
+  const server = await createSsamServer({ odc: false, deps: { cycle: { checkRunner: validPreflight, root, env: { USERPROFILE: root, LOCALAPPDATA: root }, runAnvil, assertSelected: async () => {}, tasksDir: path.join(root, 'tasks') },
     lock: { o11Root: root, odcRoot: root, connection: () => null } } });
   const client = await connect(server);
   t.after(async () => { await client.close(); await server.close(); });

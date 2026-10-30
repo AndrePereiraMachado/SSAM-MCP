@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import {createHash} from 'node:crypto';
-import {authorizationContext} from '../../facade/authorization-context.mjs';
+import {approvalOf,contextValues,originId,sameGrant,recorded} from './written-approval.mjs';
 import {isUuid} from './write-journal.mjs';
 import {fail} from './errors.mjs';
 export const EVALUATION_CREATE='agents.evaluationCreate';
@@ -10,7 +10,9 @@ export const evaluationHash=value=>createHash('sha256').update(JSON.stringify(va
 const exact=(obj,keys)=>!!obj&&Object.keys(obj).sort().join(',')===keys.split(',').sort().join(',');
 export function evaluationListInput(portfolioKey,name){return {screenVariables:{PortfolioKey:portfolioKey,_portfolioKeyInDataFetchStatus:1,
  PaginationStartIndex:0,Sort:'name',EvaluationNameContains:name,SelectedAgenticAppIds:{List:[]}}};}
-export async function evaluationCreateApproval({file,words,host,raw,lookup,read}){
+// R2-I: the contextual fixture creation is also reachable with the written words naming the evaluation and its dataset,
+// selected by the call's scope (originOperationUuid: the dataset's own confirmed creation in SSAM's journal).
+export async function evaluationCreateApproval({file,words,host,raw,lookup,read,find,scope}){
  const bad=()=>fail('AUTHORIZATION_CONTEXT_INVALID','Evaluation creation needs an owned confirmed dataset, exact approved content and an observed eligible judge. Nothing was sent.');
  const p=raw.inputParameters,e=p?.Evaluation;
  if(!exact(p,'Evaluation')||!exact(e,'Name,Description,DatasetId,Judges,PortfolioKey')
@@ -18,19 +20,20 @@ export async function evaluationCreateApproval({file,words,host,raw,lookup,read}
    ||!exact(e.Judges,'List')||!Array.isArray(e.Judges.List)||e.Judges.List.length!==1
    ||!exact(e.Judges.List[0],'Id')||!isUuid(e.Judges.List[0].Id)
    ||Object.keys(raw.screenVariables??{}).length||Object.keys(raw.clientVariables??{}).length)bad();
- let c;try{if(fs.statSync(file).size>32768)bad();c=JSON.parse(fs.readFileSync(file,'utf8')).constraints;}catch{bad();}
+ let c;try{c={...contextValues(file,scope)};}catch{bad();}
+ c.originOperationUuid=originId(c,'originOperationUuid',{written:!file,find,what:'The evaluation fixture creation',
+  predicate:r=>r?.state==='confirmed'&&r.identity?.tenant===host&&r.identity.operationId==='agents.datasetCreate'&&r.response?.DatasetId===e.DatasetId});
  if(!isUuid(c?.originOperationUuid))bad();
  const origin=lookup(c.originOperationUuid);
  if(origin?.state!=='confirmed'||origin.identity?.tenant!==host||origin.identity.operationId!=='agents.datasetCreate'
-   ||origin.response?.DatasetId!==e.DatasetId||!origin.authorization?.source)bad();
+   ||origin.response?.DatasetId!==e.DatasetId||!recorded(origin))bad();
  const detail=await read('agents.dataset',{screenVariables:{id:e.DatasetId,_idInDataFetchStatus:1}}),d=detail?.data?.Dataset;
  if(detail?.ok!==true||detail.data.NotFound!==false||d?.DatasetId!==e.DatasetId||d.PortfolioKey!==e.PortfolioKey||!d.Name
    ||!['1','2'].includes(String(d.TestCaseCount))||!Array.isArray(d.TestCases?.List)||d.TestCases.List.length!==Number(d.TestCaseCount)
    ||['SetupAppId','SetupServiceActionId','TeardownAppId','TeardownServiceActionId'].some(k=>d[k]!==''))bad();
- const approval=authorizationContext(file,words,{lane:'odc',host,operation:EVALUATION_CREATE,targets:[e.Name,d.Name],
+ const approval=approvalOf(file,words,{lane:'odc',host,operation:EVALUATION_CREATE,targets:[e.Name,d.Name],
   constraints:{originOperationUuid:c.originOperationUuid,datasetId:e.DatasetId,portfolioKey:e.PortfolioKey,inputSha256:evaluationHash(p),expectedDatasetSha256:evaluationHash(d)}});
- if(!approval||approval.wordsSha256!==origin.authorization.wordsSha256||approval.source.threadId!==origin.authorization.source.threadId
-   ||approval.source.messageId!==origin.authorization.source.messageId)bad();
+ if(!approval||!sameGrant(origin.authorization,approval,{words:true}))bad();
  const dependencies=await read('agents.datasetEvaluations',{screenVariables:{DatasetId:e.DatasetId,_datasetIdInDataFetchStatus:1}});
  if(dependencies?.ok!==true||dependencies.dependencyState?.verified!==true||dependencies.dependencyState.datasetId!==e.DatasetId||dependencies.dependencyState.hasConnectedEvaluations!==false)
   fail('EVALUATION_BASELINE_UNVERIFIED','The owned dataset must have no connected evaluations before this fixture creation. Nothing was sent.');
@@ -63,15 +66,19 @@ export async function observeEvaluationCreation(receipt,read){
  return {verified:evaluationDetailMatches(expected,id,detail)&&dataset?.ok===true&&dataset.data.NotFound===false&&evaluationHash(dataset.data.Dataset)===expected.datasetSha256,evaluationId:id,datasetId:expected.datasetId,
   detailSha256:evaluationHash(detail?.data??null),inventoryComplete:list.complete===true};
 }
-export async function evaluationOperationApproval({file,words,host,raw,operationId,lookup,read}){
+// R2-I (owner's rule, 28/10): the written words naming the evaluation are the approval of a run or a delete; a context file
+// is still accepted. Without one, SSAM finds the evaluation's own confirmed creation in its journal.
+export async function evaluationOperationApproval({file,words,host,raw,operationId,lookup,read,find}){
  const bad=()=>fail('EVALUATION_BASELINE_UNVERIFIED','The owned evaluation, original authorization, exact dataset and idle state must be proven before this operation. Nothing was sent.');
  const p=raw.inputParameters;
  if(!exact(p,'EvaluationId')||!isUuid(p.EvaluationId)||Object.keys(raw.screenVariables??{}).length||Object.keys(raw.clientVariables??{}).length)bad();
- let c;try{if(fs.statSync(file).size>32768)bad();c=JSON.parse(fs.readFileSync(file,'utf8')).constraints;}catch{bad();}
+ let c;try{c={...contextValues(file)};}catch{bad();}
+ c.originOperationUuid=originId(c,'originOperationUuid',{written:!file,find,what:'The evaluation run or delete',
+  predicate:r=>r?.state==='confirmed'&&r.identity?.tenant===host&&r.identity.operationId===EVALUATION_CREATE&&r.response?.EvalId===p.EvaluationId});
  if(!isUuid(c?.originOperationUuid))bad();
  const origin=lookup(c.originOperationUuid),expected=origin?.reconciliation?.evaluation;
  if(origin?.state!=='confirmed'||origin.identity?.tenant!==host||origin.identity.operationId!==EVALUATION_CREATE
-   ||origin.response?.EvalId!==p.EvaluationId||!expected||!origin.authorization?.source)bad();
+   ||origin.response?.EvalId!==p.EvaluationId||!expected||!recorded(origin))bad();
  const screenVariables={id:p.EvaluationId,_idInDataFetchStatus:1,portfolioId:expected.portfolioKey,_portfolioIdInDataFetchStatus:1};
  const detail=await read('agents.evaluation',{screenVariables});
  if(!evaluationDetailMatches(expected,p.EvaluationId,detail))bad();
@@ -79,9 +86,9 @@ export async function evaluationOperationApproval({file,words,host,raw,operation
  if(dataset?.ok!==true||dataset.data.NotFound!==false||evaluationHash(dataset.data.Dataset)!==expected.datasetSha256)bad();
  const ongoing=await read('agents.evaluationOngoingRun',{screenVariables:{...screenVariables,GetEvaluation:{...detail.data,DataFetchStatus:1}}});
  if(ongoing?.ok!==true||ongoing.data?.OngoingRun?.IsRunning!==false)bad();
- const approval=authorizationContext(file,words,{lane:'odc',host,operation:operationId,targets:[expected.name],
+ const approval=approvalOf(file,words,{lane:'odc',host,operation:operationId,targets:[expected.name],
   constraints:{originOperationUuid:c.originOperationUuid,evaluationId:p.EvaluationId,portfolioKey:expected.portfolioKey,inputSha256:evaluationHash(p),expectedEvaluationSha256:evaluationHash(detail.data.Evaluation)}});
- if(!approval||approval.wordsSha256!==origin.authorization.wordsSha256||approval.source.threadId!==origin.authorization.source.threadId||approval.source.messageId!==origin.authorization.source.messageId)bad();
+ if(!approval||!sameGrant(origin.authorization,approval,{words:true}))bad();
  if(operationId===EVALUATION_RUN){
   if(!/^1900-01-01T00:00:00(?:Z)?$/.test(detail.data.Evaluation.LastRunAt))bad();
   const stage=await read('agents.evaluationDevStage',{screenVariables});

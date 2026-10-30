@@ -1,3 +1,4 @@
+import { orderDeleteDependencies } from './delete-dependencies.mjs';
 // ssam_code (owner decision 2026-10-12, docs/TEXTO-SSAM.md "ssam_code"): a module read and written as code, one tool for
 // both lanes. Three parts, the same word to read and to write:
 //   ddl    tables, static entities, structures, indexes, settings/site properties, variables, timers as SQL DDL (ssam-ddl/1)
@@ -9,6 +10,7 @@
 // single refusal with every problem and patch, and owner rules; never a second delivery path. grammar needs no module: a
 // compact card per part with a from-scratch example the kernel accepts on both lanes (tests/ssam-code.test.mjs applies it).
 
+import { dependencyFacts, splitDdl, isDropDdl, sortDependencies } from './part-dependencies.mjs';
 import { mergeNormalizations } from './normalizations.mjs';
 import { GENERATORS, generatorCard, ENTITY_ACTIONS_OP, ENTITY_ACTIONS_CARD, entityActionsCall, GENERATE_SCREENS_OP, GENERATE_SCREENS_RULE, offered } from './generators.mjs';
 import fs from 'node:fs';
@@ -850,26 +852,15 @@ export function readCodeFiles(files) {
   });
   return { parts, problems, notes };
 }
-// The block names a document defines and instantiates (<block name="X"> / <Block name="X">).
-const blockDefined = t => /^\s*(?:<!--[\s\S]*?-->\s*)*<block\s[^>]*?\bname="([^"]+)"/.exec(lines(t))?.[1]?.toLowerCase() ?? null;
-const blocksUsed = t => [...lines(t).matchAll(/<Block\s[^>]*?\bname="([^"]+)"/g)].map(m => m[1].toLowerCase());
-// The actions a timer statement of a data text names (timer T action A ...).
+// Actions named by timer statements in a data text.
 const timerActions = t => [...lines(t).matchAll(/^\s*timer\s+[A-Za-z_]\w*\b[^\n]*?\baction\s+([A-Za-z_]\w*)/gm)].map(m => m[1].toLowerCase());
-// Whether a data text drops something (a drop statement), and whether it has any other statement (a create, a type, a keyed
-// statement that may add to an element): the statements start a line, comments aside.
-const ddlStatements = t => lines(t).split('\n').map(l => l.replace(/--.*$/, '').trim()).filter(l => l && !/^[),;]/.test(l));
-const dropsOf = t => ddlStatements(t).some(l => /^drop\s/i.test(l));
-const othersOf = t => ddlStatements(t).some(l => /^(?:create|type|site\s+property|setting|client\s+variable|session\s+variable|timer|alter)\b/i.test(l));
 // The part words a model writes for each part (one meaning each).
 export const PART_SYNONYMS = { ddl: ['ddl', 'data', 'sql', 'schema', 'database', 'db', 'entity', 'entities', 'table', 'tables', 'ssam-ddl', 'ssam-ddl/1'],
   logic: ['logic', 'flow', 'flows', 'pseudocode', 'actions', 'ssam-flow', 'ssam-flow/1'],
   html: ['html', 'screen', 'screens', 'ui', 'page', 'pages', 'block', 'blocks', 'ssam-html', 'ssam-html/1'] };
 export const canonicalPart = word => (typeof word !== 'string' ? null : Object.entries(PART_SYNONYMS).find(([, ws]) => ws.includes(word.trim().toLowerCase()))?.[0] ?? null);
 
-// ---- What a part of a write creates and consumes, by name: the facts a dependency order reads (R1 item 5). Today
-// orderParts orders one edge by them (a data text whose timer names an action of this write goes after the part that
-// creates that action, whatever part creates it); the topological order of every edge (blocks, structures, screens, drops:
-// the next release) reads the same facts, so a part that declares a new kind of name adds it here.
+// Module action declarations shared by the dependency extractor.
 const ACTION_TYPE = /^I?(?:Server|Service|Client)Action$/;
 const named = name => String(name).toLowerCase();
 const moduleOwner = owner => owner == null || owner === '@espace';
@@ -893,73 +884,100 @@ function actionsCreatedBy(p) {
 // The data texts of a part: a ddl part's text, an ops part's spec ddl.
 const ddlTextsOf = p => (p.part === 'ddl' ? [textList(p.text).join('\n')]
   : p.part === 'ops' ? opsOf(p).filter(op => op.op === 'spec' && plain(op.data) && typeof op.data.ddl === 'string').map(op => op.data.ddl) : []);
-/** Action dependency facts, ready for the later full dependency ordering pass. */
+/** Module action facts; other declaration and reference kinds live in part-dependencies.mjs. */
 export function partFacts(p) {
   const ddlTexts = ddlTextsOf(p);
   return { creates: { actions: [...new Set(actionsCreatedBy(p))] },
     consumes: { actions: [...new Set(ddlTexts.flatMap(timerActions))] } };
 }
 
-/**
- * The parts of a write in the order the delivery needs them (one meaning: the order of the parts in a call never carries
- * the person's intent, the dependencies do): the data first, then new blocks (a block another one uses first), then new
- * screens, then the actions and the screen edits as given. A data text whose timer names an action of this write goes
- * right after the part that creates that action (any part: a logic text, an ops part's logic or create).
- * Full dependency sorting and mixed DDL splitting belong to the next ordering pass.
- * Returns {parts, moved}.
- */
-export function orderParts(parts) {
-  // Integration 24-1 familias (review): removal goes the other way of creation. A data text that only drops goes after the
-  // parts that change its consumers (the action rewritten without Foo.Bar, the screen edit that stops showing it): before
-  // them, the delete still sees those consumers (DELETE_HAS_CONSUMERS) and the order the model wrote would have passed. A
-  // data text that drops and also creates or changes has two places (its creations first, its drops last): two readings, so
-  // the write keeps the order it was given (nothing is moved).
-  const ddl = parts.filter(p => p.part === 'ddl').map(p => ({ p, drops: dropsOf(p.text), other: othersOf(p.text) }));
-  if (ddl.some(d => d.drops && d.other)) return { parts, moved: false };
-  const dropsOnly = new Set(ddl.filter(d => d.drops).map(d => d.p));
-  const facts = new Map(parts.map(p => [p, partFacts(p)]));
-  // R1 item 5: the parts that create an action a data text's timer names. Before, only a logic text counted (an action of an
-  // ops part left the timer first) and the timer tied in rank with the logic texts, so the order of the files decided
-  // (DDL_REFUSED "no IServerAction named ...").
-  const creatorsOf = p => (facts.get(p).consumes.actions.length
-    ? parts.filter(o => o !== p && facts.get(o).creates.actions.some(a => facts.get(p).consumes.actions.includes(a))) : []);
-  const follows = new Map(parts.map(p => [p, creatorsOf(p)]).filter(([, creators]) => creators.length));
-  // Preserve the existing rank of unrelated parts before applying timer dependencies.
-  const newActions = new Set(parts.filter(p => p.part === 'logic').flatMap(p => facts.get(p).creates.actions));
-  const rank = p => (p.part === 'ddl' ? (dropsOnly.has(p) ? 4 : timerActions(p.text).some(a => newActions.has(a)) ? 3 : 0)
-    : p.part === 'html' && !isHtmlEdit(p) ? (blockDefined(p.text) ? 1 : 2) : p.part === 'ops' ? 2.5 : 3);
-  const ranked = parts.map((p, i) => ({ p, i, r: rank(p) })).sort((a, b) => a.r - b.r || a.i - b.i);
-  // Blocks: one that another block of this write instantiates goes first.
-  const blocks = ranked.filter(x => x.r === 1);
-  const done = new Set(); const sortedBlocks = [];
-  while (blocks.length) {
-    const defined = new Set(blocks.map(x => blockDefined(x.p.text)));
-    const ready = blocks.findIndex(x => blocksUsed(x.p.text).every(b => !defined.has(b) || b === blockDefined(x.p.text) || done.has(b)));
-    const [next] = blocks.splice(ready < 0 ? 0 : ready, 1);
-    sortedBlocks.push(next); done.add(blockDefined(next.p.text));
+/** Stable dependency order; split mixed DDL only when a whole part cannot be ordered. */
+export function orderParts(parts, { dependencyEdges = [] } = {}) {
+  const fragmentData = (data, text, includeMetadata) => ({
+    ...(includeMetadata ? data : {}),
+    ...(data?.basedOn !== undefined ? { basedOn: data.basedOn } : {}),
+    ddl: text,
+  });
+  const source = new Map(), ddlFragments = new WeakSet(); let ddlSplit = false;
+  const atomic = parts.flatMap(p => {
+    const entries = p.part === 'ops' && p.ops?.length > 1 ? p.ops.map(op => ({ ...p, ops: [op] })) : [p];
+    return entries.flatMap(entry => {
+      source.set(entry, p);
+      const text = entry.part === 'ddl' ? textList(entry.text).join('\n') : entry.ops?.[0]?.op === 'spec' ? entry.ops[0].data?.ddl : null;
+      if (typeof text !== 'string') return [entry];
+      const fragments = splitDdl(text);
+      if (!fragments.some(isDropDdl) || fragments.length === 1) return [entry];
+      // Keep the original statement sequence for same-name drop/recreate conflicts.
+      const groups = [];
+      for (const fragment of fragments) {
+        const drop = isDropDdl(fragment), previous = groups.at(-1);
+        if (previous?.drop === drop) previous.text += fragment;
+        else groups.push({ text: fragment, drop });
+      }
+      if (groups.length === 1) return [entry];
+      ddlSplit = true; let metadataUsed = false;
+      return groups.map(({ text, drop }) => {
+        const includeMetadata = !drop && !metadataUsed; if (includeMetadata) metadataUsed = true;
+        const data = fragmentData(entry.ops?.[0]?.data, text, includeMetadata);
+        const result = entry.part === 'ddl' ? { ...entry, text } : { ...entry, ops: [{ ...entry.ops[0], data }] };
+        source.set(result, p); if (entry.part === 'ops') ddlFragments.add(result); return result;
+      });
+    });
+  });
+  const factCache = new Map(), rankCache = new Map();
+  const facts = p => { if (!factCache.has(p)) factCache.set(p, dependencyFacts(p, partFacts(p))); return factCache.get(p); };
+  const rank = p => {
+    if (rankCache.has(p)) return rankCache.get(p);
+    const f = facts(p);
+    const ddl = p.part === 'ddl' || ddlFragments.has(p);
+    const value = ddl ? (f.removes.size && !f.creates.size ? 4 : 0)
+      : p.part === 'html' && !isHtmlEdit(p) ? (/^\s*(?:<!--[^]*?-->\s*)*<block\b/.test(p.text) ? 1 : 2)
+      : p.part === 'ops' ? 2.5 : 3;
+    rankCache.set(p, value); return value;
+  };
+  const edges = list => dependencyEdges.flatMap(({ consumer, provider }) => {
+    const c = list.findIndex(p => p.ops?.some(op => op.target === consumer));
+    const d = list.findIndex(p => p.ops?.some(op => op.target === provider));
+    return c >= 0 && d >= 0 ? [[c, d]] : [];
+  });
+  let sorted = sortDependencies(atomic, facts, rank, edges(atomic));
+  if (sorted.cycle) {
+    const expanded = atomic.flatMap(p => {
+      const text = p.part === 'ddl' ? textList(p.text).join('\n') : p.ops?.length === 1 && p.ops[0].op === 'spec' ? p.ops[0].data?.ddl : null;
+      if (typeof text !== 'string') return [p];
+      const fragments = splitDdl(text);
+      const timers = fragments.filter(t => /^\s*(?:\x2f\x2f\x2f[^\n]*\n\s*)*timer\b/i.test(t));
+      const rest = fragments.filter(t => !timers.includes(t));
+      if (!timers.length || !rest.length) return [p];
+      const texts = [rest.join(''), ...timers];
+      return texts.map((text, i) => {
+        const result = p.part === 'ddl' ? { ...p, text } : { ...p, ops: [{ ...p.ops[0], data: fragmentData(p.ops[0].data, text, i === 0) }] };
+        source.set(result, source.get(p)); if (ddlFragments.has(p)) ddlFragments.add(result); return result;
+      });
+    });
+    if (expanded.length !== atomic.length) { ddlSplit = true; sorted = sortDependencies(expanded, facts, rank, edges(expanded)); }
   }
-  const rankedParts = [...ranked.filter(x => x.r === 0), ...sortedBlocks, ...ranked.filter(x => x.r > 1)].map(x => x.p);
-  // Defer only timer consumers until their action creators have been emitted. Flush in input order so two timers
-  // waiting for the same action keep their relative order. Other dependency kinds stay with the existing ranks.
-  const ordered = [], pending = [], emitted = new Set();
-  const ready = p => (follows.get(p) ?? []).every(c => emitted.has(c));
-  const emit = p => { ordered.push(p); emitted.add(p); };
-  for (const p of rankedParts) {
-    if (ready(p)) emit(p); else pending.push(p);
-    for (let i = 0; i < pending.length;) {
-      if (ready(pending[i])) { emit(pending.splice(i, 1)[0]); i = 0; } else i++;
-    }
+  const notes = sorted.cycle ? ['Mutually dependent parts retain their relative input order for the kernel planner: ' + sorted.cycle.flatMap(p => p.names).join(', ')] : [];
+  const same = !ddlSplit && sorted.parts.length === atomic.length && sorted.parts.every((p, i) => p === atomic[i]);
+  const grouped = [];
+  for (const p of sorted.parts) {
+    const previous = grouped.at(-1), original = source.get(p);
+    if (p.part === 'ops' && previous?.part === 'ops' && source.get(previous) === original) {
+      previous.ops.push(...p.ops);
+    } else if (p.part === 'ops') { const joined = { ...p, ops: [...p.ops] }; source.set(joined, original); grouped.push(joined); }
+    else grouped.push(p);
   }
-  // Cyclic mixed parts need statement splitting in the full ordering pass; preserve their order for now.
-  ordered.push(...pending);
-  const reasons = [];
-  if (rankedParts.some((p, i) => p !== parts[i])) reasons.push('data first, then new blocks and screens, then actions and screen edits, with data that only drops last');
-  if (ordered.some((p, i) => p !== rankedParts[i])) reasons.push('timers follow the parts that create their module actions');
-  return { parts: ordered, moved: ordered.some((p, i) => p !== parts[i]), reasons };
+  const restored = grouped.map(p => {
+    const original = source.get(p);
+    return p.part === 'ops' && original?.ops?.length === p.ops.length && p.ops.every((op, i) => op === original.ops[i]) ? original : p;
+  });
+  const moved = !same;
+  const hasTimerDependency = atomic.some(p => facts(p).consumes.size && /\btimer\b/.test(p.text ?? p.ops?.[0]?.data?.ddl ?? '') && atomic.some(other => other !== p && [...facts(other).creates].some(n => facts(p).consumes.has(n))));
+  return { parts: moved ? restored : parts, moved, ...(notes.length ? { notes } : {}), reasons: moved ? [hasTimerDependency ? 'timers follow the parts that create their module actions' + (ddlSplit ? '; timer DDL separated from declarations' : '') : 'data first, then new blocks and screens, then ops and logic, with drop-only data last; explicit dependencies override ties'] : [] };
 }
 
 /** The delivery call of a write: {tool, arguments, normalizations?} for o11_deliver / studio_deliver, or {refusal}. deps.readJob reads a job file. */
-export function writeCall(input, { readJob = readJobFile, readReading = loadFlowReading, origins: includeOrigins = false } = {}) {
+export function writeCall(input, { readJob = readJobFile, readReading = loadFlowReading, origins: includeOrigins = false, dependencyEdges = [] } = {}) {
   const lane = input.lane === 'o11' ? 'o11' : 'odc';
   const module = input.module ?? input.target;
   const tool = lane === 'o11' ? 'o11_deliver' : 'studio_deliver';
@@ -985,8 +1003,11 @@ export function writeCall(input, { readJob = readJobFile, readReading = loadFlow
   for (const k of lane === 'o11' ? O11_OPTIONS : ODC_OPTIONS) if (input[k] !== undefined) options[k] = input[k];
   // CX16 (html-edits.mjs): edits of the texts of the job of basedOn {job, sha256} are one refusal, or this write as a patch
   // generated over that job (the patch route below), with what each edit changed in normalizations.
+  if (canonicalPart(input.part) === 'ddl' && input.edits != null && isJobBase(input.basedOn) && input.element == null) {
+    input = { ...input, element: 'ddl' }; note('ddl-edit-target', '/element', 'part ddl identifies the DDL text in the prior job');
+  }
   const textEdits = jobTextEdits(input);
-  if (textEdits) return textEdits.problems ? refuse(textEdits.error, { problems: textEdits.problems }) : (call => (call.refusal ? call : { ...call, normalizations: [...textEdits.notes, ...(call.normalizations ?? [])] }))(writeCall(textEdits.input, { readJob, readReading, origins: includeOrigins }));
+  if (textEdits) return textEdits.problems ? refuse(textEdits.error, { problems: textEdits.problems }) : (call => (call.refusal ? call : { ...call, normalizations: [...normalizations, ...textEdits.notes, ...(call.normalizations ?? [])] }))(writeCall(textEdits.input, { readJob, readReading, origins: includeOrigins }));
   // A correction of a refused write: patch (and/or a partial job) over basedOn {job, sha256} of the refusal.
   const jobBase = isJobBase(input.basedOn) ? input.basedOn : null;
   const hasEdits = input.edits != null || Array.isArray(input.also) && input.also.some(p => p?.edits != null);
@@ -1025,7 +1046,7 @@ export function writeCall(input, { readJob = readJobFile, readReading = loadFlow
     if (p.edits != null) {
       const expanded = expandEditPart({ ...p, module }, lane, { readReading });
       problems.push(...expanded.problems); normalizations.push(...expanded.notes); given[i] = expanded.part;
-    } else if (p.at.startsWith('also/') && !hasText(p)) problems.push({ at: p.at, error: `${p.at}: text or edits` });
+    } else if (p.at.startsWith('also/') && p.part !== 'ops' && !hasText(p)) problems.push({ at: p.at, error: `${p.at}: text or edits` });
   }
   // No text at all, only ops (or only other parts in also): the ops (and those parts) are the delivery; a part named
   // without a text says nothing to deliver.
@@ -1086,7 +1107,9 @@ export function writeCall(input, { readJob = readJobFile, readReading = loadFlow
     const r = opsOfPart(p); if (r.error) problems.push({ at: p.at, error: r.error, ...(r.gaps ? { gaps: r.gaps } : {}), ...(r.hints ? { hints: r.hints } : {}) });
   }
   if (problems.length) return refuse(problems.map(p => p.at + ': ' + p.error).join(' | '), { problems, ...(normalizations.length ? { normalizations } : {}) });
-  const sorted = orderParts(parts);
+  const descriptionParts = parts;
+  const sorted = orderParts(parts, { dependencyEdges });
+  for (const message of sorted.notes ?? []) note('parts-order-kept', '/also', message);
   if (sorted.moved) note('parts-order', '/also', 'written as ' + sorted.parts.map(p => p.part + (p.part === 'html' ? (isHtmlEdit(p) ? ' edit' : ' document') : '')).join(', ')
     + ': ' + sorted.reasons.join('; '));
   parts = sorted.parts;
@@ -1142,7 +1165,7 @@ export function writeCall(input, { readJob = readJobFile, readReading = loadFlow
   return withNotes({ tool, arguments: { module, job,
     feature: options.feature ?? ('ssam_code ' + (partNames.join('+') || 'ops') + (names.length ? ': ' + names.slice(0, 4).join(', ') : '')),
     owners: options.owners ?? (owners.length ? owners : [module]),
-    changes: options.changes ?? (parts.length ? parts.map(p => (p.part === 'ops' ? `${p.ops.length} job op(s)` : `${p.part} written as ${CODE_FORMS[p.part]}`) + (partOwnersOf(p).length ? ': ' + partOwnersOf(p).join(', ') : ''))
+    changes: options.changes ?? (descriptionParts.length ? descriptionParts.map(p => (p.part === 'ops' ? `${p.ops.length} job op(s)` : `${p.part} written as ${CODE_FORMS[p.part]}`) + (partOwnersOf(p).length ? ': ' + partOwnersOf(p).join(', ') : ''))
       : [`${ops.length} job op(s)`]),
     ...Object.fromEntries(Object.entries(options).filter(([k]) => !['feature', 'owners', 'changes'].includes(k))),
     ...(jobBase ? { basedOn: jobBase } : {}) } });
@@ -1258,7 +1281,7 @@ function writtenElements(input) {
 
 // write (feat/ssam-code-hosted): the deps of writeCall a server gives each write ({readReading, readJob}, or a function of
 // the call that returns them): the read of an action an edit expands and the job file a correction reads.
-export function registerSsamCode(server, { fromJsonSchema, map, deliver, check, plan, lanes = ['o11', 'odc'], write = null, drafts = {} } = {}) {
+export function registerSsamCode(server, { fromJsonSchema, map, deliver, check, plan, lanes = ['o11', 'odc'], write = null, drafts = {}, o11PlansDeletes = false } = {}) {
   const reply = value => ({ content: [{ type: 'text', text: JSON.stringify(value) }], structuredContent: value, ...(value && value.ok === false ? { isError: true } : {}) });
   // The lists of a write carry the person's code: no limit of this tool cuts them (the delivery takes any number of texts
   // and ops in one job); the bounds below only keep a runaway call out.
@@ -1290,7 +1313,9 @@ export function registerSsamCode(server, { fromJsonSchema, map, deliver, check, 
       removes: { anyOf: [{ type: 'boolean' }, { type: 'array', items: { type: 'string' } }] } } },
       description: 'write: other parts in the same delivery (part taken from the form of the text when left out); ssam_code orders them as the delivery needs: the data first, new blocks and screens, then the actions (a new screen action before the change of its screen) and the screen edits.' },
     ops: { type: 'array', maxItems: CODE_OPS_MAX, items: { type: 'object' }, description: 'write: raw job ops before the code (e.g. {"op":"create","parent":"@espace","type":"IRole","name":"X"}); alone (no text) they are the job.' },
-    patch: { anyOf: [{ type: 'array', maxItems: 500, items: { type: 'object' } }, { type: 'string', enum: ['verified'] }], description: 'write: JSON Patch over the job of basedOn {job, sha256}, as a refusal returned it; or "verified": every verified patch of that refusal (its verifiedPatch.call).' },
+    patch: { anyOf: [{ type: 'array', maxItems: 500, items: { type: 'object' } }, { type: 'string', enum: ['verified'] }, { type: 'object' }], description: 'write: JSON Patch over the job of basedOn {job, sha256}, as a refusal returned it; or "verified": every verified patch of that refusal (its verifiedPatch.call).' },
+    // Listed without a text: the check's write and until:'apply' give it ready.
+    candidateRef: { type: 'string' },
     // fix (R1): sent as a refusal's fixCall gives it; listed without a text (the listing budget).
     fix: { type: 'string', const: 'apply' },
     publish: { type: 'boolean', description: 'write: true also publishes after a clean merge, with authorize or the standing grant.' },
@@ -1319,9 +1344,9 @@ export function registerSsamCode(server, { fromJsonSchema, map, deliver, check, 
       const lane = input.lane === 'o11' ? 'o11' : 'odc';
       // R2 (code-draft.mjs): a draft opened, its status, a part added, or the write of a draft (one delivery).
       if (isDraftCall(input)) return reply(await (await import('./code-draft.mjs')).draftAction({ ...input, lane }, ctx, { deliver, check, ...drafts }));
-      if ((input.stubs != null && input.action !== 'check') || (['items', 'shared', 'workers'].some(k => input[k] != null) && input.action !== 'plan')) return reply({ ok: false, code: 'INPUT_INVALID', error: 'stubs is only allowed for check; items, shared and workers are only allowed for plan' });
+      if ((input.stubs != null && input.action !== 'check') || (['items', 'shared', 'workers'].some(k => input[k] != null) && input.action !== 'plan')) { const args = { ...input }; if (input.action !== 'check') delete args.stubs; if (input.action !== 'plan') for (const key of ['items', 'shared', 'workers']) delete args[key]; return reply({ ok: false, code: 'INPUT_INVALID', error: 'stubs is only allowed for check; items, shared and workers are only allowed for plan', corrected: { tool: CODE_TOOL, arguments: args } }); }
       if (input.action === 'check') return reply(await check({ ...input, lane }));
-      if (input.base != null) return reply({ ok: false, code: 'INPUT_INVALID', error: 'base is only allowed for check' });
+      if (input.base != null) { const { base, ...args } = input; return reply({ ok: false, code: 'INPUT_INVALID', error: 'base is only allowed for check', corrected: { tool: CODE_TOOL, arguments: args } }); }
       if (input.action === 'plan') return reply(await plan({ ...input, lane }));
       if (input.action === 'grammar') return reply({ ...grammarCard(input.part ?? null, lane), plan: planHint(lane) });
       if (input.action === 'read' && !CODE_PARTS.includes(input.part)) return reply({ ok: false, code: 'INPUT_INVALID', tool: CODE_TOOL, error: `read needs part: ${CODE_PARTS.join(', ')}`,
@@ -1339,6 +1364,11 @@ export function registerSsamCode(server, { fromJsonSchema, map, deliver, check, 
       const count = Math.max(writtenElements(input), writtenElements({ also: jobParts }));
       const hint = count >= PLAN_MIN_ITEMS ? planHint(lane, input.module) : null;
       if (call.refusal) return reply({ ...call.refusal, ...(hint ? { plan: hint } : {}) });
+      if (!(lane === 'o11' && o11PlansDeletes) && call.arguments?.job?.ops?.some(op => op.op === 'delete')) {
+        const planned = await orderDeleteDependencies(call.arguments.job.ops, { map, lane, module: input.module ?? input.target });
+        call.arguments.job = { ...call.arguments.job, ops: planned.ops };
+        call.normalizations = [...(call.normalizations ?? []), ...planned.notes.map(note => ({ rule: 'delete-order', at: '/ops', note }))];
+      }
       const result = await deliver(call.tool, call.arguments, ctx);
       // A refusal of the text in the words of ssam_code (grammar continuation, ssam_code read); anything else as it came.
       let value = result?.structuredContent;
