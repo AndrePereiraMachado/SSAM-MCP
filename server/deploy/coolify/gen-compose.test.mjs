@@ -14,6 +14,8 @@ test('compose has a fixed pair window, only router Traefik labels, shared data a
  assert.equal(source(a,'/data/friction'),source(b,'/data/friction'));
  assert.notEqual(source(a,'/data/cache'),source(b,'/data/cache'));
  assert.notEqual(source(a,'/data/odc-features'),source(b,'/data/odc-features'));
+ // The two switches of the R2 tools reach the backends, off unless the owner turns them on.
+ assert.equal(a.environment.SSAM_LOCAL_UPLOAD,'${SSAM_LOCAL_UPLOAD:-0}');assert.equal(a.environment.SSAM_SCREEN_RENDER,'${SSAM_SCREEN_RENDER:-0}');
  // The platform stylesheets: one private read-only store, by lane and version; never inside the image.
  assert.equal(source(a,'/data/runtime-css'),'runtime-css');assert.equal(source(b,'/data/runtime-css'),'runtime-css');
  assert.equal(a.volumes.find(v=>v.target==='/data/runtime-css').read_only,true);
