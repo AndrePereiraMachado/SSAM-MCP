@@ -140,6 +140,10 @@ deploy
 !deploy/coolify/
 deploy/coolify/*
 !deploy/coolify/r1-kernels.json
+# The Dockerfile stage studio-provenance copies this one file: a build by hand has no automatic installer custody.
+!deploy/vigia/
+deploy/vigia/*
+!deploy/vigia/no-provenance.json
 # ...except the owner console (deploy/console), which the Coolify compose runs from the image itself as the ssam-console
 # service (node /app/deploy/console/server.mjs; deploy/coolify/COOLIFY.md 11): its code only, never its tests, the UI
 # tests, the mock fixtures or the owner's tunnel script
