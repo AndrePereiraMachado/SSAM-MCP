@@ -26,12 +26,12 @@ test('the vault helper is the one the server line carries, byte for byte (sha)',
   assert.equal(createHash('sha256').update(fs.readFileSync(USERS_HELPER)).digest('hex'), VAULT_SHA256);
 });
 
-test('when the server box has the kind, it is the same word in its closed list', async t => {
+test('M10: the closed list of the server box is this agent\'s: no pass when it cannot be read, or when one side has a kind the other lacks', async () => {
   const file = new URL('../../../server/platforms/odc/facade/call-kinds.mjs', import.meta.url);
-  if (!fs.existsSync(file)) return t.skip('no server box here');
-  const { CALL_KINDS } = await import(file.href);
-  if (!CALL_KINDS.some(kind => kind.includes('users'))) return t.skip('the server box has not received the kind yet');
-  assert.ok(CALL_KINDS.includes(USERS_KIND));
+  assert.ok(fs.existsSync(file), 'the server box must be next to the agent box: ' + file.href);
+  const { CALL_KINDS, HELLO_ONLY_KINDS } = await import(file.href);
+  assert.deepEqual([...CALL_KINDS].sort(), [...helloKinds({ path: 'renderer' })].sort());
+  assert.ok(HELLO_ONLY_KINDS.has(USERS_KIND));
 });
 
 for (const row of usersRows()) test('table: ' + row.label, () => assert.equal(codeOf(() => validateUsersRequest(row.request)), row.expected));

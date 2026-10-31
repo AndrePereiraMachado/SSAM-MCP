@@ -8,12 +8,12 @@ import assert from 'node:assert/strict';
 import * as hubModule from '../agent-hub.mjs';
 import { startHub, scriptedAgent, BASE_KINDS, waitFor } from './fixtures/render-hub.mjs';
 
-test('screen.render is the last call kind; the nine of protocol 1 are unchanged; the Hello-only gate is one set', () => {
-  assert.equal(hubModule.CALL_KINDS.at(-1), 'screen.render');
+test('screen.render and then o11.users are the last call kinds; the nine of protocol 1 are unchanged; the Hello-only gate is one set', () => {
+  assert.deepEqual(hubModule.CALL_KINDS.slice(-2), ['screen.render', 'o11.users']);
   assert.deepEqual(hubModule.CALL_KINDS.slice(0, 9), ['studio.processes', 'odc.pipe', 'odc.attach', 'o11.bridge', 'o11.connect', 'o11.selected', 'file.put', 'file.get', 'file.list']);
   assert.ok(hubModule.HELLO_ONLY_KINDS instanceof Set, 'HELLO_ONLY_KINDS is a Set');
   // fase4-28/r2: R2-G's file.upload is the set's other entry (one gate for both Hello-only kinds).
-  assert.deepEqual([...hubModule.HELLO_ONLY_KINDS], ['file.upload', 'screen.render']);
+  assert.deepEqual([...hubModule.HELLO_ONLY_KINDS], ['file.upload', 'screen.render', 'o11.users']);
 });
 
 test('an agent whose Hello does not list screen.render never receives the call (KIND_NOT_ALLOWED, nothing written)', async t => {
