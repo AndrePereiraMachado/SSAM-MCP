@@ -503,6 +503,8 @@ internal sealed partial class UsersKinds
                 try { await Call("forget", host, new JsonObject { ["kind"] = "password", ["entry"] = entry }, "", false, CancellationToken.None); }
                 catch (AgentFault) { forgotten = false; }
         }
+        // A larger answer would go through the server's disk as a blob, and stop the server that reads it.
+        if ((Word(page["body"]) ?? "").Length > 262144 / 3 * 4 + 12) throw new AgentFault("USERS_PAGE_TOO_LARGE", "This page is larger than a Users page can be; it was not read.", Word(p["method"]) == "POST" ? null : false);
         StoreCookies(host, page["setCookie"]);
         // The session stays here: the answer has no setCookie. A new password was for this one POST, whatever the server does next.
         var answer = new JsonObject { ["status"] = page["status"]?.DeepClone(), ["location"] = Word(page["location"]) ?? "", ["contentType"] = Word(page["contentType"]) ?? "", ["body"] = Word(page["body"]) ?? "" };

@@ -36,6 +36,7 @@ const PASSWORD_PAGE = /^\/Users\/(?:User_Edit|User_Show)\.aspx$/;
 const PAGE = /^\/Users\/(?:(?:Login|User_List|Inactive_Users|User_Show|User_Edit|Group_List|Group_Show|Group_Edit|Application_List|Application_Show|Role_Show|MyInfo)\.aspx)?$/;
 const QUERY = /^(?:(?:UserId|GroupId|RoleId|ApplicationId)=[1-9][0-9]{0,18})?$/;
 const MAX_FIELDS = 2000, MAX_FIELD_BYTES = 8 * 1024 * 1024, MAX_SUBJECT = 256;
+const MAX_PAGE_BASE64 = Math.ceil(262144 / 3) * 4 + 8;
 const PROMPT_WAIT_MS = 12000, HELPER_MS = 45000;
 
 const ID = /^[1-9][0-9]{0,18}$/;
@@ -334,6 +335,8 @@ export function createUsersKind({ dataRoot, account = '', platform = process.pla
       let value;
       try { value = await helperCall(base('request', host), input, null); }
       finally { for (const entry of passwords) await forget(host, entry).catch(() => { forgotten = false; }); }
+      // A larger answer would go through the server's disk as a blob, and stop the server that reads it.
+      if ((value.body ?? '').length > MAX_PAGE_BASE64) throw new AgentError('USERS_PAGE_TOO_LARGE', FAILURES.USERS_PAGE_TOO_LARGE, { executed: params.method === 'POST' ? null : false });
       storeCookies(host, value.setCookie);
       // The session stays here: the answer has no setCookie. A new password was for this one POST, whatever the server does next.
       return { status: value.status, location: value.location ?? '', contentType: value.contentType ?? '', body: value.body ?? '', ...(passwords.length ? { passwordForgotten: forgotten } : {}) };

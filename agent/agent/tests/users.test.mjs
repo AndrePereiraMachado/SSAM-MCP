@@ -296,6 +296,11 @@ test('M1 and M9: the helper signs in by itself, redacts every form of a value an
   assert.ok(!/kind -eq 'login' -and \$uri\.AbsolutePath/.test(text));
 });
 
+test('M9: a page larger than the limit does not leave the agent', async t => {
+  const k = kind(t, { answers: [page({ body: 'A'.repeat(400000) })] });
+  await assert.rejects(k.users.execute(request()), e => e.code === 'USERS_PAGE_TOO_LARGE');
+});
+
 test('the helper\'s refusal is a code and a fixed text, and a host without an administrator ran nothing', async t => {
   const k = kind(t, { answers: [{ ok: false, code: 'USERS_HOST_NOT_AUTHENTICATED' }] });
   await assert.rejects(k.users.execute(request()), e => e.code === 'USERS_HOST_NOT_AUTHENTICATED' && e.executed === false);
