@@ -179,7 +179,7 @@ internal static class Program
                 {
                     if (step?["advanceMs"] is JsonValue advance) { offset += advance.GetValue<long>(); answers.Add((JsonNode?)null); continue; }
                     if (step?["dns"] is JsonArray dns) { addresses = dns.Select(item => item!.GetValue<string>()).ToArray(); answers.Add((JsonNode?)null); continue; }
-                    if (step?["waitMs"] is JsonValue wait) { await Task.Delay(wait.GetValue<int>()); answers.Add((JsonNode?)null); continue; }
+                    if (step?["settled"] is JsonValue) { await kind.WindowsClosed(); answers.Add((JsonNode?)null); continue; }
                     if (step?["set"] is JsonObject set)
                     {
                         var path = flow["statePath"]!.GetValue<string>();

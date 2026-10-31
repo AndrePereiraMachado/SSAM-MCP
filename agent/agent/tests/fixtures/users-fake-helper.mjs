@@ -53,12 +53,12 @@ if (mode === 'prompt') {
   const statusFile = arg('-PromptStatusPath');
   state.windows.push({ prompt: kind, subject: arg('-Subject'), rows: JSON.parse(Buffer.from(arg('-Rows') ?? 'W10=', 'base64').toString('utf8')) });
   const answer = state.promptAnswers.shift() ?? 'saved';
-  fs.writeFileSync(statusFile, 'visible');
+  // One write of the status: an agent that looks between two writes would answer differently on a loaded machine.
   if (answer === 'saved') {
     if (kind === 'login') state.vault.login[host] = { user: 'admin@example.invalid', secret: 'x' };
     else state.vault.passwords[host + '|' + entry] = true;
-    fs.writeFileSync(statusFile, 'saved');
   }
+  fs.writeFileSync(statusFile, answer === 'saved' ? 'saved' : 'visible');
   done({ ok: true });
 }
 if (!state.vault.login[host]) done({ ok: false, code: 'USERS_HOST_NOT_AUTHENTICATED' });

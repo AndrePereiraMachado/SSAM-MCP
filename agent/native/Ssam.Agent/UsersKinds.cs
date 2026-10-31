@@ -351,6 +351,17 @@ internal sealed partial class UsersKinds
                 }
             }
     }
+    // For check-users-flow: every window opened has closed and been read.
+    internal async Task WindowsClosed()
+    {
+        for (var waited = 0; waited < 120000; waited += 20)
+        {
+            Settle();
+            lock (sync) if (prompts.Count == 0) return;
+            await Task.Delay(20);
+        }
+        throw new TimeoutException("a window did not close");
+    }
     private static string? ChangesKey(JsonNode? changes) => changes?.ToJsonString();
     private void UsePermit(string host, string action, string? userId, JsonNode? changes, string entry)
     {

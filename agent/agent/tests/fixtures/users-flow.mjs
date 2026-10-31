@@ -14,7 +14,8 @@ const url = rest => `https://${HOST}/Users/${rest}`;
 const signIn = { params: { op: 'confirm', host: HOST, action: 'sign-in' } }, login = { params: { op: 'login', host: HOST }, expect: { authenticated: true } };
 const ready = [signIn, login];
 const write = (action, over = {}) => ({ params: { op: 'write', host: HOST, action, ...over } });
-const WAIT = { waitMs: 400 };
+// Every window of this flow has closed, and the agent has seen it: an event, not a time, so a loaded machine cannot change the answer.
+const WAIT = { settled: true };
 // Starting state of the stand-in: an approved environment, a person who says yes, two users.
 export const initialState = () => ({ vault: { login: { [HOST]: { user: 'admin@example.invalid', secret: 'x' } }, passwords: {} }, answers: [], promptAnswers: [], loginAnswers: [], windows: [], http: [], calls: [],
   users: { 42: { id: '42', name: 'Ana Silva', username: 'ana.silva', email: 'ana@example.invalid', active: true }, 7: { id: '7', name: 'Administrator', username: 'admin@example.invalid', email: 'admin@example.invalid', active: true } } });
@@ -193,19 +194,20 @@ export function verify(flow, results, state) {
 export async function runNode(flow, createUsersKind, dir) {
   const env = prepare(dir, flow);
   let offset = 0, addresses = ['93.184.216.34'];
+  const windows = [];
   const users = createUsersKind({ dataRoot: path.join(dir, 'data'), account: 'ssam_agent_flow', platform: 'win32', helper: 'fake', now: () => Date.now() + offset, wait: ms => new Promise(r => setTimeout(r, Math.min(ms, 20))), lookup: async () => addresses.map(address => ({ address })),
     exec: (file, args, input) => new Promise((resolve, reject) => { const child = execFile(process.execPath, [SCRIPT, ...args], { env, windowsHide: true, maxBuffer: 16 * 1024 * 1024 }, (error, stdout) => (stdout ? resolve(String(stdout)) : reject(error ?? new Error('no answer')))); child.stdin?.end(input ?? ''); }),
-    start: (file, args) => spawn(process.execPath, [SCRIPT, ...args], { env, windowsHide: true, stdio: ['ignore', 'ignore', 'ignore'] }) });
+    start: (file, args) => { const child = spawn(process.execPath, [SCRIPT, ...args], { env, windowsHide: true, stdio: ['ignore', 'ignore', 'ignore'] }); windows.push(new Promise(done => child.on('exit', done))); return child; } });
   const results = [];
   for (const step of flow.steps) {
     if (step.advanceMs) { offset += step.advanceMs; results.push(null); continue; }
     if (step.dns) { addresses = step.dns; results.push(null); continue; }
     if (step.set) { patchState(dir, step.set); results.push(null); continue; }
-    if (step.waitMs) { await new Promise(r => setTimeout(r, step.waitMs)); results.push(null); continue; }
+    if (step.settled) { await Promise.all(windows); results.push(null); continue; }
     try { results.push({ value: await users.execute(step.params) }); } catch (error) { results.push({ code: error.code ?? 'THROWN ' + error.message }); }
   }
   return { results, state: readState(dir) };
 }
 // What the native core's check-users-flow reads: the same steps, without the checks.
-export const nativeInput = (flow, dir) => ({ helper: [process.execPath, SCRIPT], root: path.join(dir, 'data'), account: 'ssam_agent_flow', statePath: stateFile(dir), steps: flow.steps.map(({ params, advanceMs, dns, set, waitMs }) => ({ params, advanceMs, dns, set, waitMs })) });
+export const nativeInput = (flow, dir) => ({ helper: [process.execPath, SCRIPT], root: path.join(dir, 'data'), account: 'ssam_agent_flow', statePath: stateFile(dir), steps: flow.steps.map(({ params, advanceMs, dns, set, settled }) => ({ params, advanceMs, dns, set, settled })) });
 export const tempDir = () => fs.mkdtempSync(path.join(os.tmpdir(), 'ssam-users-flow-'));
