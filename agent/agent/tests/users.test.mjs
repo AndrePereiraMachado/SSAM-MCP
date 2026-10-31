@@ -87,6 +87,11 @@ test('another platform answers in plain words before anything, whatever the requ
   }
 });
 
+test('a macOS agent without the helper file answers the same, before it would look for the file', async t => {
+  const users = createUsersKind({ dataRoot: tmp(t), platform: 'darwin', helper: path.join(os.tmpdir(), 'no-such-helper-here.ps1') });
+  await assert.rejects(users.execute({ op: 'status', host: HOST }), e => e.code === 'USERS_PLATFORM_UNAVAILABLE');
+});
+
 test('the prompt: its status file is under the agent\'s own folder and is removed; a second one is not opened', async t => {
   const dataRoot = tmp(t);
   const started = [];
