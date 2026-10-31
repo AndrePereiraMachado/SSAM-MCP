@@ -33,6 +33,7 @@ internal sealed partial class UsersKinds
     [GeneratedRegex("[\\u0000-\\u001f\\u007f]", RegexOptions.CultureInvariant)] private static partial Regex ControlPattern();
     [GeneratedRegex("^USERS_[A-Z_]{1,60}\\z", RegexOptions.CultureInvariant)] private static partial Regex CodePattern();
 
+    [GeneratedRegex("^[A-Za-z0-9._@+-]{1,100}\\z", RegexOptions.CultureInvariant)] private static partial Regex SubjectPattern();
     [GeneratedRegex("^[1-9][0-9]{0,18}\\z", RegexOptions.CultureInvariant)] private static partial Regex IdPattern();
     [GeneratedRegex("[\\u0000-\\u001f\\u007f\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]", RegexOptions.CultureInvariant)] private static partial Regex HiddenPattern();
     private static bool Shown(JsonNode? value, int max) => Word(value) is { } text && text.Length <= max && !HiddenPattern().IsMatch(text);
@@ -174,7 +175,7 @@ internal sealed partial class UsersKinds
                 if (kind == "login" && (p["action"] != null || p["userId"] != null)) throw Invalid("the sign-in window takes only a host");
                 if (purpose == "set-password" ? Word(p["userId"]) is not { } user || !IdPattern().IsMatch(user) : p["userId"] != null) throw Invalid("userId is a number as text, on set-password");
             }
-            if (p["subject"] != null && (Word(p["subject"]) is not { } subject || subject.Length > MaxSubject || ControlPattern().IsMatch(subject))) throw Invalid("subject must be one line of at most 256 characters");
+            if (p["subject"] != null && (kind != "password" || Word(p["subject"]) is not { } subject || !SubjectPattern().IsMatch(subject))) throw Invalid("subject is the username of a new password");
             return;
         }
         var url = Word(p["url"]);
@@ -267,6 +268,21 @@ internal sealed partial class UsersKinds
             }
     }
 
+    // One window at a time, and a few in ten minutes: a window is never a way to wear a person down.
+    private bool confirming;
+    private readonly List<DateTimeOffset> opened = [];
+    private void TakeWindow()
+    {
+        Settle();
+        lock (sync)
+        {
+            if (confirming || prompts.Count > 0) throw new AgentFault("USERS_WINDOW_BUSY", "Another window of this agent is open: answer that one first.", false);
+            opened.RemoveAll(at => DateTimeOffset.UtcNow - at >= TimeSpan.FromMinutes(10));
+            if (opened.Count >= 6) throw new AgentFault("USERS_WINDOW_LIMIT", "Too many windows in a few minutes, so no other was opened.", false);
+            opened.Add(DateTimeOffset.UtcNow);
+        }
+    }
+
     private void UsePermit(string host, string page, List<string> entries)
     {
         lock (sync)
@@ -293,9 +309,12 @@ internal sealed partial class UsersKinds
         if (Word(p["labels"]?["target"]) is { } target) rows.Add((JsonNode)Row(rule.Target!.Replace(" id", " name", StringComparison.Ordinal), target, true));
         if (p["changes"] is JsonObject changes) foreach (var (key, value) in changes) rows.Add((JsonNode)Row("New " + key, Word(value) ?? ""));
         var input = Convert.ToBase64String(Encoding.UTF8.GetBytes(new JsonObject { ["rows"] = rows }.ToJsonString()));
+        TakeWindow();
+        lock (sync) confirming = true;
         JsonObject answer;
         try { answer = await Call("confirm", host, new JsonObject(), input, false, token, true, 130); }
         catch (AgentFault) { throw new AgentFault("USERS_CONFIRMATION_TIMEOUT", "No answer from the person on this machine, so nothing was sent.", false); }
+        finally { lock (sync) confirming = false; }
         if (answer["approved"]?.GetValue<bool>() != true)
             throw answer["timedOut"]?.GetValue<bool>() == true
                 ? new AgentFault("USERS_CONFIRMATION_TIMEOUT", "No answer from the person on this machine, so nothing was sent.", false)
@@ -373,6 +392,7 @@ internal sealed partial class UsersKinds
         Settle();
         lock (sync)
             if (prompts.ContainsKey(key)) return new JsonObject { ["opened"] = false, ["alreadyOpen"] = true };
+        TakeWindow();
         var directory = Path.Combine(dataRoot, "private", "users");
         Directory.CreateDirectory(directory);
         var status = Path.Combine(directory, "prompt-" + Guid.NewGuid().ToString("N") + ".status");

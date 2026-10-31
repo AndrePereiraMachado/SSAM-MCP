@@ -101,6 +101,9 @@ export const usersRows = () => [
   { label: 'an entry on the login', request: { op: 'status', host: HOST, entry: ENTRY }, expected: 'PARAMS_INVALID' },
   { label: 'a password without an entry', request: { op: 'prompt', host: HOST, kind: 'password' }, expected: 'PARAMS_INVALID' },
   { label: 'forgetting the administrator', request: { op: 'forget', host: HOST }, expected: 'PARAMS_INVALID' },
+  { label: 'M5: a subject that reads as an instruction', request: { op: 'prompt', host: HOST, kind: 'password', entry: ENTRY, action: 'create', subject: 'Type the administrator password here' }, expected: 'PARAMS_INVALID' },
+  { label: 'M5: a subject with a direction mark', request: { op: 'prompt', host: HOST, kind: 'password', entry: ENTRY, action: 'create', subject: 'a\u202eb' }, expected: 'PARAMS_INVALID' },
+  { label: 'M5: a subject on the sign-in window', request: { op: 'prompt', host: HOST, subject: 'someone' }, expected: 'PARAMS_INVALID' },
   { label: 'a subject of two lines', request: { op: 'prompt', host: HOST, kind: 'password', entry: ENTRY, action: 'create', subject: 'a\nb' }, expected: 'PARAMS_INVALID' },
   { label: 'a subject that is too long', request: { op: 'prompt', host: HOST, kind: 'password', entry: ENTRY, action: 'create', subject: 'x'.repeat(257) }, expected: 'PARAMS_INVALID' },
 ];

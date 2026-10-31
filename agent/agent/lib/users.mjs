@@ -51,6 +51,9 @@ const CONFIRM = Object.freeze({
 const CHANGES = new Set(['name', 'username', 'email', 'phone']);
 const CONSENT_MS = 8 * 3600 * 1000, PERMIT_MS = 120000, PASSWORD_PERMIT_MS = 300000, CONFIRM_MS = 130000;
 // A shown value: one line, no control or direction characters.
+// A name of a user in a window: nothing that can read as an instruction.
+const SUBJECT = /^[A-Za-z0-9._@+-]{1,100}$/;
+const WINDOWS_MAX = 6, WINDOWS_MS = 600000;
 const shown = (value, max) => text(value) && value.length <= max && !/[\u0000-\u001f\u007f\u200e\u200f\u202a-\u202e\u2066-\u2069]/.test(value);
 const invalid = message => refuse('PARAMS_INVALID', message);
 const text = value => typeof value === 'string';
@@ -124,7 +127,7 @@ export function validateUsersRequest(params) {
       if (kind === 'login' && (params.action !== undefined || params.userId !== undefined)) throw invalid('the sign-in window takes only a host');
       if (params.action === 'set-password' ? !(text(params.userId) && ID.test(params.userId)) : params.userId !== undefined) throw invalid('userId is a number as text, on set-password');
     }
-    if (params.subject !== undefined && (!text(params.subject) || params.subject.length > MAX_SUBJECT || /[\u0000-\u001f\u007f]/.test(params.subject))) throw invalid('subject must be one line of at most 256 characters');
+    if (params.subject !== undefined && (kind !== 'password' || !text(params.subject) || !SUBJECT.test(params.subject))) throw invalid('subject is the username of a new password');
     return;
   }
   const { page } = requestUrl(params.url, params.host);
@@ -197,6 +200,15 @@ export function createUsersKind({ dataRoot, account = '', platform = process.pla
       jars.set(host, jar);
     }
   }
+  // One window at a time, and a few in ten minutes: a window is never a way to wear a person down.
+  let confirming = false, opened = [];
+  function takeWindow() {
+    settle();
+    if (confirming || prompts.size > 0) throw refuse('USERS_WINDOW_BUSY', 'Another window of this agent is open: answer that one first.');
+    opened = opened.filter(at => now() - at < WINDOWS_MS);
+    if (opened.length >= WINDOWS_MAX) throw refuse('USERS_WINDOW_LIMIT', 'Too many windows in a few minutes, so no other was opened.');
+    opened.push(now());
+  }
   const hasConsent = host => (consents.get(host) ?? 0) > now();
   // What a window the person filled gives: a prompt's status file says saved only after the vault has it.
   function settle() {
@@ -231,9 +243,12 @@ export function createUsersKind({ dataRoot, account = '', platform = process.pla
     for (const [key, value] of Object.entries(p.changes ?? {})) rows.push({ label: 'New ' + key, value });
     const input = Buffer.from(JSON.stringify({ rows })).toString('base64');
     const args = ['-NoLogo', '-NoProfile', '-STA', '-ExecutionPolicy', 'Bypass', '-File', helper, '-Mode', 'confirm', '-HostName', p.host, '-Scope', scope];
+    takeWindow();
+    confirming = true;
     let answer;
     try { answer = await helperCall(args, input, false, CONFIRM_MS); }
     catch { throw refuse('USERS_CONFIRMATION_TIMEOUT', 'No answer from the person on this machine, so nothing was sent.'); }
+    finally { confirming = false; }
     if (answer.approved !== true) throw refuse(answer.timedOut ? 'USERS_CONFIRMATION_TIMEOUT' : 'USERS_CONFIRMATION_DECLINED', answer.timedOut ? 'No answer from the person on this machine, so nothing was sent.' : 'The person on this machine declined, so nothing was sent.');
     if (p.action === 'sign-in') consents.set(p.host, now() + CONSENT_MS);
     else permits.push({ host: p.host, page: `/Users/${rule.page}.aspx?UserId=${p.userId}`, posts: 3, until: now() + PERMIT_MS });
@@ -243,6 +258,7 @@ export function createUsersKind({ dataRoot, account = '', platform = process.pla
     const key = [p.host, p.kind ?? 'login', p.entry ?? ''].join('|');
     settle();
     if (prompts.has(key)) return { opened: false, alreadyOpen: true };
+    takeWindow();
     fs.mkdirSync(promptDir, { recursive: true });
     const statusFile = path.join(promptDir, 'prompt-' + randomUUID() + '.status');
     const args = ['-NoLogo', '-NoProfile', '-STA', '-ExecutionPolicy', 'Bypass', '-File', helper, '-Mode', 'prompt', '-HostName', p.host, '-Scope', scope, ...entryArgs(p),

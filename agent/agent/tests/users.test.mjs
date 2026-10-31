@@ -243,6 +243,25 @@ test('A2: a new password goes only under the window that took it, to that form, 
   await assert.rejects(k.users.execute(post({ secretRefs: refs })), e => e.code === 'USERS_CONSENT_REQUIRED', 'once');
 });
 
+test('M5: one window at a time and a limit in ten minutes (the probe of the review opened 25)', async t => {
+  let clock = 1000, open = null, starts = 0;
+  const users = createUsersKind({ dataRoot: tmp(t), platform: 'win32', now: () => clock, wait: async () => {}, lookup: async () => [{ address: '93.184.216.34' }], env: { SystemRoot: 'C:\\Windows' },
+    exec: async () => JSON.stringify({ ok: true, hosts: [], available: true }),
+    start: (file, args) => { starts++; fs.writeFileSync(args[args.indexOf('-PromptStatusPath') + 1], 'visible'); open = { exitCode: null, on() {}, unref() {} }; return open; } });
+  const prompt = i => users.execute({ op: 'prompt', host: `tenant-${'abcdefghij'[i]}x${i}y.example-${i}.test` });
+  await prompt(0);
+  await assert.rejects(prompt(1), e => e.code === 'USERS_WINDOW_BUSY');
+  await assert.rejects(users.execute({ op: 'confirm', host: HOST, action: 'sign-in' }), e => e.code === 'USERS_WINDOW_BUSY');
+  assert.equal(starts, 1);
+  for (let i = 1; i < 6; i++) { open.exitCode = 0; await prompt(i); }
+  open.exitCode = 0;
+  await assert.rejects(prompt(6), e => e.code === 'USERS_WINDOW_LIMIT');
+  assert.equal(starts, 6);
+  clock += 600001;
+  await prompt(7);
+  assert.equal(starts, 7);
+});
+
 test('M4: the helper removes a new password nobody used in a quarter of an hour', () => {
   const text = fs.readFileSync(USERS_HELPER, 'utf8');
   assert.match(text, /function SweepPasswords/);
