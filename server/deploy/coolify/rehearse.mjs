@@ -84,6 +84,7 @@ try{
   const old=await post('/agent/v1/hello',d.agentCredential,hello(pairs[0],pairs[0],'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',{odcBridge:'v97'}));assert.equal(old.status,200);
   const odc=JSON.parse(old.text).compatible.odc;assert.equal(odc.ok,false);assert.match(JSON.stringify(odc),/AGENT_PACK_MISMATCH/);
   const current=await post('/agent/v1/hello',d.agentCredential,hello(pairs[0],pairs[0],'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',{odcBridge:'v98'}));assert.equal(current.status,200);assert.equal(JSON.parse(current.text).compatible.odc.ok,true);checks.push({name:'v98 accepted and v97 refused on '+pairs[0].odc,ok:true,odc});
+  for(const p of pairs){const v102=await post('/agent/v1/hello',d.agentCredential,hello(p,p,'f'.repeat(31)+String(pairs.indexOf(p)),{odcBridge:'v102'}));assert.equal(v102.status,200);assert.equal(JSON.parse(v102.text).compatible.odc.ok,true,'v102 must be accepted on '+p.odc);}checks.push({name:'v102 accepted on the three pairs',ok:true});
  }
  const init={jsonrpc:'2.0',id:1,method:'initialize',params:{protocolVersion:'2025-03-26',capabilities:{},clientInfo:{name:'rehearsal',version:'1'}}};
  const sa=await post('/mcp',a.token,init),sb=await post('/mcp',b.token,init),sc=c?await post('/mcp',c.token,init):null;assert.equal(sa.status,200);assert.equal(sb.status,200);assert.ok(sa.sid&&sb.sid);if(sc){assert.equal(sc.status,200);assert.ok(sc.sid);}checks.push({name:'admin licenses accepted by every backend',ok:true,backends:backends.length});
@@ -95,7 +96,7 @@ try{
   const tools=payload.result.tools;
   const core=new Set(['ssam_doctor','ssam_connect','ssam_discover','ssam_map','ssam_code','ssam_reference','ssam_evidence','ssam_task','o11_inspect','o11_deliver','o11_publish','o11_studio','studio_deliver','studio_inspect','studio_status']);
   const totalBytes=tools.reduce((n,t)=>n+toolListingBytes(t),0),coreBytes=tools.filter(t=>core.has(t.name)).reduce((n,t)=>n+toolListingBytes(t),0);
-  assert.equal(tools.length,90);assert.ok(!tools.some(t=>/prototype.*preview|preview.*prototype/.test(t.name)));assert.ok(totalBytes<=261330&&coreBytes<=34097,'Hosted listing must not grow');
+  assert.equal(tools.length,91);assert.ok(tools.some(t=>t.name==='o11_users'));assert.ok(!tools.some(t=>/prototype.*preview|preview.*prototype/.test(t.name)));assert.ok(totalBytes<=261330&&coreBytes<=34097,'Hosted listing must not grow');
   checks.push({name:'tools/list v'+(index+1),ok:true,count:tools.length,responseBytes:Buffer.byteLength(listed.text),totalBytes,coreBytes});
  }
  await Promise.all(Array.from({length:20},(_,i)=>post('/mcp',i%2?a.token:b.token,{jsonrpc:'2.0',id:i+2,method:'tools/call',params:{name:'ssam_doctor',arguments:{}}},{'mcp-session-id':i%2?sa.sid:sb.sid})).map(async p=>assert.equal((await p).status,200)));checks.push({name:'concurrent MCP calls',ok:true,count:20});
