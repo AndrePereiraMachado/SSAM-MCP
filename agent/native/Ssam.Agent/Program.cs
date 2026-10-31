@@ -131,6 +131,25 @@ internal static class Program
                 Console.WriteLine(answers.ToJsonString());
                 return 0;
             }
+            // check-users-request: stdin [request] -> [{ok:true} | {error}], the checks of o11.users (tests/native/users.test.mjs compares
+            // them with the Node agent's). users-helper-sha256: the embedded vault helper's sha.
+            if (args is ["check-users-request"])
+            {
+                var requests = JsonNode.Parse(await Console.In.ReadToEndAsync()) as JsonArray ?? throw new ArgumentException("Expected a JSON array");
+                var answers = new JsonArray();
+                foreach (var request in requests)
+                {
+                    try { UsersKinds.Validate(request); answers.Add((JsonNode)new JsonObject { ["ok"] = true }); }
+                    catch (AgentFault e) { answers.Add((JsonNode)new JsonObject { ["error"] = e.Code }); }
+                }
+                Console.WriteLine(answers.ToJsonString());
+                return 0;
+            }
+            if (args is ["users-helper-sha256"])
+            {
+                Console.WriteLine(Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(UsersKinds.HelperBytes())).ToLowerInvariant());
+                return 0;
+            }
             if (args is ["version"])
             {
                 Console.WriteLine("{\"runtime\":\"native-aot\",\"protocol\":\"ssam-agent/1\",\"productionReady\":false}");

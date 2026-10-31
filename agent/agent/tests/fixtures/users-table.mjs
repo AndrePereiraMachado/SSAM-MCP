@@ -1,0 +1,57 @@
+// The rows of what o11.users lets pass: the Node agent (tests/users.test.mjs) and the native core (tests/native/users.test.mjs,
+// check-users-request) answer the same table.
+export const HOST = 'tenant-a.example.test';
+export const b64 = text => Buffer.from(text).toString('base64');
+const ENTRY = 'a'.repeat(64);
+const url = (rest = 'User_List.aspx') => `https://${HOST}/Users/${rest}`;
+const request = (over = {}) => ({ op: 'request', host: HOST, url: url(), method: 'GET', fields: [], ...over });
+const loginRefs = [{ field: 'u', kind: 'login', part: 'username' }, { field: 'p', kind: 'login', part: 'password' }];
+
+export const usersRows = () => [
+  { label: 'status of the administrator', request: { op: 'status', host: HOST }, expected: 'ok' },
+  { label: 'status of a new password', request: { op: 'status', host: HOST, kind: 'password', entry: ENTRY }, expected: 'ok' },
+  { label: 'prompt with a subject', request: { op: 'prompt', host: HOST, kind: 'password', entry: ENTRY, subject: 'someone' }, expected: 'ok' },
+  { label: 'forget a new password', request: { op: 'forget', host: HOST, kind: 'password', entry: ENTRY }, expected: 'ok' },
+  { label: 'a page', request: request(), expected: 'ok' },
+  { label: 'the root of the app', request: request({ url: url('') }), expected: 'ok' },
+  { label: 'a page with its id', request: request({ url: url('User_Show.aspx?UserId=42') }), expected: 'ok' },
+  { label: 'a post with fields', request: request({ method: 'POST', fields: [['a', 'b']] }), expected: 'ok' },
+  { label: 'the login', request: request({ url: url('Login.aspx'), method: 'POST', secretRefs: loginRefs }), expected: 'ok' },
+  { label: 'a new password in a form', request: request({ url: url('User_Edit.aspx'), method: 'POST', secretRefs: [{ field: 'x', kind: 'password', entry: ENTRY, part: 'password' }] }), expected: 'ok' },
+  { label: 'not an object', request: [], expected: 'PARAMS_INVALID' },
+  { label: 'an unknown op', request: { op: 'read-vault', host: HOST }, expected: 'PARAMS_INVALID' },
+  { label: 'a cookie from the server', request: request({ cookie: 'a=b' }), expected: 'PARAMS_INVALID' },
+  { label: 'a value of a secret', request: { op: 'status', host: HOST, password: 'x' }, expected: 'PARAMS_INVALID' },
+  { label: 'a host with a scheme', request: { op: 'status', host: 'https://x.example' }, expected: 'PARAMS_INVALID' },
+  { label: 'this machine', request: { op: 'status', host: 'localhost' }, expected: 'PARAMS_INVALID' },
+  { label: 'a loopback name', request: { op: 'status', host: 'my.localhost' }, expected: 'PARAMS_INVALID' },
+  { label: 'a loopback address', request: { op: 'status', host: '127.0.0.1' }, expected: 'PARAMS_INVALID' },
+  { label: 'a private address', request: { op: 'status', host: '10.0.0.5' }, expected: 'PARAMS_INVALID' },
+  { label: 'a metadata address', request: { op: 'status', host: '169.254.169.254' }, expected: 'PARAMS_INVALID' },
+  { label: 'an upper case host', request: { op: 'status', host: 'Tenant.Example.Test' }, expected: 'PARAMS_INVALID' },
+  { label: 'a url of another host', request: request({ url: 'https://evil.example/Users/User_List.aspx' }), expected: 'PARAMS_INVALID' },
+  { label: 'a url whose host only starts the same', request: request({ url: `https://${HOST}.evil.example/Users/User_List.aspx` }), expected: 'PARAMS_INVALID' },
+  { label: 'a url with a user', request: request({ url: `https://x@${HOST}/Users/User_List.aspx` }), expected: 'PARAMS_INVALID' },
+  { label: 'http', request: request({ url: `http://${HOST}/Users/User_List.aspx` }), expected: 'PARAMS_INVALID' },
+  { label: 'another port', request: request({ url: `https://${HOST}:8443/Users/User_List.aspx` }), expected: 'PARAMS_INVALID' },
+  { label: 'another application', request: request({ url: `https://${HOST}/ServiceCenter/Home.aspx` }), expected: 'PARAMS_INVALID' },
+  { label: 'a page nobody mapped', request: request({ url: url('Secret.aspx') }), expected: 'PARAMS_INVALID' },
+  { label: 'a traversal', request: request({ url: url('../ServiceCenter/Home.aspx') }), expected: 'PARAMS_INVALID' },
+  { label: 'an encoded traversal', request: request({ url: url('%2e%2e/ServiceCenter/Home.aspx') }), expected: 'PARAMS_INVALID' },
+  { label: 'a parameter nobody mapped', request: request({ url: url('User_List.aspx?ReturnUrl=https://evil.example') }), expected: 'PARAMS_INVALID' },
+  { label: 'two parameters', request: request({ url: url('User_Show.aspx?UserId=1&UserId=2') }), expected: 'PARAMS_INVALID' },
+  { label: 'a fragment', request: request({ url: url('User_List.aspx#x') }), expected: 'PARAMS_INVALID' },
+  { label: 'another method', request: request({ method: 'DELETE' }), expected: 'PARAMS_INVALID' },
+  { label: 'fields that are no pairs', request: request({ fields: [['a']] }), expected: 'PARAMS_INVALID' },
+  { label: 'the login sent to another page', request: request({ url: url('User_Edit.aspx'), method: 'POST', secretRefs: loginRefs }), expected: 'PARAMS_INVALID' },
+  { label: 'the login sent by GET', request: request({ url: url('Login.aspx'), secretRefs: loginRefs }), expected: 'PARAMS_INVALID' },
+  { label: 'a ref with a value', request: request({ url: url('Login.aspx'), method: 'POST', secretRefs: [{ field: 'p', kind: 'login', part: 'password', value: 'x' }] }), expected: 'PARAMS_INVALID' },
+  { label: 'a new password as a username', request: request({ url: url('User_Edit.aspx'), method: 'POST', secretRefs: [{ field: 'x', kind: 'password', entry: ENTRY, part: 'username' }] }), expected: 'PARAMS_INVALID' },
+  { label: 'a bad field name', request: request({ url: url('Login.aspx'), method: 'POST', secretRefs: [{ field: 'a b', kind: 'login', part: 'password' }] }), expected: 'PARAMS_INVALID' },
+  { label: 'three refs', request: request({ url: url('Login.aspx'), method: 'POST', secretRefs: [...loginRefs, loginRefs[0]] }), expected: 'PARAMS_INVALID' },
+  { label: 'an entry on the login', request: { op: 'status', host: HOST, entry: ENTRY }, expected: 'PARAMS_INVALID' },
+  { label: 'a password without an entry', request: { op: 'prompt', host: HOST, kind: 'password' }, expected: 'PARAMS_INVALID' },
+  { label: 'forgetting the administrator', request: { op: 'forget', host: HOST }, expected: 'PARAMS_INVALID' },
+  { label: 'a subject of two lines', request: { op: 'prompt', host: HOST, subject: 'a\nb' }, expected: 'PARAMS_INVALID' },
+  { label: 'a subject that is too long', request: { op: 'prompt', host: HOST, subject: 'x'.repeat(257) }, expected: 'PARAMS_INVALID' },
+];

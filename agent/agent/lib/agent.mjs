@@ -44,7 +44,7 @@ import { completeInstances } from './studio-instance.mjs';
 // app's Electron render worker, render.mjs), both announced in the hello only when they run here; the call's deadline
 // in this machine's clock. The other kinds and the wire are those of 0.3.3. The native core of the same change is
 // 0.4.1-native.
-export const AGENT_VERSION = '0.3.4';
+export const AGENT_VERSION = '0.3.5';
 const INLINE_MAX_BYTES = 524288;
 const MAX_VALUE_BYTES = 16 * 1024 * 1024;
 const PARAMS_MEMORY_BYTES = 64 * 1024 * 1024;

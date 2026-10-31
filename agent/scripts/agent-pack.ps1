@@ -282,6 +282,7 @@ try {
   $launcher = $(if ($mac) { 'agent\ssam-agent.sh' } else { 'agent\ssam-agent.ps1' })
   Copy-Item -LiteralPath (Join-Path $root 'agent\ssam-agent.mjs'), (Join-Path $root $launcher) -Destination $agentOut
   Copy-Item -Path (Join-Path $root 'agent\lib\*.mjs') -Destination (Join-Path $agentOut 'lib')
+  Copy-Item -LiteralPath (Join-Path $root 'agent\lib\users-vault.ps1') -Destination (Join-Path $agentOut 'lib')
   if ($mac) {
     Copy-Item -LiteralPath (Join-Path $root 'agent\install.sh') -Destination (Join-Path $tree 'install.sh')
     # bash on macOS stops at a CR: the scripts go with LF only (the box's .gitattributes says eol=lf).
