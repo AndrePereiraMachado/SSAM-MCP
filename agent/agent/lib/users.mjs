@@ -54,7 +54,7 @@ const CONSENT_MS = 8 * 3600 * 1000, PERMIT_MS = 120000, PASSWORD_PERMIT_MS = 300
 // A shown value: one line, no control or direction characters.
 // A name of a user in a window: nothing that can read as an instruction.
 const SUBJECT = /^[A-Za-z0-9._@+-]{1,100}$/;
-const WINDOWS_MAX = 6, WINDOWS_MS = 600000;
+const WINDOWS_MAX = 20, REFUSALS_MAX = 3, WINDOWS_MS = 600000;
 const shown = (value, max) => text(value) && value.length <= max && !/[\u0000-\u001f\u007f\u200e\u200f\u202a-\u202e\u2066-\u2069]/.test(value);
 const invalid = message => refuse('PARAMS_INVALID', message);
 const text = value => typeof value === 'string';
@@ -201,13 +201,15 @@ export function createUsersKind({ dataRoot, account = '', platform = process.pla
       jars.set(host, jar);
     }
   }
-  // One window at a time, and a few in ten minutes: a window is never a way to wear a person down.
-  let confirming = false, opened = [];
+  // One window at a time; a person who keeps saying no is not asked again for a while; and a ceiling, so a window is never a way to wear
+  // a person down. A yes does not count against the second: approving seven changes is work, not pressure.
+  let confirming = false, opened = [], refusals = [];
   function takeWindow() {
     settle();
     if (confirming || prompts.size > 0) throw refuse('USERS_WINDOW_BUSY', 'Another window of this agent is open: answer that one first.');
     opened = opened.filter(at => now() - at < WINDOWS_MS);
-    if (opened.length >= WINDOWS_MAX) throw refuse('USERS_WINDOW_LIMIT', 'Too many windows in a few minutes, so no other was opened.');
+    refusals = refusals.filter(at => now() - at < WINDOWS_MS);
+    if (opened.length >= WINDOWS_MAX || refusals.length >= REFUSALS_MAX) throw refuse('USERS_WINDOW_LIMIT', 'Too many windows in a few minutes, so no other was opened.');
     opened.push(now());
   }
   const hasConsent = host => (consents.get(host) ?? 0) > now();
@@ -218,7 +220,8 @@ export function createUsersKind({ dataRoot, account = '', platform = process.pla
       try { phase = fs.readFileSync(record.statusFile, 'utf8'); } catch { /* not yet, or gone */ }
       if (phase === 'saved' && !record.applied) {
         record.applied = true;
-        if (record.kind === 'password') permits.push({ host: record.host, page: record.action === 'create' ? '/Users/User_Edit.aspx' : `/Users/User_Show.aspx?UserId=${record.userId}`, posts: 3, until: now() + PASSWORD_PERMIT_MS, entry: record.entry });
+        // create: its Save. set-password: the button that shows the form, and its Save.
+        if (record.kind === 'password') permits.push({ host: record.host, page: record.action === 'create' ? '/Users/User_Edit.aspx' : `/Users/User_Show.aspx?UserId=${record.userId}`, posts: record.action === 'create' ? 1 : 2, until: now() + PASSWORD_PERMIT_MS, entry: record.entry });
         else consents.set(record.host, now() + CONSENT_MS);
       }
       if ((record.child.exitCode ?? null) !== null) { fs.rmSync(record.statusFile, { force: true }); prompts.delete(key); }
@@ -248,11 +251,13 @@ export function createUsersKind({ dataRoot, account = '', platform = process.pla
     confirming = true;
     let answer;
     try { answer = await helperCall(args, input, false, CONFIRM_MS); }
-    catch { throw refuse('USERS_CONFIRMATION_TIMEOUT', 'No answer from the person on this machine, so nothing was sent.'); }
+    catch { refusals.push(now()); throw refuse('USERS_CONFIRMATION_TIMEOUT', 'No answer from the person on this machine, so nothing was sent.'); }
     finally { confirming = false; }
+    if (answer.approved !== true) refusals.push(now());
     if (answer.approved !== true) throw refuse(answer.timedOut ? 'USERS_CONFIRMATION_TIMEOUT' : 'USERS_CONFIRMATION_DECLINED', answer.timedOut ? 'No answer from the person on this machine, so nothing was sent.' : 'The person on this machine declined, so nothing was sent.');
     if (p.action === 'sign-in') consents.set(p.host, now() + CONSENT_MS);
-    else permits.push({ host: p.host, page: `/Users/${rule.page}.aspx?UserId=${p.userId}`, posts: 3, until: now() + PERMIT_MS });
+    // One POST, the one the person approved: nothing is left for another event of the same page afterwards.
+    else permits.push({ host: p.host, page: `/Users/${rule.page}.aspx?UserId=${p.userId}`, posts: 1, until: now() + PERMIT_MS });
     return { approved: true };
   }
   async function openPrompt(p) {

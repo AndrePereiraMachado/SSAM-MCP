@@ -131,8 +131,8 @@ test('A2: the window has the agent\'s words, the exact ids, and says what comes 
   const post = (at = 42) => request({ url: `https://${HOST}/Users/User_Show.aspx?UserId=${at}`, method: 'POST' });
   await assert.rejects(users.execute(post(7)), e => e.code === 'USERS_CONSENT_REQUIRED', 'another user');
   await assert.rejects(users.execute(request({ url: `https://${HOST}/Users/User_Edit.aspx?UserId=42`, method: 'POST' })), e => e.code === 'USERS_CONSENT_REQUIRED', 'another page');
-  for (let i = 0; i < 3; i++) await users.execute(post());
-  await assert.rejects(users.execute(post()), e => e.code === 'USERS_CONSENT_REQUIRED', 'it is spent');
+  await users.execute(post());
+  await assert.rejects(users.execute(post()), e => e.code === 'USERS_CONSENT_REQUIRED', 'one POST: nothing is left for another event of the page');
   await users.execute({ op: 'confirm', host: HOST, action: 'activate', userId: '42' });
   clock += 121000;
   await assert.rejects(users.execute(post()), e => e.code === 'USERS_CONSENT_REQUIRED', 'it expired');
@@ -248,18 +248,33 @@ test('M5: one window at a time and a limit in ten minutes (the probe of the revi
   const users = createUsersKind({ dataRoot: tmp(t), platform: 'win32', now: () => clock, wait: async () => {}, lookup: async () => [{ address: '93.184.216.34' }], env: { SystemRoot: 'C:\\Windows' },
     exec: async () => JSON.stringify({ ok: true, hosts: [], available: true }),
     start: (file, args) => { starts++; fs.writeFileSync(args[args.indexOf('-PromptStatusPath') + 1], 'visible'); open = { exitCode: null, on() {}, unref() {} }; return open; } });
-  const prompt = i => users.execute({ op: 'prompt', host: `tenant-${'abcdefghij'[i]}x${i}y.example-${i}.test` });
+  const prompt = i => users.execute({ op: 'prompt', host: `tenant${i}x${i * 7}y.example${i}.test` });
   await prompt(0);
   await assert.rejects(prompt(1), e => e.code === 'USERS_WINDOW_BUSY');
   await assert.rejects(users.execute({ op: 'confirm', host: HOST, action: 'sign-in' }), e => e.code === 'USERS_WINDOW_BUSY');
   assert.equal(starts, 1);
-  for (let i = 1; i < 6; i++) { open.exitCode = 0; await prompt(i); }
+  for (let i = 1; i < 20; i++) { open.exitCode = 0; await prompt(i); }
   open.exitCode = 0;
-  await assert.rejects(prompt(6), e => e.code === 'USERS_WINDOW_LIMIT');
-  assert.equal(starts, 6);
+  await assert.rejects(prompt(20), e => e.code === 'USERS_WINDOW_LIMIT');
+  assert.equal(starts, 20);
   clock += 600001;
-  await prompt(7);
-  assert.equal(starts, 7);
+  await prompt(21);
+  assert.equal(starts, 21);
+});
+
+test('M5: seven yes in a row are work, three no in a row stop the asking for a while', async t => {
+  let clock = 1000, answer = true, windows = 0;
+  const users = createUsersKind({ dataRoot: tmp(t), platform: 'win32', now: () => clock, lookup: async () => [{ address: '93.184.216.34' }], env: { SystemRoot: 'C:\\Windows' },
+    exec: async (file, args) => { const mode = args[args.indexOf('-Mode') + 1]; if (mode === 'confirm') windows++; return JSON.stringify(mode === 'confirm' ? { ok: true, approved: answer } : { ok: true, available: true }); } });
+  const ask = () => users.execute({ op: 'confirm', host: HOST, action: 'activate', userId: '42' });
+  for (let i = 0; i < 7; i++) await ask();
+  answer = false;
+  for (let i = 0; i < 3; i++) await assert.rejects(ask(), e => e.code === 'USERS_CONFIRMATION_DECLINED');
+  await assert.rejects(ask(), e => e.code === 'USERS_WINDOW_LIMIT');
+  assert.equal(windows, 10);
+  clock += 600001;
+  answer = true;
+  assert.deepEqual(await ask(), { approved: true });
 });
 
 test('M4: the helper removes a new password nobody used in a quarter of an hour', () => {

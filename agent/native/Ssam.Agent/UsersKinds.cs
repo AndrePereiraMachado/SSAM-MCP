@@ -257,7 +257,7 @@ internal sealed partial class UsersKinds
                 if (phase == "saved" && !record.Applied)
                 {
                     record.Applied = true;
-                    if (record.Kind == "password") permits.Add(new Permit { Host = record.Host, Page = record.Action == "create" ? "/Users/User_Edit.aspx" : "/Users/User_Show.aspx?UserId=" + record.UserId, Posts = 3, Until = DateTimeOffset.UtcNow.AddMinutes(5), Entry = record.Entry });
+                    if (record.Kind == "password") permits.Add(new Permit { Host = record.Host, Page = record.Action == "create" ? "/Users/User_Edit.aspx" : "/Users/User_Show.aspx?UserId=" + record.UserId, Posts = record.Action == "create" ? 1 : 2, Until = DateTimeOffset.UtcNow.AddMinutes(5), Entry = record.Entry });
                     else consents[record.Host] = DateTimeOffset.UtcNow.AddHours(8);
                 }
                 if (record.Child.HasExited)
@@ -268,9 +268,10 @@ internal sealed partial class UsersKinds
             }
     }
 
-    // One window at a time, and a few in ten minutes: a window is never a way to wear a person down.
+    // One window at a time; a person who keeps saying no is not asked again for a while; and a ceiling, so a window is never a way to wear
+    // a person down. A yes does not count against the second: approving seven changes is work, not pressure.
     private bool confirming;
-    private readonly List<DateTimeOffset> opened = [];
+    private readonly List<DateTimeOffset> opened = [], refusals = [];
     private void TakeWindow()
     {
         Settle();
@@ -278,7 +279,8 @@ internal sealed partial class UsersKinds
         {
             if (confirming || prompts.Count > 0) throw new AgentFault("USERS_WINDOW_BUSY", "Another window of this agent is open: answer that one first.", false);
             opened.RemoveAll(at => DateTimeOffset.UtcNow - at >= TimeSpan.FromMinutes(10));
-            if (opened.Count >= 6) throw new AgentFault("USERS_WINDOW_LIMIT", "Too many windows in a few minutes, so no other was opened.", false);
+            refusals.RemoveAll(at => DateTimeOffset.UtcNow - at >= TimeSpan.FromMinutes(10));
+            if (opened.Count >= 20 || refusals.Count >= 3) throw new AgentFault("USERS_WINDOW_LIMIT", "Too many windows in a few minutes, so no other was opened.", false);
             opened.Add(DateTimeOffset.UtcNow);
         }
     }
@@ -313,8 +315,9 @@ internal sealed partial class UsersKinds
         lock (sync) confirming = true;
         JsonObject answer;
         try { answer = await Call("confirm", host, new JsonObject(), input, false, token, true, 130); }
-        catch (AgentFault) { throw new AgentFault("USERS_CONFIRMATION_TIMEOUT", "No answer from the person on this machine, so nothing was sent.", false); }
+        catch (AgentFault) { lock (sync) refusals.Add(DateTimeOffset.UtcNow); throw new AgentFault("USERS_CONFIRMATION_TIMEOUT", "No answer from the person on this machine, so nothing was sent.", false); }
         finally { lock (sync) confirming = false; }
+        if (answer["approved"]?.GetValue<bool>() != true) lock (sync) refusals.Add(DateTimeOffset.UtcNow);
         if (answer["approved"]?.GetValue<bool>() != true)
             throw answer["timedOut"]?.GetValue<bool>() == true
                 ? new AgentFault("USERS_CONFIRMATION_TIMEOUT", "No answer from the person on this machine, so nothing was sent.", false)
@@ -322,7 +325,7 @@ internal sealed partial class UsersKinds
         lock (sync)
         {
             if (action == "sign-in") consents[host] = DateTimeOffset.UtcNow.AddHours(8);
-            else permits.Add(new Permit { Host = host, Page = "/Users/" + rule.Page + ".aspx?UserId=" + Word(p["userId"]), Posts = 3, Until = DateTimeOffset.UtcNow.AddSeconds(120) });
+            else permits.Add(new Permit { Host = host, Page = "/Users/" + rule.Page + ".aspx?UserId=" + Word(p["userId"]), Posts = 1, Until = DateTimeOffset.UtcNow.AddSeconds(120) });
         }
         return new JsonObject { ["approved"] = true };
     }
