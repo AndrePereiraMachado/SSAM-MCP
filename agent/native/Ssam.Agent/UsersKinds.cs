@@ -324,7 +324,10 @@ internal sealed partial class UsersKinds
         Directory.CreateDirectory(promptDir);
         File.WriteAllText(failuresFile, all.ToJsonString());
     }
-    private static void NotPaused(string host) { }
+    private void NotPaused(string host)
+    {
+        if (FailuresOf(host) >= LoginFailuresMax) throw new AgentFault("USERS_LOGIN_PAUSED", "Signing in failed twice, so it stopped before the Users application locks this administrator. A person signs in again in the window of this agent, or checks the account in the Users application first.", false);
+    }
     // What a window the person filled gives: a prompt's status file says saved only after the vault has it.
     private void Settle()
     {

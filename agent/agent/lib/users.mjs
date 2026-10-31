@@ -237,7 +237,7 @@ export function createUsersKind({ dataRoot, account = '', platform = process.pla
     fs.mkdirSync(promptDir, { recursive: true });
     fs.writeFileSync(failuresFile, JSON.stringify(all));
   }
-  const notPaused = () => {};
+  const notPaused = host => { if (failuresOf(host) >= LOGIN_FAILURES_MAX) throw refuse('USERS_LOGIN_PAUSED', LOGIN_PAUSED); };
   // What a window the person filled gives: a prompt's status file says saved only after the vault has it.
   function settle() {
     for (const [key, record] of prompts) {
