@@ -69,7 +69,7 @@ internal sealed partial class UsersKinds
         if (host == null || !HostPattern().IsMatch(host) || host.Split('.').Any(label => label.StartsWith("xn--", StringComparison.Ordinal))) throw Invalid(HostText);
         var last = host[(host.LastIndexOf('.') + 1)..];
         if (last.Length < 2 || last.StartsWith("0x", StringComparison.Ordinal) || last.All(char.IsAsciiDigit)) throw Invalid(HostText);
-        if (Internal.Any(end => host.EndsWith(end, StringComparison.Ordinal))) throw Invalid("host must be the plain DNS name of an environment");
+        if (Internal.Any(end => host.EndsWith(end, StringComparison.Ordinal))) throw new AgentFault("USERS_HOST_INTERNAL", InternalText, false);
     }
     private static bool PrivateV4(byte[] b, int at = 0)
     {

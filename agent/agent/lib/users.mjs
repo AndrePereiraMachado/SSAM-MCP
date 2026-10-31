@@ -55,7 +55,7 @@ const hostProblem = host => {
   if (!text(host) || !HOST.test(host) || host.split('.').some(label => label.startsWith('xn--'))) return invalid('host must be the plain DNS name of an environment, like name.outsystemsenterprise.com: no scheme, port, address or other alphabet');
   const last = host.split('.').at(-1);
   if (last.length < 2 || /^[0-9]+$|^0x/.test(last)) return invalid('host must be the plain DNS name of an environment, like name.outsystemsenterprise.com: no scheme, port, address or other alphabet');
-  if (INTERNAL.test(host)) return invalid('host must be the plain DNS name of an environment');
+  if (INTERNAL.test(host)) return refuse('USERS_HOST_INTERNAL', INTERNAL_TEXT);
   return null;
 };
 // The sixteen bytes of an IPv6 address.
