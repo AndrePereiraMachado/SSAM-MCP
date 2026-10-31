@@ -328,7 +328,32 @@ internal sealed class ScopeJob
     internal static string ProducerName(string producer)
     {
         if (!producer.Contains('\\') && !producer.Contains('/') && !producer.EndsWith(".oml", StringComparison.OrdinalIgnoreCase) && !producer.EndsWith(".avsig", StringComparison.OrdinalIgnoreCase)) return producer;
+        // A capture says whose it is. Its file can have any name (a session's output, X.published.avsig, name-sha8.avsig in the O11 cache), and
+        // the module's reference has the name in the capture: the file's name would make one producer two, and a call of it CALL_AMBIGUOUS.
+        if (producer.EndsWith(".avsig", StringComparison.OrdinalIgnoreCase) && CapturedName(producer) is { } captured) return captured;
         return Regex.Replace(Path.GetFileNameWithoutExtension(producer), @"-\d{14}(?:-[0-9a-f]+)?$", "");
+    }
+
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<(string Path, DateTime Written), string?> CapturedNames = new();
+    // The Name of a capture (.avsig: JSON, read without the Studio), or null when it cannot be read: the job-alone check runs without its files.
+    private static string? CapturedName(string file)
+    {
+        try
+        {
+            var full = Path.GetFullPath(file);
+            if (!File.Exists(full)) return null;
+            return CapturedNames.GetOrAdd((full, File.GetLastWriteTimeUtc(full)), key =>
+            {
+                try
+                {
+                    using var stream = File.OpenRead(key.Path);
+                    using var capture = System.Text.Json.JsonDocument.Parse(stream);
+                    return capture.RootElement.TryGetProperty("Name", out var name) && name.ValueKind == System.Text.Json.JsonValueKind.String && name.GetString() is { Length: > 0 } text ? text : null;
+                }
+                catch (Exception error) when (error is IOException or UnauthorizedAccessException or System.Text.Json.JsonException) { return null; }
+            });
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException) { return null; }
     }
 
     /// <summary>The screen or block name of a logic owner (`IMobileScreen:Home`, `Home`), null for the module.</summary>
