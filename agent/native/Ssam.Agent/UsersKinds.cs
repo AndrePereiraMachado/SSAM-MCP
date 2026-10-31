@@ -255,9 +255,20 @@ internal sealed partial class UsersKinds
             ["secretRefs"] = p["secretRefs"]?.DeepClone() ?? new JsonArray(), ["cookie"] = CookieHeader(host),
         };
         var input = Convert.ToBase64String(Encoding.UTF8.GetBytes(request.ToJsonString()));
-        var page = await Call("request", host, new JsonObject(), input, null, token);
+        var passwords = (p["secretRefs"] as JsonArray ?? []).Select(item => Word(item?["entry"])).Where(entry => entry != null).Distinct().ToList();
+        var forgotten = true;
+        JsonObject page;
+        try { page = await Call("request", host, new JsonObject(), input, null, token); }
+        finally
+        {
+            foreach (var entry in passwords)
+                try { await Call("forget", host, new JsonObject { ["kind"] = "password", ["entry"] = entry }, "", false, CancellationToken.None); }
+                catch (AgentFault) { forgotten = false; }
+        }
         StoreCookies(host, page["setCookie"]);
-        // The session stays here: the answer has no setCookie.
-        return new JsonObject { ["status"] = page["status"]?.DeepClone(), ["location"] = Word(page["location"]) ?? "", ["contentType"] = Word(page["contentType"]) ?? "", ["body"] = Word(page["body"]) ?? "" };
+        // The session stays here: the answer has no setCookie. A new password was for this one POST, whatever the server does next.
+        var answer = new JsonObject { ["status"] = page["status"]?.DeepClone(), ["location"] = Word(page["location"]) ?? "", ["contentType"] = Word(page["contentType"]) ?? "", ["body"] = Word(page["body"]) ?? "" };
+        if (passwords.Count > 0) answer["passwordForgotten"] = forgotten;
+        return answer;
     }
 }

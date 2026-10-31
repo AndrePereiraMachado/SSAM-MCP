@@ -133,6 +133,7 @@ export function createUsersKind({ dataRoot, platform = process.platform, env = p
     } finally { fs.rmSync(statusFile, { force: true }); }
     throw new AgentError('USERS_PROMPT_NOT_VISIBLE', 'The private window could not be confirmed visible.', { executed: null });
   }
+  const forget = (host, entry) => helperCall([...base('forget', host), '-Kind', 'password', '-Entry', entry], '', false);
   return {
     async execute(params) {
       if (platform !== 'win32') throw refuse('USERS_PLATFORM_UNAVAILABLE', 'Users administration is not available on this platform.');
@@ -147,11 +148,15 @@ export function createUsersKind({ dataRoot, platform = process.platform, env = p
         if ((params.kind ?? 'login') === 'login') jars.delete(host);
         return openPrompt(params);
       }
+      let forgotten = true;
       const input = Buffer.from(JSON.stringify({ url: params.url, method: params.method, fields: params.fields ?? [], secretRefs: params.secretRefs ?? [], cookie: cookieHeader(host) })).toString('base64');
-      const value = await helperCall(base('request', host), input, null);
+      const passwords = [...new Set((params.secretRefs ?? []).filter(ref => ref.kind === 'password').map(ref => ref.entry))];
+      let value;
+      try { value = await helperCall(base('request', host), input, null); }
+      finally { for (const entry of passwords) await forget(host, entry).catch(() => { forgotten = false; }); }
       storeCookies(host, value.setCookie);
-      // The session stays here: the answer has no setCookie.
-      return { status: value.status, location: value.location ?? '', contentType: value.contentType ?? '', body: value.body ?? '' };
+      // The session stays here: the answer has no setCookie. A new password was for this one POST, whatever the server does next.
+      return { status: value.status, location: value.location ?? '', contentType: value.contentType ?? '', body: value.body ?? '', ...(passwords.length ? { passwordForgotten: forgotten } : {}) };
     },
   };
 }

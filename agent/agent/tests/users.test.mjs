@@ -60,6 +60,25 @@ test('the session stays here: setCookie never leaves, and the next request carri
   assert.equal(decoded(k.calls[4]).cookie, 'ASP.NET_SessionId=abc', 'an emptied cookie leaves the jar');
 });
 
+test('A1: the new password of a POST leaves the vault there, also when the POST fails; a failed forget is said', async t => {
+  const entry = 'b'.repeat(64);
+  const refs = [{ field: 'x$wtNewPasswordInput', kind: 'password', entry, part: 'password' }];
+  const post = request({ url: `https://${HOST}/Users/User_Show.aspx?UserId=42`, method: 'POST', secretRefs: refs });
+  const k = kind(t, { answers: [page(), { ok: true }] });
+  assert.equal((await k.users.execute(post)).passwordForgotten, true);
+  const forgets = k.calls.filter(c => c.args[c.args.indexOf('-Mode') + 1] === 'forget');
+  assert.equal(forgets.length, 1);
+  assert.equal(forgets[0].args[forgets[0].args.indexOf('-Entry') + 1], entry);
+  const failed = kind(t, { answers: [{ ok: false, code: 'USERS_PRIVATE_REQUEST_FAILED' }, { ok: true }] });
+  await assert.rejects(failed.users.execute(post), e => e.code === 'USERS_PRIVATE_REQUEST_FAILED');
+  assert.equal(failed.calls.filter(c => c.args[c.args.indexOf('-Mode') + 1] === 'forget').length, 1);
+  const stuck = kind(t, { answers: [page(), { ok: false, code: 'USERS_PRIVATE_REQUEST_FAILED' }] });
+  assert.equal((await stuck.users.execute(post)).passwordForgotten, false);
+  const plain = kind(t, { answers: [page()] });
+  assert.equal(Object.hasOwn(await plain.users.execute(request()), 'passwordForgotten'), false);
+  assert.equal(plain.calls.length, 1);
+});
+
 test('the helper runs hidden, with this installation\'s scope, and takes no secret in its arguments', async t => {
   const k = kind(t, { answers: [{ ok: true, available: true, principal: 'admin' }] });
   assert.deepEqual(await k.users.execute({ op: 'status', host: HOST }), { available: true, principal: 'admin' });
@@ -126,7 +145,8 @@ test('the helper carries the rules of its own side: closed modes and routes, the
 });
 
 // The real helper, on a scope nobody has: the vault is only looked up, no window opens and nothing goes out.
-test('the real helper: an environment with no administrator stored is refused before any request', { skip: process.platform !== 'win32', timeout: 120000 }, async t => {
+// It reaches the Windows vault API, even on a scope nobody has: never by default, only with SSAM_USERS_REAL_VAULT_TEST=1.
+test('the real helper: an environment with no administrator stored is refused before any request', { skip: (process.platform !== 'win32' || process.env.SSAM_USERS_REAL_VAULT_TEST !== '1') && 'only with SSAM_USERS_REAL_VAULT_TEST=1 on Windows: it touches the vault API', timeout: 120000 }, async t => {
   const users = createUsersKind({ dataRoot: tmp(t) });
   assert.deepEqual(await users.execute({ op: 'status', host: HOST }), { available: false, principal: null });
   assert.deepEqual(await users.execute({ op: 'status', host: HOST, kind: 'password', entry: 'a'.repeat(64) }), { available: false, principal: null });
