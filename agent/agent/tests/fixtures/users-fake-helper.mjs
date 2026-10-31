@@ -38,6 +38,11 @@ if (mode === 'forget') {
   delete state.vault.passwords[host + '|' + entry];
   done({ ok: true });
 }
+if (mode === 'sweep') {
+  state.sweeps = (state.sweeps ?? 0) + 1;
+  state.vault.passwords = {};
+  done({ ok: true });
+}
 if (mode === 'sign-out') {
   delete state.vault.login[host];
   for (const key of Object.keys(state.vault.passwords)) if (key.startsWith(host + '|')) delete state.vault.passwords[key];

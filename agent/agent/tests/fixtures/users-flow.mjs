@@ -16,6 +16,7 @@ const ready = [signIn, login];
 const write = (action, over = {}) => ({ params: { op: 'write', host: HOST, action, ...over } });
 // Every window of this flow has closed, and the agent has seen it: an event, not a time, so a loaded machine cannot change the answer.
 const WAIT = { settled: true };
+const PASSWORD_WINDOW = { params: { op: 'prompt', host: HOST, kind: 'password', entry: ENTRY, action: 'set-password', userId: '42' } };
 // Starting state of the stand-in: an approved environment, a person who says yes, two users.
 export const initialState = () => ({ vault: { login: { [HOST]: { user: 'admin@example.invalid', secret: 'x' } }, passwords: {} }, answers: [], promptAnswers: [], loginAnswers: [], windows: [], http: [], calls: [],
   users: { 42: { id: '42', name: 'Ana Silva', username: 'ana.silva', email: 'ana@example.invalid', active: true }, 7: { id: '7', name: 'Administrator', username: 'admin@example.invalid', email: 'admin@example.invalid', active: true } } });
@@ -203,6 +204,37 @@ export const flows = () => [
     { params: { op: 'login', host: HOST }, expect: { code: 'USERS_LOGIN_LAYOUT_CHANGED' } },
     login,
   ] },
+  { name: 'C2: a saved window nobody used leaves by itself, with no other call', permitMs: 200, steps: [...ready, PASSWORD_WINDOW, WAIT,
+    { waitFor: { forgets: 1 } },
+    { ...write('set-password', { userId: '42', entry: ENTRY }), expect: { code: 'USERS_CONSENT_REQUIRED' } },
+  ], check: s => { same(Object.keys(s.vault.passwords), []); same(s.http, []); } },
+  { name: 'C2: past its term it also leaves at the next call, whatever that call is', steps: [...ready, PASSWORD_WINDOW, WAIT,
+    { advanceMs: 300001 },
+    { params: { op: 'status', host: HOST }, expect: { available: true, principal: 'admin@example.invalid', consent: true } },
+  ], check: s => same(Object.keys(s.vault.passwords), []) },
+  { name: 'C2: a password forgotten is no permit: nothing can use the window after it', steps: [...ready, PASSWORD_WINDOW, WAIT,
+    { params: { op: 'forget', host: HOST, kind: 'password', entry: ENTRY }, expect: {} },
+    { ...write('set-password', { userId: '42', entry: ENTRY }), expect: { code: 'USERS_CONSENT_REQUIRED' } },
+  ], check: s => { same(Object.keys(s.vault.passwords), []); same(s.http, []); } },
+  { name: 'C2: an agent that closed with a password in the vault removes it when it starts, once', steps: [...ready, PASSWORD_WINDOW, WAIT,
+    { restart: true },
+    { params: { op: 'status', host: HOST }, expect: { available: true, principal: 'admin@example.invalid', consent: false } },
+    { restart: true },
+    { params: { op: 'status', host: HOST }, expect: { available: true, principal: 'admin@example.invalid', consent: false } },
+  ], check: s => { same(Object.keys(s.vault.passwords), []); same(s.sweeps, 1); } },
+  { name: 'C2: nothing to sweep when no password window was open, was closed unsaved, or was used', state: { promptAnswers: ['cancel'] }, steps: [...ready,
+    { restart: true }, { params: { op: 'status', host: HOST } },
+    { ...signIn }, login, PASSWORD_WINDOW, WAIT,
+    { restart: true }, { params: { op: 'status', host: HOST } },
+    { ...signIn }, login, PASSWORD_WINDOW, WAIT,
+    { ...write('set-password', { userId: '42', entry: ENTRY }), expect: { status: 200, passwordForgotten: true } },
+    { restart: true }, { params: { op: 'status', host: HOST } },
+  ], check: s => same(s.sweeps, undefined) },
+  { name: 'C2: a forget that failed leaves the mark, so the next start sweeps', state: { forgetFails: true }, steps: [...ready, PASSWORD_WINDOW, WAIT,
+    { ...write('set-password', { userId: '42', entry: ENTRY }), expect: { status: 200, passwordForgotten: false } },
+    { set: { forgetFails: false } },
+    { restart: true }, { waitFor: { sweeps: 1 } },
+  ], check: s => same(Object.keys(s.vault.passwords), []) },
 ];
 export function same(actual, expected) {
   const a = JSON.stringify(actual), b = JSON.stringify(expected);
@@ -227,24 +259,37 @@ export function verify(flow, results, state) {
   });
   flow.check?.(state);
 }
+// Until the stand-in's state says so: an event again, with a limit only for a flow that is wrong.
+async function reached(dir, target) {
+  for (let waited = 0; waited < 60000; waited += 20) {
+    let state = null;
+    try { state = readState(dir); } catch { /* being written */ }
+    if (state && Object.entries(target).every(([key, value]) => JSON.stringify(state[key]) === JSON.stringify(value))) return;
+    await new Promise(r => setTimeout(r, 20));
+  }
+  throw new Error('never reached ' + JSON.stringify(target));
+}
 // The Node agent over the stand-in.
 export async function runNode(flow, createUsersKind, dir) {
   const env = prepare(dir, flow);
   let offset = 0, addresses = ['93.184.216.34'];
   const windows = [];
-  const users = createUsersKind({ dataRoot: path.join(dir, 'data'), account: 'ssam_agent_flow', platform: 'win32', helper: 'fake', now: () => Date.now() + offset, wait: ms => new Promise(r => setTimeout(r, Math.min(ms, 20))), lookup: async () => addresses.map(address => ({ address })),
+  const make = () => createUsersKind({ dataRoot: path.join(dir, 'data'), account: 'ssam_agent_flow', platform: 'win32', helper: 'fake', permitMs: flow.permitMs, now: () => Date.now() + offset, wait: ms => new Promise(r => setTimeout(r, Math.min(ms, 20))), lookup: async () => addresses.map(address => ({ address })),
     exec: (file, args, input) => new Promise((resolve, reject) => { const child = execFile(process.execPath, [SCRIPT, ...args], { env, windowsHide: true, maxBuffer: 16 * 1024 * 1024 }, (error, stdout) => (stdout ? resolve(String(stdout)) : reject(error ?? new Error('no answer')))); child.stdin?.end(input ?? ''); }),
     start: (file, args) => { const child = spawn(process.execPath, [SCRIPT, ...args], { env, windowsHide: true, stdio: ['ignore', 'ignore', 'ignore'] }); windows.push(new Promise(done => child.on('exit', done))); return child; } });
+  let users = make();
   const results = [];
   for (const step of flow.steps) {
     if (step.advanceMs) { offset += step.advanceMs; results.push(null); continue; }
     if (step.dns) { addresses = step.dns; results.push(null); continue; }
     if (step.set) { patchState(dir, step.set); results.push(null); continue; }
     if (step.settled) { await Promise.all(windows); results.push(null); continue; }
+    if (step.restart) { users = make(); users.startup(); results.push(null); continue; }
+    if (step.waitFor) { await reached(dir, step.waitFor); results.push(null); continue; }
     try { results.push({ value: await users.execute(step.params) }); } catch (error) { results.push({ code: error.code ?? 'THROWN ' + error.message }); }
   }
   return { results, state: readState(dir) };
 }
 // What the native core's check-users-flow reads: the same steps, without the checks.
-export const nativeInput = (flow, dir) => ({ helper: [process.execPath, SCRIPT], root: path.join(dir, 'data'), account: 'ssam_agent_flow', statePath: stateFile(dir), steps: flow.steps.map(({ params, advanceMs, dns, set, settled }) => ({ params, advanceMs, dns, set, settled })) });
+export const nativeInput = (flow, dir) => ({ helper: [process.execPath, SCRIPT], root: path.join(dir, 'data'), account: 'ssam_agent_flow', statePath: stateFile(dir), permitMs: flow.permitMs, steps: flow.steps.map(({ params, advanceMs, dns, set, settled, restart, waitFor }) => ({ params, advanceMs, dns, set, settled, restart, waitFor })) });
 export const tempDir = () => fs.mkdtempSync(path.join(os.tmpdir(), 'ssam-users-flow-'));

@@ -26,6 +26,7 @@ internal sealed partial class UsersKinds
     internal Func<string, Task<string[]>>? Lookup;
     internal Func<DateTimeOffset> Now = () => DateTimeOffset.UtcNow;
     internal bool ForceWindows;
+    internal TimeSpan PermitTime = TimeSpan.FromMinutes(5);
     private readonly Dictionary<string, Dictionary<string, string>> jars = new(StringComparer.Ordinal);
     private readonly Dictionary<string, OpenPrompt> prompts = new(StringComparer.Ordinal);
     private readonly object sync = new();
@@ -44,6 +45,10 @@ internal sealed partial class UsersKinds
     private readonly List<Permit> permits = [];
     private readonly string promptDir;
     private readonly string failuresFile;
+    private readonly string pendingFile;
+    private bool forgetFailed;
+    private int writing;
+    private Task? started;
 
     internal UsersKinds(string dataRoot, string account = "")
     {
@@ -51,6 +56,7 @@ internal sealed partial class UsersKinds
         scope = Scope(dataRoot, account);
         promptDir = Path.Combine(dataRoot, "private", "users");
         failuresFile = Path.Combine(promptDir, "sign-in-failures.json");
+        pendingFile = Path.Combine(promptDir, "passwords-pending");
     }
 
     // The vault scope: this installation and this account of the server. Its entries are its own: another token on this installation
@@ -343,6 +349,37 @@ internal sealed partial class UsersKinds
         lock (sync) waiting = unproven.Contains(host);
         if (FailuresOf(host) >= LoginFailuresMax && (tryingAgain || !waiting)) throw new AgentFault("USERS_LOGIN_PAUSED", "Signing in failed twice, so it stopped before the Users application locks this administrator. A person signs in again in the window of this agent, or checks the account in the Users application first.", false);
     }
+    // A new password in the vault is useful only under its permit. So it leaves by itself when the permit ends, with no other call; and a mark on
+    // disk says one may be there, so an agent that closed before that removes it when it starts. Without a mark, starting runs nothing.
+    private void ClearPending()
+    {
+        lock (sync)
+        {
+            if (forgetFailed || writing > 0 || permits.Count > 0 || prompts.Values.Any(record => record.Kind == "password")) return;
+            try { File.Delete(pendingFile); } catch (IOException) { }
+        }
+    }
+    private async Task ExpireLater(Permit permit)
+    {
+        await Task.Delay(PermitTime);
+        await Expire(permit);
+    }
+    private async Task Expire(Permit permit)
+    {
+        lock (sync) if (!permits.Contains(permit)) return;
+        await Forget(permit.Host, permit.Entry);
+    }
+    internal Task Startup() { lock (sync) return started ??= SweepOrphans(); }
+    private async Task SweepOrphans()
+    {
+        if (!(OperatingSystem.IsWindows() || ForceWindows) || !File.Exists(pendingFile)) return;
+        try
+        {
+            await Call("sweep", "sweep.invalid", new JsonObject(), "", false, CancellationToken.None);
+            File.Delete(pendingFile);
+        }
+        catch (Exception e) when (e is AgentFault or IOException) { /* the next start */ }
+    }
     // What a window the person filled gives: a prompt's status file says saved only after the vault has it.
     private void Settle()
     {
@@ -355,7 +392,14 @@ internal sealed partial class UsersKinds
                 if (phase == "saved" && !record.Applied)
                 {
                     record.Applied = true;
-                    if (record.Kind == "password") permits.Add(new Permit { Host = record.Host, Action = record.Action!, UserId = record.UserId, Changes = record.Changes, Entry = record.Entry!, Until = Now().AddMinutes(5) });
+                    if (record.Kind == "password")
+                    {
+                        // A second window for the same password replaces the first, and the first one's timer finds nothing.
+                        permits.RemoveAll(item => item.Host == record.Host && item.Entry == record.Entry);
+                        var permit = new Permit { Host = record.Host, Action = record.Action!, UserId = record.UserId, Changes = record.Changes, Entry = record.Entry!, Until = Now() + PermitTime };
+                        permits.Add(permit);
+                        _ = ExpireLater(permit);
+                    }
                     else { consents[record.Host] = Now().AddHours(8); SetFailures(record.Host, 0); }
                 }
                 if (record.Child.HasExited)
@@ -363,6 +407,7 @@ internal sealed partial class UsersKinds
                     if (!record.Applied) refusals.Add(Now());
                     try { File.Delete(record.StatusFile); } catch (IOException) { }
                     prompts.Remove(key);
+                    if (record.Kind == "password") ClearPending();
                 }
             }
     }
@@ -382,8 +427,7 @@ internal sealed partial class UsersKinds
     {
         lock (sync)
         {
-            permits.RemoveAll(item => item.Until <= Now());
-            var at = permits.FindIndex(item => item.Host == host && item.Action == action && item.Entry == entry && item.UserId == userId && item.Changes == ChangesKey(changes));
+            var at = permits.FindIndex(item => item.Until > Now() && item.Host == host && item.Action == action && item.Entry == entry && item.UserId == userId && item.Changes == ChangesKey(changes));
             if (at < 0) throw new AgentFault("USERS_CONSENT_REQUIRED", "No person on this machine approved this exact change in a window, so it was not sent.", false);
             permits.RemoveAt(at);
         }
@@ -445,6 +489,7 @@ internal sealed partial class UsersKinds
         }
         TakeWindow();
         Directory.CreateDirectory(promptDir);
+        if (kind == "password") File.WriteAllText(pendingFile, "");
         var status = Path.Combine(promptDir, "prompt-" + Guid.NewGuid().ToString("N") + ".status");
         var start = Start(true, "prompt", host, p, false, ["-Subject", subject, "-Rows", Convert.ToBase64String(Encoding.UTF8.GetBytes(rows.ToJsonString())), "-PromptStatusPath", status]);
         Process process;
@@ -511,7 +556,7 @@ internal sealed partial class UsersKinds
         NotPaused(host);
         await PublicHost(host, token);
         var passwordOp = action is "create" or "set-password";
-        if (passwordOp) UsePermit(host, action, userId, p["changes"], entry!);
+        if (passwordOp) { UsePermit(host, action, userId, p["changes"], entry!); lock (sync) writing++; }
         // From here a new password has had its one chance: it leaves the vault however this ends.
         var pending = passwordOp;
         try
@@ -537,22 +582,29 @@ internal sealed partial class UsersKinds
             }
             else answer = await Send(host, plan.Url, "POST", plan.Fields, passwordOp ? SecretRefs(plan.SecretFields, entry) : null, token);
             var value = answer.Json();
-            if (passwordOp) { pending = false; value["passwordForgotten"] = await Forget(host, entry!); }
+            if (passwordOp) { pending = false; lock (sync) writing--; value["passwordForgotten"] = await Forget(host, entry!); }
             return value;
         }
-        finally { if (pending) await Forget(host, entry!); }
+        finally { if (pending) { lock (sync) writing--; await Forget(host, entry!); } }
     }
     private async Task<bool> Forget(string host, string entry)
     {
-        try { await Call("forget", host, new JsonObject { ["kind"] = "password", ["entry"] = entry }, "", false, CancellationToken.None); return true; }
-        catch (AgentFault) { return false; }
+        lock (sync) permits.RemoveAll(item => item.Host == host && item.Entry == entry);
+        try { await Call("forget", host, new JsonObject { ["kind"] = "password", ["entry"] = entry }, "", false, CancellationToken.None); }
+        catch (AgentFault) { lock (sync) forgetFailed = true; return false; }
+        ClearPending();
+        return true;
     }
 
     internal async Task<JsonNode?> Execute(JsonObject p, CancellationToken token)
     {
         if (!OperatingSystem.IsWindows() && !ForceWindows) throw new AgentFault("USERS_PLATFORM_UNAVAILABLE", "Users administration is not available on this platform.", false);
         Validate(p);
+        await Startup();
         Settle();
+        List<Permit> due;
+        lock (sync) due = permits.Where(item => item.Until <= Now()).ToList();
+        foreach (var permit in due) await Expire(permit);
         var op = Word(p["op"])!;
         var host = Word(p["host"])!;
         switch (op)
@@ -566,11 +618,12 @@ internal sealed partial class UsersKinds
                 lock (sync) { jars.Remove(host); consents.Remove(host); permits.RemoveAll(item => item.Host == host); }
                 SetFailures(host, 0);
                 await Call("sign-out", host, new JsonObject(), "", false, token);
+                ClearPending();
                 return new JsonObject { ["signedOut"] = true };
             case "confirm":
                 return await ConfirmSignIn(host, token);
             case "forget":
-                await Call("forget", host, p, "", false, token);
+                if (!await Forget(host, Word(p["entry"])!)) throw new AgentFault("USERS_PRIVATE_REQUEST_FAILED", "The private Users request failed; no automatic retry.", false);
                 return new JsonObject();
             case "prompt":
                 await PublicHost(host, token);

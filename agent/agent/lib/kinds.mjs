@@ -485,6 +485,7 @@ export function createKinds({ root, runtimeRoot = root, ws, pack = {}, kernel = 
   const uploads = createUploads({ dataRoot: root, runtimeRoot, platform, blobs, limits, now: deps.now ?? Date.now, files: deps.uploadFiles, hooks: deps.uploadHooks });
   // screen.render: renderer is agent.mjs's resolveRenderer answer; without one the kind answers RENDER_UNAVAILABLE.
   const users = createUsersKind({ dataRoot: root, platform, account: deps.usersAccount ?? '', ...(deps.users ?? {}) });
+  users.startup();
   const screens = createRenderer({ renderer, tempRoot: path.join(root, 'private', 'tmp'), platform, now: deps.now ?? Date.now, ...(deps.renderSpawn ? { spawn: deps.renderSpawn } : {}) });
 
   const handlers = { 'studio.processes': studioProcesses, 'odc.pipe': odcPipe, 'odc.attach': odcAttach, 'o11.bridge': o11Bridge,

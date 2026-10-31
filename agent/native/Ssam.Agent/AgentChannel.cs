@@ -70,6 +70,7 @@ internal sealed class AgentChannel : IDisposable
         files = new FileKinds(state.Root, this, blobs);
         uploads = new UploadKinds(state.Root, runtime ?? AppContext.BaseDirectory, blobs, () => MaxFileBytes);
         users = new UsersKinds(state.Root, credential);
+        _ = users.Startup();
         // screen.render: the installed pack's renderer (qualification passes its own); announced only when it resolved.
         renders = render ?? new RenderKinds(runtime, pack, state.Root);
         cleanup = new Timer(_ => ReconcileBridges(), null, TimeSpan.FromSeconds(30), Timeout.InfiniteTimeSpan);

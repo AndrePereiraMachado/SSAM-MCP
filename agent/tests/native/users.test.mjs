@@ -58,7 +58,7 @@ test('the native channel lists the kind in both Hello forms, runs it, and gives 
   const channel = fs.readFileSync(path.join(app, 'native/Ssam.Agent/AgentChannel.cs'), 'utf8');
   assert.match(channel, /"file\.sync", UploadKinds\.Name, UsersKinds\.Name \}/);
   assert.match(channel, /\.Append\(UsersKinds\.Name\)/);
-  assert.match(channel, /new UsersKinds\(state\.Root, credential\)/);
+  assert.match(channel, /new UsersKinds\(state\.Root, credential\);\s*_ = users\.Startup\(\);/);
   assert.match(channel, /kind == UsersKinds\.Name\) value = await users\.Execute/);
   const kind = fs.readFileSync(path.join(app, 'native/Ssam.Agent/UsersKinds.cs'), 'utf8');
   assert.match(kind, /USERS_PLATFORM_UNAVAILABLE", "Users administration is not available on this platform\./);

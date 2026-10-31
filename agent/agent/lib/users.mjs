@@ -45,6 +45,7 @@ const CONSENT_MS = 8 * 3600 * 1000, PASSWORD_PERMIT_MS = 300000, CONFIRM_MS = 13
 const WINDOWS_MAX = 20, REFUSALS_MAX = 3, WINDOWS_MS = 600000;
 // Stops well before the lockout of the Users application: two wrong passwords, then a person.
 const LOGIN_FAILURES_MAX = 2;
+const SWEEP_HOST = 'sweep.invalid';
 
 const invalid = message => refuse('PARAMS_INVALID', message);
 const text = value => typeof value === 'string';
@@ -170,7 +171,7 @@ const FAILURES = Object.freeze({
 const LOGIN_PAUSED = 'Signing in failed twice, so it stopped before the Users application locks this administrator. A person signs in again in the window of this agent, or checks the account in the Users application first.';
 
 // exec(file, args, input, timeoutMs) -> stdout, start(file, args) -> a child: the tests' seams.
-export function createUsersKind({ dataRoot, account = '', platform = process.platform, env = process.env, helper = USERS_HELPER, exec, start, wait = ms => new Promise(r => setTimeout(r, ms)), lookup = name => dns.promises.lookup(name, { all: true }), now = Date.now } = {}) {
+export function createUsersKind({ dataRoot, account = '', platform = process.platform, env = process.env, helper = USERS_HELPER, exec, start, wait = ms => new Promise(r => setTimeout(r, ms)), lookup = name => dns.promises.lookup(name, { all: true }), now = Date.now, permitMs = PASSWORD_PERMIT_MS } = {}) {
   const jars = new Map(), prompts = new Map(), consents = new Map();
   let permits = [];
   const scope = usersScope(dataRoot, account);
@@ -242,6 +243,28 @@ export function createUsersKind({ dataRoot, account = '', platform = process.pla
   const unproven = new Set();
   // A sign-in that said yes may read the page that proves it, even as the last try.
   const notPaused = (host, tryingAgain = false) => { if (failuresOf(host) >= LOGIN_FAILURES_MAX && (tryingAgain || !unproven.has(host))) throw refuse('USERS_LOGIN_PAUSED', LOGIN_PAUSED); };
+  // A new password in the vault is useful only under its permit. So it leaves by itself when the permit ends, with no other call; and a mark on
+  // disk says one may be there, so an agent that closed before that removes it when it starts. Without a mark, starting runs nothing.
+  const pendingFile = path.join(promptDir, 'passwords-pending');
+  let forgetFailed = false, writing = 0;
+  function clearPending() {
+    if (forgetFailed || writing > 0 || permits.length > 0 || [...prompts.values()].some(record => record.kind === 'password')) return;
+    fs.rmSync(pendingFile, { force: true });
+  }
+  async function forgetEntry(host, entry) {
+    permits = permits.filter(item => !(item.host === host && item.entry === entry));
+    try { await helperCall([...base('forget', host), '-Kind', 'password', '-Entry', entry], '', false); } catch (error) { forgetFailed = true; throw error; }
+    clearPending();
+  }
+  async function expire(permit) {
+    if (!permits.includes(permit)) return;
+    try { await forgetEntry(permit.host, permit.entry); } catch { /* the mark stays, and the next start sweeps */ }
+  }
+  let started = null;
+  const startup = () => (started ??= (async () => {
+    if (platform !== 'win32' || !fs.existsSync(pendingFile)) return;
+    try { await helperCall(base('sweep', SWEEP_HOST), '', false); fs.rmSync(pendingFile, { force: true }); } catch { /* the next start */ }
+  })());
   // What a window the person filled gives: a prompt's status file says saved only after the vault has it.
   function settle() {
     for (const [key, record] of prompts) {
@@ -250,19 +273,25 @@ export function createUsersKind({ dataRoot, account = '', platform = process.pla
       if (phase) record.phase = phase;
       if (phase === 'saved' && !record.applied) {
         record.applied = true;
-        if (record.kind === 'password') permits.push({ host: record.host, action: record.action, userId: record.userId, changes: record.changes, entry: record.entry, until: now() + PASSWORD_PERMIT_MS });
+        if (record.kind === 'password') {
+          // A second window for the same password replaces the first, and the first one's timer finds nothing.
+          permits = permits.filter(item => !(item.host === record.host && item.entry === record.entry));
+          const permit = { host: record.host, action: record.action, userId: record.userId, changes: record.changes, entry: record.entry, until: now() + permitMs };
+          permits.push(permit);
+          setTimeout(() => expire(permit), permitMs).unref?.();
+        }
         else { consents.set(record.host, now() + CONSENT_MS); setFailures(record.host, 0); }
       }
       if ((record.child.exitCode ?? null) !== null) {
         if (!record.applied) refusals.push(now());
         fs.rmSync(record.statusFile, { force: true });
         prompts.delete(key);
+        if (record.kind === 'password') clearPending();
       }
     }
   }
   function usePermit(p) {
-    permits = permits.filter(item => item.until > now());
-    const at = permits.findIndex(item => item.host === p.host && item.action === p.action && item.entry === p.entry && item.userId === p.userId && JSON.stringify(item.changes ?? null) === JSON.stringify(p.changes ?? null));
+    const at = permits.findIndex(item => item.until > now() && item.host === p.host && item.action === p.action && item.entry === p.entry && item.userId === p.userId && JSON.stringify(item.changes ?? null) === JSON.stringify(p.changes ?? null));
     if (at < 0) throw refuse('USERS_CONSENT_REQUIRED', 'No person on this machine approved this exact change in a window, so it was not sent.');
     permits.splice(at, 1);
   }
@@ -313,6 +342,7 @@ export function createUsersKind({ dataRoot, account = '', platform = process.pla
     const statusFile = path.join(promptDir, 'prompt-' + randomUUID() + '.status');
     const args = ['-NoLogo', '-NoProfile', '-STA', '-ExecutionPolicy', 'Bypass', '-File', helper, '-Mode', 'prompt', '-HostName', p.host, '-Scope', scope, ...entryArgs(p),
       '-Subject', subject, '-Rows', Buffer.from(JSON.stringify(rows)).toString('base64'), '-PromptStatusPath', statusFile];
+    if ((p.kind ?? 'login') === 'password') fs.writeFileSync(pendingFile, '');
     const child = startHelper(powershell(env), args);
     const record = { child, statusFile, host: p.host, kind: p.kind ?? 'login', entry: p.entry, action: p.action, userId: p.userId, changes: p.changes, applied: false, phase: null };
     prompts.set(key, record);
@@ -356,10 +386,10 @@ export function createUsersKind({ dataRoot, account = '', platform = process.pla
     notPaused(host);
     await publicHost(host);
     const passwordOp = action === 'create' || action === 'set-password';
-    if (passwordOp) usePermit(p);
+    if (passwordOp) { usePermit(p); writing++; }
     // From here a new password has had its one chance: it leaves the vault however this ends.
     let pending = passwordOp;
-    const forgetPassword = async () => { pending = false; try { await helperCall([...base('forget', host), '-Kind', 'password', '-Entry', p.entry], '', false); return true; } catch { return false; } };
+    const forgetPassword = async () => { pending = false; writing--; try { await forgetEntry(host, p.entry); return true; } catch { return false; } };
     try {
     const stored = passwordOp ? null : await storedLogin(host);
     const routes = ACTIONS[action].read(p);
@@ -380,10 +410,13 @@ export function createUsersKind({ dataRoot, account = '', platform = process.pla
     } finally { if (pending) await forgetPassword(); }
   }
   return {
+    startup,
     async execute(params) {
       if (platform !== 'win32') throw refuse('USERS_PLATFORM_UNAVAILABLE', 'Users administration is not available on this platform.');
       validateUsersRequest(params);
+      await startup();
       settle();
+      for (const permit of permits.filter(item => item.until <= now())) await expire(permit);
       const { op, host } = params;
       if (op === 'status') {
         const value = await helperCall([...base('status', host), ...entryArgs(params)], '', false);
@@ -392,10 +425,11 @@ export function createUsersKind({ dataRoot, account = '', platform = process.pla
       if (op === 'sign-out') {
         jars.delete(host); consents.delete(host); permits = permits.filter(item => item.host !== host); setFailures(host, 0);
         await helperCall(base('sign-out', host), '', false);
+        clearPending();
         return { signedOut: true };
       }
       if (op === 'confirm') return confirmSignIn(host);
-      if (op === 'forget') { await helperCall([...base('forget', host), ...entryArgs(params)], '', false); return {}; }
+      if (op === 'forget') { await forgetEntry(host, params.entry); return {}; }
       if (op === 'prompt') {
         await publicHost(host);
         if ((params.kind ?? 'login') === 'login') {

@@ -16,7 +16,7 @@ import { usersRows, addressRows, lookalikeRows, HOST, b64 } from './fixtures/use
 import { flows, runNode, verify, tempDir } from './fixtures/users-flow.mjs';
 
 // The sha both sides name: here and platforms/odc/facade/tests/o11-users-hosted.test.mjs in the server line.
-const VAULT_SHA256 = '18b78b8935bb0a96c1bbc09c46b0615969fed3a6e4459fb08dd3977d3a795c6a';
+const VAULT_SHA256 = 'b7e6b8a27dee3d8d433bfb318ecc07bfb3fc55cd2ca6c59941e8059941480214';
 const tmp = t => { const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ssam-users-')); t.after(() => fs.rmSync(dir, { recursive: true, force: true })); return dir; };
 const codeOf = fn => { try { fn(); return 'ok'; } catch (error) { return error.code; } };
 
@@ -188,7 +188,7 @@ function helperFunctions(t, body) {
   const script = path.join(tmp(t), 'run.ps1');
   fs.writeFileSync(script, `$ErrorActionPreference='Stop'
 $ast=[Management.Automation.Language.Parser]::ParseFile(${JSON.stringify(USERS_HELPER).replace(/^"|"$/g, "'").replace(/\\\\/g, '\\')},[ref]$null,[ref]$null)
-foreach($fn in $ast.FindAll({param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst]},$true)){ if($fn.Name -in 'Attr','Form','Redact','LoginPlan','LoginResult','LoginAnswer','ConfirmForm','ReadCapped','Prefix','Sweep','SweepPasswords'){ . ([ScriptBlock]::Create($fn.Extent.Text)) } }
+foreach($fn in $ast.FindAll({param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst]},$true)){ if($fn.Name -in 'Attr','Form','Redact','LoginPlan','LoginResult','LoginAnswer','ConfirmForm','ReadCapped','Prefix','Sweep','SweepPasswords','SweepAllPasswords'){ . ([ScriptBlock]::Create($fn.Extent.Text)) } }
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 ${body}
@@ -244,6 +244,28 @@ test('signed in means a cookie, and an answer that left the login page on this h
  (LoginResult 302 '/Users/User_List.aspx' '' 0 $h)
 )|ConvertTo-Json -Compress`);
   assert.deepEqual(r, [true, true, true, false, false, false, false, false, false, false]);
+});
+test('C2: the sweep of a start takes every new password of this account, and only those', windowsOnly, t => {
+  const r = helperFunctions(t, `Add-Type -TypeDefinition 'public static class UsersVault { public static System.Collections.Generic.List<string> Gone=new System.Collections.Generic.List<string>(); public static bool Delete(string n,int a,int b){Gone.Add(n);return true;} }'
+$Scope='0123456789abcdefmine'
+$script:asked=$null
+function Names($filter){ $script:asked=$filter; @([pscustomobject]@{Name='one'},[pscustomobject]@{Name='two'}) }
+SweepAllPasswords
+@{asked=$script:asked;gone=@([UsersVault]::Gone)}|ConvertTo-Json -Compress`);
+  assert.equal(r.asked, 'SSAM/Agent/0123456789abcdef/mine/O11/*/UsersPassword/*');
+  assert.deepEqual(r.gone, ['one', 'two']);
+  assert.match(fs.readFileSync(USERS_HELPER, 'utf8'), /\$Mode -eq 'sweep'\) \{\r?\n  SweepAllPasswords/);
+});
+test('C2: the agent starts the sweep when a mark says a password may be there, and runs nothing without one', async t => {
+  for (const marked of [true, false]) {
+    const root = tmp(t), modes = [];
+    if (marked) { fs.mkdirSync(path.join(root, 'private', 'users'), { recursive: true }); fs.writeFileSync(path.join(root, 'private', 'users', 'passwords-pending'), ''); }
+    const agent = createAgent({ root, config: { credential: 'ssam_agent_' + 'a'.repeat(43), server: 'http://127.0.0.1:9' }, deps: { machine: null, locate: async () => null, processes: async () => [], platform: 'win32', fetch: async () => { throw new Error('no network here'); },
+      users: { exec: async (file, args) => { modes.push(args[args.indexOf('-Mode') + 1]); return JSON.stringify({ ok: true, available: false }); }, lookup: async () => [{ address: '93.184.216.34' }] } } });
+    assert.ok(agent);
+    for (let i = 0; i < 100 && marked && !modes.length; i++) await new Promise(r => setTimeout(r, 10));
+    assert.deepEqual(modes, marked ? ['sweep'] : []);
+  }
 });
 test('what the sign-in answers is what LoginResult decided, never a yes by itself', windowsOnly, t => {
   const r = helperFunctions(t, `$h='tenant-a.example.test'

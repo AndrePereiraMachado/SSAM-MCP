@@ -169,17 +169,39 @@ internal static class Program
             if (args is ["check-users-flow"])
             {
                 var flow = JsonNode.Parse(await Console.In.ReadToEndAsync()) as JsonObject ?? throw new ArgumentException("Expected a JSON object");
-                var kind = new UsersKinds(flow["root"]!.GetValue<string>(), flow["account"]!.GetValue<string>()) { HelperCommand = flow["helper"]!.AsArray().Select(item => item!.GetValue<string>()).ToArray(), ForceWindows = true };
                 long offset = 0;
                 string[] addresses = ["93.184.216.34"];
-                kind.Now = () => DateTimeOffset.UtcNow.AddMilliseconds(offset);
-                kind.Lookup = _ => Task.FromResult(addresses);
+                UsersKinds Make()
+                {
+                    var made = new UsersKinds(flow["root"]!.GetValue<string>(), flow["account"]!.GetValue<string>()) { HelperCommand = flow["helper"]!.AsArray().Select(item => item!.GetValue<string>()).ToArray(), ForceWindows = true };
+                    made.Now = () => DateTimeOffset.UtcNow.AddMilliseconds(offset);
+                    made.Lookup = _ => Task.FromResult(addresses);
+                    if (flow["permitMs"] is JsonValue permitMs) made.PermitTime = TimeSpan.FromMilliseconds(permitMs.GetValue<int>());
+                    return made;
+                }
+                var kind = Make();
                 var answers = new JsonArray();
                 foreach (var step in flow["steps"]!.AsArray())
                 {
                     if (step?["advanceMs"] is JsonValue advance) { offset += advance.GetValue<long>(); answers.Add((JsonNode?)null); continue; }
                     if (step?["dns"] is JsonArray dns) { addresses = dns.Select(item => item!.GetValue<string>()).ToArray(); answers.Add((JsonNode?)null); continue; }
                     if (step?["settled"] is JsonValue) { await kind.WindowsClosed(); answers.Add((JsonNode?)null); continue; }
+                    if (step?["restart"] is JsonValue) { kind = Make(); _ = kind.Startup(); answers.Add((JsonNode?)null); continue; }
+                    if (step?["waitFor"] is JsonObject target)
+                    {
+                        // Until the stand-in's state says so: an event, with a limit only for a flow that is wrong.
+                        var watched = flow["statePath"]!.GetValue<string>();
+                        for (var waited = 0; ; waited += 20)
+                        {
+                            JsonObject? seen = null;
+                            try { seen = JsonNode.Parse(await File.ReadAllTextAsync(watched)) as JsonObject; } catch (Exception e) when (e is IOException or System.Text.Json.JsonException) { }
+                            if (seen != null && target.All(pair => JsonNode.DeepEquals(seen[pair.Key], pair.Value))) break;
+                            if (waited > 60000) throw new TimeoutException("never reached " + target.ToJsonString());
+                            await Task.Delay(20);
+                        }
+                        answers.Add((JsonNode?)null);
+                        continue;
+                    }
                     if (step?["set"] is JsonObject set)
                     {
                         var path = flow["statePath"]!.GetValue<string>();

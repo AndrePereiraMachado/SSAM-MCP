@@ -1,5 +1,5 @@
 param(
- [ValidateSet('status','prompt','request','forget','hosts','login','confirm','sign-out')][string]$Mode='status',
+ [ValidateSet('status','prompt','request','forget','hosts','login','confirm','sign-out','sweep')][string]$Mode='status',
  [ValidatePattern('^[a-z0-9][a-z0-9.-]*$')][string]$HostName,
  [ValidateSet('login','password')][string]$Kind='login',
  [ValidatePattern('^[a-f0-9]{64}$')][string]$Entry,
@@ -66,6 +66,10 @@ function Sweep {
 function SweepPasswords {
  $limit=[DateTime]::UtcNow.AddMinutes(-15)
  foreach($item in (Names "$(Prefix)/*/UsersPassword/*")){ if($item.Written -lt $limit){ [void][UsersVault]::Delete($item.Name,1,0) } }
+}
+# An agent that starts holds no permit, so every new password of this account in the vault is left over.
+function SweepAllPasswords {
+ foreach($item in (Names "$(Prefix)/*/UsersPassword/*")){ [void][UsersVault]::Delete($item.Name,1,0) }
 }
 function B64([string]$s) { [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($s)) }
 # WebUtility: no limit on a long hidden field, which Uri.EscapeDataString has.
@@ -152,6 +156,11 @@ try {
  if ($Mode -eq 'sign-out') {
   [void][UsersVault]::Delete((Target 'login' ''),1,0)
   foreach($item in (Names "$(Prefix)/$HostName/UsersPassword/*")){ [void][UsersVault]::Delete($item.Name,1,0) }
+  @{ok=$true}|ConvertTo-Json -Compress
+  exit 0
+ }
+ if ($Mode -eq 'sweep') {
+  SweepAllPasswords
   @{ok=$true}|ConvertTo-Json -Compress
   exit 0
  }
