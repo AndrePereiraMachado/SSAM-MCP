@@ -119,6 +119,12 @@ export const flows = () => [
     { advanceMs: 600001 },
     { ...write('deactivate', { userId: '42' }), expect: { status: 200 } },
   ] },
+  { name: 'P4: closing a password window counts as a no', state: { promptAnswers: ['cancel', 'cancel', 'cancel'] }, steps: [...ready,
+    { params: { op: 'prompt', host: HOST, kind: 'password', entry: ENTRY, action: 'set-password', userId: '42' }, expect: { opened: true, alreadyOpen: false, visible: true } }, WAIT,
+    { params: { op: 'prompt', host: HOST, kind: 'password', entry: ENTRY, action: 'set-password', userId: '42' }, expect: { opened: true, alreadyOpen: false, visible: true } }, WAIT,
+    { params: { op: 'prompt', host: HOST, kind: 'password', entry: ENTRY, action: 'set-password', userId: '42' }, expect: { opened: true, alreadyOpen: false, visible: true } }, WAIT,
+    { params: { op: 'prompt', host: HOST, kind: 'password', entry: ENTRY, action: 'set-password', userId: '42' }, expect: { code: 'USERS_WINDOW_LIMIT' } },
+  ] },
   { name: 'A3: an approved host, a lookalike, an unresolved and a private one', steps: [
     { params: { op: 'prompt', host: 'tenant-a.example.test.evil.example' }, expect: { code: 'USERS_HOST_LOOKALIKE' } },
     { dns: ['10.0.0.5'] },

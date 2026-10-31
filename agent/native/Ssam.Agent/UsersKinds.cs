@@ -345,6 +345,7 @@ internal sealed partial class UsersKinds
                 }
                 if (record.Child.HasExited)
                 {
+                    if (!record.Applied) refusals.Add(Now());
                     try { File.Delete(record.StatusFile); } catch (IOException) { }
                     prompts.Remove(key);
                 }

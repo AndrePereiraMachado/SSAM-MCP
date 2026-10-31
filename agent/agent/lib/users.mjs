@@ -250,6 +250,7 @@ export function createUsersKind({ dataRoot, account = '', platform = process.pla
         else { consents.set(record.host, now() + CONSENT_MS); setFailures(record.host, 0); }
       }
       if ((record.child.exitCode ?? null) !== null) {
+        if (!record.applied) refusals.push(now());
         fs.rmSync(record.statusFile, { force: true });
         prompts.delete(key);
       }
