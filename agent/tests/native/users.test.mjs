@@ -1,5 +1,6 @@
-// o11.users in the native core: check-users-request answers the Node table row by row, the embedded helper is the Node agent's
-// file byte for byte, and the sources list the kind in both Hello forms and answer a clear refusal outside Windows.
+// o11.users in the native core, which is what ships in the app. check-users-request answers the Node table row by row. check-users-flow runs the
+// behaviour table of fixtures/users-flow.mjs on the real UsersKinds and UsersPage, over the same stand-in for the helper as the Node agent:
+// the same answers and the same requests. No vault, window or network.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -8,7 +9,8 @@ import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { usersRows, addressRows, lookalikeRows } from '../../agent/tests/fixtures/users-table.mjs';
-import { validateUsersRequest, isPrivateAddress, lookalikeOf, usersScope, USERS_HELPER } from '../../agent/lib/users.mjs';
+import { flows, prepare, verify, readState, nativeInput, runNode, tempDir } from '../../agent/tests/fixtures/users-flow.mjs';
+import { createUsersKind, validateUsersRequest, isPrivateAddress, lookalikeOf, usersScope, USERS_HELPER } from '../../agent/lib/users.mjs';
 
 const app = fileURLToPath(new URL('../../', import.meta.url));
 const dll = path.join(app, 'native/Ssam.Agent/bin/Release/net10.0/ssam-agent.dll');
@@ -28,7 +30,6 @@ test('native check-users-request answers the Node table row by row', { timeout: 
     assert.deepEqual(actual[i], row.expected === 'ok' ? { ok: true } : { error: row.expected }, row.label);
   });
 });
-
 test('native check-users-address and check-users-lookalike answer as the Node agent', { timeout: 120000 }, () => {
   const addresses = addressRows();
   const a = native(['check-users-address'], { input: JSON.stringify(addresses.map(([address]) => address)) });
@@ -41,7 +42,6 @@ test('native check-users-address and check-users-lookalike answer as the Node ag
   assert.deepEqual(JSON.parse(l.stdout), rows.map(([host, approved]) => lookalikeOf(host, approved)));
   assert.deepEqual(JSON.parse(l.stdout), rows.map(row => row[2]));
 });
-
 test('M3: the vault scope is the same in the native core and the Node agent', { timeout: 120000 }, () => {
   for (const [root, account] of [['C:\\agent\\data', 'ssam_agent_a'], ['C:\\agent\\data', 'ssam_agent_b'], ['C:\\Other\\Place', 'ssam_agent_a']]) {
     const result = native(['users-scope', root, account]);
@@ -49,17 +49,17 @@ test('M3: the vault scope is the same in the native core and the Node agent', { 
     assert.equal(result.stdout.trim(), usersScope(root, account));
   }
 });
-
 test('the helper embedded in the native core is the Node agent\'s file, byte for byte', { timeout: 120000 }, () => {
   const result = native(['users-helper-sha256']);
   assert.equal(result.status, 0, result.stderr);
   assert.equal(result.stdout.trim(), createHash('sha256').update(fs.readFileSync(USERS_HELPER)).digest('hex'));
 });
-
-test('the sources list the kind in both Hello forms and refuse it elsewhere than Windows', () => {
+test('the native channel lists the kind in both Hello forms, runs it, and gives it the credential as the account', () => {
   const channel = fs.readFileSync(path.join(app, 'native/Ssam.Agent/AgentChannel.cs'), 'utf8');
   assert.match(channel, /"file\.sync", UploadKinds\.Name, UsersKinds\.Name \}/);
   assert.match(channel, /\.Append\(UsersKinds\.Name\)/);
+  assert.match(channel, /new UsersKinds\(state\.Root, credential\)/);
+  assert.match(channel, /kind == UsersKinds\.Name\) value = await users\.Execute/);
   const kind = fs.readFileSync(path.join(app, 'native/Ssam.Agent/UsersKinds.cs'), 'utf8');
   assert.match(kind, /USERS_PLATFORM_UNAVAILABLE", "Users administration is not available on this platform\./);
 });

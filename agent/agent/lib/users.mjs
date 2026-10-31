@@ -1,20 +1,22 @@
-// The kind o11.users (fase4-28 r4, docs/FASE2-AGENTE.md 4.4): the Users application of an O11 environment through this
-// machine. What can sign in never leaves it: the administrator's password and new passwords are entries of this Windows
-// account's Credential Manager, typed only in a private window (users-vault.ps1), and the session cookies live in this
-// process's memory. The server reads the pages and keeps the receipts; no field of this kind carries a password or a cookie,
-// in either direction. The HTTP requests go only to https://<host>/Users/ of a host whose administrator the person stored
-// here (the helper checks the vault before any request), never redirected. Windows only: elsewhere the kind answers
-// USERS_PLATFORM_UNAVAILABLE, and the Hello still lists it, so the server can say that instead of "update your agent".
+// The kind o11.users (fase4-28 r4, docs/FASE2-AGENTE.md 4.4): the Users application of an O11 environment through this machine. What can
+// sign in never leaves it: the administrator's password and new passwords are entries of this Windows account's Credential Manager, typed
+// only in a private window (users-vault.ps1), and the session cookies live in this process's memory. The server reads pages and keeps
+// receipts, and it never builds a POST: it names an operation and its ids, and the agent reads the real page, builds the request from
+// the table of users-page.mjs and shows the person what it will send. No field carries a password or a cookie, in either direction.
+// The HTTP goes only to https://<host>/Users/ of a host the person approved in a window, never redirected. Windows only: elsewhere the kind
+// answers USERS_PLATFORM_UNAVAILABLE, and the Hello still lists it, so the server can say that instead of "update your agent".
 //
-// params: {op:'status', host, kind?, entry?} -> {available, principal}
-//         {op:'prompt', host, kind?, entry?, subject?} -> {opened, alreadyOpen, visible?, saved?}
-//         {op:'confirm', host, action, userId?, targetId?, labels?, changes?} -> {approved:true}: a window here, the person's yes. Without it
-//         the sign-in and every write are refused here (USERS_LOGIN_CONSENT_REQUIRED, USERS_CONSENT_REQUIRED): no answer is no, and the kind
-//         has no other way to get a yes. The rows are this agent's words and checked values; what comes from a page says so.
+// params: {op:'status', host, kind?, entry?} -> {available, principal, consent}
+//         {op:'prompt', host, kind?, entry?, action?, userId?, changes?} -> {opened, alreadyOpen, visible?, saved?}
+//         {op:'confirm', host, action:'sign-in'} -> {approved:true}: the person's yes to signing in, for 8 hours, in memory
 //         {op:'login', host} -> {authenticated}: the helper signs in by itself; the server chooses no field and sees no page
-//         {op:'request', host, url, method, fields:[[name, value]], secretRefs?:[{field, kind:'password', entry, part:'password'}]}
-//             -> {status, location, contentType, body} (the three texts in base64)
+//         {op:'request', host, url} -> {status, location, contentType, body} (the three texts in base64): a GET of a mapped page
+//         {op:'search', host, inactive?, text?} -> the same: the one POST without a window
+//         {op:'write', host, action, userId?, targetId?, changes?, entry?} -> the same: a window with what will be sent, then that POST.
+//              Without a yes nothing goes (USERS_CONFIRMATION_DECLINED, USERS_CONFIRMATION_TIMEOUT). create and set-password have the window that
+//              took the password for that exact user, or nothing goes (USERS_CONSENT_REQUIRED).
 //         {op:'forget', host, kind:'password', entry} -> {}
+//         {op:'sign-out', host} -> {signedOut}
 // Refusals happen before anything is started. The table of what passes is shared with the native core (check-users-request).
 import fs from 'node:fs';
 import path from 'node:path';
@@ -24,60 +26,64 @@ import { execFile, spawn } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { AgentError, refuse } from './errors.mjs';
+import { ACTIONS, PageNotKnown, planWrite, planSavePassword, planSearch, plainValue, isLoginPage, userPage, parsePage } from './users-page.mjs';
 
 export const USERS_KIND = 'o11.users';
 export const USERS_HELPER = fileURLToPath(new URL('./users-vault.ps1', import.meta.url));
-const OPS = new Set(['status', 'prompt', 'confirm', 'login', 'request', 'forget', 'sign-out']);
-const KEYS = Object.freeze({ status: ['op', 'host', 'kind', 'entry'], prompt: ['op', 'host', 'kind', 'entry', 'subject', 'action', 'userId'], confirm: ['op', 'host', 'action', 'userId', 'targetId', 'labels', 'changes'], login: ['op', 'host'], 'sign-out': ['op', 'host'], request: ['op', 'host', 'url', 'method', 'fields', 'secretRefs'], forget: ['op', 'host', 'kind', 'entry'] });
+const KEYS = Object.freeze({ status: ['op', 'host', 'kind', 'entry'], prompt: ['op', 'host', 'kind', 'entry', 'action', 'userId', 'changes'], confirm: ['op', 'host', 'action'],
+  login: ['op', 'host'], 'sign-out': ['op', 'host'], request: ['op', 'host', 'url'], search: ['op', 'host', 'inactive', 'text'],
+  write: ['op', 'host', 'action', 'userId', 'targetId', 'changes', 'entry'], forget: ['op', 'host', 'kind', 'entry'] });
 const HOST = /^(?=.{1,253}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/;
 const ENTRY = /^[a-f0-9]{64}$/;
-const FIELD = /^(?:[A-Za-z0-9_$]{1,200}[$_])?wt(?:Password|ConfirmPassword|NewPassword)Input$/;
-const PASSWORD_PAGE = /^\/Users\/(?:User_Edit|User_Show)\.aspx$/;
 const PAGE = /^\/Users\/(?:(?:Login|User_List|Inactive_Users|User_Show|User_Edit|Group_List|Group_Show|Group_Edit|Application_List|Application_Show|Role_Show|MyInfo)\.aspx)?$/;
 const QUERY = /^(?:(?:UserId|GroupId|RoleId|ApplicationId)=[1-9][0-9]{0,18})?$/;
-const MAX_FIELDS = 2000, MAX_FIELD_BYTES = 8 * 1024 * 1024, MAX_SUBJECT = 256;
 const MAX_PAGE_BASE64 = Math.ceil(262144 / 3) * 4 + 8;
 const PROMPT_WAIT_MS = 12000, HELPER_MS = 45000;
-
 const ID = /^[1-9][0-9]{0,18}$/;
-// What a person can approve: only these. Deleting and taking access away are not on the list, whatever a server asks.
-const CONFIRM = Object.freeze({
-  'sign-in': { text: 'Sign in to the Users application of this environment' },
-  update: { text: 'Change the details of this user', page: 'User_Edit', user: true },
-  activate: { text: 'Activate this user', page: 'User_Show', user: true },
-  deactivate: { text: 'Deactivate this user: the user loses access', page: 'User_Show', user: true },
-  'grant-role': { text: 'Give this role to this user', page: 'User_Show', user: true, target: 'Role id' },
-  'add-group': { text: 'Add this user to this group: the user gets its roles', page: 'User_Show', user: true, target: 'Group id' },
-});
-const CHANGES = new Set(['name', 'username', 'email', 'phone']);
-const CONSENT_MS = 8 * 3600 * 1000, PERMIT_MS = 120000, PASSWORD_PERMIT_MS = 300000, CONFIRM_MS = 130000;
-// A shown value: one line, no control or direction characters.
-// A name of a user in a window: nothing that can read as an instruction.
-const SUBJECT = /^[A-Za-z0-9._@+-]{1,100}$/;
+const CHANGE_LIMITS = Object.freeze({ name: 256, username: 250, email: 250, phone: 20 });
+const CONSENT_MS = 8 * 3600 * 1000, PASSWORD_PERMIT_MS = 300000, CONFIRM_MS = 130000;
 const WINDOWS_MAX = 20, REFUSALS_MAX = 3, WINDOWS_MS = 600000;
-const shown = (value, max) => text(value) && value.length <= max && !/[\u0000-\u001f\u007f\u200e\u200f\u202a-\u202e\u2066-\u2069]/.test(value);
+// Stops well before the lockout of the Users application: two wrong passwords, then a person.
+const LOGIN_FAILURES_MAX = 2;
+
 const invalid = message => refuse('PARAMS_INVALID', message);
 const text = value => typeof value === 'string';
-// A DNS name of an environment: never an address by number, this machine, a name only an internal network resolves, a service that
-// resolves to any address it is given, or a name written in another alphabet.
+// A name only a private network can resolve, a service that resolves to any address it is given.
 const INTERNAL = /\.(?:localhost|local|localdomain|internal|intranet|lan|home|corp|svc|arpa|nip\.io|sslip\.io|xip\.io)$/;
-const hostOk = host => {
-  if (!text(host) || !HOST.test(host) || INTERNAL.test(host) || host.split('.').some(label => label.startsWith('xn--'))) return false;
+const INTERNAL_TEXT = 'This name is only reachable inside a private network, and Users administration through the agent works only with environments on the internet. Nothing was sent. Use the Users application of that environment directly.';
+const hostProblem = host => {
+  if (!text(host) || !HOST.test(host) || host.split('.').some(label => label.startsWith('xn--'))) return invalid('host must be the plain DNS name of an environment, like name.outsystemsenterprise.com: no scheme, port, address or other alphabet');
   const last = host.split('.').at(-1);
-  return last.length >= 2 && !/^[0-9]+$|^0x/.test(last);
+  if (last.length < 2 || /^[0-9]+$|^0x/.test(last)) return invalid('host must be the plain DNS name of an environment, like name.outsystemsenterprise.com: no scheme, port, address or other alphabet');
+  if (INTERNAL.test(host)) return invalid('host must be the plain DNS name of an environment');
+  return null;
 };
-// A resolved address that is not on the internet: this machine, a private network, link-local (cloud metadata), multicast.
+// The sixteen bytes of an IPv6 address.
+function ipv6Bytes(address) {
+  let head = address.toLowerCase(), v4 = [];
+  const dotted = /^(.*:)(\d+\.\d+\.\d+\.\d+)$/.exec(head);
+  if (dotted) { head = dotted[1] + '0:0'; v4 = dotted[2].split('.').map(Number); }
+  const [left, right] = head.split('::');
+  const part = value => (value ? value.split(':').flatMap(group => { const n = parseInt(group, 16); return [n >> 8, n & 255]; }) : []);
+  const a = part(left), b = right === undefined ? [] : part(right);
+  const bytes = [...a, ...new Array(Math.max(0, 16 - a.length - b.length)).fill(0), ...b];
+  if (v4.length) bytes.splice(12, 4, ...v4);
+  return bytes;
+}
+const privateV4 = ([a, b, c]) => a === 0 || a === 10 || a === 127 || a >= 224 || (a === 100 && b >= 64 && b <= 127) || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 192 && b === 0 && c === 0) || (a === 198 && (b === 18 || b === 19));
+// A resolved address that is not on the internet: this machine, a private network, link-local (cloud metadata), multicast, or an IPv6 form
+// that carries one of those inside it (mapped, compatible, NAT64, 6to4).
 export function isPrivateAddress(address) {
   const kind = net.isIP(address);
-  if (kind === 4) {
-    const [a, b, c] = address.split('.').map(Number);
-    return a === 0 || a === 10 || a === 127 || a >= 224 || (a === 100 && b >= 64 && b <= 127) || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 192 && b === 0 && c === 0) || (a === 198 && (b === 18 || b === 19));
-  }
+  if (kind === 4) return privateV4(address.split('.').map(Number));
   if (kind !== 6) return true;
-  const lower = address.toLowerCase();
-  const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/.exec(lower);
-  if (mapped) return isPrivateAddress(mapped[1]);
-  return lower === '::' || lower === '::1' || /^f[cd]/.test(lower) || /^fe[89ab]/.test(lower) || lower.startsWith('ff');
+  const b = ipv6Bytes(address);
+  const zeros = n => b.slice(0, n).every(x => x === 0);
+  if (zeros(16) || (zeros(15) && b[15] === 1)) return true;
+  if ((zeros(10) && b[10] === 255 && b[11] === 255) || zeros(12)) return privateV4(b.slice(12));
+  if (b[0] === 0 && b[1] === 0x64 && b[2] === 0xff && b[3] === 0x9b) return privateV4(b.slice(12));
+  if (b[0] === 0x20 && b[1] === 0x02) return privateV4(b.slice(2, 6));
+  return (b[0] & 0xfe) === 0xfc || (b[0] === 0xfe && (b[1] & 0xc0) === 0x80) || (b[0] === 0xfe && (b[1] & 0xc0) === 0xc0) || b[0] === 0xff;
 }
 const distance = (a, b) => {
   let row = Array.from({ length: b.length + 1 }, (_, i) => i);
@@ -93,71 +99,77 @@ export function lookalikeOf(host, approved) {
     return host.includes(other) || other.includes(host) || first === otherFirst || (rest.join('.') === otherRest.join('.') && distance(first, otherFirst) <= 1);
   }) ?? null;
 }
-const requestUrl = (url, host) => {
-  if (!text(url) || url.length > 2048 || !url.startsWith(`https://${host}/`) || /[\\\s\u0000-\u001f]|%2e|%2f|%5c/i.test(url)) throw invalid('url is not a Users page of the host');
-  const rest = url.slice(`https://${host}`.length), mark = rest.indexOf('?');
-  const page = mark < 0 ? rest : rest.slice(0, mark), query = mark < 0 ? '' : rest.slice(mark + 1);
-  if (rest.includes('#') || !PAGE.test(page) || !QUERY.test(query)) throw invalid('url is not a Users page of the host');
-  return { page };
-};
+function validChanges(changes, needsNew) {
+  if (changes === null || typeof changes !== 'object' || Array.isArray(changes)) throw invalid('changes are name, username, email and phone');
+  const keys = Object.keys(changes);
+  if (keys.length === 0) throw invalid('changes are name, username, email and phone');
+  for (const key of keys) {
+    if (!Object.hasOwn(CHANGE_LIMITS, key)) throw invalid('changes are name, username, email and phone');
+    if (!plainValue(changes[key], CHANGE_LIMITS[key])) throw invalid(`changes.${key} must be plain text: within its limit, one line, no invisible characters or repeated spaces, because the window shows exactly what is sent`);
+  }
+  if (needsNew && (!changes.username || !changes.name)) throw invalid('a new user needs its name and username');
+}
 
 // What may run, checked before anything is started (the table tests/native/users.test.mjs shares with the native core).
 export function validateUsersRequest(params) {
   if (!params || typeof params !== 'object' || Array.isArray(params)) throw invalid('params must be an object');
-  if (!OPS.has(params.op)) throw invalid('op must be status, prompt, login, request or forget');
+  if (!text(params.op) || !Object.hasOwn(KEYS, params.op)) throw invalid('op must be status, prompt, confirm, login, request, search, write, forget or sign-out');
   for (const key of Object.keys(params)) if (!KEYS[params.op].includes(key)) throw invalid('unknown parameter ' + key);
-  if (!hostOk(params.host)) throw invalid('host must be the DNS name of an environment');
-  if (params.op === 'login' || params.op === 'sign-out') return;
-  if (params.op === 'confirm') {
-    const rule = text(params.action) && Object.hasOwn(CONFIRM, params.action) ? CONFIRM[params.action] : null;
-    if (!rule) throw invalid('action is not one a person can approve here');
-    if (rule.user ? !(text(params.userId) && ID.test(params.userId)) : params.userId !== undefined) throw invalid('userId is a number as text, on a write');
-    if (rule.target ? !(text(params.targetId) && ID.test(params.targetId)) : params.targetId !== undefined) throw invalid('targetId is a number as text, on a role or a group');
-    for (const [key, value] of Object.entries(params.labels ?? {})) if (!['user', 'target'].includes(key) || !shown(value, 120)) throw invalid('labels are one short line each');
-    if (params.changes !== undefined && params.action !== 'update') throw invalid('changes belong to update');
-    for (const [key, value] of Object.entries(params.changes ?? {})) if (!CHANGES.has(key) || !shown(value, 256)) throw invalid('changes are name, username, email and phone, one line each');
+  const problem = hostProblem(params.host);
+  if (problem) throw problem;
+  const op = params.op;
+  if (op === 'login' || op === 'sign-out') return;
+  if (op === 'confirm') { if (params.action !== 'sign-in') throw invalid('the only yes asked by itself is the sign-in: a write opens its own window'); return; }
+  if (op === 'request') {
+    const url = params.url;
+    if (!text(url) || url.length > 2048 || !url.startsWith(`https://${params.host}/`) || /[\\\s\u0000-\u001f]|%2e|%2f|%5c/i.test(url)) throw invalid('url is not a Users page of the host');
+    const rest = url.slice(`https://${params.host}`.length), mark = rest.indexOf('?');
+    if (rest.includes('#') || !PAGE.test(mark < 0 ? rest : rest.slice(0, mark)) || !QUERY.test(mark < 0 ? '' : rest.slice(mark + 1))) throw invalid('url is not a Users page of the host');
     return;
   }
-  if (params.op !== 'request') {
-    const kind = params.kind ?? 'login';
-    if (kind !== 'login' && kind !== 'password') throw invalid('kind must be login or password');
-    if (kind === 'password' ? !(text(params.entry) && ENTRY.test(params.entry)) : params.entry !== undefined) throw invalid('entry belongs to kind password, 64 hex');
-    if (params.op === 'forget' && kind !== 'password') throw invalid('only a new password is forgotten');
-    if (params.op === 'prompt') {
-      if (kind === 'password' && params.action !== 'create' && params.action !== 'set-password') throw invalid('a new password is for create or set-password');
-      if (kind === 'login' && (params.action !== undefined || params.userId !== undefined)) throw invalid('the sign-in window takes only a host');
-      if (params.action === 'set-password' ? !(text(params.userId) && ID.test(params.userId)) : params.userId !== undefined) throw invalid('userId is a number as text, on set-password');
-    }
-    if (params.subject !== undefined && (kind !== 'password' || !text(params.subject) || !SUBJECT.test(params.subject))) throw invalid('subject is the username of a new password');
+  if (op === 'search') {
+    if (params.inactive !== undefined && typeof params.inactive !== 'boolean') throw invalid('inactive is true or false');
+    if (params.text !== undefined && (!text(params.text) || params.text.length > 256)) throw invalid('text is what to search for');
     return;
   }
-  const { page } = requestUrl(params.url, params.host);
-  if (params.method !== 'GET' && params.method !== 'POST') throw invalid('method must be GET or POST');
-  const { fields = [], secretRefs = [] } = params;
-  if (!Array.isArray(fields) || fields.length > MAX_FIELDS || !fields.every(f => Array.isArray(f) && f.length === 2 && text(f[0]) && text(f[1]))) throw invalid('fields must be [name, value] texts');
-  if (page === '/Users/Login.aspx' && params.method === 'POST') throw invalid('the sign-in is op login');
-  if (fields.reduce((n, f) => n + f[0].length + f[1].length, 0) > MAX_FIELD_BYTES) throw invalid('fields are too large');
-  if (!Array.isArray(secretRefs) || secretRefs.length > 2) throw invalid('at most 2 secretRefs');
-  for (const ref of secretRefs) {
-    if (!ref || typeof ref !== 'object' || Array.isArray(ref) || Object.keys(ref).some(k => !['field', 'kind', 'entry', 'part'].includes(k))) throw invalid('secretRefs take field, kind, entry and part');
-    if (!text(ref.field) || !FIELD.test(ref.field) || ref.part !== 'password') throw invalid('a new password goes only into a password field');
-    if (ref.kind !== 'password' || !text(ref.entry) || !ENTRY.test(ref.entry) || params.method !== 'POST' || !PASSWORD_PAGE.test(page)) throw invalid('a new password goes only into the form of a user');
+  if (op === 'write') {
+    if (!text(params.action) || !Object.hasOwn(ACTIONS, params.action)) throw invalid('this operation does not exist in this agent');
+    const action = params.action;
+    if (action === 'create' ? params.userId !== undefined : !(text(params.userId) && ID.test(params.userId))) throw invalid('userId is a number as text');
+    if (['grant-role', 'add-group'].includes(action) ? !(text(params.targetId) && ID.test(params.targetId)) : params.targetId !== undefined) throw invalid('targetId is a number as text, on a role or a group');
+    if (action === 'update' || action === 'create') validChanges(params.changes, action === 'create'); else if (params.changes !== undefined) throw invalid('changes belong to update and create');
+    if (action === 'create' || action === 'set-password' ? !(text(params.entry) && ENTRY.test(params.entry)) : params.entry !== undefined) throw invalid('entry names the new password of create or set-password');
+    return;
+  }
+  const kind = params.kind ?? 'login';
+  if (kind !== 'login' && kind !== 'password') throw invalid('kind must be login or password');
+  if (kind === 'password' ? !(text(params.entry) && ENTRY.test(params.entry)) : params.entry !== undefined) throw invalid('entry belongs to kind password, 64 hex');
+  if (op === 'forget' && kind !== 'password') throw invalid('only a new password is forgotten');
+  if (op === 'prompt') {
+    if (kind === 'login') { if (params.action !== undefined || params.userId !== undefined || params.changes !== undefined) throw invalid('the sign-in window takes only a host'); return; }
+    if (params.action === 'set-password') { if (!(text(params.userId) && ID.test(params.userId)) || params.changes !== undefined) throw invalid('set-password names the user by its id, and the agent reads who that is'); return; }
+    if (params.action !== 'create') throw invalid('a new password is for create or set-password');
+    if (params.userId !== undefined) throw invalid('a new user has no id');
+    validChanges(params.changes, true);
   }
 }
 
-// The vault scope: this installation and this account of the server. Its entries are its own: another token on this installation
-// inherits nothing, and an SSAM installed on the same Windows account is apart. No account in tests.
-const short = text => createHash('sha256').update(text).digest('hex').slice(0, 16);
+// The vault scope: this installation and this account of the server. Its entries are its own: another token on this installation inherits
+// nothing, and an SSAM installed on the same Windows account is apart. No account in tests.
+const short = value => createHash('sha256').update(value).digest('hex').slice(0, 16);
 export const usersScope = (dataRoot, account = '') => short(path.resolve(dataRoot).toLowerCase()) + short('account|' + account);
 const powershell = env => path.join(env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
 const FAILURES = Object.freeze({
   USERS_PAGE_TOO_LARGE: 'This page is larger than a Users page can be; it was not read.',
   USERS_LOGIN_LAYOUT_CHANGED: 'The sign-in page of this environment is not the one this agent knows; nothing was sent.',
-  USERS_HOST_LOOKALIKE: 'This name reads like an environment already approved on this machine, so no window was opened and nothing was sent.',
+  USERS_HOST_LOOKALIKE: 'This name reads like an environment already approved on this machine, so no window was opened and nothing was sent. If it really is another environment, sign out of the other one first.',
   USERS_HOST_PRIVATE: 'This environment resolves to an address that is not on the internet, so nothing was sent.',
-  USERS_HOST_UNRESOLVED: 'This environment does not resolve, so nothing was sent.', USERS_HOST_NOT_AUTHENTICATED: 'No Users administrator is stored for this environment on this machine; nothing was sent.' });
+  USERS_HOST_UNRESOLVED: 'This environment does not resolve, so nothing was sent.',
+  USERS_HOST_NOT_AUTHENTICATED: 'No Users administrator is stored for this environment on this machine; nothing was sent.',
+});
+const LOGIN_PAUSED = 'Signing in failed twice, so it stopped before the Users application locks this administrator. A person signs in again in the window of this agent, or checks the account in the Users application first.';
 
-// exec(file, args, input) -> stdout, start(file, args) -> a child: the tests' seams.
+// exec(file, args, input, timeoutMs) -> stdout, start(file, args) -> a child: the tests' seams.
 export function createUsersKind({ dataRoot, account = '', platform = process.platform, env = process.env, helper = USERS_HELPER, exec, start, wait = ms => new Promise(r => setTimeout(r, ms)), lookup = name => dns.promises.lookup(name, { all: true }), now = Date.now } = {}) {
   const jars = new Map(), prompts = new Map(), consents = new Map();
   let permits = [];
@@ -178,13 +190,13 @@ export function createUsersKind({ dataRoot, account = '', platform = process.pla
     try { value = JSON.parse(stdout.trim().split(/\r?\n/).at(-1)); } catch { /* below */ }
     if (value?.ok === true) return value;
     const code = typeof value?.code === 'string' && /^USERS_[A-Z_]{1,60}$/.test(value.code) ? value.code : 'USERS_PRIVATE_REQUEST_FAILED';
-    throw new AgentError(code, FAILURES[code] ?? 'The private Users request failed; no automatic retry.', { executed: code === 'USERS_HOST_NOT_AUTHENTICATED' ? false : executed });
+    throw new AgentError(code, FAILURES[code] ?? 'The private Users request failed; no automatic retry.', { executed: code === 'USERS_HOST_NOT_AUTHENTICATED' || code === 'USERS_LOGIN_LAYOUT_CHANGED' ? false : executed });
   }
-  // Every request: what the name resolves to now. A short cache, so a page's requests do not each ask.
+  // What a name resolves to now, with a short cache so a page's requests do not each ask.
   const resolved = new Map();
   async function publicHost(host) {
     const known = resolved.get(host);
-    if (known && now() - known < 60000) return;
+    if (known !== undefined && now() - known < 60000) return;
     let addresses;
     try { addresses = await lookup(host); } catch { throw refuse('USERS_HOST_UNRESOLVED', FAILURES.USERS_HOST_UNRESOLVED); }
     if (!addresses?.length) throw refuse('USERS_HOST_UNRESOLVED', FAILURES.USERS_HOST_UNRESOLVED);
@@ -201,8 +213,8 @@ export function createUsersKind({ dataRoot, account = '', platform = process.pla
       jars.set(host, jar);
     }
   }
-  // One window at a time; a person who keeps saying no is not asked again for a while; and a ceiling, so a window is never a way to wear
-  // a person down. A yes does not count against the second: approving seven changes is work, not pressure.
+  // One window at a time; a person who keeps saying no is not asked again for a while; and a ceiling, so a window is never a way to wear a
+  // person down. A yes does not count against the second: approving seven changes is work, not pressure. A closed window is a no.
   let confirming = false, opened = [], refusals = [];
   function takeWindow() {
     settle();
@@ -213,82 +225,155 @@ export function createUsersKind({ dataRoot, account = '', platform = process.pla
     opened.push(now());
   }
   const hasConsent = host => (consents.get(host) ?? 0) > now();
+  const needConsent = host => { if (!hasConsent(host)) throw refuse('USERS_LOGIN_CONSENT_REQUIRED', 'No person on this machine approved signing in to this environment, so nothing was sent.'); };
+  // The sign-in brake survives a restart: a file of this agent, with a host and a count and nothing else. Only a person's new window resets it.
+  const failuresFile = path.join(promptDir, 'sign-in-failures.json');
+  const readFailures = () => { try { return JSON.parse(fs.readFileSync(failuresFile, 'utf8')); } catch { return {}; } };
+  const failuresOf = host => Number(readFailures()[scope + '|' + host]) || 0;
+  function setFailures(host, count) {
+    const all = readFailures();
+    if ((Number(all[scope + '|' + host]) || 0) === count) return;
+    if (count > 0) all[scope + '|' + host] = count; else delete all[scope + '|' + host];
+    fs.mkdirSync(promptDir, { recursive: true });
+    fs.writeFileSync(failuresFile, JSON.stringify(all));
+  }
+  const notPaused = () => {};
   // What a window the person filled gives: a prompt's status file says saved only after the vault has it.
   function settle() {
     for (const [key, record] of prompts) {
       let phase = null;
       try { phase = fs.readFileSync(record.statusFile, 'utf8'); } catch { /* not yet, or gone */ }
+      if (phase) record.phase = phase;
       if (phase === 'saved' && !record.applied) {
         record.applied = true;
-        // create: its Save. set-password: the button that shows the form, and its Save.
-        if (record.kind === 'password') permits.push({ host: record.host, page: record.action === 'create' ? '/Users/User_Edit.aspx' : `/Users/User_Show.aspx?UserId=${record.userId}`, posts: record.action === 'create' ? 1 : 2, until: now() + PASSWORD_PERMIT_MS, entry: record.entry });
-        else consents.set(record.host, now() + CONSENT_MS);
+        if (record.kind === 'password') permits.push({ host: record.host, action: record.action, userId: record.userId, changes: record.changes, entry: record.entry, until: now() + PASSWORD_PERMIT_MS });
+        else { consents.set(record.host, now() + CONSENT_MS); setFailures(record.host, 0); }
       }
-      if ((record.child.exitCode ?? null) !== null) { fs.rmSync(record.statusFile, { force: true }); prompts.delete(key); }
+      if ((record.child.exitCode ?? null) !== null) {
+        fs.rmSync(record.statusFile, { force: true });
+        prompts.delete(key);
+      }
     }
   }
-  function usePermit(host, page, entries) {
-    permits = permits.filter(item => item.until > now() && item.posts > 0);
-    const permit = permits.find(item => item.host === host && item.page === page && entries.every(entry => item.entry === entry) && (entries.length > 0 || true));
-    if (!permit) throw refuse('USERS_CONSENT_REQUIRED', 'No person on this machine approved this change, so it was not sent.');
-    permit.posts -= 1;
-    if (entries.length) permit.posts = 0;
+  function usePermit(p) {
+    permits = permits.filter(item => item.until > now());
+    const at = permits.findIndex(item => item.host === p.host && item.action === p.action && item.entry === p.entry && item.userId === p.userId && JSON.stringify(item.changes ?? null) === JSON.stringify(p.changes ?? null));
+    if (at < 0) throw refuse('USERS_CONSENT_REQUIRED', 'No person on this machine approved this exact change in a window, so it was not sent.');
+    permits.splice(at, 1);
   }
-  async function confirm(p) {
-    await publicHost(p.host);
-    const stored = await helperCall(base('status', p.host), '', false);
-    if (stored.available !== true) throw refuse('USERS_HOST_NOT_AUTHENTICATED', FAILURES.USERS_HOST_NOT_AUTHENTICATED);
-    const rule = CONFIRM[p.action];
-    const rows = [{ label: 'Environment', value: p.host }, { label: 'Signed in as', value: stored.principal ?? '' }, { label: 'What will happen', value: rule.text }];
-    if (rule.user) rows.push({ label: 'User id', value: p.userId });
-    if (p.labels?.user) rows.push({ label: 'User name', value: p.labels.user, data: true });
-    if (rule.target) rows.push({ label: rule.target, value: p.targetId });
-    if (p.labels?.target) rows.push({ label: rule.target.replace(' id', ' name'), value: p.labels.target, data: true });
-    for (const [key, value] of Object.entries(p.changes ?? {})) rows.push({ label: 'New ' + key, value });
+  async function ask(host, rows) {
     const input = Buffer.from(JSON.stringify({ rows })).toString('base64');
-    const args = ['-NoLogo', '-NoProfile', '-STA', '-ExecutionPolicy', 'Bypass', '-File', helper, '-Mode', 'confirm', '-HostName', p.host, '-Scope', scope];
+    const args = ['-NoLogo', '-NoProfile', '-STA', '-ExecutionPolicy', 'Bypass', '-File', helper, '-Mode', 'confirm', '-HostName', host, '-Scope', scope];
     takeWindow();
     confirming = true;
     let answer;
     try { answer = await helperCall(args, input, false, CONFIRM_MS); }
     catch { refusals.push(now()); throw refuse('USERS_CONFIRMATION_TIMEOUT', 'No answer from the person on this machine, so nothing was sent.'); }
     finally { confirming = false; }
-    if (answer.approved !== true) refusals.push(now());
-    if (answer.approved !== true) throw refuse(answer.timedOut ? 'USERS_CONFIRMATION_TIMEOUT' : 'USERS_CONFIRMATION_DECLINED', answer.timedOut ? 'No answer from the person on this machine, so nothing was sent.' : 'The person on this machine declined, so nothing was sent.');
-    if (p.action === 'sign-in') consents.set(p.host, now() + CONSENT_MS);
-    // One POST, the one the person approved: nothing is left for another event of the same page afterwards.
-    else permits.push({ host: p.host, page: `/Users/${rule.page}.aspx?UserId=${p.userId}`, posts: 1, until: now() + PERMIT_MS });
+    if (answer.approved === true) return;
+    refusals.push(now());
+    throw refuse(answer.timedOut ? 'USERS_CONFIRMATION_TIMEOUT' : 'USERS_CONFIRMATION_DECLINED', answer.timedOut ? 'No answer from the person on this machine, so nothing was sent.' : 'The person on this machine declined, so nothing was sent.');
+  }
+  async function storedLogin(host) {
+    const stored = await helperCall(base('status', host), '', false);
+    if (stored.available !== true) throw refuse('USERS_HOST_NOT_AUTHENTICATED', FAILURES.USERS_HOST_NOT_AUTHENTICATED);
+    return stored;
+  }
+  async function confirmSignIn(host) {
+    await publicHost(host);
+    const stored = await storedLogin(host);
+    await ask(host, [{ label: 'Environment', value: host }, { label: 'Signed in as', value: stored.principal ?? '' }, { label: 'What will happen', value: 'Sign in to the Users application of this environment' }]);
+    consents.set(host, now() + CONSENT_MS);
     return { approved: true };
   }
   async function openPrompt(p) {
     const key = [p.host, p.kind ?? 'login', p.entry ?? ''].join('|');
     settle();
     if (prompts.has(key)) return { opened: false, alreadyOpen: true };
+    let subject = '', rows = [];
+    if ((p.kind ?? 'login') === 'password') {
+      if (p.action === 'set-password') {
+        // Who this is comes from the environment's own page of that id, never from the request.
+        const page = await readPage(p.host, userPage(p.userId));
+        const plan = planWrite({ action: 'set-password', host: p.host, userId: p.userId }, [page]);
+        subject = plan.username;
+        rows = plan.rows;
+      } else {
+        subject = p.changes.username;
+        rows = [{ label: 'What will happen', value: ACTIONS.create.text }, ...Object.entries(p.changes).map(([name, value]) => ({ label: 'New ' + name, value }))];
+      }
+    }
     takeWindow();
     fs.mkdirSync(promptDir, { recursive: true });
     const statusFile = path.join(promptDir, 'prompt-' + randomUUID() + '.status');
     const args = ['-NoLogo', '-NoProfile', '-STA', '-ExecutionPolicy', 'Bypass', '-File', helper, '-Mode', 'prompt', '-HostName', p.host, '-Scope', scope, ...entryArgs(p),
-      '-Subject', p.subject ?? '', '-PromptStatusPath', statusFile];
+      '-Subject', subject, '-Rows', Buffer.from(JSON.stringify(rows)).toString('base64'), '-PromptStatusPath', statusFile];
     const child = startHelper(powershell(env), args);
-    prompts.set(key, { child, statusFile, host: p.host, kind: p.kind ?? 'login', entry: p.entry, action: p.action, userId: p.userId, applied: false });
+    const record = { child, statusFile, host: p.host, kind: p.kind ?? 'login', entry: p.entry, action: p.action, userId: p.userId, changes: p.changes, applied: false, phase: null };
+    prompts.set(key, record);
     child.on?.('error', () => prompts.delete(key));
     // The status file stays until the window closes: it says saved only then.
     child.on?.('exit', () => settle());
     child.unref?.();
+    // A window that was shown counts, even if it has already closed by the time this looks.
     for (let waited = 0; waited < PROMPT_WAIT_MS; waited += 100) {
-      if (fs.existsSync(statusFile)) {
-        const phase = fs.readFileSync(statusFile, 'utf8');
-        if (phase === 'visible' || phase === 'saved') { settle(); return { opened: true, alreadyOpen: false, visible: true, ...(phase === 'saved' ? { saved: true } : {}) }; }
-      }
+      settle();
+      if (record.phase === 'visible' || record.phase === 'saved') return { opened: true, alreadyOpen: false, visible: true, ...(record.phase === 'saved' ? { saved: true } : {}) };
       if ((child.exitCode ?? null) !== null) break;
       await wait(100);
     }
-    settle();
     fs.rmSync(statusFile, { force: true });
     prompts.delete(key);
     throw new AgentError('USERS_PROMPT_NOT_VISIBLE', 'The private window could not be confirmed visible.', { executed: null });
   }
-  const forget = (host, entry) => helperCall([...base('forget', host), '-Kind', 'password', '-Entry', entry], '', false);
+  // One request of this agent, with this agent's session. A page that asks to sign in again ends that session, and counts toward the brake.
+  async function send(host, url, method, fields = [], secretRefs = []) {
+    const input = Buffer.from(JSON.stringify({ url, method, fields, secretRefs, cookie: cookieHeader(host) })).toString('base64');
+    const value = await helperCall(base('request', host), input, method === 'POST' ? null : false);
+    // A larger answer would go through the server's disk as a blob, and stop the server that reads it.
+    if ((value.body ?? '').length > MAX_PAGE_BASE64) throw new AgentError('USERS_PAGE_TOO_LARGE', FAILURES.USERS_PAGE_TOO_LARGE, { executed: method === 'POST' ? null : false });
+    storeCookies(host, value.setCookie);
+    const html = Buffer.from(value.body ?? '', 'base64').toString('utf8');
+    if (isLoginPage(html)) { jars.delete(host); setFailures(host, failuresOf(host) + 1); } else if (failuresOf(host) > 0 && value.status === 200) setFailures(host, 0);
+    return { status: value.status, location: value.location ?? '', contentType: value.contentType ?? '', body: value.body ?? '', html };
+  }
+  const answerOf = ({ status, location, contentType, body }) => ({ status, location, contentType, body });
+  async function readPage(host, route) {
+    const page = await send(host, `https://${host}${route}`, 'GET');
+    if (page.status !== 200 || isLoginPage(page.html)) throw new PageNotKnown(route);
+    return page.html;
+  }
+  const secretRefsOf = (plan, entry) => plan.secretFields.map(field => ({ field, kind: 'password', entry, part: 'password' }));
+  // The operation as this agent will send it. The window comes from this same plan.
+  async function write(p) {
+    const { host, action } = p;
+    needConsent(host);
+    notPaused(host);
+    await publicHost(host);
+    const passwordOp = action === 'create' || action === 'set-password';
+    if (passwordOp) usePermit(p);
+    // From here a new password has had its one chance: it leaves the vault however this ends.
+    let pending = passwordOp;
+    const forgetPassword = async () => { pending = false; try { await helperCall([...base('forget', host), '-Kind', 'password', '-Entry', p.entry], '', false); return true; } catch { return false; } };
+    try {
+    const stored = passwordOp ? null : await storedLogin(host);
+    const routes = ACTIONS[action].read(p);
+    const pages = [];
+    for (const route of routes) pages.push(await readPage(host, route));
+    const plan = planWrite(p, pages);
+    if (action === 'deactivate' && stored.principal && plan.username.toLowerCase() === String(stored.principal).toLowerCase()) throw refuse('USERS_SELF_LOCKOUT_REFUSED', 'The administrator signed in here cannot be deactivated from here.');
+    if (!passwordOp) await ask(host, [{ label: 'Environment', value: host }, { label: 'Signed in as', value: stored.principal ?? '' }, ...plan.rows]);
+    let answer;
+    if (action === 'set-password') {
+      const shown = await send(host, plan.url, 'POST', plan.fields);
+      const save = planSavePassword(p, pages[0], shown.html);
+      answer = await send(host, save.url, 'POST', save.fields, secretRefsOf(save, p.entry));
+    } else answer = await send(host, plan.url, 'POST', plan.fields, passwordOp ? secretRefsOf(plan, p.entry) : []);
+    const value = answerOf(answer);
+    if (passwordOp) value.passwordForgotten = await forgetPassword();
+    return value;
+    } finally { if (pending) await forgetPassword(); }
+  }
   return {
     async execute(params) {
       if (platform !== 'win32') throw refuse('USERS_PLATFORM_UNAVAILABLE', 'Users administration is not available on this platform.');
@@ -300,18 +385,11 @@ export function createUsersKind({ dataRoot, account = '', platform = process.pla
         return { available: value.available === true, principal: typeof value.principal === 'string' ? value.principal : null, consent: hasConsent(host) };
       }
       if (op === 'sign-out') {
-        jars.delete(host); consents.delete(host); permits = permits.filter(item => item.host !== host);
+        jars.delete(host); consents.delete(host); permits = permits.filter(item => item.host !== host); setFailures(host, 0);
         await helperCall(base('sign-out', host), '', false);
         return { signedOut: true };
       }
-      if (op === 'confirm') return confirm(params);
-      if (op === 'login') {
-        if (!hasConsent(host)) throw refuse('USERS_LOGIN_CONSENT_REQUIRED', 'No person on this machine approved signing in to this environment, so nothing was sent.');
-        await publicHost(host);
-        const value = await helperCall(base('login', host), '', null);
-        storeCookies(host, value.setCookie);
-        return { authenticated: value.authenticated === true };
-      }
+      if (op === 'confirm') return confirmSignIn(host);
       if (op === 'forget') { await helperCall([...base('forget', host), ...entryArgs(params)], '', false); return {}; }
       if (op === 'prompt') {
         await publicHost(host);
@@ -320,31 +398,26 @@ export function createUsersKind({ dataRoot, account = '', platform = process.pla
           const { hosts = [] } = await helperCall(base('hosts', host), '', false);
           if (lookalikeOf(host, hosts)) throw refuse('USERS_HOST_LOOKALIKE', FAILURES.USERS_HOST_LOOKALIKE);
           jars.delete(host);
-        } else {
-          const stored = await helperCall(base('status', host), '', false);
-          if (stored.available !== true) throw refuse('USERS_HOST_NOT_AUTHENTICATED', FAILURES.USERS_HOST_NOT_AUTHENTICATED);
-        }
+        } else await storedLogin(host);
         return openPrompt(params);
       }
-      if (!hasConsent(host)) throw refuse('USERS_LOGIN_CONSENT_REQUIRED', 'No person on this machine approved signing in to this environment, so nothing was sent.');
+      needConsent(host);
+      notPaused(host);
+      if (op === 'write') return write(params);
       await publicHost(host);
-      // Only the two searches post without a yes. Every other form needs the person's yes for this page.
-      if (params.method === 'POST') {
-        const target = new URL(params.url);
-        if (!/^\/Users\/(?:User_List|Inactive_Users)\.aspx$/.test(target.pathname) || params.secretRefs?.length)
-          usePermit(host, target.pathname + target.search, [...new Set((params.secretRefs ?? []).map(ref => ref.entry))]);
+      if (op === 'login') {
+        const value = await helperCall(base('login', host), '', null);
+        storeCookies(host, value.setCookie);
+        const authenticated = value.authenticated === true;
+        setFailures(host, authenticated ? failuresOf(host) : failuresOf(host) + 1);
+        return { authenticated };
       }
-      let forgotten = true;
-      const input = Buffer.from(JSON.stringify({ url: params.url, method: params.method, fields: params.fields ?? [], secretRefs: params.secretRefs ?? [], cookie: cookieHeader(host) })).toString('base64');
-      const passwords = [...new Set((params.secretRefs ?? []).filter(ref => ref.kind === 'password').map(ref => ref.entry))];
-      let value;
-      try { value = await helperCall(base('request', host), input, null); }
-      finally { for (const entry of passwords) await forget(host, entry).catch(() => { forgotten = false; }); }
-      // A larger answer would go through the server's disk as a blob, and stop the server that reads it.
-      if ((value.body ?? '').length > MAX_PAGE_BASE64) throw new AgentError('USERS_PAGE_TOO_LARGE', FAILURES.USERS_PAGE_TOO_LARGE, { executed: params.method === 'POST' ? null : false });
-      storeCookies(host, value.setCookie);
-      // The session stays here: the answer has no setCookie. A new password was for this one POST, whatever the server does next.
-      return { status: value.status, location: value.location ?? '', contentType: value.contentType ?? '', body: value.body ?? '', ...(passwords.length ? { passwordForgotten: forgotten } : {}) };
+      if (op === 'request') return answerOf(await send(host, params.url, 'GET'));
+      const route = `/Users/${params.inactive ? 'Inactive_Users' : 'User_List'}.aspx`;
+      const plan = planSearch({ host, inactive: params.inactive === true, text: params.text ?? '' }, await readPage(host, route));
+      return answerOf(await send(host, plan.url, 'POST', plan.fields));
     },
   };
 }
+// parsePage is here for the checks of the shared tables.
+export { parsePage };

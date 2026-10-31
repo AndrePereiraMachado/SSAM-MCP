@@ -5,7 +5,8 @@ param(
  [ValidatePattern('^[a-f0-9]{64}$')][string]$Entry,
  [string]$Subject='',
  [string]$PromptStatusPath='',
- [ValidatePattern('^[a-f0-9]{32}$')][string]$Scope
+ [ValidatePattern('^[a-f0-9]{32}$')][string]$Scope,
+ [ValidatePattern('^[A-Za-z0-9+/=]*$')][string]$Rows=''
 )
 # Secrets live only in this short-lived process and Windows Credential Manager.
 # Neither CLI arguments nor returned JSON contain a password.
@@ -88,6 +89,48 @@ function Http([Uri]$uri,[string]$method,$jar,[byte[]]$bytes) {
  return $answer
 }
 function Attr([string]$tag,[string]$name) { $m=[regex]::Match($tag,"\b$name\s*=\s*(?:`"([^`"]*)`"|'([^']*)'|([^\s>]+))",'IgnoreCase'); if(-not $m.Success){return $null}; [Net.WebUtility]::HtmlDecode(($m.Groups[1].Value+$m.Groups[2].Value+$m.Groups[3].Value)) }
+# The sign-in form of a page, or nothing: exactly one user box, one password box and one Log In, outside comments and scripts. The fields to send.
+function LoginPlan([string]$html) {
+ $clean=[regex]::Replace($html,'<!--[\s\S]*?-->|<script\b[\s\S]*?</script\s*>','','IgnoreCase')
+ $tags=@([regex]::Matches($clean,'<input\b(?:"[^"]*"|''[^'']*''|[^''">])*>','IgnoreCase')|ForEach-Object{$_.Value})
+ $typeOf={param($t) $x=Attr $t 'type'; if($x){$x.ToLowerInvariant()}else{'text'}}
+ $users=@($tags|Where-Object{(& $typeOf $_) -eq 'text' -and (Attr $_ 'name')});$passwords=@($tags|Where-Object{(& $typeOf $_) -eq 'password'});$submits=@($tags|Where-Object{(& $typeOf $_) -eq 'submit' -and (Attr $_ 'value') -eq 'Log In'})
+ if($users.Count -ne 1 -or $passwords.Count -ne 1 -or $submits.Count -ne 1 -or -not (Attr $passwords[0] 'name') -or -not (Attr $submits[0] 'name')){return $null}
+ $hidden=New-Object Collections.Generic.List[object]
+ foreach($t in ($tags|Where-Object{(& $typeOf $_) -eq 'hidden' -and (Attr $_ 'name')})){$hidden.Add(@((Attr $t 'name'),[string](Attr $t 'value')))}
+ return [pscustomobject]@{User=(Attr $users[0] 'name');Password=(Attr $passwords[0] 'name');Submit=(Attr $submits[0] 'name');Hidden=$hidden}
+}
+# Signed in means a session cookie, and an answer that left the login page on this host. Anything else is a failed try.
+function LoginResult([int]$status,[string]$location,[string]$body,[int]$cookies,[string]$hostName) {
+ if($cookies -lt 1){return $false}
+ if($status -ge 300 -and $status -lt 400){
+  if(-not $location -or $location -match 'Login\.aspx'){return $false}
+  if($location -match '^[a-zA-Z][a-zA-Z0-9+.-]*://'){ if(([Uri]$location).Host -ne $hostName){return $false} }
+  return $true
+ }
+ return ($status -eq 200 -and $body -notmatch 'type\s*=\s*["'']?password')
+}
+# The window of a yes, not yet shown. Decline is the default, Enter included; Approve wakes up after a moment; no answer in two minutes closes it as no.
+function ConfirmForm($spec) {
+ $f=New-Object Windows.Forms.Form
+ $f.Text='SSAM - Confirm this change';$f.StartPosition='CenterScreen';$f.FormBorderStyle='FixedDialog';$f.MaximizeBox=$false;$f.MinimizeBox=$false;$f.TopMost=$true
+ $y=15
+ $intro=New-Object Windows.Forms.Label;$intro.SetBounds(18,$y,500,40);$intro.UseMnemonic=$false;$intro.Text='An AI assistant asks to do this through the SSAM agent on this machine. Nothing happens unless you approve it.';$f.Controls.Add($intro);$y+=48
+ foreach($row in $spec.rows){
+  $text=[string]$row.value;$lines=[Math]::Max(1,[Math]::Ceiling($text.Length/42))
+  $name=New-Object Windows.Forms.Label;$name.SetBounds(18,$y,170,38);$name.UseMnemonic=$false;$name.Text=[string]$row.label;$f.Controls.Add($name)
+  # Everything shows, however long: a value the box hid could say anything.
+  $value=New-Object Windows.Forms.TextBox;$value.Multiline=$true;$value.WordWrap=$true;$value.SetBounds(190,$y,330,(10+18*$lines));$value.ReadOnly=$true;$value.TabStop=$false;$value.Text=$text;$f.Controls.Add($value)
+  if($row.data){$name.ForeColor=[Drawing.Color]::DarkRed;$name.Text=[string]$row.label+' (from the page, not verified)'}
+  $y+=[Math]::Max(42,16+18*$lines)
+ }
+ $yes=New-Object Windows.Forms.Button;$yes.Text='Approve';$yes.SetBounds(290,($y+10),110,35);$yes.Enabled=$false;$f.Controls.Add($yes)
+ $no=New-Object Windows.Forms.Button;$no.Text='Decline';$no.SetBounds(410,($y+10),110,35);$no.DialogResult='Cancel';$f.Controls.Add($no);$f.CancelButton=$no;$f.AcceptButton=$no
+ $f.ClientSize=New-Object Drawing.Size(540,($y+60))
+ $arm=New-Object Windows.Forms.Timer;$arm.Interval=1500
+ $end=New-Object Windows.Forms.Timer;$end.Interval=120000
+ return [pscustomobject]@{Form=$f;Yes=$yes;No=$no;Arm=$arm;End=$end}
+}
 # Every form a page can show a value in: as it is, HTML, URL, JavaScript, base64; in any case.
 function Redact([string]$text,[string]$secret) {
  if(-not $secret){return $text}
@@ -126,22 +169,11 @@ try {
   $spec=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String([Console]::In.ReadToEnd().Trim()))|ConvertFrom-Json
   Add-Type -AssemblyName System.Windows.Forms
   Add-Type -AssemblyName System.Drawing
-  $f=New-Object Windows.Forms.Form
-  $f.Text='SSAM - Confirm this change';$f.StartPosition='CenterScreen';$f.FormBorderStyle='FixedDialog';$f.MaximizeBox=$false;$f.MinimizeBox=$false;$f.TopMost=$true
-  $y=15
-  $intro=New-Object Windows.Forms.Label;$intro.SetBounds(18,$y,500,40);$intro.UseMnemonic=$false;$intro.Text='An AI assistant asks to do this through the SSAM agent on this machine. Nothing happens unless you approve it.';$f.Controls.Add($intro);$y+=48
-  foreach($row in $spec.rows){
-   $name=New-Object Windows.Forms.Label;$name.SetBounds(18,$y,170,38);$name.UseMnemonic=$false;$name.Text=[string]$row.label;$f.Controls.Add($name)
-   $value=New-Object Windows.Forms.TextBox;$value.SetBounds(190,$y,330,24);$value.ReadOnly=$true;$value.TabStop=$false;$value.Text=[string]$row.value;$f.Controls.Add($value)
-   if($row.data){$name.ForeColor=[Drawing.Color]::DarkRed;$name.Text=[string]$row.label+' (from the page, not verified)'}
-   $y+=42
-  }
+  $w=ConfirmForm $spec;$f=$w.Form;$yes=$w.Yes;$no=$w.No;$arm=$w.Arm;$end=$w.End
   $approved=$false;$timedOut=$false
-  $yes=New-Object Windows.Forms.Button;$yes.Text='Approve';$yes.SetBounds(290,$y+10,110,35);$yes.Enabled=$false;$yes.Add_Click({$script:approved=$true;$f.Close()});$f.Controls.Add($yes)
-  $no=New-Object Windows.Forms.Button;$no.Text='Decline';$no.SetBounds(410,$y+10,110,35);$no.DialogResult='Cancel';$f.Controls.Add($no);$f.CancelButton=$no;$f.AcceptButton=$no
-  $f.ClientSize=New-Object Drawing.Size(540,($y+60))
-  $arm=New-Object Windows.Forms.Timer;$arm.Interval=1500;$arm.Add_Tick({$yes.Enabled=$true;$arm.Stop()})
-  $end=New-Object Windows.Forms.Timer;$end.Interval=120000;$end.Add_Tick({$script:timedOut=$true;$f.Close()})
+  $yes.Add_Click({$script:approved=$true;$f.Close()})
+  $arm.Add_Tick({$yes.Enabled=$true;$arm.Stop()})
+  $end.Add_Tick({$script:timedOut=$true;$f.Close()})
   $f.Add_Shown({[void][UsersVault]::ShowWindow($f.Handle,5);[void][UsersVault]::SetForegroundWindow($f.Handle);$no.Focus();$arm.Start();$end.Start()})
   $null=$f.ShowDialog();$arm.Dispose();$end.Dispose();$f.Dispose()
   @{ok=$true;approved=[bool]$approved;timedOut=[bool]$timedOut}|ConvertTo-Json -Compress
@@ -154,21 +186,16 @@ try {
   $uri=[Uri]"https://$HostName/Users/Login.aspx"
   $jar=New-Object Net.CookieContainer
   $page=Http $uri 'GET' $jar $null
-  $tags=@([regex]::Matches($page.Body,'<input\b[^>]*>','IgnoreCase')|ForEach-Object{$_.Value})
-  $typeOf={param($t) $x=Attr $t 'type'; if($x){$x.ToLowerInvariant()}else{'text'}}
-  $users=@($tags|Where-Object{(& $typeOf $_) -eq 'text' -and (Attr $_ 'name')});$passwords=@($tags|Where-Object{(& $typeOf $_) -eq 'password'});$submits=@($tags|Where-Object{(& $typeOf $_) -eq 'submit' -and (Attr $_ 'value') -eq 'Log In'})
-  if($users.Count -ne 1 -or $passwords.Count -ne 1 -or $submits.Count -ne 1){Fail 'USERS_LOGIN_LAYOUT_CHANGED'}
+  $plan=LoginPlan $page.Body
+  if(-not $plan){Fail 'USERS_LOGIN_LAYOUT_CHANGED'}
   $pairs=New-Object Collections.Generic.List[string]
-  foreach($t in ($tags|Where-Object{(& $typeOf $_) -eq 'hidden' -and (Attr $_ 'name')})){$pairs.Add((Form (Attr $t 'name'))+'='+(Form ([string](Attr $t 'value'))))}
-  $pairs.Add((Form (Attr $submits[0] 'name'))+'='+(Form 'Log In'))
-  $pairs.Add((Form (Attr $users[0] 'name'))+'='+(Form $v.UserName));$pairs.Add((Form (Attr $passwords[0] 'name'))+'='+(Form $v.Secret));$v=$null
+  foreach($pair in $plan.Hidden){$pairs.Add((Form $pair[0])+'='+(Form $pair[1]))}
+  $pairs.Add((Form $plan.Submit)+'='+(Form 'Log In'))
+  $pairs.Add((Form $plan.User)+'='+(Form $v.UserName));$pairs.Add((Form $plan.Password)+'='+(Form $v.Secret));$v=$null
   $bytes=[Text.Encoding]::UTF8.GetBytes(($pairs -join '&'));$pairs.Clear()
   $after=Http $uri 'POST' $jar $bytes
-  $redirected=$after.Status -ge 300 -and $after.Status -lt 400
-  $away=$redirected -and $after.Location -and ($after.Location -notmatch 'Login\.aspx')
-  $signed=$away -or ($after.Status -eq 200 -and $after.Body -notmatch 'type\s*=\s*["'']?password')
   $cookies=@($jar.GetCookies($uri)|ForEach-Object{B64 ('{0}={1}; path={2}' -f $_.Name,$_.Value,$_.Path)})
-  @{ok=$true;authenticated=[bool]$signed;setCookie=$cookies}|ConvertTo-Json -Compress
+  @{ok=$true;authenticated=[bool](LoginResult $after.Status $after.Location $after.Body $cookies.Count $HostName);setCookie=$cookies}|ConvertTo-Json -Compress
   exit 0
  }
  if ($Mode -eq 'prompt') {
@@ -185,7 +212,7 @@ try {
   # The first time, the person sees this exact host and types it again: nothing else can add an environment to the vault.
   $approving=($Kind -eq 'login') -and ($null -eq (ReadVault (Target 'login' '') $false))
   $f.ClientSize=New-Object Drawing.Size(490,340);$f.StartPosition='CenterScreen';$f.FormBorderStyle='FixedDialog';$f.MaximizeBox=$false;$f.MinimizeBox=$false;$f.TopMost=$true
-  $intro=New-Object Windows.Forms.Label;$intro.SetBounds(18,15,452,60);$intro.Text=if($Kind -eq 'login'){"Users administrator for this exact environment: $HostName. Stored only in Windows Credential Manager, and sent only to this host, over HTTPS."}else{"New password for $Subject on $HostName. Enter and confirm here; never in chat."};$f.Controls.Add($intro)
+  $intro=New-Object Windows.Forms.Label;$intro.SetBounds(18,15,452,60);$intro.Text=if($Kind -eq 'login'){"Users administrator for this exact environment: $HostName. Stored only in Windows Credential Manager, and sent only to this host, over HTTPS."}else{"New password on $HostName, for what the box below says. Enter and confirm here; never in chat."};$f.Controls.Add($intro)
   $label=New-Object Windows.Forms.Label;$label.SetBounds(18,80,145,25);$label.Text=if($Kind -eq 'login'){'Username'}else{'New password'};$f.Controls.Add($label)
   $first=New-Object Windows.Forms.TextBox;$first.SetBounds(165,80,300,25);$first.UseSystemPasswordChar=($Kind -eq 'password');$f.Controls.Add($first)
   $label2=New-Object Windows.Forms.Label;$label2.SetBounds(18,120,145,25);$label2.Text=if($Kind -eq 'login'){'Password'}else{'Confirm password'};$f.Controls.Add($label2)
@@ -195,7 +222,13 @@ try {
    $label3=New-Object Windows.Forms.Label;$label3.SetBounds(18,160,145,40);$label3.Text='New environment: type its name again';$f.Controls.Add($label3)
    $again.SetBounds(165,160,300,25);$f.Controls.Add($again)
   }
-  $errorLabel=New-Object Windows.Forms.Label;$errorLabel.SetBounds(18,205,450,30);$errorLabel.ForeColor=[Drawing.Color]::DarkRed;$f.Controls.Add($errorLabel)
+  $errorLabel=New-Object Windows.Forms.Label;$errorLabel.SetBounds(18,205,450,30);
+  # What this password is for, as this agent read it: the user's id and username, or every field of a new user.
+  if($Rows){
+   $lines=@([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($Rows))|ConvertFrom-Json|ForEach-Object{$_}|ForEach-Object{[string]$_.label+$(if($_.data){' (from the page, not verified)'}else{''})+': '+[string]$_.value})
+   $box=New-Object Windows.Forms.TextBox;$box.Multiline=$true;$box.WordWrap=$true;$box.ReadOnly=$true;$box.TabStop=$false;$box.ScrollBars='Vertical';$box.SetBounds(18,340,452,110);$box.Text=($lines -join [Environment]::NewLine);$f.Controls.Add($box)
+   $f.ClientSize=New-Object Drawing.Size(490,465)
+  }$errorLabel.ForeColor=[Drawing.Color]::DarkRed;$f.Controls.Add($errorLabel)
   $save=New-Object Windows.Forms.Button;$save.Text='Save securely';$save.SetBounds(210,280,130,35);$f.Controls.Add($save)
   $cancel=New-Object Windows.Forms.Button;$cancel.Text='Cancel';$cancel.SetBounds(350,280,110,35);$cancel.DialogResult='Cancel';$f.Controls.Add($cancel);$f.CancelButton=$cancel;$f.AcceptButton=$save
   $save.Add_Click({

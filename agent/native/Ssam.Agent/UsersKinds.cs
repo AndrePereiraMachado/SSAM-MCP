@@ -8,53 +8,50 @@ using System.Text.RegularExpressions;
 
 namespace Ssam.Agent;
 
-// o11.users, the rules of agent/lib/users.mjs in the same order: the Users application of an O11 environment through this
-// machine. The administrator's password and new passwords are entries of this Windows account's Credential Manager, typed only
-// in a private window (users-vault.ps1, embedded here byte for byte); the session cookies live in this process's memory. No
-// field of this kind carries a password or a cookie, in either direction. The HTTP requests go only to https://<host>/Users/ of
-// a host whose administrator the person stored here (the helper checks the vault first), never redirected. Windows only:
-// elsewhere the kind answers USERS_PLATFORM_UNAVAILABLE. The table of what passes is shared: tests/native/users.test.mjs.
+// o11.users, the rules of agent/lib/users.mjs in the same order: the Users application of an O11 environment through this machine. The
+// administrator's password and new passwords are entries of this Windows account's Credential Manager, typed only in a private window
+// (users-vault.ps1, embedded here byte for byte); the session cookies live in this process's memory. The server never builds a POST: it names an
+// operation and its ids, and this agent reads the real page, builds the request from the table of UsersPage.cs and shows the person what it
+// will send. No field carries a password or a cookie, in either direction. Windows only: elsewhere USERS_PLATFORM_UNAVAILABLE.
+// The behaviour is compared with the Node agent's by check-users-flow (tests/native/users.test.mjs), with a stand-in for the helper.
 internal sealed partial class UsersKinds
 {
     internal const string Name = "o11.users";
-    private const int HelperSeconds = 45, PromptWaitMs = 12000, MaxFields = 2000, MaxFieldChars = 8 * 1024 * 1024, MaxSubject = 256;
+    private const int HelperSeconds = 45, PromptWaitMs = 12000, MaxSearch = 256, WindowsMax = 20, RefusalsMax = 3, LoginFailuresMax = 2;
+    private const int MaxPageBase64 = (262144 + 2) / 3 * 4 + 8;
     private readonly string dataRoot;
     private readonly string scope;
+    // The tests' seams, set only by check-users-flow. Production runs the embedded helper with the system's PowerShell, DNS and clock.
+    internal string[]? HelperCommand;
+    internal Func<string, Task<string[]>>? Lookup;
+    internal Func<DateTimeOffset> Now = () => DateTimeOffset.UtcNow;
+    internal bool ForceWindows;
     private readonly Dictionary<string, Dictionary<string, string>> jars = new(StringComparer.Ordinal);
     private readonly Dictionary<string, OpenPrompt> prompts = new(StringComparer.Ordinal);
     private readonly object sync = new();
 
-    [GeneratedRegex("^(?=.{1,253}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+\\z", RegexOptions.CultureInvariant)] private static partial Regex HostPattern();
+    [GeneratedRegex("^(?=.{1,253}\\z)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+\\z", RegexOptions.CultureInvariant)] private static partial Regex HostPattern();
     [GeneratedRegex("^[a-f0-9]{64}\\z", RegexOptions.CultureInvariant)] private static partial Regex EntryPattern();
-    [GeneratedRegex("^(?:[A-Za-z0-9_$]{1,200}[$_])?wt(?:Password|ConfirmPassword|NewPassword)Input\\z", RegexOptions.CultureInvariant)] private static partial Regex FieldPattern();
     [GeneratedRegex("^/Users/(?:(?:Login|User_List|Inactive_Users|User_Show|User_Edit|Group_List|Group_Show|Group_Edit|Application_List|Application_Show|Role_Show|MyInfo)\\.aspx)?\\z", RegexOptions.CultureInvariant)] private static partial Regex PagePattern();
     [GeneratedRegex("^(?:(?:UserId|GroupId|RoleId|ApplicationId)=[1-9][0-9]{0,18})?\\z", RegexOptions.CultureInvariant)] private static partial Regex QueryPattern();
     [GeneratedRegex("[\\\\\\s\\u0000-\\u001f]|%2e|%2f|%5c", RegexOptions.CultureInvariant | RegexOptions.IgnoreCase)] private static partial Regex BadUrlPattern();
-    [GeneratedRegex("[\\u0000-\\u001f\\u007f]", RegexOptions.CultureInvariant)] private static partial Regex ControlPattern();
     [GeneratedRegex("^USERS_[A-Z_]{1,60}\\z", RegexOptions.CultureInvariant)] private static partial Regex CodePattern();
-
-    [GeneratedRegex("^[A-Za-z0-9._@+-]{1,100}\\z", RegexOptions.CultureInvariant)] private static partial Regex SubjectPattern();
     [GeneratedRegex("^[1-9][0-9]{0,18}\\z", RegexOptions.CultureInvariant)] private static partial Regex IdPattern();
-    [GeneratedRegex("[\\u0000-\\u001f\\u007f\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]", RegexOptions.CultureInvariant)] private static partial Regex HiddenPattern();
-    private static bool Shown(JsonNode? value, int max) => Word(value) is { } text && text.Length <= max && !HiddenPattern().IsMatch(text);
-    // What a person can approve: only these. Deleting and taking access away are not on the list, whatever a server asks.
-    private sealed record Action(string Text, string? Page, string? Target);
-    private static readonly Dictionary<string, Action> Actions = new(StringComparer.Ordinal)
-    {
-        ["sign-in"] = new("Sign in to the Users application of this environment", null, null),
-        ["update"] = new("Change the details of this user", "User_Edit", null),
-        ["activate"] = new("Activate this user", "User_Show", null),
-        ["deactivate"] = new("Deactivate this user: the user loses access", "User_Show", null),
-        ["grant-role"] = new("Give this role to this user", "User_Show", "Role id"),
-        ["add-group"] = new("Add this user to this group: the user gets its roles", "User_Show", "Group id"),
-    };
-    private sealed class Permit { public required string Host; public required string Page; public int Posts; public DateTimeOffset Until; public string? Entry; }
-    private sealed class OpenPrompt { public required Process Child; public required string StatusFile; public required string Host; public required string Kind; public string? Entry; public string? Action; public string? UserId; public bool Applied; }
+
+    private sealed class Permit { public required string Host; public required string Action; public string? UserId; public string? Changes; public required string Entry; public DateTimeOffset Until; }
+    private sealed class OpenPrompt { public required Process Child; public required string StatusFile; public required string Host; public required string Kind; public string? Entry; public string? Action; public string? UserId; public string? Changes; public bool Applied; public string? Phase; }
     private readonly Dictionary<string, DateTimeOffset> consents = new(StringComparer.Ordinal);
     private readonly List<Permit> permits = [];
-    private bool HasConsent(string host) { lock (sync) return consents.TryGetValue(host, out var until) && until > DateTimeOffset.UtcNow; }
+    private readonly string promptDir;
+    private readonly string failuresFile;
 
-    internal UsersKinds(string dataRoot, string account = "") { this.dataRoot = dataRoot; scope = Scope(dataRoot, account); }
+    internal UsersKinds(string dataRoot, string account = "")
+    {
+        this.dataRoot = dataRoot;
+        scope = Scope(dataRoot, account);
+        promptDir = Path.Combine(dataRoot, "private", "users");
+        failuresFile = Path.Combine(promptDir, "sign-in-failures.json");
+    }
 
     // The vault scope: this installation and this account of the server. Its entries are its own: another token on this installation
     // inherits nothing, and an SSAM installed on the same Windows account is apart.
@@ -63,27 +60,36 @@ internal sealed partial class UsersKinds
 
     private static AgentFault Invalid(string message) => new("PARAMS_INVALID", message);
     private static string? Word(JsonNode? node) => node is JsonValue value && value.TryGetValue<string>(out var text) ? text : null;
-    // A DNS name of an environment: never an address by number, this machine, a name only an internal network resolves, a service
-    // that resolves to any address it is given, or a name written in another alphabet.
+    private const string InternalText = "This name is only reachable inside a private network, and Users administration through the agent works only with environments on the internet. Nothing was sent. Use the Users application of that environment directly.";
+    private const string HostText = "host must be the plain DNS name of an environment, like name.outsystemsenterprise.com: no scheme, port, address or other alphabet";
+    // A name only a private network can resolve, a service that resolves to any address it is given.
     private static readonly string[] Internal = [".localhost", ".local", ".localdomain", ".internal", ".intranet", ".lan", ".home", ".corp", ".svc", ".arpa", ".nip.io", ".sslip.io", ".xip.io"];
-    private static bool HostOk(string? host)
+    private static void CheckHost(string? host)
     {
-        if (host == null || !HostPattern().IsMatch(host) || Internal.Any(end => host.EndsWith(end, StringComparison.Ordinal)) || host.Split('.').Any(label => label.StartsWith("xn--", StringComparison.Ordinal))) return false;
+        if (host == null || !HostPattern().IsMatch(host) || host.Split('.').Any(label => label.StartsWith("xn--", StringComparison.Ordinal))) throw Invalid(HostText);
         var last = host[(host.LastIndexOf('.') + 1)..];
-        return last.Length >= 2 && !last.StartsWith("0x", StringComparison.Ordinal) && !last.All(char.IsAsciiDigit);
+        if (last.Length < 2 || last.StartsWith("0x", StringComparison.Ordinal) || last.All(char.IsAsciiDigit)) throw Invalid(HostText);
+        if (Internal.Any(end => host.EndsWith(end, StringComparison.Ordinal))) throw Invalid("host must be the plain DNS name of an environment");
     }
-
-    // A resolved address that is not on the internet: this machine, a private network, link-local (cloud metadata), multicast.
+    private static bool PrivateV4(byte[] b, int at = 0)
+    {
+        byte a0 = b[at], a1 = b[at + 1], a2 = b[at + 2];
+        return a0 == 0 || a0 == 10 || a0 == 127 || a0 >= 224 || (a0 == 100 && a1 >= 64 && a1 <= 127) || (a0 == 169 && a1 == 254) || (a0 == 172 && a1 >= 16 && a1 <= 31) || (a0 == 192 && a1 == 168) || (a0 == 192 && a1 == 0 && a2 == 0) || (a0 == 198 && (a1 == 18 || a1 == 19));
+    }
+    // A resolved address that is not on the internet: this machine, a private network, link-local (cloud metadata), multicast, or an IPv6 form
+    // that carries one of those inside it (mapped, compatible, NAT64, 6to4).
     internal static bool IsPrivateAddress(string text)
     {
         if (!IPAddress.TryParse(text, out var address)) return true;
-        if (address.IsIPv4MappedToIPv6) address = address.MapToIPv4();
         var b = address.GetAddressBytes();
-        if (address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork)
-            return b[0] == 0 || b[0] == 10 || b[0] == 127 || b[0] >= 224 || (b[0] == 100 && b[1] >= 64 && b[1] <= 127) || (b[0] == 169 && b[1] == 254) || (b[0] == 172 && b[1] >= 16 && b[1] <= 31) || (b[0] == 192 && b[1] == 168) || (b[0] == 192 && b[1] == 0 && b[2] == 0) || (b[0] == 198 && (b[1] == 18 || b[1] == 19));
-        return address.Equals(IPAddress.IPv6Any) || address.Equals(IPAddress.IPv6Loopback) || (b[0] & 0xfe) == 0xfc || (b[0] == 0xfe && (b[1] & 0xc0) == 0x80) || b[0] == 0xff;
+        if (address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork) return PrivateV4(b);
+        bool Zeros(int n) => b.Take(n).All(x => x == 0);
+        if (Zeros(16) || (Zeros(15) && b[15] == 1)) return true;
+        if ((Zeros(10) && b[10] == 255 && b[11] == 255) || Zeros(12)) return PrivateV4(b, 12);
+        if (b[0] == 0 && b[1] == 0x64 && b[2] == 0xff && b[3] == 0x9b) return PrivateV4(b, 12);
+        if (b[0] == 0x20 && b[1] == 0x02) return PrivateV4(b, 2);
+        return (b[0] & 0xfe) == 0xfc || (b[0] == 0xfe && (b[1] & 0xc0) == 0x80) || (b[0] == 0xfe && (b[1] & 0xc0) == 0xc0) || b[0] == 0xff;
     }
-
     private static int Distance(string a, string b)
     {
         var row = Enumerable.Range(0, b.Length + 1).ToArray();
@@ -96,7 +102,6 @@ internal sealed partial class UsersKinds
         }
         return row[b.Length];
     }
-
     // A new host that reads like one already approved: inside it, around it, the same first label elsewhere, or one letter away.
     internal static string? LookalikeOf(string host, IEnumerable<string> approved)
     {
@@ -110,18 +115,16 @@ internal sealed partial class UsersKinds
             return host.Contains(other, StringComparison.Ordinal) || other.Contains(host, StringComparison.Ordinal) || first == otherFirst || (rest == other[(otherDot + 1)..] && Distance(first, otherFirst) <= 1);
         });
     }
-
-    // Every request: what the name resolves to now. A short cache, so a page's requests do not each ask.
-    private readonly Dictionary<string, DateTimeOffset> resolved = new(StringComparer.Ordinal);
-    private async Task PublicHost(string host, CancellationToken token)
+    private static int ChangeLimit(string key) => key switch { "name" => 256, "username" or "email" => 250, "phone" => 20, _ => 0 };
+    private static void ValidChanges(JsonNode? node, bool needsNew)
     {
-        lock (sync) if (resolved.TryGetValue(host, out var at) && DateTimeOffset.UtcNow - at < TimeSpan.FromSeconds(60)) return;
-        IPAddress[] addresses;
-        try { addresses = await Dns.GetHostAddressesAsync(host, token); }
-        catch (System.Net.Sockets.SocketException) { throw new AgentFault("USERS_HOST_UNRESOLVED", "This environment does not resolve, so nothing was sent.", false); }
-        if (addresses.Length == 0) throw new AgentFault("USERS_HOST_UNRESOLVED", "This environment does not resolve, so nothing was sent.", false);
-        if (addresses.Any(item => IsPrivateAddress(item.ToString()))) throw new AgentFault("USERS_HOST_PRIVATE", "This environment resolves to an address that is not on the internet, so nothing was sent.", false);
-        lock (sync) resolved[host] = DateTimeOffset.UtcNow;
+        if (node is not JsonObject changes || changes.Count == 0) throw Invalid("changes are name, username, email and phone");
+        foreach (var (key, value) in changes)
+        {
+            if (ChangeLimit(key) == 0) throw Invalid("changes are name, username, email and phone");
+            if (!UsersPage.PlainValue(Word(value), ChangeLimit(key))) throw Invalid("changes." + key + " must be plain text: within its limit, one line, no invisible characters or repeated spaces, because the window shows exactly what is sent");
+        }
+        if (needsNew && (changes["username"] == null || changes["name"] == null)) throw Invalid("a new user needs its name and username");
     }
 
     // What may run, checked before anything is started.
@@ -132,81 +135,57 @@ internal sealed partial class UsersKinds
         string[] keys = op switch
         {
             "status" or "forget" => ["op", "host", "kind", "entry"],
-            "prompt" => ["op", "host", "kind", "entry", "subject", "action", "userId"],
-            "confirm" => ["op", "host", "action", "userId", "targetId", "labels", "changes"],
+            "prompt" => ["op", "host", "kind", "entry", "action", "userId", "changes"],
+            "confirm" => ["op", "host", "action"],
             "login" or "sign-out" => ["op", "host"],
-            "request" => ["op", "host", "url", "method", "fields", "secretRefs"],
-            _ => throw Invalid("op must be status, prompt, confirm, login, request, forget or sign-out"),
+            "request" => ["op", "host", "url"],
+            "search" => ["op", "host", "inactive", "text"],
+            "write" => ["op", "host", "action", "userId", "targetId", "changes", "entry"],
+            _ => throw Invalid("op must be status, prompt, confirm, login, request, search, write, forget or sign-out"),
         };
         foreach (var (key, _) in p) if (!keys.Contains(key, StringComparer.Ordinal)) throw Invalid("unknown parameter " + key);
         var host = Word(p["host"]);
-        if (!HostOk(host)) throw Invalid("host must be the DNS name of an environment");
+        CheckHost(host);
         if (op is "login" or "sign-out") return;
-        if (op == "confirm")
+        if (op == "confirm") { if (Word(p["action"]) != "sign-in") throw Invalid("the only yes asked by itself is the sign-in: a write opens its own window"); return; }
+        if (op == "request")
+        {
+            var url = Word(p["url"]);
+            var prefix = "https://" + host;
+            if (url == null || url.Length > 2048 || !url.StartsWith(prefix + "/", StringComparison.Ordinal) || BadUrlPattern().IsMatch(url)) throw Invalid("url is not a Users page of the host");
+            var rest = url[prefix.Length..];
+            var mark = rest.IndexOf('?');
+            if (rest.Contains('#') || !PagePattern().IsMatch(mark < 0 ? rest : rest[..mark]) || !QueryPattern().IsMatch(mark < 0 ? "" : rest[(mark + 1)..])) throw Invalid("url is not a Users page of the host");
+            return;
+        }
+        if (op == "search")
+        {
+            if (p["inactive"] != null && !(p["inactive"] is JsonValue flag && flag.TryGetValue<bool>(out _))) throw Invalid("inactive is true or false");
+            if (p["text"] != null && (Word(p["text"]) is not { } text || text.Length > MaxSearch)) throw Invalid("text is what to search for");
+            return;
+        }
+        if (op == "write")
         {
             var action = Word(p["action"]);
-            if (action == null || !Actions.TryGetValue(action, out var rule)) throw Invalid("action is not one a person can approve here");
-            if (rule.Page != null ? Word(p["userId"]) is not { } userId || !IdPattern().IsMatch(userId) : p["userId"] != null) throw Invalid("userId is a number as text, on a write");
-            if (rule.Target != null ? Word(p["targetId"]) is not { } targetId || !IdPattern().IsMatch(targetId) : p["targetId"] != null) throw Invalid("targetId is a number as text, on a role or a group");
-            if (p["labels"] != null)
-            {
-                if (p["labels"] is not JsonObject labels) throw Invalid("labels are one short line each");
-                foreach (var (key, value) in labels) if (key is not ("user" or "target") || !Shown(value, 120)) throw Invalid("labels are one short line each");
-            }
-            if (p["changes"] != null)
-            {
-                if (action != "update") throw Invalid("changes belong to update");
-                if (p["changes"] is not JsonObject changes) throw Invalid("changes are name, username, email and phone, one line each");
-                foreach (var (key, value) in changes) if (key is not ("name" or "username" or "email" or "phone") || !Shown(value, 256)) throw Invalid("changes are name, username, email and phone, one line each");
-            }
+            if (action == null || !UsersPage.ActionText.ContainsKey(action)) throw Invalid("this operation does not exist in this agent");
+            if (action == "create" ? p["userId"] != null : Word(p["userId"]) is not { } userId || !IdPattern().IsMatch(userId)) throw Invalid("userId is a number as text");
+            if (action is "grant-role" or "add-group" ? Word(p["targetId"]) is not { } targetId || !IdPattern().IsMatch(targetId) : p["targetId"] != null) throw Invalid("targetId is a number as text, on a role or a group");
+            if (action is "update" or "create") ValidChanges(p["changes"], action == "create"); else if (p["changes"] != null) throw Invalid("changes belong to update and create");
+            if (action is "create" or "set-password" ? Word(p["entry"]) is not { } entry || !EntryPattern().IsMatch(entry) : p["entry"] != null) throw Invalid("entry names the new password of create or set-password");
             return;
         }
-        if (op != "request")
+        var kind = p["kind"] == null ? "login" : Word(p["kind"]);
+        if (kind != "login" && kind != "password") throw Invalid("kind must be login or password");
+        if (kind == "password" ? Word(p["entry"]) is not { } given || !EntryPattern().IsMatch(given) : p["entry"] != null) throw Invalid("entry belongs to kind password, 64 hex");
+        if (op == "forget" && kind != "password") throw Invalid("only a new password is forgotten");
+        if (op == "prompt")
         {
-            var kind = p["kind"] == null ? "login" : Word(p["kind"]);
-            if (kind != "login" && kind != "password") throw Invalid("kind must be login or password");
-            var entry = Word(p["entry"]);
-            if (kind == "password" ? entry == null || !EntryPattern().IsMatch(entry) : p["entry"] != null) throw Invalid("entry belongs to kind password, 64 hex");
-            if (op == "forget" && kind != "password") throw Invalid("only a new password is forgotten");
-            if (op == "prompt")
-            {
-                var purpose = Word(p["action"]);
-                if (kind == "password" && purpose != "create" && purpose != "set-password") throw Invalid("a new password is for create or set-password");
-                if (kind == "login" && (p["action"] != null || p["userId"] != null)) throw Invalid("the sign-in window takes only a host");
-                if (purpose == "set-password" ? Word(p["userId"]) is not { } user || !IdPattern().IsMatch(user) : p["userId"] != null) throw Invalid("userId is a number as text, on set-password");
-            }
-            if (p["subject"] != null && (kind != "password" || Word(p["subject"]) is not { } subject || !SubjectPattern().IsMatch(subject))) throw Invalid("subject is the username of a new password");
-            return;
-        }
-        var url = Word(p["url"]);
-        var prefix = "https://" + host;
-        if (url == null || url.Length > 2048 || !url.StartsWith(prefix + "/", StringComparison.Ordinal) || BadUrlPattern().IsMatch(url)) throw Invalid("url is not a Users page of the host");
-        var rest = url[prefix.Length..];
-        var mark = rest.IndexOf('?');
-        var page = mark < 0 ? rest : rest[..mark];
-        var query = mark < 0 ? "" : rest[(mark + 1)..];
-        if (rest.Contains('#') || !PagePattern().IsMatch(page) || !QueryPattern().IsMatch(query)) throw Invalid("url is not a Users page of the host");
-        var method = Word(p["method"]);
-        if (method != "GET" && method != "POST") throw Invalid("method must be GET or POST");
-        if (page == "/Users/Login.aspx" && method == "POST") throw Invalid("the sign-in is op login");
-        if (p["fields"] != null)
-        {
-            if (p["fields"] is not JsonArray fields || fields.Count > MaxFields) throw Invalid("fields must be [name, value] texts");
-            long total = 0;
-            foreach (var field in fields)
-            {
-                if (field is not JsonArray { Count: 2 } pair || Word(pair[0]) is not { } name || Word(pair[1]) is not { } value) throw Invalid("fields must be [name, value] texts");
-                total += name.Length + value.Length;
-            }
-            if (total > MaxFieldChars) throw Invalid("fields are too large");
-        }
-        if (p["secretRefs"] == null) return;
-        if (p["secretRefs"] is not JsonArray refs || refs.Count > 2) throw Invalid("at most 2 secretRefs");
-        foreach (var item in refs)
-        {
-            if (item is not JsonObject reference || reference.Any(pair => pair.Key is not ("field" or "kind" or "entry" or "part"))) throw Invalid("secretRefs take field, kind, entry and part");
-            if (Word(reference["field"]) is not { } field || !FieldPattern().IsMatch(field) || Word(reference["part"]) != "password") throw Invalid("a new password goes only into a password field");
-            if (Word(reference["kind"]) != "password" || Word(reference["entry"]) is not { } entry || !EntryPattern().IsMatch(entry) || method != "POST" || page is not ("/Users/User_Edit.aspx" or "/Users/User_Show.aspx")) throw Invalid("a new password goes only into the form of a user");
+            if (kind == "login") { if (p["action"] != null || p["userId"] != null || p["changes"] != null) throw Invalid("the sign-in window takes only a host"); return; }
+            var purpose = Word(p["action"]);
+            if (purpose == "set-password") { if (Word(p["userId"]) is not { } user || !IdPattern().IsMatch(user) || p["changes"] != null) throw Invalid("set-password names the user by its id, and the agent reads who that is"); return; }
+            if (purpose != "create") throw Invalid("a new password is for create or set-password");
+            if (p["userId"] != null) throw Invalid("a new user has no id");
+            ValidChanges(p["changes"], true);
         }
     }
 
@@ -217,7 +196,6 @@ internal sealed partial class UsersKinds
         stream.CopyTo(bytes);
         return bytes.ToArray();
     }
-
     // The helper as a file of this installation's private folder, rewritten whenever it is not these exact bytes.
     private string Helper()
     {
@@ -233,107 +211,20 @@ internal sealed partial class UsersKinds
         }
         return file;
     }
-
     private static string PowerShell() => Path.Combine(Environment.GetEnvironmentVariable("SystemRoot") ?? @"C:\Windows", "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
 
-    private ProcessStartInfo Start(bool interactive, string mode, string host, JsonObject p, bool redirect)
+    private ProcessStartInfo Start(bool interactive, string mode, string host, JsonObject p, bool redirect, IEnumerable<string>? extra = null)
     {
-        var start = new ProcessStartInfo(PowerShell()) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardInput = redirect, RedirectStandardOutput = redirect, RedirectStandardError = redirect };
-        var args = new List<string> { "-NoLogo", "-NoProfile", interactive ? "-STA" : "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", Helper(), "-Mode", mode, "-HostName", host, "-Scope", scope };
+        var start = new ProcessStartInfo(HelperCommand?[0] ?? PowerShell()) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardInput = redirect, RedirectStandardOutput = redirect, RedirectStandardError = redirect };
+        var args = new List<string>();
+        if (HelperCommand != null) args.AddRange(HelperCommand.Skip(1));
+        else args.AddRange(["-NoLogo", "-NoProfile", interactive ? "-STA" : "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", Helper()]);
+        args.AddRange(["-Mode", mode, "-HostName", host, "-Scope", scope]);
         if (Word(p["kind"]) is { } kind) { args.Add("-Kind"); args.Add(kind); }
         if (Word(p["entry"]) is { } entry) { args.Add("-Entry"); args.Add(entry); }
+        if (extra != null) args.AddRange(extra);
         foreach (var arg in args) start.ArgumentList.Add(arg);
         return start;
-    }
-
-    // What a window the person filled gives: a prompt's status file says saved only after the vault has it.
-    private void Settle()
-    {
-        lock (sync)
-            foreach (var (key, record) in prompts.ToList())
-            {
-                string? phase = null;
-                try { phase = File.Exists(record.StatusFile) ? File.ReadAllText(record.StatusFile) : null; } catch (IOException) { }
-                if (phase == "saved" && !record.Applied)
-                {
-                    record.Applied = true;
-                    if (record.Kind == "password") permits.Add(new Permit { Host = record.Host, Page = record.Action == "create" ? "/Users/User_Edit.aspx" : "/Users/User_Show.aspx?UserId=" + record.UserId, Posts = record.Action == "create" ? 1 : 2, Until = DateTimeOffset.UtcNow.AddMinutes(5), Entry = record.Entry });
-                    else consents[record.Host] = DateTimeOffset.UtcNow.AddHours(8);
-                }
-                if (record.Child.HasExited)
-                {
-                    try { File.Delete(record.StatusFile); } catch (IOException) { }
-                    prompts.Remove(key);
-                }
-            }
-    }
-
-    // One window at a time; a person who keeps saying no is not asked again for a while; and a ceiling, so a window is never a way to wear
-    // a person down. A yes does not count against the second: approving seven changes is work, not pressure.
-    private bool confirming;
-    private readonly List<DateTimeOffset> opened = [], refusals = [];
-    private void TakeWindow()
-    {
-        Settle();
-        lock (sync)
-        {
-            if (confirming || prompts.Count > 0) throw new AgentFault("USERS_WINDOW_BUSY", "Another window of this agent is open: answer that one first.", false);
-            opened.RemoveAll(at => DateTimeOffset.UtcNow - at >= TimeSpan.FromMinutes(10));
-            refusals.RemoveAll(at => DateTimeOffset.UtcNow - at >= TimeSpan.FromMinutes(10));
-            if (opened.Count >= 20 || refusals.Count >= 3) throw new AgentFault("USERS_WINDOW_LIMIT", "Too many windows in a few minutes, so no other was opened.", false);
-            opened.Add(DateTimeOffset.UtcNow);
-        }
-    }
-
-    private void UsePermit(string host, string page, List<string> entries)
-    {
-        lock (sync)
-        {
-            permits.RemoveAll(item => item.Until <= DateTimeOffset.UtcNow || item.Posts <= 0);
-            var permit = permits.FirstOrDefault(item => item.Host == host && item.Page == page && entries.All(entry => item.Entry == entry));
-            if (permit == null) throw new AgentFault("USERS_CONSENT_REQUIRED", "No person on this machine approved this change, so it was not sent.", false);
-            permit.Posts -= 1;
-            if (entries.Count > 0) permit.Posts = 0;
-        }
-    }
-
-    private async Task<JsonObject> Confirm(string host, JsonObject p, CancellationToken token)
-    {
-        await PublicHost(host, token);
-        var stored = await Call("status", host, new JsonObject(), "", false, token);
-        if (stored["available"]?.GetValue<bool>() != true) throw new AgentFault("USERS_HOST_NOT_AUTHENTICATED", "No Users administrator is stored for this environment on this machine; nothing was sent.", false);
-        var action = Word(p["action"])!;
-        var rule = Actions[action];
-        var rows = new JsonArray(Row("Environment", host), Row("Signed in as", Word(stored["principal"]) ?? ""), Row("What will happen", rule.Text));
-        if (rule.Page != null) rows.Add((JsonNode)Row("User id", Word(p["userId"])!));
-        if (Word(p["labels"]?["user"]) is { } user) rows.Add((JsonNode)Row("User name", user, true));
-        if (rule.Target != null) rows.Add((JsonNode)Row(rule.Target, Word(p["targetId"])!));
-        if (Word(p["labels"]?["target"]) is { } target) rows.Add((JsonNode)Row(rule.Target!.Replace(" id", " name", StringComparison.Ordinal), target, true));
-        if (p["changes"] is JsonObject changes) foreach (var (key, value) in changes) rows.Add((JsonNode)Row("New " + key, Word(value) ?? ""));
-        var input = Convert.ToBase64String(Encoding.UTF8.GetBytes(new JsonObject { ["rows"] = rows }.ToJsonString()));
-        TakeWindow();
-        lock (sync) confirming = true;
-        JsonObject answer;
-        try { answer = await Call("confirm", host, new JsonObject(), input, false, token, true, 130); }
-        catch (AgentFault) { lock (sync) refusals.Add(DateTimeOffset.UtcNow); throw new AgentFault("USERS_CONFIRMATION_TIMEOUT", "No answer from the person on this machine, so nothing was sent.", false); }
-        finally { lock (sync) confirming = false; }
-        if (answer["approved"]?.GetValue<bool>() != true) lock (sync) refusals.Add(DateTimeOffset.UtcNow);
-        if (answer["approved"]?.GetValue<bool>() != true)
-            throw answer["timedOut"]?.GetValue<bool>() == true
-                ? new AgentFault("USERS_CONFIRMATION_TIMEOUT", "No answer from the person on this machine, so nothing was sent.", false)
-                : new AgentFault("USERS_CONFIRMATION_DECLINED", "The person on this machine declined, so nothing was sent.", false);
-        lock (sync)
-        {
-            if (action == "sign-in") consents[host] = DateTimeOffset.UtcNow.AddHours(8);
-            else permits.Add(new Permit { Host = host, Page = "/Users/" + rule.Page + ".aspx?UserId=" + Word(p["userId"]), Posts = 1, Until = DateTimeOffset.UtcNow.AddSeconds(120) });
-        }
-        return new JsonObject { ["approved"] = true };
-    }
-    private static JsonObject Row(string label, string value, bool data = false)
-    {
-        var row = new JsonObject { ["label"] = label, ["value"] = value };
-        if (data) row["data"] = true;
-        return row;
     }
 
     private async Task<JsonObject> Call(string mode, string host, JsonObject p, string input, bool? executed, CancellationToken token, bool interactive = false, int seconds = HelperSeconds)
@@ -360,18 +251,30 @@ internal sealed partial class UsersKinds
         }
         if (value?["ok"] is JsonValue ok && ok.TryGetValue<bool>(out var done) && done) return value;
         var code = Word(value?["code"]) is { } said && CodePattern().IsMatch(said) ? said : "USERS_PRIVATE_REQUEST_FAILED";
-        throw code == "USERS_HOST_NOT_AUTHENTICATED"
-            ? new AgentFault(code, "No Users administrator is stored for this environment on this machine; nothing was sent.", false)
-            : code == "USERS_PAGE_TOO_LARGE" ? new AgentFault(code, "This page is larger than a Users page can be; it was not read.", executed)
-            : code == "USERS_LOGIN_LAYOUT_CHANGED" ? new AgentFault(code, "The sign-in page of this environment is not the one this agent knows; nothing was sent.", false)
-            : new AgentFault(code, "The private Users request failed; no automatic retry.", executed);
+        throw code switch
+        {
+            "USERS_HOST_NOT_AUTHENTICATED" => new AgentFault(code, "No Users administrator is stored for this environment on this machine; nothing was sent.", false),
+            "USERS_PAGE_TOO_LARGE" => new AgentFault(code, "This page is larger than a Users page can be; it was not read.", executed),
+            "USERS_LOGIN_LAYOUT_CHANGED" => new AgentFault(code, "The sign-in page of this environment is not the one this agent knows; nothing was sent.", false),
+            _ => new AgentFault(code, "The private Users request failed; no automatic retry.", executed),
+        };
     }
-
+    // What a name resolves to now, with a short cache so a page's requests do not each ask.
+    private readonly Dictionary<string, DateTimeOffset> resolved = new(StringComparer.Ordinal);
+    private async Task PublicHost(string host, CancellationToken token)
+    {
+        lock (sync) if (resolved.TryGetValue(host, out var at) && Now() - at < TimeSpan.FromSeconds(60)) return;
+        string[] addresses;
+        try { addresses = Lookup != null ? await Lookup(host) : (await Dns.GetHostAddressesAsync(host, token)).Select(item => item.ToString()).ToArray(); }
+        catch (Exception e) when (e is System.Net.Sockets.SocketException or IOException) { throw new AgentFault("USERS_HOST_UNRESOLVED", "This environment does not resolve, so nothing was sent.", false); }
+        if (addresses.Length == 0) throw new AgentFault("USERS_HOST_UNRESOLVED", "This environment does not resolve, so nothing was sent.", false);
+        if (addresses.Any(IsPrivateAddress)) throw new AgentFault("USERS_HOST_PRIVATE", "This environment resolves to an address that is not on the internet, so nothing was sent.", false);
+        lock (sync) resolved[host] = Now();
+    }
     private string CookieHeader(string host)
     {
         lock (sync) return jars.TryGetValue(host, out var jar) ? string.Join("; ", jar.Select(pair => pair.Key + "=" + pair.Value)) : "";
     }
-
     private void StoreCookies(string host, JsonNode? encoded)
     {
         if (encoded is not JsonArray items) return;
@@ -388,52 +291,235 @@ internal sealed partial class UsersKinds
                 if (value.Length > 0) jar[name] = value; else jar.Remove(name);
             }
     }
-
+    // One window at a time; a person who keeps saying no is not asked again for a while; and a ceiling, so a window is never a way to wear a
+    // person down. A yes does not count against the second: approving seven changes is work, not pressure. A closed window is a no.
+    private bool confirming;
+    private readonly List<DateTimeOffset> opened = [], refusals = [];
+    private void TakeWindow()
+    {
+        Settle();
+        lock (sync)
+        {
+            if (confirming || prompts.Count > 0) throw new AgentFault("USERS_WINDOW_BUSY", "Another window of this agent is open: answer that one first.", false);
+            opened.RemoveAll(at => Now() - at >= TimeSpan.FromMinutes(10));
+            refusals.RemoveAll(at => Now() - at >= TimeSpan.FromMinutes(10));
+            if (opened.Count >= WindowsMax || refusals.Count >= RefusalsMax) throw new AgentFault("USERS_WINDOW_LIMIT", "Too many windows in a few minutes, so no other was opened.", false);
+            opened.Add(Now());
+        }
+    }
+    private bool HasConsent(string host) { lock (sync) return consents.TryGetValue(host, out var until) && until > Now(); }
+    private void NeedConsent(string host) { if (!HasConsent(host)) throw new AgentFault("USERS_LOGIN_CONSENT_REQUIRED", "No person on this machine approved signing in to this environment, so nothing was sent.", false); }
+    // The sign-in brake survives a restart: a file of this agent, with a host and a count and nothing else. Only a person's new window resets it.
+    private JsonObject ReadFailures()
+    {
+        try { return JsonNode.Parse(File.ReadAllText(failuresFile)) as JsonObject ?? []; }
+        catch (Exception e) when (e is IOException or System.Text.Json.JsonException) { return []; }
+    }
+    private int FailuresOf(string host) => ReadFailures()[scope + "|" + host] is JsonValue value && value.TryGetValue<int>(out var count) ? count : 0;
+    private void SetFailures(string host, int count)
+    {
+        var all = ReadFailures();
+        if (FailuresOf(host) == count) return;
+        if (count > 0) all[scope + "|" + host] = count; else all.Remove(scope + "|" + host);
+        Directory.CreateDirectory(promptDir);
+        File.WriteAllText(failuresFile, all.ToJsonString());
+    }
+    private static void NotPaused(string host) { }
+    // What a window the person filled gives: a prompt's status file says saved only after the vault has it.
+    private void Settle()
+    {
+        lock (sync)
+            foreach (var (key, record) in prompts.ToList())
+            {
+                string? phase = null;
+                try { phase = File.Exists(record.StatusFile) ? File.ReadAllText(record.StatusFile) : null; } catch (IOException) { }
+                if (phase != null) record.Phase = phase;
+                if (phase == "saved" && !record.Applied)
+                {
+                    record.Applied = true;
+                    if (record.Kind == "password") permits.Add(new Permit { Host = record.Host, Action = record.Action!, UserId = record.UserId, Changes = record.Changes, Entry = record.Entry!, Until = Now().AddMinutes(5) });
+                    else { consents[record.Host] = Now().AddHours(8); SetFailures(record.Host, 0); }
+                }
+                if (record.Child.HasExited)
+                {
+                    try { File.Delete(record.StatusFile); } catch (IOException) { }
+                    prompts.Remove(key);
+                }
+            }
+    }
+    private static string? ChangesKey(JsonNode? changes) => changes?.ToJsonString();
+    private void UsePermit(string host, string action, string? userId, JsonNode? changes, string entry)
+    {
+        lock (sync)
+        {
+            permits.RemoveAll(item => item.Until <= Now());
+            var at = permits.FindIndex(item => item.Host == host && item.Action == action && item.Entry == entry && item.UserId == userId && item.Changes == ChangesKey(changes));
+            if (at < 0) throw new AgentFault("USERS_CONSENT_REQUIRED", "No person on this machine approved this exact change in a window, so it was not sent.", false);
+            permits.RemoveAt(at);
+        }
+    }
+    private async Task Ask(string host, JsonArray rows, CancellationToken token)
+    {
+        var input = Convert.ToBase64String(Encoding.UTF8.GetBytes(new JsonObject { ["rows"] = rows }.ToJsonString()));
+        TakeWindow();
+        lock (sync) confirming = true;
+        JsonObject answer;
+        try { answer = await Call("confirm", host, new JsonObject(), input, false, token, true, 130); }
+        catch (AgentFault) { lock (sync) refusals.Add(Now()); throw new AgentFault("USERS_CONFIRMATION_TIMEOUT", "No answer from the person on this machine, so nothing was sent.", false); }
+        finally { lock (sync) confirming = false; }
+        if (answer["approved"]?.GetValue<bool>() == true) return;
+        lock (sync) refusals.Add(Now());
+        throw answer["timedOut"]?.GetValue<bool>() == true
+            ? new AgentFault("USERS_CONFIRMATION_TIMEOUT", "No answer from the person on this machine, so nothing was sent.", false)
+            : new AgentFault("USERS_CONFIRMATION_DECLINED", "The person on this machine declined, so nothing was sent.", false);
+    }
+    private async Task<JsonObject> StoredLogin(string host, CancellationToken token)
+    {
+        var stored = await Call("status", host, new JsonObject(), "", false, token);
+        if (stored["available"]?.GetValue<bool>() != true) throw new AgentFault("USERS_HOST_NOT_AUTHENTICATED", "No Users administrator is stored for this environment on this machine; nothing was sent.", false);
+        return stored;
+    }
+    private async Task<JsonObject> ConfirmSignIn(string host, CancellationToken token)
+    {
+        await PublicHost(host, token);
+        var stored = await StoredLogin(host, token);
+        await Ask(host, new JsonArray(UsersPage.RowOf("Environment", host), UsersPage.RowOf("Signed in as", Word(stored["principal"]) ?? ""), UsersPage.RowOf("What will happen", "Sign in to the Users application of this environment")), token);
+        lock (sync) consents[host] = Now().AddHours(8);
+        return new JsonObject { ["approved"] = true };
+    }
     private async Task<JsonObject> Prompt(string host, JsonObject p, CancellationToken token)
     {
-        var key = host + "|" + (Word(p["kind"]) ?? "login") + "|" + (Word(p["entry"]) ?? "");
+        var kind = Word(p["kind"]) ?? "login";
+        var key = host + "|" + kind + "|" + (Word(p["entry"]) ?? "");
         Settle();
         lock (sync)
             if (prompts.ContainsKey(key)) return new JsonObject { ["opened"] = false, ["alreadyOpen"] = true };
+        var subject = "";
+        var rows = new JsonArray();
+        if (kind == "password")
+        {
+            if (Word(p["action"]) == "set-password")
+            {
+                // Who this is comes from the environment's own page of that id, never from the request.
+                var html = await ReadPage(host, UsersPage.UserPage(Word(p["userId"])!), token);
+                var plan = UsersPage.PlanWrite("set-password", host, Word(p["userId"]), null, null, [html]);
+                subject = plan.Username ?? "";
+                rows = plan.Rows;
+            }
+            else
+            {
+                subject = Word(p["changes"]?["username"]) ?? "";
+                rows.Add((JsonNode)UsersPage.RowOf("What will happen", UsersPage.ActionText["create"]));
+                foreach (var (name, value) in p["changes"]!.AsObject()) rows.Add((JsonNode)UsersPage.RowOf("New " + name, Word(value)));
+            }
+        }
         TakeWindow();
-        var directory = Path.Combine(dataRoot, "private", "users");
-        Directory.CreateDirectory(directory);
-        var status = Path.Combine(directory, "prompt-" + Guid.NewGuid().ToString("N") + ".status");
-        var start = Start(true, "prompt", host, p, false);
-        start.ArgumentList.Add("-Subject"); start.ArgumentList.Add(Word(p["subject"]) ?? "");
-        start.ArgumentList.Add("-PromptStatusPath"); start.ArgumentList.Add(status);
+        Directory.CreateDirectory(promptDir);
+        var status = Path.Combine(promptDir, "prompt-" + Guid.NewGuid().ToString("N") + ".status");
+        var start = Start(true, "prompt", host, p, false, ["-Subject", subject, "-Rows", Convert.ToBase64String(Encoding.UTF8.GetBytes(rows.ToJsonString())), "-PromptStatusPath", status]);
         Process process;
         try { process = Process.Start(start) ?? throw new IOException("no helper"); }
         catch (Exception e) when (e is IOException or System.ComponentModel.Win32Exception) { throw new AgentFault("USERS_PROMPT_NOT_VISIBLE", "The private window could not be confirmed visible.", null); }
-        lock (sync) prompts[key] = new OpenPrompt { Child = process, StatusFile = status, Host = host, Kind = Word(p["kind"]) ?? "login", Entry = Word(p["entry"]), Action = Word(p["action"]), UserId = Word(p["userId"]) };
+        var record = new OpenPrompt { Child = process, StatusFile = status, Host = host, Kind = kind, Entry = Word(p["entry"]), Action = Word(p["action"]), UserId = Word(p["userId"]), Changes = ChangesKey(p["changes"]) };
+        lock (sync) prompts[key] = record;
         // The status file stays until the window closes: it says saved only then.
         process.EnableRaisingEvents = true;
         process.Exited += (_, _) => Settle();
+        // A window that was shown counts, even if it has already closed by the time this looks.
         for (var waited = 0; waited < PromptWaitMs; waited += 100)
         {
-            if (File.Exists(status))
+            Settle();
+            if (record.Phase is "visible" or "saved")
             {
-                var phase = await File.ReadAllTextAsync(status, token);
-                if (phase is "visible" or "saved")
-                {
-                    Settle();
-                    var answer = new JsonObject { ["opened"] = true, ["alreadyOpen"] = false, ["visible"] = true };
-                    if (phase == "saved") answer["saved"] = true;
-                    return answer;
-                }
+                var answer = new JsonObject { ["opened"] = true, ["alreadyOpen"] = false, ["visible"] = true };
+                if (record.Phase == "saved") answer["saved"] = true;
+                return answer;
             }
             if (process.HasExited) break;
             await Task.Delay(100, token);
         }
-        Settle();
         lock (sync) prompts.Remove(key);
         try { File.Delete(status); } catch (IOException) { }
         throw new AgentFault("USERS_PROMPT_NOT_VISIBLE", "The private window could not be confirmed visible.", null);
     }
+    private sealed record Answer(JsonNode? Status, string Location, string ContentType, string Body, string Html)
+    {
+        public JsonObject Json() => new() { ["status"] = Status?.DeepClone(), ["location"] = Location, ["contentType"] = ContentType, ["body"] = Body };
+    }
+    // One request of this agent, with this agent's session. A page that asks to sign in again ends that session, and counts toward the brake.
+    private async Task<Answer> Send(string host, string url, string method, IEnumerable<KeyValuePair<string, string>>? fields, JsonArray? secretRefs, CancellationToken token)
+    {
+        var pairs = new JsonArray();
+        foreach (var (name, value) in fields ?? []) pairs.Add((JsonNode)new JsonArray(name, value));
+        var request = new JsonObject { ["url"] = url, ["method"] = method, ["fields"] = pairs, ["secretRefs"] = secretRefs ?? [], ["cookie"] = CookieHeader(host) };
+        var input = Convert.ToBase64String(Encoding.UTF8.GetBytes(request.ToJsonString()));
+        var page = await Call("request", host, new JsonObject(), input, method == "POST" ? null : false, token);
+        var body = Word(page["body"]) ?? "";
+        // A larger answer would go through the server's disk as a blob, and stop the server that reads it.
+        if (body.Length > MaxPageBase64) throw new AgentFault("USERS_PAGE_TOO_LARGE", "This page is larger than a Users page can be; it was not read.", method == "POST" ? null : false);
+        StoreCookies(host, page["setCookie"]);
+        var html = Encoding.UTF8.GetString(Convert.FromBase64String(body));
+        if (UsersPage.IsLoginPage(html)) { lock (sync) jars.Remove(host); SetFailures(host, FailuresOf(host) + 1); }
+        else if (FailuresOf(host) > 0 && page["status"] is JsonValue code && code.TryGetValue<int>(out var number) && number == 200) SetFailures(host, 0);
+        return new Answer(page["status"], Word(page["location"]) ?? "", Word(page["contentType"]) ?? "", body, html);
+    }
+    private async Task<string> ReadPage(string host, string route, CancellationToken token)
+    {
+        var page = await Send(host, "https://" + host + route, "GET", null, null, token);
+        if (!(page.Status is JsonValue code && code.TryGetValue<int>(out var number) && number == 200) || UsersPage.IsLoginPage(page.Html)) throw UsersPage.Unknown(route);
+        return page.Html;
+    }
+    private static JsonArray SecretRefs(IEnumerable<string> fields, string? entry) => new(fields.Select(field => (JsonNode?)new JsonObject { ["field"] = field, ["kind"] = "password", ["entry"] = entry, ["part"] = "password" }).ToArray());
+    // The operation as this agent will send it. The window comes from this same plan.
+    private async Task<JsonObject> WriteOp(string host, JsonObject p, CancellationToken token)
+    {
+        var action = Word(p["action"])!;
+        var userId = Word(p["userId"]);
+        var entry = Word(p["entry"]);
+        NeedConsent(host);
+        NotPaused(host);
+        await PublicHost(host, token);
+        var passwordOp = action is "create" or "set-password";
+        if (passwordOp) UsePermit(host, action, userId, p["changes"], entry!);
+        // From here a new password has had its one chance: it leaves the vault however this ends.
+        var pending = passwordOp;
+        try
+        {
+            var stored = passwordOp ? null : await StoredLogin(host, token);
+            var pages = new List<string>();
+            foreach (var route in UsersPage.RoutesOf(action, userId, Word(p["targetId"]))) pages.Add(await ReadPage(host, route, token));
+            var plan = UsersPage.PlanWrite(action, host, userId, Word(p["targetId"]), p["changes"] as JsonObject, pages);
+            if (action == "deactivate" && Word(stored?["principal"]) is { Length: > 0 } principal && string.Equals(plan.Username, principal, StringComparison.OrdinalIgnoreCase))
+                throw new AgentFault("USERS_SELF_LOCKOUT_REFUSED", "The administrator signed in here cannot be deactivated from here.", false);
+            if (!passwordOp)
+            {
+                var rows = new JsonArray(UsersPage.RowOf("Environment", host), UsersPage.RowOf("Signed in as", Word(stored!["principal"]) ?? ""));
+                foreach (var row in plan.Rows) rows.Add(row?.DeepClone());
+                await Ask(host, rows, token);
+            }
+            Answer answer;
+            if (action == "set-password")
+            {
+                var shown = await Send(host, plan.Url, "POST", plan.Fields, null, token);
+                var save = UsersPage.PlanSavePassword(host, userId!, pages[0], shown.Html);
+                answer = await Send(host, save.Url, "POST", save.Fields, SecretRefs(save.SecretFields, entry), token);
+            }
+            else answer = await Send(host, plan.Url, "POST", plan.Fields, passwordOp ? SecretRefs(plan.SecretFields, entry) : null, token);
+            var value = answer.Json();
+            if (passwordOp) { pending = false; value["passwordForgotten"] = await Forget(host, entry!); }
+            return value;
+        }
+        finally { if (pending) await Forget(host, entry!); }
+    }
+    private async Task<bool> Forget(string host, string entry)
+    {
+        try { await Call("forget", host, new JsonObject { ["kind"] = "password", ["entry"] = entry }, "", false, CancellationToken.None); return true; }
+        catch (AgentFault) { return false; }
+    }
 
     internal async Task<JsonNode?> Execute(JsonObject p, CancellationToken token)
     {
-        if (!OperatingSystem.IsWindows()) throw new AgentFault("USERS_PLATFORM_UNAVAILABLE", "Users administration is not available on this platform.", false);
+        if (!OperatingSystem.IsWindows() && !ForceWindows) throw new AgentFault("USERS_PLATFORM_UNAVAILABLE", "Users administration is not available on this platform.", false);
         Validate(p);
         Settle();
         var op = Word(p["op"])!;
@@ -447,18 +533,11 @@ internal sealed partial class UsersKinds
             }
             case "sign-out":
                 lock (sync) { jars.Remove(host); consents.Remove(host); permits.RemoveAll(item => item.Host == host); }
+                SetFailures(host, 0);
                 await Call("sign-out", host, new JsonObject(), "", false, token);
                 return new JsonObject { ["signedOut"] = true };
             case "confirm":
-                return await Confirm(host, p, token);
-            case "login":
-            {
-                if (!HasConsent(host)) throw new AgentFault("USERS_LOGIN_CONSENT_REQUIRED", "No person on this machine approved signing in to this environment, so nothing was sent.", false);
-                await PublicHost(host, token);
-                var signed = await Call("login", host, new JsonObject(), "", null, token);
-                StoreCookies(host, signed["setCookie"]);
-                return new JsonObject { ["authenticated"] = signed["authenticated"]?.GetValue<bool>() == true };
-            }
+                return await ConfirmSignIn(host, token);
             case "forget":
                 await Call("forget", host, p, "", false, token);
                 return new JsonObject();
@@ -469,49 +548,28 @@ internal sealed partial class UsersKinds
                     // The person decides on a window; a name built to pass for an approved one never gets a window.
                     var hosts = await Call("hosts", host, new JsonObject(), "", false, token);
                     if (LookalikeOf(host, (hosts["hosts"] as JsonArray ?? []).Select(item => Word(item) ?? "").Where(item => item.Length > 0)) != null)
-                        throw new AgentFault("USERS_HOST_LOOKALIKE", "This name reads like an environment already approved on this machine, so no window was opened and nothing was sent.", false);
+                        throw new AgentFault("USERS_HOST_LOOKALIKE", "This name reads like an environment already approved on this machine, so no window was opened and nothing was sent. If it really is another environment, sign out of the other one first.", false);
                     lock (sync) jars.Remove(host);
                 }
-                else
-                {
-                    var stored = await Call("status", host, new JsonObject(), "", false, token);
-                    if (stored["available"]?.GetValue<bool>() != true) throw new AgentFault("USERS_HOST_NOT_AUTHENTICATED", "No Users administrator is stored for this environment on this machine; nothing was sent.", false);
-                }
+                else await StoredLogin(host, token);
                 return await Prompt(host, p, token);
         }
-        if (!HasConsent(host)) throw new AgentFault("USERS_LOGIN_CONSENT_REQUIRED", "No person on this machine approved signing in to this environment, so nothing was sent.", false);
+        NeedConsent(host);
+        NotPaused(host);
+        if (op == "write") return await WriteOp(host, p, token);
         await PublicHost(host, token);
-        // Only the two searches post without a yes. Every other form needs the person's yes for this page.
-        var refs = (p["secretRefs"] as JsonArray ?? []).Select(item => Word(item?["entry"])!).Distinct().ToList();
-        if (Word(p["method"]) == "POST")
+        if (op == "login")
         {
-            var url = Word(p["url"])!;
-            var path = url[("https://" + host).Length..];
-            var bare = path.Split('?')[0];
-            if (bare is not ("/Users/User_List.aspx" or "/Users/Inactive_Users.aspx") || refs.Count > 0) UsePermit(host, path, refs);
+            var signed = await Call("login", host, new JsonObject(), "", null, token);
+            StoreCookies(host, signed["setCookie"]);
+            var authenticated = signed["authenticated"]?.GetValue<bool>() == true;
+            if (!authenticated) SetFailures(host, FailuresOf(host) + 1);
+            return new JsonObject { ["authenticated"] = authenticated };
         }
-        var request = new JsonObject
-        {
-            ["url"] = Word(p["url"]), ["method"] = Word(p["method"]), ["fields"] = p["fields"]?.DeepClone() ?? new JsonArray(),
-            ["secretRefs"] = p["secretRefs"]?.DeepClone() ?? new JsonArray(), ["cookie"] = CookieHeader(host),
-        };
-        var input = Convert.ToBase64String(Encoding.UTF8.GetBytes(request.ToJsonString()));
-        var passwords = (p["secretRefs"] as JsonArray ?? []).Select(item => Word(item?["entry"])).Where(entry => entry != null).Distinct().ToList();
-        var forgotten = true;
-        JsonObject page;
-        try { page = await Call("request", host, new JsonObject(), input, null, token); }
-        finally
-        {
-            foreach (var entry in passwords)
-                try { await Call("forget", host, new JsonObject { ["kind"] = "password", ["entry"] = entry }, "", false, CancellationToken.None); }
-                catch (AgentFault) { forgotten = false; }
-        }
-        // A larger answer would go through the server's disk as a blob, and stop the server that reads it.
-        if ((Word(page["body"]) ?? "").Length > 262144 / 3 * 4 + 12) throw new AgentFault("USERS_PAGE_TOO_LARGE", "This page is larger than a Users page can be; it was not read.", Word(p["method"]) == "POST" ? null : false);
-        StoreCookies(host, page["setCookie"]);
-        // The session stays here: the answer has no setCookie. A new password was for this one POST, whatever the server does next.
-        var answer = new JsonObject { ["status"] = page["status"]?.DeepClone(), ["location"] = Word(page["location"]) ?? "", ["contentType"] = Word(page["contentType"]) ?? "", ["body"] = Word(page["body"]) ?? "" };
-        if (passwords.Count > 0) answer["passwordForgotten"] = forgotten;
-        return answer;
+        if (op == "request") return (await Send(host, Word(p["url"])!, "GET", null, null, token)).Json();
+        var inactive = p["inactive"] is JsonValue flag && flag.TryGetValue<bool>(out var chosen) && chosen;
+        var route = "/Users/" + (inactive ? "Inactive_Users" : "User_List") + ".aspx";
+        var search = UsersPage.PlanSearch(host, inactive, Word(p["text"]) ?? "", await ReadPage(host, route, token));
+        return (await Send(host, search.Url, "POST", search.Fields, null, token)).Json();
     }
 }
