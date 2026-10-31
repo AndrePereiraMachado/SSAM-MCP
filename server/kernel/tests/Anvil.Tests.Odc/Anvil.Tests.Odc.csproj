@@ -44,6 +44,8 @@
     <Compile Include="../Shared/MergeIdentitySweep.cs" Link="MergeIdentitySweep.cs" />
     <Compile Include="../Shared/ScreenHtmlRoundTripReport.cs" Link="ScreenHtmlRoundTripReport.cs" />
     <Compile Include="../Shared/ScreenHtmlPropertyModelTests.cs" Link="ScreenHtmlPropertyModelTests.cs" />
+    <Compile Include="../Shared/DeclaredPropertyKeptTests.cs" Link="DeclaredPropertyKeptTests.cs" />
+    <Compile Include="../Shared/CorpusFact.cs" Link="CorpusFact.cs" />
     <Compile Include="../Shared/GeneratedFlowCorpus.cs" Link="GeneratedFlowCorpus.cs" />
     <Compile Include="../../../platforms/odc/studio/bridge/BridgeDataIndexes.cs" Link="BridgeDataIndexes.cs" />
     <Compile Include="../Shared/PatchCertaintyTableTests.cs" Link="PatchCertaintyTableTests.cs" />

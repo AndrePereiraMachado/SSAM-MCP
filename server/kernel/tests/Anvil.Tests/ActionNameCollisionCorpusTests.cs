@@ -20,7 +20,7 @@ public sealed class ActionNameCollisionCorpusTests(ITestOutputHelper output)
         Assert.DoesNotContain(obsolete, source);
     }
 
-    [Fact]
+    [CorpusFact(CorpusFactAttribute.TextPresent, "o11")]
     public void PredictionsAndPatchNamesAgreeWithTheNativeNamingScope()
     {
         // An isolated test output folder may be outside the checkout (parallel offline validation).

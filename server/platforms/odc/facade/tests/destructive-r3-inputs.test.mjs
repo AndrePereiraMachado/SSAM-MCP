@@ -114,11 +114,15 @@ async function pool(items, size, fn) {
   return out;
 }
 
-test('BYPASS-1: .\\odc studio refuses every shape before the pipe: 0 lines reach the fake bridge (the control reaches it)', { timeout: 600000 }, async () => {
+// The control used to be a plain command reaching the fake pipe. The CLI's client now lives in bridge\\client\\...\\net10.0 and takes only an
+// official ODCStudio.exe as its target, so nothing here can reach a pipe, compiled or not (review of 30/10/2026). What the test proves is
+// the CLI's own answer, measured by a child process: every shape refused, and a plain command not refused by these rules. The lines stay
+// counted: none may reach the pipe.
+test('BYPASS-1: .\\odc studio refuses every shape before the pipe, and a plain command is not refused by these rules', { timeout: 600000 }, async () => {
   const bridge = await fakeBridge();
   try {
     const control = await runCli(['publish-status']);
-    assert.ok(bridge.lines.includes('publish-status'), 'the harness is armed: a plain command reaches the fake bridge (' + (control.stdout + control.stderr).slice(0, 300) + ')');
+    assert.doesNotMatch(control.stdout, /DESTRUCTIVE_NEEDS_DEDICATED_TOOL|BRIDGE_LINE_UNSAFE_START/, 'the refusal is not everything: ' + (control.stdout + control.stderr).slice(0, 300));
     bridge.lines.length = 0;
     const cases = [];
     for (const command of DESTRUCTIVE_BRIDGE_COMMANDS)
@@ -130,6 +134,7 @@ test('BYPASS-1: .\\odc studio refuses every shape before the pipe: 0 lines reach
     const leaks = outs.map((out, i) => [out, cases[i]]).filter(([out]) => out.code === 0 || !/"code": "(DESTRUCTIVE_NEEDS_DEDICATED_TOOL|BRIDGE_LINE_UNSAFE_START)"/.test(out.stdout))
       .map(([out, k]) => `${k.command} ${label(k.cp)} ${k.shape}: ${(out.stdout + out.stderr).slice(0, 120)}`);
     assert.deepEqual(leaks, []);
+    assert.ok(cases.length >= 60, 'the measure of the review was 60 of 60; this table is larger: ' + cases.length);
     assert.deepEqual(bridge.lines, [], 'no line of a destructive command reached the bridge pipe');
   } finally { await bridge.close(); }
 });

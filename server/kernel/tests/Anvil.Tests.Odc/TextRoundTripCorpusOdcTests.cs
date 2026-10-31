@@ -13,7 +13,7 @@ public class TextRoundTripCorpusOdcTests(ITestOutputHelper output)
 {
     private static readonly string Work = Path.Combine(Path.GetTempPath(), "text-roundtrip-odc");
 
-    [Fact]
+    [CorpusFact(CorpusFactAttribute.Text, "odc")]
     public void EveryActionOfTheOdcCorpusIsAFixedPoint()
     {
         Directory.CreateDirectory(Work);

@@ -334,6 +334,7 @@ const KEPT = {
 // Refused on a hosted server though no deletion is named, each with its reason (the owner may change it).
 const OFF_FOR_NOW = {
   'o11_access /action=apply': 'NEW-1 of review 2: the gate could not pin the manifest bytes the kernel reads (TOCTOU); every apply is off until the sha256 pin (after 19/10)',
+  'o11_users /operation=revoke-role': 'T2: taking access away is off on a hosted server like the DELETE of the same access (the owner may turn it on); delete and remove-group name a deletion',
 };
 // Tools the MCP annotations mark destructive (they overwrite or publish) that delete nothing of the environment or tenant.
 // o11_access is no longer here (F1 of the review): an apply whose manifest revokes is refused once the manifest is read.

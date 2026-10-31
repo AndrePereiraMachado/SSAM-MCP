@@ -82,7 +82,7 @@ function world(t, { libraries, references = [] }) {
     }
     calls.push(step);
     // Round 3 (N1, N2): the Studio's status lists the open modules with their tenant, as the bridge does.
-    if (step === 'status') return { ok: true, modules: [{ name: CONSUMER, key: 'kConsumer', host: HOST }, ...Object.entries(state.libraries)
+    if (step === 'status') return { ok: true, capabilities: ['reference-snapshot:every-kind'], modules: [{ name: CONSUMER, key: 'kConsumer', host: HOST }, ...Object.entries(state.libraries)
       .filter(([, lib]) => !lib.notOpen && (lib.openIn == null || lib.openIn === pid)).map(([name]) => ({ name, key: 'k' + name, host: HOST }))] };
     if (step === 'reference-producers') return { ok: true, producers: Object.keys(state.libraries).map(name => ({ name, key: 'k' + name })) };
     if (step === 'merge') { Object.assign(state.consumerRefs, state.bound ?? {}); return { ok: true, merged: true, strictlyEqual: true }; }
@@ -188,6 +188,7 @@ test('reference snapshot exports a producer whose only public element is a servi
   assert.deepEqual(JSON.parse(fs.readFileSync(output, 'utf8')).Elements.map(e => [e.Kind, e.Name]), [['service-action', 'Rate']]);
 });
 
+// A bridge that says it links the one reader (the capability in this world's status): its "no public elements" is a finding. One that does not: signature-one-reader.test.mjs.
 test('an unpublished service action follows the publication guard and delivers the same job afterwards', async t => {
   const w = world(t, { libraries: { RatingApp: { open: [{ kind: 'service-action', name: 'Rate' }], published: [], rev: 1 } } });
   const r = await deliverKernel(w.input(w.job([['RatingApp', ['ServiceAction:Rate']]])), w.deps);

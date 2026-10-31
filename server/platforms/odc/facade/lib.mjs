@@ -5,6 +5,8 @@
 // customer's <ws>/odc; the code locations (bridge client, builder, studio/, portal/runtime) stay where they are.
 import { appendJsonLine } from './correlation.mjs';
 import { judgeMergeAnswer, publishSecurityRefusal } from './security-after-merge.mjs';
+import { busyAnswer, busyError } from './odc-pipe.mjs';
+import { beginCut, checkCut, cutJobSha, mergeManifestRefusal, notWrittenRefusal, settleCut } from './merge-cut.mjs';
 import { execFile } from 'node:child_process';
 import { createCredentialPrompt } from '../portal/runtime/credential-prompt.mjs';
 import { promisify } from 'node:util';
@@ -17,7 +19,7 @@ import path from 'node:path';
 import { odcDeliveryReceiptDir } from './lane-folders.mjs';
 import { agentJoin } from './agent-paths.mjs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { deliverKernel, publishAuthorization, publishDelivered, studioSteps, withMergeCode, withoutStack, staleRevisionNext } from './kernel-delivery.mjs';
+import { baseContentSha256, cutBlock, deliverKernel, publishAuthorization, publishDelivered, studioSteps, withMergeCode, withoutStack, staleRevisionNext } from './kernel-delivery.mjs';
 import { resolveApplicationUrls, withAppLinks, appUrlCapability, derivedStageOrigin } from './app-urls.mjs';
 import { signedRuntime } from './signed-runtime.mjs';
 import { readLocalSettings, withLocalTenant } from './local-settings.mjs';
@@ -143,6 +145,9 @@ export async function client(pid, args, { env = process.env, call, pipe, version
   const connectMs = Number.isInteger(pipe?.connectMs) && pipe.connectMs > 0 ? pipe.connectMs : null;
   const text = String(call && version ? await (pipe ? call(pid, version, args, pipe) : call(pid, version, args))
     : (await executor.call('odc.pipe', { pid, version, args, ...(connectMs ? { connectMs } : {}) })).line).trim();
+  // A busy answer of the bridge (v101 on) through the agent or the .NET client: read like the busy pipe odc-pipe.mjs reports.
+  const busy = busyAnswer(text);
+  if (busy) throw busyError(version ?? 'of this Studio', pid, 10000, busy.busy);
   try { return JSON.parse(text); } catch { return { raw: text }; }
 }
 // A new capture gets its module index in the background (module-map.mjs); the answer never waits for it or changes.
@@ -184,11 +189,14 @@ export function flightRegistry(executor = currentExecutor()) {
 const UNTRACKED = new Set(['status', 'publish-log', 'auth-status', 'dismiss-dialog']);
 const MERGE_COMMANDS = new Set(['merge', 'reconcile-merge']);
 // The evidence directory and module of a manifest argument (its evidenceDir, else <manifest folder>/evidence); {} when unreadable.
+const manifestFile = manifest => {
+  const context = hostedContext();
+  return manifest.startsWith('ws:') && context ? path.resolve(context.workspace, ...manifest.slice(3).split(/[\\/]+/).filter(Boolean)) : path.resolve(dataPath(), manifest);
+};
 export function manifestFacts(manifest) {
   if (typeof manifest !== 'string' || !manifest) return {};
   try {
-    const context = hostedContext();
-    const file = manifest.startsWith('ws:') && context ? path.resolve(context.workspace, ...manifest.slice(3).split(/[\\/]+/).filter(Boolean)) : path.resolve(dataPath(), manifest);
+    const file = manifestFile(manifest);
     const document = readJson(file);
     const declared = document?.evidenceDir ?? document?.EvidenceDir;
     return { evidence: typeof declared === 'string' && declared ? path.resolve(path.dirname(file), declared) : path.join(path.dirname(file), 'evidence'),
@@ -204,6 +212,13 @@ export async function studio(args, pid, { prefetch = true, connectMs } = {}) {
     const { evidence, module } = manifestFacts(args[1]);
     const blocked = publishSecurityRefusal(evidence, { module });
     if (blocked) return blocked;
+  }
+  // A merge by any road, over a module with an open cut: merge-cut.mjs.
+  if (args[0] === 'merge') {
+    let document = null;
+    try { document = readJson(manifestFile(String(args[1]))); } catch { /* the bridge reads it and says what is wrong */ }
+    const refused = document && mergeManifestRefusal(dataPath(), document);
+    if (refused) return refused;
   }
   let targetPid = await studioPid(pid);
   let value, refused = null, requested = null;
@@ -235,6 +250,8 @@ export async function studio(args, pid, { prefetch = true, connectMs } = {}) {
   if (MERGE_COMMANDS.has(args[0])) value = judgeMergeAnswer(value, { evidence: manifestFacts(args[1]).evidence });
   // The answer says which open module the name reached.
   if (requested && value && typeof value === 'object' && !Array.isArray(value)) value = { ...value, requestedModule: requested };
+  // The process this capture came from: a bridge up to v100 does not say, and this call knows (merge-cut.mjs).
+  if (args[0] === 'snapshot' && value?.ok === true && !Number.isInteger(value.pid) && Number.isInteger(targetPid)) value = { ...value, pid: targetPid };
   if (prefetch && ['snapshot', 'latest'].includes(args[0]) && value?.ok === true && typeof value.path === 'string') warmIndex(value.path);
   // C04 (hosted): the tenant a capture names gets its Development stage before the links of this answer are built.
   if (['snapshot', 'latest', 'auth-status'].includes(args[0]) && value?.ok !== false && hostedContext()) {
@@ -255,8 +272,9 @@ export async function studio(args, pid, { prefetch = true, connectMs } = {}) {
   }
   return withAppLinks(value, context, config);
 }
-// studio_status (C10). The bridge serves one command at a time, so while a merge or a publication runs its pipe is busy and
-// a status would wait for it. The status tries the pipe for a moment only; busy, it answers at once from the command this
+// studio_status (C10). A bridge up to v100 serves one command at a time, so while a merge or a publication runs its pipe is
+// busy and a status would wait for it; from v101 on status answers beside the running command (its busy field), unless the
+// Studio's UI does not answer either. The status tries the pipe for a moment only; busy, it answers at once from the command this
 // process sent (inFlight) and from the evidence of the delivery in flight: its stage (deliver-progress.json), the merge
 // start (merge-started.json) and the result when it is there (deliver-result.json). Nothing is repeated or waited for.
 export const STATUS_CONNECT_MS = 2000;
@@ -294,7 +312,7 @@ export function busyEvidence({ pid, error, registry = flightRegistry(), lab = da
   return { ok: true, fromEvidence: true, busy: { command, since }, ...(pid ? { pid: Number(pid) } : {}),
     ...(labDir ? { delivery: { evidence: labDir, stage: progress?.stage ?? null, ...(mergeStarted ? { mergeStarted } : {}),
       ...(result ? { result: { ok: result.ok, merged: result.merged, failed: result.failed ?? null, outcome: result.outcome ?? null, code: result.code ?? null } } : {}) } } : {}),
-    note: 'The ODC bridge is running ' + (command ?? 'a command') + (since ? ' since ' + since : '') + ': this status comes from its evidence, without waiting for the pipe. The call that started it answers when it ends; never repeat a write meanwhile.',
+    note: 'The ODC bridge is running ' + (command ?? 'a command') + (since ? ' since ' + since : '') + ': this status comes from its evidence, without waiting for the pipe. The call that started it answers when it ends; never repeat a write meanwhile.' + (error?.busy?.advice ? ' ' + error.busy.advice : ''),
     ...(error?.message ? { pipe: withoutStackText(error.message) } : {}) };
 }
 const withoutStackText = text => String(text).split(/\r?\n/)[0];
@@ -570,8 +588,10 @@ export async function withFragmentPreview(report) {
 export async function guardDeliveryStep(step, fn) {
   try { return await fn(); }
   catch (error) {
+    // A merge the bridge never took (busy, no pipe; sent:false) has a known result: nothing ran.
+    if (step === 'merge' && error?.sent === false) return { ok: false, code: error.code, outcome: 'not-sent', error: 'The merge was never sent (' + error.message + '); nothing was merged.' };
     return step === 'merge'
-      ? { ok: false, outcome: 'uncertain', error: 'Merge result unknown (' + error.message + '): read the receipts and the journal before any new attempt; never retry an uncertain merge.' }
+      ? { ok: false, outcome: 'uncertain', ...(error?.code ? { lost: error.code } : {}), ...(error?.evidenceSeen === false ? { evidenceSeen: false } : {}), error: 'Merge result unknown (' + error.message + '): read the receipts and the journal before any new attempt; never retry an uncertain merge.' }
       : { ok: false, error: step + ' did not complete (' + error.message + '); nothing was merged.' };
   }
 }
@@ -621,6 +641,14 @@ export async function deliver({ feature, module, until = 'merge', pid, producer,
     if (!authorization) return done(false, { failed: 'preflight', code: 'PUBLISH_AUTHORIZATION_REQUIRED', publish: { requested: true, outcome: 'skipped' },
       error: 'publish:true needs the user\'s own words in authorize, or a standing grant for ' + module + '; nothing was built or merged.' });
   }
+  // After a cut of this feature, the same check as a job's, before anything is built (merge-cut.mjs): the name of the feature is its job.
+  const cutIdentity = { moduleKey: snapshot.moduleKey, host: snapshot.host };
+  const cutJob = cutJobSha({ feature });
+  const cutBase = await baseContentSha256(snapshot);
+  const cutPid = Number.isInteger(snapshot.pid) ? snapshot.pid : Number.isInteger(pid) ? pid : null;
+  const skippedPublish = publish === true ? { publish: { requested: true, outcome: 'skipped' } } : {};
+  const checked = until === 'merge' ? await checkCut(dataPath(), cutIdentity, { jobSha256: cutJob, openSha256: cutBase, pid: cutPid, module, otherPids: () => studioPids() }) : {};
+  if (checked.refusal) return done(false, { failed: 'snapshot', ...checked.refusal, ...skippedPublish });
   const output = nextLabDir(feature);
   const built = await timed('build', () => builderCall([feature, snapshot.path, snapshot.sha256, output, ...(producer ? ['--producer', producer] : []), ...(tenant ? ['--tenant', tenant] : [])]));
   if (!built.ok) return done(false, { failed: 'build', code: 'BUILD_REFUSED', error: withoutStack(built.error), output: built.output, ...(built.frame ? { frame: built.frame } : {}), evidence: output,
@@ -631,8 +659,30 @@ export async function deliver({ feature, module, until = 'merge', pid, producer,
   try { const r = readJson(path.join(output, 'builder-receipt.json')); receipt = { addedErrors: r.addedErrors ?? [], addedWarnings: r.addedWarnings ?? [], elapsedMs: r.elapsedMs }; } catch { /* informative only */ }
   if (until === 'build') return done(true, { manifest, checks, receipt });
   // until=merge goes straight to the merge, which proves the base and the preview's conditions itself (C17).
+  const cutOf = { jobSha256: cutJob, baseSha256: cutBase, rawBaseSha256: snapshot.sha256, pid: cutPid, lab: output, module };
   for (const step of studioSteps(until)) {
+    let begun = null;
+    if (step === 'merge') {
+      if (checked.afterCut) fs.writeFileSync(manifest, JSON.stringify({ ...readJson(manifest), afterCut: true, expectedBaseSha256: snapshot.sha256 }, null, 2));
+      begun = beginCut(dataPath(), cutIdentity, cutOf);
+      if (!begun.ok) return done(false, { failed: 'merge', manifest, evidence: output, ...notWrittenRefusal(begun), ...skippedPublish,
+        continuation: { tool: 'studio_status', arguments: Number.isInteger(pid) ? { pid } : {}, why: 'Nothing was sent. The folder of the records of this server must be writable; the same delivery goes after that.' } });
+    }
     const r = withMergeCode(await timed(step, () => guardDeliveryStep(step, () => studioCall([step, manifest], pid))));
+    if (step === 'merge') {
+      // The one form of a cut (kernel-delivery.mjs cutBlock), and what it leaves on record.
+      const answered = r.code === 'MERGE_TIMEOUT';
+      const cut = r.outcome === 'uncertain' && (answered || r.lost || r.evidenceSeen === false)
+        ? cutBlock({ cutBy: answered ? 'bridge' : r.lost === 'PIPE_REPLY_TIMEOUT' ? 'client' : 'transport', deadlineSeconds: r.deadlineSeconds ?? null, evidenceSeen: r.evidenceSeen,
+          transport: answered || r.lost === 'PIPE_REPLY_TIMEOUT' ? null : r.lost ?? null, baseSha256: cutBase, evidence: manifestFacts(manifest).evidence ?? null, journal: path.join(dataPath(), 'journal', 'operations.jsonl') }) : null;
+      settleCut(dataPath(), cutIdentity, begun, { uncertain: cut ? cut.merged !== false : r.outcome === 'uncertain', delivered: r.ok === true && r.merged === true, cut: cutOf });
+      if (r.code === 'MODULE_NOT_AT_BASE') return done(false, { failed: 'merge', manifest, code: r.code, outcome: 'not-sent', merged: null, error: withoutStack(r.error), evidence: output, ...skippedPublish,
+        continuation: { tool: 'studio_publish', arguments: { module, reconcile: true, ...(Number.isInteger(pid) ? { pid } : {}) }, why: 'compares the open module with the delivery that was cut (nothing is merged or published): what differs, or that it is all there' } });
+      if (cut?.didNotRun) return done(false, { failed: 'merge', manifest, checks, receipt, code: 'MERGE_NOT_STARTED', merged: false, timeout: cut.timeout, evidence: output, ...skippedPublish, error: 'The command ended before the native merge took the candidate. Nothing was merged. ' + withoutStack(r.error),
+        continuation: { tool: 'studio_status', arguments: Number.isInteger(pid) ? { pid } : {}, why: 'Nothing was merged. Read what keeps the Studio busy.' } });
+      if (cut) return done(false, { failed: 'merge', manifest, checks, receipt, outcome: 'uncertain', code: answered || r.lost === 'PIPE_REPLY_TIMEOUT' ? 'MERGE_TIMEOUT' : 'MERGE_UNCERTAIN', merged: cut.merged, timeout: cut.timeout, evidence: output, ...skippedPublish, error: withoutStack(r.error),
+        continuation: { tool: 'studio_status', arguments: Number.isInteger(pid) ? { pid } : {}, why: 'Read the Studio and the evidence of this delivery first. Nothing here says whether its merge ran; once no command is busy, studio_publish {module, reconcile:true} compares the module with it.' } });
+    }
     if (!r.ok) return done(false, { failed: step, manifest, checks, receipt, gate: r.gate, outcome: r.outcome, error: withoutStack(r.error), dialogsClosed: r.dialogsClosed, evidence: output,
       ...(r.code ? { code: r.code } : step === 'merge' && r.outcome === 'uncertain' ? { code: 'MERGE_UNCERTAIN' } : {}), ...(Array.isArray(r.divergences) ? { divergences: r.divergences } : {}),
       ...(publish === true ? { publish: { requested: true, outcome: 'skipped' } } : {}) });

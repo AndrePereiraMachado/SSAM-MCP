@@ -13,7 +13,7 @@ public class ScreenRecreationTests(ITestOutputHelper output)
     private static readonly string Root = JobRunner.RepoRoot(Path.GetDirectoryName(typeof(ScreenRecreationTests).Assembly.Location)!)!;
     private static readonly string Work = Path.Combine(Root, ".local", "screen-recreation");
 
-    [Fact]
+    [CorpusFact(CorpusFactAttribute.Screens, "o11")]
     public void EveryRealScreenOfTheO11CorpusIsCompiledAgainByTheDocumentFormAndComesBackTheSame()
     {
         if (!StudioAvailable()) { output.WriteLine("WARNING: no Service Studio: the screen recreation corpus test is skipped."); return; }

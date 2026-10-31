@@ -216,6 +216,8 @@
       "reason": "The .NET extension (XIF) is built by the Integration Studio engine (.NET Framework 4.7.2, x86, Windows only), which the Linux server image does not carry; on a Windows server its spec files, work and receipts are not yet confined per account. Build and publish the extension on your own Windows machine (Integration Studio, or o11_extension of an SSAM installed there), then reference it here.",
       "continuation": { "tool": "ssam_discover", "arguments": { "intent": "reference an existing .NET extension (XIF) from an O11 module", "lane": "o11" },
         "why": "The extension is published from the user's Windows machine; this shows how to reference it from a module on this server (ssam_job op reference, then o11_deliver)." } },
+    "o11_users": { "class": "agent", "lane": "none", "agent": { "when": "not-in", "arg": "operation", "values": ["capabilities", "receipt"] },
+      "paths": { "in": [], "out": [] }, "reason": "Users administration through the user's SSAM agent (kind o11.users, hosted/users-agent.mjs): the vault, the private window, the HTTP requests and the session cookies stay on that machine; this server reads the pages and keeps minimal receipts in state/users of this workspace. An agent without the kind answers USERS_AGENT_UPDATE_REQUIRED and nothing runs. delete, revoke-role and remove-group are off here (T2)." },
     "odc_external_library": { "class": "unavailable", "lane": "none", "agent": "never",
       "paths": { "in": [], "out": [] }, "reason": "The library is built on the server machine with dotnet publish and NuGet packages the spec names (package build steps run code on that machine); not yet isolated per account. Build and upload the library in ODC Portal, then reference it with studio_deliver." }
   }

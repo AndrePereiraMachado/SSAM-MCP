@@ -12,7 +12,7 @@ public class FlowBatteryCorpusOdcTests(ITestOutputHelper output)
 {
     private static readonly string Work = Path.Combine(Path.GetTempPath(), "flow-battery-odc");
 
-    [Fact]
+    [CorpusFact(CorpusFactAttribute.Text, "odc")]
     public void EditsOfTheOdcCorpusReadBackAsTheirText()
     {
         Directory.CreateDirectory(Work);
@@ -24,7 +24,7 @@ public class FlowBatteryCorpusOdcTests(ITestOutputHelper output)
     }
 
     // Screen and data actions born from texts without @key on the screens and blocks of the corpus (FlowCreateBattery).
-    [Fact]
+    [CorpusFact(CorpusFactAttribute.Text, "odc")]
     public void NewScreenAndDataActionsOfTheOdcCorpusReadBackAsTheirText()
     {
         Directory.CreateDirectory(Work);
@@ -36,7 +36,7 @@ public class FlowBatteryCorpusOdcTests(ITestOutputHelper output)
     }
 
     // An owner whose every screen action runs a JavaScript is created through the refusal's patch (OpenDialogOnReady).
-    [Fact]
+    [CorpusFact(CorpusFactAttribute.TextPresent, "odc", "FloodQuotes")]
     public void AnOwnerWhoseScreenActionsRunAScriptIsCreatedThroughThePatch()
     {
         Directory.CreateDirectory(Work);

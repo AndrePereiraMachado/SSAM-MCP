@@ -1,4 +1,5 @@
 import { stamped } from './correlation.mjs';
+import { beginCut, checkCut, cutJobSha, notWrittenRefusal, settleCut } from './merge-cut.mjs';
 import { judgeMergeAnswer, SECURITY_CODE } from './security-after-merge.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -35,7 +36,7 @@ import { producersNamed, resolveListedName, nameNote, producerBindings, sameProd
 // fix/unpublished-library (family OF): a producer whose published revision lacks what the job references, while its open
 // model has it: ONE refusal PRODUCER_NOT_PUBLISHED with publish, refresh and the same delivery.
 import { noPublicElements, requestedElements, namingOps, signatureElements, signatureRevision, signatureModuleKind, signatureHas, classify, odcProducerModel,
-  unpublishedRefusal, odcExportable, odcExportableSurface, parseElement, ODC_SIGNATURE_HOLDS, WORDS as PUBLISH_WORDS, signatureModuleKey, personPublishStep, publicationGateStep, PERSON_PUBLISHES } from './producer-publication.mjs';
+  unpublishedRefusal, odcExportable, odcExportableSurface, parseElement, ODC_SIGNATURE_HOLDS, WORDS as PUBLISH_WORDS, signatureModuleKey, personPublishStep, publicationGateStep, PERSON_PUBLISHES, UNVERIFIED, signatureHoldsBytes, oldBridgeSeesSurface, bridgeListsEveryKind, agentUpdateStep } from './producer-publication.mjs';
 
 const exec = promisify(execFile);
 // Quality (docs/QUALIDADE.md): a cold `dotnet anvil-odc.dll` is a kernel leaf (the worker request is one in anvil-worker.mjs).
@@ -231,6 +232,28 @@ export async function checkJobKernel({ job }, deps = {}) {
   return { ok: false, static: envelope.data?.static ?? envelope.static ?? { complete: false }, code: errors.length === 1 && errors[0].code ? errors[0].code : 'PREFLIGHT_REFUSED', problems: errors,
     error: (Array.isArray(envelope.data?.errors) && envelope.data.errors.length ? envelope.data.errors : errors.map(p => p.message + (p.fix ? ' Fix: ' + p.fix : ''))).join('\n'),
     verifyRan: false, ...(typeof envelope.data?.verifyReason === 'string' ? { verifyReason: envelope.data.verifyReason } : {}) };
+}
+
+// What a published signature holds, read from its own bytes by the kernel's one reader (anvil-odc signature-elements), never from
+// the list a bridge wrote beside them: an older bridge lists less (v98 and v101: no service action), and its list must never change
+// an answer. In a process of its own, like the check above. -> {ok:true, elements:[{Kind, Name, Key}], others:[{tag, name, key}]} |
+// {ok:false, error}. A capture without bytes (no bridge writes one) has only its list.
+export async function readSignatureKernel(file, deps = {}) {
+  if (!signatureHoldsBytes(file)) {
+    const listed = signatureElements(file);
+    return listed ? { ok: true, elements: listed, others: [] } : { ok: false, error: 'the capture ' + path.basename(String(file)) + ' could not be read' };
+  }
+  if (deps.readSignature) return deps.readSignature(file);
+  const cli = deps.cli ?? kernelCli();
+  if (!fs.existsSync(cli)) return { ok: false, error: 'the ODC kernel CLI is not built' };
+  const hosted = hostedContext() ? hostedSpawnEnv('odc') : null;
+  const response = await coldKernel(() => (deps.exec ?? exec)('dotnet', [cli, 'signature-elements', '--avsig', file], { cwd: hosted ? hosted.cwd : path.dirname(cli), windowsHide: true, maxBuffer: 16 * 1024 * 1024,
+    ...(hosted ? { env: hosted.env } : {}) })
+    .then(r => ({ ...r, exitCode: 0 })).catch(e => ({ stdout: e.stdout ?? '', stderr: e.stderr ?? e.message, exitCode: e.code ?? 1 })));
+  let envelope = null;
+  try { envelope = JSON.parse(response.stdout); } catch { envelope = null; }
+  if (envelope?.ok !== true || !Array.isArray(envelope.data?.elements)) return { ok: false, error: withoutStack(envelope?.error ?? response.stderr) ?? 'signature-elements gave no answer' };
+  return { ok: true, elements: envelope.data.elements.map(e => ({ Kind: e.kind, Name: e.name, Key: e.key })), others: Array.isArray(envelope.data.others) ? envelope.data.others : [] };
 }
 
 // The delivery's merge order, computed headless by the kernel (anvil-odc merge-order: Anvil.Core.MergePlanner over the
@@ -948,10 +971,10 @@ export function outdatedContinuation(problems, { module, pid, feature, job, owne
 // a module capture of the capture folder is a data hint, never a publication). otherPids: the ODC Studio processes.
 // Round 3 (review C:\t\revisoes\unpublished-lib-2, N2): whether studio_publish {module} would take the module now, read only
 // (studio-publish-log.mjs publishPrecheck, with the lab and root the studio_publish handler of mcp.mjs reads).
-async function checkPublication({ module, pid, openSha256 }, { studio, root, lab = null, catalog = null }) {
+async function checkPublication({ module, pid, openSha256, revision = null }, { studio, root, lab = null, catalog = null }) {
   try {
     const { publishPrecheck } = await import('./studio-publish-log.mjs');
-    return await publishPrecheck({ module, pid, openSha256 }, { studio, lab: lab ?? (root ? path.join(root, 'lab') : null), root, catalog: typeof catalog === 'function' ? catalog : () => null });
+    return await publishPrecheck({ module, pid, openSha256, revision }, { studio, lab: lab ?? (root ? path.join(root, 'lab') : null), root, catalog: typeof catalog === 'function' ? catalog : () => null });
   } catch (error) { return { ok: false, code: 'PUBLISH_PRECHECK_FAILED', error: withoutStack(error.message) }; }
 }
 // Round 3 (N1): the tenant of the consumer session of a module, from the Studio's status (the host of its one open copy),
@@ -967,8 +990,17 @@ async function consumerHostOf(studio, module, pid) {
   } catch { /* the snapshot below says it */ }
   try { const snap = await studio(['snapshot', module], pid); return snap?.ok === true && typeof snap.host === 'string' && snap.host ? snap.host : null; } catch { return null; }
 }
-export async function referenceSnapshot({ module, producer, output, pid }, { studio, cache = null, captureDir = null, producerModel = null, producerDigest = null, otherPids = null, lab = null, root = null, catalog = null }) {
+export async function referenceSnapshot({ module, producer, output, pid }, { studio, cache = null, captureDir = null, producerModel = null, producerDigest = null, otherPids = null, lab = null, root = null, catalog = null, readSignature = null, cli = undefined, exec: run = undefined }) {
   const answered = await referenceSnapshotOnce({ module, producer, output, pid }, { studio, cache });
+  // The elements a capture answers are the signature's, not what this bridge's list had room for.
+  if (answered?.ok === true && typeof answered.path === 'string') {
+    let read;
+    try { read = await readSignatureKernel(answered.path, { readSignature, ...(cli ? { cli } : {}), ...(run ? { exec: run } : {}) }); } catch (error) { read = { ok: false, error: withoutStack(error.message) }; }
+    if (read.ok !== true) return { ...answered, signatureRead: { read: false, reason: read.error ?? null, note: 'elements is the list the bridge wrote; it may lack what its reader does not know' } };
+    const listed = Array.isArray(answered.elements) ? answered.elements.length : null;
+    return { ...answered, elements: read.elements.map(e => ({ kind: e.Kind, name: e.Name, key: e.Key })), ...(read.others?.length ? { others: read.others } : {}),
+      ...(listed !== null && listed < read.elements.length ? { note: (answered.note ? answered.note + '; ' : '') + 'the bridge listed ' + listed + ' element(s); the signature itself holds ' + read.elements.length } : {}) };
+  }
   if (!noPublicElements(answered)) return answered;
   const name = answered.taken ?? studioNameOf(producer) ?? producer;
   let model;
@@ -982,6 +1014,7 @@ export async function referenceSnapshot({ module, producer, output, pid }, { stu
   if (model?.ok !== true) return { ...value, ...(model?.reason ? { openModel: { read: false, reason: model.reason,
     ...(model.capture ? { capture: { file: model.capture.file, capturedAt: model.capture.capturedAt ?? null, note: 'a module capture is data, not the open model' } } : {}) } } : {}) };
   const exportable = model.surface.filter(s => s.public && odcExportableSurface(s));
+  const seen = exportable.filter(oldBridgeSeesSurface);
   if (!exportable.length) {
     const others = model.surface.filter(s => s.public).slice(0, 20).map(s => s.kind + ':' + s.name);
     return { ...value, ...(others.length ? { error: String(value.error ?? '').replace(/\.?\s*$/, '') + '. The open model of ' + name + ' has public elements only of kinds an ODC signature cannot hold ('
@@ -990,12 +1023,21 @@ export async function referenceSnapshot({ module, producer, output, pid }, { stu
   }
   const at = Number.isInteger(pid) ? { pid } : {};
   const publishAt = Number.isInteger(model.pid) ? { pid: model.pid } : at;
-  const shown = exportable.slice(0, 20).map(s => s.kind + ':' + s.name);
+  // A bridge older than this server says "no public elements" of a module whose public elements are all of a kind it does not list:
+  // that says nothing about what is published (no capture exists to read), so it is never "not published".
+  const everyKind = !seen.length && bridgeListsEveryKind(await studio(['status'], pid).catch(() => null));
+  if (!seen.length && !everyKind) return { ...value, code: UNVERIFIED,
+    error: 'SSAM could not confirm what the published revision of ' + name + ' exports: the bridge in this Studio, which lists no service action, refuses such a producer before any signature exists, so there are no bytes to read. Its open model has public '
+      + exportable.slice(0, 20).map(s => s.kind + ':' + s.name).join(', ') + '. Nothing was written.',
+    openModel: { read: true, source: model.source, ...publishAt, ...(model.host ? { host: model.host } : {}) },
+    continuation: { ...agentUpdateStep(name), then: { tool: 'studio_reference_snapshot', arguments: { module, producer, output, ...at }, why: 'The same capture.' } } };
+  const told = everyKind ? exportable : seen;
+  const shown = told.slice(0, 20).map(s => s.kind + ':' + s.name);
   // Round 3 (N2): the first step runs: studio_publish only when its handler would take the library now, else the person's.
   const publishable = await checkPublication({ module: name, pid: publishAt.pid, openSha256: model.sha256 ?? null }, { studio, root, lab, catalog });
   const capture = { tool: 'studio_reference_snapshot', arguments: { module, producer, output, ...at }, why: 'The same capture, of the revision just published.' };
   return { ...value, code: 'PRODUCER_NOT_PUBLISHED',
-    error: 'The published revision of ' + name + ' exports no public element; its open model has ' + shown.length + (exportable.length > 20 ? '+' : '') + ' public element(s) not published yet ('
+    error: 'The published revision of ' + name + ' exports no public element; its open model has ' + shown.length + (told.length > 20 ? '+' : '') + ' public element(s) not published yet ('
       + shown.join(', ') + '). Nothing was written. Publish ' + name + ' first (the person\'s own words), then capture it again.',
     unpublished: [{ producer: name, publishedElements: 0, openModel: { source: model.source, ...publishAt, ...(model.host ? { host: model.host } : {}), file: model.file ?? null, sha256: model.sha256 ?? null,
       ...(model.capturedAt ? { capturedAt: model.capturedAt } : {}) } }],
@@ -1053,15 +1095,57 @@ export function withMergeCode(value) {
   if (/conflicts with the open module/.test(value.error)) return { ...value, code: 'MERGE_CONFLICT' };
   if (/differs from the captured base/.test(value.error)) return { ...value, code: 'BASE_DRIFT' };
   if (/Authenticated author mismatch/.test(value.error)) return { ...value, code: 'AUTHOR_MISMATCH' };
-  // Bridge v98 (BridgeServe.cs JobNotStartedException): the tab never ran the queued merge within its bound; abandoned, it
+  // Bridge v101 (BridgeServe.cs JobNotStartedException): the tab never ran the queued merge within its bound; abandoned, it
   // never runs later, and nothing was merged.
   if (/^MERGE_NOT_STARTED:/.test(value.error)) return { ...value, code: 'MERGE_NOT_STARTED' };
+  if (/MODULE_NOT_AT_BASE:/.test(value.error)) return { ...value, code: 'MODULE_NOT_AT_BASE', merged: null };
   return value;
 }
 
 // A delivery that stops at `build` because the kernel refused the job or its candidate did not pass Verify gets the
 // same guidance as `ssam job` (job-guidance.mjs): contract, capabilities, proven refusal, next step. Only there: the
 // later stages talk to the Studio, and an uncertain merge is never interpreted here.
+// What the evidence of a cut merge says, and only that. merge-started.json and the hand-off come before CompareAndMerge (StartupHook.cs
+// Run), and native-return.json only after every pass, so a native call that throws leaves merge-started.json and last-error.json with
+// the candidate in the module, whole or in part. Whether anything may go again is not decided here: merge-cut.mjs checks the module.
+export function afterMergeTimeout({ notStarted = false, started = false, returned = false, ended = false, busy = false, firstPassMerged = false } = {}) {
+  if (started) return { state: busy ? 'may-be-merged-still-running' : returned ? 'merged' : 'may-be-merged' };
+  if (firstPassMerged) return { state: notStarted || (ended && !busy) ? 'second-pass-did-not-run' : busy ? 'still-running' : 'unknown' };
+  if (notStarted) return { state: 'not-started' };
+  if (ended && !busy) return { state: 'ended-before-the-merge' };
+  return { state: busy ? 'still-running' : 'unknown' };
+}
+export const MERGE_TIMEOUT_NEXT = Object.freeze([
+  { when: 'not-started.json, last-error.json or late-result.json is in the evidence, without merge-started.json', then: 'it ended before the native merge, so nothing of it ran: read it' },
+  { when: 'merge-started.json is in the evidence, whatever else is there', then: 'the native merge took the candidate, and it may be in the module whole or in part: once studio_status names no busy command, studio_publish {module, reconcile:true} compares the open module with this delivery. Equal: it merged. Different: the answer names each difference' },
+  { when: 'studio_status names it under busy', then: 'it still runs: wait. Status, dismiss-dialog and publish-log answer; any other write is refused BRIDGE_BUSY until it ends' },
+  { when: 'none of these', then: 'nothing says whether it ran: once studio_status names no busy command, studio_publish {module, reconcile:true} compares the open module with this delivery' },
+  { when: 'a new delivery', then: 'the server checks it: this same job goes only while the open module is its base (timeout.baseSha256, the content sha256 of the module), else MODULE_NOT_AT_BASE and nothing is merged. A different job, of what is really missing, goes once the module was read' },
+  { when: 'the evidence decided', then: 'this call stays on record as uncertain until then: the refusal of the next write (TASK_UNCERTAIN_PENDING) says how to close it' },
+]);
+
+// Pass 2 of a merge order: pass 1 is in the module.
+export const MERGE_TIMEOUT_NEXT_PASS_2 = Object.freeze([
+  { when: 'not-started.json, last-error.json or late-result.json is in the evidence of pass 2, without merge-started.json', then: 'pass 2 did not run and pass 1 is in the module: the repair job of this answer delivers the deferred defaults' },
+  ...MERGE_TIMEOUT_NEXT.slice(1),
+]);
+
+// What the evidence of a cut merge says, in the one form of every cut, for both roads of a delivery.
+export function cutBlock({ cutBy, deadlineSeconds = null, evidenceSeen = true, transport = null, baseSha256 = null, firstPassMerged = false, evidence = null, journal }) {
+  const next = firstPassMerged ? MERGE_TIMEOUT_NEXT_PASS_2 : MERGE_TIMEOUT_NEXT;
+  const head = { cutBy, ...(transport ? { transport } : {}), ...(deadlineSeconds ? { deadlineSeconds } : {}), ...(baseSha256 ? { baseSha256 } : {}) };
+  // Hosted, the agent cut the reply and its evidence did not come back: nothing here can be affirmed.
+  if (evidenceSeen === false) return { merged: firstPassMerged ? true : null, blind: true,
+    timeout: { ...head, evidenceSeen: false, mergeStarted: 'unknown', nativeReturned: 'unknown', now: afterMergeTimeout({ firstPassMerged }), next, journal: 'on the machine of the Studio' } };
+  const read = name => { try { return evidence ? JSON.parse(fs.readFileSync(path.join(evidence, name), 'utf8').replace(/^\uFEFF/, '')) : null; } catch { return null; } };
+  const started = read('merge-started.json'), returned = read('native-return.json'), notStarted = read('not-started.json');
+  const ended = !!(read('last-error.json') || read('late-result.json'));
+  const didNotRun = !started && (!!notStarted || ended);
+  return { merged: firstPassMerged || (started && returned) ? true : didNotRun ? false : null, started, returned, notStarted, didNotRun,
+    timeout: { ...head, evidenceSeen: true, mergeStarted: !!started, ...(started?.at ? { startedAt: started.at } : {}), nativeReturned: !!returned,
+      ...(evidence ? { evidence } : {}), journal, now: afterMergeTimeout({ started: !!started, returned: !!returned, notStarted: !!notStarted, ended, firstPassMerged }), next } };
+}
+
 const catalogGuidance = async args => (await import('./job-guidance.mjs')).jobGuidance(args);
 // The base snapshot and the built candidate get their module index in the background (module-map.mjs).
 const warmIndex = (file, lane) => import('./module-map.mjs').then(m => m.prefetchIndex(file, lane));
@@ -1084,6 +1168,19 @@ export async function deliverKernel(input, deps) {
   // A warm-up never waits, fails or changes the delivery.
   const warm = file => { Promise.resolve().then(() => prefetch(file, 'odc')).catch(() => {}); };
   const { feature, owners, changes, pid, until = 'merge', publish = false, authorize } = input;
+  // merge-cut.mjs: what this module's last cut said, what this delivery is, and where it stands.
+  let cutIdentity = null, cutBase = null, cutRawBase = null, cutPid = null, begun = null;
+  const cutOfThis = (repairs = []) => ({ baseSha256: cutBase, rawBaseSha256: cutRawBase, jobSha256: jobSha, pid: cutPid, lab: output, module, repairs });
+  // Before the hand-off, or nothing is sent (merge-cut.mjs beginCut).
+  const recordBeforeMerge = () => {
+    begun ??= beginCut(root, cutIdentity, cutOfThis());
+    if (begun.ok) return true;
+    report.failed = 'merge';
+    Object.assign(report, notWrittenRefusal(begun));
+    report.continuation = { tool: 'studio_status', arguments: Number.isInteger(pid) ? { pid } : {}, why: 'Nothing was sent. The folder of the records of this server must be writable; the same delivery goes after that.' };
+    if (publish === true) report.publish = { requested: true, outcome: 'skipped' };
+    return false;
+  };
   let { module } = input;
   if (!module?.trim() || !feature?.trim() || !input.job?.trim()) throw new Error('job, module and feature are required for kernel delivery.');
   for (const [name, list] of Object.entries({ owners, changes }))
@@ -1097,6 +1194,7 @@ export async function deliverKernel(input, deps) {
   if (!fs.statSync(job).isFile()) throw new Error('Job must be a file: ' + job);
   const readJob = file => JSON.parse(fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, ''));
   let jobDocument = readJob(job);
+  const jobSha = cutJobSha(jobDocument);
   // The prototype import is turned off (prototype-disabled.mjs): ONE refusal before any capture, build or Studio command.
   const disabled = prototypeImportRefusal(jobDocument, { lane: 'odc', module, readPart: partReader(job, fs, path) });
   if (disabled) {
@@ -1185,13 +1283,20 @@ export async function deliverKernel(input, deps) {
       refuse(step, value);
       // The module changed between the capture and the merge (the person edited it): nothing was merged, and the same call
       // again captures the module as it is now.
+      if (step === 'merge' && value.code === 'MODULE_NOT_AT_BASE') {
+        report.merged = null; report.outcome = 'not-sent';
+        report.continuation = { tool: 'studio_publish', arguments: { module, reconcile: true, ...(Number.isInteger(pid) ? { pid } : {}) }, why: 'compares the open module with the delivery that was cut (nothing is merged or published): what differs, or that it is all there' };
+      }
+      // After a cut, a bridge up to v100 ignores the sha and answers this. The module moved, and nothing here says it is not the job that was cut.
+      if (step === 'merge' && value.code === 'BASE_DRIFT' && report.afterCut)
+        report.continuation = { tool: 'studio_publish', arguments: { module, reconcile: true, ...(Number.isInteger(pid) ? { pid } : {}) }, why: 'The open module moved after the capture, with a delivery cut before it; nothing was merged. This compares the module with that delivery (nothing is merged or published).' };
       if (step === 'merge' && value.code === 'BASE_DRIFT' && !report.continuation)
         report.continuation = { tool: 'studio_deliver', arguments: { feature, module, job, owners, changes, ...(Number.isInteger(pid) ? { pid } : {}),
           ...(publish === true ? { publish: true, ...(typeof authorize === 'string' && authorize.trim() ? { authorize } : {}) } : {}) },
           why: 'The open module changed after the capture; nothing was merged. The same delivery again builds on the module as it is now.' };
       if (step === 'merge' && value.code === 'MERGE_NOT_STARTED' && !report.continuation)
         report.continuation = { tool: 'studio_status', arguments: Number.isInteger(pid) ? { pid } : {},
-          why: 'The Studio did not run the merge (its tab was not idle); the bridge abandoned it, so it never runs later and nothing was merged. Read what keeps the Studio busy, then the same studio_deliver again.' };
+          why: 'The Studio did not run the merge (its tab was not idle); the bridge abandoned it, so it never runs later and nothing was merged. Read what keeps the Studio busy.' };
       // A merge the bridge proved equal but for known losses (merge order: defaults the Studio removed, delete rules it
       // forced to Ignore, properties it normalizes) is merged and not uncertain: the answer carries each element with its
       // repair, declaration or normalization.
@@ -1245,25 +1350,47 @@ export async function deliverKernel(input, deps) {
   // merge:normalized), or the evidence does (merge-started.json and native-return.json: CompareAndMerge returned, for the
   // v39 bridge and older). Then the answer keeps merged:true, and its continuation is a read of this delivery's evidence,
   // never the same delivery: "já integrado; não repita".
-  // A merge whose answer never came (the pipe's reply deadline, past the bridge's own): an explicit, recorded outcome,
-  // MERGE_TIMEOUT, with what the evidence says (did the bridge start CompareAndMerge? did it return?) and the next call.
-  // The delivery is never repeated from here: a merge the Studio queued may still run when its tab becomes idle.
-  const mergeTimedOut = error => {
-    if (error?.code !== 'PIPE_REPLY_TIMEOUT') return;
+  // A merge past a deadline: the bridge's own (it answered MERGE_TIMEOUT, cutBy bridge) or the client's (the answer never
+  // came, PIPE_REPLY_TIMEOUT, cutBy client). An explicit, recorded outcome with what the evidence says (did the bridge start
+  // CompareAndMerge? did it return?) and what a session may do now (timeout.next); the Studio turn stays with the merge, so a
+  // write sent meanwhile is refused BRIDGE_BUSY and can never run on top of it. A bridge that abandoned the queued job says
+  // so (not-started.json): nothing ran, no doubt remains. A bridge up to v100 keeps the job queued: it may still run later.
+  // One form for every cut: the bridge's deadline (cutBy bridge), the client's (cutBy client) and a call lost on the way (cutBy
+  // transport: PIPE_TRANSPORT, PIPE_NO_REPLY, AGENT_*). The block says what the evidence shows and what a session may do; merged and
+  // mergeStarted say the same thing: true and false only from evidence, null and "unknown" when nothing here can say.
+  const mergeCut = ({ cutBy, deadlineSeconds = null, evidenceSeen = true, code = 'MERGE_TIMEOUT', transport = null }) => {
+    const firstPassMerged = !!report.mergeOrder?.firstPass;
+    const status = why => ({ tool: 'studio_status', arguments: Number.isInteger(pid) ? { pid } : {}, why });
+    report.code = code;
     let evidence = null;
-    try { evidence = report.manifest ? evidenceDirOf(report.manifest) : null; } catch { evidence = null; }
-    const read = name => { try { return evidence ? readJob(path.join(evidence, name)) : null; } catch { return null; } };
-    const started = read('merge-started.json'), returned = read('native-return.json');
-    report.code = 'MERGE_TIMEOUT';
-    report.timeout = { mergeStarted: !!started, ...(started?.at ? { startedAt: started.at } : {}), nativeReturned: !!returned,
-      ...(evidence ? { evidence } : {}), journal: path.join(root, 'journal', 'operations.jsonl') };
+    try { evidence = evidenceSeen !== false && report.manifest ? evidenceDirOf(report.manifest) : null; } catch { evidence = null; }
+    const block = cutBlock({ cutBy, deadlineSeconds, evidenceSeen, transport, baseSha256: cutBase, firstPassMerged, evidence, journal: path.join(root, 'journal', 'operations.jsonl') });
+    report.timeout = block.timeout; report.merged = block.merged;
+    if (block.blind) {
+      report.error = 'The answer did not come, and the evidence of this merge is on the machine of the Studio, out of reach of this server: whether it started, ran or ended is unknown. ' + report.error;
+      report.continuation = status('Read what the Studio is running. Never repeat this delivery: nothing here says whether its merge ran.');
+      return;
+    }
+    const { started, returned, notStarted, didNotRun } = block;
+    if (didNotRun && firstPassMerged) {
+      // Nothing of pass 2 ran and pass 1 is in the module: known, and repaired (secondPassFailed).
+      report.outcome = 'incomplete'; report.code = 'MERGE_ORDER_INCOMPLETE';
+      report.error = 'Pass 2 of the merge order did not run. ' + (report.error ?? '');
+      return;
+    }
+    if (didNotRun) {
+      report.code = 'MERGE_NOT_STARTED'; delete report.outcome;
+      report.error = (notStarted ? 'The Studio did not run the merge: its tab did not become idle, and the bridge abandoned it.' : 'The command ended before the native merge took the candidate.') + ' Nothing was merged. ' + (report.error ?? '');
+      report.continuation = status((notStarted ? 'The bridge abandoned the merge, so it never runs later and nothing was merged.' : 'The merge command ended before the native merge, and nothing was merged.') + ' Read what keeps the Studio busy.');
+      return;
+    }
     report.error = (started
       ? 'The bridge started the native merge at ' + started.at + (returned ? ' and it returned' : ' and it had not returned')
-      : 'The merge had not started in the Studio (no merge-started.json): the Studio queued it until its tab is idle, and it may still run later')
-      + ' when the answer deadline passed. ' + report.error;
-    report.continuation = { tool: 'studio_status', arguments: Number.isInteger(pid) ? { pid } : {},
-      why: 'Read the Studio and this delivery\'s evidence first (merge-started.json, native-return.json, receipt.json, late-result.json). Never repeat this delivery while its merge may still run; once the evidence shows it ran, studio_publish {module, reconcile:true} proves its content.' };
+      : 'The merge had not started in the Studio when the evidence was read (no merge-started.json): a bridge up to v100 keeps it queued until its tab is idle, and then it may still run later')
+      + (cutBy === 'transport' ? ' when the call was lost. ' : ' when the answer deadline passed. ') + report.error;
+    report.continuation = status('Read the Studio and this delivery\'s evidence first (merge-started.json, native-return.json, receipt.json, late-result.json, undelivered-answer.json). Never repeat this delivery while its merge may still run or may have run; once merge-started.json is there and it ended, studio_publish {module, reconcile:true} proves its content.');
   };
+  const bridgeTimedOut = () => { if (report.code === 'MERGE_TIMEOUT') mergeCut({ cutBy: 'bridge', deadlineSeconds: report.refusal?.deadlineSeconds ?? null }); };
   const mergedHonestly = () => {
     let ran = report.refusal?.merged === true || report.merge?.merged === true || report.merged === true;
     if (!ran && report.manifest) {
@@ -1389,6 +1516,19 @@ export async function deliverKernel(input, deps) {
       report.requestedModule = module; report.module = module = snapshot.module;
     }
     report.snapshot = { path: snapshot.path, sha256: snapshot.sha256, host: snapshot.host, ...(snapshot.capturedAt ? { capturedAt: snapshot.capturedAt } : {}) };
+    // After a cut merge: the same job only over the base it was built on, in the process that could hold it. Nothing is built before this.
+    cutIdentity = { moduleKey: snapshot.moduleKey, host: snapshot.host }; cutBase = await baseContentSha256(snapshot, deps); cutPid = Number.isInteger(snapshot.pid) ? snapshot.pid : Number.isInteger(pid) ? pid : null; cutRawBase = snapshot.sha256;
+    // Only what writes: a capture, a build and a preview change nothing, and a session reads through them.
+    const checked = until !== 'merge' ? {} : await checkCut(root, cutIdentity, { jobSha256: jobSha, openSha256: cutBase, pid: cutPid, module, otherPids: deps.otherPids });
+    if (checked.refusal) {
+      report.failed = 'snapshot';
+      Object.assign(report, checked.refusal);
+      if (publish === true) report.publish = { requested: true, outcome: 'skipped' };
+      cutIdentity = null;
+      return completed(report);
+    }
+    // The bridge reads the same Studio moments later, and compares the raw sha256 of this capture.
+    if (checked.afterCut) report.afterCut = { ...checked.afterCut, expectedBaseSha256: snapshot.sha256 };
     if (snapshot.appLinks) report.appLinks = snapshot.appLinks;
     warm(snapshot.path);
     if (until === 'snapshot') { report.ok = true; return completed(report); }
@@ -1516,7 +1656,7 @@ export async function deliverKernel(input, deps) {
     const producerModel = deps.producerModel ?? (args => odcProducerModel(args, { studio,
       digestOf: deps.producerDigest ?? (async file => (await import('./module-map.mjs')).moduleDigest({ lane: 'odc', target: file })),
       captureDir: snapshot?.path ? path.dirname(snapshot.path) : null, otherPids: deps.otherPids ?? null }));
-    const publicationCheck = (producer, at, openSha256) => checkPublication({ module: producer, pid: at, openSha256 }, { studio, root, lab: deps.publishLab, catalog: deps.catalog });
+    const publicationCheck = (producer, at, openSha256, revision) => checkPublication({ module: producer, pid: at, openSha256, revision }, { studio, root, lab: deps.publishLab, catalog: deps.catalog });
     const openModelNotes = [];
     const unpublishedProducers = async () => {
       const entries = [];
@@ -1538,6 +1678,25 @@ export async function deliverKernel(input, deps) {
         const exportable = () => asked.filter(e => odcExportable(e, moduleKind));
         const unsupported = asked.filter(e => !odcExportable(e, moduleKind));
         let missing = exportable().filter(e => !signatureHas(listed, e, { moduleKind }));
+        // The list is what the bridge's reader knew. What it lacks is judged on the signature's own bytes, by the kernel's reader: the
+        // same read the build makes (NativeReferenceSnapshot.Read), so a bridge that lists less changes no answer.
+        let signatureUnread = null, others = [];
+        const fromBytes = async capture => {
+          let read;
+          try { read = await readSignatureKernel(capture, deps); } catch (error) { read = { ok: false, error: withoutStack(error.message) }; }
+          if (read.ok !== true) { signatureUnread = read.error ?? 'no answer'; return; }
+          signatureUnread = null; others = read.others ?? [];
+          const before = listed.length;
+          listed = read.elements;
+          const still = exportable().filter(e => !signatureHas(listed, e, { moduleKind }));
+          const found = missing.filter(e => !still.includes(e));
+          if (found.length && before < listed.length) {
+            const named = (report.producers ?? []).find(p => p.name === key);
+            if (named) named.note = (named.note ? named.note + '; ' : '') + 'the bridge in this Studio does not list ' + found.map(m => m.text).join(', ') + '; the signature it captured holds ' + (found.length > 1 ? 'them' : 'it') + ', and the build read the signature';
+          }
+          missing = still;
+        };
+        if (!empty && missing.length) await fromBytes(file);
         if (!empty && !missing.length) continue;
         const reusedAt = reusedProducers.findIndex(r => r.name === key);
         if (!empty && reusedAt >= 0) {
@@ -1565,6 +1724,7 @@ export async function deliverKernel(input, deps) {
               }
               listed = signatureElements(fresh) ?? []; moduleKind = signatureModuleKind(fresh);
               missing = exportable().filter(e => !signatureHas(listed, e, { moduleKind }));
+              if (missing.length) await fromBytes(fresh);
             }
           } else if (noPublicElements(got)) { empty = { studioName: askedAs, error: withoutStack(got.error) }; listed = []; moduleKind = null; missing = exportable(); delete producers[key]; }
           // Not acquired again: nothing proves the reused capture current, so it is never called unpublished here (the build
@@ -1576,10 +1736,15 @@ export async function deliverKernel(input, deps) {
         // Round 3 (N1): the key of the published signature this call holds (none in form A).
         entries.push({ key, producer, missing, unsupported, published: listed, moduleKind, ops: asked.length ? [] : namingOps(jobDocument, names), noPublicElements: !!empty,
           publishedKey: empty ? null : signatureModuleKey(file) ?? receipt?.producerKey ?? null,
-          revision: empty ? null : receipt?.revision ?? signatureRevision(file), bridgeError: empty?.error ?? null,
+          revision: empty ? null : receipt?.revision ?? signatureRevision(file), bridgeError: empty?.error ?? null, signatureUnread, others,
           referenced: Array.isArray(snapshot.dependencies) ? snapshot.dependencies.some(d => sameText(d?.Name ?? d?.name, producer)) : null });
       }
       if (!entries.length) return null;
+      if (entries.some(e => e.noPublicElements)) {
+        let status = null;
+        try { status = await studio(['status'], pid); } catch { status = null; }
+        for (const entry of entries) entry.bridgeListsEveryKind = bridgeListsEveryKind(status);
+      }
       for (const entry of entries) {
         let model;
         // Round 3 (review C:\t\revisoes\unpublished-lib-2, N1): only on the consumer's tenant (the snapshot host of this delivery)
@@ -1594,6 +1759,7 @@ export async function deliverKernel(input, deps) {
             ? { ...m, publishedHas: m.spellings.some(s => { const right = parseElement(s); return !!right && signatureHas(entry.published, right, { moduleKind: entry.moduleKind }); }) } : m));
           // A1 (form A): only public elements of a kind the signature holds.
           entry.surfacePublic = model.surface.some(s => s.public && odcExportableSurface(s));
+          entry.surfaceOnlyUnlisted = entry.surfacePublic && !model.surface.some(s => s.public && oldBridgeSeesSurface(s));
         } else {
           entry.reason = model?.reason ?? 'the open model could not be read';
           if (model?.capture) entry.capture = model.capture;
@@ -1624,8 +1790,18 @@ export async function deliverKernel(input, deps) {
       // Round 3 (review C:\t\revisoes\unpublished-lib-2, N2): the first step runs. studio_publish {module} only when its own
       // handler would take the library now (read only: the status and lab evidence of the publication, and the open module's
       // hash against the merge receipt); otherwise the person publishes it in that Studio, then the same refresh and delivery.
-      for (const entry of entries.filter(e => e.evidence)) entry.publishable = await publicationCheck(entry.producer, Number.isInteger(entry.evidence.pid) ? entry.evidence.pid : pid, entry.evidence.sha256);
+      for (const entry of entries.filter(e => e.evidence)) entry.publishable = await publicationCheck(entry.producer, Number.isInteger(entry.evidence.pid) ? entry.evidence.pid : pid, entry.evidence.sha256, entry.revision ?? null);
       const refusal = unpublishedRefusal({ lane: 'odc', module, entries, jobCheck,
+        // What was not verified: the person's way out when it was the bridge's silence, the capture again otherwise.
+        verify: e => (e.noPublicElements
+          ? agentUpdateStep(e.producer)
+          // The open module is the published merge and its signature lacks the element: SSAM cannot explain it, and studio_publish refuses a
+          // merge already published. The person's new publication is what can give another signature; then the reference, then the delivery.
+          : e.publishable?.samePublished === true
+            ? [personPublishStep(e.producer, { pid: Number.isInteger(e.evidence?.pid) ? e.evidence.pid : at.pid ?? null, host: e.evidence?.host ?? null, refused: e.publishable }),
+              ...(e.referenced === true ? [{ tool: 'studio_refresh_references', arguments: { module, producer: e.producer, ...at }, why: module + ' already references ' + e.producer + ': this brings that reference to the revision just published (it writes to the module: the person confirms it first).' }] : [])]
+          : { tool: 'studio_reference_snapshot', arguments: { module, producer: e.producer, output: path.join(output, e.key + '.verify.avsig'), ...at },
+            why: 'Reads what the consumer session gets of ' + e.producer + ', as the signature holds it (elements, others): nothing is written to any module.' }),
         // A2: the publication goes to the Studio that has the producer open.
         publish: e => { const where = Number.isInteger(e.evidence?.pid) ? { pid: e.evidence.pid } : at;
           // Round 4 (N4): the person's step only over a "no SSAM-verified merge" refusal; a safety refusal passes on (gate).
@@ -1909,6 +2085,8 @@ export async function deliverKernel(input, deps) {
         if (plan?.ok === true && Array.isArray(plan.deferred) && plan.deferred.length && plan.firstPass) {
           order = { deferred: plan.deferred, firstPass: plan.firstPass };
           report.mergeOrder = { passes: 2, deferred: plan.deferred.map(d => d.element) };
+          // The repair of pass 1 alone, for whoever finds this delivery later with pass 2 not run (studio-publish-log.mjs).
+          try { fs.writeFileSync(path.join(output, 'merge-order-repair.json'), JSON.stringify(mergeOrderRepairJob(plan.deferred), null, 2)); } catch { /* the answer of pass 2 carries it */ }
           deliverable = plan.firstPass; manifestDir = path.join(output, 'delivery-first-pass');
         }
       }
@@ -1956,6 +2134,12 @@ export async function deliverKernel(input, deps) {
     if (until === 'merge' && reusedProducers.length) {
       for (const reused of reusedProducers) if (!(await recheck(reused, 'beforeMerge'))) return completed(report);
     }
+    // The bridge reads the open module again in the merge's own job (StartupHook.cs Run): no window between this check and the merge.
+    if (report.afterCut && report.manifest) {
+      try { const stamped = readJob(report.manifest); fs.writeFileSync(report.manifest, JSON.stringify({ ...stamped, afterCut: true, expectedBaseSha256: report.afterCut.expectedBaseSha256 }, null, 2)); }
+      catch { /* the bridge's check of the manifest's base still stands */ }
+    }
+    if (until === 'merge' && !recordBeforeMerge()) return completed(report);
     if (order) {
       // Merge order, pass 1: the candidate without its deferred defaults creates the elements (the bridge's own plan finds
       // no default on an element it creates, so it runs one plain merge).
@@ -1967,6 +2151,7 @@ export async function deliverKernel(input, deps) {
           report.merge = first; report.failed = 'merge'; report.outcome = 'uncertain'; report.code = 'MERGE_UNCERTAIN';
           report.error = 'Merge did not confirm merged and strictlyEqual; read receipts and journal before any new attempt.';
         }
+        bridgeTimedOut();
         if (report.outcome === 'uncertain') { report.code ??= 'MERGE_UNCERTAIN'; mergedHonestly(); }
         nameDivergences();
         report.error = 'Merge order pass 1 of 2 (the candidate without its deferred defaults): ' + (report.error ?? 'merge refused');
@@ -1992,12 +2177,17 @@ export async function deliverKernel(input, deps) {
           report.merge = first; report.strictlyEqual = first.strictlyEqual === true; report.equivalence = report.mergeOrder.firstPass.equivalence ?? 'strict';
           report.result = RESULT.delivered; report.ok = true;
         } else { secondPassFailed(); return completed(report); }
-      } else report.manifest = rebuilt.manifest;
+      } else {
+        report.manifest = rebuilt.manifest;
+        // Pass 2 of a delivery that passed the check: its base is pass 1, so no expected sha, and no other road refuses it.
+        if (report.afterCut) { try { fs.writeFileSync(report.manifest, JSON.stringify({ ...readJob(report.manifest), afterCut: true }, null, 2)); } catch { /* the bridge's check of the manifest's base still stands */ } }
+      }
     }
     for (const step of (report.ok && order ? [] : studioSteps(until))) {
       const value = await call(step, () => studio([step, report.manifest], pid), order && step === 'merge' ? { pass: 2 } : {});
       if (!value) {
         if (step === 'merge') {
+          bridgeTimedOut();
           if (report.outcome === 'uncertain') { report.code ??= 'MERGE_UNCERTAIN'; mergedHonestly(); }
           nameDivergences();
           if (!order && report.outcome === 'uncertain' && await reconciledAfterMerge()) { if (until === step) report.ok = true; continue; }
@@ -2103,12 +2293,31 @@ export async function deliverKernel(input, deps) {
     return completed(report);
   } catch (error) {
     report.failed = stage; report.error = withoutStack(error.message);
-    if (stage === 'merge') { report.outcome = 'uncertain'; report.code = 'MERGE_UNCERTAIN'; mergeTimedOut(error); mergedHonestly(); }
+    // A merge the bridge never took (busy, no pipe; sent:false) is no doubt: nothing ran, and the same call goes again.
+    if (stage === 'merge' && error?.sent === false) {
+      // Pass 2 of a merge order: pass 1 is in the module (secondPassFailed below keeps merged:true), so it is no not-sent.
+      report.outcome = report.mergeOrder?.firstPass ? 'incomplete' : 'not-sent'; report.code = error.code ?? 'BRIDGE_BUSY'; if (error.busy) report.busy = error.busy;
+      report.continuation = { tool: 'studio_status', arguments: Number.isInteger(pid) ? { pid } : {}, why: 'The merge was never sent: nothing ran. Read what holds the Studio, then the same studio_deliver again.' };
+    } else if (stage === 'merge') {
+      const replyCut = error?.code === 'PIPE_REPLY_TIMEOUT';
+      report.outcome = 'uncertain';
+      mergeCut({ cutBy: replyCut ? 'client' : 'transport', code: replyCut ? 'MERGE_TIMEOUT' : 'MERGE_UNCERTAIN', ...(replyCut || !error?.code ? {} : { transport: error.code }), evidenceSeen: error?.evidenceSeen !== false });
+      if (report.outcome === 'uncertain') mergedHonestly();
+    }
     if (order && stage !== 'publish' && report.mergeOrder?.firstPass) secondPassFailed();
     else if (order && stage === 'merge') { report.mergeOrder.failedPass = 1; report.error = 'Merge order pass 1 of 2 (the candidate without its deferred defaults): ' + report.error; }
     if (stage === 'publish') { report.outcome = 'uncertain'; report.code = 'PUBLISH_UNCERTAIN'; report.ok = false; }
     return completed(report);
   } finally {
+    // The record of the module opens only on a real cut, in an uncertain state, with the base of the first capture of this delivery. A
+    // known ending (a refusal, a security warning, an incomplete merge, a failed publication) or a cut proven not to have run leaves none:
+    // nothing is unknown there, and its fix is a new delivery. A delivered merge settles an earlier record.
+    if (begun?.ok && cutIdentity) {
+      // A cut proven and closed in this same call stays on record too: the job is in the module, and it stays bound to its base.
+      const uncertain = report.timeout ? report.merged !== false : report.ok !== true && report.outcome === 'uncertain' && report.failed !== 'publish';
+      const repairs = uncertain ? [report.repairJob, path.join(output, 'merge-order-repair.json')].flatMap(file => { try { return file ? [cutJobSha(readJob(file))] : []; } catch { return []; } }) : [];
+      settleCut(root, cutIdentity, begun, { uncertain, delivered: report.ok === true && report.merged === true, cut: cutOfThis(repairs) });
+    }
     report.totalSeconds = (Date.now() - started) / 1000;
     if (claimed) {
       // F7: the receipt names the session and the call of the delivery (the answer itself is unchanged).

@@ -134,6 +134,7 @@ export function hostedDestructive(name, args) {
       return SC_DELETE_ONLY.some(key => a[key] !== undefined) || (selector(a, 'action', action => SC_DELETES.has(action)) ?? false);
     case 'o11_environment': return selector(a, 'action', action => action === 'delete-app') ?? false;
     case 'o11_extension': return selector(a, 'action', action => action === 'delete') ?? false;
+    case 'o11_users': return selector(a, 'operation', operation => ['delete', 'revoke-role', 'remove-group'].includes(operation)) ?? false;
     case 'o11_data': return dataDestructive(a.request);
     case 'studio_command': return studioCommandDestructive(a);
     case 'odc_write': return odcEffectDestructive(a.operationId, a.body);
@@ -207,6 +208,7 @@ export const HOSTED_OFF = Object.freeze({
   o11_service_center_write: { part: 'delete, module-delete, extension-delete, application-delete, solution-delete and db-connection-delete', where: 'Service Center' },
   o11_environment: { part: 'delete-app', where: 'Service Center' },
   o11_extension: { part: 'delete', where: 'Service Center' },
+  o11_users: { part: 'delete, revoke-role and remove-group', where: 'the Users application of the environment' },
   o11_data: { part: 'the delete operation (alone or in a batch)', where: 'Service Studio' },
   studio_data_delete: { whole: true, where: 'ODC Studio' },
   studio_command: { part: 'data-delete, portal-call, portal-private-call, portal-api-client-fixture-cleanup and portal-session fetch', where: 'ODC Studio or the ODC Portal' },

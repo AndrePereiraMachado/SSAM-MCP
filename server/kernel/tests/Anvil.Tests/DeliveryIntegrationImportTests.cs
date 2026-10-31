@@ -54,6 +54,22 @@ public class DeliveryIntegrationImportTests
         Assert.Equal("CalculatorSoap", report["selection"]!["port"]!.ToString());
     }
 
+    /// <summary>F7 (25/10/2026): the soap op written without data (the owner's third round) is the same delivery: the bridge
+    /// receives the same import request, the job applies to the candidate and the merge runs; the receipt (apply) lists OP_DATA_WRAPPED.</summary>
+    [Fact]
+    public void ASoapOpWithoutDataIsTheSameDelivery()
+    {
+        if (!StudioAvailable()) return;
+        var (wrapped, withData) = (Deliver(withoutData: true), Deliver());
+        Assert.True(wrapped.Result["delivered"]!.GetValue<bool>(), wrapped.Result["error"]?.ToString());
+        Assert.Equal(["snapshot_module", "integration_import", "apply", "merge_from_oml"], wrapped.Bridge.Calls.Where(c => c is "snapshot_module" or "integration_import" or "apply" or "merge_from_oml").Take(4));
+        string Request(ImportingBridge b) { var r = Assert.Single(b.Imports).DeepClone().AsObject(); foreach (var k in new[] { "base_path", "base_sha256", "out_path", "operation_id" }) r.Remove(k); return r.ToJsonString(); }
+        Assert.Equal(Request(withData.Bridge), Request(wrapped.Bridge));
+        // The accepted delivery carries the job's own answer in apply (its normalizations listed there).
+        Assert.Contains(wrapped.Result["apply"]!["normalizations"]!.AsArray().OfType<JsonObject>(), n => n["rule"]!.ToString() == "OP_DATA_WRAPPED" && n["path"]!.ToString() == "/ops/0");
+        Assert.Equal(["Add"], Assert.Single(wrapped.Result["integration"]!.AsArray())!["imported"]!.AsArray().Select(i => i!.ToString()));
+    }
+
     [Fact]
     public void ACandidateWhoseContractFailsIsRefusedWithoutMerge()
     {
@@ -66,16 +82,20 @@ public class DeliveryIntegrationImportTests
         Assert.Equal("not-sent", result["writeState"]!.ToString());
     }
 
-    private static (JsonObject Result, ImportingBridge Bridge) Deliver(Action<ImportingBridge>? configure = null)
+    private static (JsonObject Result, ImportingBridge Bridge) Deliver(Action<ImportingBridge>? configure = null, bool withoutData = false)
     {
         StudioAssemblies.Bind();
         var work = Path.Combine(Root, ".local", "delivery-integration-import-tests", Guid.NewGuid().ToString("N")); Directory.CreateDirectory(work);
         var job = Path.Combine(work, "soap-calculator.json");
-        File.WriteAllText(job, new JsonObject { ["ops"] = new JsonArray(new JsonObject { ["op"] = "soap", ["data"] = new JsonObject
+        var data = new JsonObject
         {
             ["wsdl"] = new JsonObject { ["path"] = Wsdl, ["sha256"] = IntegrationDocuments.Sha256(File.ReadAllBytes(Wsdl)) },
             ["port"] = "CalculatorSoap", ["methods"] = new JsonArray("Add"),
-        } }) }.ToJsonString());
+        };
+        var op = new JsonObject { ["op"] = "soap" };
+        if (withoutData) foreach (var (key, value) in data.ToList()) { data.Remove(key); op[key] = value; }
+        else op["data"] = data;
+        File.WriteAllText(job, new JsonObject { ["ops"] = new JsonArray(op) }.ToJsonString());
         var live = Path.Combine(work, "live.oml"); File.Copy(Path.Combine(Root, "tests", "fixtures", "blank-service.oml"), live);
         var bridge = new ImportingBridge(live, work);
         configure?.Invoke(bridge);

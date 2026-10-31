@@ -52,6 +52,7 @@ public static class JobNormalizer
     public static List<JsonObject> Pure(JsonArray ops, string? prefix, string lane)
     {
         var done = new List<JsonObject>();
+        done.AddRange(WrapData(ops, prefix));
         done.AddRange(MigrationUiAdapters.Normalize(ops, prefix));
         Motor2(ops, prefix, lane, null, done);
         try
@@ -67,6 +68,38 @@ public static class JobNormalizer
         try { PlatformLimitRules.NormalizeImages(ops, prefix, lane, done); } catch { }
         // motor2 review: each path is one of the job as sent (a step the kernel inserted shifts nothing the author wrote).
         SentJob.TranslateEntries(done, ops, prefix);
+        return done;
+    }
+
+    // ---- the data of the integration ops (OP_DATA_WRAPPED) ----------------------------------------------------------------
+
+    public const string DataWrapped = "OP_DATA_WRAPPED";
+    public const string SoapClientRenamed = "SOAP_CLIENT_RENAMED";
+
+    /// <summary>The keys of the data of each integration op, the ones an op written without `data` carries at its top. The
+    /// facade wraps with the same table (platforms/odc/facade/integration-documents.mjs DATA_KEYS, held equal by its test).</summary>
+    public static readonly IReadOnlyDictionary<string, string[]> DataKeys = new Dictionary<string, string[]>(StringComparer.Ordinal)
+    {
+        ["soap"] = SoapPlan.Keys, ["rest"] = RestExpander.RootKeys, ["rest-expose"] = RestExposeExpander.RootKeys,
+    };
+
+    /// <summary>An integration op written without `data` (`{"op":"soap","wsdl":...,"methods":[...]}`, the owner's 25/10/2026
+    /// job and task 74756753 of 23/10) has one reading: its keys of the data go into `data`, in place, listed as
+    /// OP_DATA_WRAPPED. A key that is no key of the data stays where it is (VerbSurface refuses it, naming it).</summary>
+    public static List<JsonObject> WrapData(JsonArray ops, string? prefix)
+    {
+        var done = new List<JsonObject>();
+        for (var i = 0; i < ops.Count; i++)
+        {
+            if (ops[i] is not JsonObject op || op["data"] != null || op["op"]?.ToString() is not { } kind || !DataKeys.TryGetValue(kind, out var keys)) continue;
+            var moved = op.Select(p => p.Key).Where(k => keys.Contains(k, StringComparer.Ordinal)).ToList();
+            if (moved.Count == 0) continue;
+            var data = new JsonObject();
+            foreach (var key in moved) { var value = op[key]; op.Remove(key); data[key] = value; }
+            op["data"] = data;
+            done.Add(Entry(DataWrapped, prefix != null ? $"{prefix}/{i}" : null, string.Join(", ", moved), "data",
+                $"{kind}: {string.Join(", ", moved)} {(moved.Count == 1 ? "is a key" : "are keys")} of the op's data and went into \"data\": {{...}} (the op's only shape)"));
+        }
         return done;
     }
 

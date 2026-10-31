@@ -6,7 +6,8 @@ namespace Anvil.Core;
 /// <summary>
 /// The contract check of an imported SOAP client (op `soap`), on the candidate before any merge: every parameter of the
 /// requested methods keeps the exact WSDL type. A parameter whose OriginalType is an XML Schema primitive must have the
-/// compatible OutSystems representation of that primitive; one whose OriginalType is complex must be typed by the client's own SOAP structure
+/// OutSystems type of that primitive, or the native lexical Text of xs:decimal, which is a warning (<see cref="Retyped"/>:
+/// the importer's own choice, which a refresh repeats); one whose OriginalType is complex must be typed by the client's own SOAP structure
 /// of that name, bound by key (never Text, never a same-named structure elsewhere). GitSSAM proved live that an import
 /// over a filtered WSDL detached a complex type (tCurrency) this way and code generation crashed later; here the delivery
 /// stops before the merge with SOAP_CONTRACT_TYPE_MISMATCH naming each parameter. The check itself is pure (records);
@@ -43,7 +44,8 @@ public static class SoapContract
         return originalType.Contains("www.w3.org/2001/XMLSchema", StringComparison.OrdinalIgnoreCase) ? "Text" : null;
     }
 
-    /// <summary>Every parameter whose type is not the WSDL's: SOAP_CONTRACT_TYPE_MISMATCH, one problem each.</summary>
+    /// <summary>Every parameter whose type is not the WSDL's: SOAP_CONTRACT_TYPE_MISMATCH, one problem each. The native lexical
+    /// Text of xs:decimal is no problem here: <see cref="Retyped"/> says it.</summary>
     public static List<IntegrationProblem> Check(IEnumerable<Parameter> parameters, IReadOnlyCollection<Structure> structures)
     {
         var problems = new List<IntegrationProblem>();
@@ -78,6 +80,38 @@ public static class SoapContract
         }
         return problems;
     }
+
+    /// <summary>The parameters of an XML Schema primitive that the Studio's own importer typed otherwise (xs:decimal as Text,
+    /// as the NumberConversion import of 25/10/2026 did): a warning each (SOAP_PRIMITIVE_RETYPED) with the WSDL type, the
+    /// Studio's type and what that means in a call. Read after <see cref="Check"/>, which refuses every other retyped primitive.</summary>
+    public static List<JsonObject> Retyped(IEnumerable<Parameter> parameters)
+    {
+        var warnings = new List<JsonObject>();
+        foreach (var p in parameters)
+        {
+            if (string.IsNullOrWhiteSpace(p.OriginalType) || PrimitiveOf(p.OriginalType) is not { } expected || Same(Plain(p.ActualType), expected)) continue;
+            var actual = Plain(p.ActualType);
+            var input = p.Direction == "input";
+            var meaning = Same(actual, "Text") && Conversion(expected) is { } conversion
+                ? input ? $"the call takes the value as Text: pass {conversion.ToText}(<{expected}>) (an implicit conversion also writes it) and the service reads it as {LocalName(p.OriginalType)}"
+                        : $"the call returns the value as Text: read it with {conversion.FromText}({p.Action}.{p.Name}) where a {expected} is needed"
+                : $"the call {(input ? "takes" : "returns")} the value as {p.ActualType}, not {expected}: convert it where the {(input ? "argument is written" : "result is read")}";
+            warnings.Add(new JsonObject
+            {
+                ["code"] = "SOAP_PRIMITIVE_RETYPED", ["method"] = p.Action, ["parameter"] = p.Name, ["direction"] = p.Direction,
+                ["wsdlType"] = p.OriginalType, ["expected"] = expected, ["studioType"] = p.ActualType,
+                ["message"] = $"soap: {p.Action}.{p.Name} ({p.Direction}) has the WSDL type {p.OriginalType} ({expected}) and the Studio's importer typed it {p.ActualType}: {meaning}",
+            });
+        }
+        return warnings;
+    }
+
+    private static (string ToText, string FromText)? Conversion(string type) => type.Replace(" ", "") switch
+    {
+        "Decimal" => ("DecimalToText", "TextToDecimal"), "Integer" => ("IntegerToText", "TextToInteger"), "LongInteger" => ("LongIntegerToText", "TextToLongInteger"),
+        "Boolean" => ("BooleanToText", "TextToBoolean"), "Date" => ("DateToText", "TextToDate"), "DateTime" => ("DateTimeToText", "TextToDateTime"), "Time" => ("TimeToText", "TextToTime"),
+        _ => null,
+    };
 
     private static string Plain(string type) => type.EndsWith(" List", StringComparison.OrdinalIgnoreCase) ? type[..^5] : type;
     private static bool Same(string a, string b) => string.Equals(a.Replace(" ", ""), b.Replace(" ", ""), StringComparison.OrdinalIgnoreCase);

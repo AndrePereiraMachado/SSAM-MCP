@@ -193,7 +193,7 @@ export function createKinds({ root, runtimeRoot = root, ws, pack = {}, kernel = 
     const k = kernel() ?? {}, served = [k.odcBridge, ...(Array.isArray(k.odcBridgeAccepted) ? k.odcBridgeAccepted : [])];
     return served.includes(asked) && served.includes(loaded);
   };
-  async function odcPipe({ pid, version: asked, args, connectMs }) {
+  async function odcPipe({ pid, version: asked, args, connectMs, timeoutMs }) {
     requireLane('odc');
     if (!Array.isArray(args) || args.length === 0 || args.some(a => typeof a !== 'string' && typeof a !== 'number')) throw invalid('args must be a non-empty array of strings');
     const texts = args.map(String);
@@ -208,9 +208,10 @@ export function createKinds({ root, runtimeRoot = root, ws, pack = {}, kernel = 
     if (!version || (asked !== version && !servedTogether(asked, version)))
       throw refuse('BRIDGE_VERSION_MISMATCH', `This Studio runs the ODC bridge ${version ?? '(none)'}; the server asked for ${asked}`);
     const connect = Number.isFinite(Number(connectMs)) ? Math.min(Math.max(Number(connectMs), 1), 120000) : undefined;
+    const reply = Number.isFinite(Number(timeoutMs)) && Number(timeoutMs) > 0 ? Math.min(Number(timeoutMs), 3600000) : undefined;
     try {
       await bindOdcRoot(target.pid, version);
-      const line = await (deps.pipeCall ?? pipeCall)(target.pid, version, mapped, connect === undefined ? {} : { connectMs: connect });
+      const line = await (deps.pipeCall ?? pipeCall)(target.pid, version, mapped, { ...(connect === undefined ? {} : { connectMs: connect }), ...(reply === undefined ? {} : { timeoutMs: reply }) });
       return relativizeLine(line);
     } catch (error) {
       if (error instanceof PipeError) throw new AgentError(error.code, error.message, { executed: error.sent ? null : false, sent: error.sent });

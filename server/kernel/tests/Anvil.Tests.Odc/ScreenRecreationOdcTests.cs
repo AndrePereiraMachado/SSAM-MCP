@@ -13,7 +13,7 @@ public class ScreenRecreationOdcTests(ITestOutputHelper output)
     private static readonly string Root = FindRoot();
     private static readonly string Work = Path.Combine(Root, ".local", "lane-odc", "screen-recreation");
 
-    [Fact]
+    [CorpusFact(CorpusFactAttribute.Screens, "odc")]
     public void EveryRealScreenOfTheOdcCorpusIsCompiledAgainByTheDocumentFormAndComesBackTheSame()
     {
         if (!StudioAvailable()) { output.WriteLine("WARNING: no ODC Studio: the screen recreation corpus test is skipped."); return; }

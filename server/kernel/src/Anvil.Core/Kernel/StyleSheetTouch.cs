@@ -20,8 +20,10 @@ namespace Anvil.Core;
 /// earlier touch left (<c>X + ""</c>) goes back to <c>X</c>;</item>
 /// <item>a Traditional Web Style is the literal text of its class names: one trailing space is toggled.</item>
 /// </list>
-/// The touch never leaves the candidate invalid: when the Verify of the candidate has any error the base did not have, every
-/// touch is put back and the Verify runs again (the report says so per element). A theme has no widget.
+/// When the Verify of the candidate has any error the base did not have, every touch is written back, read again and the
+/// Verify runs again; the report says per element whether the widget came back (reverted.restored) and, when it did not, what
+/// to do. An element with no widget whose own Style can be written and read is left alone, and the report says so and what to
+/// do. A theme has no widget.
 /// Cost: none for a job that writes no stylesheet (<see cref="Writes"/>, a scan of the ops); otherwise one walk of the
 /// module's blocks, screens and themes before and after the ops, one walk of each changed element, one read per touched
 /// widget and one write for all of them; a second Verify only when a touch is put back.
@@ -35,6 +37,10 @@ public sealed class StyleSheetTouch
     private static readonly Regex StyleText = new(@"(<|\\u003c)style|stylesheet|""css""", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
     private readonly Dictionary<string, string>? _before;
+    /// <summary>Why an element has no touch: nothing of it can change in a way that renders the same, and what the author does.</summary>
+    internal const string NoWidgetReason = "no widget of this element has a Style the kernel can write and read back (an HTML Element keeps its classes in its class attribute), so nothing was touched and a publication may keep the old stylesheet of this element: write a property of one of its widgets in this job, keeping its value (for an HTML Element, read its Style with a get and set that same value: a set of Style replaces its class attribute), then deliver again";
+    /// <summary>The same for an element with nothing to write a property of.</summary>
+    internal const string EmptyElementReason = "this element has no widget with a Style, so nothing was touched and a publication may keep the old stylesheet of this element: add a Container to it in this job, then deliver again";
     private readonly List<(string Widget, string Original, JsonObject Entry)> _touched = [];
     public JsonArray Report { get; } = new();
     /// <summary>The time the rule spent in this job (capture, apply and, when it happened, the revert).</summary>
@@ -96,11 +102,15 @@ public sealed class StyleSheetTouch
             if (kind == "theme") { entry["touch"] = null; entry["reason"] = "a theme has no widget to change"; continue; }
             var widgets = element.GetAllDescendantsOfType<IObjectSignature>().Where(w => w.ObjectKey != null && !w.WasDeleted && HasStyle(w.GetType())).ToList();
             if (widgets.Any(w => written.Contains(w.ObjectKey!.ToString()!))) { entry["touch"] = null; entry["reason"] = "the job changes a widget of this element"; continue; }
-            var ordered = widgets.Where(w => Is(w, "Container")).Concat(widgets.Where(w => !Is(w, "Container") && !Is(w, "BlockInstance"))).ToList();
+            if (widgets.Count == 0) { entry["touch"] = null; entry["reason"] = EmptyElementReason; continue; }
+            // Only a widget whose own Style the set writes: an HTML Element keeps its classes in the extended property class, where
+            // the set adds a new one (StyleRule), so a touch there is no change that renders the same, and it cannot be put back.
+            var writable = widgets.Where(w => session.CanSet(w, "Style")).ToList();
+            var ordered = writable.Where(w => Is(w, "Container")).Concat(writable.Where(w => !Is(w, "Container") && !Is(w, "BlockInstance"))).ToList();
             (IObjectSignature Widget, string Style)? chosen = null;
             foreach (var w in ordered.Take(8))
                 if (StyleOf(session, w) is { } style) { chosen = (w, style); break; }
-            if (chosen is not { } pick) { entry["touch"] = null; entry["reason"] = "the element has no widget whose Style can be read"; continue; }
+            if (chosen is not { } pick) { entry["touch"] = null; entry["reason"] = NoWidgetReason; continue; }
             var value = flavor == "traditional" ? LiteralToggle(pick.Style) : ExpressionToggle(pick.Style);
             writes.Add((pick.Widget.ObjectKey!.ToString()!, value, pick.Style, entry));
             entry["touch"] = new JsonObject { ["key"] = pick.Widget.ObjectKey!.ToString(), ["name"] = TypeResolver.Name(pick.Widget), ["prop"] = "Style", ["value"] = value, ["from"] = pick.Style };
@@ -112,7 +122,8 @@ public sealed class StyleSheetTouch
     }
 
     /// <summary>After the Verify: when the candidate has any error the base did not have and something was touched, every
-    /// touch is put back (the Verify must run again: true). The touch never leaves the candidate invalid.</summary>
+    /// touch is written back and read again (the Verify must run again: true). The answer says "put back" only of a widget that
+    /// reads as it did (<see cref="PutBackReason"/>).</summary>
     public bool RevertOnNewErrors(IReadOnlyList<MessageInfo> before, IReadOnlyList<MessageInfo> after, ModelSession session, ESpace espace, Action<string>? log)
     {
         if (_touched.Count == 0) return false;
@@ -122,17 +133,42 @@ public sealed class StyleSheetTouch
         _clock.Start();
         try
         {
-            Write(session, espace, _touched.Select(t => (t.Widget, t.Original, t.Entry)).ToList(), log);
-            foreach (var (_, original, entry) in _touched)
+            var written = _touched.Select(t => t.Entry["touch"]?["value"]?.DeepClone()).ToList();
+            var applied = Write(session, espace, _touched.Select(t => (t.Widget, t.Original, t.Entry)).ToList(), log).Select(w => w.Key).ToHashSet(StringComparer.Ordinal);
+            for (var i = 0; i < _touched.Count; i++)
             {
-                entry["reverted"] = new JsonObject { ["value"] = entry["touch"]?["value"]?.DeepClone(), ["because"] = first.Id + ": " + first.Detail };
+                var (key, original, entry) = _touched[i];
+                // A write that failed left its error in the entry (Write).
+                var error = applied.Contains(key) ? null : entry["reason"]?.ToString();
+                var read = ReadBack(session, key);
+                var restored = error == null && read != null && SameStyle(read, original);
+                entry["reverted"] = new JsonObject { ["value"] = written[i], ["because"] = first.Id + ": " + first.Detail, ["restored"] = restored };
                 entry["touch"] = null;
-                entry["reason"] = "the Verify of the candidate had a new error; the widget was put back";
+                entry["reason"] = PutBackReason(key, original, read, error);
             }
             _touched.Clear();
         }
         finally { _clock.Stop(); }
         return true;
+    }
+
+    /// <summary>What the report says of a touch written back: "put back" only of a widget that reads as it did; otherwise that it
+    /// did not come back, why, and what to do with the candidate.</summary>
+    internal static string PutBackReason(string key, string original, string? read, string? writeError)
+    {
+        if (writeError == null && read != null && SameStyle(read, original)) return "the Verify of the candidate had a new error; the widget was put back";
+        var why = writeError != null ? "the write failed: " + writeError : read == null ? "its Style cannot be read" : $"its Style reads {read}, and it was {original}";
+        return $"the Verify of the candidate had a new error, and the widget @{key} did not come back ({why}): this candidate keeps that change, so do not deliver it; fix the error the Verify names and send the job again from the base";
+    }
+
+    // The empty Style reads as no text or as the empty text: the same class list.
+    private static bool SameStyle(string a, string b) => a == b || a.Trim() is "" or "\"\"" && b.Trim() is "" or "\"\"";
+
+    /// <summary>The Style of a touched widget now; null when it has none the set writes, or it cannot be read.</summary>
+    private static string? ReadBack(ModelSession session, string key)
+    {
+        try { return session.Resolve("@" + key) is IObjectSignature widget && session.CanSet(widget, "Style") ? StyleOf(session, widget) : null; }
+        catch { return null; }
     }
 
     /// <summary>The writes through the session's own set, in one model transaction; the ones that applied.</summary>

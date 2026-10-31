@@ -13,6 +13,10 @@
 // v98 (the agent box): the data root of the packaged agent (AgentDataRoot.cs, the agent-root command), kept as the record of the agent's bridge.
 // v101 (2026-10-30): v100 plus that data root, because the agent sends agent-root to every bridge from v98 on (agent/lib/kinds.mjs hasDataRootProtocol).
 // The agent box guards its own v98 with a copy of this test (tests/odc-bridge-version.test.mjs); the family test below is of this box.
+// v102 (2026-10-30): the same files as v101, built for the net8 ODC Studios.
+// v101 again (2026-10-30, before anything carried it): the command server that survives a lost client (BridgeServe.cs,
+// BridgeDeadlines.cs and the one table of deadlines, facade/bridge-deadlines.json). No package, server or Studio ever had the first
+// v101, so the name stays and its hashes are recorded again; once a release carries a name, its hashes never change.
 import './fixtures/isolated-profile.mjs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -108,9 +112,12 @@ const RECORDED = {
     'kernel/query-test/QueryTestOutput.cs': 'a9bb3f539accf807984d6798355ae648642568d43950b2ec01ff51784568eebf',
     'kernel/query-test/QueryTestRunner.cs': 'b9f96ac09f1aeb20493843df77a6ff6f4a59d26e485de0f603922fcfd464844c',
     'kernel/src/Anvil.Bridge/PrivateHttpContext.cs': '73785bbd6483074d865848ef9bc4f13423aabc7d371d8931e2936ffe85fdbca8',
+    'platforms/odc/facade/bridge-deadlines.json': 'a8b59d634cf1d2d126dd21604ff48e3f2d19523e47cf01a9fc3a6e48b9c9d6d2',
     'platforms/odc/studio/bridge/AgentDataRoot.cs': 'dad2cf57b23e27c6dd49070fe38268cab5670bf5d7aba8404899c2ddf9c1e68e',
     'platforms/odc/studio/bridge/AppCreationCommands.cs': '416c95f5bf1a86476109aa07d4950d12c05c72450a6d860a9dec4924b1341ccf',
-    'platforms/odc/studio/bridge/Bridge.csproj': '8f7d97a0aa64cdf1c83a53b3d5b93f0119665d7834a6874223675aba37f178f5',
+    'platforms/odc/studio/bridge/Bridge.csproj': 'd72de010ae2aea3f709f6041cda0cec8cc54b00dbcbc858c1c307af4253e4ea8',
+    'platforms/odc/studio/bridge/BridgeDeadlines.cs': 'dba4c72414278e7c08dbe6f8d1bba969048e4896a5e095c9488788bc086c6126',
+    'platforms/odc/studio/bridge/BridgeServe.cs': '955d7c3b15ad9cbee3b54d488304e6968530171d4811f8e5d294f0eb34f8fe32',
     'platforms/odc/studio/bridge/DataCommands.cs': '2c8eb954b4b1d1ccace550179399a4418f43fee308f3014fe1490a30f4196aa6',
     'platforms/odc/studio/bridge/MergeDiagnostics.cs': '8a1d4b6206278e146729c6a3515d0962d0db6b64156dc9cee313dd9adf3b8573',
     'platforms/odc/studio/bridge/MergeOrderCopy.cs': '4e7a187554154662f5ffcecf401904eb4b59ef656192f7fa57afc73b13a4d2d9',
@@ -124,41 +131,44 @@ const RECORDED = {
     'platforms/odc/studio/bridge/PortalPrivateHttp.cs': '71d15be9b8394ddbd87ad084f264a2fdcefb157ef57021ca42caf54bc49c89a2',
     'platforms/odc/studio/bridge/PortalUpload.cs': '945c40b566a21546ecf36b2a0029d357f465ef8b74e5008b28acb79cfcd55736',
     'platforms/odc/studio/bridge/PortalVault.cs': 'e8780ab773dab88a75b48737b7aa29047d29aa7394206662400b4a4c652ecf7c',
-    'platforms/odc/studio/bridge/PublicSignatureReader.cs': '2caccb3e657b84f750af2a1ba2723509b2775c9a4ffbd79f431fba100d6a1567',
+    'kernel/src/Anvil.Core.Odc/Adapters.ODC/PublicSignatureReader.cs': '0896ab08fd3de902f6731b3100ee995a9cbb8d7e3ee8549e808690f38bff849e',
     'platforms/odc/studio/bridge/PublishLogCommands.cs': '3f2b097bb4837e7f0a3e19a9534f5adb9dec6ec61129b9106133037bf96c8c56',
     'platforms/odc/studio/bridge/PublishLogCore.cs': '33b820a24c909f5528e3aaa50d5ac7410ae3721d3e0f819d3c4dd586cf9db730',
     'platforms/odc/studio/bridge/QueryTestCommands.cs': '0aafe20f964fea6c0dc7e9ee0599b1b5828dc6d1451eaf26175383be9a286c36',
-    'platforms/odc/studio/bridge/ReferenceCommands.cs': '615e55dec013036b12270e55ec8eea2a723cce753eb367cd232884b65adf9db0',
+    'platforms/odc/studio/bridge/ReferenceCommands.cs': 'a254f69279bec866d457cf6c3f30f5389b4154bc6c14ebceb93f6c059aef9e75',
     'platforms/odc/studio/bridge/SecurityWarningsCopy.cs': '9994c72f57a32b74fd8ca92299198e44dea11efed1023d5526f72eeb5307b698',
-    'platforms/odc/studio/bridge/StartupHook.cs': '66880384dd000149d1a0dc6297c01bbedf0be105600b79e06b320a3811db556b',
+    'platforms/odc/studio/bridge/StartupHook.cs': '8f178ffbff09f19c6149e2edb19e7a0039d5fc671a8ca46fc55a630cf52d1191',
     'platforms/odc/studio/bridge/TemplateCache.cs': 'a57ef89f222983393d3249c75d543e6a2fc06aef456340a63272d8f127b3f20c',
-    'platforms/odc/studio/bridge/client/Client.csproj': 'a5b9c2d9640b4df751a052075cd5b2bf9b568b7b2e00f72b160acb9ebdc953f2',
-    'platforms/odc/studio/bridge/client/Program.cs': '38dfc296b8cdaca85c3ee5a4c271630917e3134aa2527809d90d62533c605eac',
+    'platforms/odc/studio/bridge/client/Client.csproj': '9fc76085a82277606b476ec5e838f314af4012e8b9d9f96077306381b37bf1aa',
+    'platforms/odc/studio/bridge/client/Program.cs': '70374c1e1c5d5df96a7d146c02a5ca283c0b88639e8c567ae56962d3c3b12954',
     'platforms/odc/studio/engine/NativeMergeOrder.cs': '3ec32ca130504f0375a12704b58123e88539fc0472dd8174945430ac10c7e127',
     'platforms/odc/studio/engine/NativeMergeVerification.cs': 'b7b797836070709672c57d3bdeb0ebed8571e06c4dfba172b9a5a0ab7ce4aede',
     'platforms/odc/studio/shared/Journal.cs': 'e0cc116aec478a3092b9e31c04f470b6d5a47f7af72974234a3d7fa93586185e',
-    'platforms/odc/studio/shared/Manifest.cs': 'bcc45f95c3b541739dad91211be17df8d2dfe1f59398ed579d5672f095b3788b',
+    'platforms/odc/studio/shared/Manifest.cs': '420a0ff9f4909387424afaba8aa329685de83973e5f3303e576dbfa270119523',
   },
 };
+
+// v102: the same sources as v101 for the net8 ODC Studios (1.7.28, 1.7.29). The name comes from the runtime it is built for, so one
+// set of files is two names, and each name is still one set of bytes.
+RECORDED.v102 = RECORDED.v101;
 
 const lf = file => crypto.createHash('sha256')
   .update(Buffer.from(fs.readFileSync(file).toString('latin1').replace(/\r\n/g, '\n'), 'latin1')).digest('hex');
 const rel = file => path.relative(BOX, file).split(path.sep).join('/');
 
-// The files a project compiles: its Compile items (EnableDefaultCompileItems false), a glob only as <folder>/*.cs; with
-// default items, every .cs under the project folder but bin, obj and tests.
+// The files a project builds in: its Compile and EmbeddedResource items, a glob only as <folder>/*.cs, and with default items
+// also every .cs under the project folder but bin, obj and tests.
 function compiled(project) {
   const text = fs.readFileSync(project, 'utf8');
   const folder = path.dirname(project);
-  if (/<EnableDefaultCompileItems>\s*false\s*<\/EnableDefaultCompileItems>/i.test(text)) {
-    return [...text.matchAll(/<Compile\s+Include="([^"]+)"/g)].flatMap(([, include]) => {
-      const source = path.resolve(folder, include.replaceAll('\\', '/'));
-      if (!source.includes('*')) return [source];
-      if (path.basename(source) !== '*.cs' || path.dirname(source).includes('*')) throw new Error('a Compile glob this test does not read: ' + include);
-      return fs.readdirSync(path.dirname(source)).filter(n => n.endsWith('.cs')).sort().map(n => path.join(path.dirname(source), n));
-    });
-  }
-  const found = [];
+  const listed = [...text.matchAll(/<(?:Compile|EmbeddedResource)\s+Include="([^"]+)"/g)].flatMap(([, include]) => {
+    const source = path.resolve(folder, include.replaceAll('\\', '/'));
+    if (!source.includes('*')) return [source];
+    if (path.basename(source) !== '*.cs' || path.dirname(source).includes('*')) throw new Error('a Compile glob this test does not read: ' + include);
+    return fs.readdirSync(path.dirname(source)).filter(n => n.endsWith('.cs')).sort().map(n => path.join(path.dirname(source), n));
+  });
+  if (/<EnableDefaultCompileItems>\s*false\s*<\/EnableDefaultCompileItems>/i.test(text)) return listed;
+  const found = [...listed];
   const walk = dir => {
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
       if (['bin', 'obj', 'tests'].includes(entry.name)) continue;
@@ -190,6 +200,15 @@ test('the three version marks of the ODC bridge name one version', () => {
   const marks = versions();
   assert.equal(new Set(Object.values(marks)).size, 1, 'the version marks differ: ' + JSON.stringify(marks));
   assert.ok(Object.values(marks)[0], 'no version mark found: ' + JSON.stringify(marks));
+});
+
+test('v101 and v102 are one source: the runtime it is built for names it, in the DLL, the pipe and the client', () => {
+  const read = file => fs.readFileSync(path.join(BOX, BRIDGE, file), 'utf8');
+  assert.match(read('Bridge.csproj'), /<AssemblyName Condition="'\$\(TargetFramework\)' == 'net8\.0'">ODC3\.Bridge\.v102<\/AssemblyName>/);
+  assert.match(read('Bridge.csproj'), /<OdcBridgeRuntime Condition="'\$\(TargetFramework\)' == 'net8\.0'">net8\.0<\/OdcBridgeRuntime>/);
+  assert.match(codeOf(path.join(BOX, BRIDGE, 'StartupHook.cs')), /#if NET10_0_OR_GREATER\s+public const string Version = "v101";\s+#else\s+public const string Version = "v102";\s+#endif/);
+  assert.match(read('client/Program.cs'), /const string EarlierVersion = "v102";/, 'the client attaches v102 to a net8 Studio');
+  assert.ok(fromDataRoot('v102') && Object.hasOwn(RECORDED.v102, AGENT_DATA_ROOT), 'v102 implements agent-root');
 });
 
 test('the ODC bridge sources are the ones recorded for the version they declare (a code change needs a new version)', () => {
@@ -254,7 +273,7 @@ function dataRootProblems(version) {
     const branch = hook.slice(answer.index, gate);
     if (!/DataRoot\.Bind\s*\(/.test(branch)) problems.push(version + ': the agent-root answer does not bind the folder');
     if (!/\bprotocol\s*=\s*1\b/.test(branch)) problems.push(version + ': the agent-root answer is not protocol 1');
-    if (!/\bcontinue\s*;/.test(branch)) problems.push(version + ': the agent-root answer falls through to the commands');
+    if (!/\b(?:continue\s*;|return\b)/.test(branch)) problems.push(version + ': the agent-root answer falls through to the commands');
   }
   if (!hook.includes('"agent-root:1"')) problems.push(version + ': StartupHook.cs does not advertise agent-root:1');
   if (!sources().includes(AGENT_DATA_ROOT)) problems.push(version + ': AgentDataRoot.cs is not compiled into the bridge');

@@ -12,7 +12,7 @@ public class FlowBatteryCorpusTests(ITestOutputHelper output)
 {
     private static readonly string Work = Path.Combine(Path.GetTempPath(), "flow-battery-o11");
 
-    [Fact]
+    [CorpusFact(CorpusFactAttribute.Text, "o11")]
     public void EditsOfTheO11CorpusReadBackAsTheirText()
     {
         Directory.CreateDirectory(Work);
@@ -27,7 +27,7 @@ public class FlowBatteryCorpusTests(ITestOutputHelper output)
     /// another record type filled by a new step with a mapping (assign ... mapTo, or ListAppendAll with SourceList ... mapTo),
     /// then that mapping edited (remap) and everything undone; each write is the native TypeConversion and reads back as its
     /// text (FlowEdits.Map). The floor is flow-battery-expected.json "o11Map".</summary>
-    [Fact]
+    [CorpusFact(CorpusFactAttribute.Text, "o11")]
     public void MappingEditsOfTheO11CorpusReadBackAsTheirText()
     {
         Directory.CreateDirectory(Work);
@@ -39,7 +39,7 @@ public class FlowBatteryCorpusTests(ITestOutputHelper output)
     }
 
     // Screen and data actions born from texts without @key on the screens and blocks of the corpus (FlowCreateBattery).
-    [Fact]
+    [CorpusFact(CorpusFactAttribute.Text, "o11")]
     public void NewScreenAndDataActionsOfTheO11CorpusReadBackAsTheirText()
     {
         Directory.CreateDirectory(Work);
@@ -51,7 +51,7 @@ public class FlowBatteryCorpusTests(ITestOutputHelper output)
     }
 
     // An owner whose every screen action runs a JavaScript is created through the refusal's patch (DcipsLogin).
-    [Fact]
+    [CorpusFact(CorpusFactAttribute.TextPresent, "o11", "DCIPS_Staff_Common")]
     public void AnOwnerWhoseScreenActionsRunAScriptIsCreatedThroughThePatch()
     {
         Directory.CreateDirectory(Work);

@@ -23,7 +23,7 @@ public class ScreenHtmlFamilyOdcTests(ITestOutputHelper output)
             bytes => host.HtmlFamilyBattery(bytes, maxRoots: 6, log: output.WriteLine), output);
     }
 
-    [Fact]
+    [CorpusFact(CorpusFactAttribute.Screens, "odc")]
     public void EveryFamilyOfTheOdcCorpusReadsBackItsNativeConstruct()
     {
         if (!StudioAvailable()) { output.WriteLine("WARNING: no ODC Studio: the family battery is skipped."); return; }

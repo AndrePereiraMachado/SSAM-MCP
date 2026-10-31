@@ -338,7 +338,7 @@ public sealed class ScreenHtmlFamilyTests(ITestOutputHelper output)
             ScreenHtmlFamilyCorpus.Fixture(Path.Combine(Root, "tests", "fixtures", fixture), bytes => host.HtmlFamilyBattery(bytes, maxRoots: 6, log: output.WriteLine), output);
     }
 
-    [Fact]
+    [CorpusFact(CorpusFactAttribute.Screens, "o11")]
     public void EveryFamilyOfTheO11CorpusReadsBackItsNativeConstruct()
     {
         if (!StudioAvailable()) { output.WriteLine("WARNING: no Service Studio: the family battery is skipped."); return; }

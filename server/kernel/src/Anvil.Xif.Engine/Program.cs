@@ -21,6 +21,7 @@ internal static class Program
     internal static readonly JavaScriptSerializer Json = new JavaScriptSerializer { MaxJsonLength = int.MaxValue, RecursionLimit = 256 };
     internal static string Studio = "";
     internal static readonly List<string> Searched = new List<string>();
+    private static string? nativeWork;
 
     public static int Main()
     {
@@ -42,6 +43,8 @@ internal static class Program
             answer = Unexpected(error, command).Answer();
         }
         answer["studio"] = Studio.Length == 0 ? null : new Dictionary<string, object?> { ["dir"] = Studio, ["version"] = StudioVersion(), ["lastUpgradeVersion"] = StudioLastUpgradeVersion() };
+        // Keep failed native work available for diagnosis; successful packages live at the caller's output path.
+        if (nativeWork != null) answer["nativeWork"] = nativeWork;
         Console.Out.WriteLine(Json.Serialize(answer));
         return answer.TryGetValue("ok", out var ok) && ok is true ? 0 : 1;
     }
@@ -66,10 +69,45 @@ internal static class Program
         switch (command)
         {
             case "probe": return host.Probe();
-            case "model": host.Require(); return host.Model(request);
-            case "final": host.Require(); return host.Final(request);
+            case "model": host.Require(); return Build(host, request, false);
+            case "final": host.Require(); return Build(host, request, true);
             default: throw new EngineFailure("XIF_ENGINE_REQUEST", "Unknown command '" + command + "' (probe, model or final).", null);
         }
+    }
+
+    private static Dictionary<string, object?> Build(Host host, Dictionary<string, object?> request, bool final)
+    {
+        // Integration Studio's native file operations still have MAX_PATH limits, notably timestamped DLL backups.
+        // Do not inherit the facade's host/name/timestamp directory (or its equally long private TEMP).
+        var work = LocalPath(request, "work");
+        var output = LocalPath(request, "output");
+        if (File.Exists(output)) throw new EngineFailure("XIF_ENGINE_REQUEST", "output already exists.", "Use a new work folder.");
+        Directory.CreateDirectory(work);
+        nativeWork = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "SSAM", "xif", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(nativeWork);
+        Environment.SetEnvironmentVariable("TEMP", nativeWork);
+        Environment.SetEnvironmentVariable("TMP", nativeWork);
+        var local = new Dictionary<string, object?>(request)
+        {
+            ["work"] = nativeWork,
+            ["output"] = Path.Combine(nativeWork, "result.xif")
+        };
+        var result = final ? host.Final(local) : host.Model(local);
+        Directory.CreateDirectory(Path.GetDirectoryName(output)!);
+        File.Copy((string)result["xif"]!, output, false);
+        result["xif"] = output;
+        try { Directory.Delete(nativeWork, true); nativeWork = null; }
+        catch (IOException) { }
+        catch (UnauthorizedAccessException) { }
+        return result;
+    }
+
+    private static string LocalPath(Dictionary<string, object?> request, string key)
+    {
+        if (!request.TryGetValue(key, out var value) || value is not string path ||
+            !Path.IsPathRooted(path) || path.StartsWith("\\\\", StringComparison.Ordinal))
+            throw new EngineFailure("XIF_ENGINE_REQUEST", key + " must be an absolute local path.", null);
+        return Path.GetFullPath(path);
     }
 
     /// <summary>The Integration Studio folder: ANVIL_INTEGRATION_STUDIO_DIR, the uninstall registry, Program Files.</summary>

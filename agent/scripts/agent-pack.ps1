@@ -275,13 +275,14 @@ if (-not $NoNode) {
 try {
   New-Item -ItemType Directory -Force $tree | Out-Null
 
-  # Agent code: ssam-agent.mjs, ssam-agent.ps1 and lib\*.mjs (never the tests).
+  # Agent code: ssam-agent.mjs, ssam-agent.ps1, lib\*.mjs and the data they read, lib\*.json (never the tests).
   $agentOut = Join-Path $tree 'agent'
   New-Item -ItemType Directory -Force (Join-Path $agentOut 'lib') | Out-Null
   # macOS: ssam-agent.sh in place of the .ps1, and install.sh at the root of the pack.
   $launcher = $(if ($mac) { 'agent\ssam-agent.sh' } else { 'agent\ssam-agent.ps1' })
   Copy-Item -LiteralPath (Join-Path $root 'agent\ssam-agent.mjs'), (Join-Path $root $launcher) -Destination $agentOut
   Copy-Item -Path (Join-Path $root 'agent\lib\*.mjs') -Destination (Join-Path $agentOut 'lib')
+  Copy-Item -Path (Join-Path $root 'agent\lib\*.json') -Destination (Join-Path $agentOut 'lib')
   if ($mac) {
     Copy-Item -LiteralPath (Join-Path $root 'agent\install.sh') -Destination (Join-Path $tree 'install.sh')
     # bash on macOS stops at a CR: the scripts go with LF only (the box's .gitattributes says eol=lf).

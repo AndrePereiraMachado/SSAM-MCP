@@ -27,6 +27,7 @@ import { randomUUID } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
 import { openTokenStore, AGENT_PREFIX } from './server-tokens.mjs';
 import { createAgentHub } from './agent-hub.mjs';
+import { sweepAllUsersState, usersKeyLost, USERS_KEY_LINE } from './hosted/users-agent.mjs';
 import { SNAKE, CODE_UNLISTED, isListedCode } from './quality-line.mjs';
 
 export const DEFAULTS = Object.freeze({ host: '127.0.0.1', port: 7300, ratePerMinute: 240, maxSessionsPerToken: 8,
@@ -69,7 +70,7 @@ function jsonError(res, status, code, message, headers = {}, data) {
 export async function startHttpServer({ createServer, dir, host = DEFAULTS.host, port = DEFAULTS.port, allowRemote = false,
   publicHosts = [], logFile = null, agents = false,
   ratePerMinute = DEFAULTS.ratePerMinute, maxSessionsPerToken = DEFAULTS.maxSessionsPerToken, maxBodyBytes = DEFAULTS.maxBodyBytes,
-  idleMs = DEFAULTS.idleMs, sweepMs = DEFAULTS.sweepMs, keepaliveMs = DEFAULTS.keepaliveMs, log: sink = () => {}, now = () => new Date(), env = process.env,
+  idleMs = DEFAULTS.idleMs, sweepMs = DEFAULTS.sweepMs, usersSweepMs = 3600000, keepaliveMs = DEFAULTS.keepaliveMs, log: sink = () => {}, now = () => new Date(), env = process.env,
   // observeCall(params, session) -> {finish(response)} | null: the friction record of stdio (facade/friction-boundary.mjs), per call.
   observeCall = null,
   // quality: a recorder (quality-recorder.mjs) or null (records nothing; --local-studios never passes one).
@@ -131,6 +132,12 @@ export async function startHttpServer({ createServer, dir, host = DEFAULTS.host,
     }
   };
   const timer = setInterval(sweep, sweepMs); timer.unref();
+  // o11_users: the receipts leave at their term whether or not their account comes back.
+  let usersKeyLineAt = -Infinity;
+  const usersKeyLine = () => { const at = now().getTime(); if (at - usersKeyLineAt < 3600000) return; usersKeyLineAt = at; log({ event: 'users-receipt-key-missing', message: USERS_KEY_LINE }); };
+  const usersSweep = () => { try { sweepAllUsersState(path.join(dir, 'customers')); if (usersKeyLost(dir)) usersKeyLine(); } catch (error) { log({ event: 'users-sweep-failed', code: error?.code ?? 'UNKNOWN' }); } };
+  usersSweep();
+  const usersTimer = setInterval(usersSweep, usersSweepMs); usersTimer.unref();
 
   function allowedHost(header, actualPort) {
     if (allowRemote) return true;
@@ -243,6 +250,7 @@ export async function startHttpServer({ createServer, dir, host = DEFAULTS.host,
       if (message && message.id !== undefined && pending.has(message.id) && ('result' in message || 'error' in message)) {
         const call = pending.get(message.id); pending.delete(message.id);
         const ms = Math.round(performance.now() - call.start), outcome = outcomeOf(message), time = now();
+        if (outcome.error === 'USERS_RECEIPT_KEY_MISSING') usersKeyLine();
         audit({ token: auth.id, customer: auth.customer, tool: call.tool, ms, ...outcome }, time);
         try { quality?.callAnswered(sid, message, { ms, outcome, time }); } catch { /* the record never changes the answer */ }
         try { call.observer?.finish(message); } catch { /* idem */ }
@@ -318,7 +326,7 @@ export async function startHttpServer({ createServer, dir, host = DEFAULTS.host,
   });
   try {
     await new Promise((resolve, reject) => { server.once('error', reject); server.listen(port, host, () => { server.off('error', reject); resolve(); }); });
-  } catch (error) { clearInterval(timer); await hub?.close(); await store.close().catch(() => {}); throw error; }
+  } catch (error) { clearInterval(timer); clearInterval(usersTimer); await hub?.close(); await store.close().catch(() => {}); throw error; }
   const actual = server.address();
   const shownHost = actual.family === 'IPv6' ? '[' + actual.address + ']' : actual.address;
   log({ event: 'listening', url: 'http://' + shownHost + ':' + actual.port + '/mcp', mode: hub ? 'hosted' : 'local-studios', pid: process.pid,
@@ -326,7 +334,7 @@ export async function startHttpServer({ createServer, dir, host = DEFAULTS.host,
   return {
     url: 'http://' + shownHost + ':' + actual.port + '/mcp', port: actual.port, host: actual.address, sessions, hub,
     async close() {
-      clearInterval(timer);
+      clearInterval(timer); clearInterval(usersTimer);
       await hub?.close();
       await store.close().catch(() => {});
       await Promise.all([...sessions.keys()].map(sid => closeSession(sid, 'server-stop')));

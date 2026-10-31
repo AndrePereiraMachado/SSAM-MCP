@@ -1,4 +1,7 @@
 import './fixtures/isolated-profile.mjs';
+// ENVIRONMENT (review of 30/10/2026): this test needs the kernel CLIs built in this checkout, because ssam_doctor answers ok:false without
+// them (kernel\\.local\\cli and kernel\\.local\\lane-odc\\cli). In a worktree without a build it fails on both sides of any change, and that
+// failure says nothing about the licensee rule: D10 is proved only with a full build.
 // Round 4, D10 (Integradora, 17/10): a local `ssam mcp` over stdio with SSAM_EXPOSURE=licensee serves every answer and its
 // listing under the licensee rule, also when a cached tool listing exists (warm start: <root>/.local/mcp/tools-list-<key>.json,
 // whose key names the release and the arguments, never the exposure). With the cached surface, the proxy called the inner

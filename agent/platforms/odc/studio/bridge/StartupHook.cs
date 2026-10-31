@@ -32,13 +32,17 @@ public static class StartupHook { public static void Initialize() => Bridge.Star
 // model directly: every mutation goes through the native CompareAndMerge with a hash-checked base
 // and an immutable candidate, and every command appends one line to the operations journal.
 internal static partial class Bridge {
-    public const string Version = "v98";
-    // A command that outlives its timeout is reported as uncertain and keeps running; the loop stays
-    // available for status, and every other command is refused until the late command completes.
-    private static volatile string? busyCommand;
-    private static DateTimeOffset busySince;
+    // One source, one name per Studio runtime (Bridge.csproj): v101 for the net10 ODC Studios, v102 for the net8 ones.
+#if NET10_0_OR_GREATER
+    public const string Version = "v101";
+#else
+    public const string Version = "v102";
+#endif
+    // A command that outlives its deadline is reported as uncertain and keeps running; the server stays available, status
+    // answers beside it, and every other command is refused at once until it completes (BridgeServe.cs CommandRunner).
+    private static readonly CommandGate Turn = new();
     // The SSAM Hybrid-ODC repository root: SSAM_HYBRID_ODC_ROOT or ODC3_ROOT when set, otherwise found from this
-    // assembly's location (studio\bridge\bin\Release\net8.0). A checkout is recognized by its studio folder and README.
+    // assembly's location (studio\bridge\bin\Release\<runtime>). A checkout is recognized by its studio folder and README.
     private static readonly AgentDataRoot DataRoot = new(ResolveRoot(), IsPackaged());
     private static string Root => DataRoot.Value;
     private static bool IsPackaged() {
@@ -59,7 +63,10 @@ internal static partial class Bridge {
     private static readonly JsonSerializerOptions CatalogJson = new() { WriteIndented = true, Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
     private static readonly ConcurrentDictionary<string, DateTimeOffset> MergedAt = new();
     private static readonly ConcurrentDictionary<string, DateTimeOffset> PublishedAt = new();
-    private static int started;
+    // The data root is in use: only then may the server write. In a download's layout nothing marks it packaged, and a journal
+    // written before the agent binds its root would land inside the installation.
+    private static volatile bool rootInUse;
+    private static int serverErrors;
 
     private enum Mode { CheckBase, Preview, Merge, Reconcile }
     private sealed record ProviderState(string? Operations, string? Environment, bool Native);
@@ -68,114 +75,137 @@ internal static partial class Bridge {
         // Set by commands that answer a refusal instead of throwing (the portal lane), so the journal line tells the truth.
         public string? Outcome, GateName, Note;
         public bool HandedOff;
+        // The Studio turn of this command: past its deadline it has answered, and a job not started yet never starts (QueuedOnTab).
+        public BusyCommand? Turn;
         // Informational dialogs and notice windows the watchdog closed while the command ran.
         public readonly List<object> Closed = new();
         public void Bind(Manifest m) { Module = m.Module; ModuleKey = m.ModuleKey; BaseSha = m.BaseSha256; CandidateSha = m.CandidateSha256; EvidenceDir = m.EvidenceDir; Feature = m.Feature; }
     }
 
+    // The startup hook calls Start on every attach of this DLL. A command server that runs is kept; one that ended is
+    // started again (BridgeServe.cs ServerSlot), so attaching again revives a lost pipe instead of answering success on it.
     internal static void Start() {
-        if (Interlocked.Exchange(ref started, 1) != 0) return;
-        _ = Task.Run(Serve);
+        CommandServer.Ensure(Serve);
     }
+    private static readonly ServerSlot CommandServer = new();
+    private static Task Serve() {
+        var server = new PipeServer("ODC3-Bridge-" + Version + "-" + Environment.ProcessId, ServeLine, RecordServerError, BridgeDeadlines.CommandLine, BridgeDeadlines.AnswerWrite);
+        return ServeLoop.Run(server.AcceptOne, RecordServerError);
+    }
+    // One failed connection (a client that left before its answer: "Pipe is broken" at the final write) is recorded and the
+    // server goes on with the next one (BridgeServe.cs); before, it ended the only loop.
+    // One file per Studio with the last failure and how many there were: a client that leaves is common, and costs no file of its own.
+    private static void RecordServerError(Exception error) {
+        var count = Interlocked.Increment(ref serverErrors);
+        if (rootInUse) TryWrite(Path.Combine(Root, "journal", "bridge-server-error-" + Environment.ProcessId + ".txt"), error + "\n\nFailures of this server so far: " + count + ", the last at " + DateTimeOffset.UtcNow.ToString("o") + ".");
+    }
+    private static object? BusyFacts(BusyCommand? holder) => holder == null ? null : new { command = holder.Command, since = holder.Since.ToString("o"), module = (holder.Context as Context)?.Module, evidence = (holder.Context as Context)?.EvidenceDir, overran = holder.Overran, advice = holder.Advice };
+    private static readonly CommandRunner Runner = new(Turn, BridgeDeadlines.TurnWait, BridgeDeadlines.BusyAnswer);
 
-    private static async Task Serve() {
-        try {
-            var running = true;
-            while (running) {
-                using var pipe = new NamedPipeServerStream("ODC3-Bridge-" + Version + "-" + Environment.ProcessId, PipeDirection.InOut, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
-                await pipe.WaitForConnectionAsync();
-                using var reader = new StreamReader(pipe, Encoding.UTF8, leaveOpen: true);
-                using var writer = new StreamWriter(pipe, new UTF8Encoding(false), leaveOpen: true) { AutoFlush = true };
-                var line = (await reader.ReadLineAsync() ?? "").Trim();
-                var space = line.IndexOf(' ');
-                var command = space < 0 ? line : line[..space];
-                var argument = space < 0 ? "" : line[(space + 1)..].Trim();
-                // Internal bootstrap on a CurrentUserOnly pipe, never a hosted command.
-                // No journal may be written before the data root is known.
-                if (command == "agent-root") {
-                    object binding;
-                    try {
-                        using var request = JsonDocument.Parse(argument);
-                        var root = DataRoot.Bind(request.RootElement.GetProperty("root").GetString() ?? "");
-                        binding = new { ok = true, protocol = 1, root };
-                    } catch (Exception error) { binding = new { ok = false, error = error.Message }; }
-                    await writer.WriteLineAsync(JsonSerializer.Serialize(binding));
-                    continue;
-                }
-                try { DataRoot.Use(); }
+    // One command line in, one JSON line out. A command holds the Studio turn until its work ends, and a server answers past
+    // its deadline by itself: nothing here depends on the client still being there.
+    private static async Task<PipeAnswer> ServeLine(string line) {
+        var space = line.IndexOf(' ');
+        var command = space < 0 ? line : line[..space];
+        var argument = space < 0 ? "" : line[(space + 1)..].Trim();
+        // Internal bootstrap on a CurrentUserOnly pipe, never a hosted command.
+        // No journal may be written before the data root is known.
+        if (command == "agent-root") {
+            object binding;
+            try {
+                using var request = JsonDocument.Parse(argument);
+                var root = DataRoot.Bind(request.RootElement.GetProperty("root").GetString() ?? "");
+                rootInUse = true;
+                binding = new { ok = true, protocol = 1, root };
+            } catch (Exception error) { binding = new { ok = false, error = error.Message }; }
+            return new PipeAnswer(JsonSerializer.Serialize(binding));
+        }
+        try { DataRoot.Use(); }
+        catch (Exception error) { return new PipeAnswer(JsonSerializer.Serialize(new { ok = false, error = error.Message })); }
+        rootInUse = true;
+        var start = DateTimeOffset.UtcNow;
+        var context = new Context();
+        object response; Exception? failure = null;
+        var stop = command == "stop";
+        if (stop) { response = new { ok = true, stopped = true }; }
+        else {
+            var timeout = BridgeDeadlines.For(command, argument);
+            var run = await Runner.Run(command, timeout, holder => {
+                if (holder != null) { holder.Context = context; context.Turn = holder; }
+                // The watchdog closes informational dialogs and notice windows while the command runs, so a native command that
+                // ends with "Close" never holds the bridge. Choices are never made for the user.
+                // The portal lane opens no Studio dialog, so it never closes the user's.
+                var work = Dispatch(command, argument, context);
+                _ = command is "query-test" or "status" or "dismiss-dialog" or "auth-status" or "portal-call" or "portal-private-call" or "portal-private-download" or "portal-api-client-fixture-cleanup" or "portal-session" or "portal-upload" or "publish-log" ? Task.CompletedTask : WatchDialogs(work, context);
+                return work;
+            });
+            // A turn the running command keeps, or a quick read the Studio's UI did not answer beside it: nothing of this call ran,
+            // or it ran as a read only, and the caller may ask again. The facade reads the code as a busy pipe (nothing sent).
+            if (run.End == CommandEnd.Busy || (run.End == CommandEnd.Overran && CommandRunner.TakesNoTurn(command) && run.Holder != null)) {
+                failure = new InvalidOperationException(BusyCommand.Refusal(run.Holder, command));
+                response = new { ok = false, code = "BRIDGE_BUSY", outcome = "gate_refused", gate = "studio_busy", executed = false, busyCommand = run.Holder?.Command, busy = BusyFacts(run.Holder), error = failure.Message };
+            } else if (run.End == CommandEnd.Done) {
+                try { response = await run.Work!; }
                 catch (Exception error) {
-                    await writer.WriteLineAsync(JsonSerializer.Serialize(new { ok = false, error = error.Message }));
-                    continue;
-                }
-                var start = DateTimeOffset.UtcNow;
-                var context = new Context();
-                object response; Exception? failure = null;
-                if (command == "stop") { response = Stop(out running); }
-                else if (busyCommand != null && command != "status" && command != "dismiss-dialog" && command != "auth-status" && command != "publish-log") {
-                    failure = new InvalidOperationException("Command '" + busyCommand + "' is still running since " + busySince.ToString("o") + "; only status is accepted until it completes. Never retry it.");
-                    response = new { ok = false, outcome = "gate_refused", gate = "studio_busy", error = failure.Message };
-                } else {
-                    var timeout = command switch { "query-test" => TimeSpan.FromMinutes(3), "merge" => TimeSpan.FromMinutes(15), "publish" => argument.Contains("--wait") ? TimeSpan.FromMinutes(20) : TimeSpan.FromMinutes(10), "wait" => TimeSpan.FromMinutes(20), "open" or "latest" => TimeSpan.FromMinutes(3), "check-base" or "preview" => TimeSpan.FromMinutes(5), "assets" or "consumers" or "reference-producers" or "reference-snapshot" or "templates" => TimeSpan.FromMinutes(2), "create" or "create-app" or "template-download" => TimeSpan.FromMinutes(3), "refresh-references" => TimeSpan.FromMinutes(5), "data" or "data-insert" or "data-update" or "data-delete" => TimeSpan.FromMinutes(3), "portal-call" or "portal-private-call" or "portal-private-download" or "portal-session" => TimeSpan.FromMinutes(3), "portal-upload" => TimeSpan.FromMinutes(13), _ => TimeSpan.FromMinutes(1) };
-                    var work = Task.Run(() => Dispatch(command, argument, context));
-                    // The watchdog closes informational dialogs and notice windows while the command runs, so a
-                    // native command that ends with "Close" never holds the bridge. Choices are never made for the user.
-                    // The portal lane opens no Studio dialog, so it never closes the user's.
-                    var watchdog = command is "query-test" or "status" or "dismiss-dialog" or "auth-status" or "portal-call" or "portal-private-call" or "portal-private-download" or "portal-api-client-fixture-cleanup" or "portal-session" or "portal-upload" or "publish-log" ? Task.CompletedTask : WatchDialogs(work, context);
-                    if (await Task.WhenAny(work, Task.Delay(timeout)) == work) {
-                        try { response = await work; }
-                        catch (Exception error) {
-                            failure = error;
-                            // A publication that ended without success answers every message of its log (publish-log), not only the state.
-                            // The answer carries the message, never the .NET stack trace (last-error.json keeps it as evidence); an
-                            // uncertain merge also lists each divergence of the comparison (element, property, local, candidate).
-                            response = error is PublishFailedException failedPublish
-                                ? new { ok = false, outcome = Journal.Outcome(error, context.HandedOff), gate = Journal.Gate(error.Message), error = error.Message, dialogsClosed = context.Closed.ToArray(), publishLog = failedPublish.PublishLog }
-                                : error is MergeDiagnostics.MergeUncertainException uncertain
-                                ? new { ok = false, outcome = Journal.Outcome(error, context.HandedOff), gate = Journal.Gate(error.Message), error = uncertain.Detailed, divergences = uncertain.Divergences, dialogsClosed = context.Closed.ToArray() }
-                                : (object)new { ok = false, outcome = Journal.Outcome(error, context.HandedOff), gate = Journal.Gate(error.Message), error = MergeDiagnostics.Answer(error), dialogsClosed = context.Closed.ToArray() };
-                            // G-3 (C16): a merge that failed after CompareAndMerge took the candidate is integrated in the open
-                            // module: the answer says merged:true (equal:false), so nobody repeats it.
-                            if (command == "merge" && context.HandedOff && JsonSerializer.SerializeToNode(response) is JsonObject handed) {
-                                handed["merged"] = true; handed["equal"] = false; handed["equivalence"] = "uncertain";
-                                response = handed;
-                            }
-                            if (context.EvidenceDir != null) {
-                                // Same fields as the answer (friction ingest reads them), plus the stack for whoever reads the evidence.
-                                var evidence = JsonSerializer.SerializeToNode(response) as JsonObject ?? new JsonObject();
-                                evidence["stack"] = error.ToString();
-                                TryWrite(Path.Combine(context.EvidenceDir, "last-error.json"), evidence.ToJsonString(Json));
-                            }
-                        }
-                    } else {
-                        busyCommand = command; busySince = start;
-                        object[] openDialogs = Array.Empty<object>(), openWindows = Array.Empty<object>();
-                        try { openDialogs = DescribeDialogs(await Ui(Dialogs)); openWindows = DescribeWindows(await Ui(ModalWindows)); } catch { }
-                        failure = new TimeoutException("Command '" + command + "' is still running after " + timeout + "; it was not cancelled. Poll status; do not retry. Open dialogs: " + JsonSerializer.Serialize(openDialogs) + "; modal windows: " + JsonSerializer.Serialize(openWindows) + ". A dialog with a choice must be closed with dismiss-dialog <caption>|<action>.");
-                        response = new { ok = false, outcome = "uncertain", gate = "studio_busy", error = failure.Message, openDialogs, openWindows, dialogsClosed = context.Closed.ToArray() };
-                        var late = start; var lateContext = context; var lateCommand = command;
-                        _ = work.ContinueWith(t => {
-                            busyCommand = null;
-                            var lateFailure = t.Exception?.GetBaseException();
-                            Log.Append(new Journal.Entry(late.ToString("o"), DateTimeOffset.UtcNow.ToString("o"), "studio-" + Environment.ProcessId, "bridge", lateCommand + "-late",
-                                lateContext.Module, lateContext.ModuleKey, lateContext.BaseSha, lateContext.CandidateSha, Environment.ProcessId, null,
-                                Journal.Outcome(lateFailure, lateContext.HandedOff), lateFailure == null ? "none" : Journal.Gate(lateFailure.Message), lateContext.EvidenceDir, lateFailure?.Message, "live", lateContext.Feature));
-                            if (lateContext.EvidenceDir != null) TryWrite(Path.Combine(lateContext.EvidenceDir, lateFailure == null ? "late-result.json" : "last-error.json"), lateFailure == null ? t.Result : new { ok = false, error = lateFailure.ToString() });
-                        }, TaskScheduler.Default);
+                    failure = error;
+                    // A publication that ended without success answers every message of its log (publish-log), not only the state.
+                    // The answer carries the message, never the .NET stack trace (last-error.json keeps it as evidence); an
+                    // uncertain merge also lists each divergence of the comparison (element, property, local, candidate).
+                    response = error is PublishFailedException failedPublish
+                        ? new { ok = false, outcome = Journal.Outcome(error, context.HandedOff), gate = Journal.Gate(error.Message), error = error.Message, dialogsClosed = context.Closed.ToArray(), publishLog = failedPublish.PublishLog }
+                        : error is MergeDiagnostics.MergeUncertainException uncertain
+                        ? new { ok = false, outcome = Journal.Outcome(error, context.HandedOff), gate = Journal.Gate(error.Message), error = uncertain.Detailed, divergences = uncertain.Divergences, dialogsClosed = context.Closed.ToArray() }
+                        : (object)new { ok = false, outcome = Journal.Outcome(error, context.HandedOff), gate = Journal.Gate(error.Message), error = MergeDiagnostics.Answer(error), dialogsClosed = context.Closed.ToArray() };
+                    // G-3 (C16): a merge that failed after CompareAndMerge took the candidate is integrated in the open
+                    // module: the answer says merged:true (equal:false), so nobody repeats it.
+                    if (command == "merge" && context.HandedOff && JsonSerializer.SerializeToNode(response) is JsonObject handed) {
+                        handed["merged"] = true; handed["equal"] = false; handed["equivalence"] = "uncertain";
+                        response = handed;
+                    }
+                    if (context.EvidenceDir != null) {
+                        // Same fields as the answer (friction ingest reads them), plus the stack for whoever reads the evidence.
+                        var evidence = JsonSerializer.SerializeToNode(response) as JsonObject ?? new JsonObject();
+                        evidence["stack"] = error.ToString();
+                        TryWrite(Path.Combine(context.EvidenceDir, "last-error.json"), evidence.ToJsonString(Json));
                     }
                 }
-                var note = failure?.Message ?? context.Note ?? (context.Closed.Count > 0 ? "watchdog closed " + context.Closed.Count + " dialog(s): " + JsonSerializer.Serialize(context.Closed) : null);
-                Log.Append(new Journal.Entry(start.ToString("o"), DateTimeOffset.UtcNow.ToString("o"), "studio-" + Environment.ProcessId, "bridge", command,
-                    context.Module, context.ModuleKey, context.BaseSha, context.CandidateSha, Environment.ProcessId, null,
-                    failure is TimeoutException ? "uncertain" : failure == null && context.Outcome != null ? context.Outcome : Journal.Outcome(failure, context.HandedOff),
-                    failure == null ? context.GateName ?? "none" : failure is TimeoutException ? "studio_busy" : Journal.Gate(failure.Message), context.EvidenceDir, note, "live", context.Feature));
-                await writer.WriteLineAsync(JsonSerializer.Serialize(response));
+            } else {
+                // Past the deadline: it was not cancelled. The list of open dialogs is a courtesy with its own bound: a Studio
+                // whose UI does not answer never keeps this answer from going out.
+                object[] openDialogs = Array.Empty<object>(), openWindows = Array.Empty<object>();
+                try {
+                    openDialogs = DescribeDialogs(await Ui(Dialogs).WaitAsync(BridgeDeadlines.Dialogs));
+                    openWindows = DescribeWindows(await Ui(ModalWindows).WaitAsync(BridgeDeadlines.Dialogs));
+                } catch { }
+                failure = new TimeoutException("Command '" + command + "' is still running after " + timeout + "; it was not cancelled. Poll status; do not retry. Open dialogs: " + JsonSerializer.Serialize(openDialogs) + "; modal windows: " + JsonSerializer.Serialize(openWindows) + ". A dialog with a choice must be closed with dismiss-dialog <caption>|<action>.");
+                var late = JsonSerializer.SerializeToNode(new { ok = false, outcome = "uncertain", gate = "studio_busy", error = failure.Message, deadlineSeconds = (int)timeout.TotalSeconds, since = start.ToString("o"), evidence = context.EvidenceDir, openDialogs, openWindows, dialogsClosed = context.Closed.ToArray() })!.AsObject();
+                // The stable name of a merge past its deadline (kernel-delivery.mjs): running in the Studio, never queued (QueuedOnTab).
+                if (command is "merge" or "reconcile-merge") late["code"] = "MERGE_TIMEOUT";
+                response = late;
+                var lateStart = start; var lateContext = context; var lateCommand = command;
+                _ = run.Work!.ContinueWith(t => {
+                    var lateFailure = t.Exception?.GetBaseException();
+                    Log.Append(new Journal.Entry(lateStart.ToString("o"), DateTimeOffset.UtcNow.ToString("o"), "studio-" + Environment.ProcessId, "bridge", lateCommand + "-late",
+                        lateContext.Module, lateContext.ModuleKey, lateContext.BaseSha, lateContext.CandidateSha, Environment.ProcessId, null,
+                        Journal.Outcome(lateFailure, lateContext.HandedOff), lateFailure == null ? "none" : Journal.Gate(lateFailure.Message), lateContext.EvidenceDir, lateFailure?.Message, "live", lateContext.Feature));
+                    if (lateContext.EvidenceDir != null) TryWrite(Path.Combine(lateContext.EvidenceDir, lateFailure == null ? "late-result.json" : "last-error.json"), lateFailure == null ? t.Result : new { ok = false, error = lateFailure.ToString(), handedOff = lateContext.HandedOff, merged = lateContext.HandedOff ? "unknown: the native merge took the candidate" : "false" });
+                }, TaskScheduler.Default);
             }
-        } catch (Exception error) {
-            if (DataRoot.CanWrite) TryWrite(Path.Combine(Root, "journal", "bridge-server-error-" + Environment.ProcessId + ".txt"), error.ToString());
         }
+        var note = failure?.Message ?? context.Note ?? (context.Closed.Count > 0 ? "watchdog closed " + context.Closed.Count + " dialog(s): " + JsonSerializer.Serialize(context.Closed) : null);
+        Log.Append(new Journal.Entry(start.ToString("o"), DateTimeOffset.UtcNow.ToString("o"), "studio-" + Environment.ProcessId, "bridge", command,
+            context.Module, context.ModuleKey, context.BaseSha, context.CandidateSha, Environment.ProcessId, null,
+            failure is TimeoutException ? "uncertain" : failure == null && context.Outcome != null ? context.Outcome : Journal.Outcome(failure, context.HandedOff),
+            failure == null ? context.GateName ?? "none" : failure is TimeoutException ? "studio_busy" : Journal.Gate(failure.Message), context.EvidenceDir, note, "live", context.Feature));
+        var answer = JsonSerializer.Serialize(response);
+        // The client left before the answer (its own deadline): the answer stays in the evidence of the command, so a
+        // MERGE_TIMEOUT can be read instead of guessed.
+        return new PipeAnswer(answer, stop, error => {
+            if (context.EvidenceDir != null) TryWrite(Path.Combine(context.EvidenceDir, "undelivered-answer.json"), new { at = DateTimeOffset.UtcNow, command, reason = error.Message, answer = JsonNode.Parse(answer) });
+            Log.Append(new Journal.Entry(start.ToString("o"), DateTimeOffset.UtcNow.ToString("o"), "studio-" + Environment.ProcessId, "bridge", command + "-undelivered",
+                context.Module, context.ModuleKey, context.BaseSha, context.CandidateSha, Environment.ProcessId, null, "uncertain", "none", context.EvidenceDir, error.Message, "live", context.Feature));
+        });
     }
-
-    private static object Stop(out bool running) { running = false; return new { ok = true, stopped = true }; }
 
     private static async Task<object> Dispatch(string command, string argument, Context context) => command switch {
         "query-test" => await QueryTest(argument, context),
@@ -362,16 +392,11 @@ internal static partial class Bridge {
         object answer; string mode; string? producerName = null; object? producerAsset = null;
         if (producer == null) {
             mode = "check-updates";
-            var done = new TaskCompletionSource<object>(TaskCreationOptions.RunContinuationsAsynchronously);
-            var queued = p.ExecuteInContext(() => {
-                try { var result = AutoRegistryType<AddRemoveReferencesCommands.RefreshDependenciesFromModuleMenu>.Instance.Execute(p, p); done.SetResult(result?.ToString() ?? "null"); }
-                catch (Exception error) { done.SetException(error); }
-            }, executeWhenTopLevelIsIdle: true);
             // The command ends with an informational dialog "Refresh of library dependencies" whose only action is
             // Close; the command does not return until it is closed. The watchdog closes it and journals its text.
             // Proven on 2026-09-16: the refresh itself had taken the reference from r0 to r3 before the dialog appeared.
-            await queued;
-            answer = new { result = await done.Task, dialogsClosed = c.Closed.ToArray() };
+            var result = await QueuedOnTab(p, c, "refresh-references", s.Name, null, () => AutoRegistryType<AddRemoveReferencesCommands.RefreshDependenciesFromModuleMenu>.Instance.Execute(p, p)?.ToString() ?? "null");
+            answer = new { result, dialogsClosed = c.Closed.ToArray() };
         } else {
             mode = "library-update";
             var key = await Ui(() => ResolveKey(producer, Host(p)));
@@ -383,12 +408,7 @@ internal static partial class Bridge {
             var referenced = await Ui(() => s.References.FirstOrDefault(r => r.ReferenceKey.ToString() == key.ToString()));
             Require(referenced != null, s.Name + " does not reference " + asset.Name + " (key " + key + "); refresh applies only to an existing reference.");
             var request = new Dictionary<string, RevisionWithModelDigest> { { key.ToString(), new RevisionWithModelDigest { Revision = asset.Revision.ToString(), ModelDigest = asset.ModelDigest?.ToString() } } };
-            var done = new TaskCompletionSource<object>(TaskCreationOptions.RunContinuationsAsynchronously);
-            await p.ExecuteInContext(() => {
-                try { var refreshed = ReferencesManagerServiceProvider.GetInstance(provider).RefreshSpecificReferencesByKey(p, s, request); done.SetResult(new { refreshed, targetRevision = asset.Revision }); }
-                catch (Exception error) { done.SetException(error); }
-            }, executeWhenTopLevelIsIdle: true);
-            answer = await done.Task;
+            answer = await QueuedOnTab<object>(p, c, "refresh-references", s.Name, null, () => new { refreshed = ReferencesManagerServiceProvider.GetInstance(provider).RefreshSpecificReferencesByKey(p, s, request), targetRevision = asset.Revision });
         }
         var after = await Ui(() => Capture(s));
         var stamp = DateTimeOffset.UtcNow.ToString("yyyyMMddHHmmss");
@@ -728,16 +748,13 @@ internal static partial class Bridge {
             if (state.modified && discard) {
                 var discarded = await Ui(() => { using var st = copy.ActiveESpace.SaveToMemoryStream(); var b = st.ToArray(); var h = Hash(b); var path = Path.Combine(Snapshots, module + "-discarded-" + h + ".oml"); File.WriteAllBytes(path, b); return new { path, sha256 = h }; });
                 TryWrite(Path.Combine(Root, "journal", "discard-" + DateTimeOffset.UtcNow.ToString("yyyyMMddHHmmss") + ".json"), new { at = DateTimeOffset.UtcNow, module, discarded });
-                var forced = new TaskCompletionSource<object>(TaskCreationOptions.RunContinuationsAsynchronously);
                 // ForceClose is an explicit interface implementation (IAggregatorPresenter.ForceClose => close with force,
                 // no save prompt), so it is called through the interface, never located by name on the concrete type.
-                await copy.ExecuteInContext(() => { try { copy.ForceClose(); forced.SetResult(new { discarded = true, snapshot = discarded.path }); } catch (Exception error) { forced.SetException(error); } }, executeWhenTopLevelIsIdle: true);
-                closed.Add(await forced.Task);
+                closed.Add(await QueuedOnTab<object>(copy, c, "close", module, null, () => { copy.ForceClose(); return new { discarded = true, snapshot = discarded.path }; }));
                 continue;
             }
-            var done = new TaskCompletionSource<object>(TaskCreationOptions.RunContinuationsAsynchronously);
-            await copy.ExecuteInContext(() => { try { var result = AutoRegistryType<ServiceStudio.Presenter.Commands.ESpaceCommands.CloseModule>.Instance.Execute(copy, copy); done.SetResult(result?.ToString() ?? "null"); } catch (Exception error) { done.SetException(error); } }, executeWhenTopLevelIsIdle: true);
-            closed.Add(new { result = await done.Task });
+            var result = await QueuedOnTab(copy, c, "close", module, null, () => AutoRegistryType<ServiceStudio.Presenter.Commands.ESpaceCommands.CloseModule>.Instance.Execute(copy, copy)?.ToString() ?? "null");
+            closed.Add(new { result });
         }
         await Task.Delay(500);
         var remaining = await Ui(() => RuntimeImplementation.Instance.Aggregators.Count(a => a.ActiveESpace != null && (a.ActiveESpace.Name == module || a.ActiveESpace.Key.ToString() == module)));
@@ -884,14 +901,14 @@ internal static partial class Bridge {
     // I10: what this build does that older bridges do not; the facade uses each behavior only when it is here (status, brief).
     // merge:normalized: a merge proven equal but for the Studio's own rewrites answers ok:true, merged:true, normalized (G-1);
     // template-download:have: a template whose revision the caller already has answers cached:true without bytes (C25).
-    private static readonly string[] Capabilities = { "merge:normalized", "template-download:have", "agent-root:1" };
+    private static readonly string[] Capabilities = { "merge:normalized", "template-download:have", "agent-root:1", "reference-snapshot:every-kind" };
     private static object Status() {
         var providers = ProvidersState();
         object? topState = null;
         try { topState = State(RuntimeImplementation.Instance.GetAllTopLevelPresenters().FirstOrDefault(p => p.ServerCommunicationsProvider?.IsLoggedIn == true)); } catch (Exception error) { topState = error.Message; }
         return new {
             ok = true, bridge = Version, capabilities = Capabilities, root = Root, pid = Environment.ProcessId, providers, sessions = Sessions(), catalogTenant = CatalogTenant(), catalog = CatalogSummary(),
-            busy = busyCommand == null ? null : new { command = busyCommand, since = busySince.ToString("o") },
+            busy = BusyFacts(Turn.Holder),
             dialogs = DescribeDialogs(Dialogs()), modalWindows = DescribeWindows(ModalWindows()),
             topLevel = topState, runtime = State(RuntimeImplementation.Instance),
             modules = RuntimeImplementation.Instance.Aggregators.Where(a => a.ActiveESpace != null).Select(a => new {
@@ -916,7 +933,7 @@ internal static partial class Bridge {
         var path = Path.Combine(Snapshots, s.Name + "-" + hash + ".oml");
         if (!File.Exists(path)) File.WriteAllBytes(path, bytes);
         var capture = new {
-            ok = true, module = s.Name, moduleKey = c.ModuleKey, sha256 = hash, path, capturedAt = DateTimeOffset.UtcNow.ToString("o"),
+            ok = true, module = s.Name, moduleKey = c.ModuleKey, sha256 = hash, path, capturedAt = DateTimeOffset.UtcNow.ToString("o"), pid = Environment.ProcessId,
             modified = s.WasModifiedSinceLastSave, developerId = Developer(s), host = p.ServerCommunicationsProvider?.LoginInfo?.HostInfo?.Hostname,
             // App or library: the facade refuses, before any build, what only a library can hold (a public structure).
             kind = s.IsLibraryEspace ? "library" : "app",
@@ -1123,9 +1140,43 @@ internal static partial class Bridge {
     private static async Task<object> InContext(string manifestPath, Context c, Mode mode) {
         var m = Manifest.Load(manifestPath); c.Bind(m);
         var p = await Ui(() => Active(m.ModuleKey));
-        var done = new TaskCompletionSource<object>(TaskCreationOptions.RunContinuationsAsynchronously);
-        await p.ExecuteInContext(() => { try { done.SetResult(Run(m, p, mode, c)); } catch (Exception error) { done.SetException(error); } }, executeWhenTopLevelIsIdle: true);
-        return await done.Task;
+        var what = mode switch { Mode.CheckBase => "check-base", Mode.Preview => "preview", Mode.Reconcile => "reconcile-merge", _ => "merge" };
+        return await QueuedOnTab(p, c, what, m.Module, m.EvidenceDir, () => Run(m, p, mode, c));
+    }
+
+    // Every job the bridge queues on a tab goes through here (BridgeServe.cs TabQueue). The Studio runs it only when its top
+    // level is idle: it starts within BridgeDeadlines.QueueStart, or it is abandoned, and not-started.json says so in the
+    // evidence directory when the command has one.
+    // A job its tab only reaches after its command has answered past the deadline is abandoned as well: that answer said
+    // "still running", and nothing started yet may land after it.
+    private static Task<T> QueuedOnTab<T>(IAggregatorPresenter p, Context c, string what, string module, string? evidenceDir, Func<T> work) {
+        var limit = BridgeDeadlines.QueueStart;
+        void Record(DateTimeOffset queuedAt, string? state) {
+            if (evidenceDir != null) TryWrite(Path.Combine(evidenceDir, "not-started.json"), new { at = DateTimeOffset.UtcNow, queuedAt, command = what, module, limitSeconds = (int)limit.TotalSeconds, executed = false, abandoned = true, tabState = state });
+        }
+        var queued = DateTimeOffset.UtcNow;
+        return TabQueue.Run(job => p.ExecuteInContext(job, executeWhenTopLevelIsIdle: true), what, module, limit, () => {
+            if (c.Turn?.Overran == true) {
+                Record(queued, "past the deadline of its command");
+                throw new JobNotStartedException(what, module, limit, "past the deadline of its command");
+            }
+            return work();
+        }, async queuedAt => {
+            string? state = null;
+            try { state = JsonSerializer.Serialize(await Ui(() => State(p)).WaitAsync(BridgeDeadlines.Dialogs)); } catch { }
+            Record(queuedAt, state);
+            return state;
+        });
+    }
+
+    // After a cut merge, a delivery goes only over the module its check saw, byte for byte (facade merge-cut.mjs): one refusal for a late
+    // merge, another process, a restart and a partial merge. Read before the native comparisons, whose difference would answer BASE_DRIFT,
+    // and again right before the hand-off (Run).
+    private static void RequireExpectedBase(Manifest m, Mode mode, ESpace local) {
+        if (mode != Mode.Merge || string.IsNullOrEmpty(m.ExpectedBaseSha256)) return;
+        using var open = local.SaveToMemoryStream();
+        var openSha = Hash(open.ToArray());
+        Require(string.Equals(openSha, m.ExpectedBaseSha256, StringComparison.OrdinalIgnoreCase), "MODULE_NOT_AT_BASE: the open module " + m.Module + " (sha256 " + openSha + ") is not the module this delivery was checked against (sha256 " + m.ExpectedBaseSha256 + "); nothing was merged.");
     }
 
     // Steps 4 and 5 of the cycle: native preview, then a single native merge with full verification.
@@ -1162,6 +1213,7 @@ internal static partial class Bridge {
         if (referenced.Length > 0)
             throw new InvalidOperationException("Captured base of " + m.Module + " predates " + string.Join(", ", referenced.Select(x => x.What + " " + x.Name + " at " + x.At.ToString("o"))) + ", which " + m.Module + " references; the Studio may have updated the dependency. Capture a new snapshot and rebuild the candidate.");
         var unreferencedProducers = producers.Select(x => x.What + " " + x.Name + " at " + x.At.ToString("o")).ToArray();
+        RequireExpectedBase(m, mode, local);
         var basisBytes = m.ReadBase();
         m.RequireFreshBase();
         using var basis = Load(basisBytes);
@@ -1204,6 +1256,8 @@ internal static partial class Bridge {
                 File.WriteAllBytes(Path.Combine(m.EvidenceDir, "first-pass.oml"), order.FirstPass);
                 File.WriteAllText(Path.Combine(m.EvidenceDir, "merge-order.json"), JsonSerializer.Serialize(new { rule = MergeOrder.Rule, deferred = MergeOrder.ToJson(order.Deferred), firstPassSha256 = Hash(order.FirstPass) }, Json));
             }
+            // The last read before the hand-off: only this file write separates it from CompareAndMerge, in the merge's own job, with the Studio turn held.
+            RequireExpectedBase(m, mode, local);
             File.WriteAllText(Path.Combine(m.EvidenceDir, "merge-started.json"), JsonSerializer.Serialize(new { at = DateTimeOffset.UtcNow, pid = Environment.ProcessId, module = m.Module, baseSha256 = m.BaseSha256, candidateSha256 = m.CandidateSha256, passes = order.FirstPass == null ? 1 : 2, publishInvoked = false }, Json));
             handedOff = true; c.HandedOff = true;
             string NativeMerge(ESpace into, ESpace foreign, ESpace over) => CompareAndMergeCommands.CompareAndMerge(p, into, foreign, over, false, automaticMerge: true, isFrom1CP: false).ToString();
@@ -1440,9 +1494,8 @@ internal static partial class Bridge {
         }
         Require(!File.Exists(Path.Combine(m.EvidenceDir, "publish-started.json")), "Publication already requested in this evidence directory; use publish-status, never retry.");
         var p = await Ui(() => Active(m.ModuleKey));
-        var done = new TaskCompletionSource<object>(TaskCreationOptions.RunContinuationsAsynchronously);
-        await p.ExecuteInContext(() => {
-            try {
+        return await QueuedOnTab<object>(p, c, "publish", m.Module, m.EvidenceDir, () => {
+            {
                 var s = p.ActiveESpace;
                 Guard(m, p);
                 Require(!p.BottomPanePresenter.ChildPresenters.OfType<IServerMessagesPanePresenter>().Any(i => i.ServerProcess?.CurrentState.ToString() == "Running"), "Another server operation is running.");
@@ -1471,10 +1524,9 @@ internal static partial class Bridge {
                 AutoRegistryType<ServiceStudio.Presenter.Commands.Publish>.Instance.Execute(p, p);
                 PublishedAt[m.Module] = DateTimeOffset.UtcNow;
                 File.WriteAllText(Path.Combine(m.EvidenceDir, "publish-dispatched.json"), JsonSerializer.Serialize(new { at = DateTimeOffset.UtcNow }, Json));
-                done.SetResult(new { ok = true, dispatched = true, module = m.Module, publishInvoked = true, note = "Publication dispatched. Confirm with publish-status, then latest, and compare the downloaded revision with after-merge.oml." });
-            } catch (Exception error) { done.SetException(error); }
-        }, executeWhenTopLevelIsIdle: true);
-        return await done.Task;
+                return new { ok = true, dispatched = true, module = m.Module, publishInvoked = true, note = "Publication dispatched. Confirm with publish-status, then latest, and compare the downloaded revision with after-merge.oml." };
+            }
+        });
     }
 
     private static object PublishStatus(string manifestPath, Context c) {

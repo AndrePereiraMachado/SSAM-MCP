@@ -61,7 +61,7 @@ test('agent-pack.ps1 -Platform mac: the exact tar.gz, its modes, pack.json (no n
     const entries = readTarGz(out);
     const files = entries.filter(e => e.type === 'file');
     const names = files.map(e => e.name).sort();
-    const lib = fs.readdirSync(path.join(box, 'agent', 'lib')).filter(n => n.endsWith('.mjs')).map(n => 'agent/lib/' + n);
+    const lib = fs.readdirSync(path.join(box, 'agent', 'lib')).filter(n => /\.(mjs|json)$/.test(n)).map(n => 'agent/lib/' + n);
     assert.deepEqual(names, [...lib, 'agent/ssam-agent.mjs', 'agent/ssam-agent.sh', 'bin/o11/bridge/Anvil.Bridge.deps.json', 'bin/o11/bridge/Anvil.Bridge.dll',
       'bin/o11/hook/Anvil.RuntimeHook.Agent.deps.json', 'bin/o11/hook/Anvil.RuntimeHook.Agent.dll', 'docs/AGENTE-CLIENTE.md', 'docs/AGENTE-MAC.md', 'install.sh', 'odc/README.md',
       'odc/studio/bridge/bin/Release/net8.0/ODC3.Bridge.v97.deps.json', 'odc/studio/bridge/bin/Release/net8.0/ODC3.Bridge.v97.dll', 'pack.json'].sort());

@@ -173,7 +173,7 @@ internal static class ScreenHtmlRoundTrip
         target.Attributes.RemoveAll(a => a.Key == attribute);
         if (readBack != null) target.Attributes.Add(new(attribute, readBack));
         // The value as the native model holds it (the decoder's one translation of a value attribute: the type of an input).
-        var native = kind == "Input" && property == "InputType" ? ScreenHtmlTables.InputTypeIn(written) : written;
+        var native = ScreenHtmlTables.ModelValue(kind, property, written);
         // An Expression left with nothing of its own but its value is a run of its parent (the reading's rule): the text, without k.
         if (kind == "Expression" && target.Children.Count == 0 && target.Attributes.All(a => a.Key is "k" or "value") && target.Get("value") is { } value) {
             var parents = ScreenHtmlText.Parents(expected);

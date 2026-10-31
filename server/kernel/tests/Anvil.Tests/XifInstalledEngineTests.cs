@@ -102,10 +102,19 @@ public sealed class XifInstalledEngineTests
         return file;
     }
 
-    [Fact]
-    public void ModelAndFinalRunOnTheInstalledIntegrationStudio()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ModelAndFinalRunOnTheInstalledIntegrationStudio(bool longWorkPath)
     {
-        var work = NewDir("build");
+        var root = NewDir("build");
+        var work = root;
+        if (longWorkPath)
+        {
+            // The facade's host/name/timestamp folders made ProjectSave's timestamped DLL backup exceed MAX_PATH.
+            while (work.Length < 190) work = Path.Combine(work, "long-work-path");
+            Directory.CreateDirectory(work);
+        }
         try
         {
             if (!Installed(work)) return;
@@ -180,7 +189,7 @@ public sealed class XifInstalledEngineTests
             Assert.Equal("Binaries", Assert.Single(XifPackage.Read(againFinal["xif"]!.ToString()).Resources, r => r.Filename == "OutSystems.NssZZHybridXifLab.dll").CompileAction);
             Assert.NotEqual(again["hash"]!.ToString(), againFinal["hash"]!.ToString());
         }
-        finally { try { Directory.Delete(work, true); } catch (IOException) { } }
+        finally { try { Directory.Delete(root, true); } catch (IOException) { } }
     }
 
     [Fact]

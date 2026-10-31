@@ -7,7 +7,8 @@ namespace Anvil.Tests;
 /// <summary>
 /// The contract check of an imported SOAP client (SoapContract): a parameter keeps the exact WSDL type. A complex type
 /// typed Text, or typed by a structure of another key, is SOAP_CONTRACT_TYPE_MISMATCH; the client's own structure of that
-/// name, bound by key, passes; a primitive maps to its OutSystems type. Pure records first, then the same check read from
+/// name, bound by key, passes; a primitive maps to its OutSystems type, and one the importer typed otherwise is a warning
+/// (Retyped). Pure records first, then the same check read from
 /// a headless model built with the raw creators (ISOAPClient, ISOAPStructure, ISOAPAction, ISOAPActionOutput).
 /// </summary>
 public class SoapContractTests
@@ -35,7 +36,6 @@ public class SoapContractTests
     {
         Assert.Empty(SoapContract.Check([new("Add", "input", "intA", "s:int", "Integer", null), new("Add", "output", "AddResult", "{http://www.w3.org/2001/XMLSchema}long", "Long Integer", null),
             new("Add", "input", "When", "xsd:dateTime", "Date Time", null), new("Add", "input", "Blob", "s:base64Binary", "Binary Data", null)], []));
-        Assert.Equal("SOAP_CONTRACT_TYPE_MISMATCH", Assert.Single(SoapContract.Check([new("Add", "input", "intA", "s:int", "Text", null)], [])).Code);
         Assert.Equal("Decimal", SoapContract.PrimitiveOf("s:double"));
         Assert.Null(SoapContract.PrimitiveOf("tns:tOperands"));
     }
@@ -60,6 +60,25 @@ public class SoapContractTests
     {
         Assert.Equal("SOAP_CONTRACT_TYPE_MISMATCH", Assert.Single(SoapContract.Check(
             [new("Convert", "input", "Value", original, actual, null)], [Operands])).Code);
+    }
+
+    /// <summary>F7 (25/10/2026): the native lexical Text of xs:decimal (NumberConversion's dNum) is no refusal, since a refresh
+    /// repeats the same import and the same type: Retyped says it, with the WSDL type, the Studio's type and the conversion a
+    /// call needs; a primitive with its own type gives none, and a complex type typed Text is still the refusal.</summary>
+    [Fact]
+    public void TheNativeDecimalTextIsAWarningNeverARefusal()
+    {
+        var dNum = new SoapContract.Parameter("NumberToDollars", "input", "dNum", "http://www.w3.org/2001/XMLSchema:decimal", "Text", null);
+        var result = new SoapContract.Parameter("NumberToDollars", "output", "Rate", "xsd:decimal", "Text", null);
+        var kept = new SoapContract.Parameter("Add", "input", "intA", "s:int", "Integer", null);
+        Assert.Empty(SoapContract.Check([dNum, result, kept], []));
+        var warnings = SoapContract.Retyped([dNum, result, kept]);
+        Assert.Equal(2, warnings.Count);
+        Assert.All(warnings, w => Assert.Equal("SOAP_PRIMITIVE_RETYPED", w["code"]!.ToString()));
+        Assert.Equal(("dNum", "Decimal", "Text"), (warnings[0]["parameter"]!.ToString(), warnings[0]["expected"]!.ToString(), warnings[0]["studioType"]!.ToString()));
+        Assert.Contains("pass DecimalToText(<Decimal>)", warnings[0]["message"]!.ToString());
+        Assert.Contains("read it with TextToDecimal(NumberToDollars.Rate)", warnings[1]["message"]!.ToString());
+        Assert.Equal("SOAP_CONTRACT_TYPE_MISMATCH", Assert.Single(SoapContract.Check([dNum, new("Subtract", "input", "Operands", "tns:tOperands", "Text", null)], [Operands])).Code);
     }
 
     /// <summary>The imported client as the Studio's importer leaves it, built with the raw creators (with the occurrences and the

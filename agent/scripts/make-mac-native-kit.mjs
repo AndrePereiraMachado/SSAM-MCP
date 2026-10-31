@@ -31,7 +31,7 @@ function tree(relative, allowed) {
 tree('native/Ssam.Agent', /\.(cs|csproj)$/);
 tree('tests/native-protocol', /\.(cs|csproj)$/);
 tree('src', /\.(mjs|jsx|js|css|html)$/);
-tree('agent/lib', /\.mjs$/);
+tree('agent/lib', /\.(mjs|json)$/);
 tree('agent/tests/fixtures', /\.mjs$/);
 tree('assets', /\.(png|ico|icns)$/);
 tree('build', /\.(png|ico|icns|plist)$/);

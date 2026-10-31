@@ -27,6 +27,7 @@ export const VERB_FIELDS = Object.freeze({
     'create-app', 'add-modules', 'create-module', 'update-app', 'refresh-refs', 'set-user-provider', 'delete-app']) }),
   o11_studio: Object.freeze({ field: 'command', default: null, values: Object.freeze(['status', 'wait', 'open-module', 'close-module', 'snapshot', 'errors', 'publish-log', 'windows', 'dismiss-dialog', 'login', 'refresh-references']) }),
   o11_access: Object.freeze({ field: 'action', default: null, values: Object.freeze(['plan', 'apply', 'verify', 'users']) }),
+  o11_users: Object.freeze({ field: 'operation', default: null, values: Object.freeze(['capabilities', 'status', 'sign-in', 'password-prompt', 'list', 'get', 'create', 'update', 'activate', 'deactivate', 'delete', 'grant-role', 'revoke-role', 'add-group', 'remove-group', 'set-password', 'sign-out', 'receipt']) }),
   studio_create_app: Object.freeze({ field: 'action', default: 'create', values: Object.freeze(['templates', 'create']) }),
   ssam_friction: Object.freeze({ field: 'view', default: 'issues', values: Object.freeze(['issues', 'task', 'timeline', 'reports', 'report', 'delivery-kpi']) }),
 });
@@ -39,7 +40,7 @@ export const SPAN_CATEGORIES = Object.freeze({
     publish: 'publish', publish_log: 'publish', '*': 'studio' }),
   'odc.pipe': Object.freeze({ snapshot: 'capture', latest: 'capture', 'reference-producers': 'capture', publish: 'publish', 'publish-status': 'publish', '*': 'studio' }),
   'odc.attach': 'studio', 'o11.connect': 'studio', 'o11.selected': 'studio', 'studio.processes': 'studio',
-  'file.get': 'transfer', 'file.put': 'transfer', 'file.list': 'transfer', 'file.sync': 'transfer', 'net.probe': 'network', kernel: 'kernel',
+  'file.get': 'transfer', 'file.put': 'transfer', 'file.list': 'transfer', 'file.sync': 'transfer', 'net.probe': 'network', 'o11.users': 'environment', kernel: 'kernel',
 });
 export function categoryOf(kind, verb = null) {
   const entry = SPAN_CATEGORIES[kind];

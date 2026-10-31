@@ -74,7 +74,7 @@ test('every tool registered by createSsamServer() plus ssam_friction is classifi
   // servidor/fase4-24: the 24th release adds 12 (catalog/tools.json 83 -> 95, none removed): 90 of createSsamServer, the 4
   // hook tools (SSAM_APP_HOOK_TOOLS=1) and ssam_friction. servidor/fase4-25: marco-a5 adds ssam_code (95 -> 96).
   // fase4-28 r2-preview: + ssam_render, a hosted-only tool (96 -> 97).
-  assert.equal(names.size, 97, 'the 91 tools of createSsamServer of marco-a5, the 4 hook tools (SSAM_APP_HOOK_TOOLS=1), ssam_friction and the hosted-only ssam_render');
+  assert.equal(names.size, 98, 'the 92 tools of createSsamServer (fase4-28 r4: + o11_users), the 4 hook tools (SSAM_APP_HOOK_TOOLS=1), ssam_friction and the hosted-only ssam_render');
   assert.deepEqual([...names.keys()].filter(n => !tools[n]), [], 'live tools without a hosted class');
   assert.deepEqual(Object.keys(tools).filter(n => !names.has(n)), [], 'stale hosted classes');
 });
@@ -143,7 +143,7 @@ test('every in/out pointer exists in the tool schema under the 6.4 grammar', asy
 test('the hosted catalog classifies both local previews as unavailable', () => {
   const count = klass => Object.values(tools).filter(t => t.class === klass).length;
   assert.deepEqual({ server: count('server'), agent: count('agent'), tenant: count('tenant-agent'), unavailable: count('unavailable') },
-    { server: 24, agent: 33, tenant: 22, unavailable: 18 }); // fase4-28 r2-preview: + ssam_render (agent)
+    { server: 24, agent: 34, tenant: 22, unavailable: 18 }); // fase4-28 r2-preview: + ssam_render (agent); r4: + o11_users (agent)
   assert.equal(Object.values(tools).filter(t => t.class === 'server' && typeof t.agent === 'object').length, 11);
   assert.deepEqual(Object.entries(tools).filter(([, t]) => t.agent === 'report').map(([n]) => n).sort(), ['hybrid_tenants', 'odc_auth_status', 'ssam_doctor', 'studio_doctor']);
 });

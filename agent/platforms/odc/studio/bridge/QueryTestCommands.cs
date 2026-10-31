@@ -3,7 +3,10 @@ using SSAM.QueryTesting;
 
 internal static partial class Bridge
 {
-    private static readonly QueryTestRunner QueryTests = new(Path.Combine(Root, "journal", "query-tests"));
+    // Created by the first command, after the data root is known: a static initializer would read Root before agent-root binds it,
+    // and the receipts that keep a query test from running twice would stay behind in the installed or leased copy.
+    private static readonly Lazy<QueryTestRunner> QueryTestRunnerOnce = new(() => new(Path.Combine(Root, "journal", "query-tests")));
+    private static QueryTestRunner QueryTests => QueryTestRunnerOnce.Value;
     private static async Task<object> QueryTest(string argument, Context context)
     {
         try

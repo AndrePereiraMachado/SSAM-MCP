@@ -123,15 +123,13 @@ test('A2: a merge already published, or whose publication was already requested,
   assert.equal(b.calls.filter(c => c[0] !== 'status').length, 0, 'nothing authorized or published');
 });
 
-test('A2: a merge of another Studio process or of another tenant is not this Studio\'s; the exact next call is the delivery again', async t => {
+test('A2: a merge of another Studio process is not proven here, and never sent again (G12); another tenant has no delivery to publish', async t => {
   const box = sandbox(t);
   delivery(box.lab, '06-AddGenres', { mergedAt: '2026-10-06T10:00:00Z', pid: 999 });
   const b = bridge();
   const other = await publishWithGrant({ module: 'GameStore', authorize: WORDS }, deps(box, b));
   assert.equal(other.code, 'DELIVERY_IN_OTHER_STUDIO');
-  assert.equal(other.continuation.tool, 'studio_deliver');
-  assert.deepEqual(Object.keys(other.continuation.arguments).sort(), ['changes', 'feature', 'job', 'module', 'owners', 'publish']);
-  assert.equal(other.continuation.arguments.publish, true);
+  assert.notEqual(other.continuation.tool, 'studio_deliver', 'the merge may be in the module');
   assert.ok(!JSON.stringify(other.continuation).includes(WORDS), 'the words never travel');
   const box2 = sandbox(t);
   delivery(box2.lab, '01-AddGenres', { mergedAt: '2026-10-06T10:00:00Z', tenant: 'corp.outsystems.app' });
@@ -139,19 +137,19 @@ test('A2: a merge of another Studio process or of another tenant is not this Stu
   assert.equal(tenant.code, 'NO_DELIVERY_TO_PUBLISH'); assert.equal(tenant.continuation.tool, 'studio_deliver');
 });
 
-test('A2: the bridge\'s own check (the open module changed since the merge) comes back with its code and the delivery again', async t => {
+test('A2: the bridge\'s own check (the open module changed since the merge) comes back with its code, and the job of the merge is not sent again (G12)', async t => {
   const box = sandbox(t);
   const last = delivery(box.lab, '09-AddGenres', { mergedAt: '2026-10-06T10:00:00Z' });
   const b = bridge({ publishAnswer: { ok: false, gate: 'none', error: 'System.InvalidOperationException: Open module differs from the merged receipt; do not publish an unverified model.' } });
   const changed = await publishWithGrant({ module: 'GameStore', authorize: WORDS }, deps(box, b));
   assert.equal(changed.code, 'MODULE_CHANGED_SINCE_DELIVERY'); assert.equal(changed.executed, false);
-  assert.equal(changed.continuation.tool, 'studio_deliver');
-  assert.equal(changed.continuation.arguments.job, path.join(box.lab, '..', 'jobs', '09-AddGenres.json'));
+  assert.notEqual(changed.continuation.tool, 'studio_deliver', 'that merge is in the module');
+  assert.match(changed.continuation.why, /Never the job of this delivery/);
   // The same with the manifest given directly.
   // CX15 r7 (M-3, converted): with no words, no recorded authorization (this fake bridge records none) and no grant, studio_publish
   // is WORDS_REQUIRED before the bridge; the direct manifest call carries the owner's words (before: none).
   const direct = await publishWithGrant({ manifest: last.manifest, authorize: WORDS }, deps(box, b));
-  assert.equal(direct.code, 'MODULE_CHANGED_SINCE_DELIVERY'); assert.equal(direct.continuation.arguments.module, 'GameStore');
+  assert.equal(direct.code, 'MODULE_CHANGED_SINCE_DELIVERY'); assert.notEqual(direct.continuation.tool, 'studio_deliver');
 });
 
 test('A2: module or manifest, exactly one', async t => {

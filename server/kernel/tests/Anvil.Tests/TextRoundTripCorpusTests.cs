@@ -13,7 +13,7 @@ public class TextRoundTripCorpusTests(ITestOutputHelper output)
 {
     private static readonly string Work = Path.Combine(Path.GetTempPath(), "text-roundtrip-o11");
 
-    [Fact]
+    [CorpusFact(CorpusFactAttribute.Text, "o11")]
     public void EveryActionOfTheO11CorpusIsAFixedPoint()
     {
         Directory.CreateDirectory(Work);

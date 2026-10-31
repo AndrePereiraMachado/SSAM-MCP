@@ -114,7 +114,10 @@ test('the proof finds differences: refused before anything, no receipt written, 
   assert.match(answer.error, /MainFlow\/Options\/Title api:Text/);
   assert.equal(fs.existsSync(path.join(last.evidence, 'receipt.json')), false, 'never clean without the proof');
   assert.equal(answer.continuation.tool, 'ssam_evidence'); assert.equal(answer.continuation.arguments.pointer, '/proof/differences');
-  assert.equal(answer.then.tool, 'studio_deliver');
+  // G12: a different module may hold the job, whole or in part: nothing sends it again.
+  assert.equal(answer.then, undefined);
+  assert.ok(!JSON.stringify(answer).includes('"studio_deliver"'), JSON.stringify(answer));
+  assert.equal(answer.merged, null);
   assert.deepEqual(b.calls.map(c => c[0]), [...IDENTITY, 'status', 'snapshot'], 'nothing authorized or published');
 });
 
@@ -199,12 +202,119 @@ test('known losses are never reconciled; a capture refused (merge pending) and a
   for (const answer of [incomplete, pending, engine]) assert.ok(answer.continuation?.tool, 'every refusal names its next call');
 });
 
-test('a merge made in another Studio process is not reconciled here', async t => {
+test('G12: an uncertain merge of another Studio process (the restart): the proof decides, never the same delivery', async t => {
+  // The module holds it: proven here, and publishable here.
   const box = sandbox(t);
   delivery(box.lab, '71-FEATURE-1', { pid: 999 });
   const b = bridge(box); const p = prover();
-  const answer = await publishWithGrant({ module: 'OrderPortal', authorize: WORDS, pid: PID }, deps(box, b, p));
-  assert.equal(answer.code, 'DELIVERY_IN_OTHER_STUDIO'); assert.equal(p.runs.length, 0);
+  const proven = await publishWithGrant({ module: 'OrderPortal', authorize: WORDS, pid: PID }, deps(box, b, p));
+  assert.equal(p.runs.length, 1);
+  assert.equal(proven.ok, true, JSON.stringify(proven));
+  // It differs: what differs, and no job.
+  const box2 = sandbox(t);
+  delivery(box2.lab, '71-FEATURE-1', { pid: 999 });
+  const different = await publishWithGrant({ module: 'OrderPortal', reconcile: true, pid: PID }, deps(box2, bridge(box2), prover({ differences: [{ address: 'A', property: 'p' }] })));
+  assert.equal(different.ok, false);
+  assert.ok(!JSON.stringify(different).includes('"studio_deliver"'), JSON.stringify(different));
+  // No proof here: the one call that proves, and no job.
+  const box3 = sandbox(t);
+  delivery(box3.lab, '71-FEATURE-1', { pid: 999 });
+  const noProof = await publishWithGrant({ module: 'OrderPortal', authorize: WORDS, pid: PID }, deps(box3, bridge(box3)));
+  assert.equal(noProof.code, 'DELIVERY_IN_OTHER_STUDIO');
+  assert.equal(noProof.continuation.tool, 'studio_publish');
+  assert.equal(noProof.continuation.arguments.reconcile, true);
+});
+
+test('G21: a capture byte for byte the base says only that this module holds none of it: no job, and merged stays unknown', async t => {
+  const box = sandbox(t);
+  const last = delivery(box.lab, '71-FEATURE-1', { pid: 999 });
+  const document = JSON.parse(fs.readFileSync(last.manifest, 'utf8'));
+  fs.writeFileSync(last.manifest, JSON.stringify({ ...document, baseSha256: CAPTURE_SHA }));
+  const answer = await publishWithGrant({ module: 'OrderPortal', reconcile: true, pid: PID }, deps(box, bridge(box), prover()));
+  assert.equal(answer.code, 'MERGE_NOT_IN_MODULE');
+  assert.equal('nothingMerged' in answer, false);
+  assert.equal(answer.merged, null, 'the merge of pid 999 may be in that Studio');
+  assert.equal(answer.inThisModule, false);
+  assert.equal(answer.baseSha256, CAPTURE_SHA);
+  assert.match(answer.error, /another Studio/);
+  assert.equal(answer.continuation.tool, 'studio_status');
+  assert.ok(!JSON.stringify(answer).includes('"studio_deliver"'), JSON.stringify(answer));
+  assert.equal(fs.existsSync(path.join(last.evidence, 'receipt.json')), false);
+});
+
+test('G12: a clean merge of another Studio process: unknown here, and no job', async t => {
+  const box = sandbox(t);
+  delivery(box.lab, '71-FEATURE-1', { pid: 999, receipt: 'normalized' });
+  const answer = await publishWithGrant({ module: 'OrderPortal', authorize: WORDS, pid: PID }, deps(box, bridge(box), prover()));
+  assert.equal(answer.code, 'DELIVERY_IN_OTHER_STUDIO');
+  assert.equal(answer.merged, null);
+  assert.ok(!JSON.stringify(answer).includes('"studio_deliver"'));
+  assert.match(answer.continuation.why, /Never the job of that delivery/);
+});
+
+// A merge order whose pass 1 is the last merge of the lab: delivery-first-pass/ with its evidence, delivery/ without a start.
+function firstPass(lab, name, { receipt = false, repair = true, mergedAt = '2026-10-22T00:00:41Z', result = null } = {}) {
+  const dir = path.join(lab, name); const manifestDir = path.join(dir, 'delivery-first-pass'); const evidence = path.join(manifestDir, 'evidence');
+  fs.mkdirSync(evidence, { recursive: true });
+  const candidatePath = path.join(manifestDir, 'candidate.oml'); fs.writeFileSync(candidatePath, 'first pass bytes');
+  const manifest = path.join(manifestDir, 'manifest.json');
+  fs.writeFileSync(manifest, JSON.stringify({ schema: 'odc3-manifest/1', feature: 'FEATURE-2', module: 'OrderPortal', moduleKey: 'k-op', tenant: TENANT, owners: ['Options'], changes: ['Add defaults'], candidatePath, candidateSha256: CANDIDATE_SHA, evidenceDir: evidence }, null, 2));
+  fs.writeFileSync(path.join(evidence, 'merge-started.json'), JSON.stringify({ at: mergedAt, pid: PID, module: 'OrderPortal', baseSha256: 'B', candidateSha256: CANDIDATE_SHA }));
+  if (repair) fs.writeFileSync(path.join(dir, 'merge-order-repair.json'), JSON.stringify({ ops: [{ op: 'set', target: '@k', prop: 'DefaultValue', value: '"x"' }] }));
+  if (receipt) fs.writeFileSync(path.join(evidence, 'receipt.json'), JSON.stringify({ ok: true, merged: true, module: 'OrderPortal', strictlyEqual: true, sha256: CAPTURE_SHA }));
+  if (result) fs.writeFileSync(path.join(dir, 'deliver-result.json'), JSON.stringify(result));
+  return { dir, manifest, evidence };
+}
+
+test('G11: pass 1 cut with its start, and a clean delivery before it: the reconciliation is of pass 1, never "the last merge is clean"', async t => {
+  const box = sandbox(t);
+  delivery(box.lab, '70-EARLIER', { receipt: 'normalized', mergedAt: '2026-10-21T00:00:00Z' });
+  const pass = firstPass(box.lab, '71-FEATURE-2');
+  const b = bridge(box); const p = prover();
+  const answer = await publishWithGrant({ module: 'OrderPortal', reconcile: true, pid: PID }, deps(box, b, p));
+  assert.equal(answer.ok, false, JSON.stringify(answer));
+  assert.equal(answer.code, 'MERGE_ORDER_INCOMPLETE');
+  assert.equal(answer.resolvedFrom.pass, 1);
+  assert.equal(answer.resolvedFrom.manifest, pass.manifest);
+  assert.equal(p.runs.length, 1, 'captured and proven');
+  assert.equal(answer.continuation.tool, 'studio_deliver');
+  assert.equal(answer.continuation.arguments.job, path.join(pass.dir, 'merge-order-repair.json'), 'the repair, never the original job');
+  assert.ok(!b.calls.some(c => c[0] === 'publish'), 'never published');
+});
+
+test('G11: pass 2 not started with pass 1 clean: not NO_DELIVERY_TO_PUBLISH: the repair of the deferred defaults', async t => {
+  const box = sandbox(t);
+  const pass = firstPass(box.lab, '71-FEATURE-2', { receipt: true });
+  const b = bridge(box);
+  const answer = await publishWithGrant({ module: 'OrderPortal', reconcile: true, pid: PID }, deps(box, b, prover()));
+  assert.equal(answer.code, 'MERGE_ORDER_INCOMPLETE');
+  assert.equal(answer.merged, true);
+  assert.equal(answer.continuation.arguments.job, path.join(pass.dir, 'merge-order-repair.json'));
+  // Without a repair on disk: a reading, never a job.
+  const box2 = sandbox(t);
+  firstPass(box2.lab, '71-FEATURE-2', { receipt: true, repair: false });
+  const reading = await publishWithGrant({ module: 'OrderPortal', authorize: WORDS, pid: PID }, deps(box2, bridge(box2), prover()));
+  assert.equal(reading.code, 'MERGE_ORDER_INCOMPLETE');
+  assert.equal(reading.continuation.tool, 'ssam_evidence');
+});
+
+test('G11: a cut delivery whose start this server never saw is the last merge: it is proven, and an earlier clean one says nothing of it', async t => {
+  const box = sandbox(t);
+  delivery(box.lab, '70-EARLIER', { receipt: 'normalized', mergedAt: '2026-10-21T00:00:00Z' });
+  const dir = path.join(box.lab, '71-UNSEEN'); const manifestDir = path.join(dir, 'delivery');
+  fs.mkdirSync(manifestDir, { recursive: true });
+  const candidatePath = path.join(manifestDir, 'candidate.oml'); fs.writeFileSync(candidatePath, 'candidate bytes');
+  const manifest = path.join(manifestDir, 'manifest.json');
+  fs.writeFileSync(manifest, JSON.stringify({ schema: 'odc3-manifest/1', feature: 'F', module: 'OrderPortal', moduleKey: 'k-op', tenant: TENANT, owners: ['O'], changes: ['C'], candidatePath, candidateSha256: CANDIDATE_SHA, evidenceDir: path.join(manifestDir, 'evidence') }));
+  fs.writeFileSync(path.join(dir, 'deliver-result.json'), JSON.stringify({ ok: false, failed: 'merge', outcome: 'uncertain', code: 'MERGE_TIMEOUT', manifest, startedAt: '2026-10-22T01:00:00Z', timeout: { evidenceSeen: false } }));
+  fs.mkdirSync(path.join(manifestDir, 'evidence'), { recursive: true });
+  const b = bridge(box); const p = prover();
+  const answer = await publishWithGrant({ module: 'OrderPortal', reconcile: true, pid: PID }, deps(box, b, p));
+  assert.equal(answer.ok, true, JSON.stringify(answer));
+  assert.equal(answer.outcome, 'reconciled', 'not the strict receipt of the earlier delivery');
+  assert.equal(answer.resolvedFrom.manifest, manifest);
+  assert.equal(answer.resolvedFrom.startSeen, false);
+  assert.equal(p.runs.length, 1);
 });
 
 // studio_deliver: the same rule right after the merge, so the delivery itself ends clean (and publish:true publishes).

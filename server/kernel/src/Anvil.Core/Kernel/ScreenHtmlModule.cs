@@ -1375,7 +1375,7 @@ public sealed partial class ScreenHtmlModule<T> where T : class
             'r' when property == "SourceBlock" => m.TryResolveBlock(value, scope, out var block) ? block : "?" + value,
             'r' => m.TryResolve(value, scope, out var target) ? target : "?" + value,
             'l' => string.Join("\n", value.Split(", ").Select(v => m.TryResolve(v, scope, out var t) ? t : "?" + v).Order(StringComparer.Ordinal)),
-            'v' when shape.Kind == "Input" && property == "InputType" => ScreenHtmlTables.InputTypeIn(value),
+            'v' => ScreenHtmlTables.ModelValue(shape.Kind, property, value),
             _ => value };
 
         // os-on<event>.<Property>, os-@<Event>.<Property>, os-html:<event>.<Property>
@@ -1745,6 +1745,17 @@ internal static class ScreenHtmlTables
         ["Phone"] = "tel", ["Email"] = "email", ["Search"] = "search" };
     public static string InputTypeOut(string value) => InputTypes.TryGetValue(value, out var html) ? html : value;
     public static string InputTypeIn(string value) => InputTypes.FirstOrDefault(p => p.Value == value).Key ?? value;
+
+    // ---- the one table of a declared value against the model ----------------------------------------------------------------
+    // ModelValue: what a written value is in the model, where the language has a word of its own for it (the compile writes this, and a
+    // declared property is compared with what the compile wrote: Verbs.ScreenDocument.Fidelity.cs assignedFact). PlatformRewrites: a property whose value the platform itself may rewrite when it is
+    // written (a name it makes a valid identifier): what it does is said in the receipt, never refused.
+    // Anything else that does not reach the model is a refusal (HTML_PROPERTY_NOT_KEPT).
+    public static string ModelValue(string kind, string property, string written) => kind == "Input" && property == "InputType" ? InputTypeIn(written) : written;
+    // Properties the platform keeps as one (ODC: Shareable is Public, FlowExtract keeps them as one too): what a text says of one of them
+    // is what it says of the pair, and two values for them are refused.
+    public static readonly (string A, string B)[] OneProperty = [("Public", "Shareable")];
+    public static bool PlatformRewrites(string kind, string property) => property is "Name";
 }
 
 internal enum ScreenHtmlModuleMode { Widget = 0, Data = 1 }

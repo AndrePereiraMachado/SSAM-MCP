@@ -62,7 +62,7 @@ internal static partial class Bridge
         // libraries"; the facade answers that one as BRIDGE_UPGRADE_REQUIRED. An AI model connection (Codex agents) too.
         var kind = info!.ReferenceKind.ToString();
         Require(kind is "eSpace" or "ExternalLibrary" or "AIModelConnection", "This command exports module, library, External Library and AI model signatures, not " + kind + " producers");
-        // The bridge's copy of the kernel's reader (PublicSignatureReader.cs): no type of the kernel's namespace.
+        // The one reader, linked from the kernel's folder (PublicSignatureReader.cs): no type of the kernel's namespace.
         var signature = PublicSignatureReader.Read(info.SignatureBinary!);
         Require(info.Key.Equals(candidates[0].Key), "Native service returned a different producer identity");
         Require(info.SignatureHash != Guid.Empty, "Native service returned no published signature identity");

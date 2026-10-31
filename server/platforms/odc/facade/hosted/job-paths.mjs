@@ -14,7 +14,8 @@
 //   - ops[i].data.source and data.capture of a prototype op (prototype-op.mjs expandJobFile, PrototypePreflight,
 //     PrototypeCapture.Load);
 //   - ops[i].data.wsdl of a soap op (a URL or a path; or {path, imports:{<uri>:{path}}}: integration-documents.mjs pin,
-//     JobRunner.ResolveDocuments, SoapPlan) and ops[i].data.openapi.path / openapi.external.<uri>.path of a rest op
+//     JobRunner.ResolveDocuments, SoapPlan) and ops[i].data.openapi.path / openapi.external.<uri>.path of a rest op, also at the
+//     top of an op written without data (OP_DATA_WRAPPED)
 //     (RestOpenApi, OdcRestOpenApi);
 //   - a job:<name> named by base or producer is a job the kernel BUILDS (Sources.Resolve -> Build): its own fields count.
 // The other files of a call (manifests, assets, outputs, the job file itself, basedOn.job, producers) are tool arguments,
@@ -203,6 +204,13 @@ function* opFields(ops, at) {
     const verb = typeof op.op === 'string' ? op.op.trim().toLowerCase() : '';
     if (typeof op.producer === 'string') yield { owner: op, key: 'producer', at: here + '/producer', kind: 'source' };
     if (typeof op.file === 'string') yield { owner: op, key: 'file', at: here + '/file', kind: 'cwd' };
+    // OP_DATA_WRAPPED: without data the kernel reads the keys of an integration op at the top of the op (JobNormalizer.WrapData),
+    // so a document named there is the same file read and is confined the same way.
+    if (op.data == null) {
+      if (verb === 'soap') yield* documentFields(op, 'wsdl', 'imports', here);
+      if (verb === 'rest') yield* documentFields(op, 'openapi', 'external', here);
+      continue;
+    }
     const data = op.data;
     if (!isObject(data)) continue;
     if (verb === 'prototype') for (const key of ['source', 'capture']) if (typeof data[key] === 'string') yield { owner: data, key, at: `${here}/data/${key}`, kind: 'cwd' };

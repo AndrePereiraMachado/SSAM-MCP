@@ -14,7 +14,7 @@ namespace Anvil.Xif.Engine;
 /// model: a blank project (or the current XIF) + the spec -> ProjectVerify -> ProjectSave of the model XIF.
 /// final: the model XIF + the merged sources + the compiled DLL as resources -> ProjectVerify -> ProjectSave of the final XIF.
 /// Nothing here logs in or calls a server: Preferences.RunningTests is set first, the project unpacks under the caller's
-/// private work folder only.
+/// private native work folder only (Program copies the finished XIF back to the caller).
 /// </summary>
 internal sealed class Host
 {

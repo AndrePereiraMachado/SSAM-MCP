@@ -33,6 +33,8 @@ internal sealed class Manifest {
     // Producer model the candidate was built against, when the feature added a dependency.
     public string? ProducerPath { get; set; }
     public string? ProducerSha256 { get; set; }
+    // A delivery after a cut merge (facade merge-cut.mjs): the sha256 the open module must have when the merge takes the candidate.
+    public string? ExpectedBaseSha256 { get; set; }
 
     public static readonly JsonSerializerOptions Json = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase, PropertyNameCaseInsensitive = true, WriteIndented = true };
 

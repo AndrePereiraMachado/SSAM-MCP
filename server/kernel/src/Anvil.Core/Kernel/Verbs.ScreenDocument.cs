@@ -81,6 +81,9 @@ public sealed partial class ModelSession
         /// <summary>k -> ObjectKey of the reading the document is based on: an element with one of these k exists, so what
         /// it has (Visible, JavaScript, JSON) is kept and listed, never refused.</summary>
         public IReadOnlyDictionary<string, string>? ReadKeys;
+        /// <summary>The recreation proof: every k is of the reading, yet a declared property that does not reach the model is still
+        /// refused, so a false refusal of the new documents shows in the proof instead of hiding behind "an element of the reading".</summary>
+        public bool ProveDeclared;
         /// <summary>The text of that reading, when the store keeps it: an element with k keeps only the markers of the engine it
         /// was read with (review 2, M4).</summary>
         public string? ReadHtml;
@@ -891,6 +894,7 @@ public sealed partial class ModelSession
             if (joined > 0) report["bindingsJoined"] = joined;
             if (spaced > 0) report["spacesKept"] = spaced;
             if (iconSelectors != null) report["iconTheme"] = iconSelectors;
+            if (declaredChecked > 0) report["declaredPropertiesKept"] = declaredChecked;
             if (normalized.Count > 0) report["normalized"] = normalized.DeepClone();
             return report;
             };
@@ -1552,8 +1556,10 @@ public sealed partial class ModelSession
                     if (attribute == "os-Name" && value.Length == 0) { written.Add("Name"); continue; }
                     // A label names a widget that may come after it: written once every widget exists.
                     if (property == "TargetWidget") { var (p, v) = (property, value); targets.Add(() => Assign(target, kind, p, v, node, attribute, false)); written.Add(property); continue; }
+                    var problemsBefore = problems.Count;
                     Assign(target, kind, property, value, node, attribute, attribute == "class");
                     written.Add(property);
+                    if (problems.Count == problemsBefore) Declared(target, kind, property, value, node, attribute);
                     if (attribute.StartsWith("os-", StringComparison.Ordinal)) plain.Add((property, value, attribute));
                     continue;
                 }
@@ -1624,6 +1630,7 @@ public sealed partial class ModelSession
         /// member, a number, a reference by the reading's names, a type, or a collection of references.</summary>
         private void Assign(IObjectSignature target, string kind, string property, string raw, ScreenHtml.Node at, string attribute, bool sugared)
         {
+            assignedFact = null;
             try
             {
                 var pi = FindProperty(target, property);
@@ -1671,6 +1678,7 @@ public sealed partial class ModelSession
                 if (!pi.CanWrite && setter == null && collection == null)
                 {
                     readOnly.Add(new JsonObject { ["element"] = ShortType(target) + (TypeResolver.Name(target) is { Length: > 0 } n ? " " + n : ""), ["property"] = property, ["value"] = raw, ["line"] = at.Line });
+                    assignedFact = raw;
                     return;
                 }
                 if (SafeGet(pi, target) is { } current && CollectionOf(current) is { } element && t != typeof(string))
@@ -1693,7 +1701,7 @@ public sealed partial class ModelSession
                 else if (t == typeof(bool)) value = bool.Parse(raw);
                 else if (t.IsEnum)
                 {
-                    var text = kind == "Input" && property == "InputType" ? ScreenHtmlTables.InputTypeIn(raw) : raw;
+                    var text = ScreenHtmlTables.ModelValue(kind, property, raw);
                     if (!Enum.GetNames(t).Contains(text, StringComparer.OrdinalIgnoreCase))
                     {
                         var near = ScreenDocument.Nearest(text, Enum.GetNames(t));
@@ -1710,6 +1718,7 @@ public sealed partial class ModelSession
                     else { value = Reference(raw, t, at, attribute, property); if (value == null) return; }
                 }
                 else value = System.Convert.ChangeType(raw, t, CultureInfo.InvariantCulture);
+                assignedFact = FactText(value);
                 if (pi.CanWrite) pi.SetValue(target, value);
                 else setter!.Invoke(target, [value]);
                 // T18: the own stylesheet of a screen or block (its <style>) settles through the one normalization too (already
@@ -2076,8 +2085,10 @@ public sealed partial class ModelSession
                 foreach (var (name, v) in props)
                 {
                     var property = name[(3 + head.Length + 1)..];
+                    var problemsBefore = problems.Count;
                     Assign(target, eventKind, property, v, node, name, false);
                     written.Add(property);
+                    if (problems.Count == problemsBefore) Declared(target, eventKind, property, v, node, name);
                 }
                 Reset(target, eventKind, written, InPopup(element));
             }
@@ -2183,6 +2194,7 @@ public sealed partial class ModelSession
             if (element.WasDeleted) return;
             var role = Role(element);
             var children = new HashSet<IObjectSignature>(element.Children.OfType<IObjectSignature>(), ReferenceEqualityComparer.Instance);
+            List<(PropertyInfo Property, object? Value, string Text)>? wroteFacts = null;
             foreach (var pi in Readable(element.GetType()))
             {
                 var name = pi.Name;
@@ -2215,6 +2227,9 @@ public sealed partial class ModelSession
                 if (name == "Style" && type == 't' && (FindProperty(element, "StyleClasses") is { } classes ? Text(SafeGet(classes, element)) == text : text.Length == 0)) continue;
                 var wanted = defaults.DefaultOf(kind, name, type, inPopup);
                 if (text == wanted) continue;
+                // The platform keeps some properties as one (ODC: Shareable is Public). What the document wrote is read before the
+                // first default goes in, so a default never undoes it.
+                wroteFacts ??= WrittenFacts(element, written);
                 try
                 {
                     switch (type)
@@ -2232,7 +2247,46 @@ public sealed partial class ModelSession
                     }
                 }
                 catch (Exception) { /* a property the platform keeps for itself: the comparison of the proof names it */ }
+                KeepWrittenFacts(element, pi, type, value, text, wroteFacts);
             }
+        }
+
+        // The value of a fact the document can write, as text; null for a reference, a collection or anything else no text compares.
+        private static string? FactText(object? value) => value switch {
+            IExpression e => e.Text ?? "",
+            string text => text,
+            bool b => b ? "True" : "False",
+            IFormattable f => f.ToString(null, CultureInfo.InvariantCulture),
+            _ => null };
+
+        private static List<(PropertyInfo Property, object? Value, string Text)> WrittenFacts(IObjectSignature element, HashSet<string> written)
+        {
+            var facts = new List<(PropertyInfo, object?, string)>();
+            foreach (var property in written)
+                if (FindProperty(element, property) is { } pi && SafeGet(pi, element) is var value && FactText(value) is { } text)
+                    facts.Add((pi, value, text));
+            return facts;
+        }
+
+        // A default that changed a property the document wrote is not a default of this element: its own value goes back, and then
+        // the written one if the platform did not bring it back with it. PostChecks compares every declared property in the end.
+        private static void KeepWrittenFacts(IObjectSignature element, PropertyInfo reset, char type, object? before, string beforeText, List<(PropertyInfo Property, object? Value, string Text)> facts)
+        {
+            bool Undone((PropertyInfo Property, object? Value, string Text) fact) => FactText(SafeGet(fact.Property, element)) != fact.Text;
+            if (!facts.Any(Undone)) return;
+            try
+            {
+                if (type == 'e') WriteExpression(element, reset.Name, beforeText);
+                else if (type != 'l' && reset.CanWrite) reset.SetValue(element, before);
+            }
+            catch (Exception) { /* the comparison of the declared properties names what stayed changed */ }
+            foreach (var fact in facts.Where(Undone))
+                try
+                {
+                    if (fact.Value is IExpression) WriteExpression(element, fact.Property.Name, fact.Text);
+                    else if (fact.Property.CanWrite) fact.Property.SetValue(element, fact.Value);
+                }
+                catch (Exception) { /* the same */ }
         }
 
         private static IEnumerable<PropertyInfo> Readable(Type type) =>

@@ -95,6 +95,7 @@ export const PURE_READ_OPERATIONS = Object.freeze({
   ssam_code: actionReads(['grammar', 'read', 'check']),
   ssam_preview: a => ['list', 'status'].includes(a.action ?? 'list'),
   o11_access: actionReads(['plan', 'verify', 'users']),
+  o11_users: a => ['capabilities','receipt'].includes(a.operation) || (['status','list','get'].includes(a.operation) && a.prompt === false),
   o11_environment: actionReads(['inventory', 'download', 'download-app', 'templates', 'references', 'referenceable']),
   o11_extension: actionReads(['read']),
   o11_data: a => {

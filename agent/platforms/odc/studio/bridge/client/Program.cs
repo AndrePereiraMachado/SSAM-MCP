@@ -10,7 +10,7 @@ using Microsoft.Diagnostics.NETCore.Client;
 //           | merge <manifest> | publish <manifest> | publish-status <manifest> | data <Module> <Entity> ...
 //           | portal-call <request.json> [--tenant <host>] | portal-session status|open|close|fetch ... | auth-status | stop
 // A client timeout never cancels the native operation: inspect the evidence directory instead of retrying.
-const string Version = "v98";
+const string Version = "v102";
 if (args.Length < 2) throw new ArgumentException("Usage: <pid> attach <dll> | <pid> <command> [argument]");
 var pid = int.Parse(args[0]);
 var process = Process.GetProcessById(pid);
@@ -30,4 +30,5 @@ await pipe.ConnectAsync(10000);
 using var writer = new StreamWriter(pipe, new UTF8Encoding(false), leaveOpen: true) { AutoFlush = true };
 using var reader = new StreamReader(pipe, Encoding.UTF8, leaveOpen: true);
 await writer.WriteLineAsync(line);
-Console.WriteLine(await reader.ReadLineAsync().WaitAsync(TimeSpan.FromMinutes(10)));
+// Past the bridge's own deadline (BridgeDeadlines.cs), so its answer is read, never left on a closed pipe.
+Console.WriteLine(await reader.ReadLineAsync().WaitAsync(BridgeDeadlines.ClientWait(args[1], string.Join(' ', args.Skip(2)))));

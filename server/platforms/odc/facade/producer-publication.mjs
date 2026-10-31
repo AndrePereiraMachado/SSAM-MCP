@@ -25,6 +25,11 @@ import path from 'node:path';
 
 export const NOT_PUBLISHED = 'PRODUCER_NOT_PUBLISHED';
 export const ELEMENT_MISSING = 'REFERENCE_ELEMENT_MISSING';
+// The gate of 2026-10-30: PRODUCER_NOT_PUBLISHED said "not published yet" of service actions published in revision 3: a v98 bridge
+// lists no service action. That code is said only when it was found: the signature's own bytes, read by the kernel's one reader
+// (OdcPublicSignature), lack the element, the open model has it public, and the open module is not what was published. Anything
+// less is this code, which says what was not verified and what comes next.
+export const UNVERIFIED = 'PRODUCER_SIGNATURE_UNVERIFIED';
 export const WORDS = "<the user's own words>";
 // The bridge's refusal of a producer whose published revision exports nothing it supports (ReferenceCommands.cs).
 export const NO_PUBLIC_ELEMENTS = /Producer has no supported public elements/i;
@@ -165,6 +170,38 @@ export function publicationGateStep(producer, { pid = null, host = null, refused
       + ' refuses now (' + (refused?.code ?? 'refused') + (refused?.error ? ': ' + refused.error : '') + '). ' + (own.why ? own.why.replace(/\.?\s*$/, '. ') : '')
       + 'The publication of ' + producer + ' is not proposed until this is read: never publish or merge again blindly. Once it is settled, the same delivery can be asked again.' };
 }
+// Whether a capture carries the signature's own bytes (every capture of a bridge does).
+export function signatureHoldsBytes(file) {
+  try { const bytes = JSON.parse(fs.readFileSync(file, 'utf8').replace(/^﻿/, ''))?.SignatureBinary; return typeof bytes === 'string' && bytes.length > 0; } catch { return false; }
+}
+// The kinds a bridge from before the one reader leaves out of its list, and so out of its "no supported public elements": its
+// silence about them says nothing about what is published.
+const NOT_LISTED_BY_OLD_BRIDGES = new Set(['service-action']);
+const NOT_LISTED_DIGEST = new Set(['ServiceAction']);
+// A bridge that links the one reader says so (StartupHook.cs Capabilities), and only then is its silence a finding. Never its number:
+// DLLs named v101 were built with and without the reader.
+export const EVERY_KIND = 'reference-snapshot:every-kind';
+export const bridgeListsEveryKind = status => Array.isArray(status?.capabilities) && status.capabilities.includes(EVERY_KIND);
+export const oldBridgeSeesSurface = item => odcExportableSurface(item) && !NOT_LISTED_DIGEST.has(String(item?.kind ?? ''));
+export const oldBridgeSeesElement = element => !NOT_LISTED_BY_OLD_BRIDGES.has(element?.family?.kind);
+const OLD_BRIDGE_SILENCE = producer => 'the bridge in this Studio, which lists no service action, answered that ' + producer + ' exports nothing it lists: it refuses such a producer before any signature exists, so SSAM has no bytes to read';
+// The way out of that silence. No tool call gets there: attaching again loads the bridge this agent has. It is the person's: an agent
+// whose bridge says it lists every kind, or one more public element of another kind, so the same bridge writes a capture whose bytes
+// hold the service actions too (readSignatureKernel, NativeReferenceSnapshot.Read).
+export const agentUpdateStep = producer => ({ by: 'person', action: 'update-agent', module: producer, say: 'the person updates the SSAM agent, or makes one more element of ' + producer + ' public and publishes it',
+  why: 'What is missing is a signature of ' + producer + ' to read, and this bridge writes none for it. Either the person updates the SSAM agent to one whose ODC bridge has the capability ' + EVERY_KIND
+    + ' (ssam_doctor shows the agent and its bridge); a running ODC Studio keeps the bridge it loaded, so the Studio is closed and opened again after the update, with nothing to click inside it; or ' + producer + ' gets one more public element of a kind this bridge lists (a server action, a client action, a structure, an entity or a block; a write the person confirms) and is published. This step is no tool call; once one of them is done, go on with then.' });
+// Whether the published signature's lack of this element was found: why not, else null.
+function unverifiedWhy(entry, item) {
+  if (item.open !== 'public') return null;
+  if (entry.signatureUnread) return 'the signature of ' + entry.producer + ' could not be read here (' + entry.signatureUnread + ')';
+  if (entry.noPublicElements && entry.bridgeListsEveryKind !== true && (item.whole ? entry.surfaceOnlyUnlisted === true : !oldBridgeSeesElement(item)))
+    return OLD_BRIDGE_SILENCE(entry.producer);
+  if (entry.publishable?.samePublished === true)
+    return 'the last SSAM merge of ' + entry.producer + ' is published as this revision and the module open in the Studio is that merge, yet the signature of that revision lacks it: SSAM cannot tell why';
+  return null;
+}
+
 // Whether a published signature has the element, exactly as NativeReferenceSnapshot.Select (ODC) selects it (round 2, A4):
 // the ODC kind of its family (mobile block = "block"; a kind the signature cannot hold has nothing), then the name, the path
 // or @key, ordinal. A spelling that only matches by letter case is another element there, so it is another one here.
@@ -331,7 +368,7 @@ export const elementFix = fixOf;
 // adds it: the job's reference op cannot take it.
 const unsupportedProblem = (producer, item) => ({ op: item.op ?? null, pointer: item.pointer ?? null, code: ELEMENT_MISSING, severity: 'error', phase: 'reference',
   message: 'The kind of ' + item.text + ' cannot be referenced through the published signature of ' + producer + ': an ODC signature holds ' + ODC_SIGNATURE_HOLDS,
-  fix: 'publishing ' + producer + ' does not change this: reference an element of one of those kinds, or add this reference in the Studio (Manage Dependencies)',
+  fix: 'publishing ' + producer + ' does not change this: reference an element of one of those kinds',
   patch: null, producer, element: item.text, cause: 'unsupported-kind' });
 
 // One problem per element the published revision lacks (or one per naming op, when the job asks the producer nothing by
@@ -342,6 +379,12 @@ export function unpublishedProblems(lane, entry) {
   const items = entry.missing.length || entry.unsupported?.length ? entry.missing
     : (entry.ops ?? []).map(o => ({ ...o, text: 'its public elements', name: producer, open: entry.surfacePublic ? 'public' : entry.evidence ? 'absent' : null, whole: true }));
   return [...items.map(item => {
+    const why = unverifiedWhy(entry, item);
+    if (why) return { op: item.op ?? null, pointer: item.pointer ?? null, code: UNVERIFIED, severity: 'error', phase: 'reference',
+      message: 'SSAM could not confirm that the published revision of ' + producer + (entry.revision ? ' (revision ' + entry.revision + ')' : '') + ' lacks ' + item.text + ': ' + why + '. Its open model has it, public',
+      fix: entry.publishable?.samePublished === true ? 'nothing shows it unpublished; the one step that can change a signature is a new publication of ' + producer + ' by the person: the continuation has it, then the same delivery'
+        : 'nothing is known to be unpublished, so nothing here asks to publish ' + producer + ' for that: the continuation says what is missing, then the same delivery',
+      patch: null, producer, ...(item.whole ? {} : { element: item.text }), cause: 'unverified' };
     const code = item.open === 'public' ? NOT_PUBLISHED : entry.noPublicElements && !entry.evidence ? 'REFERENCE_SNAPSHOT_FAILED' : ELEMENT_MISSING;
     const message = item.whole
       ? 'The published revision of ' + producer + ' exports no public element' + (item.open === 'public' ? '; its open model has public elements that are not published yet' : '')
@@ -367,22 +410,24 @@ const chain = steps => steps.reduceRight((next, step) => (next ? { ...step, then
 // producer; publish(entry): its publication step. jobCheck (round 2, A5): the job-alone check of this call ({ok:true} passed,
 // {ok:false, problems} refused, {skipped} or null: not run); its problems are this refusal's too, and the job is never said
 // to be right (that check is not the build). -> {code, error, problems, producers, jobCheck?, sequence, continuation?}
-export function unpublishedRefusal({ lane = 'odc', module, entries, deliver, publish, refresh, jobCheck = null }) {
+export function unpublishedRefusal({ lane = 'odc', module, entries, deliver, publish, refresh, verify = null, jobCheck = null }) {
   const producerProblems = entries.flatMap(entry => unpublishedProblems(lane, entry));
   const jobProblems = jobCheck?.ok === false && Array.isArray(jobCheck.problems) ? jobCheck.problems : [];
   const problems = [...producerProblems, ...jobProblems];
   const publishable = producerProblems.length > 0 && producerProblems.every(p => p.code === NOT_PUBLISHED);
   const codes = [...new Set(producerProblems.map(p => p.code))];
-  const code = publishable ? NOT_PUBLISHED : codes.length === 1 ? codes[0] : ELEMENT_MISSING;
+  const unverified = codes.includes(UNVERIFIED);
+  const code = publishable ? NOT_PUBLISHED : unverified ? UNVERIFIED : codes.length === 1 ? codes[0] : ELEMENT_MISSING;
   const names = entries.map(e => e.producer);
   const evidence = entries.map(e => ({ producer: e.producer, ...(e.revision ? { publishedRevision: e.revision } : {}), ...(e.noPublicElements ? { publishedElements: 0 } : {}),
     missing: [...e.missing.map(m => ({ element: m.text, open: m.open ?? 'unknown', ...(m.spellings ? { spellings: m.spellings } : {}) })),
       ...(e.unsupported ?? []).map(m => ({ element: m.text, open: 'unsupported-kind' }))],
+    ...(e.others?.length ? { others: e.others.slice(0, 40) } : {}),
     openModel: e.evidence ? { source: e.evidence.source, ...(Number.isInteger(e.evidence.pid) ? { pid: e.evidence.pid } : {}), ...(e.evidence.host ? { host: e.evidence.host } : {}),
       file: e.evidence.file ?? null, sha256: e.evidence.sha256 ?? null, ...(e.evidence.capturedAt ? { capturedAt: e.evidence.capturedAt } : {}) }
       : { read: false, reason: e.reason ?? null, ...(e.capture ? { capture: { file: e.capture.file, capturedAt: e.capture.capturedAt ?? null, note: 'a module capture is data, not the open model' } } : {}) },
     referencedByModule: e.referenced ?? null }));
-  const shown = entries.map(e => e.producer + ' (' + (e.noPublicElements ? 'its published revision exports no public element' + (e.missing.length || e.unsupported?.length ? '; the job references ' : '') : '')
+  const shown = entries.map(e => e.producer + ' (' + (e.noPublicElements ? (producerProblems.some(p => p.code === UNVERIFIED && p.producer === e.producer) ? 'the bridge lists nothing of it' : 'its published revision exports no public element') + (e.missing.length || e.unsupported?.length ? '; the job references ' : '') : '')
     + [...e.missing, ...(e.unsupported ?? [])].map(m => m.text).join(', ') + ')').join('; ');
   const checked = jobProblems.length
     ? ' The job-alone check also refused ' + jobProblems.length + ' problem(s) of the job itself, listed with their fixes: correct the job first (that writes nothing).'
@@ -396,19 +441,21 @@ export function unpublishedRefusal({ lane = 'odc', module, entries, deliver, pub
   const error = publishable
     ? 'The published revision of ' + names.join(', ') + ' lacks what this job references; the open model of ' + (names.length > 1 ? 'each' : 'it') + ' has it, public, not published yet: '
       + shown + '. Nothing was built or merged. Publish ' + names.join(', ') + ' first (the person\'s own words), then deliver again; these references need no change.' + gated + checked
+    : unverified ? 'SSAM could not confirm what the published revision of ' + names.join(', ') + ' holds of what this job references: ' + shown + '. Nothing was built or merged. Each problem says what was not verified.' + checked
     : 'The published signature of ' + names.join(', ') + ' lacks what this job references: ' + shown + '. Nothing was built or merged. Each problem says its fix.' + checked;
   const again = jobProblems.length ? { ...deliver, why: 'The same delivery once the job is corrected as its problems say: it acquires the published producer again from the consumer session and builds on it.' } : deliver;
-  const steps = !publishable ? [] : gates.length ? gates : [
+  const steps = unverified ? [...entries.flatMap(e => verify?.(e) ?? []), again] : !publishable ? [] : gates.length ? gates : [
     ...publishing,
     ...(refresh ? entries.filter(e => e.referenced === true).map(refresh) : []),
     again,
   ];
   const sequence = steps.map(s => {
     // Round 3 (N2): a step no tool takes (the person publishes the library in the Studio).
+    if (s.say) return s.say;
     if (s.by === 'person') return 'the person ' + s.action + 'es ' + s.module + ' in the Studio' + (Number.isInteger(s.pid) ? ' (pid ' + s.pid + (s.host ? ', ' + s.host : '') + ')' : '');
     const target = s.arguments?.module ?? s.arguments?.args?.module, producer = s.arguments?.producer ?? (Array.isArray(s.arguments?.args?.producers) ? s.arguments.args.producers.join(', ') : null);
     return s.tool + (s.arguments?.command ? ' ' + s.arguments.command : '') + (target ? ' ' + target : '') + (producer ? ' (' + producer + ')' : '');
   });
   const jobCheckField = jobCheck ? { jobCheck: jobCheck.ok === false ? { ran: true, ok: false, problems: jobProblems.length } : jobCheck.skipped ? { ran: false, reason: String(jobCheck.skipped) } : { ran: true, ok: true } } : {};
-  return { code, error, problems, producers: evidence, ...jobCheckField, ...(publishable ? { sequence, continuation: chain(steps) } : {}) };
+  return { code, error, problems, producers: evidence, ...jobCheckField, ...(publishable || unverified ? { sequence, continuation: chain(steps) } : {}) };
 }

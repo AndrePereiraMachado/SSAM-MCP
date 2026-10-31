@@ -1,0 +1,15 @@
+{
+  "note": "What the code of a bridge named v101 built before the one reader says of itself, read from the bytes of two such DLLs (2026-10-31). The DLLs stay out of the repository; signature-one-reader.test.mjs compares a DLL with this when SSAM_BRIDGE_DLL_WITHOUT_READER names one.",
+  "bridge": "v101",
+  "capabilities": [
+    "agent-root:1",
+    "merge:normalized",
+    "reference-snapshot:external-library",
+    "template-download:have"
+  ],
+  "holdsServiceActionTag": false,
+  "sha256": [
+    "442b974910204e166ca5559eea7dd5069bde4189c8f44f3a6490dffa4be919a8",
+    "9dd05ac04d8823005cd5f5fe7f19025c78f23d123ee0c1ea852358ea97edc73c"
+  ]
+}

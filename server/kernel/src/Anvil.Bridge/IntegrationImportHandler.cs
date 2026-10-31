@@ -126,7 +126,7 @@ internal static class IntegrationImportHandler
         foreach (var (name, method) in byName) SetBool(method, "ToImport", toImport.Contains(name, StringComparer.Ordinal));
         var chosen = toImport.Select(n => byName[n]).ToList();
         var created = false;
-        string? error = null;
+        string? error = null, importerName = null;
         StudioAdapter.Runtime.Mutate(copy, "Anvil: SOAP import " + clientName, _ =>
         {
             if (client == null)
@@ -143,13 +143,24 @@ internal static class IntegrationImportHandler
             if (import == null) { error = $"the SOAP importer of this Service Studio ({StudioVersion}) has no SOAPClientDescriptor.ImportFromWSDLDefinition(client, wsdl, methods)"; return; }
             var owner = import.IsStatic ? null : descriptor ?? Activator.CreateInstance(import.DeclaringType!, nonPublic: true);
             Worker<object?>(() => import.Invoke(owner, [client, imported, TypedList(chosen, import.GetParameters()[2].ParameterType)]), "SOAP import");
+            // The importer names the client after the WSDL's service (CountryInfoService for "CountryInfo"): the requested
+            // name is applied again, as the OpenAPI path does, and the receipt says both.
+            importerName = TypeResolver.Name(client);
+            if (!string.Equals(importerName, clientName, StringComparison.Ordinal))
+                try { SetString(client, "Name", clientName); }
+                catch (Exception ex) { ((JsonArray)outcome["warnings"]!).Add($"the importer named the client '{importerName}' and '{clientName}' could not be written back: {Server.Unwrap(ex)}"); }
         });
         if (error != null) return Refuse(outcome, IntegrationImport.ImporterNotFound, error);
         var after = Actions(client);
         foreach (var name in toImport)
             if (after.Contains(name)) ((JsonArray)outcome["imported"]!).Add(name);
             else Refuse(outcome, IntegrationImport.ImportFailed, $"the Studio's importer did not create method '{name}'");
-        outcome["client"] = new JsonObject { ["name"] = clientName, ["key"] = client?.ObjectKey?.ToString(), ["created"] = created };
+        var finalName = client != null ? TypeResolver.Name(client) ?? clientName : clientName;
+        outcome["client"] = new JsonObject
+        {
+            ["name"] = finalName, ["requested"] = clientName, ["key"] = client?.ObjectKey?.ToString(), ["created"] = created,
+            ["renamed"] = importerName != null && !string.Equals(importerName, finalName, StringComparison.Ordinal), ["importerName"] = importerName,
+        };
         return outcome;
     }
 

@@ -1,13 +1,13 @@
-// Drift: the ODC bridge reads public signatures with its own copy, PublicSignatureReader (global namespace), instead of
-// compiling the kernel's Anvil.Core.OdcPublicSignature, so ODC3.Bridge.v<N>.dll carries no type of the kernel namespace
-// (docs/O11-BRIDGE-FINA.md 6.5). The class bodies stay equal, normalized only for namespace, class name, visibility and
-// whitespace. The same holds for the merge order's rule (MergeOrderCopy.cs, a copy of the kernel's MergeOrder.cs).
-// a11-b: the customers run ODC bridge v97 (f912cb7e), whose two copies PublicSignatureReader.cs and SecurityWarningsCopy.cs are
-// pinned to the kernel files it was built with (fixtures/bridge-v97/*.cs.txt, the blobs of f912cb7e and a10 5dc9ec51); the
-// kernel moved on and the drift is accepted, each change named below with why it gives no wrong answer to a v97 bridge:
-//   - OdcPublicSignature.cs, c38c53e0: + ReferenceServiceAPIMethod => "service-action". v97 lists every element it listed
-//     before, with the same kind, name and key, and the kernel's importer validates each selected element against its own
-//     read (a superset); a Service Action reference needs a newer bridge (v97 answers it as before: the element is missing).
+// Drift: the ODC bridge and the kernel read public signatures with one file, kernel/src/Anvil.Core.Odc/Adapters.ODC/
+// PublicSignatureReader.cs: the kernel compiles it (OdcPublicSignature) and the bridge links it. Its copy was fixed at v97 and knew no
+// service action: 20 published ones were called "not published" at the gate of 2026-10-30 (v98 and v101 carry that copy). The file has
+// the global namespace and no kernel type, so ODC3.Bridge.v<N>.dll carries no type of the kernel namespace (docs/O11-BRIDGE-FINA.md
+// 6.5). The merge order's rule stays a copy (MergeOrderCopy.cs, of the kernel's MergeOrder.cs), kept equal below.
+// a11-b: the customers run ODC bridge v97 (f912cb7e), whose copy SecurityWarningsCopy.cs is pinned to the kernel file it was built
+// with (fixtures/bridge-v97/*.cs.txt, the blobs of f912cb7e and a10 5dc9ec51); the kernel moved on and the drift is accepted, each
+// change named below with why it gives no wrong answer to a v97 bridge:
+//   - The signature reader: whatever bridge wrote a capture, its elements are read from its bytes (NativeReferenceSnapshot.Read with
+//     OdcPublicSignature; facade readSignatureKernel), so the list of a bridge from before the one reader changes no answer.
 //   - SecurityWarnings.cs, 700a5c1f + 0a21afba (T12): the list grew. v97's is a subset, so it refuses nothing the kernel
 //     accepts; a T12 message it accepted after a merge is refused by the server (facade/security-after-merge.mjs,
 //     facade/tests/security-after-merge.test.mjs, merge-reconcile.mjs mergeState: the verdict lives in the merge evidence).
@@ -27,7 +27,7 @@ const odc = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const repo = path.resolve(odc, '..', '..');
 const bridge = path.join(odc, 'studio', 'bridge');
 const kernelFile = path.join(repo, 'kernel', 'src', 'Anvil.Core.Odc', 'Adapters.ODC', 'OdcPublicSignature.cs');
-const copyFile = path.join(bridge, 'PublicSignatureReader.cs');
+const readerFile = path.join(repo, 'kernel', 'src', 'Anvil.Core.Odc', 'Adapters.ODC', 'PublicSignatureReader.cs');
 const v97 = path.join(odc, 'tests', 'fixtures', 'bridge-v97');
 const v97KernelFile = path.join(v97, 'OdcPublicSignature.cs.txt');
 
@@ -46,16 +46,37 @@ function parts(text, name) {
   };
 }
 
-test('PublicSignatureReader (ODC bridge v97) is OdcPublicSignature (the kernel v97 was built with) with only namespace, name and visibility changed', () => {
-  const kernel = parts(fs.readFileSync(v97KernelFile, 'utf8'), 'OdcPublicSignature');
-  const copy = parts(fs.readFileSync(copyFile, 'utf8'), 'PublicSignatureReader');
-  assert.equal(kernel.namespace, 'Anvil.Core');
-  assert.equal(kernel.visibility, 'public');
-  assert.equal(copy.namespace, null, 'the copy is in the global namespace, like the rest of the bridge');
-  assert.equal(copy.visibility, 'internal');
-  assert.deepEqual(copy.usings, kernel.usings);
-  assert.ok(kernel.body.includes('public static Catalog Read(byte[] bytes)'));
-  assert.equal(copy.body, kernel.body);
+test('one signature reader: no copy in the bridge, the kernel and the bridge compile the same file, which holds no kernel name', () => {
+  assert.ok(!fs.existsSync(path.join(bridge, 'PublicSignatureReader.cs')), 'no copy in the bridge folder');
+  const reader = parts(fs.readFileSync(readerFile, 'utf8'), 'PublicSignatureReader');
+  assert.equal(reader.namespace, null, 'the global namespace, like the rest of the bridge');
+  assert.equal(reader.visibility, 'internal');
+  assert.ok(reader.body.includes('public static Catalog Read(byte[] bytes)'));
+  assert.doesNotMatch(fs.readFileSync(readerFile, 'utf8').split(/\r?\n/).filter(line => !/^\s*\/\//.test(line)).join('\n'), /Anvil\.|Ssam\.Runtime|Ssam\.Lic/, 'no kernel name in what the bridge links');
+  const kernel = fs.readFileSync(kernelFile, 'utf8');
+  assert.match(kernel, /PublicSignatureReader\.Read\(bytes\)/, 'the kernel reads through it');
+  assert.doesNotMatch(kernel, /GetSignatureReader/, 'the kernel has no second reader');
+});
+
+// Every family the kernel knows by its tag, whatever the reader does with it: the kinds it binds have a row with the kernel's kind
+// (the ODC "block" is the mobile block family); the rest reach Others by name. Nothing a signature holds is dropped.
+test('the reader knows the kernel\'s tags, and a tag without a row is named in Others, never dropped', () => {
+  const families = [...fs.readFileSync(path.join(repo, 'kernel', 'src', 'Anvil.Core', 'Kernel', 'NativeReferenceKinds.cs'), 'utf8').matchAll(/new Family\("([^"]+)", "([^"]+)"/g)].map(m => ({ kind: m[1], tag: m[2] }));
+  assert.equal(families.length, 18);
+  const code = fs.readFileSync(readerFile, 'utf8');
+  const rows = Object.fromEntries([...code.matchAll(/"([A-Za-z.]+)" => "([a-z-]+)",/g)].map(m => [m[1], m[2]]));
+  assert.equal(rows.ReferenceServiceAPIMethod, 'service-action', 'the kind v97 to v101 did not know');
+  for (const [tag, kind] of Object.entries(rows)) {
+    const family = families.find(f => f.tag === tag);
+    assert.ok(family, tag + ' is a tag of the kernel');
+    assert.equal(kind === 'block' ? 'mobile-block' : kind, family.kind, tag);
+  }
+  assert.match(code, /else others\.Add\(new Other\(item\.Name\.LocalName, name, key\)\)/, 'what has no row is named');
+  assert.match(fs.readFileSync(path.join(bridge, 'StartupHook.cs'), 'utf8'), /Capabilities = \{[^}]*"reference-snapshot:every-kind"/, 'the bridge that links the reader says so');
+  // The kinds the kernel's envelope and the facade take from a signature are the reader's rows.
+  const snapshot = fs.readFileSync(path.join(repo, 'kernel', 'src', 'Anvil.Core', 'Kernel', 'NativeReferenceSnapshot.cs'), 'utf8');
+  const kinds = /OdcPublicKinds = \[([^\]]+)\]/.exec(snapshot)[1].replace('OdcBlockKind', '"block"').match(/"[^"]+"/g).map(s => s.slice(1, -1));
+  assert.deepEqual([...kinds].sort(), [...new Set(Object.values(rows))].sort());
 });
 
 // The merge order's rule (bridge v37): the bridge compiles MergeOrderCopy.cs, the kernel's MergeOrder.cs with only the
@@ -83,7 +104,8 @@ test('MergeOrderCopy (ODC bridge) is MergeOrder (kernel) with only the namespace
 test('the ODC bridge compiles the copy and no file of the kernel; ReferenceCommands calls the copy', () => {
   const project = fs.readFileSync(path.join(bridge, 'Bridge.csproj'), 'utf8');
   const compiled = [...project.matchAll(/<Compile Include="([^"]+)"/g)].map(m => m[1].replaceAll('\\', '/'));
-  assert.ok(compiled.includes('PublicSignatureReader.cs'));
+  const READER = '../../../../kernel/src/Anvil.Core.Odc/Adapters.ODC/PublicSignatureReader.cs';
+  assert.ok(compiled.includes(READER), 'the bridge links the one reader');
   assert.ok(compiled.includes('MergeOrderCopy.cs'));
   assert.ok(compiled.includes('SecurityWarningsCopy.cs'));
   // kernel/query-test is not the kernel: the native query test runtime (namespace SSAM.QueryTesting, no kernel type) that
@@ -92,7 +114,7 @@ test('the ODC bridge compiles the copy and no file of the kernel; ReferenceComma
   // record, namespace Ssam.PrivateTransport, no kernel type either; a file shared by the two bridges (SHARED.md of the
   // agent box). Any other file under kernel/ stays out.
   const SHARED_TRANSPORT = '../../../../kernel/src/Anvil.Bridge/PrivateHttpContext.cs';
-  assert.deepEqual(compiled.filter(file => /(^|\/)kernel\//.test(file) && !/(^|\/)kernel\/query-test\//.test(file) && file !== SHARED_TRANSPORT), [], 'no kernel source is linked into the bridge');
+  assert.deepEqual(compiled.filter(file => /(^|\/)kernel\//.test(file) && !/(^|\/)kernel\/query-test\//.test(file) && file !== SHARED_TRANSPORT && file !== READER), [], 'no other kernel source is linked into the bridge');
   for (const file of fs.readdirSync(path.join(repo, 'kernel', 'query-test')).filter(f => f.endsWith('.cs')))
     assert.doesNotMatch(fs.readFileSync(path.join(repo, 'kernel', 'query-test', file), 'utf8'), /Anvil\.|Ssam\.Runtime|Ssam\.Lic/, file + ' names no kernel namespace');
   if (compiled.includes(SHARED_TRANSPORT)) {
@@ -126,13 +148,14 @@ test('SecurityWarningsCopy (ODC bridge v97) is SecurityWarnings (the kernel v97 
 
 // The accepted drift between the kernel v97 was built with and today's kernel, exactly: a new change of either file fails
 // here until it is judged against the v97 bridge (and the bridge is rebuilt, or the change accepted here with its reason).
-test('accepted drift since v97: OdcPublicSignature gains only the Service Action kind', () => {
-  const now = parts(fs.readFileSync(kernelFile, 'utf8'), 'OdcPublicSignature');
-  const then = parts(fs.readFileSync(v97KernelFile, 'utf8'), 'OdcPublicSignature');
-  const added = ' "ReferenceServiceAPIMethod" => "service-action",';
-  assert.ok(now.body.includes(added));
-  assert.equal(now.body.replace(added, ''), then.body);
-  assert.deepEqual(now.usings, then.usings);
+test('a v97 bridge gives no wrong answer: the one reader keeps every row of v97, and a capture is read from its bytes on both sides of the server', () => {
+  const rowsOf = file => [...fs.readFileSync(file, 'utf8').matchAll(/"([A-Za-z.]+)" => "([a-z-]+)",/g)].map(m => m[1] + '=' + m[2]);
+  const then = rowsOf(v97KernelFile), now = rowsOf(readerFile);
+  for (const row of then) assert.ok(now.includes(row), row + ' stays');
+  assert.deepEqual(now.filter(r => !then.includes(r)), ['ReferenceServiceAPIMethod=service-action'], 'a new row is judged against the old bridges here');
+  assert.match(fs.readFileSync(kernelFile, 'utf8'), /NativeReferenceSnapshot\.ElementsOfSignature = /, 'the kernel reads a capture from its bytes');
+  assert.match(fs.readFileSync(path.join(repo, 'kernel', 'src', 'Anvil.Core', 'Kernel', 'NativeReferenceSnapshot.cs'), 'utf8'), /snapshot=FromItsBytes\(snapshot\);/);
+  assert.match(fs.readFileSync(path.join(odc, 'facade', 'kernel-delivery.mjs'), 'utf8'), /await readSignatureKernel\(capture, deps\)/, 'the facade judges what a list lacks on the bytes');
 });
 
 test('accepted drift since v97: SecurityWarnings is the T12 list, which the server applies after a v97 merge', () => {

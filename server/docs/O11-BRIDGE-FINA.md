@@ -699,7 +699,7 @@ A bridge completa casa a regra 2 (referencia `Anvil.Core`), então nunca passa p
 `platforms/odc/studio/bridge/Bridge.csproj` compila `kernel/src/Anvil.Core.Odc/Adapters.ODC/OdcPublicSignature.cs`
 (namespace `Anvil.Core`, 34 linhas que leem o XML da assinatura pública), usado uma vez em `ReferenceCommands.cs:33`.
 Assim `ODC3.Bridge.v35.dll` carrega o tipo `Anvil.Core.OdcPublicSignature` e cairia na regra 2. Mudança: novo
-`platforms/odc/studio/bridge/PublicSignatureReader.cs` (namespace global, `internal static class
+`platforms/odc/studio/bridge/PublicSignatureReader.cs` (hoje `kernel/src/Anvil.Core.Odc/Adapters.ODC/PublicSignatureReader.cs`, um arquivo só, compilado pelo kernel e linkado pela bridge; ver `public-signature-drift.test.mjs`) (namespace global, `internal static class
 PublicSignatureReader`, cópia do corpo), `Bridge.csproj` deixa de linkar o arquivo do kernel, `ReferenceCommands.cs:33`
 chama `PublicSignatureReader.Read`. A versão da bridge (`v35`) não muda: o protocolo é o mesmo. Uma seleção assinada
 antiga em `platforms/odc/.local/signed-runtime` ainda tem o tipo antigo e faz o pacote com ODC falhar na varredura até
@@ -973,7 +973,7 @@ Testes que têm de passar, sozinha:
   sem attach; o `.json` do gancho continua com `bin\o11\bridge\Anvil.Bridge.dll`.
 - `agent/tests/kinds.test.mjs`: `find_element`, `get_flow_nodes`, `login`, `export_modules` → `METHOD_NOT_ALLOWED`; os
   20 passam.
-- `platforms/odc/tests/public-signature-drift.test.mjs`: o corpo de `PublicSignatureReader.Read` é o de
+- (Hoje um arquivo só, sem cópia.) `platforms/odc/tests/public-signature-drift.test.mjs`: o corpo de `PublicSignatureReader.Read` é o de
   `OdcPublicSignature.Read`, normalizados namespace, nome da classe, visibilidade e brancos.
 - `dotnet build platforms\odc\studio\bridge\Bridge.csproj -c Release` compila e o DLL resultante não tem nenhum texto
   da regra 2.

@@ -23,7 +23,7 @@ public class ScreenHtmlEditBatteryOdcTests(ITestOutputHelper output)
             bytes => host.HtmlEditBattery(bytes, seed: 3, perKind: 1), output);
     }
 
-    [Fact]
+    [CorpusFact(CorpusFactAttribute.Screens, "odc")]
     public void EverySyntheticEditOfTheOdcCorpusReadsBack()
     {
         if (!StudioAvailable()) { output.WriteLine("WARNING: no ODC Studio: the C2 battery is skipped."); return; }

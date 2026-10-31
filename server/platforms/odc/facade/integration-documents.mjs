@@ -54,6 +54,49 @@ const problem = (code, message, fix, extra = {}) => ({ code, ...extra, message, 
 /** The ops of a job document (array or {ops}); a composite {jobs} is left to the kernel. */
 const opsOf = document => (Array.isArray(document) ? document : Array.isArray(document?.ops) ? document.ops : []);
 
+// ---- an op without data (OP_DATA_WRAPPED) -----------------------------------------------------------------------------
+
+// The keys of the data of each integration op: the kernel's JobNormalizer.DataKeys (SoapPlan.Keys, RestExpander.RootKeys,
+// RestExposeExpander.RootKeys), held equal by tests/integration-documents.test.mjs against `anvil api --op <op>`.
+export const DATA_KEYS = Object.freeze({
+  soap: Object.freeze(['wsdl', 'client', 'service', 'port', 'binding', 'soapVersion', 'methods', 'refresh', 'remove', 'breaks']),
+  rest: Object.freeze(['client', 'methods', 'structures', 'openapi', 'remove', 'breaks']),
+  'rest-expose': Object.freeze(['service', 'methods', 'remove', 'breaks']),
+});
+export const DATA_WRAPPED = 'OP_DATA_WRAPPED';
+
+/**
+ * F7 (25/10/2026): an integration op written without `data` ({"op":"soap","wsdl":...,"methods":[...]}) has one reading: its
+ * keys of the data go into `data`, in place, each op listed as the kernel lists it (JobNormalizer.WrapData, same rule, path,
+ * from, to and message). A key that is no key of the data stays where it is (the kernel's verb contract names it).
+ * -> [{rule, path, from, to, message, keys}] (keys: what moved, so the caller can write the op back as it was sent).
+ */
+export function wrapData(ops, prefix = '/ops') {
+  const done = [];
+  for (const [i, op] of ops.entries()) {
+    if (!op || typeof op !== 'object' || Array.isArray(op) || op.data != null || !Object.hasOwn(DATA_KEYS, op.op)) continue;
+    const keys = Object.keys(op).filter(k => DATA_KEYS[op.op].includes(k));
+    if (keys.length === 0) continue;
+    const data = {};
+    for (const key of keys) { data[key] = op[key]; delete op[key]; }
+    op.data = data;
+    done.push({ rule: DATA_WRAPPED, path: `${prefix}/${i}`, from: keys.join(', '), to: 'data',
+      message: `${op.op}: ${keys.join(', ')} ${keys.length === 1 ? 'is a key' : 'are keys'} of the op's data and went into "data": {...} (the op's only shape)`, keys });
+  }
+  return done;
+}
+
+// The op as it was sent (its data keys at the top again): the kernel wraps it itself and lists OP_DATA_WRAPPED in its receipt.
+function unwrapData(ops, wrapped) {
+  for (const entry of wrapped) {
+    const op = ops[Number(entry.path.split('/').pop())];
+    if (!op?.data || typeof op.data !== 'object') continue;
+    const data = op.data;
+    delete op.data;
+    for (const key of entry.keys) op[key] = data[key];
+  }
+}
+
 // ---- destructive words ------------------------------------------------------------------------------------------------
 
 const nameOf = target => String(target).split(':').pop().split('/').pop().trim();
@@ -462,7 +505,9 @@ function documentPaths(op) {
  * workspace: the customer's workspace when the documents are read for a hosted customer (default: the one of the hosted
  * call this runs in, else none: local use); null forces local use. lookup: dns.lookup's signature (tests). fetchImpl:
  * the HTTP client (default: hosted, the public-only client of hosted/public-fetch.mjs; local, the global fetch).
- * -> {ok:true, job, changed, documents:[{source, path, sha256, bytes}]} | {ok:false, code, error, problems, continuation?}
+ * -> {ok:true, job, changed, documents:[{source, path, sha256, bytes}], normalizations?} | {ok:false, code, error, problems, continuation?}
+ * normalizations: OP_DATA_WRAPPED of each op written without data (wrapData); the job written keeps the op as sent, its
+ * document pinned in place, so the kernel wraps it the same way and its receipt lists the same entry.
  */
 export async function prepareIntegrationJob(jobFile, { lane = 'o11', words = '', localRoot, fetchImpl, destructive = true, grant = false, exposed = null,
   workspace = hostedContext()?.workspace ?? null, lookup = dns.lookup } = {}) {
@@ -482,9 +527,12 @@ export async function prepareIntegrationJob(jobFile, { lane = 'o11', words = '',
   }
   const client = fetchImpl ?? (confine ? createPublicFetch({ lookup, maxBytes: MAX_DOCUMENT_BYTES }) : globalThis.fetch);
   const problems = [];
-  if (destructive) problems.push(...(await destructiveProblems(ops, { words, grant, exposed })).problems);
+  // F7: every rule reads an op written without data as the kernel will (its document pinned, its remove and breaks named).
   const copy = structuredClone(document);
   const copyOps = opsOf(copy);
+  const wrapped = wrapData(copyOps);
+  const normalizations = wrapped.map(({ keys, ...entry }) => entry);
+  if (destructive) problems.push(...(await destructiveProblems(copyOps, { words, grant, exposed })).problems);
   const documents = [];
   let changed = false;
   const root = localRoot ?? path.join(path.dirname(jobFile), '.local');
@@ -520,9 +568,9 @@ export async function prepareIntegrationJob(jobFile, { lane = 'o11', words = '',
   if (problems.length) {
     const codes = [...new Set(problems.map(p => p.code))];
     return { ok: false, code: codes.length === 1 ? codes[0] : codes.includes('INTEGRATION_DELETE_WORDS') ? 'INTEGRATION_DELETE_WORDS' : codes[0],
-      error: problems.map(p => p.message).join(' | ').slice(0, 900) + '. Nothing was captured or sent.', problems };
+      error: problems.map(p => p.message).join(' | ').slice(0, 900) + '. Nothing was captured or sent.', problems, ...(normalizations.length ? { normalizations } : {}) };
   }
-  if (!changed) return { ok: true, job: jobFile, changed: false, documents };
+  if (!changed) return { ok: true, job: jobFile, changed: false, documents, ...(normalizations.length ? { normalizations } : {}) };
   // The copy lives in the lane's folder, so every name the kernel resolves against the job's folder first keeps naming the
   // file it named there (else the kernel would go on to the repository: on a hosted server, the server's own files): a
   // relative base, a job:<name> base or producer (job-patch.mjs pinReferences) and a document of another op.
@@ -536,9 +584,11 @@ export async function prepareIntegrationJob(jobFile, { lane = 'o11', words = '',
     const value = field.owner[field.key];
     if (!isUrl(value) && !hasScheme(value) && !path.isAbsolute(value) && here(value)) field.owner[field.key] = here(value);
   }
+  // After the names above, which read an op with its data: the job written keeps the op as it was sent.
+  unwrapData(copyOps, wrapped);
   const text = JSON.stringify(copy, null, 2);
   const target = path.join(folder, sha256(text) + '.json');
   fs.mkdirSync(path.dirname(target), { recursive: true });
   fs.writeFileSync(target, text);
-  return { ok: true, job: target, changed: true, documents };
+  return { ok: true, job: target, changed: true, documents, ...(normalizations.length ? { normalizations } : {}) };
 }

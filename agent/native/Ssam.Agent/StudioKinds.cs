@@ -339,7 +339,9 @@ internal sealed class StudioKinds(string root, string runtime, JsonObject pack, 
             } catch { lease?.Dispose(); throw; }
         }
         await Bind(pid, version, token);
-        var line = await StudioWire.Pipe(pid, version, words, Math.Clamp(Integer(p["connectMs"], 10000), 1, 120000), token);
+        // The reply deadline of the server's one table (bridge-deadlines.json), as o11.bridge above: an agent never cuts before the bridge gives up.
+        var replyMs = Integer(p["timeoutMs"]);
+        var line = await StudioWire.Pipe(pid, version, words, Math.Clamp(Integer(p["connectMs"], 10000), 1, 120000), token, replyMs > 0 ? Math.Min(replyMs, 3600000) : null);
         var resultPaths = new JsonArray();
         try { line = Relativize(JsonNode.Parse(line), resultPaths)?.ToJsonString() ?? "null"; } catch (System.Text.Json.JsonException) { }
         return new JsonObject { ["line"] = line, ["paths"] = resultPaths };

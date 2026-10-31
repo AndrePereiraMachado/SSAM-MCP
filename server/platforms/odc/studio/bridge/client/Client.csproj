@@ -8,5 +8,8 @@
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.Diagnostics.NETCore.Client" Version="0.2.731102" />
+    <!-- The bridge's deadlines (one table with the bridge and the facade): the client waits past them. -->
+    <Compile Include="..\BridgeDeadlines.cs" Link="BridgeDeadlines.cs" />
+    <EmbeddedResource Include="..\..\..\facade\bridge-deadlines.json" LogicalName="bridge-deadlines.json" />
   </ItemGroup>
 </Project>

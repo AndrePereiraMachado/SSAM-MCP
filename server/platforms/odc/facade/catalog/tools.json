@@ -29577,6 +29577,581 @@
      "list referenceable producers in ODC"
     ]
    }
+  },
+  "o11_users": {
+   "effect": "write",
+   "lane": "o11",
+   "group": "users",
+   "kind": "operations",
+   "title": "O11 Users administration",
+   "when": "End users of an O11 environment through its Users application: list, create, update, activate, roles, groups, delete, set-password. Not Service Center users.",
+   "preconditions": [
+    "Users administrator access on the selected environment",
+    "Writes need the user authorization words and an operationId UUID; the words name the environment and confirmHost repeats it unless it is registered personal. An uncertain receipt is never resent.",
+    "Sign-in and new passwords only in the private window of the machine that runs it (operation sign-in or password-prompt with data.username); never in arguments. Windows only.",
+    "delete: without confirmationToken only a preview; then confirmationToken and operationId from it, and words that state 1 and name the username. Direct roles only: a role inherited from a group is removed with the group.",
+    "On a hosted server it runs on the user's SSAM agent (0.3.5 or 0.4.2-native); delete, revoke-role and remove-group are off there."
+   ],
+   "next": "Read back the target; never repeat an uncertain write.",
+   "args": {
+    "operation": "capabilities",
+    "host": "<environment host>"
+   },
+   "verbParam": "operation",
+   "verbSelector": "enum",
+   "triggers": [
+    [
+     "users",
+     "endpoint"
+    ],
+    [
+     "users",
+     "administration"
+    ],
+    [
+     "o11_users"
+    ]
+   ],
+   "intents": {
+    "pt": [
+     "gerenciar contas pela aplicacao Users do O11"
+    ],
+    "en": [
+     "administer accounts through O11 Users endpoints"
+    ]
+   },
+   "verbs": {
+    "capabilities": {
+     "effect": "read",
+     "field": "operation",
+     "value": "capabilities",
+     "selector": "enum",
+     "when": "Users operation capabilities",
+     "args": {
+      "operation": "capabilities",
+      "host": "<environment host>"
+     },
+     "triggers": [
+      [
+       "users",
+       "capabilities"
+      ],
+      [
+       "users",
+       "capacidades"
+      ]
+     ],
+     "intents": {
+      "pt": [
+       "capacidades do Users"
+      ],
+      "en": [
+       "users capabilities"
+      ]
+     }
+    },
+    "status": {
+     "effect": "read",
+     "field": "operation",
+     "value": "status",
+     "selector": "enum",
+     "when": "Users operation status",
+     "args": {
+      "operation": "status",
+      "host": "<environment host>"
+     },
+     "triggers": [
+      [
+       "users",
+       "status"
+      ],
+      [
+       "users",
+       "sessao"
+      ]
+     ],
+     "intents": {
+      "pt": [
+       "sessao do Users"
+      ],
+      "en": [
+       "users status"
+      ]
+     }
+    },
+    "sign-out": {
+     "effect": "write",
+     "field": "operation",
+     "value": "sign-out",
+     "selector": "enum",
+     "when": "Users operation sign-out",
+     "args": {
+      "operation": "sign-out",
+      "host": "<environment host>"
+     },
+     "triggers": [
+      [
+       "users",
+       "logout"
+      ]
+     ],
+     "intents": {
+      "pt": [
+       "logout do administrador do users"
+      ],
+      "en": [
+       "users administrator logout"
+      ]
+     }
+    },
+    "sign-in": {
+     "effect": "write",
+     "field": "operation",
+     "value": "sign-in",
+     "selector": "enum",
+     "when": "Users operation sign-in",
+     "args": {
+      "operation": "sign-in",
+      "host": "<environment host>"
+     },
+     "triggers": [
+      [
+       "users",
+       "sign"
+      ],
+      [
+       "users",
+       "login"
+      ]
+     ],
+     "intents": {
+      "pt": [
+       "login do Users"
+      ],
+      "en": [
+       "users sign in"
+      ]
+     }
+    },
+    "password-prompt": {
+     "effect": "write",
+     "field": "operation",
+     "value": "password-prompt",
+     "selector": "enum",
+     "when": "Users operation password-prompt",
+     "args": {
+      "operation": "password-prompt",
+      "host": "<environment host>"
+     },
+     "triggers": [
+      [
+       "users",
+       "password",
+       "prompt"
+      ],
+      [
+       "users",
+       "popup",
+       "senha"
+      ]
+     ],
+     "intents": {
+      "pt": [
+       "popup de senha do Users"
+      ],
+      "en": [
+       "users password prompt"
+      ]
+     }
+    },
+    "list": {
+     "effect": "read",
+     "field": "operation",
+     "value": "list",
+     "selector": "enum",
+     "when": "Users operation list",
+     "args": {
+      "operation": "list",
+      "host": "<environment host>"
+     },
+     "triggers": [
+      [
+       "users",
+       "list"
+      ],
+      [
+       "users",
+       "listar"
+      ]
+     ],
+     "intents": {
+      "pt": [
+       "listar usuarios no Users"
+      ],
+      "en": [
+       "users list"
+      ]
+     }
+    },
+    "get": {
+     "effect": "read",
+     "field": "operation",
+     "value": "get",
+     "selector": "enum",
+     "when": "Users operation get",
+     "args": {
+      "operation": "get",
+      "host": "<environment host>"
+     },
+     "triggers": [
+      [
+       "users",
+       "get"
+      ],
+      [
+       "users",
+       "detalhes"
+      ]
+     ],
+     "intents": {
+      "pt": [
+       "detalhes do usuario no Users"
+      ],
+      "en": [
+       "users get"
+      ]
+     }
+    },
+    "create": {
+     "effect": "write",
+     "field": "operation",
+     "value": "create",
+     "selector": "enum",
+     "when": "Users operation create",
+     "args": {
+      "operation": "create",
+      "host": "<environment host>"
+     },
+     "triggers": [
+      [
+       "users",
+       "create"
+      ],
+      [
+       "users",
+       "criar"
+      ]
+     ],
+     "intents": {
+      "pt": [
+       "criar usuario no Users"
+      ],
+      "en": [
+       "users create"
+      ]
+     }
+    },
+    "update": {
+     "effect": "write",
+     "field": "operation",
+     "value": "update",
+     "selector": "enum",
+     "when": "Users operation update",
+     "args": {
+      "operation": "update",
+      "host": "<environment host>"
+     },
+     "triggers": [
+      [
+       "users",
+       "update"
+      ],
+      [
+       "users",
+       "editar"
+      ]
+     ],
+     "intents": {
+      "pt": [
+       "editar usuario no Users"
+      ],
+      "en": [
+       "users update"
+      ]
+     }
+    },
+    "activate": {
+     "effect": "write",
+     "field": "operation",
+     "value": "activate",
+     "selector": "enum",
+     "when": "Users operation activate",
+     "args": {
+      "operation": "activate",
+      "host": "<environment host>"
+     },
+     "triggers": [
+      [
+       "users",
+       "activate"
+      ],
+      [
+       "users",
+       "ativar"
+      ]
+     ],
+     "intents": {
+      "pt": [
+       "ativar usuario no Users"
+      ],
+      "en": [
+       "users activate"
+      ]
+     }
+    },
+    "deactivate": {
+     "effect": "write",
+     "field": "operation",
+     "value": "deactivate",
+     "selector": "enum",
+     "when": "Users operation deactivate",
+     "args": {
+      "operation": "deactivate",
+      "host": "<environment host>"
+     },
+     "triggers": [
+      [
+       "users",
+       "deactivate"
+      ],
+      [
+       "users",
+       "inativar"
+      ]
+     ],
+     "intents": {
+      "pt": [
+       "inativar usuario no Users"
+      ],
+      "en": [
+       "users deactivate"
+      ]
+     }
+    },
+    "delete": {
+     "effect": "write",
+     "field": "operation",
+     "value": "delete",
+     "selector": "enum",
+     "when": "Users operation delete",
+     "args": {
+      "operation": "delete",
+      "host": "<environment host>"
+     },
+     "triggers": [
+      [
+       "users",
+       "delete"
+      ],
+      [
+       "users",
+       "excluir"
+      ]
+     ],
+     "intents": {
+      "pt": [
+       "excluir usuario no Users"
+      ],
+      "en": [
+       "users delete"
+      ]
+     }
+    },
+    "grant-role": {
+     "effect": "write",
+     "field": "operation",
+     "value": "grant-role",
+     "selector": "enum",
+     "when": "Users operation grant-role",
+     "args": {
+      "operation": "grant-role",
+      "host": "<environment host>"
+     },
+     "triggers": [
+      [
+       "users",
+       "grant",
+       "role"
+      ],
+      [
+       "users",
+       "dar",
+       "role"
+      ]
+     ],
+     "intents": {
+      "pt": [
+       "dar role ao usuario no Users"
+      ],
+      "en": [
+       "users grant role"
+      ]
+     }
+    },
+    "revoke-role": {
+     "effect": "write",
+     "field": "operation",
+     "value": "revoke-role",
+     "selector": "enum",
+     "when": "Users operation revoke-role",
+     "args": {
+      "operation": "revoke-role",
+      "host": "<environment host>"
+     },
+     "triggers": [
+      [
+       "users",
+       "revoke",
+       "role"
+      ],
+      [
+       "users",
+       "remover",
+       "role"
+      ]
+     ],
+     "intents": {
+      "pt": [
+       "remover role do usuario no Users"
+      ],
+      "en": [
+       "users revoke role"
+      ]
+     }
+    },
+    "add-group": {
+     "effect": "write",
+     "field": "operation",
+     "value": "add-group",
+     "selector": "enum",
+     "when": "Users operation add-group",
+     "args": {
+      "operation": "add-group",
+      "host": "<environment host>"
+     },
+     "triggers": [
+      [
+       "users",
+       "add",
+       "group"
+      ],
+      [
+       "users",
+       "adicionar",
+       "grupo"
+      ]
+     ],
+     "intents": {
+      "pt": [
+       "adicionar usuario ao grupo no Users"
+      ],
+      "en": [
+       "users add group"
+      ]
+     }
+    },
+    "remove-group": {
+     "effect": "write",
+     "field": "operation",
+     "value": "remove-group",
+     "selector": "enum",
+     "when": "Users operation remove-group",
+     "args": {
+      "operation": "remove-group",
+      "host": "<environment host>"
+     },
+     "triggers": [
+      [
+       "users",
+       "remove",
+       "group"
+      ],
+      [
+       "users",
+       "remover",
+       "grupo"
+      ]
+     ],
+     "intents": {
+      "pt": [
+       "remover usuario do grupo no Users"
+      ],
+      "en": [
+       "users remove group"
+      ]
+     }
+    },
+    "set-password": {
+     "effect": "write",
+     "field": "operation",
+     "value": "set-password",
+     "selector": "enum",
+     "when": "Users operation set-password",
+     "args": {
+      "operation": "set-password",
+      "host": "<environment host>"
+     },
+     "triggers": [
+      [
+       "users",
+       "set",
+       "password"
+      ],
+      [
+       "users",
+       "mudar",
+       "senha"
+      ]
+     ],
+     "intents": {
+      "pt": [
+       "mudar senha do usuario no Users"
+      ],
+      "en": [
+       "users set password"
+      ]
+     }
+    },
+    "receipt": {
+     "effect": "read",
+     "field": "operation",
+     "value": "receipt",
+     "selector": "enum",
+     "when": "Users operation receipt",
+     "args": {
+      "operation": "receipt",
+      "host": "<environment host>"
+     },
+     "triggers": [
+      [
+       "users",
+       "receipt"
+      ],
+      [
+       "users",
+       "recibo"
+      ]
+     ],
+     "intents": {
+      "pt": [
+       "recibo do Users"
+      ],
+      "en": [
+       "users receipt"
+      ]
+     }
+    }
+   }
   }
  },
  "gaps": [

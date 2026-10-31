@@ -19,6 +19,7 @@ import { mergeState, reconcilable, reconcileCall } from './merge-reconcile.mjs';
 import { securityRefusal, publishSecurityRefusal } from './security-after-merge.mjs';
 import { createHash } from 'node:crypto';
 import { withStudioWriteLock, studioWriteTarget, ownsStudioWrite } from './studio-write-lock.mjs';
+import { markCutRead } from './merge-cut.mjs';
 import { coalescePublication } from './studio-work-order.mjs';
 
 const isObject = v => v !== null && typeof v === 'object' && !Array.isArray(v);
@@ -64,36 +65,40 @@ const readJsonOrNull = file => { try { return JSON.parse(fs.readFileSync(file, '
 const same = (a, b) => typeof a === 'string' && typeof b === 'string' && a.toLowerCase() === b.toLowerCase();
 const at = value => { const t = Date.parse(value ?? ''); return Number.isFinite(t) ? t : 0; };
 
-// Every merge the bridge started from a manifest under lab/, newest first: {dir, manifest, document, evidence, started}.
-// A delivery refused before the merge left no merge-started.json and changed nothing, so it is not a merge.
+// Every merge the bridge started from a manifest under lab/, newest first: {dir, manifest, document, evidence, started, at}.
+// pass:1 is pass 1 of a merge order (delivery-first-pass/): never a delivered candidate by itself. unseen:true is a delivery whose
+// merge was cut and whose start this server never saw (its evidence is on another machine, or the bridge queued it): it may be in
+// the module, so it counts, and started is null. A delivery refused before the merge changed nothing, so it is not a merge.
 export function deliveryMerges(lab, { root = path.dirname(lab), module, moduleKey } = {}) {
   let dirs = [];
   try { dirs = fs.readdirSync(lab, { withFileTypes: true }).filter(e => e.isDirectory()).map(e => path.join(lab, e.name)); } catch { return []; }
   const out = [];
-  for (const dir of dirs) for (const manifest of [path.join(dir, 'delivery', 'manifest.json'), path.join(dir, 'manifest.json')]) {
+  const entryOf = manifest => {
     const document = readJsonOrNull(manifest);
-    if (!isObject(document) || document.create === true) continue;
-    if (!(moduleKey && document.moduleKey ? document.moduleKey === moduleKey : same(document.module, module))) continue;
+    if (!isObject(document) || document.create === true) return null;
+    if (!(moduleKey && document.moduleKey ? document.moduleKey === moduleKey : same(document.module, module))) return null;
     const declared = document.evidenceDir ?? document.EvidenceDir;
-    const evidence = declared ? path.resolve(root, declared) : path.join(path.dirname(manifest), 'evidence');
-    const started = readJsonOrNull(path.join(evidence, 'merge-started.json'));
-    if (!isObject(started)) continue;
-    out.push({ dir, manifest, document, evidence, started });
+    return { manifest, document, evidence: declared ? path.resolve(root, declared) : path.join(path.dirname(manifest), 'evidence') };
+  };
+  for (const dir of dirs) {
+    let any = false;
+    const result = readJsonOrNull(path.join(dir, 'deliver-result.json'));
+    for (const [manifest, pass] of [[path.join(dir, 'delivery', 'manifest.json'), null], [path.join(dir, 'manifest.json'), null], [path.join(dir, 'delivery-first-pass', 'manifest.json'), 1]]) {
+      const entry = entryOf(manifest);
+      const started = entry && readJsonOrNull(path.join(entry.evidence, 'merge-started.json'));
+      if (!isObject(started)) continue;
+      any = true;
+      // One clock: the times this server wrote order the deliveries; the Studio's order only the passes of one delivery.
+      out.push({ dir, ...entry, started, at: at(result?.completedAt ?? result?.startedAt) || at(started.at), startedAt: at(started.at), ...(pass ? { pass } : {}) });
+    }
+    if (result?.failed !== 'merge' || result.outcome !== 'uncertain' || typeof result.manifest !== 'string') continue;
+    if (out.some(merge => path.resolve(merge.manifest) === path.resolve(result.manifest))) continue;
+    const entry = entryOf(result.manifest);
+    if (entry) out.push({ dir, ...entry, started: null, unseen: true, at: at(result.completedAt ?? result.startedAt), ...(path.basename(path.dirname(result.manifest)) === 'delivery-first-pass' ? { pass: 1 } : {}) });
   }
-  return out.sort((a, b) => at(b.started.at) - at(a.started.at) || b.dir.localeCompare(a.dir));
+  return out.sort((a, b) => b.at - a.at || (a.dir === b.dir ? (b.startedAt ?? 0) - (a.startedAt ?? 0) : b.dir.localeCompare(a.dir)));
 }
 
-// The delivery a merge came from, again over the module as it is now: the same job, owners and changes (a kernel job), or
-// the same C# feature, with publish:true. A job already in the module is refused by the kernel before any change.
-function deliverAgain(merge, module, pid, why) {
-  const result = readJsonOrNull(path.join(merge.dir, 'deliver-result.json'));
-  const job = typeof result?.job === 'string' ? result.job : null;
-  const feature = merge.document.feature ?? result?.feature ?? '<Feature>';
-  const owners = Array.isArray(merge.document.owners) && merge.document.owners.length ? merge.document.owners : ['<Owner>'];
-  const changes = Array.isArray(merge.document.changes) && merge.document.changes.length ? merge.document.changes : ['<Change>'];
-  return { tool: 'studio_deliver', arguments: { feature, module, ...(job ? { job, owners, changes } : {}), publish: true, ...(Number.isInteger(pid) ? { pid } : {}) },
-    why: why + ' authorize: the user\'s own words (or the standing grant of the app). NO_CHANGE means the change is already in the module: the person publishes it in the Studio.' };
-}
 const publishLogRead = (module, pid, why) => ({ tool: 'studio_command', arguments: { command: 'publish-log', args: [module], ...(Number.isInteger(pid) ? { pid } : {}) }, why });
 const evidenceRead = (file, why) => ({ tool: 'ssam_evidence', arguments: { file }, why });
 const refused = (code, error, continuation, extra = {}) => ({ ok: false, code, executed: false, error, ...extra, continuation });
@@ -111,6 +116,10 @@ export async function resolveDeliveryManifest({ module, pid } = {}, { studio, la
   if (!open.ok) return { ...open, executed: false };
   const entry = status.modules.find(m => m?.name === open.module) ?? {};
   const name = entry.name ?? open.module;
+  // Reading settles the record of a cut, whatever the reading finds or fails to find: a new job goes after it (merge-cut.mjs). Never
+  // while a merge runs, and only a call that may reconcile: a precheck writes nothing.
+  const readThisModule = hosts => { if (typeof reconcile === 'function' && !status.busy) for (const host of new Set(hosts)) markCutRead(root, { moduleKey: entry.key, host }); };
+  readThisModule([entry.host]);
   const all = deliveryMerges(lab, { root, module: name, moduleKey: entry.key });
   // The same tenant: a merge of a module with the same key in another tenant is another asset.
   const merges = entry.host ? all.filter(m => !m.document.tenant || same(m.document.tenant, entry.host)) : all;
@@ -118,9 +127,20 @@ export async function resolveDeliveryManifest({ module, pid } = {}, { studio, la
     { tool: 'studio_deliver', arguments: { feature: '<Feature>', module: name, job: { ops: ['<ops from ssam_discover>'] }, owners: ['<Owner>'], changes: ['<Change>'], publish: true, ...(Number.isInteger(pid) ? { pid } : {}) },
       why: 'deliver and publish in one call, with the user\'s words in authorize (or the standing grant of the app); a manifest from elsewhere is published with studio_publish {manifest}' }, { module: name });
   const last = merges[0];
-  const from = { manifest: last.manifest, evidence: last.evidence, mergedAt: last.started.at ?? null };
-  const otherStudio = Number.isInteger(last.started.pid) && Number.isInteger(status.pid) && last.started.pid !== status.pid;
+  const from = { manifest: last.manifest, evidence: last.evidence, mergedAt: last.started?.at ?? null, ...(last.pass ? { pass: last.pass } : {}), ...(last.unseen ? { startSeen: false } : {}) };
+  const otherStudio = Number.isInteger(last.started?.pid) && Number.isInteger(status.pid) && last.started.pid !== status.pid;
   const state = mergeState(last.evidence);
+  // Pass 1 of a merge order with no pass 2 after it: never a delivered candidate. Clean or proven, what is missing is the repair
+  // of the deferred defaults, never publication and never the same delivery.
+  const passOneOnly = () => {
+    const repair = path.join(last.dir, 'merge-order-repair.json');
+    return refused('MERGE_ORDER_INCOMPLETE', 'Pass 1 of the merge order of ' + name + ' (' + path.basename(last.dir) + ') is in the module and pass 2 never ran: the deferred default values are missing. Nothing was published.',
+      fs.existsSync(repair) ? { tool: 'studio_deliver', arguments: { feature: last.document.feature ?? '<Feature>', module: name, job: repair, owners: Array.isArray(last.document.owners) && last.document.owners.length ? last.document.owners : ['<Owner>'], changes: ['Repair of the merge order of ' + (last.document.feature ?? name)], ...(Number.isInteger(pid) ? { pid } : {}) },
+        why: 'This job delivers only the deferred default values, over the module as it is now. Never the original delivery.' }
+        : evidenceRead(path.join(last.dir, 'deliver-result.json'), 'what pass 1 left; the deferred defaults are the only thing to deliver, never the original delivery'), { module: name, resolvedFrom: from, merged: true, outcome: 'incomplete' });
+  };
+  readThisModule([last.document.tenant]);
+  if (last.pass === 1 && state.clean && !otherStudio) return passOneOnly();
   if (!state.clean) {
     const outcome = state.outcome;
     const notClean = (continuation, extra = {}) => refused('LAST_DELIVERY_NOT_CLEAN', 'The last SSAM merge of ' + name + ' (' + path.basename(last.dir) + ') is ' + outcome + ', not a clean merge'
@@ -134,17 +154,24 @@ export async function resolveDeliveryManifest({ module, pid } = {}, { studio, la
       return notClean(isObject(result?.continuation) ? result.continuation : evidenceRead(path.join(last.evidence, 'incomplete-receipt.json'),
         'the last merge of ' + name + ' kept known losses: its repair job is the next delivery; never publish or merge again blindly'));
     }
-    // The merge ran (merge-started.json) but nothing proved it equal to the candidate: the SSAM proves it now, in the
-    // Studio process that merged it, or the refusal names the one explicit call that does (never a dead end).
-    if (otherStudio) return refused('DELIVERY_IN_OTHER_STUDIO', 'The last SSAM merge of ' + name + ' was made in another ODC Studio process (pid ' + last.started.pid + '); the module open in this one (pid ' + status.pid + ') is not what SSAM merged. Nothing was published.',
-      deliverAgain(last, name, pid, 'the same delivery in this Studio captures the module as it is now and publishes after a clean merge;'), { module: name, resolvedFrom: from });
-    if (typeof reconcile !== 'function' || !reconcilable(state)) return notClean(reconcileCall(name, pid));
-    const reconciled = await reconcile({ merge: last, module: name, pid }, { next: why => deliverAgain(last, name, pid, why + ';') });
+    // The merge may have run, and nothing proved it equal to the candidate: the SSAM proves it now against the module open in this
+    // Studio, whichever process merged it, or the refusal names the one explicit call that does (never a dead end). After a restart
+    // the module may hold the merge, part of it or none of it, so the proof decides, never the process that merged.
+    if (typeof reconcile !== 'function' || !reconcilable(state)) {
+      if (otherStudio) return refused('DELIVERY_IN_OTHER_STUDIO', 'The last SSAM merge of ' + name + ' was made in another ODC Studio process (pid ' + last.started.pid + '); whether it is in the module open in this one (pid ' + status.pid + ') is unknown. Nothing was published.',
+        reconcileCall(name, pid, 'captures the module open in this Studio and proves it against the candidate of that merge; nothing is merged or published. Never the same delivery before that proof'), { module: name, resolvedFrom: from });
+      return notClean(reconcileCall(name, pid));
+    }
+    const reconciled = await reconcile({ merge: last, module: name, pid, studioPid: status.pid });
+    // Pass 2 that left nothing: its base is the module after pass 1, which stays. What is missing is the repair, never the delivery.
+    if (reconciled?.code === 'MERGE_NOT_IN_MODULE' && !otherStudio && last.pass !== 1 && fs.existsSync(path.join(last.dir, 'delivery-first-pass', 'manifest.json'))) return passOneOnly();
+    if (reconciled?.code === 'MERGE_NOT_IN_MODULE') return refused(reconciled.code, reconciled.error, reconciled.continuation, { module: name, resolvedFrom: from, merged: null, inThisModule: false, baseSha256: reconciled.baseSha256 });
     if (reconciled?.ok !== true) {
-      const { continuation, then, reconciliation } = reconciled ?? {};
-      return notClean(continuation ?? reconcileCall(name, pid), { reconciliation: { code: reconciled?.code ?? 'RECONCILE_FAILED', error: reconciled?.error ?? 'no answer', ...(isObject(reconciliation) ? reconciliation : {}) }, ...(then ? { then } : {}) });
+      const { continuation, reconciliation, merged } = reconciled ?? {};
+      return notClean(continuation ?? reconcileCall(name, pid), { reconciliation: { code: reconciled?.code ?? 'RECONCILE_FAILED', error: reconciled?.error ?? 'no answer', ...(isObject(reconciliation) ? reconciliation : {}) }, ...(merged === null ? { merged: null } : {}) });
     }
     from.reconciliation = reconciled.reconciliation ?? { accepted: true };
+    if (last.pass === 1) return passOneOnly();
   }
   const publishReceipt = readJsonOrNull(path.join(last.evidence, 'publish-receipt.json'));
   if (publishReceipt?.ok === true)
@@ -154,10 +181,12 @@ export async function resolveDeliveryManifest({ module, pid } = {}, { studio, la
   if (fs.existsSync(path.join(last.evidence, 'publish-started.json')))
     return refused('PUBLISH_ALREADY_REQUESTED', 'A publication of the last SSAM merge of ' + name + ' was already requested' + (publishReceipt ? ' and did not succeed' : '') + '; it is never requested twice from one delivery.',
       publishLogRead(name, pid, publishReceipt ? 'the messages say what to fix; the fix is a new delivery, which publishes in the same call' : 'how that publication ended, before anything else'), { module: name, resolvedFrom: from });
-  // The same Studio process: the merge's own pid against the Studio this call reaches.
-  if (Number.isInteger(last.started.pid) && Number.isInteger(status.pid) && last.started.pid !== status.pid)
-    return refused('DELIVERY_IN_OTHER_STUDIO', 'The last SSAM merge of ' + name + ' was made in another ODC Studio process (pid ' + last.started.pid + '); the module open in this one (pid ' + status.pid + ') is not what SSAM verified. Nothing was published.',
-      deliverAgain(last, name, pid, 'the same delivery in this Studio captures the module as it is now and publishes after a clean merge;'), { module: name, resolvedFrom: from });
+  // The same Studio process: the merge's own pid against the Studio this call reaches, or a proof made in this one. A clean merge of
+  // another process: the module here may hold it or not, and its receipt names bytes of that process, so nothing here can prove it.
+  const provenHere = from.reconciliation || readJsonOrNull(path.join(last.evidence, 'reconciliation.json'))?.studioPid === status.pid;
+  if (otherStudio && !provenHere)
+    return refused('DELIVERY_IN_OTHER_STUDIO', 'The last SSAM merge of ' + name + ' was made in another ODC Studio process (pid ' + last.started.pid + ') and ended clean; whether it is in the module open in this one (pid ' + status.pid + ') is unknown to SSAM. Nothing was published.',
+      { tool: 'studio_status', arguments: { view: 'brief', ...(Number.isInteger(pid) ? { pid } : {}) }, why: 'Read the module. If it holds the merge, the person publishes it in the Studio; if something is missing, a new job carries only that. Never the job of that delivery: it may already be in the module' }, { module: name, resolvedFrom: from, merged: null });
   return { ok: true, manifest: last.manifest, module: name, resolvedFrom: from, merge: last };
 }
 
@@ -166,13 +195,20 @@ export async function resolveDeliveryManifest({ module, pid } = {}, { studio, la
 // ALREADY_PUBLISHED, PUBLISH_ALREADY_REQUESTED, DELIVERY_IN_OTHER_STUDIO), then the bridge's own dispatch check against the
 // hash of the open module the caller captured (openSha256): it must equal the merge receipt's (MODULE_CHANGED_SINCE_DELIVERY).
 // Nothing is written. -> {ok:true, manifest} | {ok:false, code, error}.
-export async function publishPrecheck({ module, pid, openSha256 = null } = {}, { studio, lab, root, catalog = () => null }) {
+export async function publishPrecheck({ module, pid, openSha256 = null, revision = null } = {}, { studio, lab, root, catalog = () => null }) {
   let target;
   try { target = await resolveDeliveryManifest({ module, pid }, { studio, lab, root, catalog }); }
   catch (error) { return { ok: false, code: 'PUBLISH_PRECHECK_FAILED', error: 'the delivery evidence of ' + module + ' could not be read (' + error.message + ')' }; }
   // Round 4 (N4): the handler's own continuation goes with its refusal (read the receipt, the publish log, the status).
-  if (target?.ok !== true) return { ok: false, code: target?.code ?? 'STUDIO_STATUS_UNAVAILABLE', error: target?.error ?? 'studio_publish would refuse ' + module,
-    ...(target?.continuation && typeof target.continuation === 'object' ? { continuation: target.continuation } : {}) };
+  if (target?.ok !== true) {
+    // Whether the open module is the merge that was published, as the very revision the caller's signature came from: only then is what
+    // is published what is open (the gate of 2026-10-30). Another revision published since says nothing of it.
+    const sameRevision = revision != null && target?.lastPublication?.version != null && String(target.lastPublication.version) === String(revision);
+    const published = target?.code === 'ALREADY_PUBLISHED' && sameRevision && openSha256 && target?.resolvedFrom?.evidence ? readJsonOrNull(path.join(target.resolvedFrom.evidence, 'receipt.json')) : null;
+    return { ok: false, code: target?.code ?? 'STUDIO_STATUS_UNAVAILABLE', error: target?.error ?? 'studio_publish would refuse ' + module,
+      ...(typeof published?.sha256 === 'string' && published.sha256.toLowerCase() === String(openSha256).toLowerCase() ? { samePublished: true } : {}),
+      ...(target?.continuation && typeof target.continuation === 'object' ? { continuation: target.continuation } : {}) };
+  }
   const receipt = readJsonOrNull(path.join(target.merge.evidence, 'receipt.json'));
   if (receipt?.created === true) return { ok: true, manifest: target.manifest };
   const expected = typeof receipt?.sha256 === 'string' && receipt.sha256 ? receipt.sha256 : null;
@@ -188,8 +224,7 @@ function changedSinceDelivery(value, merge, module, pid) {
   if (!isObject(value) || value.ok !== false || !CHANGED.test(String(value.error ?? ''))) return value;
   return { ...value, code: 'MODULE_CHANGED_SINCE_DELIVERY', executed: false,
     error: 'The module open in the Studio changed after the SSAM merge of this delivery (an edit in the Studio, a reference refresh or another merge); SSAM publishes only what it verified. Nothing was published.',
-    continuation: merge ? deliverAgain(merge, module, pid, 'a new delivery captures the module as it is now and publishes after a clean merge;')
-      : { tool: 'studio_status', arguments: { view: 'brief', ...(Number.isInteger(pid) ? { pid } : {}) }, why: 'the open module changed after the merge of this manifest: deliver again (studio_deliver publish:true), or the person publishes in the Studio' } };
+    continuation: { tool: 'studio_status', arguments: { view: 'brief', ...(Number.isInteger(pid) ? { pid } : {}) }, why: 'The open module changed after the merge of this delivery, which is in it: the person publishes it in the Studio, or a new job carries only what is new (studio_deliver publish:true). Never the job of this delivery: it is already in the module' } };
 }
 
 // studio_publish (C08, I6): manifest, or module (the manifest of its last clean merge, above). The user's words in

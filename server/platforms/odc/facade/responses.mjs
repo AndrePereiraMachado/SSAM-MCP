@@ -392,6 +392,9 @@ export function compactDelivery(tool, args, value) {
       ...(Array.isArray(problems) && problems.length ? { problems } : {}),
       ...Object.fromEntries(['problemsTotal', 'grouped', 'verifyRan', 'verifyReason', 'phases', 'normalizations', 'patchesApplied', 'patchedJob', 'autoPatch', 'sourceBuilds', 'sourceJob'].filter(key => value[key] != null).map(key => [key, value[key]])),
       ...correction, ...(value.code === 'MERGE_CONTENT_LOSS' && value.summary != null ? { summary: value.summary } : {}), ...prototypeFields(value),
+      // A cut merge says what its evidence shows and what a session may do; what holds the Studio, when it was never sent.
+      ...(value.timeout ? { timeout: value.timeout } : {}), ...(value.busy ? { busy: value.busy } : {}), ...(value.merged === null || (value.timeout && value.merged === false) ? { merged: value.merged } : {}),
+      ...(value.code === 'MODULE_NOT_AT_BASE' ? Object.fromEntries(['baseSha256', 'openSha256', 'cut'].filter(key => value[key] != null).map(key => [key, value[key]])) : {}),
       // A module name that reached no open module (or several): the open modules are the fix.
       ...(Array.isArray(value.openModules) ? { openModules: value.openModules } : {}), ...(Array.isArray(value.candidates) ? { candidates: value.candidates } : {}),
       // fix/unpublished-library: what each producer's published revision lacks, what its open model says, and the sequence.

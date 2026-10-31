@@ -446,4 +446,59 @@ public sealed class JobNormalizerTests
         Assert.Equal("/ops/0/data/flow/1", cursor["pointer"]!.GetValue<string>());
         Assert.Contains("line 4", cursor["message"]!.GetValue<string>());
     }
+
+    // ---- OP_DATA_WRAPPED (F7, 25/10/2026) ---------------------------------------------------------------------------------
+
+    /// <summary>The owner's third round of 25/10/2026 (task 81c27c58, and task 74756753 of 23/10): soap ops written without
+    /// `data` were APPLY_FAILED "missing 'data'". The keys of the op's data go into `data`, listed; a key that is not of the
+    /// data stays where it was and VerbSurface still refuses it by name; the import request reads the op the same way.</summary>
+    [Fact]
+    public void AnIntegrationOpWithoutDataHasItsDataKeysWrappedAndAnUnknownKeyStaysARefusal()
+    {
+        var ops = JsonNode.Parse("""
+            [{"op":"soap","wsdl":{"path":"C:\\w\\NumberConversion.wso","sha256":"00"},"client":"NumberConversion","soapVersion":"1.1","methods":["NumberToWords"],"refresh":["NumberToWords"]},
+             {"op":"rest","client":{"name":"Api","baseUrl":"https://example.com"},"methods":[]},
+             {"op":"rest-expose","service":{"name":"Svc"},"methods":[],"color":"blue"},
+             {"op":"soap","data":{"wsdl":"x"},"client":"Other"},
+             {"op":"logic","flow":["server action A\n  end"]}]
+            """)!.AsArray();
+        var done = JobNormalizer.WrapData(ops, "/ops");
+        Assert.Equal(3, done.Count);
+        Assert.All(done, d => Assert.Equal(JobNormalizer.DataWrapped, d["rule"]!.ToString()));
+        Assert.Equal(["/ops/0", "/ops/1", "/ops/2"], done.Select(d => d["path"]!.ToString()));
+        Assert.Equal("wsdl, client, soapVersion, methods, refresh", done[0]["from"]!.ToString());
+        var soap = ops[0]!.AsObject();
+        Assert.Equal(["op", "data"], soap.Select(p => p.Key));
+        Assert.Equal(["wsdl", "client", "soapVersion", "methods", "refresh"], soap["data"]!.AsObject().Select(p => p.Key));
+        VerbSurface.Check(soap);
+        // rest-expose: service and methods go in, color is no key of its data: it stays and the verb contract names it.
+        var expose = ops[2]!.AsObject();
+        Assert.Equal(["service", "methods"], expose["data"]!.AsObject().Select(p => p.Key));
+        Assert.Contains("unknown key(s) 'color'", Assert.Throws<InvalidOperationException>(() => VerbSurface.Check(expose)).Message);
+        // An op that has data, and an op that is no integration op, are left as written.
+        Assert.Equal("Other", ops[3]!["client"]!.ToString());
+        Assert.Null(ops[4]!["data"]);
+        Assert.Contains("unknown key(s) 'client'", Assert.Throws<InvalidOperationException>(() => VerbSurface.Check(ops[3]!.AsObject())).Message);
+    }
+
+    [Fact]
+    public void ThePureNormalizationsWrapTheDataAndTheImportRequestReadsTheOpTheSameWay()
+    {
+        var wsdl = Path.Combine(Root, "tests", "fixtures", "wsdl", "NumberConversion.wso");
+        var sha = IntegrationDocuments.Sha256(File.ReadAllBytes(wsdl));
+        var job = new JsonArray(new JsonObject { ["op"] = "soap", ["wsdl"] = new JsonObject { ["path"] = wsdl, ["sha256"] = sha }, ["client"] = "NumberConversion",
+            ["soapVersion"] = "1.1", ["methods"] = new JsonArray("NumberToWords", "NumberToDollars") });
+        var request = Assert.Single(IntegrationImport.Requests(job));
+        Assert.Equal(0, request.Op);
+        Assert.Equal("NumberConversionSoap", request.Parameters["selection"]!["port"]!.ToString());
+        Assert.Null(job[0]!["data"]);   // read on a copy: the job is not changed
+        // The same request the op written with data gives.
+        var withData = new JsonArray(new JsonObject { ["op"] = "soap", ["data"] = new JsonObject { ["wsdl"] = new JsonObject { ["path"] = wsdl, ["sha256"] = sha },
+            ["client"] = "NumberConversion", ["soapVersion"] = "1.1", ["methods"] = new JsonArray("NumberToWords", "NumberToDollars") } });
+        var same = Assert.Single(IntegrationImport.Requests(withData));
+        Assert.Equal((same.Op, same.Kind, same.Parameters.ToJsonString()), (request.Op, request.Kind, request.Parameters.ToJsonString()));
+        var normalized = JobNormalizer.Pure(job, "/ops", "o11");
+        Assert.Contains(normalized, n => n["rule"]!.ToString() == JobNormalizer.DataWrapped && n["path"]!.ToString() == "/ops/0");
+        Assert.Equal(["NumberToWords", "NumberToDollars"], job[0]!["data"]!["methods"]!.AsArray().Select(m => m!.ToString()));
+    }
 }

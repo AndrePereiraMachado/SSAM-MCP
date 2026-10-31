@@ -173,6 +173,13 @@ export async function stageOdcPipe(params, mirror) {
 
   return {
     params: { ...params, args: out },
+    // A reply that never came (the agent's own deadline): what the bridge wrote so far, so the server answers from it. Only
+    // the manifest's folder and evidence; true when they came back, false with nothing to bring.
+    async evidence() {
+      if (!manifest) return false;
+      await manifest.after();
+      return true;
+    },
     async after(value) {
       const { paths, ...rest } = value ?? {};
       let reply, parsed = true;

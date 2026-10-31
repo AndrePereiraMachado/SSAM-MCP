@@ -1522,6 +1522,7 @@ public sealed partial class ScreenHtmlModule<T>
         // created (its model is the one of the node the platform made), before its facts are written.
         private void CheckProperties(bool created = false)
         {
+            OnePropertyFacts();
             foreach (var (id, element) in edited.Elements) {
                 if (id.Length == 0 || IsStructural(id) || element.Kind is "os-opaque" or "Content" || IsData(element.Kind) || IsNew(id) != created) continue;
                 var node = created ? objects.GetValueOrDefault(id) : Existing(id);
@@ -2138,6 +2139,42 @@ public sealed partial class ScreenHtmlModule<T>
             }
         }
         private static int PropertyOrder(string fact) => fact switch { "p:Tag" => 0, "p:SourceBlock" => 1, "p:Name" => 2, _ => 5 };
+
+        // Properties the platform keeps as one (ScreenHtmlTables.OneProperty): the reading prints both. What the edit changed of one is
+        // what it says of the pair, so the plan writes it and the Verify reads it; two different values for it are refused by name.
+        private readonly HashSet<string> pairSaid = new(StringComparer.Ordinal);
+        private void OnePropertyFacts()
+        {
+            foreach (var (id, element) in edited.Elements)
+                foreach (var (a, b) in ScreenHtmlTables.OneProperty)
+                {
+                    string factA = "p:" + a, factB = "p:" + b;
+                    var read = model.Elements.GetValueOrDefault(id);
+                    if (read == null || !new[] { element, read }.Any(e => e.Facts.ContainsKey(factA) || e.Facts.ContainsKey(factB))) continue;
+                    if (Existing(id) is not { } node || !m.PropertiesOf(node).ContainsKey(a) || !m.PropertiesOf(node).ContainsKey(b)) continue;
+                    string Value(ScreenHtmlCanon.Element e, string fact) => e.Facts.GetValueOrDefault(fact) is { Length: >= 2 } text ? text[2..] : Defaults.DefaultOf(element.Kind, fact[2..], 'b', false);
+                    string nowA = Value(element, factA), nowB = Value(element, factB);
+                    bool movedA = nowA != Value(read, factA), movedB = nowB != Value(read, factB);
+                    bool hasA = element.Facts.ContainsKey(factA), hasB = element.Facts.ContainsKey(factB);
+                    if (!movedA && !movedB) continue;
+                    // The value that did not change is a stale copy only if the reading printed it, with that value. Otherwise whoever wrote
+                    // both wrote the contradiction, as in a new document.
+                    bool stale(string fact) => read.Facts.GetValueOrDefault(fact) == element.Facts.GetValueOrDefault(fact);
+                    if (hasA && hasB && nowA != nowB && (movedA && movedB || movedA && !stale(factB) || movedB && !stale(factA)))
+                    {
+                        ProblemOnce(ScreenHtmlEdit.PropertyNotKept, null, id.StartsWith('+') ? null : id, "os-" + a + "=\"" + nowA + "\" and os-" + b + "=\"" + nowB + "\" on " + Where(id) + ": the two are one property of the platform, which cannot hold two values", "write one value for both, or only the one you mean");
+                        continue;
+                    }
+                    // An attribute taken out is no declaration: the one still written is what the text says. Both written: the one that changed.
+                    var value = hasA && !hasB ? nowA : hasB && !hasA ? nowB : movedA ? nowA : nowB;
+                    var said = hasA && !hasB ? a : hasB && !hasA ? b : movedA ? a : b;
+                    var pairWas = Value(read, factA);
+                    foreach (var fact in new[] { factA, factB })
+                        if (value == Defaults.DefaultOf(element.Kind, fact[2..], 'b', false)) element.Facts.Remove(fact); else element.Facts[fact] = "b:" + value;
+                    if (value != pairWas && pairSaid.Add(id + "/" + a)) Result.Normalized.Add(new JsonObject { ["k"] = id.StartsWith('+') ? null : id, ["property"] = said == a ? b : a, ["value"] = value,
+                        ["note"] = (hasA || hasB ? "os-" + said + " says " + value + "; os-" + (said == a ? b : a) : "neither os-" + a + " nor os-" + b + " is written, so both are at their default; os-" + a) + " is the same property of the platform and went with it" });
+                }
+        }
 
         // F2: the elements whose properties the plan wrote. A property of one may move another one of the same element (a Width
         // the platform answers with the MarginLeft it gives that width): they are settled to the edit's effective values at the end.

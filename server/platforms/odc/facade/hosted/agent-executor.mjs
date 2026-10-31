@@ -62,6 +62,7 @@ const outdatedBridge = (version, studioVersion, b) => 'The ODC bridge ' + versio
 const privateTransport = what => what + ' uses a private transport of the machine that runs SSAM (a local pipe and its vault), which is never used in hosted mode: '
   + 'only the session of the user\'s own Studio is a path. Nothing was sent.';
 const MARGIN_MS = 60000;
+const EVIDENCE_PULL_MS = 60000;
 // The server-side deadline of each kind (4.4): the agent applies the operation's own timeout; this is the safety net.
 const DEADLINES = {
   'studio.processes': () => 60000,
@@ -247,10 +248,27 @@ export class AgentExecutor {
     if (late) throw studioRefused(late);
     this.sentToStudio('odc.pipe');
     let value;
-    try { value = await this.link.call('odc.pipe', staged.params, { timeoutMs: options.timeoutMs ?? DEADLINES['odc.pipe'](staged.params) }); }
-    catch (error) { throw pipeError(error, 'link'); }
+    // timeoutMs: the reply deadline of the one table (bridge-deadlines.json): an agent that reads it never cuts before the
+    // bridge gives up. An agent that does not read it ignores the field and keeps its own 10 minutes.
+    const replyMs = replyTimeoutMs((staged.params?.args ?? []).map(String));
+    try { value = await this.link.call('odc.pipe', { ...staged.params, timeoutMs: replyMs }, { timeoutMs: options.timeoutMs ?? DEADLINES['odc.pipe'](staged.params) }); }
+    catch (error) {
+      const lost = pipeError(error, 'link');
+      // The reply was lost after the command was sent (the agent's deadline, a broken pipe, a lost channel): the evidence of the
+      // command is on its machine. Bring it back, within a bound, so the answer says what happened; evidenceSeen false says it
+      // could not, and the answer then affirms nothing.
+      if (lost.sent !== false) lost.evidenceSeen = await this.evidenceOf(staged);
+      throw lost;
+    }
     try { return await staged.after(value); }
-    catch (error) { throw pipeError(error, 'after'); }
+    catch (error) { const lost = pipeError(error, 'after'); lost.evidenceSeen = false; throw lost; }
+  }
+
+  async evidenceOf(staged, limitMs = EVIDENCE_PULL_MS) {
+    let timer;
+    try { return await Promise.race([staged.evidence(), new Promise(resolve => { timer = setTimeout(() => resolve(false), limitMs); })]); }
+    catch { return false; }
+    finally { clearTimeout(timer); }
   }
 
   // The port and authorization of the caller are dropped here: the agent uses its own record and its own key.

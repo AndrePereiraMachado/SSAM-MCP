@@ -26,7 +26,7 @@ public class ScreenGeneratorOdcTests(ITestOutputHelper output)
         Assert.Equal("AppRole:InsuranceApp", receipt["roles"]!.ToString());
     }
 
-    [Fact]
+    [CorpusFact(CorpusFactAttribute.Screens, "odc")]
     public void ScreensAreGeneratedOverTheOdcCorpus()
     {
         if (!StudioAvailable()) { output.WriteLine("WARNING: no ODC Studio: skipped."); return; }

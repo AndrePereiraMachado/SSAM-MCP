@@ -13,10 +13,10 @@ public class MergeBatteryCorpusTests(ITestOutputHelper output)
     private static readonly string Work = Path.Combine(Path.GetTempPath(), "merge-battery-o11");
     private static bool bound;
 
-    [Fact]
+    [CorpusFact(CorpusFactAttribute.Text, "o11")]
     public void TheLogicTextOfTheO11CorpusMergesThreeWays() => MergeBatteryCorpus.Flow("o11", Bound, output);
 
-    [Fact]
+    [CorpusFact(CorpusFactAttribute.Text, "o11")]
     public void TheDataTextOfTheO11CorpusMergesThreeWays() => MergeBatteryCorpus.Data("o11", Bound, output);
 
     private static ModelHost Bound()

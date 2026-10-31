@@ -1,38 +1,43 @@
-using OutSystems.Model.Implementation.Oml;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 
 namespace Anvil.Core;
 
-/// <summary>Reads the platform's public signature, including UI elements omitted by LoadModuleSignature's typed view.</summary>
+/// <summary>The kernel's face of the one signature reader (PublicSignatureReader.cs, which the ODC bridge links too).</summary>
 public static class OdcPublicSignature
 {
     public sealed record Element(string Kind, string Name, string Key);
-    public sealed record Catalog(Element[] Elements);
+    /// <summary>An element the signature holds and SSAM cannot bind: named, never dropped.</summary>
+    public sealed record Other(string Tag, string Name, string Key);
+    public sealed record Catalog(Element[] Elements, Other[] Others);
 
     public static Catalog Read(byte[] bytes)
     {
-        var xml = Oml.GetSignatureReader(bytes).ToXElement();
-        if (xml.Name.LocalName != "Signature") throw new ArgumentException("Expected a public module signature");
-        var result = new List<Element>();
-        foreach (var entry in xml.Element("ElementSignatures")?.Elements("ElementSignature") ?? [])
-        {
-            var key = (string?)entry.Attribute("OriginalKey");
-            foreach (var item in entry.Descendants())
-            {
-                if ((string?)item.Attribute("OriginalKey") != key) continue;
-                var kind = item.Name.LocalName switch {
-                    "ReferenceStructure" => "structure",
-                    "NewRuntime.ReferenceWebBlock" => "block",
-                    "ReferenceClientAction" => "client-action",
-                    "ReferenceAction" => "action",
-                    "ReferenceServiceAPIMethod" => "service-action",
-                    "ReferenceEntity" => "entity",
-                    _ => null
-                };
-                var name = (string?)item.Attribute("OriginalName") ?? (string?)item.Attribute("Name");
-                if (kind != null && !string.IsNullOrWhiteSpace(name) && !string.IsNullOrWhiteSpace(key))
-                    result.Add(new Element(kind, name, key));
-            }
-        }
-        return new Catalog(result.Distinct().ToArray());
+        var read = PublicSignatureReader.Read(bytes);
+        return new Catalog(read.Elements.Select(e => new Element(e.Kind, e.Name, e.Key)).ToArray(), read.Others.Select(o => new Other(o.Tag, o.Name, o.Key)).ToArray());
     }
+
+    /// <summary>What a capture (.avsig) holds, from its own bytes: `anvil-odc signature-elements`. The envelope's list is what the
+    /// bridge that wrote it knew, so nothing here reads it. A file that is no capture is refused.</summary>
+    public static JsonObject ReadCapture(string avsig)
+    {
+        using var capture = JsonDocument.Parse(File.ReadAllText(avsig).TrimStart('﻿'));
+        var root = capture.RootElement;
+        if (!root.TryGetProperty("SignatureBinary", out var binary) || binary.ValueKind != JsonValueKind.String)
+            throw new ArgumentException("Not a producer signature capture: no SignatureBinary");
+        var read = Read(binary.GetBytesFromBase64());
+        string? Text(string name) => root.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;
+        return new JsonObject
+        {
+            ["schema"] = "ssam-signature-elements/1",
+            ["producer"] = Text("Name"), ["moduleKey"] = Text("ModuleKey"), ["moduleKind"] = Text("ModuleKind"), ["revision"] = Text("Revision"), ["signatureHash"] = Text("SignatureHash"),
+            ["elements"] = new JsonArray(read.Elements.Select(e => (JsonNode)new JsonObject { ["kind"] = e.Kind, ["name"] = e.Name, ["key"] = e.Key }).ToArray()),
+            ["others"] = new JsonArray(read.Others.Select(o => (JsonNode)new JsonObject { ["tag"] = o.Tag, ["name"] = o.Name, ["key"] = o.Key }).ToArray()),
+        };
+    }
+
+    // Every read of a capture on this lane takes its elements from the bytes (NativeReferenceSnapshot.Read), whatever bridge wrote it.
+    // Set when the Studio's assemblies are bound (StudioAssembliesOdc.Bind): the snapshot's type needs them.
+    internal static void UseForCaptures() =>
+        NativeReferenceSnapshot.ElementsOfSignature = bytes => Read(bytes).Elements.Select(e => new NativeReferenceElement(e.Kind, e.Name, e.Key)).ToArray();
 }

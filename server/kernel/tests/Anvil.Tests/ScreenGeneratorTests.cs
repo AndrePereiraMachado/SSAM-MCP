@@ -329,7 +329,7 @@ public sealed class ScreenGeneratorTests(ITestOutputHelper output)
         Assert.DoesNotContain(receipt["create"]!.AsArray(), c => c!["kind"]!.ToString() == "action");
     }
 
-    [Fact]
+    [CorpusFact(CorpusFactAttribute.Screens, "o11")]
     public void ScreensAreGeneratedOverTheO11Corpus()
     {
         if (!StudioAvailable()) return;

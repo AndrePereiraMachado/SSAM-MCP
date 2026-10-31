@@ -115,7 +115,26 @@ public sealed record NativeReferenceSnapshot
     {
         var snapshot=JsonSerializer.Deserialize<NativeReferenceSnapshot>(File.ReadAllText(path),JsonOptions)
             ?? throw new ArgumentException("Empty native reference snapshot");
+        snapshot=FromItsBytes(snapshot);
         snapshot.Validate(); return snapshot;
+    }
+    /// <summary>The ODC lane's one reader of signature bytes (OdcPublicSignature sets it): null on O11, which reads them itself.</summary>
+    public static Func<byte[],NativeReferenceElement[]>? ElementsOfSignature { get; set; }
+    // The list in an ODC capture is what the bridge that wrote it knew (v97 to v101: no service action); the bytes beside it are the
+    // signature. A capture is read from its bytes, so a bridge changes no answer. Bytes that cannot be read here (no Studio bound: the
+    // job-alone check) leave the list as the bridge wrote it, and the importer reads the bytes again before anything is imported.
+    private static NativeReferenceSnapshot FromItsBytes(NativeReferenceSnapshot snapshot)
+    {
+        if(ElementsOfSignature is not { } read || !snapshot.IsOdcPublicSignature || snapshot.SignatureBinary is not {Length:>0})return snapshot;
+        try
+        {
+            var elements=read(snapshot.SignatureBinary).Where(e=>snapshot.OdcKinds.Contains(e.Kind)).ToArray();
+            if(elements.Length==0)return snapshot;
+            var fromBytes=snapshot with { Elements=elements };
+            fromBytes.Validate();
+            return fromBytes;
+        }
+        catch(Exception error) when(error is not OutOfMemoryException) { return snapshot; }
     }
     public void Write(string path) { Validate(); File.WriteAllText(path,JsonSerializer.Serialize(this,JsonOptions)); }
     public bool IsExtension => ModuleKind==OutSystems.Model.Enumerations.ReferenceKind.Extension;

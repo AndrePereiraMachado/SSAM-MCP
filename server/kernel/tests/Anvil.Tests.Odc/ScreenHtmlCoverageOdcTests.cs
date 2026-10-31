@@ -13,7 +13,7 @@ public class ScreenHtmlCoverageOdcTests(ITestOutputHelper output)
     private static readonly string Root = FindRoot();
     private static readonly string Work = Path.Combine(Root, ".local", "lane-odc", "screen-html-coverage");
 
-    [Fact]
+    [CorpusFact(CorpusFactAttribute.Screens, "odc")]
     public void EveryScreenAndBlockOfTheOdcCorpusReadsAtTheFixedPointAboveTheFloors()
     {
         if (!StudioAvailable()) { output.WriteLine("WARNING: no ODC Studio: the screen-html corpus test is skipped."); return; }

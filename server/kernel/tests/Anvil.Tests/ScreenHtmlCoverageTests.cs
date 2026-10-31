@@ -13,7 +13,7 @@ public class ScreenHtmlCoverageTests(ITestOutputHelper output)
     private static readonly string Root = JobRunner.RepoRoot(Path.GetDirectoryName(typeof(ScreenHtmlCoverageTests).Assembly.Location)!)!;
     private static readonly string Work = Path.Combine(Root, ".local", "screen-html-coverage");
 
-    [Fact]
+    [CorpusFact(CorpusFactAttribute.Screens, "o11")]
     public void EveryScreenAndBlockOfTheO11CorpusReadsAtTheFixedPointAboveTheFloors()
     {
         if (!StudioAvailable()) { output.WriteLine("WARNING: no Service Studio: the screen-html corpus test is skipped."); return; }

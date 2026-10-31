@@ -30,6 +30,7 @@ namespace Anvil.Cli.Odc;
 ///   rich-index --oml &lt;modulo.oml&gt;                 indice rico (ssam-rich-index): valores, expressoes, argumentos, referencias
 ///   read-serve --state &lt;f&gt; --generation &lt;g&gt;       leitor residente so de leitura (resumo e indice rico do ssam_map)
 ///   references --oml &lt;modulo.oml&gt;                  as referencias registradas no modulo
+///   signature-elements --avsig &lt;captura.avsig&gt;     o que a assinatura capturada contem, lido dos bytes dela
 ///   verify-catalog [--id &lt;VerifyId&gt;] [--out &lt;f&gt;]   o catalogo publico lido da instalacao do ODC Studio; --out grava
 ///                                                  so os ids (catalog/odc/verify-messages-&lt;versao&gt;.json)
 ///   merge-order --base &lt;captura.oml&gt; --candidate &lt;candidato.oml&gt; --out &lt;first-pass.oml&gt;
@@ -114,6 +115,7 @@ usage: anvil-odc <command> [--flags]
         "read-serve" => ReadServe(args),
         "census" => Census(args),
         "references" => Host(args).References(File.ReadAllBytes(Need(args, "--oml"))),
+        "signature-elements" => SignatureElements(args),
         "verify-catalog" => VerifyCatalogCmd(args),
         "merge-order" => MergeOrderPlan(args),
         "content-proof" => ContentProof(args),
@@ -237,6 +239,14 @@ usage: anvil-odc <command> [--flags]
         var proof = MergeContentProof.Check(Host(args), expected, actual);
         Log($"content-proof: {(proof["accepted"]?.GetValue<bool>() == true ? "accepted" : "refused")}, {proof["checked"]} value(s) checked");
         return proof;
+    }
+
+    // `signature-elements --avsig <capture>`: what a producer signature capture holds, from its own bytes (OdcPublicSignature),
+    // never from the list its bridge wrote. No model, no Studio session; the facade asks it when that list lacks what a job references.
+    private static object SignatureElements(string[] args)
+    {
+        StudioAssembliesOdc.Bind(null);
+        return OdcPublicSignature.ReadCapture(Need(args, "--avsig"));
     }
 
     private static object Inspect(string[] args)

@@ -37,6 +37,9 @@ public static class IntegrationImport
     public static List<Request> Requests(JsonArray ops)
     {
         var list = new List<Request>();
+        // An op written without `data` is read as the apply will read it (JobNormalizer OP_DATA_WRAPPED), on a copy.
+        ops = ops.DeepClone().AsArray();
+        Preflight.JobNormalizer.WrapData(ops, null);
         for (var i = 0; i < ops.Count; i++)
         {
             if (ops[i] is not JsonObject op || op["data"] is not JsonObject data) continue;

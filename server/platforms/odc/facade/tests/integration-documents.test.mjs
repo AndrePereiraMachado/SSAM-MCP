@@ -9,7 +9,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { prepareIntegrationJob, wsdlImports, openApiReferences, MAX_DOCUMENT_BYTES } from '../integration-documents.mjs';
+import { prepareIntegrationJob, wsdlImports, openApiReferences, MAX_DOCUMENT_BYTES, wrapData, DATA_KEYS, DATA_WRAPPED } from '../integration-documents.mjs';
+import { spawnSync } from 'node:child_process';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const kernel = path.resolve(here, '..', '..', '..', '..', 'kernel');
@@ -129,4 +130,73 @@ test('an OpenAPI document is pinned with its external $ref bundled for the kerne
   assert.equal(fs.readFileSync(openapi.external['./schemas/order.json'].path, 'utf8'), order);
   assert.deepEqual(openApiReferences(doc), ['./schemas/order.json']);
   assert.equal(fetchImpl.calls.length, 2);
+});
+
+// ---- F7 (25/10/2026): an op written without data (OP_DATA_WRAPPED) ---------------------------------------------------
+
+test('a soap op without data has its WSDL pinned as the same op with data, and the job keeps the op as sent', async t => {
+  const b = box(t);
+  const wsdl = fs.readFileSync(WSDL, 'utf8');
+  const fetchImpl = fakeFetch({ 'https://example.invalid/Calc.asmx?WSDL': wsdl });
+  const bare = await prepareIntegrationJob(b.job([{ op: 'soap', wsdl: 'https://example.invalid/Calc.asmx?WSDL', port: 'CalculatorSoap', methods: ['Add'] }]), { localRoot: b.local, fetchImpl, destructive: false });
+  const wrapped = await prepareIntegrationJob(b.job([{ op: 'soap', data: { wsdl: 'https://example.invalid/Calc.asmx?WSDL', port: 'CalculatorSoap', methods: ['Add'] } }]), { localRoot: b.local, fetchImpl, destructive: false });
+  assert.equal(bare.ok, true, JSON.stringify(bare));
+  assert.deepEqual(bare.normalizations, [{ rule: DATA_WRAPPED, path: '/ops/0', from: 'wsdl, port, methods', to: 'data',
+    message: 'soap: wsdl, port, methods are keys of the op\'s data and went into "data": {...} (the op\'s only shape)' }]);
+  assert.equal(wrapped.normalizations, undefined);
+  const sent = JSON.parse(fs.readFileSync(bare.job, 'utf8')).ops[0];
+  const written = JSON.parse(fs.readFileSync(wrapped.job, 'utf8')).ops[0];
+  // The same pinned document; the op stays as sent, so the kernel wraps it itself and lists the same entry in its receipt.
+  assert.deepEqual(sent.wsdl, written.data.wsdl);
+  assert.equal(sent.data, undefined);
+  assert.deepEqual({ op: sent.op, data: { wsdl: sent.wsdl, port: sent.port, methods: sent.methods } }, written);
+  assert.deepEqual(bare.documents.map(d => d.sha256), wrapped.documents.map(d => d.sha256));
+});
+
+test('a document named relatively by an op without data keeps naming its file when the job moves to the lane folder', async t => {
+  const b = box(t);
+  const wsdl = fs.readFileSync(WSDL, 'utf8');
+  const fetchImpl = fakeFetch({ 'https://example.invalid/Calc.asmx?WSDL': wsdl });
+  const job = b.job([{ op: 'soap', wsdl: { path: 'local.wsdl', sha256: sha256(wsdl) }, port: 'CalculatorSoap', methods: ['Add'] },
+    { op: 'soap', wsdl: 'https://example.invalid/Calc.asmx?WSDL', port: 'CalculatorSoap', methods: ['Add'], client: 'Second' }]);
+  fs.writeFileSync(path.join(path.dirname(job), 'local.wsdl'), wsdl);
+  const prepared = await prepareIntegrationJob(job, { localRoot: b.local, fetchImpl, destructive: false });
+  assert.equal(prepared.ok, true, JSON.stringify(prepared));
+  const first = JSON.parse(fs.readFileSync(prepared.job, 'utf8')).ops[0];
+  assert.equal(first.data, undefined);
+  assert.ok(path.isAbsolute(first.wsdl.path), first.wsdl.path);
+  assert.equal(fs.readFileSync(first.wsdl.path, 'utf8'), wsdl);
+});
+
+test('the remove of an op without data needs the words as the same op with data', async t => {
+  const b = box(t);
+  const job = b.job([{ op: 'soap', wsdl: WSDL, port: 'CalculatorSoap', remove: ['Subtract'] }]);
+  const refused = await prepareIntegrationJob(job, { localRoot: b.local, words: 'atualize a calculadora' });
+  assert.equal(refused.ok, false);
+  assert.equal(refused.code, 'INTEGRATION_DELETE_WORDS');
+  assert.equal(refused.normalizations[0].rule, DATA_WRAPPED);
+  const named = await prepareIntegrationJob(job, { localRoot: b.local, words: 'remova o metodo Subtract' });
+  assert.equal(named.ok, true, JSON.stringify(named));
+});
+
+test('wrapData moves only the data keys of soap, rest and rest-expose, as the kernel does', () => {
+  const ops = [{ op: 'rest-expose', service: { name: 'Svc' }, methods: [], color: 'blue' }, { op: 'soap', data: { wsdl: 'x' }, client: 'Y' },
+    { op: 'rest-consume', name: 'Api', methods: [] }, { op: 'logic', flow: [] }];
+  const done = wrapData(ops);
+  assert.deepEqual(done.map(d => [d.path, d.from]), [['/ops/0', 'service, methods']]);
+  assert.deepEqual(ops[0], { op: 'rest-expose', color: 'blue', data: { service: { name: 'Svc' }, methods: [] } });
+  assert.equal(ops[1].client, 'Y');
+  assert.equal(ops[2].data, undefined);
+  assert.equal(ops[3].data, undefined);
+});
+
+test('DATA_KEYS are the kernel\'s data keys of each op (anvil api --op)', t => {
+  const cli = path.join(kernel, '.local', 'cli', 'anvil.dll');
+  if (!fs.existsSync(cli)) { t.diagnostic('kernel/.local/cli/anvil.dll not built: compared only when it is'); return; }
+  for (const op of Object.keys(DATA_KEYS)) {
+    const run = spawnSync('dotnet', [cli, 'api', '--op', op], { cwd: kernel, encoding: 'utf8', timeout: 120000, env: { ...process.env, ANVIL_WORKER: '0', ANVIL_ODC_NO_WORKER: '1', SSAM_NO_WARM: '1' } });
+    if (run.status !== 0) { t.diagnostic(`api --op ${op}: ${(run.stderr || run.stdout).slice(0, 200)}`); return; }
+    const answer = JSON.parse(run.stdout);
+    assert.deepEqual([...DATA_KEYS[op]], (answer.data ?? answer).data, op);
+  }
 });

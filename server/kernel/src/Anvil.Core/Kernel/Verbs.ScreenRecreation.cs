@@ -47,6 +47,7 @@ public sealed partial class ModelSession
             Flow = flow,
             Exclude = old,
             ReadKeys = keys,
+            ProveDeclared = true,
             Opaque = k => keys.TryGetValue(k, out var key) && oldByKey.TryGetValue(key, out var o) ? o : null,
             MoveOpaque = true,
             BeforeContent = root =>

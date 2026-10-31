@@ -60,6 +60,7 @@ public static class ScreenRecreationProof
                 }
                 row["compileMs"] = report["compileMs"]?.DeepClone(); row["buildMs"] = report["timings"]?["buildMs"]?.DeepClone(); row["indexMs"] = report["timings"]?["indexMs"]?.DeepClone();
                 row["steps"] = report["timings"]?["steps"]?.DeepClone();
+                row["declaredPropertiesKept"] = report["declaredPropertiesKept"]?.DeepClone();
                 // The build of the page itself: the move of the original's actions (the stand-in for the job's logic ops,
                 // which a delivery does not pay) taken out.
                 if (report["timings"]?["buildMs"]?.GetValue<long>() is { } built)

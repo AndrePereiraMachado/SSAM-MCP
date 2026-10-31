@@ -1570,6 +1570,8 @@ public sealed partial class ModelSession
             else props[pi.Name] = v.ToString();
         }
         ThemeCss.Describe(o, props);   // as metades do CSS que o Model API do O11 nao publica
+        // Style on an HTML Element is its class attribute (StyleRule): the get shows it by the word the set writes.
+        if (props["Style"] is null && !CanSet(o, "Style") && !CanSet(o, "StyleClasses") && ClassAttributeOf(o) is { } classAttribute) props["Style"] = ClassAttributeText(classAttribute);
         j["properties"] = props;
         return j;
     }

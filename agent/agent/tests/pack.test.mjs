@@ -2,6 +2,7 @@
 // right sha256 of every file, nothing forbidden inside (no source, no .local\server, no key, no OutSystems DLL, no agent
 // tests), the intellectual property scan of scripts/pack-ip-scan.ps1 over the finished ZIP (docs/O11-BRIDGE-FINA.md 6.4)
 // and node.exe only with its license (6.3). Calls that do not test Node pass -NoNode.
+import { pathToFileURL } from 'node:url';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -98,7 +99,7 @@ test('agent-pack.ps1 -NoBuild -Prebuilt -NoNode builds the 6.2 layout with the t
     const files = [...entries.keys()].sort();
     assert.ok(files.every(name => !name.includes('\\')), 'zip entries use forward slashes');
 
-    const libs = fs.readdirSync(path.join(repo, 'agent', 'lib')).filter(name => name.endsWith('.mjs')).map(name => 'agent/lib/' + name);
+    const libs = fs.readdirSync(path.join(repo, 'agent', 'lib')).filter(name => /\.(mjs|json)$/.test(name)).map(name => 'agent/lib/' + name);
     const expected = ['agent/ssam-agent.mjs', 'agent/ssam-agent.ps1', ...libs,
       'bin/o11/bridge/Anvil.Bridge.deps.json', THIN,
       CONNECT, 'bin/o11/connect/Anvil.Connect.runtimeconfig.json', 'bin/o11/connect/Microsoft.Diagnostics.NETCore.Client.dll', HOOK,
@@ -128,6 +129,39 @@ test('agent-pack.ps1 -NoBuild -Prebuilt -NoNode builds the 6.2 layout with the t
       assert.equal(entry.sha256, sha(entries.get(entry.path)), entry.path);
       assert.equal(entry.size, entries.get(entry.path).length, entry.path);
     }
+  } finally { fs.rmSync(work, { recursive: true, force: true }); }
+});
+
+// The family: a pack has everything its code reads. The agent of a pack, unzipped and alone, loads every module of its lib, and
+// every file a module names relative to itself is in the pack. Nothing here looks at the checkout.
+test('the agent of a pack runs by itself: every module loads, and every file its code names is in the pack', () => {
+  const work = tempWork();
+  try {
+    const { code, out, zip } = packWith(work);
+    assert.equal(code, 0, out);
+    const tree = path.join(work, 'unzipped');
+    for (const [name, bytes] of readZip(zip)) {
+      if (name.endsWith('/')) continue;
+      const file = path.join(tree, ...name.split('/'));
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.writeFileSync(file, bytes);
+    }
+    const lib = path.join(tree, 'agent', 'lib');
+    const modules = [path.join(tree, 'agent', 'ssam-agent.mjs'), ...fs.readdirSync(lib).filter(n => n.endsWith('.mjs')).map(n => path.join(lib, n))];
+    const missing = [];
+    for (const module of modules) {
+      const text = fs.readFileSync(module, 'utf8');
+      for (const [, target] of [...text.matchAll(/\bfrom\s+'(\.\.?\/[^']+)'/g), ...text.matchAll(/\bimport\(\s*'(\.\.?\/[^']+)'\s*\)/g), ...text.matchAll(/new URL\(\s*'(\.\.?\/[^']+)'\s*,\s*import\.meta\.url/g)])
+        if (!fs.existsSync(path.resolve(path.dirname(module), target))) missing.push(path.basename(module) + ' -> ' + target);
+    }
+    assert.deepEqual(missing, [], 'named by the code, absent from the pack');
+    // The family, however a file is named or read (double quotes, path.join, createRequire, a template): every file of agent/lib is in the pack.
+    const source = path.join(repo, 'agent', 'lib');
+    const absent = fs.readdirSync(source, { recursive: true, withFileTypes: true }).filter(e => e.isFile() && !fs.existsSync(path.join(lib, path.relative(source, path.join(e.parentPath, e.name))))).map(e => e.name);
+    assert.deepEqual(absent, [], 'in agent/lib, absent from the pack');
+    const load = 'for (const m of ' + JSON.stringify(modules.filter(m => path.basename(m) !== 'ssam-agent.mjs').map(m => pathToFileURL(m).href)) + ') await import(m);';
+    const ran = spawnSync(process.execPath, ['--input-type=module', '-e', load], { cwd: tree, encoding: 'utf8', timeout: 120000 });
+    assert.equal(ran.status, 0, ran.stderr.slice(0, 800));
   } finally { fs.rmSync(work, { recursive: true, force: true }); }
 });
 

@@ -92,7 +92,7 @@ public sealed class FlowKindPrefixTests(ITestOutputHelper output)
         Assert.Equal(2, published.Count);
     }
 
-    [Fact]
+    [CorpusFact(CorpusFactAttribute.TextPresent, "o11")]
     public void EveryPrintedCallInTheO11CorpusReturnsToItsExactOriginalText()
     {
         var root = TextRoundTripCorpus.Root()!;

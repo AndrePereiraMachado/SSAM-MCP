@@ -48,6 +48,7 @@ platforms/odc/tenants.json
 # ---- not run by the hosted server: tests, benches, evidence and the history of the work on client modules
 tests
 docs/evidence
+docs/USERS-ENDPOINTS-O11.md
 agent/tests
 platforms/odc/tests
 platforms/odc/facade/tests

@@ -446,19 +446,25 @@ for (const [label, setup, code] of N4_CASES) {
   });
 }
 
-test('N4 (controls): hand-edited, another Studio and changed since keep the person\'s step and deliver; ALREADY_PUBLISHED too; a clean merge keeps studio_publish', async t => {
-  const setups = [['hand-edited', () => {}, 'person:publish'], ['other Studio', w => w.libraryMerge('FloodServices', { pid: 5 }), 'person:publish'],
+test('N4 (controls): hand-edited, another Studio, changed since and already published keep the person\'s step and deliver; a clean merge keeps studio_publish', async t => {
+  const published = (w, revision) => { const m = w.libraryMerge('FloodServices'); fs.writeFileSync(path.join(m.evidence, 'publish-started.json'), '{}');
+    fs.writeFileSync(path.join(m.evidence, 'publish-receipt.json'), JSON.stringify({ ok: true, published: { revision }, completedAt: '2026-10-16T11:40:00Z' })); };
+  // The open module is the merge published as the revision the signature came from: nothing proves the element unpublished (the code
+  // says so), and the session still has a way out. Another revision published since, or an edit since: it is found.
+  const setups = [['hand-edited', () => {}, 'person:publish'],
+    ['already published, the same revision', w => published(w, 2), 'person:publish', 'PRODUCER_SIGNATURE_UNVERIFIED'],
+    ['already published, another revision since', w => published(w, 1), 'person:publish'],
+    ['already published, edited since', w => { published(w, 2); w.state.libraries.FloodServices.edits = 1; }, 'person:publish'], ['other Studio', w => w.libraryMerge('FloodServices', { pid: 5 }), 'person:publish'],
     ['changed since', w => { w.libraryMerge('FloodServices'); w.state.libraries.FloodServices.edits = 1; }, 'person:publish'],
-    ['already published', w => { const m = w.libraryMerge('FloodServices'); fs.writeFileSync(path.join(m.evidence, 'publish-started.json'), '{}');
-      fs.writeFileSync(path.join(m.evidence, 'publish-receipt.json'), JSON.stringify({ ok: true, published: { revision: 2 }, completedAt: '2026-10-16T11:40:00Z' })); }, 'person:publish'],
     ['clean merge', w => w.libraryMerge('FloodServices'), 'studio_publish']];
-  for (const [label, setup, first] of setups) {
+  for (const [label, setup, first, code = 'PRODUCER_NOT_PUBLISHED'] of setups) {
     const w = world(t, { libraries: { FloodServices: { open: ['GetNcipDetails', 'GetQuotes'], published: ['GetNcipDetails'], rev: 2, sessions: [{ pid: 7, host: A }] } },
       references: ['FloodServices'] });
     setup(w);
     const r = await deliverKernel(w.input(w.job([['FloodServices', ['ServerAction:GetQuotes']]])), w.deps);
-    assert.equal(r.code, 'PRODUCER_NOT_PUBLISHED', label);
+    assert.equal(r.code, code, label);
     assert.equal(chainOf(r)[0], first, label + ': ' + text(chainOf(r)));
+    if (code !== 'PRODUCER_NOT_PUBLISHED') { assert.ok(!/would change nothing|not published yet/.test(text(r)), label + ': ' + text(r.problems)); assert.match(text(r.problems), /cannot tell why/); }
     const followed = await w.follow(r);
     assert.equal(followed.codes.at(-1), 'delivered', label + ': ' + text(followed));
   }

@@ -68,7 +68,7 @@ public class ScreenHtmlEditJobTests(ITestOutputHelper output)
         Assert.All(traditional, r => Assert.Equal("ok", r["outcome"]!.GetValue<string>()));
     }
 
-    [Fact]
+    [CorpusFact(CorpusFactAttribute.Screens, "o11")]
     public void EverySyntheticEditOfTheO11CorpusReadsBack()
     {
         if (!StudioAvailable()) { output.WriteLine("WARNING: no Service Studio: the C2 battery is skipped."); return; }

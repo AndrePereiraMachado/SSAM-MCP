@@ -6,12 +6,13 @@
 // The six kinds that touch a machine come first (MACHINE_KINDS); then the file kinds between the server and the agent;
 // net.probe (fase4-24, 2.10): the network check of ssam_doctor {network:true}; file.upload (fase4-28/r2-briefing) and
 // screen.render (fase4-28 r2-preview, DESENHO-PREVIEW-UPLOAD 2.3), sent only to an agent whose Hello lists them. New kinds
-// go at the END, so the hub's supports() keeps the nine of protocol 1 for an agent without kinds.
+// go at the END, so the hub's supports() keeps the nine of protocol 1 for an agent without kinds. o11.users (fase4-28 r4,
+// hosted/users-agent.mjs): the Users application through the user's agent, sent only to an agent whose Hello lists it.
 export const CALL_KINDS = Object.freeze(['studio.processes', 'odc.pipe', 'odc.attach', 'o11.bridge', 'o11.connect', 'o11.selected',
-  'file.put', 'file.get', 'file.list', 'file.sync', 'net.probe', 'file.upload', 'screen.render']);
+  'file.put', 'file.get', 'file.list', 'file.sync', 'net.probe', 'file.upload', 'screen.render', 'o11.users']);
 // The kinds that touch a machine: the only ones the local executor runs and the hosted executor forwards.
 export const MACHINE_KINDS = Object.freeze(CALL_KINDS.slice(0, 6));
 // The kinds of protocol 1: what an agent whose Hello lists no kinds supports.
 export const PROTOCOL1_KINDS = Object.freeze(CALL_KINDS.slice(0, 9));
 // The kinds sent only to an agent whose Hello lists them (the hub refuses KIND_NOT_ALLOWED before anything is written).
-export const HELLO_ONLY_KINDS = Object.freeze(new Set(['file.upload', 'screen.render']));
+export const HELLO_ONLY_KINDS = Object.freeze(new Set(['file.upload', 'screen.render', 'o11.users']));

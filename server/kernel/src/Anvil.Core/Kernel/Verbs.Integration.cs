@@ -199,6 +199,20 @@ public sealed partial class ModelSession
         var selection = plan.Selection!;
         var problems = new List<IntegrationProblem>();
         var client = TopLevel(selection.Client).FirstOrDefault(c => Implements(c, "ISOAPClient"));
+        // The Studio's importer names a new client after the WSDL's service (CountryInfoService for "client": "CountryInfo"):
+        // the one client of this WSDL that has every requested method and that nothing uses yet takes the requested name
+        // before any check (SOAP_CLIENT_RENAMED). Several such clients rename none: the message names them.
+        var fromWsdl = client == null ? SoapClientsOf(selection) : [];
+        string? renamedFrom = null;
+        if (client == null && fromWsdl.Where(c => selection.Methods.All(SoapMethods(c).Contains) && DeleteConsumers(c).Count == 0).ToList() is [{ } imported])
+        {
+            renamedFrom = TypeResolver.Name(imported) ?? "";
+            var opIndex = _applyIndex;
+            ApplyOne(new JsonObject { ["op"] = "rename", ["target"] = "@" + imported.ObjectKey, ["name"] = selection.Client });
+            Normalized([Preflight.JobNormalizer.Entry(Preflight.JobNormalizer.SoapClientRenamed, OpsPointer != null ? $"{OpsPointer}/{opIndex}/data/client" : "/data/client", renamedFrom, selection.Client,
+                $"the Studio's importer named the client '{renamedFrom}' (the WSDL's service); it is renamed to the requested '{selection.Client}'")]);
+            client = imported;
+        }
         if (client != null)
         {
             var binding = ModelHost.Prop(client, "Binding")?.ToString() ?? "";
@@ -208,21 +222,20 @@ public sealed partial class ModelSession
                 problems.Add(new("SOAP_CLIENT_PORT_MISMATCH", "/data/client", $"soap: client '{selection.Client}' already imports binding '{binding}' (contract '{contract}'), not port {selection.Port.Name} ({selection.Port.Binding}, {selection.Port.PortType})",
                     $"name another client (\"client\": \"{selection.Client}2\") for this port, or select the client's own port (\"port\": \"{binding}\")"));
         }
-        var methods = client?.Children.OfType<IObjectSignature>().Where(c => Implements(c, "ISOAPAction")).Select(c => TypeResolver.Name(c) ?? "").ToHashSet(StringComparer.Ordinal)
-            ?? new HashSet<string>(StringComparer.Ordinal);
+        var methods = SoapMethods(client);
         var removing = RestExpander.Strings(data["remove"]).ToList();
         foreach (var target in removing.Where(r => !methods.Contains(r.Split(':').Last())))
             problems.Add(new("SOAP_METHOD_NOT_FOUND", "/data/remove", $"soap: '{target}' is not a method of client '{selection.Client}'", "use one of: " + string.Join(", ", methods)));
         var missing = selection.Methods.Where(m => !methods.Contains(m)).ToList();
-        if (missing.Count > 0)
-            problems.Add(new("INTEGRATION_IMPORT_NEEDS_STUDIO", "/data/methods", $"soap: {string.Join(", ", missing)} must be imported from the WSDL, which the Service Studio's own importer does, and this job runs without it",
-                "deliver it with o11_deliver: the bridge imports on a copy of the module (integration_import), then the job applies and merges once"));
+        if (missing.Count > 0) problems.Add(MissingMethods(selection, client, fromWsdl, missing));
         if (problems.Count > 0) throw new IntegrationRefusalException("soap", problems);
+        var warnings = new JsonArray();
         if (client != null && selection.Methods.Count > 0)
         {
             var (parameters, structures) = SoapContract.Read(client, selection.Methods);
             var contractProblems = SoapContract.Check(parameters, structures);
             if (contractProblems.Count > 0) throw new IntegrationRefusalException("soap", contractProblems);
+            foreach (var warning in SoapContract.Retyped(parameters)) warnings.Add(warning);
         }
         var ops = removing.Select(r => RestExpander.Op("delete", ("target", "@" + client!.Children.OfType<IObjectSignature>()
             .First(c => Implements(c, "ISOAPAction") && TypeResolver.Name(c) == r.Split(':').Last()).ObjectKey))).ToList();
@@ -232,6 +245,8 @@ public sealed partial class ModelSession
         var results = ApplyExpanded("soap", ops);
         var report = Report("soap");
         report["client"] = new JsonObject { ["name"] = selection.Client, ["key"] = client?.ObjectKey?.ToString(), ["created"] = false };
+        if (renamedFrom != null) report["client"]!["renamedFrom"] = renamedFrom;
+        report["warnings"] = warnings;
         report["skipped"] = new JsonArray(selection.Methods.Select(m => (JsonNode)m).ToArray());
         report["removed"] = new JsonArray(removing.Select(r => (JsonNode)("ISOAPAction:" + r.Split(':').Last())).Concat(results.OfType<JsonObject>()
             .SelectMany(r => r["removedStructures"]?.AsArray().Select(s => (JsonNode)("ISOAPStructure:" + s)) ?? [])).ToArray());
@@ -239,6 +254,46 @@ public sealed partial class ModelSession
         report["selection"] = selection.ToJson();
         report["consumersBroken"] = ConsumersBroken(results);
         return new JsonObject { ["expanded"] = ops.Count, ["integration"] = report };
+    }
+
+    private static HashSet<string> SoapMethods(IObjectSignature? client) => client?.Children.OfType<IObjectSignature>().Where(c => Implements(c, "ISOAPAction"))
+        .Select(c => TypeResolver.Name(c) ?? "").ToHashSet(StringComparer.Ordinal) ?? new HashSet<string>(StringComparer.Ordinal);
+
+    /// <summary>The SOAP clients of the module imported from this op's WSDL: WSDLLocation is the pinned document (its file
+    /// URI, the path or the source URL), or the name is the one the importer gives (the service's, or it with a digit
+    /// suffix), never the requested name itself.</summary>
+    private List<IObjectSignature> SoapClientsOf(SoapPlan.Selection selection)
+    {
+        var locations = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { selection.DocumentPath };
+        try { locations.Add(new Uri(selection.DocumentPath).AbsoluteUri); } catch (UriFormatException) { }
+        if (selection.Source is { Length: > 0 } source) locations.Add(source);
+        var service = SoapPlan.ClientName(selection.Port.Service);
+        return ((IObjectSignature)_es).Children.OfType<IObjectSignature>()
+            .Where(c => Implements(c, "ISOAPClient") && !string.Equals(TypeResolver.Name(c), selection.Client, StringComparison.OrdinalIgnoreCase))
+            .Where(c => locations.Contains(ModelHost.Prop(c, "WSDLLocation")?.ToString()?.Trim() ?? "")
+                || System.Text.RegularExpressions.Regex.IsMatch(TypeResolver.Name(c) ?? "", "^" + System.Text.RegularExpressions.Regex.Escape(service) + "[0-9]*$", System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+            .ToList();
+    }
+
+    /// <summary>Requested methods the client does not have, said as what happened: no client of the WSDL in the module (the
+    /// import did not run: this job runs without the Studio), a client of the WSDL under another name, or the client
+    /// without the methods (the import ran and did not create them). Never a fix that repeats the same delivery.</summary>
+    private static IntegrationProblem MissingMethods(SoapPlan.Selection selection, IObjectSignature? client, List<IObjectSignature> fromWsdl, List<string> missing)
+    {
+        var list = string.Join(", ", missing);
+        string Has(IObjectSignature c) => SoapMethods(c) is { Count: > 0 } m ? string.Join(", ", m.Order(StringComparer.Ordinal)) : "none";
+        if (client != null)
+            return new(IntegrationImport.NeedsStudio, "/data/methods", $"soap: client '{selection.Client}' has no method {list} (its methods: {Has(client)})",
+                $"without the Studio (ssam_job/o11_job) the import is o11_deliver's; in an o11_deliver the import ran and did not create {list}: its integrationImport receipt says why. "
+                + $"The operations of port {selection.Port.Name}: {string.Join(", ", selection.Port.Operations)}; \"refresh\": [\"{missing[0]}\"] imports one again");
+        if (fromWsdl.Count > 0)
+            return new(IntegrationImport.NeedsStudio, "/data/client", $"soap: there is no client '{selection.Client}'; the module has "
+                + string.Join("; ", fromWsdl.Select(c => $"'{TypeResolver.Name(c)}' from this WSDL (methods: {Has(c)})")) + $", and none of them can take the name with {list}"
+                + (fromWsdl.Count > 1 ? " alone" : ""),
+                fromWsdl.Count == 1 ? $"name the client the module has (\"client\": \"{TypeResolver.Name(fromWsdl[0])}\"), or import {list} into it with \"refresh\""
+                    : "name one of them in \"client\": " + string.Join(" | ", fromWsdl.Select(c => $"\"client\": \"{TypeResolver.Name(c)}\"")));
+        return new(IntegrationImport.NeedsStudio, "/data/methods", $"soap: the module has no client of this WSDL: the Service Studio's importer did not run for this op, so {list} must still be imported",
+            "this job ran without the Studio (ssam_job/o11_job): deliver it with o11_deliver, whose bridge imports on a copy of the module (integration_import) before the job applies");
     }
 
     private static bool Mentions(string value, string name) => name.Length > 0 && value.Split(':', '/', '#', '{', '}', ' ').Any(p => string.Equals(p, name, StringComparison.Ordinal));

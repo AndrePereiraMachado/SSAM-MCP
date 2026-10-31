@@ -71,13 +71,53 @@ public sealed partial class ModelSession
             return (copy, null);
         }
         if (FindCreate(target, "IExtendedProperty").Count == 0) return (op, null);
-        var value = op["value"]?.ToString() ?? "";
+        var value = ClassAttributeValue(target, path, op["value"]?.ToString() ?? "");
+        // One class attribute: the one the element has is written, as a Container's Style is replaced; a second one is refused by the Verify.
+        if (ClassAttributeOf(target) is { } existing)
+        {
+            // What the set replaces is said: the author's value appears nowhere else.
+            var from = ClassAttributeText(existing);
+            SetCore(existing, new JsonObject { ["op"] = "set", ["target"] = "@" + existing.ObjectKey, ["prop"] = "Value", ["value"] = value });
+            Touch(existing);
+            Note("SET_PROPERTY_MAPPED", $"{path}: {ShortType(target)} has no Style; the value was written to its extended property class, replacing {from}");
+            return (op, new JsonObject { ["set"] = "Style", ["via"] = "extended property class", ["from"] = from });
+        }
         var extended = Create(new JsonObject { ["op"] = "create", ["parent"] = path, ["type"] = "IExtendedProperty" });
         var created = Resolve("@" + extended["key"]);
         SetCore(created, new JsonObject { ["op"] = "set", ["target"] = "@" + extended["key"], ["prop"] = "Property", ["value"] = "class" });
-        SetCore(created, new JsonObject { ["op"] = "set", ["target"] = "@" + extended["key"], ["prop"] = "Value", ["value"] = "\"" + value.Replace("\"", "\"\"") + "\"" });
+        SetCore(created, new JsonObject { ["op"] = "set", ["target"] = "@" + extended["key"], ["prop"] = "Value", ["value"] = value });
         Note("SET_PROPERTY_MAPPED", $"{path}: {ShortType(target)} has no Style; the classes became its extended property class, as an html class attribute does");
         return (op, new JsonObject { ["set"] = "Style", ["via"] = "extended property class" });
+    }
+
+    /// <summary>The extended property class of an element that keeps its classes there.</summary>
+    private static IObjectSignature? ClassAttributeOf(object target) => (target as IObjectSignature)?.Children.OfType<IObjectSignature>()
+        .FirstOrDefault(c => Implements(c, "IExtendedProperty") && string.Equals(ModelHost.Prop(c, "Property")?.ToString(), "class", StringComparison.OrdinalIgnoreCase));
+
+    private static string ClassAttributeText(IObjectSignature attribute) => ModelHost.Prop(attribute, "Value") is { } value ? ModelHost.Prop(value, "Text")?.ToString() ?? "" : "";
+
+    // What makes a value written as Style an expression and not the text of class names: a string, a call or an operator, a
+    // name with a member (a dotted number is a class, p-0.5), and/or/not, or a - or / of its own. A class name may hold - : / %.
+    private static readonly Regex StyleExpression = new(@"[""()+=<>*&]|\b[A-Za-z_]\w*\.[A-Za-z_]|(?:^|\s)(?:and|or|not|-|/)(?:\s|$)", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    private static readonly Regex StyleName = new(@"^[A-Za-z_]\w*$", RegexOptions.Compiled);
+
+    /// <summary>The expression of the class attribute for a value written as Style: an expression as it is (its Verify judges
+    /// it), class names as their text. One bare name that is also a variable or an input of the element's screen or block has
+    /// two readings and is refused with both.</summary>
+    private string ClassAttributeValue(object target, string path, string written)
+    {
+        var text = written.Trim();
+        if (text.Length == 0) return "\"\"";
+        if (StyleExpression.IsMatch(text))
+        {
+            if (!text.Contains('"')) Note("SET_PROPERTY_MAPPED", $"{path}: {text} reads as an expression and was written as one; if it is class names, write it in quotes: \"{text}\"");
+            return text;
+        }
+        if (StyleName.IsMatch(text))
+            for (var owner = target as IObjectSignature; owner != null; owner = Parent(owner))
+                if (owner.Children.OfType<IObjectSignature>().Any(c => (Implements(c, "ILocalVariable") || Implements(c, "IInputParameter")) && string.Equals(TypeResolver.Name(c), text, StringComparison.OrdinalIgnoreCase)))
+                    throw new InvalidOperationException($"{path}: Style on {ShortType(target)} is its class attribute, and {text} reads two ways: the class name, or the variable {text} of its {ShortType(owner)}. Write \"{text}\" for the class name, or {text} + \"\" for the value of the variable");
+        return "\"" + text + "\"";
     }
 
     private static readonly Regex KindPath = new(@"^\s*I?[A-Z][A-Za-z0-9]*:([A-Za-z_][A-Za-z0-9_]*)/([A-Za-z_][A-Za-z0-9_]*)\s*$", RegexOptions.Compiled);

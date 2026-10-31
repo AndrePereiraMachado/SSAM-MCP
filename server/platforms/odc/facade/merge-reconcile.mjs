@@ -16,8 +16,11 @@
 //   - Never: a merge with known losses (incomplete-receipt.json: its repair job continues), a publication already
 //     requested, a capture refused (a merge still pending), a proof of other files or with any difference. Nothing here
 //     merges, publishes or rewrites a receipt the bridge wrote; every refusal names the exact next call.
+//   - A capture byte for byte the base of the delivery: this module holds none of it (MERGE_NOT_IN_MODULE). That says nothing of
+//     another Studio, so merged stays unknown. No answer here builds a delivery: merge-cut.mjs decides a new one on the module itself.
 import fs from 'node:fs';
 import path from 'node:path';
+import { contentSha256 } from './oml-content-sha.mjs';
 import { evidenceSecurity, securityRefusal } from './security-after-merge.mjs';
 
 export const PROOF_SCHEMA = 'ssam-merge-content-proof/1';
@@ -76,7 +79,8 @@ export function differenceNames(differences, max = 5) {
 }
 const stamp = now => now.toISOString().replace(/[:.]/g, '-');
 // A new evidence file, never over an existing one.
-function writeNew(file, value) { fs.writeFileSync(file, JSON.stringify(value, null, 2), { flag: 'wx' }); return file; }
+// The evidence folder of a cut whose start this server never saw may not be here yet.
+function writeNew(file, value) { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, JSON.stringify(value, null, 2), { flag: 'wx' }); return file; }
 
 // The divergences the bridge named for this merge (deliver-result.json of its lab folder), for the record only.
 function divergencesOf(dir) {
@@ -85,16 +89,24 @@ function divergencesOf(dir) {
   return list.slice(0, 20);
 }
 
+const atBaseOf = (merge, capture) => {
+  if (same(merge.document.baseSha256, capture.sha256)) return true;
+  try {
+    const basePath = merge.document.basePath;
+    return typeof basePath === 'string' && !!basePath && contentSha256(path.resolve(path.dirname(merge.manifest), basePath)).sha256 === contentSha256(capture.path).sha256;
+  } catch { return false; }
+};
+
 // merge: {dir, manifest, document, evidence, started} (studio-publish-log.mjs deliveryMerges, or the delivery in flight).
 // deps.studio: the bridge call; deps.prove({expected, actual}) -> {ok:true, proof} | {ok:false, error} (kernel-delivery.mjs
 // contentProofKernel); deps.next(why): the call that delivers a correction (the delivery again over the module as it is).
 // -> {ok:true, reconciled:true|false, outcome, receipt, reconciliation} | a refusal with code and continuation.
-export async function reconcileMerge({ merge, module, pid } = {}, { studio, prove, next = null, now = () => new Date() } = {}) {
+export async function reconcileMerge({ merge, module, pid, studioPid = null } = {}, { studio, prove, now = () => new Date() } = {}) {
   if (!isObject(merge) || !merge.evidence || !isObject(merge.document))
     return refusal('RECONCILE_NOT_APPLICABLE', 'No SSAM merge evidence to reconcile.', { tool: 'studio_status', arguments: withPid({ view: 'brief' }, pid), why: 'which modules are open in this Studio' });
   const state = mergeState(merge.evidence);
   if (state.clean) return { ok: true, reconciled: false, outcome: state.outcome, receipt: path.join(merge.evidence, 'receipt.json'), ...(state.reconciliationFile ? { reconciliation: { file: state.reconciliationFile } } : {}) };
-  const correction = why => (typeof next === 'function' ? next(why) : null) ?? { tool: 'studio_status', arguments: withPid({ view: 'brief' }, pid), why };
+  const reading = why => ({ tool: 'studio_status', arguments: withPid({ view: 'brief' }, pid), why });
   if (state.outcome === 'security')
     return { ...securityRefusal(state.blocking, { module }), executed: false,
       continuation: { tool: 'studio_status', arguments: withPid({ view: 'brief' }, pid), why: 'the module stays merged and unpublished; a new delivery whose job fixes the warning comes next' } };
@@ -108,7 +120,7 @@ export async function reconcileMerge({ merge, module, pid } = {}, { studio, prov
   const candidateSha256 = typeof merge.document.candidateSha256 === 'string' ? merge.document.candidateSha256 : null;
   if (!candidate || !fs.existsSync(candidate) || !candidateSha256)
     return refusal('RECONCILE_CANDIDATE_MISSING', 'The candidate of this merge (manifest candidatePath and candidateSha256) is not on disk; its content cannot be proven.',
-      correction('without the candidate the merge cannot be proven: a new delivery over the module as it is now merges and proves it again'));
+      reading('without the candidate nothing proves whether this merge is in the module: read the module, and write a new job only for what is missing. Never the job of this delivery'));
   if (typeof prove !== 'function')
     return refusal('RECONCILE_PROOF_UNAVAILABLE', 'This SSAM has no content proof (anvil-odc content-proof); the merge of ' + module + ' stays unproven.',
       { tool: 'ssam_doctor', arguments: {}, why: 'the ODC kernel CLI of this SSAM lacks content-proof: build the ODC lane again, then studio_publish {module, reconcile:true}' });
@@ -124,7 +136,12 @@ export async function reconcileMerge({ merge, module, pid } = {}, { studio, prov
   // A receipt the bridge wrote keeps its hash: a capture of another model is a change after the merge.
   if (state.receipt?.ok === true && typeof state.receipt.sha256 === 'string' && !same(state.receipt.sha256, capture.sha256))
     return refusal('MODULE_CHANGED_SINCE_DELIVERY', 'The module ' + module + ' open in the Studio changed after the merge (receipt ' + state.receipt.sha256 + ', open ' + capture.sha256 + '); SSAM reconciles only what it merged.',
-      correction('the open module changed after the merge: a new delivery captures it as it is now and proves its own merge'));
+      reading('the open module changed after the merge, which is in it: a new job carries only what is new. Never the job of this delivery'));
+  // The open module is the base of this delivery, by the same identity the check of a new delivery uses (merge-cut.mjs): the Studio's
+  // state in the header of the file does not count. None of it is in this module, and that is all this says.
+  if (!state.receipt && atBaseOf(merge, capture))
+    return refusal('MERGE_NOT_IN_MODULE', 'The module ' + module + ' open in this Studio is the base of this delivery (sha256 ' + capture.sha256 + '): none of it is in this module. Whether it is in another Studio, or still on its way, is not known here.',
+      reading('what each Studio has open and runs. A new delivery of this job goes only while the open module is still this base; the server checks it'), { merged: null, inThisModule: false, baseSha256: capture.sha256 });
   // 2. The SSAM content proof of the capture against the candidate.
   let proved;
   try { proved = await prove({ expected: candidate, actual: capture.path }); } catch (error) { proved = { ok: false, error: error.message }; }
@@ -142,7 +159,7 @@ export async function reconcileMerge({ merge, module, pid } = {}, { studio, prov
   ].filter(Boolean);
   const at = now();
   const record = { schema: RECONCILIATION_SCHEMA, accepted: problems.length === 0, rule: RULE, module, moduleKey: merge.document.moduleKey ?? capture.moduleKey ?? null, at: at.toISOString(),
-    manifest: merge.manifest, mergeStartedAt: merge.started?.at ?? null, mergePid: merge.started?.pid ?? null,
+    manifest: merge.manifest, mergeStartedAt: merge.started?.at ?? null, mergePid: merge.started?.pid ?? null, ...(merge.unseen ? { startSeen: false } : {}), ...(Number.isInteger(studioPid) ? { studioPid } : {}),
     candidate: { path: candidate, sha256: candidateSha256 }, capture: { path: capture.path, sha256: capture.sha256, capturedAt: capture.capturedAt ?? null },
     proof: { schema: proof.schema ?? null, accepted: proof.accepted === true, checked: proof.checked ?? null, differences: (differences ?? []).slice(0, 50), differencesTotal: differences?.length ?? null,
       inputs: proof.inputs ?? null, coverage: isObject(proof.coverage) ? { complete: proof.coverage.complete ?? null, boundary: proof.coverage.boundary ?? null } : null },
@@ -150,8 +167,8 @@ export async function reconcileMerge({ merge, module, pid } = {}, { studio, prov
   if (problems.length) {
     const file = writeNew(path.join(merge.evidence, 'reconciliation-refused-' + stamp(at) + '.json'), record);
     return refusal(differences?.length ? 'MERGE_CONTENT_MISMATCH' : 'RECONCILE_PROOF_REFUSED', 'The content of ' + module + ' open in the Studio is not proven equal to the delivery candidate: ' + problems.join('; ') + '. Nothing was published or merged.',
-      { tool: 'ssam_evidence', arguments: { file, pointer: '/proof/differences' }, why: 'each element and property that differs; then the correction is a new delivery over the module as it is now (never this delivery again)' },
-      { reconciliation: { file, accepted: false, problems, differences: record.proof.differences.slice(0, 10) }, then: correction('deliver the correction of those differences over the module as it is now') });
+      { tool: 'ssam_evidence', arguments: { file, pointer: '/proof/differences' }, why: 'each element and property that differs. The job of this delivery may be in the module, whole or in part: the correction is a new job of those differences alone, over the module as it is now, never this delivery again' },
+      { reconciliation: { file, accepted: false, problems, differences: record.proof.differences.slice(0, 10) }, merged: null });
   }
   // 3. The record, then the receipt the bridge's dispatch reads (only when it wrote none).
   const recordFile = path.join(merge.evidence, RECONCILIATION_FILE);

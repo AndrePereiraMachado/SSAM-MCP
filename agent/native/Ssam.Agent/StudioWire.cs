@@ -11,7 +11,14 @@ internal static class StudioWire
     private static readonly UnixStudioPipe UnixPipe = new(MacPlatform.SocketIdentity);
     internal static int ReplyTimeout(string[] words)
     {
-        var wait = 600000d;
+        // Only for a server that sends no timeoutMs: a copy of the rule of bridge-deadlines.json, whose numbers the server line owns.
+        var wait = words[0] switch {
+            "merge" or "reconcile-merge" => 960000d,
+            "portal-upload" => 840000d,
+            "wait" => 1260000d,
+            "publish" => Array.IndexOf(words, "--wait") >= 0 ? 1260000d : 660000d,
+            _ => 600000d
+        };
         if (words[0] == "wait" && double.TryParse(words[^1], out var seconds)) wait = Math.Max(wait, seconds * 1000 + 60000);
         var index = Array.IndexOf(words, "--wait");
         if (words[0] == "publish" && index >= 0 && index + 1 < words.Length && double.TryParse(words[index + 1], out var minutes)) wait = Math.Max(wait, minutes * 60000 + 60000);

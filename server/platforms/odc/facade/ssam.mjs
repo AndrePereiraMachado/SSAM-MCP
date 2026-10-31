@@ -71,6 +71,8 @@ export { MAX_ANSWER_BYTES, maxAnswerBytes, budgetCeiling } from './context-budge
 import { boundedRead, readOptions, readCheckpoint } from './read-budget.mjs';
 import { withStudioWriteLock, busyToolResult, isWrite, isPhased, declaresPhases, PHASES_META, MANAGED_QUEUE_META, processAlive } from './studio-write-lock.mjs';
 import { pendingAccessRestores, registerO11Access, restoreScope } from './o11-access.mjs';
+import { registerO11Users } from './o11-users.mjs';
+import { answerNeverKept } from './hosted/users-agent.mjs';
 import { registerO11Publish } from './o11-publish.mjs';
 import { registerO11Extension } from './o11-extension.mjs';
 import { readLocalSettings } from './local-settings.mjs';
@@ -1335,6 +1337,8 @@ export async function createSsamServer({ o11 = true, odc = true, profile = 'app'
         }
       }
       if (qualityKey) { try { noteAnswer(qualityKey, name, args, shaped); } catch { /* the record never changes an answer */ } }
+      // o11_users hosted: its answers carry people. No page, no omitted part and no replay of it is ever a file of the workspace.
+      if (hosted && name === 'o11_users') return answerNeverKept(shaped);
       const final = pageAnswer(fitResult(name, args, shaped, { root: answersRoot, directory: answersDirectory(), budgets: deps.answerBudgets, origin: kept }),
         { root: answersRoot, directory: answersDirectory(), maxBytes, origin: kept });
       // a8: hosted, the kept answer of a replay is the customer's, in ws:o11/answers with its origin record, as every kept answer.
@@ -1367,7 +1371,8 @@ export async function createSsamServer({ o11 = true, odc = true, profile = 'app'
     // a7 phase 3 (B3): hosted, every answer leaves the deadline through deadlineAnswer (above); the gate's own answers are
     // marked on the way in, so they pass untouched.
     const gated = hosted ? async (...params) => { const answer = await final(...params); if (answer && typeof answer === 'object') passedGate.add(answer); return answer; } : final;
-    const wrapped = deadline.wrap(name, gated, { ...config, exempt: config._meta?.canRequestInput === true });
+    // o11_users hosted: its reads carry people, and a detached call's answer is kept in the workspace, so it waits to the end.
+    const wrapped = deadline.wrap(name, gated, { ...config, exempt: config._meta?.canRequestInput === true || (Boolean(hosted) && name === 'o11_users') });
     return register(name, sdkConfig, inContext ? (...params) => inContext(hosted.context, async () => deadlineAnswer(await wrapped(...params))) : exposeHandler(name, wrapped, argsOf));
   };
   registerPreviewTools(server, { workspace: workspaceRoot, ...(deps.previewOptions ?? {}) });
@@ -1788,6 +1793,7 @@ export async function createSsamServer({ o11 = true, odc = true, profile = 'app'
   // O11 end-user roles by versioned manifest (o11-access.mjs): plan offline; apply EXECUTES with the user's words (one delivery
   // per owner module, bound to the manifest environment), never publishes and never creates accounts.
   registerO11Access(server, { runAnvil: o11Runner, ...(deps.access ?? {}) });
+  registerO11Users(server, deps.users ?? {});
 
   // ssam's own view of both lanes, the first call of a session, with the identity of this server (A09): its root and
   // release, and the session's SSAM root (an MCP root of the client, else the cwd the client launched the server with).

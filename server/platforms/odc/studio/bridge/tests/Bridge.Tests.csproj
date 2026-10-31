@@ -33,6 +33,9 @@
     <Compile Include="..\PublishLogCore.cs" Link="PublishLogCore.cs" />
     <Compile Include="..\MergeDiagnostics.cs" Link="MergeDiagnostics.cs" />
     <Compile Include="..\TemplateCache.cs" Link="TemplateCache.cs" />
+    <Compile Include="..\BridgeServe.cs" Link="BridgeServe.cs" />
+    <Compile Include="..\BridgeDeadlines.cs" Link="BridgeDeadlines.cs" />
+    <EmbeddedResource Include="..\..\..\facade\bridge-deadlines.json" LogicalName="bridge-deadlines.json" />
     <!-- The bridge's copy of the kernel's list, the one the bridge compiles (public-signature-drift.test.mjs keeps it equal). -->
     <Compile Include="..\SecurityWarningsCopy.cs" Link="SecurityWarningsCopy.cs" />
     <Compile Include="..\..\engine\NativeMergeVerification.cs" Link="engine\NativeMergeVerification.cs" />

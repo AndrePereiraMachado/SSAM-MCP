@@ -37,6 +37,7 @@ public static class StudioAssembliesOdc
         AssemblyLoadContext.Default.Resolving += resolver;
         var own = AssemblyLoadContext.GetLoadContext(typeof(StudioAssembliesOdc).Assembly);
         if (own != null && own != AssemblyLoadContext.Default) own.Resolving += resolver;
+        OdcPublicSignature.UseForCaptures();
         // The Reactive widgets plugin (namespace ServiceStudio.Plugin.NRWidgets, e.g. the IExpression widget) is a plain
         // assembly of the ODC install, not a Plugins\ folder as in SS11. Load it now so the kernel's type catalog
         // (ModelApiMetadata.Types) sees the widget interfaces before the first create.

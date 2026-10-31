@@ -101,6 +101,71 @@ public sealed partial class ModelSession
             foreach (var (widget, node, read) in madeExpressions)
                 if (!read && !reported.Contains((node.Line, node.Column)) && (Text(ApiValue(widget, "Value")) ?? "").Trim().Length == 0)
                     problems.Add(new(ScreenDocument.ExpressionEmpty, node.Line, node.Column, "<expr> has no value: the page would show an empty Expression", "<expr value=\"<expression>\"/>, or {{ expression }} in the text"));
+            DeclaredPropertiesKept();
+        }
+
+        // Every property the document declares (os-<Property>, os-on<event>.<Property>, and a boolean or a number of the table) and
+        // what it wrote, read back when the element is finished. A property that does not reach the model is never silence.
+        private readonly List<(IObjectSignature Target, string Kind, string Property, string Value, string AsWritten, ScreenHtml.Node Node, string Attribute)> declaredFacts = [];
+        private int declaredChecked;
+        // What Assign handed the model, in the model's terms (the word of the language, a constant binding, a number as a number): what
+        // a declared property is compared with, never the text of the attribute. Null: nothing was handed as a fact (a reference).
+        private string? assignedFact;
+
+        private void Declared(IObjectSignature target, string kind, string property, string value, ScreenHtml.Node node, string attribute)
+        {
+            var pi = FindProperty(target, property);
+            if (pi == null) return;
+            var now = SafeGet(pi, target);
+            // An attribute of the table with a text or an expression goes through its sugar (class, the literal of prose): os- only.
+            if (!attribute.StartsWith("os-", StringComparison.Ordinal) && now is not (bool or IFormattable)) return;
+            // An expression with a binding is its concatenation, and prose is its literal: what the write left is what must stay.
+            var asWritten = (now is IExpression || pi.PropertyType == typeof(IExpression) ? FactText(now) : assignedFact) ?? value;
+            declaredFacts.Add((target, kind, property, value, asWritten, node, attribute));
+        }
+
+        private void DeclaredPropertiesKept()
+        {
+            foreach (var (target, kind, property, value, asWritten, node, attribute) in declaredFacts)
+            {
+                if (target.WasDeleted || FindProperty(target, property) is not { } pi) continue;
+                var now = SafeGet(pi, target);
+                if (now != null && FactText(now) == null) continue;
+                var text = FactText(now) ?? "";
+                declaredChecked++;
+                if (SameFact(text, asWritten)) continue;
+                var name = TypeResolver.Name(target);
+                var message = $"{attribute}=\"{Clip(value)}\" did not reach {kind}{(name is { Length: > 0 } ? " " + name : "")}: its {property} holds \"{Clip(text)}\" after the compile";
+                // What the platform itself rewrites, and an element of the reading, which keeps what it has (the same rule as Visible
+                // and JavaScript): said, never refused.
+                if (Read(node) && !options.ProveDeclared || ScreenHtmlTables.PlatformRewrites(kind, property))
+                    normalized.Add(new JsonObject { ["code"] = Anvil.Reading.ScreenHtmlEdit.PropertyNotKept, ["line"] = node.Line, ["column"] = node.Column, ["element"] = node.Tag, ["attribute"] = attribute,
+                        ["from"] = ScreenDocument.ClipText(value), ["to"] = ScreenDocument.ClipText(text), ["note"] = message });
+                else if (!reported.Contains((node.Line, node.Column)))
+                    problems.Add(new(Anvil.Reading.ScreenHtmlEdit.PropertyNotKept, node.Line, node.Column, message,
+                        property == "MarginTop" ? TopMarginFix(node, attribute, value) : $"the platform decides {property} here, or another property of the element changed it: leave {attribute} out, or write what {kind} takes"));
+            }
+        }
+
+        // The exact way out of a top margin that does not survive the compile of a new widget, in each form the element has: no style (the
+        // attribute is replaced), a style of text (added to it: a second style= is a duplicate attribute), a style with an expression
+        // (added to its text), a length no style can say (3 col).
+        private static string TopMarginFix(ScreenHtml.Node node, string attribute, string value)
+        {
+            var length = System.Text.RegularExpressions.Regex.Match(value.Trim(), @"^(\d+(?:\.\d+)?)\s*(px|%)?$");
+            if (!length.Success) return $"remove {attribute}=\"{value}\": a style has no such length; write the top margin you mean as margin-top in style=";
+            var margin = "margin-top:" + length.Groups[1].Value + (length.Groups[2].Success ? length.Groups[2].Value : "px");
+            if ((node.Get("style") ?? node.Get("ext:style")) is not { Length: > 0 } style) return $"replace {attribute}=\"{value}\" with style=\"{margin}\"";
+            return ScreenHtml.HoldsBraces(style) ? $"remove {attribute}=\"{value}\" and add {margin} to the text of the style this element has, style=\"{style}\""
+                : $"remove {attribute}=\"{value}\" and add {margin} to the style this element has: style=\"{style.TrimEnd().TrimEnd(';')};{margin}\"";
+        }
+
+        // The same fact: a boolean or a member of an enumeration in any case, a number by its value, a text with any line ending.
+        private static bool SameFact(string now, string declared)
+        {
+            if (string.Equals(now.ReplaceLineEndings("\n"), declared.ReplaceLineEndings("\n"), StringComparison.Ordinal)) return true;
+            if (string.Equals(now, declared, StringComparison.OrdinalIgnoreCase) && now.All(c => char.IsLetterOrDigit(c) || c == '_')) return true;
+            return decimal.TryParse(now, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var a) && decimal.TryParse(declared, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var b) && a == b;
         }
 
         // Whether a widget is a Popup or sits inside one (up to the root): its events default to the Popup's Transition.
