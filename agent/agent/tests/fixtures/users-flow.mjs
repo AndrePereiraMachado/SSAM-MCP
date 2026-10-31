@@ -242,6 +242,25 @@ export const flows = () => [
   { name: 'a password box that is not one, in the form of the second step: the same, and the password goes nowhere', state: { textPassword: true }, steps: [...ready, PASSWORD_WINDOW, WAIT,
     { ...write('set-password', { userId: '42', entry: ENTRY }), expect: { code: 'USERS_PASSWORD_FORM_NOT_KNOWN', executed: null } },
   ], check: s => { same(s.http.length, 1); same(Object.keys(s.vault.passwords), []); } },
+  // Pages of the review's attack table: a form or a control that is not exactly the table's sends nothing, on both agents.
+  { name: 'R2: a form that posts to another user sends nothing', state: { formOf: 'User_Show.aspx?UserId=7' }, steps: [...ready, { ...write('deactivate', { userId: '42' }), expect: { code: 'USERS_PAGE_NOT_KNOWN' } }], check: s => { same(s.http, []); same(s.windows.length, 1); } },
+  { name: 'R2: a form that posts to another page sends nothing', state: { formOf: 'User_Edit.aspx?UserId=42' }, steps: [...ready, { ...write('deactivate', { userId: '42' }), expect: { code: 'USERS_PAGE_NOT_KNOWN' } }], check: s => { same(s.http, []); same(s.windows.length, 1); } },
+  { name: 'R2: a form that posts to another host sends nothing', state: { formOf: 'https://evil.example/Users/User_Show.aspx?UserId=42' }, steps: [...ready, { ...write('deactivate', { userId: '42' }), expect: { code: 'USERS_PAGE_NOT_KNOWN' } }], check: s => { same(s.http, []); same(s.windows.length, 1); } },
+  { name: 'R2: two status links: nothing is chosen, nothing is sent', state: { twoStatusLinks: true }, steps: [...ready, { ...write('deactivate', { userId: '42' }), expect: { code: 'USERS_PAGE_NOT_KNOWN' } }], check: s => { same(s.http, []); same(s.windows.length, 1); } },
+  { name: 'R2: two Save buttons: nothing is chosen, nothing is sent', state: { twoSaves: true }, steps: [...ready, { ...write('update', { userId: '42', changes: { email: 'n@example.invalid' } }), expect: { code: 'USERS_PAGE_NOT_KNOWN' } }], check: s => { same(s.http, []); same(s.windows.length, 1); } },
+  { name: 'R2: event fields the page brings do not go: only the event of the table', state: { hiddenEvent: true }, steps: [...ready, { ...write('deactivate', { userId: '42' }), expect: { status: 200 } }, { ...write('grant-role', { userId: '42', targetId: '8' }), expect: { status: 200 } }], check: s => {
+    same(s.http[0].fields.__EVENTTARGET, 'x$toggle'); same(s.http[0].repeated, undefined);
+    same(s.http[1].fields.__EVENTTARGET, undefined); same(s.http[1].fields.__EVENTARGUMENT, undefined); same(s.http[1].fields.__AJAX, undefined); same(s.http[1].repeated, undefined);
+  } },
+  { name: 'R2: no username on the page: no window with an invented one, and nothing sent', state: { noUsername: true }, steps: [...ready,
+    { ...write('deactivate', { userId: '42' }), expect: { code: 'USERS_PAGE_NOT_KNOWN' } },
+    { ...PASSWORD_WINDOW, expect: { code: 'USERS_PAGE_NOT_KNOWN' } },
+  ], check: s => { same(s.http, []); same(s.windows.length, 1); } },
+  { name: 'R2: a create whose password box is not one sends nothing, and the password leaves', steps: [...ready,
+    { params: { op: 'prompt', host: HOST, kind: 'password', entry: ENTRY, action: 'create', changes: { name: 'New Person', username: 'new.person' } } }, WAIT,
+    { set: { textPasswordOnCreate: true } },
+    { ...write('create', { entry: ENTRY, changes: { name: 'New Person', username: 'new.person' } }), expect: { code: 'USERS_PAGE_NOT_KNOWN' } },
+  ], check: s => { same(s.http, []); same(Object.keys(s.vault.passwords), []); } },
 ];
 export function same(actual, expected) {
   const a = JSON.stringify(actual), b = JSON.stringify(expected);

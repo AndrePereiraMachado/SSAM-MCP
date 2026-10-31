@@ -151,6 +151,12 @@ function Redact([string]$text,[string]$secret) {
  foreach($echo in ($forms|Select-Object -Unique)){ $text=[regex]::Replace($text,[regex]::Escape($echo),'[redacted]','IgnoreCase') }
  return $text
 }
+# What leaves this process about a page: with every value it put in the request taken out, in the body and in the address.
+function PageAnswer($page,$secrets) {
+ $body=$page.Body;$location=$page.Location
+ foreach($s in $secrets){$body=Redact $body $s;$location=Redact $location $s}
+ @{ok=$true;status=$page.Status;location=(B64 $location);contentType=(B64 $page.ContentType);setCookie=$page.Cookies;body=(B64 $body)}|ConvertTo-Json -Compress
+}
 try {
  if ($Mode -ne 'prompt' -and $Mode -ne 'confirm') { Sweep; SweepPasswords }
  if ($Mode -eq 'sign-out') {
@@ -284,9 +290,8 @@ try {
  if($r.cookie){$jar.SetCookies($uri,([string]$r.cookie).Replace('; ', ', '))}
  $bytes=if($r.method -eq 'POST'){[Text.Encoding]::UTF8.GetBytes(($pairs -join '&'))}else{$null};$pairs.Clear()
  $page=Http $uri $r.method $jar $bytes
- $body=$page.Body;$location=$page.Location
- foreach($s in $secrets){$body=Redact $body $s;$location=Redact $location $s};$secrets.Clear()
- @{ok=$true;status=$page.Status;location=(B64 $location);contentType=(B64 $page.ContentType);setCookie=$page.Cookies;body=(B64 $body)}|ConvertTo-Json -Compress
+ PageAnswer $page $secrets
+ $secrets.Clear()
 }catch{
  @{ok=$false;code='USERS_PRIVATE_REQUEST_FAILED'}|ConvertTo-Json -Compress
  exit 1

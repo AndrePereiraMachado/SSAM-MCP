@@ -12,15 +12,17 @@ const done = value => { fs.writeFileSync(file, JSON.stringify(state)); process.s
 const input = () => Buffer.from(fs.readFileSync(0, 'utf8').trim(), 'base64').toString('utf8');
 state.calls.push(mode);
 
-const form = (action, body) => `<html><body><!-- <input name="commented" value="x"> --><form method="post" action="${action}"><input type="hidden" name="__OSVSTATE" value="state-of-${action}">${body}</form></body></html>`;
+const EVENT_FIELDS = '<input type="hidden" name="__EVENTTARGET" value="x$del"><input type="hidden" name="__EVENTARGUMENT" value="page"><input type="hidden" name="__AJAX" value="page">';
+const form = (action, body) => `<html><body><!-- <input name="commented" value="x"> --><form method="post" action="${(!action.startsWith('Role_') && !action.startsWith('Group_') && state.formOf) || action}"><input type="hidden" name="__OSVSTATE" value="state-of-${action}">${state.hiddenEvent ? EVENT_FIELDS : ''}${body}</form></body></html>`;
 function show(u) {
   const link = state.noStatusLink ? '' : `<a id="x_wtEnableDisableLink" href="#" onclick="OsAjax(event,'x_wtEnableDisableLink','x$toggle','','__OSVSTATE,','');">${u.active ? 'Set as Inactive' : 'Set as Active'}</a>`;
   return form(`User_Show.aspx?UserId=${u.id}`, `<h1>${u.name}</h1>${link}<a id="x_wtSetPassword" href="#" onclick="OsAjax(event,'x_wtSetPassword','x$setpw','','__OSVSTATE,','');">Set Password</a>`
-    + `<table id="x_wtUserShow"><tr><td>Username</td><td>${u.username}</td></tr><tr><td>Email</td><td>${u.email}</td></tr></table>`
+    + (state.twoStatusLinks ? `<a id="y_wtEnableDisableLink" href="#" onclick="OsAjax(event,'y_wtEnableDisableLink','x$del','','__OSVSTATE,','');">${u.active ? 'Set as Inactive' : 'Set as Active'}</a>` : '')
+    + `<table id="x_wtUserShow">${state.noUsername ? '' : `<tr><td>Username</td><td>${u.username}</td></tr>`}<tr><td>Email</td><td>${u.email}</td></tr></table>`
     + `<div><input id="x_wtNewRole" name="x$wtNewRole"><input id="x_wttxtAutoCompleteValue" name="x$role">${state.noAdd ? '' : '<input id="x_addRole" type="submit" name="x$addRoleBtn" value="Add">'}</div>`
     + `<div><input id="x_wtNewGroupInput" name="x$wtNewGroupInput"><input id="y_wttxtAutoCompleteValue" name="x$group"><input id="y_add" type="submit" name="x$addGroupBtn" value="Add"></div>`);
 }
-const edit = u => form(`User_Edit.aspx${u ? '?UserId=' + u.id : ''}`, `<input id="x_wtUser_Name" name="x$wtUser_Name" value="${u?.name ?? ''}"><input id="x_wtUser_Username" name="x$wtUser_Username" value="${u?.username ?? ''}"><input id="x_wtUser_Email" name="x$wtUser_Email" value="${u?.email ?? ''}"><input id="x_wtUser_Phone" name="x$wtUser_Phone" value=""><input id="x_wtPasswordInput" name="x$wtPasswordInput" type="password"><input id="x_wtConfirmPasswordInput" name="x$wtConfirmPasswordInput" type="password"><input type="submit" name="x$save" value="Save"><input type="submit" name="x$del" value="Delete this User">`);
+const edit = u => form(`User_Edit.aspx${u ? '?UserId=' + u.id : ''}`, `<input id="x_wtUser_Name" name="x$wtUser_Name" value="${u?.name ?? ''}"><input id="x_wtUser_Username" name="x$wtUser_Username" value="${u?.username ?? ''}"><input id="x_wtUser_Email" name="x$wtUser_Email" value="${u?.email ?? ''}"><input id="x_wtUser_Phone" name="x$wtUser_Phone" value=""><input id="x_wtPasswordInput" name="x$wtPasswordInput" type="${state.textPasswordOnCreate ? 'text' : 'password'}"><input id="x_wtConfirmPasswordInput" name="x$wtConfirmPasswordInput" type="password"><input type="submit" name="x$save" value="Save">${state.twoSaves ? '<input type="submit" name="x$del" value="Save">' : ''}<input type="submit" name="x$del" value="Delete this User">`);
 const list = page => form(page, `<input id="x_wtSearchInput" name="x$wtSearchInput"><input type="submit" name="x$search" value="Search"><table id="x_wtUserTable"></table>`);
 const PASSWORD_INPUTS = `<input id="x_wtNewPasswordInput" name="x$wtNewPasswordInput" type="${state.textPassword ? 'text' : 'password'}"><input id="x_wtConfirmPasswordInput" name="x$wtConfirmPasswordInput" type="password"><input type="submit" name="x$savepw" value="Save">`;
 const passwordForm = u => form(`User_Show.aspx?UserId=${u.id}`, PASSWORD_INPUTS);
@@ -79,7 +81,9 @@ if (mode === 'request') {
   const r = JSON.parse(input());
   const url = new URL(r.url), id = url.searchParams.get('UserId'), fields = new Map(r.fields ?? []);
   const named = Object.fromEntries((r.fields ?? []).filter(([k]) => k !== '__OSVSTATE'));
-  if (r.method === 'POST') state.http.push({ path: url.pathname + url.search, state: fields.get('__OSVSTATE'), fields: named, secretFields: (r.secretRefs ?? []).map(ref => ref.field), cookie: r.cookie });
+  // A field sent twice would not show in the map: the site gets both.
+  const names = (r.fields ?? []).map(([k]) => k), repeated = names.filter((k, i) => names.indexOf(k) !== i);
+  if (r.method === 'POST') state.http.push({ path: url.pathname + url.search, state: fields.get('__OSVSTATE'), fields: named, secretFields: (r.secretRefs ?? []).map(ref => ref.field), cookie: r.cookie, ...(repeated.length ? { repeated } : {}) });
   const reply = (html, status = 200, location = '') => done({ ok: true, status, location: b64(location), contentType: b64('text/html'), setCookie: [], body: b64(html) });
   if (state.loginPageNext) { state.loginPageNext = false; reply(login()); }
   if (!r.cookie) reply(login());

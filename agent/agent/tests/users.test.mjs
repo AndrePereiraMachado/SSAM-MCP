@@ -16,7 +16,7 @@ import { usersRows, addressRows, lookalikeRows, HOST, b64 } from './fixtures/use
 import { flows, runNode, verify, tempDir } from './fixtures/users-flow.mjs';
 
 // The sha both sides name: here and platforms/odc/facade/tests/o11-users-hosted.test.mjs in the server line.
-const VAULT_SHA256 = 'b7e6b8a27dee3d8d433bfb318ecc07bfb3fc55cd2ca6c59941e8059941480214';
+const VAULT_SHA256 = 'a18fe3be53edf15ab5f232e9c7ca9e16ac7156a55ae9d9bdf36abc68f60c24e4';
 const tmp = t => { const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ssam-users-')); t.after(() => fs.rmSync(dir, { recursive: true, force: true })); return dir; };
 const codeOf = fn => { try { fn(); return 'ok'; } catch (error) { return error.code; } };
 
@@ -188,7 +188,7 @@ function helperFunctions(t, body) {
   const script = path.join(tmp(t), 'run.ps1');
   fs.writeFileSync(script, `$ErrorActionPreference='Stop'
 $ast=[Management.Automation.Language.Parser]::ParseFile(${JSON.stringify(USERS_HELPER).replace(/^"|"$/g, "'").replace(/\\\\/g, '\\')},[ref]$null,[ref]$null)
-foreach($fn in $ast.FindAll({param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst]},$true)){ if($fn.Name -in 'Attr','Form','Redact','LoginPlan','LoginResult','LoginAnswer','ConfirmForm','ReadCapped','Prefix','Sweep','SweepPasswords','SweepAllPasswords'){ . ([ScriptBlock]::Create($fn.Extent.Text)) } }
+foreach($fn in $ast.FindAll({param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst]},$true)){ if($fn.Name -in 'Attr','Form','Redact','LoginPlan','LoginResult','LoginAnswer','ConfirmForm','ReadCapped','Prefix','Sweep','SweepPasswords','SweepAllPasswords','B64','PageAnswer'){ . ([ScriptBlock]::Create($fn.Extent.Text)) } }
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 ${body}
@@ -266,6 +266,17 @@ test('C2: the agent starts the sweep when a mark says a password may be there, a
     for (let i = 0; i < 100 && marked && !modes.length; i++) await new Promise(r => setTimeout(r, 10));
     assert.deepEqual(modes, marked ? ['sweep'] : []);
   }
+});
+test('what the helper answers about a page has the value it sent taken out, in the body and the address', windowsOnly, t => {
+  const r = helperFunctions(t, `$s='P@ss w0rd'
+$page=[pscustomobject]@{Status=200;Location=('https://h/x?v='+[Uri]::EscapeDataString($s));ContentType='text/html';Cookies=@();Body=('<input value="'+$s+'">')}
+$a=(PageAnswer $page @($s))|ConvertFrom-Json
+@{ok=$a.ok;status=$a.status;body=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($a.body));location=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($a.location))}|ConvertTo-Json -Compress`);
+  assert.equal(r.ok, true);
+  assert.equal(r.status, 200);
+  assert.equal(r.body, '<input value="[redacted]">');
+  assert.equal(r.location, 'https://h/x?v=[redacted]');
+  assert.match(fs.readFileSync(USERS_HELPER, 'utf8'), /\n PageAnswer \$page \$secrets\r?\n/);
 });
 test('what the sign-in answers is what LoginResult decided, never a yes by itself', windowsOnly, t => {
   const r = helperFunctions(t, `$h='tenant-a.example.test'
