@@ -7,7 +7,8 @@ export const readListingBudget=root=>JSON.parse(fs.readFileSync(path.join(root,'
 const DEFAULT_PACK={odcBridge:'v97',o11BuiltFor:'11.55.92',o11Hook:'dev',odcBridgeAccepted:['v96','v48','v45']};
 // privateDir: where the test server's state, its features and its cache live during the smoke (private, outside C:/t;
 // removed in finally). dir keeps only the evidence (kernel.json, the server log without credentials, the commands).
-export async function smokeImage({pair,bundle,dir,root,docker,served,pack=DEFAULT_PACK,budget,privateDir}){
+// offers and offerCheck (a rehearsal): the signed bridges the image must offer and deliver, asked by check-backend.mjs inside it.
+export async function smokeImage({pair,bundle,dir,root,docker,served,pack=DEFAULT_PACK,budget,privateDir,offers,offerCheck}){
  if(!budget||!Number.isInteger(budget.tools)||!Number.isInteger(budget.totalBytes))throw Error('The smoke test needs the listing budget.');
  if(!privateDir||/^c:[\\/]t(?:[\\/]|$)/i.test(path.resolve(privateDir)))throw Error('The smoke test needs a private folder outside C:/t for the test server state.');
  pack={...DEFAULT_PACK,...pack};const hello={odcBridge:pack.odcBridge,o11BuiltFor:pack.o11BuiltFor,o11Hook:pack.o11Hook};
@@ -49,7 +50,11 @@ console.log(JSON.stringify({ok:true,healthy:true,agentAccepted:true,tools:tools.
 } catch(error) { console.error('SMOKE_CHECK:'+error.message); process.exitCode=1; }`;
   const checked=await docker(['exec','-i',name,'node','--input-type=module'],{input:script,dir,secret:true,allowFailure:true});
   if(checked.code!==0)throw Error(checked.stderr.split('\n').find(x=>x.startsWith('SMOKE_CHECK:'))??'Image smoke script failed.');
-  return {...JSON.parse(checked.stdout),warm};
+  if(offers){
+   const asked=await docker(['exec','-i',name,'node','--input-type=module'],{input:offerCheck,dir,secret:true,allowFailure:true});
+   if(asked.code!==0)throw Error('The image did not offer or deliver its signed bridges.');
+  }
+  return {...JSON.parse(checked.stdout),warm,...(offers?{offersChecked:offers.length}:{})};
  }catch(error){return {ok:false,error:error.message};}
  finally{
   if(created){const logs=await docker(['logs',name],{allowFailure:true});const text=logs.stdout+logs.stderr;

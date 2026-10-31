@@ -9,10 +9,12 @@ import {fileURLToPath} from 'node:url';
 import {verifyBridge} from '../../platforms/odc/facade/bridge-store.mjs';
 import {detectSources,downloadInstaller} from './sources.mjs';
 import {readListingBudget} from './smoke.mjs';
-import {assertPause,assertTime,canonicalComposeHash,cleanupSsh,cleanupRollback,liveBaseline,composeHash,unchanged,preserveCompose} from './safety.mjs';
+import {refuseInRehearsal,assertPause,assertTime,canonicalComposeHash,cleanupSsh,cleanupRollback,liveBaseline,composeHash,unchanged,preserveCompose} from './safety.mjs';
 const here=path.dirname(fileURLToPath(import.meta.url));
 const hash=b=>createHash('sha256').update(b).digest('hex');
 const q=s=>"'"+String(s).replaceAll("'","'\\''")+"'";
+// The official releases this round verifies: those the window does not serve. A rehearsal verifies the served ones too: that is what it rehearses.
+export const releasesToVerify=(observed,manifest,rehearsal=false)=>observed.filter(x=>x.url&&(rehearsal||!manifest[x.lane].some(v=>v.version===x.version)));
 export function createAutoRuntime(config,runtime) {
  const root=path.resolve(config.workspace),priv=path.resolve(config.tempRoot),settings=config.automaticDeployment??{};
  // The ODC features provenance is a journal too: unsigned records are never written or accepted there.
@@ -40,6 +42,7 @@ export function createAutoRuntime(config,runtime) {
   configureJournals(config.outDir,s.journalKey);configureJournals(priv,s.journalKey);if(config.bundleRoot)configureJournals(config.bundleRoot,s.journalKey);configureJournals(featuresRoot,s.journalKey);cached=s;return s;
  }
  async function api(s,method,route,body) {
+  if(config.rehearsal&&method!=='GET')refuseInRehearsal('Coolify '+method);
   if(method!=='GET'){if(!activeLease)throw Error('Remote release lease is required.');activeLease.assertHeld();await ssh(s,{action:'fence'});}
   const response=await fetch(settings.coolify.url.replace(/\/$/,'')+'/api/v1'+route,{
    method,redirect:'error',headers:{authorization:'Bearer '+s.coolifyToken,'content-type':'application/json'},
@@ -49,6 +52,8 @@ export function createAutoRuntime(config,runtime) {
  }
  const resource=()=>'/services/'+settings.coolify.resource;
  async function ssh(s,request) {
+  // Capacity only reads memory and disk. The snapshot looks like a read, but it issues and revokes a token on the live server.
+  if(config.rehearsal&&request.action!=='capacity')refuseInRehearsal('SSH '+request.action);
   if(['backup','prepare','check','preflight'].includes(request.action)){if(!activeLease)throw Error('Remote release lease is required.');activeLease.assertHeld();}
   const folder=path.join(priv,'ssh-'+randomUUID());fs.mkdirSync(folder,{recursive:true});
   const key=path.join(folder,'identity');
@@ -86,6 +91,7 @@ export function createAutoRuntime(config,runtime) {
    return this.acquireReleaseLock(s);
   },
   async acquireReleaseLock(s){
+   if(config.rehearsal)refuseInRehearsal('the VPS release lock');
    const folder=path.join(priv,'ssh-'+randomUUID());fs.mkdirSync(folder,{recursive:true});const key=path.join(folder,'identity');
    try{
     if(process.platform==='win32')await runtime.run('C:/Windows/System32/icacls.exe',[folder,'/inheritance:r','/grant:r',`${process.env.USERDOMAIN}\\${process.env.USERNAME}:(OI)(CI)F`],{secret:true,evenWhenStopping:true});
@@ -104,8 +110,7 @@ export function createAutoRuntime(config,runtime) {
    runtime.sourceStatus=result.sources;
    if(dryRun)return result.observed;
    const verified=[];
-   for(const release of result.observed.filter(x=>x.url)){
-    if(manifest[release.lane].some(x=>x.version===release.version))continue;
+   for(const release of releasesToVerify(result.observed,manifest,!!config.rehearsal)){
     runtime.diskPreflight();
     const downloaded=await downloadInstaller(release,config.installersDir??'C:/ssam-priv/vigia-installers');
     const signer=await runtime.verifyPublisher(downloaded.file);
@@ -137,7 +142,7 @@ export function createAutoRuntime(config,runtime) {
    for(const b of Object.values(bundles)){verifyBundleCustody(b,config.bundlePins?.[`${b.lane}-${b.version}`]);if(b.provenance)await runtime.verifyInput(b.provenance);}
    const agentSource=await runtime.agentSource();
    const s=await secrets(),key=createPublicKey(s.manifestPrivateKey).export({type:'spki',format:'pem'});
-   const stage=path.join(priv,'bridges',randomUUID());fs.mkdirSync(stage,{recursive:true});
+   const staging=config.rehearsal?.dir??priv,stage=path.join(staging,'bridges',randomUUID());fs.mkdirSync(stage,{recursive:true});
    fs.writeFileSync(path.join(stage,'public-key.pem'),key);
    // The client names the bridge of each runtime: Version for the net10 ODC Studios, EarlierVersion for the net8 ones (Bridge.csproj).
    const clientSource=fs.readFileSync(path.join(root,'server/platforms/odc/studio/bridge/client/Program.cs'),'utf8');
@@ -182,7 +187,8 @@ export function createAutoRuntime(config,runtime) {
       files.push({path:sub+'/'+name,sha256:hash(bytes),size:bytes.length,...(/\.(dll|exe)$/i.test(name)?{signer:record?.signer}:{})});
      }
     }
-    const sequenceFile=path.join(priv,'bridge-sequences.json');let sequences={};if(fs.existsSync(sequenceFile))sequences=JSON.parse(fs.readFileSync(sequenceFile,'utf8'));
+    // A rehearsal never advances the sequence real offers count on.
+    const sequenceFile=path.join(staging,'bridge-sequences.json');let sequences={};if(fs.existsSync(sequenceFile))sequences=JSON.parse(fs.readFileSync(sequenceFile,'utf8'));
     const identity=lane+':'+b.version;const sequence=(sequences[identity]??0)+1;sequences[identity]=sequence;
     fs.writeFileSync(sequenceFile+'.next',JSON.stringify(sequences));fs.renameSync(sequenceFile+'.next',sequenceFile);
     const manifest={schema:1,lane,studioVersion:b.version,runtime:b.tfm,protocol:p,sequence,createdAt:new Date().toISOString(),files,authenticodeThumbprint:s.authenticodeThumbprint};
@@ -190,7 +196,7 @@ export function createAutoRuntime(config,runtime) {
     fs.writeFileSync(path.join(target,'manifest.json'),bytes);fs.writeFileSync(path.join(target,'manifest.sig'),sign(null,bytes,s.manifestPrivateKey));
     offers.push(verifyBridge(target,key).manifest);
    }
-   runtime.bridgeStage=stage;
+   runtime.bridgeStage=stage;runtime.bridgeOffers=offers.map(({lane,studioVersion,protocol,sequence})=>({lane,studioVersion,protocol,sequence}));
    const kernels=JSON.parse(fs.readFileSync(path.join(root,'server/deploy/coolify/r1-kernels.json'),'utf8'));
    const known=Object.values(kernels).find(k=>k.odc===pair.odc&&k.o11===pair.o11);
    return {stage,offers:offers.map(({lane,studioVersion,protocol,sequence})=>({lane,studioVersion,protocol,sequence})),kernel:{o11:pair.o11,odc:pair.odc,odcBridge:protocol,odcBridgeAccepted:[...new Set([protocol,...(known?.odcBridgeAccepted??[])])],o11BridgeAccepted:['d1']}};
@@ -205,6 +211,7 @@ export function createAutoRuntime(config,runtime) {
    fs.writeFileSync(file,await protect(JSON.stringify(snapshot)),{mode:0o600});
    return {file,hash:composeHash(snapshot.compose),manifest:baseline.manifest,kernels:baseline.kernels,telemetry:baseline.telemetry};
   },
+  async assertCoolifyReadable(s){if(typeof (await api(s,'GET',resource())).docker_compose_raw!=='string')throw Error('Coolify live compose is missing.');},
   async assertLiveUnchanged(s,baseline){unchanged(baseline,(await api(s,'GET',resource())).docker_compose_raw);},
   async composeFor(s,baseline,pinned){return preserveCompose(await load(baseline),pinned);},
   backup:(s,id)=>ssh(s,{action:'backup',id}),

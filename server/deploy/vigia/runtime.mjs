@@ -15,7 +15,7 @@ import {busyDotnet} from './host.mjs';
 import {peFileVersion} from '../kernel-pair-check.mjs';
 import {createAutoRuntime} from './auto-runtime.mjs';
 import {createFeaturesStore,featuresSummary,verifyFeaturesUse} from './features-carry.mjs';
-import {executionSource,agentReleasePin,signingPolicy} from './safety.mjs';
+import {executionSource,agentReleasePin,signingPolicy,refuseInRehearsal,rehearsalRefuses} from './safety.mjs';
 const here=path.dirname(fileURLToPath(import.meta.url));
 const slash=p=>p.replaceAll('\\','/');
 const bashPath=p=>slash(p).replace(/^([A-Za-z]):/,(_,drive)=>'/'+drive.toLowerCase());
@@ -103,6 +103,7 @@ export async function createRuntime(config,{log=()=>{}}={}){
  const cutShort=()=>new EnvironmentError('The round reached its time limit; its commands were stopped.','round-timeout');
  async function run(command,args,{env={},input,dir,allowFailure=false,secret=false,cwd=root,timeoutMs=0,evenWhenStopping=false}={}){
   if(stopping&&!evenWhenStopping)throw cutShort();
+  if(config.rehearsal){const refused=rehearsalRefuses(command,args);if(refused)refuseInRehearsal(refused);}
   // PowerShell 7 hosts otherwise pass their incompatible module path to 5.1.
   if(process.platform==='win32'&&command===exe.powershell)env={PSModulePath:'C:/Windows/System32/WindowsPowerShell/v1.0/Modules;'+(process.env.PSModulePath??''),...env};
   if(dir){fs.mkdirSync(dir,{recursive:true});fs.appendFileSync(path.join(dir,'commands.jsonl'),JSON.stringify({time:new Date().toISOString(),command,args:secret?['(not recorded)']:args,cwd,env:Object.keys(env)})+'\n');}
@@ -140,11 +141,11 @@ export async function createRuntime(config,{log=()=>{}}={}){
  }
  // A bundle in the store that does not check out is never bundled over (it may be another session's, half-written, or
  // the one a published image was built from): the lane waits for a person to review the store.
- function verifyBundle(lane,v,file){
+ function verifyBundle(lane,v,file,{pinned=true}={}){
   const review=why=>new EnvironmentError(`${why}: ${file}. Review the bundle store; nothing was bundled over or changed.`,'store-mismatch',[lane]);
   const sha=hash(file);let recorded='';try{recorded=fs.readFileSync(file+'.sha256','utf8').toLowerCase();}catch{throw review('The bundle has no .sha256 beside it');}
   if(!recorded.includes(sha))throw review('The bundle checksum does not match its .sha256');
-  const pin=config.bundlePins?.[`${lane}-${v}`];if(config.automatic&&!pin&&!fs.existsSync(file+'.provenance.json'))throw review('Bundle requires a reviewed pin or installer provenance');if(pin&&pin.toLowerCase()!==sha)throw review(`The bundle is not the pinned one (bundlePins ${lane}-${v})`);
+  const pin=pinned?config.bundlePins?.[`${lane}-${v}`]:null;if(config.automatic&&!pin&&!fs.existsSync(file+'.provenance.json'))throw review('Bundle requires a reviewed pin or installer provenance');if(pin&&pin.toLowerCase()!==sha)throw review(`The bundle is not the pinned one (bundlePins ${lane}-${v})`);
   return sha;
  }
  // The features of an ODC version (the tenant's feature flags) live only in the private featuresRoot, never under C:/t,
@@ -320,7 +321,8 @@ export async function createRuntime(config,{log=()=>{}}={}){
   },
   async bundle(candidate,dir){
    if(config.automatic)await runtime.verifyInput(candidate.provenance);
-   const folder=storeDir(candidate.lane,candidate.version);fs.mkdirSync(folder,{recursive:true});
+   // A rehearsal bundles the verified installer in its own folder: the store's pinned bundle of this version stays untouched.
+   const folder=config.rehearsal?path.join(config.rehearsal.dir,'bundles',`${candidate.lane}-${candidate.version}`):storeDir(candidate.lane,candidate.version);fs.mkdirSync(folder,{recursive:true});
    // A bundle of this build already in the store is used as it is, or the lane waits (verifyBundle); only a build the
    // store does not have yet is bundled.
    let found=bundleFile(folder,candidate.lane,candidate.version,candidate.fullVersion);
@@ -332,7 +334,7 @@ export async function createRuntime(config,{log=()=>{}}={}){
     if(!found)throw new EnvironmentError(`studio-bundle.ps1 did not write ${candidate.lane}-studio-${candidate.fullVersion}.tar.gz.`,'bundle',[candidate.lane]);
    }
    if(config.automatic){await runtime.verifyInput(candidate.provenance);writeJournal(found.file+'.provenance.json',candidate.provenance);}
-   const sha256=verifyBundle(candidate.lane,candidate.version,found.file);
+   const sha256=verifyBundle(candidate.lane,candidate.version,found.file,{pinned:!config.rehearsal});
    const snapshot=await freeze(folder,found.file,found.fullVersion,candidate.studio,candidate.lane,dir);
    // The features of this ODC version: its exact file, an export of this machine's ODC Studio cache (the optional
    // featuresSource) when it is for this version, else the nearest exact file carried (featuresFor).
@@ -372,6 +374,7 @@ export async function createRuntime(config,{log=()=>{}}={}){
    await checkWorkspace();
    const commitShort=(await git(['rev-parse','--short=7','HEAD'])).stdout.trim(),revision=(await git(['rev-parse','HEAD'])).stdout.trim();
    const tag=pairTag(pair,commitShort,new Date().toISOString().slice(0,10).replaceAll('-',''))+(config.automatic?'-a'+crypto.randomUUID().replaceAll('-','').slice(0,12):'');
+   const imageTag=config.rehearsal?tag.replace(/^prod-/,'rehearsal-'):tag;
    const installers=path.join(temp,'installers',pairId(pair));fs.rmSync(installers,{recursive:true,force:true});fs.mkdirSync(installers,{recursive:true});
    try{
     for(const b of Object.values(bundles)){const to=path.join(installers,path.basename(b.file));try{fs.linkSync(b.file,to);}catch{fs.copyFileSync(b.file,to);}}
@@ -381,20 +384,20 @@ export async function createRuntime(config,{log=()=>{}}={}){
     const custody=JSON.stringify(Object.fromEntries(Object.entries(bundles).map(([lane,b])=>[lane,b.provenance??{bundlePin:b.sha256}])));
     const custodyFile=path.join(installers,'provenance.json');fs.writeFileSync(custodyFile,custody);
     const extra=runtime.bridgeStage?['--build-context','client-bridges='+slash(runtime.bridgeStage)]:[];
-    const r=await run(exe.bash,[slash(path.join(root,'server/deploy/build.sh')),'--image',image,'--tag',tag,'--','--progress','plain',...extra,'--label','pro.ssam.studio-provenance-sha256='+hash(custodyFile),'--build-context','studio-provenance='+slash(installers)],{dir,env,allowFailure:true,timeoutMs:(config.buildTimeoutMinutes??120)*60000});
+    const r=await run(exe.bash,[slash(path.join(root,'server/deploy/build.sh')),'--image',image,'--tag',imageTag,'--','--progress','plain',...extra,'--label','pro.ssam.studio-provenance-sha256='+hash(custodyFile),'--build-context','studio-provenance='+slash(installers)],{dir,env,allowFailure:true,timeoutMs:(config.buildTimeoutMinutes??120)*60000});
     if(r.code!==0){
      const cause=buildCause(r);
      if(cause.environmental)throw new EnvironmentError(`build.sh could not finish for an environment reason (${cause.why}; exit ${r.code}); the round retries. See ${path.join(dir,'commands.jsonl')}.`,'build-environment');
      throw Error(`build.sh failed (exit ${r.code})${cause.why?': '+cause.why:''}. See ${path.join(dir,'commands.jsonl')}.`);
     }
     const sha256=JSON.parse(fs.readFileSync(metadata,'utf8'))['containerimage.digest'].replace(/^sha256:/,'');
-    return {odc:bundles.odc.version,o11:bundles.o11.version,image,tag,sha256,revision:commitShort,commit:revision,provenance:JSON.parse(custody)};
+    return {odc:bundles.odc.version,o11:bundles.o11.version,image,tag:imageTag,sha256,revision:commitShort,commit:revision,provenance:JSON.parse(custody)};
    }finally{fs.rmSync(installers,{recursive:true,force:true});}
   },
   async smoke(built,bundles,served,dir){
    const pack=runtime.bridgeKernel?{...runtime.bridgeKernel,o11BuiltFor:built.o11}:packFor(config,bundles);
    verifyFeaturesUse(bundles.odc.features,bundles.odc.featuresProvenance);
-   return smokeImage({pair:built,bundle:{features:bundles.odc.features},dir,root,docker,served,pack,budget:readListingBudget(root),privateDir:path.join(temp,'smoke')});
+   return smokeImage({pair:built,bundle:{features:bundles.odc.features},dir,root,docker,served,pack,budget:readListingBudget(root),privateDir:path.join(temp,'smoke'),...(config.rehearsal&&runtime.bridgeOffers?{offers:runtime.bridgeOffers,offerCheck:'const expected='+JSON.stringify({budget:readListingBudget(root),offers:runtime.bridgeOffers})+';\n'+fs.readFileSync(path.join(here,'check-backend.mjs'),'utf8')}:{})});
   },
   // The proposal branch starts from HEAD, or from the newest approved pin main does not carry yet (base), so merging the
   // newest proposal brings the approved one too, without a conflict in versions.json.

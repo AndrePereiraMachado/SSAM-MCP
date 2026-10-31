@@ -54,6 +54,16 @@ export function assertRetained(baseline,next){
   for(const lane of ['odc','o11'])if(['version','image','tag','sha256'].some(k=>next[lane][at][k]!==baseline.manifest[lane][i][k]))fail('A retained live image was changed.','LIVE_DOWNGRADE');
  }
 }
+// A rehearsal (rehearse.mjs): what no command and no door may do, whatever calls it.
+export function refuseInRehearsal(what){throw Object.assign(Error('A rehearsal never does this: '+what+'.'),{code:'REHEARSAL_REFUSED'});}
+export function rehearsalRefuses(command,args=[]){
+ const words=args.map(String),name=String(command).replaceAll('\\','/').split('/').pop().toLowerCase();
+ if(words.some(w=>/(^|[\\/])publish\.sh$/i.test(w)))return 'publish.sh';
+ if(words.includes('--push'))return 'a push of an image';
+ if(/^(docker|git)(\.exe)?$/.test(name)&&words.includes('push'))return name.replace('.exe','')+' push';
+ if(/^(scp|sftp|rsync)(\.exe)?$/.test(name))return name.replace('.exe','');
+ return null;
+}
 export function assertPause(file='C:/ssam-priv/vigia/PAUSE'){try{fs.statSync(file);fail('Watcher paused by the owner.','PAUSED');}catch(e){if(e.code!=='ENOENT')throw e;}}
 export function memoryFloor(backends){if(!Number.isInteger(backends)||backends<1||backends>20)fail('Invalid proposed backend count.','MEMORY_LOW');return Math.max(1024,backends*1024);}
 export function assertMemory(availableMiB,backends){if(!Number.isFinite(availableMiB)||availableMiB<memoryFloor(backends))fail('Not enough available memory for the proposed window.','MEMORY_LOW');}

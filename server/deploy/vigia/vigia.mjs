@@ -3,7 +3,8 @@
 //                 itself in a child process running the code just fetched (so a fix in main applies at once);
 //   --dry-run     reads the versions and prints what a round would do; writes nothing;
 //   --approve <id|lane-version>, --reject <id> --reason <text>, --retry <id>: the owner's commands;
-//   --seed-features <Features.plain.xml>: the owner's one-time seed of an exact ODC features export (features-carry.mjs).
+//   --seed-features <Features.plain.xml>: the owner's one-time seed of an exact ODC features export (features-carry.mjs);
+//   --rehearse-current: the real round on the served versions, stopped before anything changes outside this machine (rehearse.mjs).
 import fs from 'node:fs';
 import {readJournal} from './journal.mjs';
 import path from 'node:path';
@@ -14,21 +15,25 @@ import {replayApprovals} from './window.mjs';
 import {approve,reject,retry} from './approve.mjs';
 import {acquireLock,lockHeldBy,registerChild,runLogFile,createLog} from './host.mjs';
 import {AUTOMATIC_PLAN,releaseAutomatically,releaseEvent} from './automatic.mjs';
+import {rehearseCurrent,rehearsalConfig} from './rehearse.mjs';
 export * from './window.mjs';
 export * from './pipeline.mjs';
 export * from './approve.mjs';
 export * from './host.mjs';
 // A worktree whose vigia.mjs declares this protocol runs the round as a child (--round); an older one does not.
 export const ROUND_PROTOCOL=2;
+// A worktree whose vigia.mjs declares this one understands --rehearse-current; an older one is never asked to run it.
+export const REHEARSE_PROTOCOL=1;
 const self=fileURLToPath(import.meta.url);
 export function parseArgs(argv){
  const args={flags:new Set()};
  for(let i=0;i<argv.length;i++){
   const a=argv[i];
   if(['--config','--approve','--reject','--reason','--retry','--log','--acknowledge-rollback','--seed-features'].includes(a)){if(argv[i+1]===undefined)throw Error(`${a} needs a value.`);args[a.slice(2)]=argv[++i];}
-  else if(['--dry-run','--round','--no-update'].includes(a))args.flags.add(a.slice(2));
+  else if(['--dry-run','--round','--no-update','--rehearse-current'].includes(a))args.flags.add(a.slice(2));
   else throw Error(`Unknown argument ${a}. Usage: vigia.mjs --config <file> [--dry-run | --approve <id> | --reject <id> --reason <text> | --retry <id> | --seed-features <Features.plain.xml>] [--no-update]`);
  }
+ if(args.flags.has('rehearse-current')&&(args.flags.has('dry-run')||args.approve||args.reject||args.retry||args['acknowledge-rollback']||args['seed-features']))throw Error('--rehearse-current runs alone.');
  if(!args.config)throw Error('Usage: vigia.mjs --config <file> [--dry-run | --approve <id> | --reject <id> --reason <text> | --retry <id> | --seed-features <Features.plain.xml>]');
  return args;
 }
@@ -99,10 +104,14 @@ export async function round(config,runtime,{dryRun=false}={}){
  const result=await runVigia({...config,manifest,liveBaseline:live,replayed,branchBase,state,observed,head,dryRun},runtime);
  return dryRun&&config.automatic?{...result,sources:runtime.sourceStatus,automaticPlan:AUTOMATIC_PLAN}:result;
 }
+async function childSupportsRehearsal(file){try{return fs.readFileSync(file,'utf8').includes('REHEARSE_PROTOCOL=1');}catch{return false;}}
 async function childSupportsRounds(file){try{return fs.readFileSync(file,'utf8').includes('ROUND_PROTOCOL=2');}catch{return false;}}
 async function launch(args,config,log){
  const {createRuntime}=await import('./runtime.mjs');
  const runtime=await createRuntime(config,{log});
+ const rehearsing=args.flags.has('rehearse-current');
+ // PAUSE refuses a rehearsal before anything is fetched or built.
+ if(rehearsing)runtime.pause();
  const lock=acquireLock(path.join(config.outDir,'vigia.lock'));
  if(lock.busy){
   log(`another round holds the lock (pid ${lock.busy.pid??'?'}${lock.busy.child?', round pid '+lock.busy.child.pid:''} since ${lock.busy.at??'?'}); nothing to do`);
@@ -116,9 +125,10 @@ async function launch(args,config,log){
    catch(error){log(`workspace update stopped: ${error.message}`);await remind(config.outDir,'workspace','SSAM watcher stopped',error.message,{...runtime,log});return {status:'workspace-stopped',error:error.message};}
   }
   const child=path.join(path.resolve(config.workspace),'server/deploy/vigia/vigia.mjs');
+  if(rehearsing&&!await childSupportsRehearsal(child))throw Error('The watcher worktree does not know -RehearseCurrent yet: nothing was run.');
   if(await childSupportsRounds(child)){
    let stderr='';const before=fs.statSync(log.file).size;
-   const code=await new Promise((resolve,reject_)=>{const p=spawn(process.execPath,[child,'--config',args.config,'--round','--log',log.file],{env:{...process.env,SSAM_VIGIA_LOCK:lock.token},stdio:['ignore','inherit','pipe'],windowsHide:true});try{registerChild(path.join(config.outDir,'vigia.lock'),lock.token,p.pid);}catch(e){log(`round process not registered in the lock: ${e.message}`);}p.stderr.on('data',b=>{stderr+=b;process.stderr.write(b);});p.once('error',reject_);p.once('close',resolve);});
+   const code=await new Promise((resolve,reject_)=>{const p=spawn(process.execPath,[child,'--config',args.config,'--round','--log',log.file,...(rehearsing?['--rehearse-current']:[])],{env:{...process.env,SSAM_VIGIA_LOCK:lock.token},stdio:['ignore','inherit','pipe'],windowsHide:true});try{registerChild(path.join(config.outDir,'vigia.lock'),lock.token,p.pid);}catch(e){log(`round process not registered in the lock: ${e.message}`);}p.stderr.on('data',b=>{stderr+=b;process.stderr.write(b);});p.once('error',reject_);p.once('close',resolve);});
    // A round that could not even start (the code fetched from main does not load) still leaves a trace and a notice: the
    // child always ends its log with "round <status>" or "round error: ...".
    const tail=fs.readFileSync(log.file,'utf8').slice(before);
@@ -165,8 +175,12 @@ if(process.argv[1]&&path.resolve(process.argv[1])===self){
  }else if(args.flags.has('round')){
   const log=createLog(args.log);
   if(!lockHeldBy(path.join(config.outDir,'vigia.lock'),process.env.SSAM_VIGIA_LOCK))throw Error('--round runs only under the launcher that holds the watcher lock.');
-  const {createRuntime}=await import('./runtime.mjs');
-  const runtime=await createRuntime({...config,roundDeadline:Date.now()+(config.roundHours??7)*3600000},{log});
+  const {createRuntime,createBelowChecked}=await import('./runtime.mjs');
+  const rehearsing=args.flags.has('rehearse-current');
+  // The round's own folder for a rehearsal, below the private outDir the startup gate has just checked.
+  const rehearsal=rehearsing?rehearsalConfig(config):null;
+  if(rehearsal)createBelowChecked(rehearsal.outDir,[config.outDir]);
+  const runtime=await createRuntime({...(rehearsal??config),roundDeadline:Date.now()+(config.roundHours??7)*3600000},{log});
   // A round ends before the scheduled task's time limit (8 h): at roundHours it stops its commands, records the running
   // attempt as deferred (round-timeout) and says so, instead of being killed half-way.
   const deadline=setTimeout(async()=>{
@@ -176,7 +190,7 @@ if(process.argv[1]&&path.resolve(process.argv[1])===self){
    await remind(config.outDir,'round-timeout','SSAM watcher round stopped',`A round reached its ${config.roundHours??7} h limit and was stopped; the next round retries (log ${log.file}).`,{...runtime,log}).catch(()=>{});
    log('round timeout');process.exit(3);
   },(config.roundHours??7)*3600000);deadline.unref();
-  try{const result=await round(config,runtime);log(`round ${result.status}${result.id?' '+result.id:''}`);console.log(JSON.stringify(result,null,2));if(['failed','rolled-back','rollback-failed'].includes(result.status))process.exitCode=1;}
+  try{const result=rehearsal?await rehearseCurrent({...rehearsal,roundDeadline:Date.now()+(config.roundHours??7)*3600000},runtime,{manifest:baseWindow(runtime.manifest(),config.outDir).manifest}):await round(config,runtime);log(`round ${result.status}${result.id?' '+result.id:''}`);console.log(JSON.stringify(result,null,2));if(['failed','rolled-back','rollback-failed'].includes(result.status)||(rehearsal&&result.status!=='rehearsed'))process.exitCode=1;}
   catch(error){log(`round error: ${error.stack??error.message}`);await remind(config.outDir,'error:'+String(error.message).split('\n')[0].slice(0,120),'SSAM watcher error',`${String(error.message).split('\n')[0]} (log ${log.file})`,{...runtime,log}).catch(()=>{});process.exitCode=1;}
  }else{
   const mode=args.approve?'approve':args.reject?'reject':args.retry?'retry':args['seed-features']?'seed-features':'';

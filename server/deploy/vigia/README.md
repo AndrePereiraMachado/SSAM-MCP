@@ -22,6 +22,10 @@ Installer hash, signer and the extracted content tree travel with the release an
 
 Build `TargetPath` outputs alone receive the owner's signature. Other executables must match restored NuGet bytes, retain valid Microsoft organization signatures and terminate at a pinned Microsoft root. Unsupported signers, including possible Json.NET dependencies, stop the build for integrator review. `authenticode.json` supplies the manifest's `owner` or `microsoft` signer class; the server rejects executables without a valid class. The agent release must implement both contract amendments before activation.
 
+## Rehearsal without a new Studio
+
+`vigia.ps1 -Config <file> -RehearseCurrent`, as the watcher account, runs the real round on the versions the window already serves: real execution checks and vault, the official installers downloaded and verified, baseline and candidate tests, bridges built and signed, the image built and smoked, and the signed bridges asked of that image. It stops there. It takes no VPS lock, publishes nothing, pins nothing, backs nothing up, and never PATCHes or deploys. Its only contact with production is one Coolify GET and the SSH `capacity` read: the live snapshot is refused because it issues and revokes a token on the live server. So the window comes from `versions.json` of the checkout, not from the live compose. `PAUSE` refuses it. Receipts and the signed store stay in `<outDir>/rehearsals/<stamp>`, which no real round reads; its bundles and its `rehearsal-*` image are removed at the end. It takes as long as a real round.
+
 ## Deployment and recovery
 
 Live compose, kernels and digests define the baseline. Retained pairs preserve their image identities. New pairs inherit only environment, networks and deployment/resource settings, using generated volumes without inherited bind mounts or extra volumes.

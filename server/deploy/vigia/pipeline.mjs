@@ -161,7 +161,7 @@ export function timedOut(config,attempt){
  fs.writeFileSync(path.join(dir,'AGUARDANDO.md'),failureText({id:attempt.id,error:`The round reached its ${config.roundHours??7} h limit and was stopped.`,environmental:true,dir,retry:config.retryHours??12,config}));
  writeAttempt(config.outDir,{...attempt,status:'deferred',code:'round-timeout',error:'round time limit',deferrals:(attempt.deferrals??0)+1,firstDeferredAt:attempt.firstDeferredAt??attempt.at,endedAt:new Date().toISOString()});
 }
-async function runAttempt(config,ops,decision,now){
+export async function runAttempt(config,ops,decision,now){
  const {pair,id}=decision,outDir=config.outDir,dir=path.join(outDir,id),log=ops.log??(()=>{}),base=config.manifest;
  // A deferred attempt left no evidence beyond its notice: it is overwritten (and counted), not archived.
  const waited=decision.previous?.status==='deferred'?decision.previous:null;
@@ -221,6 +221,11 @@ async function runAttempt(config,ops,decision,now){
    const release={id,dir,attempt:attempt.at,baseline:config.liveBaseline,built,manifest:next.manifest,kernel:bridges.kernel,bridges,features:bundles.odc.features,featuresProvenance,bundles};
    // Persist only public identities and local artifact paths. Never keys or tokens.
    writeJournal(path.join(dir,'release.json'),release);
+   if(config.rehearsal){
+    const rehearsed=await config.rehearsal.finish(config,ops,{release,smoke});
+    writeAttempt(outDir,{...attempt,status:'rehearsed',built,endedAt:new Date().toISOString()});
+    return {...rehearsed,dir};
+   }
    const result=await releaseAutomatically(config,ops,release);
    if(result.status==='live')writeAttempt(outDir,{...attempt,status:'approved',built,pinCommit:result.commit,approved:{at:new Date().toISOString(),digest:'sha256:'+built.sha256,commit:result.commit}});
    else writeAttempt(outDir,{...attempt,status:result.status==='deferred'?'deferred':'failed',built,rollbackLatch:['rolled-back','rollback-failed'].includes(result.status),code:result.code,failedLanes:pair.lanes});

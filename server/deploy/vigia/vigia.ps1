@@ -7,7 +7,8 @@ param(
  [string]$Retry,
  [string]$AcknowledgeRollback,
  [string]$SeedFeatures,
- [switch]$NoUpdate
+ [switch]$NoUpdate,
+ [switch]$RehearseCurrent
 )
 # Entry point of the Studio versions watcher (README.md). The scheduled task runs it with -Config only.
 $ErrorActionPreference='Stop'
@@ -32,5 +33,6 @@ if($AcknowledgeRollback){$argsList+=@('--acknowledge-rollback',$AcknowledgeRollb
 if($Retry){$argsList+=@('--retry',$Retry)}
 if($SeedFeatures){$argsList+=@('--seed-features',$SeedFeatures)}
 if($NoUpdate){$argsList+='--no-update'}
+if($RehearseCurrent){$argsList+='--rehearse-current'}
 & $node @argsList
 exit $LASTEXITCODE
