@@ -61,6 +61,11 @@ function Sweep {
  $mine="$install/$($Scope.Substring(16))/"
  foreach($item in (Names "$install/*")){ if(-not $item.Name.StartsWith($mine)){ [void][UsersVault]::Delete($item.Name,1,0) } }
 }
+# A new password nobody used in a quarter of an hour goes: it was typed for one operation.
+function SweepPasswords {
+ $limit=[DateTime]::UtcNow.AddMinutes(-15)
+ foreach($item in (Names "$(Prefix)/*/UsersPassword/*")){ if($item.Written -lt $limit){ [void][UsersVault]::Delete($item.Name,1,0) } }
+}
 function B64([string]$s) { [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($s)) }
 # WebUtility: no limit on a long hidden field, which Uri.EscapeDataString has.
 function Form([string]$s) { [Net.WebUtility]::UrlEncode($s) }
@@ -92,7 +97,7 @@ function Redact([string]$text,[string]$secret) {
  return $text
 }
 try {
- if ($Mode -ne 'prompt' -and $Mode -ne 'confirm') { Sweep }
+ if ($Mode -ne 'prompt' -and $Mode -ne 'confirm') { Sweep; SweepPasswords }
  if ($Mode -eq 'sign-out') {
   [void][UsersVault]::Delete((Target 'login' ''),1,0)
   foreach($item in (Names "$(Prefix)/$HostName/UsersPassword/*")){ [void][UsersVault]::Delete($item.Name,1,0) }

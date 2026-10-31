@@ -12,7 +12,7 @@ import { KINDS, helloKinds } from '../lib/kinds.mjs';
 import { usersRows, addressRows, lookalikeRows, HOST, b64 } from './fixtures/users-table.mjs';
 
 // The sha both sides name: here and platforms/odc/facade/tests/o11-users-hosted.test.mjs in the server line.
-const VAULT_SHA256 = '2de5d083174f8b7787a3586f732b51098b8875d9cc955c1787083414b25ba711';
+const VAULT_SHA256 = '80790a0f739e65c2ac65c51eae6d5e0b0fdfcbad5f2ad59234ce3c17d6a3e879';
 const tmp = t => { const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ssam-users-')); t.after(() => fs.rmSync(dir, { recursive: true, force: true })); return dir; };
 const codeOf = fn => { try { fn(); return 'ok'; } catch (error) { return error.code; } };
 
@@ -241,6 +241,13 @@ test('A2: a new password goes only under the window that took it, to that form, 
   await k.users.execute(post());
   await k.users.execute(post({ secretRefs: refs }));
   await assert.rejects(k.users.execute(post({ secretRefs: refs })), e => e.code === 'USERS_CONSENT_REQUIRED', 'once');
+});
+
+test('M4: the helper removes a new password nobody used in a quarter of an hour', () => {
+  const text = fs.readFileSync(USERS_HELPER, 'utf8');
+  assert.match(text, /function SweepPasswords/);
+  assert.match(text, /AddMinutes\(-15\)/);
+  assert.match(text, /\{ Sweep; SweepPasswords \}/);
 });
 
 test('M3: sign-out ends what this agent holds for the host, and the next sign-in asks a person again', async t => {
