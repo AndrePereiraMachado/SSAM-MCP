@@ -61,7 +61,7 @@ internal sealed partial class UsersKinds
     private static AgentFault Invalid(string message) => new("PARAMS_INVALID", message);
     private static string? Word(JsonNode? node) => node is JsonValue value && value.TryGetValue<string>(out var text) ? text : null;
     private const string InternalText = "This name is only reachable inside a private network, and Users administration through the agent works only with environments on the internet. Nothing was sent. Use the Users application of that environment directly.";
-    private const string HostText = "host must be the plain DNS name of an environment, like name.outsystemsenterprise.com: no scheme, port, address or other alphabet";
+    private const string HostText = "host must be the plain DNS name of an environment, like name.example.com: no scheme, port, address or other alphabet";
     // A name only a private network can resolve, a service that resolves to any address it is given.
     private static readonly string[] Internal = [".localhost", ".local", ".localdomain", ".internal", ".intranet", ".lan", ".home", ".corp", ".svc", ".arpa", ".nip.io", ".sslip.io", ".xip.io"];
     private static void CheckHost(string? host)

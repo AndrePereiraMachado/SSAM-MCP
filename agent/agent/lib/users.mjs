@@ -52,9 +52,9 @@ const text = value => typeof value === 'string';
 const INTERNAL = /\.(?:localhost|local|localdomain|internal|intranet|lan|home|corp|svc|arpa|nip\.io|sslip\.io|xip\.io)$/;
 const INTERNAL_TEXT = 'This name is only reachable inside a private network, and Users administration through the agent works only with environments on the internet. Nothing was sent. Use the Users application of that environment directly.';
 const hostProblem = host => {
-  if (!text(host) || !HOST.test(host) || host.split('.').some(label => label.startsWith('xn--'))) return invalid('host must be the plain DNS name of an environment, like name.outsystemsenterprise.com: no scheme, port, address or other alphabet');
+  if (!text(host) || !HOST.test(host) || host.split('.').some(label => label.startsWith('xn--'))) return invalid('host must be the plain DNS name of an environment, like name.example.com: no scheme, port, address or other alphabet');
   const last = host.split('.').at(-1);
-  if (last.length < 2 || /^[0-9]+$|^0x/.test(last)) return invalid('host must be the plain DNS name of an environment, like name.outsystemsenterprise.com: no scheme, port, address or other alphabet');
+  if (last.length < 2 || /^[0-9]+$|^0x/.test(last)) return invalid('host must be the plain DNS name of an environment, like name.example.com: no scheme, port, address or other alphabet');
   if (INTERNAL.test(host)) return refuse('USERS_HOST_INTERNAL', INTERNAL_TEXT);
   return null;
 };
