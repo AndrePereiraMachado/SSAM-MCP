@@ -164,6 +164,37 @@ internal static class Program
                 Console.WriteLine(UsersKinds.Scope(scopeRoot, scopeAccount));
                 return 0;
             }
+            // check-users-flow: stdin {helper, root, account, statePath, steps}: the steps of the behaviour table on the real kind, with a stand-in
+            // for the helper, DNS and the clock (tests/native/users.test.mjs compares the answers with the table and with the Node agent).
+            if (args is ["check-users-flow"])
+            {
+                var flow = JsonNode.Parse(await Console.In.ReadToEndAsync()) as JsonObject ?? throw new ArgumentException("Expected a JSON object");
+                var kind = new UsersKinds(flow["root"]!.GetValue<string>(), flow["account"]!.GetValue<string>()) { HelperCommand = flow["helper"]!.AsArray().Select(item => item!.GetValue<string>()).ToArray(), ForceWindows = true };
+                long offset = 0;
+                string[] addresses = ["93.184.216.34"];
+                kind.Now = () => DateTimeOffset.UtcNow.AddMilliseconds(offset);
+                kind.Lookup = _ => Task.FromResult(addresses);
+                var answers = new JsonArray();
+                foreach (var step in flow["steps"]!.AsArray())
+                {
+                    if (step?["advanceMs"] is JsonValue advance) { offset += advance.GetValue<long>(); answers.Add((JsonNode?)null); continue; }
+                    if (step?["dns"] is JsonArray dns) { addresses = dns.Select(item => item!.GetValue<string>()).ToArray(); answers.Add((JsonNode?)null); continue; }
+                    if (step?["waitMs"] is JsonValue wait) { await Task.Delay(wait.GetValue<int>()); answers.Add((JsonNode?)null); continue; }
+                    if (step?["set"] is JsonObject set)
+                    {
+                        var path = flow["statePath"]!.GetValue<string>();
+                        var saved = JsonNode.Parse(await File.ReadAllTextAsync(path))!.AsObject();
+                        foreach (var (key, value) in set) saved[key] = value?.DeepClone();
+                        await File.WriteAllTextAsync(path, saved.ToJsonString());
+                        answers.Add((JsonNode?)null);
+                        continue;
+                    }
+                    try { answers.Add((JsonNode)new JsonObject { ["value"] = (await kind.Execute(step!["params"]!.AsObject(), CancellationToken.None))?.DeepClone() }); }
+                    catch (AgentFault e) { answers.Add((JsonNode)new JsonObject { ["code"] = e.Code }); }
+                }
+                Console.WriteLine(answers.ToJsonString());
+                return 0;
+            }
             if (args is ["users-helper-sha256"])
             {
                 Console.WriteLine(Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(UsersKinds.HelperBytes())).ToLowerInvariant());

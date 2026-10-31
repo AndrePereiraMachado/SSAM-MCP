@@ -63,3 +63,20 @@ test('the native channel lists the kind in both Hello forms, runs it, and gives 
   const kind = fs.readFileSync(path.join(app, 'native/Ssam.Agent/UsersKinds.cs'), 'utf8');
   assert.match(kind, /USERS_PLATFORM_UNAVAILABLE", "Users administration is not available on this platform\./);
 });
+for (const flow of flows()) test('native flow: ' + flow.name, { timeout: 180000 }, async t => {
+  const dir = tempDir();
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  prepare(dir, flow);
+  const result = native(['check-users-flow'], { input: JSON.stringify(nativeInput(flow, dir)), env: { ...process.env, SSAM_USERS_FAKE_STATE: path.join(dir, 'state.json') } });
+  assert.equal(result.status, 0, result.stderr);
+  const results = JSON.parse(result.stdout);
+  const state = readState(dir);
+  verify(flow, results, state);
+  // The Node agent, over the same steps: the same requests leave.
+  const other = tempDir();
+  t.after(() => fs.rmSync(other, { recursive: true, force: true }));
+  const node = await runNode(flow, createUsersKind, other);
+  assert.deepEqual(state.http, node.state.http, 'the same requests');
+  assert.deepEqual(state.windows, node.state.windows, 'the same windows');
+  assert.deepEqual(results.map(r => r?.code ?? null), node.results.map(r => r?.code ?? null), 'the same refusals');
+});
