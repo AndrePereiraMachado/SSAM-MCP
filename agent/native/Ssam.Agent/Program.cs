@@ -145,6 +145,19 @@ internal static class Program
                 Console.WriteLine(answers.ToJsonString());
                 return 0;
             }
+            // check-users-address: stdin [address] -> [bool]; check-users-lookalike: stdin [[host, [approved]]] -> [text | null].
+            if (args is ["check-users-address"])
+            {
+                var addresses = JsonNode.Parse(await Console.In.ReadToEndAsync()) as JsonArray ?? throw new ArgumentException("Expected a JSON array");
+                Console.WriteLine(new JsonArray(addresses.Select(item => (JsonNode?)JsonValue.Create(UsersKinds.IsPrivateAddress(item!.GetValue<string>()))).ToArray()).ToJsonString());
+                return 0;
+            }
+            if (args is ["check-users-lookalike"])
+            {
+                var cases = JsonNode.Parse(await Console.In.ReadToEndAsync()) as JsonArray ?? throw new ArgumentException("Expected a JSON array");
+                Console.WriteLine(new JsonArray(cases.Select(item => (JsonNode?)JsonValue.Create(UsersKinds.LookalikeOf(item![0]!.GetValue<string>(), item[1]!.AsArray().Select(other => other!.GetValue<string>())))).ToArray()).ToJsonString());
+                return 0;
+            }
             if (args is ["users-helper-sha256"])
             {
                 Console.WriteLine(Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(UsersKinds.HelperBytes())).ToLowerInvariant());

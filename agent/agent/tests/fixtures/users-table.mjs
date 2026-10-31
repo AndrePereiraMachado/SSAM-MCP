@@ -7,6 +7,13 @@ const url = (rest = 'User_List.aspx') => `https://${HOST}/Users/${rest}`;
 const request = (over = {}) => ({ op: 'request', host: HOST, url: url(), method: 'GET', fields: [], ...over });
 const loginRefs = [{ field: 'u', kind: 'login', part: 'username' }, { field: 'p', kind: 'login', part: 'password' }];
 
+export const addressRows = () => [['8.8.8.8', false], ['93.184.216.34', false], ['2606:2800:220:1::1', false], ['127.0.0.1', true], ['10.0.0.5', true], ['172.16.0.1', true], ['172.31.255.255', true], ['172.32.0.1', false], ['192.168.1.1', true], ['169.254.169.254', true], ['100.64.0.1', true], ['0.0.0.0', true], ['224.0.0.1', true], ['198.18.0.1', true], ['::1', true], ['::', true], ['fc00::1', true], ['fd12::1', true], ['fe80::1', true], ['ff02::1', true], ['::ffff:10.0.0.5', true], ['::ffff:8.8.8.8', false], ['not an address', true]];
+export const lookalikeRows = () => [
+  [HOST, [HOST], null], [HOST, [], null],
+  ['tenant-a.example.test.evil.example', [HOST], HOST], ['tenant-a.evil.example', [HOST], HOST], ['tenant-b.example.test', [HOST], HOST],
+  ['tenant-a.example.test', ['tenant-a.example.test.evil.example'], 'tenant-a.example.test.evil.example'],
+  ['other-company.example.test', [HOST], null], ['acme-dev.outsystemsenterprise.com', ['acme-qa.outsystemsenterprise.com'], null],
+];
 export const usersRows = () => [
   { label: 'status of the administrator', request: { op: 'status', host: HOST }, expected: 'ok' },
   { label: 'status of a new password', request: { op: 'status', host: HOST, kind: 'password', entry: ENTRY }, expected: 'ok' },
@@ -25,6 +32,14 @@ export const usersRows = () => [
   { label: 'a host with a scheme', request: { op: 'status', host: 'https://x.example' }, expected: 'PARAMS_INVALID' },
   { label: 'this machine', request: { op: 'status', host: 'localhost' }, expected: 'PARAMS_INVALID' },
   { label: 'a loopback name', request: { op: 'status', host: 'my.localhost' }, expected: 'PARAMS_INVALID' },
+  { label: 'the host of the phishing probe is a name; it is the lookalike rule that stops it', request: { op: 'status', host: 'tenant-a.example.test.evil.example' }, expected: 'ok' },
+  { label: 'a metadata name', request: { op: 'status', host: 'metadata.google.internal' }, expected: 'PARAMS_INVALID' },
+  { label: 'a service that resolves to any address', request: { op: 'status', host: '127.0.0.1.nip.io' }, expected: 'PARAMS_INVALID' },
+  { label: 'another of those', request: { op: 'status', host: '10-0-0-5.sslip.io' }, expected: 'PARAMS_INVALID' },
+  { label: 'a corporate name', request: { op: 'status', host: 'printer.corp' }, expected: 'PARAMS_INVALID' },
+  { label: 'a cluster name', request: { op: 'status', host: 'kubernetes.default.svc' }, expected: 'PARAMS_INVALID' },
+  { label: 'another alphabet', request: { op: 'status', host: 'xn--tenant-a-example-test.evil.example' }, expected: 'PARAMS_INVALID' },
+  { label: 'a one letter last label', request: { op: 'status', host: 'a.b' }, expected: 'PARAMS_INVALID' },
   { label: 'a loopback address', request: { op: 'status', host: '127.0.0.1' }, expected: 'PARAMS_INVALID' },
   { label: 'a private address', request: { op: 'status', host: '10.0.0.5' }, expected: 'PARAMS_INVALID' },
   { label: 'a metadata address', request: { op: 'status', host: '169.254.169.254' }, expected: 'PARAMS_INVALID' },

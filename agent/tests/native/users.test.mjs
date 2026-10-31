@@ -7,8 +7,8 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { usersRows } from '../../agent/tests/fixtures/users-table.mjs';
-import { validateUsersRequest, USERS_HELPER } from '../../agent/lib/users.mjs';
+import { usersRows, addressRows, lookalikeRows } from '../../agent/tests/fixtures/users-table.mjs';
+import { validateUsersRequest, isPrivateAddress, lookalikeOf, USERS_HELPER } from '../../agent/lib/users.mjs';
 
 const app = fileURLToPath(new URL('../../', import.meta.url));
 const dll = path.join(app, 'native/Ssam.Agent/bin/Release/net10.0/ssam-agent.dll');
@@ -27,6 +27,19 @@ test('native check-users-request answers the Node table row by row', { timeout: 
     assert.deepEqual(actual[i], expected[i], row.label);
     assert.deepEqual(actual[i], row.expected === 'ok' ? { ok: true } : { error: row.expected }, row.label);
   });
+});
+
+test('native check-users-address and check-users-lookalike answer as the Node agent', { timeout: 120000 }, () => {
+  const addresses = addressRows();
+  const a = native(['check-users-address'], { input: JSON.stringify(addresses.map(([address]) => address)) });
+  assert.equal(a.status, 0, a.stderr);
+  assert.deepEqual(JSON.parse(a.stdout), addresses.map(([address]) => isPrivateAddress(address)));
+  assert.deepEqual(JSON.parse(a.stdout), addresses.map(([, expected]) => expected));
+  const rows = lookalikeRows();
+  const l = native(['check-users-lookalike'], { input: JSON.stringify(rows.map(([host, approved]) => [host, approved])) });
+  assert.equal(l.status, 0, l.stderr);
+  assert.deepEqual(JSON.parse(l.stdout), rows.map(([host, approved]) => lookalikeOf(host, approved)));
+  assert.deepEqual(JSON.parse(l.stdout), rows.map(row => row[2]));
 });
 
 test('the helper embedded in the native core is the Node agent\'s file, byte for byte', { timeout: 120000 }, () => {

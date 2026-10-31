@@ -7,12 +7,12 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
-import { createUsersKind, validateUsersRequest, usersScope, USERS_KIND, USERS_HELPER } from '../lib/users.mjs';
+import { createUsersKind, validateUsersRequest, usersScope, isPrivateAddress, lookalikeOf, USERS_KIND, USERS_HELPER } from '../lib/users.mjs';
 import { KINDS, helloKinds } from '../lib/kinds.mjs';
-import { usersRows, HOST, b64 } from './fixtures/users-table.mjs';
+import { usersRows, addressRows, lookalikeRows, HOST, b64 } from './fixtures/users-table.mjs';
 
 // The sha both sides name: here and platforms/odc/facade/tests/o11-users-hosted.test.mjs in the server line.
-const VAULT_SHA256 = 'd60442f8bb527a2acd9d34b7d33dde601e6654389f40b3de41780112d916c57a';
+const VAULT_SHA256 = 'd5cb88f63ee0683e43543c7b790298c2b1e202f96eea969fedd5b33ca5b00981';
 const tmp = t => { const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ssam-users-')); t.after(() => fs.rmSync(dir, { recursive: true, force: true })); return dir; };
 const codeOf = fn => { try { fn(); return 'ok'; } catch (error) { return error.code; } };
 
@@ -36,9 +36,12 @@ test('when the server box has the kind, it is the same word in its closed list',
 
 for (const row of usersRows()) test('table: ' + row.label, () => assert.equal(codeOf(() => validateUsersRequest(row.request)), row.expected));
 
-function kind(t, { answers = [], platform = 'win32' } = {}) {
+for (const [address, expected] of addressRows()) test('address: ' + address, () => assert.equal(isPrivateAddress(address), expected));
+for (const [host, approved, expected] of lookalikeRows()) test(`lookalike: ${host} after ${approved.join(', ') || 'nothing'}`, () => assert.equal(lookalikeOf(host, approved), expected));
+
+function kind(t, { answers = [], platform = 'win32', lookup = async () => [{ address: '93.184.216.34', family: 4 }] } = {}) {
   const dataRoot = tmp(t), calls = [];
-  const users = createUsersKind({ dataRoot, platform, env: { SystemRoot: 'C:\\Windows' }, exec: async (file, args, input) => { calls.push({ file, args, input }); return JSON.stringify(answers.shift() ?? { ok: true }); } });
+  const users = createUsersKind({ dataRoot, platform, lookup, env: { SystemRoot: 'C:\\Windows' }, exec: async (file, args, input) => { calls.push({ file, args, input }); return JSON.stringify(answers.shift() ?? { ok: true }); } });
   return { users, calls, dataRoot };
 }
 const page = (extra = {}) => ({ ok: true, status: 200, location: '', contentType: b64('text/html'), body: b64('<html></html>'), setCookie: [], ...extra });
@@ -58,6 +61,31 @@ test('the session stays here: setCookie never leaves, and the next request carri
   await k.users.execute(request());
   await k.users.execute(request());
   assert.equal(decoded(k.calls[4]).cookie, 'ASP.NET_SessionId=abc', 'an emptied cookie leaves the jar');
+});
+
+test('A3: a name that reads like an approved environment gets no window and no request (the phishing probe of the review)', async t => {
+  const started = [];
+  const users = createUsersKind({ dataRoot: tmp(t), platform: 'win32', env: { SystemRoot: 'C:\\Windows' }, wait: async () => {}, lookup: async () => [{ address: '93.184.216.34' }],
+    exec: async (file, args) => JSON.stringify(args[args.indexOf('-Mode') + 1] === 'hosts' ? { ok: true, hosts: [HOST] } : { ok: true, available: false }),
+    start: (file, args) => { started.push(args); return { exitCode: 1, on() {}, unref() {} }; } });
+  await assert.rejects(users.execute({ op: 'prompt', host: 'tenant-a.example.test.evil.example' }), e => e.code === 'USERS_HOST_LOOKALIKE' && e.executed === false);
+  assert.equal(started.length, 0);
+});
+
+test('A3: a name that resolves inside a network, or nowhere, gets no window and no request', async t => {
+  for (const [lookup, code] of [[async () => [{ address: '169.254.169.254' }], 'USERS_HOST_PRIVATE'], [async () => [{ address: '8.8.8.8' }, { address: '10.0.0.5' }], 'USERS_HOST_PRIVATE'], [async () => { throw new Error('ENOTFOUND'); }, 'USERS_HOST_UNRESOLVED'], [async () => [], 'USERS_HOST_UNRESOLVED']]) {
+    const k = kind(t, { lookup });
+    await assert.rejects(k.users.execute({ op: 'prompt', host: HOST }), e => e.code === code);
+    await assert.rejects(k.users.execute(request()), e => e.code === code);
+    assert.equal(k.calls.length, 0);
+  }
+});
+
+test('A3: the first window of an environment asks for its name again, and the helper writes the vault only then', () => {
+  const text = fs.readFileSync(USERS_HELPER, 'utf8');
+  assert.match(text, /\$approving=\(\$Kind -eq 'login'\) -and \(\$null -eq \(ReadVault \(Target 'login' ''\) \$false\)\)/);
+  assert.match(text, /\$again\.Text\.Trim\(\) -cne \$HostName/);
+  assert.ok(text.indexOf('-cne $HostName') < text.indexOf('[UsersVault]::Write([ref]$c,0)'));
 });
 
 test('A1: the new password of a POST leaves the vault there, also when the POST fails; a failed forget is said', async t => {
@@ -114,7 +142,8 @@ test('a macOS agent without the helper file answers the same, before it would lo
 test('the prompt: its status file is under the agent\'s own folder and is removed; a second one is not opened', async t => {
   const dataRoot = tmp(t);
   const started = [];
-  const users = createUsersKind({ dataRoot, platform: 'win32', env: { SystemRoot: 'C:\\Windows' }, wait: async () => {},
+  const users = createUsersKind({ dataRoot, platform: 'win32', env: { SystemRoot: 'C:\\Windows' }, wait: async () => {}, lookup: async () => [{ address: '93.184.216.34' }],
+    exec: async () => JSON.stringify({ ok: true, hosts: [] }),
     start: (file, args) => {
       started.push(args);
       const statusFile = args[args.indexOf('-PromptStatusPath') + 1];
@@ -131,7 +160,7 @@ test('the prompt: its status file is under the agent\'s own folder and is remove
 });
 
 test('the prompt that never shows is an answer, not a wait', async t => {
-  const users = createUsersKind({ dataRoot: tmp(t), platform: 'win32', env: { SystemRoot: 'C:\\Windows' }, wait: async () => {}, start: () => ({ exitCode: 1, on() {}, unref() {} }) });
+  const users = createUsersKind({ dataRoot: tmp(t), platform: 'win32', env: { SystemRoot: 'C:\\Windows' }, wait: async () => {}, lookup: async () => [{ address: '93.184.216.34' }], exec: async () => JSON.stringify({ ok: true, hosts: [] }), start: () => ({ exitCode: 1, on() {}, unref() {} }) });
   await assert.rejects(users.execute({ op: 'prompt', host: HOST }), e => e.code === 'USERS_PROMPT_NOT_VISIBLE');
 });
 

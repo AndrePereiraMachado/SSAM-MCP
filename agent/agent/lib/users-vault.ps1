@@ -1,5 +1,5 @@
 param(
- [ValidateSet('status','prompt','request','forget')][string]$Mode='status',
+ [ValidateSet('status','prompt','request','forget','hosts')][string]$Mode='status',
  [ValidatePattern('^[a-z0-9][a-z0-9.-]*$')][string]$HostName,
  [ValidateSet('login','password')][string]$Kind='login',
  [ValidatePattern('^[a-f0-9]{64}$')][string]$Entry,
@@ -18,6 +18,7 @@ public static class UsersVault {
  public struct Credential { public uint Flags,Type; public string TargetName,Comment; public System.Runtime.InteropServices.ComTypes.FILETIME LastWritten; public uint CredentialBlobSize; public IntPtr CredentialBlob; public uint Persist,AttributeCount; public IntPtr Attributes; public string TargetAlias,UserName; }
  [DllImport("advapi32.dll", EntryPoint="CredReadW", CharSet=CharSet.Unicode, SetLastError=true)] public static extern bool Read(string target,uint type,uint flags,out IntPtr value);
  [DllImport("advapi32.dll", EntryPoint="CredWriteW", CharSet=CharSet.Unicode, SetLastError=true)] public static extern bool Write(ref Credential value,uint flags);
+ [DllImport("advapi32.dll", EntryPoint="CredEnumerateW", CharSet=CharSet.Unicode, SetLastError=true)] public static extern bool Enumerate(string filter,uint flags,out int count,out IntPtr list);
  [DllImport("advapi32.dll", EntryPoint="CredDeleteW", CharSet=CharSet.Unicode, SetLastError=true)] public static extern bool Delete(string target,uint type,uint flags);
  [DllImport("advapi32.dll")] public static extern void CredFree(IntPtr value);
  [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr handle,int command);
@@ -43,12 +44,28 @@ function ReadVault([string]$target,[bool]$secret) {
   return @{UserName=$c.UserName;Secret=$value}
  } finally { [UsersVault]::CredFree($p) }
 }
+# The names of this scope's entries, never their secrets.
+function Names([string]$filter) {
+ $count=0;$list=[IntPtr]::Zero;$names=@()
+ if ([UsersVault]::Enumerate($filter,0,[ref]$count,[ref]$list)) {
+  try { for($i=0;$i -lt $count;$i++){ $p=[Runtime.InteropServices.Marshal]::ReadIntPtr($list,$i*[IntPtr]::Size); $c=[Runtime.InteropServices.Marshal]::PtrToStructure($p,[type][UsersVault+Credential]); $names+=[pscustomobject]@{Name=$c.TargetName;Written=[DateTime]::FromFileTimeUtc(([int64][uint32]$c.LastWritten.dwHighDateTime -shl 32) -bor [int64][uint32]$c.LastWritten.dwLowDateTime)} } }
+  finally { [UsersVault]::CredFree($list) }
+ }
+ return $names
+}
+function Prefix { if($Scope){"SSAM/Agent/$Scope/O11"}else{'SSAM/O11'} }
 function B64([string]$s) { [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($s)) }
 function Form([string]$s) { [Uri]::EscapeDataString($s).Replace('%20','+') }
 try {
  if ($Mode -eq 'status') {
   $found=ReadVault (Target $Kind $Entry) $false
   @{ok=$true;available=($null -ne $found);principal=if($Kind -eq 'login' -and $found){$found.UserName}else{$null}}|ConvertTo-Json -Compress
+  exit 0
+ }
+ if ($Mode -eq 'hosts') {
+  $prefix=Prefix
+  $hosts=@(Names "$prefix/*" | ForEach-Object { $_.Name } | Where-Object { $_ -like '*/Users' } | ForEach-Object { $_.Substring($prefix.Length+1).Replace('/Users','') })
+  @{ok=$true;hosts=$hosts}|ConvertTo-Json -Compress
   exit 0
  }
  if ($Mode -eq 'forget') {
@@ -68,18 +85,26 @@ try {
    if($PromptStatusPath -and [UsersVault]::IsWindowVisible($f.Handle)){[IO.File]::WriteAllText($PromptStatusPath,'visible')}
   })
   $f.Text=if($Kind -eq 'login'){'SSAM - Users administrator'}else{'SSAM - User password'}
-  $f.ClientSize=New-Object Drawing.Size(490,300);$f.StartPosition='CenterScreen';$f.FormBorderStyle='FixedDialog';$f.MaximizeBox=$false;$f.MinimizeBox=$false;$f.TopMost=$true
-  $intro=New-Object Windows.Forms.Label;$intro.SetBounds(18,15,452,60);$intro.Text=if($Kind -eq 'login'){"Users administrator for $HostName. Stored only in Windows Credential Manager."}else{"New password for $Subject on $HostName. Enter and confirm here; never in chat."};$f.Controls.Add($intro)
+  # The first time, the person sees this exact host and types it again: nothing else can add an environment to the vault.
+  $approving=($Kind -eq 'login') -and ($null -eq (ReadVault (Target 'login' '') $false))
+  $f.ClientSize=New-Object Drawing.Size(490,340);$f.StartPosition='CenterScreen';$f.FormBorderStyle='FixedDialog';$f.MaximizeBox=$false;$f.MinimizeBox=$false;$f.TopMost=$true
+  $intro=New-Object Windows.Forms.Label;$intro.SetBounds(18,15,452,60);$intro.Text=if($Kind -eq 'login'){"Users administrator for this exact environment: $HostName. Stored only in Windows Credential Manager, and sent only to this host, over HTTPS."}else{"New password for $Subject on $HostName. Enter and confirm here; never in chat."};$f.Controls.Add($intro)
   $label=New-Object Windows.Forms.Label;$label.SetBounds(18,80,145,25);$label.Text=if($Kind -eq 'login'){'Username'}else{'New password'};$f.Controls.Add($label)
   $first=New-Object Windows.Forms.TextBox;$first.SetBounds(165,80,300,25);$first.UseSystemPasswordChar=($Kind -eq 'password');$f.Controls.Add($first)
   $label2=New-Object Windows.Forms.Label;$label2.SetBounds(18,120,145,25);$label2.Text=if($Kind -eq 'login'){'Password'}else{'Confirm password'};$f.Controls.Add($label2)
   $second=New-Object Windows.Forms.TextBox;$second.SetBounds(165,120,300,25);$second.UseSystemPasswordChar=$true;$f.Controls.Add($second)
-  $errorLabel=New-Object Windows.Forms.Label;$errorLabel.SetBounds(18,165,450,45);$errorLabel.ForeColor=[Drawing.Color]::DarkRed;$f.Controls.Add($errorLabel)
-  $save=New-Object Windows.Forms.Button;$save.Text='Save securely';$save.SetBounds(210,240,130,35);$f.Controls.Add($save)
-  $cancel=New-Object Windows.Forms.Button;$cancel.Text='Cancel';$cancel.SetBounds(350,240,110,35);$cancel.DialogResult='Cancel';$f.Controls.Add($cancel);$f.CancelButton=$cancel;$f.AcceptButton=$save
+  $again=New-Object Windows.Forms.TextBox
+  if($approving){
+   $label3=New-Object Windows.Forms.Label;$label3.SetBounds(18,160,145,40);$label3.Text='New environment: type its name again';$f.Controls.Add($label3)
+   $again.SetBounds(165,160,300,25);$f.Controls.Add($again)
+  }
+  $errorLabel=New-Object Windows.Forms.Label;$errorLabel.SetBounds(18,205,450,30);$errorLabel.ForeColor=[Drawing.Color]::DarkRed;$f.Controls.Add($errorLabel)
+  $save=New-Object Windows.Forms.Button;$save.Text='Save securely';$save.SetBounds(210,280,130,35);$f.Controls.Add($save)
+  $cancel=New-Object Windows.Forms.Button;$cancel.Text='Cancel';$cancel.SetBounds(350,280,110,35);$cancel.DialogResult='Cancel';$f.Controls.Add($cancel);$f.CancelButton=$cancel;$f.AcceptButton=$save
   $save.Add_Click({
    $secret=if($Kind -eq 'login'){$second.Text}else{$first.Text}
    if(-not $first.Text -or -not $second.Text){$errorLabel.Text='Complete both fields.';return}
+   if($approving -and $again.Text.Trim() -cne $HostName){$errorLabel.Text='The environment name does not match. Check it before going on.';return}
    if($Kind -eq 'password' -and $first.Text -cne $second.Text){$errorLabel.Text='The passwords do not match.';return}
    $p=[Runtime.InteropServices.Marshal]::StringToCoTaskMemUni($secret)
    try {

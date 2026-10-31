@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Net;
 using System.Reflection;
 using System.Security.Cryptography;
 using System.Text;
@@ -39,11 +40,65 @@ internal sealed partial class UsersKinds
 
     private static AgentFault Invalid(string message) => new("PARAMS_INVALID", message);
     private static string? Word(JsonNode? node) => node is JsonValue value && value.TryGetValue<string>(out var text) ? text : null;
+    // A DNS name of an environment: never an address by number, this machine, a name only an internal network resolves, a service
+    // that resolves to any address it is given, or a name written in another alphabet.
+    private static readonly string[] Internal = [".localhost", ".local", ".localdomain", ".internal", ".intranet", ".lan", ".home", ".corp", ".svc", ".arpa", ".nip.io", ".sslip.io", ".xip.io"];
     private static bool HostOk(string? host)
     {
-        if (host == null || !HostPattern().IsMatch(host) || host.EndsWith(".localhost", StringComparison.Ordinal)) return false;
+        if (host == null || !HostPattern().IsMatch(host) || Internal.Any(end => host.EndsWith(end, StringComparison.Ordinal)) || host.Split('.').Any(label => label.StartsWith("xn--", StringComparison.Ordinal))) return false;
         var last = host[(host.LastIndexOf('.') + 1)..];
-        return !last.StartsWith("0x", StringComparison.Ordinal) && !last.All(char.IsAsciiDigit);
+        return last.Length >= 2 && !last.StartsWith("0x", StringComparison.Ordinal) && !last.All(char.IsAsciiDigit);
+    }
+
+    // A resolved address that is not on the internet: this machine, a private network, link-local (cloud metadata), multicast.
+    internal static bool IsPrivateAddress(string text)
+    {
+        if (!IPAddress.TryParse(text, out var address)) return true;
+        if (address.IsIPv4MappedToIPv6) address = address.MapToIPv4();
+        var b = address.GetAddressBytes();
+        if (address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork)
+            return b[0] == 0 || b[0] == 10 || b[0] == 127 || b[0] >= 224 || (b[0] == 100 && b[1] >= 64 && b[1] <= 127) || (b[0] == 169 && b[1] == 254) || (b[0] == 172 && b[1] >= 16 && b[1] <= 31) || (b[0] == 192 && b[1] == 168) || (b[0] == 192 && b[1] == 0 && b[2] == 0) || (b[0] == 198 && (b[1] == 18 || b[1] == 19));
+        return address.Equals(IPAddress.IPv6Any) || address.Equals(IPAddress.IPv6Loopback) || (b[0] & 0xfe) == 0xfc || (b[0] == 0xfe && (b[1] & 0xc0) == 0x80) || b[0] == 0xff;
+    }
+
+    private static int Distance(string a, string b)
+    {
+        var row = Enumerable.Range(0, b.Length + 1).ToArray();
+        for (var i = 1; i <= a.Length; i++)
+        {
+            var next = new int[b.Length + 1];
+            next[0] = i;
+            for (var j = 1; j <= b.Length; j++) next[j] = Math.Min(Math.Min(next[j - 1] + 1, row[j] + 1), row[j - 1] + (a[i - 1] == b[j - 1] ? 0 : 1));
+            row = next;
+        }
+        return row[b.Length];
+    }
+
+    // A new host that reads like one already approved: inside it, around it, the same first label elsewhere, or one letter away.
+    internal static string? LookalikeOf(string host, IEnumerable<string> approved)
+    {
+        var dot = host.IndexOf('.');
+        var first = host[..dot];
+        var rest = host[(dot + 1)..];
+        return approved.FirstOrDefault(other =>
+        {
+            if (other == host || other.IndexOf('.') is not (> 0 and var otherDot)) return false;
+            var otherFirst = other[..otherDot];
+            return host.Contains(other, StringComparison.Ordinal) || other.Contains(host, StringComparison.Ordinal) || first == otherFirst || (rest == other[(otherDot + 1)..] && Distance(first, otherFirst) <= 1);
+        });
+    }
+
+    // Every request: what the name resolves to now. A short cache, so a page's requests do not each ask.
+    private readonly Dictionary<string, DateTimeOffset> resolved = new(StringComparer.Ordinal);
+    private async Task PublicHost(string host, CancellationToken token)
+    {
+        lock (sync) if (resolved.TryGetValue(host, out var at) && DateTimeOffset.UtcNow - at < TimeSpan.FromSeconds(60)) return;
+        IPAddress[] addresses;
+        try { addresses = await Dns.GetHostAddressesAsync(host, token); }
+        catch (System.Net.Sockets.SocketException) { throw new AgentFault("USERS_HOST_UNRESOLVED", "This environment does not resolve, so nothing was sent.", false); }
+        if (addresses.Length == 0) throw new AgentFault("USERS_HOST_UNRESOLVED", "This environment does not resolve, so nothing was sent.", false);
+        if (addresses.Any(item => IsPrivateAddress(item.ToString()))) throw new AgentFault("USERS_HOST_PRIVATE", "This environment resolves to an address that is not on the internet, so nothing was sent.", false);
+        lock (sync) resolved[host] = DateTimeOffset.UtcNow;
     }
 
     // What may run, checked before anything is started.
@@ -246,9 +301,23 @@ internal sealed partial class UsersKinds
                 await Call("forget", host, p, "", false, token);
                 return new JsonObject();
             case "prompt":
-                if ((Word(p["kind"]) ?? "login") == "login") lock (sync) jars.Remove(host);
+                await PublicHost(host, token);
+                if ((Word(p["kind"]) ?? "login") == "login")
+                {
+                    // The person decides on a window; a name built to pass for an approved one never gets a window.
+                    var hosts = await Call("hosts", host, new JsonObject(), "", false, token);
+                    if (LookalikeOf(host, (hosts["hosts"] as JsonArray ?? []).Select(item => Word(item) ?? "").Where(item => item.Length > 0)) != null)
+                        throw new AgentFault("USERS_HOST_LOOKALIKE", "This name reads like an environment already approved on this machine, so no window was opened and nothing was sent.", false);
+                    lock (sync) jars.Remove(host);
+                }
+                else
+                {
+                    var stored = await Call("status", host, new JsonObject(), "", false, token);
+                    if (stored["available"]?.GetValue<bool>() != true) throw new AgentFault("USERS_HOST_NOT_AUTHENTICATED", "No Users administrator is stored for this environment on this machine; nothing was sent.", false);
+                }
                 return await Prompt(host, p, token);
         }
+        await PublicHost(host, token);
         var request = new JsonObject
         {
             ["url"] = Word(p["url"]), ["method"] = Word(p["method"]), ["fields"] = p["fields"]?.DeepClone() ?? new JsonArray(),
