@@ -169,3 +169,6 @@ System.Windows.Extensions.dll
 ?Microsoft.Identity.Client.Extensions.Msal.dll
 ?System.ClientModel.dll
 ?System.Memory.Data.dll
+# Optional, for the thin bridge of the agent the watcher builds from this bundle (agent/kernel/src/Anvil.Bridge.Thin): the kernel does not need them.
+?WebViewControl.Avalonia.dll
+?Xilium.CefGlue.dll

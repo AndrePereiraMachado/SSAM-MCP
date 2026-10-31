@@ -148,7 +148,7 @@ test('bridge builder targets the Studio runtime, signs through the vault entry p
  const privateKey=generateKeyPairSync('ed25519').privateKey.export({type:'pkcs8',format:'pem'});
  const runtime={executionSource:async()=>{},agentSource:async()=>agent,waitForDotnet:async()=>{},async run(cmd,args){
   if(args.some(x=>String(x).endsWith('read-secrets.ps1')))return {stdout:JSON.stringify({coolifyToken:'memory',sshPrivateKey:Buffer.from('PRIVATE KEY').toString('base64'),authenticodeThumbprint:'b'.repeat(40),manifestPrivateKey:privateKey,journalKey:Buffer.alloc(32,1).toString('base64')})};
-  if(args.includes('-getProperty:TargetFramework'))return {stdout:'net10.0'};
+  if(args.includes('-getProperty:TargetFramework'))return {stdout:args[1].includes('Anvil.RuntimeHook')?'net8.0':args[1].includes('Anvil.Bridge.Thin')?(args.includes('-p:TargetFramework=net10.0')?'net10.0':'net8.0'):'net10.0'};
   if(args.includes('-getProperty:TargetPath'))return {stdout:builds.at(-1).output};
   if(args[0]==='build'){
    builds.push(args);const out=args[args.indexOf('-o')+1];fs.mkdirSync(out,{recursive:true});
@@ -175,6 +175,10 @@ test('bridge builder targets the Studio runtime, signs through the vault entry p
  const key=fs.readFileSync(path.join(result.stage,'public-key.pem'));
  for(const offer of result.offers)assert.equal(verifyBridge(path.join(result.stage,offer.lane,offer.studioVersion,offer.protocol),key).manifest.runtime,'net10.0');
  assert.ok(result.kernel.odcBridgeAccepted.includes(result.kernel.odcBridge));
+ // The real builds of 31/10 (C:/t/r3/img/final/e2e): the thin bridge follows the Studio, and the net8 hook never sees a net10 Studio's framework copies.
+ const thin=builds.find(a=>String(a[1]).includes('Anvil.Bridge.Thin')),hook=builds.find(a=>String(a[1]).includes('Anvil.RuntimeHook'));
+ assert.ok(thin.includes('-p:TargetFramework=net10.0')&&thin.includes('-restore'));
+ assert.ok(!hook.some(x=>/^-p:(SSDir|OdcInstall|TargetFramework)=/.test(String(x))));
 });
 test('a local pin whose deployment rolled back never becomes the served baseline',t=>{
  const dir=tmp(t),r=release(dir),old={window:3,odc:[{version:'1.7.29',image:'private/image',tag:'prod-old',sha256:digest}],o11:[{version:'11.55.93',image:'private/image',tag:'prod-old',sha256:digest}]};

@@ -139,7 +139,9 @@ export function createAutoRuntime(config,runtime) {
    const s=await secrets(),key=createPublicKey(s.manifestPrivateKey).export({type:'spki',format:'pem'});
    const stage=path.join(priv,'bridges',randomUUID());fs.mkdirSync(stage,{recursive:true});
    fs.writeFileSync(path.join(stage,'public-key.pem'),key);
-   const protocol=/const string Version = "(v\d+)"/.exec(fs.readFileSync(path.join(root,'server/platforms/odc/studio/bridge/client/Program.cs'),'utf8'))?.[1];
+   // The client names the bridge of each runtime: Version for the net10 ODC Studios, EarlierVersion for the net8 ones (Bridge.csproj).
+   const clientSource=fs.readFileSync(path.join(root,'server/platforms/odc/studio/bridge/client/Program.cs'),'utf8');
+   const protocol=(bundles.odc.tfm==='net8.0'?/const string EarlierVersion = "(v\d+)"/:/const string Version = "(v\d+)"/).exec(clientSource)?.[1];
    if(!protocol)throw Error('Cannot determine ODC bridge protocol.');
    const offers=[];
    for(const lane of ['odc','o11']){
@@ -152,10 +154,12 @@ export function createAutoRuntime(config,runtime) {
     const outputs=[],assets=[];
     for(const [project,sub] of projects){
      await runtime.waitForDotnet();
-     const projectFile=path.join(lane==='o11'?agentSource:root,project),properties=['-p:UseAppHost=false',`-p:OdcInstall=${bundles.odc.snapshot}`,`-p:SSDir=${bundles.o11.snapshot}`];
+     const projectFile=path.join(lane==='o11'?agentSource:root,project),properties=sub==='hook'?['-p:UseAppHost=false']:['-p:UseAppHost=false',`-p:OdcInstall=${bundles.odc.snapshot}`,`-p:SSDir=${bundles.o11.snapshot}`,`-p:AnvilOdcStudioTfm=${bundles.odc.tfm}`,`-p:AnvilO11StudioTfm=${bundles.o11.tfm}`,...(lane==='o11'?[`-p:TargetFramework=${b.tfm}`]:[])];
+     // The hook is net8 and the client net10 in every pack, whatever the Studio; the bridges follow the Studio. The thin project names net8.0 only as its default.
+     const expected=sub==='hook'?'net8.0':sub==='client'?'net10.0':b.tfm;
      const framework=await runtime.run(config.dotnet??'C:/Program Files/dotnet/dotnet.exe',['msbuild',projectFile,'-getProperty:TargetFramework',...properties],{dir});
-     if(framework.stdout.trim()!==b.tfm)throw Error('Reviewed bridge runtime does not match the Studio.');
-     await runtime.run(config.dotnet??'C:/Program Files/dotnet/dotnet.exe',['build',projectFile,'-c','Release','-nodeReuse:false',...properties,...(sub==='hook'?['-p:AssemblyName=Anvil.RuntimeHook.Agent']:[]),'-o',path.join(target,sub)],{dir,env:{TEMP:priv,TMP:priv,DOTNET_CLI_HOME:path.join(priv,'dotnet-home'),ANVIL_LANE:lane==='odc'?'ss5':'ss4',ANVIL_STUDIO_DIR:b.snapshot,ANVIL_ODC_STUDIO_DIR:bundles.odc.snapshot},timeoutMs:15*60000});
+     if(framework.stdout.trim()!==expected)throw Error('Reviewed bridge runtime does not match the Studio.');
+     await runtime.run(config.dotnet??'C:/Program Files/dotnet/dotnet.exe',['build',projectFile,...(lane==='o11'&&sub==='bridge'?['-restore','-t:Rebuild']:[]),'-c','Release','-nodeReuse:false',...properties,...(sub==='hook'?['-p:AssemblyName=Anvil.RuntimeHook.Agent']:[]),'-o',path.join(target,sub)],{dir,env:{TEMP:priv,TMP:priv,DOTNET_CLI_HOME:path.join(priv,'dotnet-home'),ANVIL_LANE:lane==='odc'?'ss5':'ss4',ANVIL_STUDIO_DIR:b.snapshot,ANVIL_ODC_STUDIO_DIR:bundles.odc.snapshot},timeoutMs:15*60000});
       const builtPath=await runtime.run(config.dotnet??'C:/Program Files/dotnet/dotnet.exe',['msbuild',projectFile,'-getProperty:TargetPath','-p:Configuration=Release','-p:OutputPath='+path.join(target,sub)+path.sep,...properties,...(sub==='hook'?['-p:AssemblyName=Anvil.RuntimeHook.Agent']:[])],{dir});
       outputs.push(builtPath.stdout.trim());assets.push(path.join(path.dirname(projectFile),'obj/project.assets.json'));
     }
@@ -163,7 +167,7 @@ export function createAutoRuntime(config,runtime) {
     fs.writeFileSync(evidenceFile,JSON.stringify(artifactEvidence(target,outputs,assets)));
     const required=lane==='odc'?[`bridge/ODC3.Bridge.${protocol}.dll`,'client/ODC3.Bridge.Client.dll','client/ODC3.Bridge.Client.runtimeconfig.json']:['bridge/Anvil.Bridge.dll','hook/Anvil.RuntimeHook.Agent.dll'];
     if(required.some(name=>!fs.existsSync(path.join(target,name))))throw Error('The compiled client bridge entrypoints are incomplete.');
-    if(lane==='odc'&&JSON.parse(fs.readFileSync(path.join(target,'client/ODC3.Bridge.Client.runtimeconfig.json'),'utf8')).runtimeOptions?.tfm!==b.tfm)throw Error('The bridge client targets a different Studio runtime.');
+    if(lane==='odc'&&JSON.parse(fs.readFileSync(path.join(target,'client/ODC3.Bridge.Client.runtimeconfig.json'),'utf8')).runtimeOptions?.tfm!=='net10.0')throw Error('The bridge client is not the net10 client of the packs.');
     // The shared signing entry point reads the thumbprint from DPAPI itself.
     const signing=await runtime.run(ps,['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',path.join(root,'server/scripts/odc-runtime-signing.ps1'),'-Mode','Artifacts','-ArtifactDirectory',target,'-BuildEvidence',evidenceFile,'-ConfigPath',config.configFile,...(config.vault?['-Vault',config.vault]:[]),'-TimestampServer',settings.timestampServer??'http://timestamp.digicert.com'],{secret:true,timeoutMs:300000,allowFailure:true});
     if(signing.stdout.includes('REVOCATION_UNAVAILABLE'))throw Object.assign(Error('Certificate revocation service is unavailable.'),{code:'REVOCATION_UNAVAILABLE',environmental:true});
