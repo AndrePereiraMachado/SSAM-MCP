@@ -8,7 +8,7 @@ import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { usersRows, addressRows, lookalikeRows } from '../../agent/tests/fixtures/users-table.mjs';
-import { validateUsersRequest, isPrivateAddress, lookalikeOf, USERS_HELPER } from '../../agent/lib/users.mjs';
+import { validateUsersRequest, isPrivateAddress, lookalikeOf, usersScope, USERS_HELPER } from '../../agent/lib/users.mjs';
 
 const app = fileURLToPath(new URL('../../', import.meta.url));
 const dll = path.join(app, 'native/Ssam.Agent/bin/Release/net10.0/ssam-agent.dll');
@@ -40,6 +40,14 @@ test('native check-users-address and check-users-lookalike answer as the Node ag
   assert.equal(l.status, 0, l.stderr);
   assert.deepEqual(JSON.parse(l.stdout), rows.map(([host, approved]) => lookalikeOf(host, approved)));
   assert.deepEqual(JSON.parse(l.stdout), rows.map(row => row[2]));
+});
+
+test('M3: the vault scope is the same in the native core and the Node agent', { timeout: 120000 }, () => {
+  for (const [root, account] of [['C:\\agent\\data', 'ssam_agent_a'], ['C:\\agent\\data', 'ssam_agent_b'], ['C:\\Other\\Place', 'ssam_agent_a']]) {
+    const result = native(['users-scope', root, account]);
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stdout.trim(), usersScope(root, account));
+  }
 });
 
 test('the helper embedded in the native core is the Node agent\'s file, byte for byte', { timeout: 120000 }, () => {

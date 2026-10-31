@@ -12,7 +12,7 @@ import { KINDS, helloKinds } from '../lib/kinds.mjs';
 import { usersRows, addressRows, lookalikeRows, HOST, b64 } from './fixtures/users-table.mjs';
 
 // The sha both sides name: here and platforms/odc/facade/tests/o11-users-hosted.test.mjs in the server line.
-const VAULT_SHA256 = '81b610f962e388310f493395df666d6845b3a7af7cd1f81d8609674564bf15d2';
+const VAULT_SHA256 = '2de5d083174f8b7787a3586f732b51098b8875d9cc955c1787083414b25ba711';
 const tmp = t => { const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ssam-users-')); t.after(() => fs.rmSync(dir, { recursive: true, force: true })); return dir; };
 const codeOf = fn => { try { fn(); return 'ok'; } catch (error) { return error.code; } };
 
@@ -226,6 +226,9 @@ test('the helper runs hidden, with this installation\'s scope, and takes no secr
   assert.equal(args[args.indexOf('-Scope') + 1], usersScope(k.dataRoot));
   assert.equal(args[args.indexOf('-HostName') + 1], HOST);
   assert.notEqual(usersScope(k.dataRoot), usersScope(k.dataRoot + '-other'), 'each installation has its own entries');
+  assert.notEqual(usersScope(k.dataRoot, 'ssam_agent_a'), usersScope(k.dataRoot, 'ssam_agent_b'), 'each account has its own entries');
+  assert.equal(usersScope(k.dataRoot, 'ssam_agent_a').slice(0, 16), usersScope(k.dataRoot, 'ssam_agent_b').slice(0, 16), 'the sweep finds the other accounts of this installation by the first half');
+  assert.match(usersScope(k.dataRoot, 'x'), /^[a-f0-9]{32}$/);
 });
 
 test('A2: a new password goes only under the window that took it, to that form, once', async t => {
@@ -238,6 +241,16 @@ test('A2: a new password goes only under the window that took it, to that form, 
   await k.users.execute(post());
   await k.users.execute(post({ secretRefs: refs }));
   await assert.rejects(k.users.execute(post({ secretRefs: refs })), e => e.code === 'USERS_CONSENT_REQUIRED', 'once');
+});
+
+test('M3: sign-out ends what this agent holds for the host, and the next sign-in asks a person again', async t => {
+  const k = kind(t, { answers: [{ ok: true }] });
+  assert.equal((await k.users.execute({ op: 'status', host: HOST })).consent, true);
+  k.calls.length = 0;
+  assert.deepEqual(await k.users.execute({ op: 'sign-out', host: HOST }), { signedOut: true });
+  assert.equal(k.calls[0].args[k.calls[0].args.indexOf('-Mode') + 1], 'sign-out');
+  await assert.rejects(k.users.execute({ op: 'login', host: HOST }), e => e.code === 'USERS_LOGIN_CONSENT_REQUIRED');
+  await assert.rejects(k.users.execute(request()), e => e.code === 'USERS_LOGIN_CONSENT_REQUIRED');
 });
 
 test('M1: the sign-in sends nothing the server chose, gives back only yes or no, and keeps the session here', async t => {

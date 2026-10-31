@@ -27,8 +27,8 @@ import { AgentError, refuse } from './errors.mjs';
 
 export const USERS_KIND = 'o11.users';
 export const USERS_HELPER = fileURLToPath(new URL('./users-vault.ps1', import.meta.url));
-const OPS = new Set(['status', 'prompt', 'confirm', 'login', 'request', 'forget']);
-const KEYS = Object.freeze({ status: ['op', 'host', 'kind', 'entry'], prompt: ['op', 'host', 'kind', 'entry', 'subject', 'action', 'userId'], confirm: ['op', 'host', 'action', 'userId', 'targetId', 'labels', 'changes'], login: ['op', 'host'], request: ['op', 'host', 'url', 'method', 'fields', 'secretRefs'], forget: ['op', 'host', 'kind', 'entry'] });
+const OPS = new Set(['status', 'prompt', 'confirm', 'login', 'request', 'forget', 'sign-out']);
+const KEYS = Object.freeze({ status: ['op', 'host', 'kind', 'entry'], prompt: ['op', 'host', 'kind', 'entry', 'subject', 'action', 'userId'], confirm: ['op', 'host', 'action', 'userId', 'targetId', 'labels', 'changes'], login: ['op', 'host'], 'sign-out': ['op', 'host'], request: ['op', 'host', 'url', 'method', 'fields', 'secretRefs'], forget: ['op', 'host', 'kind', 'entry'] });
 const HOST = /^(?=.{1,253}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/;
 const ENTRY = /^[a-f0-9]{64}$/;
 const FIELD = /^(?:[A-Za-z0-9_$]{1,200}[$_])?wt(?:Password|ConfirmPassword|NewPassword)Input$/;
@@ -103,7 +103,7 @@ export function validateUsersRequest(params) {
   if (!OPS.has(params.op)) throw invalid('op must be status, prompt, login, request or forget');
   for (const key of Object.keys(params)) if (!KEYS[params.op].includes(key)) throw invalid('unknown parameter ' + key);
   if (!hostOk(params.host)) throw invalid('host must be the DNS name of an environment');
-  if (params.op === 'login') return;
+  if (params.op === 'login' || params.op === 'sign-out') return;
   if (params.op === 'confirm') {
     const rule = text(params.action) && Object.hasOwn(CONFIRM, params.action) ? CONFIRM[params.action] : null;
     if (!rule) throw invalid('action is not one a person can approve here');
@@ -141,8 +141,10 @@ export function validateUsersRequest(params) {
   }
 }
 
-// The vault scope of this installation: its entries are its own, apart from an SSAM installed on the same Windows account.
-export const usersScope = dataRoot => createHash('sha256').update(path.resolve(dataRoot).toLowerCase()).digest('hex').slice(0, 16);
+// The vault scope: this installation and this account of the server. Its entries are its own: another token on this installation
+// inherits nothing, and an SSAM installed on the same Windows account is apart. No account in tests.
+const short = text => createHash('sha256').update(text).digest('hex').slice(0, 16);
+export const usersScope = (dataRoot, account = '') => short(path.resolve(dataRoot).toLowerCase()) + short('account|' + account);
 const powershell = env => path.join(env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
 const FAILURES = Object.freeze({
   USERS_PAGE_TOO_LARGE: 'This page is larger than a Users page can be; it was not read.',
@@ -152,10 +154,10 @@ const FAILURES = Object.freeze({
   USERS_HOST_UNRESOLVED: 'This environment does not resolve, so nothing was sent.', USERS_HOST_NOT_AUTHENTICATED: 'No Users administrator is stored for this environment on this machine; nothing was sent.' });
 
 // exec(file, args, input) -> stdout, start(file, args) -> a child: the tests' seams.
-export function createUsersKind({ dataRoot, platform = process.platform, env = process.env, helper = USERS_HELPER, exec, start, wait = ms => new Promise(r => setTimeout(r, ms)), lookup = name => dns.promises.lookup(name, { all: true }), now = Date.now } = {}) {
+export function createUsersKind({ dataRoot, account = '', platform = process.platform, env = process.env, helper = USERS_HELPER, exec, start, wait = ms => new Promise(r => setTimeout(r, ms)), lookup = name => dns.promises.lookup(name, { all: true }), now = Date.now } = {}) {
   const jars = new Map(), prompts = new Map(), consents = new Map();
   let permits = [];
-  const scope = usersScope(dataRoot);
+  const scope = usersScope(dataRoot, account);
   const promptDir = path.join(dataRoot, 'private', 'users');
   const runHelper = exec ?? ((file, args, input, timeoutMs) => new Promise((resolve, reject) => {
     const child = execFile(file, args, { windowsHide: true, timeout: timeoutMs, maxBuffer: 32 * 1024 * 1024 }, (error, stdout) => (stdout ? resolve(String(stdout)) : reject(error ?? new Error('no answer'))));
@@ -274,6 +276,11 @@ export function createUsersKind({ dataRoot, platform = process.platform, env = p
       if (op === 'status') {
         const value = await helperCall([...base('status', host), ...entryArgs(params)], '', false);
         return { available: value.available === true, principal: typeof value.principal === 'string' ? value.principal : null, consent: hasConsent(host) };
+      }
+      if (op === 'sign-out') {
+        jars.delete(host); consents.delete(host); permits = permits.filter(item => item.host !== host);
+        await helperCall(base('sign-out', host), '', false);
+        return { signedOut: true };
       }
       if (op === 'confirm') return confirm(params);
       if (op === 'login') {

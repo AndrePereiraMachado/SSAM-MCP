@@ -43,6 +43,8 @@ export const usersRows = () => [
   { label: 'the root of the app', request: request({ url: url('') }), expected: 'ok' },
   { label: 'a page with its id', request: request({ url: url('User_Show.aspx?UserId=42') }), expected: 'ok' },
   { label: 'a post with fields', request: request({ method: 'POST', fields: [['a', 'b']] }), expected: 'ok' },
+  { label: 'sign out', request: { op: 'sign-out', host: HOST }, expected: 'ok' },
+  { label: 'sign out names nothing else', request: { op: 'sign-out', host: HOST, kind: 'login' }, expected: 'PARAMS_INVALID' },
   { label: 'the sign-in', request: { op: 'login', host: HOST }, expected: 'ok' },
   { label: 'the sign-in names nothing else', request: { op: 'login', host: HOST, fields: [] }, expected: 'PARAMS_INVALID' },
   { label: 'the login page by GET', request: request({ url: url('Login.aspx') }), expected: 'ok' },

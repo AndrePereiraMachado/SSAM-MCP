@@ -1,11 +1,11 @@
 param(
- [ValidateSet('status','prompt','request','forget','hosts','login','confirm')][string]$Mode='status',
+ [ValidateSet('status','prompt','request','forget','hosts','login','confirm','sign-out')][string]$Mode='status',
  [ValidatePattern('^[a-z0-9][a-z0-9.-]*$')][string]$HostName,
  [ValidateSet('login','password')][string]$Kind='login',
  [ValidatePattern('^[a-f0-9]{64}$')][string]$Entry,
  [string]$Subject='',
  [string]$PromptStatusPath='',
- [ValidatePattern('^[a-f0-9]{16}$')][string]$Scope
+ [ValidatePattern('^[a-f0-9]{32}$')][string]$Scope
 )
 # Secrets live only in this short-lived process and Windows Credential Manager.
 # Neither CLI arguments nor returned JSON contain a password.
@@ -28,8 +28,8 @@ public static class UsersVault {
 '@
 function Target([string]$kind,[string]$entry) {
  if (-not $HostName -or $HostName.Contains('..')) { throw 'Invalid host' }
- # -Scope: the SSAM agent's own entries, one set per agent installation, apart from an SSAM installed on the same account.
- $prefix=if($Scope){"SSAM/Agent/$Scope/O11/$HostName"}else{"SSAM/O11/$HostName"}
+ # -Scope: the SSAM agent's own entries, per installation and per account of the server, apart from an SSAM installed on the same Windows account.
+ $prefix="$(Prefix)/$HostName"
  if ($kind -eq 'login') { return "$prefix/Users" }
  if ($entry -notmatch '^[a-f0-9]{64}$') { throw 'Invalid password reference' }
  return "$prefix/UsersPassword/$entry"
@@ -53,7 +53,14 @@ function Names([string]$filter) {
  }
  return $names
 }
-function Prefix { if($Scope){"SSAM/Agent/$Scope/O11"}else{'SSAM/O11'} }
+function Prefix { if($Scope){"SSAM/Agent/$($Scope.Substring(0,16))/$($Scope.Substring(16))/O11"}else{'SSAM/O11'} }
+# What no longer belongs: entries of another account of this installation (a token replaced or revoked). Never of another installation.
+function Sweep {
+ if(-not $Scope){return}
+ $install="SSAM/Agent/$($Scope.Substring(0,16))"
+ $mine="$install/$($Scope.Substring(16))/"
+ foreach($item in (Names "$install/*")){ if(-not $item.Name.StartsWith($mine)){ [void][UsersVault]::Delete($item.Name,1,0) } }
+}
 function B64([string]$s) { [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($s)) }
 # WebUtility: no limit on a long hidden field, which Uri.EscapeDataString has.
 function Form([string]$s) { [Net.WebUtility]::UrlEncode($s) }
@@ -85,6 +92,13 @@ function Redact([string]$text,[string]$secret) {
  return $text
 }
 try {
+ if ($Mode -ne 'prompt' -and $Mode -ne 'confirm') { Sweep }
+ if ($Mode -eq 'sign-out') {
+  [void][UsersVault]::Delete((Target 'login' ''),1,0)
+  foreach($item in (Names "$(Prefix)/$HostName/UsersPassword/*")){ [void][UsersVault]::Delete($item.Name,1,0) }
+  @{ok=$true}|ConvertTo-Json -Compress
+  exit 0
+ }
  if ($Mode -eq 'status') {
   $found=ReadVault (Target $Kind $Entry) $false
   @{ok=$true;available=($null -ne $found);principal=if($Kind -eq 'login' -and $found){$found.UserName}else{$null}}|ConvertTo-Json -Compress

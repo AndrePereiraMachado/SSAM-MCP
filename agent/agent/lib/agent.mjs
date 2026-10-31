@@ -106,6 +106,8 @@ export function createAgent({ root, runtimeRoot = root, config = {}, deps = {}, 
   d.attachO11 ??= mac ? mac.attachO11 : (pid, startedUtc, hook) => run(['attach', pid, startedUtc, hook]);
 
   const credential = config.credential ?? fs.readFileSync(credentialFile(base), 'utf8').trim();
+  // The vault of o11.users is per account of the server, and the credential is what names it here.
+  d.usersAccount ??= credential;
   const pack = readPack(runtimeRoot);
   // The render worker of this installation (render.mjs): deps.renderer in tests, else pack.json renderer, checked.
   const renderer = deps.renderer ?? resolveRenderer({ runtimeRoot: path.resolve(runtimeRoot), dataRoot: base, pack, platform });

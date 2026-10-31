@@ -158,6 +158,12 @@ internal static class Program
                 Console.WriteLine(new JsonArray(cases.Select(item => (JsonNode?)JsonValue.Create(UsersKinds.LookalikeOf(item![0]!.GetValue<string>(), item[1]!.AsArray().Select(other => other!.GetValue<string>())))).ToArray()).ToJsonString());
                 return 0;
             }
+            // users-scope <root> <account>: the vault scope, compared with the Node agent's in tests/native/users.test.mjs.
+            if (args is ["users-scope", var scopeRoot, var scopeAccount])
+            {
+                Console.WriteLine(UsersKinds.Scope(scopeRoot, scopeAccount));
+                return 0;
+            }
             if (args is ["users-helper-sha256"])
             {
                 Console.WriteLine(Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(UsersKinds.HelperBytes())).ToLowerInvariant());

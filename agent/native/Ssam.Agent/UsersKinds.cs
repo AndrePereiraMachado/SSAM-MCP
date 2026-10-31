@@ -53,10 +53,12 @@ internal sealed partial class UsersKinds
     private readonly List<Permit> permits = [];
     private bool HasConsent(string host) { lock (sync) return consents.TryGetValue(host, out var until) && until > DateTimeOffset.UtcNow; }
 
-    internal UsersKinds(string dataRoot) { this.dataRoot = dataRoot; scope = Scope(dataRoot); }
+    internal UsersKinds(string dataRoot, string account = "") { this.dataRoot = dataRoot; scope = Scope(dataRoot, account); }
 
-    internal static string Scope(string dataRoot) =>
-        Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(Path.GetFullPath(dataRoot).ToLowerInvariant()))).ToLowerInvariant()[..16];
+    // The vault scope: this installation and this account of the server. Its entries are its own: another token on this installation
+    // inherits nothing, and an SSAM installed on the same Windows account is apart.
+    private static string Short(string text) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text))).ToLowerInvariant()[..16];
+    internal static string Scope(string dataRoot, string account = "") => Short(Path.GetFullPath(dataRoot).ToLowerInvariant()) + Short("account|" + account);
 
     private static AgentFault Invalid(string message) => new("PARAMS_INVALID", message);
     private static string? Word(JsonNode? node) => node is JsonValue value && value.TryGetValue<string>(out var text) ? text : null;
@@ -131,14 +133,14 @@ internal sealed partial class UsersKinds
             "status" or "forget" => ["op", "host", "kind", "entry"],
             "prompt" => ["op", "host", "kind", "entry", "subject", "action", "userId"],
             "confirm" => ["op", "host", "action", "userId", "targetId", "labels", "changes"],
-            "login" => ["op", "host"],
+            "login" or "sign-out" => ["op", "host"],
             "request" => ["op", "host", "url", "method", "fields", "secretRefs"],
-            _ => throw Invalid("op must be status, prompt, confirm, login, request or forget"),
+            _ => throw Invalid("op must be status, prompt, confirm, login, request, forget or sign-out"),
         };
         foreach (var (key, _) in p) if (!keys.Contains(key, StringComparer.Ordinal)) throw Invalid("unknown parameter " + key);
         var host = Word(p["host"]);
         if (!HostOk(host)) throw Invalid("host must be the DNS name of an environment");
-        if (op == "login") return;
+        if (op is "login" or "sign-out") return;
         if (op == "confirm")
         {
             var action = Word(p["action"]);
@@ -420,6 +422,10 @@ internal sealed partial class UsersKinds
                 var value = await Call("status", host, p, "", false, token);
                 return new JsonObject { ["available"] = value["available"]?.GetValue<bool>() == true, ["principal"] = Word(value["principal"]), ["consent"] = HasConsent(host) };
             }
+            case "sign-out":
+                lock (sync) { jars.Remove(host); consents.Remove(host); permits.RemoveAll(item => item.Host == host); }
+                await Call("sign-out", host, new JsonObject(), "", false, token);
+                return new JsonObject { ["signedOut"] = true };
             case "confirm":
                 return await Confirm(host, p, token);
             case "login":
