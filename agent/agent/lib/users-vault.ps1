@@ -1,5 +1,5 @@
 param(
- [ValidateSet('status','prompt','request','forget','hosts','login')][string]$Mode='status',
+ [ValidateSet('status','prompt','request','forget','hosts','login','confirm')][string]$Mode='status',
  [ValidatePattern('^[a-z0-9][a-z0-9.-]*$')][string]$HostName,
  [ValidateSet('login','password')][string]$Kind='login',
  [ValidatePattern('^[a-f0-9]{64}$')][string]$Entry,
@@ -100,6 +100,32 @@ try {
   if ($Kind -ne 'password') { throw 'Only a new password is forgotten' }
   [void][UsersVault]::Delete((Target $Kind $Entry),1,0)
   @{ok=$true}|ConvertTo-Json -Compress
+  exit 0
+ }
+ if ($Mode -eq 'confirm') {
+  # The person's yes. Fixed words and the agent's checked rows; a row from a page says so. No answer in time is no. Decline is the default.
+  $spec=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String([Console]::In.ReadToEnd().Trim()))|ConvertFrom-Json
+  Add-Type -AssemblyName System.Windows.Forms
+  Add-Type -AssemblyName System.Drawing
+  $f=New-Object Windows.Forms.Form
+  $f.Text='SSAM - Confirm this change';$f.StartPosition='CenterScreen';$f.FormBorderStyle='FixedDialog';$f.MaximizeBox=$false;$f.MinimizeBox=$false;$f.TopMost=$true
+  $y=15
+  $intro=New-Object Windows.Forms.Label;$intro.SetBounds(18,$y,500,40);$intro.UseMnemonic=$false;$intro.Text='An AI assistant asks to do this through the SSAM agent on this machine. Nothing happens unless you approve it.';$f.Controls.Add($intro);$y+=48
+  foreach($row in $spec.rows){
+   $name=New-Object Windows.Forms.Label;$name.SetBounds(18,$y,170,38);$name.UseMnemonic=$false;$name.Text=[string]$row.label;$f.Controls.Add($name)
+   $value=New-Object Windows.Forms.TextBox;$value.SetBounds(190,$y,330,24);$value.ReadOnly=$true;$value.TabStop=$false;$value.Text=[string]$row.value;$f.Controls.Add($value)
+   if($row.data){$name.ForeColor=[Drawing.Color]::DarkRed;$name.Text=[string]$row.label+' (from the page, not verified)'}
+   $y+=42
+  }
+  $approved=$false;$timedOut=$false
+  $yes=New-Object Windows.Forms.Button;$yes.Text='Approve';$yes.SetBounds(290,$y+10,110,35);$yes.Enabled=$false;$yes.Add_Click({$script:approved=$true;$f.Close()});$f.Controls.Add($yes)
+  $no=New-Object Windows.Forms.Button;$no.Text='Decline';$no.SetBounds(410,$y+10,110,35);$no.DialogResult='Cancel';$f.Controls.Add($no);$f.CancelButton=$no;$f.AcceptButton=$no
+  $f.ClientSize=New-Object Drawing.Size(540,($y+60))
+  $arm=New-Object Windows.Forms.Timer;$arm.Interval=1500;$arm.Add_Tick({$yes.Enabled=$true;$arm.Stop()})
+  $end=New-Object Windows.Forms.Timer;$end.Interval=120000;$end.Add_Tick({$script:timedOut=$true;$f.Close()})
+  $f.Add_Shown({[void][UsersVault]::ShowWindow($f.Handle,5);[void][UsersVault]::SetForegroundWindow($f.Handle);$no.Focus();$arm.Start();$end.Start()})
+  $null=$f.ShowDialog();$arm.Dispose();$end.Dispose();$f.Dispose()
+  @{ok=$true;approved=[bool]$approved;timedOut=[bool]$timedOut}|ConvertTo-Json -Compress
   exit 0
  }
  if ($Mode -eq 'login') {
