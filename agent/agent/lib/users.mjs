@@ -8,7 +8,8 @@
 //
 // params: {op:'status', host, kind?, entry?} -> {available, principal}
 //         {op:'prompt', host, kind?, entry?, subject?} -> {opened, alreadyOpen, visible?, saved?}
-//         {op:'request', host, url, method, fields:[[name, value]], secretRefs?:[{field, kind, entry?, part}]}
+//         {op:'login', host} -> {authenticated}: the helper signs in by itself; the server chooses no field and sees no page
+//         {op:'request', host, url, method, fields:[[name, value]], secretRefs?:[{field, kind:'password', entry, part:'password'}]}
 //             -> {status, location, contentType, body} (the three texts in base64)
 //         {op:'forget', host, kind:'password', entry} -> {}
 // Refusals happen before anything is started. The table of what passes is shared with the native core (check-users-request).
@@ -23,11 +24,12 @@ import { AgentError, refuse } from './errors.mjs';
 
 export const USERS_KIND = 'o11.users';
 export const USERS_HELPER = fileURLToPath(new URL('./users-vault.ps1', import.meta.url));
-const OPS = new Set(['status', 'prompt', 'request', 'forget']);
-const KEYS = Object.freeze({ status: ['op', 'host', 'kind', 'entry'], prompt: ['op', 'host', 'kind', 'entry', 'subject'], request: ['op', 'host', 'url', 'method', 'fields', 'secretRefs'], forget: ['op', 'host', 'kind', 'entry'] });
+const OPS = new Set(['status', 'prompt', 'login', 'request', 'forget']);
+const KEYS = Object.freeze({ status: ['op', 'host', 'kind', 'entry'], prompt: ['op', 'host', 'kind', 'entry', 'subject'], login: ['op', 'host'], request: ['op', 'host', 'url', 'method', 'fields', 'secretRefs'], forget: ['op', 'host', 'kind', 'entry'] });
 const HOST = /^(?=.{1,253}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/;
 const ENTRY = /^[a-f0-9]{64}$/;
-const FIELD = /^[A-Za-z0-9_$]{1,256}$/;
+const FIELD = /^(?:[A-Za-z0-9_$]{1,200}[$_])?wt(?:Password|ConfirmPassword|NewPassword)Input$/;
+const PASSWORD_PAGE = /^\/Users\/(?:User_Edit|User_Show)\.aspx$/;
 const PAGE = /^\/Users\/(?:(?:Login|User_List|Inactive_Users|User_Show|User_Edit|Group_List|Group_Show|Group_Edit|Application_List|Application_Show|Role_Show|MyInfo)\.aspx)?$/;
 const QUERY = /^(?:(?:UserId|GroupId|RoleId|ApplicationId)=[1-9][0-9]{0,18})?$/;
 const MAX_FIELDS = 2000, MAX_FIELD_BYTES = 8 * 1024 * 1024, MAX_SUBJECT = 256;
@@ -81,9 +83,10 @@ const requestUrl = (url, host) => {
 // What may run, checked before anything is started (the table tests/native/users.test.mjs shares with the native core).
 export function validateUsersRequest(params) {
   if (!params || typeof params !== 'object' || Array.isArray(params)) throw invalid('params must be an object');
-  if (!OPS.has(params.op)) throw invalid('op must be status, prompt, request or forget');
+  if (!OPS.has(params.op)) throw invalid('op must be status, prompt, login, request or forget');
   for (const key of Object.keys(params)) if (!KEYS[params.op].includes(key)) throw invalid('unknown parameter ' + key);
   if (!hostOk(params.host)) throw invalid('host must be the DNS name of an environment');
+  if (params.op === 'login') return;
   if (params.op !== 'request') {
     const kind = params.kind ?? 'login';
     if (kind !== 'login' && kind !== 'password') throw invalid('kind must be login or password');
@@ -96,13 +99,13 @@ export function validateUsersRequest(params) {
   if (params.method !== 'GET' && params.method !== 'POST') throw invalid('method must be GET or POST');
   const { fields = [], secretRefs = [] } = params;
   if (!Array.isArray(fields) || fields.length > MAX_FIELDS || !fields.every(f => Array.isArray(f) && f.length === 2 && text(f[0]) && text(f[1]))) throw invalid('fields must be [name, value] texts');
+  if (page === '/Users/Login.aspx' && params.method === 'POST') throw invalid('the sign-in is op login');
   if (fields.reduce((n, f) => n + f[0].length + f[1].length, 0) > MAX_FIELD_BYTES) throw invalid('fields are too large');
   if (!Array.isArray(secretRefs) || secretRefs.length > 2) throw invalid('at most 2 secretRefs');
   for (const ref of secretRefs) {
     if (!ref || typeof ref !== 'object' || Array.isArray(ref) || Object.keys(ref).some(k => !['field', 'kind', 'entry', 'part'].includes(k))) throw invalid('secretRefs take field, kind, entry and part');
-    if (!text(ref.field) || !FIELD.test(ref.field) || (ref.part !== 'username' && ref.part !== 'password')) throw invalid('invalid secret field');
-    if (ref.kind === 'login') { if (ref.entry !== undefined || page !== '/Users/Login.aspx' || params.method !== 'POST') throw invalid('the login goes only to the login page'); }
-    else if (ref.kind !== 'password' || !text(ref.entry) || !ENTRY.test(ref.entry) || ref.part !== 'password' || params.method !== 'POST') throw invalid('invalid secret reference');
+    if (!text(ref.field) || !FIELD.test(ref.field) || ref.part !== 'password') throw invalid('a new password goes only into a password field');
+    if (ref.kind !== 'password' || !text(ref.entry) || !ENTRY.test(ref.entry) || params.method !== 'POST' || !PASSWORD_PAGE.test(page)) throw invalid('a new password goes only into the form of a user');
   }
 }
 
@@ -110,6 +113,8 @@ export function validateUsersRequest(params) {
 export const usersScope = dataRoot => createHash('sha256').update(path.resolve(dataRoot).toLowerCase()).digest('hex').slice(0, 16);
 const powershell = env => path.join(env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
 const FAILURES = Object.freeze({
+  USERS_PAGE_TOO_LARGE: 'This page is larger than a Users page can be; it was not read.',
+  USERS_LOGIN_LAYOUT_CHANGED: 'The sign-in page of this environment is not the one this agent knows; nothing was sent.',
   USERS_HOST_LOOKALIKE: 'This name reads like an environment already approved on this machine, so no window was opened and nothing was sent.',
   USERS_HOST_PRIVATE: 'This environment resolves to an address that is not on the internet, so nothing was sent.',
   USERS_HOST_UNRESOLVED: 'This environment does not resolve, so nothing was sent.', USERS_HOST_NOT_AUTHENTICATED: 'No Users administrator is stored for this environment on this machine; nothing was sent.' });
@@ -191,6 +196,12 @@ export function createUsersKind({ dataRoot, platform = process.platform, env = p
       if (op === 'status') {
         const value = await helperCall([...base('status', host), ...entryArgs(params)], '', false);
         return { available: value.available === true, principal: typeof value.principal === 'string' ? value.principal : null };
+      }
+      if (op === 'login') {
+        await publicHost(host);
+        const value = await helperCall(base('login', host), '', null);
+        storeCookies(host, value.setCookie);
+        return { authenticated: value.authenticated === true };
       }
       if (op === 'forget') { await helperCall([...base('forget', host), ...entryArgs(params)], '', false); return {}; }
       if (op === 'prompt') {

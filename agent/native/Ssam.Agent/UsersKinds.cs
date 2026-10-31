@@ -24,14 +24,14 @@ internal sealed partial class UsersKinds
     private readonly Dictionary<string, Process> prompts = new(StringComparer.Ordinal);
     private readonly object sync = new();
 
-    [GeneratedRegex("^(?=.{1,253}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$", RegexOptions.CultureInvariant)] private static partial Regex HostPattern();
-    [GeneratedRegex("^[a-f0-9]{64}$", RegexOptions.CultureInvariant)] private static partial Regex EntryPattern();
-    [GeneratedRegex("^[A-Za-z0-9_$]{1,256}$", RegexOptions.CultureInvariant)] private static partial Regex FieldPattern();
-    [GeneratedRegex("^/Users/(?:(?:Login|User_List|Inactive_Users|User_Show|User_Edit|Group_List|Group_Show|Group_Edit|Application_List|Application_Show|Role_Show|MyInfo)\\.aspx)?$", RegexOptions.CultureInvariant)] private static partial Regex PagePattern();
-    [GeneratedRegex("^(?:(?:UserId|GroupId|RoleId|ApplicationId)=[1-9][0-9]{0,18})?$", RegexOptions.CultureInvariant)] private static partial Regex QueryPattern();
+    [GeneratedRegex("^(?=.{1,253}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+\\z", RegexOptions.CultureInvariant)] private static partial Regex HostPattern();
+    [GeneratedRegex("^[a-f0-9]{64}\\z", RegexOptions.CultureInvariant)] private static partial Regex EntryPattern();
+    [GeneratedRegex("^(?:[A-Za-z0-9_$]{1,200}[$_])?wt(?:Password|ConfirmPassword|NewPassword)Input\\z", RegexOptions.CultureInvariant)] private static partial Regex FieldPattern();
+    [GeneratedRegex("^/Users/(?:(?:Login|User_List|Inactive_Users|User_Show|User_Edit|Group_List|Group_Show|Group_Edit|Application_List|Application_Show|Role_Show|MyInfo)\\.aspx)?\\z", RegexOptions.CultureInvariant)] private static partial Regex PagePattern();
+    [GeneratedRegex("^(?:(?:UserId|GroupId|RoleId|ApplicationId)=[1-9][0-9]{0,18})?\\z", RegexOptions.CultureInvariant)] private static partial Regex QueryPattern();
     [GeneratedRegex("[\\\\\\s\\u0000-\\u001f]|%2e|%2f|%5c", RegexOptions.CultureInvariant | RegexOptions.IgnoreCase)] private static partial Regex BadUrlPattern();
     [GeneratedRegex("[\\u0000-\\u001f\\u007f]", RegexOptions.CultureInvariant)] private static partial Regex ControlPattern();
-    [GeneratedRegex("^USERS_[A-Z_]{1,60}$", RegexOptions.CultureInvariant)] private static partial Regex CodePattern();
+    [GeneratedRegex("^USERS_[A-Z_]{1,60}\\z", RegexOptions.CultureInvariant)] private static partial Regex CodePattern();
 
     internal UsersKinds(string dataRoot) { this.dataRoot = dataRoot; scope = Scope(dataRoot); }
 
@@ -110,12 +110,14 @@ internal sealed partial class UsersKinds
         {
             "status" or "forget" => ["op", "host", "kind", "entry"],
             "prompt" => ["op", "host", "kind", "entry", "subject"],
+            "login" => ["op", "host"],
             "request" => ["op", "host", "url", "method", "fields", "secretRefs"],
-            _ => throw Invalid("op must be status, prompt, request or forget"),
+            _ => throw Invalid("op must be status, prompt, login, request or forget"),
         };
         foreach (var (key, _) in p) if (!keys.Contains(key, StringComparer.Ordinal)) throw Invalid("unknown parameter " + key);
         var host = Word(p["host"]);
         if (!HostOk(host)) throw Invalid("host must be the DNS name of an environment");
+        if (op == "login") return;
         if (op != "request")
         {
             var kind = p["kind"] == null ? "login" : Word(p["kind"]);
@@ -136,6 +138,7 @@ internal sealed partial class UsersKinds
         if (rest.Contains('#') || !PagePattern().IsMatch(page) || !QueryPattern().IsMatch(query)) throw Invalid("url is not a Users page of the host");
         var method = Word(p["method"]);
         if (method != "GET" && method != "POST") throw Invalid("method must be GET or POST");
+        if (page == "/Users/Login.aspx" && method == "POST") throw Invalid("the sign-in is op login");
         if (p["fields"] != null)
         {
             if (p["fields"] is not JsonArray fields || fields.Count > MaxFields) throw Invalid("fields must be [name, value] texts");
@@ -152,11 +155,8 @@ internal sealed partial class UsersKinds
         foreach (var item in refs)
         {
             if (item is not JsonObject reference || reference.Any(pair => pair.Key is not ("field" or "kind" or "entry" or "part"))) throw Invalid("secretRefs take field, kind, entry and part");
-            var part = Word(reference["part"]);
-            if (Word(reference["field"]) is not { } field || !FieldPattern().IsMatch(field) || (part != "username" && part != "password")) throw Invalid("invalid secret field");
-            var kind = Word(reference["kind"]);
-            if (kind == "login") { if (reference["entry"] != null || page != "/Users/Login.aspx" || method != "POST") throw Invalid("the login goes only to the login page"); }
-            else if (kind != "password" || Word(reference["entry"]) is not { } entry || !EntryPattern().IsMatch(entry) || part != "password" || method != "POST") throw Invalid("invalid secret reference");
+            if (Word(reference["field"]) is not { } field || !FieldPattern().IsMatch(field) || Word(reference["part"]) != "password") throw Invalid("a new password goes only into a password field");
+            if (Word(reference["kind"]) != "password" || Word(reference["entry"]) is not { } entry || !EntryPattern().IsMatch(entry) || method != "POST" || page is not ("/Users/User_Edit.aspx" or "/Users/User_Show.aspx")) throw Invalid("a new password goes only into the form of a user");
         }
     }
 
@@ -222,6 +222,8 @@ internal sealed partial class UsersKinds
         var code = Word(value?["code"]) is { } said && CodePattern().IsMatch(said) ? said : "USERS_PRIVATE_REQUEST_FAILED";
         throw code == "USERS_HOST_NOT_AUTHENTICATED"
             ? new AgentFault(code, "No Users administrator is stored for this environment on this machine; nothing was sent.", false)
+            : code == "USERS_PAGE_TOO_LARGE" ? new AgentFault(code, "This page is larger than a Users page can be; it was not read.", executed)
+            : code == "USERS_LOGIN_LAYOUT_CHANGED" ? new AgentFault(code, "The sign-in page of this environment is not the one this agent knows; nothing was sent.", false)
             : new AgentFault(code, "The private Users request failed; no automatic retry.", executed);
     }
 
@@ -296,6 +298,13 @@ internal sealed partial class UsersKinds
             {
                 var value = await Call("status", host, p, "", false, token);
                 return new JsonObject { ["available"] = value["available"]?.GetValue<bool>() == true, ["principal"] = Word(value["principal"]) };
+            }
+            case "login":
+            {
+                await PublicHost(host, token);
+                var signed = await Call("login", host, new JsonObject(), "", null, token);
+                StoreCookies(host, signed["setCookie"]);
+                return new JsonObject { ["authenticated"] = signed["authenticated"]?.GetValue<bool>() == true };
             }
             case "forget":
                 await Call("forget", host, p, "", false, token);

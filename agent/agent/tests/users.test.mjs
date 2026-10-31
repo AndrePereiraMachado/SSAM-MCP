@@ -12,7 +12,7 @@ import { KINDS, helloKinds } from '../lib/kinds.mjs';
 import { usersRows, addressRows, lookalikeRows, HOST, b64 } from './fixtures/users-table.mjs';
 
 // The sha both sides name: here and platforms/odc/facade/tests/o11-users-hosted.test.mjs in the server line.
-const VAULT_SHA256 = 'd5cb88f63ee0683e43543c7b790298c2b1e202f96eea969fedd5b33ca5b00981';
+const VAULT_SHA256 = '8b7bccbefa07fb6b44256f493eb262b110a9ae41a5b1c894657ac7559549c304';
 const tmp = t => { const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ssam-users-')); t.after(() => fs.rmSync(dir, { recursive: true, force: true })); return dir; };
 const codeOf = fn => { try { fn(); return 'ok'; } catch (error) { return error.code; } };
 
@@ -117,6 +117,23 @@ test('the helper runs hidden, with this installation\'s scope, and takes no secr
   assert.notEqual(usersScope(k.dataRoot), usersScope(k.dataRoot + '-other'), 'each installation has its own entries');
 });
 
+test('M1: the sign-in sends nothing the server chose, gives back only yes or no, and keeps the session here', async t => {
+  const k = kind(t, { answers: [{ ok: true, authenticated: true, setCookie: [b64('ASP.NET_SessionId=abc; path=/')] }, page()] });
+  assert.deepEqual(await k.users.execute({ op: 'login', host: HOST }), { authenticated: true });
+  assert.equal(k.calls[0].input, '');
+  await k.users.execute(request());
+  assert.equal(decoded(k.calls[1]).cookie, 'ASP.NET_SessionId=abc');
+});
+
+test('M1 and M9: the helper signs in by itself, redacts every form of a value and refuses a large page', () => {
+  const text = fs.readFileSync(USERS_HELPER, 'utf8');
+  assert.match(text, /\$MaxPage=262144/);
+  assert.match(text, /USERS_PAGE_TOO_LARGE/);
+  for (const form of ["'IgnoreCase'", 'EscapeDataString($secret)', 'UTF8.GetBytes($secret)', 'Unicode.GetBytes($secret)', '\\u003c', '&apos;']) assert.ok(text.includes(form), form);
+  assert.match(text, /Administrator's goes only through -Mode login|administrator's goes only through -Mode login/i);
+  assert.ok(!/kind -eq 'login' -and \$uri\.AbsolutePath/.test(text));
+});
+
 test('the helper\'s refusal is a code and a fixed text, and a host without an administrator ran nothing', async t => {
   const k = kind(t, { answers: [{ ok: false, code: 'USERS_HOST_NOT_AUTHENTICATED' }] });
   await assert.rejects(k.users.execute(request()), e => e.code === 'USERS_HOST_NOT_AUTHENTICATED' && e.executed === false);
@@ -168,8 +185,9 @@ test('the helper carries the rules of its own side: closed modes and routes, the
   const text = fs.readFileSync(USERS_HELPER, 'utf8');
   assert.match(text, /\$web\.AllowAutoRedirect=\$false/);
   assert.match(text, /USERS_HOST_NOT_AUTHENTICATED/);
-  assert.ok(text.indexOf('USERS_HOST_NOT_AUTHENTICATED') < text.indexOf('[Net.HttpWebRequest]::Create'), 'the vault is read before any request');
-  assert.match(text, /Login credential outside login route/);
+  assert.ok(text.indexOf("Fail 'USERS_HOST_NOT_AUTHENTICATED'") < text.indexOf("$page=Http $uri 'GET'"), 'the vault is read before the sign-in');
+  assert.ok(text.indexOf("code='USERS_HOST_NOT_AUTHENTICATED'") < text.indexOf('$page=Http $uri $r.method'), 'the vault is read before any request');
+  assert.match(text, /\$ref\.field -notmatch/);
   assert.match(text, /\$uri\.Scheme -ne 'https' -or \$uri\.Host -ne \$HostName/);
 });
 
@@ -181,5 +199,5 @@ test('the real helper: an environment with no administrator stored is refused be
   assert.deepEqual(await users.execute({ op: 'status', host: HOST, kind: 'password', entry: 'a'.repeat(64) }), { available: false, principal: null });
   assert.deepEqual(await users.execute({ op: 'forget', host: HOST, kind: 'password', entry: 'a'.repeat(64) }), {});
   await assert.rejects(users.execute(request()), e => e.code === 'USERS_HOST_NOT_AUTHENTICATED' && e.executed === false);
-  await assert.rejects(users.execute(request({ url: `https://${HOST}/Users/Login.aspx`, method: 'POST', secretRefs: [{ field: 'p', kind: 'login', part: 'password' }] })), e => e.code === 'USERS_HOST_NOT_AUTHENTICATED');
+  await assert.rejects(users.execute({ op: 'login', host: HOST }), e => e.code === 'USERS_HOST_NOT_AUTHENTICATED');
 });

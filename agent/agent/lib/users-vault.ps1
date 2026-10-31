@@ -1,5 +1,5 @@
 param(
- [ValidateSet('status','prompt','request','forget','hosts')][string]$Mode='status',
+ [ValidateSet('status','prompt','request','forget','hosts','login')][string]$Mode='status',
  [ValidatePattern('^[a-z0-9][a-z0-9.-]*$')][string]$HostName,
  [ValidateSet('login','password')][string]$Kind='login',
  [ValidatePattern('^[a-f0-9]{64}$')][string]$Entry,
@@ -55,7 +55,35 @@ function Names([string]$filter) {
 }
 function Prefix { if($Scope){"SSAM/Agent/$Scope/O11"}else{'SSAM/O11'} }
 function B64([string]$s) { [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($s)) }
-function Form([string]$s) { [Uri]::EscapeDataString($s).Replace('%20','+') }
+# WebUtility: no limit on a long hidden field, which Uri.EscapeDataString has.
+function Form([string]$s) { [Net.WebUtility]::UrlEncode($s) }
+function Fail([string]$code) { @{ok=$false;code=$code}|ConvertTo-Json -Compress; exit 1 }
+# One request, never redirected. A page larger than this is refused: a Users page never is, and it would stop a server that reads it.
+$MaxPage=262144
+function Http([Uri]$uri,[string]$method,$jar,[byte[]]$bytes) {
+ [Net.ServicePointManager]::SecurityProtocol=[Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+ $web=[Net.HttpWebRequest]::Create($uri);$web.Method=$method;$web.AllowAutoRedirect=$false;$web.KeepAlive=$false;$web.Timeout=30000;$web.ReadWriteTimeout=30000;$web.UserAgent='SSAM-Users/1';$web.Accept='text/html,application/json,text/javascript';$web.CookieContainer=$jar
+ if($method -eq 'POST'){
+  $web.ContentType='application/x-www-form-urlencoded';$web.ContentLength=$bytes.Length
+  $stream=$web.GetRequestStream();$stream.Write($bytes,0,$bytes.Length);$stream.Close();[Array]::Clear($bytes,0,$bytes.Length)
+ }
+ try{$response=$web.GetResponse()}catch [Net.WebException] {$response=$_.Exception.Response;if(-not $response){throw}}
+ $inputStream=$response.GetResponseStream();$buffer=New-Object byte[] 65536;$memory=New-Object IO.MemoryStream
+ while($memory.Length -le $MaxPage){$n=$inputStream.Read($buffer,0,$buffer.Length);if($n -le 0){break};$memory.Write($buffer,0,$n)};$inputStream.Close()
+ if($memory.Length -gt $MaxPage){$response.Close();Fail 'USERS_PAGE_TOO_LARGE'}
+ $answer=[pscustomobject]@{Status=[int]$response.StatusCode;Location=[string]$response.Headers['Location'];ContentType=[string]$response.ContentType;Body=[Text.Encoding]::UTF8.GetString($memory.ToArray());Cookies=@($response.Cookies|ForEach-Object{B64 ('{0}={1}; path={2}' -f $_.Name,$_.Value,$_.Path)})}
+ $response.Close()
+ return $answer
+}
+function Attr([string]$tag,[string]$name) { $m=[regex]::Match($tag,"\b$name\s*=\s*(?:`"([^`"]*)`"|'([^']*)'|([^\s>]+))",'IgnoreCase'); if(-not $m.Success){return $null}; [Net.WebUtility]::HtmlDecode(($m.Groups[1].Value+$m.Groups[2].Value+$m.Groups[3].Value)) }
+# Every form a page can show a value in: as it is, HTML, URL, JavaScript, base64; in any case.
+function Redact([string]$text,[string]$secret) {
+ if(-not $secret){return $text}
+ $html=[Net.WebUtility]::HtmlEncode($secret)
+ $forms=@($secret,$html,$html.Replace('&#39;','&apos;'),(Form $secret),[Uri]::EscapeDataString($secret),$secret.Replace('\','\\').Replace('"','\"').Replace("'","\'"),$secret.Replace('<','\u003c').Replace('>','\u003e').Replace('&','\u0026'),[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($secret)),[Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($secret)))
+ foreach($echo in ($forms|Select-Object -Unique)){ $text=[regex]::Replace($text,[regex]::Escape($echo),'[redacted]','IgnoreCase') }
+ return $text
+}
 try {
  if ($Mode -eq 'status') {
   $found=ReadVault (Target $Kind $Entry) $false
@@ -72,6 +100,30 @@ try {
   if ($Kind -ne 'password') { throw 'Only a new password is forgotten' }
   [void][UsersVault]::Delete((Target $Kind $Entry),1,0)
   @{ok=$true}|ConvertTo-Json -Compress
+  exit 0
+ }
+ if ($Mode -eq 'login') {
+  # The helper signs in by itself: the server chooses no field, sees no login page and gets no answer but yes or no.
+  $v=ReadVault (Target 'login' '') $true
+  if(-not $v){Fail 'USERS_HOST_NOT_AUTHENTICATED'}
+  $uri=[Uri]"https://$HostName/Users/Login.aspx"
+  $jar=New-Object Net.CookieContainer
+  $page=Http $uri 'GET' $jar $null
+  $tags=@([regex]::Matches($page.Body,'<input\b[^>]*>','IgnoreCase')|ForEach-Object{$_.Value})
+  $typeOf={param($t) $x=Attr $t 'type'; if($x){$x.ToLowerInvariant()}else{'text'}}
+  $users=@($tags|Where-Object{(& $typeOf $_) -eq 'text' -and (Attr $_ 'name')});$passwords=@($tags|Where-Object{(& $typeOf $_) -eq 'password'});$submits=@($tags|Where-Object{(& $typeOf $_) -eq 'submit' -and (Attr $_ 'value') -eq 'Log In'})
+  if($users.Count -ne 1 -or $passwords.Count -ne 1 -or $submits.Count -ne 1){Fail 'USERS_LOGIN_LAYOUT_CHANGED'}
+  $pairs=New-Object Collections.Generic.List[string]
+  foreach($t in ($tags|Where-Object{(& $typeOf $_) -eq 'hidden' -and (Attr $_ 'name')})){$pairs.Add((Form (Attr $t 'name'))+'='+(Form ([string](Attr $t 'value'))))}
+  $pairs.Add((Form (Attr $submits[0] 'name'))+'='+(Form 'Log In'))
+  $pairs.Add((Form (Attr $users[0] 'name'))+'='+(Form $v.UserName));$pairs.Add((Form (Attr $passwords[0] 'name'))+'='+(Form $v.Secret));$v=$null
+  $bytes=[Text.Encoding]::UTF8.GetBytes(($pairs -join '&'));$pairs.Clear()
+  $after=Http $uri 'POST' $jar $bytes
+  $redirected=$after.Status -ge 300 -and $after.Status -lt 400
+  $away=$redirected -and $after.Location -and ($after.Location -notmatch 'Login\.aspx')
+  $signed=$away -or ($after.Status -eq 200 -and $after.Body -notmatch 'type\s*=\s*["'']?password')
+  $cookies=@($jar.GetCookies($uri)|ForEach-Object{B64 ('{0}={1}; path={2}' -f $_.Name,$_.Value,$_.Path)})
+  @{ok=$true;authenticated=[bool]$signed;setCookie=$cookies}|ConvertTo-Json -Compress
   exit 0
  }
  if ($Mode -eq 'prompt') {
@@ -127,31 +179,19 @@ try {
  foreach($pair in $r.fields){$pairs.Add((Form ([string]$pair[0]))+'='+(Form ([string]$pair[1])))}
  $secrets=New-Object Collections.Generic.List[string]
  foreach($ref in $r.secretRefs){
+  # A new password, into the password fields of the two forms that have them. The administrator's goes only through -Mode login.
   $expected=Target ([string]$ref.kind) ([string]$ref.entry)
-  if($ref.field -notmatch '^[A-Za-z0-9_$]+$' -or $ref.part -notin @('username','password')){throw 'Invalid secret field'}
-  if($ref.kind -ne 'login' -and $ref.part -ne 'password'){throw 'Invalid secret part'}
-  if($ref.kind -eq 'login' -and $uri.AbsolutePath -ne '/Users/Login.aspx'){throw 'Login credential outside login route'}
+  if($ref.kind -ne 'password' -or $ref.part -ne 'password' -or $r.method -ne 'POST' -or $ref.field -notmatch '(?:^|[$_])wt(?:Password|ConfirmPassword|NewPassword)Input$' -or $uri.AbsolutePath -notmatch '^/Users/(?:User_Edit|User_Show)\.aspx$'){throw 'Invalid secret field'}
   $v=ReadVault $expected $true;if(-not $v){throw 'Credential missing'}
-  $s=if($ref.part -eq 'username'){$v.UserName}else{$v.Secret};$secrets.Add($s)
-  $pairs.Add((Form ([string]$ref.field))+'='+(Form $s));$v=$null;$s=$null
+  $secrets.Add($v.Secret);$pairs.Add((Form ([string]$ref.field))+'='+(Form $v.Secret));$v=$null
  }
- [Net.ServicePointManager]::SecurityProtocol=[Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
- $web=[Net.HttpWebRequest]::Create($uri);$web.Method=$r.method;$web.AllowAutoRedirect=$false;$web.KeepAlive=$false;$web.Timeout=30000;$web.ReadWriteTimeout=30000;$web.UserAgent='SSAM-Users/1';$web.Accept='text/html,application/json,text/javascript'
  $jar=New-Object Net.CookieContainer
- if($r.cookie){$jar.SetCookies($uri,([string]$r.cookie).Replace('; ', ', '))};$web.CookieContainer=$jar
- if($r.method -eq 'POST'){
-  $bytes=[Text.Encoding]::UTF8.GetBytes(($pairs -join '&'));$web.ContentType='application/x-www-form-urlencoded';$web.ContentLength=$bytes.Length
-  $stream=$web.GetRequestStream();$stream.Write($bytes,0,$bytes.Length);$stream.Close();[Array]::Clear($bytes,0,$bytes.Length)
- }
- try{$response=$web.GetResponse()}catch [Net.WebException] {$response=$_.Exception.Response;if(-not $response){throw}}
- $inputStream=$response.GetResponseStream();$buffer=New-Object byte[] 65536;$memory=New-Object IO.MemoryStream
- while($memory.Length -lt 8388609){$n=$inputStream.Read($buffer,0,$buffer.Length);if($n -le 0){break};$memory.Write($buffer,0,$n)};$inputStream.Close()
- if($memory.Length -gt 8388608){throw 'Response too large'}
- $body=[Text.Encoding]::UTF8.GetString($memory.ToArray())
- foreach($s in $secrets){if($s){foreach($echo in @($s,[Net.WebUtility]::HtmlEncode($s),(Form $s))){$body=$body.Replace($echo,'[redacted]')}}};$secrets.Clear();$pairs.Clear()
- $cookies=@($response.Cookies|ForEach-Object{B64 ('{0}={1}; path={2}' -f $_.Name,$_.Value,$_.Path)})
- @{ok=$true;status=[int]$response.StatusCode;location=(B64 $response.Headers['Location']);contentType=(B64 $response.ContentType);setCookie=$cookies;body=(B64 $body)}|ConvertTo-Json -Compress
- $response.Close()
+ if($r.cookie){$jar.SetCookies($uri,([string]$r.cookie).Replace('; ', ', '))}
+ $bytes=if($r.method -eq 'POST'){[Text.Encoding]::UTF8.GetBytes(($pairs -join '&'))}else{$null};$pairs.Clear()
+ $page=Http $uri $r.method $jar $bytes
+ $body=$page.Body;$location=$page.Location
+ foreach($s in $secrets){$body=Redact $body $s;$location=Redact $location $s};$secrets.Clear()
+ @{ok=$true;status=$page.Status;location=(B64 $location);contentType=(B64 $page.ContentType);setCookie=$page.Cookies;body=(B64 $body)}|ConvertTo-Json -Compress
 }catch{
  @{ok=$false;code='USERS_PRIVATE_REQUEST_FAILED'}|ConvertTo-Json -Compress
  exit 1

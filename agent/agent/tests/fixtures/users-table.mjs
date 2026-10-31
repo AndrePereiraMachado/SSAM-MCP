@@ -6,6 +6,7 @@ const ENTRY = 'a'.repeat(64);
 const url = (rest = 'User_List.aspx') => `https://${HOST}/Users/${rest}`;
 const request = (over = {}) => ({ op: 'request', host: HOST, url: url(), method: 'GET', fields: [], ...over });
 const loginRefs = [{ field: 'u', kind: 'login', part: 'username' }, { field: 'p', kind: 'login', part: 'password' }];
+const passwordRef = (over = {}) => ({ field: 'x$wtNewPasswordInput', kind: 'password', entry: ENTRY, part: 'password', ...over });
 
 export const addressRows = () => [['8.8.8.8', false], ['93.184.216.34', false], ['2606:2800:220:1::1', false], ['127.0.0.1', true], ['10.0.0.5', true], ['172.16.0.1', true], ['172.31.255.255', true], ['172.32.0.1', false], ['192.168.1.1', true], ['169.254.169.254', true], ['100.64.0.1', true], ['0.0.0.0', true], ['224.0.0.1', true], ['198.18.0.1', true], ['::1', true], ['::', true], ['fc00::1', true], ['fd12::1', true], ['fe80::1', true], ['ff02::1', true], ['::ffff:10.0.0.5', true], ['::ffff:8.8.8.8', false], ['not an address', true]];
 export const lookalikeRows = () => [
@@ -23,8 +24,17 @@ export const usersRows = () => [
   { label: 'the root of the app', request: request({ url: url('') }), expected: 'ok' },
   { label: 'a page with its id', request: request({ url: url('User_Show.aspx?UserId=42') }), expected: 'ok' },
   { label: 'a post with fields', request: request({ method: 'POST', fields: [['a', 'b']] }), expected: 'ok' },
-  { label: 'the login', request: request({ url: url('Login.aspx'), method: 'POST', secretRefs: loginRefs }), expected: 'ok' },
-  { label: 'a new password in a form', request: request({ url: url('User_Edit.aspx'), method: 'POST', secretRefs: [{ field: 'x', kind: 'password', entry: ENTRY, part: 'password' }] }), expected: 'ok' },
+  { label: 'the sign-in', request: { op: 'login', host: HOST }, expected: 'ok' },
+  { label: 'the sign-in names nothing else', request: { op: 'login', host: HOST, fields: [] }, expected: 'PARAMS_INVALID' },
+  { label: 'the login page by GET', request: request({ url: url('Login.aspx') }), expected: 'ok' },
+  { label: 'a new password in the create form', request: request({ url: url('User_Edit.aspx'), method: 'POST', secretRefs: [passwordRef({ field: 'x$y$wtPasswordInput' }), passwordRef({ field: 'x$y$wtConfirmPasswordInput' })] }), expected: 'ok' },
+  { label: 'a new password in the set-password form', request: request({ url: url('User_Show.aspx?UserId=42'), method: 'POST', secretRefs: [passwordRef()] }), expected: 'ok' },
+  { label: 'M1: a new password into the name of a user', request: request({ url: url('User_Edit.aspx?UserId=42'), method: 'POST', secretRefs: [passwordRef({ field: 'x$wtUser_Name' })] }), expected: 'PARAMS_INVALID' },
+  { label: 'M1: a new password into a search box', request: request({ url: url('User_List.aspx'), method: 'POST', secretRefs: [passwordRef({ field: 'x$wtSearchInput' })] }), expected: 'PARAMS_INVALID' },
+  { label: 'M1: a new password to another page', request: request({ url: url('MyInfo.aspx'), method: 'POST', secretRefs: [passwordRef()] }), expected: 'PARAMS_INVALID' },
+  { label: 'M1: the administrator through a request', request: request({ url: url('Login.aspx'), method: 'POST', secretRefs: loginRefs }), expected: 'PARAMS_INVALID' },
+  { label: 'M1: the administrator into a form', request: request({ url: url('User_Edit.aspx'), method: 'POST', secretRefs: [{ field: 'x$wtPasswordInput', kind: 'login', part: 'password' }] }), expected: 'PARAMS_INVALID' },
+  { label: 'M1: a login POST without refs', request: request({ url: url('Login.aspx'), method: 'POST' }), expected: 'PARAMS_INVALID' },
   { label: 'not an object', request: [], expected: 'PARAMS_INVALID' },
   { label: 'an unknown op', request: { op: 'read-vault', host: HOST }, expected: 'PARAMS_INVALID' },
   { label: 'a cookie from the server', request: request({ cookie: 'a=b' }), expected: 'PARAMS_INVALID' },
@@ -60,10 +70,13 @@ export const usersRows = () => [
   { label: 'fields that are no pairs', request: request({ fields: [['a']] }), expected: 'PARAMS_INVALID' },
   { label: 'the login sent to another page', request: request({ url: url('User_Edit.aspx'), method: 'POST', secretRefs: loginRefs }), expected: 'PARAMS_INVALID' },
   { label: 'the login sent by GET', request: request({ url: url('Login.aspx'), secretRefs: loginRefs }), expected: 'PARAMS_INVALID' },
-  { label: 'a ref with a value', request: request({ url: url('Login.aspx'), method: 'POST', secretRefs: [{ field: 'p', kind: 'login', part: 'password', value: 'x' }] }), expected: 'PARAMS_INVALID' },
-  { label: 'a new password as a username', request: request({ url: url('User_Edit.aspx'), method: 'POST', secretRefs: [{ field: 'x', kind: 'password', entry: ENTRY, part: 'username' }] }), expected: 'PARAMS_INVALID' },
-  { label: 'a bad field name', request: request({ url: url('Login.aspx'), method: 'POST', secretRefs: [{ field: 'a b', kind: 'login', part: 'password' }] }), expected: 'PARAMS_INVALID' },
-  { label: 'three refs', request: request({ url: url('Login.aspx'), method: 'POST', secretRefs: [...loginRefs, loginRefs[0]] }), expected: 'PARAMS_INVALID' },
+  { label: 'a ref with a value', request: request({ url: url('User_Edit.aspx'), method: 'POST', secretRefs: [passwordRef({ value: 'x' })] }), expected: 'PARAMS_INVALID' },
+  { label: 'a new password as a username', request: request({ url: url('User_Edit.aspx'), method: 'POST', secretRefs: [passwordRef({ part: 'username' })] }), expected: 'PARAMS_INVALID' },
+  { label: 'a bad field name', request: request({ url: url('User_Edit.aspx'), method: 'POST', secretRefs: [passwordRef({ field: 'a b' })] }), expected: 'PARAMS_INVALID' },
+  { label: 'three refs', request: request({ url: url('User_Edit.aspx'), method: 'POST', secretRefs: [passwordRef(), passwordRef(), passwordRef()] }), expected: 'PARAMS_INVALID' },
+  { label: 'B1: a final newline in a host', request: { op: 'status', host: HOST + '\n' }, expected: 'PARAMS_INVALID' },
+  { label: 'B1: a final newline in an entry', request: { op: 'status', host: HOST, kind: 'password', entry: ENTRY + '\n' }, expected: 'PARAMS_INVALID' },
+  { label: 'B1: a final newline in a field', request: request({ url: url('User_Edit.aspx'), method: 'POST', secretRefs: [passwordRef({ field: 'x$wtPasswordInput\n' })] }), expected: 'PARAMS_INVALID' },
   { label: 'an entry on the login', request: { op: 'status', host: HOST, entry: ENTRY }, expected: 'PARAMS_INVALID' },
   { label: 'a password without an entry', request: { op: 'prompt', host: HOST, kind: 'password' }, expected: 'PARAMS_INVALID' },
   { label: 'forgetting the administrator', request: { op: 'forget', host: HOST }, expected: 'PARAMS_INVALID' },
