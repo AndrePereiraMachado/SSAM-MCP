@@ -235,6 +235,13 @@ export const flows = () => [
     { set: { forgetFails: false } },
     { restart: true }, { waitFor: { sweeps: 1 } },
   ], check: s => same(Object.keys(s.vault.passwords), []) },
+  { name: 'the button of set-password went and what came back is not the form: it says so, nothing more goes, and the password leaves', state: { noPasswordForm: true }, steps: [...ready, PASSWORD_WINDOW, WAIT,
+    { ...write('set-password', { userId: '42', entry: ENTRY }), expect: { code: 'USERS_PASSWORD_FORM_NOT_KNOWN', executed: null } },
+    { ...write('set-password', { userId: '42', entry: ENTRY }), expect: { code: 'USERS_CONSENT_REQUIRED' } },
+  ], check: s => { same(s.http.length, 1); same(s.http[0].secretFields, []); same(Object.keys(s.vault.passwords), []); } },
+  { name: 'a password box that is not one, in the form of the second step: the same, and the password goes nowhere', state: { textPassword: true }, steps: [...ready, PASSWORD_WINDOW, WAIT,
+    { ...write('set-password', { userId: '42', entry: ENTRY }), expect: { code: 'USERS_PASSWORD_FORM_NOT_KNOWN', executed: null } },
+  ], check: s => { same(s.http.length, 1); same(Object.keys(s.vault.passwords), []); } },
 ];
 export function same(actual, expected) {
   const a = JSON.stringify(actual), b = JSON.stringify(expected);
@@ -255,7 +262,7 @@ export function verify(flow, results, state) {
   flow.steps.forEach((step, i) => {
     if (step.expect === undefined || !step.params) return;
     const got = results[i];
-    same(got?.code ? { code: got.code } : normal(got?.value), step.expect);
+    same(got?.code ? { code: got.code, ...(Object.hasOwn(step.expect, 'executed') ? { executed: got.executed ?? null } : {}) } : normal(got?.value), step.expect);
   });
   flow.check?.(state);
 }
@@ -286,7 +293,7 @@ export async function runNode(flow, createUsersKind, dir) {
     if (step.settled) { await Promise.all(windows); results.push(null); continue; }
     if (step.restart) { users = make(); users.startup(); results.push(null); continue; }
     if (step.waitFor) { await reached(dir, step.waitFor); results.push(null); continue; }
-    try { results.push({ value: await users.execute(step.params) }); } catch (error) { results.push({ code: error.code ?? 'THROWN ' + error.message }); }
+    try { results.push({ value: await users.execute(step.params) }); } catch (error) { results.push({ code: error.code ?? 'THROWN ' + error.message, executed: error.executed }); }
   }
   return { results, state: readState(dir) };
 }

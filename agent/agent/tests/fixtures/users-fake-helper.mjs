@@ -22,7 +22,7 @@ function show(u) {
 }
 const edit = u => form(`User_Edit.aspx${u ? '?UserId=' + u.id : ''}`, `<input id="x_wtUser_Name" name="x$wtUser_Name" value="${u?.name ?? ''}"><input id="x_wtUser_Username" name="x$wtUser_Username" value="${u?.username ?? ''}"><input id="x_wtUser_Email" name="x$wtUser_Email" value="${u?.email ?? ''}"><input id="x_wtUser_Phone" name="x$wtUser_Phone" value=""><input id="x_wtPasswordInput" name="x$wtPasswordInput" type="password"><input id="x_wtConfirmPasswordInput" name="x$wtConfirmPasswordInput" type="password"><input type="submit" name="x$save" value="Save"><input type="submit" name="x$del" value="Delete this User">`);
 const list = page => form(page, `<input id="x_wtSearchInput" name="x$wtSearchInput"><input type="submit" name="x$search" value="Search"><table id="x_wtUserTable"></table>`);
-const PASSWORD_INPUTS = '<input id="x_wtNewPasswordInput" name="x$wtNewPasswordInput" type="password"><input id="x_wtConfirmPasswordInput" name="x$wtConfirmPasswordInput" type="password"><input type="submit" name="x$savepw" value="Save">';
+const PASSWORD_INPUTS = `<input id="x_wtNewPasswordInput" name="x$wtNewPasswordInput" type="${state.textPassword ? 'text' : 'password'}"><input id="x_wtConfirmPasswordInput" name="x$wtConfirmPasswordInput" type="password"><input type="submit" name="x$savepw" value="Save">`;
 const passwordForm = u => form(`User_Show.aspx?UserId=${u.id}`, PASSWORD_INPUTS);
 const login = () => form('Login.aspx', '<input type="text" name="u"><input type="password" name="p"><input type="submit" name="go" value="Log In">');
 
@@ -92,7 +92,7 @@ if (mode === 'request') {
   if (url.pathname.endsWith('/User_Show.aspx')) {
     if (r.method === 'POST') {
       if (fields.get('__EVENTTARGET') === 'x$toggle') u.active = !u.active;
-      if (fields.get('__EVENTTARGET') === 'x$setpw') reply(state.ajaxPassword ? `OsJSONUpdate(${JSON.stringify({ hidden: { __OSVSTATE: 'new-state' }, html: PASSWORD_INPUTS })});` : passwordForm(u));
+      if (fields.get('__EVENTTARGET') === 'x$setpw' && !state.noPasswordForm) reply(state.ajaxPassword ? `OsJSONUpdate(${JSON.stringify({ hidden: { __OSVSTATE: 'new-state' }, html: PASSWORD_INPUTS })});` : passwordForm(u));
     }
     reply(show(u));
   }

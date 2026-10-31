@@ -577,7 +577,10 @@ internal sealed partial class UsersKinds
             if (action == "set-password")
             {
                 var shown = await Send(host, plan.Url, "POST", plan.Fields, null, token);
-                var save = UsersPage.PlanSavePassword(host, userId!, pages[0], shown.Html);
+                // The button has gone, so from here nothing can say that nothing was sent.
+                UsersPage.Plan save;
+                try { save = UsersPage.PlanSavePassword(host, userId!, pages[0], shown.Html); }
+                catch (AgentFault) { throw new AgentFault("USERS_PASSWORD_FORM_NOT_KNOWN", "The Set Password button was sent, but what came back is not the password form this agent knows. The new password was not sent.", null); }
                 answer = await Send(host, save.Url, "POST", save.Fields, SecretRefs(save.SecretFields, entry), token);
             }
             else answer = await Send(host, plan.Url, "POST", plan.Fields, passwordOp ? SecretRefs(plan.SecretFields, entry) : null, token);

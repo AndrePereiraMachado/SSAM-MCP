@@ -212,7 +212,7 @@ internal static class Program
                         continue;
                     }
                     try { answers.Add((JsonNode)new JsonObject { ["value"] = (await kind.Execute(step!["params"]!.AsObject(), CancellationToken.None))?.DeepClone() }); }
-                    catch (AgentFault e) { answers.Add((JsonNode)new JsonObject { ["code"] = e.Code }); }
+                    catch (AgentFault e) { answers.Add((JsonNode)new JsonObject { ["code"] = e.Code, ["executed"] = e.Executed }); }
                 }
                 Console.WriteLine(answers.ToJsonString());
                 return 0;

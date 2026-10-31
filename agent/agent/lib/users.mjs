@@ -401,7 +401,9 @@ export function createUsersKind({ dataRoot, account = '', platform = process.pla
     let answer;
     if (action === 'set-password') {
       const shown = await send(host, plan.url, 'POST', plan.fields);
-      const save = planSavePassword(p, pages[0], shown.html);
+      // The button has gone, so from here nothing can say that nothing was sent.
+      let save;
+      try { save = planSavePassword(p, pages[0], shown.html); } catch { throw new AgentError('USERS_PASSWORD_FORM_NOT_KNOWN', 'The Set Password button was sent, but what came back is not the password form this agent knows. The new password was not sent.', { executed: null }); }
       answer = await send(host, save.url, 'POST', save.fields, secretRefsOf(save, p.entry));
     } else answer = await send(host, plan.url, 'POST', plan.fields, passwordOp ? secretRefsOf(plan, p.entry) : []);
     const value = answerOf(answer);
