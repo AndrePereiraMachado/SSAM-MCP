@@ -44,7 +44,7 @@ import { completeInstances } from './studio-instance.mjs';
 // app's Electron render worker, render.mjs), both announced in the hello only when they run here; the call's deadline
 // in this machine's clock. The other kinds and the wire are those of 0.3.3. The native core of the same change is
 // 0.4.1-native.
-export const AGENT_VERSION = '0.3.4';
+export const AGENT_VERSION = '0.3.5';
 const INLINE_MAX_BYTES = 524288;
 const MAX_VALUE_BYTES = 16 * 1024 * 1024;
 const PARAMS_MEMORY_BYTES = 64 * 1024 * 1024;
@@ -106,6 +106,8 @@ export function createAgent({ root, runtimeRoot = root, config = {}, deps = {}, 
   d.attachO11 ??= mac ? mac.attachO11 : (pid, startedUtc, hook) => run(['attach', pid, startedUtc, hook]);
 
   const credential = config.credential ?? fs.readFileSync(credentialFile(base), 'utf8').trim();
+  // The vault of o11.users is per account of the server, and the credential is what names it here.
+  d.usersAccount ??= credential;
   const pack = readPack(runtimeRoot);
   // The render worker of this installation (render.mjs): deps.renderer in tests, else pack.json renderer, checked.
   const renderer = deps.renderer ?? resolveRenderer({ runtimeRoot: path.resolve(runtimeRoot), dataRoot: base, pack, platform });

@@ -131,6 +131,97 @@ internal static class Program
                 Console.WriteLine(answers.ToJsonString());
                 return 0;
             }
+            // check-users-request: stdin [request] -> [{ok:true} | {error}], the checks of o11.users (tests/native/users.test.mjs compares
+            // them with the Node agent's). users-helper-sha256: the embedded vault helper's sha.
+            if (args is ["check-users-request"])
+            {
+                var requests = JsonNode.Parse(await Console.In.ReadToEndAsync()) as JsonArray ?? throw new ArgumentException("Expected a JSON array");
+                var answers = new JsonArray();
+                foreach (var request in requests)
+                {
+                    try { UsersKinds.Validate(request); answers.Add((JsonNode)new JsonObject { ["ok"] = true }); }
+                    catch (AgentFault e) { answers.Add((JsonNode)new JsonObject { ["error"] = e.Code }); }
+                }
+                Console.WriteLine(answers.ToJsonString());
+                return 0;
+            }
+            // check-users-address: stdin [address] -> [bool]; check-users-lookalike: stdin [[host, [approved]]] -> [text | null].
+            if (args is ["check-users-address"])
+            {
+                var addresses = JsonNode.Parse(await Console.In.ReadToEndAsync()) as JsonArray ?? throw new ArgumentException("Expected a JSON array");
+                Console.WriteLine(new JsonArray(addresses.Select(item => (JsonNode?)JsonValue.Create(UsersKinds.IsPrivateAddress(item!.GetValue<string>()))).ToArray()).ToJsonString());
+                return 0;
+            }
+            if (args is ["check-users-lookalike"])
+            {
+                var cases = JsonNode.Parse(await Console.In.ReadToEndAsync()) as JsonArray ?? throw new ArgumentException("Expected a JSON array");
+                Console.WriteLine(new JsonArray(cases.Select(item => (JsonNode?)JsonValue.Create(UsersKinds.LookalikeOf(item![0]!.GetValue<string>(), item[1]!.AsArray().Select(other => other!.GetValue<string>())))).ToArray()).ToJsonString());
+                return 0;
+            }
+            // users-scope <root> <account>: the vault scope, compared with the Node agent's in tests/native/users.test.mjs.
+            if (args is ["users-scope", var scopeRoot, var scopeAccount])
+            {
+                Console.WriteLine(UsersKinds.Scope(scopeRoot, scopeAccount));
+                return 0;
+            }
+            // check-users-flow: stdin {helper, root, account, statePath, steps}: the steps of the behaviour table on the real kind, with a stand-in
+            // for the helper, DNS and the clock (tests/native/users.test.mjs compares the answers with the table and with the Node agent).
+            if (args is ["check-users-flow"])
+            {
+                var flow = JsonNode.Parse(await Console.In.ReadToEndAsync()) as JsonObject ?? throw new ArgumentException("Expected a JSON object");
+                long offset = 0;
+                string[] addresses = ["93.184.216.34"];
+                UsersKinds Make()
+                {
+                    var made = new UsersKinds(flow["root"]!.GetValue<string>(), flow["account"]!.GetValue<string>()) { HelperCommand = flow["helper"]!.AsArray().Select(item => item!.GetValue<string>()).ToArray(), ForceWindows = true };
+                    made.Now = () => DateTimeOffset.UtcNow.AddMilliseconds(offset);
+                    made.Lookup = _ => Task.FromResult(addresses);
+                    if (flow["permitMs"] is JsonValue permitMs) made.PermitTime = TimeSpan.FromMilliseconds(permitMs.GetValue<int>());
+                    return made;
+                }
+                var kind = Make();
+                var answers = new JsonArray();
+                foreach (var step in flow["steps"]!.AsArray())
+                {
+                    if (step?["advanceMs"] is JsonValue advance) { offset += advance.GetValue<long>(); answers.Add((JsonNode?)null); continue; }
+                    if (step?["dns"] is JsonArray dns) { addresses = dns.Select(item => item!.GetValue<string>()).ToArray(); answers.Add((JsonNode?)null); continue; }
+                    if (step?["settled"] is JsonValue) { await kind.WindowsClosed(); answers.Add((JsonNode?)null); continue; }
+                    if (step?["restart"] is JsonValue) { kind = Make(); _ = kind.Startup(); answers.Add((JsonNode?)null); continue; }
+                    if (step?["waitFor"] is JsonObject target)
+                    {
+                        // Until the stand-in's state says so: an event, with a limit only for a flow that is wrong.
+                        var watched = flow["statePath"]!.GetValue<string>();
+                        for (var waited = 0; ; waited += 20)
+                        {
+                            JsonObject? seen = null;
+                            try { seen = JsonNode.Parse(await File.ReadAllTextAsync(watched)) as JsonObject; } catch (Exception e) when (e is IOException or System.Text.Json.JsonException) { }
+                            if (seen != null && target.All(pair => JsonNode.DeepEquals(seen[pair.Key], pair.Value))) break;
+                            if (waited > 60000) throw new TimeoutException("never reached " + target.ToJsonString());
+                            await Task.Delay(20);
+                        }
+                        answers.Add((JsonNode?)null);
+                        continue;
+                    }
+                    if (step?["set"] is JsonObject set)
+                    {
+                        var path = flow["statePath"]!.GetValue<string>();
+                        var saved = JsonNode.Parse(await File.ReadAllTextAsync(path))!.AsObject();
+                        foreach (var (key, value) in set) saved[key] = value?.DeepClone();
+                        await File.WriteAllTextAsync(path, saved.ToJsonString());
+                        answers.Add((JsonNode?)null);
+                        continue;
+                    }
+                    try { answers.Add((JsonNode)new JsonObject { ["value"] = (await kind.Execute(step!["params"]!.AsObject(), CancellationToken.None))?.DeepClone() }); }
+                    catch (AgentFault e) { answers.Add((JsonNode)new JsonObject { ["code"] = e.Code, ["executed"] = e.Executed }); }
+                }
+                Console.WriteLine(answers.ToJsonString());
+                return 0;
+            }
+            if (args is ["users-helper-sha256"])
+            {
+                Console.WriteLine(Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(UsersKinds.HelperBytes())).ToLowerInvariant());
+                return 0;
+            }
             if (args is ["version"])
             {
                 Console.WriteLine("{\"runtime\":\"native-aot\",\"protocol\":\"ssam-agent/1\",\"productionReady\":false}");

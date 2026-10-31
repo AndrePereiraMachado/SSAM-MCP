@@ -283,6 +283,8 @@ try {
   Copy-Item -LiteralPath (Join-Path $root 'agent\ssam-agent.mjs'), (Join-Path $root $launcher) -Destination $agentOut
   Copy-Item -Path (Join-Path $root 'agent\lib\*.mjs') -Destination (Join-Path $agentOut 'lib')
   Copy-Item -Path (Join-Path $root 'agent\lib\*.json') -Destination (Join-Path $agentOut 'lib')
+  # The vault helper of o11.users is Windows only: a macOS pack carries no .ps1, and its agent answers USERS_PLATFORM_UNAVAILABLE.
+  if (-not $mac) { Copy-Item -LiteralPath (Join-Path $root 'agent\lib\users-vault.ps1') -Destination (Join-Path $agentOut 'lib') }
   if ($mac) {
     Copy-Item -LiteralPath (Join-Path $root 'agent\install.sh') -Destination (Join-Path $tree 'install.sh')
     # bash on macOS stops at a CR: the scripts go with LF only (the box's .gitattributes says eol=lf).

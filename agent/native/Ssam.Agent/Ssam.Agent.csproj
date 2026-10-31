@@ -12,5 +12,6 @@
   </PropertyGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="NativeProtocol.Tests" />
+    <EmbeddedResource Include="..\..\agent\lib\users-vault.ps1" LogicalName="users-vault.ps1" />
   </ItemGroup>
 </Project>

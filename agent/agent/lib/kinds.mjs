@@ -15,11 +15,12 @@ import { netProbe, NET_PROBE_KIND } from './net-probe.mjs';
 import { createUploads, UPLOAD_KIND } from './upload.mjs';
 import { createRenderer } from './render.mjs';
 import { RENDER_KIND } from './render-request.mjs';
+import { createUsersKind, USERS_KIND } from './users.mjs';
 
 // file.upload (0.3.4): one file of a folder the person approved (upload.mjs); the hub sends it only to an agent whose hello
 // lists it.
 export const KINDS = Object.freeze(['studio.processes', 'odc.pipe', 'odc.attach', 'o11.bridge', 'o11.connect', 'o11.selected',
-  'file.put', 'file.get', 'file.list', 'file.sync', NET_PROBE_KIND, UPLOAD_KIND]);
+  'file.put', 'file.get', 'file.list', 'file.sync', NET_PROBE_KIND, UPLOAD_KIND, USERS_KIND]);
 // The kinds of the hello: KINDS, and screen.render (0.3.4, render.mjs) only when this installation has a renderer.
 export const helloKinds = renderer => [...KINDS, ...(renderer?.path ? [RENDER_KIND] : [])];
 // file.sync (C14, fase4): at most this many files per call, at most this many downloads at a time.
@@ -484,6 +485,8 @@ export function createKinds({ root, runtimeRoot = root, ws, pack = {}, kernel = 
   // file.upload: deps.uploadFiles and deps.uploadHooks are the tests' file system and hooks (upload.mjs).
   const uploads = createUploads({ dataRoot: root, runtimeRoot, platform, blobs, limits, now: deps.now ?? Date.now, files: deps.uploadFiles, hooks: deps.uploadHooks });
   // screen.render: renderer is agent.mjs's resolveRenderer answer; without one the kind answers RENDER_UNAVAILABLE.
+  const users = createUsersKind({ dataRoot: root, platform, account: deps.usersAccount ?? '', ...(deps.users ?? {}) });
+  users.startup();
   const screens = createRenderer({ renderer, tempRoot: path.join(root, 'private', 'tmp'), platform, now: deps.now ?? Date.now, ...(deps.renderSpawn ? { spawn: deps.renderSpawn } : {}) });
 
   const handlers = { 'studio.processes': studioProcesses, 'odc.pipe': odcPipe, 'odc.attach': odcAttach, 'o11.bridge': o11Bridge,
@@ -492,7 +495,8 @@ export function createKinds({ root, runtimeRoot = root, ws, pack = {}, kernel = 
     // probe is channel.probePut (agent.mjs). Nothing of the machine is read or written.
     [NET_PROBE_KIND]: params => netProbe(params, { put: probe }),
     [UPLOAD_KIND]: (params, context) => uploads.upload(params, context),
-    [RENDER_KIND]: (params, context) => screens.render(params, context) };
+    [RENDER_KIND]: (params, context) => screens.render(params, context),
+    [USERS_KIND]: params => users.execute(params) };
 
   return {
     // context: {deadline} of the call in this machine's clock (agent.mjs), or none.
