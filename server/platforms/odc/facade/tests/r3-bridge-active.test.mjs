@@ -55,3 +55,14 @@ test('a bridge the kernel does not serve is refused and nothing reaches the pipe
   await assert.rejects(unknown.kinds.execute('odc.pipe', { pid: PID, version: 'v34', args: ['status'] }), e => e.code === 'BRIDGE_VERSION_MISMATCH');
   assert.deepEqual(unknown.wire, []);
 });
+
+// The first real offer (31/10): the hub read o11BridgeAccepted from the kernel, and startupKernel never handed it over.
+test('a kernel.json that accepts an O11 bridge reaches the hub, or no O11 bridge is ever offered', async t => {
+  const { startupKernel } = await import('../ssam.mjs');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kernel-o11-accepted-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  fs.writeFileSync(path.join(dir, 'kernel.json'), JSON.stringify({ o11: '11.55.94', odc: '1.7.30', odcBridge: 'v101', odcBridgeAccepted: ['v102'], o11BridgeAccepted: ['d1'] }));
+  const { kernel } = await startupKernel({ dir, fileVersion: async () => null, log: () => {} });
+  assert.deepEqual(kernel.o11BridgeAccepted, ['d1']);
+  assert.deepEqual(kernel.odcBridgeAccepted, ['v102']);
+});
