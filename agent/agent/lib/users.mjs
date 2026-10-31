@@ -226,7 +226,9 @@ export function createUsersKind({ dataRoot, account = '', platform = process.pla
   }
   const hasConsent = host => (consents.get(host) ?? 0) > now();
   const needConsent = host => { if (!hasConsent(host)) throw refuse('USERS_LOGIN_CONSENT_REQUIRED', 'No person on this machine approved signing in to this environment, so nothing was sent.'); };
-  // The sign-in brake survives a restart: a file of this agent, with a host and a count and nothing else. Only a person's new window resets it.
+  // The sign-in brake survives a restart: a file of this agent, with a host and a count and nothing else. A try counts before it leaves, whatever
+  // happens after, since the password may have reached the site. Only a person's window, or a sign-in that a page then proves, resets it: an answer
+  // of the helper can be wrong (a redirect to an error page), and a page alone says nothing about the tries in between.
   const failuresFile = path.join(promptDir, 'sign-in-failures.json');
   const readFailures = () => { try { return JSON.parse(fs.readFileSync(failuresFile, 'utf8')); } catch { return {}; } };
   const failuresOf = host => Number(readFailures()[scope + '|' + host]) || 0;
@@ -237,7 +239,9 @@ export function createUsersKind({ dataRoot, account = '', platform = process.pla
     fs.mkdirSync(promptDir, { recursive: true });
     fs.writeFileSync(failuresFile, JSON.stringify(all));
   }
-  const notPaused = host => { if (failuresOf(host) >= LOGIN_FAILURES_MAX) throw refuse('USERS_LOGIN_PAUSED', LOGIN_PAUSED); };
+  const unproven = new Set();
+  // A sign-in that said yes may read the page that proves it, even as the last try.
+  const notPaused = (host, tryingAgain = false) => { if (failuresOf(host) >= LOGIN_FAILURES_MAX && (tryingAgain || !unproven.has(host))) throw refuse('USERS_LOGIN_PAUSED', LOGIN_PAUSED); };
   // What a window the person filled gives: a prompt's status file says saved only after the vault has it.
   function settle() {
     for (const [key, record] of prompts) {
@@ -327,7 +331,7 @@ export function createUsersKind({ dataRoot, account = '', platform = process.pla
     prompts.delete(key);
     throw new AgentError('USERS_PROMPT_NOT_VISIBLE', 'The private window could not be confirmed visible.', { executed: null });
   }
-  // One request of this agent, with this agent's session. A page that asks to sign in again ends that session, and counts toward the brake.
+  // One request of this agent, with this agent's session. A page that asks to sign in again ends that session.
   async function send(host, url, method, fields = [], secretRefs = []) {
     const input = Buffer.from(JSON.stringify({ url, method, fields, secretRefs, cookie: cookieHeader(host) })).toString('base64');
     const value = await helperCall(base('request', host), input, method === 'POST' ? null : false);
@@ -335,7 +339,7 @@ export function createUsersKind({ dataRoot, account = '', platform = process.pla
     if ((value.body ?? '').length > MAX_PAGE_BASE64) throw new AgentError('USERS_PAGE_TOO_LARGE', FAILURES.USERS_PAGE_TOO_LARGE, { executed: method === 'POST' ? null : false });
     storeCookies(host, value.setCookie);
     const html = Buffer.from(value.body ?? '', 'base64').toString('utf8');
-    if (isLoginPage(html)) { jars.delete(host); setFailures(host, failuresOf(host) + 1); } else if (failuresOf(host) > 0 && value.status === 200) setFailures(host, 0);
+    if (isLoginPage(html)) { jars.delete(host); unproven.delete(host); } else if (value.status === 200 && unproven.delete(host)) setFailures(host, 0);
     return { status: value.status, location: value.location ?? '', contentType: value.contentType ?? '', body: value.body ?? '', html };
   }
   const answerOf = ({ status, location, contentType, body }) => ({ status, location, contentType, body });
@@ -407,10 +411,15 @@ export function createUsersKind({ dataRoot, account = '', platform = process.pla
       if (op === 'write') return write(params);
       await publicHost(host);
       if (op === 'login') {
-        const value = await helperCall(base('login', host), '', null);
+        notPaused(host, true);
+        setFailures(host, failuresOf(host) + 1);
+        unproven.delete(host);
+        let value;
+        // Only a helper that says it sent nothing gives the try back.
+        try { value = await helperCall(base('login', host), '', null); } catch (error) { if (error.executed === false) setFailures(host, Math.max(0, failuresOf(host) - 1)); throw error; }
         storeCookies(host, value.setCookie);
         const authenticated = value.authenticated === true;
-        setFailures(host, authenticated ? failuresOf(host) : failuresOf(host) + 1);
+        if (authenticated) unproven.add(host);
         return { authenticated };
       }
       if (op === 'request') return answerOf(await send(host, params.url, 'GET'));

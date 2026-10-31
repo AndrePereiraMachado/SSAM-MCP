@@ -309,7 +309,19 @@ internal sealed partial class UsersKinds
     }
     private bool HasConsent(string host) { lock (sync) return consents.TryGetValue(host, out var until) && until > Now(); }
     private void NeedConsent(string host) { if (!HasConsent(host)) throw new AgentFault("USERS_LOGIN_CONSENT_REQUIRED", "No person on this machine approved signing in to this environment, so nothing was sent.", false); }
-    // The sign-in brake survives a restart: a file of this agent, with a host and a count and nothing else. Only a person's new window resets it.
+    // The sign-in brake survives a restart: a file of this agent, with a host and a count and nothing else. A try counts before it leaves, whatever
+    // happens after, since the password may have reached the site. Only a person's window, or a sign-in that a page then proves, resets it: an answer
+    // of the helper can be wrong (a redirect to an error page), and a page alone says nothing about the tries in between.
+    private readonly HashSet<string> unproven = new(StringComparer.Ordinal);
+    private void TakeLoginTry(string host)
+    {
+        lock (sync)
+        {
+            NotPaused(host, true);
+            SetFailures(host, FailuresOf(host) + 1);
+            unproven.Remove(host);
+        }
+    }
     private JsonObject ReadFailures()
     {
         try { return JsonNode.Parse(File.ReadAllText(failuresFile)) as JsonObject ?? []; }
@@ -324,9 +336,12 @@ internal sealed partial class UsersKinds
         Directory.CreateDirectory(promptDir);
         File.WriteAllText(failuresFile, all.ToJsonString());
     }
-    private void NotPaused(string host)
+    // A sign-in that said yes may read the page that proves it, even as the last try.
+    private void NotPaused(string host, bool tryingAgain = false)
     {
-        if (FailuresOf(host) >= LoginFailuresMax) throw new AgentFault("USERS_LOGIN_PAUSED", "Signing in failed twice, so it stopped before the Users application locks this administrator. A person signs in again in the window of this agent, or checks the account in the Users application first.", false);
+        bool waiting;
+        lock (sync) waiting = unproven.Contains(host);
+        if (FailuresOf(host) >= LoginFailuresMax && (tryingAgain || !waiting)) throw new AgentFault("USERS_LOGIN_PAUSED", "Signing in failed twice, so it stopped before the Users application locks this administrator. A person signs in again in the window of this agent, or checks the account in the Users application first.", false);
     }
     // What a window the person filled gives: a prompt's status file says saved only after the vault has it.
     private void Settle()
@@ -461,7 +476,7 @@ internal sealed partial class UsersKinds
     {
         public JsonObject Json() => new() { ["status"] = Status?.DeepClone(), ["location"] = Location, ["contentType"] = ContentType, ["body"] = Body };
     }
-    // One request of this agent, with this agent's session. A page that asks to sign in again ends that session, and counts toward the brake.
+    // One request of this agent, with this agent's session. A page that asks to sign in again ends that session.
     private async Task<Answer> Send(string host, string url, string method, IEnumerable<KeyValuePair<string, string>>? fields, JsonArray? secretRefs, CancellationToken token)
     {
         var pairs = new JsonArray();
@@ -474,8 +489,9 @@ internal sealed partial class UsersKinds
         if (body.Length > MaxPageBase64) throw new AgentFault("USERS_PAGE_TOO_LARGE", "This page is larger than a Users page can be; it was not read.", method == "POST" ? null : false);
         StoreCookies(host, page["setCookie"]);
         var html = Encoding.UTF8.GetString(Convert.FromBase64String(body));
-        if (UsersPage.IsLoginPage(html)) { lock (sync) jars.Remove(host); SetFailures(host, FailuresOf(host) + 1); }
-        else if (FailuresOf(host) > 0 && page["status"] is JsonValue code && code.TryGetValue<int>(out var number) && number == 200) SetFailures(host, 0);
+        if (UsersPage.IsLoginPage(html)) lock (sync) { jars.Remove(host); unproven.Remove(host); }
+        else if (page["status"] is JsonValue code && code.TryGetValue<int>(out var number) && number == 200)
+            lock (sync) if (unproven.Remove(host)) SetFailures(host, 0);
         return new Answer(page["status"], Word(page["location"]) ?? "", Word(page["contentType"]) ?? "", body, html);
     }
     private async Task<string> ReadPage(string host, string route, CancellationToken token)
@@ -575,10 +591,14 @@ internal sealed partial class UsersKinds
         await PublicHost(host, token);
         if (op == "login")
         {
-            var signed = await Call("login", host, new JsonObject(), "", null, token);
+            TakeLoginTry(host);
+            JsonObject signed;
+            // Only a helper that says it sent nothing gives the try back.
+            try { signed = await Call("login", host, new JsonObject(), "", null, token); }
+            catch (AgentFault e) when (e.Executed == false) { lock (sync) SetFailures(host, Math.Max(0, FailuresOf(host) - 1)); throw; }
             StoreCookies(host, signed["setCookie"]);
             var authenticated = signed["authenticated"]?.GetValue<bool>() == true;
-            if (!authenticated) SetFailures(host, FailuresOf(host) + 1);
+            if (authenticated) lock (sync) unproven.Add(host);
             return new JsonObject { ["authenticated"] = authenticated };
         }
         if (op == "request") return (await Send(host, Word(p["url"])!, "GET", null, null, token)).Json();

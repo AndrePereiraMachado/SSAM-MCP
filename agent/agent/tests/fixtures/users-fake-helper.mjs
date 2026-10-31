@@ -63,8 +63,11 @@ if (mode === 'prompt') {
 }
 if (!state.vault.login[host]) done({ ok: false, code: 'USERS_HOST_NOT_AUTHENTICATED' });
 if (mode === 'login') {
-  state.logins = (state.logins ?? 0) + 1;
   const signed = state.loginAnswers.shift() ?? true;
+  if (signed === 'layout') done({ ok: false, code: 'USERS_LOGIN_LAYOUT_CHANGED' });
+  state.logins = (state.logins ?? 0) + 1;
+  // The POST went out, and the process dies before it can say so.
+  if (signed === 'die') { fs.writeFileSync(file, JSON.stringify(state)); process.exit(1); }
   done({ ok: true, authenticated: signed, setCookie: signed ? [b64('ASP.NET_SessionId=s' + state.logins + '; path=/')] : [] });
 }
 if (mode === 'request') {
