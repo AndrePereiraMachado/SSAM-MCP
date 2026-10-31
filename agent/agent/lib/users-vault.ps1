@@ -73,6 +73,12 @@ function Form([string]$s) { [Net.WebUtility]::UrlEncode($s) }
 function Fail([string]$code) { @{ok=$false;code=$code}|ConvertTo-Json -Compress; exit 1 }
 # One request, never redirected. A page larger than this is refused: a Users page never is, and it would stop a server that reads it.
 $MaxPage=262144
+function ReadCapped($stream,[int]$limit) {
+ $buffer=New-Object byte[] 65536;$memory=New-Object IO.MemoryStream
+ while($memory.Length -le $limit){$n=$stream.Read($buffer,0,$buffer.Length);if($n -le 0){break};$memory.Write($buffer,0,$n)};$stream.Close()
+ if($memory.Length -gt $limit){return $null}
+ return $memory
+}
 function Http([Uri]$uri,[string]$method,$jar,[byte[]]$bytes) {
  [Net.ServicePointManager]::SecurityProtocol=[Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
  $web=[Net.HttpWebRequest]::Create($uri);$web.Method=$method;$web.AllowAutoRedirect=$false;$web.KeepAlive=$false;$web.Timeout=30000;$web.ReadWriteTimeout=30000;$web.UserAgent='SSAM-Users/1';$web.Accept='text/html,application/json,text/javascript';$web.CookieContainer=$jar
@@ -81,9 +87,8 @@ function Http([Uri]$uri,[string]$method,$jar,[byte[]]$bytes) {
   $stream=$web.GetRequestStream();$stream.Write($bytes,0,$bytes.Length);$stream.Close();[Array]::Clear($bytes,0,$bytes.Length)
  }
  try{$response=$web.GetResponse()}catch [Net.WebException] {$response=$_.Exception.Response;if(-not $response){throw}}
- $inputStream=$response.GetResponseStream();$buffer=New-Object byte[] 65536;$memory=New-Object IO.MemoryStream
- while($memory.Length -le $MaxPage){$n=$inputStream.Read($buffer,0,$buffer.Length);if($n -le 0){break};$memory.Write($buffer,0,$n)};$inputStream.Close()
- if($memory.Length -gt $MaxPage){$response.Close();Fail 'USERS_PAGE_TOO_LARGE'}
+ $memory=ReadCapped $response.GetResponseStream() $MaxPage
+ if($null -eq $memory){$response.Close();Fail 'USERS_PAGE_TOO_LARGE'}
  $answer=[pscustomobject]@{Status=[int]$response.StatusCode;Location=[string]$response.Headers['Location'];ContentType=[string]$response.ContentType;Body=[Text.Encoding]::UTF8.GetString($memory.ToArray());Cookies=@($response.Cookies|ForEach-Object{B64 ('{0}={1}; path={2}' -f $_.Name,$_.Value,$_.Path)})}
  $response.Close()
  return $answer
@@ -109,6 +114,9 @@ function LoginResult([int]$status,[string]$location,[string]$body,[int]$cookies,
   return $true
  }
  return ($status -eq 200 -and $body -notmatch 'type\s*=\s*["'']?password')
+}
+function LoginAnswer($after,$cookies,[string]$hostName) {
+ @{ok=$true;authenticated=[bool](LoginResult $after.Status $after.Location $after.Body @($cookies).Count $hostName);setCookie=@($cookies)}|ConvertTo-Json -Compress
 }
 # The window of a yes, not yet shown. Decline is the default, Enter included; Approve wakes up after a moment; no answer in two minutes closes it as no.
 function ConfirmForm($spec) {
@@ -195,7 +203,7 @@ try {
   $bytes=[Text.Encoding]::UTF8.GetBytes(($pairs -join '&'));$pairs.Clear()
   $after=Http $uri 'POST' $jar $bytes
   $cookies=@($jar.GetCookies($uri)|ForEach-Object{B64 ('{0}={1}; path={2}' -f $_.Name,$_.Value,$_.Path)})
-  @{ok=$true;authenticated=[bool](LoginResult $after.Status $after.Location $after.Body $cookies.Count $HostName);setCookie=$cookies}|ConvertTo-Json -Compress
+  LoginAnswer $after $cookies $HostName
   exit 0
  }
  if ($Mode -eq 'prompt') {

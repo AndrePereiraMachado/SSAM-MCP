@@ -16,7 +16,7 @@ import { usersRows, addressRows, lookalikeRows, HOST, b64 } from './fixtures/use
 import { flows, runNode, verify, tempDir } from './fixtures/users-flow.mjs';
 
 // The sha both sides name: here and platforms/odc/facade/tests/o11-users-hosted.test.mjs in the server line.
-const VAULT_SHA256 = 'c609a5e162331873ef5f22e2bd8f3781b504886182b50cfad18fd305453ec959';
+const VAULT_SHA256 = '18b78b8935bb0a96c1bbc09c46b0615969fed3a6e4459fb08dd3977d3a795c6a';
 const tmp = t => { const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ssam-users-')); t.after(() => fs.rmSync(dir, { recursive: true, force: true })); return dir; };
 const codeOf = fn => { try { fn(); return 'ok'; } catch (error) { return error.code; } };
 
@@ -188,7 +188,7 @@ function helperFunctions(t, body) {
   const script = path.join(tmp(t), 'run.ps1');
   fs.writeFileSync(script, `$ErrorActionPreference='Stop'
 $ast=[Management.Automation.Language.Parser]::ParseFile(${JSON.stringify(USERS_HELPER).replace(/^"|"$/g, "'").replace(/\\\\/g, '\\')},[ref]$null,[ref]$null)
-foreach($fn in $ast.FindAll({param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst]},$true)){ if($fn.Name -in 'Attr','Form','Redact','LoginPlan','LoginResult','ConfirmForm'){ . ([ScriptBlock]::Create($fn.Extent.Text)) } }
+foreach($fn in $ast.FindAll({param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst]},$true)){ if($fn.Name -in 'Attr','Form','Redact','LoginPlan','LoginResult','LoginAnswer','ConfirmForm','ReadCapped','Prefix','Sweep','SweepPasswords'){ . ([ScriptBlock]::Create($fn.Extent.Text)) } }
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 ${body}
@@ -245,6 +245,30 @@ test('signed in means a cookie, and an answer that left the login page on this h
 )|ConvertTo-Json -Compress`);
   assert.deepEqual(r, [true, true, true, false, false, false, false, false, false, false]);
 });
+test('what the sign-in answers is what LoginResult decided, never a yes by itself', windowsOnly, t => {
+  const r = helperFunctions(t, `$h='tenant-a.example.test'
+function A($s,$l,$b,$c){ (LoginAnswer ([pscustomobject]@{Status=$s;Location=$l;Body=$b}) $c $h)|ConvertFrom-Json }
+@((A 302 '/Users/User_List.aspx' '' @('x')).authenticated,(A 200 '' '<input type="password" name="p">' @('x')).authenticated,(A 302 '/Users/User_List.aspx' '' @()).authenticated,(A 302 '/Users/Login.aspx' '' @('x')).authenticated)|ConvertTo-Json -Compress`);
+  assert.deepEqual(r, [true, false, false, false]);
+});
+test('a page over the limit is not read whole: it answers nothing, and the stream is closed', windowsOnly, t => {
+  const r = helperFunctions(t, `function S($n){ New-Object IO.MemoryStream (,(New-Object byte[] $n)) }
+$fits=S 1000;$over=S 200000
+@{fits=(ReadCapped $fits 1000).Length;exact=($null -ne (ReadCapped (S 65536) 65536));over=($null -eq (ReadCapped $over 1000));closed=(-not $over.CanRead)}|ConvertTo-Json -Compress`);
+  assert.deepEqual(r, { fits: 1000, exact: true, over: true, closed: true });
+});
+test('the helper sweeps what no longer belongs and nothing else: another account of this installation, a new password nobody used', windowsOnly, t => {
+  const r = helperFunctions(t, `Add-Type -TypeDefinition 'public static class UsersVault { public static System.Collections.Generic.List<string> Gone=new System.Collections.Generic.List<string>(); public static bool Delete(string n,int a,int b){Gone.Add(n);return true;} }'
+$Scope='0123456789abcdefmine'
+function Names($filter){ if($filter -like '*UsersPassword*'){ @([pscustomobject]@{Name='stale';Written=[DateTime]::UtcNow.AddMinutes(-16)},[pscustomobject]@{Name='fresh';Written=[DateTime]::UtcNow.AddMinutes(-14)}) } else { @([pscustomobject]@{Name='SSAM/Agent/0123456789abcdef/mine/O11/x'},[pscustomobject]@{Name='SSAM/Agent/0123456789abcdef/other/O11/x'}) } }
+Sweep;SweepPasswords
+@{gone=@([UsersVault]::Gone)}|ConvertTo-Json -Compress`);
+  assert.deepEqual(r.gone, ['SSAM/Agent/0123456789abcdef/other/O11/x', 'stale']);
+  // That the modes call them is read from the text: a run of a mode needs the vault.
+  assert.match(fs.readFileSync(USERS_HELPER, 'utf8'), /\$Mode -ne 'prompt' -and \$Mode -ne 'confirm'\) \{ Sweep; SweepPasswords \}/);
+  assert.match(fs.readFileSync(USERS_HELPER, 'utf8'), /\$memory=ReadCapped [^\n]*\n if\(\$null -eq \$memory\)\{\$response\.Close\(\);Fail 'USERS_PAGE_TOO_LARGE'\}/);
+  assert.match(fs.readFileSync(USERS_HELPER, 'utf8'), /\n  LoginAnswer \$after \$cookies \$HostName\r?\n/);
+});
 test('the helper keeps its own rules: no redirect, no page over the limit, the vault read before any request', () => {
   const text = fs.readFileSync(USERS_HELPER, 'utf8');
   assert.match(text, /\$web\.AllowAutoRedirect=\$false/);
@@ -257,7 +281,7 @@ test('the helper keeps its own rules: no redirect, no page over the limit, the v
   assert.match(text, /function SweepPasswords/);
   assert.match(text, /AddMinutes\(-15\)/);
   assert.match(text, /\$ref\.field -notmatch/);
-  assert.match(text, /\$MaxPage\)\{\$response\.Close\(\);Fail 'USERS_PAGE_TOO_LARGE'\}/);
+  assert.match(text, /\$memory=ReadCapped \$response\.GetResponseStream\(\) \$MaxPage/);
 });
 // It reaches the Windows vault API, even on a scope nobody has: never by default, only with SSAM_USERS_REAL_VAULT_TEST=1.
 test('the real helper: an environment with no administrator stored is refused before any request', { skip: (process.platform !== 'win32' || process.env.SSAM_USERS_REAL_VAULT_TEST !== '1') && 'only with SSAM_USERS_REAL_VAULT_TEST=1 on Windows: it touches the vault API', timeout: 120000 }, async t => {
