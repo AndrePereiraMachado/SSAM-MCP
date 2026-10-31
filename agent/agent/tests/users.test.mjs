@@ -91,6 +91,19 @@ test('the helper runs hidden, with this installation\'s scope, and takes no secr
   assert.notEqual(usersScope(k.dataRoot, 'ssam_agent_a'), usersScope(k.dataRoot, 'ssam_agent_b'), 'each account has its own entries');
   assert.equal(usersScope(k.dataRoot, 'ssam_agent_a').slice(0, 16), usersScope(k.dataRoot, 'ssam_agent_b').slice(0, 16), 'the sweep finds the other accounts of this installation by the first half');
 });
+test('M3: the agent gives the kind its credential as the account: another token on this installation reads another vault key', async t => {
+  const scopes = [];
+  for (const credential of ['ssam_agent_' + 'a'.repeat(43), 'ssam_agent_' + 'b'.repeat(43)]) {
+    const root = tmp(t);
+    const agent = createAgent({ root, config: { credential, server: 'http://127.0.0.1:9' }, deps: { machine: null, locate: async () => null, processes: async () => [], platform: 'win32', fetch: async () => { throw new Error('no network here'); },
+      users: { exec: async (file, args) => { scopes.push({ scope: args[args.indexOf('-Scope') + 1], expected: usersScope(root, credential) }); return JSON.stringify({ ok: true, available: false }); }, lookup: async () => [{ address: '93.184.216.34' }] } } });
+    await agent.execute('o11.users', { op: 'status', host: HOST });
+  }
+  assert.equal(scopes.length, 2);
+  for (const { scope, expected } of scopes) assert.equal(scope, expected);
+  assert.equal(scopes[0].scope.slice(0, 16) === scopes[1].scope.slice(0, 16), false, 'two folders here');
+  assert.notEqual(scopes[0].scope.slice(16), scopes[1].scope.slice(16), 'and two accounts');
+});
 test('the helper\'s refusal is a code and a fixed text', async t => {
   const failed = kind(t, { answers: [{ ok: false, code: 'USERS_PRIVATE_REQUEST_FAILED', extra: 'page text' }] });
   await assert.rejects(failed.users.execute(request()), e => e.code === 'USERS_PRIVATE_REQUEST_FAILED' && e.executed === false && !e.message.includes('page text'));
