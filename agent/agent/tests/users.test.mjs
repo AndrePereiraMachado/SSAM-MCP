@@ -183,6 +183,68 @@ test('P1: the plan reads only its own page: another form, two forms or a comment
   assert.equal(parsePage(form('')).action, 'User_List.aspx');
 });
 
+// The helper's own parts, run in Windows PowerShell: no vault, no window shown and no network. They are taken out of the script by its parser.
+function helperFunctions(t, body) {
+  const script = path.join(tmp(t), 'run.ps1');
+  fs.writeFileSync(script, `$ErrorActionPreference='Stop'
+$ast=[Management.Automation.Language.Parser]::ParseFile(${JSON.stringify(USERS_HELPER).replace(/^"|"$/g, "'").replace(/\\\\/g, '\\')},[ref]$null,[ref]$null)
+foreach($fn in $ast.FindAll({param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst]},$true)){ if($fn.Name -in 'Attr','Form','Redact','LoginPlan','LoginResult','ConfirmForm'){ . ([ScriptBlock]::Create($fn.Extent.Text)) } }
+Add-Type -AssemblyName System.Windows.Forms
+Add-Type -AssemblyName System.Drawing
+${body}
+`);
+  return JSON.parse(execFileSync('powershell', ['-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', script], { encoding: 'utf8', windowsHide: true, timeout: 120000 }).trim().split(/\r?\n/).at(-1));
+}
+const windowsOnly = { skip: process.platform !== 'win32' && 'the helper is Windows PowerShell', timeout: 180000 };
+test('the window of a yes: Enter and Escape decline, Approve is asleep at first, and it ends by itself', windowsOnly, t => {
+  const w = helperFunctions(t, `$w=ConfirmForm ([pscustomobject]@{rows=@([pscustomobject]@{label='Email';value=('x'*400);data=$true},[pscustomobject]@{label='Environment';value='h.example'})})
+@{accept=($w.Form.AcceptButton -eq $w.No);cancel=($w.Form.CancelButton -eq $w.No);yesEnabled=$w.Yes.Enabled;arm=$w.Arm.Interval;end=$w.End.Interval;top=$w.Form.TopMost;visible=$w.Form.Visible;multi=@($w.Form.Controls|Where-Object{$_ -is [Windows.Forms.TextBox]}|ForEach-Object{$_.Multiline}|Select-Object -Unique);tall=@($w.Form.Controls|Where-Object{$_ -is [Windows.Forms.TextBox]})[0].Height;marked=@($w.Form.Controls|Where-Object{$_ -is [Windows.Forms.Label] -and $_.Text -match 'from the page'}).Count}|ConvertTo-Json -Compress`);
+  assert.equal(w.accept, true, 'Enter is Decline');
+  assert.equal(w.cancel, true);
+  assert.equal(w.yesEnabled, false, 'Approve is asleep');
+  assert.ok(w.arm >= 1000);
+  assert.equal(w.end, 120000);
+  assert.equal(w.top, true);
+  assert.equal(w.visible, false, 'the test shows no window');
+  assert.ok(w.tall > 100, 'a long value shows whole: ' + w.tall);
+  assert.equal(w.marked, 1, 'what comes from a page says so');
+});
+test('the redaction takes out every form a page can give the value', windowsOnly, t => {
+  const shapes = helperFunctions(t, `$s='P@ss w0rd<&>"''e'
+$html=[Net.WebUtility]::HtmlEncode($s)
+$forms=@($s,$html,$html.Replace('&#39;','&apos;'),(Form $s),[Uri]::EscapeDataString($s),([regex]::Replace([Uri]::EscapeDataString($s),'%[0-9A-F]{2}',{param($m) $m.Value.ToLower()})),$s.ToUpperInvariant(),[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($s)),[Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($s)))
+@(foreach($form in $forms){ (Redact ('<input value="'+$form+'">') $s) -match 'redacted' })|ConvertTo-Json -Compress`);
+  assert.deepEqual(shapes, shapes.map(() => true));
+  assert.ok(shapes.length >= 9);
+});
+test('the sign-in form: exactly one user box, one password box and one Log In, outside comments and scripts', windowsOnly, t => {
+  const r = helperFunctions(t, `$good='<form action="Login.aspx"><input type="hidden" name="__OSVSTATE" value="a&amp;b"><input type="text" name="u"><input type="password" name="p"><input type="submit" name="go" value="Log In"></form>'
+$plan=LoginPlan $good
+@{user=$plan.User;password=$plan.Password;submit=$plan.Submit;hidden=$plan.Hidden[0][1];
+ commented=($null -ne (LoginPlan ($good+'<!-- <input type="text" name="v"> --><script>var a="<input type=text name=w>";</script>')));
+ twoUsers=($null -eq (LoginPlan ($good+'<input type="text" name="v">')));
+ twoPasswords=($null -eq (LoginPlan ($good+'<input type="password" name="q">')));
+ noSubmit=($null -eq (LoginPlan $good.Replace('Log In','Entrar')));
+ button=($null -eq (LoginPlan $good.Replace('<input type="submit" name="go" value="Log In">','<button>Log In</button>')));
+ sso=($null -eq (LoginPlan '<form action="Login.aspx"><a href="/sso">Sign in with SSO</a></form>'))}|ConvertTo-Json -Compress`);
+  assert.deepEqual(r, { user: 'u', password: 'p', submit: 'go', hidden: 'a&b', commented: true, twoUsers: true, twoPasswords: true, noSubmit: true, button: true, sso: true });
+});
+test('signed in means a cookie, and an answer that left the login page on this host: nothing else counts', windowsOnly, t => {
+  const r = helperFunctions(t, `$h='tenant-a.example.test'
+@(
+ (LoginResult 302 'https://tenant-a.example.test/Users/User_List.aspx' '' 1 $h),
+ (LoginResult 302 '/Users/User_List.aspx' '' 1 $h),
+ (LoginResult 200 '' '<html>welcome</html>' 1 $h),
+ (LoginResult 302 '/Users/Login.aspx?error=1' '' 1 $h),
+ (LoginResult 302 'https://evil.example/Users/User_List.aspx' '' 1 $h),
+ (LoginResult 302 '' '' 1 $h),
+ (LoginResult 200 '' '<input type="password" name="p">' 1 $h),
+ (LoginResult 500 '' 'error' 1 $h),
+ (LoginResult 200 '' '<html>blocked</html>' 0 $h),
+ (LoginResult 302 '/Users/User_List.aspx' '' 0 $h)
+)|ConvertTo-Json -Compress`);
+  assert.deepEqual(r, [true, true, true, false, false, false, false, false, false, false]);
+});
 test('the helper keeps its own rules: no redirect, no page over the limit, the vault read before any request', () => {
   const text = fs.readFileSync(USERS_HELPER, 'utf8');
   assert.match(text, /\$web\.AllowAutoRedirect=\$false/);
