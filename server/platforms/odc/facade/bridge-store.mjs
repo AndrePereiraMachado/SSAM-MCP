@@ -31,6 +31,27 @@ export function verifyBridge(directory, publicKey) {
   }
   return {manifest:m, text:bytes.toString('utf8'), signature:signature.toString('base64'), files};
 }
+// What an offered bridge needs of the agent that runs it, by lane and first protocol number. From ODC bridge v106 on (U1 of the
+// line) a merge may return before the bridge's verification ran (verification-not-started.json), and the server verifies it with
+// reconcile-merge before any content proof: an agent that refuses that command leaves the merge MERGE_UNCERTAIN, with no way out
+// but a manual publication in the Studio. So v106 and later go only to an agent whose hello lists reconcile-merge (agent.odcCommands,
+// agent 0.3.6 and 0.4.3-native); an older agent keeps its own bridge, or is offered an older accepted one.
+export const AGENT_NEEDS = Object.freeze([Object.freeze({ lane: 'odc', from: 106, commands: Object.freeze(['reconcile-merge']) })]);
+const protocolNumber = protocol => /^[vd]\d+$/.test(protocol ?? '') ? Number(protocol.slice(1)) : -1;
+// The commands the agent's hello declares for a lane (agent.odcCommands); none for an agent that predates the list.
+const agentCommands = (hello, lane) => (lane === 'odc' && Array.isArray(hello?.agent?.odcCommands) ? hello.agent.odcCommands.filter(c => typeof c === 'string') : []);
+// Whether the agent of this hello runs what the bridge of this lane and protocol needs.
+export function agentRuns(hello, lane, protocol) {
+  const have = agentCommands(hello, lane);
+  return AGENT_NEEDS.filter(n => n.lane === lane && protocolNumber(protocol) >= n.from).every(n => n.commands.every(c => have.includes(c)));
+}
+// A bridge is built for one Studio runtime: never offer it to a Studio whose hello reports another (a net8 v107 is never the
+// offer of a net10 1.7.30, where it would also turn the v106 into a downgrade of the pair). A hello without the runtime is not
+// filtered here: the agent itself refuses a bridge of another runtime before installing it.
+const sameRuntime = (hello, lane, manifest) => {
+  const runtime = hello?.studios?.[lane]?.installed?.runtime;
+  return typeof runtime !== 'string' || !runtime || manifest.runtime === runtime;
+};
 export function createBridgeStore({root = process.env.SSAM_BRIDGES_DIR || '/app/bridges', publicKey,
     keyFile = process.env.SSAM_BRIDGES_PUBLIC_KEY || '/app/bridges/public-key.pem'} = {}) {
   const key = publicKey || (()=>{try{return fs.readFileSync(keyFile);}catch{return null;}})();
@@ -53,10 +74,13 @@ export function createBridgeStore({root = process.env.SSAM_BRIDGES_DIR || '/app/
     } catch { return null; }
   }
   return {
-    offer(lane, studioVersion, accepted, reports=[]) {
+    // hello: the agent's (agent-hub.mjs compatibility); without one, as before (no need and no runtime is checked).
+    offer(lane, studioVersion, accepted, reports=[], hello=undefined) {
       let protocols=[];try{protocols=fs.readdirSync(path.join(root,lane,studioVersion));}catch{return null;}
       for(const protocol of protocols.filter(p=>accepted.includes(p)).sort((a,b)=>Number(b.slice(1))-Number(a.slice(1)))) {
+        if(hello!==undefined&&!agentRuns(hello,lane,protocol))continue;
         const b=read(lane,studioVersion,protocol);
+        if(b&&hello!==undefined&&!sameRuntime(hello,lane,b.manifest))continue;
         if(b&&!reports.some(r=>['failed','refused'].includes(r.status)&&r.lane===lane&&r.studioVersion===studioVersion&&r.protocol===protocol&&r.sequence>=b.manifest.sequence))return {lane,studioVersion,protocol,manifest:b.text,signature:b.signature};
       }
       return null;

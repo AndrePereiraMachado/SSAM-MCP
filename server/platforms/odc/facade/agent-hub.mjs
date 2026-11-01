@@ -164,7 +164,9 @@ export function compatibility(hello, kernel, lanes, { refused = null, bridges = 
     const reports=Array.isArray(hello?.bridges)?hello.bridges:[];
     const version=threePart(hello?.studios?.[lane]?.installed?.version);
     const accepted=lane==='odc'?[k.odcBridge,...(k.odcBridgeAccepted??[])]:k.o11BridgeAccepted??[];
-    const offer=capable&&version&&bridges?.offer(lane,version,accepted,reports);
+    // The hello goes with the offer: a bridge whose runtime is not the Studio's, or that needs a command this agent does not run
+    // (reconcile-merge from ODC v106 on, bridge-store.mjs AGENT_NEEDS), is never offered to it.
+    const offer=capable&&version&&bridges?.offer(lane,version,accepted,reports,hello??null);
     const m=offer?(typeof offer.manifest==='string'?JSON.parse(offer.manifest):offer.manifest):null;
     const active=m&&reports.some(r=>r.lane===lane&&r.studioVersion===version&&r.protocol===m.protocol&&r.sequence===m.sequence&&['active','installed'].includes(r.status));
     const effective=active?{...hello,pack:{...hello.pack,...(lane==='odc'?{odcBridge:m.protocol}:{o11BuiltFor:version,o11Hook:m.protocol})}}:hello;

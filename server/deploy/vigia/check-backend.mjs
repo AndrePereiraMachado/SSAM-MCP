@@ -22,11 +22,17 @@ try {
  const accepted=await post('/agent/v1/hello',issued.agentCredential,hello);
  if(!accepted.data.compatible.odc.ok||!accepted.data.compatible.o11.ok)throw Error('Synthetic hello failed.');
  for(const offer of (expected.offers??[]).filter(x=>kernel[x.lane]===x.studioVersion)){
-  const old=structuredClone(hello);old.capabilities={bridgeOffer:true};
+  // The agent that may take it: from ODC v106 on only one whose hello lists reconcile-merge (bridge-store.mjs AGENT_NEEDS).
+  const old=structuredClone(hello);old.capabilities={bridgeOffer:true};old.agent={version:'1',odcCommands:['merge','reconcile-merge']};
   old.pack.odcBridge='v0';old.pack.o11BuiltFor='0.0.0';
   const response=await post('/agent/v1/hello',issued.agentCredential,old);
   const received=response.data.compatible[offer.lane]?.bridgeOffer;
   if(received?.protocol!==offer.protocol)throw Error('Signed bridge was not offered.');
+  if(offer.lane==='odc'&&/^v\d+$/.test(offer.protocol)&&Number(offer.protocol.slice(1))>=106){
+   const without=structuredClone(old);without.agent={version:'1'};
+   const refused=(await post('/agent/v1/hello',issued.agentCredential,without)).data.compatible.odc?.bridgeOffer;
+   if(refused&&Number(String(refused.protocol).slice(1))>=106)throw Error('A bridge from v106 on was offered to an agent without reconcile-merge.');
+  }
   const manifest=typeof received.manifest==='string'?JSON.parse(received.manifest):received.manifest;
   for(const f of manifest.files){
    const r=await fetch(`http://127.0.0.1:7310/agent/bridges/${offer.lane}/${offer.studioVersion}/${offer.protocol}/${f.sha256}`,{headers:{authorization:'Bearer '+issued.agentCredential},signal:AbortSignal.timeout(30000)});
