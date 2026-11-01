@@ -18,7 +18,8 @@ try {
   if(!r.ok)throw Error('Protocol verification refused.');
   return {data:text?JSON.parse(line?line.slice(5):text):null,sid:r.headers.get('mcp-session-id')};
  };
- const hello={t:'hello',protocol:'ssam-agent/1',instance:'vigia-verification',agent:{version:'1'},pack:{id:'verification',lanes:['odc','o11'],odcBridge:kernel.odcBridge,o11BuiltFor:kernel.o11,o11Hook:kernel.o11Hook??'dev'},studios:{odc:{installed:{version:kernel.odc,dir:'C:/Verification'}},o11:{installed:{version:kernel.o11,dir:'C:/Verification'}}}};
+ // The agent of this release: it runs reconcile-merge, which the ODC bridges from v106 on need (agent-hub.mjs laneCompatibility).
+ const hello={t:'hello',protocol:'ssam-agent/1',instance:'vigia-verification',agent:{version:'1',odcCommands:['merge','reconcile-merge']},pack:{id:'verification',lanes:['odc','o11'],odcBridge:kernel.odcBridge,o11BuiltFor:kernel.o11,o11Hook:kernel.o11Hook??'dev'},studios:{odc:{installed:{version:kernel.odc,dir:'C:/Verification'}},o11:{installed:{version:kernel.o11,dir:'C:/Verification'}}}};
  const accepted=await post('/agent/v1/hello',issued.agentCredential,hello);
  if(!accepted.data.compatible.odc.ok||!accepted.data.compatible.o11.ok)throw Error('Synthetic hello failed.');
  for(const offer of (expected.offers??[]).filter(x=>kernel[x.lane]===x.studioVersion)){

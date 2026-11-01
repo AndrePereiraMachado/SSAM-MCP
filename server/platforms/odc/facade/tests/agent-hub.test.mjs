@@ -928,7 +928,9 @@ test('callVerbs: only the closed lists name an agent call', () => {
   assert.ok(Object.isFrozen(ENVIRONMENT_OPERATIONS));
 });
 
-const AGENT_KINDS_FILE = fileURLToPath(new URL('../../../../agent/lib/kinds.mjs', import.meta.url));
+// The line keeps the agent at agent/lib/kinds.mjs; the box (SSAM-MCP) at ../agent/agent/lib/kinds.mjs beside server/.
+const AGENT_KINDS_FILE = [fileURLToPath(new URL('../../../../agent/lib/kinds.mjs', import.meta.url)), fileURLToPath(new URL('../../../../../agent/agent/lib/kinds.mjs', import.meta.url))]
+  .find(file => fs.existsSync(file)) ?? fileURLToPath(new URL('../../../../agent/lib/kinds.mjs', import.meta.url));
 test("drift: the pipe commands and bridge methods of the contract are the agent's own lists", { skip: !fs.existsSync(AGENT_KINDS_FILE) && 'agent/ is not in this checkout' }, async () => {
   const kinds = await import(pathToFileURL(AGENT_KINDS_FILE).href);
   assert.deepEqual([...ODC_COMMANDS], [...kinds.ODC_COMMANDS]);

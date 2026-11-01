@@ -32,7 +32,7 @@ import { agentVerbOf } from './quality-line.mjs';
 import { buildPolicyOf, servedBuildOf, studioIdentity, studioRefusal, studioVersions, studioWarningOf, threePart, servedVersions, causeOf } from './studio-identity.mjs';
 import { recordStudioVersions } from './studio-version-state.mjs';
 import { UNKNOWN_EXIT } from './hosted/network-check.mjs';
-import { createBridgeStore } from './bridge-store.mjs';
+import { createBridgeStore, agentRuns } from './bridge-store.mjs';
 import { recordEvent } from '../../../facade/friction-store.mjs';
 
 // A Windows balloon on the server machine (owner test, 2026-10-08); off with SSAM_ACCESS_NOTIFY=0, never fails a call.
@@ -172,7 +172,8 @@ export function compatibility(hello, kernel, lanes, { refused = null, bridges = 
     const effective=active?{...hello,pack:{...hello.pack,...(lane==='odc'?{odcBridge:m.protocol}:{o11BuiltFor:version,o11Hook:m.protocol})}}:hello;
     const result = laneCompatibility(lane, effective, k, lanes ?? [], refused?.[lane] ?? null);
     const needsO11=lane==='o11'&&threePart(hello?.pack?.o11BuiltFor)!==version;
-    if (capable && offer && !active && (result.code === 'AGENT_PACK_MISMATCH'||(result.ok&&needsO11))) {
+    // A refusal for a command the agent lacks (needs) is never turned into an offer: no bridge fixes it, only the agent package.
+    if (capable && offer && !active && ((result.code === 'AGENT_PACK_MISMATCH' && !result.needs)||(result.ok&&needsO11))) {
       if (offer) return [lane, result.ok ? {...result, bridgeOffer:offer} : {...result, ok:false, code:'BRIDGE_UPDATE_REQUIRED', message:'Install the signed bridge and reconnect.', bridgeOffer:offer}];
     }
     return [lane,result];
@@ -196,6 +197,20 @@ function laneCompatibility(lane, hello, kernel, lanes, refused) {
     return no('AGENT_PACK_MISMATCH', 'The agent package has no ' + lane + ' lane. Ask the server owner for the current agent package.');
   if (lane === 'odc' && pack.odcBridge !== kernel.odcBridge && !(kernel.odcBridgeAccepted ?? []).includes(pack.odcBridge))
     return no('AGENT_PACK_MISMATCH', 'The agent package carries ODC bridge ' + (pack.odcBridge ?? 'none') + '; this server uses ' + kernel.odcBridge + '. Ask the server owner for the current agent package.');
+  // The bridge the agent RUNS, not only the one offered (bridge-store.mjs AGENT_NEEDS): from ODC v106 on a merge may need the agent's
+  // reconcile-merge, so a pack bridge (the effective one, an active offer included) or a bridge this machine reports active or
+  // installed for this Studio that needs a command the agent does not list is refused before any call: an old agent core in a new
+  // pack, or an old agent over a data root that holds a newer bridge, never runs it.
+  if (lane === 'odc') {
+    const studioVersion = threePart(installed?.version);
+    const needs = 'needs an agent that runs reconcile-merge (agent 0.3.6 / 0.4.3-native); this agent does not.';
+    if (!agentRuns(hello, 'odc', pack.odcBridge))
+      return no('AGENT_PACK_MISMATCH', 'The agent package carries ODC bridge ' + pack.odcBridge + ', which ' + needs + ' Ask the server owner for the current agent package.', { needs: ['reconcile-merge'] });
+    const reported = (Array.isArray(hello?.bridges) ? hello.bridges : []).find(r => r?.lane === 'odc' && r.studioVersion === studioVersion
+      && ['active', 'installed'].includes(r.status) && !agentRuns(hello, 'odc', r.protocol));
+    if (reported)
+      return no('AGENT_PACK_MISMATCH', 'This machine has ODC bridge ' + reported.protocol + ' ' + reported.status + ' for ODC Studio ' + studioVersion + ', which ' + needs + ' Install the current agent package.', { needs: ['reconcile-merge'] });
+  }
   // A newer Studio is already allowed by studioIdentity. Its locally matching
   // bridge must not be rejected solely because the server image is older.
   // This does not admit arbitrary future packs or relax hook/protocol checks.

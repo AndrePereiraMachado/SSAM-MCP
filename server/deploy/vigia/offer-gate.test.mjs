@@ -3,8 +3,11 @@
 // bridgeOffer, so the hub offers v106 and later only to an agent whose hello lists reconcile-merge (agent.odcCommands, agent
 // 0.3.6 / 0.4.3-native); an older agent keeps its pack or is offered an older accepted bridge. And a bridge is offered only to a
 // Studio of its own runtime: the net8 v107 never to a net10 1.7.30 (it would turn the v106 into a downgrade of that pair).
-// The kernels are the box's own window (server/deploy/coolify/r1-kernels.json); the agent's lists are the agent box's own
-// (agent/agent/lib/kinds.mjs), so this test fails when either drifts.
+// The kernels are the R4 transition window, written here (the window file lands with the copy of the line, A3); the agent's lists
+// are the agent box's own (agent/agent/lib/kinds.mjs), so this test fails when they drift.
+// Round 2 (F1): the offer is not the only way a bridge reaches an agent. The pack's own bridge, or one this machine reports active
+// or installed, that needs reconcile-merge is refused (AGENT_PACK_MISMATCH, never turned into an offer) to an agent that does not
+// list it: an old agent core in a new pack, or an old agent over a data root that holds a v106.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -16,7 +19,12 @@ import {createBridgeStore, agentRuns, AGENT_NEEDS} from '../../platforms/odc/fac
 import {compatibility} from '../../platforms/odc/facade/agent-hub.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const KERNELS = JSON.parse(fs.readFileSync(path.join(here, '..', 'coolify', 'r1-kernels.json'), 'utf8'));
+const R4 = ['v98', 'v96', 'v48', 'v45', 'v102', 'v107'];
+const KERNELS = Object.freeze({
+  v1: {o11: '11.55.94', odc: '1.7.30', odcBridge: 'v106', odcBridgeAccepted: ['v98', 'v101', 'v102', 'v107']},
+  v2: {o11: '11.55.93', odc: '1.7.29', odcBridge: 'v97', odcBridgeAccepted: R4},
+  v3: {o11: '11.55.92', odc: '1.7.28', odcBridge: 'v97', odcBridgeAccepted: R4},
+});
 const AGENT_KINDS = path.join(here, '..', '..', '..', 'agent', 'agent', 'lib', 'kinds.mjs');
 const tmp = t => { const p = fs.mkdtempSync(path.join(os.tmpdir(), 'offer-gate-')); t.after(() => fs.rmSync(p, {recursive: true, force: true})); return p; };
 
@@ -102,4 +110,51 @@ test('a hello without the Studio runtime, or a call without a hello, is served a
   const bridges = store(t, [['1.7.30', 'v101', 'net10.0']]);
   assert.equal(bridges.offer('odc', '1.7.30', ['v101']).protocol, 'v101');
   assert.equal(offered(hello({studio: '1.7.30.10980'}), {odc: '1.7.30', o11: '11.55.94', odcBridge: 'v101'}, bridges).bridgeOffer.protocol, 'v101');
+});
+
+// F1: the bridge the agent runs. hello(pack, commands, bridges) of the pair's own Studio, with its runtime.
+const runs = ({kernel, pack, odcCommands, bridges = []}) => compatibility({t: 'hello', capabilities: {bridgeOffer: true}, bridges,
+  agent: {version: odcCommands ? '0.3.6' : '0.3.5', ...(odcCommands ? {odcCommands} : {})}, pack: {id: 'f1', lanes: ['odc'], odcBridge: pack},
+  studios: {odc: {installed: {version: kernel.odc + '.1', dir: 'C:/S', runtime: kernel.odc === '1.7.30' ? 'net10.0' : 'net8.0'}}}}, kernel, ['odc'], {bridges: null}).odc;
+
+test('F1: a pack bridge v107 needs reconcile-merge: refused without it on the three pairs, served with it; v102 serves the old agent as before', () => {
+  for (const name of ['v1', 'v2', 'v3']) {
+    const kernel = KERNELS[name];
+    const old = runs({kernel, pack: 'v107'});
+    assert.equal(old.ok, false, name);
+    assert.equal(old.code, 'AGENT_PACK_MISMATCH', name);
+    assert.match(old.message, /ODC bridge v107, which needs an agent that runs reconcile-merge \(agent 0\.3\.6 \/ 0\.4\.3-native\); this agent does not/);
+    assert.deepEqual(old.needs, ['reconcile-merge']);
+    assert.equal(runs({kernel, pack: 'v107', odcCommands: ['merge']}).code, 'AGENT_PACK_MISMATCH', name + ': a list without it');
+    assert.equal(runs({kernel, pack: 'v107', odcCommands: ['merge', 'reconcile-merge']}).ok, true, name);
+    assert.equal(runs({kernel, pack: 'v102'}).ok, true, name + ': the old agent keeps its v102 pack');
+  }
+  // The main bridge of the net10 pair is v106: the pack v106 too needs the command.
+  assert.equal(runs({kernel: KERNELS.v1, pack: 'v106'}).code, 'AGENT_PACK_MISMATCH');
+  assert.equal(runs({kernel: KERNELS.v1, pack: 'v106', odcCommands: ['reconcile-merge']}).ok, true);
+});
+
+test('F1: a v106 this machine reports active or installed for its Studio refuses an agent without reconcile-merge (an old agent over a newer data root)', () => {
+  const kernel = KERNELS.v1, report = status => [{lane: 'odc', studioVersion: '1.7.30', protocol: 'v106', sequence: 1, status}];
+  for (const status of ['active', 'installed']) {
+    const old = runs({kernel, pack: 'v102', bridges: report(status)});
+    assert.equal(old.code, 'AGENT_PACK_MISMATCH', status);
+    assert.match(old.message, new RegExp('ODC bridge v106 ' + status + ' for ODC Studio 1\.7\.30, which needs an agent that runs reconcile-merge'));
+    assert.equal(runs({kernel, pack: 'v102', bridges: report(status), odcCommands: ['reconcile-merge']}).ok, true, status);
+  }
+  // A failed or refused report, another Studio version, or an older protocol does not refuse.
+  for (const bridges of [report('failed'), report('refused'), [{lane: 'odc', studioVersion: '1.7.29', protocol: 'v107', status: 'active'}],
+    [{lane: 'odc', studioVersion: '1.7.30', protocol: 'v101', status: 'active'}], [{lane: 'o11', studioVersion: '1.7.30', protocol: 'd1', status: 'active'}]])
+    assert.equal(runs({kernel, pack: 'v102', bridges}).ok, true, JSON.stringify(bridges));
+});
+
+test('F1: the refusal for a missing command is never turned into an offer (no bridge fixes it, only the agent package)', t => {
+  const kernel = KERNELS.v2;
+  const bridges = store(t, [['1.7.29', 'v102', 'net8.0'], ['1.7.29', 'v107', 'net8.0']]);
+  const answer = offered(hello({studio: '1.7.29.1', runtime: 'net8.0'}), kernel, bridges);
+  assert.equal(answer.bridgeOffer?.protocol, 'v102', 'a pack refused nowhere for a command still gets the offer it can run');
+  const h = hello({studio: '1.7.29.1', runtime: 'net8.0'}); h.pack.odcBridge = 'v107';
+  const refused = offered(h, kernel, bridges);
+  assert.equal(refused.code, 'AGENT_PACK_MISMATCH');
+  assert.equal(refused.bridgeOffer, undefined);
 });
