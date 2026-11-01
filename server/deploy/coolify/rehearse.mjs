@@ -12,7 +12,8 @@ const images=process.env.SSAM_REHEARSAL_IMAGES?JSON.parse(process.env.SSAM_REHEA
 // SSAM_REHEARSAL_IMAGES: the window, newest (the default) first, two or three pairs: [{name?, image, features, odc?, o11?,
 // odcBuild?, o11Build?, odcBridge?, odcBridgeAccepted?}]. odc/o11 (three numbers) and their builds (four) default to the two
 // pairs of the initial window (1.7.29/11.55.93, 1.7.28/11.55.92); odcBridge (kernel.json) defaults to v97 with v96, v48, v45
-// accepted. A pair whose odcBridge is not v97 (the .NET 10 Studios: v101) also proves that a pack of v97 is refused there.
+// accepted. A pair whose odcBridge is not v97 (the .NET 10 Studios: v101, v106 from the R4 release) also proves that a pack of v97
+// is refused there; an agent of this release reports v98 for it (accepted on every pair).
 if(images&&(images.length<2||images.length>3))throw Error('The window takes two or three images.');
 const INITIAL=[{odc:'1.7.29',o11:'11.55.93',odcBuild:'1.7.29.10940',o11Build:'11.55.93.65289'},{odc:'1.7.28',o11:'11.55.92',odcBuild:'1.7.28.10850',o11Build:'11.55.92.65269'}];
 const image=images?.[0].image??process.env.SSAM_REHEARSAL_IMAGE??'ssam-server:prod-20261021-ac614ad';
@@ -70,7 +71,8 @@ try{
  const post=async(endpoint,token,body,extra={})=>{const r=await fetch(url+endpoint,{method:'POST',headers:{authorization:'Bearer '+token,'content-type':'application/json',accept:'application/json, text/event-stream',...extra},body:JSON.stringify(body)});return {status:r.status,text:await r.text(),sid:r.headers.get('mcp-session-id')};};
  // A hello whose ODC Studio is the one of pair odcOf and Service Studio the one of o11Of, with the pack an agent of this release
  // reports for them (the bridge built for that ODC Studio's runtime, the thin bridge built for that Service Studio).
- const hello=(odcOf,o11Of,id,pack={})=>({t:'hello',protocol:'ssam-agent/1',instance:id,agent:{version:'0.1.3',machine:{id,name:'Rehearsal',user:'Test'}},pack:{id:'rehearsal',lanes:['odc','o11'],odcBridge:odcOf.odcBridge==='v101'?'v98':odcOf.odcBridge,o11BuiltFor:o11Of.o11,o11Hook:'dev',...pack},studios:{odc:{installed:{version:odcOf.odcBuild,dir:'C:/Synthetic'}},o11:{installed:{version:o11Of.o11Build,dir:'C:/Synthetic'}}}});
+ const packBridge=p=>p.odcBridge==='v97'?'v97':'v98';
+ const hello=(odcOf,o11Of,id,pack={})=>({t:'hello',protocol:'ssam-agent/1',instance:id,agent:{version:'0.1.3',machine:{id,name:'Rehearsal',user:'Test'}},pack:{id:'rehearsal',lanes:['odc','o11'],odcBridge:packBridge(odcOf),o11BuiltFor:o11Of.o11,o11Hook:'dev',...pack},studios:{odc:{installed:{version:odcOf.odcBuild,dir:'C:/Synthetic'}},o11:{installed:{version:o11Of.o11Build,dir:'C:/Synthetic'}}}});
  const ha=await post('/agent/v1/hello',a.agentCredential,hello(pairs[0],pairs[1],'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'));assert.equal(ha.status,200);assert.equal(JSON.parse(ha.text).compatible.odc.ok,true);assert.equal(JSON.parse(ha.text).compatible.o11.ok,false);assert.match(JSON.stringify(JSON.parse(ha.text).compatible.o11),/Update Service Studio to 11\.55\.94/);checks.push({name:'mixed pair gives the O11 upgrade while ODC works',ok:true});
  const hb=await post('/agent/v1/hello',b.agentCredential,hello(pairs[1],pairs[1],'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'));assert.equal(hb.status,200);assert.equal(JSON.parse(hb.text).compatible.odc.ok,true);assert.equal(JSON.parse(hb.text).compatible.o11.ok,true);
  const routing=JSON.parse(fs.readFileSync(path.join(out,'segredo/runtime/state/routing.json'),'utf8'));assert.equal(routing.routes[a.id].backend,'v1');assert.equal(routing.routes[b.id].backend,'v2');
@@ -85,6 +87,11 @@ try{
   const odc=JSON.parse(old.text).compatible.odc;assert.equal(odc.ok,false);assert.match(JSON.stringify(odc),/AGENT_PACK_MISMATCH/);
   const current=await post('/agent/v1/hello',d.agentCredential,hello(pairs[0],pairs[0],'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',{odcBridge:'v98'}));assert.equal(current.status,200);assert.equal(JSON.parse(current.text).compatible.odc.ok,true);checks.push({name:'v98 accepted and v97 refused on '+pairs[0].odc,ok:true,odc});
   for(const p of pairs){const v102=await post('/agent/v1/hello',d.agentCredential,hello(p,p,'f'.repeat(31)+String(pairs.indexOf(p)),{odcBridge:'v102'}));assert.equal(v102.status,200);assert.equal(JSON.parse(v102.text).compatible.odc.ok,true,'v102 must be accepted on '+p.odc);}checks.push({name:'v102 accepted on the three pairs',ok:true});
+  // R4 (U1): the net8 v107 of the agent pack is accepted on the three pairs, as v102 is; v101 stays accepted on the net10 pair.
+  // The pack bridge v107 runs only in an agent that lists reconcile-merge (agent 0.3.6 / 0.4.3-native): accepted with it, refused without.
+  for(const p of pairs){const h=hello(p,p,'f'.repeat(30)+'7'+String(pairs.indexOf(p)),{odcBridge:'v107'});h.agent.odcCommands=['merge','reconcile-merge'];const v107=await post('/agent/v1/hello',d.agentCredential,h);assert.equal(v107.status,200);assert.equal(JSON.parse(v107.text).compatible.odc.ok,true,'v107 must be accepted on '+p.odc);}checks.push({name:'v107 accepted on the three pairs',ok:true});
+  for(const p of pairs){const old=await post('/agent/v1/hello',d.agentCredential,hello(p,p,'f'.repeat(30)+'8'+String(pairs.indexOf(p)),{odcBridge:'v107'}));assert.equal(old.status,200);assert.match(JSON.stringify(JSON.parse(old.text).compatible.odc),/AGENT_PACK_MISMATCH.*reconcile-merge/,'v107 must be refused to an agent without reconcile-merge on '+p.odc);}checks.push({name:'v107 refused to an agent without reconcile-merge on the three pairs',ok:true});
+  const v101=await post('/agent/v1/hello',d.agentCredential,hello(pairs[0],pairs[0],'f'.repeat(29)+'101',{odcBridge:'v101'}));assert.equal(JSON.parse(v101.text).compatible.odc.ok,true,'v101 must stay accepted on '+pairs[0].odc);checks.push({name:'v101 still accepted on '+pairs[0].odc,ok:true});
  }
  const init={jsonrpc:'2.0',id:1,method:'initialize',params:{protocolVersion:'2025-03-26',capabilities:{},clientInfo:{name:'rehearsal',version:'1'}}};
  const sa=await post('/mcp',a.token,init),sb=await post('/mcp',b.token,init),sc=c?await post('/mcp',c.token,init):null;assert.equal(sa.status,200);assert.equal(sb.status,200);assert.ok(sa.sid&&sb.sid);if(sc){assert.equal(sc.status,200);assert.ok(sc.sid);}checks.push({name:'admin licenses accepted by every backend',ok:true,backends:backends.length});
@@ -115,7 +122,7 @@ try{
   assert.ok(agent.connected());assert.equal(agent.welcome().kernel.odc,pairs[1].odc);
   const prior=await post('/mcp',b.token,init);assert.equal(prior.status,200);
   await post('/mcp',b.token,{jsonrpc:'2.0',method:'notifications/initialized'},{'mcp-session-id':prior.sid});
-  changing.studios.odc.installed.version=pairs[0].odcBuild;changing.pack.odcBridge=pairs[0].odcBridge==='v101'?'v98':pairs[0].odcBridge;
+  changing.studios.odc.installed.version=pairs[0].odcBuild;changing.pack.odcBridge=packBridge(pairs[0]);
   for(let i=0;i<400&&!(connections>=2&&agent.connected()&&agent.welcome().kernel.odc===pairs[0].odc);i++)await wait(100);
   assert.ok(connections>=2&&agent.connected());assert.equal(agent.welcome().kernel.odc,pairs[0].odc);
   const stale=await post('/mcp',b.token,{jsonrpc:'2.0',id:40,method:'tools/list',params:{}},{'mcp-session-id':prior.sid});assert.equal(stale.status,409);assert.match(stale.text,/SESSION_REROUTED/);

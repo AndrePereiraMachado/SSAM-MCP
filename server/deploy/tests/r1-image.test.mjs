@@ -14,11 +14,13 @@ test('R1 image carries the reference maps and all three current-window compatibi
       assert.ok(JSON.parse(fs.readFileSync(file,'utf8')), file);
     }
     const kernels = JSON.parse(fs.readFileSync('/app/deploy/coolify/r1-kernels.json','utf8'));
-    assert.deepEqual(kernels.v1,{o11:'11.55.94',odc:'1.7.30',odcBridge:'v101',odcBridgeAccepted:['v98','v102']});
+    // R4 (U1): v106 on the net10 pair, v101 kept so a Studio that loaded it keeps service, v107 (the net8 pack) accepted.
+    assert.deepEqual(kernels.v1,{o11:'11.55.94',odc:'1.7.30',odcBridge:'v106',odcBridgeAccepted:['v98','v101','v102','v107']});
     for (const name of ['v2','v3']) {
       assert.equal(kernels[name].odcBridge,'v97');
       assert.ok(kernels[name].odcBridgeAccepted.includes('v98'));
-  assert.ok(kernels[name].odcBridgeAccepted.includes('v102'));
+      assert.ok(kernels[name].odcBridgeAccepted.includes('v102'));
+      assert.ok(kernels[name].odcBridgeAccepted.includes('v107'));
     }
     assert.equal(kernels.v2.odc,'1.7.29');
     assert.equal(kernels.v3.odc,'1.7.28');
