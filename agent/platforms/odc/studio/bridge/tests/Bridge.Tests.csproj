@@ -33,6 +33,13 @@
     <Compile Include="..\PublishLogCore.cs" Link="PublishLogCore.cs" />
     <Compile Include="..\MergeDiagnostics.cs" Link="MergeDiagnostics.cs" />
     <Compile Include="..\TemplateCache.cs" Link="TemplateCache.cs" />
+    <!-- v106/v107 (the line's U1): the verification of a merge as a job of its own, when a publication answers ok, and the
+         journal's gate of their refusals (VerifiedPublicationTests, the line's own tests). -->
+    <Compile Include="..\BridgeServe.cs" Link="BridgeServe.cs" />
+    <Compile Include="..\BridgeDeadlines.cs" Link="BridgeDeadlines.cs" />
+    <EmbeddedResource Include="..\..\..\facade\bridge-deadlines.json" LogicalName="bridge-deadlines.json" />
+    <Compile Include="..\PublishVerification.cs" Link="PublishVerification.cs" />
+    <Compile Include="..\..\shared\Journal.cs" Link="Journal.cs" />
     <!-- The bridge's copy of the kernel's list, the one the bridge compiles (public-signature-drift.test.mjs keeps it equal). -->
     <Compile Include="..\SecurityWarningsCopy.cs" Link="SecurityWarningsCopy.cs" />
     <Compile Include="..\..\engine\NativeMergeVerification.cs" Link="engine\NativeMergeVerification.cs" />

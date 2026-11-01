@@ -28,6 +28,9 @@ internal static partial class Bridge
     // Raised by publish --wait when the server process ends without success: the Serve loop answers its log.
     internal sealed class PublishFailedException : InvalidOperationException {
         public object PublishLog { get; }
+        // U1 (v106): a publication that completed but whose revision is not verified against before-publish.oml carries the
+        // receipt's published block, and the answer says verified:false with it (the facade's F1 family, PUBLISHED_REVISION_DIFFERS).
+        public object? Unverified { get; init; }
         public PublishFailedException(string message, object publishLog) : base(message) { PublishLog = publishLog; }
     }
 

@@ -1,10 +1,18 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
+    <!-- The agent box builds for the net8 ODC Studios by default; -p:TargetFramework=net10.0 builds the same sources for the net10
+         ones (1.7.30 on), against such a Studio (-p:OdcInstall=<its folder>). -->
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <!-- One assembly name per bridge version. A loaded DLL is never replaced: a new version is a new name and a new pipe. -->
-    <AssemblyName>ODC3.Bridge.v102</AssemblyName>
+    <!-- One assembly name per bridge version. A loaded DLL is never replaced: a new version is a new name and a new pipe.
+         v107 (agent/r4-v106, the line's U1): the line's v106 sources built for the net8 ODC Studios (up to 1.7.29), the bridge of
+         the agent pack; v106, the same sources, for the net10 ones. After a merge both check the changed stylesheets against the
+         candidate and refresh their caches, run that verification as a job of its own (reconcile-merge when it did not start),
+         and answer a publication ok only when its downloaded revision is before-publish.oml. The names follow the line: the proto
+         loaded v100-v105 into a Studio with other code. -->
+    <AssemblyName>ODC3.Bridge.v107</AssemblyName>
+    <AssemblyName Condition="'$(TargetFramework)' == 'net10.0'">ODC3.Bridge.v106</AssemblyName>
     <!-- IncrementalClean must never treat a prior resident version as an orphan. -->
     <CleanFile>$(MSBuildProjectFile).$(AssemblyName).FileListAbsolute.txt</CleanFile>
     <DefineConstants>$(DefineConstants);QUERY_TEST_ODC</DefineConstants>
@@ -70,6 +78,8 @@
     <Compile Include="..\shared\Journal.cs" Link="shared\Journal.cs" />
     <Compile Include="..\shared\Manifest.cs" Link="shared\Manifest.cs" />
     <Compile Include="..\engine\NativeMergeVerification.cs" Link="engine\NativeMergeVerification.cs" />
+    <Compile Include="..\engine\NativeStyleSheetCache.cs" Link="engine\NativeStyleSheetCache.cs" />
+    <Compile Include="PublishVerification.cs" />
     <Compile Include="..\engine\NativeMergeOrder.cs" Link="engine\NativeMergeOrder.cs" />
     <!-- The merge order's rule: the bridge's copy of kernel/src/Anvil.Core/Kernel/MergeOrder.cs, never the kernel file. -->
     <Compile Include="MergeOrderCopy.cs" />

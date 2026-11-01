@@ -10,22 +10,33 @@ using Microsoft.Diagnostics.NETCore.Client;
 //           | merge <manifest> | publish <manifest> | publish-status <manifest> | data <Module> <Entity> ...
 //           | portal-call <request.json> [--tenant <host>] | portal-session status|open|close|fetch ... | auth-status | stop
 // A client timeout never cancels the native operation: inspect the evidence directory instead of retrying.
-const string Version = "v102";
+const string Version = "v106";
+// The bridge built for each Studio runtime (Bridge.csproj): v106 for the net10 ODC Studios (1.7.30 on), v107, the same sources,
+// for the net8 ones (up to 1.7.29). The agent pack carries v107, which also loads in a net10 Studio, as v102 did; a net10 v106
+// never loads in a net8 one. The runtime is the Studio's own ODCStudio.runtimeconfig.json.
+const string EarlierVersion = "v107";
 if (args.Length < 2) throw new ArgumentException("Usage: <pid> attach <dll> | <pid> <command> [argument]");
 var pid = int.Parse(args[0]);
 var process = Process.GetProcessById(pid);
 if (process.ProcessName != "ODCStudio" || process.MainModule?.FileName != @"C:\Program Files\OutSystems\ODC Studio\ODC Studio\ODCStudio.exe")
     throw new InvalidOperationException("Unexpected target process: only ODCStudio.exe from the official install is accepted.");
+var studioRuntime = System.Text.RegularExpressions.Regex.Match(
+    File.ReadAllText(Path.ChangeExtension(process.MainModule.FileName, ".runtimeconfig.json")), "\"tfm\"\\s*:\\s*\"(net\\d+\\.\\d+)\"").Groups[1].Value;
+var version = studioRuntime == "net8.0" ? EarlierVersion : Version;
 if (args[1] == "attach") {
     if (args.Length < 3) throw new ArgumentException("attach requires the bridge dll path.");
     var dll = Path.GetFullPath(args[2]);
-    if (!Path.GetFileName(dll).StartsWith("ODC3.Bridge." + Version)) throw new InvalidOperationException("This client only attaches ODC3.Bridge." + Version + ".");
+    var loadable = studioRuntime == "net8.0" ? new[] { EarlierVersion } : new[] { Version, EarlierVersion };
+    if (!loadable.Any(v => Path.GetFileName(dll) == "ODC3.Bridge." + v + ".dll"))
+        throw new InvalidOperationException("This ODC Studio runs on " + (studioRuntime == "" ? "an unknown runtime" : studioRuntime) + ": this client only attaches "
+            + string.Join(" or ", loadable.Select(v => "ODC3.Bridge." + v)) + " to it.");
     await new DiagnosticsClient(pid).ApplyStartupHookAsync(dll, new CancellationTokenSource(TimeSpan.FromSeconds(20)).Token);
     Console.WriteLine("{\"ok\":true,\"attached\":true,\"note\":\"Run status before any other command; a bridge stays loaded until the Studio closes.\"}");
     return;
 }
 var line = args[1] + (args.Length > 2 ? " " + string.Join(' ', args.Skip(2)) : "");
-using var pipe = new NamedPipeClientStream(".", "ODC3-Bridge-" + Version + "-" + pid, PipeDirection.InOut, PipeOptions.Asynchronous);
+// The pipe of the bridge built for this Studio's runtime (the agent speaks the pipe itself, by the name it attached).
+using var pipe = new NamedPipeClientStream(".", "ODC3-Bridge-" + version + "-" + pid, PipeDirection.InOut, PipeOptions.Asynchronous);
 await pipe.ConnectAsync(10000);
 using var writer = new StreamWriter(pipe, new UTF8Encoding(false), leaveOpen: true) { AutoFlush = true };
 using var reader = new StreamReader(pipe, Encoding.UTF8, leaveOpen: true);
