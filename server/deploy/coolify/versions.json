@@ -3,41 +3,41 @@
   "odc": [
     {
       "version": "1.7.30",
-      "tag": "prod-20261027-c077227-o115594-odc1730",
+      "tag": "prod-20261031-79a8da3-o115594-odc1730",
       "image": "docker.io/andrepereiramachado/ssam-server",
-      "sha256": "9974a28eb10c05f98d7f64257c87c6583970498eb8a7e30414a2337638cb4568"
+      "sha256": "f15ccf1f870c672f8ba2cca68b466069dc6777caa6f1d280edf8999fef0db1a5"
     },
     {
       "version": "1.7.29",
-      "tag": "prod-20261027-77413f9-o115593-odc1729",
+      "tag": "prod-20261031-79a8da3-o115593-odc1729",
       "image": "docker.io/andrepereiramachado/ssam-server",
-      "sha256": "1d979884a8d7546dab4680362fdfa3c2f51365fdfccfedb735ed6ca15e33fbc3"
+      "sha256": "a162845ccb3d78cd405164d56da057445f3180127ed5cd3c220e7c7c1c680f25"
     },
     {
       "version": "1.7.28",
-      "tag": "prod-20261027-77413f9-o115592-odc1728",
+      "tag": "prod-20261031-79a8da3-o115592-odc1728",
       "image": "docker.io/andrepereiramachado/ssam-server",
-      "sha256": "9d1e4b4acda957f9d06d58dbf03905b5e7d4188c5b898429e7d84c9727acef90"
+      "sha256": "76fcc16c4791018d01e29b5ae7036cd890703cb50df71df1d63563b74f4f1882"
     }
   ],
   "o11": [
     {
       "version": "11.55.94",
-      "tag": "prod-20261027-c077227-o115594-odc1730",
+      "tag": "prod-20261031-79a8da3-o115594-odc1730",
       "image": "docker.io/andrepereiramachado/ssam-server",
-      "sha256": "9974a28eb10c05f98d7f64257c87c6583970498eb8a7e30414a2337638cb4568"
+      "sha256": "f15ccf1f870c672f8ba2cca68b466069dc6777caa6f1d280edf8999fef0db1a5"
     },
     {
       "version": "11.55.93",
-      "tag": "prod-20261027-77413f9-o115593-odc1729",
+      "tag": "prod-20261031-79a8da3-o115593-odc1729",
       "image": "docker.io/andrepereiramachado/ssam-server",
-      "sha256": "1d979884a8d7546dab4680362fdfa3c2f51365fdfccfedb735ed6ca15e33fbc3"
+      "sha256": "a162845ccb3d78cd405164d56da057445f3180127ed5cd3c220e7c7c1c680f25"
     },
     {
       "version": "11.55.92",
-      "tag": "prod-20261027-77413f9-o115592-odc1728",
+      "tag": "prod-20261031-79a8da3-o115592-odc1728",
       "image": "docker.io/andrepereiramachado/ssam-server",
-      "sha256": "9d1e4b4acda957f9d06d58dbf03905b5e7d4188c5b898429e7d84c9727acef90"
+      "sha256": "76fcc16c4791018d01e29b5ae7036cd890703cb50df71df1d63563b74f4f1882"
     }
   ]
 }
