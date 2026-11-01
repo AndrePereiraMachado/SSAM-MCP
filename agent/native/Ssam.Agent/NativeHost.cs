@@ -121,7 +121,7 @@ internal static class NativeHost
             }
             Add(true, "screen render", new RenderKinds(runtime, pack, root).Line, false);
             Add(true, "upload folders", UploadRoots.Read(root).Count + " approved", false);
-            var report = new JsonObject { ["ok"] = ok, ["agentVersion"] = "0.4.2-native", ["runtime"] = "native-aot", ["root"] = root, ["pack"] = new JsonObject { ["id"] = pack["id"]?.DeepClone(), ["lanes"] = pack["lanes"]?.DeepClone() }, ["studios"] = installed, ["checks"] = checks, ["macOSValidated"] = false };
+            var report = new JsonObject { ["ok"] = ok, ["agentVersion"] = AgentChannel.AgentVersion, ["runtime"] = "native-aot", ["root"] = root, ["pack"] = new JsonObject { ["id"] = pack["id"]?.DeepClone(), ["lanes"] = pack["lanes"]?.DeepClone() }, ["studios"] = installed, ["checks"] = checks, ["macOSValidated"] = false };
             Console.WriteLine(report.ToJsonString()); return ok ? 0 : 1;
         }
         if (args[0] == "setup")

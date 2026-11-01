@@ -16,7 +16,7 @@ test('native Studio policy preserves the existing command allowlists and path re
     const requests = ODC_COMMANDS.map(command => ({ kind: 'odc.pipe', args: [command] }));
     requests.push(...O11_METHODS.map(method => ({ kind: 'o11.bridge', method, params: {} })));
     for (const value of ['agent:odc/lab/x.json', 'agent:o11/x.json', 'agent:inbox/x.json', 'agent:private/credential', 'agent:o11/../private/x', 'C:\\outside\\x', 'agent:o11/with space', 'agent:o11/nul']) {
-      requests.push({ kind: 'odc.pipe', args: ['merge', value] }, { kind: 'odc.pipe', args: ['data', 'Module', 'Entity', '--out', value] },
+      requests.push({ kind: 'odc.pipe', args: ['merge', value] }, { kind: 'odc.pipe', args: ['reconcile-merge', value] }, { kind: 'odc.pipe', args: ['data', 'Module', 'Entity', '--out', value] },
         { kind: 'odc.pipe', args: ['reference-snapshot', JSON.stringify({ output: value })] },
         { kind: 'o11.bridge', method: 'snapshot_module', params: { path: value } }, { kind: 'o11.bridge', method: 'merge_from_oml', params: { foreign_path: value } });
     }
@@ -36,5 +36,7 @@ test('native Studio policy preserves the existing command allowlists and path re
     const results = JSON.parse(run.stdout);
     requests.forEach((request, i) => assert.equal(results[i].error ?? null, expected[i], JSON.stringify(request)));
     assert.equal(results.find((r, i) => requests[i].args?.[0] === 'merge' && requests[i].args?.[1] === 'agent:odc/lab/x.json').value[1], path.join(root, 'odc/lab/x.json'));
+    // A1: reconcile-merge (the bridge's verification of a returned merge) maps its manifest exactly like merge.
+    assert.equal(results.find((r, i) => requests[i].args?.[0] === 'reconcile-merge' && requests[i].args?.[1] === 'agent:odc/lab/x.json').value[1], path.join(root, 'odc/lab/x.json'));
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });

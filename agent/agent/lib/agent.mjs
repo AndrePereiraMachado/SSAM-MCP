@@ -11,7 +11,7 @@ import { execFileSync } from 'node:child_process';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { createChannel, PROTOCOL } from './channel.mjs';
 import { createOutbox } from './outbox.mjs';
-import { createKinds, helloKinds } from './kinds.mjs';
+import { createKinds, helloKinds, ODC_COMMANDS } from './kinds.mjs';
 import { resolveRenderer } from './render.mjs';
 import { createWorkspace } from './workspace.mjs';
 import { uploadBlob, downloadBlob, downloadBuffer, PART_BYTES, MAX_FILE_BYTES } from './blobs.mjs';
@@ -44,7 +44,11 @@ import { completeInstances } from './studio-instance.mjs';
 // app's Electron render worker, render.mjs), both announced in the hello only when they run here; the call's deadline
 // in this machine's clock. The other kinds and the wire are those of 0.3.3. The native core of the same change is
 // 0.4.1-native.
-export const AGENT_VERSION = '0.3.5';
+// 0.3.6 (agent/r4-v106): odc.pipe runs reconcile-merge (the ODC bridge's verification of a returned merge, U1) and the hello lists
+// the ODC commands this agent runs (agent.odcCommands), so the server offers the ODC bridges from v106 on only to an agent that
+// runs reconcile-merge (bridge-store.mjs). The other kinds and the wire are those of 0.3.5. The native core of the same change
+// is 0.4.3-native.
+export const AGENT_VERSION = '0.3.6';
 const INLINE_MAX_BYTES = 524288;
 const MAX_VALUE_BYTES = 16 * 1024 * 1024;
 const PARAMS_MEMORY_BYTES = 64 * 1024 * 1024;
@@ -171,7 +175,9 @@ export function createAgent({ root, runtimeRoot = root, config = {}, deps = {}, 
       // root (C26): the folder of this agent, so the server names its inbox exactly; kinds: what this agent runs (file.sync
       // since 0.2.0; file.upload and, with a renderer, screen.render since 0.3.4), so the server never asks an older agent for a
       // kind it does not have.
-      agent: { version: AGENT_VERSION, node: process.version, platform, startedAt, root: base, kinds: helloKinds(renderer), machine },
+      // odcCommands (0.3.6): the commands odc.pipe passes (kinds.mjs ODC_COMMANDS); the server offers a bridge only to an agent that
+      // runs what that bridge needs (reconcile-merge from v106 on).
+      agent: { version: AGENT_VERSION, node: process.version, platform, startedAt, root: base, kinds: helloKinds(renderer), odcCommands: [...ODC_COMMANDS], machine },
       pack: { id: pack.id, lanes: pack.lanes, odcBridge: pack.odcBridge, o11BuiltFor: pack.o11BuiltFor, o11Hook: pack.o11Hook },
       capabilities: { bridgeOffer: platform !== 'darwin', ...(platform === 'darwin' ? { bridgeOfferReason: MAC_BRIDGE_REASON } : {}) },
       bridges: updates.reports(), bridgeUpdate: updates.wireStatus(), studios, o11Connection: connection };

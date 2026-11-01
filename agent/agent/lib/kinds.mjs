@@ -26,13 +26,18 @@ export const helloKinds = renderer => [...KINDS, ...(renderer?.path ? [RENDER_KI
 // file.sync (C14, fase4): at most this many files per call, at most this many downloads at a time.
 export const SYNC_MAX_FILES = 256;
 export const SYNC_PARALLEL = 4;
+// reconcile-merge <manifest> (0.3.6, U1 of the server line): the bridge's own verification of a merge that returned (VerifyMerged:
+// G-1/G-2, the stylesheet caches, receipt.json), nothing merged or published. From ODC bridge v106 on a merge may return before its
+// verification ran (verification-not-started.json), and the server verifies it with this command before any content proof; an
+// agent without it leaves such a merge MERGE_UNCERTAIN, so the server offers v106 and later only to an agent whose hello lists it
+// (the hello's agent.odcCommands, agent.mjs; bridge-store.mjs of the server).
 // reference-producers <Module> (ODC bridge v96, 24th release): the producers the open consumer can reference, read only,
 // no path. Never here: portal-private-call, portal-private-download, portal-api-client-fixture-cleanup (a local pipe and
 // the owner's vault, which do not cross machines) and portal-upload (only odc_external_library, unavailable hosted).
 export const ODC_COMMANDS = Object.freeze(['status', 'wait', 'authorize', 'open', 'snapshot', 'latest', 'check-base', 'preview', 'merge',
-  'publish', 'publish-status', 'publish-log', 'dismiss-dialog', 'close', 'module-info', 'assets', 'consumers', 'create', 'create-app',
-  'templates', 'template-download', 'refresh-references', 'reference-snapshot', 'reference-producers', 'data', 'data-insert', 'data-update',
-  'data-delete', 'portal-call', 'portal-session', 'auth-status', 'stop', 'query-test']);
+  'reconcile-merge', 'publish', 'publish-status', 'publish-log', 'dismiss-dialog', 'close', 'module-info', 'assets', 'consumers', 'create',
+  'create-app', 'templates', 'template-download', 'refresh-references', 'reference-snapshot', 'reference-producers', 'data', 'data-insert',
+  'data-update', 'data-delete', 'portal-call', 'portal-session', 'auth-status', 'stop', 'query-test']);
 // The 23 verbs of the thin O11 bridge, in the order of its bridge_manifest (docs/O11-BRIDGE-FINA.md 3.2, 14 and 16):
 // refresh_references (the Studio's own Refresh References, no path) since the ninth release; answer_dependencies_dialog (the
 // Manage Dependencies dialog answered as Cancel, no path) since servidor/fase4; sc_http (the Service Center over the
@@ -42,7 +47,7 @@ export const O11_METHODS = Object.freeze(['ping', 'bridge_manifest', 'get_active
   'close_module', 'publish', 'windows', 'ui_alive', 'close_dialog', 'snapshot_module', 'merge_from_oml', 'merge_status',
   'environment_session', 'sc_api', 'sc_web', 'sc_http', 'studio_login', 'sc_session', 'publish_log', 'refresh_references',
   'answer_dependencies_dialog']);
-const MANIFEST_COMMANDS = new Set(['check-base', 'preview', 'merge', 'publish', 'publish-status', 'create', 'authorize', 'create-app']);
+const MANIFEST_COMMANDS = new Set(['check-base', 'preview', 'merge', 'reconcile-merge', 'publish', 'publish-status', 'create', 'authorize', 'create-app']);
 const LANE_IMAGE = { odc: 'ODCStudio.exe', o11: 'ServiceStudio.exe' };
 const STUDIO_NAME = { odc: 'ODC Studio', o11: 'Service Studio' };
 const MAX_LIST = 2000;

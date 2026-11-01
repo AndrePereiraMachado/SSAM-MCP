@@ -118,6 +118,8 @@ internal sealed class AgentChannel : IDisposable
             connection = new() { ["pid"] = record["pid"]?.DeepClone(), ["port"] = record["port"]?.DeepClone(), ["startedUtc"] = record["startedUtc"]?.DeepClone(), ["studioVersion"] = record["studioVersion"]?.DeepClone() };
         return new() { ["studios"] = installed.DeepClone(), ["o11Connection"] = connection };
     }
+    // 0.4.3-native (agent/r4-v106): odc.pipe runs reconcile-merge and the hello lists the ODC commands (the Node agent's 0.3.6).
+    internal const string AgentVersion = "0.4.3-native";
     private async Task<JsonObject> Hello(CancellationToken token) {
         var versions = Versions();
         try { await bridges.Initialize(installed, token); } catch { }
@@ -130,9 +132,11 @@ internal sealed class AgentChannel : IDisposable
         return new() {
         ["t"] = "hello", ["protocol"] = "ssam-agent/1", ["instance"] = instance,
         ["agent"] = new JsonObject {
-            ["version"] = "0.4.2-native", ["runtime"] = "native-aot",
+            ["version"] = AgentVersion, ["runtime"] = "native-aot",
             ["platform"] = OperatingSystem.IsWindows() ? "win32" : "darwin",
             ["startedAt"] = startedAt, ["root"] = state.Root, ["machine"] = machine?.DeepClone(),
+            // odcCommands (0.4.3-native): what odc.pipe passes, so the server offers an ODC bridge only to an agent that runs what it needs.
+            ["odcCommands"] = studios == null ? null : new JsonArray(StudioKinds.OdcCommandList.Select(n => (JsonNode?)JsonValue.Create(n)).ToArray()),
             ["kinds"] = new JsonArray((studios == null ? new[] { "qualification.bridge", "file.put", "file.get", "file.list", "file.sync", UploadKinds.Name, UsersKinds.Name } : StudioKinds.Names.Concat(FileKinds.Names).Append("net.probe").Append(UploadKinds.Name).Append(UsersKinds.Name).ToArray()).Concat(renders.Available ? new[] { RenderRequest.Kind } : Array.Empty<string>()).Select(n => (JsonNode?)JsonValue.Create(n)).ToArray())
         },
         ["pack"] = pack == null ? new JsonObject { ["id"] = "native-qualification", ["lanes"] = new JsonArray() } : new JsonObject { ["id"] = pack["id"]?.DeepClone(), ["lanes"] = pack["lanes"]?.DeepClone(), ["odcBridge"] = pack["odcBridge"]?.DeepClone(), ["o11BuiltFor"] = pack["o11BuiltFor"]?.DeepClone(), ["o11Hook"] = pack["o11Hook"]?.DeepClone() },

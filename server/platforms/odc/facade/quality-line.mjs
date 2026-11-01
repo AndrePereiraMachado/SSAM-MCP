@@ -46,10 +46,11 @@ export const AGENT_KINDS = ['studio.processes', 'odc.pipe', 'odc.attach', 'o11.b
 // The protocol verbs an agent label may name, closed per kind: the lists the customer's agent enforces (agent/lib/kinds.mjs
 // ODC_COMMANDS and O11_METHODS; the server lane's drift test compares them). The shape (VERB) is not enough: the command of
 // studio_command is the model's own text, and a lowercase app or module name is a verb by shape. Any other kind has no verb.
+// reconcile-merge (agent 0.3.6 / 0.4.3-native): the ODC bridge's verification of a returned merge (U1, bridge v106 on).
 export const ODC_COMMANDS = Object.freeze(['status', 'wait', 'authorize', 'open', 'snapshot', 'latest', 'check-base', 'preview', 'merge',
-  'publish', 'publish-status', 'publish-log', 'dismiss-dialog', 'close', 'module-info', 'assets', 'consumers', 'create', 'create-app',
-  'templates', 'template-download', 'refresh-references', 'reference-snapshot', 'reference-producers', 'data', 'data-insert', 'data-update',
-  'data-delete', 'portal-call', 'portal-session', 'auth-status', 'stop', 'query-test']);
+  'reconcile-merge', 'publish', 'publish-status', 'publish-log', 'dismiss-dialog', 'close', 'module-info', 'assets', 'consumers', 'create',
+  'create-app', 'templates', 'template-download', 'refresh-references', 'reference-snapshot', 'reference-producers', 'data', 'data-insert',
+  'data-update', 'data-delete', 'portal-call', 'portal-session', 'auth-status', 'stop', 'query-test']);
 export const O11_METHODS = Object.freeze(['ping', 'bridge_manifest', 'get_active_module', 'list_open_modules', 'get_errors', 'open_module',
   'close_module', 'publish', 'windows', 'ui_alive', 'close_dialog', 'snapshot_module', 'merge_from_oml', 'merge_status',
   'environment_session', 'sc_api', 'sc_web', 'sc_http', 'studio_login', 'sc_session', 'publish_log', 'refresh_references',

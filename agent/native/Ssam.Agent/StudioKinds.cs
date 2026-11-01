@@ -8,9 +8,13 @@ namespace Ssam.Agent;
 internal sealed class StudioKinds(string root, string runtime, JsonObject pack, Func<JsonNode?> kernel, BridgeUpdates? bridges = null)
 {
     public static readonly string[] Names = ["studio.processes", "odc.pipe", "odc.attach", "o11.bridge", "o11.connect", "o11.selected"];
-    internal static readonly HashSet<string> OdcCommands = ["status", "wait", "authorize", "open", "snapshot", "latest", "check-base", "preview", "merge", "publish", "publish-status", "publish-log", "dismiss-dialog", "close", "module-info", "assets", "consumers", "create", "create-app", "templates", "template-download", "refresh-references", "reference-snapshot", "reference-producers", "data", "data-insert", "data-update", "data-delete", "portal-call", "portal-session", "auth-status", "stop", "query-test"];
+    // reconcile-merge (0.4.3-native, U1 of the server line): the ODC bridge's verification of a merge that returned, nothing merged or
+    // published; from bridge v106 on a merge may return before it ran. The hello lists these commands (agent.odcCommands, in this
+    // order), and the server offers the bridges from v106 on only to an agent that runs reconcile-merge (bridge-store.mjs).
+    internal static readonly string[] OdcCommandList = ["status", "wait", "authorize", "open", "snapshot", "latest", "check-base", "preview", "merge", "reconcile-merge", "publish", "publish-status", "publish-log", "dismiss-dialog", "close", "module-info", "assets", "consumers", "create", "create-app", "templates", "template-download", "refresh-references", "reference-snapshot", "reference-producers", "data", "data-insert", "data-update", "data-delete", "portal-call", "portal-session", "auth-status", "stop", "query-test"];
+    internal static readonly HashSet<string> OdcCommands = [.. OdcCommandList];
     internal static readonly HashSet<string> O11Methods = ["ping", "bridge_manifest", "get_active_module", "list_open_modules", "get_errors", "open_module", "close_module", "publish", "windows", "ui_alive", "close_dialog", "snapshot_module", "merge_from_oml", "merge_status", "environment_session", "sc_api", "sc_web", "sc_http", "studio_login", "sc_session", "publish_log", "refresh_references", "answer_dependencies_dialog"];
-    private static readonly HashSet<string> Manifests = ["check-base", "preview", "merge", "publish", "publish-status", "create", "authorize", "create-app"];
+    private static readonly HashSet<string> Manifests = ["check-base", "preview", "merge", "reconcile-merge", "publish", "publish-status", "create", "authorize", "create-app"];
     private readonly Workspace workspace = new(root);
     private readonly SemaphoreSlim attachGate = new(1, 1);
     internal static string? Text(JsonNode? node) => node is JsonValue v && v.TryGetValue<string>(out var s) ? s : null;

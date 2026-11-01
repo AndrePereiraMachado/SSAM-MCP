@@ -380,3 +380,33 @@ test('a lane the pack does not carry is disabled', async () => {
     await refused(kinds.execute('o11.connect', {}), 'LANE_DISABLED');
   } finally { removeRoot(root); }
 });
+
+// A1 (U1 of the server line): from ODC bridge v106 on a merge may return before the bridge's verification ran
+// (verification-not-started.json, verification-refused.json); the server then asks for reconcile-merge <manifest>, which runs
+// that verification (VerifyMerged) on the merge already in the module. The manifest is a write position like merge's, its own
+// paths are checked the same way, and the reply's evidence files come back as agent: paths.
+test('A1: reconcile-merge passes odc.pipe like merge (manifest at a write position, its paths checked, evidence relativized)', async () => {
+  const root = makeRoot();
+  const folder = path.join(root, 'odc', 'lab', 'j');
+  const evidence = path.join(folder, 'evidence');
+  const pipe = await fakePipe('v35', PID, () => ({ ok: true, merged: true, verifiedBy: 'bridge',
+    evidence: ['verification-not-started.json', 'verification-refused.json', 'stylesheet-caches.json', 'before-publish-stylesheet-caches.json'].map(n => path.join(evidence, n)) }));
+  try {
+    const { kinds } = kindsFor(root);
+    assert.ok(ODC_COMMANDS.includes('reconcile-merge'));
+    assert.ok(ODC_COMMANDS.indexOf('reconcile-merge') === ODC_COMMANDS.indexOf('merge') + 1, 'next to merge, as in the quality contract');
+    fs.mkdirSync(folder, { recursive: true });
+    const write = manifest => fs.writeFileSync(path.join(folder, 'manifest.json'), JSON.stringify(manifest));
+    const run = args => kinds.execute('odc.pipe', { pid: PID, version: 'v35', args });
+    await refused(run(['reconcile-merge', 'C:\\x\\manifest.json']), 'PATH_NOT_AGENT');
+    await refused(run(['reconcile-merge', 'agent:inbox/manifest.json']), 'PATH_FORBIDDEN');
+    write({ basePath: 'C:\\Users\\cliente\\segredo.oml', candidatePath: path.join(folder, 'c.oml'), evidenceDir: evidence });
+    await refused(run(['reconcile-merge', 'agent:odc/lab/j/manifest.json']), 'PATH_FORBIDDEN');
+    assert.equal(pipe.lines.length, 0, 'nothing reached the bridge');
+    write({ basePath: path.join(root, 'odc', 'snapshots', 'Q.oml'), candidatePath: path.join(folder, 'c.oml'), evidenceDir: evidence });
+    const answer = await run(['reconcile-merge', 'agent:odc/lab/j/manifest.json']);
+    assert.equal(pipe.lines[0], 'reconcile-merge ' + path.join(folder, 'manifest.json'));
+    assert.deepEqual(JSON.parse(answer.line).evidence, ['verification-not-started.json', 'verification-refused.json', 'stylesheet-caches.json',
+      'before-publish-stylesheet-caches.json'].map(n => 'agent:odc/lab/j/evidence/' + n));
+  } finally { await pipe.close(); removeRoot(root); }
+});
