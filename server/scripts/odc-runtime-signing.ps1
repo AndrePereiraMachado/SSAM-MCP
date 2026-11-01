@@ -8,7 +8,11 @@ param(
     [string]$ArtifactDirectory,
     [string]$BuildEvidence,
     [string]$ConfigPath,
-    [string]$Vault = "$env:LOCALAPPDATA\SSAM\vigia\secrets.dpapi.json"
+    [string]$Vault = "$env:LOCALAPPDATA\SSAM\vigia\secrets.dpapi.json",
+    # The ODC Studio runtime of a Prepare bundle (agent/r4-v106): one source, one bridge per runtime (Bridge.csproj). net10.0
+    # signs the client's Version (v106) from bin\Release\net10.0, net8.0 its EarlierVersion (v107) from bin\Release\net8.0;
+    # without it, OdcBridgeRuntime of Bridge.csproj, as before. Prepare records it, and Sign, Verify and Activate check it.
+    [ValidateSet('net8.0', 'net10.0')][string]$Runtime
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
@@ -76,10 +80,16 @@ function Write-Json($File, $Value) {
     [IO.File]::WriteAllText($File, ($Value | ConvertTo-Json -Depth 12), $utf8)
 }
 function Hash($File) { (Get-FileHash -LiteralPath $File -Algorithm SHA256).Hash.ToLowerInvariant() }
-function Version {
+function Version([string]$For) {
     $source = [IO.File]::ReadAllText((Join-Path $odcRoot 'studio\bridge\client\Program.cs'))
     if ($source -notmatch 'const string Version = "(v\d+)"') { throw 'Cannot identify the current ODC protocol.' }
-    $Matches[1]
+    $main = $Matches[1]
+    if ($For -eq 'net8.0' -and $source -match 'const string EarlierVersion = "(v\d+)"') { return $Matches[1] }
+    $main
+}
+# The runtime of Bridge.csproj's own OdcBridgeRuntime (the one without a condition: net10.0 for the bridges from v100 on).
+function Default-Runtime {
+    if ((Get-Content -LiteralPath (Join-Path $odcRoot 'studio\bridge\Bridge.csproj') -Raw) -match '<OdcBridgeRuntime>(net\d+\.\d+)</OdcBridgeRuntime>') { $Matches[1] } else { 'net8.0' }
 }
 function Bundle-File($Relative) {
     if ($Relative -notmatch '^(client|bridge)/[A-Za-z0-9._-]+$') { throw 'Invalid bundle path.' }
@@ -88,10 +98,10 @@ function Bundle-File($Relative) {
 
 if ($Mode -eq 'Prepare') {
     if ($BundleId) { throw 'Prepare generates a new bundle ID; do not reuse a directory.' }
-    $version = Version
+    # The bridge's runtime folder: -Runtime, else OdcBridgeRuntime of Bridge.csproj (v100 on: net10.0; the bridges before it: net8.0).
+    $bridgeRuntime = if ($Runtime) { $Runtime } else { Default-Runtime }
+    $version = Version $bridgeRuntime
     $clientDir = Join-Path $odcRoot 'studio\bridge\client\bin\Release\net10.0'
-    # The bridge's runtime folder: OdcBridgeRuntime of Bridge.csproj (v100: net10.0; the bridges before it: net8.0).
-    $bridgeRuntime = if ((Get-Content -LiteralPath (Join-Path $odcRoot 'studio\bridge\Bridge.csproj') -Raw) -match '<OdcBridgeRuntime>(net\d+\.\d+)</OdcBridgeRuntime>') { $Matches[1] } else { 'net8.0' }
     $bridgeFile = Join-Path $odcRoot "studio\bridge\bin\Release\$bridgeRuntime\ODC3.Bridge.$version.dll"
     $sourceFiles = @((Get-ChildItem -LiteralPath $clientDir -File | Where-Object { $_.Extension -in '.dll', '.json' } | ForEach-Object {
         @{ source = $_.FullName; path = 'client/' + $_.Name }
@@ -110,17 +120,20 @@ if ($Mode -eq 'Prepare') {
         @{ path = $item.path; sourceSha256 = $digest }
     })
     Write-Json (Join-Path $bundleDir 'prepared.json') @{
-        schema = 1; id = $BundleId; version = $version; files = $files
+        schema = 1; id = $BundleId; version = $version; runtime = $bridgeRuntime; files = $files
         createdAt = [DateTime]::UtcNow.ToString('o'); purpose = 'Signing only; not activated or loaded'
     }
-    @{ ok = $true; state = 'awaiting_signature'; bundleId = $BundleId; directory = $bundleDir; version = $version } | ConvertTo-Json
+    @{ ok = $true; state = 'awaiting_signature'; bundleId = $BundleId; directory = $bundleDir; version = $version; runtime = $bridgeRuntime } | ConvertTo-Json
     exit 0
 }
 
 if ($BundleId -notmatch '^[a-f0-9]{32}$') { throw 'Pass the exact -BundleId returned by Prepare.' }
 $bundleDir = Join-Path $bundleRoot $BundleId
 $plan = Get-Content -LiteralPath (Join-Path $bundleDir 'prepared.json') -Raw | ConvertFrom-Json
-if ($plan.schema -ne 1 -or $plan.id -ne $BundleId -or $plan.version -ne (Version)) { throw 'Bundle identity/protocol differs from the current runtime.' }
+# A bundle prepared before the runtime was recorded is the one of OdcBridgeRuntime, as it was prepared.
+$planRuntime = if ($plan.PSObject.Properties['runtime'] -and $plan.runtime) { [string]$plan.runtime } else { Default-Runtime }
+if ($Runtime -and $Runtime -ne $planRuntime) { throw "Bundle $BundleId was prepared for $planRuntime, not $Runtime." }
+if ($plan.schema -ne 1 -or $plan.id -ne $BundleId -or $plan.version -ne (Version $planRuntime)) { throw 'Bundle identity/protocol differs from the current runtime.' }
 $verifiedFile = Join-Path $bundleDir 'verified.json'
 $expectedPaths = @($plan.files | ForEach-Object { $_.path })
 if (($expectedPaths | Select-Object -Unique).Count -ne $expectedPaths.Count) { throw 'Duplicate bundle paths.' }

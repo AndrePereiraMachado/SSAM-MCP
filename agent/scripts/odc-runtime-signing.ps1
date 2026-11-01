@@ -4,7 +4,12 @@ param(
     [string]$BundleId,
     [string]$CertificateThumbprint,
     [ValidateSet('CurrentUser', 'LocalMachine')][string]$CertificateStore = 'CurrentUser',
-    [string]$TimestampServer
+    [string]$TimestampServer,
+    # The ODC Studio runtime of the bundle (agent/r4-v106): one source, one bridge per runtime (Bridge.csproj). net8.0 (the
+    # default of this box) signs the bridge the client names EarlierVersion (v107) from bin\Release\net8.0, net10.0 its Version
+    # (v106) from bin\Release\net10.0; a client with one Version names the bridge of every runtime. Prepare records it, and
+    # Sign, Verify and Activate check it.
+    [ValidateSet('net8.0', 'net10.0')][string]$Runtime
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
@@ -16,10 +21,12 @@ function Write-Json($File, $Value) {
     [IO.File]::WriteAllText($File, ($Value | ConvertTo-Json -Depth 12), $utf8)
 }
 function Hash($File) { (Get-FileHash -LiteralPath $File -Algorithm SHA256).Hash.ToLowerInvariant() }
-function Version {
+function Version([string]$For) {
     $source = [IO.File]::ReadAllText((Join-Path $odcRoot 'studio\bridge\client\Program.cs'))
     if ($source -notmatch 'const string Version = "(v\d+)"') { throw 'Cannot identify the current ODC protocol.' }
-    $Matches[1]
+    $main = $Matches[1]
+    if ($For -eq 'net8.0' -and $source -match 'const string EarlierVersion = "(v\d+)"') { return $Matches[1] }
+    $main
 }
 function Bundle-File($Relative) {
     if ($Relative -notmatch '^(client|bridge)/[A-Za-z0-9._-]+$') { throw 'Invalid bundle path.' }
@@ -28,9 +35,10 @@ function Bundle-File($Relative) {
 
 if ($Mode -eq 'Prepare') {
     if ($BundleId) { throw 'Prepare generates a new bundle ID; do not reuse a directory.' }
-    $version = Version
+    if (-not $Runtime) { $Runtime = 'net8.0' }
+    $version = Version $Runtime
     $clientDir = Join-Path $odcRoot 'studio\bridge\client\bin\Release\net10.0'
-    $bridgeFile = Join-Path $odcRoot "studio\bridge\bin\Release\net8.0\ODC3.Bridge.$version.dll"
+    $bridgeFile = Join-Path $odcRoot "studio\bridge\bin\Release\$Runtime\ODC3.Bridge.$version.dll"
     $sourceFiles = @((Get-ChildItem -LiteralPath $clientDir -File | Where-Object { $_.Extension -in '.dll', '.json' } | ForEach-Object {
         @{ source = $_.FullName; path = 'client/' + $_.Name }
     })) + @(@{ source = $bridgeFile; path = "bridge/ODC3.Bridge.$version.dll" })
@@ -48,17 +56,20 @@ if ($Mode -eq 'Prepare') {
         @{ path = $item.path; sourceSha256 = $digest }
     })
     Write-Json (Join-Path $bundleDir 'prepared.json') @{
-        schema = 1; id = $BundleId; version = $version; files = $files
+        schema = 1; id = $BundleId; version = $version; runtime = $Runtime; files = $files
         createdAt = [DateTime]::UtcNow.ToString('o'); purpose = 'Signing only; not activated or loaded'
     }
-    @{ ok = $true; state = 'awaiting_signature'; bundleId = $BundleId; directory = $bundleDir; version = $version } | ConvertTo-Json
+    @{ ok = $true; state = 'awaiting_signature'; bundleId = $BundleId; directory = $bundleDir; version = $version; runtime = $Runtime } | ConvertTo-Json
     exit 0
 }
 
 if ($BundleId -notmatch '^[a-f0-9]{32}$') { throw 'Pass the exact -BundleId returned by Prepare.' }
 $bundleDir = Join-Path $bundleRoot $BundleId
 $plan = Get-Content -LiteralPath (Join-Path $bundleDir 'prepared.json') -Raw | ConvertFrom-Json
-if ($plan.schema -ne 1 -or $plan.id -ne $BundleId -or $plan.version -ne (Version)) { throw 'Bundle identity/protocol differs from the current runtime.' }
+# A bundle prepared before the runtime was recorded is the net8 one of this box.
+$planRuntime = if ($plan.PSObject.Properties['runtime'] -and $plan.runtime) { [string]$plan.runtime } else { 'net8.0' }
+if ($Runtime -and $Runtime -ne $planRuntime) { throw "Bundle $BundleId was prepared for $planRuntime, not $Runtime." }
+if ($plan.schema -ne 1 -or $plan.id -ne $BundleId -or $plan.version -ne (Version $planRuntime)) { throw 'Bundle identity/protocol differs from the current runtime.' }
 $verifiedFile = Join-Path $bundleDir 'verified.json'
 $expectedPaths = @($plan.files | ForEach-Object { $_.path })
 if (($expectedPaths | Select-Object -Unique).Count -ne $expectedPaths.Count) { throw 'Duplicate bundle paths.' }

@@ -42,7 +42,9 @@ async function main() {
     if (!checked.ok) throw new Error('Source pack failed integrity verification: ' + checked.detail);
     const base = path.join(app, '.local'); fs.mkdirSync(base, { recursive: true });
     const work = fs.mkdtempSync(path.join(base, 'mac-bridges-'));
-    const version = checked.pack.odcBridge;
+    // The source pack names one ODC bridge; the ODC Studio's runtime names the one built here (Bridge.csproj, studioBuildPlan:
+    // v107 for net8, v106 for net10), and pack.json carries that one.
+    let version = checked.pack.odcBridge;
     if (!/^v\d+$/.test(version)) throw new Error('Invalid ODC bridge version.');
     const studios = [], projects = [];
     let buildFailed = false;
@@ -52,6 +54,7 @@ async function main() {
         const actual = fs.realpathSync(studio.dir), root = fs.realpathSync(studio.root);
         if (!actual.startsWith(root + path.sep)) throw new Error('Studio references leave the installed bundle.');
         const plan = studioBuildPlan(studio, app, version);
+        if (lane === 'odc') version = plan.bridgeVersion;
         studios.push({ ...studio, targetFramework: plan.targetFramework });
         projects.push(...plan.projects);
       } catch (error) {

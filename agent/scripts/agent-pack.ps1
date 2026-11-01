@@ -1,7 +1,7 @@
 # Pacote do agente SSAM para a maquina do cliente (fase 2: docs\FASE2-AGENTE.md 9.4; fase 3: docs\O11-BRIDGE-FINA.md 6;
 # guia docs\AGENTE-CLIENTE.md).
 #   .\scripts\agent-pack.ps1 -Out C:\caminho\ssam-agent.zip [-Lanes odc,o11] [-NodeExe <node.exe>] [-NodeLicense <arquivo>]
-#                            [-NoNode] [-NoBuild -Prebuilt <pasta>]
+#                            [-NoNode] [-NoBuild -Prebuilt <pasta>] [-OdcRuntime net8.0|net10.0]
 # Monta a arvore da secao 6.2 numa pasta temporaria, escreve pack.json (id, faixas, versoes e sha256 de cada arquivo),
 # compacta e passa o ZIP pela varredura de propriedade intelectual (scripts\pack-ip-scan.ps1): com achado, apaga o ZIP e
 # para. Nunca leva fontes (.cs, .csproj), outros .mjs alem de agent\, .local\server, chaves, credenciais nem DLLs da
@@ -52,7 +52,11 @@ param(
   [string]$Stage,
   [string]$FromStage,
   [string]$ExpectO11,
-  [ValidateSet('windows', 'mac')][string]$Platform = 'windows'
+  [ValidateSet('windows', 'mac')][string]$Platform = 'windows',
+  # The ODC Studio runtime of the pack's one ODC bridge (agent/r4-v106): net8.0 (default) takes the bridge the client names
+  # EarlierVersion (v107, which also loads in a net10 Studio) from bin\Release\net8.0; net10.0 takes Version (v106) from
+  # bin\Release\net10.0. With -Prebuilt the runtime is the one of the bridge's .deps.json, and a different -OdcRuntime refuses.
+  [ValidateSet('net8.0', 'net10.0')][string]$OdcRuntime
 )
 $ErrorActionPreference = 'Stop'
 $mac = $Platform -eq 'mac'
@@ -303,6 +307,8 @@ try {
   }
 
   $odcBridge = $null
+  $odcRuntimeOfPack = $null
+  $signedRuntime = $null
   $o11Bridge = $null
   $o11BuiltFor = $null
   if ($laneList -contains 'odc') {
@@ -322,15 +328,24 @@ try {
         }
         $bridgeFrom = Join-Path $signed 'bridge'
         $clientFrom = Join-Path $signed 'client'
+        # The runtime the bundle was prepared for (odc-runtime-signing.ps1 -Runtime; none before agent/r4-v106).
+        $prepared = Get-Content -LiteralPath (Join-Path $signed 'prepared.json') -Raw | ConvertFrom-Json
+        $signedRuntime = $(if ($prepared.PSObject.Properties['runtime']) { [string]$prepared.runtime } else { $null })
+        if ($OdcRuntime -and $signedRuntime -and $OdcRuntime -ne $signedRuntime) { throw "A selecao assinada e da bridge $signedRuntime, nao de -OdcRuntime $OdcRuntime." }
       } else {
-        $bridgeFrom = Join-Path $odcRoot 'studio\bridge\bin\Release\net8.0'
+        $bridgeFrom = Join-Path $odcRoot ('studio\bridge\bin\Release\' + $(if ($OdcRuntime) { $OdcRuntime } else { 'net8.0' }))
         $clientFrom = Join-Path $odcRoot 'studio\bridge\client\bin\Release\net10.0'
       }
     }
     if (-not $Prebuilt -and -not (Test-Path -LiteralPath (Join-Path $odcRoot '.local\signed-runtime\selected.json'))) {
-      # Build outputs may hold older bridges: only the version the client declares goes.
+      # Build outputs may hold older bridges: only the version the client declares for the runtime goes. A client that names two
+      # (Version for net10, EarlierVersion for net8: v106/v107) gives the net8 pack EarlierVersion; one with a single Version
+      # names the bridge of every runtime.
       $source = Get-Content -LiteralPath (Join-Path $odcRoot 'studio\bridge\client\Program.cs') -Raw
       $odcBridge = [regex]::Match($source, 'const string Version = "(v\d+)"').Groups[1].Value
+      $earlier = [regex]::Match($source, 'const string EarlierVersion = "(v\d+)"').Groups[1].Value
+      if (-not $OdcRuntime) { $OdcRuntime = 'net8.0' }
+      if ($OdcRuntime -eq 'net8.0' -and $earlier) { $odcBridge = $earlier }
     } else {
       $dlls = @(Get-ChildItem -LiteralPath $bridgeFrom -Filter 'ODC3.Bridge.v*.dll' -File)
       if ($dlls.Count -ne 1) { throw "Esperava uma bridge ODC3.Bridge.v<N>.dll em $bridgeFrom; achei $($dlls.Count)." }
@@ -344,6 +359,15 @@ try {
     Copy-Item -LiteralPath $bridgeDll -Destination $bridgeOut
     $deps = Join-Path $bridgeFrom "ODC3.Bridge.$odcBridge.deps.json"
     if (Test-Path -LiteralPath $deps) { Copy-Item -LiteralPath $deps -Destination $bridgeOut }
+    # The runtime the bridge was built for (its .deps.json runtimeTarget), written to pack.json as odcRuntime: the agent then
+    # knows which ODC Studios its pack bridge serves (studio-runtime.mjs bundledBridgeSupports), whatever the folder is named.
+    $built = $null
+    if (Test-Path -LiteralPath $deps) {
+      try { $built = [regex]::Match([string](Get-Content -LiteralPath $deps -Raw | ConvertFrom-Json).runtimeTarget.name, 'Version=v(\d+\.\d+)').Groups[1].Value } catch { $built = $null }
+      if ($built) { $built = 'net' + $built }
+    }
+    if ($OdcRuntime -and $built -and $built -ne $OdcRuntime) { throw "ODC3.Bridge.$odcBridge foi compilada para $built, nao para -OdcRuntime $OdcRuntime." }
+    $odcRuntimeOfPack = $(if ($built) { $built } elseif ($signedRuntime) { $signedRuntime } elseif ($OdcRuntime -and -not $Prebuilt) { $OdcRuntime } else { $null })
     # macOS: no attach client (the agent speaks the diagnostic IPC itself).
     if (-not $mac) {
       Copy-Folder $clientFrom (Join-Path $tree 'odc\studio\bridge\client\bin\Release\net10.0')
@@ -438,6 +462,7 @@ try {
     }
     $pack = [ordered]@{ id = 'pack-' + (Get-Date).ToUniversalTime().ToString('yyyyMMdd-HHmmss'); platform = 'darwin'; lanes = @($laneList) }
     if ($odcBridge) { $pack.odcBridge = $odcBridge }
+    if ($odcRuntimeOfPack) { $pack.odcRuntime = $odcRuntimeOfPack }
     if ($o11BuiltFor) { $pack.o11BuiltFor = $o11BuiltFor; $pack.o11Hook = $Hook; $pack.o11Bridge = [ordered]@{ path = $o11Bridge.path; sha256 = $o11Bridge.sha256 } }
     $pack.node = $node
     $pack.files = $files
@@ -454,6 +479,7 @@ try {
     o11Bridge = $o11Bridge
     files = $files
   }
+  if ($odcRuntimeOfPack) { $pack.Insert(3, 'odcRuntime', $odcRuntimeOfPack) }
   [IO.File]::WriteAllText((Join-Path $tree 'pack.json'), ($pack | ConvertTo-Json -Depth 5), $utf8)
 
   if ($Stage) {
