@@ -29,9 +29,38 @@ export function signingOf(options = {}, env = process.env) {
 
 // The electron-builder configuration of a signed Windows build: signtool with the certificate of the store by thumbprint,
 // the publisher name written to app-update.yml (what electron-updater checks every update against), signing forced.
-export function signingConfig(signing) {
+// packExes: the executables of the pack. electron-builder signs every .exe it copies as an extra resource, AFTER pack.json
+// recorded their sha256, so the installed app would refuse its own pack; they are signed before the hashes instead
+// (signPackExecutables, signNative) and excluded here by name (signExts "!<name>": the app exe, elevate.exe and the
+// installer are still signed by electron-builder).
+export function signingConfig(signing, packExes = []) {
   return { forceCodeSigning: true, win: { signtoolOptions: { certificateSha1: signing.certSha1, publisherName: [signing.publisherName],
-    rfc3161TimeStampServer: signing.timestampUrl, signingHashAlgorithms: ['sha256'] } } };
+    rfc3161TimeStampServer: signing.timestampUrl, signingHashAlgorithms: ['sha256'] },
+    ...(packExes.length ? { signExts: [...new Set(packExes.map(file => '!' + path.posix.basename(String(file))))] } : {}) } };
+}
+
+// The .exe files of a pack (pack.json files), relative paths.
+export const packExecutables = pack => (pack?.files ?? []).map(f => String(f.path)).filter(p => /\.exe$/i.test(p));
+
+// Signs, in place, every .exe of the staged pack that the release certificate has not signed yet, and records the new
+// sha256 and size in pack.json (before the native core is staged, which recomputes every hash again).
+export function signPackExecutables(packDir, signing, { run = spawnSync, signtool = null, sha256 } = {}) {
+  const file = path.join(packDir, 'pack.json');
+  const pack = JSON.parse(fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, ''));
+  const signed = [];
+  for (const entry of pack.files ?? []) {
+    if (!/\.exe$/i.test(String(entry.path))) continue;
+    const target = path.join(packDir, ...String(entry.path).split('/'));
+    if (signerThumbprint(target, run) !== signing.certSha1) {
+      const result = run(signtool ?? findSigntool(), ['sign', '/sha1', signing.certSha1, '/s', 'My', '/fd', 'SHA256', '/tr', signing.timestampUrl, '/td', 'SHA256', target], { encoding: 'utf8', windowsHide: true, stdio: 'inherit' });
+      if (result.status !== 0 || signerThumbprint(target, run) !== signing.certSha1) throw new Error('could not sign ' + entry.path + ' of the pack with certificate ' + signing.certSha1);
+    }
+    const bytes = fs.readFileSync(target);
+    entry.size = bytes.length; entry.sha256 = sha256(bytes);
+    signed.push(entry.path);
+  }
+  fs.writeFileSync(file, JSON.stringify(pack, null, 2) + '\n');
+  return signed;
 }
 
 // The electron-builder configuration of the unsigned test app: no publish (no app-update.yml), a name that says what it is.

@@ -22,7 +22,8 @@ import { verifyPack } from '../src/main/core/pack-sync.mjs';
 import { updateUrlProblem } from '../src/main/core/settings.mjs';
 import { stageNativePack } from './native-pack.mjs';
 import { assertBridgeTrust } from './bridge-trust-gate.mjs';
-import { signingOf, signingConfig, testUnsignedConfig, updaterConfigProblems, signNative, signerThumbprint } from './windows-release.mjs';
+import { signingOf, signingConfig, testUnsignedConfig, updaterConfigProblems, signNative, signerThumbprint, signPackExecutables, packExecutables } from './windows-release.mjs';
+import { createHash } from 'node:crypto';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const app = path.resolve(here, '..');
@@ -169,6 +170,8 @@ async function main() {
       throw new Error('The native executable needs hardened runtime and Developer ID signing for the configured Apple team.');
   }
   let pack = await preparePack(options.pack, options.platform);
+  // A release signs the pack's executables before their hashes are final (electron-builder must not sign them later).
+  if (options.signing && !options.dryRun) signPackExecutables(path.join(app, 'pack'), options.signing, { sha256: bytes => createHash('sha256').update(bytes).digest('hex') });
   if (options.native) {
     const destination = path.join(app, 'pack-native-' + Date.now());
     pack = stageNativePack(path.join(app, 'pack'), options.native, destination);
@@ -184,6 +187,10 @@ async function main() {
   if (options.packOnly) return;
   if (options.platform === 'mac' && process.platform !== 'darwin') throw new Error('a macOS build (DMG, ZIP, signing) only runs on a Mac');
   if (options.platform === 'win' && process.platform === 'darwin') throw new Error('build the Windows installer on Windows');
+  // electron-builder lists the production dependencies with `npm list --json` (package-lock.json): without npm on PATH it
+  // fails later with "No JSON content found in output".
+  const npm = spawnSync('npm', ['--version'], { encoding: 'utf8', windowsHide: true, shell: true });
+  if (npm.status !== 0) throw new Error('electron-builder needs npm on PATH (it lists the production dependencies with npm list); install Node.js with npm');
   // electron-vite first: src/ -> out/ (main, preload, the React panel), what electron-builder packs.
   const vite = spawnSync(process.execPath, [path.join(app, 'node_modules', 'electron-vite', 'bin', 'electron-vite.js'), 'build'], { cwd: app, stdio: 'inherit' });
   if (vite.status !== 0) throw new Error('electron-vite build failed with code ' + vite.status);
@@ -197,7 +204,7 @@ async function main() {
     config = path.join(app, '.local/build/installer-config.json');
     fs.mkdirSync(path.dirname(config), { recursive: true });
     fs.writeFileSync(config, JSON.stringify({ extends: path.join(app, 'electron-builder.yml'), ...(options.noUpdates ? { publish: null } : {}),
-      ...(options.signing ? signingConfig(options.signing) : {}), ...(options.testUnsigned ? testUnsignedConfig() : {}),
+      ...(options.signing ? signingConfig(options.signing, packExecutables(pack)) : {}), ...(options.testUnsigned ? testUnsignedConfig() : {}),
       ...(options.notarize ? { forceCodeSigning: true } : {}),
       ...(nativeMac ? { mac: { target: [{ target: 'dmg', arch: [process.arch] }, { target: 'zip', arch: [process.arch] }],
         // Ad-hoc sealing needs no Apple certificate and keeps ARM64 code valid.

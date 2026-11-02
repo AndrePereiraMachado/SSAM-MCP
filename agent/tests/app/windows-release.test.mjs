@@ -108,3 +108,38 @@ test('the app version is 0.2.0, the first that updates itself from dist.ssam.pro
   assert.match(yml, /^publish:\n  provider: generic\n  url: https:\/\/dist\.ssam\.pro\/u\/ssam-agent\n  channel: latest$/m);
   assert.doesNotMatch(yml, /verifyUpdateCodeSignature:\s*false/);
 });
+
+test('the pack executables are signed before their hashes are final, and electron-builder never re-signs them', async () => {
+  const { signPackExecutables, packExecutables } = await import('../../scripts/windows-release.mjs');
+  const { createHash } = await import('node:crypto');
+  const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ssam-sign-pack-'));
+  try {
+    const exe = path.join(dir, 'bin', 'o11', 'connect', 'Anvil.Connect.exe');
+    fs.mkdirSync(path.dirname(exe), { recursive: true }); fs.writeFileSync(exe, 'unsigned');
+    fs.writeFileSync(path.join(dir, 'a.dll'), 'dll');
+    const pack = { id: 'p', files: [{ path: 'bin/o11/connect/Anvil.Connect.exe', size: 8, sha256: sha256('unsigned') }, { path: 'a.dll', size: 3, sha256: sha256('dll') }] };
+    fs.writeFileSync(path.join(dir, 'pack.json'), JSON.stringify(pack));
+    const signedFiles = new Set(), calls = [];
+    // signtool appends a signature; Get-AuthenticodeSignature answers the thumbprint of a signed file only.
+    const run = (tool, args, opts) => {
+      calls.push(tool);
+      if (tool === 'powershell') return { status: 0, stdout: signedFiles.has(opts.env.SSAM_SIGNED_FILE) ? THUMB : '' };
+      const target = args.at(-1); fs.appendFileSync(target, '+signature'); signedFiles.add(target); return { status: 0 };
+    };
+    assert.deepEqual(signPackExecutables(dir, { certSha1: THUMB, timestampUrl: DEFAULT_TIMESTAMP_URL }, { run, signtool: 'signtool.exe', sha256 }), ['bin/o11/connect/Anvil.Connect.exe']);
+    const written = JSON.parse(fs.readFileSync(path.join(dir, 'pack.json'), 'utf8'));
+    assert.equal(written.files[0].sha256, sha256('unsigned+signature'));
+    assert.equal(written.files[0].size, 'unsigned+signature'.length);
+    assert.equal(written.files[1].sha256, sha256('dll'));
+    assert.ok(calls.includes('signtool.exe'));
+    // already signed by the release certificate: not signed twice
+    calls.length = 0;
+    signPackExecutables(dir, { certSha1: THUMB, timestampUrl: DEFAULT_TIMESTAMP_URL }, { run, signtool: 'signtool.exe', sha256 });
+    assert.equal(calls.includes('signtool.exe'), false);
+    // electron-builder: the pack executables by name in signExts "!<name>" (the app exe and installer are still signed)
+    const config = signingConfig({ certSha1: THUMB, publisherName: 'A', timestampUrl: DEFAULT_TIMESTAMP_URL },
+      packExecutables({ files: [...pack.files, { path: 'native/ssam-agent.exe' }, { path: 'odc/studio/bridge/client/bin/Release/net10.0/ODC3.Bridge.Client.exe' }] }));
+    assert.deepEqual(config.win.signExts, ['!Anvil.Connect.exe', '!ssam-agent.exe', '!ODC3.Bridge.Client.exe']);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
