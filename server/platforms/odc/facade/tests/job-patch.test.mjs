@@ -78,6 +78,18 @@ test('paths outside the ops and expectedMessages are forbidden: base, expectVali
   assert.equal(second.at, 1); assert.match(second.message, /^patch\[1\] replace \/base: only the job's ops and expectedMessages are patched/);
 });
 
+test('C-11: add /expectedMessages/- creates the list in a job without one, so the appends of one refusal apply in any order', () => {
+  // The anonymous-access patch of a refusal is one append per message (F-FitBody-08 had to send add /expectedMessages first).
+  const one = { id: 'CustomObjectWarning', element: 'Home (MobileScreen) / Send (ScreenAction) / SendMoney (ExecuteServerActionNode)', why: 'Home is public' };
+  const two = { ...one, element: 'Home (MobileScreen) / Load (DataAction) / GetStats (ExecuteServerActionNode)' };
+  const patched = applyJobPatch(JOB, [{ op: 'add', path: '/expectedMessages/-', value: one }, { op: 'add', path: '/expectedMessages/-', value: two }]);
+  assert.deepEqual(patched.expectedMessages, [one, two]);
+  assert.equal(JOB.expectedMessages, undefined);   // the base is never changed
+  assert.deepEqual(applyJobPatch({ ...JOB, expectedMessages: [one] }, [{ op: 'add', path: '/expectedMessages/-', value: two }]).expectedMessages, [one, two]);
+  // only the append creates it: a replace of an entry that does not exist is still refused
+  assert.equal(thrown(() => applyJobPatch(JOB, [{ op: 'replace', path: '/expectedMessages/0', value: one }])).code, 'PATCH_INVALID');
+});
+
 test('a failed test refuses the whole patch with PATCH_TEST_FAILED', () => {
   const error = thrown(() => applyJobPatch(JOB, [{ op: 'replace', path: '/ops/1/value', value: 'x' }, { op: 'test', path: '/ops/0/name', value: 'Other' }]));
   assert.ok(error instanceof PatchError);

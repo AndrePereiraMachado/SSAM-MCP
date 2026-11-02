@@ -88,4 +88,58 @@ public class StyleSheetLossTests
     {
         Assert.Contains(typeof(StyleSheetRules), JobPreflight.DiscoveredRules);
     }
+
+    /// <summary>B5 (the proto line's C-04, 46e5012f; F-FigmaReactive-05, F-FT-10): the round that only appended rules to the Fitmaker
+    /// sheet was delivered and published twice and the runtime kept the old Fitmaker.css: the CSS file of a screen is regenerated
+    /// only when a widget of it changes. The line's kernel touch (StyleSheetTouch, F1) covers an html edit that changes only the
+    /// &lt;style&gt;: one widget's Style is touched (it renders the same), the receipt lists the screen in styleSheets with its
+    /// touch, and the next reading the edit answers is the text of the module it saved (with the touch), so the next edit is based
+    /// on it; an edit that also changes a widget of the screen gets no touch.</summary>
+    [Fact]
+    public void AnHtmlEditOfOnlyTheStyleTouchesOneWidgetOfItsScreenAndItsNextReadingIsTheSavedOne()
+    {
+        Assert.True(StudioAvailable(), "this test needs the Service Studio's assemblies (headless)");
+        var root = JobRunner.RepoRoot(Path.GetDirectoryName(typeof(StyleSheetLossTests).Assembly.Location)!)!;
+        var dir = Path.Combine(root, ".local", "css-regeneration"); Directory.CreateDirectory(dir);
+        var host = new ModelHost(dir);
+        var basePath = Path.Combine(root, "tests", "fixtures", "reactive-ui.oml");
+        (string Html, JsonObject BasedOn) Read(string oml)
+        {
+            var bytes = File.ReadAllBytes(oml);
+            var read = host.HtmlRead(bytes, "Login", withKeys: false)["documents"]![0]!;
+            return (read["html"]!.ToString(), new JsonObject { ["capture"] = Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant(), ["html"] = read["htmlSha256"]!.DeepClone() });
+        }
+        JsonObject Run(string name, string oml, params string[] edits)
+        {
+            var (_, basedOn) = Read(oml);
+            var job = new JsonObject { ["ops"] = new JsonArray(new JsonObject { ["op"] = "html", ["data"] = new JsonObject {
+                ["screen"] = "Login", ["basedOn"] = basedOn, ["edit"] = new JsonArray(edits.Select(e => (JsonNode)e).ToArray()) } }) };
+            var path = Path.Combine(dir, name + ".json"); File.WriteAllText(path, job.ToJsonString());
+            var result = System.Text.Json.JsonSerializer.SerializeToNode(JobRunner.Run(host, oml, path, Path.Combine(dir, name + ".oml")))!.AsObject();
+            Assert.True(result["accepted"]!.GetValue<bool>(), result.ToJsonString());
+            return result;
+        }
+        JsonObject Touched(JsonObject result) => result["styleSheets"]!.AsArray().OfType<JsonObject>().Single(e => e["kind"]?.ToString() == "screen" && e["name"]?.ToString() == "Login");
+        // Round 4 of the Fitmaker: rules appended at the end of the sheet, nothing else.
+        var styled = Run("style-only", basePath, "<style>.fm-footer .fm-logo-lg{font-size:64px}</style>");
+        var touch = Touched(styled)["touch"]!.AsObject();
+        Assert.Equal("Style", touch["prop"]!.ToString());
+        Assert.NotEqual(touch["from"]!.ToString(), touch["value"]!.ToString());
+        var answer = styled["results"]!.AsArray().Select(r => r!["result"]).OfType<JsonObject>().Single(r => r["mode"]?.ToString() == "edit");
+        var (afterHtml, afterBasedOn) = Read(Path.Combine(dir, "style-only.oml"));
+        Assert.Contains(".fm-footer .fm-logo-lg{font-size:64px}", afterHtml);
+        Assert.Equal(afterBasedOn["html"]!.ToString(), answer["next"]!["html"]!.ToString());
+        // The next CSS-only round, based on that reading, is accepted and touches again.
+        var again = Run("style-again", Path.Combine(dir, "style-only.oml"), "<style>.fm-footer .fm-logo-lg{font-size:72px}</style>");
+        Assert.NotNull(Touched(again)["touch"]);
+        // An edit that also changes a widget of the screen regenerates it already: no touch.
+        var (html, _) = Read(basePath);
+        var tree = Anvil.Reading.ScreenHtml.Parse(html);
+        var logo = Anvil.Reading.ScreenHtmlText.Elements(tree).First(x => x.Node.Get("k") == "w8").Node;
+        logo.Attributes[logo.Attributes.FindIndex(a => a.Key == "class")] = new("class", "login-logo fm-wide");
+        var both = Run("style-and-widget", basePath, "<style>.fm-wide{width:100%}</style>", Anvil.Reading.ScreenHtmlText.Write(logo));
+        Assert.Null(Touched(both)["touch"]);
+    }
+
+    private static bool StudioAvailable() { try { StudioAssemblies.Bind(null); return Directory.Exists(StudioAssemblies.Directory ?? ""); } catch { return false; } }
 }

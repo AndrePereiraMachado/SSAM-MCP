@@ -1006,7 +1006,9 @@ export async function discoverAll(input = {}, options = {}) {
   // A generator asked about BY NAME ("entity-actions", "rest-consume", "gen-screen"; generators.mjs namedGenerators): the
   // answer describes it with its state (approved or blind-test-pending), reason, report, contract and explicit call, right
   // after `intent`, in the room it takes from the budget. Nothing else names a generator that is not approved.
-  const named = String(input.intent ?? '').trim() ? namedGenerators(input.intent).map(id => describeGenerator(id, input.lane ?? 'odc')) : [];
+  // r4-rest-hosted: a hosted call reads the hosted input mode (rest-consume with its samples inline).
+  const hosted = Boolean((await import('./executor.mjs')).hostedContext?.());
+  const named = String(input.intent ?? '').trim() ? namedGenerators(input.intent).map(id => describeGenerator(id, input.lane ?? 'odc', { hosted })) : [];
   const room = named.length ? bytes({ generators: named }) + 64 : 0;
   let answer = await discoverWithEnvironment(room ? { ...input, budgetBytes: Math.max(4096, input.budgetBytes - room) } : input, options);
   if (room && answer && typeof answer === 'object') {

@@ -19,6 +19,18 @@ aberta; repita a mesma chamada após salvar. `authPrompt:"never"` impede a abert
 O retorno confirma a credencial guardada, não a autenticação no Service Center;
 a leitura seguinte confirma o acesso. Nenhuma sessão do Studio é fechada ou alterada.
 
+Toda resposta do Service Center diz quem respondeu: `session {requested, source}` (`studio`, `vault`, `local` para um recibo).
+Com `session:"vault"` e o Studio logado, o cofre é consultado mesmo assim (correção de 18/10, provada por
+`sc-private-sign-in`); o passo de API que só o Studio atende recusa com `VAULT_API_UNAVAILABLE` e a continuação
+para o status da sessão, nunca mais `STUDIO_NOT_SIGNED_IN` com o Studio logado (lote 4 F3,
+`sc-vault-session-source.test.mjs`).
+
+No servidor hospedado, nenhum desses caminhos abre janela nem lê o cofre do servidor (`HOSTED_PROMPT_UNAVAILABLE`,
+`HOSTED_STUDIO_SESSION_ONLY`), e a continuação de cada código de autenticação (`refusal-codes.mjs` `authContinuation`)
+leva ao login do próprio Studio do usuário (`o11_studio login` ou `ssam_connect`), nunca à janela privada. Uma página que
+responde HTTP 404 é `SC_PAGE_NOT_FOUND` (o ID, a chave ou a página não existem no host; a continuação é a listagem
+viva), não `SC_PROTOCOL_INVALID`; numa página do Users, `USERS_PAGE_NOT_FOUND`.
+
 Algumas versões O11 devolvem a página autenticada ainda na URL `Login.aspx` após
 o POST de login. Nessa resposta específica, o adaptador aceita a página somente
 com controle de logout e sem formulário de senha nem layout de login. As leituras
@@ -26,12 +38,13 @@ protegidas seguintes mantêm a detecção estrita de sessão expirada.
 
 ## Primeira chamada sem credencial
 
-- **O11:** abre a janela `windows-o11-credential.ps1 -Mode bootstrap` ("Service Center login for <host>").
-  Digite ali o e-mail e a senha da conta OutSystems. A mesma chamada espera a entrada aparecer no cofre
-  (`SSAM_PROMPT_WAIT_MS`, padrão 120 s; numa leitura, até uns 27 s). Se não der tempo, a resposta é
-  `CREDENTIAL_PROMPT_PENDING`: a janela continua aberta, e você repete a mesma chamada depois de salvar.
-  LifeTime (conta de serviço e token), login de banco e valor secreto de site property usam a mesma janela,
-  cada um com a sua entrada.
+- **O11:** abre a janela gerenciada "SSAM - <host> - o11-<alvo>" (desde 25/10/2026, lote 4 F3: o mesmo gerenciador
+  de janela do ODC, tipos `o11-*`, alvos `SSAM/O11/...`). Digite ali o e-mail e a senha da conta OutSystems. A janela só
+  conta como aberta depois de confirmada visível; repetir a chamada a traz à frente, sem abrir outra. A mesma chamada
+  espera a entrada aparecer no cofre (`SSAM_PROMPT_WAIT_MS`, padrão 120 s; numa leitura, até uns 27 s). Se não der
+  tempo, a resposta é `CREDENTIAL_PROMPT_PENDING` com `window` e a `question` exata a repassar; cancelar na janela
+  encerra a espera e limpa o estado. LifeTime (conta de serviço e token), login de banco e valor secreto de site
+  property usam a mesma janela, cada um com a sua entrada.
 - **Portal ODC:** sem Studio e sem API Client guardado, `odc_read` abre
   `windows-api-client-credential.ps1 -Mode bootstrap`: Client ID no usuário, secret na senha. A resposta é
   `CREDENTIAL_PROMPT_OPENED`; repita a chamada depois de salvar. A conta do Portal, a conta de um banco externo e

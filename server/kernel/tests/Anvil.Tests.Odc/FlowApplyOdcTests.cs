@@ -20,6 +20,7 @@ public sealed class FlowApplyOdcTests
     [Fact] public void SameNamedUiCallsBindToTheirOwnerAcrossCreateReloadEditAndMerge() => RunReactive((dir, fixture, lane) =>
         FlowApplyScenarios.SameNamedUiCallsBindToTheirOwnerAcrossCreateReloadEditAndMerge(dir, fixture, lane, MergeUiOwners));
     [Fact] public void LifecycleDestinationIgnoresSameNamedEntityFields() => RunReactive(FlowApplyScenarios.LifecycleDestinationIgnoresSameNamedEntityFields);
+    [Fact] public void ARecordOfAStaticEntityNeverShadowsTheEntityOfASqlOutput() => Run(FlowApplyScenarios.ARecordOfAStaticEntityNeverShadowsTheEntityOfASqlOutput);
     [Fact] public void NewlyCreatedDataSourcesReplaceStaleOwnerLookup() => RunReactive(FlowApplyScenarios.NewlyCreatedDataSourcesReplaceStaleOwnerLookup);
 
     // The ODC merge of the scene: the candidate merged over its base by the native MatchTree, as a delivery merges it.
@@ -74,6 +75,7 @@ public sealed class FlowApplyOdcTests
     [Fact] public void APlatformMappingThatLeavesAnAttributeEmptyIsRefusedWhateverItsNames() => Run(FlowApplyScenarios.APlatformMappingThatLeavesAnAttributeEmptyIsRefusedWhateverItsNames);
     [Fact] public void AnEditThatLeavesAnExistingCursorMappingAsItWasKeepsIt() => Run(FlowApplyScenarios.AnEditThatLeavesAnExistingCursorMappingAsItWasKeepsIt);
     [Fact] public void DataStatementsNeedTheirReadAndGiveTheNext() => Run(FlowApplyScenarios.DataStatementsNeedTheirReadAndGiveTheNext);
+    [Fact] public void ADataRefusalForAMissingBasedOnKeepsEveryStatementOfTheJob() => Run(FlowApplyScenarios.ADataRefusalForAMissingBasedOnKeepsEveryStatementOfTheJob);
 
     // Screen, block and data actions born from their texts need a Reactive app with a layout (the blank one has no screen).
     private const string Reactive = "tests/fixtures/odc/insurance-reactive-r8.oml";

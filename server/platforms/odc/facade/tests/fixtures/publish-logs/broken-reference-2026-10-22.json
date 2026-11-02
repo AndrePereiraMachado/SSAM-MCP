@@ -1,0 +1,66 @@
+{
+ "source": "o11_publish answer a1affbc3 (2026-10-22T21:44:48Z); module and producer names anonymized",
+ "answer": {
+  "error": "The publication of Ops_UI failed at compile: Publish aborted; it is not published.",
+  "messages": [
+   {
+    "type": "Error",
+    "stage": "compile",
+    "text": "Publish aborted",
+    "detail": "New broken or missing references found for producer module 'Ops_Theme'. Please review them and republish.",
+    "element": {
+     "name": "Ops_Theme",
+     "key": "6CeftNo0u0GJWgggrNYgdw",
+     "kind": "Reference",
+     "path": "Ops_UI (ESpace) / Ops_Theme (Reference)"
+    }
+   }
+  ]
+ },
+ "publishLog": {
+  "found": true,
+  "module": "Ops_UI",
+  "moduleKey": "k-ops-ui",
+  "environment": "tenant-a.example.outsystemscloud.com",
+  "serverOperationId": 52,
+  "operation": "Publish",
+  "status": "failed",
+  "state": "CompletedWithFailure",
+  "stage": "compile",
+  "failedStage": "compile",
+  "startedAt": "18:44:30",
+  "endedAt": "18:44:44",
+  "triggeredBy": "bridge",
+  "errors": 1,
+  "warnings": 0,
+  "steps": [
+   {
+    "stage": "upload",
+    "text": "Uploading",
+    "shownAt": "18:44:31"
+   },
+   {
+    "stage": "compile",
+    "text": "Compiling Ops_UI",
+    "shownAt": "18:44:35"
+   }
+  ],
+  "messages": [
+   {
+    "type": "Error",
+    "stage": "compile",
+    "text": "Publish aborted",
+    "detail": "New broken or missing references found for producer module 'Ops_Theme'. Please review them and republish.",
+    "element": {
+     "name": "Ops_Theme",
+     "key": "6CeftNo0u0GJWgggrNYgdw",
+     "kind": "Reference",
+     "path": "Ops_UI (ESpace) / Ops_Theme (Reference)"
+    },
+    "id": "BrokenReferences",
+    "shownAt": "18:44:44"
+   }
+  ],
+  "omitted": 0
+ }
+}

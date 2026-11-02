@@ -864,21 +864,19 @@ test('explicit vault selection reads only Studio identity metadata', async () =>
   assert.deepEqual(bridge.calls, [['session', HOST]]);
 });
 
-test('the private prompt runs windows-o11-credential.ps1 -Mode bootstrap detached, one window per target, its marker under .ssam-hybrid', () => {
-  const state = temp(); const spawned = [];
-  const spawnFn = (exe, argv, options) => { spawned.push([exe, argv, options]); return { pid: 4242, unref() {}, on() {} }; };
-  const first = openPrompt(HOST, 'DatabaseConnection', 'LegacyERP', { state, spawnFn, now: () => Date.now() });
-  assert.deepEqual(first, { opened: true, target: `SSAM/O11/${HOST}/DatabaseConnection/LegacyERP` });
-  const [exe, argv, options] = spawned[0];
-  assert.ok(/powershell\.exe$/i.test(exe));
-  assert.deepEqual(argv.slice(3), ['-Mode', 'bootstrap', '-Kind', 'DatabaseConnection', '-HostName', HOST, '-Name', 'LegacyERP']);
-  assert.ok(argv[2].endsWith('windows-o11-credential.ps1'));
-  assert.deepEqual([options.detached, options.stdio, options.windowsHide], [true, 'ignore', false]);
-  assert.equal(files(path.join(state, 'auth', 'prompts'), /\.json$/).length, 1, 'the marker lives under <state>\\auth\\prompts');
-  // The same target within five minutes: the window that is open is the one; nothing new is spawned.
-  assert.deepEqual(openPrompt(HOST, 'DatabaseConnection', 'LegacyERP', { state, spawnFn }), { opened: false, alreadyOpen: true, target: `SSAM/O11/${HOST}/DatabaseConnection/LegacyERP` });
-  assert.equal(spawned.length, 1);
-  assert.throws(() => openPrompt(HOST, 'DatabaseConnection', '../x', { state, spawnFn }), isProtocol());
+// Lote 4, F3 (relato 88a0d528): the detached windows-o11-credential.ps1 -Mode bootstrap launch was declared open without
+// any window. The prompt is the managed window of portal/runtime/credential-prompt.mjs (O11 kinds), one per target, its
+// state under .ssam-hybrid; the window rules are in sc-o11-credential-window.test.mjs.
+test('the private prompt is the managed window, one per target, confirmed visible, its state under .ssam-hybrid', async () => {
+  const asked = [];
+  const manager = async (...args) => { asked.push(args); return { state: 'visible', visible: true, foreground: true, pid: 4242, opened: asked.length === 1, alreadyOpen: asked.length > 1 }; };
+  const first = await openPrompt(HOST, 'DatabaseConnection', 'LegacyERP', { manager });
+  assert.deepEqual([first.opened, first.visible, first.target], [true, true, `SSAM/O11/${HOST}/DatabaseConnection/LegacyERP`]);
+  assert.deepEqual(asked[0], ['o11-database', HOST, 'LegacyERP', 'ensure']);
+  // The same target again: the window that is open is the one, brought to the front.
+  const again = await openPrompt(HOST, 'DatabaseConnection', 'LegacyERP', { manager });
+  assert.deepEqual([again.opened, again.alreadyOpen], [false, true]);
+  await assert.rejects(openPrompt(HOST, 'DatabaseConnection', '../x', { manager }), isProtocol());
 });
 
 test('the prompt script and the vault PowerShell never write the secret', () => {

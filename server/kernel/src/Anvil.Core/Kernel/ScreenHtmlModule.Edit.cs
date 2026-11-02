@@ -159,6 +159,7 @@ public sealed partial class ScreenHtmlModule<T>
             // CX17 review 3, M6: the markers of the engine decided again on the merged page (a screen of the op only), written in
             // the text the plan decodes and writes, then taken out again: the checks and the patches read the author's text.
             engineMarks = DecideMarkers();
+            TableLists();   // F8: every List of a table part the edit writes or touches renders as that part
             EngineText(true);
             Decode(state.Shapes);
             Result.EditedHtml = ScreenHtmlText.Write(merged);
@@ -221,7 +222,6 @@ public sealed partial class ScreenHtmlModule<T>
             merged = ScreenHtml.Parse(reading.Html);
             var original = new HashSet<string>(StringComparer.Ordinal);
             foreach (var (node, _) in ScreenHtmlText.Elements(merged)) if (node.Get("k") is { } k) original.Add(k);
-            ScreenHtml.Node Top() => merged.Children.First(c => !c.IsText);
             // Every edit placed by its k: a later edit that writes again an element around it would swallow it.
             var placed = new List<(int Edit, ScreenHtml.Node Root, string Key)>();
             for (var j = 0; j < edits.Count; j++) {
@@ -230,60 +230,129 @@ public sealed partial class ScreenHtmlModule<T>
                 try { parsed = ScreenHtml.Parse(edits[j]); }
                 catch (FormatException error) { Problem(ScreenHtmlEdit.Invalid, at, null, error.Message, "every element closes (or is <x/>), every attribute value is quoted, & is written &amp; and < inside text &lt;"); continue; }
                 var roots = parsed.Children.Where(c => !c.IsText || c.Text!.Trim().Length > 0).ToList();
-                // An If is edited with its else: <div if k> and the <div else> right after it, one edit.
-                ScreenHtml.Node? elsePart = null;
-                if (roots.Count == 2 && ScreenHtmlEdit.IsIfElse(roots[0], roots[1])) { elsePart = roots[1]; roots.RemoveAt(1); }
-                if (roots.Count != 1 || roots[0].IsText) {
-                    Problem(ScreenHtmlEdit.Invalid, at, null, "an edit is one element of the reading with its k (children included), the <style> of the page or the whole document; this one has " + roots.Count + " top-level nodes",
+                if (roots.Count == 0 && edits.Count > 1) continue;   // F10: an empty edit string is nothing (HTML_DECLARATIONS_FIRST leaves one)
+                // F10: several elements in one string (the declarations of the page and its content, as the rounds of 25/10 sent
+                // them: "<var .../><var .../> <div k=...>") are as many edits, each placed by its own k (HTML_EDIT_SPLIT, listed);
+                // only loose text or the whole document beside other elements is no edit.
+                var units = ScreenHtmlEdit.Units(roots);
+                if (units == null || units.Count > 1 && units.Any(u => u.Element.Tag is "screen" or "block")) {
+                    Problem(ScreenHtmlEdit.Invalid, at, null, "an edit is one element of the reading with its k (children included), the <style> of the page or the whole document; this one has " + roots.Count + " top-level nodes"
+                        + (units == null ? (roots.Count == 0 ? "" : ", text among them") : ", the whole document among them"),
                         "send each changed element as its own string, or their common parent (with its k) as one");
                     continue;
                 }
-                var e = roots[0];
-                if (e.Tag is "screen" or "block") {
-                    if (edits.Count > 1) { Problem(ScreenHtmlEdit.Invalid, at, null, "the whole document is the only edit of its op", "send the whole document alone, or only the changed elements"); continue; }
-                    if (e.Tag != Top().Tag) { Problem(ScreenHtmlEdit.Invalid, at, null, "the reading is a <" + Top().Tag + ">, the edit a <" + e.Tag + ">", "keep the root element of the reading"); continue; }
-                    Mark(e, j);
-                    merged.Children[merged.Children.IndexOf(Top())] = e;
-                    continue;
-                }
-                if (e.Tag == "style") {
-                    Mark(e, j);
-                    var top = Top();
-                    var old = top.Children.FindIndex(c => c.Tag == "style");
-                    if (old >= 0) top.Children[old] = e; else top.Children.Insert(0, e);
-                    continue;
-                }
-                if (e.Get("k") is not { } key) {
-                    Problem(ScreenHtmlEdit.NoKey, at, null, "<" + e.Tag + "> has no k: an edit names the element of the reading it replaces by its k; a new element goes inside the edit of its parent",
-                        "send the parent of the new element (with its k), the new element inside it without k");
-                    continue;
-                }
-                if (!original.Contains(key)) {
-                    Problem(ScreenHtmlEdit.KeyForeign, at, key, "k=\"" + key + "\" is not an element of the reading " + reading.HtmlSha256[..12] + " of " + reading.Root,
-                        "use a k of that reading (read the screen again if it changed), or drop the k: an element without k is new");
-                    continue;
-                }
-                var hits = ScreenHtmlText.Elements(merged).Where(x => x.Node.Get("k") == key).ToList();
-                var inside = hits.Where(x => editedNodes.Contains(x.Node)).ToList();
-                var outside = hits.Where(x => !editedNodes.Contains(x.Node) && x.Parent != null).ToList();
-                if (inside.Count > 0 || outside.Count == 0) {
-                    var other = inside.Count > 0 && editOf.TryGetValue(inside[0].Node, out var o) ? o : -1;
-                    Problem(ScreenHtmlEdit.Overlap, at, key, "k=\"" + key + "\" is " + (other >= 0 ? "also inside edit #" + other : "inside or removed by another edit") + ": one edit per element",
-                        "keep only the outer edit and make this change inside it");
-                    continue;
-                }
-                Mark(e, j);
-                placed.Add((j, e, key));
-                var (_, parent) = outside[0];
-                var index = parent!.Children.IndexOf(outside[0].Node);
-                parent.Children[index] = e;
-                if (elsePart != null) {
-                    Mark(elsePart, j);
-                    var next = NextElementIndex(parent, index);
-                    if (next >= 0 && parent.Children[next].Get("else") != null && parent.Children[next].Attributes.Count == 1) parent.Children[next] = elsePart;
-                    else parent.Children.Insert(index + 1, elsePart);
-                }
+                if (units.Count > 1)
+                    Result.Normalized.Add(new JsonObject { ["code"] = ScreenHtmlEdit.EditSplit, ["at"] = at, ["count"] = units.Count,
+                        ["note"] = "edit #" + j.ToString(CultureInfo.InvariantCulture) + " holds " + units.Count.ToString(CultureInfo.InvariantCulture) + " elements: each is placed by its own k (a declaration without k is a new one)" });
+                foreach (var (e, elsePart) in units) MergeUnit(j, at, e, elsePart, original, placed);
             }
+            AfterMerge(placed);
+        }
+
+        // One element of edit j in the merged text: the whole document, the page's <style>, a declaration of the root (new without
+        // k), or the element of the reading with its k.
+        private void MergeUnit(int j, string at, ScreenHtml.Node e, ScreenHtml.Node? elsePart, HashSet<string> original, List<(int Edit, ScreenHtml.Node Root, string Key)> placed)
+        {
+            ScreenHtml.Node Top() => merged.Children.First(c => !c.IsText);
+            if (e.Tag is "screen" or "block") {
+                if (edits.Count > 1) { Problem(ScreenHtmlEdit.Invalid, at, null, "the whole document is the only edit of its op", "send the whole document alone, or only the changed elements"); return; }
+                if (e.Tag != Top().Tag) { Problem(ScreenHtmlEdit.Invalid, at, null, "the reading is a <" + Top().Tag + ">, the edit a <" + e.Tag + ">", "keep the root element of the reading"); return; }
+                Mark(e, j);
+                merged.Children[merged.Children.IndexOf(Top())] = e;
+                return;
+            }
+            if (e.Tag == "style") {
+                Mark(e, j);
+                PlaceStyle(e);
+                return;
+            }
+            if (e.Get("k") is not { } key) {
+                // F10: a declaration of the root (an input, a variable, an aggregate, a block event) has the root as its parent, which
+                // only the whole document writes: one without k is a new one of the root, after those of its kind (the rounds of
+                // 25/10 fell back to 42 create/set ops to declare them before the page).
+                if (ScreenHtmlEdit.IsDeclaration(e)) {
+                    // Review W3-EDIT, 4 and round 2 (R2-2, the Integradora's simple form): a declaration without k named like one the
+                    // root already has (the Studio would rename the new one, Username2, after the build) is that one only when it is
+                    // the same element as read (tag, exact name, every attribute and its value: nothing changed, nothing left out),
+                    // said with its k. Anything else (another type, a default left out, another case of the name, another kind of
+                    // declaration) is refused here, before anything is written, with the patch that adds the k.
+                    if (e.Get("name") is { Length: > 0 } declared) {
+                        var same = Top().Children.Where(c => ScreenHtmlEdit.IsDeclaration(c) && string.Equals(c.Get("name"), declared, StringComparison.OrdinalIgnoreCase)).ToList();
+                        static HashSet<(string, string)> Written(ScreenHtml.Node n) => n.Attributes.Where(a => a.Key != "k").Select(a => (a.Key, a.Value)).ToHashSet();
+                        if (same.Count == 1 && same[0].Tag == e.Tag && same[0].Get("k") is { } own && !editedNodes.Contains(same[0]) && Written(same[0]).SetEquals(Written(e))) {
+                            e.Attributes.Insert(0, new("k", own));
+                            Result.Normalized.Add(new JsonObject { ["code"] = ScreenHtmlEdit.DeclarationKeyed, ["at"] = at, ["k"] = own, ["name"] = declared,
+                                ["note"] = "<" + e.Tag + " name=\"" + declared + "\"> without k is exactly the " + e.Tag + " of " + reading.Root + " as read (k=\"" + own + "\"): nothing to write, never a second one the Studio would rename" });
+                            MergeUnit(j, at, e, elsePart, original, placed);
+                            return;
+                        }
+                        if (same.Count > 0) {
+                            var keyed = same.Where(c => c.Get("k") != null).Select(c => "<" + c.Tag + " k=\"" + c.Get("k") + "\" name=\"" + c.Get("name") + "\">").ToList();
+                            // The certain patch: the one declaration of that tag and name, the edit string with its k (and the name as read).
+                            JsonArray? patch = null;
+                            if (same.Count == 1 && same[0].Tag == e.Tag && same[0].Get("k") is { } only && same[0].Get("name") is { } readName) {
+                                var pattern = new System.Text.RegularExpressions.Regex("<" + e.Tag + "\\b(?=[^>]*\\bname=\"" + System.Text.RegularExpressions.Regex.Escape(declared) + "\")");
+                                if (pattern.Matches(edits[j]).Count == 1) {
+                                    var keyedText = pattern.Replace(edits[j], "<" + e.Tag + " k=\"" + only + "\"", 1);
+                                    if (readName != declared) keyedText = keyedText.Replace("name=\"" + declared + "\"", "name=\"" + readName + "\"", StringComparison.Ordinal);
+                                    patch = new JsonArray(new JsonObject { ["op"] = "replace", ["path"] = at, ["value"] = keyedText });
+                                }
+                            }
+                            var differs = same.Count == 1 && same[0].Tag == e.Tag
+                                ? (same[0].Get("name") != declared ? " (as " + same[0].Get("name") + ")" : "") + ", written otherwise than read (" + string.Join(", ", Written(e).Except(Written(same[0])).Select(a => a.Item1 + "=\"" + a.Item2 + "\"")
+                                    .Concat(Written(same[0]).Where(r => !Written(e).Any(w => w.Item1 == r.Item1)).Select(a => "no " + a.Item1))) + ")"
+                                : same.Count == 1 ? " (another kind of declaration)" : "";
+                            Problem(ScreenHtmlEdit.NameTaken, at, null, "<" + e.Tag + " name=\"" + declared + "\"> without k: " + reading.Root + " already has " + string.Join(", ", keyed.DefaultIfEmpty("a declaration of that name"))
+                                + differs + "; without k it would be a second one, which the Studio renames after the build",
+                                patch != null ? "to change that " + e.Tag + ", write it with its k (the patch adds k=\"" + same[0].Get("k") + "\"" + (same[0].Get("name") != declared ? " and the name as read" : "") + "); to add a new one, give it another name"
+                                : "write the one you change with its k (" + string.Join(", ", keyed) + "), or give the new one another name", patch);
+                            return;
+                        }
+                    }
+                    // In the order the reading writes them (inputs, events, variables, aggregates): after the last one of its kind
+                    // or an earlier kind, else before the first declaration (an aggregate written before a new input is read back
+                    // as that input).
+                    var top = Top();
+                    var rank = ScreenHtmlEdit.DeclarationRank(e);
+                    var last = top.Children.FindLastIndex(c => ScreenHtmlEdit.IsDeclaration(c) && ScreenHtmlEdit.DeclarationRank(c) <= rank);
+                    var first = top.Children.FindIndex(c => ScreenHtmlEdit.IsDeclaration(c) || !c.IsText && c.Tag != "style");
+                    top.Children.Insert(last >= 0 ? last + 1 : first >= 0 ? first : top.Children.Count, e);
+                    Mark(e, j);
+                    return;
+                }
+                Problem(ScreenHtmlEdit.NoKey, at, null, "<" + e.Tag + "> has no k: an edit names the element of the reading it replaces by its k; a new element goes inside the edit of its parent",
+                    "send the parent of the new element (with its k), the new element inside it without k");
+                return;
+            }
+            if (!original.Contains(key)) {
+                Problem(ScreenHtmlEdit.KeyForeign, at, key, "k=\"" + key + "\" is not an element of the reading " + reading.HtmlSha256[..12] + " of " + reading.Root,
+                    "use a k of that reading (read the screen again if it changed), or drop the k: an element without k is new");
+                return;
+            }
+            var hits = ScreenHtmlText.Elements(merged).Where(x => x.Node.Get("k") == key).ToList();
+            var inside = hits.Where(x => editedNodes.Contains(x.Node)).ToList();
+            var outside = hits.Where(x => !editedNodes.Contains(x.Node) && x.Parent != null).ToList();
+            if (inside.Count > 0 || outside.Count == 0) {
+                var other = inside.Count > 0 && editOf.TryGetValue(inside[0].Node, out var o) ? o : -1;
+                Problem(ScreenHtmlEdit.Overlap, at, key, "k=\"" + key + "\" is " + (other >= 0 ? "also inside edit #" + other : "inside or removed by another edit") + ": one edit per element",
+                    "keep only the outer edit and make this change inside it");
+                return;
+            }
+            Mark(e, j);
+            placed.Add((j, e, key));
+            var (_, parent) = outside[0];
+            var index = parent!.Children.IndexOf(outside[0].Node);
+            parent.Children[index] = e;
+            if (elsePart != null) {
+                Mark(elsePart, j);
+                var next = NextElementIndex(parent, index);
+                if (next >= 0 && parent.Children[next].Get("else") != null && parent.Children[next].Attributes.Count == 1) parent.Children[next] = elsePart;
+                else parent.Children.Insert(index + 1, elsePart);
+            }
+        }
+
+        private void AfterMerge(List<(int Edit, ScreenHtml.Node Root, string Key)> placed)
+        {
             // An earlier edit inside the element a later edit writes again is gone with the old subtree (its new Visible, its
             // text...): one edit per element, whatever their order (the review of rounds 1 and 2: k1 was accepted and lost the
             // Visible of w64; in the other order, k2, it was already HTML_EDIT_OVERLAP).
@@ -313,6 +382,42 @@ public sealed partial class ScreenHtmlModule<T>
                     parent?.Children.Remove(node);
                 }
             }
+            LiftThemeStyles();
+        }
+
+        // A <style> of an edit in the merged text, at the top of the root: the root's own style sheet replaces the reading's
+        // <style>; C-14: a <style scope="theme" [id]> replaces the reading's part with the same id (none: the root's own part), or is
+        // a new part after the other <style> (F-FigmaMobile-03: it used to replace the root's own <style>, or, inside an element,
+        // to become an HTML Element named after its id).
+        private void PlaceStyle(ScreenHtml.Node e)
+        {
+            var top = merged.Children.First(c => !c.IsText);
+            var theme = ScreenHtmlEdit.IsThemeStyle(e);
+            var id = theme ? e.Get("id") : null;
+            var old = top.Children.FindIndex(c => !ReferenceEquals(c, e) && c.Tag == "style" && ScreenHtmlEdit.IsThemeStyle(c) == theme && (!theme || c.Get("id") == id));
+            if (old >= 0) { top.Children[old] = e; return; }
+            if (!theme) { top.Children.Insert(0, e); return; }
+            var last = top.Children.FindLastIndex(c => c.Tag == "style" && !ReferenceEquals(c, e));
+            top.Children.Insert(last + 1, e);
+        }
+
+        // C-14: a <style scope="theme"> the edit wrote inside an element is a part of the theme all the same (the document form
+        // takes it wherever it is): lifted to the top of the root, in its place among the parts, and said (HTML_THEME_STYLE_LIFTED).
+        public const string ThemeStyleLifted = "HTML_THEME_STYLE_LIFTED";
+        private void LiftThemeStyles()
+        {
+            var top = merged.Children.First(c => !c.IsText);
+            foreach (var (node, parent) in ScreenHtmlText.Elements(merged).ToList()) {
+                if (parent == null || ReferenceEquals(parent, top) || !ScreenHtmlEdit.IsThemeStyle(node) || !editedNodes.Contains(node)) continue;
+                parent.Children.Remove(node);
+                PlaceStyle(node);
+                Result.Normalized.Add(new JsonObject { ["code"] = ThemeStyleLifted, ["k"] = parent.Get("k"),
+                    ["note"] = "<style scope=\"theme\"" + (node.Get("id") is { } id ? " id=\"" + id + "\"" : "") + "> is a part of the module theme, not an element: written at the top of the document" });
+            }
+            // A part's id is its marker in the theme: the document form's rule.
+            foreach (var style in top.Children.Where(c => ScreenHtmlEdit.IsThemeStyle(c) && c.Get("id") is { } id && !System.Text.RegularExpressions.Regex.IsMatch(id, @"\A[A-Za-z0-9_-]{1,64}\z")))
+                Problem(Anvil.Core.ScreenDocument.StyleUnplaced, AtNode(style), null, "<style scope=\"theme\" id=\"" + style.Get("id") + "\">: a named theme part needs an id of 1 to 64 ASCII letters, digits, underscores or hyphens",
+                    "write id=\"name\" using [A-Za-z0-9_-]{1,64}, or remove id to use the root's theme part");
         }
 
         private static int NextElementIndex(ScreenHtml.Node parent, int at)
@@ -345,8 +450,12 @@ public sealed partial class ScreenHtmlModule<T>
         private void Normalize()
         {
             var top = merged.Children.First(c => !c.IsText);
+            LiftRows();   // F8: a <tr list> of cells is the List of its row group
+            SpaceEventArguments(top);   // F10: named arguments in another spacing are the call the reading writes
+            BreaksAndRows(top);         // F10: a new <br>, a qualified declaration type, the row of a Dropdown
+            ListRowArguments(top);   // C-03: an event argument in a row of a Traditional list reads the row clicked
             NormalizeNewElements(top);
-            var style = top.Children.FirstOrDefault(c => c.Tag == "style");
+            var style = top.Children.FirstOrDefault(c => c.Tag == "style" && !ScreenHtmlEdit.IsThemeStyle(c));
             var sheet = style == null ? null : string.Concat(style.Children.Select(c => c.Text));
             var outcome = ScreenHtmlNative.Apply(top, node => editedNodes.Contains(node), node => node.Get("k") is { } k ? ReadNode(k) : null,
                 form => m.TryResolve(form, state.Scope, out _), sheet);
@@ -365,6 +474,164 @@ public sealed partial class ScreenHtmlModule<T>
             if (style != null) top.Children[top.Children.IndexOf(style)] = written; else top.Children.Insert(0, written);
             Mark(written, edit);
             Result.Normalized.Add(new JsonObject { ["code"] = ScreenHtmlNative.SvgMask, ["element"] = "style", ["note"] = outcome.Css.Count + " mask rule(s) in the page's style sheet" + (IconsConverted ? "; its svg and span selectors also match the icon spans (:is(svg, :where(.ssam-icon)), span:not(:where(.ssam-icon)))" : "") });
+        }
+
+        /// <summary>F10: an event the edit writes with named arguments in another spacing (onclick="Abrir(Id=Row.Id)", the rounds of
+        /// 25/10: "event onclick is not Destination(Param = expression, ...)" x8) is the call it says, written as the reading writes
+        /// it (Abrir(Id = Row.Id)) and listed (HTML_EVENT_ARGUMENTS); positional arguments and what is no call stay for the
+        /// checks.</summary>
+        private void SpaceEventArguments(ScreenHtml.Node top)
+        {
+            JsonObject? note = null;
+            foreach (var (node, _) in ScreenHtmlText.Elements(top)) {
+                if (!editedNodes.Contains(node)) continue;
+                for (var a = 0; a < node.Attributes.Count; a++) {
+                    var (name, value) = node.Attributes[a];
+                    if (!(name.StartsWith("on", StringComparison.Ordinal) || name.StartsWith('@') || name.StartsWith("html:on", StringComparison.Ordinal)) || name.Contains('.')) continue;
+                    if (ScreenHtml.TryCall(value, out _, out _) || !Anvil.Core.ScreenDocument.ParseCall(value, out var target, out var arguments)
+                        || arguments.Count == 0 || arguments.Any(x => x.Param == null) || Anvil.Core.ScreenDocument.ScriptAttribute(name, value) != null) continue;
+                    var canonical = ScreenHtml.Call(target, arguments.Select(x => (x.Param!, x.Value.Trim())).ToList());
+                    if (!ScreenHtml.TryCall(canonical, out _, out _) || canonical == value) continue;
+                    node.Attributes[a] = new(name, canonical);
+                    if (note == null) {
+                        note = new JsonObject { ["code"] = ScreenHtmlEdit.EventArguments, ["count"] = 0, ["lines"] = new JsonArray(),
+                            ["note"] = "an event's named arguments are written Param = expression, separated by \", \": the same call" };
+                        Result.Normalized.Add(note);
+                    }
+                    note["count"] = note["count"]!.GetValue<int>() + 1;
+                    if (note["lines"]!.AsArray().Count < 6) note["lines"]!.AsArray().Add(name + "=\"" + value + "\" -> " + name + "=\"" + canonical + "\"");
+                }
+            }
+        }
+
+        /// <summary>F10, what the Verify refused after the build on the rounds of 25/10 and has one reading:
+        /// HTML_BR_CONTAINER, a new &lt;br&gt; is the empty Container of the document form and the fragment (ElementWidgetMap: no
+        /// HTML Element br, "'br' is not a valid HTML tag"); HTML_TYPE_UNQUALIFIED, a declaration's type qualified with its producer
+        /// is the type of that name the page resolves, only when the qualifier is the module or the reference that owns that entity
+        /// or structure (the rule of TypeResolver.Qualified: any other qualifier is read as written, and refused there);
+        /// DROPDOWN_ITEM_SCOPE (PreflightRules.DropdownItemScopeRules, the one rule of the raw ops and the fragment), the value and
+        /// label of a &lt;select options="L"&gt; are read per element of L, so every L.Current.X of them, outside its text literals, is X
+        /// (O11 only, as the central rule: the ODC Verify of this case is not proved; what has no certain rewrite is refused here).
+        /// A Reactive or Mobile page only: a Traditional page has its own controls.</summary>
+        private void BreaksAndRows(ScreenHtml.Node top)
+        {
+            if (reading.RootKind is "WebScreen" or "WebBlock") return;
+            foreach (var (node, _) in ScreenHtmlText.Elements(top)) {
+                if (!editedNodes.Contains(node)) continue;
+                var read = node.Get("k") is { } k ? ReadNode(k) : null;
+                if (node.Tag == "br" && node.Get("k") == null) {
+                    node.Tag = "div";
+                    Result.Normalized.Add(new JsonObject { ["code"] = ScreenHtmlEdit.BreakContainer, ["element"] = "a new <br> at line " + node.Line.ToString(CultureInfo.InvariantCulture),
+                        ["from"] = "<br/>", ["to"] = "<div/>", ["note"] = "the platform has no HTML element br: a line break is an empty Container, as the document form writes it" });
+                    continue;
+                }
+                // HTML_TYPE_UNQUALIFIED: a declaration's type qualified with its producer (type="SSAMCoverageSoapWire.Cliente Identifier",
+                // round 8bc99ec2 of 25/10: "names nothing for DataType") is the type of that name the page resolves: the name as
+                // the reading writes it, when the rest resolves, the qualified form does not and the qualifier is the module or the
+                // reference that owns that entity or structure (OwnsType, the rule of TypeResolver.Qualified).
+                if (ScreenHtmlEdit.IsDeclaration(node) && node.Get("type") is { } type && read?.Get("type") != type && type.IndexOf('.') is var dot and > 0
+                    && !m.TryResolve(type, state.Scope, out _) && m.TryResolve(type[(dot + 1)..], state.Scope, out _)) {
+                    if (!OwnsType(type[..dot], type[(dot + 1)..])) {
+                        // Review W3-EDIT, 5: a qualifier that owns no type of that name names nothing: refused here, before the build, with
+                        // the type of that name the page has (never written for the author: the qualifier may mean another one).
+                        Problem(ScreenHtmlEdit.NameUnknown, AtId(node.Get("k") ?? ""), node.Get("k"),
+                            "type=\"" + type + "\" on <" + node.Tag + " name=\"" + node.Get("name") + "\">: " + type[..dot] + " is neither this module nor a reference that has " + type[(dot + 1)..] + " (a type is named without its producer)",
+                            "write type=\"" + type[(dot + 1)..] + "\" if the " + type[(dot + 1)..] + " the page has is the one meant, or reference the producer that has it");
+                        continue;
+                    }
+                    var qualifier = type[..dot];
+                    node.Attributes[node.Attributes.FindIndex(x => x.Key == "type")] = new("type", type[(dot + 1)..]);
+                    Result.Normalized.Add(new JsonObject { ["code"] = ScreenHtmlEdit.TypeUnqualified, ["k"] = node.Get("k"), ["from"] = "type=\"" + type + "\"", ["to"] = "type=\"" + type[(dot + 1)..] + "\"",
+                        ["note"] = "the type " + type[(dot + 1)..] + " of " + qualifier + " is the one the page resolves by that name: written as the reading writes it" });
+                    continue;
+                }
+                if (node.Tag != "select" || node.Get("options") is not { Length: > 0 } options || Anvil.Core.KernelLane.Current == "odc") continue;
+                var list = options.Trim();
+                for (var a = 0; a < node.Attributes.Count; a++) {
+                    var (name, value) = node.Attributes[a];
+                    if (name is not ("value" or "label") || read?.Get(name) == value || !Anvil.Core.PreflightRules.DropdownItemScopeRules.ReadsCurrent(list, value)) continue;
+                    var where = node.Get("k") is { } own ? "<select k=\"" + own + "\">" : "a new <select> (line " + node.Line.ToString(CultureInfo.InvariantCulture) + ")";
+                    if (Anvil.Core.PreflightRules.DropdownItemScopeRules.Bare(list, value) is not { } bare) {
+                        Problem(Anvil.Core.PreflightRules.DropdownItemScopeRules.Code, AtId(node.Get("k") ?? ""), node.Get("k"),
+                            name + "=\"" + Clip(value) + "\" on " + where + " reads " + list + ".Current; value and label are evaluated per element of options, where only the element's attributes are names (the Verify cannot identify " + list + " there)",
+                            "read the element's attributes: Entity.Attribute for an aggregate, Attribute for a list of records");
+                        continue;
+                    }
+                    node.Attributes[a] = new(name, bare);
+                    Result.Normalized.Add(new JsonObject { ["code"] = Anvil.Core.PreflightRules.DropdownItemScopeRules.Code, ["k"] = node.Get("k"), ["from"] = name + "=\"" + value + "\"", ["to"] = name + "=\"" + bare + "\"",
+                        ["note"] = "the " + name + " of a Dropdown is evaluated per element of its options (" + list + "): every " + list + ".Current. of it is the element's attribute (the Verify of O11 refuses the List there)" });
+                }
+            }
+        }
+
+        // Review W3-EDIT, 5: whether the qualifier of a qualified type names the module or the reference that owns the entity or
+        // structure the rest names (TypeResolver.Qualified, the same rule in the type text): any other qualifier stays as written.
+        private bool OwnsType(string qualifier, string rest)
+        {
+            var name = System.Text.RegularExpressions.Regex.Replace(rest, @"\s+(Identifier|List|Record)$", "", System.Text.RegularExpressions.RegexOptions.IgnoreCase).Trim();
+            if (!m.TryResolve(name, state.Scope, out var target) || m.IndexOf(target) is not (var i and >= 0)) return false;
+            if (!(m.kind[i].Contains("Entity", StringComparison.Ordinal) || m.kind[i].Contains("Structure", StringComparison.Ordinal))) return false;
+            for (var p = m.parent[i]; p >= 0; p = m.parent[p])
+                if ((m.role[p] == "reference" || m.parent[p] < 0) && string.Equals(m.display[p], qualifier, StringComparison.OrdinalIgnoreCase)) return true;
+            return false;
+        }
+
+        /// <summary>C-03 (F-FT-09, 27/10, P0), the edit form of TraditionalDocumentRules.ThroughList: in a Traditional page, an
+        /// event argument the edit writes (a new element, or an event it changed) inside a row of a list-records or table-records
+        /// reads the row clicked through the list widget (&lt;List&gt;.List.Current), never through the source's Current (the last
+        /// row at the postback). A new list without id is named (the first free ListRecordsN/TableRecordsN of the page) so its
+        /// rows can name it. Listed in normalized (HTML_LIST_ROW); an argument the reading already had is left as it is.</summary>
+        private void ListRowArguments(ScreenHtml.Node top)
+        {
+            if (reading.RootKind is not ("WebScreen" or "WebBlock")) return;
+            JsonObject? note = null;
+            HashSet<string>? names = null;
+            string Free(string prefix)
+            {
+                names ??= new HashSet<string>(ScreenHtmlText.Elements(top).SelectMany(e => new[] { e.Node.Get("id"), e.Node.Get("name") }).OfType<string>(), StringComparer.OrdinalIgnoreCase);
+                var n = 1; while (names.Contains(prefix + n)) n++;
+                names.Add(prefix + n);
+                return prefix + n;
+            }
+            void Walk(ScreenHtml.Node node, List<(string Source, string List)> rows)
+            {
+                foreach (var child in node.Children) {
+                    if (child.IsText) continue;
+                    var opened = false;
+                    if (child.Tag is "list-records" or "table-records" && child.Get("source") is { } source) {
+                        var name = child.Get("id");
+                        if (name == null && child.Get("k") == null && editedNodes.Contains(child)) {
+                            name = Free(child.Tag == "list-records" ? "ListRecords" : "TableRecords");
+                            child.Attributes.Add(new("id", name));
+                        }
+                        if (name != null) { rows.Add((source, name)); opened = true; }
+                    }
+                    if (rows.Count > 0 && editedNodes.Contains(child))
+                        for (var a = 0; a < child.Attributes.Count; a++) {
+                            var (attribute, value) = child.Attributes[a];
+                            if (!(attribute is "onclick" or "onchange" or "onnotify" || attribute.StartsWith('@'))) continue;
+                            if (child.Get("k") is { } k && ReadNode(k)?.Get(attribute) == value) continue;
+                            if (!ScreenHtml.TryCall(value, out var target, out var arguments) || arguments.Count == 0) continue;
+                            var written = arguments.Select(x => {
+                                var v = x.Value;
+                                for (var r = rows.Count - 1; r >= 0; r--) v = Anvil.Core.TraditionalDocumentRules.ThroughList(v, rows[r].Source, rows[r].List);
+                                return (x.Param, v);
+                            }).ToList();
+                            var call = ScreenHtml.Call(target, written);
+                            if (call == value) continue;
+                            child.Attributes[a] = new(attribute, call);
+                            if (note == null) {
+                                note = new JsonObject { ["code"] = ScreenHtmlEdit.ListRow, ["count"] = 0, ["lines"] = new JsonArray(), ["note"] = Anvil.Core.TraditionalDocumentRules.RowWhy };
+                                Result.Normalized.Add(note);
+                            }
+                            note["count"] = note["count"]!.GetValue<int>() + 1;
+                            if (note["lines"]!.AsArray().Count < 6) note["lines"]!.AsArray().Add(attribute + "=\"" + value + "\" -> " + attribute + "=\"" + call + "\"");
+                        }
+                    Walk(child, rows);
+                    if (opened) rows.RemoveAt(rows.Count - 1);
+                }
+            }
+            Walk(top, []);
         }
 
         /// <summary>L3d: what a new element of an edit writes that the platform of this lane has no property for, normalized as the
@@ -454,7 +721,7 @@ public sealed partial class ScreenHtmlModule<T>
             var changed = new List<(ScreenHtml.Node, List<KeyValuePair<string, string>>, List<KeyValuePair<string, string>>)>();
             if (theme == null || !OpRoot()) return changed;
             var top = merged.Children.First(c => !c.IsText);
-            var style = top.Children.FirstOrDefault(c => c.Tag == "style");
+            var style = top.Children.FirstOrDefault(c => c.Tag == "style" && !ScreenHtmlEdit.IsThemeStyle(c));
             var sheet = style == null ? null : string.Concat(style.Children.Select(c => c.Text));
             var map = new Dictionary<ScreenHtml.Node, Anvil.Core.DomNode>(ReferenceEqualityComparer.Instance);
             Anvil.Core.ScreenVisual.AuthorDom(top, map);
@@ -771,6 +1038,7 @@ public sealed partial class ScreenHtmlModule<T>
             CheckNames();
             CheckFixedNames();
             CheckDestinations();
+            CheckDestinationInputs();
             CheckBlocks();
             CheckArguments();
             CheckLiterals();
@@ -1177,19 +1445,33 @@ public sealed partial class ScreenHtmlModule<T>
         //   is (if, list, bind, options, content) is not one of these.
         // Only what the edit writes new is judged: an attribute the reading wrote stays as it was.
         public const string PropertyUnknown = "HTML_PROPERTY_UNKNOWN", ValueEmpty = "HTML_VALUE_EMPTY";
+        // C-01 (b), F-FitBody-40 (27/10): the short form of an aggregate (from, join, where, sort, group) on an aggregate of the
+        // reading. Each was HTML_PROPERTY_UNKNOWN with a patch that removed it, and that "verified" patch left <aggregate k name
+        // max/>: no source, filter or sort. They are no property to remove but the aggregate's data, which an edit writes in its
+        // long-form parts: one HTML_DATA_EDIT on the aggregate, the route in its fix, never a patch. On a new aggregate they say
+        // nothing more than its HTML_DATA_NEW.
+        public const string DataEdit = "HTML_DATA_EDIT";
+        internal static readonly string[] AggregateShortForm = ["from", "join", "where", "sort", "group"];
         private void CheckPlatformProperties(bool created = false)
         {
             foreach (var (id, element) in edited.Elements) {
                 if (element.Kind is "os-opaque" or "Content" or "PlaceholderContentWidget" || IsStructural(id) || created && !IsNew(id)) continue;
                 var before = IsNew(id) ? null : model.Elements.GetValueOrDefault(id);
                 if (!IsNew(id) && before == null || !idNodes.TryGetValue(id, out var node)) continue;
+                var shortForm = element.Kind == "ScreenAggregate" ? AggregateShortForm.Where(a => node.Get(a) != null).ToList() : [];
+                if (shortForm.Count > 0 && !IsNew(id) && !created)
+                    ProblemOnce(DataEdit, AtId(id), id, "<aggregate k=\"" + id + "\"> writes " + string.Join(", ", shortForm.Select(a => a + "=\"" + Clip(node.Get(a)!) + "\""))
+                        + ": that is the short form a new aggregate takes in a document; an aggregate of the reading is edited in its long-form parts (os-AliasedSource, os-Join, os-Filter, os-Sort), as ssam_map view html writes it, so these attributes would change nothing of it"
+                        + (node.Children.Any(c => !c.IsText) ? "" : ", and an aggregate sent without its parts would lose them"),
+                        "send the aggregate as the reading writes it, with its parts and their k, and change a part by its k: the os-Condition of an os-Filter, the os-Attribute or os-SortDirection of an os-Sort, the os-Condition or os-JoinType of an os-Join;"
+                        + " a part the aggregate does not have (another source, a join, a filter, a sort) is not created by an edit (HTML_DATA_NEW). Nothing of the aggregate is patched away.");
                 var mode = IsData(element.Kind) ? ScreenHtmlModuleMode.Data : ScreenHtmlModuleMode.Widget;
                 T? sample = null; var looked = false;
                 foreach (var (fact, value) in element.Facts.ToList()) {
                     if (!fact.StartsWith("p:", StringComparison.Ordinal) || fact is "p:SourceBlock" or "p:Name" or "p:Tag" || value.Length < 2 || value[1] != ':') continue;
                     if (before != null && before.Facts.GetValueOrDefault(fact) == value) continue;
                     var property = fact[2..];
-                    if (AttributeIn(node, element.Kind, property, mode) is not { } attribute) continue;
+                    if (AttributeIn(node, element.Kind, property, mode) is not { } attribute || shortForm.Contains(attribute, StringComparer.Ordinal)) continue;
                     // F2 judged this attribute first (CheckProperties, the one property model): its problem is the one of this
                     // attribute (T16: one problem per attribute, never two codes for one value), and the certain patch this rule
                     // knows goes on it (PlatformOnce), so nothing of either rule is lost.
@@ -1251,6 +1533,7 @@ public sealed partial class ScreenHtmlModule<T>
                 // os-ActionConnector of a Traditional screen) the platform refuses its create after the build.
                 foreach (var (fact, value) in element.Facts) {
                     if (!fact.StartsWith("x:", StringComparison.Ordinal) || before?.Facts.Values.Contains(value) == true) continue;
+                    if (shortForm.Contains(value[..value.IndexOf('\n')], StringComparer.Ordinal)) continue;
                     // A control attribute of the language (enabled, disabled, required) on a widget that has no such property (no
                     // Upload has Enabled, in either lane) is no HTML attribute to keep: refused, never an extended property.
                     if (value[..value.IndexOf('\n')] is "enabled" or "disabled" or "required" && mode == ScreenHtmlModuleMode.Widget && element.Kind != "AdvancedHtml"
@@ -1329,6 +1612,16 @@ public sealed partial class ScreenHtmlModule<T>
                         || fact.Contains(":p:", StringComparison.Ordinal) || value.Length == 0 || before?.Facts.GetValueOrDefault(fact) == value) continue;
                     if (value[0] == '?') { Ambiguous(id, node, where, value[1..]); continue; }
                     if (m.IndexOf(value) is not (var i and >= 0)) continue;
+                    // F10 (round 7304ec8c of 25/10, the edit form of C-34): the event of an HTML element runs a screen action (its
+                    // Handler); a screen is no Handler of it ("IMobileScreen cannot be used as the value for the IEvent.Handler
+                    // property in a IAdvancedHtml", after the build). A Link or a Button opens a screen.
+                    if (element.Kind == "AdvancedHtml" && fact.StartsWith("hev:", StringComparison.Ordinal) && (m.role[i] == "screen" || m.kind[i].EndsWith("ScreenSignature", StringComparison.Ordinal))) {
+                        ProblemOnce(Anvil.Core.ScreenDocument.EventOpensScreen, AtId(id), id.StartsWith('+') ? null : id,
+                            fact[4..] + " of " + (id.StartsWith('+') ? "a new <" + node.Tag + "> (line " + node.Line.ToString(CultureInfo.InvariantCulture) + ")" : "<" + node.Tag + "> k=\"" + id + "\"")
+                                + " opens the screen " + m.display[i] + ": the event of an HTML element runs a screen action of " + reading.Root + ", never a screen",
+                            "write the element as <a> or <button> (they open a screen, their content kept), or declare a screen action that navigates (`action " + reading.Root + ".Go" + m.display[i] + "` with `navigate " + m.display[i] + "(...)`) and name it");
+                        continue;
+                    }
                     var written = node.Attributes.FirstOrDefault(a => (a.Key.StartsWith("on", StringComparison.Ordinal) && !a.Key.Contains('.') || a.Key.StartsWith('@'))
                         && ScreenHtml.TryCall(a.Value, out var called, out _) && m.TryResolveDestination(called.Trim(), state.Scope, out var hit) && hit == value);
                     if (written.Key == null || !ScreenHtml.TryCall(written.Value, out var name, out _)) continue;
@@ -1362,6 +1655,41 @@ public sealed partial class ScreenHtmlModule<T>
             }
             // What an event runs: a screen (of the module or of a reference), a screen action of this page, a System destination.
             bool Runs(int j) => NameResolution.IsEventDestination(m.kind[j], m.role[j], m.root[j] == state.Root && j != state.Root, m.display[j]);
+        }
+
+        // F10: the arguments of an event against the inputs of its destination (a screen or a screen action of this module, as
+        // the module is when the edit runs: the inputs an earlier op of the job declared included). An argument the destination
+        // has no input for was refused by the platform at the set, after the build ("the destination of ev:OnClick on the new
+        // element has no input PedidoId", 4 rounds of 25/10): said here, before anything is written, with the inputs the
+        // destination has. A mandatory input the event leaves out stays the Verify's (ArgumentRequiredExpression): a later op of
+        // the same job may make it optional.
+        private void CheckDestinationInputs()
+        {
+            foreach (var (id, element) in edited.Elements) {
+                if (!idNodes.TryGetValue(id, out var node)) continue;
+                var before = IsNew(id) ? null : model.Elements.GetValueOrDefault(id);
+                foreach (var (fact, value) in element.Facts) {
+                    if (!(fact.StartsWith("ev:", StringComparison.Ordinal) || fact.StartsWith("h:", StringComparison.Ordinal) || fact.StartsWith("hev:", StringComparison.Ordinal))
+                        || fact.Contains(":a:", StringComparison.Ordinal) || fact.Contains(":p:", StringComparison.Ordinal) || value.Length == 0 || value[0] == '?') continue;
+                    var passed = element.Facts.Keys.Where(f => f.StartsWith(fact + ":a:", StringComparison.Ordinal)).Select(f => f[(fact.Length + 3)..]).ToList();
+                    // What the reading had stays as it was: only an event the edit wrote or changed is judged.
+                    if (before != null && before.Facts.GetValueOrDefault(fact) == value
+                        && passed.All(p => before.Facts.GetValueOrDefault(fact + ":a:" + p) == element.Facts[fact + ":a:" + p])
+                        && before.Facts.Keys.Count(f => f.StartsWith(fact + ":a:", StringComparison.Ordinal)) == passed.Count) continue;
+                    if (m.IndexOf(value) is not (var d and >= 0) || !(m.role[d] == "screen" || m.role[d] == "action")) continue;
+                    // The inputs from the model (the walk keeps the parameters of an action out of it).
+                    var names = m.r.ChildrenOf(m.nodes[d]).Where(c => m.r.KindOf(c) == "InputParameter").Select(c => m.r.DisplayOf(c)).ToList();
+                    var where = id.StartsWith('+') ? "a new " + element.Kind + " (line " + node.Line.ToString(CultureInfo.InvariantCulture) + ")" : element.Kind + " k=\"" + id + "\"";
+                    var destination = m.display[d];
+                    foreach (var param in passed.Where(p => !names.Contains(p, StringComparer.Ordinal))) {
+                        var certain = ScreenHtmlEdit.Certain(param, names);
+                        ProblemOnce(ScreenHtmlEdit.NameUnknown, AtId(id), id.StartsWith('+') ? null : id,
+                            "the event of " + where + " passes " + param + " to " + destination + ", which has no input " + param + " (its inputs: " + (names.Count == 0 ? "none" : string.Join(", ", names)) + ")",
+                            certain != null ? "write " + certain + " = ... (the input of " + destination + " it means)"
+                            : "declare <input name=\"" + param + "\" type=\"...\"/> in the edit of " + destination + " in this job (it is declared before the pages that use it), or pass one of its inputs");
+                    }
+                }
+            }
         }
 
         private readonly HashSet<string> Noted = new(StringComparer.Ordinal);
@@ -1494,9 +1822,16 @@ public sealed partial class ScreenHtmlModule<T>
                     if (!fact.StartsWith("p:", StringComparison.Ordinal) && m.Destination(unresolved, state.Scope, full: false).Outcome == NameOutcome.Ambiguous) continue;
                     var candidates = Candidates(fact);
                     var certain = ScreenHtmlEdit.Certain(unresolved, candidates);
+                    // F10: a destination that names nothing is a screen action the page does not have yet (the rounds of 25/10:
+                    // "closest: Pedidos, Cliente, Clientes" for 'AplicarPeriodo', screens offered for an action): the fix says to
+                    // declare it, and names a screen only when one is certainly meant.
+                    var destination = !fact.StartsWith("p:", StringComparison.Ordinal);
                     var nameless = Problem(ScreenHtmlEdit.NameUnknown, AtId(id), id.StartsWith('+') ? null : id,
-                        "'" + unresolved + "' names nothing " + (fact.StartsWith("p:", StringComparison.Ordinal) ? "for " + fact[2..] : "as the destination of " + fact) + " from " + reading.Root,
-                        certain != null ? "write '" + certain + "'" : "closest: " + string.Join(", ", ScreenHtmlEdit.Closest(unresolved, candidates)));
+                        "'" + unresolved + "' names nothing " + (destination ? "as the destination of " + fact : "for " + fact[2..]) + " from " + reading.Root
+                            + (destination ? ": " + reading.Root + " has no screen action and the module no screen of that name" : ""),
+                        certain != null ? "write '" + certain + "'"
+                        : destination ? "declare the screen action in a logic op of this job (`action " + reading.Root + "." + unresolved + "`), or name a screen (" + (reading.RootKind.StartsWith("Web", StringComparison.Ordinal) ? "WebScreen" : "MobileScreen") + ":<Screen>)"
+                        : "closest: " + string.Join(", ", ScreenHtmlEdit.Closest(unresolved, candidates)));
                     // R2-A: a destination's nearest destinations, each with its exact attribute (as an ambiguous name's).
                     if (nameless != null && !fact.StartsWith("p:", StringComparison.Ordinal) && idNodes.TryGetValue(id, out var holder)
                         && holder.Attributes.FirstOrDefault(a => (a.Key.StartsWith("on", StringComparison.Ordinal) && !a.Key.Contains('.') || a.Key.StartsWith('@'))
@@ -2062,7 +2397,7 @@ public sealed partial class ScreenHtmlModule<T>
                 var reverse = ScreenHtmlTables.Reverse(kind, ScreenHtmlModuleMode.Widget);
                 if (node.Attributes.Any(a => a.Key == "os-Style" || reverse.GetValueOrDefault(a.Key) == "Style")) continue;   // the author's class
                 var born = CurrentFacts(id, kind).GetValueOrDefault("p:Style") is { Length: > 1 } fact && fact[0] == 'e' ? fact[2..] : "";
-                if (Anvil.Core.ScreenVisual.StudioClassOf(kind, born) is not { } studio) continue;
+                if (Anvil.Core.ScreenVisual.StudioClassOf(kind, born, kind == "List" ? Anvil.Core.ScreenVisual.ListTagOf(node) : null) is not { } studio) continue;
                 var attribute = new KeyValuePair<string, string>(ScreenHtmlTables.AttributeOf(kind, "Style", ScreenHtmlModuleMode.Widget, false), ScreenHtml.Sugar(studio.Expression));
                 var at = engineMarks.FindIndex(e => ReferenceEquals(e.Node, node));
                 if (at >= 0) {
@@ -2073,6 +2408,111 @@ public sealed partial class ScreenHtmlModule<T>
                 if (Anvil.Core.ScreenVisual.CountStudioClass(notes, studio, "a new " + studio.Kind + " at line " + node.Line.ToString(CultureInfo.InvariantCulture)) is { } note)
                     Result.Normalized.Add(note);
             }
+        }
+
+        // ---- F8: the Lists of a table part (ScreenVisual.Tables) ------------------------------------------------------------
+        /// <summary>Every List of the merged page whose element is not a div and that the edit writes (a new one) or touches (an
+        /// element of its table, or the List itself, is in the edit) gets what the platform needs to render that element: Mode
+        /// Custom (in Mode Default the runtime renders a div, which in a table boxes the rows into the first column) and, a table
+        /// part, disable-virtualization True and its display (the rows marker where the theme the page shows carries the native
+        /// layout block, else the List's inline style): ScreenVisual.TableListOf, the rule the document form and the fragment
+        /// follow. Written as attributes of the engine (as the markers: the checks and the patches read the author's text), each
+        /// said in normalized (LIST_MODE_CUSTOM, LIST_RENDERS_ALL_ROWS on a new List, TABLE_LIST_REPAIRED on one with k) and in
+        /// the receipt's visual.tables. A screen whose edit touches no table keeps its Lists as they are.</summary>
+        private void TableLists()
+        {
+            if (reading.RootKind is "WebScreen" or "WebBlock") return;   // a Traditional page has no List widget (list-records, table-records)
+            var parents = ParentsOf();
+            var reachable = theme?.Reachable == true;
+            var notes = new Dictionary<string, JsonObject>(StringComparer.Ordinal);
+            void Note(string code, string line, string text)
+            {
+                if (!notes.TryGetValue(code, out var note)) {
+                    notes[code] = note = new JsonObject { ["code"] = code, ["element"] = "List", ["count"] = 0, ["lines"] = new JsonArray(), ["note"] = text };
+                    Result.Normalized.Add(note);
+                }
+                note["count"] = note["count"]!.GetValue<int>() + 1;
+                if (note["lines"]!.AsArray().Count < 10) note["lines"]!.AsArray().Add(line);
+            }
+            bool Touched(ScreenHtml.Node node) => TouchesTable(node, parents);
+            var native = Anvil.Core.ScreenVisual.NativeTableParts(merged);   // the native Table is no List (ScreenHtmlTables.NativeTable)
+            foreach (var (node, _) in ScreenHtmlText.Elements(merged).ToList()) {
+                if (node.Get("list") == null || native.Contains(node)) continue;
+                var tag = Anvil.Core.ScreenVisual.ListTagOf(node);
+                if (!Anvil.Core.ScreenVisual.NeedsCustomMode(tag)) continue;
+                var k = node.Get("k");
+                // Review W3-EDIT, 2: a List of the reading is repaired only when it is a table part (what its reading says it renders
+                // wrong, HTML_TABLE_LIST_VIRTUALIZED) of a table the edit touches; any other List of the reading keeps its Mode.
+                if (k != null && (!Anvil.Core.ScreenVisual.IsTablePart(tag) || !Touched(node))) continue;
+                var at = engineMarks.FindIndex(e => ReferenceEquals(e.Node, node));
+                // What the element says now, with the markers the engine already decided on it.
+                var probe = new ScreenHtml.Node { Tag = node.Tag, Line = node.Line, Column = node.Column, Attributes = at >= 0 ? engineMarks[at].Engine.ToList() : node.Attributes.ToList() };
+                var line = k != null ? "k=\"" + k + "\"" : "a new List at line " + node.Line.ToString(CultureInfo.InvariantCulture);
+                List<KeyValuePair<string, string>> decided;
+                IReadOnlyList<string> says;
+                var rule = "";
+                if (Anvil.Core.ScreenVisual.TableListOf(probe, reachable) is { } needs) { decided = needs.Attributes.ToList(); says = needs.Says; rule = needs.Rule; }
+                else if (!Anvil.Core.ScreenVisual.IsTablePart(tag) && probe.Get(Anvil.Core.ScreenVisual.ModeAttribute) != Anvil.Core.ScreenVisual.CustomMode) {
+                    decided = probe.Attributes.Where(a => a.Key != Anvil.Core.ScreenVisual.ModeAttribute).Append(new(Anvil.Core.ScreenVisual.ModeAttribute, Anvil.Core.ScreenVisual.CustomMode)).ToList();
+                    says = ["Mode Custom"];
+                }
+                else continue;
+                if (at >= 0) engineMarks[at] = (node, engineMarks[at].Author, decided);
+                else engineMarks.Add((node, node.Attributes.ToList(), decided));
+                if (decided.Any(a => Anvil.Core.ScreenVisual.MarkerOf(a.Key) != null)) CarriesMarkers = true;
+                var detail = string.Join("; ", says);
+                if (k != null) Note(Anvil.Core.ScreenVisual.TableListRepaired, line,
+                    "a List of this page whose element is not a div, in a table the edit touches, repaired: " + detail + " (the rule of every form that writes a List of a table part: ScreenVisual.TableListOf)");
+                else {
+                    if (says.Any(s => s.StartsWith("Mode Custom", StringComparison.Ordinal)))
+                        Note(Anvil.Core.ScreenVisual.ListModeCustom, line, "a new List whose element is not a div is Mode Custom: in Mode Default the runtime renders it as a div (the Studio's rule: \"Default mode sets tag as div\"), which in a table boxes all the rows into the first column");
+                    if (Anvil.Core.ScreenVisual.IsTablePart(tag))
+                        Note(Anvil.Core.ScreenVisual.ListRendersAllRows, line, "a new List of a table part renders every row and lays out as that part: " + detail);
+                }
+                if (Anvil.Core.ScreenVisual.IsTablePart(tag))
+                    Result.Tables.Add(Anvil.Core.ScreenVisual.TableEntry(reading.Root, line, tag, decided.Any(a => Anvil.Core.ScreenVisual.MarkerOf(a.Key) == Anvil.Core.ScreenVisual.RowsMarker),
+                        rule.Length > 0 ? rule : reachable ? "theme" : "inline", theme?.Name, says));
+            }
+        }
+
+        private Dictionary<ScreenHtml.Node, ScreenHtml.Node?> ParentsOf()
+        {
+            var parents = new Dictionary<ScreenHtml.Node, ScreenHtml.Node?>(ReferenceEqualityComparer.Instance);
+            foreach (var (node, parent) in ScreenHtmlText.Elements(merged)) parents[node] = parent;
+            return parents;
+        }
+
+        // Whether the edit touches the table of an element: the element or one around it is in the edit, or an element of its
+        // nearest <table> (the element itself when it is in none).
+        private bool TouchesTable(ScreenHtml.Node node, Dictionary<ScreenHtml.Node, ScreenHtml.Node?> parents)
+        {
+            var table = node;
+            for (var at = node; at != null && parents.TryGetValue(at, out var up); at = up) {
+                if (editedNodes.Contains(at)) return true;
+                if (at.Tag == "table" && ReferenceEquals(table, node)) table = at;
+            }
+            return ScreenHtmlText.Elements(table).Any(x => editedNodes.Contains(x.Node));
+        }
+
+        /// <summary>F8: a &lt;tr list&gt; of a table the edit touches whose cells are the record's becomes the List of its row group
+        /// (ScreenVisual.LiftRowLists: the List keeps its key, its Tag becomes tbody, the row is a new HTML element inside it), said
+        /// in normalized (TABLE_ROW_LIST_LIFTED). Runs on the merged text before it is decoded, like the other normalizations.</summary>
+        private void LiftRows()
+        {
+            if (reading.RootKind is "WebScreen" or "WebBlock") return;   // a Traditional page has no List widget (list-records, table-records)
+            var parents = ParentsOf();
+            var lifted = Anvil.Core.ScreenVisual.LiftRowLists(merged, row => TouchesTable(row, parents));
+            if (lifted.Count == 0) return;
+            var note = new JsonObject { ["code"] = Anvil.Core.ScreenVisual.RowListLifted, ["element"] = "List", ["count"] = lifted.Count, ["lines"] = new JsonArray(),
+                ["note"] = "a <tr list> whose children are cells is one row with the cells of every record (a List repeats its content inside its own element): written as <tbody list><tr>cells</tr></tbody>, one row per record; the List keeps its key" };
+            foreach (var (row, body, dropped, onRow) in lifted) {
+                var edit = editOf.TryGetValue(row, out var e) ? e : editOf.Values.DefaultIfEmpty(0).Min();
+                foreach (var node in new[] { row, body }) { editedNodes.Add(node); editOf[node] = edit; }
+                var where = body.Get("k") is { } k ? "k=\"" + k + "\"" : "a new <tr list> at line " + row.Line.ToString(CultureInfo.InvariantCulture);
+                if (note["lines"]!.AsArray().Count < 10) note["lines"]!.AsArray().Add(where);
+                Anvil.Core.ScreenVisual.SayLiftedClasses(note, where, dropped, onRow);
+            }
+            Result.Normalized.Add(note);
         }
 
         // ---- facts --------------------------------------------------------------------------------------------------------
@@ -2195,7 +2635,7 @@ public sealed partial class ScreenHtmlModule<T>
         }
 
         // The value to write for a fact (type:text), or the default of the property when the edit dropped it.
-        private ScreenHtmlValue<T> Value(string? fact, string kind, string property, string? raw, bool inPopup = false)
+        private ScreenHtmlValue<T> Value(string? fact, string kind, string property, string? raw, bool inPopup = false, bool inForm = false)
         {
             if (fact == null) {
                 var type = model.Elements.Values.SelectMany(e => e.Facts).Where(f => f.Key == "p:" + property).Select(f => f.Value[0]).FirstOrDefault('e');
@@ -2203,7 +2643,10 @@ public sealed partial class ScreenHtmlModule<T>
                 if (property == "Transition") shapeType = 'v';
                 if (shapeType is 'r' or '?') return new ScreenHtmlValue<T>('?', "");
                 if (shapeType == 'l') return new ScreenHtmlValue<T>('l', "", Targets: []);
-                return new ScreenHtmlValue<T>(shapeType, Defaults.DefaultOf(kind, property, shapeType, inPopup));
+                var wanted = Defaults.DefaultOf(kind, property, shapeType, inPopup, inForm);
+                // A number or member whose default is no value (a Traditional input's Max Length, C-09) is written empty: null.
+                if (shapeType == 'v' && wanted.Length == 0) return new ScreenHtmlValue<T>('?', "");
+                return new ScreenHtmlValue<T>(shapeType, wanted);
             }
             var t = fact[0]; var text = fact.Length > 2 ? fact[2..] : "";
             if (t == 'r') return Reference(text, raw);
@@ -2351,7 +2794,7 @@ public sealed partial class ScreenHtmlModule<T>
                 if (old.FirstOrDefault(o => o.Key == fact).Value != value) Write(evt, fact[(prefix.Length + 3)..], Value(value, m.r.KindOf(evt), fact[(prefix.Length + 3)..], null), id, fact);
             // A property the edit dropped goes back to its default where the element sits (inside a Popup: the Popup's Transition).
             foreach (var (fact, _) in old.Where(f => f.Key.StartsWith(prefix + ":p:", StringComparison.Ordinal) && !now.ContainsKey(f.Key)))
-                Write(evt, fact[(prefix.Length + 3)..], Value(null, m.r.KindOf(evt), fact[(prefix.Length + 3)..], null, InPopup(id)), id, fact);
+                Write(evt, fact[(prefix.Length + 3)..], Value(null, m.r.KindOf(evt), fact[(prefix.Length + 3)..], null, InPopup(id), InForm(id)), id, fact);
         }
 
         // Whether a fact the edit wrote (a property of the element, p:X, or of one of its events, ev:E:p:X) holds the default of that
@@ -2362,7 +2805,7 @@ public sealed partial class ScreenHtmlModule<T>
             if (fact.StartsWith("p:", StringComparison.Ordinal))
                 return Defaults.DefaultOf(kind, fact[2..], value[0], false) == value[2..];
             if (fact.StartsWith("ev:", StringComparison.Ordinal) && fact.IndexOf(":p:", 3, StringComparison.Ordinal) is var at and > 3)
-                return Defaults.DefaultOf(EventKind(id, fact[3..at]), fact[(at + 3)..], value[0], InPopup(id)) == value[2..];
+                return Defaults.DefaultOf(EventKind(id, fact[3..at]), fact[(at + 3)..], value[0], InPopup(id), InForm(id)) == value[2..];
             return false;
         }
 
@@ -2383,31 +2826,49 @@ public sealed partial class ScreenHtmlModule<T>
             return false;
         }
 
+        // C-02: whether an element of the edited page is a Button or a Link with a Form among its ancestors (through slots and
+        // contents): its click validates the Form by default (ScreenDefaults.FormDefault).
+        private bool InForm(string id)
+        {
+            if (!edited.Elements.TryGetValue(id, out var self) || !ScreenDefaults.ValidatesInForm(self.Kind)) return false;
+            var seen = new HashSet<string>(StringComparer.Ordinal) { id };
+            for (string? p = editedParents.TryGetValue(id, out var first) ? first.Parent : null; p != null && seen.Add(p); p = editedParents.TryGetValue(p, out var up) ? up.Parent : null)
+                if (edited.Elements.TryGetValue(p, out var e) && e.Kind == "Form") return true;
+            return false;
+        }
+
         // The native events of a widget the edit created or moved, at the default of where it now sits (a Transition the edit does
-        // not write: inside a Popup the Popup's, elsewhere the table's), as a widget the Studio creates there has them.
+        // not write: inside a Popup the Popup's, elsewhere the table's; C-02: the Built-in Validations of the click of a Button or a
+        // Link, ValidateAndContinue inside a Form), as a widget the Studio creates there has them.
         private void SettleEvents(string id, ScreenHtmlCanon.Element element)
         {
             var node = objects.TryGetValue(id, out var made) ? made : Index(id) is var at and >= 0 ? movedNodes.GetValueOrDefault(at) ?? m.nodes[at] : null;
             if (node == null) return;
             var inPopup = InPopup(id);
+            var inForm = InForm(id);
             var shape = new Shape();
             m.FactsOf(node, "widget", "settle", new HashSet<T>(m.r.ChildrenOf(node), ReferenceEqualityComparer.Instance), m.r.ParentOf(node), _ => false, shape, [], out var pointers);
             foreach (var (property, evt) in pointers) {
                 var eventKind = m.r.KindOf(evt);
                 var role = ModuleIndex.Roles[ModuleIndex.RoleOf(eventKind, new HashSet<string>(m.r.KindNamesOf(evt), StringComparer.Ordinal))];
                 if (role != "event") continue;
-                var fact = "ev:" + property + ":p:Transition";
-                if (element.Facts.ContainsKey(fact)) continue;
-                var eventShape = new Shape();
-                var facts = m.FactsOf(evt, "event", "settle event", new HashSet<T>(m.r.ChildrenOf(evt), ReferenceEqualityComparer.Instance), node, _ => false, eventShape, [], out _);
-                if (!eventShape.Types.ContainsKey("Transition")) continue;
-                var now = facts.FirstOrDefault(f => f.Name == "Transition");
-                var wanted = Defaults.DefaultOf(eventKind, "Transition", 'v', inPopup);
-                if ((now.Name == null ? "" : now.Text) == wanted || now.Name == null && wanted.Length == 0) continue;
-                current = id.StartsWith('+') ? null : id;
-                Write(evt, "Transition", new ScreenHtmlValue<T>('v', wanted), id, fact);
+                List<Fact>? facts = null; Shape? eventShape = null;
+                foreach (var settled in SettledEventProperties) {
+                    var fact = "ev:" + property + ":p:" + settled;
+                    if (element.Facts.ContainsKey(fact)) continue;
+                    if (facts == null) { eventShape = new Shape(); facts = m.FactsOf(evt, "event", "settle event", new HashSet<T>(m.r.ChildrenOf(evt), ReferenceEqualityComparer.Instance), node, _ => false, eventShape, [], out _); }
+                    if (!eventShape!.Types.ContainsKey(settled)) continue;
+                    var now = facts.FirstOrDefault(f => f.Name == settled);
+                    var wanted = Defaults.DefaultOf(eventKind, settled, 'v', inPopup, inForm);
+                    if ((now.Name == null ? "" : now.Text) == wanted || now.Name == null && wanted.Length == 0) continue;
+                    current = id.StartsWith('+') ? null : id;
+                    Write(evt, settled, new ScreenHtmlValue<T>('v', wanted), id, fact);
+                }
             }
         }
+
+        // The properties of an event whose default depends on where its widget sits (SettleEvents).
+        private static readonly string[] SettledEventProperties = ["Transition", "BuiltInValidations"];
         private string HandlerEventName(T handler)
         {
             var target = m.r.PropertyOf(handler, "Event")?.Invoke();
@@ -2689,6 +3150,12 @@ public sealed partial class ScreenHtmlModule<T>
                             continue;
                         }
                         if (fact == "p:StyleSheet" && a != null && b != null && Squeeze(a) == Squeeze(b)) { Result.Normalized.Add(new JsonObject { ["k"] = e, ["property"] = "StyleSheet", ["note"] = "the CSS was formatted (spaces and lines only)" }); continue; }
+                        // C-14: what the theme does to every part (an @import goes to the top of the theme, #reactContainer is written
+                        // :is(#reactContainer, body), the one stylesheet normalization): the same rules as written, said.
+                        if (ScreenHtmlEdit.IsThemeFact(fact) && a is { Length: >= 2 } && b is { Length: >= 2 } && SameThemeRules(a[2..], b[2..])) {
+                            Result.Normalized.Add(new JsonObject { ["k"] = e, ["property"] = fact, ["note"] = "the theme wrote the part with its own rules (an @import at its top, #reactContainer as :is(#reactContainer, body), the stylesheet normalization): the same rules" });
+                            continue;
+                        }
                         // The one normalization every stylesheet write takes (CssPipeline: shadowed rules out, imports up), when the
                         // edit's sheet reached the plan without it (a rebased sheet): the same CSS in every browser, said.
                         if (fact == "p:StyleSheet" && a is { Length: >= 2 } && b is { Length: >= 2 } && a.StartsWith("t:", StringComparison.Ordinal)
@@ -2839,6 +3306,32 @@ public sealed partial class ScreenHtmlModule<T>
             return false;
         }
         private static string Squeeze(string text) => new(text.Where(c => !char.IsWhiteSpace(c)).ToArray());
+        // C-14: two texts of a theme part with the same rules once the theme's own writing is undone on both (its @import at the top
+        // of the theme, #reactContainer as :is(#reactContainer, body)), or once the edit's goes through the one stylesheet
+        // normalization every theme write takes (CssPipeline).
+        private static bool SameThemeRules(string a, string b)
+        {
+            static string Rules(string text) => string.Join("\n", Anvil.Core.CssCompat.Imports(Anvil.Core.CssCompat.CanvasSelectors(text.Replace("\r\n", "\n", StringComparison.Ordinal)).Css).Others
+                .Split('\n').Select(l => l.Trim()).Where(l => l.Length > 0));
+            if (Rules(a) == Rules(b)) return true;
+            try { return Rules(Anvil.Core.CssPipeline.Normalize(a, new Anvil.Core.CssPipeline.Context("verify"), canvas: true).Css) == Rules(b); }
+            catch (Exception) { return false; }
+        }
+
+        /// <summary>C-14: the parts of the module theme the edit changes (the facts css:theme[:id] of the root), in the order of their
+        /// facts: the id (null: the root's own part) and the CSS the part takes (null: the edit left it out, it goes).</summary>
+        public List<(string? Id, string? Css)> ThemeChanges()
+        {
+            var before = model.Elements.GetValueOrDefault("")?.Facts;
+            var after = edited.Elements.GetValueOrDefault("")?.Facts;
+            var changes = new List<(string? Id, string? Css)>();
+            var facts = (before?.Keys ?? Enumerable.Empty<string>()).Union(after?.Keys ?? Enumerable.Empty<string>()).Where(ScreenHtmlEdit.IsThemeFact).Distinct().OrderBy(f => f, StringComparer.Ordinal);
+            foreach (var fact in facts) {
+                var was = before?.GetValueOrDefault(fact); var now = after?.GetValueOrDefault(fact);
+                if (was != now) changes.Add((ScreenHtmlEdit.ThemeFactId(fact), now?[2..]));
+            }
+            return changes;
+        }
         // An expression fact: an argument (a:, an event's :a:) or a property whose value is an expression (e:).
         private static bool IsExpressionFact(string fact, string value) =>
             fact.StartsWith("a:", StringComparison.Ordinal) || fact.Contains(":a:", StringComparison.Ordinal) || value.StartsWith("e:", StringComparison.Ordinal);

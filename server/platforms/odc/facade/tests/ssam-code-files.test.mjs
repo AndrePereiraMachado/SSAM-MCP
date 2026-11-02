@@ -328,3 +328,34 @@ for (const lane of ['o11', 'odc']) {
     t.diagnostic(`corpus ${lane}: modules=${modules}, actions=${actions}, exact=true, extended=${process.env.SSAM_SPLIT_CORPUS === '1'}`);
   });
 }
+
+// B15 (the proto line's C-10, 968d5605): an image file among the files of a write is the module image named after the file,
+// written before the screens that show it (<img src="fm-hero.png"> names fm_hero), with every bound said at once.
+test('B15 image files: create IImage with the bytes, named after the file, before the screen; every invalid image named', t => {
+  const dir = tmp(t);
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64');
+  const image = path.join(dir, 'fm-hero.png'); fs.writeFileSync(image, png);
+  const digits = path.join(dir, '2x.webp'); fs.writeFileSync(digits, png);
+  const screen = put(dir, 'screen.html', '<screen name="Fitmaker"><img src="fm-hero.png" alt="Hero"/></screen>');
+  const read = readCodeFiles([screen, image, digits]);
+  assert.deepEqual(read.problems, []);
+  assert.deepEqual(read.parts[1].ops, [{ op: 'create', parent: '@espace', type: 'IImage', name: 'fm_hero', args: { binary: png.toString('base64'), originalPath: 'fm-hero.png' } }]);
+  assert.equal(read.parts[2].ops[0].name, '_2x');
+  assert.ok(read.notes.some(n => n.note === `fm-hero.png: module image fm_hero (${png.length} bytes)`), JSON.stringify(read.notes));
+  // The images go before the screen whatever the order of the files.
+  const ops = opsOf(writeCall({ lane: 'o11', module: 'M', files: [screen, image] }));
+  assert.equal(ops[0].op, 'create'); assert.equal(ops[0].type, 'IImage'); assert.equal(ops[0]._from, undefined, 'no field of the job authorizes a fill (R2-1)');
+  assert.ok(ops.findIndex(op => op.op === 'html') > 0, JSON.stringify(ops.map(op => op.op)));
+  // Every bound at once: two files that are one image, a folder, a file over 6 MB, the total over 6 MB.
+  const same = path.join(dir, 'FM-hero.jpg'); fs.writeFileSync(same, png);
+  const folder = path.join(dir, 'folder.png'); fs.mkdirSync(folder);
+  const big = path.join(dir, 'big.png'); fs.writeFileSync(big, ''); fs.truncateSync(big, 6 * 1024 * 1024 + 1);
+  const half = path.join(dir, 'half-a.png'); fs.writeFileSync(half, ''); fs.truncateSync(half, 4 * 1024 * 1024);
+  const other = path.join(dir, 'half-b.png'); fs.writeFileSync(other, ''); fs.truncateSync(other, 4 * 1024 * 1024);
+  const bad = readCodeFiles([image, same, folder, big, half, other, 'relative.png']);
+  assert.deepEqual(bad.problems.map(p => p.at), ['files/1', 'files/2', 'files/3', 'files/5', 'files/6']);
+  assert.match(bad.problems[0].error, /FM-hero.jpg and fm-hero.png are both the module image FM_hero/);
+  assert.match(bad.problems[2].error, /6291457 bytes/);
+  assert.match(bad.problems[3].error, /image files reach/);
+  assert.equal(writeCall({ lane: 'o11', module: 'M', files: [same, folder] }).refusal.code, 'INPUT_INVALID');
+});

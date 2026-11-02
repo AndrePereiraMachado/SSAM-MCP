@@ -1047,6 +1047,24 @@ public static class FlowApplyScenarios
             Assert.Equal(text, Bare(ReadOwned(dir, "fe-new", lane, "FaShop", action).Text));
     }
 
+    // F10 (the owner's rounds 1-4 of 25/10/2026, three rounds lost): `sql -> Cliente` beside records "Cliente" of static entities
+    // of the prototype names the entity; an entity and a structure of the same name stay FLOW_NAME_AMBIGUOUS.
+    public static void ARecordOfAStaticEntityNeverShadowsTheEntityOfASqlOutput(string dir, string fixture, string lane)
+    {
+        static string Ddl(string ddl) => new JsonObject { ["op"] = "spec", ["data"] = new JsonObject { ["ddl"] = ddl } }.ToJsonString();
+        const string Query = "server action FaConsultar\n  out Total: Integer\n  Consulta = sql -> FaCliente max 10\n    | SELECT {FaCliente}.* FROM {FaCliente}\n  assign Total = Consulta.List.Length\n  end\n";
+        var data = Ddl("create entity FaCliente (\n  Id Long Integer identifier auto required,\n  Nome Text(50)\n);\n"
+            + "create static entity FaRotulo (\n  Id Integer identifier required,\n  Label Text(50) required\n)\nvalues\n  FaCliente (Id = 1, Label = \"c\"),\n  FaComum (Id = 2, Label = \"o\");\n"
+            + "create static entity FaEsquema (\n  Id Integer identifier required,\n  Label Text(50) required\n)\nvalues\n  FaCliente (Id = 1, Label = \"c\"),\n  FaComum (Id = 2, Label = \"o\");\n");
+        var accepted = Run(dir, "static-record", $$$"""{"base":"{{{fixture}}}","ops":[{{{data}}},{{{Texts(Query)}}}]}""");
+        Assert.True(accepted["accepted"]!.GetValue<bool>(), accepted.ToJsonString());
+        // Records of static entities with no entity or structure of their name: the rule leaves them alone, still ambiguous. (An
+        // entity and a structure of one name cannot be built: the Studio renames the second at its create and at a rename, also
+        // against a reference's entity; the rule keeps them ambiguous by its own condition.)
+        var records = Refused(dir, "static-only", $$$"""{"base":"{{{fixture}}}","ops":[{{{data}}},{{{Texts(Query.Replace("sql -> FaCliente", "sql -> FaComum"))}}}]}""");
+        Assert.Contains(records, p => p!["code"]?.ToString() == "FLOW_NAME_AMBIGUOUS" && p["message"]!.ToString().Contains("FaComum", StringComparison.Ordinal));
+    }
+
     // A lifecycle event goes to an action of its owner: an entity attribute named like the handler (FaCollision.Loaded) and
     // a same-named handler of another screen are no Destination.
     public static void LifecycleDestinationIgnoresSameNamedEntityFields(string dir, string fixture, string lane)
@@ -1349,8 +1367,9 @@ public static class FlowApplyScenarios
         var noBase = Refused(dir, "dn-nobase", $$$"""{"ops":[{{{DataSpec(block.Replace("Title Text(50)", "Title Text(60)"), null)}}}]}""", basePath);
         var required = Assert.Single(noBase)!;
         Assert.Equal("DDL_BASE_REQUIRED", required["code"]!.ToString());
-        Assert.Contains("Title Text(50)", required["edit"]!["ddl"]!.ToString());
-        Assert.Equal(64, required["edit"]!["basedOn"]!.ToString().Length);
+        Assert.Contains("Title Text(50)", required["current"]!["ddl"]!.ToString());
+        Assert.Null(required["patch"]);
+        Assert.Equal(64, required["current"]!["basedOn"]!.ToString().Length);
         // On the capture the job runs on: no read needed.
         var first = Run(dir, "dn-first", $$$"""{"ops":[{{{DataSpec(block.Replace("Title Text(50)", "Title Text(60)"), baseSha)}}}]}""", basePath);
         Assert.True(first["accepted"]!.GetValue<bool>(), first["policyMessages"]?.ToJsonString() + first["details"]);
@@ -1372,7 +1391,10 @@ public static class FlowApplyScenarios
         Assert.Contains("default 7", now);
         // A read the store does not keep: refused, the Studio's default is not undone.
         var unknown = Refused(dir, "dn-unknown", $$$"""{"ops":[{{{DataSpec(model, new string('b', 64))}}}]}""", Path.Combine(dir, "dn-studio.oml"));
-        Assert.Contains(unknown, p => p!["code"]!.ToString() == "DDL_BASE_UNKNOWN" && p["edit"]?["ddl"]?.ToString().Contains("default 7") == true);
+        Assert.Contains(unknown, p => p!["code"]!.ToString() == "DDL_BASE_UNKNOWN" && p["current"]?["ddl"]?.ToString().Contains("default 7") == true);
+        // C-01: the statements change what the module has, so the module's own basedOn is not certain: no patch, and never
+        // the declarations now in place of the statements.
+        Assert.All(unknown.Where(p => p!["code"]!.ToString().StartsWith("DDL_", StringComparison.Ordinal)), p => Assert.Null(p!["patch"]));
         // A read of another module.
         var other = JsonNode.Parse(ddl.ToJson(store.Adapter))!.AsObject();
         var otherSha = new string('c', 64);
@@ -1381,6 +1403,56 @@ public static class FlowApplyScenarios
         File.WriteAllText(store.DdlPathOf(otherSha), other.ToJsonString());
         var foreign = Refused(dir, "dn-foreign", $$$"""{"ops":[{{{DataSpec(model, otherSha)}}}]}""", Path.Combine(dir, "dn-studio.oml"));
         Assert.Contains(foreign, p => p!["code"]!.ToString() == "DDL_BASE_FOREIGN");
+    }
+
+    // C-01 (a), F-FitBody-21 (27/10): a data text with the statement of a read (-- @key) that adds attributes, plus new
+    // entities and new structures, sent without basedOn. The "verified" patch of DDL_BASE_REQUIRED was `replace /ddl` with the
+    // module's declaration: fix:"apply" sent a job without the new entities, structures and attributes. Now the patch only adds
+    // the basedOn (the statements only add to what the module has, so any read they were written on gives the same edit), every
+    // statement the job sent stays, and the patched job delivers all of it. A statement that changes what the module has cannot
+    // take the module's own basedOn for sure: no patch, the declarations now come in `current`, only to read.
+    public static void ADataRefusalForAMissingBasedOnKeepsEveryStatementOfTheJob(string dir, string fixture, string lane)
+    {
+        Run(dir, "fb21-base", $$$"""{"base":"{{{fixture}}}","ops":[{{{Spec}}}]}""");
+        var basePath = Path.Combine(dir, "fb21-base.oml");
+        var block = new ModelHost(Path.Combine(dir, "work")).BuildDdl(File.ReadAllBytes(basePath), "", lane).Blocks.Single(b => b.Name == "FaOrder").Text;
+        Assert.Contains("Title Text(50)", block);
+        // The statement of the read with two attributes more at its end, as FBContent with its six.
+        var lines = block.Split('\n').ToList();
+        var last = lines.FindLastIndex(l => l.StartsWith("  ", StringComparison.Ordinal) && !l.StartsWith("  ///", StringComparison.Ordinal) && l.Contains(" -- @", StringComparison.Ordinal) && !l.Contains(" index ", StringComparison.Ordinal));
+        var cut = lines[last].LastIndexOf(" -- @", StringComparison.Ordinal);
+        lines[last] = lines[last][..cut] + "," + lines[last][cut..];
+        lines.InsertRange(last + 1, ["  /// Position of the order in its list.", "  ProgramOrder Integer default 0,", "  /// The order shown first.", "  IsFeatured Boolean required default False"]);
+        var text = string.Join('\n', lines) + "\n\n"
+            + "/// A level of the orders.\ncreate entity FaLevel label Label (\n  Id Long Integer identifier auto required,\n  Label Text(30) required,\n  SortOrder Integer required default 0\n);\n\n"
+            + "/// A tag of an order.\ncreate entity FaTag label Name (\n  Id Long Integer identifier auto required,\n  Name Text(40) required\n);\n\n"
+            + "/// One row of the summary.\ntype FaRow = {\n  /// The title.\n  Title: Text(50);\n  /// How many.\n  Qty: Integer;\n}\n\n"
+            + "/// The totals.\ntype FaTotals = {\n  /// Seconds.\n  Seconds: Integer;\n}\n";
+        var job = $$$"""{"ops":[{{{DataSpec(text, null)}}}]}""";
+        var refused = Refused(dir, "fb21-nobase", job, basePath);
+        var required = Assert.Single(refused, p => p!["code"]!.ToString() == "DDL_BASE_REQUIRED")!;
+        var step = Assert.Single(Assert.IsType<JsonArray>(required["patch"]))!;
+        Assert.Equal("add", step["op"]!.ToString());
+        Assert.Equal("/ops/0/data/basedOn", step["path"]!.ToString());
+        Assert.Equal(64, step["value"]!.ToString().Length);
+        Assert.Contains("Title Text(50)", required["current"]!["ddl"]!.ToString());
+        Assert.DoesNotContain(refused, p => p!["patch"]?.ToJsonString().Contains("/data/ddl", StringComparison.Ordinal) == true);
+        // fix:"apply": the job with every patch of the refusal still has every statement it sent, and delivers them.
+        var patched = Patched(job, refused);
+        var sent = JsonNode.Parse(patched)!["ops"]![0]!["data"]!.AsObject();
+        Assert.Equal(text, sent["ddl"]!.ToString());
+        Assert.Superset(SpecExpander.DdlNames(JsonNode.Parse(job)!["ops"]![0]!["data"]!.AsObject()).ToHashSet(), SpecExpander.DdlNames(sent).ToHashSet());
+        var written = Run(dir, "fb21-patched", patched, basePath);
+        Assert.True(written["accepted"]!.GetValue<bool>(), written["policyMessages"]?.ToJsonString() + written["details"]);
+        var now = new ModelHost(Path.Combine(dir, "work")).BuildDdl(File.ReadAllBytes(Path.Combine(dir, "fb21-patched.oml")), "", lane).Text;
+        foreach (var name in new[] { "ProgramOrder Integer", "IsFeatured Boolean", "create entity FaLevel", "create entity FaTag", "type FaRow", "type FaTotals", "Title Text(50)" })
+            Assert.Contains(name, now);
+        // A statement that changes what the module has: which side changed it cannot be told without its read, so no patch.
+        var changed = Refused(dir, "fb21-changed", $$$"""{"ops":[{{{DataSpec(block.Replace("Title Text(50)", "Title Text(60)"), null)}}}]}""", basePath);
+        var uncertain = Assert.Single(changed, p => p!["code"]!.ToString() == "DDL_BASE_REQUIRED")!;
+        Assert.Null(uncertain["patch"]);
+        Assert.Contains("Title Text(50)", uncertain["current"]!["ddl"]!.ToString());
+        Assert.Equal(64, uncertain["current"]!["basedOn"]!.ToString().Length);
     }
 
     private static string DataSpec(string ddl, string? basedOn)

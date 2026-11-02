@@ -205,9 +205,10 @@ public sealed class FamDepsReferenceTests
             var reader = new Reader();
             IReadOnlyDictionary<string, string>? bound = null;
             var bridge = new Stub { Capabilities = ["refresh_references"] };
+            // C-06: the check before the Studio's refresh (validation.oml) accepts the job; the apply after it refuses.
             var result = Delivery.Run(bridge, new DeliveryRequest("VisitaCerta_UI", job, work, [], CaptureProducers: ["VisitaCerta_CS"]),
                 (_, _, _) => throw new Exception("producer-aware apply expected"), producerAuthority: new Authority(),
-                applyWithProducers: (_, _, _, producers) => { bound = producers; return new JsonObject { ["isValid"] = false, ["accepted"] = false }; },
+                applyWithProducers: (b, j, o, producers) => { if (Path.GetFileName(o) == "validation.oml") return Valid(b, j, o, producers); bound = producers; return new JsonObject { ["isValid"] = false, ["accepted"] = false }; },
                 referenceInventory: reader.Read);
             Assert.Contains("job rejected", result["error"]!.ToString());
             Assert.Equal("(System)", result["capturedProducers"]!["System"]!["producer"]!.ToString());
@@ -477,7 +478,7 @@ public sealed class FamDepsReferenceTests
             var bridge = new Stub { Capabilities = ["refresh_references"] };
             var result = Delivery.Run(bridge, new DeliveryRequest("VisitaCerta_UI", job, work, [], CaptureProducers: ["VisitaCerta_CS"]),
                 (_, _, _) => throw new Exception("producer-aware apply expected"), producerAuthority: new Authority(),
-                applyWithProducers: (_, _, _, _) => new JsonObject { ["isValid"] = false, ["accepted"] = false }, referenceInventory: reader.Read);
+                applyWithProducers: (b, j, o, p) => Path.GetFileName(o) == "validation.oml" ? Valid(b, j, o, p) : new JsonObject { ["isValid"] = false, ["accepted"] = false }, referenceInventory: reader.Read);
             var refresh = Assert.Single(bridge.Refreshes);
             Assert.Equal(["(System)", "VisitaCerta_CS"], refresh["producers"]!.AsArray().Select(p => p!.ToString()).OrderBy(p => p, StringComparer.Ordinal).ToArray());
             Assert.Contains(SystemKey, refresh["producer_keys"]!.AsArray().Select(k => k!.ToString()));

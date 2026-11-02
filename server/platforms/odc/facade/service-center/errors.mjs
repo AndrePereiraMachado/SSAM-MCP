@@ -13,16 +13,32 @@ export class BridgeError extends ProtocolError {
 }
 
 export const continuation = (tool, args, why) => ({ tool, arguments: args, why });
+
+// A call argument refused before any request: its own code (SC_ARGUMENT_INVALID, never SC_PROTOCOL_INVALID), the argument as
+// the MCP tool names it, what to give, and the corrected call when it can be told. The seven SC_PROTOCOL_INVALID of 21..24/10
+// were all this (a module or application name where its key goes, a module name as moduleId, no host).
+export class ArgumentInvalid extends ProtocolError {
+  constructor(argument, message, fix, { continuation: next = null } = {}) {
+    super(message, 'SC_ARGUMENT_INVALID');
+    this.name = 'ArgumentInvalid'; this.argument = argument; this.fix = fix; this.continuation = next;
+  }
+  answer() {
+    return { ok: false, code: this.code, stage: 'service-center', error: this.message, argument: this.argument, fix: this.fix, sent: false,
+      ...(this.continuation ? { continuation: this.continuation } : {}) };
+  }
+}
 export const connectStudio = why => continuation('ssam_connect', { lane: 'o11' }, why);
 
 export class AuthRequired extends BridgeError {
-  constructor(code, message, { auth = null, continuation: next = null, attempts = [] } = {}) {
+  constructor(code, message, { auth = null, continuation: next = null, attempts = [], question = null } = {}) {
     super(code, message);
     this.name = 'AuthRequired'; this.auth = auth; this.continuation = next; this.attempts = attempts;
+    // question: the exact text to relay to the person (a private window waiting for them), never a request for a secret.
+    this.question = question;
   }
   answer() {
     return { ok: false, code: this.code, stage: 'authentication', error: this.message, auth: this.auth ?? {},
-      ...(this.continuation ? { continuation: this.continuation } : {}), attempts: this.attempts };
+      ...(this.question ? { question: this.question } : {}), ...(this.continuation ? { continuation: this.continuation } : {}), attempts: this.attempts };
   }
 }
 

@@ -38,6 +38,20 @@ test('front C: contract check passes, zero unaccounted types per lane and class,
   for (const w of report.warnings) assert.match(w.text, /on odc without native type|IClientVariable, owned by front A|C\/agents\.json ai\.agents: role 'tool' uses odc:OutSystems\.Model\.Logic\.IActionHandler, owned by front A/);
 });
 
+test('front C: the consumed REST callback is represented on both lanes by integration.rest-callbacks; the Advanced and exposed ones stay a gap', () => {
+  const report = checkCatalog({ root, front: 'C' });
+  for (const lane of ['odc', 'o11']) assert.equal(report.typeStates[`${lane}:ServiceStudio.Plugin.REST.IRestCallbackActionFlow`], 'represented', lane);
+  const fragment = JSON.parse(fs.readFileSync(path.join(here, '..', 'catalog', 'fragments', 'C', 'rest-callbacks.json'), 'utf8'));
+  const capability = fragment.capabilities.find(c => c.id === 'integration.rest-callbacks');
+  assert.deepEqual(capability.lanes, ['odc', 'o11']);
+  assert.match(capability.route.operation, /callback action <Client>\.OnBeforeRequest\|OnAfterResponse @key/);
+  const accounting = JSON.parse(fs.readFileSync(path.join(here, '..', 'catalog', 'fragments', 'C', 'accounting.json'), 'utf8')).coverage;
+  assert.ok(!accounting.some(e => /IRestCallbackActionFlow$/.test(e.type)), 'the consumed callback is no longer a gap');
+  const exposed = accounting.filter(e => /^odc:.*IRestServiceCallbackActionFlow(Input|Output)?$/.test(e.type));
+  assert.equal(exposed.length, 3);
+  for (const e of exposed) assert.equal(e.alternative, 'integration.rest-callbacks-advanced (unavailable entry)');
+});
+
 // The tools registered now are the input of the next reconciled inventory; the pinned one above (35 tools, 2026-09-23)
 // predates ssam_map and changes only with that reconciliation. The map is a model tool carried by read.inspect.
 test('front C: the live tool boundary carries ssam_map as a model tool, with its accounting rule ready', async () => {
@@ -86,7 +100,10 @@ for (const lane of ['odc', 'o11']) {
     for (const id of onlyOdc) assert.equal(ids.includes(id), lane === 'odc', id);
     for (const id of onlyO11) assert.equal(ids.includes(id), lane === 'o11', id);
     const u = index.unavailable.map(x => x.id);
-    assert.ok(u.includes('integration.rest-callbacks'), `integration.rest-callbacks on ${lane}`);
+    // The existing OnBeforeRequest/OnAfterResponse are edited as text on both lanes; the Advanced and exposed ones stay a gap.
+    assert.ok(ids.includes('integration.rest-callbacks'), `integration.rest-callbacks on ${lane}`);
+    assert.ok(!u.includes('integration.rest-callbacks'), 'integration.rest-callbacks is no longer a gap');
+    assert.ok(u.includes('integration.rest-callbacks-advanced'), `integration.rest-callbacks-advanced on ${lane}`);
     // SOAP (lane restsoap): a capability on O11 (op soap through o11_deliver), a declared gap on ODC; OpenAPI import on both.
     assert.equal(ids.includes('integration.soap'), lane === 'o11', 'integration.soap');
     assert.equal(u.includes('integration.soap-odc'), lane === 'odc', 'integration.soap-odc');
@@ -95,6 +112,13 @@ for (const lane of ['odc', 'o11']) {
     assert.equal(u.includes('process.odc-workflow'), lane === 'odc'); assert.equal(u.includes('reference.import-headless-odc'), lane === 'odc');
     assert.equal(u.includes('deliver.publish-o11'), lane === 'o11'); assert.equal(u.includes('integration.sap'), lane === 'o11');
     for (const legacy of ['bpt-process', 'rest-credentials-in-model', 'reference-import-headless', 'agents']) assert.ok(!u.includes(legacy), legacy);
+  });
+
+  test(`front C (${lane}): editing an existing REST callback selects integration.rest-callbacks; an advanced one is the gap`, { skip }, async () => {
+    const edit = await ask(lane, 'edit the OnAfterResponse callback of the REST client');
+    assert.equal(direct(edit)[0], 'integration.rest-callbacks', JSON.stringify(direct(edit)));
+    assert.match(edit.matches.find(m => m.id === 'integration.rest-callbacks').route.operation, /callback action <Client>/);
+    assert.ok(unavailable(await ask(lane, 'add an advanced rest callback')).includes('integration.rest-callbacks-advanced'));
   });
 
   test(`front C (${lane}): consuming REST selects integration.rest-consume with per-lane evidence`, { skip }, async () => {

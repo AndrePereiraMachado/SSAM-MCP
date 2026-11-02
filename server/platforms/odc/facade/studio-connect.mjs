@@ -7,6 +7,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { LANES, anvilLaneFacts, studioProcesses } from './lanes.mjs';
 import { connectionFile, readConnection } from './studio-session.mjs';
+import { studioRuntime, defaultStudioDir, recordGoodBuild, lastGoodBuild, connectorFailure, recordBuildFailure } from './studio-runtime.mjs';
 import { LocalExecutor, currentExecutor, o11NotConnected, workspacePath } from './executor.mjs';
 
 const exec = promisify(execFile);
@@ -132,27 +133,37 @@ export function classifyO11(processes, probe) {
     ...(connected ? { pid: probe.pid, installation: processes.find(p => p.pid === probe.pid).path ? path.dirname(processes.find(p => p.pid === probe.pid).path) : null, bridge: probe } : { bridge: probe }) };
 }
 
-async function build(project, out, extra = []) {
+// C-49 (F-FT-31): a build of the connector that fails says why (studio-runtime.mjs connectorFailure: STUDIO_UPDATED {from, to,
+// runtime} when the Studio is not the one of the last good build, else CONNECTOR_BUILD_FAILED; the first compiler errors; the
+// action), and is kept for ssam_doctor; the bridge build that succeeds records the Studio it was built for. what: bridge,
+// hook, connector; studioDir: the Studio it compiles against (the installed one when the build does not depend on it).
+export async function build(project, out, extra = [], { root = null, lane = null, studioDir = null, what = 'connector', run = exec, now = () => new Date() } = {}) {
   const log = path.join(path.dirname(out), path.basename(out) + '-build.log');
   fs.mkdirSync(path.dirname(out), { recursive: true });
   try {
-    const result = await exec('dotnet', ['build', project, '-c', 'Release', '--nologo', '-v', 'minimal',
+    const result = await run('dotnet', ['build', project, '-c', 'Release', '--nologo', '-v', 'minimal',
       '--artifacts-path', out + '-artifacts', '-o', out, ...extra], { windowsHide: true, maxBuffer: 8 * 1024 * 1024, timeout: 180000 });
     fs.writeFileSync(log, result.stdout + result.stderr);
   } catch (error) {
-    fs.writeFileSync(log, (error.stdout ?? '') + (error.stderr ?? '') + '\n' + error.message);
-    throw new Error('Connector build failed; Studio unchanged. See ' + log);
+    const text = (error.stdout ?? '') + (error.stderr ?? '') + '\n' + error.message;
+    fs.writeFileSync(log, text);
+    let record = null;
+    try { record = root && lane ? readConnection(root, lane) : null; } catch { record = null; }
+    const diagnosis = connectorFailure({ what, log, logText: text, runtime: studioRuntime(studioDir ?? defaultStudioDir(process.env, record)), last: root ? lastGoodBuild(root) : null, record });
+    if (root) recordBuildFailure(root, diagnosis, { now: now() });
+    throw Object.assign(new Error(diagnosis.error + ' ' + diagnosis.action + ' Log: ' + log), { code: diagnosis.code, connector: diagnosis });
   }
+  if (root && studioDir && what === 'bridge') recordGoodBuild(root, studioRuntime(studioDir), { what, now: now() });
 }
 
-async function connectorTool(root) {
+async function connectorTool(root, lane = null) {
   const project = path.join(root, 'tools', 'Anvil.Connect');
   const hash = createHash('sha256').update(fs.readFileSync(path.join(project, 'Program.cs')))
     .update(fs.readFileSync(path.join(project, 'Anvil.Connect.csproj'))).digest('hex').slice(0, 20);
   const out = path.join(root, '.local', 'runtime-connect', 'client-' + hash);
   const dll = path.join(out, 'Anvil.Connect.dll');
   if (!fs.existsSync(path.join(out, 'ready.json'))) {
-    await build(path.join(project, 'Anvil.Connect.csproj'), out);
+    await build(path.join(project, 'Anvil.Connect.csproj'), out, [], { root, lane, what: 'connector' });
     fs.writeFileSync(path.join(out, 'ready.json'), JSON.stringify({ hash }));
   }
   return async args => {
@@ -254,6 +265,7 @@ async function withConnectionLock(port, action) {
 
 // The o11.connect call of the executor seam: locally connectO11Local below; hosted the agent attaches the bridge of its
 // own package and keeps the record (no connection file is written and no variable of this process changes).
+const connectedRuntime = dir => { const runtime = studioRuntime(dir); return runtime ? { studioRuntime: { version: runtime.version, tfm: runtime.tfm } } : {}; };
 export async function connectO11({ pid } = {}) {
   return currentExecutor().call('o11.connect', pid === undefined ? {} : { pid });
 }
@@ -283,10 +295,10 @@ export async function connectO11Local({ pid } = {}) {
       evidence = path.join(entry.root, '.local', 'runtime-connect', id);
       const bridgeOut = path.join(evidence, 'bridge');
       await build(path.join(entry.root, 'src', 'Anvil.Bridge', 'Anvil.Bridge.csproj'), bridgeOut,
-        ['-p:SSDir=' + target.studioDir, '-p:CopyLocalLockFileAssemblies=true']);
+        ['-p:SSDir=' + target.studioDir, '-p:CopyLocalLockFileAssemblies=true'], { root: entry.root, lane: entry.lane, studioDir: target.studioDir, what: 'bridge' });
       const hookName = 'Anvil.RuntimeHook.' + id;
       const hookOut = path.join(evidence, 'hook');
-      await build(path.join(entry.root, 'tools', 'Anvil.RuntimeHook', 'Anvil.RuntimeHook.csproj'), hookOut, ['-p:AssemblyName=' + hookName]);
+      await build(path.join(entry.root, 'tools', 'Anvil.RuntimeHook', 'Anvil.RuntimeHook.csproj'), hookOut, ['-p:AssemblyName=' + hookName], { root: entry.root, lane: entry.lane, studioDir: target.studioDir, what: 'hook' });
       const hook = path.join(hookOut, hookName + '.dll');
       fs.writeFileSync(hook + '.json', JSON.stringify({ pid: target.pid, startedUtc: target.startedUtc, port,
         bridgePath: path.join(bridgeOut, 'Anvil.Bridge.dll'), authorityDir }));
@@ -312,6 +324,8 @@ export async function connectO11Local({ pid } = {}) {
     if (confirmed.startedUtc !== target.startedUtc) throw new Error('Studio changed before connection confirmation.');
     const result = { ok: true, lane: 'o11', anvilLane: entry.lane, connected: true, reused, pid: target.pid,
       startedUtc: target.startedUtc, studioDir: target.studioDir, studioVersion: target.version, port,
+      // C-49: the runtime of the Studio this connection works with (ServiceStudio.exe FileVersion and runtimeconfig tfm).
+      ...connectedRuntime(target.studioDir),
       ...authenticated, ...(evidence ? { evidence } : {}), connectedAt: new Date().toISOString() };
     const file = connectionFile(entry.root, entry.lane);
     fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -446,7 +460,7 @@ async function connectO11Studios(o11, { pid, onlyLane }) {
     else {
       // A bridge built for another served version connects with the agent's warning (kinds.mjs O11_BRIDGE_BUILT_FOR_DIFFERS).
       try { const record = await o11.connect(p.pid); entry.attached = true; if (record?.warning) entry.warning = record.warning; }
-      catch (error) { entry.error = message(error); }
+      catch (error) { entry.error = message(error); if (error?.code) entry.code = error.code; if (error?.connector) entry.connector = error.connector; }
     }
     if (entry.attached) Object.assign(entry, await o11.session(o11.record()).catch(() => ({ tenant: null, account: null })));
   }
@@ -524,6 +538,9 @@ export async function connectAll({ lane, pid } = {}, deps = {}) {
   if (!studios.length) value.error = 'No Studio is open' + (lane ? ' on the ' + lane + ' lane' : '') + '. Open it normally (and sign in), then call ssam_connect again.';
   else if (!targets.length && !ok) value.error = requestedPid !== undefined ? 'No open Studio has pid ' + requestedPid + '.' : 'Several Studios of one lane are open: select one with pid.';
   else if (!ok) value.error = targets.filter(s => !s.attached).map(s => s.lane + ' ' + (s.pid ?? '') + ': ' + (s.error ?? 'not attached')).join('; ');
+  // C-49: the code of the failed target (STUDIO_UPDATED, CONNECTOR_BUILD_FAILED) and its diagnosis, at the top of the answer.
+  const failedTarget = !ok ? targets.find(s => !s.attached && s.code) : null;
+  if (failedTarget) { value.code = failedTarget.code; if (failedTarget.connector) { value.connector = failedTarget.connector; value.next = failedTarget.connector.action; } }
   return value;
 }
 

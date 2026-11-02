@@ -47,6 +47,8 @@ public static partial class JobRunner
             if (ops[i] is not JsonObject create || create["op"]?.ToString() != "create" || create["name"]?.ToString() is not { Length: > 0 } name
                 || create["type"]?.ToString() is not { Length: > 0 } type || create["parent"]?.ToString() is not { Length: > 0 } parent
                 || parent.StartsWith('$')) continue;
+            // B15 (C-10): a module image with the bytes of an image the module already has fills it (ModelSession.CreateCore), no collision.
+            if (ModelSession.FillsExistingImage(create)) continue;
             if (session.ExistingChild(parent, type, name) is not { } found || session.UnsureAfterJob(ops, i, found.Existing)) continue;
             var alias = create["as"]?.ToString();
             var nameOnly = create.All(p => NameOnlyCreate.Contains(p.Key) || p.Key.StartsWith('_'));

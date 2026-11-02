@@ -92,6 +92,11 @@ export function callDeadlineMs(env = process.env, { tool = null, args = null } =
 const ECHOED = ['action', 'lane', 'module', 'until'];
 const TOLERATED = new Set([...ECHOED, 'authorize']);
 const echoOf = args => Object.fromEntries(ECHOED.filter(k => typeof args?.[k] === 'string').map(k => [k, args[k]]));
+// C-20 (F-FitBody-48): every other field of the original call, by the hash of its value: a field the announced schema
+// requires (o11_data host, module, oml, request) repeated beside continueTask with the same value is ignored (said in
+// normalizations), never refused; another value is still refused as different from the original call.
+const fieldHash = (k, v) => createHash('sha256').update(canonicalArguments({ [k]: v })).digest('hex').slice(0, 32);
+const fieldsOf = args => Object.fromEntries(Object.keys(args ?? {}).filter(k => k !== 'continueTask' && k !== 'authorize').map(k => [k, fieldHash(k, args[k])]));
 const seconds = ms => Math.max(1, Math.round(ms / 1000));
 export const CONTINUE_TASK_SCHEMA = { type: 'string' };
 export function continuationSchema(config) {
@@ -327,9 +332,11 @@ export function createCallDeadline({ root, dir = tasksDir(root), timeoutMs = nul
           // R1: action, lane, module and until equal to the original call's (any value when the record kept none) and
           // authorize are ignored, each said in normalizations.
           const echo = call?.echo ?? null;
-          const tolerated = k => TOLERATED.has(k) && (k === 'authorize' || !echo || !Object.hasOwn(echo, k) || echo[k] === args[k]);
+          const fields = call?.fields ?? null;
+          const tolerated = k => TOLERATED.has(k) && (k === 'authorize' || !echo || !Object.hasOwn(echo, k) || echo[k] === args[k])
+            || fields != null && Object.hasOwn(fields, k) && fields[k] === fieldHash(k, args[k]);
           const left = extras.filter(k => !tolerated(k));
-          if (!repeated && left.length) return notReached(refusal('INPUT_INVALID', 'A continuation accepts only continueTask and lane (action, module, until and authorize repeated from the original call are ignored).', { violations: left.map(k => ({ path: '/' + k, message: TOLERATED.has(k) ? 'Differs from the original call of this task' : 'Unexpected continuation field', accepted: ['continueTask', 'lane'] })), continuation: { tool, arguments: { continueTask: args.continueTask, ...(args.lane ? { lane: args.lane } : {}) }, why: 'remove all extra fields' } }));
+          if (!repeated && left.length) return notReached(refusal('INPUT_INVALID', 'A continuation accepts only continueTask and lane (any field repeated from the original call with the same value, and authorize, are ignored).', { violations: left.map(k => ({ path: '/' + k, message: TOLERATED.has(k) || fields?.[k] != null ? 'Differs from the original call of this task' : 'Unexpected continuation field', accepted: ['continueTask', 'lane'] })), continuation: { tool, arguments: { continueTask: args.continueTask, ...(args.lane ? { lane: args.lane } : {}) }, why: 'remove all extra fields' } }));
           if (!repeated) ignored = extras.map(k => ({ rule: 'continuation-field', at: '/' + k, note: k + ' is ignored: a continuation takes continueTask (and lane) only' }));
         }
         if (entry && entry.tool !== tool) return notReached(refusal('TASK_TOOL_MISMATCH', 'This task belongs to ' + entry.tool, { continuation: next(entry) }));
@@ -386,7 +393,7 @@ export function createCallDeadline({ root, dir = tasksDir(root), timeoutMs = nul
       const abort = () => controller.abort(signal.reason);
       if (signal?.aborted) abort(); else signal?.addEventListener('abort', abort, { once: true });
       const previewIds = phase === 'execute' ? tokensOfCall(args) : [];
-      entry = { id: randomUUID(), dir, tool, key, exempt, started: Date.now(), continuationLane: args.lane, deadlineMs: deadlineOf(tool, args), call: { argsSha256: hash, echo: echoOf(args), lane: args.lane ?? (/^o11_/.test(tool) ? 'o11' : /^(studio_|odc_|hybrid_)/.test(tool) ? 'odc' : defaultLane), ...(previewIds.length ? { previewIds } : {}), ...(inputs?.print ? { inputsSha256: inputs.print } : {}) }, isWrite: mutation, deliveries: 0, controller, inputs,
+      entry = { id: randomUUID(), dir, tool, key, exempt, started: Date.now(), continuationLane: args.lane, deadlineMs: deadlineOf(tool, args), call: { argsSha256: hash, echo: echoOf(args), fields: fieldsOf(args), lane: args.lane ?? (/^o11_/.test(tool) ? 'o11' : /^(studio_|odc_|hybrid_)/.test(tool) ? 'odc' : defaultLane), ...(previewIds.length ? { previewIds } : {}), ...(inputs?.print ? { inputsSha256: inputs.print } : {}) }, isWrite: mutation, deliveries: 0, controller, inputs,
         phase, previewIds, step: phase === 'execute' ? taskStepOfCall(args) : null, owner, persistTask, parent: callScope.getStore() ?? null,
         removeAbort: () => signal?.removeEventListener('abort', abort) };
       // F7: the ids of this call (a nested call keeps the outer call's), read by every record writer inside it.

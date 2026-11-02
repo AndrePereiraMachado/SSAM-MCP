@@ -249,6 +249,28 @@ public class HtmlElementEditsTests
             Codes(Apply("""{"move":"w24","into":"w7"}""", """{"set":"w24","attributes":{"icon":"eye"}}""", """{"replace":"w24","with":"<i icon=\"x\"/>"}""")).Order());
     }
 
+    /// <summary>C-35 (onda 2, F-Jesse-09): the find the author copied from the source has no k; the reading writes k="wNN"
+    /// in every tag, and four finds came back "HTML_EDIT_TEXT_NOT_UNIQUE: the text is not in the reading". A find that is in
+    /// the reading once with its k left out is that text, and with takes the k in its tags of the same names; nowhere has its
+    /// own code and the nearest lines.</summary>
+    [Fact]
+    public void AFindWithoutTheKOfTheReadingIsThatTextAndWithKeepsTheK()
+    {
+        Accepted(Apply("""{"find":"<i icon=\"eye\" class=\"icon\"/>","with":"<i icon=\"eye\" class=\"icon big\"/>"}"""),
+            With((11, 1, ["     <i k=\"w25\" icon=\"eye\" class=\"icon big\"/>"])));
+        // Across two tags: each takes its own k.
+        Accepted(Apply("""{"find":"<a onclick=\"OnTogglePasswordVisibility\">\n    <div id=\"PasswordVisibile\" if=\"MakePasswordVisible\">","with":"<a onclick=\"OnTogglePasswordVisibility\" class=\"eye\">\n    <div id=\"PasswordVisibile\" if=\"MakePasswordVisible\">"}"""),
+            With((6, 1, ["   <a k=\"w22\" onclick=\"OnTogglePasswordVisibility\" class=\"eye\">"])));
+        // Nowhere: its own code, with the nearest lines of the reading.
+        var none = Apply("""{"find":"<button class=\"btn btn-primary\" onclick=\"Nope\">","with":""}""");
+        Assert.Equal([HtmlElementEdits.TextNotFound], Codes(none));
+        Assert.Contains(none.Problems[0]["lines"]!.AsArray(), l => l!["line"]!.GetValue<int>() == 17);
+        // A with of other tags cannot take the k: the reading's text, to copy.
+        var other = Apply("""{"find":"<i icon=\"eye\" class=\"icon\"/>","with":"<span>eye</span>"}""");
+        Assert.Equal([HtmlElementEdits.TextNotFound], Codes(other));
+        Assert.Contains("k=\"w25\"", other.Problems[0]["message"]!.ToString());
+    }
+
     [Fact]
     public void FindReplacesTheOnlyOccurrence()
     {
@@ -260,7 +282,7 @@ public class HtmlElementEditsTests
         Assert.Equal("/edits/0", problem["pointer"]!.ToString());
         Assert.Equal([9, 12], problem["lines"]!.AsArray().Select(l => l!["line"]!.GetValue<int>()));
         var none = Apply("""{"find":"class=\"nothing\"","with":""}""");
-        Assert.Equal([HtmlElementEdits.TextNotUnique], Codes(none));
+        Assert.Equal([HtmlElementEdits.TextNotFound], Codes(none));
         Assert.Empty(none.Problems[0]["lines"]!.AsArray());
     }
 

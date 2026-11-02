@@ -139,3 +139,78 @@ test('reply text the agent did not rewrite stays data, even when it starts with 
   await assert.rejects(h.call('snapshot_module', { path: path.join(h.workspace, 'o11', 'snapshots', 'X.oml') }), e => e.code === 'AGENT_PROTOCOL_VIOLATION');
   assert.equal(h.link.protocolErrors.length, 1);
 });
+
+// fase4-28 r4-f3-import (criterion C3): integration_import through an agent that declares it (hello agent.o11Methods). The base,
+// the pinned document and its imports go to the agent (the document's folder kept under agent:o11/imports/<sha>/, so an xsd
+// import resolves next to the WSDL), out_path is an agent:o11/ output, and the candidate the bridge wrote comes back to the
+// workspace path the kernel reads. An agent without the method keeps INTEGRATION_IMPORT_NEEDS_BRIDGE: nothing is sent, and the
+// import capabilities of its bridge never reach the kernel (which then refuses the job before the snapshot).
+const IMPORT_AGENT = { agentVersion: '0.3.7', agentO11Methods: ['ping', 'bridge_manifest', 'snapshot_module', 'merge_from_oml', 'integration_import'] };
+const importRequest = h => {
+  const folder = path.join(h.workspace, 'o11', 'documents', 'aa'.repeat(32));
+  const wsdl = write(path.join(folder, 'service.wsdl'), '<definitions/>');
+  const xsd = write(path.join(folder, 'types', 'common.xsd'), '<schema/>');
+  const base = write(path.join(h.workspace, 'o11', 'deliveries', 't1', 'base.oml'), 'base');
+  return { kind: 'wsdl', module_key: 'k1', operation_id: 'op1', base_path: base, base_sha256: sha('base'), document_path: wsdl, document_sha256: 'aa'.repeat(32),
+    dependencies: [{ uri: 'types/common.xsd', path: xsd, sha256: sha('<schema/>') }], client: 'Calc', source: 'https://example.com/calc?wsdl',
+    selection: { port: 'CalculatorSoap', methods: ['Add'] }, out_path: path.join(h.workspace, 'o11', 'deliveries', 't1', 'import-0.oml') };
+};
+
+test('r4-f3: integration_import stages the base, the document and its imports, and brings the candidate back', async () => {
+  const h = setup((request, link) => {
+    link.writeAgent(request.params.out_path, 'candidate');
+    return { success: true, data: { candidate_path: request.params.out_path, candidate_sha256: sha('candidate'), client: { name: 'Calc', created: true }, imported: ['Add'], skipped: [], warnings: [], errors: [] } };
+  });
+  h.link.setInfo(IMPORT_AGENT);
+  const request = importRequest(h);
+  const value = await h.call('integration_import', request);
+  const sent = h.seen[0].params;
+  const docs = 'agent:o11/imports/' + 'aa'.repeat(32);
+  assert.equal(sent.base_path, 'agent:o11/deliveries/t1/base.oml');
+  assert.equal(sent.document_path, docs + '/service.wsdl');
+  assert.deepEqual(sent.dependencies, [{ uri: 'types/common.xsd', path: docs + '/types/common.xsd', sha256: sha('<schema/>') }]);
+  assert.equal(sent.out_path, 'agent:o11/deliveries/t1/import-0.oml');
+  assert.deepEqual(sent.selection, request.selection);
+  assert.equal(h.link.readAgent(docs + '/service.wsdl'), '<definitions/>');
+  assert.equal(h.link.readAgent(docs + '/types/common.xsd'), '<schema/>');
+  assert.equal(value.reply.data.candidate_path, request.out_path);
+  assert.equal(fs.readFileSync(request.out_path, 'utf8'), 'candidate');
+  noSecrets(h);
+});
+
+test('r4-f3: an importer refusal (errors, no candidate) comes back as it is and nothing is pulled', async () => {
+  const h = setup(() => ({ success: true, data: { code: 'SOAP_METHOD_NOT_FOUND', client: { name: 'Calc' }, imported: [], skipped: [], warnings: [], errors: ['the selected port has no operation \'Sub\''] } }));
+  h.link.setInfo(IMPORT_AGENT);
+  const request = importRequest(h);
+  const value = await h.call('integration_import', request);
+  assert.equal(value.reply.data.code, 'SOAP_METHOD_NOT_FOUND');
+  assert.equal(fs.existsSync(request.out_path), false);
+  assert.equal(h.link.gets.length, 0);
+});
+
+test('r4-f3: a document outside the workspace is refused before anything is sent', async () => {
+  const h = setup(() => ({ success: true, data: {} }));
+  h.link.setInfo(IMPORT_AGENT);
+  const request = importRequest(h);
+  request.document_path = path.join(os.tmpdir(), 'elsewhere', 'service.wsdl');
+  await assert.rejects(h.call('integration_import', request), e => e.name === 'BridgeError' && e.code === 'PATH_OUTSIDE_WORKSPACE' && e.executed === false);
+  assert.equal(h.seen.length, 0);
+});
+
+test('r4-f3: an agent that does not declare integration_import (0.4.0-native, every older agent) keeps INTEGRATION_IMPORT_NEEDS_BRIDGE', async () => {
+  for (const info of [{}, { agentVersion: '0.4.0-native', agentO11Methods: null }, { agentVersion: '0.3.6', agentO11Methods: ['ping', 'bridge_manifest'] }]) {
+    const h = setup(request => ({ success: true, data: request.method === 'bridge_manifest'
+      ? { flavor: 'thin', capabilities: ['refresh_references', 'integration_import:wsdl', 'integration_import:openapi', 'thin'] } : {} }));
+    h.link.setInfo(info);
+    await assert.rejects(h.call('integration_import', importRequest(h)), e => e.name === 'BridgeError' && e.code === 'INTEGRATION_IMPORT_NEEDS_BRIDGE'
+      && e.executed === false && /does not run the Service Studio integration import/.test(e.message) && /Install the current SSAM Agent app/.test(e.message));
+    assert.equal(h.seen.length, 0, 'nothing sent');
+    // Its bridge's manifest never shows the import to the kernel (Delivery.Offers then refuses the job before the snapshot).
+    const manifest = await h.call('bridge_manifest', {});
+    assert.deepEqual(manifest.reply.data.capabilities, ['refresh_references', 'thin']);
+  }
+  // The agent that declares it: the manifest is unchanged.
+  const h = setup(() => ({ success: true, data: { capabilities: ['refresh_references', 'integration_import:wsdl', 'integration_import:openapi'] } }));
+  h.link.setInfo(IMPORT_AGENT);
+  assert.deepEqual((await h.call('bridge_manifest', {})).reply.data.capabilities, ['refresh_references', 'integration_import:wsdl', 'integration_import:openapi']);
+});

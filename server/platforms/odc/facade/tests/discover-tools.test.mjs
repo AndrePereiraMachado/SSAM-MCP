@@ -47,6 +47,17 @@ const F4_REMOVED = {
   'odc a-data-action-en': ['ui.html-page'], 'odc d-policy-list-composite': ['ui.html-page'], 'odc b-delete-block': ['ui.html-page'], 'odc b-traditional-table': ['ui.html-page'],
   'o11 a-preparation-traditional': ['ui.screen'], 'o11 b-traditional-table': ['ui.list', 'ui.screen', 'ui.form', 'ui.screen-spec', 'ui.html-visual', 'ui.widget'],
 };
+// Capabilities the catalog gained after the baseline was captured (R4 integration: integration.rest-callbacks of U2,
+// d59de8db). An intent may get one as a match (a REST client's credentials) or as an alternative that pushes the baseline's
+// last alternatives out of the room. Without them the matches are the baseline's, in its order, and only alternatives are
+// missing at its end, never more of them than were added.
+const ADDED_AFTER_BASELINE = ['integration.rest-callbacks'];
+const onlyAdded = (got, wanted) => {
+  const kept = got.filter(m => !ADDED_AFTER_BASELINE.includes(m.split(':')[0]));
+  const added = got.length - kept.length;
+  return added > 0 && isDeepStrictEqual(kept, wanted.slice(0, kept.length)) && wanted.length - kept.length <= added
+    && wanted.slice(kept.length).every(m => m.endsWith(':alternative'));
+};
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 // The lane indexes read the committed snapshot of stamped job results (fixtures/discovery-results.json), never
@@ -210,7 +221,7 @@ test('discoverAll keeps the model answers of the baseline (matches identical, mo
       const gone = F4_REMOVED[`${lane} ${i.id}`];
       const expectedF4 = gone ? expected.filter(m => m.endsWith(':match') && !gone.includes(m.split(':')[0])) : expected;
       const got = gone || expected.every(m => m.endsWith(':match')) ? direct : matches;
-      if (raised.rule !== 'raise-to-minimal' || !isDeepStrictEqual(got, expectedF4)) diffs.push(`${lane} ${budget} ${i.id}: raised (${JSON.stringify(raised)}) ${got.join(',')} != ${expectedF4.join(',')}`);
+      if (raised.rule !== 'raise-to-minimal' || (!isDeepStrictEqual(got, expectedF4) && !onlyAdded(got, expectedF4))) diffs.push(`${lane} ${budget} ${i.id}: raised (${JSON.stringify(raised)}) ${got.join(',')} != ${expectedF4.join(',')}`);
     } else {
       // A screen intent whose model part would leave no room for the OutSystems UI counts is budgeted with that floor less
       // (2026-10-05, C07), and says so (size.reserved): its matches are the model answer at the budget minus the floor. At
@@ -226,7 +237,7 @@ test('discoverAll keeps the model answers of the baseline (matches identical, mo
       const direct = list => list.filter(m => m.endsWith(':match'));
       const got = removed ? direct(matches) : matches;
       const wanted = removed ? direct(want).filter(m => !removed.includes(m.split(':')[0])) : want;
-      if (!isDeepStrictEqual(got, wanted)) diffs.push(`${lane} ${budget} ${i.id}: ${got.join(',')} != ${wanted.join(',')}${reserved ? ` (floor ${reserved})` : ''}`);
+      if (!isDeepStrictEqual(got, wanted) && !onlyAdded(got, wanted)) diffs.push(`${lane} ${budget} ${i.id}: ${got.join(',')} != ${wanted.join(',')}${reserved ? ` (floor ${reserved})` : ''}`);
     }
     if (i.tools === 'none' && budget === '12000') {
       // With a direct model match, operational capabilities are shown with their operationalTitles title (titles only).

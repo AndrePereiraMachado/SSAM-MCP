@@ -8,7 +8,9 @@ export const PACKET_DEFAULT_BYTES = 24576;
 export const PACKET_MAX_BYTES = ANSWER_CEILING_BYTES - BUDGET_MARGIN_BYTES;
 export const EXPANSION_DEFAULT_BYTES = PACKET_MAX_BYTES;
 export const RECOVERY_PART_BYTES = EXPANSION_DEFAULT_BYTES - BUDGET_MARGIN_BYTES;
-export const ANSWER_BUDGETS = Object.freeze({ discoverFirst: 5120, receipt: 2048, refusal: 8192, read: 1536, other: 4096, plan: 4096, packet: PACKET_DEFAULT_BYTES });
+// C-19: grammar, the ssam_code grammar card (8-14 KB per part, ~29 KB for every part), inline up to the packet's ceiling: as
+// "other" (4 KB) the Figma runs of 27/10 got only ssam_evidence pointers and spent a call per part to read it.
+export const ANSWER_BUDGETS = Object.freeze({ discoverFirst: 5120, receipt: 2048, refusal: 8192, read: 1536, other: 4096, plan: 4096, packet: PACKET_DEFAULT_BYTES, grammar: PACKET_MAX_BYTES });
 // Isolated tests may lower the ceiling through the environment, never raise it.
 export const MAX_ANSWER_BYTES = ANSWER_CEILING_BYTES;
 export const maxAnswerBytes = (env = process.env) => {

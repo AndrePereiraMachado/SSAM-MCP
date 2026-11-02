@@ -69,7 +69,8 @@ public static class OdcAppFactory
     private static readonly Regex ModuleNamePattern = new("^[A-Za-z_][A-Za-z0-9_]*$", RegexOptions.CultureInvariant);
     private static readonly Regex ColorPattern = new("^#[0-9A-Fa-f]{6}$", RegexOptions.CultureInvariant);
 
-    public static bool IsLibrary(string kind) => Kinds.TryGetValue(kind, out var k) && k is MetaKind.ReactiveLibrary or MetaKind.MobileLibrary;
+    public static bool IsLibrary(string kind) => Kinds.TryGetValue(kind, out var k)
+        && Enum.TryParse<OutSystems.Model.Enumerations.SegmentationKind>(k.ToString(), out var model) && OdcModuleKinds.IsLibrary(model);
 
     /// <summary>The module name derived from the app name: the characters a module name cannot hold are dropped
     /// ("Escala Viva" -> "EscalaViva", as the tenant shows for an app created by the Studio).</summary>

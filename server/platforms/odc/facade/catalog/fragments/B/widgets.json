@@ -861,7 +861,7 @@
      "when": "input/checkbox/textarea/label written as an HTML fragment (bind names an existing variable)"
     }
    ],
-   "guidance": "Bind to what exists: `Variable` names a local variable (`Name`) or an aggregate attribute (`GetX.List.Current.<Entity>.<Attr>`). A widget referenced by a Label's TargetWidget cannot be deleted before the label (usages lists it).",
+   "guidance": "Bind to what exists: `Variable` names a local variable (`Name`) or an aggregate attribute (`GetX.List.Current.<Entity>.<Attr>`). A widget referenced by a Label's TargetWidget cannot be deleted before the label (usages lists it). The click of a Button or a Link inside an IForm validates it (OnClick BuiltInValidations ValidateAndContinue, as the Studio creates it there; in ssam-html the default of a <button> or <a> inside <form>, os-onclick.BuiltInValidations=\"None\" for one that must not), so <Form>.Valid runs the Mandatory and type checks.",
    "example": {
     "ops": [
      "create",

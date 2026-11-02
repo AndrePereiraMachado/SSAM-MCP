@@ -77,8 +77,39 @@ public static class CommandSurface
     {
         var hits = definitions.Where(m => exact ? m.Id.Equals(query, StringComparison.OrdinalIgnoreCase)
             : (m.Id + " " + m.Title + " " + m.Detail + " " + hints.GetValueOrDefault(m.Id)?.Hint).Contains(query, StringComparison.OrdinalIgnoreCase));
-        return hits.Select(m => new { id = m.Id, severity = m.Severity, title = m.Title, detail = m.Detail,
+        var verify = hits.Select(m => new { id = m.Id, severity = m.Severity, title = m.Title, detail = m.Detail,
             hint = hints.GetValueOrDefault(m.Id)?.Hint, hintOrigin = hints.GetValueOrDefault(m.Id)?.Origin }).ToArray();
+        // C-11: what the Verify catalog does not name (an HTML_* code of a refusal, the text of the anonymous-access warning,
+        // which the O11 Studio files under the generic CustomObjectWarning "{0}"/"{1}") is answered by the SSAM's own words, so
+        // the lookup a refusal sends never comes back empty.
+        var ssam = SsamCodes(query, exact).Where(s => !verify.Any(v => v.id == s.Id && v.detail == s.Detail))
+            .Select(s => new { id = s.Id, severity = s.Severity, title = s.Title, detail = s.Detail, hint = (string?)s.Hint, hintOrigin = (string?)"ssam" });
+        return verify.Concat(ssam).ToArray();
+    }
+
+    /// <summary>One code the SSAM answers with (an HTML_* refusal or warning of the document form, the anonymous-access family).</summary>
+    public sealed record SsamCode(string Id, string Severity, string Title, string Detail, string Hint);
+
+    /// <summary>C-11 (F-FigmaReactive-07, F-AiChatbot-02: verify-message answered [] for the codes and the text of a refusal): the
+    /// SSAM's codes with their descriptions, the ones the Verify catalog has not: every refusal of the document form (the contract
+    /// of api --op html, ScreenDocument.Schema "refusals"), the normalization CSS_IMPORT_MOVED and the anonymous-access family,
+    /// by its id or the text it prints. <paramref name="exact"/>: the id; else the query anywhere in the id, the title, the
+    /// detail or the hint.</summary>
+    public static IEnumerable<SsamCode> SsamCodes(string query, bool exact)
+    {
+        var all = new List<SsamCode>();
+        if (ScreenDocument.Schema()["refusals"] is JsonObject refusals)
+            foreach (var (code, text) in refusals)
+                all.Add(new(code, "ssam", "ssam-html document form", text?.ToString() ?? "",
+                    "the refusal names the line and column, the fix and, when the correction is certain, the patch: apply it (basedOn the refused job) or correct the document as the fix says"));
+        all.Add(new(ScreenDocument.ImportMoved, "normalized", "ssam-html document form", "an @import of <style scope=\"theme\"> written first in the root's own style sheet: the module's theme has Theme Editor CSS, which the platform serves first, and the browser ignores an @import after rules",
+            "nothing to do; the receipt's styleSheet.cssImportsMoved says where it now loads"));
+        foreach (var id in new[] { "CustomObjectWarning", "ServerActionInScreenAccessibleByEveryone" })
+            all.Add(new(id, "warning", "Security Warning (anonymous access)", "You're exposing a Server Action for public access and without authentication. A screen open to everyone (the Anonymous role, AnonymousAccess True) calls it.",
+                "a new one blocks on a screen of the job unless the job declares the screen open: roles=\"Anonymous\" (os-AnonymousAccess=\"True\" on ODC) in the document or a set of Roles/AnonymousAccess in the same job (tolerated for every server action of that screen); "
+                + "else restrict the screen (a role), or accept the message in the user's own words: expectedMessages {\"id\":\"" + id + "\",\"element\":\"<the last two levels of the path the message prints>\",\"why\":\"<the user's own words>\"}, the patch add /expectedMessages/- the refusal brings (SECURITY_ACCEPTANCE, never applied by itself)"));
+        return all.Where(s => exact ? s.Id.Equals(query, StringComparison.OrdinalIgnoreCase)
+            : (s.Id + " " + s.Title + " " + s.Detail + " " + s.Hint).Contains(query, StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>`ui-block --catalog &lt;json&gt; --name &lt;Block&gt; | --find &lt;text&gt;`: the block of that name (any case), or

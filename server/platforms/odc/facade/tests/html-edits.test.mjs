@@ -169,7 +169,7 @@ test('ddl: the data.ddl of the spec op', t => {
   assert.equal(jobTextEdits(write(base, { part: 'logic', element: 'ddl', edits: [{ find: 'Name', with: 'N' }] })).problems[0].code, 'EDIT_ELEMENT_UNKNOWN', 'part breaks the tie');
 });
 
-test('find once, nowhere or twice: EDIT_TEXT_NOT_UNIQUE with the lines of each occurrence or the nearest ones', t => {
+test('find once, nowhere or twice: EDIT_TEXT_NOT_UNIQUE with the lines of each occurrence, EDIT_TEXT_NOT_FOUND with the nearest ones (C-35)', t => {
   const base = writeJob(t);
   const twice = jobTextEdits(write(base, { element: 'Login', edits: [{ find: 'class="', with: 'x' }] }));
   assert.equal(twice.problems.length, 1);
@@ -177,7 +177,7 @@ test('find once, nowhere or twice: EDIT_TEXT_NOT_UNIQUE with the lines of each o
   assert.equal(p.code, 'EDIT_TEXT_NOT_UNIQUE'); assert.equal(p.at, 'edits/0'); assert.match(p.error, /occurs 3 times in Login/);
   assert.deepEqual(p.lines, [{ line: 3, text: '<div class="login">' }, { line: 4, text: ' <input bind="User" class="form-control"/>' }, { line: 5, text: ' <button class="btn" onclick="DoLogin">Entrar</button>' }]);
   const nowhere = jobTextEdits(write(base, { element: 'Login', edits: [{ find: '<button class="btn" onclick="DoLogin">Sair</button>', with: 'x' }] })).problems[0];
-  assert.equal(nowhere.code, 'EDIT_TEXT_NOT_UNIQUE'); assert.match(nowhere.error, /occurs nowhere in Login/);
+  assert.equal(nowhere.code, 'EDIT_TEXT_NOT_FOUND'); assert.match(nowhere.error, /occurs nowhere in Login/);
   assert.deepEqual(nowhere.lines, [{ line: 5, text: ' <button class="btn" onclick="DoLogin">Entrar</button>' }]);
   // Overlapping starts count: "aa" is twice in "aaa".
   const overlapping = writeJob(t, { ops: [{ op: 'spec', data: { ddl: 'aaa' } }] });
@@ -211,9 +211,15 @@ test('a composite job, new parts beside a correction and a changed base are refu
   assert.deepEqual(c.problems.map(p => [p.at, p.code]), [['basedOn', 'PATCH_PATH_FORBIDDEN']]); assert.match(c.problems[0].error, /composite job/);
   const base = writeJob(t);
   const mixed = jobTextEdits(write(base, { element: 'Login', edits: [{ find: 'Entrar', with: 'Sair' }], text: DO_LOGIN, ops: [{ op: 'create' }], files: ['C:\\x.flow'],
-    also: [{ part: 'logic', text: LIST }, { part: 'logic', element: 'X', basedOn: 'abcdefabcdef0123', edits: [{ delete: '@n1' }] }] }));
-  assert.deepEqual(mixed.problems.map(p => p.at), ['text', 'files', 'ops', 'also/0', 'also/1']);
+    also: [{ part: 'logic', text: LIST.replace('ListStations', 'ListDocks') }, { part: 'logic', element: 'X', basedOn: 'abcdefabcdef0123', edits: [{ delete: '@n1' }] }] }));
+  // C-18 (F-Jesse-03): a new action text in also (also/0) is carried into the job; files, ops, text and an edit of a read are not.
+  assert.deepEqual(mixed.problems.map(p => p.at), ['text', 'files', 'ops', 'also/1']);
   assert.equal(new Set(mixed.problems.map(p => p.error)).size, 1); assert.match(mixed.problems[0].error, /^a correction of a job is patch \+ edits/);
+  // An action the job already has (ListStations) is no new text: its change is an edit of the job's text. Review round 2 of
+  // B1: it exists, so PARTIAL_AMBIGUOUS (the merge's code), never EDIT_ELEMENT_UNKNOWN; told by scope, owner and name.
+  const known = jobTextEdits(write(base, { element: 'Login', edits: [{ find: 'Entrar', with: 'Sair' }], also: [{ part: 'logic', text: LIST }] }));
+  assert.deepEqual(known.problems.map(p => [p.at, p.code]), [['also/0', 'PARTIAL_AMBIGUOUS']]);
+  assert.match(known.problems[0].error, /^ListStations \(server action\) is already an action of the job/);
   const changed = jobTextEdits(write({ ...base, sha256: 'f'.repeat(64) }, { element: 'Login', edits: [{ find: 'Entrar', with: 'Sair' }] }));
   assert.deepEqual(changed.problems.map(p => [p.at, p.code]), [['basedOn', 'BASE_CHANGED']]);
   const missing = jobTextEdits(write({ file: path.join(path.dirname(base.file), 'none.json'), sha256: base.sha256 }, { element: 'Login', edits: [{ find: 'Entrar', with: 'Sair' }] }));

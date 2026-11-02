@@ -42,8 +42,11 @@ public sealed class CssPathModelTests
             var properties = Results(result).OfType<JsonObject>().Last(r => r["properties"] != null)["properties"]!.AsObject();
             var written = (properties["UserStyleSheet"] ?? properties["StyleSheet"])!.ToString();
             Assert.Contains(probe, written);
-            // The one normalization: the @import the edit appended is at the top of the stylesheet.
-            Assert.StartsWith(Import, (properties["StyleSheet"]!.ToString()).TrimStart());
+            // The one normalization: the @import the edit appended is at the top of the stylesheet the edit writes (B4: in a
+            // theme with Theme Editor CSS that is the author's half; its effective StyleSheet is the platform's composition).
+            Assert.StartsWith(Import, written.TrimStart());
+            if (properties["GeneratedStyleSheet"] is { } generated)
+                Assert.Equal(generated.ToString() + "\r\n" + written, properties["StyleSheet"]!.ToString());
             Assert.True(ThemeCss.Matches(css["basedOn"]!.ToString(), written), target);
             Assert.Equal(ThemeCss.Sha256(author), css["was"]!.ToString());
             // F1: the element is in the stylesheet report the served proof compares against (the read-back stylesheet).
@@ -62,12 +65,15 @@ public sealed class CssPathModelTests
         if (!StudioAvailable()) return;
         var (host, work, fixture) = Setup("css-op-refusals", "traditional-ui.oml");
         var (target, _, author) = Elements(host, fixture).First(e => e.Kind == "block");
+        // F1b: a stale basedOn whose edits all apply is merged (F1bStop3 below); one whose edit no longer applies is refused.
         var (code, problems) = Refusal(() => RunJob(host, fixture, new JsonArray(new JsonObject { ["op"] = "css", ["target"] = target, ["basedOn"] = ThemeCss.Sha256(author + "x"),
-            ["edits"] = new JsonArray(new JsonObject { ["append"] = ".a{b:c}" }) }), Path.Combine(work, "stale.oml")));
+            ["edits"] = new JsonArray(new JsonObject { ["replaceRule"] = ".t18-no-such-rule", ["body"] = "color:red" }) }), Path.Combine(work, "stale.oml")));
         Assert.Equal(ModelSession.ThemeChanged, code);
         var stale = Assert.Single(problems)!;
         Assert.Equal(ThemeCss.Sha256(author), stale["actual"]!.ToString());   // the current hash, for the next call
-        Assert.Equal("/ops/0/basedOn", stale["patch"]![0]!["path"]!.ToString());
+        // The new basedOn alone does not mend an edit that no longer applies: a patch, when one is published, names only basedOn.
+        Assert.True(stale["patch"] is null || stale["patch"]![0]!["path"]!.ToString() == "/ops/0/basedOn", stale.ToJsonString());
+        Assert.Contains("0 of 1 edit(s) apply", stale["message"]!.ToString());
         Assert.Contains(target[(target.IndexOf(':') + 1)..], stale["message"]!.ToString());
         (code, problems) = Refusal(() => RunJob(host, fixture, new JsonArray(new JsonObject { ["op"] = "css", ["target"] = target,
             ["edits"] = new JsonArray(new JsonObject { ["append"] = ".a{b:c}" }) }), Path.Combine(work, "missing.oml")));
@@ -87,6 +93,34 @@ public sealed class CssPathModelTests
         Assert.Contains(CssPipeline.EnvUrl, error.ToString());
     }
 
+    /// <summary>F1b stop 3 (owner 2026-11-02: SSAM programs together with the person): the person edits the stylesheet in the
+    /// Studio after the delivery read it, so its basedOn is stale. Edits that still apply merge over the person's CSS: both
+    /// changes are in the module and the answer notes THEME_CHANGED (before: refused THEME_CHANGED, nothing written).</summary>
+    [Fact]
+    public void F1bStop3_ACssEditOverCssThePersonChangedAfterBasedOnIsMergedWithANote()
+    {
+        if (!StudioAvailable()) return;
+        var (host, work, fixture) = Setup("css-op-f1b-merge", "traditional-ui.oml");
+        var (target, _, author) = Elements(host, fixture).First(e => e.Kind == "block");
+        const string person = ".f1b-person{color:#654321}";
+        const string delivery = ".f1b-delivery{color:#123456}";
+        var result = RunJob(host, fixture, new JsonArray(
+            // the person's edit in the Studio, between the read (basedOn) and the write
+            new JsonObject { ["op"] = "set", ["target"] = target, ["prop"] = "StyleSheet", ["value"] = author + "\n" + person },
+            new JsonObject { ["op"] = "css", ["target"] = target, ["basedOn"] = ThemeCss.Sha256(author), ["edits"] = new JsonArray(new JsonObject { ["append"] = delivery }) },
+            new JsonObject { ["op"] = "get", ["target"] = target }), Path.Combine(work, "merged.oml"));
+        Assert.True(result["accepted"]!.GetValue<bool>(), Clip(result));
+        var properties = Results(result).OfType<JsonObject>().Last(r => r["properties"] != null)["properties"]!.AsObject();
+        var written = (properties["UserStyleSheet"] ?? properties["StyleSheet"])!.ToString();
+        Assert.Contains(person, written);
+        Assert.Contains(delivery, written);
+        // The css op's own result (on this line a set StyleSheet answers its placement under css too).
+        var css = Results(result).OfType<JsonObject>().Last(r => r["css"] != null && r["edits"] != null);
+        Assert.Equal(ModelSession.ThemeChanged, css["mergedOver"]!["code"]!.ToString());
+        Assert.Equal(ThemeCss.Sha256(author), css["mergedOver"]!["basedOn"]!.ToString());
+        Assert.Contains(result["notes"]!.AsArray(), n => n!["code"]!.ToString() == ModelSession.ThemeChanged);
+    }
+
     [Fact]
     public void ASetStyleSheetTakesTheSameNormalizationAndTheSameBasedOnCheck()
     {
@@ -98,8 +132,15 @@ public sealed class CssPathModelTests
             new JsonObject { ["op"] = "get", ["target"] = target }), Path.Combine(work, "set.oml"));
         Assert.True(set["accepted"]!.GetValue<bool>(), Clip(set));
         var properties = Results(set).OfType<JsonObject>().Last(r => r["properties"] != null)["properties"]!.AsObject();
-        Assert.StartsWith(Import, properties["StyleSheet"]!.ToString().TrimStart());   // before T18: only a theme with Theme Editor CSS
+        var authorHalf = (properties["UserStyleSheet"] ?? properties["StyleSheet"])!.ToString();
+        Assert.StartsWith(Import, authorHalf.TrimStart());
         var landing = Results(set).OfType<JsonObject>().First(r => r["set"] != null)["styleSheet"]!;
+        // B4: in a theme with Theme Editor CSS the effective StyleSheet is the platform's composition and the @import is said ignored.
+        if (properties["GeneratedStyleSheet"] is { } generated)
+        {
+            Assert.Equal(generated.ToString() + "\r\n" + authorHalf, properties["StyleSheet"]!.ToString());
+            Assert.NotNull(landing["cssImportsIgnored"]);
+        }
         Assert.True(ThemeCss.Matches(landing["basedOn"]!.ToString(), (properties["UserStyleSheet"] ?? properties["StyleSheet"])!.ToString()));
         Assert.NotNull(landing["cssImportsHoisted"]);
         var (code, problems) = Refusal(() => RunJob(host, fixture, new JsonArray(new JsonObject { ["op"] = "set", ["target"] = target, ["prop"] = "StyleSheet", ["value"] = ".x{y:z}", ["basedOn"] = ThemeCss.Sha256(author + "x") }),

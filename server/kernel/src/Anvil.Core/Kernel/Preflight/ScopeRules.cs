@@ -25,6 +25,11 @@ internal static class ScopeRules
 {
     public const string CallUnknown = "CALL_UNKNOWN";
     public const string CallAmbiguous = "CALL_AMBIGUOUS";
+    /// <summary>F13 (proto 4b6c3591/760bc130, the owner's six rounds of 26/10/2026): how a call of a producer's action is written,
+    /// said by every fix of an unknown call (CALL_UNKNOWN here, FLOW_NAME_UNKNOWN in the apply). "(Producer.Action, (System).Action)"
+    /// was read as `(Sonnet_IS).ObterPokemon`, which FLOW_PRODUCER_CALL_SYNTAX now refuses.</summary>
+    public const string ProducerCallForm = "a producer's action is called as Producer.Action(args), with the producer's module name (Sonnet_IS.GetPokemon(Name=N)); "
+        + "only the System module is written (System).Action(args), because its name is (System)";
     public const string ChildExists = "OWNER_CHILD_EXISTS";
     public const string KindNode = "ACTION_KIND_NODE";
     public const string Required = "WIDGET_REQUIRED_PROPERTY";
@@ -281,7 +286,8 @@ internal static class ScopeRules
             // R2-A (NameResolution, the slot Navigation): the kind enters the search, so a name only an action, a block or a
             // record has is no destination. A navigate has no tiers here: two screens of the name are the apply's to pick.
             var target = callee.Split('/').Last();
-            if (k.SystemDestinations.Contains(target) || k.JobDeclares(target)) return null;
+            // C-22: the Previous Screen (`navigate ()`, read as navigate PreviousScreen()) is a destination of every module.
+            if (k.SystemDestinations.Contains(target) || k.JobDeclares(target) || target == FlowParser.PreviousScreen) return null;
             var named = k.Index.KindsOf(target).Select(kind => new NameCandidate(target, kind, RoleOfKind(kind), 1, target)).ToList();
             if (k.Job.Roots.TryGetValue(target, out var rootKind))
                 named.Add(rootKind.Contains("block", StringComparison.OrdinalIgnoreCase) ? new(target, "Block", "block", 1, target) : new(target, "Screen", "screen", 1, target));
@@ -498,8 +504,8 @@ internal static class ScopeRules
             ? new JsonArray(new JsonObject { ["op"] = "replace", ["path"] = patchPath, ["value"] = Form(written, meant) }) : null;
         return Problem(op, pointer, why.Ambiguous ? CallAmbiguous : CallUnknown, predicts, $"the call {callee}(...): {why.Why}",
             why.Ambiguous ? $"write the one you mean: {string.Join(", ", why.Candidates.Select(c => Form(callee, c)))} (candidates: the patch of each)"
-            : why.Candidates.Count > 0 ? $"call one of: {string.Join(", ", why.Candidates.Select(c => Form(callee, c)))}; or declare it earlier in this job (a logic op), or import it (a reference op)"
-                : "declare the action in a logic op of this job, import it with a reference op, or name an action of the module (ssam_map)", patch, "logic");
+            : why.Candidates.Count > 0 ? $"call one of: {string.Join(", ", why.Candidates.Select(c => Form(callee, c)))}; or declare it earlier in this job (a logic op), or import it (a reference op); " + ProducerCallForm
+                : "declare the action in a logic op of this job, import it with a reference op, or name an action of the module (ssam_map); " + ProducerCallForm, patch, "logic");
     }
 
     /// <summary>Every callee of a parsed action: the calls, the navigates and the event destinations.</summary>

@@ -21,6 +21,7 @@ public sealed record FlowTextEdit(string Rule, int Line, bool Insert, string? Fr
     public const string MappingRelative = "FLOW_MAPPING_RELATIVE";
     public const string SortDirection = "FLOW_SORT_DIRECTION";
     public const string AggregateSqlShape = "FLOW_AGGREGATE_SQL_SHAPE";
+    public const string PreparationDescription = "FLOW_PREPARATION_DESCRIPTION";
 
     /// <summary>The text with the edits applied, in order (the inserts before a line in the order they were made).</summary>
     public static string Apply(string text, IReadOnlyList<FlowTextEdit> edits)
@@ -149,6 +150,7 @@ public static class FlowTextNormalizer
         Step(ref current, done, NewActionIds);
         Step(ref current, done, MappingValues);
         Step(ref current, done, SortDirections);
+        Step(ref current, done, PreparationDescriptions);
         return new(current, done);
     }
 
@@ -241,6 +243,22 @@ public static class FlowTextNormalizer
             done.AddRange(edits);
             text = edited;
         } catch (Exception) { /* a normalization never refuses: the checks judge what stays */ }
+    }
+
+    // C-47 (F-FT-13): the Preparation of a Traditional screen has no description in the model: /// lines above its header (as
+    // the grammar writes them above every action) were PROPERTY_SET_DROPPED and then FLOW_NOT_EXACT ("does not read back ...
+    // report it"). The one thing they can mean is nothing the model keeps: left out, and said.
+    private static readonly Regex PreparationHeader = new(@"^\s*preparation\s", RegexOptions.CultureInvariant);
+    private static List<FlowTextEdit> PreparationDescriptions(string text, FlowItem action)
+    {
+        var edits = new List<FlowTextEdit>();
+        var lines = text.Replace("\r\n", "\n").Split('\n');
+        var header = Array.FindIndex(lines, l => PreparationHeader.IsMatch(l));
+        if (header <= 0) return edits;
+        for (var i = header - 1; i >= 0 && lines[i].TrimStart().StartsWith("///", StringComparison.Ordinal); i--)
+            edits.Insert(0, new FlowTextEdit(FlowTextEdit.PreparationDescription, i + 1, false, lines[i], "",
+                $"line {i + 1}: a Preparation has no description in the model (the Studio keeps none): the /// line above it is left out"));
+        return edits;
     }
 
     private static readonly Regex ReadId = new(@"^[npl][0-9]+$", RegexOptions.CultureInvariant);

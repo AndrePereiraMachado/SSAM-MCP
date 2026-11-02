@@ -171,16 +171,27 @@ public sealed class DeclaredPropertyKeptTests(ITestOutputHelper output)
     }
 
     // A value the write itself refused has one problem, its own: no second one that says the platform decides.
+    // C-41 (baf2965a): an input bound to a variable of the document whose data type implies its input type (PhoneNumber: Phone)
+    // takes it from that type, so type="TEL" (no input type at all) is that rule's one problem, HTML_INPUT_TYPE_MISMATCH, whose
+    // patch leaves type out: as certain for a value that is no input type as for another one. Its message says TEL is none,
+    // never a mismatch the Studio would report. Bound to a type no input type follows (Boolean), the same value is the
+    // write's own HTML_INVALID, as before. Either way one problem for the attribute, and never HTML_PROPERTY_NOT_KEPT.
     [Fact]
     public void AValueTheWriteRefusedIsNotSaidTwice()
     {
         if (!Bound()) return;
         var (host, baseOml, work) = Module("twice");
-        var document = "<block name=\"KeptTwice\" flow=\"KeptFlow\"><var name=\"V\" type=\"PhoneNumber\"/><input bind=\"V\" type=\"TEL\"/></block>";
-        var refusal = Assert.ThrowsAny<Exception>(() => Run(host, baseOml, work, "{\"ops\":[" + FlowOp + "," + HtmlOp(document) + "]}", out _));
-        var said = (refusal as KernelRefusalException ?? refusal.InnerException as KernelRefusalException)?.Problems?.ToJsonString() ?? "";
-        Assert.Contains("HTML_INVALID", said, StringComparison.Ordinal);
-        Assert.DoesNotContain(ScreenHtmlEdit.PropertyNotKept, said, StringComparison.Ordinal);
+        foreach (var (type, code) in new[] { ("PhoneNumber", ScreenDocument.InputTypeMismatch), ("Boolean", ScreenDocument.Invalid) })
+        {
+            var document = "<block name=\"KeptTwice\" flow=\"KeptFlow\"><var name=\"V\" type=\"" + type + "\"/><input bind=\"V\" type=\"TEL\"/></block>";
+            var refusal = Assert.ThrowsAny<Exception>(() => Run(host, baseOml, work, "{\"ops\":[" + FlowOp + "," + HtmlOp(document) + "]}", out _));
+            var problems = (refusal as KernelRefusalException ?? refusal.InnerException as KernelRefusalException)?.Problems?.OfType<JsonObject>().ToList() ?? [];
+            var said = new JsonArray(problems.Select(p => (JsonNode)p.DeepClone()).ToArray()).ToJsonString();
+            var own = Assert.Single(problems, p => (p["message"]?.ToString() ?? "").Contains("type=\"TEL\"", StringComparison.Ordinal));
+            Assert.True(own["code"]?.ToString() == code, type + ": " + said);
+            Assert.DoesNotContain(ScreenHtmlEdit.PropertyNotKept, said, StringComparison.Ordinal);
+            if (code == ScreenDocument.InputTypeMismatch) Assert.Contains("TEL is no input type", own["message"]!.ToString(), StringComparison.Ordinal);
+        }
     }
 
     // Measured: a new widget ends the compile with no MarginTop, alone or with a width, in ODC and O11, and with no inline style: the value is

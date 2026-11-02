@@ -412,8 +412,30 @@ function unreachable(i, envelope) {
       : { tool: 'o11_environment', arguments: withoutKeys(i, ['authorize']), why: 'a read: ask it again once the network of the Studio\'s PC answers (the Studio reaches the environment, not the SSAM server)' } };
 }
 
+// Lote 4, F3: the server refused the identity of the Studio's session (IDX20803 in a SOAP fault, 24/10). The kernel already
+// renewed the lease once for a read (ConnectedEnvironment, code ENVIRONMENT_SESSION_EXPIRED); an older kernel answers the
+// same text as ENVIRONMENT_SERVER_ERROR. The next step is the Studio's own sign-in, never a password in the chat.
+export const SESSION_EXPIRED = 'ENVIRONMENT_SESSION_EXPIRED';
+const SESSION_IDENTITY = /\bIDX\d{5}\b|\bSecurityToken\w*Exception\b/;
+function sessionExpired(i, envelope) {
+  const write = isWrite(i.action);
+  const text = String(envelope.error ?? '');
+  const host = i.host ?? /OutSystems environment (\S+) (?:refused|answered)/.exec(text)?.[1];
+  return { ok: false, code: SESSION_EXPIRED, ...(write ? { outcome: 'uncertain' } : {}),
+    error: 'The OutSystems environment' + (host ? ' ' + host : '') + ' refused the session of the connected Service Studio (its login token expired or could not be validated)'
+      + (/renewed once/.test(text) ? '; SSAM renewed it once from the Studio\'s login and it was refused again' : '')
+      + (write ? '. The write may or may not have reached the server; it is not repeated.' : '; nothing was changed.'),
+    session: { renewed: /renewed once/.test(text), source: 'studio' },
+    continuation: host ? { tool: 'o11_studio', arguments: { command: 'login', args: { host } }, why: 'opens the Studio\'s own sign-in for this environment; the person signs in there (password or SSO), then '
+        + (write ? 'read the environment (inventory) to see whether the write was applied; never repeat it before that' : 'repeat the same read') }
+      : { tool: 'ssam_connect', arguments: { lane: 'o11' }, why: 'reattach the signed-in Service Studio, then ' + (write ? 'read the environment before any new attempt' : 'repeat the same read') } };
+}
+
 function interpret(i, run, context) {
   const envelope = run.envelope;
+  if (envelope?.ok === false && envelope.data === undefined && (envelope.code === SESSION_EXPIRED
+    || ((envelope.code === 'ENVIRONMENT_SERVER_ERROR' || /environment_session:/.test(String(envelope.error ?? ''))) && SESSION_IDENTITY.test(String(envelope.error ?? '')))))
+    return sessionExpired(i, envelope);
   // Only a failure the Studio answered for an environment call (environment_session: ...); a socket error of the local
   // bridge connection is the bridge, not the environment, and keeps its own answer below.
   const failure = String(envelope?.error ?? '');

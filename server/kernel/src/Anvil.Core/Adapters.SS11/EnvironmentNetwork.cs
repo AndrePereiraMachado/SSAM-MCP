@@ -79,6 +79,20 @@ public static class EnvironmentNetwork
         return statuses.Count > 0 && statuses.All(GatewayStatuses.Contains);
     }
 
+    public const string SessionExpiredCode = "ENVIRONMENT_SESSION_EXPIRED";
+
+    // Lote 4, F3 (24/10/2026, ssam_map of SSAM_DumpProbe): the server refused the Studio login's token while validating it
+    // ("FaultException: Server was unable to process request. ---> IDX20803: Unable to obtain configuration from ...
+    // server.identity/.well-known/openid-configuration"). Microsoft.IdentityModel answers IDXnnnnn (IDX10223 lifetime,
+    // IDX10503 signature, IDX20803 configuration) and SecurityToken*Exception: the identity of the session, not the request.
+    private static readonly Regex SessionIdentity = new(
+        @"\bIDX\d{5}\b|\bSecurityToken\w*Exception\b|\b(?:token|session) (?:is |has )?expired\b",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
+    /// <summary>The server refused the identity of the session (its token): renewed once by a fresh lease of the Studio's
+    /// current login, then ENVIRONMENT_SESSION_EXPIRED. Checked before <see cref="IsServerAnswer"/>.</summary>
+    public static bool IsSessionExpired(string? error) => !string.IsNullOrEmpty(error) && SessionIdentity.IsMatch(error);
+
     /// <summary>The environment answered the request (an HTTP status, a SOAP fault, a protocol error): a failure of the
     /// server, never of the network between the Studio and the environment. A proxy or gateway answer
     /// (<see cref="IsGatewayAnswer"/>) is not one.</summary>
@@ -126,6 +140,23 @@ public sealed class EnvironmentServerErrorException(string operation, string hos
     public string Operation { get; } = operation;
     public string Host { get; } = host;
     public int? HttpStatus { get; } = httpStatus;
+    public bool Write { get; } = write;
+}
+
+/// <summary>The server refused the session's identity (EnvironmentNetwork.IsSessionExpired). A read was asked once more on a
+/// renewed lease of the Studio's current login (Renewed) and still refused, or the renewal itself failed; a write is never
+/// repeated. Code ENVIRONMENT_SESSION_EXPIRED: the next step is the Studio's own sign-in, never a password in the chat.</summary>
+public sealed class EnvironmentSessionExpiredException(string operation, string host, string failure, bool renewed, bool write)
+    : InvalidOperationException($"The OutSystems environment {host} refused the session of the connected Studio for '{operation}' (its login token expired or could not be validated)"
+        + (renewed ? "; renewed once from the Studio's current login and refused again" : write ? "; a write: not repeated" : "; the session could not be renewed")
+        + (write ? "; its outcome on the server is unknown" : "; nothing was changed")
+        + ". Sign in again in the Service Studio (o11_studio login), then ssam_connect. Server answer: " + failure), ICodedError
+{
+    public string Code => EnvironmentNetwork.SessionExpiredCode;
+    public System.Text.Json.Nodes.JsonArray? Problems => null;
+    public string Operation { get; } = operation;
+    public string Host { get; } = host;
+    public bool Renewed { get; } = renewed;
     public bool Write { get; } = write;
 }
 

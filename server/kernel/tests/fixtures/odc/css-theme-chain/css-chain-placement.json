@@ -1,0 +1,37 @@
+{
+ "description": "Fixture F2, ODC mirror (lote 4): one set StyleSheet on every place a delivery can put CSS, over the consumer of css-chain-consumer.json. Each result carries css.placement (what serves the CSS at runtime) and the receipt cssPlacement: the local theme served by ChainFlow, the module's default theme, the block ChainCard placed on ChainScreen, the block ChainUnusedCard that no page places (warning CSS_TARGET_UNSERVED) and the screen with its chain of themes (the producer's included).",
+ "base": "job:css-chain-consumer",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "set",
+   "target": "IMobileTheme:ChainLocalTheme",
+   "prop": "StyleSheet",
+   "value": ".chain-local { color: #224; }"
+  },
+  {
+   "op": "set",
+   "target": "IMobileTheme:InsuranceApp",
+   "prop": "StyleSheet",
+   "value": ".chain-default { color: #224; }"
+  },
+  {
+   "op": "set",
+   "target": "IMobileBlock:ChainCard",
+   "prop": "StyleSheet",
+   "value": ".chain-card { margin: 6px; }"
+  },
+  {
+   "op": "set",
+   "target": "IMobileBlock:ChainUnusedCard",
+   "prop": "StyleSheet",
+   "value": ".chain-unused { margin: 6px; }"
+  },
+  {
+   "op": "set",
+   "target": "IMobileScreen:ChainScreen",
+   "prop": "StyleSheet",
+   "value": ".chain-screen { gap: 6px; }"
+  }
+ ]
+}

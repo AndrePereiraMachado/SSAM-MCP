@@ -56,6 +56,9 @@ public interface IBaseFacts
     /// <summary>motor2: the names of the data of a screen or block of the base (inputs, local variables, aggregates, data
     /// actions), by its logic owner (`IMobileScreen:Home`); null when the base does not have it.</summary>
     IReadOnlyCollection<string>? ScreenNames(string owner) => null;
+    /// <summary>C-38 (review B1 round 3, fix 5): every name a screen or block of the base already holds, at any depth (its
+    /// widgets, local variables, inputs, aggregates, actions), by the root's name; null when the base does not have it.</summary>
+    IReadOnlyCollection<string>? RootNames(string root) => null;
     /// <summary>T9: whether the element the target names runs in client-side code (a client action, a Reactive or Mobile screen
     /// or block and what is in them), in server logic (false), or unknown (null).</summary>
     bool? IsClientSide(string target) => null;

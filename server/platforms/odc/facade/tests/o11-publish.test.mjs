@@ -407,3 +407,20 @@ test('publishOutcome: the pure classification', () => {
   const untrusted = new BridgeError('UnauthorizedAccessException: not a trusted Hybrid controller', { code: 'BRIDGE_REFUSED', executed: false, reply: { success: false, executed: false } });
   assert.equal(publishOutcome({ error: untrusted }, active).code, 'O11_NOT_AUTHORIZED');
 });
+
+// F1b stop 4 (owner 2026-11-02: SSAM programs together with the person): the person selected another tab, or kept the
+// Studio busy, between the checks and the start; the bridge proved nothing started. The same publication, by the module
+// key, goes again after a short wait, and the answer says so (before: TARGET_CHANGED / UI_BUSY, nothing published).
+test('F1b stop 4: a publication the busy Studio did not start goes again by the module key, with a note', async t => {
+  for (const first of [fail('InvalidOperationException: Requested module identity is no longer active; nothing was executed'),
+    fail('publish: publish: read the publish state: the Studio UI thread did not run this step in 30 s (withdrawn from the UI queue; nothing of it ran)', { executed: false, code: 'UI_BUSY' })]) {
+    let calls = 0;
+    const h = await harness(t, { publish: () => (++calls === 1 ? first : PUBLISHED_REPLY) });
+    const value = await h.call({ module: 'Orders', authorize: WORDS });
+    assert.equal(value.ok, true, JSON.stringify(value));
+    assert.equal(h.sent('publish').length, 2);
+    assert.ok(h.sent('publish').every(r => r.params.module_key === 'k-orders'), 'the module by its key');
+    const items = Array.isArray(value.normalizations) ? value.normalizations : value.normalizations?.items ?? [];
+    assert.deepEqual(items.map(n => n.rule), ['STUDIO_BUSY'], JSON.stringify(value));
+  }
+});

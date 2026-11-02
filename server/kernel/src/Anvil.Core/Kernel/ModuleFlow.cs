@@ -77,8 +77,10 @@ public sealed class ModuleFlow
     // data action names its owner (action Home.Save, FlowOwners); 6 also invalidates the 5 each of those changes wrote alone.
     // 7: an ODC empty mapping (Source mapTo {  }, the conversion the platform makes on its own) is written as its source.
     // 9: Traditional Preparation is an owned flow with its native fixed name and identity.
-    public const int Extractor = 9;
-    public static readonly HashSet<string> ActionKinds = new(StringComparer.Ordinal) { "ServerAction", "ServiceAction", "ClientAction", "ScreenAction", "DataAction", "Preparation" };
+    // 10: the callbacks of a consumed REST client (OnBeforeRequest, OnAfterResponse) are owned flows (callback action
+    // Client.OnBeforeRequest), their native parameters kept outside the text.
+    public const int Extractor = 10;
+    public static readonly HashSet<string> ActionKinds = new(StringComparer.Ordinal) { "ServerAction", "ServiceAction", "ClientAction", "ScreenAction", "DataAction", "Preparation", "RestCallbackActionFlow" };
 
     public string Lane { get; private init; } = "";
     public string SourceSha256 { get; private init; } = "";

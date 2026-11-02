@@ -23,11 +23,15 @@
 // Each family becomes ONE entry (CASCADE / APPLY_SKIPPED) with its count, codes, ops, the failed parts it follows from and
 // the names, and the first root problem of each failed op says how many it blocks (blocks). Without the job the name
 // family is left as it is; a ring of name problems with no root of its own is left as it is (it is the root).
-// Pure but for refusalFields with options.jobFile (writes <job>.verified-patch.json, verified-patch.mjs).
+// Pure but for refusalFields with options.jobFile (writes <job>.verified-patch.json, verified-patch.mjs) and a job named by its
+// file (jobDocumentOf reads it).
+import fs from 'node:fs';
 import { headerOf, namesOf } from './ssam-code.mjs';
 import { patchUnion, writeVerifiedPatch, patchConflicts, CONFLICT_NOTE } from './verified-patch.mjs';
 import { clipText } from './text-clip.mjs';
 import { hostedContext } from './executor.mjs';
+import { patchJob } from './job-patch.mjs';
+import { patchLoss, lossText, PATCH_DESTRUCTIVE, DESTRUCTIVE_NOTE } from './job-inventory.mjs';
 export { patchUnion };
 
 export const PROBLEMS_BUDGET = 30000;
@@ -99,6 +103,8 @@ export function problemOf(p, limit = 600) {
     // One patch of a document for several problems (kernel JobRunner.DocumentPatches), or none and why (verified-patch.mjs).
     ...(Number.isInteger(p.patchJoins) ? { patchJoins: p.patchJoins } : {}),
     ...(p.patchOmitted === true ? { patchOmitted: true, ...(typeof p.patchOmittedWhy === 'string' ? { patchOmittedWhy: clip(p.patchOmittedWhy, 300) } : {}) } : {}),
+    // C-01 (c): what a patch left out for PATCH_DESTRUCTIVE would have lost (job-inventory.mjs).
+    ...(Array.isArray(p.patchLost) && p.patchLost.length ? { patchLost: p.patchLost.slice(0, 10) } : {}),
     ...(typeof p.element === 'string' && p.element ? { element: clip(p.element, 300) } : {}), ...(typeof p.key === 'string' && p.key ? { key: p.key } : {}),
     // PROTOTYPE_BINDING_REQUIRED: what the item is and whether its patch was built offline (unresolved ones carry no patch)
     ...(isObject(p.binding) ? { binding: p.binding } : {}),
@@ -432,7 +438,38 @@ export function diagnosisOf(source) {
 
 // The fields of a refusal with problems: {problems, problemsTotal?, grouped?, verifyRan?, verifyReason?, phases?}; empty
 // when there are none.
+// The job document a caller names: the document itself, or the path of its file (read here; unreadable or not JSON: null).
+export function jobDocumentOf(job) {
+  if (isObject(job) || Array.isArray(job)) return job;
+  if (typeof job !== 'string' || !job) return null;
+  try { return JSON.parse(fs.readFileSync(job, 'utf8').replace(/^﻿/, '')); } catch { return null; }
+}
+const lossOn = job => patch => patchLoss(job, patch, (j, ops) => patchJob(j, ops, { max: Infinity }).job);
+// C-01 (c), 27/10 (F-FitBody-21, -40): a problem's patch that would leave the job without what it declares (job-inventory.mjs:
+// ddl statements and members, actions, elements with k and the data of an aggregate) is no patch: it loses it and says what it
+// would lose (patchOmitted, patchOmittedWhy PATCH_DESTRUCTIVE, patchLost). The one judgement of every answer that carries
+// problems with patches (refusalFields, the ssam_code check, the validation contract, ssam_reference check-job): job is
+// the document or its file; without one the problems are left as they are. A source job's patch is relative to its own
+// document and is left as it is.
+export function withoutDestructivePatches(problems, job) {
+  const document = jobDocumentOf(job);
+  if (!document || !Array.isArray(problems)) return problems;
+  const lossOf = lossOn(document), seen = new Map();
+  return problems.map(p => {
+    if (!isObject(p) || isObject(p.sourceJob) || !Array.isArray(p.patch) || !p.patch.length) return p;
+    const key = JSON.stringify(p.patch);
+    if (!seen.has(key)) seen.set(key, lossOf(p.patch));
+    const loss = seen.get(key);
+    if (!loss.length) return p;
+    const { patch: _patch, ...rest } = p;
+    return { ...rest, patchOmitted: true, patchOmittedWhy: PATCH_DESTRUCTIVE + ': this patch would leave the job without ' + clip(lossText(loss), 200) + ' (patchLost); never verified nor applied', patchLost: loss };
+  });
+}
 export function refusalFields(problems, source, options) {
+  // C-01 (c): the patches judged on the job (withoutDestructivePatches); options.job is its document or its file.
+  const job = jobDocumentOf(options?.job);
+  const lossOf = lossOn(job);
+  problems = withoutDestructivePatches(problems, job);
   // Integration 24-1 familias (review): patches that write different values at one path are no patch (the last would win):
   // each problem whose patch touches such a path loses it and says why (patchOmitted, patchOmittedWhy), and no verified call.
   const originOf = p => isObject(p?.sourceJob) ? JSON.stringify([p.sourceJob.role, p.sourceJob.spec, p.sourceJob.job]) : '';
@@ -453,7 +490,12 @@ export function refusalFields(problems, source, options) {
   // Omit them publicly with their origin and reason, never seal a union against the root
   // when any offered repair belongs to another source job.
   const sourcePatches = Array.isArray(problems) && problems.some(p => isObject(p?.sourceJob) && Array.isArray(p.patch) && p.patch.length);
-  const verified = fitted && options?.jobFile && !sourcePatches ? writeVerifiedPatch(options.jobFile, patchUnion(problems)) : {};
+  // C-01 (c): the union too (two patches each harmless alone may lose something together) is never written as "verified".
+  const writes = fitted && options?.jobFile && !sourcePatches;
+  const unionLoss = writes && job ? lossOf(patchUnion(problems)) : [];
+  const verified = !writes ? {}
+    : unionLoss.length ? { verifiedPatchRefused: { code: PATCH_DESTRUCTIVE, lost: unionLoss, why: DESTRUCTIVE_NOTE } }
+      : writeVerifiedPatch(options.jobFile, patchUnion(problems));
   return { ...(fitted ? { problems: fitted.problems, ...(fitted.grouped ? { grouped: true } : {}), ...(fitted.problemsTotal ? { problemsTotal: fitted.problemsTotal } : {}) } : {}),
     ...diagnosisOf(source), ...verified };
 }

@@ -70,6 +70,9 @@ export const TEXT_RULES = Object.freeze([
   // Atritos 3 (docs/PACOTE-ATRITOS-3.md 5.3): D5, a Service Studio without a main window (an older bridge answers "the
   // Studio has no window"), and C26, a path outside the folders the hosted agent reads.
   [/\b(?:has no main window|the Studio has no window)\b/, 'STUDIO_WINDOWLESS'],
+  // C-49 (studio-runtime.mjs): the connector that no longer builds for the Studio installed now, and why.
+  [/\bService Studio was updated from .+ and the connector\b/, 'STUDIO_UPDATED'],
+  [/\bConnector build failed\b/, 'CONNECTOR_BUILD_FAILED'],
   [/\bis outside the folders the agent reads\b/, 'PATH_OUTSIDE_WORKSPACE'],
   // G11 (FarmaVirtual 2026-10-10, call 131): an @key the reader (ModelReader.Resolve, the 22nd's "Unresolved or ambiguous
   // key") or the map does not resolve in the capture; next-steps.mjs continues to the map under that key. A key that names
@@ -82,6 +85,11 @@ export const TEXT_RULES = Object.freeze([
   [/\bNo screen or block named '/, 'ELEMENT_NOT_FOUND'],
   [/\bAmbiguous screen or block '/, 'AMBIGUOUS_ELEMENT'],
   [/\bSnapshot content changed: expectedSourceSha256 does not match\b/, 'CAPTURE_CHANGED'],
+  // Lote 4, F3 (AUTH_CODES below): an environment that refused the Studio session's token (IDX20803 on 24/10 came back as
+  // CLI_REFUSED) and a Service Center login page in place of the answer.
+  // Only the O11 environment session's own text (review W2-DIAG: an ODC refusal with IDXnnnnn is not this O11 code).
+  [/\benvironment_session:.*?(?:\bIDX\d{5}\b|\bSecurityToken\w*Exception\b)|\bEnvironmentSessionExpiredException\b/, 'ENVIRONMENT_SESSION_EXPIRED'],
+  [/\bService Center (?:login required or session expired|answered with its login page)\b/, 'SC_AUTH_EXPIRED'],
   [/\b(?:timed out|TimeoutException|ETIMEDOUT)\b/, 'TIMEOUT'],
   [/\b(?:SharpZipBaseException|Illegal rep length code)\b/, 'FILE_UNREADABLE'],
   [/\b(?:ENOENT|FileNotFoundException|DirectoryNotFoundException)\b|\bno such file or directory\b/, 'FILE_NOT_FOUND'],
@@ -160,6 +168,78 @@ function textsOf(value, texts = []) {
 //                                 uncertain, gate equivalence); a content proof that compared everything answers
 //                                 MERGE_CONTENT_LOSS or delivers, never this.
 export const MERGE_PROOF_CODES = Object.freeze(['MERGE_CONTENT_LOSS', 'MERGE_CONTENT_PREVIEW_REFUSED', 'MERGE_CONTENT_MISMATCH', 'EQUIVALENCE_UNCERTAIN']);
+
+// Lote 4, F3: the authentication codes of the friction queue and of this front, each with the call that goes on. The
+// emitters answer with their own code and fill the continuation from authContinuation (O11: service-center/index.mjs
+// runServiceCenter and o11-environment.mjs; ODC: portal/runtime/errors.mjs publicError and access.mjs refusal, whose
+// error.continuation odc-access.mjs withContinuation lifts to the answer). No continuation asks for a secret: every
+// credential is typed in the Studio's own sign-in or in SSAM's private window, never in the chat.
+//   SC_AUTH_EXPIRED              O11: Service Center answered its login page (the tool-owned web session or the Studio's
+//                                expired); nothing from that page was accepted. Next: o11_service_center_session
+//                                {action:"sign-in", host} (the Studio's session or the stored profile), then the same call;
+//                                a write is verified (action "verify") before any new attempt.
+//   IDENTITY_TIMEOUT             The private OutSystems identity sign-in (Service Center SSO or Portal) got no answer in
+//                                time, before anything protected was sent. Next: the same call once (O11, when known), else
+//                                o11_service_center_session {action:"status", host}; ODC: odc_portal_login {tenant}.
+//   HEADLESS_AUTH_UNAVAILABLE    The attached bridge has no headless transport for this session; no window was opened.
+//                                Next: O11 ssam_doctor {lane:"o11"} (the bridge version and the reconnect); ODC
+//                                odc_auth_status {tenant} (which session serves the tenant; auth:"portal-credential" uses
+//                                the saved Portal profile).
+//   AUTH_REQUIRED                No compatible stored credential, and no prompt was opened (authPrompt=never, or none
+//                                available here). Next: O11 o11_service_center_session {action:"sign-in", host,
+//                                session:"vault"}; ODC odc_portal_login {tenant, action:"prompt"}: the private window, only
+//                                when the person wants it.
+//   ENVIRONMENT_SESSION_EXPIRED  O11: the environment refused the connected Studio's session (IDXnnnnn, an expired or
+//                                unverifiable login token); a read was renewed once. Next: o11_studio {command:"login",
+//                                args:{host}} (the Studio's own sign-in), or ssam_connect {lane:"o11"} without a host.
+//   VAULT_API_UNAVAILABLE        O11: session=vault asked for a step that only the signed-in Studio serves (the Service
+//                                Center API); nothing was sent. Next: o11_service_center_session {action:"status", host,
+//                                session:"vault"}; repeat with session=auto, or name the module by moduleId.
+export const AUTH_CODES = Object.freeze(['SC_AUTH_EXPIRED', 'IDENTITY_TIMEOUT', 'HEADLESS_AUTH_UNAVAILABLE', 'AUTH_REQUIRED',
+  'ENVIRONMENT_SESSION_EXPIRED', 'VAULT_API_UNAVAILABLE']);
+
+// The continuation of an authentication code: {tool, arguments, why}, or null for another code. lane: 'o11' or 'odc';
+// host (O11) and tenant (ODC) are filled when known (an ODC tenant left out is the tool's default tenant); same: the
+// refused call itself ({tool, arguments}), used where repeating it is safe (IDENTITY_TIMEOUT: nothing protected was sent).
+// hosted (the SSAM server answering a customer): never a prompt, the vault or a stored profile of the server, which hosted
+// mode refuses (HOSTED_PROMPT_UNAVAILABLE, HOSTED_STUDIO_SESSION_ONLY): the user's own Studio session is the only path.
+export function authContinuation(code, { lane = 'o11', host = null, tenant = null, same = null, hosted = false } = {}) {
+  const at = host ? { host } : {};
+  const on = tenant ? { tenant } : {};
+  const odc = lane === 'odc';
+  if (hosted && code === 'AUTH_REQUIRED') return odc
+    ? { tool: 'ssam_connect', arguments: { lane: 'odc' }, why: 'no stored credential or prompt is used in hosted mode: the user signs in their own ODC Studio, which SSAM attaches; then repeat the call' }
+    : host ? { tool: 'o11_studio', arguments: { command: 'login', args: { host } }, why: 'no stored credential or prompt is used in hosted mode: opens the user\'s own Service Studio sign-in for this environment; then repeat the call' }
+      : { tool: 'ssam_connect', arguments: { lane: 'o11' }, why: 'no stored credential or prompt is used in hosted mode: attach the user\'s signed-in Service Studio; then repeat the call' };
+  if (hosted && code === 'SC_AUTH_EXPIRED') return { tool: 'o11_service_center_session', arguments: { action: 'sign-in', ...at },
+    why: 'signs in again through the user\'s own Service Studio session (never the chat); then repeat the call, or verify a write first' };
+  if (hosted && code === 'VAULT_API_UNAVAILABLE') return { tool: 'o11_service_center_session', arguments: { action: 'status', ...at },
+    why: 'hosted, only the user\'s Service Studio session serves Service Center: status shows it; repeat with session=auto' };
+  if (hosted && code === 'HEADLESS_AUTH_UNAVAILABLE' && odc)
+    return { tool: 'odc_auth_status', arguments: { ...on }, why: 'shows which session of the user\'s ODC Studio serves this tenant; hosted, only that session is a path' };
+  switch (code) {
+    case 'SC_AUTH_EXPIRED':
+      return { tool: 'o11_service_center_session', arguments: { action: 'sign-in', ...at },
+        why: 'signs in again through the Studio\'s session or the stored profile (never the chat); then repeat the call, or verify a write first' };
+    case 'IDENTITY_TIMEOUT':
+      if (odc) return { tool: 'odc_portal_login', arguments: { ...on }, why: 'the identity sign-in got no answer in time and nothing protected was sent; sign in once more' };
+      return same?.tool ? { tool: same.tool, arguments: { ...same.arguments }, why: 'the identity sign-in got no answer in time and nothing protected was sent; repeat once' }
+        : { tool: 'o11_service_center_session', arguments: { action: 'status', ...at }, why: 'the identity sign-in got no answer in time; status shows the session each need would use' };
+    case 'HEADLESS_AUTH_UNAVAILABLE':
+      return odc ? { tool: 'odc_auth_status', arguments: { ...on }, why: 'shows which session serves this tenant; without a headless Studio transport, auth:"portal-credential" uses the saved Portal profile' }
+        : { tool: 'ssam_doctor', arguments: { lane: 'o11' }, why: 'the loaded bridge lacks the headless transport; the doctor names its version and how to reconnect a newer one' };
+    case 'AUTH_REQUIRED':
+      return odc ? { tool: 'odc_portal_login', arguments: { ...on, action: 'prompt' }, why: 'opens the private window for the Portal account, only when the person wants it; never the chat' }
+        : { tool: 'o11_service_center_session', arguments: { action: 'sign-in', ...at, session: 'vault' }, why: 'stores or selects the credential in the private window, only when the person wants it; never the chat' };
+    case 'ENVIRONMENT_SESSION_EXPIRED':
+      return host ? { tool: 'o11_studio', arguments: { command: 'login', args: { host } }, why: 'opens the Studio\'s own sign-in for this environment; then repeat the call' }
+        : { tool: 'ssam_connect', arguments: { lane: 'o11' }, why: 'reattach the signed-in Service Studio; then repeat the call' };
+    case 'VAULT_API_UNAVAILABLE':
+      return { tool: 'o11_service_center_session', arguments: { action: 'status', ...at, session: 'vault' },
+        why: 'shows which source answers each need; repeat with session=auto, or name the module by moduleId' };
+    default: return null;
+  }
+}
 
 // The code of a refusal without one: a refusal with the problems of a job (PREFLIGHT_REFUSED), the text rules over its
 // texts, then its step, then the tool (when given).

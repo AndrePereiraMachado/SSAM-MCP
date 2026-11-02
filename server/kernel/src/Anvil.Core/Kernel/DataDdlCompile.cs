@@ -6,8 +6,12 @@ namespace Anvil.Reading;
 // certain). Every problem of a text comes at once (the owner's rule: refused once, with all of them).
 public sealed record DdlProblem(int Line, string Code, string Message, string Fix, string? Corrected = null)
 {
-    // More fields of the refusal (the edit ready to send: the current declarations and their basedOn), copied as they are.
+    // More fields of the refusal (current: the declarations the statements name, as the module has them now, and their
+    // basedOn; only to read), copied as they are.
     public JsonObject? Data { get; init; }
+    // C-01 (F-FitBody-21): the basedOn the op certainly takes (the module's own data text, when the statements with keys only
+    // add to what it has): the patch adds it to the op and keeps every statement the job sent.
+    public string? BasedOn { get; init; }
 }
 
 // One op the way back emits, with the line of the text it comes from and what it changes ("Produto.Nome").

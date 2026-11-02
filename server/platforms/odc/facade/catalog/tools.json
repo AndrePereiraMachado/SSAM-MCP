@@ -13357,16 +13357,17 @@
      "field": "command",
      "value": "dismiss-dialog",
      "selector": "enum",
-     "when": "Close an owned dialog with that exact title like its X (Cancel), only when the person agreed.",
+     "when": "Close an owned dialog with that exact title like its X (Cancel), only with the person's own words (WORDS_REQUIRED otherwise).",
      "preconditions": [
       "Studio connected",
-      "the person agreed"
+      "the person's own words in args.words"
      ],
      "next": "status",
      "args": {
       "command": "dismiss-dialog",
       "args": {
-       "title": "<exact dialog title>"
+       "title": "<exact dialog title>",
+       "words": "<the user's own words>"
       }
      },
      "triggers": [

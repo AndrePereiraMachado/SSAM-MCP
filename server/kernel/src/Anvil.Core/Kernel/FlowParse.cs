@@ -18,6 +18,9 @@ namespace Anvil.Reading;
 // which has no shape of a node line, is one of its assignments (FLOW_ASSIGNMENT_INDENT). The strict parse never applies any.
 internal sealed class FlowParser
 {
+    /// <summary>C-22: the name the flow reader gives the Previous Screen (it has no name: the reader names it by its kind). The
+    /// digest prints it `navigate ()`, which is read as this destination.</summary>
+    internal const string PreviousScreen = "PreviousScreen";
     private enum Mode { Strict, Collect, Lenient }
     private readonly Mode mode;
     private readonly List<(int Depth, string Text, int Number)> lines = [];
@@ -243,14 +246,14 @@ internal sealed class FlowParser
         var head = FlowSyntax.SplitKey(line, out var split, out var key) ? split : line;
         if (head == line) key = "";
         var (label, kind) = ActionLabels.FirstOrDefault(l => head.StartsWith(l.Label, StringComparison.Ordinal));
-        if (label == null) throw Error(number, "expected an action header (server action, service action, client action, action, data action)");
+        if (label == null) throw Error(number, "expected an action header (" + string.Join(", ", FlowPrinter.Labels.Values) + ")");
         var words = head[label.Length..].Split(' ');
         // A screen, block or data action names its owner before its name: action Home.Save, data action Flow/Home.GetOrders.
         var name = words[0]; var owner = "";
         var dot = name.LastIndexOf('.');
         if (dot >= 0) {
             owner = name[..dot]; name = name[(dot + 1)..];
-            if (!FlowOwners.Owned(kind)) throw Error(number, "a " + label.Trim() + " belongs to the module: its header names no owner (" + words[0] + "); only a screen, block or data action has one");
+            if (!FlowOwners.Owned(kind)) throw Error(number, "a " + label.Trim() + " belongs to the module: its header names no owner (" + words[0] + "); only a screen, block, data or callback action has one");
             if (!FlowOwners.Valid(owner) || !FlowSyntax.IsIdentifier(name)) throw Error(number, "expected <Owner>.<Name> after " + label.Trim() + " (the screen, block or email, or its Flow/Name path, then the action's name): " + words[0]);
         }
         action = new FlowItem("action", kind, key, name) { Owner = owner };
@@ -791,11 +794,22 @@ internal sealed class FlowParser
             }
             if (rest.StartsWith("navigate ", StringComparison.Ordinal)) {
                 node.Kind = "DestinationNode"; i = 9;
-                node.Set("Destination", 'r', Callee(rest, ref i, number));
+                // C-22 (F-FigmaMobile-06): `navigate ()`, as the digest prints the Previous Screen (a destination with no name),
+                // is the destination the flow reader names by its kind: navigate PreviousScreen().
+                node.Set("Destination", 'r', i < rest.Length && rest[i] == '(' ? PreviousScreen : Callee(rest, ref i, number));
                 Arguments(rest, ref i, node, number);
                 Label(node, rest[i..], number);
                 Passthrough(node, depth + 1);
                 return Flow.End;
+            }
+            // C-22 (F-FT-03, FLOW_SYNTAX x20): `ajax refresh W`, as the digest prints an Ajax Refresh, is the Ajax Refresh of the
+            // widget W (the flow reader writes the same node as node AjaxRefreshNode() @{WidgetOrWebBlock=&"W"}).
+            if (rest.StartsWith("ajax refresh ", StringComparison.Ordinal)) {
+                node.Kind = "AjaxRefreshNode"; i = 13;
+                node.Set("WidgetOrWebBlock", 'r', Callee(rest, ref i, number));
+                Label(node, rest[i..], number);
+                Passthrough(node, depth + 1);
+                return Flow.Next;
             }
             if (rest.StartsWith("refresh ", StringComparison.Ordinal)) {
                 node.Kind = "RefreshDataNode"; i = 8;
@@ -1375,7 +1389,7 @@ internal static class FlowTolerance
     private static readonly System.Text.RegularExpressions.Regex SqlWord = new(
         @"^(?:SELECT|FROM|JOIN|INNER|LEFT|RIGHT|FULL|CROSS|WHERE|ORDER|GROUP|HAVING|ON|AND|OR|UNION|LIMIT|OFFSET|SET|UPDATE|INSERT|DELETE|VALUES|WITH|INTO)\b",
         System.Text.RegularExpressions.RegexOptions.CultureInvariant | System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-    private static readonly string[] Keywords = ["if ", "switch:", "foreach ", "assign", "end", "raise ", "navigate ", "refresh ", "message ",
+    private static readonly string[] Keywords = ["if ", "switch:", "foreach ", "assign", "end", "raise ", "navigate ", "ajax refresh ", "refresh ", "message ",
         "trigger ", "next", "-> ", "else", "otherwise:", "case ", "on ", "unreached:", "//", "@{", "|", "in ", "out ", "local "];
 
     private sealed class Pass

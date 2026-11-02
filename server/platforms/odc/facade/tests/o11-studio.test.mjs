@@ -132,7 +132,7 @@ test('status joins ping, manifest, open modules, the active module with its dial
     assert.deepEqual(value.openModules, [{ name: 'Orders', modified: true, environment: HOST }, { name: 'Lib', modified: false, environment: HOST }]);
     assert.deepEqual(value.environments, [HOST]);
     assert.equal(value.pendingDialogs.length, 2);
-    assert.deepEqual(value.pendingDialogs[0].next.arguments, { command: 'dismiss-dialog', args: { title: 'Unsaved changes' } });
+    assert.deepEqual(value.pendingDialogs[0].next.arguments, { command: 'dismiss-dialog', args: { title: 'Unsaved changes', words: "<the user's own words>" } });
     assert.match(value.pendingDialogs[0].hint, /"command":"dismiss-dialog"/);
     assert.deepEqual(value.pendingDialogs[1].next, WAIT_NO_DIALOGS);
     noShell(value);
@@ -296,7 +296,7 @@ test('open-module blocked by a dialog returns it with the continuation: dismiss 
     const owned = await h.call('open-module', { name: 'Orders' });
     assert.equal(owned.code, 'DIALOG_BLOCKING'); assert.equal(owned.dialogs[0].title, 'Unsaved changes');
     assert.equal(owned.continuation.tool, 'o11_studio');
-    assert.deepEqual(owned.continuation.arguments, { command: 'dismiss-dialog', args: { title: 'Unsaved changes' } });
+    assert.deepEqual(owned.continuation.arguments, { command: 'dismiss-dialog', args: { title: 'Unsaved changes', words: "<the user's own words>" } });
     noShell(owned);
     blockedBy = [webDialog];
     const web = await h.call('open-module', { name: 'Orders' });
@@ -444,15 +444,36 @@ test('dismiss-dialog closes an owned window by its exact title; refuses a web di
     { title: 'Unsaved changes', type: 'MessageBoxWindow', isVisible: true, isModal: true, contentKind: 'native', texts: ['[Button] Cancel'] },
     { title: 'Recover', type: 'DialogWindow', isVisible: true, isModal: false, contentKind: 'web' }] });
   try {
-    assert.deepEqual(await h.call('dismiss-dialog', { title: 'unsaved changes' }), { ok: true, closed: ['MessageBoxWindow:Unsaved changes'] });
-    const web = await h.call('dismiss-dialog', { title: 'Recover' });
+    assert.deepEqual(await h.call('dismiss-dialog', { title: 'unsaved changes', words: 'sim, pode fechar' }), { ok: true, closed: ['MessageBoxWindow:Unsaved changes'] });
+    const web = await h.call('dismiss-dialog', { title: 'Recover', words: 'sim, pode fechar' });
     assert.equal(web.code, 'WEB_DIALOG'); assert.deepEqual(web.continuation, WAIT_NO_DIALOGS);
-    assert.equal((await h.call('dismiss-dialog', { title: 'Nope' })).code, 'DIALOG_NOT_FOUND');
-    assert.equal((await h.call('dismiss-dialog', { title: 'Service Studio' })).code, 'NOT_A_DIALOG');
+    assert.equal((await h.call('dismiss-dialog', { title: 'Nope', words: 'sim, pode fechar' })).code, 'DIALOG_NOT_FOUND');
+    assert.equal((await h.call('dismiss-dialog', { title: 'Service Studio', words: 'sim, pode fechar' })).code, 'NOT_A_DIALOG');
     assert.equal((await h.call('dismiss-dialog', { title: '' })).code, 'BAD_ARGS');
     assert.deepEqual(h.sent('close_dialog').map(r => r.params), [{ title: 'unsaved changes' }]);
     assert.ok(h.sent('close_dialog').every(r => typeof r.params.title === 'string' && r.params.title.trim()));
     assert.equal(h.selected.length, 4); // the refused blank title never reached the check
+  } finally { await h.close(); }
+});
+
+// Review W2-DIAG, correction 1: closing a Studio dialog is the person's decision, and the rule is the code, not a flag.
+test('dismiss-dialog without the person\'s words (absent, blank, the marker, a template, a sha256) is WORDS_REQUIRED and nothing reaches the bridge', async () => {
+  const h = await harness({ windows: [
+    { title: 'Unexpected Error', type: 'DialogWindow', isVisible: true, isModal: true, contentKind: 'native', texts: ['[Button] OK'] }] });
+  try {
+    for (const words of [undefined, '', '   ', "<the user's own words>", '<words>', 'sha256:' + 'a'.repeat(64)]) {
+      const refused = await h.call('dismiss-dialog', { title: 'Unexpected Error', ...(words === undefined ? {} : { words }) });
+      assert.equal(refused.code, 'WORDS_REQUIRED', JSON.stringify(words));
+      assert.equal(refused.outcome, 'not-sent'); assert.equal(refused.executed, false);
+      assert.equal(refused.question, 'The Studio shows the dialog "Unexpected Error". Close it like its X (Cancel)?');
+      assert.deepEqual(refused.continuation.arguments, { command: 'dismiss-dialog', args: { title: 'Unexpected Error', words: "<the user's own words>" } });
+      assert.equal(refused.continuation.question, refused.question);
+    }
+    assert.deepEqual(h.fake.seen.map(r => r.method), [], 'no windows read and no close_dialog: nothing was sent to the bridge');
+    assert.equal(h.selected.length, 0, 'refused before the selection check');
+    const closed = await h.call('dismiss-dialog', { title: 'Unexpected Error', words: 'sim, pode fechar o erro' });
+    assert.deepEqual(closed, { ok: true, closed: ['DialogWindow:Unexpected Error'] });
+    assert.deepEqual(h.sent('close_dialog').map(r => r.params), [{ title: 'Unexpected Error' }], 'the words never travel to the bridge');
   } finally { await h.close(); }
 });
 
@@ -512,7 +533,7 @@ test('assertSelected runs only before the commands that change the Studio, and i
     for (const [command, args] of [['status'], ['errors'], ['publish-log'], ['windows'], ['wait', { condition: 'idle' }], ['wait', { condition: 'no-dialogs' }], ['wait', { condition: 'signed-in', host: HOST }]])
       assert.equal((await h.call(command, args)).ok, true, command);
     assert.equal(h.selected.length, 0);
-    for (const [command, args] of [['open-module', { name: 'Orders' }], ['snapshot', {}], ['dismiss-dialog', { title: 'Note' }], ['login', { host: HOST }], ['wait', { condition: 'open', module: 'Orders' }]])
+    for (const [command, args] of [['open-module', { name: 'Orders' }], ['snapshot', {}], ['dismiss-dialog', { title: 'Note', words: 'sim, pode fechar' }], ['login', { host: HOST }], ['wait', { condition: 'open', module: 'Orders' }]])
       assert.equal((await h.call(command, args)).ok, true, command);
     assert.equal(h.selected.length, 5);
   } finally { await h.close(); }
@@ -534,13 +555,13 @@ test('translateDialogHint turns every DialogPolicy hint and the bridge dialog re
   }
   assert.match(translateDialogHint(HINTS.Recovery), /ask the person to choose Discard or Open in the Studio, then o11_studio \{"command":"wait","args":\{"condition":"no-dialogs"\}\}/);
   assert.match(translateDialogHint(HINTS.WebDialog), /ask the person to answer it in the Studio/);
-  assert.match(translateDialogHint(HINTS._, { title: 'Save', closable: true }), /o11_studio \{"command":"dismiss-dialog","args":\{"title":"Save"\}\}/);
+  assert.match(translateDialogHint(HINTS._, { title: 'Save', closable: true }), /o11_studio \{"command":"dismiss-dialog","args":\{"title":"Save","words":"<the user's own words>"\}\} closes it like its X \(Cancel\), with the person's words/);
   assert.doesNotMatch(translateDialogHint(HINTS._, { title: 'Save', closable: false }), /dismiss-dialog/);
   assert.match(translateDialogHint(HINTS._ + '; then call open_module again'), /call o11_studio \{"command":"open-module"\} again$/);
   const merge = "merge_from_oml: 'M' has a dialog or merge editor pending in the Studio (WebDialog): apply or close it in the Studio (see `windows` / `python scripts/cdp_pages.py`) and retry; never restart the Studio for this";
   assert.equal(translateDialogHint(merge), "merge_from_oml: 'M' has a dialog or merge editor pending in the Studio (WebDialog): apply or close it in the Studio (see o11_studio {\"command\":\"windows\"}) and retry; never restart the Studio for this");
   assert.equal(translateDialogHint('run `python scripts/cdp_pages.py --click "Keep Local"` now'), 'run ask the person to click Keep Local in the Studio now');
-  assert.equal(translateDialogHint('`python scripts\\cdp_pages.py --click Cancel`', { title: 'Merge', closable: true }), 'o11_studio {"command":"dismiss-dialog","args":{"title":"Merge"}}');
+  assert.equal(translateDialogHint('`python scripts\\cdp_pages.py --click Cancel`', { title: 'Merge', closable: true }), 'o11_studio {"command":"dismiss-dialog","args":{"title":"Merge","words":"<the user\'s own words>"}} (with the person\'s words)');
   assert.equal(translateDialogHint('python scripts/cdp_pages.py --list'), 'o11_studio {"command":"windows"}');
   assert.equal(translateDialogHint('nothing to change'), 'nothing to change');
   assert.equal(translateDialogHint(undefined), undefined);

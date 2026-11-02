@@ -50,19 +50,22 @@ test('incident replay through MCP: immediate recovery/read, fenced uncertainty, 
  const reappear=setTimeout(()=>{visible=true},1000);
  try{
   const delivery=call('o11_deliver',{authorize:'words-never-in-lock'},'deliver');
-  await at(200);const first=await call('o11_studio',{command:'dismiss-dialog',args:{title:'Unexpected Error'}},'dismiss1');assert.equal(first.ok,true);assert.ok(timings.dismiss1<=500);assert.equal(closed,1);
+  await at(200);const first=await call('o11_studio',{command:'dismiss-dialog',args:{title:'Unexpected Error',words:'sim, pode fechar'}},'dismiss1');assert.equal(first.ok,true);assert.ok(timings.dismiss1<=500);assert.equal(closed,1);
   await at(300);const closing=await call('ssam_task',{id:taskId,close:{reason:'test'}},'runningClose');assert.equal(closing.code,'TASK_STILL_RUNNING');assert.equal(closing.holder.tool,'o11_deliver');assert.equal(closing.holder.taskId,taskId);assert.ok(closing.holder.heldMs>=0);assert.ok(timings.runningClose<=500);
   await at(400);const read=await call('o11_data',{request:{operation:'read'}},'read');assert.equal(read.via,'cold');assert.ok(read.workerNote);assert.equal(coldCalls,1);assert.ok(timings.read<=510);
   await at(500);const publishing=call('o11_publish',{},'waitingPublish');
   const uncertain=await delivery;assert.equal(uncertain.code,'DELIVERY_UNCERTAIN');assert.equal(uncertain.recovery[0].arguments.command,'dismiss-dialog');
   const blocked=await publishing;assert.equal(blocked.code,'STUDIO_WRITE_HOLDER_STALLED');assert.equal(blocked.holder.tool,'bridge:merge_from_oml');assert.ok(timings.waitingPublish<=2000);
-  await call(blocked.recovery[0].tool,blocked.recovery[0].arguments,'dismiss2');assert.equal(closed,2);assert.equal(studioWriteHolder({deps}).state,'pending-in-studio');
+  // The recovery carries the marker of the person's words: replayed as it is it closes nothing; with their reply it closes.
+  assert.equal(blocked.recovery[0].arguments.args.words,"<the user's own words>");
+  const asIs=await call(blocked.recovery[0].tool,blocked.recovery[0].arguments,'dismissMarker');assert.equal(asIs.code,'WORDS_REQUIRED');assert.equal(closed,1);
+  await call(blocked.recovery[0].tool,{...blocked.recovery[0].arguments,args:{...blocked.recovery[0].arguments.args,words:'sim, pode fechar'}},'dismiss2');assert.equal(closed,2);assert.equal(studioWriteHolder({deps}).state,'pending-in-studio');
   // CX14 R5: the Studio shows its report once more after the second dismiss (in the incident it stayed from 00:12 to 00:30).
   // The watch of the pending merge marks it again: a write answers at once with the recovery, never the queue timeout.
   visible=true;const reappeared=Date.now();while(studioWriteHolder({deps})?.state!=='stalled'&&Date.now()-reappeared<1000)await wait(1);timings.remarked=Date.now()-reappeared;
   const again=await call('o11_publish',{},'reappearPublish');assert.equal(again.code,'STUDIO_WRITE_HOLDER_STALLED');assert.ok(timings.reappearPublish<=500);
   assert.equal(again.recovery[0].arguments.command,'dismiss-dialog');
-  await call(again.recovery[0].tool,again.recovery[0].arguments,'dismiss3');assert.equal(closed,3);assert.equal(studioWriteHolder({deps}).state,'pending-in-studio');
+  await call(again.recovery[0].tool,{...again.recovery[0].arguments,args:{...again.recovery[0].arguments.args,words:'sim, pode fechar de novo'}},'dismiss3');assert.equal(closed,3);assert.equal(studioWriteHolder({deps}).state,'pending-in-studio');
   const settlement=Date.now();journalState='not-applied';while(studioWriteHolder({deps})&&Date.now()-settlement<500)await wait(1);assert.equal(studioWriteHolder({deps}),null);timings.settlement=Date.now()-settlement;assert.ok(timings.settlement<=50);
   assert.equal((await call('ssam_task',{id:taskId,close:{reason:'test'}},'closed')).ok,true);
   assert.equal((await call('o11_publish',{},'publish')).ok,true);assert.equal(publishes,1);

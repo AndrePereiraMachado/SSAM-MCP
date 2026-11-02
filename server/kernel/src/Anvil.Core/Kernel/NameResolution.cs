@@ -74,9 +74,13 @@ public static class NameResolution
     public static bool IsSystemDestination(string kind, string name) => SystemDestinations.Contains(name) && kind.Contains("Action", StringComparison.Ordinal);
 
     /// <summary>The one predicate of an event's destination, for the edit and the document form of ssam-html/1 and the
-    /// preflight: <paramref name="own"/> says the action belongs to the event's own screen or block.</summary>
+    /// preflight: <paramref name="own"/> says the action belongs to the event's own screen or block. C-23: an external site of the
+    /// module (RedirectToURL of the Reactive templates, ExternalURL of the Traditional ones, one the module declares) opens a URL
+    /// as a screen opens a page.</summary>
     public static bool IsEventDestination(string kind, string? role, bool own, string name) =>
-        IsScreen(kind, role) || role == "action" && own || IsSystemDestination(kind, name);
+        IsScreen(kind, role) || role == "action" && own || IsSystemDestination(kind, name) || IsExternalSite(kind);
+
+    public static bool IsExternalSite(string kind) => Bare(kind) is "ExternalSite" or "ExternalSiteSignature";
 
     public static bool IsRecord(string kind, string? role)
     {

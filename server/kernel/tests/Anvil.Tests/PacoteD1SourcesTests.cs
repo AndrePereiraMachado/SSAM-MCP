@@ -143,7 +143,8 @@ public sealed class PacoteD1SourcesTests
             Assert.Equal("not-sent", refused["writeState"]!.ToString());
             Assert.Equal(1, previews);
             Assert.DoesNotContain("merge_from_oml", refreshing.Calls);
-            Assert.True(refreshing.Calls.IndexOf("refresh_references") < refreshing.Calls.IndexOf("snapshot_module"), string.Join(",", refreshing.Calls));
+            // C-06: the capture the job is checked on comes first; the refresh precedes the base snapshot.
+            Assert.True(refreshing.Calls.IndexOf("refresh_references") < refreshing.Calls.LastIndexOf("snapshot_module"), string.Join(",", refreshing.Calls));
             var sent = refreshing.Refresh!;
             Assert.Equal("ZZHighCodePrimitives", sent["producers"]![0]!.ToString());
             Assert.Equal("module-key", sent["module_key"]!.ToString());

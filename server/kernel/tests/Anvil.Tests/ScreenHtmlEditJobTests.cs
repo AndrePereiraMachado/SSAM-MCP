@@ -287,6 +287,58 @@ public class ScreenHtmlEditJobTests(ITestOutputHelper output)
     }
 
     [Fact]
+    public void AnAggregateEditedWithItsShortFormIsRefusedWithoutAPatchThatEmptiesIt()
+    {
+        // C-01 (b), F-FitBody-40 (27/10): an edit sent <aggregate k name from join where sort max/> for an aggregate of the
+        // reading. from, join, where and sort came back as HTML_PROPERTY_UNKNOWN with a "verified" patch that removed them and
+        // left <aggregate k name max/>: an aggregate without source, filter or sort. Now one HTML_DATA_EDIT on the aggregate, with
+        // the supported route in its fix and no patch; no problem patches those attributes away.
+        if (!StudioAvailable()) return;
+        var host = Host("aggregate-short-edit");
+        var spec = """{"op":"spec","data":{"entities":[{"name":"Pedido","attributes":[{"name":"Numero","type":"Text","length":20},{"name":"Ativo","type":"Boolean"}],"public":true},{"name":"Nota","attributes":[{"name":"PedidoId","type":"Pedido Identifier"},{"name":"Texto","type":"Text","length":50}],"public":true}]}}""";
+        const string pedidos = """
+            <screen name="Pedidos" roles="Registered">
+            <aggregate name="GetPedidos" from="Pedido" sort="Pedido.Numero" max="10"/>
+            <Block name="LayoutBlank">
+             <slot name="Content">
+              <div class="lista">
+               <p>{{ "Pedidos" }}</p>
+              </div>
+             </slot>
+            </Block>
+            </screen>
+            """;
+        var createJob = Path.Combine(host.WorkDirectory, "pedidos-create.json");
+        File.WriteAllText(createJob, new JsonObject { ["ops"] = new JsonArray(JsonNode.Parse(spec), new JsonObject { ["op"] = "html", ["data"] = new JsonObject { ["html"] = pedidos } }) }.ToJsonString());
+        var created = JsonSerializer.SerializeToNode(JobRunner.Run(host, Fixture("reactive-ui.oml"), createJob, Path.Combine(host.WorkDirectory, "pedidos.oml")))!.AsObject();
+        Assert.True(created["accepted"]!.GetValue<bool>(), created.ToJsonString());
+        var basePath = Path.Combine(host.WorkDirectory, "pedidos.oml");
+        var (reading, html, sha) = Read(host, basePath, "Pedidos");
+        var aggregate = ScreenHtmlText.Elements(ScreenHtml.Parse(html)).First(x => x.Node.Tag == "aggregate").Node;
+        var k = aggregate.Get("k")!;
+        // The short form of a document, written on the aggregate of the reading (the shape of the FitBody edit).
+        var edit = "<aggregate k=\"" + k + "\" name=\"GetPedidos\" from=\"Pedido\" join=\"Nota on Nota.PedidoId = Pedido.Id\" where=\"Pedido.Ativo\" sort=\"Pedido.Numero desc\" max=\"10\"/>";
+        var refused = Run(host, basePath, Job(sha, reading, "Pedidos", [edit]), "aggregate-short-edit");
+        Assert.False(refused["accepted"]?.GetValue<bool>() ?? false);
+        var problems = Problems(refused).Select(p => p!.AsObject()).ToList();
+        var data = Assert.Single(problems, p => p["code"]!.ToString() == "HTML_DATA_EDIT");
+        Assert.Null(data["patch"]);
+        foreach (var attribute in new[] { "from", "join", "where", "sort" }) Assert.Contains(attribute, data["message"]!.ToString());
+        Assert.Contains("os-Filter", data["fix"]!.ToString());
+        // No problem of the edit removes the aggregate's data attributes (the patch that emptied it).
+        Assert.DoesNotContain(problems, p => p["code"]!.ToString() == "HTML_PROPERTY_UNKNOWN" && System.Text.RegularExpressions.Regex.IsMatch(p["message"]!.ToString(), @"^(from|join|where|sort)="));
+        foreach (var patch in problems.Select(p => p["patch"]).OfType<JsonArray>())
+            Assert.DoesNotContain("<aggregate k=\\\"" + k + "\\\" name=\\\"GetPedidos\\\" max=", patch.ToJsonString());
+        // The route the fix names: the aggregate as the reading writes it, a part changed by its k.
+        var sort = ScreenHtmlText.Elements(aggregate).First(x => x.Node.Tag == "os-Sort").Node;
+        Attribute(sort, "os-SortDirection", "Descending");
+        var routed = Run(host, basePath, Job(sha, reading, "Pedidos", [ScreenHtmlText.Write(aggregate)]), "aggregate-long-edit");
+        Assert.True(routed["accepted"]!.GetValue<bool>(), routed.ToJsonString());
+        var (_, after, _) = Read(host, Path.Combine(host.WorkDirectory, "aggregate-long-edit.oml"), "Pedidos");
+        Assert.Contains("os-SortDirection=\"Descending\"", after);
+    }
+
+    [Fact]
     public void AnEditOfAnOlderReadingIsRebasedByKeyAndKeepsWhatChangedSince()
     {
         if (!StudioAvailable()) return;
@@ -428,6 +480,137 @@ public class ScreenHtmlEditJobTests(ITestOutputHelper output)
         var ops = new JsonArray(EditOp(sha, read, "FarmaVirtual", ["<style>" + css + "</style>"]));
         for (var i = 1; i < session.Count; i++) ops.Add(session[i]!.DeepClone());
         return new JsonObject { ["ops"] = ops };
+    }
+
+    /// <summary>C-14 (F-FigmaMobile-03, F-FitBody-07/16/31/44/51): the CSS a document wrote in the theme is edited by the edit of
+    /// its root. The reading of FB_Launch did not print its &lt;style scope="theme" id="fitbody"&gt; (no basedOn to edit it), and
+    /// &lt;style scope="theme" id="ewallet-r2"&gt; sent inside an element of the Home edit was refused HTML_EDIT_NOT_APPLIED (it
+    /// became an HTML Element); a &lt;style scope="theme"&gt; edit replaced the root's own style sheet. The sessions created 10
+    /// blocks that only carried CSS. Now the reading prints the root's own part and the named parts it owns, the edit replaces a
+    /// part by its id and adds a new one (nested or not, HTML_THEME_STYLE_LIFTED), the theme holds each part once, the root's own
+    /// style sheet stays, and another root's part is never printed here.</summary>
+    [Fact]
+    public void TheThemePartsOfARootAreReadAndEditedThroughItsEdit()
+    {
+        if (!StudioAvailable()) return;
+        var host = Host("theme-parts");
+        var created = Path.Combine(host.WorkDirectory, "created.oml");
+        JsonObject Document(string name, string body) => new() { ["op"] = "html", ["data"] = new JsonObject { ["html"] = $"<screen name=\"{name}\" roles=\"Registered\">" + body
+            + "<Block name=\"LayoutBlank\"><slot name=\"Content\"><div class=\"fb-app\"><div class=\"fb-logo\">FitBody</div></div></slot></Block></screen>" } };
+        var first = Run(host, Fixture("reactive-ui.oml"), new JsonObject { ["ops"] = new JsonArray(
+            Document("FbLaunch", "<style>.fb-own{margin:0}</style><style scope=\"theme\" id=\"fitbody\">.fb-app .fb-logo{width:120px}\n.fb-app .lg{font-size:32px}</style><style scope=\"theme\">.fb-app{padding:0}</style>"),
+            Document("FbOther", "<style scope=\"theme\" id=\"fitbodyl2\">.fb-app .fbn-tabs{position:absolute}</style>")) }, "created");
+        Assert.True(first["accepted"]!.GetValue<bool>(), first.ToJsonString());
+
+        var (reading, html, sha) = Read(host, created, "FbLaunch");
+        output.WriteLine(html);
+        // The reading prints the parts FbLaunch wrote (named and own), never FbOther's.
+        Assert.Contains("<style scope=\"theme\" id=\"fitbody\">\n.fb-app .fb-logo{width:120px}\n.fb-app .lg{font-size:32px}\n</style>", html.Replace("\r\n", "\n"));
+        Assert.Contains("<style scope=\"theme\">\n.fb-app{padding:0}\n</style>", html.Replace("\r\n", "\n"));
+        Assert.DoesNotContain("fitbodyl2", html);
+
+        // The edit: the part fitbody corrected, and a new part sent inside the element it styles (the F-FigmaMobile-03 shape).
+        var tree = ScreenHtml.Parse(html);
+        var logo = ScreenHtmlText.Elements(tree).First(x => x.Node.Get("class") == "fb-logo").Node;
+        var holder = ScreenHtmlText.Elements(tree).First(x => x.Node.Children.Contains(logo)).Node;
+        holder.Children.Add(ScreenHtml.Parse("<style scope=\"theme\" id=\"ewallet-r2\">.fb-app .ew-balance{color:#c6f432}</style>").Children[0]);
+        var edits = new[] { "<style scope=\"theme\" id=\"fitbody\">.fb-app .fb-logo{width:147px}\n.fb-app .lg{font-size:32px}</style>", ScreenHtmlText.Write(holder) };
+        var result = Run(host, created, Job(sha, reading, "FbLaunch", edits), "edited");
+        Assert.True(result["accepted"]!.GetValue<bool>(), result.ToJsonString());
+        Assert.Contains("HTML_THEME_STYLE_LIFTED", result.ToJsonString());
+        var parts = Answer(result)["themeParts"]!.AsArray();
+        Assert.Equal(["ewallet-r2", "fitbody"], parts.Select(p => p!["part"]!.ToString()).Order(StringComparer.Ordinal));
+        Assert.True(parts.Single(p => p!["part"]!.ToString() == "ewallet-r2")!["created"]!.GetValue<bool>());
+
+        var edited = Path.Combine(host.WorkDirectory, "edited.oml");
+        var css = ThemeAuthor(host, edited);
+        Assert.Equal(1, css.Split("/* anvil:html style:fitbody */").Length - 1);
+        Assert.Contains(".fb-app .fb-logo{width:147px}", css);
+        Assert.DoesNotContain("width:120px", css);
+        Assert.Contains("/* anvil:html style:ewallet-r2 */ /* anvil:owner FbLaunch */", css);
+        Assert.Contains(".fb-app .fbn-tabs{position:absolute}", css);
+        var (_, again, _) = Read(host, edited, "FbLaunch");
+        Assert.Contains("<style scope=\"theme\" id=\"ewallet-r2\">\n.fb-app .ew-balance{color:#c6f432}\n</style>", again.Replace("\r\n", "\n"));
+        Assert.Contains("width:147px", again);
+        Assert.Contains(".fb-own{margin:0}", again);
+        Assert.DoesNotContain("<style scope=\"theme\" id=\"ewallet-r2\">", again[again.IndexOf("<Block", StringComparison.Ordinal)..]);
+        // The next edit is based on this reading (result.next.html): the same text, read from the edited capture.
+        Assert.Equal(Answer(result)["next"]!["html"]!.ToString(), host.HtmlRead(File.ReadAllBytes(edited), "FbLaunch", withKeys: false)["documents"]![0]!["htmlSha256"]!.ToString());
+    }
+
+    /// <summary>B15 (the proto line's C-10, 968d5605; F-FigmaReactive-01, F-FT-01, F-FigmaMobile-09): the image files of a write are
+    /// module images (ssam_code files: the facade writes create IImage with the bytes of fm-hero.png as fm_hero), the screen of the
+    /// same job shows the one its src names (<c>&lt;img src="fm-hero.png"&gt;</c>), and the same file sent again (a new photo) fills
+    /// the image it already is: one image, the new content, never fm_hero2 nor the collision refusal.</summary>
+    [Fact]
+    public void AnImageFileOfTheWriteIsTheModuleImageItsScreenShows()
+    {
+        Assert.True(StudioAvailable(), "this test needs the Service Studio's assemblies (headless)");
+        var host = Host("module-images");
+        const string png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+        const string gif = "R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
+        // The op module-images.mjs writes for an image file of ssam_code files; the facade passes the grant of that file
+        // (--image-fill fm_hero=<sha256 of its bytes>, ImageFills) outside the job.
+        JsonObject Image(string binary, string file) => new() { ["op"] = "create", ["parent"] = "@espace", ["type"] = "IImage", ["name"] = "fm_hero", ["args"] = new JsonObject { ["binary"] = binary, ["originalPath"] = file } };
+        var first = Run(host, Fixture("reactive-ui.oml"), new JsonObject { ["ops"] = new JsonArray(Image(png, "fm-hero.png"),
+            new JsonObject { ["op"] = "html", ["data"] = new JsonObject { ["html"] = "<screen name=\"Fitmaker\" roles=\"Registered\"><Block name=\"LayoutBlank\"><slot name=\"Content\"><img src=\"fm-hero.png\" alt=\"Hero\"/></slot></Block></screen>" } }) }, "images-first");
+        Assert.True(first["accepted"]!.GetValue<bool>(), first.ToJsonString());
+        var (_, html, _) = Read(host, Path.Combine(host.WorkDirectory, "images-first.oml"), "Fitmaker");
+        Assert.Contains("src=\"fm_hero\"", html);
+        // The same file again, another photo: the image takes the new content.
+        var replace = Image(gif, "fm-hero.gif"); replace["as"] = "$hero";
+        var job = new JsonObject { ["ops"] = new JsonArray(replace, new JsonObject { ["op"] = "get", ["target"] = "$hero" }) };
+        JsonObject again;
+        using (ImageFills.For(("fm_hero", Convert.ToHexString(SHA256.HashData(Convert.FromBase64String(gif))))))
+            again = Run(host, Path.Combine(host.WorkDirectory, "images-first.oml"), job, "images-again");
+        Assert.True(again["accepted"]!.GetValue<bool>(), again.ToJsonString());
+        var results = again["results"]!.AsArray();
+        Assert.True(results[0]!["result"]!["contentReplaced"]!.GetValue<bool>(), results[0]!.ToJsonString());
+        Assert.Contains("Gif", results[1]!["result"]!.ToJsonString());
+        Assert.Contains(again["normalized"]!.AsArray(), n => n!["code"]?.ToString() == "IMAGE_CONTENT_REPLACED");
+        // Review of W3-CSS (correction 2): the replacement reaches the answer, as a high warning the facades of both lanes relay.
+        var warning = Assert.Single(again["highWarnings"]!.AsArray(), w => w!["code"]?.ToString() == "IMAGE_CONTENT_REPLACED")!;
+        Assert.Equal("high", warning["severity"]!.ToString());
+        Assert.Equal("fm_hero", warning["image"]!.ToString());
+        Assert.Contains("fm_hero", warning["message"]!.ToString());
+        Assert.Contains("fm-hero.gif", warning["message"]!.ToString());
+        var (_, still, _) = Read(host, Path.Combine(host.WorkDirectory, "images-again.oml"), "Fitmaker");
+        Assert.Contains("src=\"fm_hero\"", still);
+    }
+
+    /// <summary>Review of W3-CSS (S1, the Integradora's decision): only a create an image FILE made fills an image of the same name.
+    /// A create IImage written by hand with the name of an image the module has (Logo, the app's own icon in the fixture) is still
+    /// NAME_COLLISION, as on the base: nothing is replaced and nothing is saved.</summary>
+    [Fact]
+    public void AHandWrittenCreateOfAnExistingImageIsStillANameCollision()
+    {
+        Assert.True(StudioAvailable(), "this test needs the Service Studio's assemblies (headless)");
+        var host = Host("module-images-hand");
+        const string png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+        var saved = Path.Combine(host.WorkDirectory, "image-by-hand.oml");
+        var pngSha = Convert.ToHexString(SHA256.HashData(Convert.FromBase64String(png)));
+        // R2-1 (round 3 of the review): no field of the job authorizes the fill. Without a grant, with the _from "file" an
+        // earlier generated job carried, and with a grant of another image or of other bytes: NAME_COLLISION, nothing saved.
+        foreach (var (from, grant) in new (string? From, (string, string)[] Grant)[] { (null, []), ("file", []), ("file", [("fm_hero", pngSha)]), (null, [("Logo", new string('0', 64))]) })
+        {
+            var op = new JsonObject { ["op"] = "create", ["parent"] = "@espace", ["type"] = "IImage", ["name"] = "Logo", ["args"] = new JsonObject { ["binary"] = png, ["originalPath"] = "logo.png" } };
+            if (from != null) op["_from"] = from;
+            if (File.Exists(saved)) File.Delete(saved);
+            JsonObject refused;
+            using (ImageFills.For(grant)) refused = Run(host, Fixture("reactive-ui.oml"), new JsonObject { ["ops"] = new JsonArray(op) }, "image-by-hand");
+            Assert.False(refused["accepted"]!.GetValue<bool>(), (from ?? "-") + ": " + refused.ToJsonString());
+            Assert.Contains(Problems(refused), p => p!["code"]?.ToString() == "NAME_COLLISION" && p["existing"]?.ToString() == "IImage:Logo");
+            Assert.False(File.Exists(saved), "a refused job saves nothing");
+        }
+    }
+
+    private static string ThemeAuthor(ModelHost host, string oml)
+    {
+        var dir = host.WorkDirectory;
+        var job = Path.Combine(dir, "theme-get.json");
+        File.WriteAllText(job, """{"ops":[{"op":"get","target":"IMobileTheme:Headless_UI"}]}""");
+        var got = JsonSerializer.SerializeToNode(JobRunner.Run(host, oml, job, Path.Combine(dir, "theme-get.oml")))!["results"]![0]!["result"]!;
+        return (got["properties"]?["UserStyleSheet"]?.ToString() ?? got["UserStyleSheet"]?.ToString() ?? got["properties"]?["StyleSheet"]?.ToString() ?? got["StyleSheet"]?.ToString() ?? "").Replace("\r\n", "\n");
     }
 
     // ---- helpers ----------------------------------------------------------------------------------------------------------

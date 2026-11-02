@@ -14,6 +14,8 @@ namespace Anvil.Core.Preflight;
 public static class DocumentAggregates
 {
     public const string Code = "OPERAND_TYPES";
+    /// <summary>C-26: a join of the short form whose condition reads a source it does not join.</summary>
+    public const string JoinCode = "AGGREGATE_JOIN_SOURCES";
     private static readonly HashSet<string> Ordering = new(StringComparer.Ordinal) { "<", ">", "<=", ">=" };
     private static readonly HashSet<string> Arithmetic = new(StringComparer.Ordinal) { "-", "*", "/" };
     private static readonly HashSet<string> Numeric = new(StringComparer.OrdinalIgnoreCase) { "Integer", "Long Integer", "Decimal", "Currency" };
@@ -31,6 +33,18 @@ public static class DocumentAggregates
             var path = prefix == null ? null : $"{prefix}/{doc.Op}/data/html";
             foreach (var aggregate in doc.Declared.Where(d => d.Kind == "aggregate"))
             {
+                // C-26: a join that cannot read its condition (a third source, a left side declared after it) is said before the
+                // Studio, by the parser the compile uses (the Verify answered "Can't identify 'FBRoutine'" twice).
+                if (aggregate.Element.Get("from") is { Length: > 0 } from && aggregate.Element.Get("join") is { Length: > 0 } join)
+                    foreach (var wrong in ScreenDocument.ParseAggregate(HtmlDocumentRules.Decode(from), HtmlDocumentRules.Decode(join)).Problems)
+                    {
+                        var (line, column) = doc.Text.Position(aggregate.Element.Find("join")!.Start);
+                        var problem = JobPreflight.Problem(doc.Op, path, JoinCode, "error", $"html: line {line} col {column}: aggregate {aggregate.Name} of {doc.Name}: {wrong}",
+                            "each join reads its two sources: its left side is the one source its condition reads besides its right side (or Left~Right), so a chained join names the source it hangs on (C on C.BId = B.Id); a condition on a third source goes to where=", null, "html");
+                        problem["verifyCode"] = "ExpressionUnknownObject";
+                        problem["element"] = aggregate.Name;
+                        problems.Add(problem);
+                    }
                 var sources = Sources(aggregate.Element);
                 foreach (var name in new[] { "where", "os-Filter" })
                 {
@@ -58,23 +72,16 @@ public static class DocumentAggregates
         return problems;
     }
 
-    /// <summary>The source of each name an aggregate reads: from= (Entity or Alias=Entity, comma separated) and join= (Entity
-    /// on ..., comma separated at the top level).</summary>
+    /// <summary>The source of each name an aggregate reads: from= and join= as the compile reads them (C-26: the one parser,
+    /// ScreenDocument.ParseAggregate; before, the joins were split at ',' here and at ';' there).</summary>
     private static Dictionary<string, string> Sources(HtmlText.Element element)
     {
         var sources = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        void Add(string part)
+        var shape = ScreenDocument.ParseAggregate(HtmlDocumentRules.Decode(element.Get("from") ?? ""), HtmlDocumentRules.Decode(element.Get("join") ?? ""));
+        foreach (var source in shape.All)
         {
-            var text = part.Trim();
-            var eq = text.IndexOf('=');
-            var (alias, entity) = eq > 0 ? (text[..eq].Trim(), text[(eq + 1)..].Trim()) : (text, text);
-            if (alias.Length > 0 && entity.Length > 0 && !entity.Contains(' ')) sources[alias] = entity;
-        }
-        foreach (var part in (HtmlDocumentRules.Decode(element.Get("from") ?? "")).Split(',', StringSplitOptions.RemoveEmptyEntries)) Add(part);
-        foreach (var part in (HtmlDocumentRules.Decode(element.Get("join") ?? "")).Split(',', StringSplitOptions.RemoveEmptyEntries))
-        {
-            var on = part.IndexOf(" on ", StringComparison.OrdinalIgnoreCase);
-            Add(on > 0 ? part[..on] : part);
+            var entity = source.Entity[(source.Entity.LastIndexOf(':') + 1)..];
+            if (source.Alias.Length > 0 && entity.Length > 0 && !entity.Contains(' ')) sources[source.Alias] = entity;
         }
         return sources;
     }

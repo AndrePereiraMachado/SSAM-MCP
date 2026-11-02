@@ -77,7 +77,9 @@ public sealed class ScreenVisualPredictTests(ITestOutputHelper output)
         One("label[data-label].OSFillParent > span > input[data-checkbox].checkbox[type=checkbox]");
         One("strong > span[data-expression]");
         Assert.Single(CssSelectors.Select(dom, ".bar > a[data-link].ThemeGrid_MarginGutter"));      // the second link only
-        One("tbody[data-list].list.OSFillParent[data-virtualization-disabled]");
+        // F8: Mode Custom (the runtime renders the tbody, not a div) and no class list on a table part (ScreenVisual.TableListClass).
+        One("tbody[data-list].OSFillParent[data-virtualization-disabled][data-ssam-rows]");
+        Assert.Empty(CssSelectors.Select(dom, "tbody.list"));
         Assert.Empty(CssSelectors.Select(dom, "tbody[data-list] > script"));
         Assert.Equal(2, CssSelectors.Select(dom, "div[data-list] > script").Count());                // a plain List keeps its sentinels
         Assert.Equal(0, prediction.QuotedClasses);

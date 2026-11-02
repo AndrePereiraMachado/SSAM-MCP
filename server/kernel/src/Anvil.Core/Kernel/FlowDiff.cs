@@ -151,6 +151,26 @@ public sealed partial class FlowDiff
 
     private void Run(FlowItem edited)
     {
+        // The callback's own rules, only when the text is a callback's: a new one, or the read of a callback. A header that writes
+        // callback action over the @key of another kind of action is FLOW_ACTION_KIND alone (no fix names a callback that is not).
+        if (edited.Kind == "RestCallbackActionFlow" && (baseline == null || baseline.Kind == "RestCallbackActionFlow")) {
+            // The text edits a callback the client already has (rest-consume creates them); ModelSession refuses a header
+            // without @key before this, naming the module's callbacks.
+            if (baseline == null)
+                Problem("FLOW_CALLBACK_CREATION", "a callback action edits an existing REST callback; the text does not create one", null,
+                    "create the callbacks with the rest-consume op (callbacks.before/after), then read the callback (ssam_map view flow) and edit its keyed text");
+            if (edited.Items.Any(i => i.Role is "in" or "out"))
+                Problem("FLOW_CALLBACK_PARAMETERS", "the inputs and outputs of a REST callback are given by the platform; the text does not declare them", null,
+                    "remove the in/out lines; use the native Request, Response, CustomizedRequest and CustomizedResponse, and declare locals only");
+            if (baseline != null && !string.Equals(edited.Name, baseline.Name, StringComparison.Ordinal))
+                Problem("FLOW_CALLBACK_NAME", "the header names the callback " + edited.Name + ", and @" + baseline.Key + " is " + baseline.Name + ": the name of a REST callback is fixed by the platform", null,
+                    "keep the name as it was read: callback action " + (baseline.Owner.Length > 0 ? baseline.Owner + "." : "") + baseline.Name);
+            // Its type (OnBeforeRequest, OnAfterResponse, the Advanced ones) is its native identity, as its name is.
+            else if (baseline != null && edited.Prop("CallbackType") != baseline.Prop("CallbackType"))
+                Problem("FLOW_CALLBACK_NAME", "the text writes CallbackType=" + (edited.Prop("CallbackType") ?? "(none)") + ", and " + baseline.Name + " is CallbackType="
+                    + (baseline.Prop("CallbackType") ?? "(none)") + ": the type of a REST callback is fixed by the platform", null,
+                    "keep the line @{CallbackType=" + baseline.Prop("CallbackType") + "} as it was read");
+        }
         if (edited.Kind == "Preparation") {
             if (edited.Name != "Preparation")
                 Problem("FLOW_PREPARATION_NAME", "Preparation has the fixed native name Preparation", null, "use preparation <Owner>.Preparation");

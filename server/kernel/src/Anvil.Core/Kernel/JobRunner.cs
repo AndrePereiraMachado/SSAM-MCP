@@ -239,6 +239,8 @@ public static partial class JobRunner
             phase = sw.ElapsedMilliseconds;
             var after = ModelHost.Messages(espace);
             if (styleSheetTouch.RevertOnNewErrors(before, after, session, espace, log)) after = ModelHost.Messages(espace);
+            // B5 (C-04): the reading an html edit of a touched element answered is read again, so its next is the saved text.
+            StyleSheetTouch.ReadNextAgain(espace, styleSheets, results);
             var verifyAfterMs = sw.ElapsedMilliseconds - phase;
             phase = sw.ElapsedMilliseconds;
             var snap = ModelHost.Describe(espace, 0, after);
@@ -655,9 +657,10 @@ public static partial class JobRunner
                 // Without a certain or a close name, the lookup of the built-ins: the facade turns `anvil functions --find X`
                 // into ssam_reference {kind:"functions", query:X} with its continuation (responses.mjs), so the session follows it.
                 var problem = JobPreflight.Problem(op, sites.Count == 1 ? sites[0].Pointer : Pointer(op), "FUNCTION_UNKNOWN", "error",
-                    $"'{name}(' is not a built-in function of this Studio ({MessageExpectations.Lane}), nor a function of the module, of its references or of this job",
+                    $"'{name}' is not a built-in function of this Studio ({MessageExpectations.Lane}), nor a function of the module, of its references or of this job",
                     candidate != null ? certain ? $"write {candidate}(...), the explicit built-in rename with the same declared arguments"
                         : $"choose whether the intended call is {candidate}(...); an action call or another operation may be intended"
+                        : FunctionCatalog.OtherPlatformFix(MessageExpectations.Lane, name) is { } elsewhere ? elsewhere
                         : closest.Count > 0 ? "use one of: " + string.Join(", ", closest)
                         : $"no built-in, no function of the module or of its references and no action of this job is named like {name}: write the built-in the expression means (ToLower, Substr, If, ...), or call an action of the module marked Function; the built-ins: `anvil functions --find {name}`", patch, "logic",
                         patchRule: patch == null ? null : certain ? "BUILTIN_FUNCTION_RENAMED" : whitelist != null ? "BUILTIN_FUNCTION_SHADOWED" : "BUILTIN_FUNCTION_NEAREST");
@@ -683,7 +686,9 @@ public static partial class JobRunner
                 // The pure pass may have found the same name problem without the base: once (its pointers are the job as sent).
                 var sent = Preflight.SentJob.ToSent(problem["pointer"]?.ToString(), ops, opsPointer).Pointer;
                 if (Preflight.ActionNameRules.EnrichPreflight(preflight, problem, sent)) continue;
-                if (problems.Any(p => p["code"]?.ToString() == problem["code"]?.ToString() && p["pointer"]?.ToString() == problem["pointer"]?.ToString())
+                // Two problems of one html document at two lines are two (C-30: every <img> of a Traditional document, base phase).
+                if (problems.Any(p => p["code"]?.ToString() == problem["code"]?.ToString() && p["pointer"]?.ToString() == problem["pointer"]?.ToString()
+                        && p["line"]?.ToJsonString() == problem["line"]?.ToJsonString() && p["column"]?.ToJsonString() == problem["column"]?.ToJsonString())
                     || preflight?["problems"] is JsonArray pure && pure.OfType<JsonObject>().Any(p => p["code"]?.ToString() == problem["code"]?.ToString() && p["pointer"]?.ToString() == sent)) continue;
                 problems.Add(problem); lines.Add(JobPreflight.Text(problem));
             }

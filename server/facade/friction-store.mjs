@@ -138,6 +138,11 @@ export function deliveryOfCall(tool, args) {
 const CALL_FIELDS = { tool: v => (DELIVERY_TOOLS.includes(v) ? v : null), action: v => (CODE_ACTIONS.includes(v) ? v : null), module: moduleOf,
   basedOnJob: v => (/^job-[a-f0-9]{32}$/.test(v ?? '') ? v : null), basedOnSha256: sha, basedOnTaskId: token, continueTask: token, closePrevious: token };
 const checked = (value, fields) => (value && typeof value === 'object' && !Array.isArray(value) ? compact(Object.fromEntries(Object.entries(fields).map(([k, check]) => [k, check(value[k])]))) : null);
+// The protocol detail of an SC_PROTOCOL_INVALID or SC_PAGE_NOT_FOUND (friction-boundary.mjs protocolOf): its five fields,
+// strings cut, nothing else.
+const PROTOCOL_CODES = new Set(['SC_PROTOCOL_INVALID', 'SC_PAGE_NOT_FOUND']);
+const protocolDetail = p => (p && typeof p === 'object' && !Array.isArray(p)
+  ? Object.fromEntries(['operation', 'expected', 'got', 'sample', 'form'].map(k => [k, typeof p[k] === 'string' ? p[k].slice(0, k === 'sample' ? 300 : 200) : null])) : null);
 const PROBLEMS_KEPT = 40, PROBLEM_CODE = /^[A-Za-z][A-Za-z0-9_]{1,79}$/;
 // The answer's side, from the same documented wrapper fields outcomeOf reads.
 export function deliveryOfAnswer(input) {
@@ -418,6 +423,7 @@ export function createStore({ root, directory, workspace = null, env = process.e
       const end = { ...event, ...result, ...linksOf(value), ...(event.facadeTaskId ? { facadeTaskId: event.facadeTaskId } : {}), lane: result.lane === 'unknown' ? event.lane : result.lane,
         endedAt: new Date(clock()).toISOString(), durationMs: Math.round((performance.now() - start) * 1000) / 1000,
         durationSource: 'observer-monotonic', startRecorded: !!recorded, evidence,
+        ...(PROTOCOL_CODES.has(result.code) && protocolDetail(transport.protocol) ? { protocol: protocolDetail(transport.protocol) } : {}),
         ...(event.delivery ? { delivery: { ...event.delivery, ...deliveryOfAnswer(value) } } : {}),
         ...(Number.isFinite(transport.receiptDurationMs) && transport.receiptDurationMs >= 0 ? { receiptDurationMs: transport.receiptDurationMs } : {}) };
       if (Number.isFinite(meta.slowThresholdMs) && meta.slowThresholdMs > 0 && end.durationMs > meta.slowThresholdMs && end.outcome === 'success') end.signal = 'SLOW_OPERATION';
@@ -477,7 +483,7 @@ export function createStore({ root, directory, workspace = null, env = process.e
   function report(input = {}, { sessionId, profile, callerKey = null } = {}) {
     const problems = reportProblems(input);
     if (problems.length) return { ok: false, code: 'REPORT_INVALID', error: 'Invalid friction report: ' + problems.join('; '), problems,
-      accepted: { kind: REPORT_KINDS, required: ['kind', 'tool', 'intent', 'attempted'], optional: ['workaround', 'cost', 'summary', 'taskId'], maxLength: REPORT_FIELDS } };
+      accepted: { kind: REPORT_KINDS, required: ['kind', 'tool', 'intent', 'attempted'], optional: ['workaround', 'cost', 'summary', 'taskId', 'lane'], maxLength: REPORT_FIELDS } };
     const session = sessionKey(sessionId);
     // From the tail of the index; only the ended operations it links are read, for their receipt.
     const recent = session ? sessionTail(session, REPORT_LINKED).map(e => {
@@ -490,6 +496,8 @@ export function createStore({ root, directory, workspace = null, env = process.e
     const text = key => (input[key] === undefined || input[key] === null ? undefined : String(input[key]).trim());
     // F7: the report names its session (correlationId) and, hosted, its caller key: reports() of another session never lists it.
     const record = { schema: 'ssam-friction-report/1', reportId, kind: input.kind, tool: text('tool'), intent: text('intent'), attempted: text('attempted'),
+      // C-20: the lane of the case, when the report says it.
+      ...(input.lane === 'o11' || input.lane === 'odc' ? { lane: input.lane } : {}),
       ...Object.fromEntries(['workaround', 'cost', 'summary'].filter(k => text(k)).map(k => [k, text(k)])),
       taskRef: taskRef(input.taskId), sessionId: session, ...(session ? { correlationId: session } : {}), ...(CALLER_KEY.test(callerKey ?? '') ? { callerKey } : {}),
       profile: profile === 'selected-readonly' ? 'selected-readonly' : 'operational',

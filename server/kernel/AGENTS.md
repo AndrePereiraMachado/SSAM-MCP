@@ -12,6 +12,66 @@ Check deprecation and devices: Popup_Editor 5404 is legacy without mobile suppor
 the compatible official Modal. When a browser acceptance is asked for, prove the initial load, the served CSS and the
 behaviour after Ajax, as well as open/close, cancel and validation.
 
+## Traditional documents (migration and the Figma apps, ported from the proto)
+
+Batch 4 (F5, 25/10/2026): known HTML becomes the equivalent Traditional widget before the build: `th`, `thead`/`tbody`,
+`table list`, `p`/`h1…`, `strong`/`em…`, `i icon`, `radio`, `title`, `if` on any widget and `placeholder` in a block; the
+op result lists `migration.adapted[]` (what was converted) and `migration.dropped[]` (what has no equivalent, with the
+reason), never silently. What has no widget (`pre`, a select without a source or with two sources, `os-onchange.Method`)
+is refused before the build (`HTML_TRADITIONAL`, base phase, every document in one refusal) with the specific fix. A
+Label writes Text and Value (the runtime shows the Value); a record-list Combo Box takes `label`/`value`, a bare `label`
+and `List.Current.Field`; a link or block may name a root a later document of the same job creates (created empty and
+filled after). A `prototype` op is not a way in: the line refuses it in every module, Traditional included, with
+`PROTOTYPE_IMPORT_DISABLED` before anything runs (PrototypeImport, 22/10). Tests `TraditionalHtmlMigrationTests`.
+
+Wave 1 of the Figma apps (27/10/2026), `TraditionalHtmlControlsTests` and `TraditionalHtmlRecordsTests`:
+- `line-separator="NewLine|None|Bullets"` on `list-records` and `div list` is the Line Separator of the List Records (it was
+  an extended property and the runtime kept the `<br>` between the rows). The reading writes `line-separator` only for what
+  the list has; an extended property of that name reads `ext:line-separator`. On `table-records`, or with another value, it
+  is refused before the build.
+- A `span` is a Container (it renders a `div`): it is written `display: inline` only when the CSS of the document gives
+  none of its classes a `display` (the inline style beat the class). Literal text follows `ScreenHtml.Runs`, as the reading
+  writes it: line breaks and indentation are layout; the space beside an inline element on the same line is kept ("Our "
+  before the span), and a lone space between two inline elements on the same line is a `" "` text.
+- Input, password, select, upload and label without `os-Width` are born without a grid width (the Studio gives `4 col`/
+  `2 col`, and `ThemeGrid_Width4` beat the class); an input without `required`/`mandatory` is not mandatory; without
+  `maxlength`, no Max Length (the Studio gives 50). It is the `ScreenDefaults.LanguageDefault` of a Traditional page
+  (`AsTraditional`): the reading writes `os-Width` and `maxlength` only when the widget has them, and the edit form writes
+  the same on a new widget.
+- An event argument (`onclick`, `onchange`, `onnotify`, a block's `@Event`) in a row of `list-records`, `table-records` or
+  `div list` that reads `Source.Current`/`Source.CurrentRowNumber` is written `<List>.List.Current`/`.CurrentRowNumber`
+  (`TraditionalDocumentRules.ThroughList`, a stack of lists in the compiler): at the postback `Source.Current` is the last
+  row rendered (the Pro plan's "Choose This Plan" chose the first plan and saved a JoinRequest with the wrong PlanId). A list
+  without `id` keeps the name its widget gets (`ListRecords1`). The edit form (`ListRowArguments`) does the same inside
+  `list-records` and `table-records` only, and a new one without `id` gets the first free `ListRecordsN`/`TableRecordsN`; a
+  `div list` an edit writes has no list name the edit can say, so its row arguments stay as written: in an edit, write the
+  repeated rows as `<list-records id="...">`. Listed in `migration.adapted` (document) and as `HTML_LIST_ROW` in
+  `normalized` (edit, only on what the edit writes). What renders the row (`{{ Source.Current.X }}`, `if`) stays as written.
+- `<img>` is refused before the build (`HTML_TRADITIONAL`, base phase, each with its line): the installed Model API creates
+  no image widget in a Web container (`catalog/model-api-*.json`, Creatables of `IContainerWidget`; before it was
+  `APPLY_FAILED "cannot create IImageWidget"` without a line). The patch is the document with each `<img>` written as
+  `<expr value="&quot;<img ...src='&quot; + EncodeHtml(Url) + &quot;'>&quot;" os-EscapeContent="False"/>` (a literal in the
+  text, `{{ }}` through `EncodeHtml`; `id`/`if`/`else` stay on the Expression); an `<img>` with an event or `os-*` has no patch.
+
+Two effects of this port reach every lane (Reactive, Mobile and ODC too), not only Traditional:
+- Base-phase dedupe (`JobRunner`, C-30): two problems with the same code and pointer at different lines or columns are two
+  problems now (before, the second was dropped as a repeat); a refusal may list more lines than before.
+- Edit form, a value property (`'v'`, a number or a member) whose language/Studio default is empty is written empty (null)
+  instead of `""` (`ScreenHtmlModule.Edit`, C-09: a Traditional input's Max Length without `maxlength`).
+
+Traditional dialect (C-13, C-28, C-29; 27/10): what each tag takes is ONE table, `TraditionalDocumentRules.AttributesOf`,
+which the `Check` reads; `Dialect()` exports it to `platforms/odc/facade/catalog/traditional-dialect.json` (the test
+`TraditionalDialectTests` keeps both equal; `SSAM_WRITE_TRADITIONAL_DIALECT=1` rewrites it) and the facade serves the card
+generated from it (`ssam_code grammar part html lane o11`: `card.traditional`, and the Traditional work packet). The default
+`fix` of `HTML_TRADITIONAL` is the tag's own (`TagFix`: what it takes), never the whole dialect (35 problems with the same
+long fix were cut by the answer). `<screen layout="blank">` is the screen without the template's layout block (the content
+at the root); `layout="theme"` is the default. The nodes of `preparation <Screen>.Preparation` in a logic text of the same
+job (`X = aggregate ...`) are data of the screen for S5 (before, `HTML_NAME_UNKNOWN` and 15 list variables as a
+workaround). A List Records (`list-records`, `table-records`, `div list`) whose `line-count` is an expression gets the
+warning `HTML_LIST_RECORDS_LINE_COUNT` (preflight, creation and edit receipts): the runtime fetches start-index +
+line-count + 1 rows of the aggregate it shows (also through the variable, also in a screen action); a "show more" raises
+the counter BEFORE querying again.
+
 ## Traditional interactions: Ajax Submit, Navigate and Submit
 
 Choose by the effect of the interaction. Navigate goes to a screen/URL with explicit parameters. Ajax Submit runs a
@@ -122,6 +182,16 @@ op falhou, `accepted:false`): os erros vem tambem em `data.problems` (op, pontei
 Op logic com varias actions (sem `replace`): a action que falha no apply sai da op, e sai tambem a action da op que a chama
 (aviso `APPLY_SKIPPED` com o ponteiro dela); o resto da op aplica de novo e chega ao Verify. Cada problema aponta para
 `/ops/<i>/data/actions/<j>/...` do job escrito (`ModelSession.IsolateActions`). Spec e html ainda falham a op inteira.
+Onda 2 (C-21, 27/10/2026): documento Reactive/Mobile cujo conteudo falha deixa a casca (raiz, dados, placeholders e as
+actions do job declaradas para ele, sem os widgets; o tema volta): os textos de logica que enchem essas actions e os documentos
+que usam a raiz (bloco, navegacao) aplicam na mesma rodada e os problemas deles vem na mesma recusa; so os widgets do documento
+ficam bloqueados, e o Verify do que a casca guarda e a falha dele (`VERIFY_OF_FAILED_OPS_OMITTED`). Documento pulado por
+dependencia (usa o que um op falho criaria) nao deixa nada: as declaracoes que um op de logica ou outro documento preparou antes
+saem (`DropPreparedDocument`), e o que a preparacao cria tem a ancora do proprio documento, nunca a do op que a disparou.
+Documento Traditional: cada elemento que a plataforma ou uma regra recusa e um problema com linha e coluna, e os irmaos sao
+escritos (`Guarded` em cada elemento de `Children` e no `else` fora de lugar; um `if` direto na raiz e seus ramos ainda param o documento; referencia que carrega produtor sobe como antes). Rodada de patch: problema
+da rodada que nomeia o que o patch de um op tirou do job (uma entidade de um texto de dados e suas entity actions) e do patch,
+que nao e oferecido; nunca um problema novo do job (`JobRunner.LostDeclarations`). Provas: `tests/Anvil.Tests/RefusalCascadeTests.cs`.
 Regras com patch exato: site property sem `Site.` (ODC: setting sem `Settings.`), funcao desconhecida com uma unica builtin
 certa (`FunctionCatalog.Certain`: NullDateTime -> NullDate, Len -> Length, um erro de letra), output ou argumento de action do
 proprio job escrito errado (patch quando so um casa) e `EXPRESSION_SYNTAX` em toda expressao de logic e de `set` na base
@@ -269,7 +339,9 @@ no html como foi mandado, e so sai se a mesma regra nao acha nada no texto corri
 achar (HTML_NAME_UNKNOWN, FLOW_OWNER_UNKNOWN, FLOW_NAME_UNKNOWN, REFERENCE_UNRESOLVED, CHILD_NOT_FOUND, `*Unknown*` do Verify) um nome
 que uma parte do job que falhou declara (um texto de logica que nao leu, `*_SYNTAX`/JSON_SHAPE do preflight, ou erro do apply da
 parte; nunca so o Verify ou uma regra do preflight, que deixam a parte aplicada) sai dos problemas; a raiz leva
-`blocks: N` e `blocked` (os 3 primeiros), transitivo, e o aviso `CASCADE_FOLDED` diz quantos. O check do documento conta como
+`blocks: N` e `blocked` (os 3 primeiros), transitivo, e o aviso `CASCADE_FOLDED` diz quantos. Um texto de dados (op spec) declara
+suas entidades, atributos, estruturas e as entity actions de cada entidade (C-39); um documento declara tambem os ids dos seus
+widgets (o que a casca de C-21 nao tem). O check do documento conta como
 declarado tambem o que um texto de dados do job declara (`Client.X` de um `client variable` de um spec depois do html).
 Provas: `tests/Anvil.Tests/FamilyPreflightTests.cs` (FamilyPreflightTests e FamilyCascadeTests).
 Textos `ssam-flow/1` da op `logic` (VisitaCerta 12/10/2026, `Kernel/FlowTextNormalize.cs`, chamado por `JobNormalizer.Pure`):
@@ -472,6 +544,14 @@ element (`ScreenDefaults.LanguageDefault`): `mandatory` of `<input>` and block `
 True, `size` of `<i>` FontSize, the join of an aggregate (`join=`, `os-Join` without `os-JoinType`) Left. ODC Studio
 1.7.28.10873 and Service Studio 11.55.87 create inputs and block events mandatory, an Icon Twotimes and a Join Inner: the
 writer sets the language's value and the reading writes the attribute only when it holds another one (`mandatory="True"`).
+Where an element sits decides some defaults: an event inside a Popup takes the Popup's (Transition Fade, measured), and the
+click of a `<button>` or `<a>` inside a `<form>` validates it (`ScreenDefaults.FormDefault`, C-02: Built-in Validations
+ValidateAndContinue, what the Model API create gives a Button or a Link in a Form; outside one, None). The document's
+`Reset`, the reading and the edit forms (`SettleEvents` of a new or moved widget) apply the same rule, so a button written
+inside `<form>` runs the form's required and type checks (`<Form>.Valid`), and the reading writes
+`os-onclick.BuiltInValidations="None"` only for a click inside a form that does not validate (F-FigmaReactive-04: `None`
+everywhere made `Valid` always True, silently). Tests: `ScreenDocumentTests.AButtonOrALinkInsideAFormValidatesItUnlessTheDocumentSaysOtherwise`,
+`ScreenVisualOdcTests.AClickInsideAFormValidatesItAndAScreenTheDocumentOpensDeclaresItOnTheOdcLane`.
 Mudou o que a receita cria: sobe `StudioBornValues.Recipe`. Manutencao: toda mudanca do texto sobe `ScreenHtml.Extractor`;
 colecao do Model API sem ordem estavel (actions, eventos, argumentos, partes de aggregate) entra em ordem canonica
 (`ChildIndexes`), nunca na ordem da carga. Testes: `tests/Shared/ScreenHtmlTests.cs` (as duas faixas),
@@ -493,7 +573,13 @@ The native look of the document form (CX17, `ScreenVisual*.cs`, `Verbs.ScreenDoc
 `class` is born with the Studio's class (controls) or with it minus the ornament (`form`, `list`), table
 `ScreenVisual.ClassDecisions` checked against `PrototypeWidgetDefaults.Table`, one rule (`ScreenVisual.StudioClassOf`) in the
 forms that create a widget without `k` (document, `html`/`edit`/`edits` of a reading, fragment `parent`; not the page form: D1
-of 2026-10-17); a new List of `thead|tbody|tfoot|ul|ol` or of a grid/flex box gets `disable-virtualization`; the theme the
+of 2026-10-17); a new List of `thead|tbody|tfoot|tr|ul|ol` or of a grid/flex box gets `disable-virtualization`; F8
+(`ScreenVisual.Tables.cs`, 2026-10-25): every List whose element is not a div is Mode Custom (the Studio renders a List's Tag only
+in Mode Custom; Default published a div in the table), and a List of a table part gets, in every form (document, edit forms on a
+new List or one of a table the edit touches, fragment), `ScreenVisual.TableListOf`: Mode Custom, disable-virtualization, the rows
+marker (block v5, `tbody[data-ssam-rows][data-ssam-rows]` (0,2,1); the line's v4 was the older `:is(thead,tbody,tfoot)` rule) or `ext:style` inline where the theme is another module's,
+no class `list` (never a part of a native Table, `ScreenVisual.NativeTableParts`); a `<tr list>` of cells becomes the List of its row group (`TABLE_ROW_LIST_LIFTED`); `LIST_MODE_CUSTOM`/`TABLE_LIST_REPAIRED`, `visual.tables[]`, reading note `HTML_TABLE_LIST_VIRTUALIZED`
+(tests `ScreenVisualTableTests`, `ScreenHtmlEditTableTests`, `ScreenVisualTableJobTests`, `ScreenVisualTableOdcTests`); the theme the
 page shows (its flow's, else the module's default: `PageThemeOf`, review 3, M7) carries `/* ssam:native-layout */` (versioned, once; a theme of another module takes none, so nothing is marked and
 the notes say why: `THEME_NATIVE_LAYOUT` `written:false`, `GUTTER_ADDS_TO_GAP`),
 but every rule needs a marker `data-ssam-gap|page|rows` the op writes only on an element it created, so a screen the op did
@@ -514,7 +600,15 @@ in every job. `ScreenVisual.Predict` predicts the runtime
 DOM from `RuntimeDomTable` (no layout) and `ScreenVisual.Check` (static; today only the document form calls it) returns the warnings
 `HTML_SELECTOR_MISSES_RUNTIME`, `HTML_THEME_TOKEN_SCOPED`, `HTML_TEXT_JOINED` and `HTML_LIST_NOT_LAYOUT_CONTAINER`, one per
 family per job, after the data and owner-rule warnings (`ReceiptFields` orders them; the facade says `highWarningsTotal` when
-it cuts at 10), with the checked patch in `suggestion`. Tests: `ScreenVisualFamilyTests`, `ScreenVisualPredictTests`,
+it cuts at 10), with the checked patch in `suggestion`. Runtime facts of `HTML_SELECTOR_MISSES_RUNTIME` by `kind` (C-12):
+`popup-portal` (in the check, not the render, the predicted DOM mounts a `<popup>` in `div.portal-class` of the body; patch: the
+selector scoped by `.popup-dialog` beside it), `list-position` (the List's inline `position: relative`; patch: the position with
+`!important`), `list-row-inline-top` (no patch) and `theme-order` (a rule of the document's theme part loses to a later part of the
+same specificity; patch: the subject's class repeated beside it); a heading OutSystems UI sizes by device and a `{{ }}` span's own
+white-space are the platform cascade's (`HTML_PLATFORM_SPECIFICITY`, `HTML_PLATFORM_INHERITED`). The theme parts every document of the
+job writes are rules of the page (a class with a rule, a List as a layout container). Not warned (C-17): a literal compared in an
+If(), two inline words of letters that are all the text of their parent (a logo), a List that is itself a grid or flex box, a
+selector that styles only a runtime element. Tests: `ScreenVisualFamilyTests`, `ScreenVisualPredictTests`,
 `ScreenVisualCheckTests` and `DemoLatamVisualTests` (copies outside the repository; skipped without `SSAM_DEMOLATAM_DIR`).
 
 ## Dados: uma spec, uma entrega e uma prova
@@ -524,6 +618,11 @@ Edit Data em processo headless, com credencial privada e recibos por operationId
 para seed quando esse caminho atende. Contrato e prova: `../docs/O11-DADOS-HEADLESS.md`.
 Sem `--host` e sem `--credentials` (ou com `--studio`), `anvil data` usa o Studio ja logado da faixa (SSO incluido),
 sem credencial, pelas operacoes `data-read`/`data-write` da bridge (`EnvironmentData`).
+R4 (C-27, C-32): `operationId` e um UUID (o schema diz `format: uuid`, que o SDK ja cobra na entrada); escrita sem ele e
+recusada com um UUID pronto, o mesmo para a mesma escrita (`EnvironmentData.SuggestedOperationId`, patch `add`/`replace`).
+`update` aceita `ids`, um por record na ordem dos records, como o `delete`: cada record sem o identificador recebe o seu.
+Entidade ou atributo que a captura da chamada nao tem, com captura mais nova do mesmo modulo na mesma pasta: a resposta traz
+`staleCapture` (a captura e de antes da entrega) e, numa leitura, a `continuation` com a captura mais nova (`ssam.mjs` `newerCapture`).
 
 Para tabelas relacionadas, use uma unica op `spec` com `static`, `entities` e `structures`. O compilador declara todos
 os tipos e seus identificadores antes dos campos: a ordem entre entidades da mesma spec nao exige entregas separadas,
@@ -1019,6 +1118,28 @@ e instala o bloco na metade do autor. O resultado do `set` diz onde o texto caiu
 `userChars`, `generatedChars`). Num tema SEM Theme Editor as tres metades sao o mesmo texto e nada disto aparece.
 Vale nas duas faixas (o modelo e o mesmo); prova em `tests/jobs-odc/theme-css-halves.json` e nos numeros de
 `Anvil.Tests.Odc.ThemeCssTests`.
+B4 (01/11/2026): a efetiva e SEMPRE `gerada + CRLF + autor`, a conta da plataforma, que o Studio refaz ao salvar, carregar
+e publicar. O C23 punha os `@import` do autor no topo da efetiva; nenhum save guardava isso, e o candidato mostrava um texto
+que o modulo salvo nunca teve (`Pa3KhOdcTests.TheEffectiveStyleSheetOfTheCandidateIsTheOneTheSavedModuleHas`). Num tema com
+Theme Editor um `@import` do autor fica depois das regras do Theme Editor e o navegador o ignora: o resultado diz
+`cssImportsIgnored {imports, served}`; o documento html o leva para a folha da propria tela (`CSS_IMPORT_MOVED`, C-05).
+Todo `set StyleSheet` (tema, tela, bloco) diz no resultado onde o CSS ficou e quem o serve, lido no fim do job
+(`css.placement`; o recibo junta todos em `cssPlacement`): o tema traz a metade gravada, se e o padrao do modulo, os fluxos que
+o mostram (`Theme` do fluxo, padrao ou `BaseTheme` de um tema mostrado) e se e publico; o bloco, as telas que o colocam e o
+recurso `Modulo.Fluxo.Bloco.css`; a tela, a cadeia de temas com o modulo de cada um. CSS num tema que o modulo ja tinha, que
+nenhuma pagina mostra e que nao e publico e recusado antes do build (`CSS_TARGET_UNSERVED`, com os temas que as paginas mostram
+no `fix`); num tema que o proprio job cria, ou num bloco que nenhuma pagina coloca, e aviso. `HTML_CLASS_NO_RULE` segue a
+cadeia de temas pelo `BaseTheme`, os de outro modulo inclusive (a assinatura traz o CSS do produtor). Provas:
+`tests/fixtures/css-theme-chain`, `tests/fixtures/odc/css-theme-chain` (`CssThemeChainTests`, `CssThemeChainOdcTests`).
+B5: depois do toque (`StyleSheetTouch`), o `next` de uma edicao html da raiz tocada e relido: a proxima edicao se baseia no
+texto que o modulo salvo tem (`StyleSheetLossTests.AnHtmlEditOfOnlyTheStyleTouchesOneWidgetOfItsScreenAndItsNextReadingIsTheSavedOne`).
+B15: `create IImage {parent: @espace, name, args: {binary, originalPath}}` que um arquivo de imagem em `files` do `ssam_code` gera,
+com o nome de uma imagem que o modulo ja tem, grava o conteudo novo nela so com a licenca que vem FORA do job: `--image-fill
+<nome>=<sha256 dos bytes>` na chamada do kernel (`ImageFills.cs`; a fachada concede so o que o `readCodeFiles` leu de arquivo,
+`image-fill-grants.mjs`; nenhum campo do texto do job, `_from` inclusive, autoriza) (`SetImageContent`, `contentReplaced`),
+nunca uma segunda nem `NAME_COLLISION`, e a resposta das duas faixas diz isso (`highWarnings` `IMAGE_CONTENT_REPLACED`, com a imagem
+e os bytes; tambem em `normalized`). Um `create IImage` escrito a mao com o nome de uma imagem existente continua `NAME_COLLISION`; `<img src="fm-hero.png">` acha a imagem `fm_hero` (`ScreenHtmlNative.ImageNameOf`, a mesma regra do
+`imageNameOf` da fachada, que faz de cada arquivo de imagem em `files` do `ssam_code` esse create).
 
 **Codigo em varias linhas (CSS, SQL, JavaScript).** O texto de `StyleSheet` (tema, tela, bloco), `Statement` (no SQL,
 inclusive o `statement` da op `logic`) e `JavaScript` (no JavaScript, script, tela, bloco), e o bloco que a op `html`
@@ -1137,7 +1258,7 @@ o que existe (quem chama continua ligado), nao toca o que nao nomeia e apaga o q
 recusa so, antes de qualquer op (`REST_*`, `REST_EXPOSE_*`, codigos de SOAP), pela regra `PreflightRules.IntegrationOps`.
 - `rest`: `{"client":{"name","baseUrl","headers"},"methods":[{"name","http","path","inputs":[{"name","type","in":"url|query|header|body"}],"response":{"structure"|"sample"|"type"}}],"structures":[...],"remove":[...],"breaks":[...]}`. Expande so para os verbos crus provados; amostra JSON vira estruturas pelo plugin REST; credencial nunca no modelo (`REST_CREDENTIALS_NOT_IN_MODEL`, regra do SSAM no O11: entrada `Authorization` em header). `openapi {path, sha256, operations}`: ODC headless; O11 pelo `o11_deliver` (bridge).
 - `rest-consume` (gerador, 13/10/2026; `RestConsume.cs` puro, `Verbs.RestConsume.cs` no modulo): `{"name":"<Cliente>","baseUrl"?,"methods":[{"name","url","verb"?,"sample"?,"request"?,"resource"?,"action"?,"params"?,"try"?,"timeout"?}],"expose"?,"errors"?}`. Uma op escreve a integracao inteira de qualquer API: o cliente e os metodos pela op `rest` (estruturas explicitas, `<Recurso>Json`, inferidas da amostra: Text, Integer, Long Integer, Decimal, Boolean, Date `yyyy-MM-dd`, Date Time ISO com `T` e segundos; numero escrito como texto fica Text; null/`[]` viram Text/Text List com aviso; lista de listas fica de fora com aviso; formas iguais sao uma estrutura so), uma estrutura publica por recurso (o espelho, mesmos nomes), o mapeamento escrito atributo a atributo (`Origem mapTo {A: A, R.A: R.A}`: a conversao automatica da plataforma deixa vazias algumas formas, "Empty Mapping", nas duas faixas; registro dois niveis abaixo e lista de registros passam por funcoes privadas `<Estrutura>[List]FromJson|ToJson`), e uma service action publica por metodo com nome Verbo+Cliente+Objeto (o verbo do proprio metodo quando o nome comeca por um, `ListRepos` vira `ListGitHubRepos`; senao o do HTTP: GET `Get`, POST `Send`, PUT `Save`, PATCH `Update`, DELETE `Delete`, `Feriados` vira `GetBrasilApiFeriados`; `action` sobrepoe; ODC library: server actions publicas; `expose.serviceActions:false`: server actions; `expose:false`: so o cliente) que chama o metodo e transforma qualquer falha na user exception `errors.exception` (padrao `<Cliente>Error`, reaproveitada se existe) com log. Action que muda dado (todo verbo menos GET) checa o usuario antes (`if GetUserId() = NullIdentifier()`, no ODC `NullTextIdentifier()`, raise `AccessDenied`, a do modulo ou criada) e chama a sua `<Action>_Impl` privada, onde ficam a chamada e o handler (`expose.guard:"none"` tira a checagem). Booleano leva Is/Has/Can (`fork` vira `IsFork`, o NameInJSON fica); todo elemento tem descricao, todo assign um label e o If uma pergunta: o OutSystems padroes (estagio oml) da 0 achados nas 15 amostras, nas duas faixas. Nada de For Each nem JavaScript. Cada elemento leva na descricao a marca `ssam:rest-consume <Cliente>/<Base> #<hash>`: a mesma op de novo nao muda nada (`changed:false`, tudo em `unchanged`); amostra mudada atualiza no lugar (mesmas chaves; o que sumiu e apagado depois que as actions foram reescritas); nome usado por outro elemento vai para o proximo livre (`renamed`). O kernel nunca le a rede: metodo GET sem `sample` e recusado com `REST_CONSUME_SAMPLE_MISSING`; a fachada (`integration-documents.mjs`) faz um GET por url (10 s, 2 MB, sem credencial, listas cortadas em 20) e fixa `sample` e `sampledFrom`. O recibo traz `generated` (cliente, base, excecao e, por metodo, o URL Path, os tipos e a assinatura da action). Exemplo provado: `rest-consume-generate.json` (O11) e `jobs-odc/rest-consume-generate.json`. Provas: `tests/Anvil.Tests/RestConsumeTests.cs`, `tests/Shared/RestConsumeScenarios.cs` (as duas faixas, amostras em `tests/fixtures/rest-consume`) e `platforms/odc/facade/tests/rest-consume-sampling.test.mjs` (url por um servidor local).
-- `rest-consume` autenticada e customizada (`RestConsume.Auth.cs`, as duas faixas): `auth {type: bearer|basic|apiKey (in header|query, name)|oauth2 (tokenUrl https, scope, cacheMinutes)}`, `headers {Nome: literal}`, `methods[].headers {Nome: literal|{entrada}}`, `methods[].optional`, `correlationHeader`, `settings {baseUrl:true}`, `timeout`, `errors.status {"404": "<Excecao>"}`, `callbacks {before|after: {steps, vars}}`. Credencial nunca no modelo (`REST_CREDENTIALS_NOT_IN_MODEL`): o gerador cria as site properties (O11) / settings (ODC) vazias e secretas (`<Cliente>Token`, `<Cliente>ApiKey`, `<Cliente>ClientId`/`ClientSecret`; `basic`: no O11 `<Cliente>Username` e `<Cliente>Password`, codificados em tempo de execucao pela extensao BinaryData, `TextToBinaryData` + `BinaryToBase64`, cuja op `reference` a fachada acrescenta no fim do job e o `o11_deliver` captura, sem ela `REST_CONSUME_REFERENCE_MISSING`; no ODC `<Cliente>BasicCredentials` = Base64 de user:password; o correlation id vem de quem chama nas duas faixas, nenhum produtor de GUID offline), o `OnBeforeRequest` do cliente as le (oauth2: cliente `<Cliente>Auth` e `Get<Cliente>AccessToken` privada com Cache in Minutes) e o recibo traz `configure` (o que preencher e onde). O `OnAfterResponse` levanta a excecao do status mapeado ou `<Cliente>Error` com o status e 300 caracteres do corpo; os handlers das actions mantem a excecao mapeada. Os callbacks sao criados antes da op `logic` (que os substitui, mesmas chaves) e os tipos `HTTPHeader`/`URLQueryParameter` vao por `@chave` (cada cliente tem os seus; o ODC os nomeia `HTTPHeader5`). Callback que a op nao escreveu: `REST_CONSUME_CALLBACK_NOT_OWN`. Auth que muda apaga o que a op nao planeja mais. Op sem essas chaves escreve o mesmo de antes (modulos do commit anterior ficam `changed:false`). Leitura dos callbacks como texto: `ModelHost.RestCallbackTexts`. Exemplo provado: `rest-consume-auth.json` (O11) e `jobs-odc/rest-consume-auth.json`; provas `tests/Shared/RestConsumeAuthScenarios.cs` (O11 com a captura `tests/fixtures/rest-consume/producers/BinaryData.avsig`).
+- `rest-consume` autenticada e customizada (`RestConsume.Auth.cs`, as duas faixas): `auth {type: bearer|basic|apiKey (in header|query, name)|oauth2 (tokenUrl https, scope, cacheMinutes)}`, `headers {Nome: literal}`, `methods[].headers {Nome: literal|{entrada}}`, `methods[].optional`, `correlationHeader`, `settings {baseUrl:true}`, `timeout`, `errors.status {"404": "<Excecao>"}`, `callbacks {before|after: {steps, vars}}`. Credencial nunca no modelo (`REST_CREDENTIALS_NOT_IN_MODEL`): o gerador cria as site properties (O11) / settings (ODC) vazias e secretas (`<Cliente>Token`, `<Cliente>ApiKey`, `<Cliente>ClientId`/`ClientSecret`; `basic`: no O11 `<Cliente>Username` e `<Cliente>Password`, codificados em tempo de execucao pela extensao BinaryData, `TextToBinaryData` + `BinaryToBase64`, cuja op `reference` a fachada acrescenta no fim do job e o `o11_deliver` captura, sem ela `REST_CONSUME_REFERENCE_MISSING`; no ODC `<Cliente>BasicCredentials` = Base64 de user:password; o correlation id vem de quem chama nas duas faixas, nenhum produtor de GUID offline), o `OnBeforeRequest` do cliente as le (oauth2: cliente `<Cliente>Auth` e `Get<Cliente>AccessToken` privada com Cache in Minutes) e o recibo traz `configure` (o que preencher e onde). O `OnAfterResponse` levanta a excecao do status mapeado ou `<Cliente>Error` com o status e 300 caracteres do corpo; os handlers das actions mantem a excecao mapeada. Os callbacks sao criados antes da op `logic` (que os substitui, mesmas chaves) e os tipos `HTTPHeader`/`URLQueryParameter` vao por `@chave` (cada cliente tem os seus; o ODC os nomeia `HTTPHeader5`). Callback que a op nao escreveu: `REST_CONSUME_CALLBACK_NOT_OWN`. Auth que muda apaga o que a op nao planeja mais. Op sem essas chaves escreve o mesmo de antes (modulos do commit anterior ficam `changed:false`). Leitura dos callbacks como texto: `ModelHost.RestCallbackTexts`; no `ssam_map view:flow` (Extractor 10) eles sao `callback action <Cliente>.OnBeforeRequest|OnAfterResponse @chave`, editados pela op `logic` com `basedOn` (so o texto com @chave: `FLOW_CALLBACK_CREATION`/`FLOW_CALLBACK_UNKNOWN` dizem a chave ou os mais proximos; parametros nativos fora do texto, `FLOW_CALLBACK_PARAMETERS`; nome fixo, `FLOW_CALLBACK_NAME`; provas `tests/Shared/RestCallbackFlowScenarios.cs`). Exemplo provado: `rest-consume-auth.json` (O11) e `jobs-odc/rest-consume-auth.json`; provas `tests/Shared/RestConsumeAuthScenarios.cs` (O11 com a captura `tests/fixtures/rest-consume/producers/BinaryData.avsig`).
 - `rest-expose`: cada metodo e uma action de logic de tipo `rest` (dono `IRestService:<S>`, `http`, `path`, parametro `in`); `action` + `arguments` + `results` geram chamada e atribuicao; ou `steps`. Start e End sao os do proprio metodo.
 - `soap` (so O11): `{"wsdl","port"|"service"|"binding"|"soapVersion","methods","refresh","remove","breaks"}`. A selecao da porta e headless (`SoapPlan`); o import e o do Studio pela bridge (`integration_import`) dentro do `o11_deliver`; o candidato confere os tipos complexos (estrutura do proprio cliente, `SOAP_CONTRACT_TYPE_MISMATCH`); primitivo que o importador tipou de outro modo (xs:decimal como Text) e aviso `SOAP_PRIMITIVE_RETYPED` em `integration.warnings`, nunca recusa. O importador nomeia o cliente pelo servico do WSDL: a bridge reaplica o nome pedido (recibo `client {name, requested, renamed, importerName}`) e o kernel renomeia o unico cliente do WSDL com os metodos pedidos e sem consumidores (`SOAP_CLIENT_RENAMED`, `integration.client.renamedFrom`). Metodo que falta diz o que houve: nenhum cliente do WSDL (o import nao rodou: `ssam_job`/`o11_job` sem Studio), cliente do WSDL com outro nome, ou cliente sem o metodo (o import rodou e nao o criou), sempre `INTEGRATION_IMPORT_NEEDS_STUDIO`. Op de integracao sem `data` tem as chaves embrulhadas (`OP_DATA_WRAPPED`, `JobNormalizer.WrapData`). Provas: `tests/Anvil.Tests/SoapClientRenameTests.cs` (candidato real `tests/fixtures/soap-wire/import-1.oml`), `SoapContractTests`.
 - Documentos: a fachada fixa URL/caminho em `.local/documents/<sha256>/` e reescreve para `{path, sha256, source}`; o kernel nunca busca na rede (`DOCUMENT_NOT_PINNED`). Job de suite usa caminho relativo (`tests/fixtures/wsdl/...`).

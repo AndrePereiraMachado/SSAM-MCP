@@ -1,0 +1,8 @@
+{
+ "description": "Fixture F2 (lote 4, relato 90a697c3): a page of ChainFlow uses the classes of the producer theme ChainProducerTheme (the BaseTheme of the flow's theme ChainLocalTheme). The consumer keeps the producer's StyleSheet in the theme's signature, so HTML_CLASS_NO_RULE names only the class no theme of the chain defines (zz-sem-regra), with no themeElsewhere.",
+ "base": "job:css-chain-consumer",
+ "expectValid": true,
+ "ops": [
+  {"op": "html", "data": {"html": "<screen name=\"ChainDoc\" flow=\"ChainFlow\"><div class=\"chain-panel chain-pad\"><div class=\"chain-panelhead chain-local\">Painel</div><div class=\"zz-sem-regra\">x</div></div></screen>"}}
+ ]
+}

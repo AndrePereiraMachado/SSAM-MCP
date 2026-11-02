@@ -69,6 +69,110 @@ public static class HtmlDocumentRules
         for (var i = 0; i < ops.Count; i++)
             if (ops[i] is JsonObject op && ScreenDocFacts.Of(op, i) is { Edit: false } doc) MoveDefaults(ops, doc, prefix, done);
         LogicDefaults(ops, prefix, done);
+        DeclarationsFirst(ops, prefix, done);
+    }
+
+    public const string DeclarationsHoisted = "HTML_DECLARATIONS_FIRST";
+
+    /// <summary>F10, HTML_DECLARATIONS_FIRST: the inputs and variables an html edit declares at the top of its edit list (with k:
+    /// a change of one the screen has; without k: a new one) belong to the screen before anything of the job uses them: the
+    /// logic texts (a data action reads the screen's variables) and the other pages (Detalhe(PedidoId = ...) on Dashboard needs
+    /// the input PedidoId that the edit of Detalhe declares, "the destination of ev:OnClick on the new element has no input
+    /// PedidoId", refused after the build in 4 rounds of 25/10, until the owner declared all 42 with create/set ops). They go
+    /// into an edit of their own of the same screen and reading, placed before the first logic op or page edit of the job;
+    /// the edit keeps the rest. Only when nothing but logic ops and html ops lies between that place and the edit (what
+    /// declares their types comes first).</summary>
+    private static void DeclarationsFirst(JsonArray ops, string? prefix, List<JsonObject> done)
+    {
+        static bool Writer(JsonObject op) => op["op"]?.ToString() == "logic" || op["op"]?.ToString() == "html" && op["parent"] == null;
+        // The declarations at the top of an edit string (their spans), the rest of the string without them.
+        static (List<string> Declarations, string Remainder)? Split(string text)
+        {
+            HtmlText parsed;
+            try { parsed = HtmlText.Parse(text); } catch { return null; }
+            static bool Declaration(HtmlText.Element e) => e.Tag == "var" || e.Tag == "input" && e.Get("name") != null && e.Get("bind") == null;
+            var tops = parsed.Root.Children;
+            // The whole document as the edit: its new declarations (no k) go first too and leave the document, which the three-way
+            // merge with its reading then keeps. One of the reading (k) stays: a whole document writes them all, changed or not,
+            // and an edit of them alone would be merged again with what the job changed before it.
+            if (tops.Count == 1 && tops[0].Tag is "screen" or "block")
+            {
+                var fresh = tops[0].Children.Where(e => Declaration(e) && e.Get("k") == null).ToList();
+                if (fresh.Count == 0) return null;
+                var whole = HtmlText.Apply(text, fresh.Select(e => new HtmlText.Edit(e.OpenStart, e.End - e.OpenStart, "")));
+                return (fresh.Select(e => text[e.OpenStart..e.End]).ToList(), whole);
+            }
+            var declarations = tops.Where(Declaration).ToList();
+            if (declarations.Count == 0) return null;
+            var rest = HtmlText.Apply(text, declarations.Select(e => new HtmlText.Edit(e.OpenStart, e.End - e.OpenStart, ""))).Trim();
+            return (declarations.Select(e => text[e.OpenStart..e.End]).ToList(), rest);
+        }
+        bool OnlyDeclarations(JsonObject op) => op["data"]?["edit"] is JsonArray list && list.Count > 0
+            && list.All(e => e is JsonValue v && v.TryGetValue<string>(out var t) && Split(t) is { } only && only.Remainder.Length == 0);
+        var first = -1;
+        for (var i = 0; i < ops.Count && first < 0; i++)
+            if (ops[i] is JsonObject op && Writer(op) && !(op["op"]?.ToString() == "html" && OnlyDeclarations(op))) first = i;
+        if (first < 0) return;
+        // What an earlier run already put first (the normalizations run on the preflight and again on the apply): the declarations
+        // of each screen in the edits of declarations before the first writer.
+        var already = new HashSet<string>(StringComparer.Ordinal);
+        for (var i = 0; i < first; i++)
+            if (ops[i] is JsonObject op && op["op"]?.ToString() == "html" && op["data"]?["screen"]?.ToString() is { } screen && op["data"]?["edit"] is JsonArray strings)
+                foreach (var e in strings) if (e is JsonValue v && v.TryGetValue<string>(out var t)) already.Add(screen + "" + t);
+        var moves = new List<(int Index, JsonObject Op, List<string> Declarations)>();
+        for (var i = first + 1; i < ops.Count; i++)
+        {
+            if (ops[i] is not JsonObject op) break;
+            if (!Writer(op)) break;   // what declares the types of the declarations may come after the first writer: left as it is
+            if (op["op"]?.ToString() != "html" || !ScreenHtmlEdit.IsEdit(op) || op["data"] is not JsonObject data || data["edit"] is not JsonArray list
+                || data["screen"] is not JsonValue || data["basedOn"] is not JsonObject) continue;
+            var target = data["screen"]!.ToString();
+            var splits = list.Select(e => e is JsonValue value && value.TryGetValue<string>(out var text) ? Split(text) : null)
+                .Select(x => x is { } y && y.Declarations.All(d => already.Contains(target + "" + d)) && y.Remainder.Length > 0 ? null : x).ToList();
+            // An op of declarations only stays where it is (a page edit with nothing left is no edit).
+            if (splits.All(x => x == null) || splits.All(x => x != null && x.Value.Remainder.Length == 0)) continue;
+            var declarations = new List<string>();
+            for (var j = 0; j < list.Count; j++)
+            {
+                if (splits[j] is not { } split) continue;
+                declarations.AddRange(split.Declarations);
+                // An edit string that held only declarations is left empty (an empty edit is nothing): the strings after it
+                // keep their place in the job as sent.
+                var rest = JsonValue.Create(split.Remainder);
+                list[j] = rest;
+                SentJob.Replaced(rest);
+            }
+            moves.Add((i, op, declarations));
+        }
+        // Where each edit is in the job as sent, before anything is inserted (the origin of the edit put first).
+        var origins = moves.Select(m => prefix == null ? null : SentJob.ToSent($"{prefix}/{m.Index}/data/edit", ops, prefix).Pointer).ToList();
+        var sentFirst = prefix == null ? first : int.TryParse(SentJob.ToSent($"{prefix}/{first}", ops, prefix).Pointer?.Split('/')[^1], out var f) ? f : first;
+        var entries = new List<(JsonObject Op, List<string> Declarations, string? Origin)>();
+        for (var m = 0; m < moves.Count; m++)
+        {
+            var (_, op, declarations) = moves[m];
+            var data = op["data"]!.AsObject();
+            var hoisted = new JsonObject { ["op"] = "html", ["data"] = new JsonObject {
+                ["screen"] = data["screen"]!.DeepClone(), ["basedOn"] = data["basedOn"]!.DeepClone(), ["edit"] = new JsonArray(declarations.Select(d => (JsonNode)JsonValue.Create(d)!).ToArray()) } };
+            ops.Insert(first + m, hoisted);
+            SentJob.Inserted(hoisted, origins[m]);
+            entries.Add((op, declarations, origins[m]));
+        }
+        // The entry points at the edit the declarations came from, where it is now (TranslateEntries writes it as sent).
+        foreach (var (op, declarations, origin) in entries)
+        {
+            var screen = op["data"]!["screen"]!.ToString();
+            var at = ops.IndexOf(op);
+            done.Add(JobNormalizer.Entry(DeclarationsHoisted, prefix == null ? null : $"{prefix}/{at}/data/edit",
+                $"{declarations.Count} declaration(s) of {screen} in {origin ?? "the edit"}", $"an edit of {screen} before op #{sentFirst}",
+                $"the inputs and variables of {screen} ({string.Join(", ", declarations.Select(DeclarationName).Take(6))}{(declarations.Count > 6 ? ", ..." : "")}) are declared before the logic and the other pages of the job use them"
+                + "; the rest of the edit stays where it was"));
+        }
+    }
+
+    private static string DeclarationName(string declaration)
+    {
+        try { return HtmlText.Parse(declaration).Root.Children.FirstOrDefault()?.Get("name") ?? "?"; } catch { return "?"; }
     }
 
     /// <summary>The html strings of an html op: data.html (page and document forms) and html (fragment form).</summary>
@@ -439,7 +543,10 @@ public static class HtmlDocumentRules
         {
             if (ops[i] is not JsonObject op || op["op"]?.ToString() != "html") continue;
             foreach (var (holder, key, at) in HtmlSlots(op, prefix, i))
+            {
                 UnknownIcons(holder, key, lane, i, at, problems);
+                ModOperators(holder, key, lane, i, at, problems);
+            }
             if (ScreenDocFacts.Of(op, i) is not { } doc) continue;
             var html = prefix == null ? null : $"{prefix}/{i}/data/html";
             // An edit is judged against its reading (EditDefaults); nothing of it moves into an OnInitialize.
@@ -520,6 +627,118 @@ public static class HtmlDocumentRules
             var (message, fix) = EditDefaultRefusal(d.Kind == "var" ? "variable" : "input", d.Name, doc.Name, value.Trim(), before);
             problems.Add(JobPreflight.Problem(doc.Op, html, "DEFAULT_NOT_LITERAL", "error", $"html: {Where(doc.Text, dv.Start)}: {message}", fix, null, "html"));
         }
+    }
+
+    /// <summary>C-24 (F-FigmaReactive-10a): `(a - b + n) mod n` in an expression of the html (a {{ }} binding, if=, an argument)
+    /// reached the Verify as "Invalid Expression | Expecting an expression instead of end of line", with no word of Mod(n, m):
+    /// OutSystems has no mod operator (ExpressionRules says it for the logic texts, C19; OdcPlatformRules for ODC logic). The
+    /// same problem here, both lanes, every one of the html at once, with the html as sent rewritten by the same writer
+    /// (ExpressionRewrites.Mod) as the patch.</summary>
+    private static void ModOperators(JsonObject holder, string key, string lane, int op, string? path, List<JsonObject> problems)
+    {
+        var html = holder[key]!.GetValue<string>();
+        if (!html.Contains("mod", StringComparison.OrdinalIgnoreCase)) return;
+        HtmlText text;
+        try { text = HtmlText.Parse(html); } catch { return; }
+        var hasMod = ExpressionRewrites.HasMod(lane);
+        var found = new List<(int Start, string Expression, string? Written)>();
+        foreach (var element in text.Elements())
+            foreach (var (start, end) in HtmlText.ExpressionSpans(html, element).Distinct())
+            {
+                var expression = html[start..end];
+                List<Token> tokens;
+                try { tokens = ExpressionText.Tokens(expression); } catch { continue; }
+                if (!tokens.Any(t => t.Kind == TokenKind.Operator && t.Is("mod"))) continue;
+                if (found.Any(f => f.Start == start)) continue;
+                // The spaces around the expression ({{ x }}) are the author's: kept. An expression with an entity of the html
+                // (&quot;) gets no rewrite (the positions of the patch would not be the text's).
+                var written = Decode(expression) == expression ? ExpressionRewrites.Mod(expression.Trim(), hasMod) : null;
+                var lead = expression[..(expression.Length - expression.TrimStart().Length)];
+                var trail = expression[expression.TrimEnd().Length..];
+                found.Add((start, expression, written == null ? null : lead + written + trail));
+            }
+        if (found.Count == 0) return;
+        var edits = found.Where(f => f.Written != null).Select(f => new HtmlText.Edit(f.Start, f.Expression.Length, f.Written!)).ToList();
+        var sent = SentJob.HtmlAsSent(holder) ?? html;
+        // The patch over the html as sent, only when the sent text is the one these positions read (no normalization moved it).
+        var patch = path != null && edits.Count == found.Count && sent == html
+            ? new JsonArray(new JsonObject { ["op"] = "replace", ["path"] = path, ["value"] = HtmlText.Apply(html, edits) }) : null;
+        foreach (var (start, expression, written) in found)
+            problems.Add(JobPreflight.Problem(op, path, "EXPR_UNKNOWN_IDENTIFIER", "error",
+                $"html: {Where(text, start)}: can't identify 'mod' in {expression.Trim()}: OutSystems has no mod operator (the Studio answers 'Invalid Expression | Expecting an expression instead of end of line')",
+                written != null ? $"write {written.Trim()} (the built-in Mod(n, m) is the remainder; the patch writes every one of the html)" : "write Mod(n, m), the built-in that returns the remainder",
+                patch?.DeepClone().AsArray(), "html"));
+    }
+
+    /// <summary>F5 (2026-10-25): the Traditional documents of a job (a WebResponsive module), read before the build as the
+    /// compiler will read them (<see cref="TraditionalDocumentRules.Lint"/>: the same adaptation, then the same check): every
+    /// HTML_TRADITIONAL of every document in the one refusal of the base phase, each with the tag or attribute to write instead,
+    /// never one document per round at the apply (the NWLoanPortal_TW chain: 125 problems in 10 receipts).</summary>
+    public static List<JsonObject> CheckTraditional(JsonArray ops, string? prefix, string? moduleType)
+    {
+        var problems = new List<JsonObject>();
+        if (moduleType is not ("WebResponsive" or "WebResponsiveLibrary")) return problems;
+        for (var i = 0; i < ops.Count; i++)
+        {
+            // C-48: every html of the op (a new document, the document of an edit, the elements of an edit): a List Records whose
+            // line count is an expression fetches start-index + line-count + 1 rows (a warning, with the pattern that shows more).
+            if (ops[i] is JsonObject paged && paged["op"]?.ToString() == "html" && paged["parent"] == null && paged["data"] is JsonObject pagedData)
+                foreach (var (text, pagedAt) in TraditionalTexts(pagedData, prefix, i))
+                {
+                    List<ScreenDocument.Problem> warnings;
+                    try { warnings = TraditionalDocumentRules.Paging(ScreenHtml.Parse(text)).ToList(); }
+                    catch (FormatException) { continue; }
+                    foreach (var w in warnings)
+                    {
+                        var warning = JobPreflight.Problem(i, pagedAt, w.Code, "warning", $"html: line {w.Line} col {w.Column}: {w.Message}", w.Fix, null, "html");
+                        warning["line"] = w.Line; warning["column"] = w.Column;
+                        problems.Add(warning);
+                    }
+                }
+            if (ops[i] is not JsonObject op || op["op"]?.ToString() != "html" || op["parent"] != null || op["data"] is not JsonObject data
+                || data["screen"] != null || data["edits"] != null || data["html"] is not JsonValue value || !value.TryGetValue<string>(out var html) || !HtmlText.IsDocument(html)) continue;
+            List<ScreenDocument.Problem> found;
+            try { found = TraditionalDocumentRules.Lint(html, out _); }
+            catch (FormatException) { continue; } // the parser's own refusal is the compiler's
+            var at = prefix == null ? null : $"{prefix}/{i}/data/html";
+            // C-30: the problems with a correction (an <img> written as the <expr> that renders it) have the corrected document as
+            // their patch, over the html as sent, offered only when it reads again with no problem but the uncorrected ones.
+            var patch = at != null && found.Any(p => p.Correction != null) ? TraditionalPatch(SentJob.HtmlAsSent(data) ?? html, at) : null;
+            foreach (var p in found)
+            {
+                var problem = JobPreflight.Problem(i, at, p.Code, "error", $"html: line {p.Line} col {p.Column}: {p.Message}", p.Fix, p.Correction != null ? patch?.DeepClone().AsArray() : null, "html");
+                if (p.Correction != null && patch != null) problem["_sentPatch"] = true;
+                // its place in the document, as the compiler says it: the merge of the phases keeps one problem per place
+                problem["line"] = p.Line; problem["column"] = p.Column;
+                problems.Add(problem);
+            }
+        }
+        return problems;
+    }
+
+    // The html texts of an html op (its document, or the elements of its edit) with their pointers.
+    private static IEnumerable<(string Text, string? Pointer)> TraditionalTexts(JsonObject data, string? prefix, int op)
+    {
+        if (data["html"] is JsonValue html && html.TryGetValue<string>(out var text)) yield return (text, prefix == null ? null : $"{prefix}/{op}/data/html");
+        foreach (var key in new[] { "edit", "edits" })
+            if (data[key] is JsonArray list)
+                for (var j = 0; j < list.Count; j++)
+                    if (list[j] is JsonValue e && e.TryGetValue<string>(out var element)) yield return (element, prefix == null ? null : $"{prefix}/{op}/data/{key}/{j}");
+    }
+
+    // The corrected Traditional document (every correction of its problems applied) as the patch of its html, when it reads again
+    // with no problem other than those nothing corrects; null otherwise.
+    private static JsonArray? TraditionalPatch(string sent, string at)
+    {
+        try
+        {
+            var found = TraditionalDocumentRules.Lint(sent, out _);
+            if (ScreenDocument.Correct(sent, found) is not { } corrected || corrected == sent) return null;
+            var left = found.Where(p => p.Correction == null).Select(p => p.Message).ToList();
+            if (!TraditionalDocumentRules.Lint(corrected, out _).All(p => left.Remove(p.Message))) return null;
+            return new JsonArray(new JsonObject { ["op"] = "replace", ["path"] = at, ["value"] = corrected });
+        }
+        catch (FormatException) { return null; }
     }
 
     private static void UnknownIcons(JsonObject holder, string key, string lane, int op, string? path, List<JsonObject> problems)

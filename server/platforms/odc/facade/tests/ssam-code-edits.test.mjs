@@ -316,6 +316,24 @@ test('reading lookup and expansion validate hashes, lane, aliases and ambiguous 
   assert.equal(loadFlowReading('o11', sha, { env }).text, reading);
 });
 
+// C-22 (F-FitBody-12): the read of a screen action is named by its path (MainFlow/FB_LogIn/LogIn) and the read accepted the
+// element as the header writes it (FB_LogIn.LogIn); the edit refused that same element (x3, "does not match read action").
+test('C-22 the edit of a screen action accepts every form its read accepts', () => {
+  const screenAction = 'action FB_LogIn.LogIn @VHtOUc436Eu5+e1Waasxfw\n  assign Message = "Hi" @n1\n  end @n2\n';
+  const screenSha = textSha(screenAction);
+  const reading = flowReadingOf({ key: 'VHtOUc436Eu5+e1Waasxfw', kind: 'ScreenAction', name: 'MainFlow/FB_LogIn/LogIn', text: screenAction, ids: {} }, 'o11', 'c'.repeat(64));
+  const store = { [screenSha]: reading };
+  const readReading = (lane, s) => store[s] ?? null;
+  for (const element of ['FB_LogIn.LogIn', 'MainFlow/FB_LogIn/LogIn', 'MainFlow.FB_LogIn.LogIn', 'FB_LogIn/LogIn', 'LogIn', '@VHtOUc436Eu5+e1Waasxfw']) {
+    const result = expandEditPart({ part: 'logic', element, basedOn: screenSha, edits: [{ replace: '@n1', with: 'assign Message = "Bye"' }] }, 'o11', { readReading });
+    assert.deepEqual(result.problems, [], element);
+  }
+  for (const element of ['Other.LogIn', 'FB_LogIn.LogOut', 'Wrong']) {
+    const result = expandEditPart({ part: 'logic', element, basedOn: screenSha, edits: [{ replace: '@n1', with: 'assign Message = "Bye"' }] }, 'o11', { readReading });
+    assert.match(JSON.stringify(result.problems), /does not match read action MainFlow\/FB_LogIn\/LogIn/, element);
+  }
+});
+
 test('reading lookup ignores corrupt newer captures and rejects every invalid identity', t => {
   const env = { ...process.env, SSAM_MODULE_INDEX_ROOT: path.join(tmp(t), 'index') };
   const valid = storeReading('o11', reading, env);

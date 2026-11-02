@@ -310,6 +310,10 @@ public sealed partial class ModelSession
     private FlowPlan PlanFlowText(string text, string? basedOn, string prefix)
     {
         var problems = new List<FlowProblem>();
+        // A `P/A(` line is a malformed call of P only when P is a module this module references (else it is a division).
+        var producerCalls = Preflight.TextForms.ProducerCallProblems(text,
+            name => _espace.References.Any(r => string.Equals(r.Name, name, StringComparison.OrdinalIgnoreCase)));
+        if (producerCalls.Count > 0) return new(null, null, null, null, null, producerCalls.ToList());
         FlowItem edited;
         try { edited = ModuleFlow.Read(text); EmptyMappings(edited); }
         catch (FormatException error) {
@@ -330,13 +334,18 @@ public sealed partial class ModelSession
         // The screen or block a new screen, block or data action is born under (what the model says of its scope).
         IObjectSignature? under = null;
         var shell = false;
+        if (edited.Kind == "RestCallbackActionFlow" && edited.Key.Length == 0) {
+            // A callback is never created by its text (rest-consume creates it): the header names the @key of one the module has.
+            problems.Add(CallbackWithoutKey(reader, root, edited));
+            return new(edited, null, null, null, null, problems);
+        }
         if (edited.Key.Length == 0 && FlowOwners.Owned(edited.Kind) && edited.Owner.Length > 0) {
             // A new screen, block or data action: under the one owner its header names.
-            var found = FlowOwners.Find(reader, root, edited.Owner);
+            var found = FlowOwners.Find(reader, root, edited.Owner, edited.Kind);
             if (found.Count != 1) {
                 problems.Add(found.Count == 0
                     ? new("FLOW_OWNER_UNKNOWN", "the header names the owner " + edited.Owner + ", and the module has no screen, block or email of that name"
-                        + (NameSuggestions.Closest(edited.Owner[(edited.Owner.LastIndexOf('/') + 1)..], FlowOwners.Names(reader, root), 3) is { Count: > 0 } near ? " (nearest: " + string.Join(", ", near) + ")" : ""),
+                        + (NameSuggestions.Closest(edited.Owner[(edited.Owner.LastIndexOf('/') + 1)..], FlowOwners.Names(reader, root, edited.Kind), 3) is { Count: > 0 } near ? " (nearest: " + string.Join(", ", near) + ")" : ""),
                         null, "name an owner of the module, or the screen or block of an html document of this job (in any order of the ops)")
                     : new("FLOW_OWNER_AMBIGUOUS", "the owner " + edited.Owner + " names " + found.Count + " elements: " + string.Join(", ", found.Take(4).Select(o => FlowOwners.PathOf(reader, root, o))),
                         null, "write the owner's path: " + FlowPrinter.Labels[edited.Kind] + " " + FlowOwners.PathOf(reader, root, found[0]) + "." + edited.Name));
@@ -456,7 +465,7 @@ public sealed partial class ModelSession
             // The owner the header names is the action's (the read's text writes it as FlowOwners.Text; a path or another
             // case of the same owner is the same): another owner would move the action (FlowDiff refuses it).
             if (edited.Owner.Length > 0 && FlowOwners.Owned(baseline.Kind) && action.Parent is IObjectSignature parent
-                && FlowOwners.Find(reader, root, edited.Owner).Any(o => ReferenceEquals(o, parent)))
+                && FlowOwners.Find(reader, root, edited.Owner, baseline.Kind).Any(o => ReferenceEquals(o, parent)))
                 edited.Owner = baseline.Owner;
         } else if (!FlowOwners.Owned(edited.Kind) && ModuleAction(edited.Name, edited.Kind) is { } taken) {
             // A text without @key creates an action: never a second one beside an action of the same name (OutSystems names
@@ -651,6 +660,27 @@ public sealed partial class ModelSession
             return name.Length == 0 ? null : reader.Walk((IObjectSignature)_es).FirstOrDefault(e => !e.WasDeleted && (Implements(e, "IStructureSignature") || Implements(e, "IEntitySignature"))
                 && string.Equals(reader.DisplayOf(e), name, StringComparison.Ordinal));
         }
+    }
+
+    /// <summary>The refusal of a callback text without @key: the callback the header names, when the module has it (read it and
+    /// edit the keyed text), else the module's callbacks nearest to it (or that it has none).</summary>
+    private static FlowProblem CallbackWithoutKey(KernelModelReader reader, IObjectSignature root, FlowItem edited)
+    {
+        var written = (edited.Owner.Length > 0 ? edited.Owner + "." : "") + edited.Name;
+        var callbacks = reader.Walk(root).Where(n => reader.KindOf(n) == "RestCallbackActionFlow" && !n.WasDeleted && reader.ParentOf(n) is { } client && !ReferenceEquals(client, root))
+            .Select(n => (Text: FlowOwners.Text(reader, root, reader.ParentOf(n)!) + "." + reader.NameOf(n), Key: reader.KeyOf(n)))
+            .OrderBy(c => c.Text, StringComparer.Ordinal).ToList();
+        var same = callbacks.Where(c => string.Equals(c.Text, written, StringComparison.OrdinalIgnoreCase)
+            || edited.Owner.Length == 0 && c.Text.EndsWith("." + edited.Name, StringComparison.OrdinalIgnoreCase)).ToList();
+        if (same.Count > 0)
+            return new("FLOW_CALLBACK_CREATION", "the header callback action " + written + " names no @key, and a text does not create a REST callback: "
+                + string.Join(", ", same.Select(c => c.Text + " is @" + c.Key)), null,
+                "read the callback (ssam_map view flow, element " + same[0].Text + ") and send its text with its @key and basedOn: the textSha of that read");
+        var near = NameSuggestions.Closest(written, callbacks.Select(c => c.Text), 4);
+        return new("FLOW_CALLBACK_UNKNOWN", "the module has no REST callback " + written
+            + (callbacks.Count == 0 ? "; it has no consumed REST client with callbacks" : " (nearest: " + string.Join(", ", near.Select(n => n + " @" + callbacks.First(c => c.Text == n).Key)) + ")"), null,
+            callbacks.Count == 0 ? "create the client's callbacks with the rest-consume op (callbacks.before/after), then read and edit their keyed text"
+                : "read one of the module's callbacks (ssam_map view flow) and edit its keyed text, with the name the client gave it");
     }
 
     // FLOW_ACTION_NAME_TAKEN: the text of the action already there is the patch (edit it and keep its ids).
@@ -1333,7 +1363,8 @@ public sealed partial class ModelSession
             throw new KernelRefusalException("FLOW_NAME_UNKNOWN", $"logic: no callable action is named {text} in this scope or its module references; a screen or block action must belong to the caller's owner",
                 new JsonArray(JobPreflight.PublicProblem(Choices(JobPreflight.Problem(null, null, "FLOW_NAME_UNKNOWN", "error", $"no action {text}"
                     + (typed is { Unfit.Count: > 0 } ? " (" + string.Join(", ", typed.Unfit.Take(3).Select(NameResolution.Describe)) + " of that name is no action)" : ""),
-                    "define the action on the caller's screen or block, or name an action of the module or of a producer it references (Producer.Action, (System).Action)"
+                    // F13: the form of a producer's call, as every fix of an unknown call says it (ScopeRules.ProducerCallForm).
+                    "define the action on the caller's screen or block, or call an action of the module or of a producer it references; " + Preflight.ScopeRules.ProducerCallForm
                     + (typed is { Candidates.Count: > 0 } ? "; the nearest: " + string.Join(", ", typed.Candidates.Select(c => c.Canonical)) : "")), text, typed))));
         bool IsClient(IObjectSignature e) => Implements(e, "IClientAction") || Implements(e, "IClientActionSignature") || Implements(e, LogicOrder.MobileScreenAction);
         var flowClient = action != null && ClientFlow(action);
@@ -1458,6 +1489,13 @@ public sealed partial class ModelSession
     {
         using var timing = NativePerformanceCapture.Measure(again ? "lookup.display.again" : "lookup.display");
         var reader = new KernelModelReader();
+        // C-22: `navigate ()` (the digest's form) and `navigate PreviousScreen()` (the flow reader's: the Previous Screen has no
+        // name, the reader names it by its kind) are the module's Previous Screen, unless an element of the module has that name.
+        if (property == "Destination" && text == FlowParser.PreviousScreen && !again && ModelHost.Prop(_espace, "PreviousScreen") is IObjectSignature previous)
+        {
+            try { return Display(text, property, target, action, again: true); }
+            catch (KernelRefusalException) { return previous; }
+        }
         // Ajax Refresh names a widget owned by this Traditional screen/block, never a same-named
         // output parameter or a widget in another screen. Resolve live: earlier ops can add widgets.
         if (property == "WidgetOrWebBlock" && target != null && Implements(target, "IAjaxRefreshNode") && action != null)
@@ -1548,7 +1586,7 @@ public sealed partial class ModelSession
         var reader = new KernelModelReader();
         if (AggregateParts.Contains(reader.KindOf(element)) || Implements(element, "IWidget")) return true;
         for (var at = element; at.Parent is IObjectSignature parent; at = parent)
-            if ((reader.KindOf(parent).EndsWith("Action", StringComparison.Ordinal) || reader.KindOf(parent) == "Preparation") && reader.KindOf(at).EndsWith("Node", StringComparison.Ordinal)) return true;
+            if ((reader.KindOf(parent).EndsWith("Action", StringComparison.Ordinal) || reader.KindOf(parent) is "Preparation" or "RestCallbackActionFlow") && reader.KindOf(at).EndsWith("Node", StringComparison.Ordinal)) return true;
         return false;
     }
 

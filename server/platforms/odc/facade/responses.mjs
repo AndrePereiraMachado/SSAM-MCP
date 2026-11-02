@@ -33,7 +33,7 @@ export function formatCall(tool, args = {}) {
   return tool + ' {' + entries.map(([k, v]) => k + ':' + (v !== null && typeof v === 'object' && !Array.isArray(v) ? '{' + Object.entries(v).map(([a, b]) => a + (b === true ? '' : ':' + JSON.stringify(b))).join(', ') + '}' : JSON.stringify(v))).join(', ') + '}';
 }
 
-const dialogCall = { tool: 'o11_studio', arguments: { command: 'dismiss-dialog', args: { title: '<dialog title>' } }, why: DIALOG_WHY };
+const dialogCall = { tool: 'o11_studio', arguments: { command: 'dismiss-dialog', args: { title: '<dialog title>', words: "<the user's own words>" } }, why: DIALOG_WHY };
 const notBuilt = lane => ({ tool: 'ssam_doctor', arguments: { lane }, why: NOT_BUILT_WHY });
 const notBuiltText = lane => formatCall('ssam_doctor', { lane }) + ' (component not built: the integrator or the user builds it)';
 
@@ -353,6 +353,8 @@ const NEXT = ['nextBasedOn', 'partial', 'summary', 'normalizations', 'patchesApp
 // `preview` (C04, servidor/fase4): the structural preview of the delivered html (preview/fragment.mjs).
 export const DELIVERY_FIELDS = ['publish', 'lastPublication', 'leftovers', 'leftoversTotal', 'screenRoles', 'screenRolesTotal', 'authorization', 'integration', 'integrationTotal', 'entityActions',
   'highWarnings', 'warnings', 'warningsTotal', 'queue', 'equivalence', 'normalized', 'normalizedTotal', 'phases', 'preview', 'removed', 'removedTotal',
+  // C-16: the basedOn {capture, html} of the next edit of every root an html edit wrote (no html read only for the basedOn).
+  'nextHtmlBasedOn', 'nextHtmlBasedOnTotal',
   // fix/system-reference: a producer taken under the name the Studio lists it by ("System" -> "(System)") says so; a name the
   // consumer session does not offer answers the producers it offers.
   'producerNotes', 'available', 'availableTotal'];

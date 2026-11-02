@@ -535,6 +535,165 @@ public sealed class ScreenDocumentTests
         Assert.Equal(preflight, compiled);
     }
 
+    [Fact]
+    public void AButtonOrALinkInsideAFormValidatesItUnlessTheDocumentSaysOtherwise()
+    {
+        if (!StudioAvailable()) return;
+        // C-02 (F-FigmaReactive-04, P0; the proto line's ca60082d): <button onclick="SubmitJoin"> inside <form id="JoinForm"> was
+        // written with Built-in Validations None (the Reset took the page's default), so JoinForm.Valid was always True and the
+        // required and email checks never ran, silently. The Studio gives a Button or a Link it creates inside a Form
+        // ValidateAndContinue; a value the document writes stays, and a click outside a Form keeps the page's default.
+        var html = "<screen name=\"JoinUs\" roles=\"Registered\" actions=\"SubmitJoin, Clear\">\n<var name=\"Name\" type=\"Text\"/>\n<var name=\"Email\" type=\"Email\"/>\n"
+            + "<form id=\"JoinForm\">\n <input id=\"NameInput\" bind=\"Name\" required=\"True\"/>\n <input id=\"EmailInput\" bind=\"Email\" required=\"True\"/>\n"
+            + " <button id=\"JoinButton\" onclick=\"SubmitJoin\">Join</button>\n <a id=\"JoinLink\" onclick=\"SubmitJoin\">Join</a>\n"
+            + " <button id=\"ClearButton\" onclick=\"Clear\" os-onclick.BuiltInValidations=\"None\">Clear</button>\n</form>\n"
+            + "<button id=\"OutsideButton\" onclick=\"Clear\">Clear</button>\n</screen>";
+        var dir = Path.Combine(Work, "form-validations");
+        Directory.CreateDirectory(dir);
+        var ops = new JsonArray(Op(html), JsonNode.Parse("""{"op": "logic", "data": {"flow": ["action JoinUs.SubmitJoin\n  end\n", "action JoinUs.Clear\n  end\n"]}}"""));
+        string[] clicks = ["JoinForm/JoinButton", "JoinForm/JoinLink", "JoinForm/ClearButton", "OutsideButton"];
+        foreach (var click in clicks) ops.Add(new JsonObject { ["op"] = "get", ["target"] = "IMobileScreen:JoinUs/" + click + "/OnClick" });
+        var path = Path.Combine(dir, "job.json");
+        File.WriteAllText(path, new JsonObject { ["base"] = "reactive-ui.oml", ["ops"] = ops }.ToJsonString());
+        var host = Host("form-validations");
+        var output = Path.Combine(dir, "out.oml");
+        var result = JsonSerializer.SerializeToNode(JobRunner.Run(host, null, path, output))!.AsObject();
+        Assert.True(result["accepted"]!.GetValue<bool>(), result["details"]?.ToJsonString());
+        var validations = result["results"]!.AsArray().Where(r => r!["op"]?.ToString() == "get").Select(r => r!["result"]!["properties"]!["BuiltInValidations"]!.ToString()).ToList();
+        Assert.Equal(["ValidateAndContinue", "ValidateAndContinue", "None", "None"], validations);
+        // The reading says the same: a click inside a form validates unless it says None; the page reads back at the fixed point.
+        var bytes = File.ReadAllBytes(output);
+        var text = host.HtmlRead(bytes, "MobileScreen:JoinUs", withKeys: false)["documents"]![0]!["html"]!.ToString();
+        Assert.DoesNotContain("ValidateAndContinue", text);
+        Assert.Contains("id=\"ClearButton\"", Assert.Single(text.Split('\n'), l => l.Contains("os-onclick.BuiltInValidations=\"None\"", StringComparison.Ordinal)));
+        Assert.Equal(0, host.HtmlCheck(bytes)["documents"]!.AsArray().Single(d => d!["root"]!.ToString() == "JoinUs")!["ops"]!.GetValue<int>());
+
+        // The same rule in the edit form: a new button inside the form, and the button outside moved into it (its text says
+        // nothing of its validations), validate it; the one that says None keeps None.
+        var read = host.HtmlRead(bytes, "MobileScreen:JoinUs", withKeys: true);
+        var reading = read["documents"]![0]!["html"]!.ToString();
+        string K(string id) => reading.Split('\n').Single(l => l.Contains("id=\"" + id + "\"", StringComparison.Ordinal)).Split(" k=\"")[1].Split('"')[0];
+        var form = HtmlElementEdits.ElementText(reading, K("JoinForm"))!;
+        var outside = HtmlElementEdits.ElementText(reading, K("OutsideButton"))!;
+        var moved = form[..form.LastIndexOf("</form>", StringComparison.Ordinal)] + outside.Trim() + "\n<button id=\"AgainButton\" onclick=\"SubmitJoin\">Again</button>\n</form>";
+        var edit = new JsonArray(new JsonObject { ["op"] = "html", ["data"] = new JsonObject { ["screen"] = "JoinUs",
+            ["basedOn"] = new JsonObject { ["capture"] = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes)).ToLowerInvariant(), ["html"] = read["documents"]![0]!["htmlSha256"]!.DeepClone() },
+            ["edit"] = new JsonArray(moved) } });
+        foreach (var click in new[] { "AgainButton", "OutsideButton", "ClearButton" }) edit.Add(new JsonObject { ["op"] = "get", ["target"] = "IMobileScreen:JoinUs/JoinForm/" + click + "/OnClick" });
+        var editPath = Path.Combine(dir, "edit.json");
+        File.WriteAllText(editPath, new JsonObject { ["ops"] = edit }.ToJsonString());
+        var edited = JsonSerializer.SerializeToNode(JobRunner.Run(host, output, editPath, Path.Combine(dir, "edited.oml")))!.AsObject();
+        Assert.True(edited["accepted"]!.GetValue<bool>(), edited["details"]?.ToJsonString());
+        Assert.Equal(["ValidateAndContinue", "ValidateAndContinue", "None"],
+            edited["results"]!.AsArray().Where(r => r!["op"]?.ToString() == "get").Select(r => r!["result"]!["properties"]!["BuiltInValidations"]!.ToString()));
+    }
+
+    [Fact]
+    public void TwoAggregatesOverOneEntityAndAJoinToAnotherAggregatesSourceEachTakeTheirOwnSources()
+    {
+        if (!StudioAvailable()) return;
+        // C-15 (the proto line's f6fb4153): the second <aggregate from="Stat"> of a screen resolved os-Source="Stat" to the alias
+        // of the first one (F-FigmaReactive-03: HTML_NAME_AMBIGUOUS "os-Source="Stat" names 2 elements: IAddSourceOperation ... /
+        // IAliasedSource"; F-FigmaMobile-04: InvalidDataSet_NoEntity "GetAllContacts must use at least one entity"), and a join to
+        // an entity that is the source of another aggregate took that aggregate's alias (F-FitBody-37: AGGREGATE_JOIN_NOT_NATIVE).
+        // The sources are data sources seen from their own aggregate.
+        var html = "<screen name=\"DoisAggs\" roles=\"Registered\">\n"
+            + "<aggregate name=\"GetStatus\" from=\"StatusPedido\" max=\"10\"/>\n"
+            + "<aggregate name=\"GetUrgentes\" from=\"Pedido\" where=\"Pedido.Urgente\" max=\"5\"/>\n"
+            + "<aggregate name=\"GetPedidos\" from=\"Pedido\" join=\"StatusPedido on Pedido.StatusPedidoId = StatusPedido.Id\" sort=\"Pedido.Numero\" max=\"50\"/>\n"
+            + "<ul list=\"GetStatus.List\"><li>{{ GetStatus.List.Current.StatusPedido.Label }}</li></ul>\n"
+            + "<ul list=\"GetUrgentes.List\"><li>{{ GetUrgentes.List.Current.Pedido.Numero }}</li></ul>\n"
+            + "<ul list=\"GetPedidos.List\"><li>{{ GetPedidos.List.Current.Pedido.Numero + \" \" + GetPedidos.List.Current.StatusPedido.Label }}</li></ul>\n</screen>";
+        var dir = Path.Combine(Work, "two-aggregates");
+        Directory.CreateDirectory(dir);
+        var path = Path.Combine(dir, "job.json");
+        File.WriteAllText(path, new JsonObject { ["base"] = "reactive-ui.oml", ["ops"] = new JsonArray(JsonNode.Parse(Spec), Op(html)) }.ToJsonString());
+        var host = Host("two-aggregates");
+        var output = Path.Combine(dir, "out.oml");
+        JsonObject result;
+        try { result = JsonSerializer.SerializeToNode(JobRunner.Run(host, null, path, output))!.AsObject(); }
+        catch (Exception error) { throw new Xunit.Sdk.XunitException("refused: " + Errors.Text(error)); }
+        Assert.True(result["accepted"]!.GetValue<bool>(), result["details"]?.ToJsonString());
+        var bytes = File.ReadAllBytes(output);
+        var text = host.HtmlRead(bytes, "MobileScreen:DoisAggs", withKeys: false)["documents"]![0]!["html"]!.ToString();
+        // Each aggregate reads back with its own sources: two over Pedido (one with the join to StatusPedido) and one over StatusPedido.
+        Assert.Equal(2, System.Text.RegularExpressions.Regex.Matches(text, "<os-AliasedSource[^>]*name=\"Pedido\"").Count);
+        Assert.Equal(2, System.Text.RegularExpressions.Regex.Matches(text, "<os-AliasedSource[^>]*name=\"StatusPedido\"").Count);
+        Assert.DoesNotContain("os-Source=\"AliasedSource:", text);
+        Assert.Equal(0, host.HtmlCheck(bytes)["documents"]!.AsArray().Single(d => d!["root"]!.ToString() == "DoisAggs")!["ops"]!.GetValue<int>());
+    }
+
+    [Fact]
+    public void AScreenTheDocumentDeclaresAnonymousToleratesTheWarningOfTheServerActionsItCalls()
+    {
+        if (!StudioAvailable()) return;
+        // C-11 (the proto line's b19ae05e; F-FigmaReactive-07, F-AiChatbot-02, F-Jesse-04, F-FitBody-08/50...): <screen
+        // roles="Anonymous"> whose screen action calls a server action was refused VALIDATION_REFUSED with "Warning
+        // CustomObjectWarning: Security Warning | You're exposing a Server Action for public access and without authentication":
+        // the document wrote the roles by reflection and never declared the intent, which a raw set Roles does (C08). The author's
+        // roles decide, for the whole screen.
+        var dir = Path.Combine(Work, "anonymous");
+        Directory.CreateDirectory(dir);
+        var html = "<screen name=\"Publica\" roles=\"Anonymous\" actions=\"Enviar\">\n<button onclick=\"Enviar\">Enviar</button>\n</screen>";
+        var ops = new JsonArray(JsonNode.Parse("""{"op": "logic", "data": {"flow": ["server action Registrar\n  end\n"]}}"""), Op(html),
+            JsonNode.Parse("""{"op": "logic", "data": {"flow": ["action Publica.Enviar\n  Registrar()\n  end\n"]}}"""));
+        var path = Path.Combine(dir, "job.json");
+        File.WriteAllText(path, new JsonObject { ["base"] = "reactive-ui.oml", ["ops"] = ops }.ToJsonString());
+        JsonObject result;
+        try { result = JsonSerializer.SerializeToNode(JobRunner.Run(Host("anonymous"), null, path, Path.Combine(dir, "out.oml")))!.AsObject(); }
+        catch (Exception error) { throw new Xunit.Sdk.XunitException("refused: " + Errors.Text(error)); }
+        Assert.True(result["accepted"]!.GetValue<bool>(), result["details"]?.ToJsonString());
+        Assert.Contains(MessageExpectations.AnonymousDeclaredReason, result.ToJsonString());
+    }
+
+    // ---- C-26: one parser of the short form, the left side of a join declared or read from its condition ----------------
+
+    /// <summary>C-26 (the proto line's dbd0fffb; F-FitBody-27): FBExercise, then FBRoutine, then FBRoutineItem on
+    /// FBRoutineItem.RoutineId = FBRoutine.Id: the compile put the first source of from on the left of every join and the Verify
+    /// answered "Can't identify 'FBRoutine'" twice (the model was denormalized to get around it); the preflight split the joins at
+    /// ',' and the rules read from= as one token. One parser: the left side of a join is the one it declares (Left~Right) or the
+    /// source declared before it that its condition reads; from= is a list with Alias=Entity.</summary>
+    [Fact]
+    public void AChainedJoinIsJoinedToTheSourceItsConditionReadsAndTheThreeReadersAgree()
+    {
+        // A join reads its two sources only: a condition on a third one is said before the Studio (the Verify's "Can't identify").
+        var third = "<screen name=\"S\">\n<aggregate name=\"G\" from=\"CJExercise\" join=\"CJRoutine on CJRoutine.Id = 1; CJRoutineItem on CJRoutineItem.RoutineId = CJRoutine.Id and CJRoutineItem.ExerciseId = CJExercise.Id\"/>\n</screen>";
+        var said = Anvil.Core.Preflight.DocumentAggregates.Check(new JsonArray(Op(third)), "/ops", "o11");
+        Assert.Contains(said, p => p["code"]!.ToString() == "AGGREGATE_JOIN_SOURCES" && p["message"]!.ToString().Contains("CJExercise and CJRoutine", StringComparison.Ordinal));
+        if (!StudioAvailable()) return;
+        var html = "<screen name=\"Chained\" roles=\"Registered\">\n"
+            + "<aggregate name=\"GetOptions\" from=\"CJExercise\" join=\"CJRoutine on CJRoutine.MemberName = &quot;x&quot;; CJRoutineItem on CJRoutineItem.RoutineId = CJRoutine.Id\" max=\"50\"/>\n"
+            + "<div list=\"GetOptions.List\"><div class=\"opt\">{{ GetOptions.List.Current.CJExercise.Name }}</div></div>\n</screen>";
+        var dir = Path.Combine(Work, "chained-" + Guid.NewGuid().ToString("N")[..8]);
+        Directory.CreateDirectory(dir);
+        var job = Path.Combine(dir, "job.json");
+        File.WriteAllText(job, new JsonObject { ["base"] = "reactive-ui.oml", ["ops"] = new JsonArray(
+            JsonNode.Parse("""{"op":"spec","data":{"ddl":"create entity CJExercise (\n  Id Long Integer identifier auto required,\n  Name Text(50)\n);\ncreate entity CJRoutine (\n  Id Long Integer identifier auto required,\n  MemberName Text(50)\n);\ncreate entity CJRoutineItem (\n  Id Long Integer identifier auto required,\n  RoutineId CJRoutine Identifier,\n  ExerciseId CJExercise Identifier\n);\n"}}"""),
+            Op(html)) }.ToJsonString());
+        var host = Host("chained");
+        JsonObject result;
+        try { result = JsonSerializer.SerializeToNode(JobRunner.Run(host, null, job, Path.Combine(dir, "out.oml")))!.AsObject(); }
+        catch (Exception error) { throw new Xunit.Sdk.XunitException("refused: " + Errors.Text(error)); }
+        Assert.True(result["accepted"]!.GetValue<bool>(), dir + "\n" + result["details"]?.ToJsonString());
+        var text = host.HtmlRead(File.ReadAllBytes(Path.Combine(dir, "out.oml")), "MobileScreen:Chained", withKeys: false)["documents"]![0]!["html"]!.ToString();
+        Assert.Matches("os-LeftSource=\"(AliasedSource:)?CJRoutine\"[^>]*os-RightSource=\"(AliasedSource:)?CJRoutineItem\"|os-RightSource=\"(AliasedSource:)?CJRoutineItem\"[^>]*os-LeftSource=\"(AliasedSource:)?CJRoutine\"", text);
+    }
+
+    // C-26: the one parser of the short form, without a module: from= is a list with Alias=Entity, joins are separated by ';'
+    // (a ',' or a ';' inside a text literal stays), and the left side of each join is declared (Left~Right) or the one source
+    // declared before it that its condition reads; a declared left side that is no source declared before it is a problem.
+    [Fact]
+    public void TheShortFormOfAnAggregateHasOneParserWithAliasesAndTheLeftSideOfEachJoin()
+    {
+        var shape = ScreenDocument.ParseAggregate("Ex=CJExercise", "CJRoutine on CJRoutine.MemberName = \"a, b; c\"; CJRoutineItem on CJRoutineItem.RoutineId = CJRoutine.Id; Ex~Other=CJRoutine on Other.Id = Ex.Id");
+        Assert.Empty(shape.Problems);
+        Assert.Equal([("Ex", "CJExercise")], shape.Sources.Select(s => (s.Alias, s.Entity)));
+        Assert.Equal([("Ex", "CJRoutine"), ("CJRoutine", "CJRoutineItem"), ("Ex", "Other")], shape.Joins.Select(j => (j.Left, j.Right)));
+        Assert.Equal("CJRoutine", shape.Joins[2].Entity);
+        Assert.Single(ScreenDocument.ParseAggregate("A", "Nowhere~B on B.X = A.Y").Problems);
+        Assert.Single(ScreenDocument.ParseAggregate("A", "B on B.X = A.Y; C on C.X = A.Y and C.Z = B.Z").Problems);
+    }
+
     // A job of one document op over the reactive fixture.
     private static string DocumentJob(string html, string name)
     {
@@ -543,6 +702,30 @@ public sealed class ScreenDocumentTests
         var path = Path.Combine(dir, "job.json");
         File.WriteAllText(path, new JsonObject { ["base"] = "reactive-ui.oml", ["ops"] = new JsonArray(Op(html)) }.ToJsonString());
         return path;
+    }
+
+    // ---- C-17: no false HTML_CLASS_NO_RULE -----------------------------------------------------------------------------------
+
+    /// <summary>C-17 (F-FigmaReactive-09d, F-FigmaMobile-12): the literals a class expression compares (If(Active = "Home",
+    /// "on", "")) were warned as classes without a rule, and so were the classes a later document of the same job writes in the
+    /// theme (16 of the BottomNav). A compared literal is a value; a part of the theme the job writes is a rule.</summary>
+    [Fact]
+    public void AComparedLiteralIsNoClassAndAThemePartOfTheJobIsARule()
+    {
+        var top = ScreenHtml.Parse("<screen name=\"S\"><div class=\"nav-item {{ If(Active = &quot;Home&quot;, &quot;on&quot;, &quot;&quot;) + If(&quot;About&quot; = Page, &quot; is-about&quot;, &quot;&quot;) }}\"/></screen>")
+            .Children.First(c => !c.IsText);
+        Assert.Equal(["nav-item", "on", "is-about"], ScreenDocument.UsedClasses(top).Select(u => u.Class));
+        if (!StudioAvailable()) return;
+        var home = "<screen name=\"BnHome\" roles=\"Registered\">\n<var name=\"Tab\" type=\"Text\"/>\n<div class=\"bn-bar {{ If(Tab = &quot;Home&quot;, &quot;bn-on&quot;, &quot;&quot;) }}\"><span class=\"bn-item\">Home</span></div>\n</screen>";
+        var other = "<screen name=\"BnOther\" roles=\"Registered\">\n<style scope=\"theme\">.bn-bar{display:flex}.bn-on{color:red}.bn-item{padding:4px}</style>\n<div class=\"bn-bar\">x</div>\n</screen>";
+        var dir = Path.Combine(Work, "theme-parts-" + Guid.NewGuid().ToString("N")[..8]);
+        Directory.CreateDirectory(dir);
+        var job = Path.Combine(dir, "job.json");
+        File.WriteAllText(job, new JsonObject { ["base"] = "reactive-ui.oml", ["ops"] = new JsonArray(Op(home), Op(other)) }.ToJsonString());
+        var result = JsonSerializer.SerializeToNode(JobRunner.Run(Host("theme-parts"), null, job, Path.Combine(dir, "out.oml")))!.AsObject();
+        File.WriteAllText(Path.Combine(dir, "result.json"), result.ToJsonString());
+        Assert.True(result["accepted"]!.GetValue<bool>(), dir + "\n" + result["details"]?.ToJsonString());
+        Assert.DoesNotContain("HTML_CLASS_NO_RULE", result.ToJsonString());
     }
 
     // ---- helpers ---------------------------------------------------------------------------------------------------

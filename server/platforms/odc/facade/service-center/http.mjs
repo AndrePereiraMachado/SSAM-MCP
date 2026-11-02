@@ -9,6 +9,7 @@ import https from 'node:https';
 import { AuthRequired, BridgeError, ProtocolError } from './errors.mjs';
 import { Document, Page, controls, formFields, lower, postbackTarget, secretRefs as toSecretRefs } from './html.mjs';
 import { urlencode, urljoin, urlsplit } from './urls.mjs';
+import { PageNotFound, ProtocolMismatch } from './protocol.mjs';
 import { readCheckpoint } from '../read-budget.mjs';
 
 // Codes with which the bridge turns a request down before sending anything to Service Center.
@@ -31,13 +32,22 @@ export function hostName(value) {
   return value.toLowerCase();
 }
 
-export function accepted(kind, accept) {
-  if (accept === 'html' && !kind.includes('text/html')) throw new ProtocolError('Expected Service Center HTML; protocol variant unsupported');
+// context (method, path, status, body): what the refusal keeps as its protocol detail (protocol.mjs).
+export function accepted(kind, accept, context = {}) {
+  const refuse = message => new ProtocolMismatch(message, { ...context, contentType: kind, expected: EXPECTED[accept] ?? accept });
+  if (accept === 'html' && !kind.includes('text/html')) throw refuse('Expected Service Center HTML; protocol variant unsupported');
+  // The login page in place of an OsAjax/JSON reply: never parsed as the reply (the page reads keep their own checks, a file
+  // its own refusal below).
+  if (['text', 'text-write'].includes(accept) && kind.includes('html') && context.body && LOGIN_PAGE.test(Buffer.isBuffer(context.body) ? context.body.subarray(0, 65536).toString('utf8') : String(context.body)))
+    throw refuse('Service Center answered with its login page instead of the reply; no response data was accepted');
   if (['text', 'text-write'].includes(accept) && !(kind.startsWith('text/') || kind.includes('json') || kind.includes('javascript')))
-    throw new ProtocolError('Expected a Service Center text reply; protocol variant unsupported');
+    throw refuse('Expected a Service Center text reply; protocol variant unsupported');
   // An HTML answer to a download is a login page or an error page, never the file.
-  if ((accept === 'xlsx' || accept === 'binary') && kind.includes('text/html')) throw new ProtocolError('Service Center answered with a page instead of the file');
+  if ((accept === 'xlsx' || accept === 'binary') && kind.includes('text/html')) throw refuse('Service Center answered with a page instead of the file');
 }
+const EXPECTED = { html: 'HTTP 200 text/html (a Service Center page)', text: 'HTTP 200 text (an OsAjax or JSON reply)', 'text-write': 'HTTP 200 text (an OsAjax or JSON reply)',
+  xlsx: 'HTTP 200 the XLSX file', binary: 'HTTP 200 the file', solution: 'HTTP 200 the file' };
+const pathOf = url => { try { return urlsplit(url).path; } catch { return null; } };
 
 const charsetOf = kind => /;\s*charset\s*=\s*"?([^";\s]+)"?/i.exec(kind)?.[1]?.toLowerCase() ?? null;
 export const decode = (raw, charset) => new TextDecoder(charset || 'utf-8').decode(raw);
@@ -95,6 +105,12 @@ export function nodeSend() {
 }
 
 export class Transport {
+  // The refusal of an HTTP status the call cannot read (both transports, and the Users surface over them): 404 is its own
+  // answer (PageNotFound, SC_PAGE_NOT_FOUND); any other status is a protocol mismatch with the exchange.
+  statusRefusal(status, context) {
+    const message = `Service Center returned HTTP ${status ?? 'None'}`;
+    return status === 404 ? new PageNotFound(message, context) : new ProtocolMismatch(message, context);
+  }
   constructor(host, { timeoutMs = 30000, send = null, origin = null, privateBridge = null, privatePrincipal = null } = {}) {
     this.host = hostName(host);
     this.base = `https://${this.host}/ServiceCenter/`;
@@ -168,28 +184,31 @@ export class Transport {
           : await this.send({ method: data === null ? 'GET' : 'POST', url: this.physical(url), headers, body: data, timeoutMs: this.timeoutMs, limit });
       } catch (error) {
         if (error instanceof ProtocolError) throw error;
-        throw new ProtocolError('Service Center connection failed; no automatic retry');
+        throw new ProtocolMismatch('Service Center connection failed; no automatic retry', { method: data === null ? 'GET' : 'POST', path: pathOf(url), expected: EXPECTED[accept] ?? accept });
       }
+      const exchange = { method: data === null ? 'GET' : 'POST', path: pathOf(url), status: response.status, contentType: String(response.contentType ?? ''), body: response.body };
       this.jar.store(url, response.setCookie);
       if (REDIRECTS.includes(response.status)) {
         const location = response.location || '';
-        if (!location) throw new ProtocolError('Service Center redirect has no destination');
+        if (!location) throw new ProtocolMismatch('Service Center redirect has no destination', { ...exchange, expected: 'a redirect with its destination', location: '(none)' });
         if (urlsplit(urljoin(url, location)).hostname === 'id.outsystems.com')
           throw new AuthRequired('SC_SSO_REQUIRED', 'Service Center requires its validated headless identity exchange. No credential was sent by this request.');
-        const destination = this.url(location, url);
+        let destination;
+        try { destination = this.url(location, url); }
+        catch (error) { throw new ProtocolMismatch(error.message, { ...exchange, expected: 'a redirect within /ServiceCenter/ of this host', location }); }
         if (data !== null && (response.status === 307 || response.status === 308)) throw new ProtocolError('Refusing to replay a POST after a redirect');
         url = destination; data = null;
         continue;
       }
-      if (response.status < 200 || response.status >= 300) throw new ProtocolError(`Service Center returned HTTP ${response.status}`);
+      if (response.status < 200 || response.status >= 300) throw this.statusRefusal(response.status, { ...exchange, expected: EXPECTED[accept] ?? accept });
       const kind = String(response.contentType ?? '').toLowerCase();
-      if (response.body.length > limit) throw new ProtocolError('Service Center response exceeds its size limit');
+      if (response.body.length > limit) throw new ProtocolMismatch('Service Center response exceeds its size limit', { ...exchange, expected: 'at most ' + limit + ' bytes' });
       if (this.preauthenticated && kind.includes('html') && LOGIN_PAGE.test(response.body.toString('utf8')))
         throw new AuthRequired('SC_AUTH_EXPIRED', 'Service Center answered with its login page; no response data was accepted.');
-      accepted(kind, accept);
+      accepted(kind, accept, exchange);
       return [url, kind, response.body, response.charset ?? charsetOf(kind) ?? 'utf-8'];
     }
-    throw new ProtocolError('Too many Service Center redirects');
+    throw new ProtocolMismatch('Too many Service Center redirects', { method: 'GET', path: pathOf(url), expected: 'at most 5 redirects', location: url });
   }
 
   async request(url, fields = null, secretRefs = null) {
@@ -417,7 +436,7 @@ export class StudioWebTransport extends Transport {
     if (write) this.authorized[2].sent = true;
     if (reply?.redirected === true && form !== null) {
       // A postback answered with a redirect (manual mode): the POST went through; read the page again.
-      if (!['html', 'text', 'text-write'].includes(accept)) throw new ProtocolError('Service Center redirected instead of returning the file');
+      if (!['html', 'text', 'text-write'].includes(accept)) throw new ProtocolMismatch('Service Center redirected instead of returning the file', { method: 'POST', path: pathOf(url), expected: EXPECTED[accept] ?? accept, status: reply?.status ?? null, location: reply?.finalUrl || '(redirect)' });
       return this.fetch(url);
     }
     let final = reply?.finalUrl || url;
@@ -429,7 +448,8 @@ export class StudioWebTransport extends Transport {
     if (urlsplit(final).path.toLowerCase().endsWith('/login.aspx') || reply?.status === 401)
       throw new BridgeError('WEB_SIGN_IN_REQUIRED', "The native Service Center HTTP session is not authenticated; no interactive sign-in was attempted", { sent: form !== null });
     const status = reply && Object.hasOwn(reply, 'status') ? reply.status : 200;
-    if (status !== 200) throw new ProtocolError(`Service Center returned HTTP ${status ?? 'None'}`);
+    const exchange = { method: form === null ? 'GET' : 'POST', path: pathOf(final), status, contentType: String(reply?.contentType ?? '') };
+    if (status !== 200) throw this.statusRefusal(status, { ...exchange, expected: EXPECTED[accept] ?? accept, body: reply?.html ?? null });
     const kind = String(reply.contentType || (Object.hasOwn(reply, 'html') ? 'text/html' : '')).toLowerCase();
     let raw;
     if (Object.hasOwn(reply, 'bodyBase64')) {
@@ -437,11 +457,11 @@ export class StudioWebTransport extends Transport {
       if (text.length % 4 || !/^[A-Za-z0-9+/]*={0,2}$/.test(text)) throw new Error('Invalid base64 body');
       raw = Buffer.from(text, 'base64');
     } else raw = Buffer.from(String(reply.html ?? ''), 'utf8'); // html:null + htmlOmitted: the reply echoed a vault value the bridge could not mask
-    if (raw.length > (['html', 'text', 'text-write'].includes(accept) ? LIMIT : BINARY_LIMIT)) throw new ProtocolError('Service Center response exceeds its size limit');
+    if (raw.length > (['html', 'text', 'text-write'].includes(accept) ? LIMIT : BINARY_LIMIT)) throw new ProtocolMismatch('Service Center response exceeds its size limit', { ...exchange, expected: 'a bounded answer', body: raw });
     if (kind.includes('html') && LOGIN_PAGE.test(raw.toString('utf8')))
       throw new BridgeError('WEB_SIGN_IN_REQUIRED', "Service Center answered with its login page: the native HTTP session "
         + 'is unauthenticated; nothing was read and no window was opened', { sent: form !== null });
-    accepted(kind, accept);
+    accepted(kind, accept, { ...exchange, body: raw });
     return [final, kind, raw, 'utf-8'];
   }
 }

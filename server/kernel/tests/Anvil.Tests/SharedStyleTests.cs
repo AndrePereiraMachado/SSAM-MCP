@@ -219,12 +219,12 @@ public sealed class SharedStyleTests(ITestOutputHelper output)
             var theme = read["results"]![0]!["result"]!;
             var css = theme["UserStyleSheet"]?.ToString() ?? theme["properties"]?["UserStyleSheet"]?.ToString() ?? theme["StyleSheet"]?.ToString() ?? theme["properties"]?["StyleSheet"]?.ToString() ?? "";
             Assert.Single(Regex.Matches(css, @"/\* anvil:html style:shared-"));
-            foreach (var name in new[] { "SharedOne", "SharedTwo" })
-            {
-                var html = host.HtmlRead(File.ReadAllBytes(model), "MobileScreen:" + name, withKeys: false)["documents"]![0]!["html"]!.ToString();
-                Assert.DoesNotContain(".shared-card", html);
-                Assert.DoesNotContain("scope=\"theme\"", html);
-            }
+            // C-14: the moved rule is printed once, as the named part of the root whose document carried it (its owner, so an edit
+            // of that root changes it), never as a root's own CSS nor in both readings.
+            var readings = new[] { "SharedOne", "SharedTwo" }.Select(name => host.HtmlRead(File.ReadAllBytes(model), "MobileScreen:" + name, withKeys: false)["documents"]![0]!["html"]!.ToString()).ToList();
+            Assert.Single(readings, html => html.Contains("<style scope=\"theme\" id=\"shared-", StringComparison.Ordinal));
+            Assert.Equal(1, readings.Sum(html => Regex.Matches(html, @"\.shared-card\{").Count));
+            Assert.All(readings, html => Assert.DoesNotContain("<style>", html));
         }
     }
 

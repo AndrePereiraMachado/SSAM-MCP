@@ -31,7 +31,7 @@ test('kernel dialog hints name the Studio person or o11_studio, never cdp_pages.
     if (/cdp_pages/.test(hint)) {
       assert.match(text, /in the Studio|o11_studio/, text);
       assert.deepEqual(continuations.map(c => [c.tool, c.arguments.command]), [['o11_studio', 'dismiss-dialog']]);
-      assert.deepEqual(continuations[0].arguments.args, { title: '<dialog title>' });
+      assert.deepEqual(continuations[0].arguments.args, { title: '<dialog title>', words: "<the user's own words>" });
       assert.ok(continuations[0].why);
     }
   }

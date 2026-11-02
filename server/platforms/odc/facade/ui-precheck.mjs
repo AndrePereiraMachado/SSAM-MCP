@@ -49,6 +49,7 @@ import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { hostedContext } from './executor.mjs';
 import { STORE_GENERATION } from './store-generation.mjs';
+import { withoutDestructivePatches } from './refusal-problems.mjs';
 
 export const PRECHECK_CODE = 'PREFLIGHT_REFUSED';
 // The values of SSAM_UI_PRECHECK that turn the precheck off (CX16 r4: on by default again, check-job outside the worker queue).
@@ -405,6 +406,8 @@ async function precheck(request, deps, parallel) {
     const listed = Array.isArray(data.problems) ? data.problems : [];
     let problems = listed.filter(p => !plain(p) || p.severity !== 'warning').map(problemOf);
     if (!problems.length && data.valid === false && Array.isArray(data.errors)) problems = data.errors.map(problemOf);
+    // C-01 (c): the patches judged on the job (withoutDestructivePatches), for the refusal it answers and for the carried ones.
+    problems = withoutDestructivePatches(problems, document ?? jobFile);
     const warnings = [...(Array.isArray(data.warnings) ? data.warnings : []), ...listed.filter(p => plain(p) && p.severity === 'warning')];
     const kernelStatic = plain(data.static) ? data.static : null;
     if (!kernelStatic) skipped.push({ class: 'static', reason: 'the lane CLI answered check-job without its static check (phases ' + JSON.stringify(data.phases ?? ['preflight']) + ')' });
@@ -438,7 +441,7 @@ async function precheck(request, deps, parallel) {
       const rest = complete ? [] : Array.isArray(kernelStatic?.rest) ? kernelStatic.rest : [{ phase: 'apply', reason: kernelStatic ? 'check-job did not say the apply path adds nothing' : 'the lane CLI answered without its static check' }];
       note({ outcome: 'carried', jobSha256, problems: problems.length, codes: codesOf(problems), warnings: warnings.length, basis: basisNote, timings,
         complete, rest: rest.map(r => r?.phase ?? 'apply'), ...(parallel ? { parallel: true } : {}) });
-      return { carry: true, code: PRECHECK_CODE, problems, local, lane, mode, jobSha256,
+      return { carry: true, code: PRECHECK_CODE, problems, local, lane, mode, jobSha256, job: document ?? jobFile,
         static: { basis: { module: { capture: base.path, sha256: base.sha256, fresh: base.fresh, source: base.source } },
           checked: Array.isArray(kernelStatic?.checked) ? kernelStatic.checked : [], skipped: [...(Array.isArray(kernelStatic?.skipped) ? kernelStatic.skipped : []), ...skipped],
           complete, rest, elapsedMs, indexMs: index.ms, checkMs },
@@ -471,7 +474,8 @@ const sameProblem = (a, b) => plain(a) && plain(b) && String(a.code ?? '') === S
 export function joinPrecheck(answer, carried) {
   if (!carried?.carry || !plain(answer)) return answer;
   try {
-    const statics = Array.isArray(carried.problems) ? carried.problems : [];
+    // C-01 (c): the carried problems are judged on the job they came from (carried.job, its file), as the answer's own are.
+    const statics = withoutDestructivePatches(Array.isArray(carried.problems) ? carried.problems : [], carried.job);
     const refused = answer.ok === false || answer.accepted === false;
     if (!refused || answer.outcome === 'uncertain') {
       journalTo(carried.local, { lane: carried.lane, mode: carried.mode, jobSha256: carried.jobSha256, outcome: refused ? 'carried-uncertain' : 'carried-accepted',

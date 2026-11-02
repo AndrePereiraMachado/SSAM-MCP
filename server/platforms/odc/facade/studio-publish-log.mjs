@@ -334,10 +334,12 @@ async function publishWithGrantLocked({ manifest, module: requested, authorize, 
   })();
   value = changedSinceDelivery(value, merge, target?.module ?? module ?? requested, pid);
   const { lastPublicationFrom, publishOutcomeOf, staleRevisionNext, publishEvidence } = await import('./kernel-delivery.mjs');
-  // F1: a completed publication whose server revision is the one the delivery started from is never answered as published.
-  if (value.ok === true && wait && isObject(value.published)) {
+  // F1: a completed publication whose server revision is the one the delivery started from is never answered as published;
+  // U1 (bridge v106/v107): nor one the bridge did not verify against the bytes sent (verified:false), the same family.
+  if ((value.ok === true || value.verified === false) && wait && isObject(value.published)) {
     const outcome = publishOutcomeOf(value, publishEvidence(manifest));
-    if (outcome.outcome === 'stale') value = { ...value, ok: false, code: outcome.code, outcome: 'stale', error: outcome.error, continuation: staleRevisionNext(manifest) };
+    if (outcome.outcome === 'stale') value = { ...value, ok: false, code: outcome.code, outcome: 'stale', error: outcome.error, ...(outcome.version != null ? { version: outcome.version } : {}),
+      continuation: staleRevisionNext(manifest, outcome) };
   }
   const lastPublication = value.ok === true && wait
     ? { at: value.completedAt ? String(value.completedAt) : null, status: 'succeeded', version: value.published?.revision ?? null, author: null, by: 'ssam', source: 'publish-result' }
@@ -348,6 +350,9 @@ async function publishWithGrantLocked({ manifest, module: requested, authorize, 
 
 export async function publishWithLog({ manifest, wait = true, minutes = 10, pid } = {}, { studio, moduleOf = () => null }) {
   const value = await studio(['publish', manifest, ...(wait ? ['--wait', String(minutes)] : [])], pid);
+  // U1: a completed publication the bridge did not verify keeps its own answer (verified:false, published): it is not a failed
+  // compilation, and its log is already in it (kernel-delivery.mjs unverifiedPublication).
+  if (isObject(value) && value.ok === false && value.verified === false && isObject(value.published)) return value;
   if (!isObject(value) || value.ok !== false || !AFTER_DISPATCH.test(String(value.error ?? ''))) return value;
   let log = isObject(value.publishLog) ? value.publishLog : null;
   if (!log) {

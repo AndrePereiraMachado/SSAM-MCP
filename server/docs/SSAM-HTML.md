@@ -2,7 +2,10 @@
 
 Atualização de 19/10/2026: o Traditional possui criação e edição nativas; as tabelas históricas
 abaixo que o classificam como D2/opaco não descrevem a cobertura atual. A matriz atual e seus
-limites estão nos testes `Traditional*Tests` e `HtmlCrossPlatformLifecycleTests` do kernel.
+limites estão nos testes `Traditional*Tests` e `HtmlCrossPlatformLifecycleTests` do kernel. Desde 25/10/2026 o documento
+Traditional converte o HTML conhecido (`th`, `thead`/`tbody`, `table list`, `p`/`h1…`, `strong`/`em…`, `i icon`, `radio`,
+`title`, `if`, `placeholder` em bloco) no widget equivalente e declara `migration.adapted[]`/`migration.dropped[]`; o que
+não tem widget é recusado antes do build (seção "Traditional documents" de `kernel/AGENTS.md`; o dialeto inteiro, gerado da allowlist do kernel, sai em `ssam_code` grammar html lane o11, `card.traditional`).
 Para um campo que filtra ou recalcula ao mudar, use `<input bind="Query" onchange="ApplyFilter"/>`
 (ou `textarea`) e declare a screen action no mesmo job. No Traditional isso liga o `OnChange`
 nativo à action; em Reactive/Mobile/ODC usa o modelo de eventos da respectiva plataforma.
@@ -17,8 +20,9 @@ Controles Traditional: `input type="checkbox|password|radio"` aceita `bind`, `on
 `enabled`; radio usa `value` como expressão OutSystems. A leitura usa `checkbox-input`,
 `password-input` e `radio-input`, também aceitos na criação. `form record="Row" editable="True"`
 liga o formulário a uma variável de registro. A classe do Form Traditional é um atributo estendido
-(a leitura mostra `ext:class`); preserve `Form` ao acrescentar uma classe sua. O tema aplica largura
-de grid por padrão: para formulário largo, use CSS limitado à classe do formulário e confira no navegador.
+(a leitura mostra `ext:class`); preserve `Form` ao acrescentar uma classe sua. Desde 27/10/2026 (C-09) os
+controles criados por documento nascem sem a largura de grid do tema; `os-Width="4 col"` a aplica. Dimensione
+pela classe e confira no navegador.
 O seletor legado usa `select bind="Person"`
 com `source-entity="IEntitySignature:User"`, `source-attribute="IEntitySignature:User/Name"`
 e `required="False"`; esse contrato não tem OnChange, então a aplicação da seleção precisa
@@ -39,7 +43,30 @@ usando `id`, `source`, `line-count` e `start-index`. A tabela declara `slot name
 e `slot name="DataRow"`, contendo células `td`; a lista recebe conteúdo diretamente.
 Para `Rows` do tipo estrutura List, use `Records.List.Current.Caption` dentro da tabela,
 sem inserir novamente o nome da estrutura. Comandos por linha passam o identificador ou
-valor corrente em argumentos nomeados. A fonte precisa ser consultada/atribuída na
+valor corrente em argumentos nomeados. Desde 27/10/2026 (C-03), um argumento de evento
+(`onclick`, `onchange`, `onnotify`, `@Evento`) dentro da linha que lê `Fonte.Current` ou
+`Fonte.CurrentRowNumber` é escrito `<Lista>.List.Current`/`.CurrentRowNumber`: no postback,
+`Fonte.Current` é a última linha renderizada (o "Choose This Plan" do Pro escolhia o
+Begginer). A lista sem `id` usa o nome que o widget ganhou (`ListRecords1`, ou o primeiro
+`ListRecordsN`/`TableRecordsN` livre na forma edição). Na forma edição isso vale só dentro de
+`list-records` e `table-records`: um `div list` escrito numa edição fica com o argumento como
+veio (escreva as linhas repetidas como `<list-records id="...">`). O recibo lista cada argumento em
+`migration.adapted` (documento) ou `HTML_LIST_ROW` em `normalized` (edição). O que renderiza
+a linha (`{{ Fonte.Current.X }}`, `if`) fica como está. `line-separator="None"` em
+`list-records` (e `div list`) tira o `<br>` entre as linhas (C-07).
+
+Defaults dos controles Traditional (C-09, 27/10/2026): um input, password, select, upload ou
+label sem `os-Width` nasce sem largura de grid (o Studio dava `4 col`/`2 col`, e o
+`ThemeGrid_Width4` vencia a classe), um input sem `required`/`mandatory` não é obrigatório e
+sem `maxlength` não tem Max Length (o Studio dava 50). A leitura escreve `os-Width` e
+`maxlength` só quando o widget os tem (`ScreenDefaults.LanguageDefault` numa página Traditional).
+Um `span` só sai `display: inline` quando o CSS do documento não dá `display` a uma das suas
+classes, e o espaço junto de um inline na mesma linha fica no texto (C-08). `<img>` não tem
+widget Traditional criável pela Model API: é recusado antes do build (`HTML_TRADITIONAL`, fase
+base) com o patch `<expr value="&quot;<img src='&quot; + EncodeHtml(Url) + &quot;'>&quot;"
+os-EscapeContent="False"/>` (C-30). Uma List Records com `line-count` que é expressão recebe o aviso
+`HTML_LIST_RECORDS_LINE_COUNT` (o runtime busca start-index + line-count + 1 linhas: some ao contador antes de
+consultar de novo, C-48); `<screen layout="blank">` é a tela sem o bloco de layout do template (C-28). A fonte precisa ser consultada/atribuída na
 Preparation e nas actions Ajax pertinentes. Use RichWidgets.List_Navigation para a
 paginação e atualize o container que inclui tabela e pager. Se a consulta já pagina os
 dados, mantenha o start-index visual em zero para não aplicar o deslocamento duas vezes.
@@ -329,6 +356,38 @@ Recusas, todas numa resposta, antes de escrever (`HTML_EDIT_INVALID`, `HTML_EDIT
     nomeado (20/10); nenhum tipo das fixtures (O11 Reactive e Traditional, ODC) recusa renomear um widget da leitura. Se um
     recusar, o `fix` mantém o nome lido ou recria o widget com o nome (sem `k`), só quando nada fora da tela o usa.
 
+**F10 (26/10/2026; porte de 01/11): o que a forma edição recusava por forma vira normalização, e o que o build recusava é dito antes.** As 9
+telas do dono de 25/10 (SSAMCoverageSoapWire_UI) levaram 6 recusas na primeira entrega e 4 na segunda; quase tudo tinha
+uma leitura só ou era decidível com a captura e o job. Listados em `normalized` (nunca recusados). Três casos do proto a linha já
+tinha com regra própria: a prosa numa expressão de texto (`TEXT_LITERAL_QUOTED`, R2-C), o destino pelo tipo antes do escopo
+(`REFERENCE_CANONICAL`, R2-A) e a lista `actions`/`data-actions` como o módulo a tem (nota em `normalized`, 18/10).
+
+| Código | Antes | Agora |
+|---|---|---|
+| `HTML_EDIT_SPLIT` | `"<var .../><var name=\"X\"/>\n<div k=\"w56\">..."` numa string: `HTML_EDIT_INVALID` (7-8 por rodada) | cada elemento é uma edição; `<var>`/`<input name>` (sem `bind`)/`<aggregate>`/`<event>` sem `k` é declaração nova da raiz, na ordem da leitura (inputs, eventos, variáveis, aggregates); uma string vazia ao lado de outras é nada; uma declaração sem `k` com o nome de uma que a raiz já tem é ela só quando é idêntica à da leitura (mesmo tag, nome exato, todos os atributos e valores: `HTML_DECLARATION_KEYED`, com o `k`, nada a escrever); em todo outro caso (tipo, default omitido, outra caixa do nome, outro tipo de declaração) `HTML_NAME_TAKEN` no plano, nada escrito, com o patch que põe o `k` (e o nome como a leitura escreve) (revisão W3-EDIT, rodadas 1 e 2) |
+| `HTML_EVENT_ARGUMENTS` | `onclick="SelecionarAba(NomeAba=&quot;resumo&quot;)"`: "event onclick is not Destination(...)" | a chamada como a leitura escreve, `SelecionarAba(NomeAba = "resumo")`; argumento posicional segue recusado |
+| `HTML_BR_CONTAINER` | `<br/>` novo: HTML Element `br`, "'br' is not a valid HTML tag" no Verify | Container vazio, como a forma documento e o fragmento |
+| `DROPDOWN_ITEM_SCOPE` (normalização) | `<select options="L" value="L.Current.Id" label="L.Current.Nome">`: "Can't identify 'L'" no Verify | a regra central (`DropdownItemScopeRules.Bare`): todo `L.Current.` fora dos literais sai (`value="Id"`, `label='Nome + " (" + Codigo + ")"'`); só O11, como a regra central (o Verify do ODC não está provado); sem reescrita certa, recusa no plano |
+| `HTML_TYPE_UNQUALIFIED` | `type="SSAMCoverageSoapWire.Cliente Identifier"`: "names nothing for DataType", fix "closest: &lt;módulos&gt;" | o tipo desse nome que a página resolve (`Cliente Identifier`), só quando o qualificador é o módulo ou a referência dona daquela entidade ou estrutura (a regra de `TypeResolver.Qualified`); outro qualificador (`Nowhere.Text`) é recusado no plano |
+
+Ditos no plano, antes de escrever (eram `HTML_EDIT_NOT_APPLIED` depois do build, "nothing was kept"):
+- argumento de evento que o destino (tela ou screen action do módulo, como o módulo está quando a edição roda) não tem
+  (`HTML_NAME_UNKNOWN`, com os inputs do destino; o input que ele certamente quer quando há um; senão declarar o
+  `<input name>` na edição da tela de destino). O input obrigatório que o evento não passa fica com o Verify
+  (`ArgumentRequiredExpression`): um op posterior do mesmo job pode torná-lo opcional;
+- evento de um elemento HTML (`<section onclick>`, `<tr onclick>`) apontando para uma tela (`HTML_EVENT_OPENS_SCREEN`, o
+  mesmo código da forma documento, C-34): o handler de um HTML Element é uma screen action (`<a>`/`<button>` abrem tela, ou
+  uma screen action com `navigate`);
+- destino que não nomeia nada: `` declare `action Tela.X` `` num op `logic` do job, ou nomeie uma tela (nunca "closest:
+  &lt;telas&gt;" para uma action ausente).
+
+No job (`HtmlDocumentRules`, preflight e apply): `HTML_DECLARATIONS_FIRST` põe as declarações das edições de tela (forma de
+elementos: todas; documento inteiro: só as novas, sem `k`) numa edição própria da mesma tela e `basedOn`, antes do primeiro
+op `logic`/`html` (só quando entre eles há apenas ops `logic` e `html`): o `Detalhe(PedidoId = ...)` de Dashboard acha o input
+que a edição de Detalhe declara, e a lógica acha as variáveis. A edição de origem segue depois, juntada em 3 vias com a sua
+leitura. Na cascata, os textos de um op `logic` falham juntos (um texto que falha derruba o op): os `HTML_NAME_UNKNOWN` das
+screen actions que os outros textos declaram dobram em `blocks` da raiz; o `op` de cada problema é o do job enviado.
+
 **Conferência:** depois de escrever, a tela é lida de novo e comparada com o texto editado, elemento por elemento: tipo,
 fatos, filhos e a ObjectKey de tudo o que a edição manteve (inclusive as linhas de texto). Se não for o texto editado, nada
 fica (`HTML_EDIT_NOT_APPLIED`). As únicas normalizações aceitas são listadas em `normalized`: o CSS só reformatado e o nome
@@ -410,8 +469,10 @@ Endereço: o `k`, o slot `k/Nome`, o ramo `k.true`/`k.false`, a raiz `/` ou `@<O
 edições endereçam a base (uma `find` e um endereço sobre o mesmo texto se sobrepõem); o texto inserido ou trocado é escrito
 na forma canônica da sua profundidade e o resto da base fica byte a byte; `set` e `replace` mantêm o elemento; uma edição
 sem efeito devolve a base. Recusas, todas numa resposta, com `pointer` `/edits/<j>` e `element` (a linha da tag) ou
-`candidates`: `HTML_EDIT_TARGET_UNKNOWN` (endereço que a leitura não tem), `HTML_EDIT_TEXT_NOT_UNIQUE` (0 ou ≥ 2
-ocorrências, com as linhas), `HTML_EDIT_OVERLAP`, `HTML_KEY_TWICE`, `HTML_EDIT_INVALID` (forma; também uma `find` cujo
+`candidates`: `HTML_EDIT_TARGET_UNKNOWN` (endereço que a leitura não tem), `HTML_EDIT_TEXT_NOT_UNIQUE` (≥ 2
+ocorrências, com as linhas), `HTML_EDIT_TEXT_NOT_FOUND` (nenhuma, com as linhas mais próximas; onda 2, C-35: uma
+`find` sem `k` que a leitura tem uma vez com os `k` das suas tags é esse trecho, e o `with` recebe os `k` nas tags de mesmo nome,
+na mesma ordem), `HTML_EDIT_OVERLAP`, `HTML_KEY_TWICE`, `HTML_EDIT_INVALID` (forma; também uma `find` cujo
 `with` tira, troca ou acrescenta um `k` do trecho: o `k` é a identidade do elemento, e sem ele o elemento seria outro e o
 rebase perderia o que o Studio mudou nele; mude-o por `set`, `replace` ou `move`). Dois elementos trocados de lugar dentro
 de uma `find`, cada um com o seu `k` **e o seu próprio texto**, são o mesmo par recolocado (só `place`: nada criado, apagado
@@ -435,7 +496,7 @@ e a forma documento continuam valendo como antes.
 `ssam_code check`), `element` (o nome de um `<screen>`/`<block>` do job, a tela de uma op de edição, `Tela.Action` ou
 `Action` de um texto de lógica, ou `ddl`) e `edits:[{find, with}]`; outros elementos em `also:[{element, edits}]`. O
 `ssam_code` gera o JSON Patch dos textos (`html-edits.mjs`) e entrega pela rota de patch de hoje; nada do job viaja de novo.
-Problemas: `EDIT_ELEMENT_UNKNOWN` (com os elementos que o job tem), `EDIT_TEXT_NOT_UNIQUE` (com as linhas), `EDIT_OVERLAP`
+Problemas: `EDIT_ELEMENT_UNKNOWN` (com os elementos que o job tem), `EDIT_TEXT_NOT_UNIQUE` (o `find` ocorre 2 vezes ou mais, com as linhas), `EDIT_TEXT_NOT_FOUND` (não ocorre, com as linhas mais próximas; C-35), `EDIT_OVERLAP`
 (duas edições no mesmo trecho, ou com o `patch` do modelo no mesmo caminho), `BASE_CHANGED`.
 
 ## Checagem estática (CX16)
@@ -883,12 +944,13 @@ carries the block, the edit removes the gap, page and rows markers, each in `HTM
 | Family | What the engine does | Code |
 |---|---|---|
 | F2 default class | in the document, the edit of a reading (`html`/`edit`/`edits`) and the fragment into a `parent` (D1 of 2026-10-17; not the page form, where a new button keeps the class the Studio gives, unsaid), a new widget without `k` and without `class` keeps the class the Studio gives it (`form-control`, `dropdown`, `checkbox`, `radio-group`, `popup-dialog`). These lose the ornament or the emphasis: `form` without `card`, `list` without `list-group` and `btn` without `btn-primary`. Before, the reset wrote the empty expression and the runtime published `"form-control"` between quotes | `normalized` `STYLE_STUDIO_CLASS_KEPT` / `STYLE_STUDIO_CLASS_TRIMMED` |
-| F1 list in a table or grid | a new List of `thead`/`tbody`/`tfoot`/`ul`/`ol`, or whose element is a grid or flex box by the CSS, gets `disable-virtualization` (never twice) and the marker `data-ssam-rows` | `normalized` `LIST_RENDERS_ALL_ROWS` |
-| F3/F6 margin and layout | The theme the page shows carries `/* ssam:native-layout */` (version 4), and it acts on marked elements only: (1) the runtime's gutter is zeroed only on a new link, button or form after a neighbor whose parent already spaces its items side by side: a flex or grid parent whose column gap is not 0 (`column-gap`, or the second value of `gap`, the first when there is one; the declaration that wins by the cascade). `ScreenVisual.SpacingReader` is the one reading of it, per axis, over OutSystems UI's `display-*`, `gap-*`, `row-gap-*` and `column-gap-*` (a table taken from the fixture), the theme and the page. The rules without a condition decide; a `@media`/`@supports` under which the parent spaces its items otherwise is listed in the note's `conditions`. A row gap alone, `gap:16px 0` or `column-gap:0` keep the gutter, which is then the only spacing, as in the gen-screen's `display-flex` row of buttons (review 2, M5); (2) `min-width:0` goes to the `.layout` chain of a marked page: only a screen the op created carries the page marker, never a block (a block goes on pages the op did not create); (3) a marked table List becomes a row group. Every document says what it did, in every job | `normalized` `THEME_NATIVE_LAYOUT` (`otherRootsAffected` measured), `GUTTER_ZEROED_IN_GAP` (with `gaps`), `GUTTER_KEPT` (count = gutters; both with `conditions`), `GUTTER_ADDS_TO_GAP`, `PAGE_MARKED_FOR_LAYOUT`, `HTML_MARKER_DECIDED`; refusal `HTML_RESERVED_MARKER` |
-| F4 wrappers | warning: a selector that does not reach the runtime element (a wrapper in between, the span of `{{ }}`, a flex item that is the wrapper, a control OutSystems UI styles with a stronger selector, a checkbox drawn by a pseudo-element) | `HTML_SELECTOR_MISSES_RUNTIME` |
+| F1 list in a table or grid | a new List of `thead`/`tbody`/`tfoot`/`tr`/`ul`/`ol`, or whose element is a grid or flex box by the CSS, gets `disable-virtualization` (never twice) and the marker `data-ssam-rows` | `normalized` `LIST_RENDERS_ALL_ROWS` |
+| F8 table List | every List whose element is not a `div` is `os-Mode="Custom"` (the Studio renders a List's Tag only in Mode Custom: in Default the runtime publishes a `div` in the `<table>`, and the header's first column takes all the rows). A List of a table part (`thead`/`tbody`/`tfoot`/`tr`) also gets `disable-virtualization` and its display: the rows marker where the theme the page shows is this module's (block version 5: `tbody[data-ssam-rows][data-ssam-rows]{display:table-row-group}`, (0,2,1), over `.list{display:flex}` of an imported theme), else `ext:style="display:table-row-group"`; a new one has `class=""` (no `.list`); a lifted `<tr list>` of a reading leaves the Studio's `list`/`list-group` (`classDropped`), and the author's other class stays on the row (`classMovedToRow`). A data table (one header row of `<th>`, one template row of `<td>` over a list) is the native Table and not this rule. In every form: document, `html`/`edit`/`edits` (a new List, or a List of a table part of a table the edit touches: repaired; any other List of the reading keeps its Mode; the repair writes the rows marker on a screen the op did not create and the block in its theme, an exception to A1 that the notes say), fragment. The reading says a table List that renders as a div or with virtualization, with the element edit that repairs it | `normalized` `LIST_MODE_CUSTOM`, `TABLE_LIST_REPAIRED`; the receipt's `visual.tables[]`; reading note `HTML_TABLE_LIST_VIRTUALIZED` (`ssam_map view:"html"` `notes[].call`) |
+| F3/F6 margin and layout | The theme the page shows carries `/* ssam:native-layout */` (version 5; replacing an older block keeps, right after it and outside its markers, every complete rule or comment of the old block the engine never wrote, said in `THEME_NATIVE_LAYOUT` `from`/`kept`; what is no complete rule goes inside one comment, `keptAsComment`, so it never joins the next rule; the version is the `/* version N` comment or the `vN` of the marker line of version 1), and it acts on marked elements only: (1) the runtime's gutter is zeroed only on a new link, button or form after a neighbor whose parent already spaces its items side by side: a flex or grid parent whose column gap is not 0 (`column-gap`, or the second value of `gap`, the first when there is one; the declaration that wins by the cascade). `ScreenVisual.SpacingReader` is the one reading of it, per axis, over OutSystems UI's `display-*`, `gap-*`, `row-gap-*` and `column-gap-*` (a table taken from the fixture), the theme and the page. The rules without a condition decide; a `@media`/`@supports` under which the parent spaces its items otherwise is listed in the note's `conditions`. A row gap alone, `gap:16px 0` or `column-gap:0` keep the gutter, which is then the only spacing, as in the gen-screen's `display-flex` row of buttons (review 2, M5); (2) `min-width:0` goes to the `.layout` chain of a marked page: only a screen the op created carries the page marker, never a block (a block goes on pages the op did not create); (3) a marked table List becomes a row group. Every document says what it did, in every job | `normalized` `THEME_NATIVE_LAYOUT` (`otherRootsAffected` measured), `GUTTER_ZEROED_IN_GAP` (with `gaps`), `GUTTER_KEPT` (count = gutters; both with `conditions`), `GUTTER_ADDS_TO_GAP`, `PAGE_MARKED_FOR_LAYOUT`, `HTML_MARKER_DECIDED`; refusal `HTML_RESERVED_MARKER` |
+| F4 wrappers | warning: a selector that does not reach the runtime element (a wrapper in between, the span of `{{ }}`, a flex item that is the wrapper, a control OutSystems UI styles with a stronger selector, a checkbox drawn by a pseudo-element; C-12: a `<popup>` mounted in a portal of the body outside the page, a List whose `position` loses to the runtime's inline `position: relative`, an inline `top` in a List row, a rule of this document's theme part that loses by the order of the parts; a heading OutSystems UI sizes by device and the `{{ }}` span's own white-space are the platform cascade's, `HTML_PLATFORM_SPECIFICITY` and `HTML_PLATFORM_INHERITED`) | `HTML_SELECTOR_MISSES_RUNTIME` |
 | F5 tokens | warning: an OutSystems UI token declared outside `:root`; the patch adds the named part `brand-tokens` | `HTML_THEME_TOKEN_SCOPED` |
-| F7 joined text | warning: inline neighbors with no space, `}}` glued to a word | `HTML_TEXT_JOINED` |
-| F1 container | warning: a List that is the only child of a grid or flex box; the patch moves `list=` up to the container | `HTML_LIST_NOT_LAYOUT_CONTAINER` |
+| F7 joined text | warning: inline neighbors with no space, `}}` glued to a word; not two that are all the text of their parent and each one word of letters (a logo, C-17) | `HTML_TEXT_JOINED` |
+| F1 container | warning: a List that is the only child of a grid or flex box and is not one itself (a List that lays out its own rows is its parent's item on purpose, C-17); the patch moves `list=` up to the container | `HTML_LIST_NOT_LAYOUT_CONTAINER` |
 
 The runtime DOM comes from `RuntimeDomTable` (O11 with evidence from the published DemoLATAM: `span.input-<type>`,
 `div.dropdown-container > select.dropdown-display`, `OSFillParent` on label/input/List; ODC `inferred`) and is part of the

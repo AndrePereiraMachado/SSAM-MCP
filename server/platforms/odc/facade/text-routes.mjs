@@ -262,6 +262,25 @@ function afterLocative(toks, m) {
   }
   return false;
 }
+// C-19: the text families a request names when classifyTextRoute finds no single route in it, the whole-app build
+// of the Figma runs of 27/10 above all ("build the E-Wallet app from Figma: data model, logic and 5 screens", "pacote de
+// trabalho para landing Fitmaker: tela, formulario, entidades e actions"): their packets came with text null. The families
+// (data, logic, ui) of the mentions, in that order, or [] when the words decide that no text is written: a prototype, a
+// Traditional screen, a copy, a repoint, another module (EXCLUDED), rows of data that are no static entity, a rename, move or
+// delete (the refactor routes), a read, or only words of the runtime. Deterministic, like classifyTextRoute.
+const FAMILY_ORDER = ['data', 'logic', 'ui'];
+export function textFamiliesOf(intent) {
+  const { toks } = lexOf(intent);
+  if (!toks.length) return [];
+  const text = ' ' + toks.join(' ') + ' ';
+  if (EXCLUDED.some(re => re.test(text))) return [];
+  if (ROWS.test(text) && !STATIC.test(text)) return [];
+  if (toks.some(t => ['rename', 'delete', 'move', 'read'].includes(verbKind(t)))) return [];
+  const families = new Set(mentionsOf(toks).map(m => m.family).filter(f => FAMILY_ORDER.includes(f)));
+  if (!families.size) return [];
+  if (RUNTIME.test(text) && !toks.some(t => ['create', 'add', 'edit', 'need'].includes(verbKind(t)))) return [];
+  return FAMILY_ORDER.filter(f => families.has(f));
+}
 const routeOfFamily = (family, mode) => (family === 'ui' ? (mode === 'create' ? 'ui.screen-html' : 'ui.screen-html-edit') : family === 'data' ? 'data.ddl' : family === 'logic' ? 'logic.flow' : null);
 
 /**

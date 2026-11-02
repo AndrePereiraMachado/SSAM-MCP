@@ -22,6 +22,11 @@ public class Tests
     [InlineData("SELECT a FROM {Thing} WHERE a IN (1,2)")]
     [InlineData("SELECT REPLACE('delete','d','D') FROM {Thing}")]
     [InlineData("SELECT d.[Id] FROM {Thing} d LEFT JOIN (SELECT [Id] FROM {Other}) o ON o.[Id] = d.[Id]")]
+    // relato 26af8123: the SHA-256 of a decoded image, and the other hash and checksum reads of SQL Server and PostgreSQL
+    [InlineData("SELECT {Image}.[Id], CONVERT(VARCHAR(64), HASHBYTES('SHA2_256', {Image}.[Data]), 2) FROM {Image} WHERE {Image}.[Id] = @Id")]
+    [InlineData("SELECT HASHBYTES('MD5', CAST([Name] AS NVARCHAR(MAX))), CHECKSUM([Name]), BINARY_CHECKSUM(*), CONVERT(VARBINARY(32), [Name]) FROM {Thing}")]
+    [InlineData("SELECT CHECKSUM_AGG(CHECKSUM([Id])) FROM {Thing}")]
+    [InlineData("SELECT MD5([Name]), ENCODE(SHA256(CAST([Name] AS BYTEA)), 'hex') FROM {Thing}")]
     public void SelectSubset(string sql) => QueryTestContract.RequireReadSql(sql);
 
     [Theory]
@@ -37,6 +42,10 @@ public class Tests
     [InlineData("SELECT * FROM x FOR UPDATE")]
     [InlineData("SELECT @@version")]
     [InlineData("SELECT 1 /*")]
+    // a hash function never opens a way to effects: qualified, or next to an effect, it still refuses
+    [InlineData("SELECT dbo.HASHBYTES('SHA2_256', [Data]) FROM {Image}")]
+    [InlineData("SELECT HASHBYTES('SHA2_256', [Data]) FROM {Image}; DELETE FROM {Image}")]
+    [InlineData("SELECT pgp_sym_encrypt([Data], 'k') FROM {Image}")]
     public void EffectsRefuse(string sql) => Assert.Equal("QUERY_TEST_EFFECTS_UNSUPPORTED", Assert.Throws<QueryTestFailure>(() => QueryTestContract.RequireReadSql(sql)).Code);
 
     [Fact]

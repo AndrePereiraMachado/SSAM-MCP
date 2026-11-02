@@ -66,6 +66,29 @@ public class HtmlElementEditJobTests(ITestOutputHelper output)
         Assert.Equal(1, problem["edit"]!.GetValue<int>());
     }
 
+    /// <summary>C-35 (F-Jesse-09): a find copied without the k the reading writes is that text of the reading: the edit is
+    /// written with the element's k (its identity kept) and the receipt says so (keyedFind), never in silence.</summary>
+    [Fact]
+    public void AFindWithoutTheKOfTheReadingIsWrittenOnThatElementAndSaidInTheReceipt()
+    {
+        if (!StudioAvailable()) return;
+        var host = Host("keyed-find");
+        var basePath = Fixture("reactive-ui.oml");
+        var (reading, html, sha) = Read(host, basePath, "Login");
+        var line = html.Replace("\r\n", "\n").Split('\n').First(l => l.Contains("k=\"w8\"", StringComparison.Ordinal)).Trim();
+        var tag = line[..(line.IndexOf('>') + 1)];
+        var find = System.Text.RegularExpressions.Regex.Replace(tag, @"\s+k=""w8""", "");
+        Assert.DoesNotContain("k=", find);
+        Assert.Contains("class=\"", find);
+        var with = System.Text.RegularExpressions.Regex.Replace(find, @"class=""([^""]*)""", "class=\"$1 compact\"");
+        var result = Run(host, basePath, Job(sha, reading, "Login", edits: new JsonArray(new JsonObject { ["find"] = find, ["with"] = with })), "keyed-find");
+        Assert.True(result["accepted"]!.GetValue<bool>(), result.ToJsonString());
+        var note = Answer(result)["normalizations"]![0]!;
+        Assert.Equal("html-element-edits", note["rule"]!.ToString());
+        Assert.Equal(["w8"], note["keyedFind"]!["edits"]![0]!["k"]!.AsArray().Select(k => k!.ToString()));
+        Assert.Contains("w8", note["touched"]!.AsArray().Select(k => k!.ToString()));
+    }
+
     [Fact]
     public void AnOlderReadingKeptInTheStoreIsMergedThreeWays()
     {
@@ -268,7 +291,7 @@ public class HtmlElementEditJobTests(ITestOutputHelper output)
         Assert.False(result["verifyRan"]!.GetValue<bool>());
         var problems = result["problems"]!.AsArray().Select(p => (p!["pointer"]!.ToString(), p["code"]!.ToString())).ToList();
         Assert.Contains(("/ops/0/data/edits/0", HtmlElementEdits.TargetUnknown), problems);
-        Assert.Contains(("/ops/0/data/edits/1", HtmlElementEdits.TextNotUnique), problems);
+        Assert.Contains(("/ops/0/data/edits/1", HtmlElementEdits.TextNotFound), problems);
         Assert.True(ms < 2000, ms + " ms");
         // The addresses are good: the document they make is judged as a whole document (a new element's script).
         var script = Check(new JsonArray(JsonNode.Parse("""{"into":"w1","insert":"<button onclick=\"javascript:go()\">Go</button>"}""")));
@@ -407,6 +430,44 @@ public class HtmlElementEditJobTests(ITestOutputHelper output)
         output.WriteLine($"total: {totals.Values.Sum(t => t.Same)}/{totals.Values.Sum(t => t.Edits)}");
         Assert.True(totals.Count > 0);
         Assert.All(totals, t => Assert.Equal(t.Value.Edits, t.Value.Same));
+    }
+
+    /// <summary>C-38 on an existing root (review B1 round 3, fix 5 and S11): name= of a new widget in an edit of the Login becomes
+    /// id= only when no name of the root has it (its widgets, local variables, inputs, aggregates; case-insensitive): LoginForm
+    /// (the form k="w7"), loginform and Username (a local variable) stay the extended property they are at base, accepted with no
+    /// note; a free name is written as id= and said, in the edit form and in the with of edits [{find, with}].</summary>
+    [Fact]
+    public void TheNameOfANewWidgetInAnEditIsItsIdOnlyWhenTheRootHasNoSuchName()
+    {
+        if (!StudioAvailable()) return;
+        var host = Host("widget-name-root");
+        var basePath = Fixture("reactive-ui.oml");
+        var (reading, html, sha) = Read(host, basePath, "Login");
+        var link = html.Replace("\r\n", "\n").Split('\n').First(l => l.Contains("k=\"w28\"", StringComparison.Ordinal)).Trim();
+        Assert.EndsWith("Forgot password?</a>", link);
+        string With(string name) => link[..^"</a>".Length] + $"<div name=\"{name}\" class=\"zz\">Z</div></a>";
+        IEnumerable<JsonObject> Notes(JsonObject result) => (result["normalizations"] as JsonArray ?? []).OfType<JsonObject>().Where(n => n["rule"]?.ToString() == "HTML_WIDGET_NAME_IS_ID");
+        string After(string name) => Read(host, Path.Combine(host.WorkDirectory, name + ".oml"), "Login").Html;
+        foreach (var name in new[] { "LoginForm", "loginform", "Username" })
+        {
+            var result = Run(host, basePath, Job(sha, reading, "Login", edit: [With(name)]), "taken-" + name);
+            Assert.True(result["accepted"]?.GetValue<bool>() ?? false, result.ToJsonString());
+            Assert.Empty(Notes(result));
+            Assert.Contains($"ext:name=\"{name}\"", After("taken-" + name));
+        }
+        var fresh = Run(host, basePath, Job(sha, reading, "Login", edit: [With("ZzFreshName")]), "fresh");
+        Assert.True(fresh["accepted"]?.GetValue<bool>() ?? false, fresh.ToJsonString());
+        Assert.Equal("/ops/0/data/edit/0", Assert.Single(Notes(fresh))["path"]!.ToString());
+        Assert.Contains("id=\"ZzFreshName\"", After("fresh"));
+        // S11: the with of edits [{find, with}] takes the same rule.
+        var freeWith = Run(host, basePath, Job(sha, reading, "Login", edits: new JsonArray(new JsonObject { ["find"] = link, ["with"] = With("ZzWithName") })), "with-fresh");
+        Assert.True(freeWith["accepted"]?.GetValue<bool>() ?? false, freeWith.ToJsonString());
+        Assert.Equal("/ops/0/data/edits/0/with", Assert.Single(Notes(freeWith))["path"]!.ToString());
+        Assert.Contains("id=\"ZzWithName\"", After("with-fresh"));
+        var takenWith = Run(host, basePath, Job(sha, reading, "Login", edits: new JsonArray(new JsonObject { ["find"] = link, ["with"] = With("LoginForm") })), "with-taken");
+        Assert.True(takenWith["accepted"]?.GetValue<bool>() ?? false, takenWith.ToJsonString());
+        Assert.Empty(Notes(takenWith));
+        Assert.Contains("ext:name=\"LoginForm\"", After("with-taken"));
     }
 
     // ---- helpers (as ScreenHtmlEditJobTests) ---------------------------------------------------------------------------------

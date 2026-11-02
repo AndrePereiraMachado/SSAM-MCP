@@ -125,8 +125,9 @@ public static class StaticChecks
                     || JobPreflight.PossiblyCreated(name, words, whole) || !seen.Add(op + "|" + name)) continue;
                 var near = ScreenHtmlEdit.Closest(name, builtins.Keys);
                 var problem = JobPreflight.Problem(op, pointer, "FUNCTION_UNKNOWN", facts.Fresh && !unplanned ? "error" : "warning",
-                    $"'{name}(' is not a built-in function of this Studio ({lane}), nor a function of the module, of its references or of this job",
+                    $"'{name}' is not a built-in function of this Studio ({lane}), nor a function of the module, of its references or of this job",
                     near.Count > 0 ? "use one of: " + string.Join(", ", near)
+                        : FunctionCatalog.OtherPlatformFix(lane, name) is { } elsewhere ? elsewhere
                         : $"no built-in, no function of the module or of its references and no action of this job is named like {name}: write the built-in the expression means (ToLower, Substr, If, ...), or call an action of the module marked Function; the built-ins: `anvil functions --find {name}`",
                     null, "logic");
                 problem["phase"] = "static";

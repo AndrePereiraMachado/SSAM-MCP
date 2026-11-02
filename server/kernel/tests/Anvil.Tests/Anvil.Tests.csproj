@@ -72,6 +72,8 @@
     <Compile Include="../Shared/ReactiveClientRulesReviewTests.cs" Link="ReactiveClientRulesReviewTests.cs" />
     <Compile Include="../Shared/PublicReferenceSurfaceTests.cs" Link="PublicReferenceSurfaceTests.cs" />
     <Compile Include="../Shared/MergeIdentitySweep.cs" Link="MergeIdentitySweep.cs" />
+    <Compile Include="../Shared/MergeProofStylesheetTests.cs" Link="MergeProofStylesheetTests.cs" />
+    <Compile Include="../Shared/DeliveryAlignmentRulesTests.cs" Link="DeliveryAlignmentRulesTests.cs" />
     <Compile Include="../Shared/ScreenHtmlRoundTripReport.cs" Link="ScreenHtmlRoundTripReport.cs" />
     <Compile Include="../Shared/ScreenHtmlPropertyModelTests.cs" Link="ScreenHtmlPropertyModelTests.cs" />
     <Compile Include="../Shared/DeclaredPropertyKeptTests.cs" Link="DeclaredPropertyKeptTests.cs" />
@@ -107,6 +109,12 @@
     <Compile Include="../Shared/ScreenHtmlTests.cs" Link="ScreenHtmlTests.cs" />
     <Compile Include="../Shared/ScreenHtmlCoverage.cs" Link="ScreenHtmlCoverage.cs" />
     <Compile Include="../Shared/ScreenHtmlEditTests.cs" Link="ScreenHtmlEditTests.cs" />
+    <Compile Include="../Shared/ScreenHtmlEditTableTests.cs" Link="ScreenHtmlEditTableTests.cs" />
+    <Compile Include="../Shared/ScreenHtmlEditFormTests.cs" Link="ScreenHtmlEditFormTests.cs" />
+    <Compile Include="../Shared/ScreenHtmlEditReviewW3Tests.cs" Link="ScreenHtmlEditReviewW3Tests.cs" />
+    <Compile Include="../Shared/HtmlDocumentDeclarationsFirstTests.cs" Link="HtmlDocumentDeclarationsFirstTests.cs" />
+    <Compile Include="../Shared/QualifiedTypeTests.cs" Link="QualifiedTypeTests.cs" />
+    <Compile Include="../Shared/ScreenVisualTableTests.cs" Link="ScreenVisualTableTests.cs" />
     <Compile Include="../Shared/ScreenHtmlEditReviewTests.cs" Link="ScreenHtmlEditReviewTests.cs" />
     <Compile Include="../Shared/ScreenHtmlEditNamesTests.cs" Link="ScreenHtmlEditNamesTests.cs" />
     <Compile Include="../Shared/ScreenHtmlRebaseTests.cs" Link="ScreenHtmlRebaseTests.cs" />
@@ -128,8 +136,10 @@
     <Compile Include="../Shared/QueryRulesScenarios.cs" Link="QueryRulesScenarios.cs" />
     <Compile Include="../Shared/PagingRulesScenarios.cs" Link="PagingRulesScenarios.cs" />
     <Compile Include="../Shared/PagingWiringScenarios.cs" Link="PagingWiringScenarios.cs" />
+    <Compile Include="../Shared/OnInitializeRuleScenarios.cs" Link="OnInitializeRuleScenarios.cs" />
     <Compile Include="../Shared/RestConsumeScenarios.cs" Link="RestConsumeScenarios.cs" />
     <Compile Include="../Shared/RestConsumeAuthScenarios.cs" Link="RestConsumeAuthScenarios.cs" />
+    <Compile Include="../Shared/RestCallbackFlowScenarios.cs" Link="RestCallbackFlowScenarios.cs" />
     <Compile Include="../Shared/FamiliasRevisaoScenarios.cs" Link="FamiliasRevisaoScenarios.cs" />
     <Compile Include="../Shared/CompositionScenarios.cs" Link="CompositionScenarios.cs" />
   </ItemGroup>

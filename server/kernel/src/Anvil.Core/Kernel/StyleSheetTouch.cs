@@ -152,6 +152,35 @@ public sealed class StyleSheetTouch
         return true;
     }
 
+    /// <summary>B5 (the proto line's C-04, 46e5012f): the reading an html edit of a touched element answered (its <c>next</c>) was
+    /// made before the touch, so the next edit based on it was based on a text the saved module never had. After the touch (and
+    /// after a put back, which writes again), every such answer is read again from the candidate: the next edit is based on the
+    /// text the module holds. A reading that fails takes <c>next</c> out of that answer (the next edit reads the module first).</summary>
+    public static void ReadNextAgain(ESpace espace, JsonArray styleSheets, IEnumerable<JsonNode?> results)
+    {
+        var written = styleSheets.OfType<JsonObject>().Where(e => e["kind"]?.ToString() is "screen" or "block" && (e["touch"] is JsonObject || e["reverted"] is JsonObject)
+            && e["key"]?.ToString() is { Length: > 0 }).ToList();
+        if (written.Count == 0) return;
+        var answers = results.OfType<JsonObject>().Where(r => r["op"]?.ToString() == "html").Select(r => r["result"]).OfType<JsonObject>()
+            .Where(a => a["mode"]?.ToString() == "edit" && a["next"] is JsonObject).ToList();
+        if (answers.Count == 0) return;
+        Anvil.Reading.ScreenHtmlModule<IObjectSignature>? reading = null;
+        foreach (var entry in written)
+            foreach (var answer in answers.Where(a => string.Equals(a["root"]?.ToString(), entry["name"]?.ToString(), StringComparison.Ordinal)
+                && (a["rootKind"]?.ToString() is not { Length: > 0 } kind || kind.Contains(entry["kind"]!.ToString() == "block" ? "Block" : "Screen", StringComparison.OrdinalIgnoreCase))))
+            {
+                try
+                {
+                    reading ??= Anvil.Reading.ScreenHtml.Module((IObjectSignature)(object)espace, new KernelModelReader());
+                    var after = reading.Read("@" + entry["key"]);
+                    var next = answer["next"]!.AsObject();
+                    next["html"] = after.HtmlSha256; next["bytes"] = after.Bytes;
+                    if (next["text"] != null) next["text"] = after.Html;
+                }
+                catch (Exception) { answer.Remove("next"); }
+            }
+    }
+
     /// <summary>What the report says of a touch written back: "put back" only of a widget that reads as it did; otherwise that it
     /// did not come back, why, and what to do with the candidate.</summary>
     internal static string PutBackReason(string key, string original, string? read, string? writeError)

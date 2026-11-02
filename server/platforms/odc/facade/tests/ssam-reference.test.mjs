@@ -106,6 +106,18 @@ test('check-job takes a path or the job itself, stored under <lane>/jobs/inline/
   assert.equal(h.run.calls.length, 2);
 });
 
+test('C-11: verify-message on odc searches the SSAM codes the CLI gives beside the Verify catalog (an HTML_* code, the anonymous text)', async t => {
+  // F-AiChatbot-02 and F-FigmaReactive-07: verify-message answered [] for the code and the text of a refusal.
+  const definitions = [{ Id: 'UnusedVariable', Severity: 'Warning', Title: 'Unused' }];
+  const ssamCodes = [{ Id: 'HTML_NAME_UNKNOWN', Severity: 'ssam', Title: 'ssam-html document form', Detail: 'a name that does not exist', Hint: 'the refusal names the line' },
+    { Id: 'ServerActionInScreenAccessibleByEveryone', Severity: 'warning', Title: 'Security Warning (anonymous access)', Detail: "You're exposing a Server Action for public access and without authentication.", Hint: 'expectedMessages' }];
+  const h = await harness(t, { handlers: { 'verify-catalog': () => ({ ok: true, command: 'verify-catalog', data: { platform: 'odc', count: 1, definitions, ssamCodes } }) } });
+  const code = await h.ask('odc', 'verify-message', { find: 'HTML_NAME_UNKNOWN' });
+  assert.deepEqual(code.data.matches, [ssamCodes[0]]);
+  const text = await h.ask('odc', 'verify-message', { find: 'exposing a Server Action' });
+  assert.deepEqual(text.data.matches, [ssamCodes[1]]);
+});
+
 test('lane odc runs the anvil-odc CLI and maps what it has; the other kinds name the O11 lane', async t => {
   const definitions = [{ Id: 'RequiredConnector_Out', Severity: 'Error', Title: 'Connector required' }, { Id: 'UnusedVariable', Severity: 'Warning', Title: 'Unused' }];
   const h = await harness(t, { handlers: { 'verify-catalog': args => ({ ok: true, command: 'verify-catalog',

@@ -7,24 +7,19 @@ import { fileURLToPath } from 'node:url';
 import { atomicJson, readJson, loadProfile, publicProfile, check, fail } from './profile.mjs';
 import { compareBrowserPages } from './compare.mjs';
 import { acceptMigration } from './acceptance.mjs';
+import { ENGINES, autoPrepare } from './auto-prepare.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
 const validId = id => /^[a-z0-9][a-z0-9-]{0,79}$/.test(id ?? '');
 
-// Meta de 20/10/2026, item 18 (relatos 2f39462f, 162de9b2, 48783193: three sessions found profiles:[] and had nothing to
-// do with it). A list without a profile for the target says who prepares one and how, and the route that exists now:
-// the published screen in the person's browser (ssam_app_url), which SSAM does not capture.
-function withPrepare(args, answer) {
-  if (answer.profiles.length > 0) return answer;
-  const target = { ...(args.lane ? { lane: args.lane } : {}), ...(args.app ? { app: args.app } : {}), ...(args.tenant ? { tenant: args.tenant } : {}) };
-  return { ...answer, prepare: {
-    by: 'integrator', why: 'no prepared local preview matches this target; an app session never prepares one (no shell, no profile installation)',
-    api: 'platforms/odc/facade/preview/prepare.mjs prepareProfile({directory, id, lane, target:{app, tenant}, screens, limitations, hostConfig, watcherConfig?, port})',
-    doc: 'docs/PREVIEW-LOCAL.md',
-    meanwhile: { tool: 'ssam_app_url', arguments: { app: args.app ?? '<app>', screen: '<screen>', ...(args.lane ? { lane: args.lane } : {}) },
-      why: "the published screen opens in the person's browser; SSAM does not capture or compare it" },
-    target } };
+// Meta de 20/10/2026, item 18 (relatos 2f39462f, 162de9b2, 48783193) and relato 84a4a6a3 (23/10; proto dd4264de): a target
+// without a profile is prepared here when a qualified input names it (auto-prepare.mjs, PREVIEW_PROFILE_PREPARED); otherwise
+// the list says who prepares one, the exact input path and command, and the route that exists now: the published screen in
+// the person's browser (ssam_app_url), which SSAM does not capture.
+function withPrepare(answer, notPrepared) {
+  if (answer.profiles.length > 0 || !notPrepared) return answer;
+  return { ...answer, prepare: notPrepared };
 }
 export function control(endpoint, action, timeoutMs = 2500) {
   check(endpoint && endpoint.host === '127.0.0.1' && Number.isInteger(endpoint.port), 'PREVIEW_CONTROL_ENDPOINT');
@@ -40,7 +35,8 @@ export function control(endpoint, action, timeoutMs = 2500) {
     req.end();
   });
 }
-export function createPreviewManager({ workspace, env = process.env, spawnProcess = spawn } = {}) {
+// engines: the engines folder the automatic preparation pins (tests: a simulated engine).
+export function createPreviewManager({ workspace, env = process.env, spawnProcess = spawn, engines = ENGINES } = {}) {
   check(path.isAbsolute(workspace ?? ''), 'PREVIEW_WORKSPACE');
   const root = path.join(workspace, '.local', 'preview');
   const catalogFile = env.SSAM_PREVIEW_CATALOG || path.join(root, 'catalog.json');
@@ -53,9 +49,13 @@ export function createPreviewManager({ workspace, env = process.env, spawnProces
     check(new Set(values.map(v => v.profile.id)).size === values.length, 'PREVIEW_DUPLICATE_PROFILE');
     return values;
   }
-  function choose(args) {
-    const matches = profiles().filter(({profile:p}) => (!args.profile || p.id === args.profile) && (!args.lane || p.lane === args.lane) && (!args.app || p.target.app === args.app) && (!args.tenant || p.target.tenant === args.tenant));
-    check(matches.length !== 0, 'PREVIEW_PROFILE_NOT_PREPARED', 'No prepared local preview matches this target. Use ssam_preview action=list; the integrator must prepare an unsupported target.');
+  const matching = args => profiles().filter(({profile:p}) => (!args.profile || p.id === args.profile) && (!args.lane || p.lane === args.lane) && (!args.app || p.target.app === args.app) && (!args.tenant || p.target.tenant === args.tenant));
+  // A target without a profile: prepared now when a qualified input names it, else the integrator's block of the refusal.
+  const ensure = args => (matching(args).length > 0 ? {} : autoPrepare(args, { workspace, catalogFile, env, engines }));
+  function choose(args, notPrepared = null) {
+    const matches = matching(args);
+    if (matches.length === 0) fail('PREVIEW_PROFILE_NOT_PREPARED', 'No prepared local preview matches this target and none could be prepared here: '
+      + (notPrepared?.why ?? 'the integrator prepares it') + '. The integrator writes the input ' + (notPrepared?.input ?? '<input>') + ' and runs ' + (notPrepared?.command ?? 'prepare.mjs') + '.', notPrepared ? { prepare: notPrepared } : {});
     check(matches.length === 1, 'PREVIEW_PROFILE_AMBIGUOUS', 'Several profiles match. Select profile or tenant explicitly.');
     const selected = matches[0];
     if (args.screen) check(selected.profile.screens.some(s => s.name === args.screen || s.key === args.screen), 'PREVIEW_SCREEN_NOT_PREPARED');
@@ -77,8 +77,8 @@ export function createPreviewManager({ workspace, env = process.env, spawnProces
     }
     return { ok: true, ...receipt };
   }
-  async function open(args) {
-    const chosen = choose(args), p = chosen.profile, f = files(p.id);
+  async function open(args, notPrepared = null) {
+    const chosen = choose(args, notPrepared), p = chosen.profile, f = files(p.id);
     fs.mkdirSync(f.dir, { recursive: true });
     const lock = path.join(f.dir, 'open.lock');
     let fd;
@@ -119,21 +119,27 @@ export function createPreviewManager({ workspace, env = process.env, spawnProces
     const selected = profile.lane==='o11' && screen && profile.screens.find(s => s.name === screen || s.key === screen);
     return { ...result, ...(selected ? { url: result.url.split('?')[0] + '?entry=' + encodeURIComponent(selected.key) } : {}), browser: { action:'open-visible', url: selected ? result.url.split('?')[0] + '?entry=' + encodeURIComponent(selected.key) : result.url }, instructions:'Open browser.url visibly and keep that tab for development. This tool does not publish or open a headless browser.' };
   }
+  // (a refused open after the preparation keeps its own code: PREVIEW_OPEN_BUSY, PREVIEW_SCREEN_NOT_PREPARED...)
+  const withPrepared = (value, prepared) => (prepared ? { ...value, ...(value.ok === false ? {} : { code: prepared.code }), prepared } : value);
   return async function preview(args = {}) {
+    let prepared = null;
     try {
       const action = args.action || 'list';
       if (action === 'compare') return await compareBrowserPages(args, { workspace });
       if (action === 'accept') return acceptMigration(args, { workspace });
-      if (action === 'list') return withPrepare(args, { ok:true, experimental:true, profiles:profiles().filter(({profile:p})=>(!args.lane||args.lane===p.lane)&&(!args.app||args.app===p.target.app)&&(!args.tenant||args.tenant===p.target.tenant)&&(!args.profile||args.profile===p.id)).map(v=>publicProfile(v.profile)), installationRequired:!fs.existsSync(catalogFile), note:'Only explicitly prepared profiles are available. ODC uses an O11-adapted renderer; it is not native ODC runtime equivalence.' });
-      if (action === 'open') return await open(args);
+      const ensured = ['list', 'open'].includes(action) || (!args.sessionId && ['status', 'refresh', 'stop'].includes(action)) ? ensure(args) : {};
+      const notPrepared = ensured.notPrepared ?? null;
+      prepared = ensured.prepared ?? null;
+      if (action === 'list') return withPrepared(withPrepare({ ok:true, experimental:true, profiles:profiles().filter(({profile:p})=>(!args.lane||args.lane===p.lane)&&(!args.app||args.app===p.target.app)&&(!args.tenant||args.tenant===p.target.tenant)&&(!args.profile||args.profile===p.id)).map(v=>publicProfile(v.profile)), installationRequired:!fs.existsSync(catalogFile), note:'Only explicitly prepared profiles are available. ODC uses an O11-adapted renderer; it is not native ODC runtime equivalence.' }, notPrepared), prepared);
+      if (action === 'open') return withPrepared(await open(args, notPrepared), prepared);
       check(['status','refresh','stop'].includes(action), 'PREVIEW_ACTION');
-      const id = args.sessionId || choose(args).profile.id;
+      const id = args.sessionId || choose(args, notPrepared).profile.id;
       const current = await status(id);
       if (action === 'status' || ['stopped','failed'].includes(current.status)) return current;
       if (!current.ok || current.status === 'starting') return current;
       const f = files(id);
       const endpoint=readJson(f.endpoint); check(endpoint.instanceId===current.instanceId,'PREVIEW_INSTANCE_MISMATCH');
       return await control(endpoint, action, 8000);
-    } catch(e) { return {ok:false, code:e.code || 'PREVIEW_ERROR', error:e.message, continuation:{tool:'ssam_preview',arguments:{action:'list'},why:'Inspect prepared profiles and their exact limits.'}}; }
+    } catch(e) { return {ok:false, code:e.code || 'PREVIEW_ERROR', error:e.message, ...(e.prepare ? { prepare: e.prepare } : {}), ...(prepared ? { prepared } : {}), continuation:{tool:'ssam_preview',arguments:{action:'list'},why:'Inspect prepared profiles and their exact limits.'}}; }
   };
 }

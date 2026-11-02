@@ -222,7 +222,13 @@ test('L2 the gate confines every path ssam_code reads to the customer\'s workspa
   const proto = (await gated({ lane: 'o11', action: 'check', module: 'M', ops: [{ op: 'prototype', data: { source: 'ws:inbox/p' } }] }, {})).structuredContent;
   assert.equal(proto.cause, 'PROTOTYPE_IMPORT_DISABLED', JSON.stringify(proto));
   const generator = (await gated({ lane: 'odc', action: 'write', module: 'M', ops: [{ op: 'rest-consume', data: { name: 'X', methods: [{ name: 'P', url: 'http://127.0.0.1:9/x' }] } }] }, {})).structuredContent;
-  assert.equal(generator.cause, 'GENERATOR_PENDING', JSON.stringify(generator));
+  // r4-rest-hosted: rest-consume runs hosted only with its samples inline (this one has none); a generator without a hosted
+  // mode (here entity-actions with its mode taken away) is still refused as pending.
+  assert.equal(generator.code, 'DOCUMENT_FETCH_HOSTED_REFUSED', JSON.stringify(generator));
+  const { withGeneratorStates } = await import('../generators.mjs');
+  const pending = await withGeneratorStates({ 'entity-actions': { hosted: null } },
+    async () => (await gated({ lane: 'odc', action: 'write', module: 'M', ops: [{ op: 'entity-actions', data: { entities: 'all' } }] }, {})).structuredContent);
+  assert.equal(pending.cause, 'GENERATOR_PENDING', JSON.stringify(pending));
   const verified = (await gated({ lane: 'o11', action: 'write', module: 'M', basedOn: { job: 'ws:o11/jobs/check/old/job.json', sha256: 'a'.repeat(64) }, patch: 'verified' }, {})).structuredContent;
   assert.equal(verified.cause, 'VERIFIED_PATCH_LOCAL', JSON.stringify(verified));
   assert.equal(verified.continuation.tool, 'ssam_code', 'the same call with the explicit patch');
@@ -232,6 +238,47 @@ test('L2 the gate confines every path ssam_code reads to the customer\'s workspa
   assert.equal((await oneLane({ lane: 'odc', action: 'grammar' }, {})).structuredContent.code, 'HOSTED_LANE_DISABLED');
   assert.deepEqual(A.executor.calls, [], 'nothing reached the customer\'s machine');
   assert.deepEqual(B.executor.calls, []);
+});
+
+// ------------------------------------------------------------------------------------------------------------------ L2b
+test('L2b B15: an image file of ssam_code files is read on a hosted server only from the customer\'s workspace (uploaded bytes or the agent\'s), never from the server', async () => {
+  const { readCodeFiles } = await import('../ssam-code.mjs');
+  const A = customer('a', { studio: true }), B = customer('b', { studio: true });
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64');
+  const mine = ws(A, 'inbox/images/fm-hero.png'); fs.mkdirSync(path.dirname(mine), { recursive: true }); fs.writeFileSync(mine, png);
+  const theirs = ws(B, 'inbox/images/secret.png'); fs.mkdirSync(path.dirname(theirs), { recursive: true }); fs.writeFileSync(theirs, Buffer.from('B only'));
+  // A server file named as an image, and a junction inside A's workspace that points at the server's folder.
+  const serverDir = fs.mkdtempSync(path.join(tmp, 'server-files-'));
+  const serverImage = path.join(serverDir, 'server.png'); fs.writeFileSync(serverImage, Buffer.from('server only'));
+  const junction = ws(A, 'inbox/linked');
+  let linked = false;
+  try { fs.symlinkSync(serverDir, junction, 'junction'); linked = true; } catch { /* no junctions here: the case is skipped */ }
+  const seen = [];
+  const gated = wrapHostedTool('ssam_code', { inputSchema: {} }, async args => { seen.push(args); return { content: [{ type: 'text', text: '{"ok":true}' }], structuredContent: { ok: true } }; },
+    { context: A, link: A.agent, lanes: ['odc', 'o11'], presentation: presentation(A) });
+  const outside = [theirs, serverImage, path.join(repo, 'docs', 'logo.png'), 'C:\\Windows\\System32\\secret.png', '\\\\server\\share\\logo.png',
+    ws(A, 'inbox/../../../' + path.basename(serverDir) + '/server.png'), ...(linked ? [path.join(junction, 'server.png')] : [])];
+  for (const file of outside) {
+    for (const action of ['write', 'check']) {
+      const before = seen.length;
+      const value = (await gated({ lane: 'o11', action, module: 'M', files: [file] }, {})).structuredContent;
+      assert.equal(value.code, 'PATH_OUTSIDE_WORKSPACE', action + ' ' + file + ': ' + JSON.stringify(value).slice(0, 300));
+      assert.equal(seen.length, before, action + ' ' + file + ': the handler never ran, so the file was never read');
+      assert.deepEqual(serverPaths(JSON.parse(JSON.stringify(value).split(JSON.stringify(file).slice(1, -1)).join('<sent>')), A, B), [], 'the refusal names nothing of the server but what the call sent');
+    }
+  }
+  // A's own uploaded image, by ws: or by its absolute path: resolved inside A's workspace, and what ssam_code makes of it is the
+  // module image with A's bytes.
+  for (const file of ['ws:inbox/images/fm-hero.png', mine]) {
+    const value = (await gated({ lane: 'o11', action: 'write', module: 'M', files: [file] }, {})).structuredContent;
+    assert.equal(value.ok, true, JSON.stringify(value));
+    assert.deepEqual(seen.at(-1).files, [mine]);
+  }
+  const read = readCodeFiles(seen.at(-1).files);
+  assert.deepEqual(read.problems, []);
+  assert.deepEqual(read.parts[0].ops, [{ op: 'create', parent: '@espace', type: 'IImage', name: 'fm_hero', args: { binary: png.toString('base64'), originalPath: 'fm-hero.png' } }]);
+  assert.deepEqual(A.executor.calls, [], 'nothing reached the customer\'s machine');
+  if (linked) fs.rmdirSync(junction);
 });
 
 // ------------------------------------------------------------------------------------------------------------------ L3

@@ -181,3 +181,27 @@ test('arguments of other views are refused with their own words, and the CLI nam
     { target: 'q.oml', view: 'html', screen: 'Orders', page: '2', keys: true, lane: 'o11' });
   assert.deepEqual(parseMapArguments(['q.oml', '--html']), { target: 'q.oml', view: 'html' });
 });
+
+// F8: the reading's notes (a List of a table part that renders as a div or with virtualization) come with the delivery that
+// repairs them, pinned to this reading, in both lanes.
+test('the notes of the reading come with the delivery of the element edit that repairs them', async t => {
+  for (const lane of ['o11', 'odc']) {
+    const c = setup(t);
+    const text = '<screen name="Orders">\n <table k="w1">\n  <tbody k="w2" list="GetOrders.List" class="list">\n   <tr k="w3"/>\n  </tbody>\n </table>\n</screen>\n';
+    const note = { code: 'HTML_TABLE_LIST_VIRTUALIZED', k: 'w2', tag: 'tbody', message: 'k="w2" is the List of a <tbody>: it is Mode Default',
+      edit: { edits: [{ set: 'w2', attributes: { 'os-Mode': 'Custom', 'disable-virtualization': '{{ True }}' } }] }, fix: 'deliver this element edit' };
+    const read = async ({ request }) => ({ ok: true, html: { schema: HTML_SCHEMA, model: 'Shop', root: 'Orders', rootKey: 'S1', rootKind: 'MobileScreen',
+      htmlSha256: 'h'.repeat(64), bytes: Buffer.byteLength(text), widgets: 3, opaqueWidgets: 0, elements: 3, html: text, notes: [note] } });
+    const answer = await moduleMap({ lane, target: c.file, view: 'html', screen: 'Orders' }, { env: c.env, read });
+    assert.equal(answer.ok, true, answer.error);
+    assert.equal(answer.notes.length, 1);
+    assert.equal(answer.notes[0].code, 'HTML_TABLE_LIST_VIRTUALIZED');
+    assert.ok(answer.continuations.edit, 'the edit of a reading is wired');
+    {
+      const op = answer.notes[0].call.arguments.job.ops[0];
+      assert.equal(answer.notes[0].call.tool, lane === 'o11' ? 'o11_deliver' : 'studio_deliver');
+      assert.deepEqual(op.data.basedOn, { capture: c.sha256, html: 'h'.repeat(64) });
+      assert.deepEqual(op.data.edits, note.edit.edits);
+    }
+  }
+});

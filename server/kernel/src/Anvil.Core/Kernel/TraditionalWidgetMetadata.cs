@@ -43,12 +43,40 @@ internal static class TraditionalWidgetMetadata
         foreach (var (label,value) in options) add.Invoke(combo,[label,value]);
     }
 
-    public static IObjectSignature ColumnParent(object combo, IObjectSignature record, IObjectSignature field)
+    /// <summary>The row type of the combo's Source Record List (an entity or structure, or a record of them), or null.</summary>
+    private static object? RowType(object combo)
     {
-        var expression = combo.GetType().GetProperty("SourceRecordList")!.GetValue(combo);
+        var expression = combo.GetType().GetProperty("SourceRecordList")?.GetValue(combo);
         var reference = expression?.GetType().GetProperty("Type")?.GetValue(expression);
         var type = reference?.GetType().GetProperty("Type")?.GetValue(reference);
-        var element = type is IListType list ? list.ElementType : null;
+        return type is IListType list ? list.ElementType : null;
+    }
+
+    /// <summary>The entities and structures a row of the options holds (the row itself, or the parts of its record).</summary>
+    private static List<IObjectSignature> Records(object combo)
+    {
+        if (RowType(combo) is not { } element) return [];
+        var parts = (element.GetType().GetMethod("GetAttributes", Type.EmptyTypes)?.Invoke(element, null) as IEnumerable)?.Cast<object>()
+            .Select(a => a.GetType().GetProperty("AttributeType")?.GetValue(a)).OfType<IObjectSignature>()
+            .Where(t => ModelSession.Implements(t, "IEntitySignature") || ModelSession.Implements(t, "IStructureSignature")).ToList() ?? [];
+        return element is IObjectSignature own && (ModelSession.Implements(own, "IEntitySignature") || ModelSession.Implements(own, "IStructureSignature")) ? [own] : parts;
+    }
+
+    /// <summary>The names of the records a row of the options holds, for the fix of a column that names none of them.</summary>
+    public static List<string> RowRecords(object combo) => Records(combo).Select(r => TypeResolver.Name(r) ?? "").Where(n => n.Length > 0).ToList();
+
+    /// <summary>F5: a bare column (label="Name") of a select with options: the one record of its rows that has a field of that
+    /// name, and the field. Null when none or more than one has it (the column then needs Record.Field).</summary>
+    public static (IObjectSignature Record, IObjectSignature Field)? InferColumn(object combo, string name)
+    {
+        var found = Records(combo).SelectMany(r => r.Children.OfType<IObjectSignature>()
+            .Where(f => string.Equals(TypeResolver.Name(f), name, StringComparison.Ordinal)).Select(f => (Record: r, Field: f))).ToList();
+        return found.Count == 1 ? found[0] : null;
+    }
+
+    public static IObjectSignature ColumnParent(object combo, IObjectSignature record, IObjectSignature field)
+    {
+        var element = RowType(combo);
         if (ReferenceEquals(element, record)) return field;
         var fields = element?.GetType().GetMethod("GetAttributes", Type.EmptyTypes)?.Invoke(element, null) as IEnumerable;
         var parent = fields?.Cast<object>().OfType<IObjectSignature>().SingleOrDefault(a =>

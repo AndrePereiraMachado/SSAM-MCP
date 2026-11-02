@@ -179,3 +179,20 @@ test('a path outside the workspace is PipeError PATH_OUTSIDE_WORKSPACE with sent
   await assert.rejects(h.call(['portal-call', path.join(h.workspace, 'state', 'x.json')]), e => e.code === 'PATH_OUTSIDE_WORKSPACE' && e.sent === false);
   assert.equal(h.link.calls.length, 0);
 });
+
+// U1: reconcile-merge <manifest> verifies a merge that returned before its verification ran; hosted, its manifest goes to the
+// agent like merge's (the agent's MANIFEST_COMMANDS), and the verification's evidence comes back. Unstaged, the agent got the
+// server's own path and refused it (PATH_NOT_AGENT), so a hosted merge stayed MERGE_UNCERTAIN.
+test('reconcile-merge sends the rewritten manifest like merge and brings the verification evidence back', async () => {
+  const h = setup((args, link) => {
+    assert.equal(args[1], 'agent:odc/lab/01-feature/manifest.json');
+    assert.ok(JSON.parse(link.readAgent(args[1])).candidatePath.startsWith(h.agentRoot));
+    link.writeAgent('agent:odc/lab/01-feature/evidence/receipt.json', '{"verifiedBy":"bridge"}');
+    return reply({ ok: true, merged: true, verifiedBy: 'bridge', receipt: 'agent:odc/lab/01-feature/evidence/receipt.json' });
+  });
+  const f = manifestFixture(h.workspace, h.link);
+  const value = JSON.parse((await h.call(['reconcile-merge', f.manifestFile])).line);
+  assert.deepEqual(h.seen, [['reconcile-merge', 'agent:odc/lab/01-feature/manifest.json']]);
+  assert.equal(value.receipt, path.join(f.lab, 'evidence', 'receipt.json'));
+  assert.equal(fs.readFileSync(path.join(f.lab, 'evidence', 'receipt.json'), 'utf8'), '{"verifiedBy":"bridge"}');
+});

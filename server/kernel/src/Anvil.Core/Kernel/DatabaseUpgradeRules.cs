@@ -202,6 +202,23 @@ public static class DatabaseUpgradeRules
                         declared = new(i, "spec");
                         if (field["deleteRule"] != null) rule = new(i, "spec");
                     }
+                    // C-36 (F-FitBody-25): the entities and attributes a data text writes are the job's too (the refusal said
+                    // "already in the module, not set by this job" of an attribute the text created). A text that does not parse
+                    // whole gives what it parsed (the preflight refuses the rest with its lines).
+                    if (op["data"]?["ddl"] is JsonValue ddlText && ddlText.TryGetValue<string>(out var ddl))
+                    {
+                        Anvil.Reading.DdlDocument? parsed = null;
+                        try { parsed = Anvil.Reading.DdlParser.Parse(ddl, MessageExpectations.Lane); }
+                        catch (Anvil.Reading.DdlParseException error) { parsed = error.Partial; }
+                        catch (Exception) { }
+                        foreach (var written in parsed?.Elements.Where(e => !e.Drop && Anvil.Reading.DdlRules.IsEntityKind(e.Kind) && Same(JsonValue.Create(e.Name), entity)) ?? [])
+                        {
+                            if (attribute == null) { declared = new(i, "spec"); continue; }
+                            if (written.Children.LastOrDefault(c => c.Kind == "EntityAttribute" && !c.Drop && string.Equals(c.Name, attribute, StringComparison.OrdinalIgnoreCase)) is not { } column) continue;
+                            declared = new(i, "spec");
+                            if (column.Props.ContainsKey("DeleteRule")) rule = new(i, "spec");
+                        }
+                    }
                     break;
                 case "create":
                     var type = op["type"]?.ToString();

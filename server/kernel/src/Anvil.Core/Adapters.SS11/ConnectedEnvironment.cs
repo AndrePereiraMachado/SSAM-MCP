@@ -10,7 +10,8 @@ public sealed class ConnectedEnvironment : IDisposable
 {
     public static readonly JsonSerializerOptions Wire = new() { IncludeFields = true };
     private readonly IBridgeClient _bridge;
-    private readonly string _lease;
+    private string _lease;
+    private readonly string? _requestedHost, _requestedModule;
     public string Host { get; }
     public string Username { get; }
     public string IdeVersion { get; }
@@ -22,6 +23,7 @@ public sealed class ConnectedEnvironment : IDisposable
     public ConnectedEnvironment(IBridgeClient bridge, string? host, string? module, bool readOnly)
     {
         _bridge = bridge;
+        _requestedHost = host; _requestedModule = module;
         var response = bridge.Call("environment_session", new JsonObject {
             ["operation"] = "connect", ["host"] = host, ["module"] = module, ["readOnly"] = readOnly });
         _lease = response["lease"]?.GetValue<string>() ?? throw new InvalidOperationException("Studio session lease is absent");
@@ -62,6 +64,10 @@ public sealed class ConnectedEnvironment : IDisposable
         // timeout of the Studio's own client, which would only wait as long again); one that still fails is
         // ENVIRONMENT_UNREACHABLE, which a delivery's capture names as ENVIRONMENT_CALL_CUT (EnvironmentCut) with repeated.
         try { response = _bridge.Call("environment_session", Request()); }
+        // The server refused the session's identity (its login token): a read is asked once more on a renewed lease of the
+        // Studio's current login; a write never; what is still refused is ENVIRONMENT_SESSION_EXPIRED.
+        catch (BridgeCallException expired) when (EnvironmentNetwork.IsSessionExpired(expired.Message))
+        { response = Renew(operation, Request, expired.Message); }
         // The server answered with a failure (an HTTP 500, a SOAP fault): its own code, with the status; never asked again. A
         // proxy or gateway answer (407, 502, 503, 504) is the path, not the server: the network rule below (EnvironmentNetwork).
         catch (BridgeCallException answered) when (EnvironmentNetwork.IsServerAnswer(answered.Message))
@@ -78,6 +84,51 @@ public sealed class ConnectedEnvironment : IDisposable
             { throw new EnvironmentServerErrorException(operation, Host, second.Message, EnvironmentNetwork.HttpStatusOf(second.Message), write: false); }
         }
         return response["value"].Deserialize<T>(Wire)!;
+    }
+
+    private readonly List<string> _renewed = [];
+    /// <summary>The reads this lease asked again on a renewed session after the server refused its identity, in order.</summary>
+    public IReadOnlyList<string> RenewedReads => _renewed;
+
+    private JsonObject Renew(string operation, Func<JsonObject> request, string failure)
+    {
+        var write = WriteOperations.Contains(operation);
+        if (write || !EnvironmentNetwork.RepeatableReads.Contains(operation))
+            throw new EnvironmentSessionExpiredException(operation, Host, failure, renewed: false, write);
+        // One renewal per session (review W2-DIAG): a later read the server refuses for its identity on this same session is
+        // the session expired again, never a second renewal.
+        if (_renewed.Count > 0)
+            throw new EnvironmentSessionExpiredException(operation, Host, failure, renewed: true, write: false);
+        // A fresh lease takes the Studio's current login (a Studio signed in again answers with a new token), on the same
+        // environment, or nothing is asked again.
+        JsonObject renewed;
+        try
+        {
+            renewed = _bridge.Call("environment_session", new JsonObject {
+                ["operation"] = "connect", ["host"] = _requestedHost ?? Host, ["module"] = _requestedModule, ["readOnly"] = ReadOnly });
+        }
+        catch (BridgeCallException refused)
+        { throw new EnvironmentSessionExpiredException(operation, Host, failure + " <- renewal: " + refused.Message, renewed: false, write: false); }
+        var lease = renewed["lease"]?.GetValue<string>();
+        if (lease == null || !string.Equals(renewed["host"]?.GetValue<string>(), Host, StringComparison.OrdinalIgnoreCase))
+        {
+            // The lease the Studio opened on another environment is closed, never kept.
+            if (lease != null) { try { _bridge.Call("environment_session", new JsonObject { ["operation"] = "close", ["lease"] = lease }); } catch { } }
+            throw new EnvironmentSessionExpiredException(operation, Host, failure + " <- renewal: the Studio answered another environment", renewed: false, write: false);
+        }
+        try { _bridge.Call("environment_session", new JsonObject { ["operation"] = "close", ["lease"] = _lease }); }
+        catch { }
+        _lease = lease;
+        _renewed.Add(operation);
+        try { return _bridge.Call("environment_session", request()); }
+        catch (BridgeCallException again) when (EnvironmentNetwork.IsSessionExpired(again.Message))
+        { throw new EnvironmentSessionExpiredException(operation, Host, again.Message, renewed: true, write: false); }
+        catch (BridgeCallException answered) when (EnvironmentNetwork.IsServerAnswer(answered.Message))
+        { throw new EnvironmentServerErrorException(operation, Host, answered.Message, EnvironmentNetwork.HttpStatusOf(answered.Message), false); }
+        // The renewed read lost on the network between the Studio and the environment: its code, never a bare bridge error,
+        // and never a third request.
+        catch (BridgeCallException lost) when (EnvironmentNetwork.IsUnreachable(lost.Message))
+        { throw new EnvironmentUnreachableException(operation, Host, lost.Message, repeated: false); }
     }
 
     public void Dispose()

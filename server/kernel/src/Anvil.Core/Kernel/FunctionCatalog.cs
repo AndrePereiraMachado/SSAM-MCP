@@ -87,6 +87,18 @@ public static partial class FunctionCatalog
         ["Today"] = "CurrDate", ["IIf"] = "If", ["NullId"] = "NullIdentifier",
     };
 
+    /// <summary>F7 (25/10/2026): built-ins of the other platform that this Studio does not have, with what to write instead.
+    /// GenerateGuid() is ODC's; the Service Studio 11 registry has none (11.55.93 here: its own Verify answers
+    /// ExpressionUnknownFunction 'GenerateGuid'). Keyed by lane: the lane whose Studio lacks the name.</summary>
+    public static readonly IReadOnlyDictionary<(string Lane, string Name), string> OtherPlatform = new Dictionary<(string, string), string>
+    {
+        [("o11", "generateguid")] = "GenerateGuid() is a built-in of ODC, not of Service Studio 11 (its Verify answers ExpressionUnknownFunction 'GenerateGuid'): "
+            + "for a unique text in O11 read it in an SQL node (sql -> one Text column: SELECT CONVERT(varchar(36), NEWID())) or call the GUID action of an extension the module references; "
+            + "for a number in sequence, the entity's AutoNumber Id is already unique",
+    };
+
+    public static string? OtherPlatformFix(string lane, string name) => OtherPlatform.TryGetValue((lane, name.ToLowerInvariant()), out var fix) ? fix : null;
+
     /// <summary>Only the explicit compatibility table proves the intended rename. Similar spelling does not prove semantics.</summary>
     public static string? Certain(string name)
         => Renames.TryGetValue(name, out var renamed) && Names.Contains(renamed) ? renamed : null;

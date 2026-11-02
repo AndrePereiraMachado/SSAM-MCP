@@ -11,7 +11,8 @@ namespace Anvil.Reading;
 // not touch keeps its ObjectKey, and so does an element whose properties changed. The result is read again and compared with
 // the edited text: the edit is applied only when the text read back is the text sent (ScreenHtmlModule<T>.EditPlan.Verify).
 // Free of Studio types: the native moves go through IScreenHtmlWriter (ModelSession implements it over the Model API).
-public static class ScreenHtmlEdit
+// The theme facts (C-14) are in ScreenHtmlEdit.Theme.cs, which the ODC builder compiles with ScreenHtmlModule.cs.
+public static partial class ScreenHtmlEdit
 {
     // R2-D (the owner's decision of 2026-10-28): data.css in an edit IS the root's own style sheet, as written: it replaces the
     // page's <style> instead of following it (docs/SSAM-HTML.md, Fidelity, CSS; ScreenDocument.OwnSheet, the same rule on a
@@ -34,7 +35,8 @@ public static class ScreenHtmlEdit
         {
             var tree = ScreenHtml.Parse(result[i]);
             var root = tree.Children.FirstOrDefault(n => !n.IsText);
-            if (root?.Tag is "screen" or "block" or "style")
+            // C-14: a <style scope="theme"> edit is a part of the module theme, never the page's own sheet.
+            if (root?.Tag is "screen" or "block" || root?.Tag == "style" && !IsThemeStyle(root))
             {
                 var own = root.Tag == "style" ? root : OwnStyle(root);
                 var was = own == null ? null : StyleText(own);
@@ -51,7 +53,7 @@ public static class ScreenHtmlEdit
     /// <summary>The CSS of the root's own &lt;style&gt; of a document (a reading or a whole edit), or null when it has none.</summary>
     public static string? OwnSheetOf(string html)
     {
-        try { return ScreenHtml.Parse(html).Children.FirstOrDefault(n => !n.IsText) is { } top && (top.Tag == "style" ? top : OwnStyle(top)) is { } style ? StyleText(style) : null; }
+        try { return ScreenHtml.Parse(html).Children.FirstOrDefault(n => !n.IsText) is { } top && (top.Tag == "style" ? (IsThemeStyle(top) ? null : top) : OwnStyle(top)) is { } style ? StyleText(style) : null; }
         catch (FormatException) { return null; }
     }
 
@@ -63,7 +65,7 @@ public static class ScreenHtmlEdit
             ScreenHtml.Node? root;
             try { root = ScreenHtml.Parse(edits[i]).Children.FirstOrDefault(n => !n.IsText); } catch (FormatException) { continue; }
             if (root?.Tag is "screen" or "block" && OwnStyle(root) is { } own) return (i, StyleText(own));
-            if (root?.Tag == "style") return (i, StyleText(root));
+            if (root?.Tag == "style" && !IsThemeStyle(root)) return (i, StyleText(root));
         }
         return null;
     }
@@ -99,7 +101,7 @@ public static class ScreenHtmlEdit
         && (data["edits"] == null || data["edits"] is JsonArray { Count: 0 });
 
     // The root's own <style> (the first child <style> without scope="theme": the one the edit plan writes as its sheet).
-    private static ScreenHtml.Node? OwnStyle(ScreenHtml.Node root) => root.Children.FirstOrDefault(n => !n.IsText && n.Tag == "style" && n.Get("scope") != "theme");
+    private static ScreenHtml.Node? OwnStyle(ScreenHtml.Node root) => root.Children.FirstOrDefault(n => !n.IsText && n.Tag == "style" && !IsThemeStyle(n));
     private static string StyleText(ScreenHtml.Node style) => string.Concat(style.Children.Select(c => c.Text));
     private static ScreenHtml.Node Style(string text) { var node = new ScreenHtml.Node { Tag = "style" }; node.Children.Add(new ScreenHtml.Node { Text = text }); return node; }
 
@@ -155,10 +157,14 @@ public static class ScreenHtmlEdit
             try {
                 var parsed = ScreenHtml.Parse(text);
                 var roots = parsed.Children.Where(c => !c.IsText || c.Text!.Trim().Length > 0).ToList();
-                if (roots.Count == 2 && IsIfElse(roots[0], roots[1])) roots.RemoveAt(1);
-                if (roots.Count != 1 || roots[0].IsText) { Add(pointer, Invalid, "an edit is one element of the reading with its k (children included), the <style> of the page or the whole document", "send each changed element as its own string"); continue; }
-                if (roots[0].Tag is not ("screen" or "block" or "style") && roots[0].Get("k") == null)
-                    Add(pointer, NoKey, "<" + roots[0].Tag + "> has no k: an edit names the element of the reading it replaces by its k", "send the parent of the new element (with its k), the new element inside it without k");
+                if (roots.Count == 0 && texts.Count > 1) continue;   // F10: an empty edit string is nothing (HTML_DECLARATIONS_FIRST leaves one)
+                // F10: several elements in one string are as many edits (the plan lists HTML_EDIT_SPLIT); loose text, or the whole
+                // document beside other elements, is no edit.
+                var units = Units(roots);
+                if (units == null || units.Count > 1 && units.Any(u => u.Element.Tag is "screen" or "block")) { Add(pointer, Invalid, "an edit is one element of the reading with its k (children included), the <style> of the page or the whole document", "send each changed element as its own string"); continue; }
+                foreach (var (unit, _) in units)
+                    if (unit.Tag is not ("screen" or "block" or "style") && unit.Get("k") == null && !IsDeclaration(unit))
+                        Add(pointer, NoKey, "<" + unit.Tag + "> has no k: an edit names the element of the reading it replaces by its k", "send the parent of the new element (with its k), the new element inside it without k");
                 foreach (var (node, _) in ScreenHtmlText.Elements(parsed)) {
                     if (node.Tag == "script") { Add(pointer, Script, "<script> is not part of a page", "remove it; behavior is a native event naming a screen action (onclick=\"Save\")"); continue; }
                     // What a new element (no k) writes new, without the reading: an element with its k is judged against the reading
@@ -194,7 +200,33 @@ public static class ScreenHtmlEdit
         TableColumn = "HTML_TABLE_COLUMN",
         // F2: a property the page does not keep (editor state, derived, no setter, not of the kind) and a value its property does
         // not take, both refused before anything is written, named with the element, the property, expected and actual.
-        PropertyNotKept = "HTML_PROPERTY_NOT_KEPT", PropertyValue = "HTML_PROPERTY_VALUE";
+        PropertyNotKept = "HTML_PROPERTY_NOT_KEPT", PropertyValue = "HTML_PROPERTY_VALUE",
+        // C-03: an event argument in a row of a Traditional list, written through the list widget.
+        ListRow = "HTML_LIST_ROW",
+        // F10 normalizations of the edit form (listed in normalized, never refused).
+        EditSplit = "HTML_EDIT_SPLIT", EventArguments = "HTML_EVENT_ARGUMENTS", BreakContainer = "HTML_BR_CONTAINER",
+        TypeUnqualified = "HTML_TYPE_UNQUALIFIED",
+        // A declaration without k named like the root's only one of its tag: the edit of that one (review W3-EDIT, 4).
+        DeclarationKeyed = "HTML_DECLARATION_KEYED";
+
+    // F10: the elements of one edit string, each with the <div else> that follows its <div if> (one If), or null when loose text
+    // is among them. One element is the edit of today; several are as many edits (HTML_EDIT_SPLIT).
+    internal static List<(ScreenHtml.Node Element, ScreenHtml.Node? Else)>? Units(IReadOnlyList<ScreenHtml.Node> roots)
+    {
+        var units = new List<(ScreenHtml.Node, ScreenHtml.Node?)>();
+        for (var i = 0; i < roots.Count; i++) {
+            if (roots[i].IsText) return null;
+            if (i + 1 < roots.Count && IsIfElse(roots[i], roots[i + 1])) { units.Add((roots[i], roots[i + 1])); i++; }
+            else units.Add((roots[i], null));
+        }
+        return units.Count == 0 ? null : units;
+    }
+
+    // F10: a declaration of a screen or block (its parent is the root): an input parameter (<input name> without bind), a
+    // variable, an aggregate or a block event. Written without k in an edit, it is a new one of the root.
+    internal static bool IsDeclaration(ScreenHtml.Node node) =>
+        !node.IsText && (node.Tag is "var" or "aggregate" or "event" || node.Tag == "input" && node.Get("name") != null && node.Get("bind") == null);
+    internal static int DeclarationRank(ScreenHtml.Node node) => node.Tag switch { "input" => 0, "event" => 1, "var" => 2, _ => 3 };
 
     // <div if k="..."> followed by its <div else>: the two halves of one If, sent together.
     internal static bool IsIfElse(ScreenHtml.Node first, ScreenHtml.Node second) =>
@@ -268,6 +300,8 @@ public sealed class ScreenHtmlEditResult
     public List<JsonObject> KeyChanged = [];
     public List<JsonObject> VisiblePreserved = [];
     public List<JsonObject> Normalized = [];
+    // F8: the Lists of a table part the edit wrote or repaired (ScreenVisual.TableEntry), the receipt's visual.tables.
+    public List<JsonObject> Tables = [];
     public string EditedHtml = "";
     public ScreenHtmlDocument? After;
     public double PlanMs, ApplyMs, VerifyMs;
@@ -286,6 +320,7 @@ public sealed class ScreenHtmlEditResult
         if (KeyChanged.Count > 0) json["keyChanged"] = new JsonArray(KeyChanged.Select(o => (JsonNode)o.DeepClone()).ToArray());
         if (VisiblePreserved.Count > 0) json["visiblePreserved"] = new JsonArray(VisiblePreserved.Select(o => (JsonNode)o.DeepClone()).ToArray());
         if (Normalized.Count > 0) json["normalized"] = new JsonArray(Normalized.Select(o => (JsonNode)o.DeepClone()).ToArray());
+        if (Tables.Count > 0) json["visual"] = new JsonObject { ["tables"] = new JsonArray(Tables.Select(o => (JsonNode)o.DeepClone()).ToArray()) };
         if (Problems.Count > 0) json["problems"] = new JsonArray(Problems.Select(o => (JsonNode)o.DeepClone()).ToArray());
         if (After != null) {
             // The next edit is based on this reading: its text, hash and keys come in the answer (one call less).

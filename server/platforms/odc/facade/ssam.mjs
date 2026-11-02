@@ -39,6 +39,7 @@ import { anvilLaneFacts, catalog, command, lane, laneNames, laneOfModule, LANES,
 import { registerO11Operations } from './o11-operations.mjs';
 import { connectAll, probeO11, classifyO11, assertSelectedO11, WINDOWLESS_FIX } from './studio-connect.mjs';
 import { readConnection, staleConnection } from './studio-session.mjs';
+import { connectorHealth } from './studio-runtime.mjs';
 import { authorityDir, o11LaneOf, userEnvironmentValue } from './o11-lane.mjs';
 import { registerO11AppSession, runHook } from './o11-app-session.mjs';
 import { registerO11Cycle, findKernelTask, closeState } from './o11-cycle.mjs';
@@ -254,7 +255,7 @@ export function releaseReservation({ reservation, authorize } = {}, { env = proc
 // doctor of its own (src\Anvil.Cli\Program.cs), so the O11 half is built from the lane's own facts
 // (scripts/lanes.py --json) plus the Service Studio processes running from that lane's installation.
 // deps (tests): processes() (lanes.studioProcesses), facts(), probe(port), record() (the connection record), cliBuilt.
-export async function doctorO11({ factsCache = defaultDoctorFacts, reservations: reservationDeps = {}, processes: listProcesses, facts: readFacts, probe: probeBridge, record: readRecord, cliBuilt, restores: readRestores } = {}) {
+export async function doctorO11({ factsCache = defaultDoctorFacts, reservations: reservationDeps = {}, processes: listProcesses, facts: readFacts, probe: probeBridge, record: readRecord, cliBuilt, restores: readRestores, connector: readConnector } = {}) {
   const entry = LANES.o11;
   const processFacts = listProcesses ? { value: await listProcesses(), ageMs: 0 } : await factsCache.processes('o11').catch(() => ({ value: [], ageMs: 0 }));
   const processes = processFacts.value;
@@ -268,9 +269,13 @@ export async function doctorO11({ factsCache = defaultDoctorFacts, reservations:
   const stale = staleConnection(record, processes);
   let reservations;
   try { reservations = moduleReservations(reservationDeps); } catch (error) { reservations = { error: error.message }; }
+  // C-49: the Studio installed now against the last good connector build, and the last failed build while it stands.
+  let connector = null;
+  try { connector = readConnector ? readConnector(record) : connectorHealth(entry.root, { record }); } catch { connector = null; }
   const report = { factsAgeMs: processFacts.ageMs, lane: 'o11', platform: entry.platform, root: entry.root, anvilLane: facts, cli, studio, reservations,
     catalog: catalog('o11'), ok: cli.built && studio.connected && stale?.reason !== 'windowless',
-    ...(studio.windowless ? { windowless: studio.windowless } : {}), ...(stale ? { connectionStale: stale } : {}) };
+    ...(studio.windowless ? { windowless: studio.windowless } : {}), ...(stale ? { connectionStale: stale } : {}), ...(connector ? { connector } : {}) };
+  if (connector?.lastFailure && !studio.connected) { report.code = connector.lastFailure.code; report.error = connector.lastFailure.error; }
   // Next steps are MCP calls, never a shell command: the CLI build belongs to the integrator, not to the session.
   // T12: the temporary access changes still waiting for their restore (o11-access.mjs), each with the call that restores it.
   let restores = [];
@@ -279,6 +284,8 @@ export async function doctorO11({ factsCache = defaultDoctorFacts, reservations:
     message: restores.length + ' temporary access change(s) wait for their restore, newest first (restore them in this order, or close one with the user\'s words): '
       + restores.map(r => r.id + ' (' + r.module + ', ' + r.screens.length + ' screen(s))').join(', ') }] });
   if (!cli.built) report.hint = { why: 'The O11 CLI of this checkout is not built; the integrator builds it. Nothing to run from the session.', path: entry.cli };
+  else if (!report.ok && connector?.lastFailure && !studio.connected) report.hint = { why: connector.lastFailure.error + ' ' + (connector.lastFailure.action ?? ''), log: connector.lastFailure.log,
+    ...(connector.lastFailure.errors?.length ? { errors: connector.lastFailure.errors } : {}) };
   else if (!report.ok) report.continuation = { tool: 'ssam_connect', arguments: { lane: 'o11' },
     why: studio.laneHeldBy ? 'The lane port is held by Service Studio ' + studio.laneHeldBy.pid + ', which has no main window (STUDIO_WINDOWLESS): '
         + (studio.windowless?.find(w => w.pid === studio.laneHeldBy.pid)?.next ?? '') + ' ' + WINDOWLESS_FIX
@@ -478,6 +485,10 @@ export function hostedRelease(freeing, { context }) {
 // The paragraph a hosted session adds to the instructions (docs/FASE2-AGENTE.md 10.7). a8 review (M1): its ssam_code
 // sentence follows the one switch (hosted/served.mjs, the class of ssam_code in hosted/tools.json); off, the paragraph and
 // the rules are the ones of the line before ssam_code was served hosted, word for word (HOSTED_*_CODE_OFF).
+// fase4-28 r4-rest-hosted: the sentence on the generator ops follows the gate (generators.mjs hosted modes), whatever the
+// ssam_code switch: the only sentence of the code-off paragraph that is not the one of that line (tests/fixtures/hosted-code-off.mjs).
+const HOSTED_GENERATORS = 'The generator ops entity-actions, rest-consume and screen with data.generate are not offered by ssam_discover '
+  + 'but run here when a job names their op; rest-consume needs every input in the job: "sample" (the JSON response) in each GET method, as this server never calls the API.';
 const hostedParagraph = code => 'This SSAM server is hosted: it runs on the SSAM owner\'s machine and drives the user\'s own '
   + 'Studios through the SSAM agent on the user\'s machine. ssam_debug, ssam_debug_run, ssam_debug_invoke, context, propose, '
   + 'continue and status are unavailable here (HOSTED_UNAVAILABLE). Files are named ws:<path> (the workspace of this account on '
@@ -485,8 +496,7 @@ const hostedParagraph = code => 'This SSAM server is hosted: it runs on the SSAM
   + 'exactly as returned. A file from the user\'s machine reaches SSAM when the user puts it in the agent inbox folder and you '
   + 'pass agent:inbox/<file>. Before any O11 tool, connect the Service Studio with ssam_connect {lane:"o11"}. When the agent is '
   + 'not connected, tools that need the user\'s Studio answer AGENT_NOT_CONNECTED; ssam_doctor shows the agent and the Studio '
-  + 'versions of both sides. ' + code + ' The generator ops not offered here yet (entity-actions, '
-  + 'rest-consume, screen with data.generate) are refused (GENERATOR_PENDING). No credential window opens here: odc_portal_login '
+  + 'versions of both sides. ' + code + ' ' + HOSTED_GENERATORS + ' No credential window opens here: odc_portal_login '
   + 'prompt and focus answer HOSTED_PROMPT_UNAVAILABLE.';
 export const HOSTED_INSTRUCTIONS = hostedParagraph('ssam_code reads and writes the module as code here too, its texts inline (text, also); the files '
   + 'subagents write for it go in the agent inbox folder (an ssam_code plan names each one there and brings its prompts to the '
@@ -617,7 +627,7 @@ const dataOp = (batch) => ({ type: 'object', required: ['operation', 'entity'], 
   operation: batch ? { type: 'string', pattern: '^(' + DATA_OPERATIONS.join('|') + ')$', description: DATA_OPERATIONS.join(' | ') } : { type: 'string', enum: DATA_OPERATIONS },
   entity: { type: 'string' },
   preview: { type: 'boolean' },
-  operationId: { type: 'string' }, authorization: { type: 'string' }, records: { type: 'array', items: { type: 'object' } },
+  operationId: { type: 'string', format: 'uuid' }, authorization: { type: 'string' }, records: { type: 'array', items: { type: 'object' } },
   confirmationToken: { type: 'string', minLength: 1, description: 'delete: the token of its preview (the execution, without ids; the owner\'s reply names the entity and states the number of records). ' + DESTRUCTIVE_SUFFIX }, ownerRequest: { type: 'string', minLength: 1, description: "delete preview: the owner's request, verbatim (kept only as a sha256)" },
   ids: { type: 'array', items: batch ? { anyOf: [{ type: 'string' }, dataRef] } : { type: 'string' } }, offset: { type: 'integer', minimum: 0 }, tenantId: { type: 'integer' },
   // P3 (2026-10-08): a read-all answers at most limit rows per call within deadlineMs; an incomplete answer carries the
@@ -659,7 +669,42 @@ function dataContinuation(envelope, request, call) {
     why: String(results[index].next ?? results[index].error ?? 'the read stopped early; the same read from this offset goes on').slice(0, 600) } };
 }
 
-export function o11DataAnswer(r, request = {}, call = null) {
+// C-32 (F-FitBody-52, F-FT-24): the captures of a module are named <Module>-<yyyyMMddHHmmss>[-<hash>].oml, or with the build-
+// prefix (o11_studio snapshot, ssam_map capture, the build phase), in one folder; a newer one of the same module than the
+// oml of a call is the module after a later delivery.
+const CAPTURE_NAME = /^(?:build-)?(.+?)-(\d{14})(?:-[0-9a-f]+)?\.oml$/i;
+const captureModule = module => String(module).replace(/[^\w.-]/g, '_').toLowerCase();
+export function newerCapture(oml, module, { list = dir => fs.readdirSync(dir) } = {}) {
+  if (typeof oml !== 'string' || typeof module !== 'string') return null;
+  const mine = CAPTURE_NAME.exec(path.basename(oml));
+  if (!mine || mine[1].toLowerCase() !== captureModule(module)) return null;
+  let names;
+  try { names = list(path.dirname(oml)); } catch { return null; }
+  const newer = names.map(n => ({ n, m: CAPTURE_NAME.exec(n) })).filter(x => x.m && x.m[1].toLowerCase() === captureModule(module) && x.m[2] > mine[2])
+    .sort((a, b) => b.m[2].localeCompare(a.m[2]) || a.n.localeCompare(b.n));
+  return newer.length ? path.join(path.dirname(oml), newer[0].n) : null;
+}
+// What a request names that a stale capture does not have (EnvironmentData.ValidateBatch).
+const NAMES_MISSING = /^(?:Entity not found in this module|Unknown attribute)\b/;
+
+export function o11DataAnswer(r, request = {}, call = null, { newer = newerCapture } = {}) {
+  const answer = o11DataAnswerCore(r, request, call);
+  // C-32: entities or attributes the capture of the call does not have, and a newer capture of the same module: the capture
+  // predates the delivery that made them; the same request on the newest capture is the next call.
+  if (answer.ok === false && call?.oml && Array.isArray(answer.problems) && answer.problems.some(p => NAMES_MISSING.test(String(p?.message ?? '')))) {
+    const current = newer(call.oml, call.module);
+    if (current) {
+      answer.staleCapture = { capture: call.oml, newer: current,
+        note: 'the capture of this call predates the delivery that changed the module: the entities and attributes it does not have may be in the newer capture of the same module' };
+      // A read goes again as it was; a write is sent again by the session with the owner's words (never replayed here).
+      if (!dataWrites(request)) answer.continuation = { tool: 'o11_data', arguments: { ...call, oml: current, request }, why: 'the same request on the newest capture of ' + call.module };
+      else answer.staleCapture.next = 'send the same request with oml ' + current + ' (the words of the owner again in authorization)';
+    }
+  }
+  return answer;
+}
+
+function o11DataAnswerCore(r, request = {}, call = null) {
   if (r?.unknown || (r?.timedOut && !r?.envelope)) return { ok: false, lane: 'o11', verb: 'data', code: r.code ?? 'DATA_OUTCOME_UNKNOWN', stage: 'data',
     ...(dataWrites(request) ? { outcome: 'uncertain' } : {}), error: String((r.stderr ?? []).join(' ') || 'the data command got no answer').slice(0, 600),
     next: 'repeat the same request with the same operationId: its receipt reconciles the write; never a new operationId' };
@@ -922,7 +967,8 @@ export async function createSsamServer({ o11 = true, odc = true, profile = 'app'
       const args = runArgs(argsOfTool.get(name), raw ?? {});
       if (!runsToEnd(name, args) && !nestsDelivery(name, args)) return undefined;
       const tools = hosted.tools ?? hostedPolicy.hostedTools();
-      const gate = { tools, raw: raw ?? {}, lanes: hosted.session?.lanes ?? hosted.context.lanes ?? [], kernelRefused: hosted.kernelRefused ?? null };
+      const gate = { tools, raw: raw ?? {}, lanes: hosted.session?.lanes ?? hosted.context.lanes ?? [], kernelRefused: hosted.kernelRefused ?? null,
+        supports: hostedPolicy.supportsOf(hosted.session?.agent ?? hosted.context.agent) };
       // A call the gate refuses before the agent and any path (unavailable, deleting, the prototype op...) is outside the
       // family here: an identical call joins that refusal, never "a delivery is still running"; nothing is asked of the agent.
       if (hostedPolicy.refusedBeforePaths(name, args, gate)) return undefined;
@@ -2023,8 +2069,9 @@ export async function runStdio({ env = process.env, profile, warm = warmBackgrou
       caller: exposure === 'owner' ? null : () => env.SSAM_EXPOSURE_CALLER || 'local',
       inputsOf: (name, args) => active?.server?.ssamInputsOf?.(name, args) });
     const result = await createWarmServer({ root: workspaceRoot, identity: serverIdentity(), env: warmEnv, serverInfo: { name: serverProfile(selectedProfile).name, version: '0.2.0' }, args: [...args, 'profile:' + selectedProfile], startAfterConnect: true, build: (server, registerTool) => createSsamServer({ ...served, profile: selectedProfile, deps: { server, registerTool, activeDeadline: () => bootDeadline, exposure: { profile: exposure },
-        // F1: only this entry, the person's own SSAM on their machine, reads the served stylesheets after a publication.
-        cycle: { servedFetch: localServedReader({ env }) } } }),
+        // F1: only this entry, the person's own SSAM on their machine, reads the served stylesheets after a publication;
+        // B5: o11_publish too (the stylesheets a delivery without publish:true left pending), with the same reader.
+        ...(reader => ({ cycle: { servedFetch: reader }, publish: { servedFetch: reader } }))(localServedReader({ env })) } }),
       wrap: (name, handler, config) => { bootTools.add(name); return bootDeadline.wrap(name, handler, { ...config, exempt: config?._meta?.canRequestInput === true }); },
       onStale: async () => { const store = await import(pathToFileURL(path.join(workspaceRoot, 'facade', 'friction-store.mjs')).href); await store.recordEvent({ operation: 'mcp-start', code: 'TOOL_LIST_SNAPSHOT_STALE', outcome: 'reconciled' }); } });
     active = result.server;

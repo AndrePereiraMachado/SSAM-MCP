@@ -11,24 +11,26 @@ namespace Anvil.Xif;
 ///   final: the stubs and the platform DLLs the environment returned -> merge of the bodies -> net472 compilation -> the
 ///          engine adds the sources and the DLL to the model and saves the final XIF -> the final XIF is read again and
 ///          audited (our DLL, no platform DLL embedded, no local profile path) before anyone may send it.
-/// The engine is injectable (tests); by default it is the Anvil.Xif.Engine process.
+/// The engine is injectable (tests); by default it is the Anvil.Xif.Engine process, or on a hosted server the user's SSAM
+/// agent through the O11 relay (XifEngineClient.Default: kind o11.xif, the Integration Studio of the user's machine).
 /// </summary>
 public static class XifBuild
 {
     public delegate JsonObject EngineRunner(JsonObject request, string work);
     public const long ZipLimit = 256L * 1024 * 1024;
 
-    public static XifSpecContext Context(XifDocument? baseXif, bool requireFiles = true) => new()
+    public static XifSpecContext Context(XifDocument? baseXif, bool requireFiles = true, IReadOnlyList<string>? confine = null) => new()
     {
+        Confine = confine,
         ExistingActions = (baseXif?.Actions.Select(a => a.Name) ?? []).ToHashSet(StringComparer.OrdinalIgnoreCase),
         ExistingStructures = (baseXif?.Structures.Select(s => s.Name) ?? []).ToHashSet(StringComparer.OrdinalIgnoreCase),
         RequireFiles = requireFiles,
     };
 
-    public static JsonObject Check(JsonNode? specNode, string? basePath)
+    public static JsonObject Check(JsonNode? specNode, string? basePath, IReadOnlyList<string>? confine = null)
     {
         var baseXif = basePath == null ? null : XifPackage.Read(basePath);
-        var spec = XifSpec.Parse(specNode, Context(baseXif));
+        var spec = XifSpec.Parse(specNode, Context(baseXif, confine: confine));
         if (baseXif != null && !string.Equals(baseXif.Name, spec.Name, StringComparison.Ordinal))
             throw XifRefusal.Single(XifCodes.SpecInvalid, $"The spec names '{spec.Name}' but the extension is '{baseXif.Name}'.", "Keep the name of the extension; renaming an extension is not an edit.", "name");
         var answer = new JsonObject
@@ -46,11 +48,11 @@ public static class XifBuild
         return answer;
     }
 
-    public static JsonObject Model(JsonNode? specNode, string? basePath, string work, EngineRunner? engine = null)
+    public static JsonObject Model(JsonNode? specNode, string? basePath, string work, EngineRunner? engine = null, IReadOnlyList<string>? confine = null)
     {
         work = Work(work);
         var baseXif = basePath == null ? null : XifPackage.Read(basePath);
-        var spec = XifSpec.Parse(specNode, Context(baseXif));
+        var spec = XifSpec.Parse(specNode, Context(baseXif, confine: confine));
         if (baseXif != null && !string.Equals(baseXif.Name, spec.Name, StringComparison.Ordinal))
             throw XifRefusal.Single(XifCodes.SpecInvalid, $"The spec names '{spec.Name}' but the extension is '{baseXif.Name}'.", "Keep the name of the extension.", "name");
         var output = Path.Combine(work, "model", spec.Name + ".xif");
@@ -62,7 +64,7 @@ public static class XifBuild
             ["references"] = new JsonArray(spec.References.Select(r => (JsonNode)JsonValue.Create(r)!).ToArray()),
         };
         if (basePath != null) request["base"] = Path.GetFullPath(basePath);
-        var answer = (engine ?? XifEngineClient.Run)(request, work);
+        var answer = (engine ?? XifEngineClient.Default)(request, work);
         var model = XifPackage.Read(answer["xif"]?.ToString() ?? output);
         return new JsonObject
         {
@@ -71,11 +73,11 @@ public static class XifBuild
         };
     }
 
-    public static JsonObject Final(JsonNode? specNode, string modelPath, string stubsZip, string depsZip, string? basePath, string work, EngineRunner? engine = null)
+    public static JsonObject Final(JsonNode? specNode, string modelPath, string stubsZip, string depsZip, string? basePath, string work, EngineRunner? engine = null, IReadOnlyList<string>? confine = null)
     {
         work = Work(work);
         var baseXif = basePath == null ? null : XifPackage.Read(basePath);
-        var spec = XifSpec.Parse(specNode, Context(baseXif));
+        var spec = XifSpec.Parse(specNode, Context(baseXif, confine: confine));
         var model = XifPackage.Read(modelPath);
         if (!string.Equals(model.Name, spec.Name, StringComparison.Ordinal))
             throw XifRefusal.Single(XifCodes.SpecInvalid, $"The model XIF is '{model.Name}', not '{spec.Name}'.", "Build the model of this spec first.", "name");
@@ -122,7 +124,7 @@ public static class XifBuild
         var written = new JsonArray();
         foreach (var s in sources.Values.OrderBy(s => s.Path, StringComparer.OrdinalIgnoreCase))
         {
-            var file = Path.Combine(outDir, "source", s.Path);
+            var file = XifPaths.Under(Path.Combine(outDir, "source"), s.Path);
             Directory.CreateDirectory(Path.GetDirectoryName(file)!);
             File.WriteAllText(file, s.Text, new UTF8Encoding(true));
             written.Add(new JsonObject { ["path"] = s.Path, ["file"] = file });
@@ -134,7 +136,7 @@ public static class XifBuild
             ["command"] = "final", ["work"] = work, ["model"] = Path.GetFullPath(modelPath), ["output"] = output, ["name"] = spec.Name,
             ["sources"] = written, ["dll"] = dll,
         };
-        var answer = (engine ?? XifEngineClient.Run)(request, work);
+        var answer = (engine ?? XifEngineClient.Default)(request, work);
         var final = XifPackage.Read(answer["xif"]?.ToString() ?? output);
         var profiles = new[] { Environment.GetEnvironmentVariable("USERPROFILE"), Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) }.Where(p => !string.IsNullOrEmpty(p)).Cast<string>();
         var problems = final.Audit(compiled.Sha256, deps.Values, profiles);
@@ -173,7 +175,7 @@ public static class XifBuild
                 total += entry.Length;
                 if (total > ZipLimit) throw XifRefusal.Single(XifCodes.PackageInvalid, "The archive inflates to more than 256 MiB.", "Generate it again; nothing was sent.");
                 var relative = string.Join("\\", parts);
-                var target = Path.Combine(dir, relative);
+                var target = Path.Combine([dir, .. parts]);
                 Directory.CreateDirectory(Path.GetDirectoryName(target)!);
                 entry.ExtractToFile(target, overwrite: false);
                 found[relative] = target;

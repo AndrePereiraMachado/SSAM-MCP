@@ -13,6 +13,10 @@
 // DNS and transport are stubs: a fake lookup, node:http/https request replaced by a recorder that resolves through the
 // lookup the client hands it and answers from a table, globalThis.fetch replaced for local use, net.connect spied.
 // Nothing leaves this process.
+// fase4-28 r4-f3-import (criterion C3): stricter since then. A hosted server never fetches a document at all: an internal
+// address, a public one, a redirect and an import or $ref by URL are all DOCUMENT_FETCH_HOSTED_REFUSED before any lookup or connection (the
+// document comes from the customer: a workspace file, agent:inbox/<file>, or inline). The cases below keep their addresses
+// and now prove that nothing is resolved or connected for any of them; createPublicFetch keeps its own proof (rebinding).
 import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -113,12 +117,14 @@ const KINDS = [['WSDL', soap, 'o11', '/ops/0/data/wsdl'], ['OpenAPI', rest, 'odc
 const hosted = (b, lane, lookup) => ({ lane, localRoot: b.local, destructive: false, workspace: b.workspace, lookup });
 const reset = routes => { transport.connects.length = 0; transport.routes = routes; };
 
-test('hosted: a WSDL or OpenAPI document at an internal address or name is DOCUMENT_HOST_NOT_PUBLIC, and nothing is requested there', async () => {
+test('hosted: a WSDL or OpenAPI document at an internal address or name is DOCUMENT_FETCH_HOSTED_REFUSED, and nothing is requested there', async () => {
   for (const [kind, op, lane, pointer] of KINDS) for (const url of INTERNAL) {
     const b = box();
     reset({ [url]: { status: 200, body: kind === 'WSDL' ? WSDL : openApi() } });
-    const prepared = await prepareIntegrationJob(b.write([op(url)]), hosted(b, lane, stubLookup()));
-    assert.deepEqual([prepared.ok, prepared.code], [false, 'DOCUMENT_HOST_NOT_PUBLIC'], kind + ' ' + url + ': ' + JSON.stringify(prepared).slice(0, 300));
+    const lookup = stubLookup();
+    const prepared = await prepareIntegrationJob(b.write([op(url)]), hosted(b, lane, lookup));
+    assert.deepEqual([prepared.ok, prepared.code], [false, 'DOCUMENT_FETCH_HOSTED_REFUSED'], kind + ' ' + url + ': ' + JSON.stringify(prepared).slice(0, 300));
+    assert.deepEqual(lookup.asked, [], kind + ' ' + url + ': not even resolved');
     assert.equal(prepared.problems[0].path, pointer, kind + ' ' + url);
     assert.deepEqual(transport.connects, [], kind + ' ' + url + ': no connection at all');
     assert.ok(!fs.existsSync(path.join(b.local, 'documents')), kind + ' ' + url + ': nothing pinned');
@@ -126,35 +132,35 @@ test('hosted: a WSDL or OpenAPI document at an internal address or name is DOCUM
   assert.deepEqual(fetched, []); assert.deepEqual(sockets, []);
 });
 
-test('hosted: a public document that redirects to an internal address, or imports/$refs one, is refused at that hop; only the public address is reached', async () => {
+test('hosted: a public document that redirects to an internal address, or imports/$refs one, is refused before any request; no address is reached', async () => {
   const main = { WSDL: 'https://docs.example.test/svc/Calc.asmx?WSDL', OpenAPI: 'https://docs.example.test/api/openapi.json' };
   for (const [kind, op, lane] of KINDS) for (const target of INTERNAL) {
     // redirect public -> internal
     let b = box();
     reset({ [main[kind]]: { status: 302, location: target }, [target]: { status: 200, body: kind === 'WSDL' ? WSDL : openApi() } });
     let prepared = await prepareIntegrationJob(b.write([op(main[kind])]), hosted(b, lane, stubLookup()));
-    assert.deepEqual([prepared.ok, prepared.code], [false, 'DOCUMENT_HOST_NOT_PUBLIC'], kind + ' redirect ' + target + ': ' + JSON.stringify(prepared).slice(0, 300));
-    assert.deepEqual(transport.connects.map(c => [c.address, c.url]), [[PUBLIC, main[kind]]], kind + ' redirect ' + target);
+    assert.deepEqual([prepared.ok, prepared.code], [false, 'DOCUMENT_FETCH_HOSTED_REFUSED'], kind + ' redirect ' + target + ': ' + JSON.stringify(prepared).slice(0, 300));
+    assert.deepEqual(transport.connects, [], kind + ' redirect ' + target);
     // import (WSDL schemaLocation) or external $ref (OpenAPI) -> internal
     b = box();
     reset({ [main[kind]]: { status: 200, body: kind === 'WSDL' ? wsdlImporting(target) : openApi(target + '#/Order') }, [target]: { status: 200, body: kind === 'WSDL' ? XSD : '{"Order":{"type":"object"}}' } });
     prepared = await prepareIntegrationJob(b.write([op(main[kind])]), hosted(b, lane, stubLookup()));
-    assert.deepEqual([prepared.ok, prepared.code], [false, 'DOCUMENT_HOST_NOT_PUBLIC'], kind + ' import ' + target + ': ' + JSON.stringify(prepared).slice(0, 300));
-    assert.equal(prepared.problems[0].target, target, kind + ' import ' + target);
-    assert.deepEqual(transport.connects.map(c => [c.address, c.url]), [[PUBLIC, main[kind]]], kind + ' import ' + target);
+    assert.deepEqual([prepared.ok, prepared.code], [false, 'DOCUMENT_FETCH_HOSTED_REFUSED'], kind + ' import ' + target + ': ' + JSON.stringify(prepared).slice(0, 300));
+    assert.equal(prepared.problems[0].url, main[kind], kind + ' import ' + target + ': the document itself is never read');
+    assert.deepEqual(transport.connects, [], kind + ' import ' + target);
   }
   assert.deepEqual(internalConnects(), []); assert.deepEqual(fetched, []); assert.deepEqual(sockets, []);
 });
 
-test('hosted: DNS rebinding (first answer public, the next private) never connects; the connection takes the address its own checked lookup approved', async () => {
+test('hosted: a rebinding name is never even resolved for a document; the public client still takes the address its own checked lookup approved', async () => {
   for (const [kind, op, lane] of KINDS) {
     const b = box();
     const url = kind === 'WSDL' ? 'http://rebind.example.test/svc.wsdl' : 'http://rebind.example.test/openapi.json';
     reset({ [url]: { status: 200, body: kind === 'WSDL' ? WSDL : openApi() } });
     const lookup = stubLookup();
     const prepared = await prepareIntegrationJob(b.write([op(url)]), hosted(b, lane, lookup));
-    assert.deepEqual([prepared.ok, prepared.code], [false, 'DOCUMENT_HOST_NOT_PUBLIC'], kind + ': ' + JSON.stringify(prepared).slice(0, 300));
-    assert.deepEqual(lookup.asked, ['rebind.example.test', 'rebind.example.test'], kind + ': the check, then the socket\'s own lookup, which refused');
+    assert.deepEqual([prepared.ok, prepared.code], [false, 'DOCUMENT_FETCH_HOSTED_REFUSED'], kind + ': ' + JSON.stringify(prepared).slice(0, 300));
+    assert.deepEqual(lookup.asked, [], kind + ': no lookup at all');
     assert.deepEqual(transport.connects, [], kind + ': no connection');
   }
   // The client alone: the address handed to the connection is the one its checked lookup returned, and a public name
@@ -174,24 +180,24 @@ test('hosted: DNS rebinding (first answer public, the next private) never connec
   assert.deepEqual(internalConnects(), []); assert.deepEqual(fetched, []); assert.deepEqual(sockets, []);
 });
 
-test('hosted: every blocked document of a job comes back in one refusal; a public document is still pinned; local use is unchanged', async () => {
+test('hosted: every document URL of a job comes back in one refusal, a public one too; local use is unchanged', async () => {
   let b = box();
   reset({});
   const many = await prepareIntegrationJob(b.write([soap('http://169.254.169.254/latest/meta-data/'), rest('http://10.0.0.5/openapi.json'), soap('http://intranet.example.test/svc')]), hosted(b, 'o11', stubLookup()));
-  assert.deepEqual([many.ok, many.code], [false, 'DOCUMENT_HOST_NOT_PUBLIC']);
-  assert.deepEqual(many.problems.map(p => [p.code, p.path]), [['DOCUMENT_HOST_NOT_PUBLIC', '/ops/0/data/wsdl'], ['DOCUMENT_HOST_NOT_PUBLIC', '/ops/1/data/openapi/path'], ['DOCUMENT_HOST_NOT_PUBLIC', '/ops/2/data/wsdl']]);
+  assert.deepEqual([many.ok, many.code], [false, 'DOCUMENT_FETCH_HOSTED_REFUSED']);
+  assert.deepEqual(many.problems.map(p => [p.code, p.path]), [['DOCUMENT_FETCH_HOSTED_REFUSED', '/ops/0/data/wsdl'], ['DOCUMENT_FETCH_HOSTED_REFUSED', '/ops/1/data/openapi/path'], ['DOCUMENT_FETCH_HOSTED_REFUSED', '/ops/2/data/wsdl']]);
   assert.match(many.error, /Nothing was captured or sent/);
   assert.deepEqual(transport.connects, []);
-  // public: pinned with its sha256, through the public address only, redirects followed one by one
+  // public: refused the same way, nothing pinned and no connection (before fase4-28 r4-f3-import it was pinned)
   for (const [kind, op, lane] of KINDS) {
     b = box();
     const url = kind === 'WSDL' ? 'https://docs.example.test/svc/Calc.asmx?WSDL' : 'https://docs.example.test/api/openapi.json';
     const moved = kind === 'WSDL' ? 'https://cdn.example.test/v2/Calc.wsdl' : 'https://cdn.example.test/v2/openapi.json';
     reset({ [url]: { status: 301, location: moved }, [moved]: { status: 200, body: kind === 'WSDL' ? WSDL : openApi() } });
     const prepared = await prepareIntegrationJob(b.write([op(url)]), hosted(b, lane, stubLookup()));
-    assert.equal(prepared.ok, true, kind + ': ' + JSON.stringify(prepared).slice(0, 300));
-    assert.equal(prepared.documents[0].source, moved, kind);
-    assert.deepEqual(transport.connects.map(c => c.address), [PUBLIC, '93.184.216.35'], kind);
+    assert.deepEqual([prepared.ok, prepared.code], [false, 'DOCUMENT_FETCH_HOSTED_REFUSED'], kind + ': ' + JSON.stringify(prepared).slice(0, 300));
+    assert.deepEqual(transport.connects, [], kind);
+    assert.ok(!fs.existsSync(path.join(b.local, 'documents')), kind + ': nothing pinned');
   }
   // local use (no hosted workspace): the global fetch, as before, with no destination rule
   b = box();

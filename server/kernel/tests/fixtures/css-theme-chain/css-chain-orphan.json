@@ -1,0 +1,8 @@
+{
+ "description": "Fixture F2 (lote 4): CSS written to a theme no page shows (ChainOrphanTheme: not the default theme, no flow's Theme, no BaseTheme of a shown theme, not public) is refused before the build with CSS_TARGET_UNSERVED and a fix that names the themes the pages show; nothing is saved.",
+ "base": "job:css-chain-consumer",
+ "expectValid": true,
+ "ops": [
+  {"op": "set", "target": "IMobileTheme:ChainOrphanTheme", "prop": "StyleSheet", "value": ".chain-orphan { color: #b00; }"}
+ ]
+}

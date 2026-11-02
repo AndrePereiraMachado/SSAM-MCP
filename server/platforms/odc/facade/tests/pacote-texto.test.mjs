@@ -75,6 +75,30 @@ test('the owner\'s words reach their text route: tables are entities without a s
 
 // Review odc-defaults-4 (R4-2): the screen grammar of the packet says what an <input> or a block <event> without mandatory is
 // (optional, whatever the Studio gives a fresh one) and how a mandatory one is written.
+// W4 item 6 (C-19): a whole-app build names data, logic and screens but no single text route; its packet came with text null
+// (EW, L1, L3, L5 of the Figma runs, 27/10). It gets every text form of the lane; the requests whose words decide that no
+// text is written keep text null.
+test('W4 packet text: a request with no single route that names data, logic or screens gets every text form; decided nulls stay', () => {
+  const slice = () => undefined;
+  for (const intent of ['build the E-Wallet app from Figma: data model, logic and 5 screens with bottom nav',
+    'Construir o app E-Wallet a partir do Figma: entidades de transações e cartões, as server actions de transferência e as 5 telas com o tema e o menu inferior; publicar no fim',
+    'work packet for FitBody auth+setup flow: sign in, sign up, onboarding screens, member entity and client variables']) {
+    assert.equal(classifyTextRoute(intent), null, 'no single route: ' + intent);
+    for (const lane of ['o11', 'odc']) {
+      const s = packetTextSection({ lane, intent, found: null, slice });
+      assert.ok(s, lane + ': a text section for ' + intent);
+      assert.equal(s.value.id, 'text.all');
+      assert.deepEqual(s.value.forms, ['ssam-ddl/1', 'ssam-html/1', 'ssam-flow/1']);
+      for (const form of s.value.forms) assert.ok(s.value[form].grammar.length > 0 && s.value[form].example, lane + ' ' + form + ': grammar and proven example');
+      assert.deepEqual(s.value.call.arguments.job.ops.map(op => op.op), ['spec', 'create', 'html', 'logic']);
+    }
+  }
+  // (On this line the prototype import is off and "import the prototype as screens" routes to the screen text: ui.screen-html.)
+  for (const intent of ['publicar o módulo', 'inserir 5 registros de teste na entidade Cliente', 'renomear a tela Pedidos para Encomendas',
+    'o que tenho no ambiente para gerar PDF', 'debugar a action SalvarPedido no ambiente de QA', 'copiar a tela Home para outro modulo'])
+    assert.equal(packetTextSection({ lane: 'o11', intent, found: null, slice }), null, intent);
+});
+
 test('packet text, screens: an input or a block event without mandatory is optional, mandatory="True" makes it mandatory', () => {
   for (const lane of ['odc', 'o11']) {
     const s = packetTextSection({ lane, intent: 'criar a tela Pedidos com uma tabela dos pedidos do cliente', found: null, slice });

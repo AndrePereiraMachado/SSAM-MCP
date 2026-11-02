@@ -120,6 +120,44 @@ export function namesGenerator(value, wanted = () => true, budget = { left: 4000
   return null;
 }
 
+// ---- fase4-28 r4-rest-hosted: the input mode a hosted server runs rest-consume in (generators.mjs GENERATOR_APPROVAL
+// hosted 'inline-samples'): every input is in the job itself. A GET method without "sample" is the one input the facade
+// would fetch (integration-documents.mjs sampleRestConsume, a GET of the job's url): on a hosted server it never is. The
+// rest-consume ops a value names (op "rest-consume"/"gen-rest", any case, JSON text read as JSON, inside patch values too),
+// each GET method (verb absent or GET) whose sample is absent or null -> [{path, method}] (JSON pointers from `at`), [] when
+// none; a value too large or too deep to read whole -> [{path: at, method: null, unreadable: true}] (the gate fails closed).
+// The kernel itself reads neither files nor the network for this op (RestConsume.cs is pure: the plan is built from data).
+export function restConsumeUnsampled(value, at = '', budget = { left: 4000000 }, depth = 0) {
+  if (looksLikeJson(value)) { try { return restConsumeUnsampled(JSON.parse(value), at, budget, depth + 1); } catch { return []; } }
+  if (value === null || typeof value !== 'object') return [];
+  if (--budget.left < 0 || depth > 128) return [{ path: at || '/', method: null, unreadable: true }];
+  const out = [];
+  if (!Array.isArray(value) && generatorOfName(value.op) === 'rest-consume') {
+    // Every shape a later step may still read as the op (the blind test of r4-rest-hosted): data as an object or as its JSON
+    // text, the methods at the op itself when data is absent (the facade's OP_DATA_WRAPPED repair), the methods list or a
+    // method as JSON text. A shape the gate cannot read at all is unreadable (fails closed), never a pass.
+    const parsed = item => { if (!looksLikeJson(item)) return item; try { return JSON.parse(item); } catch { return undefined; } };
+    const data = value.data === undefined || value.data === null ? value : parsed(value.data);
+    const where = data === value ? at : `${at}/data`;
+    const methods = isObject(data) ? parsed(data.methods) : undefined;
+    if (data !== value && !isObject(data)) out.push({ path: where, method: null, unreadable: true });
+    else if (methods !== undefined && methods !== null && !Array.isArray(methods)) out.push({ path: `${where}/methods`, method: null, unreadable: true });
+    else for (const [j, raw] of (methods ?? []).entries()) {
+      const method = parsed(raw);
+      if (!isObject(method)) { if (raw !== null && typeof raw === 'object') continue; out.push({ path: `${where}/methods/${j}`, method: null, unreadable: true }); continue; }
+      if (String(method.verb ?? 'GET').trim().toUpperCase() !== 'GET') continue;
+      if (method.sample === undefined || method.sample === null) out.push({ path: `${where}/methods/${j}`, method: typeof method.name === 'string' ? method.name : null });
+    }
+  }
+  for (const [key, item] of Object.entries(value)) {
+    if (item === null || (typeof item !== 'object' && !looksLikeJson(item))) continue;
+    const found = restConsumeUnsampled(item, `${at}/${String(key).replace(/~/g, '~0').replace(/\//g, '~1')}`, budget, depth + 1);
+    out.push(...found);
+    if (found.some(f => f.unreadable)) break;
+  }
+  return out;
+}
+
 // ---- where a call carries jobs
 // The pointers where the JSON text of a job is the job itself (vel-hosted, narrowed here): the job of the four job tools,
 // and the query of ssam_reference check-job (the job, or the partial job of {basedOn, patch, job}). Anywhere else a value
@@ -300,9 +338,10 @@ class JobWalk {
   // resolve(value) -> the absolute workspace path of a ws:, agent:, absolute or relative value (policy.mjs resolveValue,
   // role 'in'), or throws a PathRefusal. prototype: whether D2 asks (the walk then also notes the prototype op).
   // generator(id) -> whether the gate refuses that generator (policy.mjs; null: the generators are not asked).
-  constructor({ workspace, resolve, prototype, generator = null }) {
-    this.workspace = path.resolve(workspace); this.resolver = resolve; this.prototypeOn = prototype; this.generatorOn = generator;
-    this.prototype = false; this.generator = null; this.unknown = false; this.refusal = null; this.files = 0; this.seen = new Set(); this.resolved = new Map();
+  // samples: whether the walk notes the rest-consume GET methods without a sample (restConsumeUnsampled; hosted, r4-rest-hosted).
+  constructor({ workspace, resolve, prototype, generator = null, samples = false }) {
+    this.workspace = path.resolve(workspace); this.resolver = resolve; this.prototypeOn = prototype; this.generatorOn = generator; this.samplesOn = samples;
+    this.unsampled = []; this.prototype = false; this.generator = null; this.unknown = false; this.refusal = null; this.files = 0; this.seen = new Set(); this.resolved = new Map();
   }
   // One resolution per value and call (an agent: file is brought once).
   async resolve(value) {
@@ -320,6 +359,10 @@ class JobWalk {
   }
   inside(file) { return insideVisible(this.workspace, file); }
   notePrototype(doc) { if (this.prototypeOn && !this.prototype && namesPrototype(doc)) this.prototype = true; }
+  noteSamples(doc, at) {
+    if (!this.samplesOn) return;
+    for (const found of restConsumeUnsampled(doc, at)) if (!this.unsampled.some(u => u.path === found.path)) this.unsampled.push(found);
+  }
   noteGenerator(doc) {
     if (!this.generatorOn || this.generator) return;
     const id = namesGenerator(doc, this.generatorOn);
@@ -336,6 +379,7 @@ class JobWalk {
     for (const target of shaped === doc ? [doc] : [doc, shaped]) {
       this.notePrototype(target);
       this.noteGenerator(target);
+      this.noteSamples(target, at || '');
       for (const field of [...pathFields(target)]) {
         const value = field.owner[field.key];
         const next = await this.value(value, field.kind, { mode, dir, pointer: at + field.at, depth });
@@ -425,12 +469,14 @@ class JobWalk {
 // (its pointer set) or null. options: workspace, resolve(value) (policy.mjs, with the call's lane), prototype (D2).
 // generator(id): servidor/fase4-25, whether the gate refuses that generator op (null: not asked); the answer then names the
 // first refused generator the call reaches, or 'unreadable' for a part the gate could not read whole.
-export async function confineJobs(name, resolved, { workspace, resolve, prototype = false, generator = null } = {}) {
-  if (name === CODE_TOOL) return confineCodeJobs(resolved, { workspace, resolve, prototype, generator });
-  if (!jobSlot(name, resolved)) return { resolved, prototype: false, generator: null, refusal: null };
+// samples: fase4-28 r4-rest-hosted, whether the walk notes the rest-consume GET methods without a sample of every document it
+// reads (unsampled: [{path, method}], the pointers prefixed as the refusals name them).
+export async function confineJobs(name, resolved, { workspace, resolve, prototype = false, generator = null, samples = false } = {}) {
+  if (name === CODE_TOOL) return confineCodeJobs(resolved, { workspace, resolve, prototype, generator, samples });
+  if (!jobSlot(name, resolved)) return { resolved, prototype: false, generator: null, unsampled: [], refusal: null };
   const copy = structuredClone(resolved);
   const { holder, at, key } = jobSlot(name, copy);
-  const walk = new JobWalk({ workspace, resolve, prototype, generator });
+  const walk = new JobWalk({ workspace, resolve, prototype, generator, samples });
   const jobAt = at + '/' + key;
   const job = holder[key];
   // The job: inline (rewritten in the copy), or a file of the workspace (checked where it is). A missing or invalid job
@@ -475,7 +521,7 @@ export async function confineJobs(name, resolved, { workspace, resolve, prototyp
     }
   }
   return { resolved: copy, prototype: prototype && (walk.prototype || walk.unknown),
-    generator: generator ? walk.generator ?? (walk.unknown ? 'unreadable' : null) : null, refusal: walk.refusal };
+    generator: generator ? walk.generator ?? (walk.unknown ? 'unreadable' : null) : null, unsampled: walk.unsampled, refusal: walk.refusal };
 }
 
 // servidor/fase4-26 a8: ssam_code makes the job a check runs (and a write hands to its lane's delivery tool) of its texts,
@@ -486,13 +532,13 @@ export async function confineJobs(name, resolved, { workspace, resolve, prototyp
 // bytes are what the facade reads; tools.json already confined their own paths). The prototype op and the pending
 // generators are noted on the way, as in confineJobs.
 export const CODE_TOOL = 'ssam_code';
-async function confineCodeJobs(resolved, { workspace, resolve, prototype = false, generator = null } = {}) {
+async function confineCodeJobs(resolved, { workspace, resolve, prototype = false, generator = null, samples = false } = {}) {
   const copy = structuredClone(resolved ?? {});
   if (copy.patch != null) {
-    const patched = await confineJobs('o11_deliver', copy, { workspace, resolve, prototype, generator });
-    if (patched.refusal || patched.prototype || patched.generator) return patched;
+    const patched = await confineJobs('o11_deliver', copy, { workspace, resolve, prototype, generator, samples });
+    if (patched.refusal || patched.prototype || patched.generator || patched.unsampled.length) return patched;
   }
-  const walk = new JobWalk({ workspace, resolve, prototype, generator });
+  const walk = new JobWalk({ workspace, resolve, prototype, generator, samples });
   if (Array.isArray(copy.ops)) {
     const shaped = shapedJob({ ops: copy.ops });
     if (shaped === null || !Array.isArray(shaped.ops)) walk.refuse(unchecked('/ops', 'ops the gate cannot normalize as the handler does'), '/ops');
@@ -511,7 +557,7 @@ async function confineCodeJobs(resolved, { workspace, resolve, prototype = false
     if (doc !== undefined) await walk.document(Array.isArray(doc) ? { ops: doc } : doc, { mode: 'file', dir: path.dirname(file), at: at + ' > ', depth: 1 });
   }
   return { resolved: copy, prototype: prototype && (walk.prototype || walk.unknown),
-    generator: generator ? walk.generator ?? (walk.unknown ? 'unreadable' : null) : null, refusal: walk.refusal };
+    generator: generator ? walk.generator ?? (walk.unknown ? 'unreadable' : null) : null, unsampled: walk.unsampled, refusal: walk.refusal };
 }
 
 // The base job of basedOn: {job} (already confined by tools.json) or {taskId} (the job an O11 delivery of this customer

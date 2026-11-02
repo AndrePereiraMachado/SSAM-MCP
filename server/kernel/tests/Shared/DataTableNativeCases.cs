@@ -153,6 +153,10 @@ public static class DataTableNativeCases
             var table = Elements(wrap).Single(n => n.Tag == "table");
             table.Attributes.RemoveAll(a => a.Key == "html");
             foreach (var part in Elements(table)) part.Attributes.RemoveAll(a => a.Key == "html");
+            // F8: a List of a table part is born without class now; the reading of an older delivery carries the Studio's "list".
+            var older = Elements(table).Single(n => n.Tag == "tbody");
+            older.Attributes.RemoveAll(a => a.Key == "class");
+            older.Attributes.Add(new("class", "list"));
             Assert.Contains(Elements(table), n => n.Tag == "tbody" && n.Get("class") == "list");
             var result = Edit("edit-old-table", wrap, out var outPath);
             Assert.True(result["accepted"]!.GetValue<bool>(), result.ToJsonString()[..Math.Min(3000, result.ToJsonString().Length)]);

@@ -1,6 +1,6 @@
 param(
  [ValidateSet('ensure','status','focus','dialog')][string]$Mode='status',
- [ValidateSet('portal','api-client','database','setting')][string]$Kind,
+ [ValidateSet('portal','api-client','database','setting','o11-service-center','o11-lifetime','o11-database','o11-setting')][string]$Kind,
  [ValidatePattern('^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$')][string]$HostName,
  [ValidatePattern('^[a-f0-9]{64}$')][string]$ContextKey,
  [Parameter(Mandatory=$true)][string]$StateDirectory,
@@ -11,8 +11,11 @@ $ErrorActionPreference='Stop'
 $utf8=New-Object System.Text.UTF8Encoding($false)
 $stateFile=Join-Path $StateDirectory 'window.json'
 $focusFile=Join-Path $StateDirectory 'focus.json'
+# Lote 4, F3: the O11 kinds store the same targets as the legacy Get-Credential prompt (SSAM/O11/<host>/<Kind>[/<name>]).
+$O11=$Kind -like 'o11-*'
 if(($Kind -in @('database','setting')) -and $EntryName -notmatch '^[A-Za-z0-9_.-]{1,64}$'){throw 'Invalid entry name'}
-if(($Kind -in @('portal','api-client')) -and $EntryName){throw 'Unexpected entry name'}
+if(($Kind -in @('o11-database','o11-setting')) -and $EntryName -notmatch '^[A-Za-z0-9_.-]{1,100}$'){throw 'Invalid entry name'}
+if(($Kind -in @('portal','api-client','o11-service-center','o11-lifetime')) -and $EntryName){throw 'Unexpected entry name'}
 [IO.Directory]::CreateDirectory($StateDirectory)|Out-Null
 Add-Type -TypeDefinition @'
 using System;
@@ -105,12 +108,14 @@ try {
  $form=New-Object Windows.Forms.Form;$form.Text="SSAM - $HostName - $Kind";$form.ClientSize=New-Object Drawing.Size(580,235)
  $form.StartPosition='CenterScreen';$form.FormBorderStyle='FixedDialog';$form.MaximizeBox=$false;$form.MinimizeBox=$true;$form.TopMost=$true
  $label=New-Object Windows.Forms.Label;$label.Location=New-Object Drawing.Point(16,14);$label.Size=New-Object Drawing.Size(548,48)
- $label.Text="ODC: $HostName`r`n$Kind $EntryName - values stored only in the Windows Vault; never in the chat.";$form.Controls.Add($label)
+ $label.Text="$(if($O11){'O11'}else{'ODC'}): $HostName`r`n$Kind $EntryName - values stored only in the Windows Vault; never in the chat.";$form.Controls.Add($label)
  $userLabel=New-Object Windows.Forms.Label;$userLabel.Location=New-Object Drawing.Point(16,78);$userLabel.Text=$(if($Kind -eq 'api-client'){'Client ID'}else{'User'});$form.Controls.Add($userLabel)
  $user=New-Object Windows.Forms.TextBox;$user.Location=New-Object Drawing.Point(140,74);$user.Size=New-Object Drawing.Size(422,24);$form.Controls.Add($user)
- $secretLabel=New-Object Windows.Forms.Label;$secretLabel.Location=New-Object Drawing.Point(16,119);$secretLabel.Text=$(if($Kind -eq 'api-client'){'Client secret'}elseif($Kind -eq 'setting'){'Secret value'}else{'Password'});$form.Controls.Add($secretLabel)
+ $secretLabel=New-Object Windows.Forms.Label;$secretLabel.Location=New-Object Drawing.Point(16,119);$secretLabel.Text=$(if($Kind -eq 'api-client'){'Client secret'}elseif($Kind -in @('setting','o11-setting')){'Secret value'}elseif($Kind -eq 'o11-lifetime'){'Token'}else{'Password'});$form.Controls.Add($secretLabel)
  $secret=New-Object Windows.Forms.TextBox;$secret.Location=New-Object Drawing.Point(140,115);$secret.Size=New-Object Drawing.Size(422,24);$secret.UseSystemPasswordChar=$true;$form.Controls.Add($secret)
  if($Kind -eq 'setting'){$user.Text='setting';$user.ReadOnly=$true}
+ if($Kind -eq 'o11-setting'){$user.Text='site-property';$user.ReadOnly=$true}
+ if($Kind -eq 'o11-lifetime'){$user.Text='service-account'}
  $save=New-Object Windows.Forms.Button;$save.Text='Save';$save.Location=New-Object Drawing.Point(360,177);$save.Size=New-Object Drawing.Size(96,32);$form.Controls.Add($save);$form.AcceptButton=$save
  $cancel=New-Object Windows.Forms.Button;$cancel.Text='Cancel';$cancel.DialogResult='Cancel';$cancel.Location=New-Object Drawing.Point(466,177);$cancel.Size=New-Object Drawing.Size(96,32);$form.Controls.Add($cancel);$form.CancelButton=$cancel
  $script:stored=$false
@@ -118,7 +123,8 @@ try {
   $pointer=[IntPtr]::Zero
   try {
    if([string]::IsNullOrWhiteSpace($user.Text) -or !$secret.Text){throw 'Incomplete'}
-   $target=switch($Kind){'portal'{"SSAM/ODC3/$HostName/Portal"}'api-client'{"SSAM/ODC3/$HostName/APIClient"}'database'{"SSAM/ODC3/$HostName/DB/$EntryName"}'setting'{"SSAM/ODC3/$HostName/Setting/$EntryName"}}
+   $target=switch($Kind){'portal'{"SSAM/ODC3/$HostName/Portal"}'api-client'{"SSAM/ODC3/$HostName/APIClient"}'database'{"SSAM/ODC3/$HostName/DB/$EntryName"}'setting'{"SSAM/ODC3/$HostName/Setting/$EntryName"}
+    'o11-service-center'{"SSAM/O11/$HostName/ServiceCenter"}'o11-lifetime'{"SSAM/O11/$HostName/LifeTime"}'o11-database'{"SSAM/O11/$HostName/DatabaseConnection/$EntryName"}'o11-setting'{"SSAM/O11/$HostName/SiteProperty/$EntryName"}}
    $pointer=[Runtime.InteropServices.Marshal]::StringToCoTaskMemUni($secret.Text)
    $record=New-Object SsamCredentialWindow+Credential;$record.Type=1;$record.TargetName=$target;$record.UserName=$user.Text.Trim();$record.Persist=2
    $record.CredentialBlob=$pointer;$record.CredentialBlobSize=[Text.Encoding]::Unicode.GetByteCount($secret.Text)

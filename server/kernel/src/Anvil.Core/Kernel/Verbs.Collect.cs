@@ -145,6 +145,27 @@ public sealed partial class ModelSession
             At(owner + "." + name, at);
         }
 
+        /// <summary>C-21: a document whose shell stayed (root, data, placeholders and action shells exist) blocks only the
+        /// widgets its content would have written, the evidence of a later missing-reference failure.</summary>
+        public void MarkDocumentWidgets(JsonObject op, int origin)
+        {
+            if (op["data"]?["html"] is not JsonValue v || !v.TryGetValue<string>(out var html)) return;
+            Anvil.Reading.ScreenHtml.Node document;
+            try { document = Anvil.Reading.ScreenHtml.Parse(html); } catch (FormatException) { return; }
+            void Widgets(Anvil.Reading.ScreenHtml.Node node)
+            {
+                if (!node.IsText && node.Tag is not ("screen" or "block" or "var" or "input" or "aggregate" or "event" or "style" or "slot" or "placeholder"))
+                {
+                    if (node.Get("id") is { Length: > 0 } id) _texts.Add((origin, id));
+                    var kind = Anvil.Reading.ScreenHtmlTables.KindOf(node, out _);
+                    var attribute = Anvil.Reading.ScreenHtmlTables.AttributeOf(kind, "Name", Anvil.Reading.ScreenHtmlModuleMode.Widget, false);
+                    if (attribute != "id" && node.Get(attribute) is { Length: > 0 } widgetName) _texts.Add((origin, widgetName));
+                }
+                foreach (var child in node.Children) Widgets(child);
+            }
+            Widgets(document);
+        }
+
         private void MarkDocument(JsonObject data, int origin, string? at = null)
         {
             var html = data["html"]!.GetValue<string>();

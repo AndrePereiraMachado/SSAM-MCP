@@ -189,6 +189,33 @@ test('W4 basedOn {job, sha256} + edits: the patch route of today, the model rese
   assert.ok(read.problems.some(p => p.at === 'patch' && /cannot be combined/.test(p.error)), JSON.stringify(read.problems));
 });
 
+test('C-11 (F-FitBody-50): the expected messages a write declares beside its edits go into the job, never "patch and edits cannot be combined"', t => {
+  // Lote 5 of FitBody: the whole batch (also with edits) and patch [{add /expectedMessages, [3 entries]}] was refused INPUT_INVALID
+  // "patch and edits cannot be combined"; without it the next write was refused only for the 3 anonymous-access warnings.
+  const declared = [{ id: 'CustomObjectWarning', element: 'FB_Article (MobileScreen) / ToggleFavorite (ScreenAction) / FBToggleFavorite (ExecuteServerActionNode)', why: 'FB_Article is public by the brief' }];
+  for (const lane of ['o11', 'odc']) {
+    const input = { lane, action: 'write', module: 'FigmaMobile', part: 'html', element: 'Login', basedOn: READ, edits: EDITS };
+    const viaPatch = writeCall({ ...input, patch: [{ op: 'add', path: '/expectedMessages', value: declared }] });
+    assert.ok(!viaPatch.refusal, JSON.stringify(viaPatch.refusal));
+    assert.deepEqual(opsOf(viaPatch), [{ op: 'html', data: { screen: 'Login', basedOn: READ, edits: EDITS } }]);
+    assert.deepEqual(viaPatch.arguments.job.expectedMessages, declared);
+    assert.ok(viaPatch.normalizations.some(n => n.rule === 'expected-messages-patch'), JSON.stringify(viaPatch.normalizations));
+    // The field at the top of the write, and the append the refusal's patch is (add /expectedMessages/-).
+    assert.deepEqual(writeCall({ ...input, expectedMessages: declared }).arguments.job.expectedMessages, declared);
+    assert.deepEqual(writeCall({ ...input, patch: [{ op: 'add', path: '/expectedMessages/-', value: declared[0] }] }).arguments.job.expectedMessages, declared);
+    // A new screen with the declaration of its anonymous-access warning, in one write.
+    assert.deepEqual(writeCall({ lane, action: 'write', module: 'M', part: 'html', text: LOGIN, expectedMessages: declared }).arguments.job.expectedMessages, declared);
+  }
+  const input = { lane: 'o11', action: 'write', module: 'M', part: 'html', element: 'Login', basedOn: READ, edits: EDITS };
+  // Any other patch beside edits stays refused; expectedMessages is a list of {id, element, why}.
+  assert.ok(writeCall({ ...input, patch: [{ op: 'add', path: '/ops/-', value: { op: 'create' } }] }).refusal.problems.some(p => p.at === 'patch' && /cannot be combined/.test(p.error)));
+  assert.equal(writeCall({ ...input, expectedMessages: [{ id: 'CustomObjectWarning' }] }).refusal.problems[0].at, 'expectedMessages');
+  // A correction of a refused write (basedOn {job, sha256}, no edits) takes the declarations into its patch, as appends.
+  const dir = tmp(t); const base = writeJob(dir);
+  const fix = writeCall({ lane: 'o11', action: 'write', module: 'M', basedOn: base, patch: [{ op: 'replace', path: '/ops/0/producer', value: 'Bike_CS' }], expectedMessages: declared });
+  assert.deepEqual(fix.arguments.patch, [{ op: 'replace', path: '/ops/0/producer', value: 'Bike_CS' }, { op: 'add', path: '/expectedMessages/-', value: declared[0] }]);
+});
+
 test('W4 codeCheck: basedOn {job} + edits checks the corrected job; the model\'s patch stays refused', async t => {
   const dir = tmp(t); const base = writeJob(dir); const capture = put(dir, 'base.oml');
   for (const lane of ['o11', 'odc']) {

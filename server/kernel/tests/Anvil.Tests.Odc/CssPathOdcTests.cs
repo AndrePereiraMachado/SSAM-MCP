@@ -40,16 +40,17 @@ public sealed class CssPathOdcTests
             Assert.Contains(probe, written);
             Assert.True(ThemeCss.Matches(css["basedOn"]!.ToString(), written), target);
             var effective = properties["StyleSheet"]!.ToString();
-            Assert.True(ThemeCss.ImportsFirst(effective).Ok && effective.Contains(Import, StringComparison.Ordinal) && effective.IndexOf(Import, StringComparison.Ordinal) < effective.IndexOf(probe, StringComparison.Ordinal), target + ": " + effective[..Math.Min(300, effective.Length)]);
+            // The @import goes first in the stylesheet the edit writes (the author's half of a theme with Theme Editor CSS).
+            Assert.True(ThemeCss.ImportsFirst(written).Ok && written.Contains(Import, StringComparison.Ordinal) && written.IndexOf(Import, StringComparison.Ordinal) < written.IndexOf(probe, StringComparison.Ordinal), target + ": " + written[..Math.Min(300, written.Length)]);
             if (split)
             {
-                // The Theme Editor block stays whole after the author's @import, and the author half keeps the rest.
+                // B4: the effective StyleSheet is the platform's composition, the Theme Editor block and then the author's half
+                // (what the saved module holds), and the edit says its @import is ignored there (cssImportsIgnored).
                 var generated = properties["GeneratedStyleSheet"]!.ToString();
-                var imports = CssCompat.Imports(written).Imports.Select(x => x.Statement).ToList();
-                Assert.Contains(Import, imports);
-                Assert.StartsWith(string.Join("\r\n", imports) + "\r\n" + generated + "\r\n", effective);
-                Assert.NotNull(css["cssImportsHoisted"]);
+                Assert.Equal(generated + "\r\n" + written, effective);
+                Assert.Contains(Import, css["cssImportsIgnored"]!["imports"]!.AsArray().Select(i => i!.ToString()));
             }
+            else Assert.Equal(written, effective);
             var entry = Assert.Single(result["styleSheets"]!.AsArray(), e => e!["name"]!.ToString() == target[(target.IndexOf(':') + 1)..])!;
             Assert.Equal(kind, entry["kind"]!.ToString());
             Assert.True(entry["touch"] != null || entry["reason"]?.ToString() is { Length: > 0 }, entry.ToJsonString());
@@ -63,7 +64,8 @@ public sealed class CssPathOdcTests
         var (target, _, author, _) = Elements().First(e => e.Kind == "theme");
         foreach (var op in new[]
         {
-            new JsonObject { ["op"] = "css", ["target"] = target, ["basedOn"] = ThemeCss.Sha256(author + "x"), ["edits"] = new JsonArray(new JsonObject { ["append"] = ".a{b:c}" }) },
+            // F1b: a stale basedOn whose edits all apply is merged (F1bStop3 below); one whose edit no longer applies is refused.
+            new JsonObject { ["op"] = "css", ["target"] = target, ["basedOn"] = ThemeCss.Sha256(author + "x"), ["edits"] = new JsonArray(new JsonObject { ["replaceRule"] = ".t18-no-such-rule", ["body"] = "color:red" }) },
             new JsonObject { ["op"] = "set", ["target"] = target, ["prop"] = "StyleSheet", ["value"] = ".a{b:c}", ["basedOn"] = ThemeCss.Sha256(author + "x") },
         })
         {
@@ -72,6 +74,31 @@ public sealed class CssPathOdcTests
             Assert.Equal(ModelSession.ThemeChanged, coded.Code);
             Assert.Equal(ThemeCss.Sha256(author), coded.Problems![0]!["actual"]!.ToString());
         }
+    }
+
+    /// <summary>F1b stop 3 on ODC: the person edits a block's CSS in the Studio after the delivery read it; the css op merges
+    /// over it (both changes stay) with a THEME_CHANGED note, instead of refusing.</summary>
+    [Fact]
+    public void F1bStop3_ACssEditOverCssThePersonChangedAfterBasedOnIsMergedWithANote()
+    {
+        if (!StudioAvailable()) return;
+        // A block: its StyleSheet is all author CSS (a theme with Theme Editor CSS keeps the set apart from the author half).
+        var (target, _, author, _) = Elements().First(e => e.Kind == "block");
+        const string person = ".f1b-person{color:#654321}";
+        const string delivery = ".f1b-delivery{color:#123456}";
+        var result = Run("f1b-merge", new JsonArray(
+            new JsonObject { ["op"] = "set", ["target"] = target, ["prop"] = "StyleSheet", ["value"] = author + "\n" + person },
+            new JsonObject { ["op"] = "css", ["target"] = target, ["basedOn"] = ThemeCss.Sha256(author), ["edits"] = new JsonArray(new JsonObject { ["append"] = delivery }) },
+            new JsonObject { ["op"] = "get", ["target"] = target }));
+        Assert.True(result["accepted"]!.GetValue<bool>(), Clip(result));
+        var properties = Results(result).OfType<JsonObject>().Last(r => r["properties"] != null)["properties"]!.AsObject();
+        var written = (properties["UserStyleSheet"] ?? properties["StyleSheet"])!.ToString();
+        Assert.Contains(person, written);
+        Assert.Contains(delivery, written);
+        // The css op's own result (on this line a set StyleSheet answers its placement under css too).
+        var css = Results(result).OfType<JsonObject>().Last(r => r["css"] != null && r["edits"] != null);
+        Assert.Equal(ModelSession.ThemeChanged, css["mergedOver"]!["code"]!.ToString());
+        Assert.Contains(result["notes"]!.AsArray(), n => n!["code"]!.ToString() == ModelSession.ThemeChanged);
     }
 
     /// <summary>The block whose first widgets are HTML Elements with a class attribute (they have no Style of their own): the

@@ -69,7 +69,28 @@ public static class DdlConventions
             Records(entity, was, current != null, result);
             Indexes(entity, was, edit.Text, result);
         }
+        NullDefaults(edit, result);
         return result;
+    }
+
+    // ---- C-45: the default of a client variable, site property or session variable is a literal ------------------------
+
+    // The null value of a type, written as its function: the value the variable has with no default at all.
+    private static readonly System.Text.RegularExpressions.Regex NullOfType = new(@"^(?:NullIdentifier|NullTextIdentifier|NullDate|NullTime|NullDateTime|NullBinary|NullObject)\s*\(\s*\)$", System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    // `client variable X: T Identifier = NullIdentifier()` passed the grammar and the Studio refused it at the Verify
+    // (InvalidPropertyValue_DefaultValue: a default there is a literal, never a call; F-FitBody-13). Its one meaning is the
+    // value of the type without a default: the default is left out, and said.
+    private static void NullDefaults(DdlDocument edit, Result result)
+    {
+        foreach (var variable in edit.Elements.Where(e => !e.Drop && DdlRules.VariableKinds.Contains(e.Kind)))
+        {
+            if (variable.Props.GetValueOrDefault("DefaultValue") is not { } value || !NullOfType.IsMatch(value.Trim())) continue;
+            variable.Props.Remove("DefaultValue");
+            var what = variable.Kind switch { "ClientVariable" => "client variable", "SessionVariable" => "session variable", _ => "site property" };
+            result.Notes.Add(new("DDL_DEFAULT_NULL_DROPPED", $"line {variable.Line}: the default of {what} {variable.Name} is {value.Trim()}, the value it has without a default; "
+                + $"the default of a {what} is a literal (the Studio refuses a call there: InvalidPropertyValue_DefaultValue), so it is left out"));
+        }
     }
 
     // ---- the identifier ------------------------------------------------------------------------------------------------------

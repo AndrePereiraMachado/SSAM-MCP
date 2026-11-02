@@ -8,7 +8,7 @@ namespace Anvil.Tests;
 // and a writer of the same model. An edit of the reading (the changed elements with their k) is merged into the text, checked
 // at once (every refusal in one answer, with its patch when there is one), written with the few native moves it needs and read
 // back: the module reads the edited text, every element the edit kept keeps its key.
-public sealed class ScreenHtmlEditTests
+public sealed partial class ScreenHtmlEditTests
 {
     private sealed class Node(string key, string kind, string name = "", params string[] kinds)
     {
@@ -92,7 +92,7 @@ public sealed class ScreenHtmlEditTests
                 'l' => value.Targets?.ToList(), _ => value.Text };
             if (written == null) node.Props.Remove(property); else node.Set(property, written);
             // An event that gets a destination gets one argument per input of it (the platform's own).
-            if (property == "Destination" && written is Node target)
+            if (property is "Destination" or "Handler" && written is Node target)
                 foreach (var input in target.Children.Where(c => c.Kind == "InputParameter"))
                     if (!node.Children.Any(a => a.Props.GetValueOrDefault("Parameter") == input)) node.Add(N("Argument")).Set("Parameter", input);
         }
@@ -554,6 +554,26 @@ public sealed class ScreenHtmlEditTests
             Assert.Contains("class=\"detail\"", after);
             Assert.Contains("Order", Texts(TableOf(ScreenHtml.Parse(after), "Lines")).Select(t => t.Text!.Trim()));
         }
+    }
+
+    // C-14: the theme parts a reading prints (<style scope="theme" [id]>) are merged three ways one by one, by their id, beside the
+    // root's own <style>: an edit of an older reading that changes a part and adds another keeps what only the Studio changed.
+    [Fact]
+    public void TheThemePartsOfAnOlderReadingMergeThreeWaysByTheirId()
+    {
+        const string older = "<screen name=\"S\">\n<style>.own{}</style>\n<style scope=\"theme\" id=\"fit\">\n.x{width:1px}\n</style>\n"
+            + "<style scope=\"theme\">\n.root{margin:0}\n</style>\n<div k=\"w1\" class=\"a\"/>\n</screen>\n";
+        var current = older.Replace("class=\"a\"", "class=\"b\"");
+        var keys = new Dictionary<string, string>(StringComparer.Ordinal) { [""] = "R", ["w1"] = "K1" };
+        var merged = ScreenHtmlMerge.ThreeWay(older, keys, current, keys, ["<style scope=\"theme\" id=\"fit\">.x{width:2px}</style>", "<style scope=\"theme\" id=\"new\">.y{color:red}</style>"]);
+        Assert.Empty(merged.Missing);
+        var document = merged.Document!;
+        Assert.Contains("<style>.own{}</style>", document);
+        Assert.Contains("<style scope=\"theme\" id=\"fit\">.x{width:2px}</style>", document);
+        Assert.Contains("<style scope=\"theme\" id=\"new\">.y{color:red}</style>", document);
+        Assert.Contains(".root{margin:0}", document);
+        Assert.Contains("class=\"b\"", document);
+        Assert.Single(System.Text.RegularExpressions.Regex.Matches(document, "id=\"fit\""));
     }
 
     private static IEnumerable<ScreenHtml.Node> Texts(ScreenHtml.Node node)

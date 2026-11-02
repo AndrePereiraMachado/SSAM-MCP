@@ -127,6 +127,161 @@ public sealed class ScreenVisualCheckTests(ITestOutputHelper output)
         Assert.Equal("<div class=\"grid\" list=\"Rows\" as=\"r\"><div>", replace);
     }
 
+    // ---- C-17: no false visual warnings ----------------------------------------------------------------------------------------
+
+    /// <summary>C-17 (F-AiChatbot-07b, F-FigmaReactive-09e): .ac-chatwin-input > span styles the input's own span.input-text (the
+    /// author wrote no span there); the warning's patch left that span out and would have undone the style. A selector that
+    /// styles no element the author wrote means the runtime's: no warning. One that also styles an authored span still warns.</summary>
+    [Fact]
+    public void ASelectorThatStylesOnlyTheRuntimesSpanMeansItAndIsNoNews()
+    {
+        var html = "<screen name=\"Page\"><div id=\"c\" class=\"ac-chatwin-input\"><input id=\"i\"/></div><div id=\"m\" class=\"metric\"><span id=\"s\">x</span>{{ N }}</div></screen>";
+        var css = ".ac-chatwin-input > span{display:flex;flex:1}\n.metric span{color:gray}";
+        var (input, _) = Input(html, a =>
+        {
+            var fragment = DomNode.Fragment();
+            var map = new Dictionary<DomNode, DomNode>(ReferenceEqualityComparer.Instance);
+            var chat = El(fragment, "div", "ac-chatwin-input", null, ("data-container", "")); map[a["c"]] = chat;
+            var span = El(chat, "span", "input-text", "IInput"); span.RuntimeSelector = "span:has(> input[data-input])";
+            map[a["i"]] = El(span, "input", "form-control OSFillParent", null, ("data-input", ""));
+            var metric = El(fragment, "div", "metric", null, ("data-container", "")); map[a["m"]] = metric;
+            map[a["s"]] = El(metric, "span", null, null, ("data-advancedhtml", ""));
+            El(metric, "span", null, "IExpression", ("data-expression", "")).Add(DomNode.TextNode("1"));
+            return (fragment, map);
+        }, new ScreenVisual.Sheet(css, "page"));
+        var findings = ScreenVisual.Check(input).Where(f => f.Code == ScreenVisual.SelectorMissesRuntime && f.Kind == "runtime-element").ToList();
+        foreach (var f in findings) output.WriteLine($"{f.Kind} {f.Subject} -> {f.Right}: {f.Why}");
+        var only = Assert.Single(findings);
+        Assert.Equal(".metric span", only.Subject);
+    }
+
+    /// <summary>C-17 (F-AiChatbot-07c/-07d): the logo's "Its" + "Bot" (two words of letters that are all the text of their
+    /// parent) are one word styled in parts, and a List that is itself the flex column is the one item of its parent on purpose:
+    /// neither warns; a value glued to a word and a plain List alone in a grid still do.</summary>
+    [Fact]
+    public void ALogoWordInPartsAndAListThatLaysOutItsOwnRowsDoNotWarn()
+    {
+        var html = "<screen name=\"Page\"><div class=\"app\">\n<a class=\"logo\"><span class=\"its\">Its</span><span class=\"bot\">Bot</span></a>\n"
+            + "<p><strong>R$ {{ X }}</strong><span>estimate</span></p>\n"
+            + "<div class=\"chat\"><div list=\"Msgs\" class=\"msgs\"><p>x</p></div></div>\n"
+            + "<div class=\"grid\"><div list=\"Rows\"><p>x</p></div></div>\n</div></screen>";
+        var css = ".chat{display:flex}\n.msgs{display:flex;flex-direction:column}\n.grid{display:grid}";
+        var (input, _) = Input(html, _ => (DomNode.Fragment(), new Dictionary<DomNode, DomNode>(ReferenceEqualityComparer.Instance)), new ScreenVisual.Sheet(css, "page"));
+        var findings = ScreenVisual.Check(input);
+        foreach (var f in findings) output.WriteLine($"{f.Code} {f.Kind} {f.Subject}");
+        var joined = Assert.Single(findings, f => f.Code == ScreenVisual.TextJoined);
+        Assert.Contains("strong", joined.Subject);
+        var alone = Assert.Single(findings, f => f.Code == ScreenVisual.ListNotLayoutContainer);
+        Assert.Contains("grid", alone.Subject);
+    }
+
+    // ---- C-12: the runtime facts the check did not know ------------------------------------------------------------------------
+
+    /// <summary>C-12 (F-AiChatbot-04/-05, F-FitBody-35/-43/-44b): the facts of the runtime the check did not know. The List's
+    /// inline position:relative over a position:absolute; the inline top of an element in a List row; the popup mounted in a
+    /// portal of the body, outside the page's root class; a rule of this document's theme part that loses by the order of
+    /// the parts. Each with the patch that is certain, checked on the predicted DOM.</summary>
+    [Fact]
+    public void TheListPositionTheRowTopThePopupPortalAndTheThemePartOrderAreFound()
+    {
+        var html = "<screen name=\"Page\"><div id=\"page\" class=\"ac-page fb-app\">\n<div class=\"menu\"><div id=\"dd\" list=\"Links\" class=\"ac-dropdown\"><p>x</p></div></div>\n"
+            + "<div id=\"rows\" list=\"Rows\"><div id=\"star\" class=\"star\" style=\"left: 317px; top: 340px\">*</div></div>\n"
+            + "<popup id=\"pop\" show=\"Show\"><div id=\"modal\" class=\"ac-modal\"><button id=\"send\" class=\"ac-btn\">Send</button></div></popup>\n"
+            + "<div id=\"tabs\" class=\"fbx-list fbn-tabs\">Tabs</div>\n</div>\n<style scope=\"theme\">.fb-app .fbn-tabs{position:absolute}</style></screen>";
+        var page = ".ac-page .ac-dropdown{position:absolute;top:36px}\n.ac-page .ac-btn{background:#123;color:#fff}\n.ac-page .menu{display:block}";
+        var theme = "/* anvil:html Page */\n.fb-app .fbn-tabs{position:absolute}\n/* /anvil:html Page */\n\n/* anvil:html style:old */ /* anvil:owner Other */\n.fb-app .fbx-list{position:relative}\n/* /anvil:html style:old */\n";
+        var (input, _) = Input(html, a =>
+        {
+            var fragment = DomNode.Fragment();
+            var map = new Dictionary<DomNode, DomNode>(ReferenceEqualityComparer.Instance);
+            var app = El(fragment, "div", "ac-page fb-app", null, ("data-container", "")); map[a["page"]] = app;
+            var menu = El(app, "div", "menu", null, ("data-container", ""));
+            var dd = El(menu, "div", "ac-dropdown", null, ("data-list", ""), ("style", "position: relative;")); dd.Widget = "IList"; map[a["dd"]] = dd;
+            var rows = El(app, "div", null, null, ("data-list", ""), ("style", "position: relative;")); rows.Widget = "IList"; map[a["rows"]] = rows;
+            map[a["star"]] = El(rows, "div", "star", null, ("data-container", ""), ("style", "left: 317px; top: 340px"));
+            var portal = El(fragment, "div", "portal-class", "IPopup");
+            var inner = El(portal, "div", null, "IPopup");
+            var backdrop = El(inner, "div", "popup-backdrop", "IPopup");
+            var dialog = El(backdrop, "div", "popup-dialog", "IPopup", ("data-popup", ""), ("role", "dialog"));
+            var content = El(dialog, "div", "popup-content"); content.Widget = "IPopup"; map[a["pop"]] = content;
+            var modal = El(content, "div", "ac-modal", null, ("data-container", "")); map[a["modal"]] = modal;
+            map[a["send"]] = El(modal, "button", "ac-btn", null, ("data-button", ""));
+            map[a["tabs"]] = El(app, "div", "fbx-list fbn-tabs", null, ("data-container", ""));
+            return (fragment, map);
+        }, new ScreenVisual.Sheet(theme, "theme"), new ScreenVisual.Sheet(page, "page"));
+        var findings = ScreenVisual.Check(input);
+        foreach (var f in findings) output.WriteLine($"{f.Code} {f.Kind} {f.Subject} -> {f.Right ?? "(candidates " + string.Join(" | ", f.Candidates) + ")"} append={f.Append}: {f.Why}");
+        var portaled = Assert.Single(findings, f => f.Kind == "popup-portal");
+        Assert.Equal(".ac-page .ac-btn", portaled.Subject);
+        Assert.Equal(".popup-dialog .ac-btn", portaled.Right);
+        Assert.True(portaled.AddSelector);
+        Assert.DoesNotContain(findings, f => f.Kind == "wrapper" && f.Subject == ".ac-page .ac-btn");   // said once, as the portal
+        var position = Assert.Single(findings, f => f.Kind == "list-position");
+        Assert.Equal(".ac-page .ac-dropdown{position:absolute!important}", position.Append);
+        var top = Assert.Single(findings, f => f.Kind == "list-row-inline-top");
+        Assert.Contains("top: 340px", top.Subject);
+        var order = Assert.Single(findings, f => f.Kind == "theme-order");
+        Assert.Equal(".fb-app .fbn-tabs", order.Subject);
+        Assert.Equal(".fb-app .fbn-tabs.fbn-tabs", order.Right);
+        Assert.Contains(".fb-app .fbx-list", order.Why);
+
+        // The same page with the patches applied: none of them again.
+        var fixedPage = page + "\n.ac-page .ac-dropdown{position:absolute!important}\n.popup-dialog .ac-btn{background:#123;color:#fff}";
+        var fixedTheme = theme.Replace(".fb-app .fbn-tabs{", ".fb-app .fbn-tabs,.fb-app .fbn-tabs.fbn-tabs{", StringComparison.Ordinal);
+        var (again, _) = Input(html.Replace(" top: 340px", "", StringComparison.Ordinal), a =>
+        {
+            var map = new Dictionary<DomNode, DomNode>(ReferenceEqualityComparer.Instance);
+            foreach (var (author, predicted) in input.Counterparts) if (author.Attr("id") is { } id && a.TryGetValue(id, out var now)) map[now] = predicted;
+            return (input.Predicted.Root, map);
+        }, new ScreenVisual.Sheet(fixedTheme, "theme"), new ScreenVisual.Sheet(fixedPage, "page"));
+        var left = ScreenVisual.Check(again);
+        foreach (var f in left) output.WriteLine($"after: {f.Code} {f.Kind} {f.Subject}");
+        Assert.DoesNotContain(left, f => f.Kind is "list-position" or "list-row-inline-top" or "theme-order");
+        // The original popup selector stays beside the added one (the page keeps it): the popup is styled, nothing to say.
+        Assert.DoesNotContain(left, f => f.Kind == "popup-portal");
+    }
+
+    /// <summary>C-12 (F-FitBody-43): the same List markup on two screens got disable-virtualization on one and not on the other:
+    /// the rule that makes its element a flex box was in a theme part a later document of the job writes, which the first
+    /// screen's compile did not see. The parts of the theme every document of the job writes decide it, in any order.</summary>
+    [Fact]
+    public void AListIsALayoutContainerByAThemePartALaterDocumentOfTheJobWrites()
+    {
+        if (!StudioAvailable()) { output.WriteLine("WARNING: no Service Studio: the compile is skipped."); return; }
+        var first = "<screen name=\"VisualRowsA\" roles=\"Registered\">\n<var name=\"Rows\" type=\"Text List\"/>\n"
+            + "<Block name=\"LayoutBlank\"><slot name=\"Content\"><div class=\"vr-app\"><div class=\"vr-list vr-tabs\" list=\"Rows\"><p>{{ Rows.Current }}</p></div></div></slot></Block>\n</screen>";
+        var second = "<screen name=\"VisualRowsB\" roles=\"Registered\">\n<style scope=\"theme\" id=\"vr-shared\">.vr-app .vr-list{display:flex;gap:8px}</style>\n"
+            + "<Block name=\"LayoutBlank\"><slot name=\"Content\"><div class=\"vr-app\">B</div></slot></Block>\n</screen>";
+        var outPath = Path.Combine(Work, "rows-later", "out.oml");
+        var result = JsonSerializer.SerializeToNode(JobRunner.Run(Host("rows-later"), null, Job(new JsonArray(Op(first), Op(second)), "rows-later"), outPath))!.AsObject();
+        Assert.True(result["accepted"]!.GetValue<bool>(), result["details"]?.ToJsonString());
+        var report = result["results"]!.AsArray().Select(r => r!["result"]).OfType<JsonObject>().First(r => r["form"]?.ToString() == "document" && r["root"]?.ToString() == "VisualRowsA");
+        output.WriteLine(report["normalized"]?.ToJsonString());
+        Assert.Contains(report["normalized"]!.AsArray(), n => n!["code"]!.ToString() == ScreenVisual.ListRendersAllRows);
+    }
+
+    /// <summary>C-12 through the compile: the predicted DOM of a real page mounts the popup in the portal of the body and
+    /// gives the List its inline position, so the job's warning has both findings and their checked patch.</summary>
+    [Fact]
+    public void ACompiledPageWarnsOfThePopupPortalAndTheListPositionWithTheirPatch()
+    {
+        if (!StudioAvailable()) { output.WriteLine("WARNING: no Service Studio: the compile is skipped."); return; }
+        var page = "<screen name=\"VisualPortal\" roles=\"Registered\" actions=\"Go\">\n<var name=\"Show\" type=\"Boolean\"/>\n<var name=\"Rows\" type=\"Text List\"/>\n"
+            + "<style>.vp-app .vp-btn{color:#fff;background:#123}\n.vp-app .vp-menu{position:absolute;top:36px}</style>\n"
+            + "<Block name=\"LayoutBlank\"><slot name=\"Content\"><div class=\"vp-app\">\n<div class=\"vp-menu\" list=\"Rows\"><p>{{ Rows.Current }}</p></div>\n"
+            + "<popup show=\"Show\"><div class=\"vp-modal\"><button class=\"vp-btn\" onclick=\"Go\">Send</button></div></popup>\n</div></slot></Block>\n</screen>";
+        var result = JsonSerializer.SerializeToNode(JobRunner.Run(Host("portal"), null, Job(new JsonArray(Op(page), Logic("VisualPortal")), "portal"), Path.Combine(Work, "portal", "out.oml")))!.AsObject();
+        Assert.True(result["accepted"]!.GetValue<bool>(), result["details"]?.ToJsonString());
+        var warning = Assert.Single((result["highWarnings"] as JsonArray ?? []).OfType<JsonObject>(), w => w["code"]!.ToString() == ScreenVisual.SelectorMissesRuntime);
+        output.WriteLine(warning.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+        var subjects = warning["suggestion"]!["subjects"]!.AsArray().Select(s => s!.ToString()).ToList();
+        Assert.Contains(subjects, s => s.StartsWith("popup-portal: .vp-app .vp-btn", StringComparison.Ordinal));
+        Assert.Contains(subjects, s => s.StartsWith("list-position: .vp-app .vp-menu", StringComparison.Ordinal));
+        var patch = warning["suggestion"]!["patch"]!.ToJsonString();
+        Assert.Contains(".popup-dialog .vp-btn", patch);
+        Assert.Contains("position:absolute!important", patch);
+    }
+
     // ---- one answer: the warnings of a job over the reactive fixture -----------------------------------------------------------
 
     private const string Page = "<screen name=\"VisualCheck\" roles=\"Registered\" actions=\"Go\">\n<var name=\"Rows\" type=\"Text List\"/>\n<var name=\"Q\" type=\"Text\"/>\n<var name=\"Ok\" type=\"Boolean\"/>\n<var name=\"N\" type=\"Integer\"/>\n"
@@ -195,7 +350,7 @@ public sealed class ScreenVisualCheckTests(ITestOutputHelper output)
         for (var i = 0; i < 15; i++)
         {
             var name = "NoRule" + i;
-            ops.Add(Op($"<screen name=\"{name}\" roles=\"Registered\"><Block name=\"LayoutBlank\"><slot name=\"Content\"><div class=\"zz-none-{i}\"><p><strong>a</strong><span>b</span></p></div></slot></Block></screen>"));
+            ops.Add(Op($"<screen name=\"{name}\" roles=\"Registered\"><Block name=\"LayoutBlank\"><slot name=\"Content\"><div class=\"zz-none-{i}\"><p><strong>R$ 1</strong><span>b</span></p></div></slot></Block></screen>"));
         }
         var result = JsonSerializer.SerializeToNode(JobRunner.Run(Host("fifteen"), null, Job(ops, "fifteen"), Path.Combine(Work, "fifteen", "out.oml")))!.AsObject();
         Assert.True(result["accepted"]!.GetValue<bool>(), result["details"]?.ToJsonString());

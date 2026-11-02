@@ -222,6 +222,8 @@ public static partial class ScreenVisual
             if (kind.Contains("BlockInstance", StringComparison.Ordinal)) { Block(widget, parent, depth); return; }
             if (kind == "TableRecords") { Table(widget, parent, placeholders, depth); return; }
             var row = RuntimeDomTable.Row(platform, kind);
+            // C-12: the check sees a popup where the runtime mounts it, in a portal of the body (the render keeps it in place).
+            if (row?.Widget == "IPopup" && render == null) { Popup(widget, row, placeholders, depth); return; }
             if (row == null || row.Element == null)
             {
                 var unknown = parent.Add(DomNode.Element(widget.Props.GetValueOrDefault("Tag") is { Length: > 0 } t ? Unquote(t) : "div"));
@@ -247,6 +249,8 @@ public static partial class ScreenVisual
                 host = element;
             }
             var tag = row.Element.StartsWith('{') ? (widget.Props.GetValueOrDefault("Tag") is { Length: > 0 } t2 ? Unquote(t2) : "div") : row.Element;
+            // F8: a List renders its Tag only in Mode Custom (the Studio's ListDescriptor: "Default mode sets tag as div").
+            if (widget.Basic == "List" && row.Element.StartsWith('{') && !string.Equals(Unquote(widget.Props.GetValueOrDefault("Mode") ?? ""), CustomMode, StringComparison.Ordinal)) tag = "div";
             var node = host.Add(Mark(DomNode.Element(tag), widget));
             foreach (var (name, value) in row.Attributes) if (name.StartsWith("data-", StringComparison.Ordinal)) node.Attributes.Add((name, value));
             var list = new List<string>();
@@ -358,6 +362,31 @@ public static partial class ScreenVisual
                 if (rowClasses.Count > 0) tr.SetAttr("class", string.Join(" ", rowClasses));
                 Emit(widget.Contents.GetValueOrDefault(content) ?? [], tr, placeholders, depth + 1);
             }
+        }
+
+        /// <summary>C-12 (F-AiChatbot-05, foreseen and confirmed by F-Jesse): the runtime mounts a popup in a portal of the body,
+        /// outside the page: body &gt; div.portal-class &gt; div &gt; div.popup-backdrop &gt; div.popup-dialog &gt; div.popup-content
+        /// &gt; its content. A selector scoped by an element of the page around the popup does not reach its content.</summary>
+        private void Popup(PrototypeRender.NativeWidget widget, RuntimeDomRow row, IReadOnlyDictionary<string, List<PrototypeRender.NativeWidget>>? placeholders, int depth)
+        {
+            var portal = prediction.Root.Add(DomNode.Element("div"));
+            portal.SetAttr("class", PortalClass);
+            portal.Runtime = row.Widget;
+            var host = portal.Add(DomNode.Element("div"));
+            host.Runtime = row.Widget;
+            foreach (var wrapper in row.Wrappers)
+            {
+                var element = host.Add(DomNode.Element(wrapper.Tag));
+                foreach (var a in wrapper.Attributes) element.Attributes.Add(a);
+                if (wrapper.Classes.Count > 0) element.SetAttr("class", string.Join(" ", wrapper.Classes));
+                element.Runtime = row.Widget;
+                element.RuntimeSelector = PrototypeAdapters.WrapperSelector(row, wrapper);
+                if (row.Status == RuntimeStatus.Inferred) element.SetAttr("data-ssam-runtime", "inferred");
+                host = element;
+            }
+            var content = host.Add(Mark(DomNode.Element("div"), widget));
+            content.SetAttr("class", "popup-content");
+            Emit(Kids(widget), content, placeholders, depth + 1);
         }
 
         private static void Sentinel(DomNode list)

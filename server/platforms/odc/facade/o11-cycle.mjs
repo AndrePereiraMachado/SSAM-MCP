@@ -73,7 +73,7 @@ import { resolveOpenModule } from './studio-module.mjs';
 import * as standingGrants from './standing-grants.mjs';
 import { prepareIntegrationJob } from './integration-documents.mjs';
 import { textFormRefusal, partReader } from './text-routes.mjs';
-import { CODE_JOB_TEXT, removedOf, grammarCard, exampleCall, exampleLogicTexts } from './ssam-code.mjs';
+import { CODE_JOB_TEXT, removedOf, nextHtmlBasedOnOf, grammarCard, exampleCall, exampleLogicTexts } from './ssam-code.mjs';
 import { taskWarnings, warningFields, producerHashWarningsOf } from './delivery-warnings.mjs';
 import { jobSummary } from './job-summary.mjs';
 import { mergeNormalizations } from './normalizations.mjs';
@@ -84,10 +84,14 @@ import { PHASES_META, noteStudioHolder, pendingOperationOf, phaseOfCall, awaitRe
 import { watchPendingOperation } from './studio-pending-operation.mjs';
 import { stallRecovery } from './studio-recovery.mjs';
 import { cleanStall } from './bridge-stall.mjs';
+import { stoppedProcessDetail } from './process-stop.mjs';
 // F5: what a delivery reused of its producer signatures, in every answer (producer-signatures.mjs).
 import { producerSignaturesOf } from './producer-signatures.mjs';
 // F1: the served proof of the stylesheets a delivery changed, after its publication.
-import { elementsOfKernel, jobWritesStyleSheets, proveServed, servedBaseline, servedRefusal, levelsOf, BUDGET_MS } from './served-proof.mjs';
+import { imageFillArgs } from './image-fill-grants.mjs';
+// R3-S1: the module and environment an O11 kernel call on a job is for (the grants of image files are bound to them).
+export const fillPlace = input => ({ lane: 'o11', module: input?.module ?? null, environment: input?.expectedEnvironment ?? null });
+import { elementsOfKernel, jobWritesStyleSheets, proveServed, servedBaseline, servedRefusal, levelsOf, BUDGET_MS, rememberServedPending, settleServedPending } from './served-proof.mjs';
 // fix/system-reference: one rule for a producer's name ((System) and System are one producer, bound as System).
 import { bindingKeyOf, listedKeyOf, slotKeyOf, captureEntryOf, sameProducer, producersNamed, o11UnknownProducer, separatorKeyProblems, producerTextsOf } from './producer-names.mjs';
 // fix/unpublished-library (family OF): the O11 lane's PRODUCER_SIGNATURE_MISSING of elements the producer's open model has
@@ -203,7 +207,9 @@ export function studioWritesOf(state) {
       // and the error of an unknown outcome.
       ...(r.endedBy ? { endedBy: r.endedBy } : {}),
       ...(['failed', 'unknown'].includes(r.outcome) ? { error: clean(r.error ?? 'no cause reported', 160) } : {}), ...(r.fallback ? { fallback: r.fallback } : {}),
-      ...(WRITE_OUTCOMES.has(r.outcome) ? { undo: 'Ctrl+Z in Service Studio undoes it' } : {}) };
+      ...(WRITE_OUTCOMES.has(r.outcome) ? { undo: 'Ctrl+Z in Service Studio undoes it' } : {}),
+      // C-06 (F-FitBody-05): what a Manage Dependencies added stays when the delivery is not merged; how the person removes it.
+      ...(typeof r.remove === 'string' && r.remove ? { remove: clean(r.remove, 300) } : {}) };
   });
 }
 export function referencesAddedOf(state) {
@@ -382,7 +388,7 @@ export function deliverArguments(input, { work, port }) {
   const close = input.publish === true ? [] : ['--close-opened-tab'];
   if (input.resume) return ['deliver', '--resume', input.resume, '--work', work, '--port', String(port),
     ...(input.expectedEnvironment ? ['--expected-environment', input.expectedEnvironment] : []), ...(input.autoPatch === false ? ['--auto-patch', 'off'] : []), ...close];
-  return ['deliver', '--module', input.module, '--job', input.job, ...(input.checks?.length ? ['--checks', input.checks.join(',')] : []),
+  return ['deliver', '--module', input.module, '--job', input.job, ...imageFillArgs(input.job, fillPlace(input)), ...(input.checks?.length ? ['--checks', input.checks.join(',')] : []),
     ...producerArgs(input.producers, input.captureProducers, { names: null }), ...(input.expectedEnvironment ? ['--expected-environment', input.expectedEnvironment] : []),
     '--work', work, '--port', String(port), ...(input.autoPatch === false ? ['--auto-patch', 'off'] : []), ...close];
 }
@@ -716,12 +722,13 @@ export function preflightProblems(problems, limit = 300) {
 // kernel's own (problems of the task, then of its apply) or, without them, one per new Verify error, data contract or refactor
 // difference and uncovered message (contractProblems), never an empty list. ops: the ops the errors name. Empty without the
 // kernel's apply data.
-export function contractRefusal(apply, own = null) {
+// job: the document or the file of the job the contract refused (its patches are judged on it, C-01 c).
+export function contractRefusal(apply, own = null, job = null) {
   const contract = validationContract(apply);
   if (!contract) return { fields: {}, summary: null, ops: [] };
   const list = Array.isArray(own) && own.length ? own : Array.isArray(apply.problems) && apply.problems.length ? apply.problems : contractProblems(apply);
   const ops = [...new Set(list.filter(p => p && p.severity !== 'warning' && Number.isInteger(p.op)).map(p => p.op))];
-  return { fields: { contract, ...refusalFields(preflightProblems(list), apply) }, summary: contract.summary, ops };
+  return { fields: { contract, ...refusalFields(preflightProblems(list), apply, { job }) }, summary: contract.summary, ops };
 }
 // The refusal names the job it ran (withJob adds job and jobSha256), so every problem is fixed with one patch + basedOn.
 // primeira-certa A3: the kernel's single refusal over the live module (every phase, verifyRan, phases), grouped only to
@@ -770,10 +777,14 @@ export function deliveryFields(state) {
   const integration = Array.isArray(state?.integration) ? state.integration : Array.isArray(state?.apply?.integration) ? state.apply.integration : [];
   // ssam_code: what an action text or a screen edit removed (the lines and elements it left out), never silent.
   const removed = removedOf(state?.apply?.results);
+  // C-16: the basedOn of the next edit of every root an html edit wrote, on the capture the delivery took after the merge.
+  const delivered = state?.deliveredSnapshot;
+  const nextHtml = nextHtmlBasedOnOf(state?.apply?.results, typeof delivered?.sha256 === 'string' && /^[0-9a-f]{64}$/i.test(delivered.sha256) ? delivered.sha256.toLowerCase() : null);
   // The generated standard actions of the data model (op entity-actions): what was created, unchanged and kept.
   const entityActions = entityActionsOf(state?.entityActions ?? state?.apply?.entityActions);
   return { ...(leftovers.length ? { leftovers: leftovers.slice(0, 20), ...(leftovers.length > 20 ? { leftoversTotal: leftovers.length } : {}) } : {}),
     ...(removed.length ? { removed: removed.slice(0, 20), ...(removed.length > 20 ? { removedTotal: removed.length } : {}) } : {}),
+    ...(nextHtml.length ? { nextHtmlBasedOn: nextHtml.slice(0, 20), ...(nextHtml.length > 20 ? { nextHtmlBasedOnTotal: nextHtml.length } : {}) } : {}),
     ...(screenRoles.length ? { screenRoles: screenRoles.slice(0, 20), ...(screenRoles.length > 20 ? { screenRolesTotal: screenRoles.length } : {}) } : {}),
     ...(integration.length ? { integration: integration.slice(0, 10), ...(integration.length > 10 ? { integrationTotal: integration.length } : {}) } : {}),
     ...(entityActions ? { entityActions } : {}),
@@ -783,13 +794,21 @@ export function deliveryFields(state) {
     ...referencesRefreshedOf(state),
     // Review A1: what the Studio's Manage Dependencies added to the module before the merge, with the undo.
     ...referencesAddedOf(state),
-    // lentidao 2026-10-12: the kernel's JobNormalizer rewrites of this job (apply receipt), never silent.
-    ...normalizationsOf(state?.apply),
+    // lentidao 2026-10-12: the kernel's JobNormalizer rewrites of this job (apply receipt), never silent; F1b: the waits for a
+    // busy Studio (studioWaits) are said with them.
+    ...withStudioWaits(normalizationsOf(state?.apply), state),
     ...patchesAppliedOf(state?.apply),
     // fam-deps review (finding 1): the dialogs the bridge closed for this delivery.
     ...dialogsOf(state),
     // R3-C (K2): the names the Studio gave on its own in the merge, which the content proof accepted only as predicted.
     ...nativeRenamesOf(state) };
+}
+// F1b stop 4 (Delivery.cs StudioBusyBridge): each step the busy Studio withdrew before it ran, waited for and sent again, as a
+// normalization {rule: STUDIO_BUSY, at: <bridge method>, note}; nothing when the Studio was never busy.
+export function withStudioWaits(normalized, state) {
+  const waits = (Array.isArray(state?.studioWaits) ? state.studioWaits : []).filter(w => w && typeof w === 'object' && typeof w.note === 'string')
+    .map(w => ({ rule: 'STUDIO_BUSY', at: String(w.method ?? 'bridge'), note: w.note }));
+  return waits.length ? { normalizations: mergeNormalizations(normalized?.normalizations, waits) } : normalized;
 }
 // R3-C (K2, Delivery.cs nativeRenames): the elements the Studio renamed on its own during the merge (NativeNames: an aggregate
 // named Get + plural that received a filter by an attribute), short, with a note; absent when none. The merge applied them and
@@ -951,7 +970,11 @@ function deliverOutcomeCore(run, { trackId, work, job, taskId, since, input = {}
     return preflightRefusal(run.envelope, { taskId: taskId ?? null }, /^[A-Z][A-Z0-9_]{2,}$/.test(String(run.envelope.code ?? '')) ? run.envelope.code : 'PREFLIGHT_REFUSED', job);
   if (!state || typeof state !== 'object') {
     const found = findKernelTask(work, { taskId, job, since });
-    const error = run?.envelope?.error ?? (run?.timedOut ? 'deliver timed out' : 'deliver ended without an answer');
+    // R4 (family C of the capture of 02/11): a kernel process that stopped without an envelope says why, from its stderr
+    // (exception lines only, server paths <server>), and after which recorded stage; the stage alone read as a failed capture.
+    const stopped = run?.envelope ? '' : stoppedProcessDetail(run);
+    const said = run?.timedOut ? 'deliver timed out' : 'deliver ended without an answer';
+    const error = run?.envelope?.error ?? (stopped ? 'The delivery process stopped' + (found?.stage ? ' after the ' + found.stage + ' stage' : '') + ' (' + stopped + '); ' + said : said);
     if (found) state = { ...found, error: found.error ?? error };
     else if (run?.timedOut) return { ok: false, outcome: 'uncertain', code: 'DELIVERY_UNCERTAIN', stage: null, taskId: null, error: clean(error + '; the outcome is unknown and nothing was repeated'),
       continuation: { tool: 'ssam_task', arguments: { id: trackId }, why: 'Reads what this delivery left recorded; never repeat it.' } };
@@ -1387,7 +1410,7 @@ async function applyOnly(input, job, ctx, task, proto = null) {
     const keptJob = privateWorkspace ? path.join(folder, 'job.json') : null;
     const base = privateWorkspace ? path.join(folder, 'base.oml') : snapshot;
     if (privateWorkspace) { fs.mkdirSync(folder, { recursive: true }); fs.copyFileSync(job, keptJob); fs.copyFileSync(snapshot, base); }
-    const applyOnce = file => ctx.runAnvil(['apply', '--job', file, '--base', base, '--out', path.join(folder, 'candidate.oml'), '--work', path.join(folder, 'model'),
+    const applyOnce = file => ctx.runAnvil(['apply', '--job', file, ...imageFillArgs(file, fillPlace(input)), '--base', base, '--out', path.join(folder, 'candidate.oml'), '--work', path.join(folder, 'model'),
       ...producerArgs(input.producers, [], { names: null }), ...(input.autoPatch === false ? ['--auto-patch', 'off'] : []), ...(input[BASED_ON] ? ['--based-on', input[BASED_ON]] : [])], { timeoutMs: ctx.applyTimeoutMs });
     let run;
     if (proto) {
@@ -1412,7 +1435,7 @@ async function applyOnly(input, job, ctx, task, proto = null) {
       const { messages, omitted } = validationMessages({ apply: data });
       // The part of the contract that refused and every problem (as deliverOutcome answers a delivery), never only messages;
       // the op the errors name, when one, is the op the correction patches.
-      const refused = contractRefusal(data);
+      const refused = contractRefusal(data, null, job);
       return { ok: false, valid: false, capture, code: 'VALIDATION_REFUSED', stage: 'apply',
         error: clean('Job rejected by the validation contract' + (refused.summary ? ' (' + refused.summary + ')' : '') + '; nothing was merged.', 400),
         ...refused.fields, ...(refused.ops.length === 1 ? { failedOp: refused.ops[0] } : {}),
@@ -1423,7 +1446,8 @@ async function applyOnly(input, job, ctx, task, proto = null) {
     if (run?.envelope?.ok === false && (run.envelope.code === 'PREFLIGHT_REFUSED' || (Array.isArray(run.envelope.problems) && run.envelope.problems.length)))
       return preflightRefusal(run.envelope, { stage: 'apply' }, /^[A-Z][A-Z0-9_]{2,}$/.test(String(run.envelope.code ?? '')) ? run.envelope.code : 'PREFLIGHT_REFUSED');
     const failedOp = failedOpOf(run?.envelope?.error, job);
-    return refusal('APPLY_FAILED', clean(run?.envelope?.error ?? [...(run?.stderr ?? [])].slice(-3).join(' ')) || 'apply failed',
+    const stopped = run?.envelope ? '' : stoppedProcessDetail(run);
+    return refusal('APPLY_FAILED', clean(run?.envelope?.error ?? (stopped ? 'The apply process stopped (' + stopped + ')' : [...(run?.stderr ?? [])].slice(-3).join(' ')), 600) || 'apply failed',
       doctor('Reports the O11 lane CLI and Studio; nothing was merged.'), { stage: 'apply', ...(failedOp != null ? { failedOp } : {}) });
   } catch (error) {
     if (error instanceof Refusal) throw error;
@@ -1598,7 +1622,21 @@ export function publishField(value) {
     ...(value?.diagnosis ? { diagnosis: value.diagnosis } : {}),
     ...(value?.version != null ? { version: value.version } : {}), ...(value?.lastPublication?.at ? { at: value.lastPublication.at } : {}),
     ...(messages?.length ? { messages } : {}), ...(Array.isArray(value?.dialogsSeen) && value.dialogsSeen.length ? { dialogsSeen: value.dialogsSeen } : {}),
-    ...(Array.isArray(value?.consumers) ? { consumers: value.consumers } : {}) };
+    ...(Array.isArray(value?.consumers) ? { consumers: value.consumers } : {}),
+    // B7 (W4 item 3): the TrueChange read the publication skipped because the delivery's own Verify of the same tab was clean.
+    ...(value?.trueChange ? { trueChange: value.trueChange } : {}) };
+}
+// B7 (port of proto 1ea02ff4, W4 item 3): what the delivery of this call proved of the module it merged, for the publication
+// right after it (o11-publish.mjs verifiedBy): its tab's key and its Verify (errors, isValid, newErrors, settled: whether the
+// bridge read it once the Studio was idle after the merge, C28). Null when the delivery did not end delivered with a Verify of
+// its own: then the publication reads TrueChange itself, as before.
+export function deliveryVerified(state) {
+  const validation = state?.validation;
+  if (state?.delivered !== true || !validation || typeof validation !== 'object' || Array.isArray(validation) || typeof state.moduleKey !== 'string' || !state.moduleKey) return null;
+  const errors = Number.isFinite(validation.errors) ? validation.errors : null;
+  return { moduleKey: state.moduleKey, errors, isValid: typeof validation.isValid === 'boolean' ? validation.isValid : null,
+    newErrors: Number.isFinite(validation.newErrors) ? validation.newErrors : null, settled: validation.settled === true,
+    ...(typeof state.updatedAt === 'string' ? { at: state.updatedAt } : {}) };
 }
 async function publishAfter(delivered, input, { words, authorization, job = null, kernelState = null }, ctx, signal) {
   const run = await ctx.publisher();
@@ -1609,7 +1647,8 @@ async function publishAfter(delivered, input, { words, authorization, job = null
     ? await servedBaseline(served.elements, { ...served.where, reader: ctx.servedFetch, deadline: served.deadline }).catch(() => new Map()) : new Map();
   // The same words cover the publication; a standing grant must cover publish itself (o11-publish looks it up).
   const value = await run({ module: input.module, ...(authorization?.source === 'standing-grant' ? {} : { authorize: words }),
-    ...(input.expectedEnvironment ? { expectedEnvironment: input.expectedEnvironment.trim().toLowerCase() } : {}) }, { signal });
+    ...(input.expectedEnvironment ? { expectedEnvironment: input.expectedEnvironment.trim().toLowerCase() } : {}) },
+    { signal, ...(deliveryVerified(kernelState) ? { verified: deliveryVerified(kernelState) } : {}) });
   const publish = publishField(value);
   const base = { ...delivered, ...(value?.lastPublication ? { lastPublication: value.lastPublication } : {}) };
   if (value?.ok !== true) return { ...base, ok: false, result: RESULT.delivered, code: publish.code ?? (publish.outcome === 'uncertain' ? 'PUBLISH_UNCERTAIN' : 'PUBLISH_FAILED'), failed: 'publish',
@@ -1855,8 +1894,33 @@ async function deliverWith(input, auth, ctx, lane, signal) {
     }
     const { fix: _fix, ...rest } = input; input = rest;
   }
-  const answer = await deliverRun(input, auth, ctx, lane, signal);
+  let answer = await deliverRun(input, auth, ctx, lane, signal);
+  // F1b stop 5 (owner 2026-11-02: SSAM programs together with the person): a producer published again, or its references
+  // refreshed in the Studio, between the capture and the merge wrote nothing (PRODUCER_CHANGED, its continuation is this
+  // same delivery with closePrevious of the refused task). This call does it itself, on the version it just observed, and
+  // says so in normalizations; at most PRODUCER_REDO_LIMIT times, then the refusal stands as before.
+  const notes = [];
+  for (let i = 0; i < PRODUCER_REDO_LIMIT; i++) {
+    const next = producerRedoOf(answer, input);
+    if (!next) break;
+    notes.push({ rule: 'PRODUCER_CHANGED', at: 'merge', ...(answer.taskId ? { taskId: answer.taskId } : {}),
+      note: 'A producer of this module changed between the capture and the merge (published again, or its references refreshed in the Studio); nothing was merged then. SSAM closed that attempt and delivered the same job again on the version it observed.' });
+    input = next;
+    answer = await deliverRun(input, auth, ctx, lane, signal);
+  }
+  if (notes.length && answer && typeof answer === 'object') answer = { ...answer, normalizations: mergeNormalizations(answer.normalizations, notes) };
   return fixes && answer && typeof answer === 'object' ? { ...answer, fixesApplied: fixes } : answer;
+}
+const PRODUCER_REDO_LIMIT = 2;
+// The same delivery again that a PRODUCER_CHANGED refusal names (closeAndDeliver): the same module and the job file it ran.
+export function producerRedoOf(answer, input) {
+  const next = answer?.ok === false && answer.code === 'PRODUCER_CHANGED' && answer.merged !== true ? answer.continuation : null;
+  const args = next?.tool === 'o11_deliver' ? next.arguments : null;
+  if (!args || typeof args.job !== 'string' || !args.module || String(args.module).toLowerCase() !== String(input.module ?? '').toLowerCase()) return null;
+  if (input.resume || input.close) return null;
+  const { patch: _patch, basedOn: _basedOn, closePrevious: _closed, ...rest } = input;
+  return { ...rest, job: args.job, ...(args.closePrevious ? { closePrevious: args.closePrevious } : {}),
+    ...(args.producers ? { producers: args.producers } : {}), ...(args.captureProducers ? { captureProducers: args.captureProducers } : {}) };
 }
 
 async function deliverRun(input, { words, authorization, wordsSha256 = words ? sha256(words) : null }, ctx, lane, signal) {
@@ -1932,11 +1996,11 @@ async function deliverRun(input, { words, authorization, wordsSha256 = words ? s
     // R2-F rule 1, the static check: null when it passes (its problems of an incomplete verdict are carried into the answer),
     // else the refusal that stops before the Studio: PREFLIGHT_REFUSED (a complete verdict) or PREFLIGHT_UNAVAILABLE (none).
     const staticCheck = async () => {
-      const run = await (ctx.checkRunner ?? ctx.runAnvil)(['check-job', '--job', resolved.path, '--basis-fresh', 'false'], { timeoutMs: ctx.applyTimeoutMs, read: true });
+      const run = await (ctx.checkRunner ?? ctx.runAnvil)(['check-job', '--job', resolved.path, ...imageFillArgs(resolved.path, fillPlace(input)), '--basis-fresh', 'false'], { timeoutMs: ctx.applyTimeoutMs, read: true });
       const checked = run?.envelope?.data ?? run?.envelope;
       if (checked?.valid === false || checked?.problems?.some(p => p.severity !== 'warning')) {
         if (checked.static?.complete === true) return preflightRefusal(checked, {}, 'PREFLIGHT_REFUSED', resolved.path);
-        carriedPreflight = { carry: true, problems: checked.problems ?? [], static: checked.static ?? { complete: false }, local: lane.local, lane: 'o11', mode: 'deliver' };
+        carriedPreflight = { carry: true, problems: checked.problems ?? [], static: checked.static ?? { complete: false }, local: lane.local, lane: 'o11', mode: 'deliver', job: resolved.path };
         return null;
       }
       if (checked?.valid !== true) return refusal('PREFLIGHT_UNAVAILABLE', 'The static job check did not return a verdict; nothing was sent to the Studio.',
@@ -2143,12 +2207,19 @@ async function deliverRun(input, { words, authorization, wordsSha256 = words ? s
     const module = input.module ?? findKernelTask(lane.work, { taskId: input.resume })?.module ?? null;
     // C32, F1: the kernel's touch of this delivery (and the elements none could reach).
     if (value && typeof value === 'object' && kernelState?.apply?.styleSheets) value = { ...value, ...touchOfKernel(kernelState.apply.styleSheets) };
+    // B5 (the proto line's C-04): the stylesheets a merged delivery changed wait, per environment and module, for the
+    // publication that proves them served (this publish:true, or a later o11_publish); only where this SSAM reads them (the
+    // person's own machine). The environment is the one the Studio's tab is connected to, else the one the call expected.
+    const servedWhere = value?.ok === true && ctx.servedFetch && module && kernelState?.apply?.styleSheets
+      ? { environment: kernelState?.environment ?? kernelState?.open?.environment ?? input.expectedEnvironment ?? null, module } : null;
+    if (servedWhere) rememberServedPending(lane.local, { ...servedWhere, theme: kernelState.apply.styleSheetsTheme ?? null, elements: elementsOfKernel(kernelState.apply.styleSheets) });
     if (input.publish === true) {
       // C08: only after a clean merge; otherwise the publication is skipped and the answer says so.
       if (value?.ok !== true) value = { ...value, publish: { requested: true, outcome: 'skipped' } };
       else {
         const begin = Date.now();
         value = await publishAfter(value, { ...input, module }, { words, authorization, job, kernelState }, ctx, signal);
+        if (servedWhere && value?.served) settleServedPending(lane.local, servedWhere, value.served);
         if (proto?.receipt) proto.receipt.timings.publishMs = Date.now() - begin;
         // The demo data of a prototype import (3.4): after a clean publication, into the empty entities the import marked,
         // with the words of this call, while the module is still open.

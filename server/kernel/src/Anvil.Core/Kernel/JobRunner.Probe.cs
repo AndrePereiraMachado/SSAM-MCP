@@ -323,14 +323,62 @@ public static partial class JobRunner
         return p["code"] + ": " + (message.Length > 160 ? message[..160] + "…" : message);
     }
 
+    private static readonly Regex EntityActionName = new(@"^(?:CreateOrUpdate|Create|Update|Delete|Get)(\w+?)(?:ForUpdate)?$", RegexOptions.Compiled);
+
+    /// <summary>C-39: for each op a patch changed, the names the op as sent declares and the patched op no longer does (the
+    /// scope reading of the job: the entities, attributes and structures of a data text, the actions of a logic op, the root of
+    /// a document).</summary>
+    private static Dictionary<int, HashSet<string>> LostDeclarations(Probe probe)
+    {
+        var lost = new Dictionary<int, HashSet<string>>();
+        if (probe.Changed is null || probe.Original is null || probe.Applied is null) return lost;
+        foreach (var op in probe.Changed)
+        {
+            if (op >= probe.Original.Count || op >= probe.Applied.Count) continue;
+            static HashSet<string> Declared(JsonNode? node)
+            {
+                if (node is not JsonObject one) return [];
+                try { var job = Preflight.ScopeJob.Of(new JsonArray(one.DeepClone())); return job.Ops.Count == 0 ? [] : new HashSet<string>(job.Ops[0].Declares, StringComparer.OrdinalIgnoreCase); }
+                catch (Exception) { return []; }
+            }
+            var before = Declared(probe.Original[op]);
+            before.ExceptWith(Declared(probe.Applied[op]));
+            if (before.Count > 0) lost[op] = before;
+        }
+        return lost;
+    }
+
+    /// <summary>The changed op whose patch dropped a name this problem quotes (directly, or the entity of an entity action:
+    /// CreateX is X's), or null.</summary>
+    private static (int Op, string Name)? LostBy(JsonObject problem, Dictionary<int, HashSet<string>> lost)
+    {
+        if (lost.Count == 0) return null;
+        foreach (var name in Subjects(problem))
+            foreach (var (op, names) in lost)
+            {
+                if (names.Contains(name)) return (op, name);
+                if (EntityActionName.Match(name) is { Success: true } entity && names.Contains(entity.Groups[1].Value)) return (op, entity.Groups[1].Value);
+            }
+        return null;
+    }
+
     // The refusal with what the round found: the problems of the job it could not see, and no patch where a patch caused one.
     private static Exception Merge(Exception refusal, ICodedError coded, List<JsonObject> listed, Probe probe, string opsPointer, Action<string>? log)
     {
         var said = listed.Select(Signature).ToHashSet(StringComparer.Ordinal);
         var broken = new Dictionary<int, string>();
         var added = new List<JsonObject>();
+        var lost = LostDeclarations(probe);
         foreach (var (p, cause) in probe.Found)
         {
+            // C-39 (F-FitBody-21/23): a problem of the round that names what the job declared in an op a patch changed, and the
+            // patched op no longer declares (an entity of a data text, its entity actions), is that patch's: the round found the
+            // patch drops work of the job, never a problem the refusal could not see.
+            if (cause == null && LostBy(p, lost) is { } dropper)
+            {
+                broken.TryAdd(dropper.Op, $"the patched op #{dropper.Op} no longer declares {dropper.Name}, which the job declared and op #{p["op"]} uses");
+                continue;
+            }
             var op = p["op"] is JsonValue v && v.TryGetValue<int>(out var i) ? i : (int?)null;
             // What the refusal already says (a problem no patch fixes, found again), and what only leaving a text out made
             // fail, is not news, nor the patch's fault.

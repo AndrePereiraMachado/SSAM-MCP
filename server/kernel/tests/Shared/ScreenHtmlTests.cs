@@ -22,8 +22,9 @@ public sealed class ScreenHtmlTests
         const string legacy = "/* ssam:native-layout */\n/* version 3, written by the html op (CX17) */\n.old{}\n/* /ssam:native-layout */";
         var upgraded = Anvil.Core.ScreenVisual.WithNativeLayout(before + legacy + after, out action);
         Assert.Equal("replaced", action);
-        Assert.Equal(before + Anvil.Core.ScreenVisual.NativeLayoutCss + after, upgraded);
-        Assert.Contains("/* version 4,", upgraded);
+        // Review W3-EDIT, 1: what the old block held that the engine never writes (.old{}) is kept, right after the new block.
+        Assert.Equal(before + Anvil.Core.ScreenVisual.NativeLayoutCss + "\n.old{}" + after, upgraded);
+        Assert.Contains("/* version " + Anvil.Core.ScreenVisual.NativeLayoutVersion + ",", upgraded);   // F8: version 5 (each table part its own rule)
         Assert.DoesNotMatch(@"\b(?:CX|X)\d+\b", upgraded);
         Assert.Equal(upgraded, Anvil.Core.ScreenVisual.WithNativeLayout(upgraded, out action));
         Assert.Equal("present", action);

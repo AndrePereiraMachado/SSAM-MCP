@@ -13,7 +13,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { anvilRoot } from '../workspace.mjs';
 import { SEAM_CODES, hostedContext, seamFields, usesWorkspace, workspacePath } from '../executor.mjs';
-import { AuthRequired, BridgeError, ProtocolError, Refusal, connectStudio } from './errors.mjs';
+import { ArgumentInvalid, AuthRequired, BridgeError, ProtocolError, Refusal, connectStudio, continuation } from './errors.mjs';
+import { ProtocolMismatch, genericProtocol, protocolContinuation } from './protocol.mjs';
 import { Auth, Resolver, credentialTarget, guardWrite, hostClass, hostedNoPrompt, hostedStudioOnly, hostsFile, openPrompt, promptAndWait, promptWaitMs, storedProfile,
   studioRunning } from './auth.mjs';
 import { locateStudioBridge, redact } from './bridge.mjs';
@@ -30,6 +31,7 @@ import { sha256 } from './util.mjs';
 import { ServiceCenterSso } from './sso.mjs';
 import { ownedSsoJar } from './solution-download.mjs';
 import { ownSsoSessions } from './sso-session-cache.mjs';
+import { AUTH_CODES, authContinuation } from '../refusal-codes.mjs';
 import { readOptions } from '../read-budget.mjs';
 import { approveDatabasePlan, DB_APPROVAL_ACTIONS } from './db-approval.mjs';
 import { authorizationContext } from '../authorization-context.mjs';
@@ -112,7 +114,57 @@ function ownerWords(words) {
   if (!wordsGiven(words)) throw new ProtocolError('WORDS_REQUIRED: --words must be the owner\'s own words, never a marker, a <template> or a sha256 of the server');
 }
 function required(args, ...names) {
-  if (names.some(n => !args[n])) throw new ProtocolError('Required: ' + names.map(n => '--' + n.replaceAll('_', '-')).join(', '));
+  const missing = names.filter(n => !args[n]);
+  if (missing.length) throw new ArgumentInvalid(camel(missing[0]), 'Required: ' + names.map(n => '--' + n.replaceAll('_', '-')).join(', '),
+    'give ' + missing.map(camel).join(', ') + (missing.includes('module_id') ? ' (or module: the exact module name; the call resolves its numeric ID)' : ''));
+}
+
+// ---- arguments the call gives in another form (the SC_PROTOCOL_INVALID of 14..24/10, every one a local refusal) ----------------
+// A module name as moduleId (timer-run moduleId:"SSAMCoverageReserve"), a module or application name where the Studio API read
+// takes its key (module-id/consumers/versions module:"X", application-dependencies application:"Equipment Loan Portal"), a
+// page path written with /ServiceCenter/: each is resolved here, from the live listing when a key is needed, and named in the
+// answer (normalizations); an exact name that matches nothing, or two, still refuses (SC_ARGUMENT_INVALID with its fix).
+const NUMERIC_ID = /^[1-9][0-9]*$/;
+const SC_KEY = /^[A-Za-z0-9*_+/=-]{1,100}$/;
+const MODULE_KEY_READS = { 'module-id': ['eSpace'], versions: ['eSpace'], consumers: null };
+const APPLICATION_KEY_READS = ['application', 'application-api', 'application-dependencies', 'application-database'];
+export function normalizeArguments(args, normalized) {
+  if (args.module_id && !NUMERIC_ID.test(String(args.module_id).trim()) && !args.module && !args.module_key) {
+    normalized.push({ argument: 'moduleId', value: args.module_id, as: 'module', why: 'not a numeric ID: taken as the exact module name, whose numeric ID the call resolves' });
+    args.module = String(args.module_id).trim(); args.module_id = null;
+  }
+  if (args.action === 'page-layout' && typeof args.path === 'string') {
+    const pagePath = args.path.trim().replace(/^https:\/\/[^/]+/i, '').replace(/^\/?ServiceCenter\//i, '');
+    if (pagePath !== args.path) { normalized.push({ argument: 'path', value: args.path, as: pagePath, why: 'the page under /ServiceCenter/ is named without that prefix' }); args.path = pagePath; }
+  }
+}
+async function resolveKeys(api, args, normalized) {
+  if (Object.hasOwn(MODULE_KEY_READS, args.action) && (!args.module_key || !SC_KEY.test(args.module_key))) {
+    const name = args.module || args.module_key;
+    if (!name) throw new ArgumentInvalid('moduleKey', `${args.action} needs the module: --module-key must be the key from a Service Center listing`, 'give module: the exact module name (the call resolves its key), or moduleKey from o11_service_center_read {action:"modules"}');
+    const key = await api.moduleKey({ ...args, module: name, module_key: null }, MODULE_KEY_READS[args.action]);
+    normalized.push({ argument: args.module ? 'module' : 'moduleKey', value: name, as: 'moduleKey', key, why: 'the Studio API read takes the key: resolved from the live module listing by the exact name' });
+    args.module_key = key;
+  }
+  if (APPLICATION_KEY_READS.includes(args.action) && (!args.application_key || !SC_KEY.test(args.application_key))) {
+    const name = args.application || args.application_key;
+    if (!name) throw new ArgumentInvalid('applicationKey', `${args.action} needs the application: --application-key must be the key from a Service Center listing`, 'give application: the exact application name (the call resolves its key), or applicationKey from o11_service_center_read {action:"applications"}');
+    const [key] = await api.application({ ...args, application: name, application_key: null });
+    normalized.push({ argument: args.application ? 'application' : 'applicationKey', value: name, as: 'applicationKey', key, why: 'the Studio API read takes the key: resolved from the live application listing by the exact name' });
+    args.application_key = key;
+  }
+}
+// Hosted (registry null): the server's registry is the owner's, never another customer's answer: no host is listed or suggested.
+function missingHost(argv, registry) {
+  let hosts = [];
+  if (registry) try { hosts = Object.entries(JSON.parse(fs.readFileSync(registry, 'utf8').replace(/^\uFEFF/, '')).hosts ?? {}).map(([h, v]) => ({ host: h, class: v?.class ?? 'corporate' })); } catch { /* no registry */ }
+  const personal = hosts.filter(h => h.class === 'personal');
+  let next = null;
+  try {
+    const call = sameCall(argv);
+    if (personal.length === 1 && call.tool === 'o11_service_center_read') next = continuation(call.tool, { ...call.arguments, host: personal[0].host }, 'the only personal environment registered; another host is named by the user');
+  } catch { /* no corrected call */ }
+  return new ArgumentInvalid('host', 'Required: --host', 'give host: the O11 environment DNS name' + (hosts.length ? ' (registered: ' + hosts.map(h => h.host + ' ' + h.class).join(', ') + ')' : ''), { continuation: next });
 }
 
 function valueFile(file) {
@@ -134,7 +186,7 @@ export function journalDefault(env = process.env) {
 export function capabilities() {
   return { ok: true, protocol: 'Native Service Studio APIs and headless HTTP for Service Center pages (sc_http); no window transport.',
   authentication: 'studio (the connected Studio\'s own session) -> the stored credential profile of the host (Windows Credential Manager, '
-    + 'credential-profiles) -> only when the host has nothing stored, the private Windows prompt (windows-o11-credential.ps1 -Mode bootstrap) '
+    + 'credential-profiles) -> only when the host has nothing stored, the private Windows prompt (a managed window, confirmed visible; a repeated call brings it to the front) '
     + 'in its own window, waited for in the same call up to SSAM_PROMPT_WAIT_MS (never past the read budget), then CREDENTIAL_PROMPT_PENDING, '
     + 'resumable. No browser or Studio login dialog is opened. Missing headless SSO support is reported explicitly. Service Center reads share a 90-second budget, including cold SSO authentication.',
   session: SESSION, reads: { 'studio-api': API_READS, pages: WEB_READS, local: ['capabilities', 'receipt'] },
@@ -158,9 +210,11 @@ export function capabilities() {
     + 'live proofs (simulation shapes, DeleteModule of an extension, GetConsumers of an extension) are pending; see docs/OPERACOES-O11.md' };
 }
 
+// session {requested, source}: the session the caller asked for and the source that answered (Auth.session).
+const sessionOf = auth => (typeof auth?.session === 'function' ? { session: auth.session() } : {});
 const answer = (auth, result) => (result && typeof result === 'object' && !Array.isArray(result)
-  ? { ok: Object.hasOwn(result, 'ok') ? result.ok : true, host: auth.host, auth: auth.describe(), ...result }
-  : { ok: true, host: auth.host, auth: auth.describe(), result });
+  ? { ok: Object.hasOwn(result, 'ok') ? result.ok : true, host: auth.host, auth: auth.describe(), ...sessionOf(auth), ...result }
+  : { ok: true, host: auth.host, auth: auth.describe(), ...sessionOf(auth), result });
 
 // Vault status, once per target and call; many() asks several targets at once (one PowerShell run by default).
 function memoPresent(single, many) {
@@ -200,11 +254,16 @@ async function session(args, { locate, present, opener, running, registry, profi
     return out;
   }
   required(args, 'host');
+  const signedBy = source => ({ requested: args.session ?? 'auto', source });
+  // authPrompt=never holds on every sign-in path: nothing stored is AUTH_REQUIRED, never the private window (lote 4, F3).
+  const ask = options => (args.auth_prompt === 'never'
+    ? Promise.reject(new AuthRequired('AUTH_REQUIRED', `${options.why}; nothing was prompted (authPrompt=never).`, { auth: { target: options.target } }))
+    : promptAndWait(options));
   if (args.action === 'session-sign-in' && args.surface === 'lifetime') {
     if (hostedContext()) throw hostedStudioOnly('LifeTime (its service-account token)');
     const target = credentialTarget(host, 'LifeTime');
     if (await present(target)) return { ok: true, host, already: true, auth: { path: 'vault', host, target } };
-    const stored = await promptAndWait({ host, kind: 'LifeTime', target, opener, present, wait, why: `No LifeTime service-account token is stored for ${host}` });
+    const stored = await ask({ host, kind: 'LifeTime', target, opener, present, wait, why: `No LifeTime service-account token is stored for ${host}` });
     return { ok: true, host, stored: true, auth: { path: 'vault', host, target }, attempts: [stored] };
   }
   const bridge = await locate();
@@ -232,12 +291,12 @@ async function session(args, { locate, present, opener, running, registry, profi
       if (!selected.ok) throw new AuthRequired(selected.code, selected.reason ?? 'Choose a credential in the private Windows form.',
         { auth: { path: 'profiles', host, candidateCount: selected.candidateCount, resumable: selected.resumable === true } });
       return { ok: true, host, stored: true, authenticated: false,
-        auth: { path: 'vault', host, user: selected.principal, target: selected.target, source: selected.source } };
+        auth: { path: 'vault', host, user: selected.principal, target: selected.target, source: selected.source }, session: signedBy('vault') };
     }
     if (bridge && args.session !== 'vault') {
       const info = await bridge.session(host);
       const studio = info?.studio && typeof info.studio === 'object' && !Array.isArray(info.studio) ? info.studio : info;
-      if (studio.signedIn === true) return { ok: true, host, already: true, auth: { path: 'studio', host, user: studio.user ?? null } };
+      if (studio.signedIn === true) return { ok: true, host, already: true, auth: { path: 'studio', host, user: studio.user ?? null }, session: signedBy('studio') };
       throw new AuthRequired('STUDIO_NOT_SIGNED_IN', 'The selected Studio is not authenticated on this host; no login dialog was opened.');
     }
     if (hostedContext())
@@ -248,14 +307,14 @@ async function session(args, { locate, present, opener, running, registry, profi
         { continuation: connectStudio('connect the open Service Studio') });
     if (profiles) {
       // The stored profile of the host; with nothing stored at all, the private window stores one (auth.mjs storedProfile).
-      const { selected, attempts } = await storedProfile({ profiles, host, target: args.credential_target || null, present, opener, wait });
+      const { selected, attempts } = await storedProfile({ profiles, host, target: args.credential_target || null, present, opener, prompt: args.auth_prompt, wait });
       if (!selected.ok) throw new AuthRequired(selected.code, selected.reason ?? 'Private credential selection was cancelled.', { attempts });
-      return { ok: true, host, stored: true, auth: { path: 'vault', host, user: selected.principal, source: selected.source }, attempts };
+      return { ok: true, host, stored: true, auth: { path: 'vault', host, user: selected.principal, source: selected.source }, session: signedBy('vault'), attempts };
     }
     const target = args.credential_target || credentialTarget(host, 'ServiceCenter');
-    if (await present(target)) return { ok: true, host, already: true, auth: { path: 'vault', host, target } };
-    const stored = await promptAndWait({ host, target, opener, present, wait, why: `No Studio and no vault entry for ${host}` });
-    return { ok: true, host, stored: true, auth: { path: 'vault', host, target }, attempts: [stored] };
+    if (await present(target)) return { ok: true, host, already: true, auth: { path: 'vault', host, target }, session: signedBy('vault') };
+    const stored = await ask({ host, target, opener, present, wait, why: `No Studio and no vault entry for ${host}` });
+    return { ok: true, host, stored: true, auth: { path: 'vault', host, target }, session: signedBy('vault'), attempts: [stored] };
   }
   if (!bridge)
     throw new AuthRequired('STUDIO_NOT_CONNECTED', "The headless native HTTP session needs a connected Studio; run ssam_connect {lane:\"o11\"}.",
@@ -533,7 +592,7 @@ export async function main(argv, deps = {}) {
     : hosted ? memoPresent(() => false, targets => targets.map(() => false))
     : memoPresent(target => vaultPresent(target, vaultOptions), targets => vaultPresent(targets, vaultOptions));
   const opener = deps.opener ?? (hosted ? (host => { throw hostedNoPrompt(host, `No credential of ${host} can be stored from here`); })
-    : (host, kind, name = null) => openPrompt(host, kind, name, { env, root }));
+    : (host, kind, name = null) => openPrompt(host, kind, name, { env, manager: deps.promptManager ?? null }));
   const running = deps.running ?? (() => studioRunning());
   // Injected tests stay isolated from the real Windows vault unless they explicitly supply a profiles fake. Hosted, no
   // credential profile of the server is ever used: the user's Studio session is the only path.
@@ -552,13 +611,17 @@ export async function main(argv, deps = {}) {
   // The bounded wait of a pending private prompt (A13): SSAM_PROMPT_WAIT_MS; deps.promptWaitMs, promptSleep and now in tests.
   const wait = { waitMs: promptWaitMs(env, deps.promptWaitMs), ...(deps.promptSleep ? { sleep: deps.promptSleep } : {}), ...(deps.now ? { now: deps.now } : {}) };
   if (SESSION.includes(args.action)) return session(args, { locate, present, opener, running, registry, profiles, wait });
-  required(args, 'host');
-  const host = hostName(args.host);
+  if (!args.host) throw missingHost(argv, hosted ? null : registry);
+  let host;
+  try { host = hostName(args.host); }
+  catch (error) { throw new ArgumentInvalid('host', error.message, 'give host as the DNS name only, e.g. personal-xxxx.outsystemscloud.com (no https://, path or port)'); }
+  const normalized = deps.normalized ?? [];
+  normalizeArguments(args, normalized);
   if (args.action === 'solution-download-status') required(args,'operation_id');
   const write = WRITES.includes(args.action);
   const deletes = DELETE_ACTIONS.includes(args.action);
   if (args.execute && !write && !LOCAL_WRITES.includes(args.action)) throw new ProtocolError('--execute is only valid for a write operation');
-  if (!(args.limit >= 1 && args.limit <= 5000)) throw new ProtocolError('--limit must be between 1 and 5000');
+  if (!(args.limit >= 1 && args.limit <= 5000)) throw new ArgumentInvalid('limit', '--limit must be between 1 and 5000', 'give limit from 1 to 5000');
   const local = LOCAL_WRITES.includes(args.action);
   if (!write && !RECEIPT_ACTIONS.includes(args.action) && ((local ? [args.value_file, args.value_vault] : [args.words, args.value_file, args.value_vault, args.confirm_host]).some(Boolean) || args.value !== null))
     throw new ProtocolError('Read operations cannot carry authorization or a property value');
@@ -685,7 +748,7 @@ export async function main(argv, deps = {}) {
   }
   const waits = { sleep: deps.sleep, wait: deps.wait };
   const api = async () => { const auth = studio(await resolver.resolve('api')); return [auth, new StudioApi(auth.bridge, host, waits)]; };
-  if (!args.module_id && (args.module || args.module_key) && (Object.hasOwn(ACTIONS, args.action) || ['timers', 'site-properties', 'property-value', 'integrations', 'integration-detail'].includes(args.action))) {
+  if (!args.module_id && (args.module || args.module_key) && (Object.hasOwn(ACTIONS, args.action) || ['timers', 'site-properties', 'property-value', 'integrations', 'integration-detail', 'module-references'].includes(args.action))) {
     const [, native] = await api();
     args.module_id = await native.numericModuleId(args);
   }
@@ -806,15 +869,16 @@ export async function main(argv, deps = {}) {
     return answer(auth, await client.write(args.action, args, { osp, approve, ...options() }));
   }
 
-  if (!(args.max_pages >= 1 && args.max_pages <= 100)) throw new ProtocolError('--max-pages must be between 1 and 100');
+  if (!(args.max_pages >= 1 && args.max_pages <= 100)) throw new ArgumentInvalid('maxPages', '--max-pages must be between 1 and 100', 'give maxPages from 1 to 100');
   if (args.action === 'modules' && ['auto', 'studio'].includes(args.session)) {
     // The Studio's module listing when a Studio is connected; the page listing (numeric IDs) otherwise.
     let pair = null;
     try { pair = await api(); } catch (error) { if (!(error instanceof AuthRequired) || error.code !== 'STUDIO_REQUIRED') throw error; }
-    if (pair) return answer(pair[0], await pair[1].read('modules', args));
+    if (pair) return answer(pair[0], limitModules(await pair[1].read('modules', args), args.module_limit));
   }
   if (API_READS.includes(args.action) && args.action !== 'modules') {
     const [auth, client] = await api();
+    await resolveKeys(client, args, normalized);
     if (args.action === 'apply-settings-status' && args.operation_id) {
       const receipt = journal.lookup(args.operation_id);
       if (!receipt || receipt.identity?.host !== host || receipt.identity?.action !== 'apply-settings'
@@ -848,7 +912,7 @@ export async function main(argv, deps = {}) {
   const [auth, client] = await pagesClient();
   let result;
   switch (args.action) {
-    case 'modules': result = await client.modules(args.limit, args.max_pages); break;
+    case 'modules': result = limitModules(await client.modules(args.limit, args.max_pages), args.module_limit); break;
     // timers with a name: that timer's own page (schedule, runs, actions), read by labels and captions (C40).
     case 'timers': case 'site-properties': required(args, 'module_id');
       result = args.action === 'timers' && args.name ? await client.timer(args.module_id, args.name) : await client.resources(args.module_id, args.action, args.limit); break;
@@ -922,7 +986,11 @@ export async function runServiceCenter(argv, deps = {}) {
 async function runServiceCenterWithinBudget(argv, deps) {
   const authResources = [];
   const ssoCache=deps.ssoCache??ownSsoSessions,ssoKeys=[];
-  try { return await main(argv, { ...deps, authResources, ssoCache, ssoKeys }); }
+  const normalized = [];
+  try {
+    const value = await main(argv, { ...deps, authResources, ssoCache, ssoKeys, normalized });
+    return normalized.length && value && typeof value === 'object' && !Array.isArray(value) ? { ...value, normalizations: normalized } : value;
+  }
   catch (error) {
     // Terminal failure evicts the session after any bounded same-identity GET
     // recovery. Protected writes are never replayed; the next call starts fresh.
@@ -934,17 +1002,57 @@ async function runServiceCenterWithinBudget(argv, deps) {
       try { error.continuation = { ...sameCall(argv), why: 'the same call goes on once the login is stored in the private prompt; nothing else to do' }; }
       catch { /* the answer keeps its auth fields */ }
     }
+    // Lote 4, F3: the managed private window (auth.mjs openPrompt). Cancelled: the same call opens a new one, only when
+    // the person asks. Not confirmed on the screen: the same call asks the manager again (it recovers or focuses the
+    // window); a manager that cannot run at all (CREDENTIAL_PROMPT_UNAVAILABLE) goes to the doctor's vault check.
+    if (error instanceof AuthRequired && !error.continuation) {
+      try {
+        if (error.code === 'CREDENTIAL_PROMPT_CANCELLED') error.continuation = { ...sameCall(argv), why: 'opens the private window again; only when the person asks to continue' };
+        else if (['CREDENTIAL_PROMPT_WINDOW_UNAVAILABLE', 'CREDENTIAL_PROMPT_BUSY'].includes(error.code))
+          error.continuation = { ...sameCall(argv), why: 'asks the prompt manager again: it recovers the window or brings the open one to the front; never claim it opened before it confirms' };
+        else if (['CREDENTIAL_PROMPT_UNAVAILABLE', 'CREDENTIAL_PROMPT_PROTOCOL_INVALID'].includes(error.code))
+          error.continuation = { tool: 'ssam_doctor', arguments: { checks: ['vault'] }, why: 'the private prompt manager could not run here; the doctor shows the vault and the prompt' };
+      } catch { /* the answer keeps its auth fields */ }
+    }
+    // Lote 4, F3: the authentication codes of the queue (refusal-codes.mjs AUTH_CODES) always carry the call that goes on.
+    const authNext = () => {
+      const hosted = hostedContext() !== null;
+      try { return authContinuation(error.code, { lane: 'o11', host: parseArgs(argv).host ?? null, same: sameCall(argv), hosted }); }
+      catch { return authContinuation(error.code, { lane: 'o11', hosted }); }
+    };
+    if (error instanceof AuthRequired && !error.continuation && AUTH_CODES.includes(error.code)) error.continuation = authNext();
     // AuthRequired and the planned refusals (ScheduleInModule) answer with their own fields.
     if (error instanceof BridgeError && typeof error.answer === 'function') return error.answer();
+    const next = error instanceof BridgeError ? error.extra?.continuation ?? (AUTH_CODES.includes(error.code) ? authNext() : null) : null;
     if (error instanceof BridgeError) return { ok: false, code: error.code, error: error.message, stage: 'service-center',
       ...(error.extra?.fault ? { cause: { kind: 'soap' } } : {}),
       ...(error.extra?.transport ? {transport:error.extra.transport} : {}),
-      ...(error.extra?.continuation ? { continuation: error.extra.continuation } : {}),
+      ...(next ? { continuation: next } : {}),
       ...Object.fromEntries(['inventoryVerified','emptyInventoryProven','databaseVerified','databaseAbsentProven'].filter(k=>typeof error.extra?.[k]==='boolean').map(k=>[k,error.extra[k]])),
       ...Object.fromEntries(['executed', 'sent', 'submitted', 'status'].filter(k => error.extra?.[k] !== undefined).map(k => [k, error.extra[k]])) };
-    // A local refusal with its own fields (TARGET_PENDING: the holder receipt, verify and discard).
-    if (error instanceof ProtocolError && typeof error.answer === 'function') return error.answer();
-    if (error instanceof ProtocolError) return { ok: false, code: error.code, stage: 'service-center', error: error.message };
+    // A local refusal with its own fields (TARGET_PENDING: the holder receipt, verify and discard; SC_ARGUMENT_INVALID).
+    if (error instanceof ProtocolError && typeof error.answer === 'function') return withNormalized(error.answer(), normalized);
+    // What Service Center answered instead (protocol.mjs): the exchange, what was expected, the sample and the next call.
+    if (error instanceof ProtocolMismatch) {
+      let retry = null, host = null;
+      try { const call = sameCall(argv); retry = call; host = call.arguments.host ?? null; } catch { /* no same call */ }
+      const write = WRITES.includes(argv[0]);
+      // HTTP 404: what the call names is not on this host. Repeating it answers the same; the live listing has the IDs and keys.
+      if (error.code === 'SC_PAGE_NOT_FOUND') return withNormalized({ ok: false, code: error.code, stage: 'service-center',
+        error: 'Service Center answered HTTP 404 for ' + (error.protocol?.operation ?? 'the page') + ': the page, or the ID or key it names, does not exist on '
+          + (host ?? 'this host') + '. Repeating the same call answers the same' + (write ? '; a write is never repeated' : '') + '.',
+        protocol: error.protocol,
+        continuation: continuation('o11_service_center_read', { action: 'modules', ...(host ? { host } : {}) },
+          'the live listing gives the numeric IDs and keys that exist on this host; give one of them, or the exact name') }, normalized);
+      return withNormalized({ ok: false, code: error.code, stage: 'service-center', error: error.message, protocol: error.protocol,
+        ...protocolContinuation(error.protocol, { host, retry, write }) }, normalized);
+    }
+    if (error instanceof ProtocolError) {
+      let action = null; try { action = parseArgs(argv).action; } catch { /* the argv itself was refused */ }
+      return withNormalized({ ok: false, code: error.code, stage: 'service-center', error: error.message,
+        ...(error.code === 'SC_PROTOCOL_INVALID' ? { protocol: genericProtocol(action, error) } : {}),
+        ...(AUTH_CODES.includes(error.code) ? { continuation: authNext() } : {}) }, normalized);
+    }
     // A refusal of the executor seam or the agent carries no form value or credential: its code and text stay.
     if (SEAM_CODES.has(error?.code)) return { ok: false, ...seamFields(error), error: error.message };
     return { ok: false, code: 'SC_LOCAL_FAILURE', stage: 'service-center', error: 'Service Center operation failed locally; no automatic retry' };
@@ -954,10 +1062,35 @@ async function runServiceCenterWithinBudget(argv, deps) {
 
 // The answer of the MCP tools: the shape lanes.run() gave the Python output ({ok, lane, verb, exitCode, result}),
 // without the command line, since nothing is spawned any more.
+const WRITE_STATE_CODES = { uncertain: 'SC_WRITE_UNCERTAIN', rejected: 'SC_WRITE_REJECTED', refused: 'SC_WRITE_NOT_SENT', 'not-sent': 'SC_WRITE_NOT_SENT' };
 export async function serviceCenterTool(argv, deps = {}) {
-  const result = await runServiceCenter(argv, deps);
+  let result = await runServiceCenter(argv, deps);
+  // A write receipt that is not confirmed (14/10: 32 SC_LOCAL_FAILURE, a timer-activate whose readback did not confirm and its
+  // verifies): the code says what it is; an uncertain one is never repeated, verify reads the target.
+  if (result && result.ok === false && !result.code && typeof result.state === 'string' && Object.hasOwn(WRITE_STATE_CODES, result.state) && result.operationId) {
+    const host = result.host ?? result.identity?.host ?? null;
+    result = { ...result, code: WRITE_STATE_CODES[result.state],
+      ...(result.state === 'uncertain' && !result.continuation ? { continuation: continuation('o11_service_center_write', { action: 'verify', ...(host ? { host } : {}), operationId: result.operationId },
+        'the send may have gone out: verify reads the target and resolves the receipt; never repeat the write') } : {}) };
+  }
   const exitCode = (result.ok ?? true) ? 0 : 1;
   return { ok: exitCode === 0, lane: 'o11', verb: 'service-center', exitCode, result,
     ...(exitCode ? { code: result.code ?? 'SC_LOCAL_FAILURE', stage: result.stage ?? 'service-center',
       ...(result.continuation ? { continuation: result.continuation } : {}) } : {}) };
+}
+
+
+const withNormalized = (value, normalized) => (normalized.length ? { ...value, normalizations: normalized } : value);
+// moduleLimit (81fce8e9: modules answered 397 rows with moduleLimit 5): the first rows of the listing, with the total.
+export function limitModules(result, limit) {
+  if (!Number.isInteger(Number(limit)) || Number(limit) < 1 || !result || typeof result !== 'object') return result;
+  const max = Number(limit);
+  for (const key of ['result', 'modules', 'rows', 'items']) {
+    const value = result[key];
+    const list = Array.isArray(value) ? value : Array.isArray(value?.returnValue) ? value.returnValue : null;
+    if (!list || list.length <= max) continue;
+    const cut = list.slice(0, max);
+    return { ...result, [key]: Array.isArray(value) ? cut : { ...value, returnValue: cut }, limited: { moduleLimit: max, total: list.length, returned: max } };
+  }
+  return result;
 }

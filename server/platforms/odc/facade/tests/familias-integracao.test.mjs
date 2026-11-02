@@ -90,3 +90,97 @@ test('the facade list and the kernel object of normalizations are joined, neithe
   assert.equal(joined.itemsLeft, 1);
   assert.equal(withNormalizationsOf({ ok: true }, []).normalizations, undefined);
 });
+
+
+// ---- C-01 (c), 27/10 (F-FitBody-21, F-FitBody-40): "verified" was only the union of the problems' patches without a conflict
+// of path. The patch of DDL_BASE_REQUIRED replaced /ddl with the module's read of FBContent (the job's new entities, structures
+// and attributes left it after fix:"apply"); the one of HTML_PROPERTY_UNKNOWN left <aggregate k name max/> without its from,
+// join, where and sort. A patch that leaves the job without what it declares (job-inventory.mjs) is never verified nor applied.
+const FB_READ = [
+  'create entity FBContent label Title ( -- @UQMLFQl1qk6FV7uDhSnKuQ',
+  '  Id Long Integer identifier auto required, -- @vpIQwxlClkOjWgv7NuhJ7Q',
+  '  Title Text(100) required, -- @LGAL_4E2GUy+j9adXRL1PA',
+  '  SortOrder Integer required default 0 -- @wizCnIRDC0aNAHQUmgT4mw',
+  ');'].join('\n');
+const FB_DDL = [
+  '/// One item of the FitBody catalog.',
+  'create entity FBContent label Title ( -- @UQMLFQl1qk6FV7uDhSnKuQ',
+  '  Id Long Integer identifier auto required, -- @vpIQwxlClkOjWgv7NuhJ7Q',
+  '  Title Text(100) required, -- @LGAL_4E2GUy+j9adXRL1PA',
+  '  SortOrder Integer required default 0, -- @wizCnIRDC0aNAHQUmgT4mw',
+  '  /// Position of the workout in its level.',
+  '  ProgramOrder Integer default 0,',
+  '  IsFeatured Boolean required default False',
+  ');', '',
+  'create entity FBLevelProgram label Label (', '  Id Long Integer identifier auto required,', '  Label Text(30) required', ');',
+  'create unique index UQ_FBLevelProgram_Label on FBLevelProgram (Label);', '',
+  'create entity FBRoutine label Name (', '  Id Long Integer identifier auto required,', '  Name Text(50) required', ');', '',
+  'type FBCalendarDay = {', '  DayNumber: Integer;', '  IsBlank: Boolean;', '}', '',
+  'type FBLogTotals = {', '  Seconds: Integer;', '  Kcal: Integer;', '}'].join('\n');
+const FB_AGGREGATE = '<aggregate k="w2" name="GetFeatures" from="FBRecipeFeature" join="FBContent on FBContent.Id = FBRecipeFeature.ContentId" where="FBRecipeFeature.OnNutritionHome" sort="FBRecipeFeature.SortOrder" max="30"/>';
+const FB_JOB = { ops: [
+  { op: 'spec', data: { ddl: FB_DDL } },
+  { op: 'html', data: { screen: 'FB_Nutrition', basedOn: { capture: 'a'.repeat(64), html: 'b'.repeat(64) }, edit: [FB_AGGREGATE, '<div k="w61" if="True"><div k="w62" class="fbx-play"/></div>'] } },
+  { op: 'logic', data: { flow: ['server action CreateFBWorkoutLog\n  in MemberId: Long Integer\n  end\n'] } },
+] };
+const DDL_PROBLEM = { phase: 'apply', op: 0, pointer: '/ops/0/data/ddl', code: 'DDL_BASE_REQUIRED', severity: 'error', message: 'line 2: FBContent names elements of a read by their keys and the op has no basedOn',
+  fix: 'send basedOn', patch: [{ op: 'replace', path: '/ops/0/data/ddl', value: FB_READ }], patchCertain: true };
+const HTML_PROBLEM = { phase: 'apply', op: 1, pointer: '/ops/1/data/edit/0', code: 'HTML_PROPERTY_UNKNOWN', severity: 'error', message: 'from="FBRecipeFeature" on ScreenAggregate k="w2": ScreenAggregate has no property from',
+  fix: 'remove from', patch: [{ op: 'replace', path: '/ops/1/data/edit', value: ['<aggregate k="w2" name="GetFeatures" max="30"/>', FB_JOB.ops[1].data.edit[1]] }], patchCertain: true };
+const BASED_ON_PROBLEM = { phase: 'apply', op: 0, pointer: '/ops/0/data/ddl', code: 'DDL_BASE_REQUIRED', severity: 'error', message: 'line 2: FBContent has no basedOn',
+  fix: 'add basedOn', patch: [{ op: 'add', path: '/ops/0/data/basedOn', value: 'c'.repeat(64) }], patchCertain: true };
+
+test('C-01 (c): a refusal patch that leaves the job without its statements or its aggregate data is no patch and never verified (F-FitBody-21, -40)', async () => {
+  const { jobInventory, inventoryLoss } = await import('../job-inventory.mjs');
+  const inventory = jobInventory(FB_JOB);
+  assert.deepEqual(inventory.get('ddl entity'), ['FBContent', 'FBLevelProgram', 'FBRoutine']);
+  assert.deepEqual(inventory.get('ddl type'), ['FBCalendarDay', 'FBLogTotals']);
+  assert.deepEqual(inventory.get('ddl member FBContent'), ['Id', 'Title', 'SortOrder', 'ProgramOrder', 'IsFeatured']);
+  assert.deepEqual(inventory.get('html aggregate FB_Nutrition w2'), ['from', 'join', 'where', 'sort']);
+  assert.deepEqual(inventory.get('logic action'), ['CreateFBWorkoutLog']);
+  assert.deepEqual(inventoryLoss(inventory, jobInventory(FB_JOB)), []);
+  const dir = tmp(); const file = path.join(dir, 'job.json'); fs.writeFileSync(file, JSON.stringify(FB_JOB));
+  const fields = refusalFields([DDL_PROBLEM, HTML_PROBLEM, BASED_ON_PROBLEM], { verifyRan: true }, { job: FB_JOB, jobFile: file });
+  const [ddl, html, basedOn] = fields.problems;
+  for (const lost of [ddl, html]) {
+    assert.equal(lost.patch, undefined, lost.code + ' keeps no destructive patch');
+    assert.equal(lost.patchOmitted, true);
+    assert.match(lost.patchOmittedWhy, /^PATCH_DESTRUCTIVE/);
+  }
+  assert.deepEqual(ddl.patchLost.find(l => l.group === 'ddl entity').lost, ['FBLevelProgram', 'FBRoutine']);
+  assert.deepEqual(ddl.patchLost.find(l => l.group === 'ddl type').lost, ['FBCalendarDay', 'FBLogTotals']);
+  assert.deepEqual(ddl.patchLost.find(l => l.group === 'ddl member FBContent').lost, ['ProgramOrder', 'IsFeatured']);
+  assert.deepEqual(html.patchLost, [{ group: 'html aggregate FB_Nutrition w2', lost: ['from', 'join', 'where', 'sort'], before: 4, after: 0 }]);
+  // The patch that keeps every statement (only adds basedOn) stays, and is the only verified one.
+  assert.deepEqual(basedOn.patch, BASED_ON_PROBLEM.patch);
+  assert.equal(fields.verifiedPatch.ops, 1);
+  assert.deepEqual(JSON.parse(fs.readFileSync(verifiedPatchFile(path.resolve(file)), 'utf8')).patch, BASED_ON_PROBLEM.patch);
+});
+
+test('C-01 (c): fix:"apply" and patch "verified" never apply a patch that loses what the job declares: PATCH_DESTRUCTIVE, nothing sent', async () => {
+  const { saveRefusalFixes, proposedPatch } = await import('../job-patch.mjs');
+  const dir = tmp(); const text = JSON.stringify(FB_JOB); const file = path.join(dir, 'job.json'); fs.writeFileSync(file, text);
+  // Fixes kept before the guard (or by another release): the destructive one among them refuses the whole fix:"apply".
+  const fixes = path.join(dir, 'fixes');
+  assert.equal(saveRefusalFixes(fixes, { job: file, jobSha256: sha(text), problems: [DDL_PROBLEM, BASED_ON_PROBLEM], module: 'FigmaMobile' }), true);
+  const refused = proposedPatch(fixes, { file, sha256: sha(text) });
+  assert.equal(refused.ok, false);
+  assert.equal(refused.code, 'PATCH_DESTRUCTIVE');
+  assert.match(refused.error, /nothing was sent/);
+  assert.ok(refused.lost.some(l => l.group === 'ddl entity' && l.lost.includes('FBRoutine')));
+  // Only the harmless one: applied.
+  const only = path.join(dir, 'fixes-ok');
+  saveRefusalFixes(only, { job: file, jobSha256: sha(text), problems: [BASED_ON_PROBLEM], module: 'FigmaMobile' });
+  const applied = proposedPatch(only, { file, sha256: sha(text) });
+  assert.equal(applied.ok, true, JSON.stringify(applied));
+  assert.deepEqual(applied.patch, BASED_ON_PROBLEM.patch);
+  // A verified-patch file written before the guard: patch "verified" refuses it too.
+  fs.writeFileSync(verifiedPatchFile(path.resolve(file)), JSON.stringify({ schema: 'ssam-verified-patch/1', job: path.resolve(file), jobSha256: sha(text), patch: HTML_PROBLEM.patch }));
+  const verified = resolvePatchedJob({ patch: 'verified', basedOn: { job: file, sha256: sha(text) } }, { inlineDir: path.join(dir, 'inline') });
+  assert.equal(verified.ok, false);
+  assert.equal(verified.code, 'PATCH_DESTRUCTIVE');
+  assert.deepEqual(verified.lost.map(l => l.group), ['html aggregate FB_Nutrition w2']);
+  // A patch of the caller's own may remove what it means to.
+  const own = resolvePatchedJob({ patch: HTML_PROBLEM.patch, basedOn: { job: file, sha256: sha(text) } }, { inlineDir: path.join(dir, 'inline') });
+  assert.equal(own.ok, true, JSON.stringify(own));
+});

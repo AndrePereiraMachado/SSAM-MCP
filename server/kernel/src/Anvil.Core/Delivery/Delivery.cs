@@ -120,11 +120,15 @@ public static partial class Delivery
         BeginStudioWritesRun(result);
         // CX14 N6: what a call sent again after the proof of a call it settled belongs to that call's answer.
         result.Remove("sentAgainAfterIdle");
+        // B7 (F9): what this call decided of the Studio's alignment before the merge; the previous call's belongs to it.
+        result.Remove("referencesAlignment");
         IReadOnlyDictionary<string, VerifyHint>? hints = null;
         var dataProofDiffers = false;
         // primeira-certa A3: the preflight of a job it refuses, kept for an answer without a capture (Fail).
         JsonObject? pure = null;
         CountingBridge? sentAfterSettlement = null;
+        // F1b stop 4: a step the busy Studio withdrew before it ran (UI_BUSY, executed:false) waits briefly and goes again.
+        bridge = StudioBusyBridge.Wrap(bridge, result);
         try
         {
             // CX14: an unjournaled UI write may have run after this client stopped waiting. While it may still run, the
@@ -305,8 +309,9 @@ public static partial class Delivery
                 {
                     result["code"] = IntegrationImport.NeedsBridge;
                     return Fail($"The Service Studio runs a bridge without the integration import ({string.Join(", ", missing)}): the {string.Join(" and ", imports.Select(i => i.Kind.ToUpperInvariant()).Distinct())} import of this job "
-                        + "runs the Studio's own importer through it. Nothing was captured, imported or merged. The current bridge loads with the next Service Studio opened "
-                        + "(\"Service Studio (SSAM)\" shortcut); then resume this task." + (imports.Any(i => i.Kind == "openapi") ? " For REST, explicit methods (op rest without openapi) need no import." : ""));
+                        + "runs the Studio's own importer through it. Nothing was captured, imported or merged. With the SSAM Agent app, install its current version (its "
+                        + "Service Studio bridge has the import) and reopen the Service Studio; on the machine that runs SSAM, the current bridge loads with the next Service "
+                        + "Studio opened (\"Service Studio (SSAM)\" shortcut). Then resume this task." + (imports.Any(i => i.Kind == "openapi") ? " For REST, explicit methods (op rest without openapi) need no import." : ""));
                 }
             }
             // C26: a consumer whose job captured producer signatures first takes the Studio's own Refresh References for those
@@ -324,24 +329,32 @@ public static partial class Delivery
             // answer before any merge (REFERENCES_NOT_ADDED). The candidate then changes no producer signature (DeliveryManageDependencies.cs).
             var capturedNow = result["capturedProducers"] as JsonObject;
             var boundNow = writeState == "not-sent" ? BoundSignatures(request) : new Dictionary<string, (string Key, string? Hash)>();
+            // B7 (port of proto F9 d01b576c): the capture of the module before the alignment, when the alignment had nothing to do:
+            // it is the merge's base (nothing was written since it was taken).
+            JsonObject? alignedBase = null;
             if (writeState == "not-sent" && (capturedNow is { Count: > 0 } || boundNow.Count > 0) && Offers(bridge, RefreshReferencesCapability))
             {
                 var keptBeforeRefresh = new List<string>();
                 var owners = (capturedNow ?? new JsonObject()).Where(p => p.Value?["ownerKey"] != null).Select(p => p.Key).ToList();
-                if (owners.Count > 0)
+                keptBeforeRefresh.AddRange(owners);
+                // B7 (F9): the capture of the module as it is now decides R5 (owners kept) and whether the Studio's alignment below
+                // has anything to do. Without owners it is taken only when it can spare the alignment: the open's own references
+                // check ended and found nothing outdated, so that capture becomes the base.
+                IReadOnlyList<ModuleReferenceEntry>? current = null;
+                var preRefreshPath = Path.Combine(attemptDirectory, "pre-refresh.oml");
+                JsonObject? preRefresh = null;
+                var studioSaysCurrent = opened["referencesCheck"]?.ToString() == "complete" && opened["referencesOutdated"] is JsonValue outdatedValue
+                    && outdatedValue.TryGetValue<bool>(out var outdated) && !outdated;
+                if (consumer && (owners.Count > 0 || (studioSaysCurrent && (referenceInventory != null || DefaultReferenceInventory != null))))
                 {
-                    keptBeforeRefresh.AddRange(owners);
-                    if (consumer)
+                    stage = "reference-closure";
+                    preRefresh = bridge.Call("snapshot_module", Target(new() { ["path"] = preRefreshPath }));
+                    if (preRefresh["key"]?.ToString() == key) current = ReadReferences(preRefreshPath, "preRefresh");
+                    if (current != null && owners.Count > 0)
                     {
-                        stage = "reference-closure";
-                        var preRefreshPath = Path.Combine(attemptDirectory, "pre-refresh.oml");
-                        var preRefresh = bridge.Call("snapshot_module", Target(new() { ["path"] = preRefreshPath }));
-                        if (preRefresh["key"]?.ToString() == key && ReadReferences(preRefreshPath, "preRefresh") is { } current)
-                        {
-                            var (keptNow, ownersNow) = ReferenceClosure.OwnersKeptByBase(capturedNow!, current, SameProducerKey);
-                            keptBeforeRefresh.Clear(); keptBeforeRefresh.AddRange(keptNow);
-                            Closure()["ownersBeforeRefresh"] = ownersNow;
-                        }
+                        var (keptNow, ownersNow) = ReferenceClosure.OwnersKeptByBase(capturedNow!, current, SameProducerKey);
+                        keptBeforeRefresh.Clear(); keptBeforeRefresh.AddRange(keptNow);
+                        Closure()["ownersBeforeRefresh"] = ownersNow;
                     }
                 }
                 var toRefreshPairs = (capturedNow ?? new JsonObject()).Where(p => !keptBeforeRefresh.Contains(p.Key, StringComparer.OrdinalIgnoreCase) && p.Value is JsonObject).ToList();
@@ -351,8 +364,47 @@ public static partial class Delivery
                 if (manage)
                     foreach (var (binding, (signatureKey, _)) in boundNow)
                         if (!aligned.Any(a => a.Key != null && SameProducerKey(a.Key, signatureKey))) aligned.Add(new AlignedProducer(binding, signatureKey, null, null));
-                if (toRefresh.Count > 0 || (manage && aligned.Count > 0))
+                // B7 (F9) + R5: the Studio's Manage Dependencies (or Refresh References) runs only when the module, as captured now,
+                // lacks something of the producers it aligns: a reference, its published signature, an element a reference op
+                // names (ReferenceClosure.AlignedInModule). Otherwise it would change nothing: it is not sent, the receipt says why
+                // (referencesAlignment), and that same capture is the base of the merge (no second snapshot). Nothing else is
+                // spared: the candidate's references are still checked against the base and the captures before the merge
+                // (CheckCandidate), and the merged module after it (CheckDelivered).
+                var alignment = toRefresh.Count > 0 || (manage && aligned.Count > 0) ? current : null;
+                if (alignment != null)
                 {
+                    var targets = aligned.Select(a =>
+                    {
+                        var entry = capturedNow?[a.Binding] as JsonObject;
+                        var hash = entry?["signatureHash"]?.ToString() ?? (boundNow.TryGetValue(a.Binding, out var b) ? b.Hash : null);
+                        var elements = manage ? referenceOps.Where(op => string.Equals(op.Producer, a.Binding, StringComparison.OrdinalIgnoreCase)
+                                || a.Name != null && string.Equals(op.Producer, a.Name, StringComparison.OrdinalIgnoreCase))
+                            .SelectMany(op => op.Elements).Distinct(StringComparer.Ordinal).ToList() : [];
+                        // B7 review: the capture's elements resolve each job element to its original key; a bound signature has none,
+                        // so its elements stay unresolved and the Studio aligns it.
+                        return new ReferenceClosure.AlignmentTarget(a.Name ?? a.Binding, a.Key, hash, entry?["advertisedSignatureHash"]?.ToString(), elements,
+                            entry?["elements"] as JsonArray);
+                    }).ToList();
+                    var (already, report) = ReferenceClosure.AlignedInModule(targets, alignment, SameProducerKey);
+                    result["referencesAlignment"] = new JsonObject { ["command"] = manage ? ManageDependenciesCommand : RefreshReferencesCommand,
+                        ["sent"] = !already, ["by"] = "reference-closure", ["producers"] = report, ["base"] = already ? "pre-refresh" : "snapshot",
+                        ["reason"] = already ? "the module already references every producer of the alignment at its published signature with every element the job names: the Studio's alignment would change nothing"
+                            : "the module lacks something of a producer of the alignment (see producers): the Studio aligns it" };
+                    if (already)
+                        log?.Invoke($"deliver: the module already references {string.Join(", ", targets.Select(t => t.Binding))} at the published signature with what the job names; no {(manage ? "Manage Dependencies" : "Refresh References")} before the merge");
+                    else alignment = null;
+                }
+                if (alignment != null) alignedBase = preRefresh;
+                else if (toRefresh.Count > 0 || (manage && aligned.Count > 0))
+                {
+                    // C-06 (F-FitBody-05, 27/10): a PREFLIGHT_REFUSED came back with studioWrites [Manage Dependencies, before-merge,
+                    // changed]: the Studio's command had added the reference to the module of a delivery that was then refused, and the
+                    // bridge has no undo for it (only the person's Ctrl+Z). The job is checked first on the module as it is now, with
+                    // the producers' captured signatures linked: a job that apply refuses is refused here, and nothing is written to the
+                    // module. A refusal that names a producer's signature (PRODUCER_SIGNATURE_MISSING: a theme, a private element, what
+                    // only the Studio's reference brings) proves nothing about the job: the delivery goes on as before, and a later
+                    // refusal names what the Studio's command left and how to remove it (StudioWriteText).
+                    if (ValidateBeforeStudioWrite(manage ? ManageDependenciesCommand : RefreshReferencesCommand) is { } refusedBefore) return refusedBefore;
                     stage = manage ? "add-references" : "refresh-references";
                     var names = new JsonArray(); var keys = new JsonArray();
                     foreach (var producer in aligned)
@@ -396,11 +448,90 @@ public static partial class Delivery
                         if (RefreshBlocked(result, plain, stage) is { } waitingAgain) return Fail(waitingAgain);
                     }
                 }
+
+                // C-06: the check of the job before the Studio's command that would write the module (see the call above). Only the
+                // plain consumer apply (no integration import, no C# runtime or frozen compilation, which run on the snapshot after
+                // it). Answers the refusal (nothing written), or null: the delivery goes on. referencesAlignment.validation says
+                // whether the job was checked first (ran, refused) or why not; referencesAlignment.sent is false when it was refused.
+                JsonObject? ValidateBeforeStudioWrite(string command)
+                {
+                    var said = new JsonObject();
+                    // R4 integration: B7 (W3-merge) already wrote what the alignment found (sent, by, producers, base, reason) in this
+                    // same report; the check before the Studio's write adds its own part and never replaces it.
+                    var alignmentReport = result["referencesAlignment"] as JsonObject ?? new JsonObject { ["command"] = command };
+                    alignmentReport["validation"] = said;
+                    result["referencesAlignment"] = alignmentReport;
+                    if (imports.Count > 0 || dependencies != null || frozenCompilation != null || request.CaptureProducers is { Count: > 0 } && applyWithProducers == null)
+                    {
+                        said["ran"] = false; said["why"] = "the job applies on the snapshot taken after it (an integration import or a C# runtime): checked there";
+                        return null;
+                    }
+                    stage = "validation";
+                    var validationBase = Path.Combine(attemptDirectory, "pre-refresh.oml");
+                    if (preRefresh == null || preRefresh["key"]?.ToString() != key || !File.Exists(validationBase))
+                        preRefresh = bridge.Call("snapshot_module", Target(new() { ["path"] = validationBase }));
+                    if (preRefresh["key"]?.ToString() != key || !File.Exists(validationBase))
+                    {
+                        said["ran"] = false; said["why"] = "the module could not be captured as it is now";
+                        return null;
+                    }
+                    var linked = producers.Where(p => !keptBeforeRefresh.Contains(p.Key, StringComparer.OrdinalIgnoreCase)).ToDictionary(p => p.Key, p => p.Value, StringComparer.OrdinalIgnoreCase);
+                    var output = Path.Combine(attemptDirectory, "validation.oml");
+                    JsonObject checkedJob;
+                    try
+                    {
+                        using (LinkSignatures(linked))
+                            checkedJob = applyWithProducers != null ? applyWithProducers(validationBase, request.JobPath, output, linked) : apply(validationBase, request.JobPath, output);
+                    }
+                    catch (Exception ex) when (ex is not OutOfMemoryException and not BridgeCallException)
+                    {
+                        // A coded refusal of the job (PREFLIGHT_REFUSED with every phase): the delivery's refusal, before any Studio
+                        // write (the outer catch keeps its code and problems, as for the apply after the snapshot).
+                        if (Errors.FindCoded(ex) is { } coded && !NamesProducerSignature(coded.Code, coded.Problems))
+                        {
+                            said["ran"] = true; said["refused"] = true; alignmentReport["sent"] = false;
+                            said["note"] = "the job was refused on the module as it is, before the Studio's " + command + ": nothing was written to the module";
+                            throw;
+                        }
+                        // A failure that is no refusal of the job (a producer republished since its capture), or one that names a
+                        // producer's signature: the check proves nothing, the delivery goes on as before and meets it again there.
+                        var stopped = Errors.Text(ex).Split('\n')[0];
+                        said["ran"] = false; said["why"] = "the check before the Studio's " + command + " stopped ("
+                            + (stopped.Length > 240 ? stopped[..240] + "..." : stopped) + "): the job is checked after it";
+                        return null;
+                    }
+                    if (checkedJob["isValid"]?.GetValue<bool>() == true && checkedJob["accepted"]?.GetValue<bool>() == true)
+                    {
+                        said["ran"] = true; said["refused"] = false;
+                        return null;
+                    }
+                    if (NamesProducerSignature(null, checkedJob["problems"] as JsonArray))
+                    {
+                        said["ran"] = false; said["why"] = "the check before the Studio's " + command + " named a producer signature only the Studio's reference brings: the job is checked after it";
+                        return null;
+                    }
+                    said["ran"] = true; said["refused"] = true; alignmentReport["sent"] = false;
+                    said["note"] = "the job was refused on the module as it is, before the Studio's " + command + ": nothing was written to the module";
+                    result["apply"] = checkedJob;
+                    RecordWarnings(null);
+                    return Fail("job rejected by validation contract (" + ValidationVerdict(checkedJob) + ") on the module as it is, before the Studio's " + command
+                        + " would have written it: nothing was written to the module; merge was not attempted");
+                }
             }
             if (writeState == "not-sent")
             {
                 stage = "snapshot";
-                var snapshot = bridge.Call("snapshot_module", Target(new() { ["path"] = basePath }));
+                JsonObject snapshot;
+                if (alignedBase != null)
+                {
+                    // B7 (F9): nothing was written since the capture before the alignment: its bytes are the base (the bridge proves a
+                    // merge base by module key and bytes, SnapshotRegistry.RequireBase, never by path), with its own snapshot id and
+                    // baseline. A change of the module after it is the local side of the three-way merge, as after any base capture.
+                    File.Copy(PreRefreshPathOf(attemptDirectory), basePath, overwrite: true);
+                    snapshot = alignedBase.DeepClone().AsObject();
+                    snapshot["path"] = basePath; snapshot["reusedFrom"] = "pre-refresh";
+                }
+                else snapshot = bridge.Call("snapshot_module", Target(new() { ["path"] = basePath }));
                 result["snapshot"] = snapshot;
                 if (snapshot["key"]?.ToString() != key) return Fail("active module changed during snapshot; nothing was applied");
                 if (string.IsNullOrEmpty(snapshot["snapshot_id"]?.ToString())) return Fail("bridge does not register snapshots; update the bridge before delivery");
@@ -519,7 +650,16 @@ public static partial class Delivery
                 if (dependencies == null && frozenCompilation == null && BindsProducerSignatures(request)
                     && (previewSignatures ?? DefaultSignaturePreview) is { } previewer)
                 {
-                    var preview = previewer(basePath, foreignPath, attemptDirectory);
+                    // B7 (port of proto F9 d01b576c): the preview loads the base twice and the candidate to find a producer signature
+                    // the candidate moves (ReferenceSignatureMerge.Analyze). Its plan holds a change or a conflict only for a producer
+                    // key both reference whose ReferenceHash moved or that is referenced more than once on a side; the closure's
+                    // inventories of the same two files (ReferenceKey, ReferenceHash) say whether one does. None: the preview would
+                    // answer changes 0, accepted, so it is not run and the receipt says why.
+                    JsonObject preview;
+                    if (baseReferences != null && candidateReferences != null && ReferenceClosure.SignaturesUnchanged(baseReferences, candidateReferences))
+                        preview = new JsonObject { ["ran"] = false, ["accepted"] = true, ["changes"] = 0, ["by"] = "reference-closure",
+                            ["reason"] = "the reference inventories of the base and the candidate show no producer signature change: nothing for the preview to merge" };
+                    else preview = previewer(basePath, foreignPath, attemptDirectory);
                     result["signaturePreview"] = preview;
                     if (preview["ran"]?.GetValue<bool>() == true && preview["accepted"]?.GetValue<bool>() == false)
                     {
@@ -1659,6 +1799,13 @@ public static partial class Delivery
         void RemoveSource(string path) => RemoveRecordedSource(sources, path);
     }
 
+    /// <summary>C-06: whether a refusal of the check before the Studio's write names a producer's signature
+    /// (PRODUCER_SIGNATURE_MISSING): what only the Studio's reference brings (a theme, a private element) cannot stand in for the
+    /// job's own fault, so that check proves nothing and the delivery goes on as before.</summary>
+    internal static bool NamesProducerSignature(string? code, JsonArray? problems)
+        => code == Anvil.Core.Preflight.ProducerSignatureMissing.Code
+            || (problems ?? new JsonArray()).OfType<JsonObject>().Any(p => p["code"]?.ToString() == Anvil.Core.Preflight.ProducerSignatureMissing.Code);
+
     /// <summary>The part of the apply's validation contract that refused a candidate, with its counts (VisitaCerta 2026-10-12:
     /// the refusal said only "job rejected by validation contract"): the Verify (its errors by code, when the module is not as
     /// the job expects it), the messages no expectedMessages entry covers, the data contract.</summary>
@@ -2104,6 +2251,9 @@ public static partial class Delivery
 
     /// <summary>The O11 signature preview (Adapters.SS11/SignaturePreview.cs), found by name: the delivery sources also compile
     /// in Anvil.Core.Odc, which has no O11 merge types; there the preview is absent (null) and nothing runs.</summary>
+    /// <summary>B7 (F9): the capture of the module before the Studio's alignment, in the attempt's folder.</summary>
+    private static string PreRefreshPathOf(string attemptDirectory) => Path.Combine(attemptDirectory, "pre-refresh.oml");
+
     private static readonly Func<string, string, string, JsonObject>? DefaultSignaturePreview =
         typeof(Delivery).Assembly.GetType("Anvil.Core.Delivery.SignaturePreview")?.GetMethod("Check", [typeof(string), typeof(string), typeof(string)]) is { } check
             ? check.CreateDelegate<Func<string, string, string, JsonObject>>() : null;

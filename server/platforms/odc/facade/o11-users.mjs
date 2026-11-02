@@ -10,7 +10,7 @@ import { guardWrite, namesWhole } from './service-center/auth.mjs';
 import { powershellPath } from './service-center/vault.mjs';
 import { hostName } from './service-center/http.mjs';
 import { UsersClient, UsersTransport, UsersError, identifier } from './users/client.mjs';
-import { hostedContext } from './executor.mjs';
+import { hostedContext, servedWithoutContext, seamError, contextLost } from './executor.mjs';
 import { hostedUsersDeps, usersAgentRefusal, sweepUsersState, minimalReceipt, fitHostedAnswer } from './hosted/users-agent.mjs';
 
 const helper=fileURLToPath(new URL('./users/vault.ps1',import.meta.url));
@@ -34,11 +34,17 @@ const refuse=(code,error,extra={})=>({ok:false,code,error,...extra});
 const refusal=e=>refuse(e.code||'USERS_REQUEST_FAILED',e instanceof UsersError?e.message:'The Users operation failed. No automatic retry was sent.',{...(e?.validation?{validation:e.validation}:{}),...(e?.continuation?{continuation:e.continuation}:{}),...(e?.code==='USERS_RECEIPT_KEY_MISSING'?{outcome:'not-sent'}:{})});
 // The local vault and private window are Windows ones of the machine that runs this. A hosted call never comes here: it runs on
 // the account's agent (hosted/users-agent.mjs), with the sessions keyed by its token and the receipts in its workspace.
-function windowsOnly(){if(process.platform!=='win32')throw new UsersError('USERS_WINDOWS_ONLY','Users administration needs the Windows Credential Manager of this machine. Use an SSAM installed on Windows, or the Users application of the environment.');}
+// localOnly is the first statement of the two PowerShell -File sites below (the vault helper and its private window), the lock the
+// seam guard checks: a hosted call, or a served process that lost its context, never reads the server's vault or opens a window on it.
+function localOnly(what){
+  if(hostedContext())throw seamError('SEAM_LOCAL_IN_HOSTED','The local Users '+what+' was called inside a hosted call; nothing ran.');
+  if(servedWithoutContext())throw contextLost('the local Users '+what);
+  if(process.platform!=='win32')throw new UsersError('USERS_WINDOWS_ONLY','Users administration needs the Windows Credential Manager of this machine. Use an SSAM installed on Windows, or the Users application of the environment.');
+}
 const reply=value=>({content:[{type:'text',text:JSON.stringify(value)}],structuredContent:value,...(value.ok===false?{isError:true}:{})});
 
 export function privateCall(mode,host,extra={},input=null) {
-  windowsOnly();
+  try{localOnly('vault helper');}catch(e){return Promise.reject(e);}
   return new Promise((resolve,reject)=>{
     const args=['-NoLogo','-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',helper,'-Mode',mode,'-HostName',host];
     for(const [k,v]of Object.entries(extra))args.push('-'+k,String(v));
@@ -51,7 +57,7 @@ export function privateCall(mode,host,extra={},input=null) {
   });
 }
 export async function openUsersPrompt(host,{kind='login',entry,subject=''}={}) {
-  windowsOnly();
+  localOnly('private window');
   const key=[host,kind,entry||''].join('|');const pending=prompts.get(key);
   if(pending&&pending.exitCode===null)return {opened:false,alreadyOpen:true};
   const args=['-NoLogo','-NoProfile','-STA','-ExecutionPolicy','Bypass','-File',helper,'-Mode','prompt','-HostName',host,'-Kind',kind,'-Subject',subject];

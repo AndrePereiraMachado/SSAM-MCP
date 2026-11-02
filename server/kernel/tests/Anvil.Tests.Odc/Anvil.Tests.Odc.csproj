@@ -30,6 +30,9 @@
     <Reference Include="$(OdcInstall)/OutSystems.ModelAPILoader.dll" Private="false" />
     <Reference Include="$(OdcInstall)/OutSystems.Model.Versioning.dll" Private="false" />
     <Reference Include="$(OdcInstall)/OutSystems.RuntimeCommon.dll" Private="false" />
+    <!-- NativeStyleSheetCache.cs: the native transaction and the referenceable-element notification. -->
+    <Reference Include="$(OdcInstall)/OutSystems.FrameworkExtensions.dll" Private="false" />
+    <Reference Include="$(OdcInstall)/OutSystems.C5.dll" Private="false" />
     <Reference Include="$(OdcInstall)/OutSystems.ServiceStudio.PluginAPI.dll" Private="false" />
     <Reference Include="$(OdcInstall)/OutSystems.ServiceStudio.Observability.dll" Private="false" />
     <Reference Include="$(OdcInstall)/ServiceStudio.Framework.dll" Private="false" />
@@ -42,6 +45,8 @@
     <Compile Include="../Shared/ReactiveClientRulesReviewTests.cs" Link="ReactiveClientRulesReviewTests.cs" />
     <Compile Include="../Shared/PublicReferenceSurfaceTests.cs" Link="PublicReferenceSurfaceTests.cs" />
     <Compile Include="../Shared/MergeIdentitySweep.cs" Link="MergeIdentitySweep.cs" />
+    <Compile Include="../Shared/MergeProofStylesheetTests.cs" Link="MergeProofStylesheetTests.cs" />
+    <Compile Include="../Shared/DeliveryAlignmentRulesTests.cs" Link="DeliveryAlignmentRulesTests.cs" />
     <Compile Include="../Shared/ScreenHtmlRoundTripReport.cs" Link="ScreenHtmlRoundTripReport.cs" />
     <Compile Include="../Shared/ScreenHtmlPropertyModelTests.cs" Link="ScreenHtmlPropertyModelTests.cs" />
     <Compile Include="../Shared/DeclaredPropertyKeptTests.cs" Link="DeclaredPropertyKeptTests.cs" />
@@ -85,6 +90,12 @@
     <Compile Include="../Shared/ScreenHtmlTests.cs" Link="ScreenHtmlTests.cs" />
     <Compile Include="../Shared/ScreenHtmlCoverage.cs" Link="ScreenHtmlCoverage.cs" />
     <Compile Include="../Shared/ScreenHtmlEditTests.cs" Link="ScreenHtmlEditTests.cs" />
+    <Compile Include="../Shared/ScreenHtmlEditTableTests.cs" Link="ScreenHtmlEditTableTests.cs" />
+    <Compile Include="../Shared/ScreenHtmlEditFormTests.cs" Link="ScreenHtmlEditFormTests.cs" />
+    <Compile Include="../Shared/ScreenHtmlEditReviewW3Tests.cs" Link="ScreenHtmlEditReviewW3Tests.cs" />
+    <Compile Include="../Shared/HtmlDocumentDeclarationsFirstTests.cs" Link="HtmlDocumentDeclarationsFirstTests.cs" />
+    <Compile Include="../Shared/QualifiedTypeTests.cs" Link="QualifiedTypeTests.cs" />
+    <Compile Include="../Shared/ScreenVisualTableTests.cs" Link="ScreenVisualTableTests.cs" />
     <Compile Include="../Shared/ScreenHtmlEditReviewTests.cs" Link="ScreenHtmlEditReviewTests.cs" />
     <Compile Include="../Shared/ScreenHtmlEditNamesTests.cs" Link="ScreenHtmlEditNamesTests.cs" />
     <Compile Include="../Shared/ScreenHtmlRebaseTests.cs" Link="ScreenHtmlRebaseTests.cs" />
@@ -106,13 +117,17 @@
     <Compile Include="../Shared/QueryRulesScenarios.cs" Link="QueryRulesScenarios.cs" />
     <Compile Include="../Shared/PagingRulesScenarios.cs" Link="PagingRulesScenarios.cs" />
     <Compile Include="../Shared/PagingWiringScenarios.cs" Link="PagingWiringScenarios.cs" />
+    <Compile Include="../Shared/OnInitializeRuleScenarios.cs" Link="OnInitializeRuleScenarios.cs" />
     <Compile Include="../Shared/RestConsumeScenarios.cs" Link="RestConsumeScenarios.cs" />
     <Compile Include="../Shared/RestConsumeAuthScenarios.cs" Link="RestConsumeAuthScenarios.cs" />
+    <Compile Include="../Shared/RestCallbackFlowScenarios.cs" Link="RestCallbackFlowScenarios.cs" />
     <Compile Include="../Shared/FamiliasRevisaoScenarios.cs" Link="FamiliasRevisaoScenarios.cs" />
     <Compile Include="../Shared/CompositionScenarios.cs" Link="CompositionScenarios.cs" />
     <!-- The ODC bridge's merge order and verification, over the ODC Studio's own model (OdcMergeOrderTests). -->
     <Compile Include="../../../platforms/odc/studio/engine/NativeMergeOrder.cs" Link="engine/NativeMergeOrder.cs" />
     <Compile Include="../../../platforms/odc/studio/engine/NativeMergeVerification.cs" Link="engine/NativeMergeVerification.cs" />
+    <!-- U1 (bridge v106): the stylesheet caches of a merge, over the ODC Studio's own model (StyleSheetMergeCacheTests). -->
+    <Compile Include="../../../platforms/odc/studio/engine/NativeStyleSheetCache.cs" Link="engine/NativeStyleSheetCache.cs" />
   </ItemGroup>
   <ItemGroup>
     <Compile Include="../Shared/DdlStatementOrderTests.cs" Link="DdlStatementOrderTests.cs" />

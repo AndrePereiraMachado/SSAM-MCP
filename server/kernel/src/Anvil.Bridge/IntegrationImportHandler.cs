@@ -2,8 +2,6 @@ using System.Collections;
 using System.Diagnostics;
 using System.Reflection;
 using System.Text.Json.Nodes;
-using Anvil.Core;
-using Anvil.Core.Delivery;
 using Avalonia.Threading;
 using ServiceStudio.Model;
 using ServiceStudio.Presenter;
@@ -15,7 +13,7 @@ namespace Anvil.Bridge;
 /// importer runs on a DETACHED copy of the delivery's snapshot (ESpace.Load, as merge_from_oml loads its foreign module),
 /// with the PluginWorkspace of the target tab borrowed for the plugin; the open module is never touched. The candidate is
 /// saved to out_path once and the delivery applies the job to it and merges it (one native merge, Ctrl+Z, TrueChange).
-/// Arguments are checked first by Anvil.Core.IntegrationImport.Validate (absolute paths, sha256): anything wrong is
+/// Arguments are checked first by ImportKit.Validate (the kernel's IntegrationImport.Validate; absolute paths, sha256): anything wrong is
 /// NotExecuted. The plugin members are found by name in the loaded plugins (install-agnostic); a member this Studio does
 /// not have answers INTEGRATION_IMPORTER_NOT_FOUND naming it and the Studio version, nothing written.
 /// WSDL: WSDLFetcher.ConsumeWsdl on the pinned file (the full WSDL, so an incremental import keeps every type), the port
@@ -29,7 +27,7 @@ internal static class IntegrationImportHandler
 
     public static async Task<string> Handle(JsonObject? p)
     {
-        var problems = IntegrationImport.Validate(p);
+        var problems = ImportKit.Validate(p);
         if (problems.Count > 0) return Server.NotExecuted(string.Join("; ", problems));
         IAggregatorPresenter aggregator; ESpace live;
         try
@@ -53,7 +51,7 @@ internal static class IntegrationImportHandler
                 var copy = ESpace.Load(File.ReadAllBytes(p["base_path"]!.ToString()), productKey: null, informationForUpgrader: null);
                 try
                 {
-                    SnapshotRegistry.RequireForeignIdentity(live.Key.ToString(), copy.Key.ToString());
+                    ImportKit.RequireForeignIdentity(live.Key.ToString(), copy.Key.ToString());
                     var workspace = BorrowWorkspace(aggregator);
                     var outcome = kind == "wsdl" ? ImportWsdl(copy, workspace, p) : ImportOpenApi(copy, p);
                     if (outcome["errors"] is JsonArray { Count: > 0 }) { outcome["elapsedMs"] = sw.ElapsedMilliseconds; return Server.Ok(outcome); }
@@ -103,10 +101,10 @@ internal static class IntegrationImportHandler
         var consume = fetcherType?.GetMethod("ConsumeWsdl", Any, null, [typeof(string)], null);
         if (fetcherType != null && consume == null) missing.Add("WSDLFetcher.ConsumeWsdl(string)");
         if (missing.Count > 0)
-            return Refuse(outcome, IntegrationImport.ImporterNotFound, $"the SOAP importer of this Service Studio ({StudioVersion}) has no {string.Join(", ", missing)}");
+            return Refuse(outcome, ImportKit.ImporterNotFound, $"the SOAP importer of this Service Studio ({StudioVersion}) has no {string.Join(", ", missing)}");
         var es = (OutSystems.Model.IESpace)copy;
         var client = ((OutSystems.Model.IObjectSignature)copy).Children.OfType<OutSystems.Model.IObjectSignature>()
-            .FirstOrDefault(c => clientInterface!.IsInstanceOfType(c) && string.Equals(TypeResolver.Name(c), clientName, StringComparison.OrdinalIgnoreCase));
+            .FirstOrDefault(c => clientInterface!.IsInstanceOfType(c) && string.Equals(ImportKit.Name(c), clientName, StringComparison.OrdinalIgnoreCase));
         var present = Actions(client);
         var toImport = wanted.Where(m => !present.Contains(m) || refresh.Contains(m)).ToList();
         foreach (var skipped in wanted.Except(toImport)) ((JsonArray)outcome["skipped"]!).Add(skipped);
@@ -114,11 +112,11 @@ internal static class IntegrationImportHandler
         var fileUri = new Uri(p["document_path"]!.ToString()).AbsoluteUri;
         object? imported;
         try { imported = Worker(() => consume!.Invoke(CreateFetcher(fetcherType!, workspace), [fileUri]), "WSDL fetch"); }
-        catch (Exception ex) { return Refuse(outcome, IntegrationImport.ImportFailed, "the Studio could not read the pinned WSDL: " + Server.Unwrap(ex)); }
-        if (imported == null) return Refuse(outcome, IntegrationImport.ImportFailed, "the Studio's WSDL reader returned nothing for the pinned WSDL");
+        catch (Exception ex) { return Refuse(outcome, ImportKit.ImportFailed, "the Studio could not read the pinned WSDL: " + Server.Unwrap(ex)); }
+        if (imported == null) return Refuse(outcome, ImportKit.ImportFailed, "the Studio's WSDL reader returned nothing for the pinned WSDL");
         ChoosePort(imported, selection["port"]?.ToString() ?? "", selection["service"]?.ToString() ?? "");
         var methods = MethodsToChoose(imported);
-        if (methods.Count == 0) return Refuse(outcome, IntegrationImport.ImporterNotFound, $"the SOAP importer of this Service Studio ({StudioVersion}) exposes no selectable methods (GetMethodsToChoose)");
+        if (methods.Count == 0) return Refuse(outcome, ImportKit.ImporterNotFound, $"the SOAP importer of this Service Studio ({StudioVersion}) exposes no selectable methods (GetMethodsToChoose)");
         var byName = methods.GroupBy(m => Studio.Prop(m, "Name")?.ToString() ?? "", StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
         foreach (var name in toImport.Where(n => !byName.ContainsKey(n)))
             Refuse(outcome, "SOAP_METHOD_NOT_FOUND", $"the selected port has no operation '{name}' (available: {string.Join(", ", byName.Keys)})");
@@ -127,7 +125,7 @@ internal static class IntegrationImportHandler
         var chosen = toImport.Select(n => byName[n]).ToList();
         var created = false;
         string? error = null, importerName = null;
-        StudioAdapter.Runtime.Mutate(copy, "Anvil: SOAP import " + clientName, _ =>
+        ImportKit.Mutate(copy, "Anvil: SOAP import " + clientName, _ =>
         {
             if (client == null)
             {
@@ -135,7 +133,7 @@ internal static class IntegrationImportHandler
                 client = create?.MakeGenericMethod(clientInterface!).Invoke(es, create.GetParameters().Select((pp, i) => i == 0 ? (object?)clientName : pp.HasDefaultValue ? pp.DefaultValue : null).ToArray()) as OutSystems.Model.IObjectSignature;
                 if (client == null) { error = "IESpace.CreateIntegration<ISOAPClient> is not available in this Studio"; return; }
                 created = true;
-                SetString(client, "WSDLLocation", p["source"]?.ToString() is { Length: > 0 } source && source.StartsWith("http", StringComparison.OrdinalIgnoreCase) ? source : fileUri);
+                SetString(client, "WSDLLocation", WsdlLocation(p["source"]?.ToString(), p["document_path"]!.ToString()));
             }
             var descriptor = client.GetType().GetMethod("GetCustomObjectDescriptor", Any, Type.EmptyTypes)?.Invoke(client, null) ?? Studio.Prop(client, "Descriptor");
             var import = descriptor?.GetType().GetMethods(Any).FirstOrDefault(m => m.Name == "ImportFromWSDLDefinition" && m.GetParameters().Length == 3)
@@ -145,17 +143,17 @@ internal static class IntegrationImportHandler
             Worker<object?>(() => import.Invoke(owner, [client, imported, TypedList(chosen, import.GetParameters()[2].ParameterType)]), "SOAP import");
             // The importer names the client after the WSDL's service (CountryInfoService for "CountryInfo"): the requested
             // name is applied again, as the OpenAPI path does, and the receipt says both.
-            importerName = TypeResolver.Name(client);
+            importerName = ImportKit.Name(client);
             if (!string.Equals(importerName, clientName, StringComparison.Ordinal))
                 try { SetString(client, "Name", clientName); }
                 catch (Exception ex) { ((JsonArray)outcome["warnings"]!).Add($"the importer named the client '{importerName}' and '{clientName}' could not be written back: {Server.Unwrap(ex)}"); }
         });
-        if (error != null) return Refuse(outcome, IntegrationImport.ImporterNotFound, error);
+        if (error != null) return Refuse(outcome, ImportKit.ImporterNotFound, error);
         var after = Actions(client);
         foreach (var name in toImport)
             if (after.Contains(name)) ((JsonArray)outcome["imported"]!).Add(name);
-            else Refuse(outcome, IntegrationImport.ImportFailed, $"the Studio's importer did not create method '{name}'");
-        var finalName = client != null ? TypeResolver.Name(client) ?? clientName : clientName;
+            else Refuse(outcome, ImportKit.ImportFailed, $"the Studio's importer did not create method '{name}'");
+        var finalName = client != null ? ImportKit.Name(client) ?? clientName : clientName;
         outcome["client"] = new JsonObject
         {
             ["name"] = finalName, ["requested"] = clientName, ["key"] = client?.ObjectKey?.ToString(), ["created"] = created,
@@ -165,7 +163,7 @@ internal static class IntegrationImportHandler
     }
 
     private static HashSet<string> Actions(OutSystems.Model.IObjectSignature? client) => client?.Children.OfType<OutSystems.Model.IObjectSignature>()
-        .Where(c => c.GetType().GetInterfaces().Any(i => i.Name == "ISOAPAction")).Select(c => TypeResolver.Name(c) ?? "").ToHashSet(StringComparer.Ordinal) ?? new HashSet<string>(StringComparer.Ordinal);
+        .Where(c => c.GetType().GetInterfaces().Any(i => i.Name == "ISOAPAction")).Select(c => ImportKit.Name(c) ?? "").ToHashSet(StringComparer.Ordinal) ?? new HashSet<string>(StringComparer.Ordinal);
 
     private static object? CreateFetcher(Type fetcherType, object? workspace)
     {
@@ -211,44 +209,44 @@ internal static class IntegrationImportHandler
         var service = serviceType != null && getService != null ? getService.MakeGenericMethod(serviceType).Invoke(services, null) : null;
         var create = serviceType?.GetMethods().Where(m => m.Name == "CreateRestClientFromSwagger").OrderByDescending(m => m.GetParameters().Length).FirstOrDefault();
         if (service == null || create == null)
-            return Refuse(outcome, IntegrationImport.ImporterNotFound, $"the REST plugin of this Service Studio ({StudioVersion}) has no IRestPluginService.CreateRestClientFromSwagger reachable through ModelServices.GetPluginService");
+            return Refuse(outcome, ImportKit.ImporterNotFound, $"the REST plugin of this Service Studio ({StudioVersion}) has no IRestPluginService.CreateRestClientFromSwagger reachable through ModelServices.GetPluginService");
         var existing = ((OutSystems.Model.IObjectSignature)copy).Children.OfType<OutSystems.Model.IObjectSignature>()
-            .FirstOrDefault(c => string.Equals(TypeResolver.Name(c), clientName, StringComparison.OrdinalIgnoreCase));
-        var operations = p["selection"]!["operations"]!.AsArray().OfType<JsonObject>().Select(o => new RestOpenApi.Operation(o["id"]?.ToString() ?? "", o["verb"]!.ToString(), o["path"]!.ToString())).ToList();
+            .FirstOrDefault(c => string.Equals(ImportKit.Name(c), clientName, StringComparison.OrdinalIgnoreCase));
+        var operations = p["selection"]!["operations"]!.AsArray().OfType<JsonObject>().Select(o => (Id: o["id"]?.ToString() ?? "", Verb: o["verb"]!.ToString(), Path: o["path"]!.ToString())).ToList();
         if (existing != null)
         {
-            var have = existing.Children.OfType<OutSystems.Model.IObjectSignature>().Select(c => TypeResolver.Name(c) ?? "").ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var have = existing.Children.OfType<OutSystems.Model.IObjectSignature>().Select(c => ImportKit.Name(c) ?? "").ToHashSet(StringComparer.OrdinalIgnoreCase);
             var all = operations.Select(o => (Operation: o, Name: OperationName(o))).ToList();
-            foreach (var (operation, _) in all.Where(x => have.Contains(x.Name))) ((JsonArray)outcome["skipped"]!).Add(operation.Label);
+            foreach (var (operation, _) in all.Where(x => have.Contains(x.Name))) ((JsonArray)outcome["skipped"]!).Add(ImportKit.Label(operation.Id, operation.Verb, operation.Path));
             if (all.All(x => have.Contains(x.Name))) { outcome["client"]!["key"] = existing.ObjectKey?.ToString(); return outcome; }
-            return Refuse(outcome, IntegrationImport.ImportFailed, $"client '{clientName}' already exists: the O11 OpenAPI import creates a new client; import the new operations into another client name, or declare them as methods (op rest)");
+            return Refuse(outcome, ImportKit.ImportFailed, $"client '{clientName}' already exists: the O11 OpenAPI import creates a new client; import the new operations into another client name, or declare them as methods (op rest)");
         }
         var text = File.ReadAllText(p["document_path"]!.ToString());
-        var plan = new RestOpenApi.OpenApiPlan(p["document_path"]!.ToString(), p["document_sha256"]!.ToString(), text, null, operations, operations, []);
+        var filtered = ImportKit.Filtered(p["document_path"]!.ToString(), p["document_sha256"]!.ToString(), text, operations);
         var dependencies = new Dictionary<Uri, string>();
         foreach (var d in p["dependencies"]?.AsArray().OfType<JsonObject>() ?? [])
             if (Uri.TryCreate(d["uri"]!.ToString(), UriKind.RelativeOrAbsolute, out var uri)) dependencies[uri] = File.ReadAllText(d["path"]!.ToString());
         string? error = null;
         OutSystems.Model.IObjectSignature? client = null;
-        StudioAdapter.Runtime.Mutate(copy, "Anvil: OpenAPI import " + clientName, _ =>
+        ImportKit.Mutate(copy, "Anvil: OpenAPI import " + clientName, _ =>
         {
             var arguments = create.GetParameters().Select(parameter => parameter.Name switch
             {
-                "eSpace" => (object?)copy, "swaggerJson" => RestOpenApi.Filtered(plan), "swaggerUri" => new Uri(p["document_path"]!.ToString()),
+                "eSpace" => (object?)copy, "swaggerJson" => filtered, "swaggerUri" => new Uri(p["document_path"]!.ToString()),
                 "dependencies" => dependencies, _ => parameter.HasDefaultValue ? parameter.DefaultValue : null,
             }).ToArray();
             try { client = create.Invoke(service, arguments) as OutSystems.Model.IObjectSignature; }
             catch (Exception ex) { error = "the REST plugin refused the document: " + Server.Unwrap(ex); return; }
-            if (client != null && TypeResolver.Name(client) != clientName) SetString(client, "Name", clientName);
+            if (client != null && ImportKit.Name(client) != clientName) SetString(client, "Name", clientName);
         });
         if (error != null) return Refuse(outcome, "OPENAPI_INVALID", error);
-        if (client == null) return Refuse(outcome, IntegrationImport.ImportFailed, "the REST plugin created no client");
-        foreach (var operation in operations) ((JsonArray)outcome["imported"]!).Add(operation.Label);
+        if (client == null) return Refuse(outcome, ImportKit.ImportFailed, "the REST plugin created no client");
+        foreach (var operation in operations) ((JsonArray)outcome["imported"]!).Add(ImportKit.Label(operation.Id, operation.Verb, operation.Path));
         outcome["client"] = new JsonObject { ["name"] = clientName, ["key"] = client.ObjectKey?.ToString(), ["created"] = true };
         return outcome;
     }
 
-    private static string OperationName(RestOpenApi.Operation operation)
+    private static string OperationName((string Id, string Verb, string Path) operation)
     {
         var source = operation.Id.Length > 0 ? operation.Id : operation.Verb + operation.Path;
         var name = new string(source.Select(c => char.IsLetterOrDigit(c) || c == '_' ? c : '_').ToArray()).Trim('_');
@@ -283,8 +281,37 @@ internal static class IntegrationImportHandler
         return result;
     }
 
-    private static Type? FindType(string fullName) => AppDomain.CurrentDomain.GetAssemblies().Where(a => !a.IsDynamic)
-        .Select(a => { try { return a.GetType(fullName); } catch { return null; } }).FirstOrDefault(t => t != null);
+    /// <summary>A type of the Studio by its full name: in the loaded assemblies, else (review B3 of fase4-28 r4-f3-import) in the
+    /// Studio's own plugin assembly of that namespace, Plugins\ServiceStudio\ServiceStudio.Plugin.&lt;Name&gt;.dll next to the
+    /// model assembly (install-agnostic), loaded into the model's load context when the Studio has not loaded it yet. A plugin
+    /// already loaded without the type is the answer (null): nothing else is loaded.</summary>
+    internal static Type? FindType(string fullName)
+    {
+        var loaded = AppDomain.CurrentDomain.GetAssemblies().Where(a => !a.IsDynamic)
+            .Select(a => { try { return a.GetType(fullName); } catch { return null; } }).FirstOrDefault(t => t != null);
+        if (loaded != null) return loaded;
+        var parts = fullName.Split('.');
+        if (parts.Length < 4 || parts[0] != "ServiceStudio" || parts[1] != "Plugin") return null;
+        var assemblyName = string.Join('.', parts.Take(3));
+        if (AppDomain.CurrentDomain.GetAssemblies().Any(a => string.Equals(a.GetName().Name, assemblyName, StringComparison.OrdinalIgnoreCase))) return null;
+        try
+        {
+            var studio = Path.GetDirectoryName(typeof(ESpace).Assembly.Location);
+            if (string.IsNullOrEmpty(studio)) return null;
+            var file = Path.Combine(studio, "Plugins", "ServiceStudio", assemblyName + ".dll");
+            if (!File.Exists(file)) return null;
+            var context = System.Runtime.Loader.AssemblyLoadContext.GetLoadContext(typeof(ESpace).Assembly) ?? System.Runtime.Loader.AssemblyLoadContext.Default;
+            return context.LoadFromAssemblyPath(file).GetType(fullName);
+        }
+        catch (Exception ex) when (ex is IOException or BadImageFormatException or UnauthorizedAccessException or ArgumentException) { return null; }
+    }
+
+    /// <summary>The WSDLLocation a new SOAP client keeps (review B4): the service's own http(s) address when the job named one
+    /// (informative: the import never fetched it), else only the pinned file's name, never a path of the machine that ran the
+    /// import (the customer's agent folder, or the server's workspace).</summary>
+    internal static string WsdlLocation(string? source, string documentPath)
+        => source is { Length: > 0 } && (source.StartsWith("http://", StringComparison.OrdinalIgnoreCase) || source.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+            ? source : Path.GetFileName(documentPath);
 
     private static IEnumerable<object> Enumerate(object? value) => value is IEnumerable e and not string ? e.Cast<object?>().Where(x => x != null).Cast<object>() : [];
     private static IEnumerable<string> Strings(JsonNode? node) => node is JsonArray a ? a.Select(x => x?.ToString() ?? "").Where(x => x.Length > 0) : [];

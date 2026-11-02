@@ -147,6 +147,14 @@ confere a closure das DLLs. Não há resolução automática de NuGet. Intername
 - Processo do Studio sem janela: `STUDIO_STARTING` (ainda abrindo) ou `STUDIO_WINDOWLESS` com pid, hora e o passo exato. O SSAM nunca encerra um Studio.
 - Provas: `kernel/tests/Anvil.Tests/UiFreezeTests.cs`, `platforms/odc/facade/tests/ui-freeze*.test.mjs`. Prova viva pendente.
 
+## Studio atualizado e conector que não compila (C-49, 27/10/2026)
+
+- O Service Studio se atualiza sozinho (11.55.91 em net8.0 para 11.55.94 em net10.0 em 27/10). Nesta linha o conector já compila para o runtime que o Studio declara (`kernel/StudioRuntime.props`); um build ainda pode falhar depois de uma atualização (o reference pack do runtime ausente na máquina, uma API que o Studio mudou).
+- `platforms/odc/facade/studio-runtime.mjs` lê o Studio instalado sem processo: `FileVersion` do `ServiceStudio.exe` (VS_FIXEDFILEINFO) e `tfm` do `ServiceStudio.runtimeconfig.json`.
+- Todo build do bridge que passa grava `kernel/.local/runtime-connect/last-good-build.json`; o registro da conexão leva `studioRuntime`.
+- Build que falha (`studio-connect.mjs build`): `STUDIO_UPDATED {from, to, runtime}` quando o Studio não é o do último build bom (ou o do registro da conexão), senão `CONNECTOR_BUILD_FAILED`; os dois com os primeiros erros do compilador, o log e a ação. `ssam_connect` responde `code`, `connector` e `next`; `last-build-failure.json` fica até um build passar, e o `ssam_doctor` o mostra em `lanes.o11.connector` (com `studioChanged` quando o Studio instalado mudou desde o último build bom).
+- Testes: `platforms/odc/facade/tests/studio-runtime.test.mjs`.
+
 ## Referências
 
 ### Prompt de credenciais ODC (2026-10-14)

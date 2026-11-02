@@ -47,6 +47,7 @@ import { laneEnvironment, createAnvilRunner } from './anvil-cli.mjs';
 import { hostedContext, hostedSpawnEnv, onHostedContextClose, usesWorkspace } from './executor.mjs';
 import { kernelStart } from './quality-meter.mjs';
 import { withTraceArgs } from './correlation.mjs';
+import { logTailSince, sizeOf } from './process-stop.mjs';
 
 export const WORKER_PROTOCOL = 'anvil-worker-1';
 const MAX_REPLY_BYTES = 256 * 1024 * 1024;
@@ -339,13 +340,17 @@ export async function runOnWorker(argv, target, deps = {}) {
   for (let attempt = 1; ; attempt++) {
     if (deps.avoidBusy === true && (state.status.busy || Number(state.status.queued) > 0))
       return { used: false, note: `the resident worker was busy with ${state.status.currentCommand ?? 'an unknown command'} for ${state.status.runningMs ?? 0} ms; this read ran cold` };
+    // R4 (family C): a worker that dies with the request leaves its reason in its startup log (its stderr) from here on.
+    const startupLog = target.local ? path.join(target.local, `worker-${target.port}-startup.log`) : null;
+    const logAt = startupLog ? sizeOf(startupLog) : 0;
     const r = await workerRequest({ port: target.port, authorization: target.key() ?? null, timeoutMs: target.timeoutMs }, argv);
     if (!r.sent) {
       if (!r.refused) return { used: false, note: `worker unreachable before the request was written (${r.error})` };
       if (attempt >= 3) return { used: false, note: 'the worker kept refusing the connection; nothing was sent' };
     } else if (!r.reply) {
       return { used: true, unknown: true, code: 'WORKER_OUTCOME_UNKNOWN', detail: r.error,
-        error: 'worker connection failed after submission; execution outcome is unknown, command was not replayed' };
+        error: 'worker connection failed after submission; execution outcome is unknown, command was not replayed',
+        stderrTail: startupLog ? logTailSince(startupLog, logAt) : [] };
     } else if (r.reply.retryable === true && r.reply.executed === false) {
       if (attempt >= 3) return { used: false, note: 'the worker kept recycling before executing the request' };
     } else {
@@ -507,7 +512,7 @@ export function createWorkerFirstRunner({ root = anvilRoot, env = process.env, o
       return note ? { ...r, workerNote: note } : r;
     }
     if (w.unknown) return { ok: false, exitCode: 1, envelope: null, timedOut: true, unknown: true, code: w.code,
-      stderr: [w.error].filter(Boolean), wallMs: Date.now() - started, line, via: 'worker' };
+      stderr: [w.error].filter(Boolean), stderrTail: Array.isArray(w.stderrTail) ? w.stderrTail : [], wallMs: Date.now() - started, line, via: 'worker' };
     const envelope = w.envelope;
     return { ok: envelope?.ok === true, exitCode: envelope?.ok === true ? 0 : 1, envelope, stderr: w.warning ? [w.warning] : [],
       wallMs: Date.now() - started, line, via: 'worker', ...(Number.isFinite(envelope?.queuedMs) ? { workerQueuedMs: envelope.queuedMs } : {}) };
@@ -822,14 +827,20 @@ export class HostedO11Workers {
     if (!claim.entry) return { used: false, note: claim.note };
     const entry = claim.entry;
     let written = false; // from the request on, a failure is an unknown outcome
+    // R4 (family C): what the worker wrote to its startup log (its stderr) after the request was sent: the unhandled
+    // exception of a worker that died with it (02/11, the SkiaSharp finalizer), read before the entry is retired.
+    const startupLog = path.join(entry.local, `worker-${entry.port}-startup.log`);
+    let logAt = null;
     const unknown = detail => {
+      const stderrTail = logAt == null ? [] : logTailSince(startupLog, logAt);
       this.retire(entry, 'outcome unknown', { mode: 'drain', drainMs: timeoutMs });
-      return { used: true, unknown: true, code: 'WORKER_OUTCOME_UNKNOWN', detail, error: UNKNOWN };
+      return { used: true, unknown: true, code: 'WORKER_OUTCOME_UNKNOWN', detail, error: UNKNOWN, stderrTail };
     };
     try {
       const ready = await this.check(entry, timeoutMs);
       if (!ready.ok) return { used: false, note: ready.note };
       written = true;
+      logAt = sizeOf(startupLog);
       let r;
       try { r = await workerRequest({ port: entry.port, authorization: entry.key, timeoutMs }, argv.map(String)); }
       catch (error) { r = { sent: false, error: error.message }; } // the socket never opened: nothing was written

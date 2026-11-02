@@ -9,7 +9,9 @@ import { randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { MirrorError, violation } from './mirror.mjs';
 
-export const MANIFEST_COMMANDS = Object.freeze(['check-base', 'preview', 'merge', 'publish', 'publish-status', 'create', 'authorize', 'create-app']);
+// reconcile-merge <manifest> (U1): the bridge's verification of a merge that returned; its manifest goes to the agent like merge's
+// (agent/lib/kinds.mjs MANIFEST_COMMANDS, the same list).
+export const MANIFEST_COMMANDS = Object.freeze(['check-base', 'preview', 'merge', 'reconcile-merge', 'publish', 'publish-status', 'create', 'authorize', 'create-app']);
 // The manifest fields the bridge reads as paths (studio/shared/Manifest.cs), the only ones json:"agent-paths" rewrites.
 export const MANIFEST_FIELDS = Object.freeze(['basePath', 'candidatePath', 'producerPath', 'builderReceipt', 'evidenceDir']);
 const INPUT_FIELDS = ['basePath', 'candidatePath', 'producerPath', 'builderReceipt'];

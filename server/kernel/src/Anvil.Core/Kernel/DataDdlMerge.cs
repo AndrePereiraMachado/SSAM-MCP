@@ -82,11 +82,38 @@ public static class DdlMerge
         return Merger.ChangedStatement(statement, now) ? "differs from its declaration now" : null;
     }
 
+    // C-01: the declaration now (Corrected) is what the module has, never the job's statement: the refusal shows it in
+    // current, to read, and keeps the statements as sent (ModelSession.RefuseDdl).
     private static DdlProblem Unknown(int line, string what, string why, string? current, string? fix) =>
         new(line, "DDL_BASE_UNKNOWN", what + ", and " + why + ": what changed in the Studio since cannot be told from what the statement changes, so nothing of it is written"
-            + (current != null ? " (its declaration now is the patch)" : ""),
-            fix ?? "write the statement on the declaration as the module has it now (the patch; the edit of this problem carries every declaration this text names, with the basedOn to send), or read the data again (ssam_map view ddl)",
+            + (current != null ? " (its declaration now is in current.ddl)" : ""),
+            fix ?? "write the statement on the declaration as the module has it now (current.ddl carries every declaration this text names, current.basedOn the read to send it on), keeping the other statements, or read the data again (ssam_map view ddl)",
             current);
+
+    /// <summary>C-01 (F-FitBody-21): whether the statements with keys change nothing the module has now but add to it (attributes,
+    /// records, indexes and events without a key) or drop what they name. What such statements write is the same whatever read
+    /// they were written on (a three-way merge with any base gives the module now plus the additions), so the basedOn of the
+    /// module now is certain for them. False for a statement that changes, renames or leaves out what the module has, or names a
+    /// key the module does not have: which side changed it cannot be told without its read.</summary>
+    public static bool OnlyAdds(DdlDocument theirs, DdlDocument ours)
+    {
+        var all = theirs.All().Where(e => e.Key.Length > 0).GroupBy(e => e.Key).ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
+        foreach (var top in ours.Elements) {
+            if (top.Key.Length == 0) {
+                // A new statement holds nothing of the module (a key inside one names what the reader never prints there).
+                if (Merger.HasKeyedPart(top)) return false;
+                continue;
+            }
+            if (!all.TryGetValue(top.Key, out var now) || now.Parent != null) return false;
+            if (top.Drop) continue;
+            if (!Merger.OnlyAdds(top, now)) return false;
+        }
+        foreach (var statement in ours.Detached.Where(e => e.Key.Length > 0)) {
+            if (!all.TryGetValue(statement.Key, out var now) || now.Parent == null || now.Parent.Name != statement.Of) return false;
+            if (!statement.Drop && !Merger.SameDetached(statement, now)) return false;
+        }
+        return true;
+    }
 
     // The declaration of a top-level element in a data text: its block (the statement and the ones of its own after it, up to
     // the blank line), found by the key of its first statement. Null when the text does not have it.
@@ -226,7 +253,7 @@ public static class DdlMerge
 
         private void NameTaken(int line, string name, string other, string? current) =>
             result.Problems.Add(new DdlProblem(line, "DDL_MERGE_NAME_TAKEN", "the statement names an element " + name + ", and since the read the Studio gave that name to "
-                + other + ": two elements of one name that are not the same element", "give it another name, or write the statement on the module as it is now (the edit of this problem)", current));
+                + other + ": two elements of one name that are not the same element", "give it another name, or write the statement on the module as it is now (current.ddl)", current));
 
         // ---- top-level statements ----------------------------------------------------------------------------------------------
 
@@ -573,6 +600,16 @@ public static class DdlMerge
         // Whether a statement as sent changes the element it was read from: itself, its attributes, its records when it has its
         // values, the indexes, events and sample record it writes.
         internal static bool SameDetached(DdlElement statement, DdlElement now) => SameOwn(statement, now, now.Parent!, now.Parent!);
+
+        // C-01: the statement without the parts it adds (no key) says what its element says now.
+        internal static bool OnlyAdds(DdlElement statement, DdlElement now)
+        {
+            var kept = Shell(statement, statement.Parent);
+            foreach (var child in statement.Children.Where(c => c.Key.Length > 0)) kept.Children.Add(Copy(child, kept));
+            return !ChangedStatement(kept, now);
+        }
+
+        internal static bool HasKeyedPart(DdlElement element) => Descendants(element).Any(d => d.Key.Length > 0);
 
         internal static bool ChangedStatement(DdlElement statement, DdlElement was)
         {

@@ -17,7 +17,9 @@
 # (where only .NET 10 is installed): Service Studio 11.55.91 carries System.Text.Json and others at 10.0, which the O11
 # kernel compiles against (kernel/Directory.Build.targets). A .NET 8 runtime next to it would be chosen first and would
 # not satisfy those references, so the image has none.
-# The XIF engine (o11_extension) is .NET Framework x86, Windows only: not built here, refused hosted (XIF_ENGINE_WINDOWS_ONLY).
+# The XIF engine (o11_extension) is .NET Framework x86, Windows only: not built here. Hosted, its two stages run on the user's
+# machine through the SSAM agent (kind o11.xif); an agent without the kind answers XIF_ENGINE_WINDOWS_ONLY. The server compiles
+# the extension DLL itself, against ref/net472 next to the O11 CLI (checked in the kernel-o11 stage).
 
 ARG NODE_VERSION=24
 ARG PNPM_VERSION=11.19.0
@@ -102,6 +104,8 @@ COPY kernel/ kernel/
 RUN --mount=type=bind,from=studio-o11,source=/studio/o11,target=/studio/o11 \
     dotnet build kernel/src/Anvil.Cli -c Release -nologo -v q -nodeReuse:false \
       -p:SSDir=/studio/o11 -o /out/kernel/.local/cli
+# F4 (o11_extension hosted): the net472 reference assemblies the XIF compiler needs (XifCompiler.DefaultReferenceAssemblies).
+RUN test -f /out/kernel/.local/cli/ref/net472/mscorlib.dll && test -d /out/kernel/.local/cli/ref/net472/Facades
 
 # ---- ODC kernel (anvil-odc.dll), against /studio/odc ----------------------------------------------------------------------------
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS kernel-odc

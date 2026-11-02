@@ -244,6 +244,15 @@ internal static class ScreenHtmlNative
     /// <summary>A src that is a place, not a module image: a URL with a scheme, a data URL, a network or an absolute path.</summary>
     internal static bool IsUrl(string value) => Url.IsMatch(value.Trim());
 
+    /// <summary>B15 (the proto line's C-10): the name of the module image a file becomes (the facade's module-images.mjs
+    /// imageNameOf): its base name with what an OutSystems name does not take written as _, and _ first when it does not start
+    /// with a letter or _ (fm-hero -> fm_hero).</summary>
+    internal static string ImageNameOf(string stem)
+    {
+        var name = Regex.Replace(stem, "[^A-Za-z0-9_]", "_");
+        return name.Length > 0 && (char.IsAsciiLetter(name[0]) || name[0] == '_') ? name : "_" + name;
+    }
+
     /// <summary>A file name without a scheme (logo.png, assets/logo.png, ./img/a.jpg): the base name it names (logo), else null.</summary>
     internal static string? FileBase(string value)
     {
@@ -290,8 +299,11 @@ internal static class ScreenHtmlNative
         if (!ScreenHtml.HasBinding(src) && !isReference(src.Trim()) && FileBase(src) is { } stem && type is null or "Static")
         {
             var images = context.Images?.Invoke()?.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            // B15 (C-10): the image a file of that name became (ssam_code files: fm-hero.png is fm_hero).
+            var named = ImageNameOf(stem);
             var same = images?.FirstOrDefault(i => string.Equals(i, stem, StringComparison.OrdinalIgnoreCase))
-                ?? (isReference("Image:" + stem) ? stem : null);
+                ?? images?.FirstOrDefault(i => string.Equals(i, named, StringComparison.OrdinalIgnoreCase))
+                ?? (isReference("Image:" + stem) ? stem : named != stem && isReference("Image:" + named) ? named : null);
             if (same != null)
             {
                 node.Attributes[node.Attributes.FindIndex(a => a.Key == "src")] = new("src", same);
@@ -396,6 +408,10 @@ internal static class ScreenHtmlNative
     /// list's row (and the attributes of their records); null when unknown here.</summary>
     internal static string? SrcType(string expression, ScreenHtml.Node at, Context context)
     {
+        // C-31 (F-FitBody-06, -39, F-AiChatbot-06b): an element of a list by its index (List[i]) has the type of its current
+        // row (List.Current): src="{{ GetFotos.List[0].Foto.Url }}" was "the type is not known here". Innermost index first.
+        for (var unindexed = Indexer.Replace(expression, ".Current"); unindexed != expression; unindexed = Indexer.Replace(expression, ".Current"))
+            expression = unindexed;
         List<Anvil.Core.Preflight.Token> tokens;
         try { tokens = Anvil.Core.Preflight.ExpressionText.Tokens(expression); } catch { return null; }
         if (tokens.Any(t => t.Kind == Anvil.Core.Preflight.TokenKind.Text)) return "Text";
@@ -434,6 +450,9 @@ internal static class ScreenHtmlNative
             _ => type,
         };
     }
+
+    // C-31: an index right after a name (List[0], List[i + 1]), innermost first: no bracket inside.
+    private static readonly Regex Indexer = new(@"(?<=[\w)\]])\[[^\[\]]*\]", RegexOptions.Compiled);
 
     // ---- svg -------------------------------------------------------------------------------------------------------------
     private static readonly HashSet<string> NotIcon = new(StringComparer.OrdinalIgnoreCase)

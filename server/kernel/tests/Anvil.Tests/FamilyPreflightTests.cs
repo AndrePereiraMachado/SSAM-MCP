@@ -291,4 +291,26 @@ public sealed class FamilyCascadeTests
         };
         Assert.Equal(2, JobRunner.FoldCascade(applied, Job(), "/ops").Count);
     }
+
+    /// <summary>C-34 (F-FigmaMobile-05): two new screens of the job link each other; the document of the second failed, and the
+    /// Verify said "Unknown 'MainFlow\SendMoney' On Click" on the first (a RequiredPropertyValue code, the screen named as its
+    /// flow path). That is the second document's failure seen again: a cascade of it, never a root that blames the first.</summary>
+    [Fact]
+    public void AVerifyUnknownFlowPathOfAScreenAFailedDocumentDeclaresIsItsCascade()
+    {
+        var job = JsonNode.Parse("""
+            [{"op":"html","data":{"html":"<screen name=\"FamContacts\" flow=\"MainFlow\"><a onclick=\"FamSend()\">Send</a></screen>"}},
+             {"op":"html","data":{"html":"<screen name=\"FamSend\" flow=\"MainFlow\"><div onclick=\"FamContacts\">Back</div></screen>"}}]
+            """)!.AsArray();
+        var root = P("apply", 1, "/ops/1/data/html", "HTML_EVENT_OPENS_SCREEN", "html: line 1 col 40: onclick=\"FamContacts\" on <div> opens the screen FamContacts: the event of a Container runs a screen action, never a screen");
+        var verify = P("verify", 0, "/ops/0", "RequiredPropertyValue_PropertyIn_WithPrevious",
+            "Error RequiredPropertyValue_PropertyIn_WithPrevious: Required Property Value | Unknown 'MainFlow\\FamSend' On Click in 'OnClick' Event. @ FamContacts (MobileScreen) / Link / OnClick (UILifeCycleEvent)");
+        var folded = JobRunner.FoldCascade([root, verify], job, "/ops");
+        Assert.Same(root, Assert.Single(folded));
+        Assert.Equal(1, root["blocks"]!.GetValue<int>());
+        // The same message about a screen no part of the job declares stays: a fault of its own.
+        var foreign = P("verify", 0, "/ops/0", "RequiredPropertyValue_PropertyIn_WithPrevious",
+            "Error RequiredPropertyValue_PropertyIn_WithPrevious: Required Property Value | Unknown 'MainFlow\\FamElsewhere' On Click in 'OnClick' Event. @ FamContacts (MobileScreen) / Link / OnClick (UILifeCycleEvent)");
+        Assert.Equal(2, JobRunner.FoldCascade([P("apply", 1, "/ops/1/data/html", "HTML_EVENT_OPENS_SCREEN", "x"), foreign], job, "/ops").Count);
+    }
 }

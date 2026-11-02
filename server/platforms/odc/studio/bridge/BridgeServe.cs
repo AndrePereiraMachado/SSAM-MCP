@@ -111,6 +111,29 @@ internal sealed class JobNotStartedException : InvalidOperationException {
     public static string TokenOf(string what) => what == "merge" ? "MERGE_NOT_STARTED" : "STUDIO_NOT_IDLE";
 }
 
+// U1 (v106): the verification of a merge is a job of its own on the tab, queued only after the merge's job has returned. Before, the
+// merge's job verified from inside its own context (Dispatcher.UIThread.InvokeAsync(() => VerifyMerged(...))), where a read can still
+// see the model of before the merge, and the proto's v102, which nested a second idle job there, hung waiting on itself. A
+// verification its tab does not start within its bound is abandoned like any queued job, but the merge did run, so the refusal says
+// that (MergeNotVerifiedException), never "nothing was executed". It runs even past the deadline of its command, as the
+// verification always did: what the merge left is always proven or refused, never left half-checked.
+internal static class VerifyAfterMerge {
+    public static async Task<object> Run(Func<Action, Task> enqueue, string module, TimeSpan limit, Func<object> verify, Func<DateTimeOffset, Task<string?>> abandoned) {
+        string? state = null;
+        try { return await TabQueue.Run(enqueue, "verification of the merge", module, limit, verify, async queuedAt => state = await abandoned(queuedAt)); }
+        catch (JobNotStartedException) { throw new MergeNotVerifiedException(module, limit, state); }
+    }
+}
+
+// A merge that returned and whose verification never started: merged (the bridge's answer says merged:true, uncertain), not
+// verified, nothing published. "did not become idle" is what Journal.Gate reads as studio_busy.
+internal sealed class MergeNotVerifiedException : InvalidOperationException {
+    public MergeNotVerifiedException(string module, TimeSpan limit, string? state)
+        : base("The native merge of " + module + " returned (native-return.json), but the Studio did not run its verification within " + (int)limit.TotalSeconds
+            + " s: its tab did not become idle. The module holds the merge, not verified, and nothing was published. Never deliver it again: once studio_status names no busy command,"
+            + " studio_publish {module, reconcile:true} verifies it." + (string.IsNullOrEmpty(state) ? "" : " Tab state: " + state)) { }
+}
+
 // The command that holds the Studio turn: it holds it until its work ends, whether its answer was written, lost or sent
 // late. Context: whatever the caller wants to read back about it (the bridge's module and evidence).
 internal sealed class BusyCommand {

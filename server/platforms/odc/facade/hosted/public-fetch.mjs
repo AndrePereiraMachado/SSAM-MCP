@@ -58,6 +58,9 @@ function embeddedV4(g) {
   return null;
 }
 
+/** The IPv4 address an IPv6 address carries (::a.b.c.d, ::ffff:a.b.c.d, 64:ff9b::a.b.c.d, 2002:aabb:ccdd::), or null (served-proof.mjs). */
+export function carriedIPv4(ip) { const g = net.isIP(String(ip ?? '')) === 6 ? groups6(ip) : null; return g ? embeddedV4(g) : null; }
+
 /** True when ip is not a public address (or not an address at all): the hosted server never connects there. */
 export function blockedAddress(ip) {
   const family = net.isIP(String(ip ?? ''));

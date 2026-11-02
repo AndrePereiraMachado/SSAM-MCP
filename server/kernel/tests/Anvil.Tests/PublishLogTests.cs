@@ -136,6 +136,34 @@ public class PublishLogTests
         Assert.Empty(PublishLog.QuotedNames(null, ""));
     }
 
+    // Lote 4, F1: the real rows of two failures TrueChange did not see (the o11_publish answers of 22/10 and 15/10, module
+    // names anonymized as in platforms/odc/facade/tests/fixtures/publish-logs): the producer the compile error quotes and the
+    // Timer an upgrade error names come back as the element of the message, with its stage.
+    [Fact]
+    public void ErrorsTrueChangeDoesNotSeeComeWithTheirElement()
+    {
+        var reference = new JsonObject { ["name"] = "Ops_Theme", ["key"] = "6CeftNo0u0GJWgggrNYgdw", ["kind"] = "Reference", ["path"] = "Ops_UI (ESpace) / Ops_Theme (Reference)" };
+        var timer = new JsonObject { ["name"] = "AgentQueue", ["key"] = "Ad6j6qiy4kyA8+Atpti_SQ", ["kind"] = "Timer", ["path"] = "Agent_CS (ESpace) / AgentQueue (Timer)" };
+        JsonObject? Resolve(string name) => name == "Ops_Theme" ? (JsonObject)reference.DeepClone() : name == "AgentQueue" ? (JsonObject)timer.DeepClone() : null;
+        var broken = PublishLog.Project(Op("CompletedWithFailure", "Compiling",
+            Row(Def("OneCP_Compile", MessageType.Info, "Compiling Ops_UI"), "18:44:35"),
+            Row(Def("BrokenReferences", MessageType.Error, "Publish aborted",
+                "New broken or missing references found for producer module 'Ops_Theme'. Please review them and republish."), "18:44:44")), Steps, 60, Resolve);
+        var first = broken["messages"]!.AsArray()[0]!;
+        Assert.Equal("compile", first["stage"]!.GetValue<string>());
+        Assert.Equal("Publish aborted", first["text"]!.GetValue<string>());
+        Assert.True(JsonNode.DeepEquals(reference, first["element"]));
+        Assert.Equal("compile", broken["failedStage"]!.GetValue<string>());
+        var upgrade = PublishLog.Project(Op("CompletedWithFailure", "Deploying",
+            Row(Def("OneCP_Publish", MessageType.Info, "Deploying Agent_CS"), "15:28:01"),
+            Row(Def("UpgradeError", MessageType.Error, "Upgrade Error",
+                "Generic SQL Error. String or binary data would be truncated.\nThe statement has been terminated. Timer 'AgentQueue' schedule"), "15:28:08")), Steps, 60, Resolve);
+        var deploy = upgrade["messages"]!.AsArray()[0]!;
+        Assert.Equal("deploy", deploy["stage"]!.GetValue<string>());
+        Assert.Equal("Timer", deploy["element"]!["kind"]!.GetValue<string>());
+        Assert.Equal("deploy", upgrade["failedStage"]!.GetValue<string>());
+    }
+
     [Fact]
     public void WithoutAPaneTheAnswerSaysWhy()
     {

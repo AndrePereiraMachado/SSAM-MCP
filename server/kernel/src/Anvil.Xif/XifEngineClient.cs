@@ -29,6 +29,73 @@ public static class XifEngineClient
         return found;
     }
 
+    /// <summary>Set to "1" by a hosted server (executor.mjs hostedSpawnEnv): the engine stages go to the user's SSAM agent,
+    /// whose own Integration Studio runs them (kind o11.xif), through the O11 relay of that customer (ANVIL_BRIDGE_PORT, key
+    /// ANVIL_AUTHORITY_DIR\bridge.key). No engine process runs on the server, whatever its system.</summary>
+    public const string RelayVariable = "ANVIL_XIF_ENGINE_RELAY";
+    /// <summary>The relay method the server's O11 relay routes to the agent kind o11.xif (o11-relay.mjs).</summary>
+    public const string RelayMethod = "xif_engine";
+    /// <summary>The engine's own limit, the mirror of the files both ways and a margin.</summary>
+    public static readonly TimeSpan RelayTimeout = TimeSpan.FromMinutes(14);
+
+    /// <summary>The engine of `anvil xif build`: the relay when the hosted server set RelayVariable, else the local process.</summary>
+    public static XifBuild.EngineRunner Default => Select(Environment.GetEnvironmentVariable);
+
+    public static XifBuild.EngineRunner Select(Func<string, string?> env)
+    {
+        if (env(RelayVariable) != "1") return Run;
+        return (request, work) =>
+        {
+            if (!int.TryParse(env("ANVIL_BRIDGE_PORT"), out var port) || port < 1 || port > 65535)
+                throw XifRefusal.Single(XifCodes.EngineUnavailable, "The relay to the user's SSAM agent has no port; nothing was generated or sent.", "Connect the user's Service Studio (ssam_connect {lane:\"o11\"}), then call again.");
+            string key;
+            try { key = File.ReadAllText(Path.Combine(env("ANVIL_AUTHORITY_DIR") ?? "", "bridge.key")).Trim(); }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException)
+            { throw XifRefusal.Single(XifCodes.EngineUnavailable, "The relay key of this account is missing; nothing was generated or sent.", "Connect the user's Service Studio again (ssam_connect {lane:\"o11\"})."); }
+            return RunRelay(request, port, key, RelayTimeout);
+        };
+    }
+
+    /// <summary>One engine stage through the server's O11 relay: one line {method:"xif_engine", params:request, authorization}
+    /// out, one engine answer back (the relay maps the server's files to the agent and the XIF back). The stage only writes
+    /// local files on both sides, so a lost answer is a refusal to repeat, never an unknown outcome in the environment.</summary>
+    public static JsonObject RunRelay(JsonObject request, int port, string key, TimeSpan timeout)
+    {
+        string? line;
+        try
+        {
+            using var client = new System.Net.Sockets.TcpClient();
+            if (!client.ConnectAsync(System.Net.IPAddress.Loopback, port).Wait(TimeSpan.FromSeconds(10)))
+                throw new IOException("the relay did not accept the connection");
+            client.ReceiveTimeout = (int)timeout.TotalMilliseconds; client.SendTimeout = 60000;
+            using var stream = client.GetStream();
+            var payload = new JsonObject { ["method"] = RelayMethod, ["params"] = request.DeepClone(), ["authorization"] = key }.ToJsonString() + "\n";
+            stream.Write(Encoding.UTF8.GetBytes(payload));
+            stream.Flush();
+            using var reader = new StreamReader(stream, new UTF8Encoding(false));
+            line = reader.ReadLine();
+        }
+        catch (Exception error) when (error is IOException or System.Net.Sockets.SocketException or AggregateException or ObjectDisposedException)
+        {
+            throw XifRefusal.Single(XifCodes.EngineUnavailable, "The user's SSAM agent did not answer the Integration Studio stage (" + Clip(error.Message) + "); nothing was sent to the environment.",
+                "Run the same call again; the stage works only on local files.");
+        }
+        JsonObject? answer = null;
+        try { answer = string.IsNullOrWhiteSpace(line) ? null : JsonNode.Parse(line) as JsonObject; } catch (System.Text.Json.JsonException) { }
+        if (answer == null)
+            throw XifRefusal.Single(XifCodes.EngineUnavailable, "The user's SSAM agent answered nothing readable for the Integration Studio stage; nothing was sent to the environment.",
+                "Run the same call again; the stage works only on local files.");
+        // The relay's own refusal (the key, a call never delivered): {success:false, executed:false, error:"CODE: text"}.
+        if (answer["ok"] == null && answer["success"]?.GetValue<bool>() == false)
+        {
+            var text = answer["error"]?.ToString() ?? "refused";
+            var code = System.Text.RegularExpressions.Regex.Match(text, "^([A-Z][A-Z0-9_]{2,60}): ").Groups[1].Value;
+            throw XifRefusal.Single(code.Length > 0 ? code : XifCodes.EngineUnavailable, "The Integration Studio stage did not reach the user's SSAM agent: " + Clip(text) + "; nothing was sent to the environment.",
+                "Connect the SSAM agent and the user's Service Studio, then call again.");
+        }
+        return Answered(answer);
+    }
+
     public static JsonObject Run(JsonObject request, string work)
     {
         var candidates = Candidates();
@@ -59,6 +126,12 @@ public static class XifEngineClient
         try { answer = line == null ? null : JsonNode.Parse(line) as JsonObject; } catch (System.Text.Json.JsonException) { }
         if (answer == null)
             throw XifRefusal.Single(XifCodes.EngineUnavailable, "The engine answered nothing readable (" + Clip(error.Result) + ").", "Run scripts\\setup-dev.ps1 again; check that Integration Studio is installed.");
+        return Answered(answer);
+    }
+
+    /// <summary>An engine answer, local or relayed: ok as it is, else the refusal with every problem it names.</summary>
+    private static JsonObject Answered(JsonObject answer)
+    {
         if (answer["ok"]?.GetValue<bool>() != true)
         {
             var code = answer["code"]?.ToString() ?? XifCodes.EngineUnavailable;

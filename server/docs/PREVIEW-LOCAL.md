@@ -50,6 +50,35 @@ A API de manutenção `platforms/odc/facade/preview/prepare.mjs` exporta:
 
 - `prepareProfile({directory,id,lane,target,screens,limitations,hostConfig,watcherConfig?,port})`: exige diretório novo e configurações de entrada qualificadas, com caminho/hash. Gera pins do código versionado, configuração do host e do watcher e recibo de preparação; todos os arquivos mutáveis ganham caminhos próprios. **Não copia o pacote privado de dependências** nem cria um compilador para um app arbitrário.
 - `registerProfile({catalogFile,profile})`: valida e acrescenta o perfil, recusando ID duplicado. Operação de manutenção serializada pelo integrador, não exposta a sessões de app.
+- Comando do integrador: `node platforms/odc/facade/preview/prepare.mjs --input <arquivo> [--catalog <arquivo>] [--directory <pasta nova>]`, com um insumo `ssam-preview-input/1` (os argumentos de `prepareProfile` menos o diretório, com `hostConfig`/`watcherConfig` fixados por sha256). Recusa um ID já registrado antes de preparar; a pasta padrão é sempre nova (`<id>-<segundo UTC>`, depois `-2`, `-3`).
+
+### Preparação automática
+
+Quando o alvo de `list`, `open` (ou `status`/`refresh`/`stop` sem `sessionId`) não tem perfil, `ssam_preview` procura um insumo
+qualificado em `<raiz>/.local/preview/inputs/*.json` (`SSAM_PREVIEW_INPUTS` troca a pasta, dentro da raiz). Com exatamente um
+insumo para o alvo, a engine da faixa instalada (`preview/engines/<lane>/host.mjs`) e os pins conferidos, prepara numa pasta nova
+`.local/preview/profiles/<id>-<data>`, registra no catálogo e responde `code: PREVIEW_PROFILE_PREPARED` com `prepared`
+(perfil, pasta, insumo). Sem insumo, com pin alterado, engine ausente, dois insumos ou outra preparação em curso
+(`PREVIEW_PREPARE_BUSY`): `PREVIEW_PROFILE_NOT_PREPARED` com `prepare {by: integrator, input, schema, command, reasons, meanwhile}`:
+o caminho exato do insumo e o comando acima. Nada é inferido de URL, tela ou app; a sessão de app continua sem shell.
+
+**Confinamento.** A chamada é de uma sessão de app: tudo o que a preparação automática lê, e tudo o que a engine vai ler no `open`,
+fica dentro da raiz, pelo caminho e pelo caminho real (junction ou link que sai é fora): a pasta de insumos, cada insumo e **o grafo
+inteiro fixado a partir do `hostConfig`** (`contextContract` e o que ele fixa, `runtimeAssets` e cada asset, `scenarioPlan`,
+`baselineConfig`, `scope`, `selectionFile`...). Cada JSON alcançado é lido (sha256 conferido quando fixado) e percorrido: um campo
+cujo nome diz caminho (`file`, `path`, `*File`, `*Path`, `*Dir`, `*Root`...) ou uma string escrita como caminho (letra de drive,
+`\\`, `//`, `\` inicial, `file:`) tem de estar dentro; um relativo não pode subir (`..`). Rotas de cenário (`path: "/..."` fora de
+pin) e registros `provenance` (que nenhuma engine segue) não são caminhos. Fora disso o motivo é `PATH_OUTSIDE_WORKSPACE` e nada é
+preparado; o ID precisa ser um ID de perfil antes de virar pasta. **Um insumo com `watcherConfig` nunca é preparado pela chamada**
+(o watcher carrega o compilador que a configuração nomeia e se liga ao processo de Studio que ela nomeia): o motivo
+`PREVIEW_WATCHER_INTEGRATOR_ONLY` traz o comando do integrador. Um servidor hospedado nunca prepara: o portão responde
+`HOSTED_UNAVAILABLE` ao `ssam_preview`, e a preparação dentro de um contexto hospedado não lê nem escreve nada. O comando do
+integrador continua lendo os arquivos qualificados onde estiverem instalados.
+
+**Uma preparação por vez.** A preparação automática e o comando do integrador tomam a mesma trava,
+`<pasta do catálogo>/profiles/prepare.lock`, com `{pid, startedAt, token}`. Ocupada: `PREVIEW_PREPARE_BUSY` com o arquivo. Uma trava
+cujo processo terminou, ou com mais de 120 s, é recuperada por `rename` atômico para `prepare.lock.stale-<hora>-<pid>` (nunca apagada)
+e tomada de novo. A trava só é removida por quem a tomou. Uma preparação que falha apaga só a pasta que ela mesma criou.
 
 O host deve ter endereço loopback dedicado, porta fixa e contratos consistentes com sua captura. Cookies compartilham hostname entre portas: **trocar só a porta não isola duas sessões**. Para um cenário O11 novo, prepare outra origem e seu contexto/release correspondente. Não limpe o armazenamento de uma sessão em uso para contornar a validação de contexto. O perfil ODC atual mantém o endereço exigido por seu contrato e não deve ser duplicado em outro cenário no mesmo browser.
 
@@ -67,6 +96,6 @@ O watcher registra a intenção antes de pedir snapshot. Timeout após envio exi
 
 ## Validação
 
-Testes versionados: `preview.test.mjs` (MCP/ciclo de vida), `preview-discover.test.mjs` (ODC/O11 e desambiguação de merge), `preview-pipeline.test.mjs` e `preview-capture.test.mjs` (concorrência, revisão obsoleta, indisponibilidade e recibos incertos). `tool-routes.test.mjs` verifica o catálogo contra o servidor vivo.
+Testes versionados: `preview.test.mjs` (MCP/ciclo de vida), `preview-auto-prepare.test.mjs` (preparação automática, caminhos maliciosos e hospedado), `preview-discover.test.mjs` (ODC/O11 e desambiguação de merge), `preview-pipeline.test.mjs` e `preview-capture.test.mjs` (concorrência, revisão obsoleta, indisponibilidade e recibos incertos). `tool-routes.test.mjs` verifica o catálogo contra o servidor vivo.
 
 A validação de integração desta mudança abriu capturas qualificadas de GameStore/O11 e Quotes/ODC em hosts separados dos originais. O11 também passou por nova montagem do release para uma origem isolada. Isso verifica integração e renderização; não constitui uma nova prova de edição/captura ao vivo no ODC, nem implementa atualização automática O11.

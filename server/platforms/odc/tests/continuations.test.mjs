@@ -132,7 +132,7 @@ const SPEC = {
 // o11_studio args per command (the strict shapes of the o11_studio tool)
 const O11_STUDIO_ARGS = { status: {}, wait: { condition: ['idle', 'no-dialogs', 'open', 'signed-in'], module: null, host: null, timeoutSeconds: null },
   'open-module': { name: null, app: null, environment: null, moduleKey: null, timeoutSeconds: null }, snapshot: { module: null, path: null },
-  errors: { max: null, since: null }, windows: { maxTexts: null }, 'dismiss-dialog': { title: null, type: null }, login: { host: null, timeoutSeconds: null } };
+  errors: { max: null, since: null }, windows: { maxTexts: null }, 'dismiss-dialog': { title: null, words: null, type: null }, login: { host: null, timeoutSeconds: null } };
 
 const placeholder = v => typeof v === 'string' && /<[^<>]+>/.test(v);
 function argumentProblems(where, args, spec) {
@@ -203,7 +203,8 @@ test('continuationFor fills placeholders by argument name and never the user\'s 
   assert.deepEqual(continuationFor('STUDIO_NOT_CONNECTED', { lane: 'odc' }), { tool: 'ssam_connect', arguments: { lane: 'odc' }, why: CONTINUATIONS.STUDIO_NOT_CONNECTED.why });
   assert.deepEqual(continuationFor('STUDIO_NOT_CONNECTED').arguments, { lane: '<lane>' }, 'without a value the placeholder stays');
   assert.deepEqual(continuationFor('SEVERAL_STUDIOS', { lane: 'o11', pid: 4242 }).arguments, { lane: 'o11', pid: 4242 });
-  assert.deepEqual(continuationFor('DIALOG_OPEN', { title: 'Save changes?' }).arguments, { command: 'dismiss-dialog', args: { title: 'Save changes?' } });
+  assert.deepEqual(continuationFor('DIALOG_OPEN', { title: 'Save changes?' }).arguments, { command: 'dismiss-dialog', args: { title: 'Save changes?', words: WORDS } });
+  assert.equal(continuationFor('DIALOG_OPEN', { title: 'Save changes?', words: 'sim' }).arguments.args.words, WORDS, 'the person’s words are never filled in');
   assert.deepEqual(continuationFor('O11_DELIVER', { module: 'Orders', checks: ['a', 'b'], authorize: 'sim, pode entregar' }).arguments,
     { module: 'Orders', job: '<job.json>', checks: ['a', 'b'], authorize: WORDS });
   assert.deepEqual(continuationFor('LEGACY_BRIDGE_LOADED', { lane: 'o11', coexistLegacy: false, authorize: 'x' }).arguments,
@@ -238,7 +239,7 @@ test('the refusal codes of the 2026-10-06 package carry the continuation of its 
 });
 
 test('formatCall writes the notation of the tool descriptions (the same as responses.mjs)', () => {
-  assert.equal(callText('DIALOG_OPEN'), 'o11_studio {command:"dismiss-dialog", args:{title:"<dialog title>"}}');
+  assert.equal(callText('DIALOG_OPEN'), 'o11_studio {command:"dismiss-dialog", args:{title:"<dialog title>", words:"<the user\'s own words>"}}');
   assert.equal(callText('COMPONENT_MISSING', { lane: 'odc' }), 'ssam_doctor {lane:"odc"}');
   assert.equal(callText('STUDIO_NOT_OPEN'), 'ssam_status {}');
   assert.equal(callText('INCOMPATIBLE_STUDIO', { lane: 'o11' }), 'ssam_doctor {lane:"o11", checks:["compat"]}');

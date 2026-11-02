@@ -46,7 +46,20 @@ public static class ScreenHtml
     // 15 (T1, its 10): a literal that holds a brace of a binding ({{ or }}) is written in <text> with every brace as its
     // character reference (&#123; &#125;), so a literal never prints as a binding; before, <text>{{ "Search" }}</text> read as
     // an expression.
-    public const int Extractor = 15;
+    // 16 (C-02, the proto line's 13): the click of a Button or a Link inside a Form is at the Form's default (Built-in
+    // Validations ValidateAndContinue, ScreenDefaults.FormDefault): the reading writes os-onclick.BuiltInValidations only for one
+    // that does not validate (None).
+    // 16 (the Traditional document line, port of the proto's 13, C-07 and C-09): a Traditional List Records reads its Line
+    // Separator as line-separator; on a Traditional page an input, password, select, upload or label reads os-Width when it has
+    // a grid width, and an input maxlength when it has one (the language writes them without, ScreenDefaults.LanguageDefault;
+    // 15 read the Studio's "4 col" and 50 as defaults).
+    // 17 (C-14, the proto line's theme parts): the reading of a root prints its named theme parts as <style scope="theme" id>
+    // (css:theme facts).
+    // 18: both 16s and the 17 together (the screen-writing fixes merged with the Traditional document line): no stored reading
+    // of either line is reused.
+    // 19 (F8, the proto line's table Lists): the reading says a List of a table part that renders as a div or with
+    // virtualization (notes, HTML_TABLE_LIST_VIRTUALIZED, with the edit that repairs it): a stored reading of 18 has no notes.
+    public const int Extractor = 19;
 
     public static ScreenHtmlModule<T> Module<T>(T module, ModelReader<T> reader) where T : class => new(module, reader);
 
@@ -127,6 +140,7 @@ public static class ScreenHtml
             ["rule"] = "the installed Studio's: what a fresh element of the kind is born with when the Studio creates it in a module like the one read (the kind of module and the grid of its theme decide part of it; inside a Popup, what it is born with there), its settings only (a boolean, an enumeration member or a number; a Boolean literal of an expression; a text written as os-<Property>); any other property is at its default only when empty (\"\"; False for a boolean)",
             ["studio"] = measured?.Identity ?? "",
             ["language"] = ScreenDefaults.LanguageRule,
+            ["form"] = ScreenDefaults.FormRule,
         };
         if (measured is { Context.Length: > 0 }) defaults["context"] = measured.Context;
         if (measured is { Note.Length: > 0 }) defaults["note"] = measured.Note;
@@ -616,7 +630,9 @@ public static class ScreenHtml
                 }
                 var (l, c) = (line, col);
                 var sb = new StringBuilder();
-                while (!End && Peek() != '<') sb.Append(Peek() == '&' ? Entity() : Take().ToString());
+                // C-40: a '<' inside a binding {{ ... }} is the expression's (HtmlSource.TextRunEnd, the rule of both parsers).
+                var stop = Anvil.Core.HtmlSource.TextRunEnd(text, i);
+                while (!End && i < stop) sb.Append(Peek() == '&' ? Entity() : Take().ToString());
                 open[^1].Children.Add(new Node { Text = sb.ToString(), Line = l, Column = c });
             }
             if (open.Count > 1) throw Error("unclosed <" + open[^1].Tag + "> from line " + open[^1].Line);
@@ -809,6 +825,8 @@ public sealed class ScreenHtmlDocument
     // Why the reading has no defaults of the installed Studio ("" when it has them, or has no Studio): every property is then
     // written, and a writer refuses with this (ScreenDefaults.Note).
     public string DefaultsNote { get; init; } = "";
+    // What the reading sees that renders wrong, with the edit that repairs it (F8: HTML_TABLE_LIST_VIRTUALIZED).
+    public IReadOnlyList<JsonObject> Notes { get; init; } = [];
     internal ScreenHtmlCanon Canon { get; init; } = new();
     internal Func<ScreenHtml.Node, ScreenHtmlCanon>? Decoder { get; init; }
     // The module, root, names and shapes of the reading (ScreenHtmlModule<T>.ReadingState): what an edit of this text (C2,
@@ -823,6 +841,7 @@ public sealed class ScreenHtmlDocument
         if (withKeys) json["keys"] = new JsonObject(Keys.Select(k => KeyValuePair.Create(k.Key, (JsonNode?)k.Value)));
         if (Problems.Count > 0) json["problems"] = new JsonArray(Problems.Select(p => (JsonNode)p).ToArray());
         if (DefaultsNote.Length > 0) json["defaults"] = "no defaults of the installed Studio, every property is written: " + DefaultsNote;
+        if (Notes.Count > 0) json["notes"] = new JsonArray(Notes.Select(n => (JsonNode)n.DeepClone()).ToArray());
         return json;
     }
 
@@ -911,6 +930,14 @@ public sealed class ScreenDefaults
     /// <summary>Whether a Studio was measured for these defaults.</summary>
     public bool Measured => Identity.Length > 0;
 
+    /// <summary>Whether they are the defaults of a Traditional page (a WebScreen or WebBlock): the language's own defaults of the
+    /// Traditional form controls apply (<see cref="LanguageDefault"/>, C-09).</summary>
+    public bool Traditional { get; private init; }
+    private ScreenDefaults? traditional;
+
+    /// <summary>The same defaults for a Traditional page.</summary>
+    public ScreenDefaults AsTraditional() => Traditional ? this : traditional ??= new ScreenDefaults(Identity, kinds.ToDictionary(k => k.Key, k => (IReadOnlyDictionary<string, string>)k.Value, StringComparer.Ordinal)) { Context = Context, Note = Note, Traditional = true };
+
     /// <summary>No measurement, and why: every property is then at its default only when empty.</summary>
     public static ScreenDefaults Unmeasured(string why, string context = "") => new("", new Dictionary<string, IReadOnlyDictionary<string, string>>()) { Note = why, Context = context };
 
@@ -924,14 +951,32 @@ public sealed class ScreenDefaults
     public IReadOnlyDictionary<string, string>? Of(string kind) => kinds.TryGetValue(kind, out var map) ? map : null;
 
     /// <summary>The default of a property where the element sits: for an attribute of the language, what the language
-    /// says it means when left out (<see cref="LanguageDefault"/>); inside a Popup what the kind is born with there (when the
-    /// Studio was measured there), anywhere else what it is born with on a page; else the empty value of its type.</summary>
-    public string DefaultOf(string kind, string property, char type, bool inPopup = false)
+    /// says it means when left out (<see cref="LanguageDefault"/>); the click of a Button or a Link inside a Form what the Studio
+    /// gives it there (<see cref="FormDefault"/>); inside a Popup what the kind is born with there (when the Studio was measured
+    /// there), anywhere else what it is born with on a page; else the empty value of its type.</summary>
+    public string DefaultOf(string kind, string property, char type, bool inPopup = false, bool inForm = false)
     {
-        if (Measured && LanguageDefault(kind, property) is { } meaning) return meaning;
+        if (Measured && LanguageDefault(kind, property, Traditional) is { } meaning) return meaning;
+        if (Measured && inForm && FormDefault(property) is { } form) return form;
         if (inPopup && kinds.TryGetValue(kind + PopupSuffix, out var popup)) return popup.TryGetValue(property, out var p) ? p[2..] : Empty(type);
         return kinds.TryGetValue(kind, out var page) && page.TryGetValue(property, out var v) ? v[2..] : Empty(type);
     }
+
+    /// <summary>C-02 (F-FigmaReactive-04, 2026-10-27): what the Studio gives the click of a Button or a Link it creates inside a
+    /// Form (a Form among its ancestors up to its screen or block), for the properties the Form decides: Built-in Validations
+    /// ValidateAndContinue (the Model API create of the writer: a Button and a Link inside a Form are born ValidateAndContinue,
+    /// outside one None). The other properties of the event keep what it is born with where it sits (inside a Popup, the
+    /// Popup's Transition). Null for a property the Form does not decide. A document's button inside &lt;form&gt; written None
+    /// made the Form's Valid always True: its required and type checks never ran, silently.</summary>
+    public static string? FormDefault(string property) => property == "BuiltInValidations" ? FormValidations : null;
+
+    public const string FormValidations = "ValidateAndContinue";
+
+    /// <summary>The kinds whose click a Form validates (<see cref="FormDefault"/>).</summary>
+    public static bool ValidatesInForm(string widgetKind) => widgetKind is "Button" or "Link";
+
+    /// <summary>The rule of <see cref="FormDefault"/>, as the contract of the reading says it.</summary>
+    public const string FormRule = "the click of a <button> or an <a> inside a <form> validates it (os-onclick.BuiltInValidations ValidateAndContinue, what the Studio gives a Button or a Link it creates in a Form; the form's Valid then runs its required and type checks): write os-onclick.BuiltInValidations=\"None\" for one that does not; outside a <form> a click does not validate";
 
     private static string Empty(char type) => type == 'b' ? "False" : "";
 
@@ -944,19 +989,29 @@ public sealed class ScreenDefaults
     /// and the Join of an aggregate inner: an &lt;i icon&gt; without size keeps the font size around it (FontSize, as HtmlVisual
     /// writes an &lt;i&gt;) and a join without a type (join= of the short form, an os-Join without os-JoinType) is a left join,
     /// as the language wrote both before the Studio's defaults were measured (the screen generator's joins to the label of a
-    /// reference rely on it: an inner one hides the rows whose reference is empty). Used whenever a Studio was measured
-    /// (<see cref="Measured"/>); without one, every value is written anyway.</summary>
-    public static string? LanguageDefault(string kind, string property) => property switch {
+    /// reference rely on it: an inner one hides the rows whose reference is empty). On a Traditional page (C-09, F-FT-23 and
+    /// F-FT-07 of 27/10) a form control and its label without os-Width have no grid width, and an input without maxlength no Max
+    /// Length: the Studio gives them the theme's grid (ThemeGrid_Width4 beat the class of the text: a 125 px field) and 50
+    /// characters (an e-mail or a textarea cut). Used whenever a Studio was measured (<see cref="Measured"/>); without one, every
+    /// value is written anyway.</summary>
+    public static string? LanguageDefault(string kind, string property, bool traditional = false) => property switch {
         "IsMandatory" when kind is "InputParameter" or "BlockEvent" => "False",
         "Mandatory" when ScreenHtmlTables.Named.TryGetValue(kind, out var named) && named.GetValueOrDefault("Mandatory") == "required" => "False",
         "Enabled" when ScreenHtmlTables.Named.TryGetValue(kind, out var named) && named.GetValueOrDefault("Enabled") == "enabled" => "True",
         "IconSize" when kind == "Icon" => "FontSize",
         "JoinType" when kind == "Join" => "Left",
+        "Width" when traditional && TraditionalGridWidth.Contains(kind) => "",
+        "MaxLength" when traditional && kind is "InputWidget" or "InputPasswordWidget" => "",
         _ => null,
     };
 
+    /// <summary>The kinds of a Traditional page the Studio gives the theme's grid width (Width "4 col", "2 col" for a label) that
+    /// the language writes without one (C-09).</summary>
+    public static readonly IReadOnlySet<string> TraditionalGridWidth = new HashSet<string>(StringComparer.Ordinal) {
+        "InputWidget", "InputPasswordWidget", "ComboBoxWidget", "InputFilenameWidget", "Label" };
+
     /// <summary>The rule of <see cref="LanguageDefault"/>, as the contract of the reading says it.</summary>
-    public const string LanguageRule = "an attribute of the language left out means what the language says, whatever the Studio gives a fresh element: mandatory of <input> (screen or block) and of a block <event> False (write mandatory=\"True\" for a mandatory one), required False, enabled True, size of <i> FontSize, the join of an aggregate (join=, os-Join without os-JoinType) Left";
+    public const string LanguageRule = "an attribute of the language left out means what the language says, whatever the Studio gives a fresh element: mandatory of <input> (screen or block) and of a block <event> False (write mandatory=\"True\" for a mandatory one), required False, enabled True, size of <i> FontSize, the join of an aggregate (join=, os-Join without os-JoinType) Left; on a Traditional page, os-Width of an input, password, select, upload or label \"\" (no grid width) and maxlength of an input none";
 
     /// <summary>The defaults among what the Studio gives a fresh element of each kind (kind or kind@popup -> property ->
     /// "type:text", with the role of each kind): its settings (<see cref="IsSetting"/>).</summary>
@@ -998,5 +1053,45 @@ public sealed class ScreenDefaults
         foreach (var (kind, map) in json["kinds"]!.AsObject())
             kinds[kind] = map!.AsObject().ToDictionary(p => p.Key, p => p.Value!.GetValue<string>(), StringComparer.Ordinal);
         return new ScreenDefaults(json["identity"]?.GetValue<string>() ?? "", kinds) { Context = json["context"]?.GetValue<string>() ?? "" };
+    }
+}
+
+/// <summary>F8 (2026-10-25), the part of the rule of a List of a table part that the reading needs (this file is also compiled by
+/// the ODC reader, without ScreenVisual): which Lists are table parts, how the text writes their Mode and their virtualization, and
+/// the note of a reading for one that renders as a div (Mode Default: the Studio renders a List's Tag only in Mode Custom) or with
+/// virtualization, with the element edit that repairs it. Anvil.Core.ScreenVisual.Tables is the rest of the rule.</summary>
+public static class ScreenHtmlTableLists
+{
+    public const string Note = "HTML_TABLE_LIST_VIRTUALIZED";
+    public const string ModeAttribute = "os-Mode", CustomMode = "Custom", VirtualizationAttribute = "disable-virtualization";
+
+    /// <summary>The tags of a List that is a part of a table.</summary>
+    public static readonly IReadOnlySet<string> Tags = new HashSet<string>(StringComparer.Ordinal) { "thead", "tbody", "tfoot", "tr" };
+
+    public static bool IsTablePart(string? tag) => tag != null && Tags.Contains(tag);
+
+    /// <summary>Whether a value of disable-virtualization is true ("{{ True }}", "True").</summary>
+    public static bool IsTrue(string? value)
+    {
+        var v = (value ?? "").Trim();
+        if (v.StartsWith("{{", StringComparison.Ordinal) && v.EndsWith("}}", StringComparison.Ordinal)) v = v[2..^2].Trim();
+        return v.Trim('"').Equals("True", StringComparison.OrdinalIgnoreCase);
+    }
+
+    public static JsonObject NoteOf(string k, string tag, bool custom, bool allRows)
+    {
+        var missing = new List<string>();
+        if (!custom) missing.Add("it is Mode Default: the runtime renders it as a div inside the table, so the header and the rows do not share columns");
+        if (!allRows) missing.Add("it renders with virtualization (sentinels and measured positions among the rows)");
+        var attributes = new JsonObject();
+        if (!custom) attributes[ModeAttribute] = CustomMode;
+        if (!allRows) attributes[VirtualizationAttribute] = "{{ True }}";
+        return new JsonObject
+        {
+            ["code"] = Note, ["k"] = k, ["tag"] = tag,
+            ["message"] = $"k=\"{k}\" is the List of a <{tag}>: " + string.Join("; ", missing),
+            ["edit"] = new JsonObject { ["edits"] = new JsonArray(new JsonObject { ["set"] = k, ["attributes"] = attributes }) },
+            ["fix"] = "deliver this element edit (the html op's edits form, basedOn this reading); any edit of an element of this table repairs it too, and the receipt says what it wrote (visual.tables); the repair writes the rows marker on this screen and the native layout block in the theme it shows, which the receipt says (THEME_NATIVE_LAYOUT)",
+        };
     }
 }

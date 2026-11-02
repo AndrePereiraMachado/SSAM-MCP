@@ -5,7 +5,7 @@ import { stallRecovery } from '../studio-recovery.mjs';
 const resume={tool:'o11_deliver',arguments:{resume:'same-task'},why:'reconcilie pelo diário'};
 test('error reports recover by exact title, then reconcile the same operation',()=>{
   const recovery=stallRecovery({verdict:'dialog',blockedBy:{title:'Erro inesperado',kind:'Modal'}},resume);
-  assert.deepEqual(recovery[0].arguments,{command:'dismiss-dialog',args:{title:'Erro inesperado'}});
+  assert.deepEqual(recovery[0].arguments,{command:'dismiss-dialog',args:{title:'Erro inesperado',words:"<the user's own words>"}});
   assert.equal(recovery[1],resume);
 });
 test('a native Yes/No question is for the person even though classified MessageBox',()=>{

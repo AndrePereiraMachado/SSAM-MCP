@@ -4,6 +4,10 @@
 // tools that take a job (o11_deliver, studio_deliver, ssam_job, o11_job), before the agent, the lane checks and any
 // capture: HOSTED_UNAVAILABLE, cause GENERATOR_PENDING, policy HOSTED_GENERATOR_OPS. One switch ('refuse'); a generator the
 // owner approves is let through like any op. A fake link, context and executor; no hub, agent or Studio.
+// fase4-28 r4-rest-hosted: every generator of the shipped table has a hosted input mode (generators.mjs GENERATOR_APPROVAL
+// hosted): entity-actions and gen-screen 'job-only', rest-consume 'inline-samples' (the gate lets it through with every GET
+// method's sample in the job and refuses one without, DOCUMENT_FETCH_HOSTED_REFUSED: tests/hosted-rest-consume.test.mjs). The
+// refusal below is proved with the modes taken away (MODELESS): any generator without a mode is still refused here.
 import './fixtures/isolated-profile.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -21,8 +25,14 @@ const write = (file, value) => { fs.mkdirSync(path.dirname(file), { recursive: t
 const reply = value => ({ content: [{ type: 'text', text: JSON.stringify(value) }], structuredContent: value });
 const ENTITY_ACTIONS = { op: 'entity-actions', data: { entities: 'all' } };
 const REST_CONSUME = { op: 'rest-consume', data: { name: 'Api', methods: [{ name: 'Get', url: 'https://api.example.test/items' }] } };
+const REST_CONSUME_SAMPLED = { op: 'rest-consume', data: { name: 'Api', methods: [{ name: 'Get', url: 'https://api.example.test/items', sample: [{ id: 1 }] }] } };
 const GEN_SCREEN = { op: 'screen', data: { generate: { entities: ['Customer'] } } };
 const BASED_ON = { job: 'ws:o11/jobs/base.json', sha256: 'a'.repeat(64) };
+// The generators without a hosted input mode (generators.mjs hosted: null): the refusal of the gate. The shipped table gives
+// each of the three a mode (r4-rest-hosted), so these tests take the modes away to prove the refusal still holds for any
+// generator without one.
+const MODELESS = { 'entity-actions': { hosted: null }, 'rest-consume': { hosted: null }, 'gen-screen': { hosted: null } };
+const modeless = fn => withGeneratorStates(MODELESS, fn);
 
 function harness({ connected = true } = {}) {
   const dirs = hostedDirs(os.tmpdir());
@@ -72,11 +82,11 @@ test('namesGenerator finds each pending generator op, its patch forms and JSON t
   assert.equal(namesGenerator({ ops: [{ op: 'rest', data: { openapi: { path: 'ws:inbox/a.json' } } }] }), null);
 });
 
-test('an inline job, a partial job or a patch with a pending generator is refused in the four tools before the agent and any capture', async () => {
+test('an inline job, a partial job or a patch with a pending generator without a hosted mode is refused in the four tools before the agent and any capture', () => modeless(async () => {
   for (const connected of [true, false]) {
     const h = harness({ connected });
     for (const name of TOOLS) {
-      for (const [op, id] of [[ENTITY_ACTIONS, 'entity-actions'], [REST_CONSUME, 'rest-consume'], [GEN_SCREEN, 'gen-screen']]) {
+      for (const [op, id] of [[ENTITY_ACTIONS, 'entity-actions'], [REST_CONSUME_SAMPLED, 'rest-consume'], [GEN_SCREEN, 'gen-screen']]) {
         refusedAsGenerator(await h.gate(name)({ ...h.lane(name), job: { ops: [{ op: 'entity', data: { name: 'Order' } }, op] } }), name, id);
         refusedAsGenerator(await h.gate(name)({ ...h.lane(name), job: JSON.stringify({ ops: [op] }) }), name, id);
         refusedAsGenerator(await h.gate(name)({ ...h.lane(name), job: { ops: [op] }, basedOn: BASED_ON }), name, id);
@@ -87,20 +97,54 @@ test('an inline job, a partial job or a patch with a pending generator is refuse
     assert.deepEqual(h.pulls, [], 'nothing was brought from the agent');
     assert.deepEqual(h.link.calls, [], 'nothing reached the agent');
   }
-});
+}));
 
-test('a job FILE of the workspace (ws:, the job of basedOn, a composite part) with a pending generator is refused before the handler', async () => {
+test('a job FILE of the workspace (ws:, the job of basedOn, a composite part) with a pending generator without a hosted mode is refused before the handler', () => modeless(async () => {
   const h = harness();
-  write(path.join(h.workspace, 'inbox', 'gen.json'), { ops: [REST_CONSUME] });
+  write(path.join(h.workspace, 'inbox', 'gen.json'), { ops: [GEN_SCREEN] });
   write(path.join(h.workspace, 'o11', 'jobs', 'base.json'), { ops: [{ op: 'entity', data: {} }, ENTITY_ACTIONS] });
   write(path.join(h.workspace, 'odc', 'lab', 'part.json'), { ops: [GEN_SCREEN] });
   write(path.join(h.workspace, 'odc', 'lab', 'composite.json'), { jobs: ['part.json'] });
   for (const name of TOOLS) {
-    refusedAsGenerator(await h.gate(name)({ ...h.lane(name), job: 'ws:inbox/gen.json' }), name, 'rest-consume');
+    refusedAsGenerator(await h.gate(name)({ ...h.lane(name), job: 'ws:inbox/gen.json' }), name, 'gen-screen');
     refusedAsGenerator(await h.gate(name)({ ...h.lane(name), job: { ops: [{ op: 'entity', data: { name: 'X' } }] }, basedOn: BASED_ON }), name, 'entity-actions');
     refusedAsGenerator(await h.gate(name)({ ...h.lane(name), job: 'ws:odc/lab/composite.json' }), name, 'gen-screen');
   }
   assert.deepEqual(h.calls, []);
+}));
+
+// r4-rest-hosted (C7 of PLANO-11H): the shipped table gives entity-actions and screen with data.generate the hosted mode
+// 'job-only' (the kernel op reads the job and the module, no file, no network): called by name, they pass the gate in
+// every form a job reaches it, as on a local server; discover still never offers them (generators.mjs offered).
+test('the shipped modes: entity-actions and gen-screen called by name run hosted in every job form (job-only); a part the gate cannot read still fails closed', async () => {
+  const h = harness();
+  write(path.join(h.workspace, 'inbox', 'gen.json'), { ops: [GEN_SCREEN] });
+  write(path.join(h.workspace, 'o11', 'jobs', 'base.json'), { ops: [{ op: 'entity', data: {} }, ENTITY_ACTIONS] });
+  write(path.join(h.workspace, 'odc', 'lab', 'part.json'), { ops: [GEN_SCREEN] });
+  write(path.join(h.workspace, 'odc', 'lab', 'composite.json'), { jobs: ['part.json'] });
+  const forms = op => ({ inline: { job: { ops: [{ op: 'entity', data: { name: 'Order' } }, op] } }, text: { job: JSON.stringify({ ops: [op] }) },
+    partial: { job: { ops: [op] }, basedOn: BASED_ON }, patch: { patch: [{ op: 'add', path: '/ops/-', value: op }], basedOn: BASED_ON } });
+  let ran = 0;
+  for (const name of TOOLS) {
+    for (const op of [ENTITY_ACTIONS, GEN_SCREEN, REST_CONSUME_SAMPLED]) for (const [label, args] of Object.entries(forms(op))) {
+      const result = await h.gate(name)({ ...h.lane(name), ...args });
+      assert.notEqual(result.isError, true, name + ' ' + op.op + ' ' + label + ': ' + JSON.stringify(result.structuredContent).slice(0, 300)); ran++;
+    }
+    for (const job of ['ws:inbox/gen.json', 'ws:odc/lab/composite.json']) {
+      const result = await h.gate(name)({ ...h.lane(name), job });
+      assert.notEqual(result.isError, true, name + ' ' + job + ': ' + JSON.stringify(result.structuredContent).slice(0, 300)); ran++;
+    }
+  }
+  assert.equal(h.calls.length, ran, 'every call reached its handler');
+  // A job nested deeper than the gate reads is refused whatever the modes (the gate cannot tell what it carries; the first
+  // of the fail-closed checks to reach it answers).
+  let deep = { ops: [ENTITY_ACTIONS] };
+  for (let i = 0; i < 140; i++) deep = { wrap: deep };
+  const unreadable = await h.gate('o11_deliver')({ module: 'M', job: { ops: [{ op: 'entity', data: { name: 'Deep', note: deep } }] } });
+  assert.equal(unreadable.isError, true);
+  assert.equal(unreadable.structuredContent.code, 'HOSTED_UNAVAILABLE', JSON.stringify(unreadable.structuredContent).slice(0, 300));
+  assert.equal(unreadable.structuredContent.outcome, 'not-sent');
+  assert.equal(h.calls.length, ran, 'the unreadable job never reached its handler');
 });
 
 test('jobs without a generator op run; the switch at allow, or an approved generator, lets the op through', async () => {
@@ -111,10 +155,14 @@ test('jobs without a generator op run; the switch at allow, or an approved gener
     const allowed = await h.gate(name, { generatorOps: 'allow' })({ ...h.lane(name), job: { ops: [ENTITY_ACTIONS] } });
     assert.notEqual(allowed.isError, true, name + ' with the switch at allow');
   }
-  await withGeneratorStates({ 'entity-actions': { state: 'approved' } }, async () => {
+  await withGeneratorStates({ ...MODELESS, 'entity-actions': { state: 'approved', hosted: null } }, async () => {
     const approved = await h.gate('o11_deliver')({ module: 'M', job: { ops: [ENTITY_ACTIONS] } });
     assert.notEqual(approved.isError, true, 'an approved generator runs like any op');
-    refusedAsGenerator(await h.gate('o11_deliver')({ module: 'M', job: { ops: [ENTITY_ACTIONS, REST_CONSUME] } }), 'o11_deliver', 'rest-consume');
+    refusedAsGenerator(await h.gate('o11_deliver')({ module: 'M', job: { ops: [ENTITY_ACTIONS, GEN_SCREEN] } }), 'o11_deliver', 'gen-screen');
+  });
+  // Without its hosted input mode, rest-consume is a pending generator like the others (the mode is what lets it through).
+  await modeless(async () => {
+    refusedAsGenerator(await h.gate('o11_deliver')({ module: 'M', job: { ops: [REST_CONSUME_SAMPLED] } }), 'o11_deliver', 'rest-consume');
   });
   assert.equal(h.calls.length, TOOLS.length * 2 + 1);
 });

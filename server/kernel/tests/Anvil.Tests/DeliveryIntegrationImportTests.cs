@@ -27,6 +27,8 @@ public class DeliveryIntegrationImportTests
         Assert.Equal(IntegrationImport.NeedsBridge, result["code"]!.ToString());
         Assert.Equal("not-sent", result["writeState"]!.ToString());
         Assert.Contains("integration_import:wsdl", result["error"]!.ToString());
+        // fase4-28 r4-f3-import: the next step for a customer of the SSAM Agent app as well as for the machine that runs SSAM.
+        Assert.Contains("With the SSAM Agent app, install its current version", result["error"]!.ToString());
         Assert.DoesNotContain(bridge.Calls, c => c is "snapshot_module" or "merge_from_oml" or "integration_import");
     }
 

@@ -115,7 +115,9 @@ test('hosted: the main document outside the workspace, or a relative one the job
   assert.equal((await prepareIntegrationJob(suite, { ...b.hosted, workspace: null })).changed, false, 'local use: the kernel resolves it');
 });
 
-test('hosted: a document read by URL names only URLs: a file: or drive-letter reference is refused, a root-relative one is its server\'s URL', async () => {
+// fase4-28 r4-f3-import: a hosted server never reads a document by URL (DOCUMENT_FETCH_HOSTED_REFUSED, before any request), so
+// what a URL document names is never reached either; this test keeps its cases and proves nothing is fetched for any of them.
+test('hosted: a document named by URL is never read, whatever it would name (file:, a drive letter, a root-relative URL)', async () => {
   const b = box();
   const calls = [];
   const table = {};
@@ -127,16 +129,17 @@ test('hosted: a document read by URL names only URLs: a file: or drive-letter re
     table[url] = wsdlImporting(reference);
     calls.length = 0;
     const prepared = await prepareIntegrationJob(b.job([{ op: 'soap', data: { wsdl: url, methods: ['Add'] } }]), { ...b.hosted, fetchImpl });
-    refused(prepared, '/ops/0/data/wsdl', reference, reference);
-    assert.match(prepared.problems[0].message, /names only URLs/);
-    assert.deepEqual(calls, [url], 'only the document itself was fetched');
+    assert.deepEqual([prepared.ok, prepared.code], [false, 'DOCUMENT_FETCH_HOSTED_REFUSED'], reference);
+    assert.equal(prepared.problems[0].path, '/ops/0/data/wsdl');
+    assert.deepEqual(calls, [], 'nothing was fetched');
   }
   // a root-relative name is a URL of the document's own server, never a file of this one
   table[url] = wsdlImporting('/schemas/types.xsd');
   table['https://docs.example.test/schemas/types.xsd'] = '<s:schema xmlns:s="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:x"/>';
+  calls.length = 0;
   const prepared = await prepareIntegrationJob(b.job([{ op: 'soap', data: { wsdl: url, methods: ['Add'] } }]), { ...b.hosted, fetchImpl });
-  assert.equal(prepared.ok, true, JSON.stringify(prepared).slice(0, 300));
-  assert.deepEqual(prepared.documents.map(d => d.source), [url, 'https://docs.example.test/schemas/types.xsd']);
+  assert.deepEqual([prepared.ok, prepared.code], [false, 'DOCUMENT_FETCH_HOSTED_REFUSED']);
+  assert.deepEqual(calls, []);
 });
 
 test('hosted: a WSDL and its imports inside the workspace are pinned as before, into the workspace', async () => {
@@ -172,7 +175,10 @@ test('the job copy keeps naming, from the job\'s folder, its job:<name> base and
   assert.equal(copy.ops[2].data.wsdl.path, pinned);
 });
 
-test('a pinned import never lands outside its documents folder (a relative name that climbs through a/../../..)', async () => {
+// fase4-28 r4-f3-import (review A1): a WSDL import that climbs out of the WSDL's folder is now refused (DOCUMENT_NAME_INVALID):
+// the Studio's importer reads each import by its name next to the pinned WSDL, so a name that leaves the folder would be read
+// from somewhere else on the customer's machine. Nothing is pinned, in hosted and in local use.
+test('a WSDL import that climbs out of the WSDL folder (a/../../..) is refused and nothing is pinned', async () => {
   const b = box();
   // hosted: a WSDL deep in the workspace imports a file of the workspace by a name that, joined to the pinned folder, would climb out
   const deep = b.ws('inbox', 'd1', 'd2', 'd3', 'd4', 'd5', 'd6');
@@ -180,37 +186,42 @@ test('a pinned import never lands outside its documents folder (a relative name 
   const climbing = 'x/' + '../'.repeat(7) + 't.xsd';
   write(path.join(deep, 'service.wsdl'), wsdlImporting(climbing));
   const prepared = await prepareIntegrationJob(b.job([{ op: 'soap', data: { wsdl: path.join(deep, 'service.wsdl'), methods: ['Add'] } }]), b.hosted);
-  assert.equal(prepared.ok, true, JSON.stringify(prepared).slice(0, 300));
-  const folder = path.dirname(prepared.documents[0].path);
-  for (const d of prepared.documents) assert.ok(d.path.startsWith(folder + path.sep), d.path + ' inside ' + folder);
+  assert.deepEqual([prepared.ok, prepared.code], [false, 'DOCUMENT_NAME_INVALID'], JSON.stringify(prepared).slice(0, 300));
+  assert.equal(prepared.problems[0].target, climbing);
   assert.ok(!fs.existsSync(path.join(b.root, 'server', 't.xsd')), 'nothing written outside the workspace');
   // local use too: a document read by URL decides the bytes, and its name decided where they were written
   const fetchImpl = async url => { const body = String(url).endsWith('evil.xsd') ? '<s:schema xmlns:s="http://www.w3.org/2001/XMLSchema"/>' : wsdlImporting('x/' + '../'.repeat(12) + 'evil.xsd');
     const x = Buffer.from(body); return { ok: true, status: 200, headers: { get: () => null }, arrayBuffer: async () => x.buffer.slice(x.byteOffset, x.byteOffset + x.byteLength) }; };
   const local = await prepareIntegrationJob(b.job([{ op: 'soap', data: { wsdl: 'https://example.invalid/a/b/c/d/e/f/g/h/i/j/svc.wsdl', methods: ['Add'] } }]), { ...b.hosted, workspace: null, fetchImpl });
-  assert.equal(local.ok, true, JSON.stringify(local).slice(0, 300));
-  const pinned = path.dirname(local.documents[0].path);
-  for (const d of local.documents) assert.ok(d.path.startsWith(pinned + path.sep), d.path);
+  assert.deepEqual([local.ok, local.code], [false, 'DOCUMENT_NAME_INVALID'], JSON.stringify(local).slice(0, 300));
   assert.ok(!fs.existsSync(path.join(b.root, 'evil.xsd')) && !fs.existsSync(path.join(path.parse(b.root).root, 'evil.xsd')));
 });
 
 // servidor/fase4-25 (G1 of C:\t\vps-a5\CORRECAO.md): the rest-consume op of marco-a5 reads one GET sample per method
-// without one. Hosted, that GET goes through the public-only client like every document of the job (hosted/public-fetch.mjs),
-// never through the global fetch of the server: an internal address answers REST_CONSUME_SAMPLE_FETCH_FAILED and nothing is
-// pinned in the job.
-test('hosted: a rest-consume sample is read only by the public-only client, never by the global fetch (no internal address)', async () => {
+// without one. fase4-28 r4-rest-hosted: hosted, that GET is never made at all, not by the global fetch of the server nor by
+// the public-only client (no DNS lookup either): the method answers DOCUMENT_FETCH_HOSTED_REFUSED and nothing is pinned.
+test('hosted: a rest-consume GET without sample is never requested (no fetch, no lookup): DOCUMENT_FETCH_HOSTED_REFUSED', async () => {
   const b = box();
-  const job = b.job([{ op: 'rest-consume', data: { name: 'Internal', methods: [{ name: 'Probe', url: 'http://127.0.0.1:9/internal' }] } }]);
+  const job = b.job([{ op: 'rest-consume', data: { name: 'Internal', methods: [{ name: 'Probe', url: 'http://127.0.0.1:9/internal' },
+    { name: 'Metadata', url: 'http://169.254.169.254/latest/meta-data/' }, { name: 'Public', url: 'https://api.example.com/items' }] } }]);
   const original = globalThis.fetch;
   const asked = [];
+  const looked = [];
   globalThis.fetch = async (url, options) => { asked.push({ url: String(url), redirect: options?.redirect ?? null }); return new Response('{"internal":true}', { status: 200, headers: { 'content-type': 'application/json' } }); };
   let result;
-  try { result = await prepareIntegrationJob(job, { ...b.hosted, localRoot: b.ws('o11', '.local') }); }
+  try { result = await prepareIntegrationJob(job, { ...b.hosted, localRoot: b.ws('o11', '.local'), lookup: (host, options, callback) => { looked.push(host); PUBLIC(host, options, callback); } }); }
   finally { globalThis.fetch = original; }
   assert.deepEqual(asked, [], 'the global fetch of the server was never called');
+  assert.deepEqual(looked, [], 'the public-only client was never asked either');
   assert.equal(result.ok, false);
-  const sample = (result.problems ?? []).find(p => p.code === 'REST_CONSUME_SAMPLE_FETCH_FAILED');
-  assert.ok(sample, JSON.stringify(result.problems));
-  assert.match(sample.message ?? sample.error ?? JSON.stringify(sample), /not public|127\.0\.0\.1/);
+  assert.equal(result.code, 'DOCUMENT_FETCH_HOSTED_REFUSED');
+  assert.deepEqual(result.problems.map(p => [p.code, p.path]), [0, 1, 2].map(j => ['DOCUMENT_FETCH_HOSTED_REFUSED', `/ops/0/data/methods/${j}/sample`]));
+  assert.match(result.problems[0].message, /never fetches for a hosted account/);
+  assert.equal(result.problems[0].cause, 'REST_CONSUME_SAMPLE_MISSING');
   assert.equal(JSON.stringify(JSON.parse(fs.readFileSync(job, 'utf8'))).includes('"internal"'), false, 'no sample was written into the job');
+  // A job whose GET methods carry their samples passes the documents step untouched (nothing to fetch).
+  const sampled = b.job([{ op: 'rest-consume', data: { name: 'Given', methods: [{ name: 'One', url: 'https://api.example.com/one', sample: { a: 1 } }] } }], {}, 'sampled.json');
+  const ok = await prepareIntegrationJob(sampled, { ...b.hosted, localRoot: b.ws('o11', '.local') });
+  assert.equal(ok.ok, true, JSON.stringify(ok));
+  assert.equal(ok.changed, false);
 });

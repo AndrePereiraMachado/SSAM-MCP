@@ -291,7 +291,7 @@ Legenda: `novo` = exemplo desta pasta; `suite` = job de `tests/jobs-odc` que já
 | usage.link-icon-text | novo: `usage-link-icon-text-minimal` | novo: `usage-link-icon-text-typical` | - | nao |
 | usage.navigation-input | novo: `usage-navigation-input-minimal` | novo: `usage-navigation-input-typical` | - | nao |
 
-### Capacidades do discover (faixa odc) (60)
+### Capacidades do discover (faixa odc) (61)
 
 | id | minimal | typical | rich | havia antes |
 |---|---|---|---|---|
@@ -306,6 +306,7 @@ Legenda: `novo` = exemplo desta pasta; `suite` = job de `tests/jobs-odc` que já
 | deliver.publish | bloqueado | bloqueado | - | nao |
 | diagnostic.troubleshoot | bloqueado | bloqueado | - | nao |
 | integration.external-library-odc | bloqueado | bloqueado | - | nao |
+| integration.rest-callbacks | pendente | pendente | - | nao |
 | integration.rest-consume | suite: `rest-consume` | suite: `rest-consume-call` | - | sim |
 | integration.rest-expose | suite: `rest-expose` | suite: `rest-expose-lifecycle` | - | sim |
 | integration.rest-import | suite: `rest-openapi-import` | suite: `rest-openapi-import` | - | sim |
@@ -366,7 +367,7 @@ Legenda: `novo` = exemplo desta pasta; `suite` = job de `tests/jobs-odc` que já
 | absent.button-group-native | novo: `widget-button-group-minimal +1` | - | - | nao |
 | absent.data-action-inputs | bloqueado | - | - | nao |
 | absent.event.global-events | suite: `global-event-unused` | - | - | sim |
-| absent.integration.rest-callbacks | bloqueado | - | - | nao |
+| absent.integration.rest-callbacks-advanced | bloqueado | - | - | nao |
 | absent.integration.rest-credentials-in-model | bloqueado | - | - | nao |
 | absent.integration.soap-odc | bloqueado | - | - | nao |
 | absent.module-image | suite: `image-create` | - | - | sim |

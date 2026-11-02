@@ -18,7 +18,7 @@ internal sealed class FlowPrinter
     public const string Schema = "ssam-flow/1";
     private static readonly Dictionary<string, string> ActionLabels = new(StringComparer.Ordinal) {
         ["ServerAction"] = "server action", ["ServiceAction"] = "service action", ["ClientAction"] = "client action",
-        ["ScreenAction"] = "action", ["DataAction"] = "data action", ["Preparation"] = "preparation" };
+        ["ScreenAction"] = "action", ["DataAction"] = "data action", ["Preparation"] = "preparation", ["RestCallbackActionFlow"] = "callback action" };
     public static IReadOnlyDictionary<string, string> Labels => ActionLabels;
     // Slot terminators (FlowSyntax.Plain): a value is written plain only when reading the slot gives it back whole.
     internal static readonly string[] LabelEnd = ["  # "];

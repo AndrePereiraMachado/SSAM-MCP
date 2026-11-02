@@ -107,6 +107,8 @@ import { prepareTimerWake, timerWakeInput, TIMER_CONFIGURATION, TIMER_APPLICATIO
 import { compareApplicationConfigurations } from './configuration-comparison.mjs';
 import { timerConfigurationApproval } from './timer-configuration-approval.mjs';
 import { PORTAL_READS, PORTAL_WRITES, checkSecretRefs, dbSecretTarget, envelope, rawInput, routeOf, routesModule, settingSecretTarget } from './portal-routes.mjs';
+import { AUTH_CODES, authContinuation } from '../../facade/refusal-codes.mjs';
+import { hostedContext } from '../../facade/executor.mjs';
 
 const HOST = /^(?=.{1,253}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/;
 const TYPED_PORTAL_READS = new Set(['monitoring.stages', 'monitoring.applications', 'monitoring.logs', 'monitoring.errors', 'monitoring.detail',
@@ -2478,7 +2480,12 @@ function hostedOnlyStudio(host, auth) {
   return refusal('HOSTED_STUDIO_SESSION_ONLY', 'auth:"' + auth + '" uses a credential of the SSAM server, which is never used in hosted mode: the call runs only through the session '
     + 'of the user\'s own ODC Studio (auth "auto" or "studio").', { host });
 }
-function refusal(code, message, extra = {}) { return { ok: false, code, error: { code, message }, ...extra }; }
+// An authentication code without its own continuation gets the one of refusal-codes.mjs (AUTH_CODES); hosted, never a
+// prompt or a stored profile of the server.
+function refusal(code, message, extra = {}) {
+  const next = extra.continuation === undefined && AUTH_CODES.includes(code) ? authContinuation(code, { lane: 'odc', tenant: extra.host ?? null, hosted: hostedContext() !== null }) : null;
+  return { ok: false, code, error: { code, message }, ...extra, ...(next ? { continuation: next } : {}) };
+}
 // The words and the UUID of a write are checked together (CX15 r2, M1: the schemas keep them optional for the preview of a
 // destructive call): both missing = ONE refusal naming both, never one refusal per field. One missing keeps the refusal of
 // that field as it was (code and message, no problems list).

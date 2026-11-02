@@ -756,7 +756,7 @@
   },
   {
     "id": "CustomObjectWarning",
-    "hint": "Plugin/custom object warning: the fix is in the message text.",
+    "hint": "Plugin/custom object warning: the fix is in the message text. 'Security Warning | You're exposing a Server Action for public access and without authentication' is a screen open to everyone (the Anonymous role) that calls a server action: declare the screen open in the same job (roles=\"Anonymous\" in its document, or set Roles), which tolerates it for the whole screen; else give the screen a role, or accept the message in the user's own words (the refusal's patch add /expectedMessages/-).",
     "origin": "curated (message text + verifier code)"
   },
   {

@@ -29,6 +29,90 @@ public sealed class Pa2F2RulesTests
     private static string Logic(string actions, string? spec = null)
         => "{\"ops\":[" + (spec == null ? "" : "{\"op\":\"spec\",\"data\":" + spec + "},") + "{\"op\":\"logic\",\"data\":{\"actions\":[" + actions + "]}}]}";
 
+    [Theory]
+    [InlineData("(Sonnet_IS).ObterPokemon")]
+    [InlineData("Sonnet_IS::ObterPokemon")]
+    [InlineData("Sonnet_IS/ObterPokemon")]
+    [InlineData("Sonnet_IS->ObterPokemon")]
+    public void MalformedProducerCallsAreRefusedWithOneCompletePatch(string callee)
+    {
+        // `P/A(` is also a division: it is a call of P only when P is a module the job references (here its reference op).
+        var text = $"server action BuscarPorCep\n  in NomePokemon: Text\n  ConsultaPokemon = {callee}(IdOuNome=NomePokemon)\n  ConsultaOutra = {callee}(IdOuNome=NomePokemon)\n  end\n";
+        var job = new JsonObject { ["ops"] = new JsonArray(
+            JsonNode.Parse("""{"op":"reference","producer":"Sonnet_IS","elements":["IServerAction:ObterPokemon"]}"""),
+            new JsonObject { ["op"] = "logic", ["data"] = new JsonObject { ["flow"] = text } }) };
+        var result = JobPreflight.Analyze(job["ops"]!.AsArray(), job, []);
+        var problems = Problems(result, "FLOW_PRODUCER_CALL_SYNTAX");
+        Assert.Equal(2, problems.Length);
+        Assert.Empty(Problems(result, "FLOW_SYNTAX"));
+        Assert.DoesNotContain("assign Consulta", job.ToJsonString());
+        Assert.Contains("line 3", problems[0]["message"]!.ToString());
+        Assert.Contains("ConsultaPokemon = Sonnet_IS.ObterPokemon(IdOuNome=NomePokemon)", problems[0]["fix"]!.ToString());
+        var patch = problems[0]["patch"]!.AsArray();
+        Assert.Equal(patch.ToJsonString(), problems[1]["patch"]!.ToJsonString());
+        job["ops"]![1]!["data"]!["flow"] = patch[0]!["value"]!.DeepClone();
+        Assert.Empty(Problems(JobPreflight.Analyze(job["ops"]!.AsArray(), job, []), "FLOW_PRODUCER_CALL_SYNTAX"));
+        Assert.Empty(Problems(JobPreflight.Analyze(job["ops"]!.AsArray(), job, []), "FLOW_SYNTAX"));
+    }
+
+    /// <summary>Round 3 (the reviewer's R2-1): `X = P/A(...)` in a module action where neither X nor P is a name of the text is
+    /// no assignment, so it is FLOW_PRODUCER_CALL_SYNTAX already in the preflight, without the base (here the job has no
+    /// reference op: only the base would reference Sonnet_IS), with the Producer.Action(args) patch. A screen action reads its
+    /// screen's variables, which the text does not declare: there the line is left to the base, as an assignment.</summary>
+    [Fact]
+    public void AProducerCallWrittenWithASlashIsRefusedWithoutTheBaseWhenItAssignsNothingOfTheAction()
+    {
+        var text = "server action BuscarPorCep\n  in NomePokemon: Text\n  out Nome: Text\n  ConsultaPokemon = Sonnet_IS/ObterPokemon(IdOuNome=NomePokemon)\n  assign Nome = ConsultaPokemon.Nome\n  end\n";
+        var job = new JsonObject { ["ops"] = new JsonArray(new JsonObject { ["op"] = "logic", ["data"] = new JsonObject { ["flow"] = text } }) };
+        var problem = Assert.Single(Problems(JobPreflight.Analyze(job["ops"]!.AsArray(), job, []), "FLOW_PRODUCER_CALL_SYNTAX"));
+        Assert.Contains("line 4", problem["message"]!.ToString());
+        Assert.Contains("ConsultaPokemon = Sonnet_IS.ObterPokemon(IdOuNome=NomePokemon)", problem["fix"]!.ToString());
+        var patched = problem["patch"]![0]!["value"]!.ToString();
+        Assert.Contains("ConsultaPokemon = Sonnet_IS.ObterPokemon(IdOuNome=NomePokemon)", patched);
+        Assert.DoesNotContain("Sonnet_IS/", patched);
+        Assert.DoesNotContain("assign ConsultaPokemon", job.ToJsonString());
+        // A screen action: Ratio and Total may be variables of the screen; the line stays an assignment for the base to judge.
+        var screen = "action Home.Calc\n  in Count: Integer\n  Ratio = Total/Max(Count, 1)\n  end\n";
+        var screenJob = new JsonObject { ["ops"] = new JsonArray(new JsonObject { ["op"] = "logic", ["data"] = new JsonObject { ["flow"] = screen } }) };
+        Assert.Empty(Problems(JobPreflight.Analyze(screenJob["ops"]!.AsArray(), screenJob, []), "FLOW_PRODUCER_CALL_SYNTAX"));
+    }
+
+    /// <summary>Review of r4-w2-flow, correction 1: a division whose divisor is a call (`Total/Max(Count, 1)`, with or without
+    /// spaces, as a statement line or inside an `assign` block) is an expression, never a producer call: no
+    /// FLOW_PRODUCER_CALL_SYNTAX, and the statement line is written `assign` as before (FLOW_ASSIGN_WRITTEN). The same `/` with a
+    /// left name that is no module the job references is a division too.</summary>
+    [Theory]
+    [InlineData("  Avg = Total/Max(Count, 1)\n", true)]
+    [InlineData("  Avg = Total / Max(Count, 1)\n", true)]
+    [InlineData("  assign\n    Avg = Total/Max(Count, 1)\n", false)]
+    [InlineData("  assign\n    Avg = Total / IntegerToDecimal(Count)\n", false)]
+    [InlineData("  Avg = Other_IS/Max(Count, 1)\n", true)]
+    public void ADivisionByACallIsNoProducerCall(string body, bool statement)
+    {
+        var text = "server action Media\n  in Total: Decimal\n  in Count: Integer\n  out Avg: Decimal\n" + body + "  end\n";
+        var job = new JsonObject { ["ops"] = new JsonArray(
+            JsonNode.Parse("""{"op":"reference","producer":"Sonnet_IS","elements":["IServerAction:ObterPokemon"]}"""),
+            new JsonObject { ["op"] = "logic", ["data"] = new JsonObject { ["flow"] = text } }) };
+        Assert.Empty(Anvil.Core.Preflight.TextForms.ProducerCallProblems(text, Anvil.Core.Preflight.TextForms.ReferencedModules(job["ops"]!.AsArray()).Contains));
+        var result = JobPreflight.Analyze(job["ops"]!.AsArray(), job, []);
+        Assert.Empty(Problems(result, "FLOW_PRODUCER_CALL_SYNTAX"));
+        if (statement) Assert.Contains("assign Avg = ", job["ops"]![1]!["data"]!["flow"]!.ToString());
+        else Assert.Equal(text, job["ops"]![1]!["data"]!["flow"]!.ToString());
+    }
+
+    [Fact]
+    public void MalformedProducerCallDoesNotCascadeIntoReturnSyntax()
+    {
+        var text = "server action GarantirPokemonNoCache\n  in Name: Text\n  out Value: Text\n"
+            + "  Read = (Sonnet_IS).ObterPokemon(IdOuNome=Name)\n  if Read.Found:\n    return Value = Read.Name\n  return Value = Name\n";
+        var job = new JsonObject { ["ops"] = new JsonArray(new JsonObject { ["op"] = "logic", ["data"] = new JsonObject { ["flow"] = text } }) };
+        var result = JobPreflight.Analyze(job["ops"]!.AsArray(), job, []);
+        var problem = Assert.Single(result["problems"]!.AsArray());
+        Assert.Equal("FLOW_PRODUCER_CALL_SYNTAX", problem!["code"]!.ToString());
+        job["ops"]![0]!["data"]!["flow"] = problem["patch"]![0]!["value"]!.DeepClone();
+        Assert.Empty(JobPreflight.Analyze(job["ops"]!.AsArray(), job, [])["problems"]!.AsArray());
+    }
+
     // ---- I4: coded refusals rebased -----------------------------------------------------------------------------------------
 
     [Fact]
@@ -297,7 +381,7 @@ public sealed class Pa2F2RulesTests
     }
 
     private static readonly string[] NewCodes = ["ENUM_VALUE_INVALID", "PROPERTY_NOT_WRITABLE", "ARGUMENT_UNKNOWN", "REQUIRED_ARGUMENT", "EXPR_UNKNOWN_IDENTIFIER",
-        "NAME_COLLISION", "FUNCTION_ARITY", "OPERAND_TYPES", "DB_FUNCTION_IN_AGGREGATE", "MOBILE_BLOCK_WITH_NAVIGATION", "LOGIC_DUPLICATE_ACTION", "PREFLIGHT_RULE_FAILED"];
+        "NAME_COLLISION", "FUNCTION_ARITY", "OPERAND_TYPES", "DB_FUNCTION_IN_AGGREGATE", "MOBILE_BLOCK_WITH_NAVIGATION", "LOGIC_DUPLICATE_ACTION", "PREFLIGHT_RULE_FAILED", "FLOW_PRODUCER_CALL_SYNTAX"];
 
     /// <summary>No false positive on the repository's O11 jobs (the suites, the live jobs, the tested coverage): the rules
     /// refuse only what the platform refuses.</summary>

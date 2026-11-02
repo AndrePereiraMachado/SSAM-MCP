@@ -45,6 +45,30 @@ public sealed class Pa3KlAnonymousTests
     }
 
     [Fact]
+    public void VerifyMessageAnswersTheSsamCodesAndTheAnonymousTextTheVerifyCatalogDoesNotName()
+    {
+        // C-11 (the proto line's b19ae05e; F-AiChatbot-02: verify-message answered []; F-FigmaMobile-08: it only repeated the
+        // bucket "{0}"/"{1}"): the code of a refusal and the text of the anonymous warning come back with what they mean and
+        // what to do.
+        var bucket = new VerifyDefinition("CustomObjectWarning", "Warning", "{0}", "{1}");
+        var hints = new Dictionary<string, VerifyHint>();
+        string Json(object o) => System.Text.Json.JsonSerializer.Serialize(o);
+        var code = Json(CommandSurface.VerifyMessages([bucket], hints, "HTML_NAME_AMBIGUOUS", exact: true));
+        Assert.Contains("\"id\":\"HTML_NAME_AMBIGUOUS\"", code);
+        Assert.Contains("Kind:Name or Owner.Name", code);
+        var text = Json(CommandSurface.VerifyMessages([bucket], hints, "exposing a Server Action", exact: false));
+        Assert.Contains("\"id\":\"CustomObjectWarning\"", text);
+        Assert.Contains("/expectedMessages/-", text);
+        Assert.Contains("roles=\\u0022Anonymous\\u0022", text);
+        // The Verify id still answers its own definition first, then the SSAM's reading of it.
+        var both = System.Text.Json.Nodes.JsonNode.Parse(Json(CommandSurface.VerifyMessages([bucket], hints, "CustomObjectWarning", exact: true)))!.AsArray();
+        Assert.Equal(["{1}", "ssam"], [both[0]!["detail"]!.ToString(), both[1]!["hintOrigin"]!.ToString()]);
+        Assert.Equal("[]", Json(CommandSurface.VerifyMessages([bucket], hints, "NO_SUCH_CODE", exact: true)));
+        // The normalization of C-05 is answered too (the ODC CLI's verify-catalog gives the same list as data.ssamCodes).
+        Assert.Contains(CommandSurface.SsamCodes("CSS_IMPORT_MOVED", exact: true), s => s.Severity == "normalized");
+    }
+
+    [Fact]
     public void TheReceiptListsTheExposedActionsByScreen()
     {
         var messages = new[] { Anonymous("m1", "Produtos", "GetProducts"), Anonymous("m2", "Produtos", "GetCategories") };

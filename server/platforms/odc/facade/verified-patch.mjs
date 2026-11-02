@@ -35,6 +35,8 @@ export function patchConflicts(ops) {
   const byPath = new Map();
   for (const op of Array.isArray(ops) ? ops : []) {
     if (!isObject(op) || !['replace', 'add'].includes(op.op) || typeof op.path !== 'string') continue;
+    // C-11: an append (add .../-, the expectedMessages entry of each anonymous-access message) writes a new place, never another's.
+    if (op.op === 'add' && op.path.endsWith('/-')) continue;
     if (!byPath.has(op.path)) byPath.set(op.path, new Set());
     byPath.get(op.path).add(JSON.stringify(op.value ?? null));
   }

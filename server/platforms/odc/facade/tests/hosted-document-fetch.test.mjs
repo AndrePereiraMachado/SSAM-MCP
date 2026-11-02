@@ -89,80 +89,49 @@ test('publicUrlProblem: an IP literal in every spelling, a name with one address
   assert.equal(await publicUrlProblem('https://v6.example.test/svc?wsdl', { lookup }), null);
 });
 
-test('hosted: a document URL that is not public is DOCUMENT_HOST_NOT_PUBLIC before any request; a public one is pinned as before', async () => {
+// fase4-28 r4-f3-import (criterion C3): the rule of the 24th release above (public addresses only) gave way to a stricter one: a
+// hosted server never fetches a document at all. Every URL, public or not (the document, a redirect, an import or $ref a
+// document names), is DOCUMENT_FETCH_HOSTED_REFUSED before any request; the document comes from the customer (a workspace file,
+// agent:inbox/<file>, or inline: hosted-document-inline.test.mjs). Local use still reads a URL.
+test('hosted: no document URL is ever requested, public or not; the refusal names the URL and how to give the document', async () => {
   const b = box();
   const lookup = fakeLookup({ 'docs.example.test': ['93.184.216.34'], 'intranet.example.test': ['10.0.0.5'] });
   for (const url of ['http://127.0.0.1:8080/svc.wsdl', 'http://169.254.169.254/latest/meta-data/iam/security-credentials/', 'http://[::1]/svc.wsdl',
-    'http://2130706433/svc.wsdl', 'http://intranet.example.test/Calc.asmx?WSDL']) {
+    'http://2130706433/svc.wsdl', 'http://intranet.example.test/Calc.asmx?WSDL', 'https://docs.example.test/Calc.asmx?WSDL']) {
     const fetchImpl = fakeFetch({ [url]: WSDL });
     const prepared = await prepareIntegrationJob(b.job(url), { ...b.hosted, lookup, fetchImpl });
-    assert.deepEqual([prepared.ok, prepared.code], [false, 'DOCUMENT_HOST_NOT_PUBLIC'], url + ': ' + JSON.stringify(prepared).slice(0, 300));
+    assert.deepEqual([prepared.ok, prepared.code], [false, 'DOCUMENT_FETCH_HOSTED_REFUSED'], url + ': ' + JSON.stringify(prepared).slice(0, 300));
     assert.equal(prepared.problems[0].path, '/ops/0/data/wsdl');
+    assert.equal(prepared.problems[0].url, url);
+    assert.match(prepared.problems[0].message, /never fetches a document for a hosted account/);
+    assert.match(prepared.problems[0].fix, /agent:inbox\/<file>/);
+    assert.match(prepared.problems[0].fix, /"content"/);
     assert.deepEqual(fetchImpl.calls, [], url + ': nothing was requested');
+    assert.deepEqual(lookup.asked, [], url + ': not even resolved');
   }
   assert.ok(!fs.existsSync(path.join(b.local, 'documents')));
-  const url = 'https://docs.example.test/Calc.asmx?WSDL';
-  const fetchImpl = fakeFetch({ [url]: WSDL });
-  const prepared = await prepareIntegrationJob(b.job(url), { ...b.hosted, lookup, fetchImpl });
-  assert.equal(prepared.ok, true, JSON.stringify(prepared).slice(0, 300));
-  assert.deepEqual(fetchImpl.calls, [{ url, redirect: 'manual' }], 'hosted, the client never follows a redirect by itself');
 });
 
-test('hosted: each redirect hop is checked; a redirect to the metadata address, to loopback, to file: or a chain over the limit is refused there', async () => {
+test('hosted: an import or $ref by URL of a workspace document is refused before it is requested', async () => {
   const b = box();
-  const lookup = fakeLookup({ 'docs.example.test': ['93.184.216.34'], 'cdn.example.test': ['93.184.216.35'] });
-  const url = 'https://docs.example.test/Calc.asmx?WSDL';
-  for (const location of ['http://169.254.169.254/latest/meta-data/', 'http://127.0.0.1:9000/admin', 'http://[::1]/', 'file:///etc/passwd']) {
-    const fetchImpl = fakeFetch({ [url]: { status: 302, location }, [location]: WSDL });
-    const prepared = await prepareIntegrationJob(b.job(url), { ...b.hosted, lookup, fetchImpl });
-    assert.equal(prepared.ok, false, location);
-    assert.ok(['DOCUMENT_HOST_NOT_PUBLIC', 'UNSUPPORTED_DOCUMENT_SCHEME'].includes(prepared.code), location + ': ' + prepared.code);
-    assert.deepEqual(fetchImpl.calls.map(c => c.url), [url], location + ': the target of the redirect was never requested');
-  }
-  // a redirect to another public host is followed (and its relative imports resolve against the final URL)
-  const moved = 'https://cdn.example.test/v2/Calc.wsdl';
-  const followed = fakeFetch({ [url]: { status: 301, location: moved }, [moved]: WSDL });
-  const prepared = await prepareIntegrationJob(b.job(url), { ...b.hosted, lookup, fetchImpl: followed });
-  assert.equal(prepared.ok, true, JSON.stringify(prepared).slice(0, 300));
-  assert.equal(prepared.documents[0].source, moved);
-  // more hops than the limit
-  const table = {};
-  for (let i = 0; i < 8; i++) table[`https://docs.example.test/${i}`] = { status: 307, location: `/${i + 1}` };
-  const loop = fakeFetch(table);
-  const chain = await prepareIntegrationJob(b.job('https://docs.example.test/0'), { ...b.hosted, lookup, fetchImpl: loop });
-  assert.equal(chain.code, 'DOCUMENT_NOT_FOUND');
-  assert.match(chain.error, /redirected more than 5 times/);
-  assert.equal(loop.calls.length, 6);
-});
-
-test('hosted: an import or $ref of a public document that points at a private address is refused before it is requested', async () => {
-  const b = box();
-  const lookup = fakeLookup({ 'docs.example.test': ['93.184.216.34'], 'internal.example.test': ['192.168.10.4'] });
-  const url = 'https://docs.example.test/svc/Calc.asmx?WSDL';
-  for (const location of ['http://169.254.169.254/latest/user-data', 'http://internal.example.test/types.xsd', 'http://[fd00:ec2::254]/latest/']) {
+  for (const location of ['http://169.254.169.254/latest/user-data', 'https://docs.example.test/types.xsd']) {
     const main = WSDL.replace('<wsdl:types>', `<wsdl:types><s:schema><s:import namespace="urn:x" schemaLocation="${location}"/></s:schema>`);
-    const fetchImpl = fakeFetch({ [url]: main, [location]: '<s:schema xmlns:s="http://www.w3.org/2001/XMLSchema"/>' });
-    const prepared = await prepareIntegrationJob(b.job(url), { ...b.hosted, lookup, fetchImpl });
-    assert.deepEqual([prepared.ok, prepared.code], [false, 'DOCUMENT_HOST_NOT_PUBLIC'], location);
+    const file = write(path.join(b.workspace, 'inbox', 'Calc.wsdl'), main);
+    const fetchImpl = fakeFetch({ [location]: '<s:schema xmlns:s="http://www.w3.org/2001/XMLSchema"/>' });
+    const prepared = await prepareIntegrationJob(b.job(file), { ...b.hosted, fetchImpl });
+    assert.deepEqual([prepared.ok, prepared.code], [false, 'DOCUMENT_FETCH_HOSTED_REFUSED'], location + ': ' + JSON.stringify(prepared).slice(0, 300));
     assert.equal(prepared.problems[0].target, location);
-    assert.deepEqual(fetchImpl.calls.map(c => c.url), [url], location);
+    assert.deepEqual(fetchImpl.calls, [], location);
   }
 });
 
-test('hosted, the default client: loopback by name or by address is never connected, even when the name turns private after the check (DNS rebinding); local use still reads it', async t => {
+test('hosted, the default client: loopback is never connected; local use still reads a URL', async t => {
   const b = box();
   const target = await loopbackServer(t);
-  // the real resolver: localhost is loopback; an address literal too
   for (const url of [`http://localhost:${target.port}/svc.wsdl`, `http://127.0.0.1:${target.port}/svc.wsdl`]) {
     const prepared = await prepareIntegrationJob(b.job(url), b.hosted);
-    assert.deepEqual([prepared.ok, prepared.code], [false, 'DOCUMENT_HOST_NOT_PUBLIC'], url + ': ' + JSON.stringify(prepared).slice(0, 300));
+    assert.deepEqual([prepared.ok, prepared.code], [false, 'DOCUMENT_FETCH_HOSTED_REFUSED'], url + ': ' + JSON.stringify(prepared).slice(0, 300));
   }
-  // a name whose first answer is public and whose next is loopback: the check passes, the connection is refused
-  let answers = 0;
-  const rebinding = fakeLookup({ 'rebind.example.test': () => (answers++ === 0 ? ['93.184.216.34'] : ['127.0.0.1']) });
-  const prepared = await prepareIntegrationJob(b.job(`http://rebind.example.test:${target.port}/svc.wsdl`), { ...b.hosted, lookup: rebinding });
-  assert.deepEqual([prepared.ok, prepared.code], [false, 'DOCUMENT_HOST_NOT_PUBLIC'], JSON.stringify(prepared).slice(0, 300));
-  assert.ok(answers >= 2, 'the connection asked the name again and was refused');
   assert.deepEqual(target.seen, [], 'the loopback server never got a request');
   // local use (no workspace): the global fetch, as before
   const local = await prepareIntegrationJob(b.job(`http://127.0.0.1:${target.port}/svc.wsdl`), { ...b.hosted, workspace: null });

@@ -416,6 +416,8 @@ Seen in: C:\Users\andre\SSAM-Hybrid-ODC\tenants.json:30 (note of tenant clientte
 
 ### IImage of the module (image resource)
 
+CORRIGIDO — nao voltar a reportar (C-10, 27/10/2026). O kernel converte JsonValue para byte[] desde 2026-09 (Convert: base64, `Verbs.cs` "Binary content") e `create IImage {parent: @espace, name, args: {binary, originalPath}}` cria a imagem nas duas faixas (provas: `tests/jobs-odc/image-create.json`, `tests/jobs/image-localized.json`). A fachada le o arquivo: arquivos de imagem (.png, .jpg, .gif, .svg, .webp...) em `files` do `ssam_code write` (`platforms/odc/facade/module-images.mjs`; no maximo 6 MB de imagens por escrita, o job tem no maximo 8 MB; no servidor hospedado, so arquivos do workspace da conta). Uma imagem que o modulo ja tem recebe o conteudo novo (`SetImageContent`, IMAGE_CONTENT_REPLACED), nunca uma segunda. `<img src="Nome.png">` nomeia a imagem do modulo. O texto abaixo fica como historia.
+
 `kernel-limit`
 
 > **IMPRECISE** (passagem adversarial, 2026-09-17)
@@ -597,14 +599,17 @@ ou uma biblioteca externa que o chame.
 
 Seen in: src/Anvil.Core/Kernel/Verbs.Integration.cs (SoapOp); src/Anvil.Core/Kernel/IntegrationPreflight.cs; docs/GITSSAM-O-QUE-SE-APROVEITA.md:799-807
 
-### REST callbacks (OnBefore/OnAfterRequest, OnRequest/OnResponse)
+### Advanced and exposed REST callbacks (OnBeforeRequestAdvanced, OnAfterResponseAdvanced, OnRequest, OnResponse)
 
 `declared-gap`
 
-Nenhuma das ops escreve callbacks. Os quatro criadores de callback do cliente consumido deixam o create generico ambiguo (a
-primeira fabrica atribuivel venceria). Continua `integration.rest-callbacks` (indisponivel) nas duas faixas.
+O `rest-consume` cria o `OnBeforeRequest` e o `OnAfterResponse` do cliente consumido, e o texto de fluxo os le e edita
+(`callback action Cliente.OnAfterResponse @chave`, `integration.rest-callbacks`, as duas faixas; o texto nao cria callback
+nem declara os parametros nativos). Os Advanced e os expostos nao tem rota: os quatro criadores de callback do cliente
+consumido deixam o create generico ambiguo (a primeira fabrica atribuivel venceria). Continua
+`integration.rest-callbacks-advanced` (indisponivel) nas duas faixas.
 
-Seen in: platforms/odc/facade/catalog/fragments/C/integrations-without-route.json (integration.rest-callbacks)
+Seen in: platforms/odc/facade/catalog/fragments/C/integrations-without-route.json (integration.rest-callbacks-advanced); catalog/fragments/C/rest-callbacks.json
 
 ### Authentication flow of exposed REST (Basic/Custom)
 
@@ -1047,6 +1052,8 @@ Seen in: C:\Users\andre\Anvil\tests\jobs-odc\delete-entity-whole.json:9, :13 and
 
 ### IImage of the module (create with byte[])
 
+CORRIGIDO — nao voltar a reportar (C-10, 27/10/2026). O kernel converte JsonValue para byte[] desde 2026-09 (Convert: base64, `Verbs.cs` "Binary content") e `create IImage {parent: @espace, name, args: {binary, originalPath}}` cria a imagem nas duas faixas (provas: `tests/jobs-odc/image-create.json`, `tests/jobs/image-localized.json`). A fachada le o arquivo: arquivos de imagem (.png, .jpg, .gif, .svg, .webp...) em `files` do `ssam_code write` (`platforms/odc/facade/module-images.mjs`; no maximo 6 MB de imagens por escrita, o job tem no maximo 8 MB; no servidor hospedado, so arquivos do workspace da conta). Uma imagem que o modulo ja tem recebe o conteudo novo (`SetImageContent`, IMAGE_CONTENT_REPLACED), nunca uma segunda. `<img src="Nome.png">` nomeia a imagem do modulo. O texto abaixo fica como historia.
+
 `kernel-limit`
 
 Imagem de modulo nao e exprimivel pela linguagem de jobs em NENHUMA das duas faixas: o unico construtor pede byte[] e o Convert do kernel nao sabe converter JsonValue para byte[]. Explicitamente NAO e diferenca de plataforma -- a assinatura e identica nos dois catalogos.
@@ -1403,6 +1410,8 @@ expectError: ["create WfCovSessionState", "Session Variable objects can't be chi
 Seen in: C:\Users\andre\Anvil\tests\jobs-odc-negative\session-variable-not-in-odc.json; table in C:\Users\andre\SSAM-Hybrid-ODC\lab\cobertura-t-relatorio.md:498
 
 ### create IImage (module resource) — BOTH lanes
+
+CORRIGIDO — nao voltar a reportar (C-10, 27/10/2026). O kernel converte JsonValue para byte[] desde 2026-09 (Convert: base64, `Verbs.cs` "Binary content") e `create IImage {parent: @espace, name, args: {binary, originalPath}}` cria a imagem nas duas faixas (provas: `tests/jobs-odc/image-create.json`, `tests/jobs/image-localized.json`). A fachada le o arquivo: arquivos de imagem (.png, .jpg, .gif, .svg, .webp...) em `files` do `ssam_code write` (`platforms/odc/facade/module-images.mjs`; no maximo 6 MB de imagens por escrita, o job tem no maximo 8 MB; no servidor hospedado, so arquivos do workspace da conta). Uma imagem que o modulo ja tem recebe o conteudo novo (`SetImageContent`, IMAGE_CONTENT_REPLACED), nunca uma segunda. `<img src="Nome.png">` nomeia a imagem do modulo. O texto abaixo fica como historia.
 
 `unreachable`
 

@@ -48,6 +48,8 @@ public static class PreflightChecks
         var job = JobFacts.From(ops);
         Run(found, nameof(ActionNameRules), () => ActionNameRules.Check(ops, prefix, model));
         Run(found, nameof(NodeRules), () => NodeRules.Check(ops, prefix, job, model.ModuleType));
+        // F5: the Traditional documents, adapted and checked as the compiler will, before the build.
+        Run(found, nameof(HtmlDocumentRules.CheckTraditional), () => HtmlDocumentRules.CheckTraditional(ops, prefix, model.ModuleType));
         Run(found, nameof(ScopeRenames), () => ScopeRenames.Check(ops, prefix, model.ScreenNames));
         // T9: what only the module type or the base says runs in the browser (a Traditional module is exempt), and the attributes
         // nothing of the job or of the module reads.

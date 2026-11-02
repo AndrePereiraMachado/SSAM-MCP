@@ -163,6 +163,14 @@ Inside the loop, `ListFilter(GetOrdersWithLines.List, OrderLine.OrderId = GetOrd
 - An explicit escape, only when the query really has to run per item: `"allowQueryInLoop": {"why": "<15+ characters>"}`
   on the op that creates the query. It is accepted and stays in the receipt (`QUERY_IN_LOOP_ALLOWED` in `highWarnings`),
   never silently.
+- **ONINITIALIZE_SERVER_CALL (refusal, F11 2026-10-26)**: a server or service action called from the OnInitialize of a
+  Reactive or Mobile screen or block (O11 and ODC), directly or through the client actions it calls, is refused at apply
+  with the other failures when the job created the screen, bound the handler or wrote the call. OnInitialize runs before
+  the first render: the round trip delays the whole screen. The answer names the screen, the handler, the chain and the
+  callees, and the binding the job wrote; the fix says to fetch the data with a Data Action of the screen (Fetch: At start)
+  or an aggregate. Never OnReady: the owner's rule S1 forbids a server call in every lifecycle event, and there is no
+  event-swap patch (review of r4-w2-flow, 2026-10-31). A call that was already in the module, in a screen the job touched without changing the
+  binding or the call, is a HIGH warning (`legacy: true`), never a refusal. There is no escape for this rule.
 - **Aggregate sort (refusal, `AGGREGATE_SORT_NOT_ATTRIBUTE`)**: the sort is ONE attribute of a source (`Source.Attribute`)
   or a column of the aggregate; descending order is `desc` (in the text) or `SortDirection` Descending. Never an
   expression: the Verify accepts it and the publication breaks in the compiler (VisitaCerta_CS, 2026-10-12). `X DESC`,

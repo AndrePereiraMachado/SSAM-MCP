@@ -139,14 +139,15 @@ public sealed class BridgeServeTests {
 
     [Fact]
     public void Every_job_queued_on_an_idle_tab_is_bounded() {
-        // A queued job is bounded when it goes through QueuedOnTab (TabQueue), or (open) waits for its own started signal with a bound.
+        // A queued job is bounded when it goes through QueuedOnTab (TabQueue), the verification of a merge (VerifyAfterMerge, which
+        // is TabQueue), or (open) waits for its own started signal with a bound.
         var source = BridgeSource();
         var lines = source.Split('\n');
         var unbounded = new List<string>();
         for (var i = 0; i < lines.Length; i++) {
             if (!Regex.IsMatch(lines[i], @"\.ExecuteInContext\(") || lines[i].Contains("executeWhenTopLevelIsIdle: false")) continue;
             var window = string.Join("\n", lines.Skip(Math.Max(0, i - 3)).Take(16));
-            if (window.Contains("TabQueue.Run(") || window.Contains("Task.WhenAny(started.Task")) continue;
+            if (window.Contains("TabQueue.Run(") || window.Contains("VerifyAfterMerge.Run(") || window.Contains("Task.WhenAny(started.Task")) continue;
             unbounded.Add((i + 1) + ": " + lines[i].Trim());
         }
         Assert.True(unbounded.Count == 0, "Unbounded queued jobs:\n" + string.Join("\n", unbounded));

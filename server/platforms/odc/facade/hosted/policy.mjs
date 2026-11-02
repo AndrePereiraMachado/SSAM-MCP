@@ -42,8 +42,8 @@ import { localUploadEnabled, uploadLocalFile } from './local-upload.mjs';
 import { scrubDiscover, scrubEvidence, thirdPartyJobs } from './evidence.mjs';
 import { agentReadable, agentSegments, insideVisible } from './mirror.mjs';
 import { agentPath, outsideWorkspaceRefusal, isAgentMachinePath } from '../agent-paths.mjs';
-import { CODE_TOOL, JOB_TOOLS, JobTextError, PathRefusal, confineJobs, jobTextPointers, namesGenerator, namesPrototype, namesVerifiedPatch, outside, parseJobTexts } from './job-paths.mjs';
-import { generatorApproval, offered } from '../generators.mjs';
+import { CODE_TOOL, JOB_TOOLS, JobTextError, PathRefusal, confineJobs, jobTextPointers, namesGenerator, namesPrototype, namesVerifiedPatch, outside, parseJobTexts, restConsumeUnsampled } from './job-paths.mjs';
+import { generatorApproval, hostedGeneratorMode, offered } from '../generators.mjs';
 import { holdPointers, pointersOf, scrubText } from '../exposure.mjs';
 import { hostedCatalog } from './served.mjs';
 import { withoutHostedPreview, hiddenTools } from './availability.mjs';
@@ -253,13 +253,39 @@ export function prototypeUnavailable(name, lane) {
 // ---- servidor/fase4-25 (D2 of C:\t\vps-a5\PLANO.md, 3.2-E): the generator ops pending their blind test
 // THE switch. 'refuse': a hosted job, delivery or proof that carries a generator op whose approval (generators.mjs
 // GENERATOR_APPROVAL) is not 'approved' is refused at the gate, before the agent and any capture (an op called by name runs
-// locally; hosted, nothing the owner has not approved runs, and rest-consume would read its samples from the server).
+// locally; hosted, nothing the owner has not approved runs).
 // 'allow': the gate lets them through. A generator the owner approves runs like any op.
+// fase4-28 r4-rest-hosted (C2, C7): a generator with a hosted input mode (generators.mjs GENERATOR_APPROVAL hosted.mode)
+// runs here called by name before its approval, in that mode only, as a local server runs it (discover still offers only
+// an approved one). 'job-only' (entity-actions, screen with data.generate): the kernel op reads the job and the module,
+// nothing else. 'inline-samples' (rest-consume): its one server-side read was the sample GET of a job's url
+// (integration-documents.mjs sampleRestConsume, the server's network); hosted, every input is in the job, each GET method
+// carries its "sample", and a job that lacks one is refused at the gate (restConsumeSampleRequired, whatever the switch),
+// before the agent and any capture; the documents step never fetches it either (defence in depth). The job's files are
+// confined like every other job file (job-paths.mjs confineJobs); a generator without a mode stays refused here.
 export const HOSTED_GENERATOR_OPS = 'refuse';
 export const GENERATOR_TOOLS = JOB_TOOLS;
-export { namesGenerator };
+export { namesGenerator, restConsumeUnsampled };
 // Whether the gate refuses this generator id ('unreadable': a part it could not read whole, fails closed).
-export const pendingGenerator = id => id === 'unreadable' || (typeof id === 'string' && !offered(id));
+export const pendingGenerator = id => id === 'unreadable' || (typeof id === 'string' && !offered(id) && hostedGeneratorMode(id) === null);
+// rest-consume in its hosted input mode: the GET methods without a sample a call names, refused before anything runs, with
+// the family code of the documents (DOCUMENT_FETCH_HOSTED_REFUSED, M3 of the F3 review: a hosted server never fetches what a
+// job names), cause REST_CONSUME_SAMPLE_MISSING.
+export function restConsumeSampleRequired(name, lane, unsampled) {
+  const named = [...new Set(unsampled.map(u => u.method).filter(Boolean))];
+  const unreadable = unsampled.some(u => u.unreadable);
+  return { ok: false, code: 'DOCUMENT_FETCH_HOSTED_REFUSED', cause: 'REST_CONSUME_SAMPLE_MISSING', policy: 'HOSTED_GENERATOR_OPS', tool: name, generator: 'rest-consume', outcome: 'not-sent',
+    pointer: unsampled[0]?.path ?? null,
+    ...(named.length ? { methods: named.slice(0, 20) } : {}),
+    error: 'The SSAM server never fetches for a hosted account, so it never calls an API a job names: rest-consume runs here only with every input in the job, '
+      + 'so each GET method needs "sample" (its JSON response)' + (named.length ? '; missing in ' + named.slice(0, 20).join(', ') : '')
+      + (unreadable ? '; the gate could not read the whole job' : '') + '. Nothing was requested and nothing ran.',
+    problems: unsampled.slice(0, 20).map(u => ({ code: 'DOCUMENT_FETCH_HOSTED_REFUSED', cause: 'REST_CONSUME_SAMPLE_MISSING', path: u.path, ...(u.method ? { method: u.method } : {}) })),
+    fix: 'give the response inline in each GET method: "sample": <the JSON response> (from the API documentation, or a call the user made on their machine); a POST/PUT/PATCH '
+      + 'gives "request": <the JSON body> and, for a typed answer, "sample". Then send the same call again.',
+    continuation: { tool: 'ssam_reference', arguments: { lane: lane === 'odc' ? 'odc' : 'o11', kind: 'api', query: { op: 'rest-consume' } },
+      why: 'The closed keys of rest-consume: sample, request, verb, auth, headers.' } };
+}
 export function generatorUnavailable(name, lane, generator) {
   const approval = generatorApproval(generator);
   return { ok: false, code: 'HOSTED_UNAVAILABLE', cause: 'GENERATOR_PENDING', policy: 'HOSTED_GENERATOR_OPS', tool: name, generator, outcome: 'not-sent',
@@ -382,6 +408,8 @@ const pathOnlyWhen = (name, entry, pointer, args, value) => {
 
 // R2-H (f): a refused local upload keeps the outcome the agent gave (not-sent: nothing left the user's machine).
 const uploadRefused = error => Object.assign(new PathRefusal(error.code, error.message), error.outcome ? { fields: { outcome: error.outcome } } : {});
+// A scheme of two letters or more (a drive letter is one): file:, http:, https:, ... (ws:, agent: and local: are read first).
+const URL_SCHEME = /^[A-Za-z][A-Za-z0-9+.-]+:/;
 async function resolveValue(value, role, lane, context, agentRoot = null) {
   const workspace = path.resolve(context.workspace);
   if (role === 'in' && value.startsWith('local:')) {
@@ -426,6 +454,9 @@ async function resolveValue(value, role, lane, context, agentRoot = null) {
     }
     return abs;
   }
+  // fase4-28 r4-rest-hosted (blind test): a URL of any scheme (file:, http:, ...) is no path of this account: it names a
+  // file or a resource elsewhere, never a relative name under the workspace (a file: URL was taken as ws:o11/file:/...).
+  if (URL_SCHEME.test(value)) throw outside(value);
   // Relative: inputs under ws:<lane>/, outputs under ws:odc/lab/ (ODC) or ws:o11/ (O11). A tool without a lane takes
   // ws:<rel> as given (it must start with odc/, o11/ or inbox/).
   const base = role === 'out' ? (lane === 'o11' ? ['o11'] : ['odc', 'lab']) : LANED.has(lane) ? [lane] : [];
@@ -448,6 +479,7 @@ function outsideValue(value, role, lane, context, agentRoot = null) {
     return !insideVisible(workspace, path.join(workspace, ...parsed.segments));
   }
   if (path.isAbsolute(value) || /^[A-Za-z]:/.test(value) || /^[\\/]/.test(value)) return !insideVisible(workspace, path.resolve(value));
+  if (URL_SCHEME.test(value) && !value.startsWith('local:')) return true;
   const base = role === 'out' ? (lane === 'o11' ? ['o11'] : ['odc', 'lab']) : LANED.has(lane) ? [lane] : [];
   return !insideVisible(workspace, path.resolve(workspace, ...base, value));
 }
@@ -530,10 +562,14 @@ async function jobInputs(value, lane, context, agentRoot, budget, depth = 0) {
 // of these checks fell behind (its prototype, generator and patch "verified" checks: the deadline listed the agent's files of
 // a call the gate then refused).
 export function refusalBeforeAgent(name, args, { entry, config = null, raw = args, hasArgs = true, lanes = [], kernelRefused = null, workspace = null,
-  prototypeOp = HOSTED_PROTOTYPE_OP, generatorOps = HOSTED_GENERATOR_OPS, destructive = HOSTED_DESTRUCTIVE } = {}) {
+  prototypeOp = HOSTED_PROTOTYPE_OP, generatorOps = HOSTED_GENERATOR_OPS, destructive = HOSTED_DESTRUCTIVE, supports = null } = {}) {
   if (!entry || entry.class === 'unavailable') return { refusal: unavailable(name, entry, config) };
   // T2: a call that deletes, read on the arguments it runs and on the ones sent, before anything else of the call.
   if (destructive !== 'allow' && (deletes(name, args) || (hasArgs && deletes(name, raw)))) return { refusal: destructiveUnavailable(name) };
+  // F4 (PLANO-11H): a tool served only through a kind of the agent (entry.kind: o11_extension and o11.xif) answers, for an
+  // agent whose Hello does not list that kind (an older agent, or none), the refusal it had before it was served (entry.off),
+  // in the same shape: nothing of the call runs. After T2, so a delete never consults the agent link.
+  if (entry.kind && !agentRuns(supports, entry.kind)) return { refusal: unavailable(name, { ...entry, class: 'unavailable' }, config) };
   // Item 1: the JSON text of a job is the job itself only on a job pointer; parsed here, every rule below (and the
   // handler) reads the object. A text there that looks like JSON and does not parse is refused: it is no path either.
   if (hasArgs) {
@@ -550,6 +586,11 @@ export function refusalBeforeAgent(name, args, { entry, config = null, raw = arg
     const generator = namesGenerator(args, pendingGenerator);
     if (generator) return { refusal: generatorUnavailable(name, lane, generator) };
   }
+  // r4-rest-hosted: rest-consume's hosted input mode, whatever the switch (the server never fetches a url of a job).
+  if ((GENERATOR_TOOLS.includes(name) || name === CODE_TOOL) && hasArgs) {
+    const unsampled = restConsumeUnsampled(args);
+    if (unsampled.length) return { refusal: restConsumeSampleRequired(name, lane, unsampled) };
+  }
   // servidor/fase4-25 (finding A1): patch "verified" reads its operations from a file the gate never reads; refused here,
   // before the agent, any file brought from it and any capture (the explicit patch is checked: confineJobs).
   // a8: ssam_code write {patch:"verified", basedOn} hands that patch to the delivery, with its own continuation. a11: fix
@@ -561,17 +602,20 @@ export function refusalBeforeAgent(name, args, { entry, config = null, raw = arg
   if (LANED.has(lane) && need !== 'report' && kernelRefused?.[lane]) return { refusal: kernelLaneOff(lane, kernelRefused[lane]) };
   return { args, lane, need };
 }
+const agentRuns = (supports, kind) => { try { return typeof supports === 'function' && supports(kind) === true; } catch { return false; } };
+// The kinds the agent of a session runs (AgentLink supports), for refusalBeforeAgent; never throws.
+export const supportsOf = link => kind => { try { return link?.supports?.(kind) === true; } catch { return false; } };
 // Whether the gate refuses this call before the agent and any path (refusalBeforeAgent). The deadline's inputs never ask the
 // agent anything for such a call: the gate answers it, nothing pulled and no kind (hosted-destructive NEW-1). A call whose
 // checks throw is read as refused too (no print: the gate answers it).
 export function refusedBeforePaths(name, args, { tools = hostedTools(), lanes = [], kernelRefused = null, raw = args, prototypeOp = HOSTED_PROTOTYPE_OP,
-  generatorOps = HOSTED_GENERATOR_OPS, destructive = HOSTED_DESTRUCTIVE } = {}) {
-  try { return Boolean(refusalBeforeAgent(name, args, { entry: tools?.[name], raw, lanes, kernelRefused, prototypeOp, generatorOps, destructive }).refusal); }
+  generatorOps = HOSTED_GENERATOR_OPS, destructive = HOSTED_DESTRUCTIVE, supports = null } = {}) {
+  try { return Boolean(refusalBeforeAgent(name, args, { entry: tools?.[name], raw, lanes, kernelRefused, prototypeOp, generatorOps, destructive, supports }).refusal); }
   catch { return true; }
 }
-export async function replayInputs(name, args, context, { agentRoot = null, tools = hostedTools(), lanes = context?.lanes ?? [], kernelRefused = null, raw = args } = {}) {
+export async function replayInputs(name, args, context, { agentRoot = null, tools = hostedTools(), lanes = context?.lanes ?? [], kernelRefused = null, raw = args, supports = supportsOf(context?.agent) } = {}) {
   const entry = tools?.[name];
-  if (!entry || !isPlainObject(args) || !context?.workspace || refusedBeforePaths(name, args, { tools, lanes, kernelRefused, raw })) return args;
+  if (!entry || !isPlainObject(args) || !context?.workspace || refusedBeforePaths(name, args, { tools, lanes, kernelRefused, raw, supports })) return args;
   let value;
   try { value = structuredClone(parseJobTexts(name, args)); } catch { return args; }
   const lane = laneOf(entry, value);
@@ -850,7 +894,8 @@ export function wrapHostedTool(name, config, handler, { context, link = context?
     let args = hasArgs ? effectiveArgs(argsOf, params[0] ?? {}) : {};
     // a8 phase 6: the checks before the agent and any path are ONE function (refusalBeforeAgent), the one the call deadline's
     // inputs read too (refusedBeforePaths).
-    const early = refusalBeforeAgent(name, args, { entry, config, raw: params[0], hasArgs, lanes, kernelRefused, prototypeOp, generatorOps, destructive, workspace: context?.workspace ?? null });
+    const supports = supportsOf(link);
+    const early = refusalBeforeAgent(name, args, { entry, config, raw: params[0], hasArgs, lanes, kernelRefused, prototypeOp, generatorOps, destructive, workspace: context?.workspace ?? null, supports });
     if (early.refusal) return refusal(early.refusal);
     args = early.args;
     const { lane, need } = early;
@@ -869,7 +914,7 @@ export function wrapHostedTool(name, config, handler, { context, link = context?
       return refusal({ ...recovery, code: error.code, error: error.message });
     }
     if (args !== unexpandedArgs) {
-      const expanded = refusalBeforeAgent(name, args, { entry, config, raw: args, hasArgs, lanes, kernelRefused, prototypeOp, generatorOps, destructive, workspace: context.workspace });
+      const expanded = refusalBeforeAgent(name, args, { entry, config, raw: args, hasArgs, lanes, kernelRefused, prototypeOp, generatorOps, destructive, workspace: context.workspace, supports });
       if (expanded.refusal) return refusal(expanded.refusal);
     }
     let info = null, skipped = [];
@@ -918,7 +963,7 @@ export function wrapHostedTool(name, config, handler, { context, link = context?
       // (directly, or a part the gate cannot read whole), then every path inside them confined and, inline, rewritten to
       // the absolute workspace path the kernel reads (job-paths.mjs). Before the handler and any capture.
       const jobs = await confineJobs(name, resolved, { workspace: context.workspace, prototype: refusesPrototype,
-        generator: refusesGenerators ? pendingGenerator : null, resolve: value => resolveValue(value, 'in', lane, context, info?.agentRoot ?? null) });
+        generator: refusesGenerators ? pendingGenerator : null, samples: GENERATOR_TOOLS.includes(name) || name === CODE_TOOL, resolve: value => resolveValue(value, 'in', lane, context, info?.agentRoot ?? null) });
       if (jobs.prototype) return refusal(prototypeUnavailable(name, lane));
       if (jobs.refusal) {
         const answer = jobPathRefused(jobs.refusal, info?.agentRoot ?? null, text => present.string(String(text ?? '')));
@@ -928,6 +973,8 @@ export function wrapHostedTool(name, config, handler, { context, link = context?
       }
       // servidor/fase4-25: after the paths (a part the gate refused is named by its own refusal, never as 'unreadable').
       if (jobs.generator) return refusal(generatorUnavailable(name, lane, jobs.generator));
+      // r4-rest-hosted: a job file, the job of basedOn, a patched job or a composite part with a GET method without sample.
+      if (jobs.unsampled?.length) return refusal(restConsumeSampleRequired(name, lane, jobs.unsampled));
       resolved = jobs.resolved;
       if (name === 'ssam_job' && lane === 'odc' && (resolved.base === undefined || resolved.base === null || resolved.base === ''))
         resolved = { ...resolved, base: NEUTRAL_ODC_BASE };

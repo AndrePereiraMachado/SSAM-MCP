@@ -857,6 +857,31 @@ public static class SqlPreflight
                 uses.Add(use);
             });
         }
+        // F7 (25/10/2026): the SQL node of a ssam-flow/1 text (`X = sql -> T`, its `in` lines and `|` statement) is read the
+        // same way: the owner's ImportarClientesDemo reached the Verify with @@ROWCOUNT and DECLARE @x (5 InvalidSQL_UnknownParam)
+        // and `sqlStatements: 0`. Its parameters are the node's own `in` lines, so used and declared are compared here.
+        if (data == null) return;
+        foreach (var (_, text) in Preflight.DocumentNameRules.Texts(data))
+        {
+            Anvil.Reading.FlowItem action;
+            try { action = Anvil.Reading.FlowParser.Parse(text); } catch { continue; }   // a text the grammar refuses is the preflight's
+            foreach (var node in FlowNodes(action).Where(n => n.Kind == "SQLNode" && n.Prop("Statement") is { Length: > 0 }))
+            {
+                var use = new SqlUse { Op = origin, Where = $"in logic action '{action.Name}' sql '{node.Name}'", Statement = node.Prop("Statement") };
+                foreach (var p in node.Items.Where(c => c.Role == "in"))
+                    use.Params[p.Name] = new Param { Name = p.Name, Type = p.Prop("DataType"), ExpandInline = p.Prop("ExpandInline") == "True" };
+                uses.Add(use);
+            }
+        }
+    }
+
+    private static IEnumerable<Anvil.Reading.FlowItem> FlowNodes(Anvil.Reading.FlowItem item)
+    {
+        foreach (var child in item.Items)
+        {
+            if (child.Role == "node") yield return child;
+            foreach (var deeper in FlowNodes(child)) yield return deeper;
+        }
     }
 
     private static void Walk(JsonNode? node, Action<JsonObject> visit)

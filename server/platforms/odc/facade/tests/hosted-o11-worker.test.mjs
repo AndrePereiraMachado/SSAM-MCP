@@ -529,6 +529,28 @@ test('a request written with no reply is an unknown outcome: sent once, never re
   assert.deepEqual(notPing(spawnFn.launched[2].worker).map(r => r.args), [['apply', 'next']]);
 });
 
+test('R4 family C: a worker that died with the request answers the tail of its startup log written since the request, nothing older', async t => {
+  const s = server(t);
+  let log = null;
+  const spawnFn = fakeDotnet({ handler: request => {
+    if (request.args[1] !== 'crash') return { ok: true, command: request.args[0], data: {} };
+    fs.appendFileSync(log, 'Unhandled exception. System.TypeInitializationException: The type initializer for \'SkiaSharp.SKObject\' threw an exception.\n'
+      + '   at SkiaSharp.SKNativeObject.Finalize()\n');
+    return 'drop';
+  } });
+  const workers = pool(t, { spawnFn });
+  const a = customer(t, s, 'a');
+  const entry = await warmUp(workers, a);
+  log = path.join(entry.local, `worker-${entry.port}-startup.log`);
+  fs.appendFileSync(log, 'a line of the start, before the request\n');
+  const lost = await workers.run(a, ['deliver', 'crash']);
+  assert.deepEqual([lost.used, lost.unknown, lost.code], [true, true, 'WORKER_OUTCOME_UNKNOWN']);
+  assert.ok(Array.isArray(lost.stderrTail), JSON.stringify(lost));
+  assert.match(lost.stderrTail[0], /^Unhandled exception\. System\.TypeInitializationException/);
+  assert.ok(!lost.stderrTail.some(line => /before the request/.test(line)));
+  await waitFor(() => spawnFn.launched[0].exited);
+});
+
 test('after an unknown outcome the command still running is waited for: shutdown once its ping says idle, terminated only past the call\'s timeout', async t => {
   const s = server(t);
   // 'outlive': the connection drops while the command goes on (the worker's ping says busy until the test ends it).
@@ -648,6 +670,10 @@ test('hosted, createWorkerFirstRunner sends each customer\'s command to that cus
   const lost = createWorkerFirstRunner({ cold, env: {} }, { hostedWorkers: recordingPool(() => ({ used: true, unknown: true, code: 'WORKER_OUTCOME_UNKNOWN', error: 'worker connection failed after submission' })) });
   const unknown = await runWithExecutor(a, () => lost(['deliver', '--module', 'M']));
   assert.deepEqual([unknown.ok, unknown.timedOut, unknown.unknown, unknown.via], [false, true, true, 'worker']);
+  assert.equal(cold.calls.length, 0);
+  // R4 family C: the worker's stderr tail travels with the run, for the answer to say why the process stopped.
+  const crashed = createWorkerFirstRunner({ cold, env: {} }, { hostedWorkers: recordingPool(() => ({ used: true, unknown: true, code: 'WORKER_OUTCOME_UNKNOWN', error: 'worker connection failed after submission', stderrTail: ['Unhandled exception. X'] })) });
+  assert.deepEqual((await runWithExecutor(a, () => crashed(['deliver', '--module', 'M']))).stderrTail, ['Unhandled exception. X']);
   assert.equal(cold.calls.length, 0);
   // Nothing ran there (a miss, busy, no place): the same command runs cold, with the reason.
   const full = createWorkerFirstRunner({ cold, env: {} }, { hostedWorkers: recordingPool(() => ({ used: false, note: "the customer's O11 worker is not running: this call ran cold and the worker starts in the background for the next call" })) });

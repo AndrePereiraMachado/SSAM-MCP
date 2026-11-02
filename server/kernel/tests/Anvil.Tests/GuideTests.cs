@@ -16,11 +16,28 @@ public class GuideTests
     public void EveryJobMentionedInTheGuideExists()
     {
         var guide = File.ReadAllText(Path.Combine(Root, "AGENTS.md"));
-        var mentioned = Regex.Matches(guide, @"(?<![\w.\-])([a-z][a-z0-9-]*)\.json\b").Select(m => m.Groups[1].Value).Distinct().ToList();
+        // A name written as the end of a path names that file, not a job: it holds when the file is there (the Traditional dialect
+        // card platforms/odc/facade/catalog/traditional-dialect.json, the text corpus tests/text-corpus/...); a rooted path is a
+        // corpus or a capture outside the checkout (C:\t\html-plan\unique.json), never a job. R4 integration: the card's mention
+        // (B2) was read as a job.
+        var mentioned = Regex.Matches(guide, @"(?<![\w.\-])([a-z][a-z0-9-]*)\.json\b").Where(m => !NamesAFileByItsPath(guide, m))
+            .Select(m => m.Groups[1].Value).Distinct().ToList();
         // Todas as pastas de job das DUAS faixas: um job so do ODC (theme-css-halves) tambem e citavel pelo nome.
         var folders = new[] { "jobs", "jobs-live", "jobs-negative", "jobs-odc", "jobs-odc-negative" };
         var missing = mentioned.Where(n => !folders.Any(f => File.Exists(Path.Combine(Root, "tests", f, n + ".json"))) && n != "result" /* generated delivery artifact, not a job */ && !n.StartsWith("model-api") && !n.StartsWith("verify-messages") && !n.StartsWith("functions-") && !n.Contains("OutSystems")).ToList();
         Assert.True(missing.Count == 0, "jobs citados no AGENTS.md que nao existem: " + string.Join(", ", missing));
+    }
+
+    /// <summary>Whether the mention ends a path (a / or \ right before the name): rooted, or a file there from this kernel or
+    /// from the checkout's root.</summary>
+    private static bool NamesAFileByItsPath(string guide, Match mention)
+    {
+        var start = mention.Index;
+        while (start > 0 && !char.IsWhiteSpace(guide[start - 1]) && guide[start - 1] is not ('`' or '"' or '\'' or '(' or '[')) start--;
+        var path = guide[start..(mention.Index + mention.Length)];
+        if (path.Length == mention.Length || !(path.Contains('/') || path.Contains('\\'))) return false;
+        if (Path.IsPathRooted(path)) return true;
+        return File.Exists(Path.Combine(Root, path)) || File.Exists(Path.Combine(Root, "..", path));
     }
 
     [Fact]

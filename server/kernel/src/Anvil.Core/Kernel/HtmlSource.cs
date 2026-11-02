@@ -70,6 +70,24 @@ public static class HtmlSource
     /// <summary>Parses a document or fragment into a synthetic root whose children are the top-level nodes.</summary>
     public static HtmlNode Parse(string html) => new Parser(html).Document();
 
+    /// <summary>C-40 (F-FitBody-04a), the one rule of both parsers of the language (this one and ScreenHtml's): where the text
+    /// run that starts at <paramref name="start"/> ends. A '&lt;' inside a binding {{ ... }} is the expression's (A &lt; B),
+    /// never a tag, so the run goes on to the }} that closes it; a {{ that nothing closes is no binding, and a '&lt;' that opens
+    /// a tag (a letter, '/' or '!' after it) ends the run even inside one (an unpaired {{ never swallows the page).</summary>
+    internal static int TextRunEnd(string text, int start)
+    {
+        var binding = false;
+        for (var i = start; i < text.Length; i++)
+        {
+            if (!binding && string.CompareOrdinal(text, i, "{{", 0, 2) == 0 && text.IndexOf("}}", i + 2, StringComparison.Ordinal) >= 0) { binding = true; i++; continue; }
+            if (binding && string.CompareOrdinal(text, i, "}}", 0, 2) == 0) { binding = false; i++; continue; }
+            if (text[i] != '<') continue;
+            var next = i + 1 < text.Length ? text[i + 1] : '\0';
+            if (!binding || char.IsLetter(next) || next is '/' or '!') return i;
+        }
+        return text.Length;
+    }
+
     private sealed class Parser(string text)
     {
         private int _i; private int _line = 1, _col = 1;
@@ -108,7 +126,8 @@ public static class HtmlSource
         private void TextRun()
         {
             var (l, c) = (_line, _col); var sb = new StringBuilder();
-            while (!End && Peek() != '<') sb.Append(Peek() == '&' ? Entity() : Take().ToString());
+            var stop = TextRunEnd(text, _i);
+            while (!End && _i < stop) sb.Append(Peek() == '&' ? Entity() : Take().ToString());
             Top.Children.Add(new HtmlNode(HtmlNode.TextTag, [], sb.ToString(), l, c));
         }
 

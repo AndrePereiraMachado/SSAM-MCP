@@ -934,7 +934,7 @@ export function registerSsamReference(server, deps = {}) {
       return named(refusal('JOB_INVALID', 'the job does not pass: every problem of every phase over its base, at once', again(lane, kind, built.job, 'fix every problem (apply the patches) and check the stored job again'),
         { job: built.job, base: declaredBase(built.job), ...(verdict.code ? { refusalCode: verdict.code } : {}),
           errors: String(verdict.error ?? '').split(/\r?\n/).filter(Boolean).slice(0, 20).map(l => l.slice(0, 500)),
-          ...refusalFields(verdict.problems ?? ran?.preflight?.problems, verdict.problems ? verdict : { verifyRan: true, phases: ['verify'] }),
+          ...refusalFields(verdict.problems ?? ran?.preflight?.problems, verdict.problems ? verdict : { verifyRan: true, phases: ['verify'] }, { job: built.job }),
           ...(!verdict.problems && Array.isArray(ran?.policyMessages) ? { policyMessages: ran.policyMessages.slice(0, 20) } : {}) }));
     }
     const run = await runAnvil(built.argv, { timeoutMs, cwd: root, read: true, ...(lane === 'odc' ? { cli } : {}) });
@@ -948,7 +948,7 @@ export function registerSsamReference(server, deps = {}) {
         : data?.verifyReason ?? 'only the job was read: it names no base, so the base check, the apply and the Verify did not run; give the job a base (a fixture, job:<name>) to check every phase' };
       if (data?.valid === true) return named({ ok: true, lane, kind, job: built.job, ...sized(lane, data), ...alone });
       return named(refusal('JOB_INVALID', 'the job does not pass the preflight', again(lane, kind, built.job, 'fix the errors and check the stored job again'),
-        { job: built.job, errors: (data?.errors ?? []).slice(0, 20), ...refusalFields(data?.problems, alone) }));
+        { job: built.job, errors: (data?.errors ?? []).slice(0, 20), ...refusalFields(data?.problems, alone, { job: built.job }) }));
     }
     if (kind === 'check-delivery') {
       const named = built.taskId ? { taskId: built.taskId, result: built.result } : {};
@@ -957,7 +957,8 @@ export function registerSsamReference(server, deps = {}) {
     }
     if (built.find !== undefined) {
       const wanted = built.find.toLowerCase();
-      const matches = (data?.definitions ?? []).filter(d => JSON.stringify(d).toLowerCase().includes(wanted));
+      // C-11: the SSAM's own codes (HTML_*, the anonymous-access family) the CLI gives beside the Verify catalog of the ODC Studio.
+      const matches = [...(data?.definitions ?? []), ...(Array.isArray(data?.ssamCodes) ? data.ssamCodes : [])].filter(d => JSON.stringify(d).toLowerCase().includes(wanted));
       data = { find: built.find, count: matches.length, matches: matches.slice(0, FIND_CAP), ...(matches.length > FIND_CAP ? { more: matches.length - FIND_CAP } : {}) };
     }
     const value = { ok: true, lane, kind, ...(built.defaultMax ? { maxDefaulted: built.defaultMax } : {}), ...sized(lane, data) };

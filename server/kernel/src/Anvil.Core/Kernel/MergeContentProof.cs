@@ -564,15 +564,63 @@ public static class MergeContentProof
                 ["expected"] = IsBinding(field.Property) ? value : null,
                 ["actual"] = IsBinding(field.Property) && present ? got : null,
                 ["expectedValue"] = expectedPresent ? Readable(field.Property, value, expectedLabels) : null,
-                ["actualValue"] = present ? Readable(field.Property, got, actualLabels) : null });
+                ["actualValue"] = present ? Readable(field.Property, got, actualLabels) : null,
+                // B17 (proto c995402e): a stylesheet that differs says how, byte by byte (CssStylesheet.Compare); the
+                // acceptance itself is unchanged (modulo line endings, Normalize).
+                ["css"] = IsStyleSheet(field.Property) && expectedPresent && present ? CssSummary(CssStylesheet.Compare(value, got)) : null });
         }
         return new JsonObject { ["schema"] = "ssam-merge-content-proof/1", ["accepted"] = differences.Count == 0,
             ["scope"] = "Object identity/parent, public writable scalar/reference/expression properties, expression text/references, ESpace.DefaultScreen, refresh targets, Traditional links and all stylesheet values outside producer references; unsupported property value types are not covered",
-            ["checked"] = expected.Count, ["differences"] = differences };
+            ["checked"] = expected.Count, ["differences"] = differences, ["css"] = CssSection(expected, actual, Element) };
     }
     private static bool IsBinding(string property) => property is "DataSource" or "DefaultScreen" or "WidgetOrWebBlock" or "Method" or "Validation" or "Destination"
         or "$references" or "$parent" or "ordered:Widgets";
     private static string Normalize(string text) => text.Replace("\r\n", "\n");
+
+    // B17 (proto c995402e, lote 4 F2): every stylesheet of the candidate (screen, block, theme: StyleSheet and the theme's two
+    // halves) byte by byte. The acceptance stays modulo line endings (Normalize): CRLF against LF is how the Studio may store
+    // the same CSS, and the section says so (lineEndingsOnly) instead of hiding it.
+    private static bool IsStyleSheet(string property) => property is "StyleSheet" or "UserStyleSheet" or "GeneratedStyleSheet";
+
+    private static JsonObject CssSummary(JsonObject compare)
+    {
+        var summary = new JsonObject { ["bytesEqual"] = compare["bytesEqual"]?.DeepClone(), ["lineEndingsOnly"] = compare["lineEndingsOnly"]?.DeepClone(),
+            ["firstDifference"] = compare["firstDifference"] is JsonObject at ? new JsonObject { ["line"] = at["line"]!.DeepClone(), ["column"] = at["column"]!.DeepClone() } : null };
+        if (compare["rules"] is JsonObject rules)
+            summary["rules"] = new JsonObject { ["expected"] = rules["expected"]!.DeepClone(), ["actual"] = rules["actual"]!.DeepClone(),
+                ["lost"] = rules["lost"]!.DeepClone(), ["added"] = rules["added"]!.DeepClone(), ["reordered"] = rules["reordered"]!.DeepClone(),
+                ["lostRules"] = rules["lostRules"]!.DeepClone(), ["addedRules"] = rules["addedRules"]!.DeepClone() };
+        return summary;
+    }
+
+    /// <summary>B17: the stylesheets of the candidate compared with the merged module byte by byte: how many, how many are the
+    /// same bytes, how many differ only in line endings, how many differ otherwise (differingTotal) and the first
+    /// <see cref="CssDiffering"/> of those with their rules lost, added or reordered; a stylesheet the merged module does not
+    /// have at all is missing.</summary>
+    internal static JsonObject CssSection(Dictionary<(string Key, string Property), string> expected, Dictionary<(string Key, string Property), string> actual,
+        Func<string, string> element)
+    {
+        int sheets = 0, same = 0, lineEndings = 0, other = 0;
+        var differing = new JsonArray();
+        foreach (var (field, value) in expected.Where(f => IsStyleSheet(f.Key.Property)).OrderBy(f => f.Key.Key, StringComparer.Ordinal).ThenBy(f => f.Key.Property, StringComparer.Ordinal))
+        {
+            sheets++;
+            JsonObject entry;
+            if (!actual.TryGetValue(field, out var got)) entry = new JsonObject { ["missing"] = true };
+            else
+            {
+                var compare = CssStylesheet.Compare(value, got);
+                if (compare["bytesEqual"]!.GetValue<bool>()) { same++; continue; }
+                if (compare["lineEndingsOnly"]?.GetValue<bool>() == true) { lineEndings++; continue; }
+                entry = CssSummary(compare);
+            }
+            other++;
+            entry["element"] = element(field.Key); entry["property"] = field.Property;
+            if (differing.Count < CssDiffering) differing.Add(entry);
+        }
+        return new JsonObject { ["sheets"] = sheets, ["bytesEqual"] = same, ["lineEndingsOnly"] = lineEndings, ["differingTotal"] = other, ["differing"] = differing };
+    }
+    private const int CssDiffering = 20;
     private static string Clip(string text) => text.Length <= 300 ? text : text[..300] + "...";
     private static string Hash(string text) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(Normalize(text)))).ToLowerInvariant();
 }

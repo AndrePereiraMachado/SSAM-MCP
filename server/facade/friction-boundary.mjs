@@ -52,6 +52,18 @@ function receiptEvidence(root,value) {
   }
   return undefined;
 }
+// SC_PROTOCOL_INVALID and SC_PAGE_NOT_FOUND: the queue keeps what Service Center answered instead (service-center/protocol.mjs),
+// so the failure explains itself; before, it kept only the code. Only the documented fields, already masked and cut by the tool.
+// The stdio boundary only: the hosted server's per-call observer records the code, never a sample of a customer's page.
+const PROTOCOL_CODES = new Set(['SC_PROTOCOL_INVALID', 'SC_PAGE_NOT_FOUND']);
+export function protocolOf(value) {
+  for (let depth = 0; value && typeof value === 'object' && depth < 4; depth++) {
+    if (PROTOCOL_CODES.has(value.code) && value.protocol && typeof value.protocol === 'object') return value.protocol;
+    if (PROTOCOL_CODES.has(value.result?.code) && value.result.protocol && typeof value.result.protocol === 'object') return value.result.protocol;
+    value = value.structuredContent ?? value.result;
+  }
+  return undefined;
+}
 export function captureJson({limit=BUFFER_LIMIT,onLimit=()=>{}}={}) {
   let buffers=[],size=0,overflow=false;
   return {push(chunk) {
@@ -71,7 +83,7 @@ export function observeCli({root,entry,args,env=process.env,store=createStore({r
   return {operationId:op.operationId,trace,stdout:chunk=>capture.push(chunk),stderr:chunk=>errors.push(chunk),finish(exitCode,interrupted=false,transportError=false){
     const value=capture.value(),error=errors.value();
     // Never overwrite a semantic failure with a successful process exit.
-    op.finish({result:value,refusal:error},{exitCode,interrupted,transportError,evidence:receiptEvidence(root,value)});
+    op.finish({result:value,refusal:error},{exitCode,interrupted,transportError,evidence:receiptEvidence(root,value),protocol:protocolOf(value)});
   }};
 }
 
@@ -125,7 +137,8 @@ export const frictionTool={name:'ssam_friction',description:'SSAM friction queue
     since:{type:'string',description:'YYYY-MM-DD'},until:{type:'string',description:'YYYY-MM-DD (inclusive)'},lane:{type:'string',enum:['o11','odc']}}},
   annotations:{readOnlyHint:false,destructiveHint:false,idempotentHint:false,openWorldHint:false}};
 
-const REPORT_KEYS=['view','kind','tool','intent','attempted','workaround','cost','summary','taskId'];
+// C-20: lane, a field the schema publishes, is taken on a report too (the lane of the case, recorded with it).
+const REPORT_KEYS=['view','kind','tool','intent','attempted','workaround','cost','summary','taskId','lane'];
 const QUEUE_KEYS=['view','taskId','session','offset','limit','max'];
 // The fields each view takes (a refusal names them).
 export const FRICTION_VIEWS=Object.freeze({issues:QUEUE_KEYS,task:QUEUE_KEYS,timeline:QUEUE_KEYS,reports:QUEUE_KEYS,'delivery-kpi':['view','since','until','lane'],report:REPORT_KEYS});
@@ -140,7 +153,8 @@ export function frictionRefusal(error){
 }
 export function readQueue(store,args={},context={}) {
   if(args&&typeof args==='object'&&!Array.isArray(args)&&args.view==='report'){
-    if(Object.keys(args).some(k=>!REPORT_KEYS.includes(k)))throw Error('Invalid report: fields are '+REPORT_KEYS.join(', '));
+    if(Object.keys(args).some(k=>!REPORT_KEYS.includes(k)))throw Error('Invalid report: fields are '+REPORT_KEYS.join(', ')+' (since and until belong to view delivery-kpi; offset, limit and max page the reads)');
+    if(args.lane!==undefined&&!['o11','odc'].includes(args.lane))throw Error('Invalid report: lane is o11 or odc');
     const {view,...report}=args;
     return store.report(report,context);
   }
@@ -231,7 +245,7 @@ export function observeMcp({root,entry,args,env=process.env,store=createStore({r
     if(!message||typeof message!=='object'||Array.isArray(message)){store.warn('MCP_INVALID_ENVELOPE');return false;}
     if(message.id===undefined)return false;
     const ref=key(message.id),op=pending.get(ref);
-    if(op){op.finish(message.result??message.error,{protocolError:!!message.error,evidence:receiptEvidence(root,message.result)});pending.delete(ref);}
+    if(op){op.finish(message.result??message.error,{protocolError:!!message.error,evidence:receiptEvidence(root,message.result),protocol:protocolOf(message.result)});pending.delete(ref);}
     if(lists.delete(ref)&&includeFrictionTool&&message.result&&Array.isArray(message.result.tools)&&!message.result.nextCursor){
       if(!message.result.tools.some(t=>t.name===frictionTool.name))message.result.tools.push(frictionTool);
       send(message);return true;

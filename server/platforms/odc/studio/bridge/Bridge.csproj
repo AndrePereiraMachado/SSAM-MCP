@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <!-- The runtime of the Studio it compiles against (kernel/StudioRuntime.props): v101 runs inside the net10 ODC Studios
+    <!-- The runtime of the Studio it compiles against (kernel/StudioRuntime.props): v106 runs inside the net10 ODC Studios
          (1.7.30 on) only, see OdcBridgeRuntime below. -->
     <TargetFramework>$(AnvilOdcTargetFramework)</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
@@ -9,12 +9,19 @@
          v101 (D3: the server line's numbers v100-v199) is the v97 code built for the net10 ODC Studios plus the agent's data root
          (agent-root, the protocol every bridge from v98 on must speak to the agent) and the command server that survives a lost
          client (BridgeServe.cs, BridgeDeadlines.cs: d5b65432, lost in the merge 6c574812); v100 was the same code without them; the net8 ODC Studios
-         (up to 1.7.29) keep the v97 binary of the agent pack (sources 3c2c73e), which the client still attaches. -->
-    <AssemblyName>ODC3.Bridge.v101</AssemblyName>
+         (up to 1.7.29) keep the v97 binary of the agent pack (sources 3c2c73e), which the client still attaches.
+         v102: the v101 sources built for the net8 ODC Studios.
+         v106 (U1, 2026-10-31): v101 plus the verified stylesheet caches and the verified publication (the proto's v105, whose
+         numbers v100-v105 the proto already loaded into a Studio with other code, so the line goes on at v106): after the merge
+         the changed stylesheets are checked against the candidate and their native caches refreshed (NativeStyleSheetCache.cs),
+         the verification runs as a job of its own after the merge's job returned (BridgeServe.cs VerifyAfterMerge), a module
+         that is no longer the active one is refused, and a publication answers ok only when its downloaded revision equals
+         before-publish.oml (PublishVerification.cs). -->
+    <AssemblyName>ODC3.Bridge.v106</AssemblyName>
     <OdcBridgeRuntime>net10.0</OdcBridgeRuntime>
-    <!-- v102: the same sources built for the net8 ODC Studios (up to 1.7.29), against a bundle of 1.7.28:
+    <!-- v107: the v106 sources built for the net8 ODC Studios (up to 1.7.29), against a bundle of 1.7.28 or 1.7.29:
          -p:OdcInstall=<its folder> -p:AnvilOdcStudioTfm=net8.0. A net8 DLL also loads in the net10 Studios, as the v98 does. -->
-    <AssemblyName Condition="'$(TargetFramework)' == 'net8.0'">ODC3.Bridge.v102</AssemblyName>
+    <AssemblyName Condition="'$(TargetFramework)' == 'net8.0'">ODC3.Bridge.v107</AssemblyName>
     <OdcBridgeRuntime Condition="'$(TargetFramework)' == 'net8.0'">net8.0</OdcBridgeRuntime>
     <!-- IncrementalClean must never treat a prior resident version as an orphan. -->
     <CleanFile>$(MSBuildProjectFile).$(AssemblyName).FileListAbsolute.txt</CleanFile>
@@ -82,6 +89,8 @@
     <Compile Include="..\shared\Journal.cs" Link="shared\Journal.cs" />
     <Compile Include="..\shared\Manifest.cs" Link="shared\Manifest.cs" />
     <Compile Include="..\engine\NativeMergeVerification.cs" Link="engine\NativeMergeVerification.cs" />
+    <Compile Include="..\engine\NativeStyleSheetCache.cs" Link="engine\NativeStyleSheetCache.cs" />
+    <Compile Include="PublishVerification.cs" />
     <Compile Include="..\engine\NativeMergeOrder.cs" Link="engine\NativeMergeOrder.cs" />
     <!-- The merge order's rule: the bridge's copy of kernel/src/Anvil.Core/Kernel/MergeOrder.cs, never the kernel file. -->
     <Compile Include="MergeOrderCopy.cs" />

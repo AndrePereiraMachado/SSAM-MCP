@@ -21,7 +21,7 @@ public static class XifCommand
             var verb = args.Length > 1 ? args[1] : "";
             return verb switch
             {
-                "check" => XifBuild.Check(Spec(args), Opt(args, "--base")),
+                "check" => XifBuild.Check(Spec(args), Opt(args, "--base"), Confine(args)),
                 "read" => Read(Need(args, "--xif"), Opt(args, "--resources-out")),
                 "build" => Build(args),
                 "diff" => Diff(Need(args, "--base"), Need(args, "--new")),
@@ -33,8 +33,8 @@ public static class XifCommand
 
     private static JsonObject Build(string[] args) => Opt(args, "--stage") switch
     {
-        "model" => XifBuild.Model(Spec(args), Opt(args, "--base"), Need(args, "--work")),
-        "final" => XifBuild.Final(Spec(args), Need(args, "--model"), Need(args, "--stubs"), Need(args, "--deps"), Opt(args, "--base"), Need(args, "--work")),
+        "model" => XifBuild.Model(Spec(args), Opt(args, "--base"), Need(args, "--work"), confine: Confine(args)),
+        "final" => XifBuild.Final(Spec(args), Need(args, "--model"), Need(args, "--stubs"), Need(args, "--deps"), Opt(args, "--base"), Need(args, "--work"), confine: Confine(args)),
         _ => XifRefusal.Single(XifCodes.SpecInvalid, "xif build needs --stage model or --stage final.", "Pass --stage model first, then --stage final with the stubs and dependencies.").ToJson(),
     };
 
@@ -74,6 +74,10 @@ public static class XifCommand
         var i = Array.IndexOf(args, name);
         return i >= 0 && i + 1 < args.Length ? args[i + 1] : null;
     }
+
+    // F4 review A1: every --confine <folder> and ANVIL_XIF_CONFINE (set by a hosted server): the files of the spec stay inside.
+    private static IReadOnlyList<string>? Confine(string[] args) =>
+        XifPaths.Roots(args.Select((a, i) => (a, i)).Where(p => p.a == "--confine" && p.i + 1 < args.Length).Select(p => args[p.i + 1]), Environment.GetEnvironmentVariable("ANVIL_XIF_CONFINE"));
 
     private static string Need(string[] args, string name) => Opt(args, name)
         ?? throw XifRefusal.Single(XifCodes.SpecInvalid, $"{name} is required.", $"Pass {name} <value>.");

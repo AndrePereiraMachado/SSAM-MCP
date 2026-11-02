@@ -46,7 +46,11 @@
     <Compile Include="..\..\..\..\kernel\src\Anvil.Core\Kernel\ModuleDigest.cs" Link="shared\ModuleDigest.cs" />
     <Compile Include="..\..\..\..\kernel\src\Anvil.Core\Kernel\ModuleRichIndex.cs" Link="shared\ModuleRichIndex.cs" />
     <Compile Include="..\..\..\..\kernel\src\Anvil.Core\Kernel\ScreenHtml.cs" Link="shared\ScreenHtml.cs" />
+    <Compile Include="..\..\..\..\kernel\src\Anvil.Core\Kernel\HtmlSource.cs" Link="shared\HtmlSource.cs" />
     <Compile Include="..\..\..\..\kernel\src\Anvil.Core\Kernel\ScreenHtmlModule.cs" Link="shared\ScreenHtmlModule.cs" />
+    <Compile Include="..\..\..\..\kernel\src\Anvil.Core\Kernel\ScreenHtmlEdit.Theme.cs" Link="shared\ScreenHtmlEdit.Theme.cs" />
+    <Compile Include="..\..\..\..\kernel\src\Anvil.Core\Kernel\ThemeParts.cs" Link="shared\ThemeParts.cs" />
+    <Compile Include="..\..\..\..\kernel\src\Anvil.Core\Kernel\ThemeCss.Read.cs" Link="shared\ThemeCss.Read.cs" />
     <Compile Include="..\..\..\..\kernel\src\Anvil.Core\Kernel\NameResolution.cs" Link="shared\NameResolution.cs" />
     <Compile Include="..\..\..\..\kernel\src\Anvil.Core\Kernel\DataDdl.cs" Link="shared\DataDdl.cs" />
     <Compile Include="..\..\..\..\kernel\src\Anvil.Core\Kernel\ModuleFlow.cs" Link="shared\ModuleFlow.cs" />

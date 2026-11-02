@@ -903,23 +903,30 @@ const stdio = await ssamModule.createSsamServer({ ...ssamModule.servedLanes(), p
     renamedInside?.ok === true && renamedInside.count >= 1 && inWs(renamedInside.captures?.[0]?.file, 'ws:odc/') && !serverPathIn(renamedInside),
     renamedInside ? { ok: renamedInside.ok, count: renamedInside.count, code: renamedInside.code ?? null, error: renamedInside.error ?? null } : renamedInside);
 
-  // 9j. The product's marco-a5 over the hosted path (servidor/fase4-25, C:\t\vps-a5\PLANO.md section 5): the generators still
-  // pending their blind test are refused at the gate (rest-consume naming an internal address included: nothing is fetched),
-  // and the private credential window of odc_portal_login never opens. (ssam_code: served since a8, step 9k.)
+  // 9j. The product's marco-a5 over the hosted path (servidor/fase4-25, C:\t\vps-a5\PLANO.md section 5), as of fase4-28
+  // r4-rest-hosted: the generators run called by name in their hosted input mode (generators.mjs hosted); rest-consume naming
+  // an internal address without a sample is refused at the gate in the four job tools (DOCUMENT_FETCH_HOSTED_REFUSED, not-sent:
+  // nothing is fetched, nothing captured), and entity-actions / screen with data.generate pass the gate (a headless ssam_job:
+  // whatever the kernel answers, never GENERATOR_PENDING). The private credential window of odc_portal_login never opens.
+  // (ssam_code: served since a8, step 9k.)
   odcSeen = odcLines(A).length; seen = o11Count();
-  const GENERATOR_OPS = { 'entity-actions': { op: 'entity-actions', data: { entities: 'all' } },
-    'rest-consume': { op: 'rest-consume', data: { name: 'Internal', methods: [{ name: 'Probe', url: 'http://127.0.0.1:9/internal' }] } },
-    'gen-screen': { op: 'screen', data: { generate: { entities: ['Order'] } } } };
+  const UNSAMPLED = { op: 'rest-consume', data: { name: 'Internal', methods: [{ name: 'Probe', url: 'http://127.0.0.1:9/internal' }] } };
   const generated = {};
-  for (const [id, op] of Object.entries(GENERATOR_OPS))
-    for (const [name, args] of [['ssam_job', { lane: 'o11', job: { ops: [op] } }], ['o11_job', { job: { ops: [op] } }],
-      ['studio_deliver', { feature: 'generator', module: ODC_MODULE.name, job: { ops: [op] }, owners: ['e2e'], changes: ['A pending generator over the hosted path'] }],
-      ['o11_deliver', { module: O11_MODULE.name, job: { ops: [op] }, authorize: 'pode entregar no Headless_CS' }]])
-      generated[id + ' ' + name] = { id, value: sc(await call(clientA, name, args, 120000)) };
-  check('marco-a5 (D2): the generators pending their blind test are refused at the gate in the four job tools (HOSTED_UNAVAILABLE, cause GENERATOR_PENDING, not-sent), before any capture',
-    Object.values(generated).every(({ id, value }) => value?.code === 'HOSTED_UNAVAILABLE' && value.cause === 'GENERATOR_PENDING' && value.generator === id && value.outcome === 'not-sent')
+  for (const [name, args] of [['ssam_job', { lane: 'o11', job: { ops: [UNSAMPLED] } }], ['o11_job', { job: { ops: [UNSAMPLED] } }],
+    ['studio_deliver', { feature: 'generator', module: ODC_MODULE.name, job: { ops: [UNSAMPLED] }, owners: ['e2e'], changes: ['A rest-consume without its samples over the hosted path'] }],
+    ['o11_deliver', { module: O11_MODULE.name, job: { ops: [UNSAMPLED] }, authorize: 'pode entregar no Headless_CS' }]])
+    generated['rest-consume ' + name] = sc(await call(clientA, name, args, 120000));
+  check('r4-rest-hosted: rest-consume without its samples is refused at the gate in the four job tools (DOCUMENT_FETCH_HOSTED_REFUSED, not-sent), before any capture',
+    Object.values(generated).every(value => value?.code === 'DOCUMENT_FETCH_HOSTED_REFUSED' && value.generator === 'rest-consume' && value.outcome === 'not-sent')
       && odcLines(A).length === odcSeen && o11Count() === seen,
-    Object.fromEntries(Object.entries(generated).map(([key, { value }]) => [key, { code: value?.code ?? null, cause: value?.cause ?? null, generator: value?.generator ?? null }])));
+    Object.fromEntries(Object.entries(generated).map(([key, value]) => [key, { code: value?.code ?? null, generator: value?.generator ?? null }])));
+  const jobOnly = {};
+  for (const [id, op] of [['entity-actions', { op: 'entity-actions', data: { entities: 'all' } }], ['gen-screen', { op: 'screen', data: { generate: { entities: ['Order'] } } }]])
+    jobOnly[id] = sc(await call(clientA, 'ssam_job', { lane: 'o11', job: { ops: [{ op: 'entity', data: { name: 'Order', attributes: [{ name: 'Title', type: 'Text' }] } }, op] } }, 600000));
+  check('r4-rest-hosted: entity-actions and screen with data.generate called by name pass the hosted gate (job-only): never GENERATOR_PENDING',
+    Object.values(jobOnly).every(value => value && value.cause !== 'GENERATOR_PENDING' && value.code !== 'HOSTED_UNAVAILABLE'),
+    Object.fromEntries(Object.entries(jobOnly).map(([key, value]) => [key, { ok: value?.ok ?? null, code: value?.code ?? null, cause: value?.cause ?? null }])));
+  odcSeen = odcLines(A).length;
   const windows = {};
   for (const action of ['prompt', 'focus']) windows[action] = sc(await call(clientA, 'odc_portal_login', { tenant: ODC_MODULE.host, action }));
   check('marco-a5: odc_portal_login prompt and focus answer HOSTED_PROMPT_UNAVAILABLE before the Studio is read; no credential window',

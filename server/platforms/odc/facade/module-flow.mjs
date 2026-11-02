@@ -14,7 +14,7 @@ import fs from 'node:fs';
 
 export const FLOW_SCHEMA = 'ssam-flow/1';
 // ModuleFlow.Extractor (C#): a stored flow of another version is a miss.
-export const FLOW_EXTRACTOR = 9;
+export const FLOW_EXTRACTOR = 10;
 export const FLOW_ADAPTER = 'kernel';
 export const FLOW_PAGE_SCHEMA = 'ssam-flow-page/1';
 export const FLOW_INDEX_SCHEMA = 'ssam-flow-index/1';
@@ -147,4 +147,5 @@ export const FLOW_NOTE = 'One action as ssam-flow/1, whole: every node, paramete
   + 'fixedPoint:true means the text parses back to this exact action. To change it, send the edited text in a job: '
   + '{"op":"logic","data":{"flow":<text>,"basedOn":<textSha>}} (several actions: "flow":[{"text","basedOn"},...]). A line keeps the element of its @id, '
   + 'a line without @id is new, a removed line is removed, a parameter or local renamed on its @id is renamed; only what changed is written and the '
-  + 'action must read back as the text. A header without @key creates the action: server, service or client action Name; action Owner.Name and data action Owner.Name under that screen or block.';
+  + 'action must read back as the text. A header without @key creates the action: server, service or client action Name; action Owner.Name and data action Owner.Name under that screen or block. '
+  + 'A REST callback (callback action Client.OnBeforeRequest or Client.OnAfterResponse) is edited through its keyed text only: the platform gives its name and parameters.';

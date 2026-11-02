@@ -1,0 +1,26 @@
+{
+ "description": "Fixture F2, ODC mirror (lote 4, meta 16 'precisa app de teste'): the PRODUCER of the shared CSS. A theme module in miniature: a public theme ChainProducerTheme (no base, so it may be public without public layouts) whose CSS defines the shared classes chain-panel, chain-panelhead and chain-pad (the shape of PMAI_Theme, relato 90a697c3). Consumed by css-chain-consumer.json.",
+ "base": "../blank-mobile.oml",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "ITheme",
+   "name": "ChainProducerTheme",
+   "as": "$theme"
+  },
+  {
+   "op": "set",
+   "target": "$theme",
+   "prop": "Public",
+   "value": true
+  },
+  {
+   "op": "set",
+   "target": "$theme",
+   "prop": "StyleSheet",
+   "value": ".chain-panel { border: 1px solid #ccd; border-radius: 8px; }\n\n.chain-panelhead { font-weight: 600; }\n\n.chain-pad { padding: 12px; }"
+  }
+ ]
+}

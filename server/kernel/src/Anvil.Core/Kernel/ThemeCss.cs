@@ -20,29 +20,10 @@ namespace Anvil.Core;
 /// Quem recalcula a efetiva no Studio e o refresh de cache; sem interface ninguem o chama, por isso o kernel
 /// refaz a mesma conta depois de escrever, e o <c>get</c> passa a mostrar as tres metades quando elas divergem.
 /// </summary>
-public static class ThemeCss
+/// <remarks>The reading (<c>Of</c>, <c>IsSplit</c>, <c>Author</c>) is in ThemeCss.Read.cs, which the ODC builder compiles with
+/// ScreenHtmlModule.cs (C-14: the html reading prints the theme parts of a root).</remarks>
+public static partial class ThemeCss
 {
-    /// <summary>A folha nativa do objeto (tema, tela ou bloco), ou null se ele nao tem CSS proprio.
-    /// A propriedade publica <c>StyleSheet</c> da classe concreta devolve a folha; a do Model API, com o mesmo
-    /// nome, e uma implementacao explicita de interface e nao aparece por reflexao sobre o tipo.</summary>
-    public static WebStyleSheet? Of(object? target)
-    {
-        if (target == null) return null;
-        foreach (var p in target.GetType().GetProperties())
-        {
-            if (p.Name != "StyleSheet" || p.GetIndexParameters().Length > 0 || !typeof(AbstractStyleSheet).IsAssignableFrom(p.PropertyType)) continue;
-            try { return p.GetValue(target) as WebStyleSheet; } catch { return null; }
-        }
-        return null;
-    }
-
-    /// <summary>True quando a efetiva e derivada, ou seja, quando ler <c>StyleSheet</c> e escrever <c>StyleSheet</c>
-    /// tocam metades diferentes.</summary>
-    public static bool IsSplit(WebStyleSheet sheet)
-    {
-        try { return sheet.IsGeneratedEffectiveValueInUse(); } catch { return false; }
-    }
-
     // O que a ultima recomposicao de cada folha mudou, para o Landing relatar (o Verbs chama Recompute e depois Landing).
     private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<WebStyleSheet, JsonObject> Changes = new();
 
@@ -50,8 +31,10 @@ public static class ThemeCss
     /// plataforma. Chamada depois de escrever <c>StyleSheet</c>, para o modelo ficar coerente consigo proprio. Duas regras do
     /// pacote atritos 3, relatadas pelo <see cref="Landing"/>:
     /// <list type="bullet">
-    /// <item>C23: um <c>@import</c> do autor sobe para o topo da efetiva, antes do bloco do Theme Editor (o navegador ignora um
-    /// @import depois de regras: as fontes de um cliente nao carregavam). A metade do autor guarda o @import como foi escrito.</item>
+    /// <item>C23, as B4 corrected it: an <c>@import</c> of the author goes up in the author's half (the browser ignores an @import
+    /// after rules); the effective StyleSheet stays the platform's composition (the Theme Editor CSS, then the author's), the one
+    /// the saved module holds, and the result says the @import is ignored there (<c>cssImportsIgnored</c>, C-05). C23 had put it at
+    /// the top of the effective StyleSheet of the model, which no save kept.</item>
     /// <item>C35: um seletor do autor que comeca por <c>#reactContainer</c> vira <c>:is(#reactContainer, body)</c>, na metade
     /// do autor: o canvas do Studio nao tem #reactContainer e os blocos ficavam sem estilo la.</item>
     /// </list></summary>
@@ -61,11 +44,11 @@ public static class ThemeCss
     /// html op's theme blocks, the css op, the native widgets' CSS, the prototype importer): the author CSS through the one
     /// normalization (<see cref="CssPipeline.Normalize"/>), which never changes what the CSS selects nor the cascade (an @import
     /// after a rule, which the browser ignores, goes up keeping the order of the imports; nothing crosses an @layer), then, in a
-    /// theme with Theme Editor CSS, the effective StyleSheet composed again with the author's @import statements before the Theme
-    /// Editor block. <paramref name="canvas"/>: the write is the author's own CSS on a reactive element; only then, and only in a
+    /// theme with Theme Editor CSS, the effective StyleSheet composed again as the platform composes it (the Theme Editor CSS, then
+    /// the author's: B4). <paramref name="canvas"/>: the write is the author's own CSS on a reactive element; only then, and only in a
     /// theme with Theme Editor CSS (where the platform's composition did it before), a <c>#reactContainer X</c> descendant
     /// selector also selects in the Studio canvas. What changed is reported by <see cref="Changed"/> (<c>cssImportsHoisted</c>,
-    /// <c>cssImportsMerged</c>, <c>cssImportsKept</c>, <c>cssRewrites</c>, <c>cssStages</c>). <paramref name="keepRules"/>: the
+    /// <c>cssImportsIgnored</c>, <c>cssImportsMerged</c>, <c>cssImportsKept</c>, <c>cssRewrites</c>, <c>cssStages</c>). <paramref name="keepRules"/>: the
     /// prototype importer's verbatim write, which keeps every rule of the capture (no shadowed stage).</summary>
     public static void Settle(WebStyleSheet sheet, bool canvas = false, bool keepRules = false)
     {
@@ -85,15 +68,20 @@ public static class ThemeCss
         }).ToList();
         if (split)
         {
+            // B4 (the U1 review's doubt on C23, proven by Pa3KhOdcTests.TheEffectiveStyleSheetOfTheCandidateIsTheOneTheSavedModuleHas):
+            // the effective StyleSheet is the platform's composition, the Theme Editor CSS and then the author's, exactly as
+            // CalculateFinalCssSource makes it again when the module is saved, loaded and published. C23 composed it with the
+            // author's @import first: the candidate's get showed a text the saved module never had, and the proofs that read
+            // the candidate (merge, served, publish) compared it. An @import of the author's half comes after the Theme Editor
+            // rules there, so the browser ignores it (C-05): said once, as the html op says it (cssImportsIgnored).
             var generated = sheet.GeneratedEffectiveValue ?? "";
-            var (imports, rest) = CssCompat.Imports(author);
-            sheet.SetCssSource(imports.Count == 0 ? generated + "\r\n" + author
-                : string.Join("\r\n", imports.Select(x => x.Statement)) + "\r\n" + generated + "\r\n" + rest);
-            hoisted = imports.Select(x => (JsonNode)new JsonObject
-            {
-                ["path"] = "/StyleSheet", ["from"] = $"{x.Statement} (line {x.Line} of UserStyleSheet, after the Theme Editor CSS)",
-                ["to"] = "the top of the effective StyleSheet, before the Theme Editor CSS",
-            }).ToList();
+            sheet.SetCssSource(generated + "\r\n" + author);
+            if (CssCompat.Imports(author).Imports is { Count: > 0 } ignored)
+                change["cssImportsIgnored"] = new JsonObject
+                {
+                    ["imports"] = new JsonArray(ignored.Select(x => x.Statement).Distinct(StringComparer.Ordinal).Select(x => (JsonNode)x).ToArray()),
+                    ["served"] = ServedImportNote,
+                };
         }
         if (hoisted.Count > 0) change["cssImportsHoisted"] = new JsonArray(hoisted.ToArray());
         if (outcome.ImportsMerged > 0) change["cssImportsMerged"] = outcome.ImportsMerged;
@@ -106,6 +94,11 @@ public static class ThemeCss
         if (outcome.StageChanges.Count > 0) change["cssStages"] = new JsonArray(outcome.StageChanges.Select(c => (JsonNode)c.DeepClone()).ToArray());
         if (change.Count == 0) Changes.Remove(sheet); else Changes.AddOrUpdate(sheet, change);
     }
+
+    /// <summary>C-05: what the browser gets of an @import in the author's half of a theme with Theme Editor CSS.</summary>
+    public const string ServedImportNote = "ignored by the browser: the platform serves this theme as the Theme Editor CSS (its :root{...}) and then the author's, "
+        + "so an @import of the author's CSS comes after rules; put it first in a screen's or block's own style sheet (the html document moves it there), "
+        + "or write the @font-face rules it would load";
 
     /// <summary>Whether an element is reactive (O11 Reactive and Mobile, ODC): an O11 mobile element implements the web interface too.</summary>
     public static bool Reactive(object? target)
@@ -181,10 +174,6 @@ public static class ThemeCss
     private static System.Reflection.PropertyInfo? StyleSheetProperty(object target) =>
         target.GetType().GetInterfaces().Prepend(target.GetType()).SelectMany(t => t.GetProperties())
             .FirstOrDefault(p => p.Name == "StyleSheet" && p.PropertyType == typeof(string) && p.GetIndexParameters().Length == 0 && p.CanRead);
-
-    /// <summary>O CSS do autor: a metade que a interface do Studio mostra e que o <c>ITheme.StyleSheet</c> escreve.
-    /// Quando nao ha CSS gerado, autor e efetiva sao o mesmo texto.</summary>
-    public static string Author(WebStyleSheet sheet) => (IsSplit(sheet) ? sheet.UserEffectiveValue : sheet.EffectiveValue) ?? "";
 
     /// <summary>Escreve a metade do autor e repoe a efetiva. E o caminho seguro para quem quer ACRESCENTAR CSS:
     /// escrever pelo <c>ITheme.StyleSheet</c> obriga a plataforma a recortar o bloco gerado do texto recebido, e um

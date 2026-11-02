@@ -231,28 +231,93 @@ public sealed class ExtensionReferenceDeliveryTests
         });
 
     [Fact]
-    public void AJobRefusedAfterManageDependenciesDeclaresTheElementsItAddedToTheModule()
+    public void C06_AJobTheApplyRefusesIsRefusedBeforeTheStudiosManageDependenciesWritesTheModule()
         => WithAuthority(() =>
         {
-            // Review A1 (D1): the Manage Dependencies committed, then the apply refused the job: the answer says what the Studio
-            // wrote to the module before the refusal, never only "merge was not attempted".
-            var (work, job) = JobWork("apply-refused");
+            // C-06, F-FitBody-05 (27/10): a PREFLIGHT_REFUSED came back with studioWrites [Manage Dependencies, before-merge,
+            // changed]: the reference stayed in the module of a refused delivery (the bridge has no undo for that command). The
+            // job is now checked first on the module as it is, with the producer's captured signature linked; refused there, the
+            // Studio is never asked to write, and the answer and the receipt say so.
+            var (work, job) = JobWork("refused-before-manage");
             var studio = new Studio();
             var bridge = new Stub(studio);
-            var result = Deliver(bridge, studio, work, job, (_, _, output, _) =>
+            var bases = new List<string>();
+            var result = Deliver(bridge, studio, work, job, (basePath, _, output, producers) =>
             {
+                bases.Add(File.ReadAllText(basePath));
+                Assert.True(producers.ContainsKey(Producer), "the captured signature is linked to the check");
                 File.WriteAllText(output, "OML candidate");
                 return new JsonObject { ["isValid"] = false, ["accepted"] = false, ["errors"] = new JsonArray("op #2: synthetic validation error of the job") };
             });
             Assert.False(result["delivered"]!.GetValue<bool>());
+            Assert.DoesNotContain("refresh_references", bridge.Calls);
+            Assert.DoesNotContain("merge_from_oml", bridge.Calls);
+            Assert.False(studio.Aligned, "the module was never written");
+            Assert.Equal(["OML snapshot old"], bases);
+            Assert.Null(result["referencesAdded"]);
+            Assert.Empty(Writes(result));
+            var alignment = result["referencesAlignment"]!;
+            Assert.Equal("Manage Dependencies", alignment["command"]!.ToString());
+            Assert.False(alignment["sent"]!.GetValue<bool>());
+            Assert.True(alignment["validation"]!["ran"]!.GetValue<bool>());
+            Assert.True(alignment["validation"]!["refused"]!.GetValue<bool>());
+            Assert.Contains("nothing was written to the module", alignment["validation"]!["note"]!.ToString());
+            Assert.Equal("not-sent", result["writeState"]!.ToString());
+            var error = result["error"]!.ToString();
+            Assert.Contains("merge was not attempted", error);
+            Assert.Contains("nothing was written to the module", error);
+            Assert.DoesNotContain("Ctrl+Z", error);
+        });
+
+    [Fact]
+    public void C06_AJobTheCheckAcceptsIsAppliedAgainOnTheModuleTheManageDependenciesAligned()
+        => WithAuthority(() =>
+        {
+            // The accepted path: the check on the module as it is, then the Studio's Manage Dependencies, then the apply on the
+            // snapshot it left, then the merge (one merge, no signature selected).
+            var (work, job) = JobWork("checked-then-manage");
+            var studio = new Studio();
+            var bridge = new Stub(studio);
+            var bases = new List<string>();
+            var result = Deliver(bridge, studio, work, job, (basePath, jobPath, output, producers) => { bases.Add(File.ReadAllText(basePath)); return Valid(basePath, jobPath, output, producers); });
+            Assert.True(result["delivered"]?.GetValue<bool>() == true, result["error"]?.ToString());
+            Assert.Equal(["OML snapshot old", "OML snapshot aligned"], bases);
+            Assert.False(result["referencesAlignment"]!["validation"]!["refused"]!.GetValue<bool>());
+            Assert.Single(bridge.Refreshes);
+            Assert.Single(bridge.Merges);
+        });
+
+    [Fact]
+    public void AJobRefusedAfterManageDependenciesDeclaresTheElementsItAddedAndHowToRemoveThem()
+        => WithAuthority(() =>
+        {
+            // Review A1 (D1) and C-06: the check before the Studio's command could not stand for the job (it named the producer's
+            // signature: a theme, an element only the Studio's reference brings), the Manage Dependencies committed, then the apply
+            // refused the job. The answer says what the Studio wrote to the module, that it stays, and exactly how it goes.
+            var (work, job) = JobWork("apply-refused");
+            var studio = new Studio();
+            var bridge = new Stub(studio);
+            var result = Deliver(bridge, studio, work, job, (basePath, _, output, _) =>
+            {
+                File.WriteAllText(output, "OML candidate");
+                return File.ReadAllText(basePath).EndsWith("old", StringComparison.Ordinal)
+                    ? new JsonObject { ["isValid"] = false, ["accepted"] = false, ["problems"] = new JsonArray(new JsonObject { ["code"] = "PRODUCER_SIGNATURE_MISSING", ["message"] = "TemplateTheme is a theme" }) }
+                    : new JsonObject { ["isValid"] = false, ["accepted"] = false, ["errors"] = new JsonArray("op #2: synthetic validation error of the job") };
+            });
+            Assert.False(result["delivered"]!.GetValue<bool>());
             Assert.DoesNotContain("merge_from_oml", bridge.Calls);
             Assert.True(studio.Aligned, "the fake Studio committed the Manage Dependencies");
+            Assert.False(result["referencesAlignment"]!["validation"]!["ran"]!.GetValue<bool>());
             DeclaresTheElementsAdded(result);
+            var write = Assert.Single(Writes(result));
+            Assert.Contains("untick GenerateTemplatePowerPoint and TemplateSection of " + Producer + " in the Studio's Manage Dependencies", write["remove"]!.ToString());
             var error = result["error"]!.ToString();
             Assert.Contains("merge was not attempted", error);
             Assert.Contains("Manage Dependencies", error);
             Assert.Contains("GenerateTemplatePowerPoint", error);
             Assert.Contains("Ctrl+Z", error);
+            Assert.Contains("they stay in " + Consumer, error);
+            Assert.Contains("untick GenerateTemplatePowerPoint and TemplateSection", error);
             NeverSaysNothingWasApplied(error);
         });
 

@@ -104,4 +104,16 @@ public class ScopePhaseOdcTests
         var blocked = Assert.Single(Code(Run(ops, preflight), ScopePhase.Blocked));
         Assert.Equal([0, 2], blocked["blockedOps"]!.AsArray().Select(o => o!.GetValue<int>()).Order().ToList());
     }
+    /// <summary>F7 (25/10/2026): the outputs of a call a text reads (ScopeOutputs) on lane odc: the outputs of an action of the
+    /// job are its out lines, as on o11; the entity actions' outputs are judged only on o11 (where the Verify proved them), so
+    /// here they are left to the Verify.</summary>
+    [Fact]
+    public void TheOutputsOfAJobActionAreJudgedAndTheEntityActionsAreLeftToTheVerify()
+    {
+        var helper = Logic("server action Totals\n  out Total: Integer\n  end\n");
+        var caller = Logic("server action Report\n  local X: Integer\n  T = Totals()\n  assign X = T.Totl\n  Lock = GetOrderForUpdate(Id=1)\n  assign X = Lock.Order.Id\n  end\n");
+        var problem = Assert.Single(Code(Run(Ops(helper, caller)), ScopeOutputs.Code));
+        Assert.Contains("'Totl'", problem["message"]!.ToString());
+        Assert.Contains("T.Total", problem["patch"]![0]!["value"]!.ToString());
+    }
 }

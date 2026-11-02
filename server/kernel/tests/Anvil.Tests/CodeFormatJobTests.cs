@@ -90,6 +90,38 @@ public sealed class CodeFormatJobTests
         Assert.DoesNotContain(block.Split('\n'), line => line.Length > CodeFormat.LongLine && CodeFormat.Units(CodeLanguage.Css, line) >= 2);
     }
 
+    /// <summary>C-16 (F-FigmaReactive-08, F-AiChatbot-07a, F-Jesse-08, F-FT-19): the &lt;style&gt; of an html edit is the CSS as the
+    /// author wrote it. The Fitmaker sheet was written one rule per line; the first edit stored it one property per line (1385 ->
+    /// 4596 lines) and the next edit's find no longer matched. Now the stored sheet, read back, is the text sent, and the receipt
+    /// lists no formatting of it.</summary>
+    [Fact]
+    public void AnHtmlEditWritesTheStyleSheetOfTheScreenAsWritten()
+    {
+        if (!StudioAvailable()) return;
+        var dir = Path.Combine(Work, "code-format-html-edit"); Directory.CreateDirectory(dir);
+        var host = new ModelHost(dir);
+        var basePath = Path.Combine(Root, "tests", "fixtures", "reactive-ui.oml");
+        var bytes = File.ReadAllBytes(basePath);
+        var read = host.HtmlRead(bytes, "Login", withKeys: false);
+        var sha = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes)).ToLowerInvariant();
+        // Rules of the Fitmaker sheet as the session wrote them: one rule per line, each longer than CodeFormat.LongLine.
+        const string css = ".fm-hero{display:flex;align-items:center;justify-content:space-between;gap:48px;padding:96px 120px 64px;background:#0b0b0b;color:#ffffff}\n"
+            + ".fm-footer .fm-logo-lg{font-family:'Bebas Neue',sans-serif;font-size:64px;letter-spacing:2px;line-height:1;color:#c6f432;margin:0 0 24px 0}\n"
+            + ".fm-card{border-radius:24px;box-shadow:0 8px 24px rgba(0,0,0,.24);overflow:hidden;background:linear-gradient(180deg,#1b1b1b 0%,#0b0b0b 100%)}";
+        Assert.True(css.Split('\n').All(line => line.Length > CodeFormat.LongLine && CodeFormat.Units(CodeLanguage.Css, line) >= 2));
+        var job = new JsonObject { ["ops"] = new JsonArray(new JsonObject {
+            ["op"] = "html", ["data"] = new JsonObject { ["screen"] = "Login",
+                ["basedOn"] = new JsonObject { ["capture"] = sha, ["html"] = read["documents"]![0]!["htmlSha256"]!.DeepClone() },
+                ["edit"] = new JsonArray("<style>" + css + "</style>") } }) };
+        var jobPath = Path.Combine(dir, "style-edit.json"); File.WriteAllText(jobPath, job.ToJsonString());
+        var outPath = Path.Combine(dir, "style-edit.oml");
+        var result = JsonSerializer.SerializeToNode(JobRunner.Run(host, basePath, jobPath, outPath))!.AsObject();
+        Assert.True(result["accepted"]!.GetValue<bool>(), result.ToJsonString());
+        Assert.DoesNotContain(result["formatted"] as JsonArray ?? new JsonArray(), f => f!["language"]?.ToString() == "css");
+        var after = host.HtmlRead(File.ReadAllBytes(outPath), "Login", withKeys: false)["documents"]![0]!["html"]!.ToString().Replace("\r\n", "\n");
+        Assert.Contains("<style>" + css + "</style>", after);
+    }
+
     private static JsonObject? Run()
     {
         if (!StudioAvailable()) return null;

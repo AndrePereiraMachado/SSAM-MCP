@@ -70,7 +70,7 @@ public sealed partial class ModelSession
                 baseKeys = (stored["keys"] as JsonObject)?.Where(p => p.Value is JsonValue).ToDictionary(p => p.Key, p => p.Value!.ToString(), StringComparer.Ordinal);
             }
             else throw BaseChanged(reading, baseHtml!, StoredReading(basedOn!)?["keys"] as JsonObject, elementEdits);
-            var applied = HtmlElementEdits.Apply(baseText, elementEdits, baseKeys, out editOf, out var escapedWith);
+            var applied = HtmlElementEdits.Apply(baseText, elementEdits, baseKeys, out editOf, out var escapedWith, out var keyedFind);
             if (applied.Problems.Count > 0)
                 throw new KernelRefusalException(applied.Problems.Select(p => p["code"]!.ToString()).Distinct().Count() == 1 ? applied.Problems[0]["code"]!.ToString() : "HTML_EDIT_REFUSED",
                     "html edits of " + reading.Root + " refused: " + string.Join(" | ", applied.Problems.Take(6).Select(p => "[" + p["code"] + "] " + p["message"])),
@@ -78,6 +78,11 @@ public sealed partial class ModelSession
             edits = [applied.Document];
             elementNote = new JsonObject { ["rule"] = "html-element-edits", ["at"] = "/edits", ["from"] = baseHtml![..Math.Min(12, baseHtml.Length)],
                 ["edits"] = elementEdits.Count, ["touched"] = new JsonArray(applied.Touched.Select(k => (JsonNode)k).ToArray()) };
+            // C-35 (F-Jesse-09): a find written without the k of the reading, matched with them left out; its with took them.
+            if (keyedFind.Count > 0)
+                elementNote["keyedFind"] = new JsonObject { ["edits"] = new JsonArray(keyedFind.Select(f => (JsonNode)new JsonObject { ["edit"] = f.Edit,
+                        ["k"] = new JsonArray(f.Keys.Select(k => (JsonNode)k).ToArray()) }).ToArray()),
+                    ["note"] = "find had no k: it is the text of the reading with its k left out, and with took them in its tags of the same names, in order (each element keeps its identity)" };
             // R2-C: the loose & or < of a with written as its entity where it landed (HTML text or a tag of the reading).
             var opAt = OpsPointer != null && _applyOps != null && _applyIndex < _applyOps.Count ? $"{OpsPointer}/{_applyIndex}/data" : null;
             foreach (var (j, escaped) in escapedWith) {
@@ -247,6 +252,9 @@ public sealed partial class ModelSession
         plan.Apply(writer);
         EditLiterals(plan.Result, pointer);
         if (plan.Refused) throw Refusal(plan.Result);
+        // C-14: the parts of the module theme the edit changed (<style scope="theme" [id]>), written where the document form writes
+        // them, before the root is read again (the reading prints them, so the verify reads them back).
+        var themeParts = plan.ThemeChanges() is { Count: > 0 } changes ? WriteThemeParts(reading, changes) : null;
         var after = module.Refresh(reading.RootKey);
         ScreenHtmlAfter = after;
         var afterReading = after.Read("@" + reading.RootKey);
@@ -268,12 +276,64 @@ public sealed partial class ModelSession
         if (plan.IconsConverted) try { if (Resolve("@" + reading.RootKey) is IObjectSignature edited) iconTheme = WidenIconTheme(edited).Report; } catch (KeyNotFoundException) { }
         var answer = plan.Result.Json(withHtml: data["answer"]?.ToString() == "html");
         answer["screen"] = reading.Root;
+        if (themeParts != null) answer["themeParts"] = themeParts;
         if (iconTheme != null) answer["iconTheme"] = iconTheme;
         if (notes.Count > 0) answer["rebased"] = notes;
         if (elementNote != null) answer["normalizations"] = new JsonArray(new JsonNode?[] { elementNote }.Concat((escapes ?? new JsonArray()).Select(e => e?.DeepClone())).ToArray());
         // R2-D: the style sheet the op wrote, from the first call (bytes before and after, rules added and removed).
         if (style != null || afterSheet != readSheet) answer["styleSheet"] = StyleSheetReport(readSheet, afterSheet, style);
+        // C-48: in a Traditional page, a List Records the edit writes with an expression as its line count fetches only
+        // start-index + line-count + 1 rows (the warning of the creation form, with the pattern that shows more).
+        if (_espace.ESpaceType.ToString() is "WebResponsive" or "WebResponsiveLibrary") {
+            var paging = new JsonArray();
+            foreach (var edit in edits) {
+                try { foreach (var p in TraditionalDocumentRules.Paging(ScreenHtml.Parse(edit))) paging.Add(new JsonObject { ["code"] = p.Code, ["message"] = p.Message, ["fix"] = p.Fix }); }
+                catch (FormatException) { }
+            }
+            if (paging.Count > 0) answer["warnings"] = paging;
+        }
         return answer;
+    }
+
+    /// <summary>C-14 (F-FigmaMobile-03, F-FitBody-07/16/31/44/51): the theme parts an html edit changed, in the module's own default
+    /// theme, between the markers of the document form (InstallStylesheet, the CSS as written, through the one write path): the
+    /// root's own part (its name) or a named part (style:id), which records this root as its owner; a part the edit left out of its
+    /// reading goes. One entry per part: its key, whether it is new, the root that owned it before when another one did, the chars.</summary>
+    private JsonArray WriteThemeParts(ScreenHtmlDocument reading, List<(string? Id, string? Css)> changes)
+    {
+        var root = (IObjectSignature)Resolve("@" + reading.RootKey);
+        var name = TypeResolver.Name(root) ?? "";
+        if (name.Length == 0 || OwnDefaultThemeName() is not { } themeName) {
+            var problem = JobPreflight.Problem(null, "/edit", ScreenDocument.StyleUnplaced, "error",
+                "<style scope=\"theme\"> in the edit of " + reading.Root + ": the module has no default theme of its own to take the CSS",
+                "write <style> without scope (the CSS goes to this page's style sheet), or give the module a theme of its own");
+            throw new KernelRefusalException(ScreenDocument.StyleUnplaced, problem["message"]!.ToString(), new JsonArray(JobPreflight.PublicProblem(problem)));
+        }
+        var theme = OwnDefaultTheme();
+        string AuthorCss() => ThemeCss.Of(theme) is { } sheet ? ThemeCss.Author(sheet) : theme.StyleSheet ?? "";
+        var parts = new JsonArray();
+        foreach (var (id, css) in changes) {
+            var key = ThemeParts.Key(name, id);
+            var before = ThemeParts.Find(AuthorCss(), key);
+            var entry = new JsonObject { ["theme"] = themeName, ["part"] = id ?? name, ["marker"] = ThemeParts.Begin(key) };
+            try {
+                if (css == null) { entry["removed"] = RemoveStylesheet(key); parts.Add(entry); continue; }
+                var report = new JsonObject();
+                InstallStylesheet(key, css, report, format: false, owner: id != null ? name : null);
+                entry["created"] = before == null;
+                if (id != null && before is { Owner: var owner } && owner != name) entry["previousOwner"] = owner;
+                entry["chars"] = css.Length;
+                entry["basedOn"] = report["basedOn"]?.DeepClone();
+                if (report["cssImportsHoisted"] is JsonNode hoisted) entry["cssImportsHoisted"] = hoisted.DeepClone();
+            } catch (InvalidOperationException error) {
+                var problem = JobPreflight.Problem(null, "/edit", ScreenDocument.StyleDropped, "error",
+                    "<style scope=\"theme\"" + (id != null ? " id=\"" + id + "\"" : "") + "> in the edit of " + reading.Root + ": the theme " + themeName + " could not take the CSS: " + error.Message,
+                    "nothing was written; send the edit again (a defect of the engine if it repeats)");
+                throw new KernelRefusalException(ScreenDocument.StyleDropped, problem["message"]!.ToString(), new JsonArray(JobPreflight.PublicProblem(problem)));
+            }
+            parts.Add(entry);
+        }
+        return parts;
     }
 
     // R2-C: the literals the plan wrote for prose (TEXT_LITERAL_QUOTED), in the job's normalizations too, so a refusal of another
@@ -589,6 +649,15 @@ public sealed partial class ModelSession
         return corrected;
     }
 
+    /// <summary>One set written as given (CodeFormat and the expression rewrites off), then the session as it was.</summary>
+    private void SetVerbatim(JsonObject op)
+    {
+        var was = _verbatim;
+        _verbatim = true;
+        try { ApplyOne(op); }
+        finally { _verbatim = was; }
+    }
+
     /// <summary>The native moves of an html edit, through the verbs (each one the op the receipt names): handles for the objects of
     /// the reading, never a lookup by name.</summary>
     private sealed class ScreenHtmlNativeWriter(ModelSession session) : IScreenHtmlWriter<IObjectSignature>
@@ -649,7 +718,12 @@ public sealed partial class ModelSession
                     .Concat((value.Name ?? "").Split('\n', StringSplitOptions.RemoveEmptyEntries).Select(n => (JsonNode)JsonValue.Create(n)!)).ToArray()),
                 _ => JsonValue.Create(value.Text),
             };
-            session.ApplyOne(new JsonObject { ["op"] = "set", ["target"] = Alias(node), ["prop"] = property, ["value"] = written });
+            var op = new JsonObject { ["op"] = "set", ["target"] = Alias(node), ["prop"] = property, ["value"] = written };
+            // C-16 (F-FigmaReactive-08, F-FT-19): the <style> of an edit is the CSS as the author wrote it, never reformatted (a
+            // sheet written one rule per line came back with one property per line, 1385 -> 4596 lines, and the next edit's
+            // find/with no longer matched). The same bypass the Traditional document takes for its literals.
+            if (property == "StyleSheet") { session.SetVerbatim(op); return; }
+            session.ApplyOne(op);
         }
 
         public void Rename(IObjectSignature node, string name) => session.ApplyOne(new JsonObject { ["op"] = "rename", ["target"] = Alias(node), ["name"] = name });

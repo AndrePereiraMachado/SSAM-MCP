@@ -21,7 +21,7 @@ import { agentJoin } from './agent-paths.mjs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { baseContentSha256, cutBlock, deliverKernel, publishAuthorization, publishDelivered, studioSteps, withMergeCode, withoutStack, staleRevisionNext } from './kernel-delivery.mjs';
 import { resolveApplicationUrls, withAppLinks, appUrlCapability, derivedStageOrigin } from './app-urls.mjs';
-import { signedRuntime } from './signed-runtime.mjs';
+import { signedRuntime, bridgeFor, installedOdcStudioRuntime } from './signed-runtime.mjs';
 import { readLocalSettings, withLocalTenant } from './local-settings.mjs';
 import { LocalExecutor, bridgeClientPath, contextLost, currentExecutor, hostedContext, hostedSpawnEnv, servedWithoutContext, usesWorkspace,
   workspacePath } from './executor.mjs';
@@ -114,16 +114,15 @@ export async function studioPid(explicit) {
   if (pids.length > 1) throw new Error('Several ODC Studio processes are running (' + pids.join(', ') + '); pass the pid.');
   return pids[0];
 }
-export function newestBridgeDll() {
-  const signed = signedRuntime(root);
+// U1 (v106/v107): the bridge of the installed ODC Studio's runtime, the one the client attaches to it (client/Program.cs: v106
+// for net10, v107 for net8), in the build folder of that runtime. A Studio whose runtime is not readable gets the net10 name.
+export function newestBridgeDll({ runtime = installedOdcStudioRuntime() } = {}) {
+  const signed = signedRuntime(root, runtime ? { runtime } : {});
   if (signed) return { path: signed.bridge, version: signed.version };
-  if (!fs.existsSync(paths.bridgeBin)) return null;
   // Match the declared client protocol. Old/experimental loaded DLLs remain evidence, never a fallback.
-  const source = fs.readFileSync(path.join(root, 'studio', 'bridge', 'client', 'Program.cs'), 'utf8');
-  const version = source.match(/const string Version = "(v\d+)"/)?.[1];
-  if (!version) return null;
-  const file = path.join(paths.bridgeBin, 'ODC3.Bridge.' + version + '.dll');
-  return fs.existsSync(file) ? { path: file, version } : null;
+  let chosen = null;
+  try { chosen = bridgeFor(root, runtime); } catch { return null; }
+  return chosen && fs.existsSync(chosen.path) ? { path: chosen.path, version: chosen.version } : null;
 }
 // One bridge command. The bridge itself journals every command; the client only relays JSON. Every command but
 // attach is the odc.pipe call of the executor: locally straight to the bridge pipe from this process (odc-pipe.mjs),
@@ -135,7 +134,7 @@ export function newestBridgeDll() {
 // CX15 r5 (N-2): the one point every bridge command crosses: the owner's words of a line (the authorize command's text,
 // --authorize <words>) go as one sha256:<hex> token (the bridge only requires a nonempty value: StartupHook.cs Authorize,
 // :402, :1410; AppCreationCommands.cs:121; DataCommands.cs:79). version: the bridge protocol (tests; else the runtime's).
-export const bridgeVersion = () => signedRuntime(root)?.version ?? newestBridgeDll()?.version ?? null;
+export const bridgeVersion = () => newestBridgeDll()?.version ?? null;
 export async function client(pid, args, { env = process.env, call, pipe, version: pinned } = {}) {
   args = bridgeArgsWithoutWords(args);
   const executor = currentExecutor();
@@ -695,7 +694,7 @@ export async function deliver({ feature, module, until = 'merge', pid, producer,
     const published = await publishDelivered({ manifest, module, words: authorization.words, pid }, { studio: studioCall });
     Object.assign(answer, { authorization: authorization.authorization, ...published });
     if (published.publish.outcome === 'published') return done(true, { ...answer, result: RESULT.deliveredAndPublished });
-    if (published.publish.outcome === 'stale') return done(false, { ...answer, failed: 'publish', code: published.publish.code, error: published.publish.error, continuation: staleRevisionNext(manifest) });
+    if (published.publish.outcome === 'stale') return done(false, { ...answer, failed: 'publish', code: published.publish.code, error: published.publish.error, continuation: staleRevisionNext(manifest, published.publish) });
     return done(false, { ...answer, failed: 'publish', code: published.publish.outcome === 'uncertain' ? 'PUBLISH_UNCERTAIN' : 'PUBLISH_FAILED',
       ...(published.publish.outcome === 'uncertain' ? { outcome: 'uncertain' } : {}), error: published.publish.error ?? 'The publication did not succeed.',
       continuation: { tool: 'studio_publish', arguments: { manifest, ...(Number.isInteger(pid) ? { pid } : {}) }, why: 'Merged; publish this manifest again after the fix the publication names. Never repeat the delivery.' } });

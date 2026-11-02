@@ -16,6 +16,8 @@ import { agentVerbOf } from '../quality-line.mjs';
 const MAX_LINE_BYTES = 16 * 1024 * 1024;
 const digest = text => createHash('sha256').update(String(text), 'utf8').digest();
 export const REFUSED_KEY = "Relay refused: not this customer's relay key";
+// The relay method of the kernel's Integration Studio stages (XifEngineClient.RelayMethod), F4 of PLANO-11H.
+export const XIF_METHOD = 'xif_engine';
 // prazos B (2026-10-12): the time a relayed call may take on the agent, where the kernel's own budget is longer than the
 // wire's default (timeoutFor: 120 s). The kernel's environment verbs and the delivery's producer authority wait 330 s for
 // an environment_session reply (Anvil.Cli Program.cs, BridgeClient(port, 330)), and the full bridge has no cut of its own,
@@ -52,6 +54,15 @@ export async function startRelay({ key, call, log = () => {}, host = '127.0.0.1'
         return;
       }
       const method = typeof request.method === 'string' ? request.method : '';
+      // F4: an Integration Studio stage of the kernel (XifEngineClient, method xif_engine) goes to the kind o11.xif; the
+      // answer is the engine's shape, whatever happened (the executor never throws for it).
+      if (method === XIF_METHOD) {
+        let value;
+        try { value = await call('o11.xif', request.params ?? {}); }
+        catch (error) { value = { ok: false, code: error?.code ?? 'XIF_ENGINE_UNAVAILABLE', error: String(error?.message ?? error).slice(0, 400) + ' Nothing was sent to the environment.' }; }
+        if (!answer(value ?? { ok: false, code: 'XIF_ENGINE_UNAVAILABLE', error: 'No answer.' })) log({ event: 'relay-late', method: XIF_METHOD });
+        return;
+      }
       const named = agentVerbOf('o11.bridge', method);
       try {
         const budget = Object.hasOwn(RELAY_BUDGET_MS, method) ? RELAY_BUDGET_MS[method] : null;

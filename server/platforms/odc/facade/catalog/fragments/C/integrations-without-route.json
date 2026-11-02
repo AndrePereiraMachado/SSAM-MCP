@@ -61,25 +61,24 @@
       "alternative": "none on a public route; the SAP connection is authored by the user in Service Studio"
     },
     {
-      "id": "integration.rest-callbacks",
+      "id": "integration.rest-callbacks-advanced",
       "keywords": [
-        "on before request",
-        "on after request",
-        "rest callback",
-        "onbeforerequest",
-        "onafterrequest",
+        "advanced rest callback",
+        "onbeforerequestadvanced",
+        "onafterresponseadvanced",
         "on request callback",
         "on response callback",
+        "exposed rest callback",
         "rest authentication flow",
         "custom authentication"
       ],
-      "reason": "REST callbacks (consumed: OnBefore/OnAfterRequest[Advanced]; exposed: OnRequest/OnResponse on ODC) and the exposed-REST authentication flow have no job; the four consumed-callback creators are ambiguous for the generic create (the first assignable factory would win), and the authentication flow has no creator in either catalog.",
+      "reason": "The Advanced consumed callbacks (OnBeforeRequestAdvanced, OnAfterResponseAdvanced), the exposed REST OnRequest/OnResponse (ODC) and the exposed-REST authentication flow have no proven route: the four consumed-callback creators are ambiguous for the generic create (the first assignable factory would win), and the authentication flow has no creator in either catalog. The existing OnBeforeRequest/OnAfterResponse of a consumed client are read and edited as text by integration.rest-callbacks, and rest-consume creates them.",
       "evidence": "platforms/odc/docs/model-api/OutSystems.Model.Plugin.REST.md (Create*Callback); OutSystems.Model.Plugin.RESTService.md (CreateOnRequest/ResponseCallback, ODC only); kernel/src/Anvil.Core/Kernel/Verbs.cs FindCreateCore (first assignable factory); no job (declared, not executed)",
       "negative": {
         "odc": [],
         "o11": []
       },
-      "alternative": "integration.rest-consume / integration.rest-expose without callbacks; a callback is authored by the user in the Studio"
+      "alternative": "integration.rest-callbacks for the existing OnBeforeRequest/OnAfterResponse (created by integration.rest-consume); the others are authored by the user in the Studio"
     },
     {
       "id": "event.global-events",

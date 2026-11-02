@@ -576,14 +576,6 @@
       "origin": "inventory rule (docs/evidence/catalogo-abrangente/inventario-reconciliado/inventory.json sources.kindClassRule/metadataRules): context-excluded for referenced signatures"
     },
     {
-      "type": "o11:ServiceStudio.Plugin.REST.IRestCallbackActionFlow",
-      "status": "gap",
-      "applicability": "applicable",
-      "reason": "OnBefore/OnAfterRequest callback of a consumed REST client: four creators on the client make the generic create ambiguous; no job",
-      "origin": "platforms/odc/docs/model-api/OutSystems.Model.Plugin.REST.md (Create*Callback); no job in kernel/tests/jobs, jobs-negative, jobs-odc or jobs-odc-negative",
-      "alternative": "integration.rest-callbacks (unavailable entry)"
-    },
-    {
       "type": "o11:ServiceStudio.Plugin.REST.IRestCallbackActionFlowInputSignature",
       "status": "excluded",
       "applicability": "not-applicable",
@@ -2558,14 +2550,6 @@
       "alternative": "integration.rest-import (op rest with openapi) / integration.soap (O11, op soap) / integration.soap-odc (unavailable on ODC)"
     },
     {
-      "type": "odc:ServiceStudio.Plugin.REST.IRestCallbackActionFlow",
-      "status": "gap",
-      "applicability": "applicable",
-      "reason": "OnBefore/OnAfterRequest callback of a consumed REST client: four creators on the client make the generic create ambiguous; no job",
-      "origin": "platforms/odc/docs/model-api/OutSystems.Model.Plugin.REST.md (Create*Callback); no job in kernel/tests/jobs, jobs-negative, jobs-odc or jobs-odc-negative",
-      "alternative": "integration.rest-callbacks (unavailable entry)"
-    },
-    {
       "type": "odc:ServiceStudio.Plugin.REST.IRestCallbackActionFlowInputSignature",
       "status": "excluded",
       "applicability": "not-applicable",
@@ -2665,7 +2649,7 @@
       "applicability": "applicable",
       "reason": "OnRequest/OnResponse callback of an exposed REST service (ODC creators CreateOnRequest/ResponseCallback); no job",
       "origin": "platforms/odc/docs/model-api/OutSystems.Model.Plugin.RESTService.md; no job in kernel/tests/jobs, jobs-negative, jobs-odc or jobs-odc-negative",
-      "alternative": "integration.rest-callbacks (unavailable entry)"
+      "alternative": "integration.rest-callbacks-advanced (unavailable entry)"
     },
     {
       "type": "odc:ServiceStudio.Plugin.RESTService.IRestServiceCallbackActionFlowInput",
@@ -2673,7 +2657,7 @@
       "applicability": "applicable",
       "reason": "OnRequest/OnResponse callback of an exposed REST service (ODC creators CreateOnRequest/ResponseCallback); no job",
       "origin": "platforms/odc/docs/model-api/OutSystems.Model.Plugin.RESTService.md; no job in kernel/tests/jobs, jobs-negative, jobs-odc or jobs-odc-negative",
-      "alternative": "integration.rest-callbacks (unavailable entry)"
+      "alternative": "integration.rest-callbacks-advanced (unavailable entry)"
     },
     {
       "type": "odc:ServiceStudio.Plugin.RESTService.IRestServiceCallbackActionFlowOutput",
@@ -2681,7 +2665,7 @@
       "applicability": "applicable",
       "reason": "OnRequest/OnResponse callback of an exposed REST service (ODC creators CreateOnRequest/ResponseCallback); no job",
       "origin": "platforms/odc/docs/model-api/OutSystems.Model.Plugin.RESTService.md; no job in kernel/tests/jobs, jobs-negative, jobs-odc or jobs-odc-negative",
-      "alternative": "integration.rest-callbacks (unavailable entry)"
+      "alternative": "integration.rest-callbacks-advanced (unavailable entry)"
     },
     {
       "type": "odc:ServiceStudio.Plugin.RESTService.IRestServiceCallbackStructureAttributeSignature",

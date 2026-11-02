@@ -39,4 +39,12 @@ public sealed class RestConsumeOdcTests
     [Fact] public void EveryAuthProblemIsOneRefusal() => Run(RestConsumeAuthScenarios.EveryAuthProblemIsOneRefusal);
     [Fact] public void ACallbackTheOpDidNotWriteIsRefused() => Run(RestConsumeAuthScenarios.ACallbackTheOpDidNotWriteIsRefused);
     [Fact] public void BasicAuthNeedsBinaryDataOnO11() => Run(RestConsumeAuthScenarios.BasicAuthNeedsBinaryDataOnO11);
+    // The existing callbacks of a consumed client as keyed flow text (RestCallbackFlowScenarios).
+    [Fact] public void ACallbackTextRoundTripsAndAnEditChangesOnlyIt() => Run(RestCallbackFlowScenarios.ACallbackTextRoundTripsAndAnEditChangesOnlyIt);
+    [Fact] public void ACallbackTextIsRefusedWithTheNameToUse() => Run(RestCallbackFlowScenarios.ACallbackTextIsRefusedWithTheNameToUse);
+    [Fact] public void CallbackParametersCannotBeDeclaredByText() => RestCallbackFlowScenarios.CallbackParametersCannotBeDeclaredByText();
+    [Fact] public void ACallbackHeaderOverAnotherActionIsOnlyAKindChange() => Run(RestCallbackFlowScenarios.ACallbackHeaderOverAnotherActionIsOnlyAKindChange);
+    // An app with the block Common/ChangePassword and a consumed client ChangePassword (the owner indexes of FlowOwners).
+    [Fact] public void AClientNamedLikeAScreenChangesNothingOfTheScreen()
+        => Run((dir, _) => RestCallbackFlowScenarios.AClientNamedLikeAScreenChangesNothingOfTheScreen(dir, "tests/fixtures/odc/insurance-reactive-r8.oml", "ChangePassword"));
 }

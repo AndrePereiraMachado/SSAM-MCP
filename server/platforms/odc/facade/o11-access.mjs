@@ -223,7 +223,7 @@ function refusedAnswer(v, verdicts, { input, operationId, deliverWork }) {
   const continuation = holder ? (closeState(findKernelTask(deliverWork, { taskId: holder })) === 'refused' ? closeHolder(holder) : resumeWith(holder)) : planAgain(input);
   // A refusal of the validation contract names the part that refused and carries every problem (o11-cycle contractRefusal, as
   // o11_deliver answers it): never only messages.
-  const refused = !merged && !v.code && invalid && task.apply ? contractRefusal(task.apply, Array.isArray(task.problems) && task.problems.length ? task.problems : null) : null;
+  const refused = !merged && !v.code && invalid && task.apply ? contractRefusal(task.apply, Array.isArray(task.problems) && task.problems.length ? task.problems : null, task.request?.JobPath ?? task.request?.jobPath ?? null) : null;
   if (refused?.summary && /^job rejected by validation contract; /.test(error)) error = cleanKernel('job rejected by validation contract (' + refused.summary + '); merge was not attempted', 400);
   return { ok: false, outcome: 'refused', code: v.code ?? (invalid ? 'VALIDATION_REFUSED' : 'DELIVERY_FAILED'), module: v.module, stage: task.stage ?? null,
     taskId: v.taskId ?? null, operationId, error, ...(refused ? refused.fields : {}), ...(messages.length ? { messages } : {}), ...(omitted ? { messagesOmitted: omitted } : {}),

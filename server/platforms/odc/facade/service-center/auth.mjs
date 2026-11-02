@@ -4,7 +4,7 @@
 //      the Studio's principal, or an explicit credentialTarget);
 //   3. only when the host has no stored credential at all (no SSAM/O11/<host>/ServiceCenter entry, or no LifeTime token,
 //      database login or secret site property value for those surfaces): the private Windows prompt in its own window
-//      (windows-o11-credential.ps1 -Mode bootstrap: Get-Credential + CredWriteW). The call waits for the entry, bounded
+//      (the managed private window of portal/runtime/credential-prompt.mjs, confirmed visible). The call waits, bounded
 //      (SSAM_PROMPT_WAIT_MS, default 120 s, and never past the 29 s read budget of a read); not stored in time,
 //      CREDENTIAL_PROMPT_PENDING, resumable: the window stays open and the same call goes on once it is stored. The
 //      entry the user typed there is remembered as the host's profile, so later calls reuse it from the vault.
@@ -13,7 +13,6 @@
 // Hosted (the SSAM server answering a customer, ../executor.mjs) only the customer's Studio session is a path
 // (studio, studio-http): the profiles, the vault, the window and the prompt of the server are never used
 // (HOSTED_STUDIO_SESSION_ONLY, HOSTED_PROMPT_UNAVAILABLE), so session "vault" and LifeTime are refused.
-import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -21,8 +20,8 @@ import { anvilRoot } from '../workspace.mjs';
 import { LocalExecutor, currentExecutor, hostedContext, workspacePath } from '../executor.mjs';
 import { AuthRequired, BridgeError, ProtocolError, connectStudio, continuation } from './errors.mjs';
 import { hostName } from './http.mjs';
-import { powershellPath } from './vault.mjs';
-import { fold, sha256, utc } from './util.mjs';
+import { O11_PROMPT_KINDS, createCredentialPrompt, promptStateDir } from '../../portal/runtime/credential-prompt.mjs';
+import { fold } from './util.mjs';
 import { readCheckpoint, readOptions } from '../read-budget.mjs';
 
 export const KINDS = ['ServiceCenter', 'LifeTime', 'DatabaseConnection', 'SiteProperty'];
@@ -49,9 +48,17 @@ export function credentialTarget(host, kind, name = null) {
   return `SSAM/O11/${host}/${kind}`;
 }
 
+// Lote 4, F3 (relatos af6dbc48, e2179576): which source answered a call, beside the session the caller asked for.
+// studio, studio-http and studio-web are the connected Studio's login; vault, vault-sso and vault-sso-cache the stored
+// credential of the private Windows vault; local-receipt answers from a receipt, without any session.
+export const sessionSource = pathName => (/^studio/.test(String(pathName)) ? 'studio' : /^(?:vault|profiles)/.test(String(pathName)) ? 'vault'
+  : pathName === 'local-receipt' ? 'local' : 'unknown');
+
 export class Auth {
   constructor(pathName, host, user = null, bridge = null, attempts = []) { this.path = pathName; this.host = host; this.user = user; this.bridge = bridge; this.attempts = attempts; }
   describe() { return { path: this.path, host: this.host, ...(this.user ? { user: this.user } : {}), attempts: this.attempts }; }
+  // requested: the caller's session (auto, studio, studio-web or vault), set by the Resolver; source: who answered.
+  session() { return { requested: this.requested ?? 'auto', source: sessionSource(this.path) }; }
 }
 
 // Whether a Service Studio process is open, connected or not (the studio.processes call of the executor seam; nothing
@@ -67,23 +74,44 @@ export async function studioRunning() {
   return (processes ?? []).length > 0;
 }
 
-// Open the private credential window (Get-Credential + CredWriteW, windows-o11-credential.ps1 -Mode bootstrap)
-// detached, in its own console. Its output is never read: the only result is that the vault entry exists afterwards.
-// One window per target at a time (marker in %USERPROFILE%\.ssam-hybrid\auth\prompts, never %LOCALAPPDATA%).
-export function openPrompt(host, kind, name = null, { state = null, env = process.env, root = anvilRoot, spawnFn = spawn, now = Date.now } = {}) {
+// Lote 4, F3 (relato 88a0d528, 14/10: CREDENTIAL_PROMPT_PENDING declared a window the person never found, not even by
+// Alt+Tab). The private window is the one of the ODC prompt manager (portal/runtime/credential-prompt.mjs and
+// windows-credential-prompt.ps1, O11 kinds): it owns only its own form, confirms it visible by PID, start time and handle,
+// and brings it to the front on every ensure (a repeated call focuses the window that is open, never a second one). A
+// launch alone is never a window: what the manager does not confirm visible is refused with its code, nothing stored.
+// The state lives in %USERPROFILE%\.ssam-hybrid\auth\prompts\o11-<key> (never %LOCALAPPDATA%), window metadata only.
+export const promptTitle = (host, kind) => `SSAM - ${hostName(host)} - ${O11_PROMPT_KINDS[kind]}`;
+// Hosted, the refusal is thrown at once (synchronously), before any window or manager: the server never opens one.
+export function openPrompt(host, kind, name = null, options = {}) {
   if (hostedContext()) throw hostedNoPrompt(host, `No credential of ${host} can be stored from here`);
-  const target = credentialTarget(host, kind, name);
-  const folder = path.join(state ?? stateDir(env), 'auth', 'prompts');
-  fs.mkdirSync(folder, { recursive: true });
-  const marker = path.join(folder, 'o11-' + sha256(Buffer.from(target, 'utf8')).slice(0, 24) + '.json');
-  if (fs.existsSync(marker) && now() - fs.statSync(marker).mtimeMs < 300000) return { opened: false, alreadyOpen: true, target };
-  const argv = ['-NoProfile', '-File', promptScript(root), '-Mode', 'bootstrap', '-Kind', kind, '-HostName', hostName(host), ...(name ? ['-Name', name] : [])];
-  const child = spawnFn(powershellPath(env), argv, { detached: true, stdio: 'ignore', windowsHide: false });
-  child.on?.('error', () => {});
-  child.unref?.();
-  fs.writeFileSync(marker, JSON.stringify({ target, pid: child.pid ?? null, openedAt: utc() }), 'utf8');
-  return { opened: true, target };
+  return openManagedPrompt(host, kind, name, options);
 }
+async function openManagedPrompt(host, kind, name, { env = process.env, manager = null } = {}) {
+  const target = credentialTarget(host, kind, name);
+  const prompt = manager ?? createCredentialPrompt({ env });
+  const managed = [O11_PROMPT_KINDS[kind], hostName(host), name ?? ''];
+  const window = await prompt(...managed, 'ensure');
+  const status = () => prompt(...managed, 'status');
+  const title = promptTitle(host, kind);
+  if (window?.state === 'cancelled') { clearPrompt(managed, env); throw promptCancelled(host, target, kind); }
+  if (window?.visible !== true)
+    throw new AuthRequired(window?.code ?? 'CREDENTIAL_PROMPT_WINDOW_UNAVAILABLE', `The private credential window for ${target} could not be confirmed on the screen `
+      + `(${window?.state ?? 'no answer'}); nothing was typed or stored, and SSAM does not claim it opened.`,
+    { auth: { path: 'prompt', host: hostName(host), target, window: { title, state: window?.state ?? 'failed', visible: false } },
+      attempts: [{ path: 'prompt', outcome: 'window-unconfirmed', target }] });
+  return { opened: window.opened === true, alreadyOpen: window.alreadyOpen === true, visible: true, foreground: window.foreground === true,
+    pid: window.pid, title, target, status, clear: () => clearPrompt(managed, env) };
+}
+
+// A cancelled window leaves no state behind: the next call that needs the credential opens a new window, only when the
+// person repeats it.
+function clearPrompt([kind, host, name], env) {
+  try { fs.rmSync(path.join(promptStateDir(kind, host, name, env), 'window.json'), { force: true }); } catch { /* best effort */ }
+}
+const promptCancelled = (host, target, kind) => new AuthRequired('CREDENTIAL_PROMPT_CANCELLED',
+  `The private credential window for ${target} was cancelled; nothing was stored and nothing was sent. It opens again only when the person asks to continue.`,
+  { auth: { path: 'prompt', host: hostName(host), target, window: { title: promptTitle(host, kind), state: 'cancelled', visible: false } },
+    attempts: [{ path: 'prompt', outcome: 'cancelled', target }] });
 
 export function hostClass(host, registry = hostsFile()) {
   let hosts = {};
@@ -135,14 +163,17 @@ export function promptWaitMs(env = process.env, override = undefined) {
 const realSleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 // Inside a bounded read (read-budget.mjs) the wait ends 2 s before the read budget does, so a read answers
 // CREDENTIAL_PROMPT_PENDING (resumable) instead of READ_DEADLINE_EXCEEDED.
-export async function awaitStored(present, target, { waitMs = promptWaitMs(), sleep = realSleep, now = Date.now, interval = 1000 } = {}) {
+// cancelled: an optional check of the window (the manager's status, every third poll): a window the person cancelled
+// ends the wait at once ({cancelled:true}) instead of holding the call until the deadline.
+export async function awaitStored(present, target, { waitMs = promptWaitMs(), sleep = realSleep, now = Date.now, interval = 1000, cancelled = null } = {}) {
   const check = typeof present.fresh === 'function' ? present.fresh : present;
   const budget = readOptions('authentication').timeoutMs;
   if (Number.isFinite(budget)) waitMs = Math.max(0, Math.min(waitMs, budget - 2000));
   const start = now();
-  for (;;) {
+  for (let poll = 0; ; poll++) {
     readCheckpoint('authentication');
     if (await check(target)) return { stored: true, waitedMs: now() - start };
+    if (typeof cancelled === 'function' && poll % 3 === 2 && await cancelled()) return { stored: false, cancelled: true, waitedMs: now() - start };
     const left = waitMs - (now() - start);
     if (left <= 0) return { stored: false, waitedMs: now() - start };
     await sleep(Math.min(interval, left));
@@ -155,7 +186,11 @@ const promptPending = (why, host, target, opened, waited, attempts, kind = 'Serv
   `${why}: a private Windows prompt is open in its own window for ${target}. The user types ${TYPED[kind] ?? TYPED.ServiceCenter}; `
   + `nothing passes through the chat. This call waited ${Math.round(waited.waitedMs / 1000)} s and nothing was stored yet; `
   + 'the same call goes on once it is stored (the prompt stays open).',
-  { auth: { path: 'prompt', host, target, alreadyOpen: opened?.alreadyOpen ?? false, waitedMs: waited.waitedMs, resumable: true },
+  { auth: { path: 'prompt', host, target, alreadyOpen: opened?.alreadyOpen ?? false, waitedMs: waited.waitedMs, resumable: true,
+    // The window the manager confirmed on the screen (openPrompt), and the exact question to relay to the person.
+    ...(opened?.visible === true ? { window: { title: opened.title, visible: true, foreground: opened.foreground === true, pid: opened.pid } } : {}) },
+    ...(opened?.title ? { question: `A private SSAM window titled "${opened.title}" is open on your screen. Please type ${TYPED[kind] ?? TYPED.ServiceCenter}, `
+      + 'then click Save (or Cancel to stop). Nothing goes through this chat. Tell me when it is saved and I will continue.' } : {}),
     attempts: [...attempts, { path: 'prompt', outcome: 'pending', target }] });
 
 // Opens the private prompt for target (or finds it open) and waits for the entry; throws CREDENTIAL_PROMPT_PENDING when it
@@ -167,7 +202,9 @@ export async function promptAndWait({ host, kind = 'ServiceCenter', name = null,
     throw new AuthRequired('AUTH_REQUIRED', `${why}; no credential prompt is available here.`, { attempts, auth: { target } });
   readCheckpoint('authentication');
   const opened = await opener(host, kind, ...(name ? [name] : []));
-  const waited = await awaitStored(present, target, wait);
+  const cancelled = typeof opened?.status === 'function' ? async () => (await opened.status())?.state === 'cancelled' : null;
+  const waited = await awaitStored(present, target, { ...wait, ...(cancelled && !wait.cancelled ? { cancelled } : {}) });
+  if (waited.cancelled) { opened.clear?.(); throw promptCancelled(host, target, kind); }
   if (!waited.stored) throw promptPending(why, host, target, opened, waited, attempts, kind);
   return { path: 'prompt', outcome: 'stored', target, waitedMs: waited.waitedMs };
 }
@@ -236,8 +273,15 @@ export class Resolver {
     return this.studioState;
   }
 
-  // need: api (SOAP/server.api/rest through the Studio), web (.aspx pages) or lifetime (LifeTime token).
+  // need: api (SOAP/server.api/rest through the Studio), web (.aspx pages) or lifetime (LifeTime token). The answer says
+  // which session was asked (Auth.session().requested) beside the source that answered.
   async resolve(need) {
+    const auth = await this.resolveNeed(need);
+    auth.requested = this.session;
+    return auth;
+  }
+
+  async resolveNeed(need) {
     if (!['api', 'web', 'lifetime'].includes(need)) throw new ProtocolError('Unknown authentication need');
     const hosted = hostedContext() !== null;
     if (hosted && need === 'lifetime') throw hostedStudioOnly('LifeTime (its service-account token)');
@@ -250,6 +294,16 @@ export class Resolver {
     if (need === 'api') {
       if (this.session !== 'vault' && studio?.signedIn === true)
         return new Auth('studio', this.host, principal, bridge, [...attempts, { path: 'studio', outcome: 'used' }]);
+      // Relatos af6dbc48/e2179576 (18/10): session=vault with the Studio signed in answered STUDIO_NOT_SIGNED_IN. The
+      // stored credential serves the Service Center pages; the API (SOAP, server.api, module ids) has no transport but the
+      // Studio's own login, and the explicit vault is never swapped for the Studio silently.
+      if (this.session === 'vault' && studio?.signedIn === true)
+        throw new AuthRequired('VAULT_API_UNAVAILABLE', `session=vault selects the stored credential, which serves the Service Center pages; this step needs the `
+          + `Service Center API, which SSAM reaches only through the signed-in Studio${principal ? ' (' + principal + ')' : ''}. Nothing was sent. `
+          + 'Repeat with session=auto to use the Studio for it, or name the module by moduleId so the pages need no API lookup.',
+        { attempts: [...attempts, { path: 'vault', outcome: 'no-api-transport' }], auth: { path: 'vault', host: this.host, requested: 'vault' },
+          continuation: { tool: 'o11_service_center_session', arguments: { action: 'status', host: this.host, session: 'vault' },
+            why: 'shows which source answers each need (wouldUse.api, wouldUse.web) and whether the vault holds a credential for this host' } });
       if (!bridge && await this.running())
         throw new AuthRequired('STUDIO_NOT_CONNECTED', 'A Studio is already open but has no valid SSAM connection; attach it without opening a login dialog.',
           { attempts, continuation: connectStudio('attach the existing Studio') });

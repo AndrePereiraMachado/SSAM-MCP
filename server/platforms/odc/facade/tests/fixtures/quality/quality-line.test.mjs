@@ -61,7 +61,7 @@ test('codes and rules: only the registries pass; an UPPER_SNAKE word of the cust
   for (const word of ['CLIENTE_ACME_SNTL', 'PREFLIGHT_REFUSED', 'OSUSR_K3X_FOLHA_SNTL']) assert.equal(ruleOf(word), RULE_UNLISTED, word);
   for (const bad of ['LIST_ENTITY_SEGMENT_DROPPED+NULL_FUNCTION_REWRITTEN', 'sort_keys_split', 'ExpressionUnknownObject', '__proto__', '', 'X'.repeat(65)])
     assert.equal(ruleOf(bad), null, bad);
-  assert.deepEqual([...RULES], ['LIST_ENTITY_SEGMENT_DROPPED', 'NULL_FUNCTION_REWRITTEN', 'PROPERTY_SET_DROPPED', 'SORT_KEYS_SPLIT']);
+  assert.deepEqual([...RULES], ['LIST_ENTITY_SEGMENT_DROPPED', 'NULL_FUNCTION_REWRITTEN', 'OP_DATA_WRAPPED', 'PROPERTY_SET_DROPPED', 'SOAP_CLIENT_RENAMED', 'SORT_KEYS_SPLIT']);
   assert.ok(CODES.length > 1000 && CODES.every(c => /^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*$/.test(c) && c.length <= 64));
   assert.ok(!CODES.some(c => /SNTL|ACME|FOLHA/.test(c)));
   assert.ok(Object.isFrozen(CODES) && Object.isFrozen(RULES) && Object.isFrozen(OPS) && Object.isFrozen(PLACEHOLDER_CODES));

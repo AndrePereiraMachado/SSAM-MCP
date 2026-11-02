@@ -297,6 +297,8 @@ public static class JobPreflight
                     // out of a loop. The names a created client action may not take are the texts' own (the module's are the
                     // apply's, which judges the same rules again with the read).
                     var reserved = FlowTextForm.ActionNames(texts);
+                    // The modules this job references by name: a `P/A(` line is a malformed call of P only when P is one of them.
+                    var referencedModules = Preflight.TextForms.ReferencedModules(ops);
                     var allowQuery = QueryInLoopRule.Allowed(op, out _) != null;
                     var found = new List<(string Pointer, Anvil.Reading.FlowProblem Problem)>();
                     var corrected = new string?[texts.Count];
@@ -306,6 +308,15 @@ public static class JobPreflight
                     for (var t = 0; t < texts.Count; t++)
                     {
                         var (text, _, at) = texts[t];
+                        var producerCalls = Preflight.TextForms.ProducerCallProblems(text, referencedModules.Contains);
+                        if (producerCalls.Count > 0)
+                        {
+                            foreach (var problem in producerCalls) found.Add((at, problem));
+                            // A bad qualifier can keep the general forms (return/insert) from normalizing. Analyze
+                            // their corrected reading too, so this refusal reports real remaining problems only.
+                            text = corrected[t] = Anvil.Reading.FlowTextNormalizer.Normalize(producerCalls[0].Corrected!,
+                                Preflight.JobNormalizer.JobSchema(ops)).Text;
+                        }
                         try
                         {
                             var edited = Anvil.Reading.ModuleFlow.Read(text);
@@ -315,7 +326,9 @@ public static class JobPreflight
                                 Error(i, kind, "FLOW_MAPPING_CURSOR", "logic: line " + line + ": the mapping " + value + " reads " + source + ".Current, the list's cursor (one item for every item it maps)",
                                     "inside `" + source + " mapTo { ... }` each value is relative to the item: write the item's attribute (`Record.Attribute`, or `Record` for a record of the row) where it reads " + source + ".Current",
                                     Pointer(i, "/data" + at));
-                            if (edited.Key.Length != 0) continue;
+                            // A callback text without @key is refused with the module (ModelSession.CallbackWithoutKey names
+                            // the callback's @key or the nearest callbacks), never here without it.
+                            if (edited.Key.Length != 0 || edited.Kind == "RestCallbackActionFlow") continue;
                             var diff = Anvil.Reading.FlowDiff.Compute(null, new Dictionary<string, string>(), edited, null, Anvil.Reading.FlowDiff.AliasPrefix + ".", text,
                                 reserved.Contains, allowQuery, allowScreenJavaScript: ScreenJavaScriptException.Allowed(op, edited) != null);
                             foreach (var problem in diff.Problems) found.Add((at, problem));

@@ -42,6 +42,7 @@ import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { normalizeCodeOps } from './ssam-code.mjs';
 import { readVerifiedPatch, verifiedPatchFile } from './verified-patch.mjs';
+import { jobInventory, inventoryLoss, lossText, PATCH_DESTRUCTIVE } from './job-inventory.mjs';
 export { verifiedPatchFile };
 
 // 500 since 20/10/2026 (goal list of 2026-10-20, item 4, report d9398179: a refusal with 61 fixes could not be answered in one call at 50,
@@ -234,6 +235,12 @@ function applyOne(job, operation, at, resolved, notes = null) {
   if (op !== 'remove' && !Object.hasOwn(operation, 'value')) throw new PatchError('PATCH_INVALID', `${label}: ${op} needs value`, at);
   const tokens = resolveTokens(job, pointer(where, at, label), op, operation.value, at, label, notes);
   area(tokens, job, at, label);
+  // C-11: add /expectedMessages/- declares a message in a job that has no list yet (the anonymous-access patch of a refusal,
+  // one per message): the list is created, so the patches of one refusal apply in any order; the note says so.
+  if (op === 'add' && tokens.length === 2 && tokens[0] === 'expectedMessages' && tokens[1] === '-' && !Array.isArray(job) && isObject(job) && job.expectedMessages === undefined) {
+    job.expectedMessages = [];
+    notes?.push({ rule: 'expected-messages-list', at: '/patch/' + at, note: 'the job had no expectedMessages: the list was created for this append' });
+  }
   resolved?.push({ op, path: toPointer(tokens), ...(Object.hasOwn(operation, 'value') ? { value: operation.value } : {}) });
   const missing = upTo => new PatchError('PATCH_INVALID', `${label}: no value at ${'/' + tokens.slice(0, upTo).map(t => t.replace(/~/g, '~0').replace(/\//g, '~1')).join('/')}`, at);
   let parent = job;
@@ -252,6 +259,12 @@ function applyOne(job, operation, at, resolved, notes = null) {
     if (op === 'add') { if (index > parent.length) throw missing(tokens.length); parent.splice(index, 0, value); return; }
     if (index >= parent.length) throw missing(tokens.length);
     if (op === 'remove') parent.splice(index, 1);
+    // C-42 (F-FitBody-22 seq 25): the text of a read action replaced as a string keeps the basedOn its entry had
+    // ({text, basedOn}): the new text is written on the same read (FLOW_BASE_REQUIRED otherwise); the note says so.
+    else if (op === 'replace' && typeof value === 'string' && tokens.at(-2) === 'flow' && isObject(parent[index]) && typeof parent[index].text === 'string' && parent[index].basedOn != null) {
+      parent[index] = { ...parent[index], text: value };
+      notes?.push({ rule: 'patch-flow-basedOn', at: '/patch/' + at, note: toPointer(tokens) + ' was {text, basedOn}: the new text keeps basedOn ' + JSON.stringify(parent[index].basedOn) });
+    }
     else if (op === 'replace') parent[index] = value;
     else if (!jsonEqual(parent[index], operation.value)) throw new PatchError('PATCH_TEST_FAILED', `${label}: the value there differs; nothing was patched`, at);
     return;
@@ -436,6 +449,67 @@ function newOpIndex(ops, verb) {
 }
 const PARTIAL_KEYS = new Set(['ops', 'expectedMessages', 'description', 'base', 'expectValid']);
 
+// The identity of an action, the kernel's (review of r4-w2-flow, corrections 3 and 4): its naming scope (a server and a
+// service action share one, a client action has its own: ActionNameRules.Scope), its owner (the screen or block of a screen
+// action, a data action or a Preparation: `Home` of `action Home.X`, `MainFlow/Home.X` and `IMobileScreen:Home`) and its
+// name, without regard to case. The labels are FlowPrinter.Labels; `action` (a screen action) is tried last.
+const FLOW_LABELS = [['server action', 'server'], ['service action', 'server'], ['client action', 'client'], ['data action', 'data'],
+  ['preparation', 'preparation'], ['action', 'screen']];
+const actionIdentity = (scope, owner, name) => `${scope}|${String(owner ?? '').split('/').pop().replace(/^I\w*:/, '').toLowerCase()}|${String(name).toLowerCase()}`;
+// The header of a text: {id, name, key} or null when its first line (the body may still carry the error being corrected)
+// is no header the kernel reads.
+function headerOf(line) {
+  for (const [label, scope] of FLOW_LABELS) {
+    if (!line.startsWith(label + ' ')) continue;
+    const words = line.slice(label.length + 1).trim().split(/\s+/);
+    const written = words[0];
+    if (!written || written.startsWith('@')) return null;
+    const dot = written.lastIndexOf('.');
+    let owner = dot > 0 ? written.slice(0, dot) : '', name = written.slice(dot + 1);
+    // A Preparation is its screen's: `preparation Home` and `preparation Home.Preparation` are one.
+    if (scope === 'preparation') { owner = owner || name; name = 'Preparation'; }
+    return { id: actionIdentity(scope, owner, name), name: written, key: words.find(w => w.startsWith('@')) ?? null };
+  }
+  return null;
+}
+// Every action header of a text (a line at column 0 that starts with a label: a text may hold several actions, which the
+// shaper splits later, normalizeCodeOps). The first line that is no description must be one; else the text names nothing.
+function flowHeaders(item) {
+  const text = typeof item === 'string' ? item : item?.text;
+  if (typeof text !== 'string') return [];
+  const lines = text.replace(/\r\n/g, '\n').split('\n');
+  const first = lines.find(l => l.trim() && !l.startsWith('///'));
+  if (!first || !headerOf(first)) return [];
+  return lines.filter(l => l.length && l[0] !== ' ' && l[0] !== '\t' && !l.startsWith('///')).map(headerOf).filter(Boolean);
+}
+const flowHeader = item => flowHeaders(item)[0] ?? null;
+// The identity of an action of the JSON form (its kind and owner; an owned action without a kind is a screen action).
+function jsonIdentity(action) {
+  const kind = String(action?.kind ?? (action?.owner ? 'screen' : 'server')).toLowerCase();
+  const scope = kind === 'service' ? 'server' : ['client', 'screen', 'data', 'preparation'].includes(kind) ? kind : 'server';
+  return scope === 'preparation' ? actionIdentity(scope, action.owner ?? action.name, 'Preparation') : actionIdentity(scope, action.owner, action.name);
+}
+function flowName(item, at) {
+  const header = flowHeader(item);
+  if (!header) throw new PatchError('PARTIAL_UNNAMED', `partial op #${at}: data.flow requires an action header (server action, service action, client action, action, data action, preparation)`, at);
+  return header;
+}
+
+function flowList(op, at) {
+  if (op?.op !== 'logic' || !isObject(op.data) || op.data.flow == null) return null;
+  const unknown = Object.keys(op.data).filter(k => k !== 'flow' && k !== 'basedOn');
+  if (unknown.length) throw new PatchError('PARTIAL_INVALID', `partial op #${at}: the text form takes flow and basedOn, not ${unknown.join(', ')}`, at);
+  const list = Array.isArray(op.data.flow) ? op.data.flow : [op.data.flow];
+  if (op.data.basedOn != null) {
+    if (list.length !== 1) throw new PatchError('PARTIAL_INVALID', `partial op #${at}: data.basedOn requires one action`, at);
+    if (typeof list[0] === 'string') list[0] = { text: list[0], basedOn: op.data.basedOn };
+    else list[0] = { basedOn: op.data.basedOn, ...list[0] };
+    delete op.data.basedOn;
+  }
+  op.data.flow = list;
+  return list;
+}
+
 // The whole job: the job of basedOn with the partial job's elements merged by name (see the head of this file). Returns
 // {job, summary: {replaced, added, ops}} (the pointers, in the merged job, of what was replaced, appended to a list and
 // added as an op); throws a PatchError (PARTIAL_INVALID, PARTIAL_UNNAMED, PARTIAL_AMBIGUOUS).
@@ -454,13 +528,79 @@ export function mergePartialJob(base, partial) {
   const job = structuredClone(base);
   const ops = opsOf(job);
   // What was merged, by reference: the pointers are taken at the end, once every new op has its place.
-  const merged = { replaced: [], added: [], ops: [] };
+  const merged = { replaced: [], added: [], ops: [], notes: [] };
   const placed = new Set(); // what the partial job already put in place: a second one with the same identity is refused
   const twice = (at, what) => new PatchError('PARTIAL_AMBIGUOUS', `partial op #${at}: ${what} comes twice in the partial job`, at);
   const where = (i, ...rest) => toPointer([...(Array.isArray(job) ? [] : ['ops']), i, ...rest]);
   partialOps.forEach((entry, at) => {
     if (!isObject(entry) || typeof entry.op !== 'string' || !entry.op) throw new PatchError('PARTIAL_INVALID', `partial op #${at} is not an op {op, ...}`, at);
     const op = structuredClone(entry);
+    const flows = flowList(op, at);
+    if (flows) {
+      if (!flows.length) throw new PatchError('PARTIAL_INVALID', `partial op #${at}: data.flow brings no actions`, at);
+      const headers = flows.map(element => flowName(element, at));
+      for (const [index, element] of flows.entries()) {
+        for (const header of flowHeaders(element).length ? flowHeaders(element) : [headers[index]]) {
+          const key = 'flow:' + header.id;
+          if (placed.has(key)) throw twice(at, `action ${header.name}`);
+          placed.add(key);
+        }
+      }
+      // Search every logic op, including the one emitted by `also` after a DDL write. A logic op of basedOn whose text form
+      // does not read is the kernel's to refuse, never this partial's: it takes no text (review of r4-w2-flow, suggestion 2).
+      const candidates = ops.filter(o => o?.op === 'logic' && isObject(o.data)).filter(candidate => {
+        try { flowList(candidate, at); return true; } catch (error) { if (error instanceof PatchError) return false; throw error; }
+      });
+      if (!candidates.length) { ops.push(op); merged.ops.push({ op }); return; }
+      const fresh = [];
+      // Every action of every text of basedOn, by identity (a text may hold several: review of the B1 integration, case D).
+      const located = (id) => candidates.flatMap(target => (target.data.flow ?? []).flatMap((item, index) => {
+        const all = flowHeaders(item);
+        return all.some(h => h.id === id) ? [{ target, index, count: all.length }] : [];
+      }));
+      for (const [index, element] of flows.entries()) {
+        const header = headers[index];
+        const own = flowHeaders(element);
+        for (const one of own.length ? own : [header])
+          if (candidates.some(target => target.data.actions?.some(a => isObject(a) && jsonIdentity(a) === one.id)))
+            throw new PatchError('PARTIAL_INVALID', `partial op #${at}: action ${one.name} is in the JSON form of basedOn; change it in that form or with a patch`, at);
+        // A text of the partial with several actions replaces nothing by name: each action goes as its own text.
+        if (own.length > 1) {
+          const known = own.filter(one => located(one.id).length);
+          if (known.length) throw new PatchError('PARTIAL_AMBIGUOUS', `partial op #${at}: data.flow[${index}] holds ${own.length} actions and ${known.map(k => k.name).join(', ')} already in basedOn; send each action as its own text of data.flow, so each replaces its action by name`, at);
+        }
+        // A text of basedOn whose header does not read matches nothing (it is not this partial's to name).
+        const hits = located(header.id);
+        if (hits.length > 1) throw new PatchError('PARTIAL_AMBIGUOUS', `partial op #${at}: action ${header.name} matches several texts of basedOn`, at);
+        // An action of a text of basedOn that holds several is never appended twice nor cut out of that text here (the indices
+        // the patches of basedOn address would move): the answer says how to change it.
+        if (hits.length && hits[0].count > 1)
+          throw new PatchError('PARTIAL_AMBIGUOUS', `partial op #${at}: action ${header.name} is one of the ${hits[0].count} actions of the text ${where(ops.indexOf(hits[0].target), 'data', 'flow', hits[0].index)} of basedOn; change it with a patch at that pointer (the whole text, with every action of it), or with edits [{find, with}] over the job`, at, [where(ops.indexOf(hits[0].target), 'data', 'flow', hits[0].index)]);
+        if (hits.length) {
+          const { target, index } = hits[0];
+          // Correction 5: the corrected text of an action read with its @key keeps the basedOn of the text it replaces when it
+          // brings none (FLOW_BASE_REQUIRED otherwise); the partial's own basedOn always wins, and another @key inherits nothing.
+          const before = target.data.flow[index];
+          const inherited = isObject(before) && before.basedOn != null && header.key != null && flowHeader(before)?.key === header.key
+            && (typeof element === 'string' || (isObject(element) && element.basedOn == null));
+          const placedElement = inherited ? { text: typeof element === 'string' ? element : element.text, basedOn: before.basedOn } : element;
+          target.data.flow[index] = placedElement;
+          merged.replaced.push({ op: target, list: 'flow', element: placedElement });
+          if (inherited) merged.notes.push({ op: target, list: 'flow', element: placedElement, note: `the text of ${header.name} ${header.key} brought no basedOn: it keeps ${JSON.stringify(before.basedOn)}, the basedOn of the text it replaces` });
+        } else {
+          // A logic op cannot mix the JSON and text forms: a new action goes into the last text-form op of basedOn; with none
+          // (only JSON-form logic ops), the new texts are one new logic op, as a partial text op was before the merge by name.
+          const target = candidates.findLast(o => Array.isArray(o.data.flow) && o.data.actions == null);
+          if (target) { target.data.flow.push(element); merged.added.push({ op: target, list: 'flow', element }); }
+          else fresh.push(element);
+        }
+      }
+      if (fresh.length) {
+        const added = { ...op, data: { ...op.data, flow: fresh } };
+        ops.splice(newOpIndex(ops, added.op), 0, added); merged.ops.push({ op: added });
+      }
+      return;
+    }
     const lists = namedLists(op, at);
     const screen = pageScreen(op);
     if (screen) {
@@ -530,6 +670,8 @@ export function mergePartialJob(base, partial) {
     return list ? where(i, 'data', list, op.data[list].indexOf(element)) : where(i);
   };
   const summary = { replaced: merged.replaced.map(pointerOf), added: merged.added.map(pointerOf), ops: merged.ops.map(pointerOf) };
+  // Every normalization of the merge is said (rule 8): {rule, at, note}, as the notes of a patch.
+  if (merged.notes.length) summary.notes = merged.notes.map(n => ({ rule: 'partial-flow-basedOn', at: pointerOf(n), note: n.note }));
   if (given.expectedMessages !== undefined) {
     if (!Array.isArray(given.expectedMessages) || given.expectedMessages.some(m => !isObject(m)))
       throw new PatchError('PARTIAL_INVALID', 'the partial job\'s expectedMessages is a list of {id, element, why}');
@@ -741,11 +883,19 @@ export function resolvePatchedJob({ job, patch, basedOn } = {}, { root = null, i
       try { patched = patchJob(result, patch, verified ? { max: Infinity } : {}); }
       // R1: a patch refused never comes back dry: the same patch mended where one reading is certain, by name, ready to send.
       catch (error) { if (error instanceof PatchError && Array.isArray(patch)) return fail(error.code, error.message, { ...patchErrorFields(error), ...mendedFields(result, patch) }); throw error; }
+      // C-01 (c): the verified patches of a refusal never leave the job without what it declared (a file written before the
+      // guard of refusalFields, or by another release); a patch of the caller's own may remove what it means to.
+      if (verified) {
+        const lost = inventoryLoss(jobInventory(result), jobInventory(patched.job));
+        if (lost.length) return fail(PATCH_DESTRUCTIVE, 'The verified patches kept beside ' + base.file + ' would leave the job without what it declares (' + lossText(lost)
+          + '); nothing was patched. Correct the job with your own patch over the same basedOn, keeping all of it.', { lost });
+      }
       result = patched.job;
     }
   } catch (error) { if (error instanceof PatchError) return fail(error.code, error.message, patchErrorFields(error)); throw error; }
   const shaped = normalizeCodeOps(result);
   if (patched?.notes?.length) shaped.normalizations = [...patched.notes, ...(shaped.normalizations ?? [])];
+  if (summary?.notes?.length) shaped.normalizations = [...summary.notes, ...(shaped.normalizations ?? [])];
   const text = JSON.stringify(pinReferences(shaped.job, path.dirname(base.file), inlineDir), null, 2) + '\n';
   const file = writeInline(inlineDir, text, uuid);
   const done = { ok: true, path: file, sha256: sha256(text), basedOn: { job: base.file, sha256: base.sha256, ...(base.taskId ? { taskId: base.taskId } : {}) },
@@ -897,7 +1047,7 @@ export function mendedFields(job, patch) {
 // applyFixes(job, fixes): the patches a refusal proposed ([{code, pointer?, pointers?, patch}]), applied in order over the
 // job, each whole or not at all; an operation another fix already applied is not applied twice, and a fix that writes a
 // different value where an earlier one wrote is not applied (it would undo it). -> {patch: the operations applied, in
-// order, applied: [{code, pointer, ops}], notApplied: [{code, pointer, patch, error}]}.
+// order, applied: [{code, pointer, ops}], notApplied: [{code, pointer, patch, error}], job: the patched copy}.
 export function applyFixes(job, fixes) {
   let copy = structuredClone(job);
   const patch = [], applied = [], notApplied = [], seen = new Set(), written = new Map();
@@ -915,7 +1065,7 @@ export function applyFixes(job, fixes) {
     for (const op of fresh) { seen.add(JSON.stringify(op)); patch.push(op); if (isObject(op) && ['add', 'replace'].includes(op.op)) written.set(op.path, JSON.stringify(op.value ?? null)); }
     applied.push({ ...where, ops: ops.length });
   }
-  return { patch, applied, notApplied };
+  return { patch, applied, notApplied, job: copy };
 }
 
 // changeOnly(base, changed): a job with only what changed from base to changed (the ops of changed that base has not; of
@@ -991,7 +1141,7 @@ export function readRefusalFixes(dir, hash) {
 }
 // The patch fix:"apply" sends over the job file of basedOn (its bytes checked against sha256): every patch its refusal
 // proposed that applies, in order. -> {ok:true, patch, applied, module} or {ok:false, code (FIX_NONE, BASE_CHANGED,
-// BASE_NOT_FOUND, FIX_NOT_APPLIED), error, module?, notApplied?, fixesApplicable?, patchByName? (the ones that apply)}.
+// BASE_NOT_FOUND, FIX_NOT_APPLIED, PATCH_DESTRUCTIVE + lost), error, module?, notApplied?, fixesApplicable?, patchByName? (the ones that apply)}.
 export function proposedPatch(dir, { file, sha256: hash }) {
   const saved = SHA256.test(String(hash ?? '')) ? readRefusalFixes(dir, hash) : null;
   const module = saved?.module ?? null;
@@ -1002,9 +1152,15 @@ export function proposedPatch(dir, { file, sha256: hash }) {
     if (sha256(bytes) !== String(hash).toLowerCase()) return fail('BASE_CHANGED', 'The base job changed after that refusal (sha256 differs); nothing was patched.', { job: file, module });
     document = JSON.parse(bytes.toString('utf8').replace(/^\uFEFF/, ''));
   } catch { return fail('BASE_NOT_FOUND', 'No job file at ' + file + '; nothing was patched.', { module }); }
-  const { patch, applied, notApplied } = applyFixes(document, saved.fixes);
+  const { patch, applied, notApplied, job: patched } = applyFixes(document, saved.fixes);
   if (notApplied.length) return fail('FIX_NOT_APPLIED', notApplied.length + ' of the ' + (applied.length + notApplied.length) + ' patches this refusal proposed do not apply over its job; nothing was sent.',
     { module, notApplied, fixesApplicable: applied, patchByName: patch.length ? namedPatch(document, patch) ?? patch : [] });
+  // C-01 (c), F-FitBody-21: fix:"apply" applied the refusal's patches blindly, and a patch that replaced the job's data text
+  // with the module's read delivered a job without its new entities and structures. The patched job must still declare
+  // everything the job declared (job-inventory.mjs); otherwise nothing is sent, and the answer says what would be lost.
+  const lost = inventoryLoss(jobInventory(document), jobInventory(patched));
+  if (lost.length) return fail(PATCH_DESTRUCTIVE, 'The patches this refusal proposed would leave the job without what it declares (' + lossText(lost) + '); nothing was sent.'
+    + ' Correct the job with your own patch over the same basedOn, keeping every statement, action and element.', { module, lost });
   return { ok: true, patch, applied, module, patchByName: namedPatch(document, patch) ?? patch };
 }
 // servidor/fase4-27 a12: on a hosted server the next call after a refusal is the explicit patch, never fix "apply" nor patch

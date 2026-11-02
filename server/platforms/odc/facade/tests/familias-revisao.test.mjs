@@ -39,6 +39,8 @@ test('two patches of one path with different values are no patch: patchOmitted w
   assert.equal(fields.verifiedPatch.ops, 1);
   // The same value twice is one patch (no conflict), and one value per path is the union as before.
   assert.deepEqual(patchConflicts([{ op: 'replace', path: '/p', value: 'v' }, { op: 'replace', path: '/p', value: 'v' }, { op: 'add', path: '/q', value: 1 }]), []);
+  // C-11: appends never collide (each anonymous-access message of a refusal is its own add /expectedMessages/-).
+  assert.deepEqual(patchConflicts([{ op: 'add', path: '/expectedMessages/-', value: { id: 'A', element: 'x', why: 'w' } }, { op: 'add', path: '/expectedMessages/-', value: { id: 'A', element: 'y', why: 'w' } }]), []);
 });
 
 test('a verified file whose union writes one path twice is refused when it is applied', () => {

@@ -352,7 +352,9 @@ test('replayInputs asks the agent nothing for a call the gate refuses first; a c
   const refused = [
     ['o11_access', { action: 'apply', manifestPath: 'agent:inbox/g.json', words: 'synthetic words' }, {}],
     ['o11_deliver', { module: 'M', job: { ops: [{ op: 'prototype', data: { source: 'agent:inbox/g.json' } }] }, producers: { P: 'agent:inbox/g.json' } }, {}],
-    ['o11_deliver', { module: 'M', job: { ops: [{ op: 'entity-actions', data: { entities: 'all' } }] }, producers: { P: 'agent:inbox/g.json' } }, {}],
+    // r4-rest-hosted: entity-actions runs hosted (mode job-only); the generator the gate refuses first is rest-consume without
+    // its samples (DOCUMENT_FETCH_HOSTED_REFUSED).
+    ['o11_deliver', { module: 'M', job: { ops: [{ op: 'rest-consume', data: { name: 'X', methods: [{ name: 'P', url: 'http://127.0.0.1:9/x' }] } }] }, producers: { P: 'agent:inbox/g.json' } }, {}],
     ['o11_deliver', { module: 'M', job: { ops: [] }, producers: { P: 'agent:inbox/g.json' } }, { lanes: ['odc'] }],
     ['o11_deliver', { module: 'M', job: { ops: [] }, producers: { P: 'agent:inbox/g.json' } }, { kernelRefused: { o11: { reason: 'synthetic' } } }],
     ['zz_a8_unavailable', { job: 'agent:inbox/g.json' }, { tools }],

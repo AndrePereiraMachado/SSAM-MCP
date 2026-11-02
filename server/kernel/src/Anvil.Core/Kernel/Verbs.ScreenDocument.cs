@@ -41,26 +41,70 @@ public sealed partial class ModelSession
     private sealed record PreparedDocument(DocumentCompiler Compiler, Func<JsonObject> Finish, JsonArray Shells,
         List<JsonObject> Marked, List<string> FlowShells, DocumentOptions Options, string Html, HtmlJob? Job);
     private Dictionary<JsonObject, PreparedDocument>? _preparedDocuments;
+    // C-43: the action shells the Studio named otherwise (the root and the name the job gave -> the name the Studio gave).
+    private readonly Dictionary<(IObjectSignature Root, string Name), string> _shellRenamed = new();
     private Dictionary<JsonObject, Exception>? _documentDeclarationErrors;
     private bool _preparingDocuments;
+    // C-21: the ops this apply skipped so far (they use what a failed op would have created): their documents are never
+    // prepared, so nothing of them reaches the Verify.
+    private HashSet<int>? _notRun;
+
+    /// <summary>The exception data key a document refusal carries when its shell stayed (C-21): the root, its data, its
+    /// placeholders and the job's action shells are in the model, without the content.</summary>
+    internal const string ShellKeptKey = "anvil.document.shellKept";
 
     private void PrepareUiDeclarations()
     {
         if (_applyOps == null || _preparedDocuments != null || _espace.ESpaceType.ToString() is "WebResponsive" or "WebResponsiveLibrary") return;
         _preparedDocuments = new(); _documentDeclarationErrors = new(); _preparingDocuments = true;
         var current = _applyIndex;
+        // C-21: what the declarations of a document create is that document's op (its anchor), whichever op runs this phase:
+        // the Verify of a shell points at its own document, and a failure of the op running now never takes it as its own.
+        var (outerOp, outerJournal) = (_anchorOp, _anchorJournal.ToList());
         try
         {
             foreach (var candidate in _applyOps.OfType<JsonObject>().Where(ScreenDocument.IsDocumentOp))
             {
                 var position = _applyOps.IndexOf(candidate);
-                if (SkipOps?.Contains(position) == true) continue;
+                if (SkipOps?.Contains(position) == true || _notRun?.Contains(position) == true) continue;
                 _applyIndex = position;
+                _anchorOp = position; _anchorJournal.Clear();
                 try { HtmlDocument(candidate); }
                 catch (Exception error) { _documentDeclarationErrors[candidate] = error; }
             }
         }
-        finally { _preparingDocuments = false; _applyIndex = current; }
+        finally
+        {
+            _preparingDocuments = false; _applyIndex = current;
+            _anchorOp = outerOp; _anchorJournal.Clear(); _anchorJournal.AddRange(outerJournal);
+        }
+    }
+
+    /// <summary>C-21: a document op the apply skips (it uses what a failed op would have created) leaves nothing: what its
+    /// declarations made is removed, and the logic ops go back to what the job said.</summary>
+    private void DropPreparedDocument(JsonObject op)
+    {
+        if (_preparedDocuments == null || !_preparedDocuments.Remove(op, out var plan)) return;
+        plan.Compiler.Discard();
+        foreach (var declaration in plan.Marked) declaration.Remove("replace");
+        foreach (var key in plan.FlowShells) _flowShells.Remove(key);
+    }
+
+    /// <summary>C-21: the shell of a document whose content failed is a failure of its op: the Verify of what it kept (the
+    /// data, the action shells before a logic op fills them) is that failure again, never a problem of its own.</summary>
+    private void FailAnchorsOf(int op)
+    {
+        foreach (var (target, _) in _anchors.Where(a => a.Value == op).ToList())
+        {
+            _anchors.Remove(target); _creators.Remove(target); _failedAnchors[target] = op;
+        }
+    }
+
+    internal static bool ShellKept(Exception error)
+    {
+        for (Exception? e = error; e != null; e = e.InnerException)
+            if (e.Data.Contains(ShellKeptKey)) return true;
+        return false;
     }
 
     private void PrepareUiForLogic(JsonObject op)
@@ -306,20 +350,32 @@ public sealed partial class ModelSession
         var (compiler, finish, shells, marked, flowShells, options, html, job) = plan;
         var inJob = _applyOps != null && _applyIndex < _applyOps.Count && ReferenceEquals(_applyOps[_applyIndex], op);
         JsonObject report;
-        // A refused document leaves nothing behind: the apply goes on with the other ops and runs the Verify of what did
-        // apply, which must not judge half a page (an image whose name was wrong, a block without its block).
+        // C-21: a refused document keeps its shell (the root, its data, its placeholders and the job's action shells, what the
+        // declarations phase made) and loses its content: the apply goes on with the other ops, the logic texts fill the
+        // actions and the documents that use this root (a block instance, a navigation) compile, so one refusal says every
+        // problem of the job; the Verify never judges half a page (the content is gone, and what the shell holds is anchored to
+        // this failure).
         try { report = finish(); }
-        catch (KernelRefusalException refusal)
+        catch (Exception error)
         {
-            compiler.Discard();
-            // The logic ops go back to what the job said: with the shells gone, they create (and fail on the missing owner,
-            // skipped as dependents of this op) instead of replacing an action that is not there.
-            foreach (var declaration in marked) declaration.Remove("replace");
-            foreach (var key in flowShells) _flowShells.Remove(key);
+            var kept = compiler.KeepShell();
+            if (!kept)
+            {
+                // Nothing to keep (the root is gone): the logic ops go back to what the job said, they create (and fail on the
+                // missing owner, skipped as dependents of this op) instead of replacing an action that is not there.
+                foreach (var declaration in marked) declaration.Remove("replace");
+                foreach (var key in flowShells) _flowShells.Remove(key);
+            }
             // B4: a corrected document is offered only when it compiles (its expressions read by the Verify) with no problem but
-            // the ones nothing corrects.
-            if ((refusal.Data["correctedHtml"] is string || refusal.Data["correctedCss"] is string) && compiler.Problems.Count > 0)
-                throw CheckedDocumentRefusal([.. compiler.Problems], html, job, options.ReadKeys, options.Css);
+            // the ones nothing corrects; the kept shell is renamed out of the way of that compile and put back.
+            if (error is KernelRefusalException refusal && (refusal.Data["correctedHtml"] is string || refusal.Data["correctedCss"] is string) && compiler.Problems.Count > 0)
+            {
+                var problems = compiler.Problems.ToList();
+                var checkedRefusal = compiler.Aside(() => CheckedDocumentRefusal(problems, html, job, options.ReadKeys, options.Css));
+                if (kept) checkedRefusal.Data[ShellKeptKey] = true;
+                throw checkedRefusal;
+            }
+            if (kept) error.Data[ShellKeptKey] = true;
             throw;
         }
         if (shells.Count > 0) report["sameJobScreenActions"] = shells;
@@ -529,6 +585,9 @@ public sealed partial class ModelSession
         {
             if (root.Children.OfType<IObjectSignature>().Any(c => Implements(c, "IScreenAction") && string.Equals(TypeResolver.Name(c), action.Name, StringComparison.OrdinalIgnoreCase))) continue;
             var shell = (IObjectSignature)NewChild(root, "IScreenAction", action.Name);
+            // C-43 (F-Jesse-01): the Studio renames a screen action whose name an action of a referenced module takes
+            // (ToggleSideMenu of OutSystemsUI): the document's events would bind to that action. Kept to say it at the root.
+            if (TypeResolver.Name(shell) is { } given && !string.Equals(given, action.Name, StringComparison.Ordinal)) _shellRenamed[(root, action.Name)] = given;
             // A flow text writes its types as the reader does: a type this side does not read stays the Studio's until the
             // text sets it (FlowDiff writes the DataType that differs).
             void Typed(object parameter, string type)
@@ -649,6 +708,59 @@ public sealed partial class ModelSession
             RestoreTheme();
         }
 
+        /// <summary>C-21: what a refused compile keeps of its root: the root itself, its data (variables, inputs, aggregates),
+        /// its placeholders and the job's action shells, which other ops of the job name; the content (every widget the compile
+        /// wrote) goes, and the theme is put back. False when there is no root to keep (it is discarded).</summary>
+        public bool KeepShell()
+        {
+            if (root is not { WasDeleted: false })
+            {
+                Discard();
+                return false;
+            }
+            try
+            {
+                // A placeholder the content moved into a widget goes back to the root before that widget goes (C-50: the
+                // platform's move recreates it at the root, and that one is the placeholder the shell keeps).
+                foreach (var (node, placeholder) in declaredPlaceholders.Where(p => !p.Value.WasDeleted && !ReferenceEquals(p.Value.Parent, root)).ToList())
+                {
+                    s.Move(new JsonObject { ["target"] = "@" + placeholder.ObjectKey, ["into"] = "@" + root.ObjectKey });
+                    declaredPlaceholders[node] = AfterMove(placeholder);
+                }
+                var placeholders = declaredPlaceholders.Values.ToHashSet(ReferenceEqualityComparer.Instance);
+                foreach (var widget in root.Children.OfType<IObjectSignature>().Where(c => Is(c, "IWidget") && !placeholders.Contains(c)).ToList())
+                    widget.Delete();
+            }
+            catch (Exception)
+            {
+                // A shell that cannot be emptied is not kept half-built.
+                Discard();
+                return false;
+            }
+            RestoreTheme();
+            return true;
+        }
+
+        /// <summary>C-50: the object a move into another parent left in place of <paramref name="held"/> (the platform's move
+        /// recreates the object in the new parent and deletes the original); the same one after a reorder.</summary>
+        private static IObjectSignature AfterMove(IObjectSignature held)
+        {
+            var now = held;
+            for (var hops = 0; now.WasDeleted && hops < 8 && (now as ServiceStudio.Model.AbstractObject)?.TryGetReplacement() is IObjectSignature next; hops++) now = next;
+            return now;
+        }
+
+        /// <summary>Runs a check that compiles a document of the same name (the corrected document of a refusal) with the kept
+        /// root renamed out of its way, and puts the name back.</summary>
+        public T Aside<T>(Func<T> check)
+        {
+            if (root is not { WasDeleted: false } kept || FindProperty(kept, "Name") is not { CanWrite: true } name) return check();
+            var original = TypeResolver.Name(kept);
+            name.SetValue(kept, original + "_ShellAside");
+            try { return check(); }
+            finally { name.SetValue(kept, original); }
+        }
+
         // F5: the children of a root declared before the first op (its inputs and events, JobComposition.Signature) when this
         // compile fills it; null for a root this compile creates.
         private HashSet<IObjectSignature>? shell;
@@ -703,6 +815,17 @@ public sealed partial class ModelSession
                     Correct: native.Corrections.TryGetValue((line, column), out var set) ? new ScreenDocument.SetAttribute(set.Attribute, set.Value) : null));
             iconRules = native.Css;
             iconsConverted = native.Normalized.Any(n => n["code"]?.ToString() == ScreenHtmlNative.SvgMask);
+            // F8: a new <tr list> whose children are cells is the List of its row group (one row per record); an element of the
+            // reading keeps what it had (ScreenVisual.LiftRowLists).
+            var lifted = ScreenVisual.LiftRowLists(top, row => row.Get("k") is not { } own || options.ReadKeys?.ContainsKey(own) != true);
+            if (lifted.Count > 0)
+            {
+                var liftNote = new JsonObject { ["code"] = ScreenVisual.RowListLifted, ["element"] = "List", ["count"] = lifted.Count,
+                    ["lines"] = new JsonArray(lifted.Take(10).Select(l => (JsonNode)l.Row.Line).ToArray()),
+                    ["note"] = "a <tr list> whose children are cells is one row with the cells of every record (a List repeats its content inside its own element): written as <tbody list><tr>cells</tr></tbody>, one row per record" };
+                foreach (var l in lifted) ScreenVisual.SayLiftedClasses(liftNote, "line " + l.Row.Line.ToString(System.Globalization.CultureInfo.InvariantCulture), l.ClassDropped, l.ClassOnRow);
+                normalized.Add(liftNote);
+            }
             // The owner's rules and the keys of the reading, on every element, before the model is touched.
             foreach (var node in ScreenDocument.Descendants(document))
             {
@@ -714,11 +837,36 @@ public sealed partial class ModelSession
                 foreach (var p in ScreenDocument.RuleProblems(node, read, (attribute, value) => preserved.Add(new JsonObject { ["k"] = k, ["attribute"] = attribute, ["value"] = value, ["line"] = node.Line }),
                              read ? ReadNode(k!) : null, top.Tag == "block"))
                     problems.Add(p);
+                // S9 (review B1 round 2): a new <i> is an Icon, and an Icon needs its Icon (the Verify's RequiredPropertyValue_Property
+                // came one round after this refusal); a class fa-<name> says the name it meant. The property written as itself
+                // (os-Icon, :Icon) sets it too.
+                if (!read && node.Tag == "i" && !node.Attributes.Any(a => a.Value.Trim().Length > 0
+                        && System.Text.RegularExpressions.Regex.IsMatch(a.Key, "^(os-|:)?icon$", System.Text.RegularExpressions.RegexOptions.IgnoreCase)))
+                    Problem(ScreenDocument.Invalid, node, "<i> needs icon=\"<name>\": an Icon must be set (an <i> is an Icon; italic text is <em>)",
+                        "write icon=\"<name>\" on it" +((node.Get("class") ?? "").Split(' ', StringSplitOptions.RemoveEmptyEntries)
+                            .Select(c => System.Text.RegularExpressions.Regex.Match(c, @"^fa-([a-z][a-z0-9-]*)$")).FirstOrDefault(m => m.Success && !System.Text.RegularExpressions.Regex.IsMatch(m.Groups[1].Value, @"^(fw|lg|\dx|spin|pulse|border|inverse|stack.*|rotate.*|flip.*|pull.*|li|ul)$")) is { } fa
+                            ? $" (class fa-{fa.Groups[1].Value}: icon=\"{fa.Groups[1].Value}\")" : " (icon=\"home\")"));
             }
             // Where every <style> goes, the CSS the theme does not render, the bindings that are not bindings (the same checks
             // as the preflight, with the keys of the reading).
             problems.AddRange(ScreenDocument.FidelityProblems(top, options.Css, node => node.Get("k") is { } key && options.ReadKeys?.ContainsKey(key) == true));
-            reported = problems.Select(p => (p.Line, p.Column)).ToHashSet();
+            // C-44 (F-Jesse-02): a site property is the server's; an expression of a Reactive or Mobile page runs in the
+            // browser, where Site.X names nothing (ExpressionUnknownObject at the Verify, with the hint "qualify it (Site.)").
+            // A name of the document's own called Site (a variable, an input, an aggregate, the row of a list) is that element.
+            var ownSite = ScreenDocument.Descendants(document).Any(n => !n.IsText && (n.Tag is "var" or "input" or "aggregate" && n.Get("name") == "Site" || n.Get("as") == "Site"));
+            // An aggregate or a data action of the page runs on the server (its filter may read a site property), and so do its
+            // parts; a read element keeps what it has.
+            var serverSide = new HashSet<ScreenHtml.Node>(ReferenceEqualityComparer.Instance);
+            foreach (var data in ScreenDocument.Descendants(document).Where(n => !n.IsText && n.Tag is "aggregate" or "data-action"))
+                serverSide.UnionWith(ScreenDocument.Descendants(data));
+            foreach (var node in ownSite ? Enumerable.Empty<ScreenHtml.Node>() : ScreenDocument.Descendants(document))
+            {
+                if (node.IsText || node.Tag is "aggregate" or "data-action" || serverSide.Contains(node) || node.Get("k") is { } kept && options.ReadKeys?.ContainsKey(kept) == true) continue;
+                if (ClientExpressions(node).Select(t => SiteInClient.Match(QuotedText.Replace(t, "\"\""))).FirstOrDefault(m => m.Success) is { } site)
+                    Problem(ScreenDocument.SiteInClient, node, $"{site.Value} is a site property, which this module reads only on the server: an expression of a {top.Tag} runs in the browser, where it names nothing",
+                        $"read it in a data action of the page (data-actions=\"GetSettings\" and the logic text \"data action <Screen>.GetSettings\" with an output assigned from {site.Value}) and write {{{{ GetSettings.<Output> }}}}; or keep it in a client variable");
+            }
+            reported =problems.Select(p => (p.Line, p.Column)).ToHashSet();
             var name = top.Get("name") ?? "";
             // Without a name there is no root to compile into; the problems of the rules wait for the names of the compile
             // (one refusal with both).
@@ -785,6 +933,8 @@ public sealed partial class ModelSession
                 styles = styles.Select(b => b with { Css = ScreenHtmlNative.WidenIconSelectors(b.Css) }).ToList();
                 if (dataCss != null) dataCss = ScreenHtmlNative.WidenIconSelectors(dataCss);
             }
+            // C-05: the @import of the theme's part go first in this root's own sheet when the theme serves Theme Editor CSS first.
+            var themeImports = ThemeImportsToOwnSheet();
             ownSheet = ScreenDocument.OwnSheet(styles, dataCss);
             // R2-D: data.css is the whole sheet; the document's own <style> it replaced (another CSS) is said, never added to it.
             sheetBefore = ThemeCss.AuthorOf(root) ?? "";
@@ -798,6 +948,7 @@ public sealed partial class ModelSession
             }
             // The mask rules of the icons, after the document's CSS (each class once).
             if (iconRules.Count > 0) ownSheet = (ownSheet is { Length: > 0 } sheet ? sheet.TrimEnd('\r', '\n') + "\n" : "") + string.Join("\n", iconRules);
+            if (themeImports.Count > 0) ownSheet = WithImportsFirst(ownSheet, themeImports);
             // T18: the root's own sheet takes the one normalization before it is written, so what is compared after the compile
             // (PostChecks) is what was written; each rewrite is listed. An absolute url to an OutSystems environment host the
             // document brings (one the sheet did not have) is a problem of the document; an existing one is not.
@@ -847,7 +998,16 @@ public sealed partial class ModelSession
             var declared = options.DeclaredBy?.Invoke(root.GetInterface()?.Name ?? "", name) ?? [];
             foreach (var list in new[] { "actions", "data-actions" })
                 foreach (var action in (top.Get(list) ?? "").Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
-                    if (!root.Children.OfType<IObjectSignature>().Any(c => Role(c) == "action" && string.Equals(TypeResolver.Name(c), action, StringComparison.OrdinalIgnoreCase))
+                    if (s._shellRenamed.TryGetValue((root, action), out var renamed))
+                    {
+                        // C-43 (F-Jesse-01): the name is taken outside the screen; the events would run that other action. Said
+                        // once, here, with what holds the name (the events that name it say nothing more: Bind).
+                        var holders = index.Lookup(action, options.Exclude).Where(n => !ReferenceEquals(n.Node, root) && n.Node.Parent is IObjectSignature p && !ReferenceEquals(p, root))
+                            .Select(n => (n.Node.Parent is IObjectSignature p && TypeResolver.Name(p) is { Length: > 0 } producer ? producer + "." : "") + action + " (" + n.Kind + ")").Distinct().Take(3).ToList();
+                        Problem(ScreenDocument.ActionNameTaken, top, $"screen action '{action}' of {name}: the name is taken by {(holders.Count > 0 ? string.Join(", ", holders) : "another element in scope")}, so the Studio names the screen action '{renamed}' and every event that names '{action}' would run the other one",
+                            $"give the screen action another name (here, in actions=\"...\", in the events that name it, and in its logic text \"action {name}.{action}\"), e.g. {name}{action}");
+                    }
+                    else if (!root.Children.OfType<IObjectSignature>().Any(c => Role(c) == "action" && string.Equals(TypeResolver.Name(c), action, StringComparison.OrdinalIgnoreCase))
                         && !(list == "data-actions" && declared.Contains(action, StringComparer.OrdinalIgnoreCase)))
                         Problem(ScreenDocument.NameUnknown, top, $"{(list == "actions" ? "screen action" : "data action")} '{action}' is not declared",
                             $"declare it in a logic op of this job: a flow text \"action {name}.{action}\" (data action {name}.{action} for a data action), or kind \"screen\" with owner \"I{rootKind}:{name}\"; the document names actions, their bodies are logic");
@@ -896,12 +1056,32 @@ public sealed partial class ModelSession
             if (iconSelectors != null) report["iconTheme"] = iconSelectors;
             if (declaredChecked > 0) report["declaredPropertiesKept"] = declaredChecked;
             if (normalized.Count > 0) report["normalized"] = normalized.DeepClone();
+            if (tables.Count > 0) report["visual"] = new JsonObject { ["tables"] = tables.DeepClone() };   // F8: what each table List has
             return report;
             };
         }
 
         // ---- the names inside expressions ---------------------------------------------------------------------------------
         private static readonly System.Text.RegularExpressions.Regex Unidentified = new(@"Can't identify '([^']+)'", System.Text.RegularExpressions.RegexOptions.Compiled);
+        // C-44: Site.X in an expression (never a part of another name, never inside a text literal: those are blanked first).
+        private static readonly System.Text.RegularExpressions.Regex SiteInClient = new(@"(?<![\w.])Site\.[A-Za-z_]\w*", System.Text.RegularExpressions.RegexOptions.Compiled);
+        private static readonly System.Text.RegularExpressions.Regex QuotedText = new("\"(?:[^\"]|\"\")*\"", System.Text.RegularExpressions.RegexOptions.Compiled);
+        private static readonly System.Text.RegularExpressions.Regex Binding = new(@"\{\{(.*?)\}\}", System.Text.RegularExpressions.RegexOptions.Compiled | System.Text.RegularExpressions.RegexOptions.Singleline);
+
+        /// <summary>C-44: the expressions of an element of the page: the bindings {{ }} of its attributes and of its own text, and
+        /// the whole value of the attributes that hold one (if, list, bind, a block input :X, the arguments of an event). A plain
+        /// text attribute (title="Visit Site.Com") holds none.</summary>
+        private static IEnumerable<string> ClientExpressions(ScreenHtml.Node node)
+        {
+            foreach (var (name, value) in node.Attributes)
+            {
+                if (name is "class" or "style" or "name" or "k" or "id" || name.StartsWith("os-on", StringComparison.Ordinal)) continue;
+                if (value.Contains("{{", StringComparison.Ordinal)) { foreach (System.Text.RegularExpressions.Match b in Binding.Matches(value)) yield return b.Groups[1].Value; continue; }
+                if (name is "if" or "list" or "bind" || name.StartsWith(':') || name.StartsWith("on", StringComparison.Ordinal) || name.StartsWith('@')) yield return value;
+            }
+            foreach (var child in node.Children.Where(c => c.IsText && c.Text!.Contains("{{", StringComparison.Ordinal)))
+                foreach (System.Text.RegularExpressions.Match b in Binding.Matches(child.Text!)) yield return b.Groups[1].Value;
+        }
         // The word a syntax error names ("unexpected 'por' element"): the attribute that holds it is the one at fault.
         private static readonly System.Text.RegularExpressions.Regex Unexpected = new(@"unexpected '([^']+)'", System.Text.RegularExpressions.RegexOptions.Compiled | System.Text.RegularExpressions.RegexOptions.IgnoreCase);
 
@@ -1146,7 +1326,9 @@ public sealed partial class ModelSession
                 Dictionary<string, object?>? args = null;
                 if (kind == "AliasedSource")
                 {
-                    var entity = node.Get("os-Source") is { } src ? Reference(src, typeof(IObjectSignature), node, "os-Source", "entity") : null;
+                    // C-15: the source of a source is a data source (an entity, a static entity, a structure), seen from this
+                    // aggregate: the alias of another aggregate over the same entity (from="Stat" twice) is never it.
+                    var entity = node.Get("os-Source") is { } src ? Reference(src, typeof(OutSystems.Model.Logic.Aggregates.IDataSource), node, "os-Source", "entity", parent) : null;
                     if (entity == null) return;
                     args = new() { ["dataSource"] = entity };
                 }
@@ -1197,20 +1379,21 @@ public sealed partial class ModelSession
                 Attributes = node.Attributes.Where(a => a.Key is not ("from" or "join" or "where" or "sort")).ToList() };
             var combine = Part("os-CombineSourcesOperation");
             canonical.Children.Add(combine);
-            var sources = TopLevel(node.Get("from") ?? "", ',');
-            if (sources.Count == 0) { Problem(ScreenDocument.Invalid, node, "from=\"\" names no entity", "from=\"<Entity>\""); return null; }
-            static string Alias(string source) { var bare = source[(source.LastIndexOf(':') + 1)..]; return bare[(bare.LastIndexOf('.') + 1)..]; }
-            var joins = new List<(string Right, string Condition)>();
-            foreach (var join in TopLevel(node.Get("join") ?? "", ';'))
+            // C-26: the one parser of the short form (ScreenDocument.ParseAggregate): aliases, and the left side of each join
+            // declared (Left~Right) or the source its condition names (a chained join is joined to the source it reads).
+            var shape = ScreenDocument.ParseAggregate(node.Get("from"), node.Get("join"));
+            if (shape.Sources.Count == 0) { Problem(ScreenDocument.Invalid, node, "from=\"\" names no entity", "from=\"<Entity>\""); return null; }
+            if (shape.Problems.Count > 0)
             {
-                var on = System.Text.RegularExpressions.Regex.Match(join, @"^\s*(\S+)\s+on\s+(.+)$", System.Text.RegularExpressions.RegexOptions.Singleline | System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-                if (!on.Success) { Problem(ScreenDocument.Invalid, node, $"join=\"{Clip(join)}\" is not '<Entity> on <condition>'", "join=\"StatusPedido on Pedido.StatusPedidoId = StatusPedido.Id\""); return null; }
-                joins.Add((on.Groups[1].Value, on.Groups[2].Value.Trim()));
+                foreach (var problem in shape.Problems)
+                    Problem(ScreenDocument.Invalid, node, problem,
+                        "join=\"StatusPedido on Pedido.StatusPedidoId = StatusPedido.Id; Categoria on StatusPedido.CategoriaId = Categoria.Id\" (joins separated by ';', each reading its two sources: the left one is the source its condition reads, or Left~Right; a condition on a third source goes to where=)");
+                return null;
             }
-            foreach (var source in sources.Concat(joins.Select(j => j.Right)).Distinct(StringComparer.OrdinalIgnoreCase))
-                combine.Children.Add(Part("os-AliasedSource", ("name", Alias(source)), ("os-Source", source)));
-            foreach (var (right, condition) in joins)
-                combine.Children.Add(Part("os-Join", ("os-Condition", condition), ("os-LeftSource", "AliasedSource:" + Alias(sources[0])), ("os-RightSource", "AliasedSource:" + Alias(right))));
+            foreach (var source in shape.All.DistinctBy(x => x.Alias, StringComparer.OrdinalIgnoreCase))
+                combine.Children.Add(Part("os-AliasedSource", ("name", source.Alias), ("os-Source", source.Entity)));
+            foreach (var join in shape.Joins)
+                combine.Children.Add(Part("os-Join", ("os-Condition", join.Condition), ("os-LeftSource", "AliasedSource:" + join.Left), ("os-RightSource", "AliasedSource:" + join.Right)));
             if (node.Get("where") is { Length: > 0 } where) combine.Children.Add(Part("os-Filter", ("os-Condition", where)));
             foreach (var key in TopLevel(node.Get("sort") ?? "", ','))
             {
@@ -1364,6 +1547,8 @@ public sealed partial class ModelSession
                         else if (answer?["key"]?["after"]?.ToString() is { Length: > 0 } after && s.Resolve("@" + after) is IObjectSignature found) widget = found;
                     }
                     else s.Move(new JsonObject { ["target"] = "@" + widget.ObjectKey, ["last"] = true });
+                    // C-50: the shell of a refused compile (KeepShell) keeps the placeholder that is there now.
+                    declaredPlaceholders[node] = widget;
                 }
                 else widget = CreateIn(host, "I" + kind, name);
             }
@@ -1391,6 +1576,7 @@ public sealed partial class ModelSession
             written.UnionWith(Facts(widget, kind, node, ScreenHtmlModuleMode.Widget, ScreenDocument.WidgetSkip(node, kind)));
             var table = kind == "TableRecords" ? ScreenHtmlTables.NativeTable(node) : null;
             if (table != null) TableFacts(widget, table, written);
+            ListMode(widget, kind, node, tagText, written);   // F8: a List renders its Tag only in Mode Custom
             // A block that did not resolve has no inputs, events or placeholders: its name is the one problem, and what its
             // slots hold is still compiled (every name of the document is checked in the same refusal).
             var lost = kind == "MobileBlockInstanceWidget" && PrototypeBuilder.Prop(widget, "SourceBlock") == null;
@@ -1543,6 +1729,17 @@ public sealed partial class ModelSession
                 // CX17 review 3, M6: a marker of the engine in the text is never written as it is: NativeVisual decides it on the
                 // widget (and says when its decision is not the text's); one the reading did not have is refused (review 2, M4).
                 if (mode == ScreenHtmlModuleMode.Widget && ScreenVisual.MarkerOf(attribute) != null && DecidesMarkers(node)) continue;
+                // C-23: the href the normalization left on a new Link (LINK_HREF_REWRITTEN writes a URL as its On Click) is no
+                // property: the runtime drops it. Refused with its fix (the patch when it is certain), never written as an
+                // attribute. What a read element already has stays as it was (an extended property).
+                if (mode == ScreenHtmlModuleMode.Widget && kind == "Link" && attribute == "href" && Preflight.ExternalLinks.Of(value) != Preflight.ExternalLinks.Form.Script && !Read(node))
+                {
+                    var onclick = node.Get("onclick") != null;
+                    problems.Add(new(Preflight.ExternalLinks.Unsupported, node.Line, node.Column, Preflight.ExternalLinks.Message(value, onclick),
+                        Preflight.ExternalLinks.Fix(value, onclick, false, Preflight.ExternalLinks.ReactiveSite),
+                        Correct: onclick ? new ScreenDocument.RemoveAttribute("href") : null));
+                    continue;
+                }
                 // An extended property (ext:<name>, or on a widget an attribute no table names): the rule the preflight checks the
                 // bindings of (ScreenDocument.ExtendedName), so a brace pair that is no binding is in its refusal already.
                 if (ScreenDocument.ExtendedName(attribute, reverse, mode == ScreenHtmlModuleMode.Widget) is { } extended) { Extended(target, extended, value, node, attribute); continue; }
@@ -1683,7 +1880,7 @@ public sealed partial class ModelSession
                 }
                 if (SafeGet(pi, target) is { } current && CollectionOf(current) is { } element && t != typeof(string))
                 {
-                    var wanted = raw.Length == 0 ? [] : raw.Split(", ").Select(v => Reference(v, element, at, attribute, property)).ToList();
+                    var wanted = raw.Length == 0 ? [] : raw.Split(", ").Select(v => Reference(v, element, at, attribute, property, target)).ToList();
                     if (wanted.Any(w => w == null)) return;
                     var type = typeof(ICollection<>).MakeGenericType(element);
                     var items = ((IEnumerable)current).Cast<object>().ToList();
@@ -1694,6 +1891,9 @@ public sealed partial class ModelSession
                     var live = SafeGet(pi, target) is { } again && CollectionOf(again) != null ? again : current;
                     var now = ((IEnumerable)live).Cast<object>().ToList();
                     foreach (var item in wanted.Where(w => !now.Contains(w!))) type.GetMethod("Add")!.Invoke(live, [item]);
+                    // C-11 (C08): roles="Anonymous" is the author's declared intent, as a raw set Roles is (Verbs.cs): the anonymous-
+                    // access warning family of this screen (a server action it calls) is tolerated, never a refusal per node.
+                    if (property == "Roles" && wanted.Any(w => AnonymousIntent.IsAnonymousRole(TypeResolver.Name(w)))) s.DeclareAnonymous(target);
                     return;
                 }
                 object? value;
@@ -1702,6 +1902,22 @@ public sealed partial class ModelSession
                 else if (t.IsEnum)
                 {
                     var text = ScreenHtmlTables.ModelValue(kind, property, raw);
+                    // C-41 (F-FitBody-04b): the input type of an input bound to a variable or input of this document follows its
+                    // data type (the Studio refuses an Email input of a Text variable: Input Type Mismatch, only at the Verify);
+                    // the rule of the importer (HtmlVisual.InputTypeOf, AcceptsInputType). A read element keeps what it has.
+                    if (kind == "Input" && property == "InputType" && !Read(at) && BoundDataType(at) is { } bound && HtmlVisual.InputTypeOf(bound.Type) is { } implied
+                        && !HtmlVisual.AcceptsInputType(text, implied))
+                    {
+                        // A value that is no InputType at all is judged here too: the bound type decides it the same way and the patch
+                        // is as certain; the message says it is none, never a mismatch the Studio would report.
+                        var known = Enum.GetNames(t).Contains(text, StringComparer.OrdinalIgnoreCase);
+                        problems.Add(new(ScreenDocument.InputTypeMismatch, at.Line, at.Column,
+                            $"{attribute}=\"{raw}\" on an input bound to {bound.Name} ({bound.Type}): the input type of a {bound.Type} is {implied} "
+                            + (known ? $"(the Studio refuses {text}: Input Type Mismatch)" : $"({raw} is no input type; values: {string.Join(", ", Enum.GetNames(t))})"),
+                            $"the patch leaves {attribute} out (the bound data type decides); or declare {bound.Name} with the data type of a {raw} input (Email, Phone Number, a number, a date)",
+                            Correct: new ScreenDocument.RemoveAttribute(attribute)));
+                        return;
+                    }
                     if (!Enum.GetNames(t).Contains(text, StringComparer.OrdinalIgnoreCase))
                     {
                         var near = ScreenDocument.Nearest(text, Enum.GetNames(t));
@@ -1715,12 +1931,14 @@ public sealed partial class ModelSession
                 else if (t.IsInterface || typeof(OutSystems.Model.Types.ITypeSignature).IsAssignableFrom(t))
                 {
                     if (raw.Length == 0) value = null;
-                    else { value = Reference(raw, t, at, attribute, property); if (value == null) return; }
+                    else { value = Reference(raw, t, at, attribute, property, target); if (value == null) return; }
                 }
                 else value = System.Convert.ChangeType(raw, t, CultureInfo.InvariantCulture);
                 assignedFact = FactText(value);
                 if (pi.CanWrite) pi.SetValue(target, value);
                 else setter!.Invoke(target, [value]);
+                // C-11 (C08): os-AnonymousAccess="True" (ODC) is the same declared intent as roles="Anonymous".
+                if (property == "AnonymousAccess" && AnonymousIntent.Opens(value)) s.DeclareAnonymous(target);
                 // T18: the own stylesheet of a screen or block (its <style>) settles through the one normalization too (already
                 // normalized by the compile, so this writes nothing more: what PostChecks compares is what is stored).
                 if (property == "StyleSheet" && ThemeCss.Of(target) is { } sheet)
@@ -1820,9 +2038,12 @@ public sealed partial class ModelSession
         // ---- references: the reading's names ------------------------------------------------------------------------------
         /// <summary>The element a name of the document points at, by the reading's rules: @key; this root's own elements;
         /// the module, its references and the other roots, nearest tier first; a type. Unknown or ambiguous is a problem
-        /// with the nearest names of the same kind (null answer).</summary>
-        private object? Reference(string form, Type expected, ScreenHtml.Node at, string attribute, string what) { var t = Stopwatch.GetTimestamp(); try { return ReferenceCore(form, expected, at, attribute, what); } finally { Spent("Reference", t); } }
-        private object? ReferenceCore(string form, Type expected, ScreenHtml.Node at, string attribute, string what)
+        /// with the nearest names of the same kind (null answer). C-15 (F-FigmaReactive-03, F-FigmaMobile-04, F-FitBody-37): an
+        /// element inside an aggregate (a source, a join) is a name of that aggregate only, seen from <paramref name="scope"/>
+        /// (the element whose property is written): the second aggregate over the same entity (from="Stat" twice) took the alias
+        /// of the first as its source.</summary>
+        private object? Reference(string form, Type expected, ScreenHtml.Node at, string attribute, string what, IObjectSignature? scope = null) { var t = Stopwatch.GetTimestamp(); try { return ReferenceCore(form, expected, at, attribute, what, scope); } finally { Spent("Reference", t); } }
+        private object? ReferenceCore(string form, Type expected, ScreenHtml.Node at, string attribute, string what, IObjectSignature? scope)
         {
             if (attribute == "for" && widgetsById.TryGetValue(form, out var authored))
             {
@@ -1858,7 +2079,7 @@ public sealed partial class ModelSession
             // link of a screen to itself). An element of the root of another kind (an output parameter named like the screen an
             // event opens) no longer hides the elements of the outer tiers that fit.
             var destination = what == "destination";
-            var named = Own(form).Select(n => DocumentCandidate(n, 0, destination)).ToList();
+            var named = Own(form).Where(n => VisibleFrom(n, scope)).Select(n => DocumentCandidate(n, 0, destination)).ToList();
             foreach (var (node, _, tier) in index.Lookup(form, options.Exclude)) named.Add(DocumentCandidate(node, tier, destination));
             if (Root(form)) named.Add(DocumentCandidate(root, 3, destination));
             var answer = NameResolution.Resolve(name, named, new NameSlot(Wanted(expected), c => c.Element is IObjectSignature n && expected.IsInstanceOfType(n) && FitsReference(n, what)));
@@ -1984,6 +2205,15 @@ public sealed partial class ModelSession
             return false;
         }
 
+        // C-15: an element of the root inside an aggregate (a source, a join, a filter) is a name of that aggregate only: seen
+        // from inside it (scope), never from another aggregate or the page. The aggregate itself is a name of the page.
+        private bool VisibleFrom(IObjectSignature node, IObjectSignature? scope)
+        {
+            for (var o = node.Parent as IObjectSignature; o != null && !ReferenceEquals(o, root); o = o.Parent as IObjectSignature)
+                if (Role(o) == "aggregate") return Inside(scope, o);
+            return true;
+        }
+
         // Tier 0: the root's own elements (never the root itself; the body of an action is not walked), by name, Kind:Name,
         // Owner.Name, Kind:Owner.Name.
         private void Changed() => version++;
@@ -2090,7 +2320,7 @@ public sealed partial class ModelSession
                     written.Add(property);
                     if (problems.Count == problemsBefore) Declared(target, eventKind, property, v, node, name);
                 }
-                Reset(target, eventKind, written, InPopup(element));
+                Reset(target, eventKind, written, InPopup(element), InForm(element, kind));
             }
         }
 
@@ -2150,8 +2380,36 @@ public sealed partial class ModelSession
             if (name.Length == 0) return;
             var property = FindProperty(target, "Destination") is { } d ? d : FindProperty(target, "Handler");
             if (property == null) { Problem(ScreenDocument.Invalid, node, $"{head}: the event has no Destination"); return; }
+            // C-43: an event that names a screen action of this root the Studio renamed is said once, at the root.
+            if (s._shellRenamed.ContainsKey((root, name))) return;
             var destination = Reference(name, property.PropertyType, node, head, "destination");
             if (destination == null) return;
+            // C-34 (F-FigmaMobile-05, -07): the event of a container or an HTML element runs a screen action (its Handler); the
+            // screen the name resolves to there (by kind first, the resolver of every form) was the platform's raw "IMobileScreen
+            // cannot be used as the value for the IEvent.Handler property", five rounds. A Link opens a screen: a container is
+            // written as the <a> (its content kept); an element that is itself the widget (an image, an icon, an input: nothing
+            // inside it to keep) goes inside an <a> that takes its onclick, its other attributes kept (review B1 round 3: the
+            // rename made an <img> an empty Link). The fix says the correction, never a patch the check may still drop.
+            if (property.Name == "Handler" && destination is IObjectSignature screen && (Is(screen, "IMobileScreen") || Is(screen, "IWebScreen")))
+            {
+                // S8 (review B1 round 2): already inside a Link (the widget, or its placeholder, is the content of an ILink), the
+                // Link takes the click: the element only loses its event, never a second Link around it.
+                var widget = target.Parent as IObjectSignature;
+                var inLink = widget?.Parent is IObjectSignature up && (Is(up, "ILink") || up.Parent is IObjectSignature upper && Is(upper, "ILink"));
+                ScreenDocument.Correction? correction = node.Tag is "div" or "span" or "section" or "li" or "p" && !inLink ? new ScreenDocument.RenameTag("a")
+                    : head == "onclick" && node.Tag is not ("a" or "button") ? new ScreenDocument.WrapIn("a", head, inLink) : null;
+                var how = correction switch {
+                    ScreenDocument.RenameTag => "write the element as <a> (a Link opens a screen; its attributes and content kept); or ",
+                    ScreenDocument.WrapIn { Drop: true } => $"remove {head} from the element: it is already inside an <a> that takes the click (a Link opens a screen); or ",
+                    ScreenDocument.WrapIn => $"write the element inside an <a> that takes the event (<a {head}=\"{name}\"><{node.Tag} .../></a>: a Link opens a screen; the element keeps its other attributes); or ",
+                    _ => "",
+                };
+                problems.Add(new(ScreenDocument.EventOpensScreen, node.Line, node.Column,
+                    $"{head}=\"{name}\" on <{node.Tag}> opens the screen {name}: the event of a {ShortType(target.Parent as IObjectSignature ?? target)} runs a screen action, never a screen",
+                    how + $"declare a screen action that navigates (`action <Screen>.Go{name}` with `navigate {name}()`) and name it",
+                    Correct: correction));
+                return;
+            }
             try { property.SetValue(target, destination); }
             catch (Exception error) { Problem(ScreenDocument.Invalid, node, $"{head}=\"{name}\": {Unwrap(error)}"); return; }
             if (arguments.Count == 0) return;
@@ -2166,6 +2424,18 @@ public sealed partial class ModelSession
                 Problem(ScreenDocument.NameUnknown, node, $"{head}: {name} has no input '{param}'; inputs: {string.Join(", ", inputs)}", near.Count == 1 ? $"{near[0]} = {value}" : null, near,
                     near.Count == 1 ? (head, param, near[0]) : null);
             }
+        }
+
+        /// <summary>C-41: the variable or input of this document an input's bind names (its whole value is that name), with its
+        /// declared type; null for anything else (an aggregate's attribute, a module variable: the Verify judges those).</summary>
+        private (string Name, string Type)? BoundDataType(ScreenHtml.Node input)
+        {
+            if (input.Get("bind")?.Trim() is not { Length: > 0 } bind || !ScreenHtml.IsIdentifier(bind)) return null;
+            foreach (var node in ScreenDocument.Descendants(document))
+                if (node.Tag is "var" or "input" && ScreenDocument.DataElement(node) && string.Equals(node.Get("name"), bind, StringComparison.OrdinalIgnoreCase)
+                    && node.Get("type") is { Length: > 0 } type)
+                    return (bind, type.Trim());
+            return null;
         }
 
         private static List<string> Inputs(object destination) =>
@@ -2187,9 +2457,10 @@ public sealed partial class ModelSession
         /// the owner's decision D1 of 2026-10-17 (F2): the class of a new widget without k and without class is the one the
         /// Studio gives it, or its trimmed form (ScreenVisual.StudioClassOf, decided in NativeVisual before this runs, which puts
         /// Style in <paramref name="written"/>), as in the edit forms and the fragment; the class of an element with k is the
-        /// one its text says.</summary>
-        private void Reset(IObjectSignature element, string kind, HashSet<string> written, bool inPopup = false) { var t = Stopwatch.GetTimestamp(); try { ResetCore(element, kind, written, inPopup); } finally { Spent("Reset", t); } }
-        private void ResetCore(IObjectSignature element, string kind, HashSet<string> written, bool inPopup)
+        /// one its text says. Where the element sits decides some defaults: inside a Popup the Popup's (<paramref name="inPopup"/>),
+        /// the click of a Button or a Link inside a Form validates it (<paramref name="inForm"/>, C-02: ScreenDefaults.FormDefault).</summary>
+        private void Reset(IObjectSignature element, string kind, HashSet<string> written, bool inPopup = false, bool inForm = false) { var t = Stopwatch.GetTimestamp(); try { ResetCore(element, kind, written, inPopup, inForm); } finally { Spent("Reset", t); } }
+        private void ResetCore(IObjectSignature element, string kind, HashSet<string> written, bool inPopup, bool inForm)
         {
             if (element.WasDeleted) return;
             var role = Role(element);
@@ -2225,7 +2496,7 @@ public sealed partial class ModelSession
                 }
                 // A text Style that repeats StyleClasses (or is empty) is not a fact of the reading: the two are kept together.
                 if (name == "Style" && type == 't' && (FindProperty(element, "StyleClasses") is { } classes ? Text(SafeGet(classes, element)) == text : text.Length == 0)) continue;
-                var wanted = defaults.DefaultOf(kind, name, type, inPopup);
+                var wanted = defaults.DefaultOf(kind, name, type, inPopup, inForm);
                 if (text == wanted) continue;
                 // The platform keeps some properties as one (ODC: Shareable is Public). What the document wrote is read before the
                 // first default goes in, so a default never undoes it.

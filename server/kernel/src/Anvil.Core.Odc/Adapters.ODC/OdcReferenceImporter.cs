@@ -17,6 +17,10 @@ public static class OdcReferenceImporter
         // form is an ODC public signature.
         if (!snapshot.IsOdcPublicSignature) throw new NotSupportedException("ODC dependencies require a version 2 public module, External Library or AI model signature; export it with studio reference-snapshot.");
         if (elements.Count == 0) throw new ArgumentException("reference: select at least one public element");
+        // A library references only libraries: an app's Service Action, Structure, Entity or any other element is refused
+        // here, for both library kinds, before any model change (the native import fails without a word).
+        if (OdcModuleKinds.LibraryReferencesApp(((IESpace)target).Kind, target.Name, snapshot.ModuleType, snapshot.Name, elements) is { } refusal)
+            throw new NotSupportedException(refusal);
         var key = Keys.Parse(snapshot.ModuleKey);
         if (target.Key.Equals(key)) throw new ArgumentException("A module cannot reference itself");
         var existing = target.References.SingleOrDefault(r => r.ReferenceKey.Equals(key));

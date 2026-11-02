@@ -182,6 +182,97 @@ public static class ReferenceClosure
         return changed;
     }
 
+    /// <summary>F9: whether the C15 signature preview has anything to check. Its plan (ReferenceSignatureMerge.Analyze of the
+    /// base, the candidate and the base again) holds a change only for a producer key the base and the candidate both
+    /// reference whose ReferenceHash moved, and a conflict only where that key has more than one reference on either side; a
+    /// reference the candidate adds is not part of it. True when every key the two share has one reference on each side at the
+    /// same hash: the preview would answer changes 0, accepted, so it need not load the three models.</summary>
+    public static bool SignaturesUnchanged(IReadOnlyList<ModuleReferenceEntry> basis, IReadOnlyList<ModuleReferenceEntry> candidate)
+    {
+        var bases = basis.GroupBy(r => r.ProducerKey, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.ToArray(), StringComparer.Ordinal);
+        foreach (var group in candidate.GroupBy(r => r.ProducerKey, StringComparer.Ordinal))
+        {
+            if (!bases.TryGetValue(group.Key, out var originals)) continue;
+            var proposed = group.ToArray();
+            if (originals.Length != 1 || proposed.Length != 1 || !SameHash(originals[0].Hash, proposed[0].Hash)) return false;
+        }
+        return true;
+    }
+
+    /// <summary>F9: one producer the delivery would bring to its published signature with the Studio's own Manage Dependencies
+    /// (or Refresh References) before the merge: its binding, key, the hash of its attested capture (or bound signature), the
+    /// hash the server advertises, the elements the job's reference ops add, and the elements of the producer's capture
+    /// ({type, name, path, originalKey}: ProducerSignatureCapture), which resolve each job element to its original key.</summary>
+    public sealed record AlignmentTarget(string Binding, string? Key, string? Hash, string? PublishedHash, IReadOnlyList<string> Elements,
+        JsonArray? CapturedElements = null);
+
+    /// <summary>B7 review (round 2): the original key of a job element, for the decision to skip the Studio's alignment: Type:@key
+    /// or @key as written; otherwise the one element of the producer's capture with that type (when the job names one) and that
+    /// name, or that qualified path (Flow\Name, Flow/Name) when the job qualifies it. Null when it does not resolve to exactly one
+    /// element: a name alone never proves the module holds the same element (another kind, or the same name in another flow).</summary>
+    public static string? ElementKey(string element, JsonArray? captured)
+    {
+        var colon = element.IndexOf(':');
+        var type = colon > 0 ? element[..colon] : null;
+        var tail = colon >= 0 ? element[(colon + 1)..] : element;
+        if (tail.StartsWith('@'))
+        {
+            if (tail.Length <= 1) return null;
+            var key = tail[1..];
+            // Review S6: Type:@key holds only when the capture's element of that key has that type; a type the delivery cannot
+            // check against a capture (none, or no element of that key) resolves to nothing, and the Studio runs.
+            if (type == null) return key;
+            return captured?.OfType<JsonObject>().Any(e => string.Equals(e["originalKey"]?.ToString(), key, StringComparison.Ordinal)
+                && string.Equals(e["type"]?.ToString(), type, StringComparison.OrdinalIgnoreCase)) == true ? key : null;
+        }
+        if (captured == null || tail.Length == 0) return null;
+        static string Slashes(string text) => text.Replace('\\', '/');
+        var qualified = tail.Contains('\\') || tail.Contains('/');
+        var matches = captured.OfType<JsonObject>().Where(e =>
+        {
+            if (type != null && !string.Equals(e["type"]?.ToString(), type, StringComparison.OrdinalIgnoreCase)) return false;
+            return qualified ? string.Equals(Slashes(e["path"]?.ToString() ?? ""), Slashes(tail), StringComparison.OrdinalIgnoreCase)
+                : string.Equals(e["name"]?.ToString(), tail, StringComparison.OrdinalIgnoreCase);
+        }).Select(e => e["originalKey"]?.ToString()).Where(k => !string.IsNullOrEmpty(k)).Distinct(StringComparer.Ordinal).ToList();
+        return matches.Count == 1 ? matches[0] : null;
+    }
+
+    /// <summary>F9 + R5 (add-references only when the job needs something the base does not have): the Studio's alignment before
+    /// the merge would change nothing when the module, as captured now, already references every producer of the alignment by
+    /// its key, at the hash of its attested capture (and the hash the server advertises, when known), with every element the
+    /// job's reference ops name. Aligned is true only when that holds for every target (an unknown key or hash decides
+    /// nothing: the Studio runs). Each target is reported with the module's hash and why.</summary>
+    public static (bool Aligned, JsonArray Report) AlignedInModule(IReadOnlyList<AlignmentTarget> targets, IReadOnlyList<ModuleReferenceEntry> module,
+        Func<string, string, bool>? sameKey = null)
+    {
+        var same = sameKey ?? OrdinalKey;
+        var report = new JsonArray(); var aligned = targets.Count > 0;
+        foreach (var target in targets)
+        {
+            var reference = target.Key is { Length: > 0 } key ? module.FirstOrDefault(r => r.ProducerKey.Length > 0 && same(r.ProducerKey, key)) : null;
+            // B7 review (round 2): an element counts as held only by its original key (ElementKey), never by its name alone.
+            var unresolved = target.Elements.Where(e => ElementKey(e, target.CapturedElements) == null).ToList();
+            var missing = reference == null ? target.Elements.ToList()
+                : target.Elements.Where(e => ElementKey(e, target.CapturedElements) is not { } k || !reference.Exports.Any(x => x.Key.Length > 0 && same(x.Key, k))).ToList();
+            string? why;
+            if (target.Key is not { Length: > 0 } || string.IsNullOrWhiteSpace(target.Hash)) why = "the delivery knows no key or signature hash of " + target.Binding + ": the Studio aligns it";
+            else if (reference == null) why = "the module does not reference " + target.Binding + " yet: the Studio adds it";
+            else if (!SameHash(reference.Hash, target.Hash)) why = "the module references " + target.Binding + " at " + reference.Hash + ", its attested capture is " + target.Hash + ": the Studio brings it to the published signature";
+            else if (!string.IsNullOrWhiteSpace(target.PublishedHash) && !SameHash(reference.Hash, target.PublishedHash)) why = "the server advertises " + target.PublishedHash + " for " + target.Binding + ": the Studio brings it to the published signature";
+            // Review S1: two references of the same producer key are what the C15 preview refuses (ambiguous-producer); the
+            // Studio's alignment may settle them, so it runs.
+            else if (module.Count(r => r.ProducerKey.Length > 0 && same(r.ProducerKey, target.Key!)) > 1) why = "the module references " + target.Binding + " more than once: the Studio aligns it";
+            else if (unresolved.Count > 0) why = "the delivery cannot resolve " + string.Join(", ", unresolved) + " of " + target.Binding + " to one element of its capture (by type, name or path): the Studio adds them";
+            else if (missing.Count > 0) why = "the module's reference of " + target.Binding + " lacks " + string.Join(", ", missing) + ": the Studio adds them";
+            else why = null;
+            var ok = why == null;
+            aligned &= ok;
+            report.Add(new JsonObject { ["producer"] = target.Binding, ["key"] = target.Key, ["moduleHash"] = reference?.Hash, ["capturedHash"] = target.Hash,
+                ["aligned"] = ok, ["why"] = why ?? "the module already references " + target.Binding + " at its published signature with every element the job names" });
+        }
+        return (aligned, report);
+    }
+
     /// <summary>Before the merge: the candidate holds every producer the job names (when its key is known), at the published
     /// signature of its capture; and no reference of the base changed its signature unless its producer is named by the job
     /// or is an owner the delivery needed (<paramref name="mayChange"/>): any other change is collateral (R5) and would send

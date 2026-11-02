@@ -14,16 +14,18 @@ namespace Anvil.Tests.Odc;
 public class OdcServiceActionReferenceTests
 {
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public void PublicServiceSignatureImportsItsContractAndBuildsARemoteCall(bool externalTypes)
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public void PublicServiceSignatureImportsItsContractAndBuildsARemoteCall(bool externalTypes, bool libraryConsumer)
     {
         StudioAssembliesOdc.Bind();
-        Run(externalTypes);
+        Run(externalTypes, libraryConsumer);
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
-    private static void Run(bool externalTypes)
+    private static void Run(bool externalTypes, bool libraryConsumer)
     {
         var work = Path.Combine(Path.GetTempPath(), "svc-ref", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(work);
@@ -83,11 +85,19 @@ public class OdcServiceActionReferenceTests
         Assert.Throws<ArgumentException>(() => snapshot.Select("ServerAction:Echo"));
         Assert.Throws<ArgumentException>(() => snapshot.Select("ServiceAction:echo"));
 
-        using var consumer = Loader.ModelServicesInstance.CreateESpace(SegmentationKind.CrossDevice, "ServiceConsumer",
+        using var consumer = Loader.ModelServicesInstance.CreateESpace(libraryConsumer ? SegmentationKind.ReactiveLibrary : SegmentationKind.CrossDevice, "ServiceConsumer",
             targetPlatform: PlatformServerVersion.Neo, enableTransactions: true);
         var target = (ESpace)consumer;
         var basePath = Path.Combine(work, "base.oml");
         File.WriteAllBytes(basePath, consumer.Save());
+        if (libraryConsumer) {
+            var before = Capture(target);
+            var error = Assert.Throws<NotSupportedException>(() => OdcReferenceImporter.Import(target, snapshot, [selected]));
+            Assert.Contains("can reference only Libraries and External Libraries:", error.Message);
+            Assert.DoesNotContain("AI model", error.Message);
+            Assert.Equal(before, Capture(target));
+            return;
+        }
         if (contracts != null) {
             var beforeMissingOwner = Capture(target);
             Assert.ThrowsAny<Exception>(() => OdcReferenceImporter.Import(target, snapshot, [selected]));

@@ -12,6 +12,8 @@ import { anvilRoot } from './workspace.mjs';
 
 export const NONBLOCKING = 'nonblocking';
 export const HIGH = 'high';
+// A kernel warning of the receipt's highWarnings the kernel calls medium (review of W3-CSS, S2).
+export const MEDIUM = 'medium';
 export const WARNINGS_MAX = 20;
 export const UNUSED_FIX = 'Remove the element or use it.';
 
@@ -92,9 +94,13 @@ export function warningOf(entry, hints = {}) {
   // A HIGH warning of the data-access rules (QUERY_IN_LOOP legacy/allowed, AGGREGATES_MERGEABLE) keeps its severity, op,
   // suggestion and why, and a longer detail.
   const high = entry.severity === HIGH;
+  // Review of W3-CSS (S2): a kernel warning the kernel itself calls medium (CSS_TARGET_UNSERVED of a theme the job creates or a
+  // block no page places) keeps that severity and its op: a warning of the answer, never one of its HIGH warnings.
+  const medium = entry.severity === MEDIUM;
   const warning = { id, path: shortText(entry.path ?? ''), ...(typeof key === 'string' && key ? { key: shortKey(key) } : {}), detail: oneLine(shortText(entry.detail), high ? 400 : 200),
     fix: entry.fix === undefined ? fixOf(id, hints) : entry.fix,
-    ...(high ? { severity: HIGH, ...Object.fromEntries(['op', 'suggestion', 'why', 'elements'].filter(k => entry[k] != null).map(k => [k, entry[k]])) } : {}) };
+    ...(high ? { severity: HIGH, ...Object.fromEntries(['op', 'suggestion', 'why', 'elements'].filter(k => entry[k] != null).map(k => [k, entry[k]])) } : {}),
+    ...(medium ? { severity: MEDIUM, ...(entry.op != null ? { op: entry.op } : {}) } : {}) };
   if (typeof entry.ownerKey === 'string' && entry.ownerKey) ownerOf.set(warning, entry.ownerKey);
   return warning;
 }
@@ -104,7 +110,7 @@ export function warningOf(entry, hints = {}) {
 // suggestion?, why?}.
 export function highWarningsOf(list) {
   return (Array.isArray(list) ? list : []).filter(isObject).map(w => warningOf({
-    id: w.code ?? w.id, severity: HIGH, path: w.path ?? [w.flow ?? w.owner, w.loop, w.query].filter(Boolean).join(' / '),
+    id: w.code ?? w.id, severity: w.severity === MEDIUM ? MEDIUM : HIGH, path: w.path ?? [w.flow ?? w.owner, w.loop, w.query].filter(Boolean).join(' / '),
     detail: w.message ?? w.detail, fix: w.fix ?? null, op: w.op, suggestion: w.suggestion, why: w.why, elements: w.elements })).filter(Boolean);
 }
 

@@ -16,7 +16,7 @@
 // packet then keeps those capabilities as a line and their JSON example by reference (work-packet.mjs).
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { classifyTextRoute, WIRED } from './text-routes.mjs';
+import { classifyTextRoute, textFamiliesOf, WIRED } from './text-routes.mjs';
 import { traditionalText } from './traditional-text.mjs';
 import { ENTITY_ACTIONS_CARD, ENTITY_ACTIONS_OP, offered } from './generators.mjs';
 
@@ -78,7 +78,7 @@ const GRAMMAR = {
   ],
   'ssam-html/1': () => [
     '<screen name="<Screen>" [roles="<Role>"] [actions="<A>, <B>"] [data-actions="<D>"]> ... </screen>   or   <block name="<Block>"> ... </block>',
-    '<input name type default/> (screen input), <var name type default/>, <aggregate name from="<Entity>" [join="<Other> on <condition>" (a left join)] [where="<condition>"] [sort="<Entity>.<Attr> desc"] max="50"/>; <event name/> in a block; an <input> or <event> without mandatory is optional, mandatory="True" makes it mandatory',
+    '<input name type default/> (screen input), <var name type default/>, <aggregate name from="<Entity>" [join="<Other> on <condition>" (a left join; several separated by ";", each reading its two sources: a chained one hangs on the source its condition reads, or Left~Right)] [where="<condition>"] [sort="<Entity>.<Attr> desc"] max="50"/>; <event name/> in a block; an <input> or <event> without mandatory is optional, mandatory="True" makes it mandatory',
     'content inside the layout block: <Block name="LayoutTopMenu"><slot name="Title">...</slot><slot name="MainContent">...</slot></Block>',
     'widgets: div, form, a, button, input, textarea, select, switch, label, img, i, upload, popup; <div list="<Source>"> repeats with <Source>.Current; <div if="<condition>"> + <div else>; {{ <expression> }}; os-<Property>="<value>"',
     'events: onclick="<Action>(<Param> = <expression>)"; each screen action named in actions="..." is declared by a flow text "action <Screen>.<Name>" in a logic op after the html op',
@@ -179,8 +179,17 @@ function opOf(form, { creating, found, readings = [] }) {
     : { op: 'html', data: { screen: html?.screen ?? '<Screen>', basedOn: html?.basedOn ?? { capture: sha, html: HTML_BASED_ON }, edit: ['<the changed element, whole, with its k (scope.owner.widgets)>'] } };
 }
 
+// C-19: a request that names data, logic or screens but no single text route (the whole-app build) gets every
+// text form of the lane, as a creation (no read: a text without @key is new; each form's readToChange says how to edit),
+// instead of text null. textFamiliesOf keeps null for the requests whose words decide that no text is written.
+export const ALL_FORMS_ROUTE = Object.freeze({ id: 'data.ddl', verb: null, also: ['ui.screen-html', 'logic.flow'], fallback: 'text.all' });
+export function fallbackRoute(intent) {
+  const families = textFamiliesOf(intent);
+  return families.length ? { ...ALL_FORMS_ROUTE, why: ['no single text route in the request; it names ' + families.join(', ') + ': every text form of the lane'] } : null;
+}
+
 /**
- * The packet's text section for an intent, or null when the intent names no text route.
+ * The packet's text section for an intent, or null when the intent names no text route (C-19: and no text family either).
  * input: {lane, intent, found (the packet's module digest answer, or null), slice (pointer -> contract node of the lane
  * index), route (classifyTextRoute's answer, computed when absent)}.
  * Returns {value, covers (forms), levels (smaller forms of value, richest first)}.
@@ -188,6 +197,7 @@ function opOf(form, { creating, found, readings = [] }) {
 export function packetTextSection({ lane, intent, found = null, readings = [], slice = () => undefined, route = classifyTextRoute(intent), examples = textExamples(), kinds = null } = {}) {
   const traditional = traditionalText({ lane, intent, found, route, wired: WIRED['ui.screen-html'], kinds });
   if (traditional !== undefined) return traditional;
+  if (!route) route = fallbackRoute(intent);
   if (!route) return null;
   const primary = FORM_OF[route.id];
   if (!primary || WIRED[route.id] !== true) return null;
@@ -208,7 +218,11 @@ export function packetTextSection({ lane, intent, found = null, readings = [], s
     const own = form === primary;
     // A companion form is a creation (the data the actions carry), except the edit of an existing screen the change shows
     // something in (route.also ui.screen-html-edit).
-    const make = own ? creating : !(form === 'ssam-html/1' && (route.also ?? []).includes('ui.screen-html-edit'));
+    // C-19: in the every-form fallback a form whose element the packet read (the action the change raises in, the screen it
+    // shows something on) is the edit of that reading; the others are creations.
+    const readKind = form === 'ssam-flow/1' ? 'flow' : form === 'ssam-html/1' ? 'html' : null;
+    const make = route.fallback ? !(readKind && readings.some(r => r.kind === readKind))
+      : own ? creating : !(form === 'ssam-html/1' && (route.also ?? []).includes('ui.screen-html-edit'));
     if (!make) editing.push(form);
     const { read, why, toChange } = readOf(form, { lane, found, intent, creating: make, has, readings });
     const ex = examples?.examples?.[form] ?? null;
@@ -239,7 +253,7 @@ export function packetTextSection({ lane, intent, found = null, readings = [], s
       : { tool: 'studio_deliver', arguments: { feature: '<Feature>', module: name, job: { ops: [{ op: 'screen', data: { generate: { entities: ['<Entity>', '<Entity2>'] } } }] }, owners: ['<Owner>'], changes: ['<Change>'] } },
   } : null;
   const value = {
-    schema: TEXT_PACKET_SCHEMA, id: route.id, forms, creating, ...(creating && editing.length ? { editing } : {}),
+    schema: TEXT_PACKET_SCHEMA, id: route.fallback ?? route.id, forms, creating, ...(creating && editing.length ? { editing } : {}),
     use: 'Write this change in its text form' + (forms.length > 1 ? 's' : '') + ' (' + forms.join(' + ') + '): every op of call goes into the ONE job of next.deliver, the JSON ops only for what no text covers; '
       + (creating ? 'a creation needs no read' : 'read once, then deliver'),
     ...(standard ? { standard } : {}),

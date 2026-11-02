@@ -210,15 +210,14 @@ public sealed partial class ModelSession
     /// before the owner) is adopted once by the first owner that installs that class: the marker is renamed and the content
     /// replaced (<c>adoptedLegacy</c>); the next owners get blocks of their own. Never two copies. The @import statements the
     /// block carries go to the top of the stylesheet, once (H14, <c>cssImportsHoisted</c>).</summary>
-    private string InstallStylesheet(string blockKey, string scopedCss, JsonObject report, bool format = true)
+    private string InstallStylesheet(string blockKey, string scopedCss, JsonObject report, bool format = true, string? owner = null)
     {
-        var defaultTheme = _es.DefaultMobileTheme ?? throw new InvalidOperationException("html: the module has no default theme to carry the stylesheet");
-        var theme = _es.MobileThemes.FirstOrDefault(t => t.ObjectKey?.ToString() == defaultTheme.ObjectKey?.ToString())
-            ?? throw new InvalidOperationException($"html: the default theme {TypeResolver.Name(defaultTheme)} belongs to another module; the page stylesheet needs a theme owned by this module");
+        var theme = OwnDefaultTheme();
         // The document form writes its CSS as given (format false); the page and fragment forms write the CSS they compiled.
         if (format) scopedCss = FormatCode(CodeLanguage.Css, scopedCss, TypeResolver.Name(theme) + ".StyleSheet (html " + blockKey + ")");
         var begin = Marker(blockKey); var end = EndMarker(blockKey);
-        var block = begin + "\n" + scopedCss.TrimEnd() + "\n" + end;
+        // C-14: a named part records the root whose document or edit wrote it (ThemeParts), so the reading of that root prints it.
+        var block = begin + (owner != null ? " " + ThemeParts.Owner(owner) : "") + "\n" + scopedCss.TrimEnd() + "\n" + end;
         // O bloco vai para a metade do AUTOR do tema, nunca pela efetiva: num tema com CSS do Theme Editor a efetiva
         // e gerada + autor, e um ciclo ler-efetiva/escrever-efetiva ou perde o marcador ou duplica o bloco gerado.
         var sheet = ThemeCss.Of(theme);
@@ -259,8 +258,40 @@ public sealed partial class ModelSession
         // What the recomposition of a split theme changed in the author CSS around the block (C23, C35), said here too.
         if (sheet != null && ThemeCss.Changed(sheet) is { } changed)
             foreach (var (key, value) in changed) report[key] = value?.DeepClone();
+        // C-05: cssImportsHoisted is the top of the author's CSS; in a theme with Theme Editor CSS that is not the top of what the
+        // browser gets (generated + author), so the receipt says the @import are ignored there and where they load instead.
+        if (sheet != null && ThemeCss.IsSplit(sheet) && CssCompat.Imports(css).Imports is { Count: > 0 } ignored)
+            report["cssImportsIgnored"] = new JsonObject
+            {
+                ["imports"] = new JsonArray(ignored.Select(x => x.Statement).Distinct(StringComparer.Ordinal).Select(x => (JsonNode)x).ToArray()),
+                ["served"] = ThemeCss.ServedImportNote,
+            };
         return TypeResolver.Name(theme) ?? "";
     }
+
+    /// <summary>The module's own default theme, the one the html CSS goes to (refused when it is missing or of another module).</summary>
+    private OutSystems.Model.UI.Mobile.IMobileTheme OwnDefaultTheme()
+    {
+        var defaultTheme = _es.DefaultMobileTheme ?? throw new InvalidOperationException("html: the module has no default theme to carry the stylesheet");
+        return _es.MobileThemes.FirstOrDefault(t => t.ObjectKey?.ToString() == defaultTheme.ObjectKey?.ToString())
+            ?? throw new InvalidOperationException($"html: the default theme {TypeResolver.Name(defaultTheme)} belongs to another module; the page stylesheet needs a theme owned by this module");
+    }
+
+    /// <summary>C-14: the block of <paramref name="blockKey"/> taken out of the module's default theme (an edit that leaves a theme
+    /// part of its reading out), through the one write path. False when the theme has no such block.</summary>
+    private bool RemoveStylesheet(string blockKey)
+    {
+        var theme = OwnDefaultTheme();
+        var sheet = ThemeCss.Of(theme);
+        var css = sheet != null ? ThemeCss.Author(sheet) : theme.StyleSheet ?? "";
+        var without = ThemeParts.Without(css, blockKey);
+        if (ReferenceEquals(without, css)) return false;
+        if (sheet != null) ThemeCss.WriteAuthor(sheet, without, canvas: true); else ThemeCss.Write(theme, without);
+        return true;
+    }
+
+    /// <summary>The name of the module's own default theme, null when it has none of its own (the html CSS then has nowhere to go).</summary>
+    private string? OwnDefaultThemeName() { try { return TypeResolver.Name(OwnDefaultTheme()); } catch (InvalidOperationException) { return null; } }
 
     private static string Marker(string key) => $"/* anvil:html {key} */";
     private static string EndMarker(string key) => $"/* /anvil:html {key} */";

@@ -19,9 +19,9 @@ test('error-report recovery bypasses holder, serializes recoveries, normal dismi
   const before=Date.now(); const close=await locks.withStudioWriteLock({tool:'ssam_task',args:{id:'task',close:{reason:'words-never-in-lock'}},deps},()=>assert.fail('cannot close running task'));
   assert.equal(close.code,'TASK_STILL_RUNNING');assert.ok(Date.now()-before<500);assert.equal(close.holder.taskId,'task');
   let running=0,max=0;
-  const recover=()=>locks.withStudioWriteLock({tool:'o11_studio',args:{command:'dismiss-dialog',args:{title:'Unexpected Error'}},deps},async()=>{max=Math.max(max,++running);await wait(15);running--;return{ok:true}});
+  const recover=()=>locks.withStudioWriteLock({tool:'o11_studio',args:{command:'dismiss-dialog',args:{title:'Unexpected Error',words:'sim, pode fechar'}},deps},async()=>{max=Math.max(max,++running);await wait(15);running--;return{ok:true}});
   await Promise.all([recover(),recover()]);assert.equal(max,1);
-  const normal=locks.withStudioWriteLock({tool:'o11_studio',args:{command:'dismiss-dialog',args:{title:'Question'}},deps},async()=>{order.push('normal');return{ok:true}});
+  const normal=locks.withStudioWriteLock({tool:'o11_studio',args:{command:'dismiss-dialog',args:{title:'Question',words:'sim, pode fechar'}},deps},async()=>{order.push('normal');return{ok:true}});
   const writes=[1,2,3].map(i=>locks.withStudioWriteLock({tool:'o11_publish',deps},async()=>{order.push(i);return{ok:true}}));
   const priority=locks.withStudioWriteLock({tool:'ssam_task',args:{id:'other',close:{reason:'done'}},deps},async()=>{order.push('close');return{ok:true}});
   await wait(30);
@@ -35,7 +35,7 @@ test('matching stalled dialog bypass clears metadata, pending task close is imme
  try{
   const refused=await locks.withStudioWriteLock({tool:'ssam_task',args:{id:'pending',close:{reason:'done'}},deps},()=>assert.fail('pending'));
   assert.equal(refused.code,'CLOSE_WAITS_FOR_PENDING_OPERATION');assert.ok(refused.recovery.length);
-  await locks.withStudioWriteLock({tool:'o11_studio',args:{command:'dismiss-dialog',args:{title:'Custom dialog'}},deps},async()=>({ok:false,code:'DIALOG_NOT_FOUND'}));
+  await locks.withStudioWriteLock({tool:'o11_studio',args:{command:'dismiss-dialog',args:{title:'Custom dialog',words:'sim, pode fechar'}},deps},async()=>({ok:false,code:'DIALOG_NOT_FOUND'}));
   const holder=locks.studioWriteHolder({deps});assert.equal(holder.state,'pending-in-studio');assert.ok(!holder.blockedBy);
  }finally{flight()}
  for(const command of ['status','windows','errors'])assert.equal(locks.isWrite('o11_studio',{command}),false);
@@ -45,7 +45,7 @@ for(const capable of [true,false])test(`ownerless error report close requires na
  let closes=0;
  const bridge={ok:async method=>method==='windows'?{windows:[{title:'Unexpected Error',type:'DialogWindow',isVisible:true,isModal:false}]}:method==='bridge_manifest'?{capabilities:capable?['merge_from_oml:dialog_watch']:[]}:method==='close_dialog'?(closes++,{closed:['Unexpected Error']}):{}};
  const run=o11Studio({bridge,assertSelected:async()=>{}});
- const result=await run({command:'dismiss-dialog',args:{title:'Unexpected Error'}});
+ const result=await run({command:'dismiss-dialog',args:{title:'Unexpected Error',words:'sim, pode fechar'}});
  assert.equal(result.ok,capable);assert.equal(closes,capable?1:0);if(!capable)assert.equal(result.code,'WEB_DIALOG');
 });
 test('facade task running during build answers TASK_STILL_RUNNING without a Studio lock',async()=>{
@@ -63,16 +63,16 @@ test('a stalled custom dialog hidden behind its running owner still bypasses, an
  try{
   const close=await locks.withStudioWriteLock({tool:'ssam_task',args:{id:'owner',close:{reason:'test'}},deps},()=>assert.fail('running'));
   assert.equal(close.code,'TASK_STILL_RUNNING');assert.equal(close.holder.tool,'o11_deliver');
-  const before=Date.now();const dismissed=await locks.withStudioWriteLock({tool:'o11_studio',args:{command:'dismiss-dialog',args:{title:'Custom blocker'}},deps},async()=>({ok:true,closed:['Custom blocker']}));
+  const before=Date.now();const dismissed=await locks.withStudioWriteLock({tool:'o11_studio',args:{command:'dismiss-dialog',args:{title:'Custom blocker',words:'sim, pode fechar'}},deps},async()=>({ok:true,closed:['Custom blocker']}));
   assert.equal(dismissed.ok,true);assert.ok(Date.now()-before<500);assert.equal(locks.pendingOperationOf({taskId:'owner',deps}).state,'pending-in-studio');
  }finally{flight();finish();await owner}
 });
 test('recovery lock excludes a normal writer and cancellation still uses the MCP onBusy shape',async()=>{
  const deps=sandbox();let ready,finish;const started=new Promise(r=>ready=r),gate=new Promise(r=>finish=r),order=[];
- const recovery=locks.withStudioWriteLock({tool:'o11_studio',args:{command:'dismiss-dialog',args:{title:'Unexpected Error'}},deps},async()=>{ready();await gate;order.push('recovery');return{ok:true}});
+ const recovery=locks.withStudioWriteLock({tool:'o11_studio',args:{command:'dismiss-dialog',args:{title:'Unexpected Error',words:'sim, pode fechar'}},deps},async()=>{ready();await gate;order.push('recovery');return{ok:true}});
  await started;const normal=locks.withStudioWriteLock({tool:'o11_publish',deps},async()=>{order.push('normal');return{ok:true}});
  const aborted=new AbortController();aborted.abort();
- const answer=await locks.withStudioWriteLock({tool:'o11_studio',args:{command:'dismiss-dialog',args:{title:'Unexpected Error'}},deps,signal:aborted.signal,onBusy:locks.busyToolResult},()=>assert.fail('cancelled'));
+ const answer=await locks.withStudioWriteLock({tool:'o11_studio',args:{command:'dismiss-dialog',args:{title:'Unexpected Error',words:'sim, pode fechar'}},deps,signal:aborted.signal,onBusy:locks.busyToolResult},()=>assert.fail('cancelled'));
  assert.equal(answer.structuredContent.code,'CANCELLED');assert.equal(answer.isError,true);await wait(20);assert.deepEqual(order,[]);finish();await Promise.all([recovery,normal]);assert.deepEqual(order,['recovery','normal']);
 });
 
@@ -97,4 +97,24 @@ test('close finds its running owner behind another narrowed module holder in the
   assert.ok(Date.now()-before<500);assert.ok(value.holder.heldMs>=0);assert.ok(value.holder.startedAt);
   assert.equal(value.continuation.tool,'ssam_task');assert.equal(value.continuation.arguments.id,'task-B');
  }finally{finish();await Promise.all(owners)}
+});
+// Review W2-DIAG, correction 1: without the person's words an error-report dismiss is no recovery: it never bypasses the
+// holder nor waits in the queue (o11_studio refuses it before anything); with the words the recovery stays as it was.
+test('a dismiss without the person\'s words never bypasses the write lock; with the words the error-report recovery stays',async()=>{
+ const deps=sandbox();let release,ready;const gate=new Promise(r=>release=r),started=new Promise(r=>ready=r);
+ const owner=locks.withStudioWriteLock({tool:'o11_deliver',deps},async()=>{ready();await gate;return{ok:true}});
+ await started;
+ try{
+  for(const words of [undefined,'',"<the user's own words>"]){
+   const args={command:'dismiss-dialog',args:{title:'Unexpected Error',...(words===undefined?{}:{words})}};
+   assert.equal(locks.recoveryOf('o11_studio',args,null),null,'no recovery without words: '+JSON.stringify(words));
+   assert.equal(locks.wordlessDismiss('o11_studio',args),true);
+   let inside=null;const value=await locks.withStudioWriteLock({tool:'o11_studio',args,deps},async()=>{inside=locks.studioWriteHolder({tool:'o11_studio',deps});return{ok:false,code:'WORDS_REQUIRED'}});
+   assert.equal(value.code,'WORDS_REQUIRED','the handler answers at once');assert.equal(inside?.tool,'o11_deliver','it ran beside the holder, holding nothing');
+  }
+  const worded={command:'dismiss-dialog',args:{title:'Unexpected Error',words:'sim, pode fechar'}};
+  assert.equal(locks.recoveryOf('o11_studio',worded,null),'bypass');assert.equal(locks.wordlessDismiss('o11_studio',worded),false);
+  const before=Date.now();const value=await locks.withStudioWriteLock({tool:'o11_studio',args:worded,deps},async()=>({ok:true,closed:['x']}));
+  assert.equal(value.ok,true);assert.ok(Date.now()-before<1000,'the worded recovery passes the running holder');
+ }finally{release();await owner}
 });

@@ -16,6 +16,7 @@
 // to <lane local>/journal/job-patch.jsonl), paths by index or by name; or a partial job + basedOn (only the changed or new
 // elements, merged by name into the earlier job). jobTool answers the job it ran with its sha256 and nextBasedOn, for
 // the next patch, and a refusal's patches also by name (patchByName).
+import { imageFillArgs } from './image-fill-grants.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -356,7 +357,7 @@ async function runJobOnce(request, deps, carried) {
     const out = outFor(file);
     fs.mkdirSync(path.dirname(out), { recursive: true });
     if (lane === 'odc') {
-      const argv = ['apply', '--job', file, '--out', out, ...(base ? ['--base', base] : []), ...producers.flatMap(p => ['--producer', p]), ...(request.autoPatch === false ? ['--auto-patch', 'off'] : []), ...(basedOnFile ? ['--based-on', basedOnFile] : []),
+      const argv = ['apply', '--job', file, ...imageFillArgs(file, { lane, module: request.module ?? null, environment: request.expectedEnvironment ?? null }), '--out', out, ...(base ? ['--base', base] : []), ...producers.flatMap(p => ['--producer', p]), ...(request.autoPatch === false ? ['--auto-patch', 'off'] : []), ...(basedOnFile ? ['--based-on', basedOnFile] : []),
         '--work', request.work ?? path.join(odcLocal, 'jobs', 'work')];
       let envelope = null; let via = 'worker odc';
       if (worker) {
@@ -379,7 +380,7 @@ async function runJobOnce(request, deps, carried) {
       }
       return { saved: { ok: Boolean(envelope.ok), data: envelope.data, via, wallMs }, out, note };
     }
-    const argv = ['apply', '--job', file, '--out', out, '--work', request.work ?? o11.work, ...(base ? ['--base', base] : []), ...producers.flatMap(p => ['--producer', p]),
+    const argv = ['apply', '--job', file, ...imageFillArgs(file, { lane, module: request.module ?? null, environment: request.expectedEnvironment ?? null }), '--out', out, '--work', request.work ?? o11.work, ...(base ? ['--base', base] : []), ...producers.flatMap(p => ['--producer', p]),
       ...(request.autoPatch === false ? ['--auto-patch', 'off'] : []), ...(basedOnFile ? ['--based-on', basedOnFile] : [])];
     let envelope = null;
     if (worker) {

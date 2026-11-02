@@ -1,0 +1,41 @@
+{
+  "schemaVersion": "ssam-discovery-fragment/1",
+  "contract": "ssam-catalog-contribution/1",
+  "front": "C",
+  "title": "Existing consumed REST callbacks (OnBeforeRequest, OnAfterResponse) read and edited as keyed flow text",
+  "reviewedAt": "2026-10-31",
+  "capabilities": [
+    {
+      "id": "integration.rest-callbacks",
+      "lanes": ["odc", "o11"],
+      "category": "integration",
+      "title": "Read and edit the existing callbacks of a consumed REST client (OnBeforeRequest, OnAfterResponse) as keyed flow text",
+      "keywords": ["rest callback", "onbeforerequest", "onafterresponse", "on before request", "on after response", "edit callback", "api logging"],
+      "summary": "ssam_map view flow, element <Client>.OnBeforeRequest or <Client>.OnAfterResponse, reads the callback as callback action <Client>.<Name> @key with its textSha. Edit that text and send it in a logic op: {\"op\":\"logic\",\"data\":{\"flow\":<text>,\"basedOn\":<textSha>}}. Only what changed is written; the callback's native inputs and outputs (Request, Response, CustomizedRequest, CustomizedResponse) stay the platform's.",
+      "route": {"kind": "job", "operation": "studio_deliver / o11_deliver op logic, data.flow: callback action <Client>.OnBeforeRequest|OnAfterResponse @key, with basedOn"},
+      "guidance": "Read the callback first and keep its @key, its name and its owner. Keep the request/response passthrough and the existing exception behavior. Never declare in/out lines (FLOW_CALLBACK_PARAMETERS) nor rename the callback (FLOW_CALLBACK_NAME); locals are allowed. A header without @key is refused (FLOW_CALLBACK_CREATION names the callback's @key; FLOW_CALLBACK_UNKNOWN names the nearest callbacks): create the callbacks with the rest-consume op (callbacks.before/after). On ODC, OnAfterResponse receives Response, not the original Request: per-call correlation belongs to the action that calls the method.",
+      "elements": [
+        {
+          "role": "consumed rest callback",
+          "child": true,
+          "platforms": {
+            "odc": {"native": "ServiceStudio.Plugin.REST.IRestCallbackActionFlow", "jobType": "IRestCallbackActionFlow", "address": "IRestClient:<Client>/OnBeforeRequest"},
+            "o11": {"native": "ServiceStudio.Plugin.REST.IRestCallbackActionFlow", "jobType": "IRestCallbackActionFlow", "address": "IRestClient:<Client>/OnBeforeRequest"}
+          }
+        }
+      ],
+      "platforms": {
+        "odc": {"proofs": [], "negative": [], "limits": [
+          {"text": "Existing consumed callbacks only; read, keyed edit, save and read-back offline in RestCallbackFlowScenarios. A live delivery is still to be proven.", "origin": "kernel/tests/Anvil.Tests.Odc/RestConsumeOdcTests.cs (RestCallbackFlowScenarios)"},
+          {"text": "The Advanced callbacks and the exposed REST OnRequest/OnResponse are not proven by this route.", "origin": "platforms/odc/facade/catalog/fragments/C/integrations-without-route.json (integration.rest-callbacks-advanced)"}
+        ]},
+        "o11": {"proofs": [], "negative": [], "limits": [
+          {"text": "Existing consumed callbacks only; read, keyed edit, save and read-back offline in RestCallbackFlowScenarios. A live delivery is still to be proven.", "origin": "kernel/tests/Anvil.Tests/RestConsumeTests.cs (RestCallbackFlowScenarios)"},
+          {"text": "The Advanced callbacks are not proven by this route.", "origin": "platforms/odc/facade/catalog/fragments/C/integrations-without-route.json (integration.rest-callbacks-advanced)"}
+        ]}
+      },
+      "depends": []
+    }
+  ],
+  "unavailable": []
+}

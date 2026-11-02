@@ -1,9 +1,36 @@
 // O11 bridge methods through the agent (docs/FASE2-AGENTE.md 4.6): the same mirror rule as ODC, with
 // <ws>/o11/<rel> <-> agent:o11/<rel> (all of o11/ is writable on the agent). The caller has already removed port and
 // authorization: the agent always talks to the port of its own record, with its own key.
+import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { MirrorError } from './mirror.mjs';
 import { mapAgentPaths } from './odc-stage.mjs';
+
+// integration_import (fase4-28 r4-f3-import, thin bridge 1.1.0): the Studio's own SOAP/OpenAPI importer on a detached copy of
+// the delivery's snapshot. Read: base_path (the snapshot), document_path and each dependencies[].path (the pinned WSDL or
+// OpenAPI document of the job and the files it imports, already confined to the customer's workspace by the gate, job-paths.mjs);
+// written: out_path (the candidate), which comes back to the server before the kernel reads it. The document and its
+// dependencies go to agent:o11/imports/<document sha256>/ with their names relative to the document's folder kept, so the
+// Studio's importer resolves an xsd import next to the WSDL as on the server. The bridge never fetches: every file is pinned.
+export const IMPORT_METHOD = 'integration_import';
+const importFolder = sha => 'agent:o11/imports/' + (/^[0-9a-f]{64}$/i.test(String(sha ?? '')) ? String(sha).toLowerCase() : randomUUID());
+async function stageImport(p, mirror) {
+  if (typeof p.base_path === 'string') p.base_path = await mirror.input(p.base_path, 'o11');
+  if (typeof p.document_path !== 'string') return;
+  const folder = path.dirname(p.document_path);
+  const target = importFolder(p.document_sha256);
+  // A file of the document's folder keeps its relative name; any other (outside that folder) is staged by its sha256.
+  const at = async file => {
+    const relative = path.relative(folder, file);
+    if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) return mirror.input(file, 'o11', { stageAlways: true });
+    return mirror.input(file, 'o11', { to: target + '/' + relative.split(path.sep).join('/') });
+  };
+  const document = p.document_path;
+  p.document_path = await at(document);
+  if (Array.isArray(p.dependencies))
+    p.dependencies = await Promise.all(p.dependencies.map(async d => (d && typeof d === 'object' && typeof d.path === 'string' ? { ...d, path: await at(d.path) } : d)));
+  if (typeof p.out_path === 'string') p.out_path = mirror.output(p.out_path);
+}
 
 // login carries a credential file; the exports are not used in hosted mode.
 export const refusedMethod = method => method === 'login' || /^export_/.test(String(method));
@@ -15,7 +42,8 @@ export async function stageO11Bridge({ method, params }, mirror, { newId = rando
   const p = structuredClone(params ?? {});
   if ((method === 'sc_api' || method === 'sc_web') && p.args && typeof p.args === 'object' && Object.hasOwn(p.args, 'outFile'))
     throw new MirrorError('HOSTED_PATH_PARAM_REFUSED', 'args.outFile is not accepted in hosted mode: the bridge would write a file on the user\'s machine that the server never reads.');
-  let snapshot = false, download = false;
+  let snapshot = false, download = false, imported = false;
+  if (method === IMPORT_METHOD) { await stageImport(p, mirror); imported = typeof p.out_path === 'string'; }
   if (method === 'snapshot_module' && typeof p.path === 'string') { p.path = mirror.output(p.path); snapshot = true; }
   if (method === 'merge_from_oml') {
     // first_pass_path: the merge order's first-pass copy (Delivery), read by the bridge like the candidate.
@@ -41,6 +69,8 @@ export async function stageO11Bridge({ method, params }, mirror, { newId = rando
       // other agent paths are the strings the agent reports it rewrote. Any other text is data.
       const required = [];
       if (reply.success === true && snapshot) required.push(['data', 'path']);
+      // The import candidate the kernel applies the job to (absent when the importer refused: errors, nothing written).
+      if (reply.success === true && imported && reply.data?.candidate_path != null) required.push(['data', 'candidate_path']);
       if (reply.success === true && download && reply.data?.value?.FilePath != null) required.push(['data', 'value', 'FilePath']);
       const bring = required.map(keys => keys.reduce((node, key) => node?.[key], reply));
       for (const agentPath of bring) mirror.fromAgent(agentPath);

@@ -301,4 +301,12 @@ public class RestConsumeTests
     [Fact] public void EveryAuthProblemIsOneRefusal() => Run(RestConsumeAuthScenarios.EveryAuthProblemIsOneRefusal);
     [Fact] public void ACallbackTheOpDidNotWriteIsRefused() => Run(RestConsumeAuthScenarios.ACallbackTheOpDidNotWriteIsRefused);
     [Fact] public void BasicAuthNeedsBinaryDataOnO11() => Run(RestConsumeAuthScenarios.BasicAuthNeedsBinaryDataOnO11);
+    // The existing callbacks of a consumed client as keyed flow text (RestCallbackFlowScenarios).
+    [Fact] public void ACallbackTextRoundTripsAndAnEditChangesOnlyIt() => Run(RestCallbackFlowScenarios.ACallbackTextRoundTripsAndAnEditChangesOnlyIt);
+    [Fact] public void ACallbackTextIsRefusedWithTheNameToUse() => Run(RestCallbackFlowScenarios.ACallbackTextIsRefusedWithTheNameToUse);
+    [Fact] public void CallbackParametersCannotBeDeclaredByText() => RestCallbackFlowScenarios.CallbackParametersCannotBeDeclaredByText();
+    [Fact] public void ACallbackHeaderOverAnotherActionIsOnlyAKindChange() => Run(RestCallbackFlowScenarios.ACallbackHeaderOverAnotherActionIsOnlyAKindChange);
+    // A Reactive module with the screen Login and a consumed client Login (the owner indexes of FlowOwners).
+    [Fact] public void AClientNamedLikeAScreenChangesNothingOfTheScreen()
+        => Run((dir, _) => RestCallbackFlowScenarios.AClientNamedLikeAScreenChangesNothingOfTheScreen(dir, "tests/fixtures/reactive-ui.oml", "Login"));
 }

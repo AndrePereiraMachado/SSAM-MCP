@@ -111,7 +111,9 @@ test('items 16 and 18: the hosted generator refusal and instructions name no int
   try {
     assert.doesNotMatch(s.server.ssamInstructions, /blind/i);
     const job = { description: 'synthetic', ops: [{ op: 'entity-actions', data: { entities: ['Customer'] } }] };
-    const refused = await s.call('ssam_job', { lane: 'o11', job });
+    // r4-rest-hosted: entity-actions runs hosted (mode job-only); the refusal is read with its mode taken away.
+    const { withGeneratorStates } = await import('../generators.mjs');
+    const refused = await withGeneratorStates({ 'entity-actions': { hosted: null } }, () => s.call('ssam_job', { lane: 'o11', job }));
     assert.equal(refused.cause, 'GENERATOR_PENDING', JSON.stringify(refused).slice(0, 300));
     assert.deepEqual(shown(findings(refused)), []);
     assert.doesNotMatch(JSON.stringify(refused), /blind/i);

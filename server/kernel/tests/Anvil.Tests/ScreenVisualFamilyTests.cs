@@ -81,11 +81,13 @@ public sealed class ScreenVisualFamilyTests(ITestOutputHelper output)
         var older = ".a{}\n/* ssam:native-layout */ v0\n.x{}\n/* /ssam:native-layout */\n.b{}";
         var replaced = ScreenVisual.WithNativeLayout(older, out var third);
         Assert.Equal("replaced", third);
-        Assert.Equal(".a{}\n" + ScreenVisual.NativeLayoutCss + "\n.b{}", replaced);
+        // Review W3-EDIT, 1: what the older block held that the engine never wrote is kept as written, after the new block.
+        Assert.Equal(".a{}\n" + ScreenVisual.NativeLayoutCss + "\n.x{}\n.b{}", replaced);   // R2-1: "v0" is the marker's version, .x stays .x
         // Every rule of the block parses, each neutralizes one family, and each needs a marker of the op (review 1, A1).
         var rules = ScreenVisual.RulesOf([ScreenVisual.NativeLayoutCss]);
         Assert.Equal(["[data-ssam-gap].ThemeGrid_MarginGutter", ".layout :is(.main,.content,.main-content):has([data-ssam-page])",
-            ":is(thead,tbody,tfoot)[data-ssam-rows]", "[data-ssam-rows]>script"], rules.Select(r => r.Selector));
+            "tbody[data-ssam-rows][data-ssam-rows]", "tfoot[data-ssam-rows][data-ssam-rows]", "thead[data-ssam-rows][data-ssam-rows]", "tr[data-ssam-rows][data-ssam-rows]",
+            "[data-ssam-rows]>script"], rules.Select(r => r.Selector));   // F8: each table part its display, (0,2,1)
         Assert.Contains(rules, r => r.Selector.Contains("ThemeGrid_MarginGutter", StringComparison.Ordinal) && r.Declarations.Any(d => d.Property == "margin-left" && d.Value.Trim() == "0"));
         Assert.Contains(rules, r => r.Selector.Contains("main-content", StringComparison.Ordinal) && r.Declarations.Any(d => d.Property == "min-width"));
         Assert.Contains(rules, r => r.Selector.Contains("tbody", StringComparison.Ordinal) && r.Declarations.Any(d => d.Property == "display" && d.Value.Trim() == "table-row-group"));
@@ -144,7 +146,10 @@ public sealed class ScreenVisualFamilyTests(ITestOutputHelper output)
         Assert.Matches("<input[^>]*type=\"checkbox\"[^>]*class=\"checkbox\"|<input[^>]*class=\"checkbox\"[^>]*type=\"checkbox\"", text);
         Assert.Matches("<button[^>]*class=\"btn\"", text);
         Assert.Matches("<form[^>]*class=\"form\"", text);
-        Assert.Equal(2, Regex.Matches(text, "<tbody[^>]*class=\"list\"").Count);
+        // F8: a List of a table part takes no class (ScreenVisual.TableListClass: .list is the hook of patterns that are no table
+        // part, and of the lists of an author's CSS), and is Mode Custom (the runtime renders its Tag only then).
+        Assert.Equal(2, Regex.Matches(text, "<tbody[^>]*class=\"\"").Count);
+        Assert.Equal(2, Regex.Matches(text, "<tbody[^>]*os-Mode=\"Custom\"").Count);
         Assert.Equal(3, Regex.Matches(text, "disable-virtualization=").Count);   // two tbody, one grid; once each
         Assert.Equal(3, Regex.Matches(text, "data-ssam-rows=").Count);
         // The reading reads back what it wrote (the fixed point).

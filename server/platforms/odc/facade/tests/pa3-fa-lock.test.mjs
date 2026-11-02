@@ -67,7 +67,7 @@ test('C07, I2: after narrowStudioWrite({module:"A"}) a write of module B runs an
   assert.equal(fs.readFileSync(path.join(deps.o11Root, '.local', 'locks', locks(deps)[0]), 'utf8').includes('"A"'), false, 'never the module name');
   assert.equal(await withStudioWriteLock({ tool: 'o11_deliver', args: { module: 'B', job: [] }, lane: 'o11', deps: { ...deps, queueMs: 0 } }, async () => 'B entregue'), 'B entregue');
   assert.equal((await withStudioWriteLock({ tool: 'o11_deliver', args: { module: 'a', job: [] }, lane: 'o11', deps: { ...deps, queueMs: 0 } }, async () => 'x')).code, QUEUE_TIMEOUT_CODE);
-  assert.equal((await withStudioWriteLock({ tool: 'o11_studio', args: { command: 'dismiss-dialog' }, lane: 'o11', deps: { ...deps, queueMs: 0 } }, async () => 'x')).code, QUEUE_TIMEOUT_CODE,
+  assert.equal((await withStudioWriteLock({ tool: 'o11_studio', args: { command: 'dismiss-dialog', args: { title: 'X', words: 'sim, pode fechar' } }, lane: 'o11', deps: { ...deps, queueMs: 0 } }, async () => 'x')).code, QUEUE_TIMEOUT_CODE,
     'a write that names no module conflicts with every module lock');
   const afterwards = withStudioWriteLock({ tool: 'o11_deliver', args: { module: 'A', job: [] }, lane: 'o11', deps }, async () => 'A entregue');
   gate.resolve();

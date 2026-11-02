@@ -1,0 +1,9 @@
+{
+ "description": "B4 (the proto line's 9daca5c2): a job that creates a theme and writes its CSS before a later job gives it to a flow is accepted: CSS_TARGET_UNSERVED is a warning for a theme the job itself creates; the refusal is for a theme the module already had (css-chain-orphan.json).",
+ "base": "job:css-chain-consumer",
+ "expectValid": true,
+ "ops": [
+  {"op": "create", "parent": "@espace", "type": "IMobileTheme", "name": "ChainNewTheme", "as": "$new"},
+  {"op": "set", "target": "$new", "prop": "StyleSheet", "value": ".chain-new { color: #040; }"}
+ ]
+}

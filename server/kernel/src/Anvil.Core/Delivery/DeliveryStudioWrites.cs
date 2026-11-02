@@ -103,6 +103,9 @@ public static partial class Delivery
         if (answer["unknownOutcome"] is { } lost) record["error"] = lost.DeepClone();
         if (outcome == "refused") record["problems"] = (answer["problems"] as JsonArray)!.Count;
         if (WriteOutcomes.Contains(outcome)) record["undo"] = "Ctrl+Z in Service Studio undoes it (its own Studio command, \"" + command + "\"); nothing was published";
+        // C-06 (F-FitBody-05): the bridge has no undo of its own for this command; when the delivery is not merged after it, what it
+        // added stays in the module, and the record says exactly what and how the person removes it.
+        if (manage && outcome == "changed" && RemovalOf(answer) is { } removal) record["remove"] = removal;
         // N1: the same command answering in this run is the evidence that the one of an earlier run ended; what this run
         // observes before its own command (the elements already referenced, the references' signature before it ran) is said
         // with it. Never this run's own additions (review round 4, N3).
@@ -124,6 +127,17 @@ public static partial class Delivery
         list.Add(record);
         record["text"] = StudioWriteText(record, merged: false, result["studioWritesRun"]?.ToString());
         return record;
+    }
+
+    /// <summary>C-06: how the person removes what a Manage Dependencies added (its own Studio command, which the bridge cannot
+    /// undo): Ctrl+Z right after, or later the Studio's Manage Dependencies, unticking each element it added; null when it added
+    /// no element (a signature brought to the published one only goes back with Ctrl+Z).</summary>
+    private static string? RemovalOf(JsonObject answer)
+    {
+        var added = (answer["added"] as JsonArray ?? new JsonArray()).OfType<JsonObject>().GroupBy(a => a["producer"]?.ToString() ?? "?", StringComparer.OrdinalIgnoreCase)
+            .Select(g => Names(g.Select(a => a["element"]?.ToString() ?? "?").ToList()) + " of " + g.Key).ToList();
+        return added.Count == 0 ? null
+            : "Ctrl+Z in Service Studio right after this answer removes them (before any other change in that module); later, untick " + string.Join("; ", added) + " in the Studio's Manage Dependencies";
     }
 
     /// <summary>Whether a record changed the module or may have changed it.</summary>
@@ -201,7 +215,9 @@ public static partial class Delivery
             var moved = (record["moved"] as JsonArray ?? new JsonArray()).OfType<JsonObject>()
                 .Select(r => r["producer"] + " (" + Short(r["before"]?.ToString()) + " -> " + Short(r["after"]?.ToString()) + ")").ToList();
             return when + ", the Studio's Manage Dependencies changed " + module + " in its own Studio command: it " + (added.Count > 0 ? "added " + string.Join("; ", added) : "added no element")
-                + (moved.Count > 0 ? " and brought " + string.Join(", ", moved) + " to the published signature" : "") + ". " + undo;
+                + (moved.Count > 0 ? " and brought " + string.Join(", ", moved) + " to the published signature" : "") + ". " + undo
+                // C-06: a delivery that did not merge leaves them there; the record says how they go.
+                + (!merged && record["remove"]?.ToString() is { Length: > 0 } remove ? " If this delivery is not merged, they stay in " + module + ": " + remove + "." : "");
         }
         var refreshed = Strings(record["refreshed"]);
         return when + ", the Studio's " + command + " changed " + module + " in its own Studio command: it refreshed "

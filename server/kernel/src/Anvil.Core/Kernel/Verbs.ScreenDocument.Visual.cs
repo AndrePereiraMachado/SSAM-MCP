@@ -19,6 +19,20 @@ public sealed partial class ModelSession
         private Dictionary<ScreenHtml.Node, DomNode>? authorMap;                    // the document as the author's DOM (lazy)
         private List<CssRule>? pageRules;                                           // the rules of the page, the document's theme parts and the module theme
         private readonly Dictionary<string, JsonObject> visualNotes = new(StringComparer.Ordinal);   // normalized, one per code and kind
+        private readonly JsonArray tables = new();                                  // F8: the Lists of a table part (visual.tables)
+
+        /// <summary>F8: a List whose element is not the runtime's div is Mode Custom (both Studios render the Tag of a List only in
+        /// Mode Custom; Default renders a div, and a div in a table has no columns of the table). The author's os-Mode wins.</summary>
+        private void ListMode(IObjectSignature widget, string kind, ScreenHtml.Node node, string tagText, HashSet<string> written)
+        {
+            if (kind != "List" || written.Contains("Mode") || !ScreenVisual.NeedsCustomMode(tagText) || FindProperty(widget, "Mode") is not { } mode) return;
+            // The recreation of a root the op did not mark keeps what was read (review 1, A1), as the markers do.
+            if (Read(node) && !DecidesRead()) return;
+            if (SafeGet(mode, widget)?.ToString() == ScreenVisual.CustomMode) { written.Add("Mode"); return; }
+            Assign(widget, kind, "Mode", ScreenVisual.CustomMode, node, ScreenVisual.ModeAttribute, false);
+            written.Add("Mode");
+            VisualNote(ScreenVisual.ListModeCustom, "List", node, tagText, "");
+        }
 
         /// <summary>The element of the author's DOM written by a node of the document.</summary>
         private DomNode? AuthorElement(ScreenHtml.Node node)
@@ -33,9 +47,12 @@ public sealed partial class ModelSession
         }
 
         /// <summary>The style rules that reach this page: its own sheet (data.css when sent, else its &lt;style&gt; blocks; R2-D), its theme parts and the
-        /// author CSS of the themes the page shows (review 3, M7: its flow's, else the module's default, and their bases).</summary>
+        /// author CSS of the themes the page shows (review 3, M7: its flow's, else the module's default, and their bases) and the
+        /// theme parts every html document of this job writes (C-12, F-FitBody-43: the same List got disable-virtualization on one
+        /// screen and not on the one compiled before the document that wrote the rule; the decision is the job's, in any order of
+        /// its ops).</summary>
         private List<CssRule> PageRules() =>
-            pageRules ??= ScreenVisual.RulesOf(PageCss().Concat(Theme().Css));
+            pageRules ??= ScreenVisual.RulesOf(PageCss().Concat(Theme().Css).Concat(JobThemeParts()));
 
         // R2-D: the CSS of the page itself: the theme parts of the document, then its own sheet (data.css replaces its <style>).
         private IEnumerable<string?> PageCss() => styles.Where(b => b.Theme || Anvil.Reading.ScreenHtmlEdit.DataCss(options.Css) == null).Select(b => (string?)b.Css).Append(Anvil.Reading.ScreenHtmlEdit.DataCss(options.Css));
@@ -68,7 +85,7 @@ public sealed partial class ModelSession
             // F2: the class of a widget the document creates without class (the author's class always wins); a k keeps its class.
             // The one rule of the forms that create a widget (ScreenVisual.StudioClassOf, the owner's decision D1 of 2026-10-17).
             if (!read && !written.Contains("Style") && FindProperty(widget, "Style") is { } style
-                && ScreenVisual.StudioClassOf(kind, Text(SafeGet(style, widget))) is { } studio)
+                && ScreenVisual.StudioClassOf(kind, Text(SafeGet(style, widget)), kind == "List" ? tagText : null) is { } studio)
             {
                 try
                 {
@@ -90,12 +107,28 @@ public sealed partial class ModelSession
             if (kind == "List" && node.Get("list") != null && ScreenVisual.AllRowsReason(tagText, element, PageRules()) is { } reason)
             {
                 var wrote = false;
+                var says = new List<string>();
                 if (!node.Attributes.Any(a => a.Key is "disable-virtualization" or "ext:disable-virtualization"))
-                    wrote |= Marker(widget, node, "disable-virtualization", "True", "disable-virtualization on the new List");
+                {
+                    if (Marker(widget, node, "disable-virtualization", "True", "disable-virtualization on the new List")) { wrote = true; says.Add("disable-virtualization True"); }
+                }
                 // The rows marker only where the block reaches the page (review 3, M7).
-                if (theme.Reachable && Marker(widget, node, ScreenVisual.RowsMarker, ScreenVisual.MarkerValue, "the rows marker of the new List")) { wrote = true; marked.Add(ScreenVisual.RowsMarker); }
+                if (theme.Reachable && Marker(widget, node, ScreenVisual.RowsMarker, ScreenVisual.MarkerValue, "the rows marker of the new List")) { wrote = true; marked.Add(ScreenVisual.RowsMarker); says.Add(ScreenVisual.RowsMarker); }
+                // F8: a table part on a page whose theme takes no native layout block gets its display inline (the List's
+                // extended property style; the author's style that says a display wins).
+                var rule = "theme";
+                if (!theme.Reachable && ScreenVisual.IsTablePart(tagText))
+                {
+                    var author = node.Get(ScreenVisual.InlineStyleAttribute) ?? node.Get("style");
+                    rule = author is { Length: > 0 } && ScreenVisual.InlineRowsStyle(tagText, author) == null ? "author" : "inline";
+                    if (rule == "inline" && ScreenVisual.InlineRowsStyle(tagText, author) is { } inline
+                        && Marker(widget, node, "style", "\"" + inline + "\"", "the inline display of the new List")) { wrote = true; says.Add("style " + inline); }
+                }
                 why[ScreenVisual.RowsMarker] = theme.Reachable ? reason : $"the theme the page shows carries no native layout block: {theme.Why}";
                 if (wrote) VisualNote(ScreenVisual.ListRendersAllRows, "List", node, tagText, theme.Reachable ? reason : reason + "; the rows marker is not written: " + theme.Why);
+                if (ScreenVisual.IsTablePart(tagText))
+                    tables.Add(ScreenVisual.TableEntry(TypeResolver.Name(root!) ?? "", node.Get("k") is { } k ? "k=\"" + k + "\"" : "a new List at line " + node.Line, tagText,
+                        marked.Contains(ScreenVisual.RowsMarker), rule, theme.Name, says.Prepend("Mode Custom")));
             }
             else why[ScreenVisual.RowsMarker] = "the List is not part of a table, a list or a layout container";
             // F3 (review 1, A1/M1; review 2, M5): the runtime's gutter is zeroed only on a link, button or form whose parent already
@@ -226,6 +259,7 @@ public sealed partial class ModelSession
                     {
                         ScreenVisual.GutterZeroedInGap or ScreenVisual.GutterKept or ScreenVisual.GutterAddsToGap => ScreenVisual.GutterNote(code, kind, Theme().Name),
                         ScreenVisual.PageMarked => $"the {kind} at the top of the page is marked {ScreenVisual.PageMarker}: the native layout block gives min-width 0 to the layout chain of this page only",
+                        ScreenVisual.ListModeCustom => "a List whose element is not a div is Mode Custom: in Mode Default the runtime renders it as a div (the Studio's rule: \"Default mode sets tag as div\"), which in a table boxes all the rows into the first column",
                         _ => ScreenVisual.AllRowsNote(why),
                     },
                 };
@@ -288,12 +322,14 @@ public sealed partial class ModelSession
     private void VisualReport(JsonObject report, (List<ScreenVisual.Finding> Findings, ScreenVisual.Prediction Prediction, long Ms) visual, int? op)
     {
         var (findings, prediction, ms) = visual;
+        var tables = (report["visual"] as JsonObject)?["tables"]?.DeepClone();   // F8: written by the compile
         report["visual"] = new JsonObject
         {
             ["checkMs"] = ms, ["quotedClasses"] = prediction.QuotedClasses, ["gutters"] = prediction.Gutters, ["listsWithSentinels"] = prediction.ListsWithSentinels,
             ["inferredWidgets"] = prediction.Inferred,
             ["findings"] = new JsonObject(findings.GroupBy(f => f.Code).Select(g => KeyValuePair.Create(g.Key, (JsonNode?)g.Count()))),
         };
+        if (tables != null) report["visual"]!["tables"] = tables;
         if (findings.Count > 0) ReportVisual(findings, op, report["root"]?.ToString() ?? "", RuntimeDomTable.IsOdc(MessageExpectations.Lane) ? "inferred" : "evidence");
     }
 
@@ -585,7 +621,7 @@ public sealed partial class ModelSession
             var author = sheet != null ? ThemeCss.Author(sheet) : theme.StyleSheet ?? "";
             // A theme of this module the shown one is based on that carries this version: the page loads it already.
             if (page.Css.Take(page.Css.Count - 1).Any(css => css.Contains(ScreenVisual.NativeLayoutCss, StringComparison.Ordinal))) return null;
-            var css = ScreenVisual.WithNativeLayout(author, out var action);
+            var css = ScreenVisual.WithNativeLayout(author, out var action, out var from, out var kept, out var keptAsComment);
             if (action == "present") return null;
             if (sheet != null) ThemeCss.WriteAuthor(sheet, css); else theme.StyleSheet = css;
             // Review 2, M4: what the block reaches in the other roots is measured on their markers (ScreenVisual.ReachedRoots: a
@@ -603,6 +639,21 @@ public sealed partial class ModelSession
                         : $": {reached.Count} of the {others.Count} other screen(s)/block(s) of the module carry markers of earlier html ops (otherRootsReached), the block reaches those elements only; the others carry none (measured) and keep their CSS"),
             };
             if (reached.Count > 0) note["otherRootsReached"] = new JsonArray(reached.Take(10).Select(x => (JsonNode)x.ToString()).ToArray());
+            // Review W3-EDIT, 1: a replacement says the version it replaced and keeps, outside the block, what the engine never wrote.
+            if (action == "replaced")
+            {
+                note["from"] = from;
+                if (keptAsComment.Count > 0)
+                {
+                    note["keptAsComment"] = new JsonArray(keptAsComment.Select(k => (JsonNode)k).ToArray());
+                    note["note"] = note["note"]!.ToString() + $"; {keptAsComment.Count} line(s) of the block of version {from ?? "?"} are no complete rule: kept inside one comment after the block, so they join no rule after it";
+                }
+                if (kept.Count > 0)
+                {
+                    note["kept"] = new JsonArray(kept.Select(k => (JsonNode)k).ToArray());
+                    note["note"] = note["note"]!.ToString() + $"; the block of version {from ?? "?"} held {kept.Count} rule(s) the engine never writes: kept as written, right after the new block, outside its markers";
+                }
+            }
             // R2-D: the theme's write took the one normalization (shadowed rules, imports): what it changed is said here.
             ThemeCss.SayChanged(sheet, note);
             return note;

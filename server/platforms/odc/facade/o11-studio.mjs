@@ -35,6 +35,8 @@ import { classifyWindow, isErrorReportTitle, withoutTypedText, cleanStall } from
 import { stallRecovery } from './studio-recovery.mjs';
 export { classifyWindow } from './bridge-stall.mjs';
 import { o11LaneOf } from './o11-lane.mjs';
+import { wordsGiven } from './destructive-operations.mjs';
+import { WORDS_MARKER } from './next-steps.mjs';
 import { hostedContext } from './executor.mjs';
 import { renderManageProblems } from './manage-dependencies-text.mjs';
 import { assertSelectedO11 } from './studio-connect.mjs';
@@ -54,8 +56,11 @@ const call = (command, args) => ({ tool: 'o11_studio', arguments: { command, ...
 const CONNECT = { tool: 'ssam_connect', arguments: { lane: 'o11' }, why: 'connect the Service Studio open on this lane' };
 const WAIT_NO_DIALOGS = { ...call('wait', { condition: 'no-dialogs' }), why: ASK_PERSON };
 const STATUS = why => ({ ...call('status'), why });
-const dismissCall = title => ({ ...call('dismiss-dialog', { title }),
-  why: 'closes the window like the X (Cancel), only if the person agrees; otherwise ' + ASK_PERSON });
+// Closing a Studio dialog is the person's decision: dismiss-dialog takes their own words (args.words), never a flag; a call
+// without them is WORDS_REQUIRED and nothing reaches the bridge (dismissWordsRequired).
+const dismissArgs = title => ({ title, words: WORDS_MARKER });
+const dismissCall = title => ({ ...call('dismiss-dialog', dismissArgs(title)),
+  why: 'closes the window like the X (Cancel), only with the person\'s own words in args.words; otherwise ' + ASK_PERSON });
 const mcp = (command, args) => 'o11_studio ' + JSON.stringify({ command, ...(args ? { args } : {}) });
 
 // ---- Arguments: one strict schema per command; unknown keys are refused before anything runs.
@@ -75,7 +80,7 @@ const SHAPES = {
   errors: { max: int(1, 500, 60), since: name.optional(), module: name.optional() },
   'publish-log': { module: name.optional(), max: int(1, 500, 60) },
   windows: { maxTexts: z.number().int().min(0).max(400).optional() },
-  'dismiss-dialog': { title, type: name.optional() },
+  'dismiss-dialog': { title, words: z.string().max(2000).optional(), type: name.optional() },
   login: { host, timeoutSeconds: int(1, 1800, 300) },
   // module: the consumer (the active module when absent); producers: reference names or producer keys (all when absent).
   // fix-ext-refs: add (the elements to add, by producer, as a job's reference op names them) and published (bring each named
@@ -197,14 +202,14 @@ const KNOWN_HINTS = [
     () => 'a web dialog is open in the Studio (its text is not visible to the bridge): ask the person to answer it in the Studio (recovery after a kill: Discard or Open), ' + WAIT_TEXT],
   ['a dialog is open in the Studio: read it with `windows` or `python scripts/cdp_pages.py`, answer it, and retry',
     ({ title, closable }) => 'a dialog is open in the Studio: read it with ' + mcp('windows') + '; '
-      + (title && closable !== false ? mcp('dismiss-dialog', { title }) + ' closes it like its X (Cancel), or ' : '')
+      + (title && closable !== false ? mcp('dismiss-dialog', dismissArgs(title)) + ' closes it like its X (Cancel), with the person\'s words, or ' : '')
       + 'ask the person to answer it in the Studio; then retry'],
 ];
 const BUTTON = String.raw`(?:"([^"]+)"|'([^']+)'|<([^>]+)>|([^\s\`,;)]+))`;
 const CDP = String.raw`python(?:\.exe)?\s+scripts[\\/]cdp_pages\.py`;
 const pick = groups => groups.find(g => g !== undefined);
 const clickText = (button, { title, closable }) => /^(cancel|close|x)$/i.test(button) && title && closable !== false
-  ? mcp('dismiss-dialog', { title }) : 'ask the person to click ' + button + ' in the Studio';
+  ? mcp('dismiss-dialog', dismissArgs(title)) + ' (with the person\'s words)' : 'ask the person to click ' + button + ' in the Studio';
 
 // Pure. context {title?, closable?}: the dialog the text is about, when the caller knows it (closable:false for a web
 // dialog without owner or a presenter, which close_dialog cannot close).
@@ -911,6 +916,20 @@ async function windows(bridge, args) {
     ({ title, type, isVisible, isActive, isModal, contentKind, ...(owner ? { owner } : {}), texts: Array.isArray(texts) ? withoutTypedText(texts) : texts })) };
 }
 
+// dismiss-dialog without the person's own words (absent, blank, the marker, a <template> or a sha256 of the server): refused
+// before anything, the bridge included (no windows read, no close_dialog). The question names the dialog by its title (and
+// its kind when a stalled write recorded it); the exact texts are in the answer that met the dialog (o11_publish question).
+export function dismissWordsRequired(args, holder = null) {
+  const same = (a, b) => String(a ?? '').trim().toLowerCase() === String(b ?? '').trim().toLowerCase();
+  const blocked = holder?.state === 'stalled' && same(holder.blockedBy?.title, args.title) ? holder.blockedBy : null;
+  const question = 'The Studio shows the dialog "' + String(args.title).slice(0, 120) + '"' + (blocked ? ' (it stopped ' + (holder.tool ?? 'a write') + ')' : '')
+    + '. Close it like its X (Cancel)?';
+  return { ok: false, code: 'WORDS_REQUIRED', title: args.title, executed: false, outcome: 'not-sent', question,
+    error: 'Closing a Studio dialog is the person\'s decision: dismiss-dialog needs their own words in args.words; nothing was sent to the Studio.',
+    continuation: { ...call('dismiss-dialog', { ...dismissArgs(args.title), ...(args.type ? { type: args.type } : {}) }),
+      question, why: 'ask the person this question; only if they agree, pass their reply verbatim in args.words' } };
+}
+
 // close_dialog {title, type?} closes every visible OWNED window with that exact title (WindowsHandler.CloseDialog);
 // An ownerless error report is closable only when the bridge advertises its title-based dialog watcher.
 async function dismissDialog(bridge, args) {
@@ -1124,6 +1143,10 @@ export function o11Studio({ bridge, assertSelected = assertSelectedO11, lane = o
     const system = systemOpen(command, parsed.data);
     if (system) return systemModuleRefusal(system);
     if (signal?.aborted) return cancelled({ command, outcome: 'not-sent' });
+    if (command === 'dismiss-dialog' && !wordsGiven(parsed.data.words)) {
+      let holder = null; try { holder = ctx.writeHolder(); } catch { /* the refusal stands without it */ }
+      return dismissWordsRequired(parsed.data, holder);
+    }
     if (mutates(command, parsed.data)) {
       try { await assertSelected(); } catch (error) { return notSelected(error); }
     }
@@ -1154,8 +1177,8 @@ export function registerO11Studio(server, deps = {}) {
       + 'type, text, detail and element; the errors TrueChange never sees (SQL the database refuses, code generation, deploy); read only. '
       + 'It sees only this Studio\'s 1-Click Publish tabs: a publication through the environment session (o11_environment refresh-refs '
       + 'publish) is a module version in Service Center (answer elsewhere). '
-      + 'windows {maxTexts?}: Studio windows and their visible texts. dismiss-dialog {title, type?}: closes an owned dialog window with that '
-      + 'exact title like its X (Cancel), only when the person agreed; a web dialog without owner is refused (the person answers it in the '
+      + 'windows {maxTexts?}: Studio windows and their visible texts. dismiss-dialog {title, words, type?}: closes an owned dialog window with that '
+      + 'exact title like its X (Cancel), only with the person\'s own words (WORDS_REQUIRED otherwise); a web dialog without owner is refused (the person answers it in the '
       + 'Studio). login {host, timeoutSeconds = 300}: opens the Studio\'s own sign-in for host; the person types the password or completes '
       + 'SSO there. refresh-references {module?, producers?, timeoutSeconds 10..1800 = 600}: the Studio\'s own Refresh References on the '
       + 'module (the active one when absent), for the named references or all; Ctrl+Z undoes it, nothing is published. open-module and '

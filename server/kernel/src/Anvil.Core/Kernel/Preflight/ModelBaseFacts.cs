@@ -278,6 +278,19 @@ internal sealed class ModelBaseFacts(ModelSession session, ServiceStudio.Model.E
         catch { return null; }
     }
 
+    private static readonly string[] RootKinds = ["IMobileScreen", "IWebScreen", "IMobileBlock", "IWebBlock"];
+
+    public IReadOnlyCollection<string>? RootNames(string root)
+    {
+        try
+        {
+            if (!Index().TryGetValue(root, out var named) || named.FirstOrDefault(d => RootKinds.Any(k => ModelSession.Implements(d, k))) is not { } found) return null;
+            return found.GetAllDescendantsOfType<IObjectSignature>().Select(d => TypeResolver.Name(d)).OfType<string>().Where(n => n.Length > 0)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        }
+        catch { return null; }
+    }
+
     private Dictionary<string, List<IObjectSignature>>? _index;
     private IndexBaseFacts? _indexed;
     private Dictionary<string, IObjectSignature?>? _samples;

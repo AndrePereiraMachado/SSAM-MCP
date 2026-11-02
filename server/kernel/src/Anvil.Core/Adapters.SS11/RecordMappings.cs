@@ -55,10 +55,27 @@ internal sealed class Ss11RecordMappings : IRecordMappings
                 value.Text = text;
                 owner.RefreshTypeConversions(true);
                 conversion = Conversion(element);
+                // F7 (25/10/2026): the output of a generic System action (ListFilter's FilteredList, ListSort's...) takes its
+                // type from the call's own arguments, read when the call had no scope yet (`Filtradas = (System).ListFilter(
+                // SourceList=Fetch.Response, ...)` then `Postagens = Filtradas.FilteredList mapTo {...}`): the arguments of the
+                // call the value names are read again, then the value, so the output has the list's type and the conversion follows.
+                if (conversion == null && CallNamed(element, text.Split('.')[0].Trim()) is { } call) {
+                    foreach (var argument in call.Children.OfType<Argument>())
+                        if (ModelHost.Prop(argument, "Value") is IExpression { Text: { Length: > 0 } argumentText } argumentValue) {
+                            ModelSession.RefreshScopes(argument);
+                            argumentValue.Text = "";
+                            argumentValue.Text = argumentText;
+                        }
+                    ModelSession.RefreshScopes(element);
+                    value.Text = "";
+                    value.Text = text;
+                    owner.RefreshTypeConversions(true);
+                    conversion = Conversion(element);
+                }
             }
         }
         if (conversion == null)
-            return fields.Count == 0 ? null : Describe(element) + " has no record conversion: its value and its target are not two different record (or list) types";
+            return fields.Count == 0 ? null : Describe(element) + " has no record conversion: its value and its target are not two different record (or list) types" + Shapes(element);
         var mappings = conversion.AttributesMappings.ToList();
         // An automatic conversion with no attribute to map (a SQL list wrapped in its structure) takes no mapping. One the
         // Studio maps by itself (a record whose attributes the target has under the same names: each from its namesake)
@@ -179,6 +196,44 @@ internal sealed class Ss11RecordMappings : IRecordMappings
             "Time" => "NullTime()",
             "Date Time" => "#1900-01-01 00:00:00#",
             _ => null };
+    }
+
+    // The flow node of the action the element belongs to whose name the value starts with (a call node: its arguments).
+    private static IObjectSignature? CallNamed(object element, string name)
+    {
+        if (name.Length == 0) return null;
+        for (var at = (element as IObjectSignature)?.Parent as IObjectSignature; at != null && !ModelSession.Implements(at, "IESpace"); at = at.Parent as IObjectSignature)
+            if (at.Children.OfType<IObjectSignature>().FirstOrDefault(c => c.Children.OfType<Argument>().Any()
+                    && string.Equals(ModelHost.Prop(c, "Name")?.ToString(), name, StringComparison.Ordinal)) is { } call)
+                return call;
+        return null;
+    }
+
+    // What the value and the target are, when the model says: a record whose attribute is the list the target is (the SOAP
+    // ArrayOfX wrapper) names that attribute, the source the mapping means.
+    private static string Shapes(object element)
+    {
+        try {
+            if (ModelHost.Prop(element, "Value") is not IExpression value || ModelHost.Prop(element, "Variable") is not IExpression variable) return "";
+            var source = ModelHost.Prop(value, "Type") ?? ModelHost.Prop(value, "DataType");
+            var target = ModelHost.Prop(variable, "Type") ?? ModelHost.Prop(variable, "DataType");
+            // An expression's type (ExpressionTypeReference) prints as the type it is; a model type has its name.
+            static string Name(object? type) => type == null ? "" : TypeResolver.Name(type) is { Length: > 0 } name ? name
+                : type.ToString() is { Length: > 0 } shown && shown != type.GetType().FullName ? shown : UiCatalog.TypeName(type);
+            var sourceName = Name(source); var targetName = Name(target);
+            if (source == null || target == null || sourceName.Length == 0 || targetName.Length == 0) return "";
+            var text = $" ({value.Text} is {sourceName}, {variable.Text} is {targetName})";
+            if (!targetName.EndsWith(" List", StringComparison.Ordinal) || sourceName.EndsWith(" List", StringComparison.Ordinal)) return text;
+            // The attributes of the record: the structure of that name in the module (top level or in an integration).
+            IObjectSignature? module = element as IObjectSignature;
+            while (module != null && !ModelSession.Implements(module, "IESpace")) module = module.Parent as IObjectSignature;
+            var structure = module?.Children.OfType<IObjectSignature>().SelectMany(c => c.Children.OfType<IObjectSignature>().Prepend(c))
+                .FirstOrDefault(c => string.Equals(TypeResolver.Name(c), sourceName, StringComparison.Ordinal) && c.Children.OfType<IObjectSignature>().Any(a => ModelHost.Prop(a, "DataType") != null));
+            var attributes = structure?.Children.OfType<IObjectSignature>() ?? [];
+            var lists = attributes.Select(a => (Name: TypeResolver.Name(a) ?? "", Type: Name(ModelHost.Prop(a, "DataType"))))
+                .Where(a => a.Name.Length > 0 && a.Type.EndsWith(" List", StringComparison.Ordinal)).ToList();
+            return lists is [var only] ? text + $": a record is no list; its attribute {only.Name} is the {only.Type}: write {value.Text}.{only.Name} mapTo {{ ... }}" : text;
+        } catch (Exception) { return ""; }
     }
 
     private static string Describe(object element) => element switch {

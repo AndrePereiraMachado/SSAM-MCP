@@ -143,7 +143,7 @@ test('every in/out pointer exists in the tool schema under the 6.4 grammar', asy
 test('the hosted catalog classifies both local previews as unavailable', () => {
   const count = klass => Object.values(tools).filter(t => t.class === klass).length;
   assert.deepEqual({ server: count('server'), agent: count('agent'), tenant: count('tenant-agent'), unavailable: count('unavailable') },
-    { server: 24, agent: 34, tenant: 22, unavailable: 18 }); // fase4-28 r2-preview: + ssam_render (agent); r4: + o11_users (agent)
+    { server: 24, agent: 35, tenant: 22, unavailable: 17 }); // fase4-28 r2-preview: + ssam_render (agent); r4: + o11_users (agent); F4: o11_extension (agent, kind o11.xif)
   assert.equal(Object.values(tools).filter(t => t.class === 'server' && typeof t.agent === 'object').length, 11);
   assert.deepEqual(Object.entries(tools).filter(([, t]) => t.agent === 'report').map(([n]) => n).sort(), ['hybrid_tenants', 'odc_auth_status', 'ssam_doctor', 'studio_doctor']);
 });
@@ -173,7 +173,8 @@ test('the ninth release tools: ssam_grant, ssam_task close, ssam_connect without
 test('the 16th release tools: preview, .NET extension and External Library answer HOSTED_UNAVAILABLE', async () => {
   const { wrapHostedTool } = await import('../hosted/policy.mjs');
   const names = await liveTools();
-  for (const name of ['ssam_preview', 'o11_extension', 'odc_external_library', ...APP_SESSION_TOOLS]) {
+  // F4 (PLANO-11H): o11_extension is served through the kind o11.xif; an agent without it keeps this answer (next test).
+  for (const name of ['ssam_preview', 'odc_external_library', ...APP_SESSION_TOOLS]) {
     assert.ok(names.has(name), name + ' is a live tool');
     assert.equal(tools[name].class, 'unavailable', name);
     let ran = false;

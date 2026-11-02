@@ -50,7 +50,7 @@ test('after the second dismiss the report comes back: the next write is answered
   const bridge={ok:async verb=>verb==='merge_status'?{state:'unknown'}:{windows:dialog?[MAIN,REPORT]:[MAIN]}};
   const release=watchPendingOperation({lane:'ss4',root,record,method:'merge_from_oml',operationId:'op-b',moduleKey:'k',taskId:'facade-b',
     blockedBy:{title:'Unexpected Error',kind:'UnexpectedError'},bridge,settleMs:20,capMs:60000,alive:()=>true});
-  const dismiss=()=>withStudioWriteLock({tool:'o11_studio',args:{command:'dismiss-dialog',args:{title:'Unexpected Error'}},lane:'ss4',deps},
+  const dismiss=()=>withStudioWriteLock({tool:'o11_studio',args:{command:'dismiss-dialog',args:{title:'Unexpected Error',words:'sim, pode fechar'}},lane:'ss4',deps},
     async()=>{closes++;dialog=false;return{ok:true,closed:['Unexpected Error']}});
   try{
     for(let round=1;round<=2;round++){
@@ -72,7 +72,7 @@ test('a blocker that is not an error report goes and comes back: its exact dismi
     dialog=false;assert.ok(await until(()=>holderState(deps)==='pending-in-studio'));
     dialog=true;assert.ok(await until(()=>holderState(deps)==='stalled'));
     let ran=false;const at=Date.now();
-    const value=await withStudioWriteLock({tool:'o11_studio',args:{command:'dismiss-dialog',args:{title:'Synthetic blocker'}},lane:'ss4',deps},
+    const value=await withStudioWriteLock({tool:'o11_studio',args:{command:'dismiss-dialog',args:{title:'Synthetic blocker',words:'sim, pode fechar'}},lane:'ss4',deps},
       async()=>{ran=true;dialog=false;return{ok:true,closed:['Synthetic blocker']}});
     assert.equal(ran,true);assert.equal(value.ok,true);assert.ok(Date.now()-at<500,`dismiss took ${Date.now()-at} ms`);
   }finally{release()}
@@ -86,7 +86,7 @@ test('a dismiss of the exact blocker that arrives before the watch saw it again 
   try{
     dialog=false;assert.ok(await until(()=>holderState(deps)==='pending-in-studio',1500));
     dialog=true;let ran=false;const at=Date.now();
-    const value=await withStudioWriteLock({tool:'o11_studio',args:{command:'dismiss-dialog',args:{title:'Synthetic blocker'}},lane:'ss4',deps},
+    const value=await withStudioWriteLock({tool:'o11_studio',args:{command:'dismiss-dialog',args:{title:'Synthetic blocker',words:'sim, pode fechar'}},lane:'ss4',deps},
       async()=>{ran=true;dialog=false;return{ok:true,closed:['Synthetic blocker']}});
     assert.equal(ran,true,JSON.stringify(value));assert.ok(Date.now()-at<QUEUE_MS/2,`dismiss took ${Date.now()-at} ms`);
   }finally{release()}

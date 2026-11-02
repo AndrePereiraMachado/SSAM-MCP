@@ -82,7 +82,7 @@ test('wp: a write nested in the build takes the Studio for the rest of the call;
   const nested = deferred(); const gate = deferred();
   const phased = withStudioWriteLock({ tool: 'o11_deliver', args: { module: 'A', job: [] }, lane: 'o11', deps, phased: true }, async () => {
     // During the build another write of the same Studio runs at once.
-    const beside = await withStudioWriteLock({ tool: 'o11_studio', args: { command: 'dismiss-dialog' }, lane: 'o11', deps: { ...deps, queueMs: 0 } }, async () => 'beside');
+    const beside = await withStudioWriteLock({ tool: 'o11_studio', args: { command: 'dismiss-dialog', args: { title: 'X', words: 'sim, pode fechar' } }, lane: 'o11', deps: { ...deps, queueMs: 0 } }, async () => 'beside');
     // A nested Studio write (the select of a capture) is this call's first write.
     const inner = await withStudioWriteLock({ tool: 'o11_studio', args: { command: 'open-module', module: 'A' }, lane: 'o11', deps }, async () => 'opened');
     nested.resolve({ beside, inner, phase: phaseOfCall() });
@@ -91,7 +91,7 @@ test('wp: a write nested in the build takes the Studio for the rest of the call;
   });
   const seen = await nested.promise;
   assert.deepEqual([seen.beside, seen.inner, seen.phase.promoted], ['beside', 'opened', true]);
-  const blocked = await withStudioWriteLock({ tool: 'o11_studio', args: { command: 'dismiss-dialog' }, lane: 'o11', deps: { ...deps, queueMs: 0 } }, async () => 'x');
+  const blocked = await withStudioWriteLock({ tool: 'o11_studio', args: { command: 'dismiss-dialog', args: { title: 'X', words: 'sim, pode fechar' } }, lane: 'o11', deps: { ...deps, queueMs: 0 } }, async () => 'x');
   assert.equal(blocked.code, QUEUE_TIMEOUT_CODE, 'from its first write the call holds the Studio');
   gate.resolve();
   assert.equal((await phased).result, 'delivered');

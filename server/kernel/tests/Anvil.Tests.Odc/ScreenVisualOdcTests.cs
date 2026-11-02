@@ -200,6 +200,51 @@ public sealed class ScreenVisualOdcTests(ITestOutputHelper output)
         Assert.Equal(0, check["problemCount"]!.GetValue<int>());
     }
 
+    [Fact]
+    public void AClickInsideAFormValidatesItAndAScreenTheDocumentOpensDeclaresItOnTheOdcLane()
+    {
+        if (!StudioAvailable()) { output.WriteLine("WARNING: no ODC Studio: skipped."); return; }
+        // C-02 on ODC (the proto line's ca60082d, its ODC test in b19ae05e): a <button> or <a> inside <form> is written
+        // ValidateAndContinue (the document wrote None, Form.Valid always True), a None written stays, a click outside keeps None;
+        // the reading says only the None inside the form. C-11 on ODC: os-AnonymousAccess="True" declares the screen open, so the
+        // warning of the server action it calls is tolerated (C08).
+        var form = "<screen name=\"FormOdc\" actions=\"Join, Clear\">\n<var name=\"Name\" type=\"Text\"/>\n<form id=\"JoinForm\">\n <input bind=\"Name\" required=\"True\"/>\n"
+            + " <button id=\"JoinButton\" onclick=\"Join\">Join</button>\n <a id=\"JoinLink\" onclick=\"Join\">Join</a>\n"
+            + " <button id=\"ClearButton\" onclick=\"Clear\" os-onclick.BuiltInValidations=\"None\">Clear</button>\n</form>\n"
+            + "<button id=\"OutsideButton\" onclick=\"Clear\">Clear</button>\n</screen>";
+        var open = "<screen name=\"PublicOdc\" os-AnonymousAccess=\"True\" actions=\"Send\">\n<button onclick=\"Send\">Send</button>\n</screen>";
+        var dir = Path.Combine(FindRoot(), ".local", "lane-odc", "screen-visual", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        var ops = new JsonArray(new JsonObject { ["op"] = "logic", ["data"] = new JsonObject { ["flow"] = new JsonArray("server action RegisterOdc\n  end\n") } },
+            new JsonObject { ["op"] = "html", ["data"] = new JsonObject { ["html"] = form } },
+            new JsonObject { ["op"] = "html", ["data"] = new JsonObject { ["html"] = open } },
+            new JsonObject { ["op"] = "logic", ["data"] = new JsonObject { ["flow"] = new JsonArray("action FormOdc.Join\n  end\n", "action FormOdc.Clear\n  end\n", "action PublicOdc.Send\n  RegisterOdc()\n  end\n") } });
+        string[] clicks = ["JoinForm/JoinButton", "JoinForm/JoinLink", "JoinForm/ClearButton", "OutsideButton"];
+        foreach (var click in clicks) ops.Add(new JsonObject { ["op"] = "get", ["target"] = "IMobileScreen:FormOdc/" + click + "/OnClick" });
+        var job = Path.Combine(dir, "job.json");
+        File.WriteAllText(job, new JsonObject
+        {
+            ["base"] = Fixture,
+            ["expectedMessages"] = new JsonArray(new JsonObject { ["id"] = "AnonymousAccess_NoPermissions", ["all"] = true, ["why"] = "a test screen without a role" }),
+            ["ops"] = ops,
+        }.ToJsonString());
+        var outPath = Path.Combine(dir, "out.oml");
+        var host = new ModelHost(Path.Combine(dir, "work"));
+        JsonObject result;
+        try { result = JsonSerializer.SerializeToNode(JobRunner.Run(host, null, job, outPath))!.AsObject(); }
+        catch (Exception error) { throw new Xunit.Sdk.XunitException("refused: " + Errors.Text(error)); }
+        Assert.True(result["accepted"]!.GetValue<bool>(), result["details"]?.ToJsonString());
+        Assert.Equal(["ValidateAndContinue", "ValidateAndContinue", "None", "None"],
+            result["results"]!.AsArray().Where(r => r!["op"]?.ToString() == "get").Select(r => r!["result"]!["properties"]!["BuiltInValidations"]!.ToString()));
+        Assert.Contains(MessageExpectations.AnonymousDeclaredReason, result.ToJsonString());
+        var bytes = File.ReadAllBytes(outPath);
+        var text = host.HtmlRead(bytes, "MobileScreen:FormOdc", withKeys: false)["documents"]![0]!["html"]!.ToString();
+        output.WriteLine(text);
+        Assert.DoesNotContain("ValidateAndContinue", text);
+        Assert.Contains("id=\"ClearButton\"", Assert.Single(text.Split('\n'), l => l.Contains("os-onclick.BuiltInValidations=\"None\"", StringComparison.Ordinal)));
+        Assert.Equal(0, host.HtmlCheck(bytes)["documents"]!.AsArray().Single(d => d!["root"]!.ToString() == "FormOdc")!["ops"]!.GetValue<int>());
+    }
+
     private static string FindRoot()
     {
         var dir = Path.GetDirectoryName(typeof(ScreenVisualOdcTests).Assembly.Location);

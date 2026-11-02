@@ -193,6 +193,8 @@ public static class JobNormalizer
         // its actions; mapTo { * } into one of its records), with the records of the job first.
         try { FlowTexts(ops, prefix, done, Anvil.Reading.FlowSchema.Combine(JobSchema(ops), Anvil.Reading.FlowSchema.Of(model))); } catch { }
         Motor2(ops, prefix, lane, model, done);
+        // C-23: the href of a link is its On Click through the module's external site (the module type says which one).
+        try { ExternalLinks.Normalize(ops, prefix, model.ModuleType, done); } catch { }
         try
         {
             Sorts(ops, prefix, done);
@@ -227,6 +229,9 @@ public static class JobNormalizer
         try { SharedStyleNormalizer.Normalize(ops, prefix, done); } catch { }
         try { PropertyAliases.Normalize(ops, prefix, lane, done); } catch { }
         try { HtmlDocumentRules.Normalize(ops, prefix, lane, done); } catch { }
+        // C-38: name= of a new widget without id= is its id= (HTML_WIDGET_NAME_IS_ID), never a refusal of what the platform accepts.
+        // Review B1 round 3 (fix 5): on an existing root, only with the base, against every name the root already holds.
+        try { WidgetNames.Normalize(ops, prefix, done, model == null ? null : model.RootNames); } catch { }
         try { ScopeRenames.Normalize(ops, prefix, lane, model == null ? null : model.ScreenNames, done); } catch { }
         try { SystemCalls.Normalize(ops, prefix, lane, model, done); } catch { }
         // R2-C: N.Record.Attr of a Get<E>[ForUpdate] node is N.Record.E.Attr (RECORD_ENTITY_MEMBER_ADDED), both lanes.

@@ -74,7 +74,8 @@ const verifiedRefusal = (value, name, label, pointer = '/patch', carried = null)
   assert.match(JSON.stringify(value.continuation?.add ?? {}), /JSON Patch operations themselves/, label);
 };
 // The gate's own check of each planted op once it is sent explicitly.
-const plantedCause = { 'rest-consume': 'GENERATOR_PENDING', prototype: 'PROTOTYPE_IMPORT_DISABLED', 'reference producer of another customer': 'PATH_OUTSIDE_WORKSPACE' };
+// r4-rest-hosted: rest-consume runs hosted only with its samples inline; the planted one has none (DOCUMENT_FETCH_HOSTED_REFUSED).
+const plantedCause = { 'rest-consume': 'REST_CONSUME_SAMPLE_MISSING', prototype: 'PROTOTYPE_IMPORT_DISABLED', 'reference producer of another customer': 'PATH_OUTSIDE_WORKSPACE' };
 
 test('patch "verified" over basedOn {job} is refused at the gate in the four job tools, whatever the planted patch carries', async () => {
   const h = harness();
@@ -129,7 +130,7 @@ test('control: the same operations as an explicit patch are checked and refused;
   const basedOn = { job: 'ws:o11/jobs/base.json', sha256: sha(base) };
   const ops = planted(h);
   for (const name of TOOLS) {
-    assert.equal(refused(await h.gate(name)({ ...lane(name), basedOn, patch: [{ op: 'add', path: '/ops/-', value: ops['rest-consume'] }] }), name).cause, 'GENERATOR_PENDING', name);
+    assert.equal(refused(await h.gate(name)({ ...lane(name), basedOn, patch: [{ op: 'add', path: '/ops/-', value: ops['rest-consume'] }] }), name).code, 'DOCUMENT_FETCH_HOSTED_REFUSED', name);
     assert.equal(refused(await h.gate(name)({ ...lane(name), basedOn, patch: [{ op: 'add', path: '/ops/-', value: ops.prototype }] }), name).cause, 'PROTOTYPE_IMPORT_DISABLED', name);
     const outside = refused(await h.gate(name)({ ...lane(name), basedOn, patch: [{ op: 'add', path: '/ops/-', value: ops['reference producer of another customer'] }] }), name);
     assert.deepEqual([outside.code, outside.pointer], ['PATH_OUTSIDE_WORKSPACE', '/basedOn/job (patched) > /ops/1/producer'], name);

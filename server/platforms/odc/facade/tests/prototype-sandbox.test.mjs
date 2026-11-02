@@ -41,6 +41,10 @@ function hostile(dir) {
       // Realm-reparented globals: their constructor is the jsdom-realm Function, where 'process' does not exist.
       probe('timerCtor', function () { return typeof setTimeout.constructor('return process')(); });
       probe('fetchCtor', function () { return typeof fetch.constructor('return process')(); });
+      probe('cloneCtor', function () { return typeof structuredClone.constructor('return process')(); });
+      // What the clone returns and throws is the realm's: no second way out through the copy or the error.
+      probe('cloneResultCtor', function () { return typeof structuredClone({}).constructor.constructor('return process')(); });
+      probe('cloneErrorCtor', function () { var e; try { structuredClone(function () {}); } catch (x) { e = x; } return typeof e.constructor.constructor('return process')(); });
       // The inherent jsdom vector still reaches the host process; the OS sandbox must make it useless.
       var P; try { P = document.createElement.constructor('return process')(); } catch (e) { P = null; }
       probe('reachedProcess', function () { return !!P; });
@@ -66,6 +70,40 @@ function probeOf(result) {
   return found;
 }
 
+test('structuredClone loads prototype state without losing nested values, cycles or transfer semantics', async () => {
+  const dir = path.join(tmp, 'clone');
+  fs.mkdirSync(dir);
+  fs.writeFileSync(path.join(dir, 'index.html'), `<!doctype html><p id="o">clone</p><script>
+    const source = { rows: [{ name: 'Original', missing: undefined }], date: new Date('2026-10-29'), map: new Map([['n', 7]]) };
+    source.self = source;
+    const copy = structuredClone(source);
+    copy.rows[0].name = 'Edited';
+    const buffer = new ArrayBuffer(4);
+    new Uint8Array(buffer)[0] = 42;
+    const moved = structuredClone(buffer, { transfer: [buffer] });
+    let rejected = false, rejectedRealm = false;
+    try { structuredClone(function () {}); } catch (e) { rejected = e.name === 'DataCloneError'; rejectedRealm = e instanceof DOMException && e instanceof Error; }
+    let node = 'cloned';
+    try { structuredClone({ inner: [document.body] }); } catch (e) { node = e.name + ':' + (e instanceof DOMException); }
+    const bytes = new Uint8Array([1, 2, 3]);
+    const more = structuredClone({ set: new Set([1]), bytes, view: new DataView(bytes.buffer), re: /a+/gi, error: new TypeError('bad'), boxed: new String('s') });
+    // The copy belongs to the page's realm, as in a browser.
+    const realm = [copy instanceof Object, copy.constructor === Object, Object.getPrototypeOf(copy) === Object.prototype,
+      copy.rows instanceof Array, copy.date instanceof Date, copy.map instanceof Map, moved instanceof ArrayBuffer,
+      more.set instanceof Set, more.bytes instanceof Uint8Array, more.view instanceof DataView, more.bytes.buffer === more.view.buffer,
+      more.re instanceof RegExp && more.re.flags === 'gi', more.error instanceof TypeError && more.error.message === 'bad',
+      more.boxed instanceof String && String(more.boxed) === 's', structuredClone.length, rejectedRealm, node];
+    document.getElementById('o').setAttribute('data-probe', JSON.stringify([
+      source.rows[0].name, copy.rows[0].name, 'missing' in copy.rows[0], copy.self === copy,
+      copy.date.toISOString(), copy.map.get('n'), buffer.byteLength, new Uint8Array(moved)[0], rejected, realm
+    ]));
+  </script>`);
+  const result = await capturePrototype({ source: dir, clock, pool: 1, download: null, resident: false });
+  assert.equal(result.ok, true, JSON.stringify(result.problems));
+  assert.deepEqual(JSON.parse(probeOf(result)), ['Original', 'Edited', true, true, '2026-10-29T00:00:00.000Z', 7, 0, 42, true,
+    [true, true, true, true, true, true, true, true, true, true, true, true, true, true, 1, true, 'DataCloneError:true']]);
+});
+
 test('a hostile prototype cannot write, read a secret, spawn, or see the environment through the capture child', { skip: sandboxed ? false : 'sandbox disabled via SSAM_PROTOTYPE_NO_SANDBOX' }, async () => {
   const result = await capturePrototype({ source: hostile(path.join(tmp, 'hostile')), clock, pool: 1, download: null, resident: false });
   assert.equal(result.ok, true, 'the capture still renders the page: ' + JSON.stringify(result.problems));
@@ -73,6 +111,9 @@ test('a hostile prototype cannot write, read a secret, spawn, or see the environ
   // The constructor vectors on the installed globals are closed inside the realm.
   assert.match(probe, /timerCtor=ERR:.*process is not defined/, probe);
   assert.match(probe, /fetchCtor=ERR:.*process is not defined/, probe);
+  assert.match(probe, /cloneCtor=ERR:.*process is not defined/, probe);
+  assert.match(probe, /cloneResultCtor=ERR:.*process is not defined/, probe);
+  assert.match(probe, /cloneErrorCtor=ERR:.*process is not defined/, probe);
   // Whether or not the inherent jsdom vector reaches the host process, the sandbox denies every capability.
   assert.match(probe, /spawn=ERR:/, 'child_process must be denied: ' + probe);
   assert.match(probe, /write=ERR:/, 'fs write outside the work dir must be denied: ' + probe);

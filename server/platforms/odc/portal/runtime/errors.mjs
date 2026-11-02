@@ -1,6 +1,8 @@
 import { observeCredentials } from './projection-context.mjs';
 import { processCredentials, credentialStateVersion } from './credential-registry.mjs';
 import { createCredentialMatcher } from './credential-matcher.mjs';
+import { AUTH_CODES, authContinuation } from '../../facade/refusal-codes.mjs';
+import { hostedContext } from '../../facade/executor.mjs';
 
 let processMatcher, matcherVersion = -1;
 const explicitMatchers = new WeakMap();
@@ -64,9 +66,13 @@ export function publicError(error) {
     return { code: 'AUTHORIZATION_CONTEXT_INVALID', message: 'The approval record does not cover this exact proposal, environment, operation and target. Nothing was sent.' };
   if (['AbortError', 'TimeoutError'].includes(error?.name) || error?.code === 'READ_DEADLINE_EXCEEDED')
     return { code: 'PORTAL_TIMEOUT', message: 'Portal request timed out or was cancelled. No replay performed.' };
-  return error instanceof OdcError
-    ? { code: error.code, message: error.message, ...error.details }
-    : { code: 'INTERNAL_ERROR', message: 'The operation failed locally. No remote error or credentials were logged.' };
+  // Lote 4, F3: an authentication code carries the call that goes on (refusal-codes.mjs authContinuation); odc-access.mjs
+  // withContinuation lifts error.continuation to the answer, with the tenant when the answer names it.
+  if (error instanceof OdcError) {
+    const next = AUTH_CODES.includes(error.code) && !error.details?.continuation ? authContinuation(error.code, { lane: 'odc', hosted: hostedContext() !== null }) : null;
+    return { code: error.code, message: error.message, ...error.details, ...(next ? { continuation: next } : {}) };
+  }
+  return { code: 'INTERNAL_ERROR', message: 'The operation failed locally. No remote error or credentials were logged.' };
 }
 
 export function fail(code, message, details) { throw new OdcError(code, message, details); }

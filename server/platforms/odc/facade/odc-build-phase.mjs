@@ -10,8 +10,8 @@
 //   Studio lock; the kernel apply of a slot gets the slot's TEMP and TMP (deps.exec) and its resident ODC worker
 //   (deps.worker: slot 0 is the lane's worker, slot i listens on base + i * poolStep).
 // - check: the job preflight of the kernel delivery (C31 of lane mb) when kernel-delivery.mjs has it.
-// phasedDeliver: the delivery, rebuilt once in the same call when the merge proves the open module changed after the
-// capture (BASE_DRIFT, nothing merged): the second build captures the module as it is now (phases.rebased).
+// phasedDeliver: the delivery, redone in the same call (at most REDO_LIMIT times) when its answer wrote nothing and names the
+// same delivery again: BASE_DRIFT, a busy Studio at the merge, PRODUCER_CHANGED (phases.rebased, normalizations; see below).
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
@@ -22,6 +22,7 @@ import { phaseOfCall, phaseGuard, studioMoment, notePhase, StudioTurnRefused, qu
 import { pooledBuild, sharedBuildPool, BuildQueueRefused, slotWorkerPort } from './build-pool.mjs';
 import { workspaceRoot } from './workspace.mjs';
 import { hostedContext } from './executor.mjs';
+import { withNormalizationsOf } from './normalizations.mjs';
 
 // reference-producers (fix/system-reference): the listing a delivery reads once when the session offers no producer of the job's name.
 export const BUILD_STUDIO_READS = new Set(['snapshot', 'reference-snapshot', 'reference-producers']);
@@ -118,17 +119,49 @@ export async function afterOdcMerge({ merge, snapshot, module } = {}, deps = {})
   } catch { return null; }
 }
 
-// The delivery of one call (lib.mjs deliver), rebuilt once on BASE_DRIFT (see the header); the build and the receipt go
-// to the call's phases.
-export async function phasedDeliver(args, deps, { deliver }) {
+// F1b (owner 2026-11-02, "o ssam deve permitir que o usuario programe junto com ele"): the person works in the same Studio,
+// so a delivery never stops because the person changed something there. The answers below wrote NOTHING to the module
+// (merged is not true, nothing was sent or the merge refused before it ran) and their own continuation is the same
+// delivery again; this call does it itself, on the module as it is now (a new capture, so the person's edits are the base
+// of the three-way merge), and the answer says so in normalizations (never silent). A cut merge (MODULE_NOT_AT_BASE), a
+// merge that may have run, a conflict or a security warning are never redone here: they keep their own answer.
+//   BASE_DRIFT (stop 3): the open module changed after the capture: captured again and rebuilt over it.
+//   BRIDGE_BUSY / PIPE_BUSY at the merge, nothing sent (stop 4): the Studio was busy; waited briefly and sent again.
+//   PRODUCER_CHANGED before the merge (stop 5): a producer was published or its references refreshed between the capture
+//     and the merge: the redo builds on the version this call acquired (the continuation drops a stale bound capture).
+export const REDO_LIMIT = 3;
+const REDO_WAIT_MS = [1000, 2000, 4000];
+const redoOf = value => {
+  if (!value || value.ok !== false || value.merged === true) return null;
+  if (value.code === 'BASE_DRIFT' && value.failed === 'merge' && !value.afterCut && value.continuation?.tool !== 'studio_publish') return { rule: 'BASE_DRIFT', wait: false,
+    note: 'The open module changed after the capture (an edit in the Studio); nothing was merged then. SSAM captured the module again, with that edit, and merged this delivery over it.' };
+  if ((value.code === 'BRIDGE_BUSY' || value.code === 'PIPE_BUSY') && value.failed === 'merge' && value.outcome === 'not-sent') return { rule: 'STUDIO_BUSY', wait: true,
+    note: 'The Studio was busy when the merge was sent (nothing of it ran); SSAM waited and sent this delivery again over the module as it is now.' };
+  if (value.code === 'PRODUCER_CHANGED' && value.failed === 'reference-snapshot' && value.continuation?.tool === 'studio_deliver') return { rule: 'PRODUCER_CHANGED', wait: false,
+    args: value.continuation.arguments, note: 'A producer of this module changed between the capture and the merge (published again, or its references refreshed); nothing was merged then. SSAM built this delivery again on the version it acquired.' };
+  return null;
+};
+// The delivery of one call (lib.mjs deliver), redone on the answers above (at most REDO_LIMIT times); the build and the
+// receipt go to the call's phases, the first redo to phases.rebased.
+export async function phasedDeliver(args, deps, { deliver, sleep: wait = sleep } = {}) {
   const settle = value => {
     if (Array.isArray(value?.steps) && value.steps.some(s => s?.step === 'build')) notePhase({ built: true });
     if (typeof value?.evidence === 'string' && value.evidence) notePhase({ receipt: path.join(value.evidence, 'deliver-result.json') });
     return value;
   };
-  const first = settle(await deliver(args, deps));
-  if (!(first && first.ok === false && first.code === 'BASE_DRIFT' && first.failed === 'merge' && first.merged !== true)) return first;
-  notePhase({ rebased: { reason: 'BASE_DRIFT', ...(first.evidence ? { from: first.evidence } : {}) } });
-  const { output: _used, ...again } = args;
-  return settle(await deliver(again, deps));
+  let value = settle(await deliver(args, deps));
+  const notes = [];
+  for (let i = 0; i < REDO_LIMIT; i++) {
+    const redo = redoOf(value);
+    if (!redo) break;
+    if (i === 0) notePhase({ rebased: { reason: redo.rule, ...(value.evidence ? { from: value.evidence } : {}) } });
+    notes.push({ rule: redo.rule, at: 'merge', note: redo.note, ...(value.evidence ? { from: value.evidence } : {}) });
+    if (redo.wait) await wait(REDO_WAIT_MS[i] ?? REDO_WAIT_MS.at(-1));
+    const { output: _used, ...again } = args;
+    // PRODUCER_CHANGED: the arguments the refusal itself names (the same job, owners and changes, without the stale capture).
+    const next = redo.args ? { ...again, producers: redo.args.producers } : again;
+    if (redo.args && redo.args.producers === undefined) delete next.producers;
+    value = settle(await deliver(next, deps));
+  }
+  return notes.length ? withNormalizationsOf(value, notes) : value;
 }

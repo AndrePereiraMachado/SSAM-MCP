@@ -16,6 +16,10 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <RollForward>Major</RollForward>
+    <!-- The thin bridge's own number (ping and bridge_manifest "version"). 1.0.0 until fase4-28; 1.1.0 (r4-f3-import) serves
+         integration_import:wsdl and integration_import:openapi. The pack's identity of the bridge stays its sha256
+         (pack.json o11Bridge.sha256); callers check a capability, never this number. -->
+    <Version>1.1.0</Version>
     <SSDir Condition="'$(SSDir)' == ''">$(USERPROFILE)\OutSystems\Service Studio 11 - Anvil 4516\Service Studio</SSDir>
   </PropertyGroup>
   <ItemGroup>
@@ -81,6 +85,10 @@
          UiGate, ModuleGate, HeadlessPublications); pure apart from Avalonia's dispatcher. -->
     <Compile Include="..\Anvil.Bridge\Ui.cs" Link="Shared\Ui.cs" />
     <Compile Include="..\Anvil.Bridge\UiGate.cs" Link="Shared\UiGate.cs" />
+    <!-- fase4-28 r4-f3-import: integration_import (the Studio's own SOAP and OpenAPI importers on a detached copy of the
+         snapshot), the full bridge's handler linked unchanged; what it needs beyond the Studio is ImportKit.cs (this folder,
+         Studio types and the BCL only; the full bridge's ImportKit delegates to the kernel). -->
+    <Compile Include="..\Anvil.Bridge\IntegrationImportHandler.cs" Link="Shared\IntegrationImportHandler.cs" />
   </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="Anvil.Bridge.Thin.Tests" />

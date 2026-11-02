@@ -182,7 +182,9 @@ public sealed class VerifySourcePatchTests
         File.WriteAllText(Path.Combine(work, "problems.json"), new JsonArray(problems.Select(p => p.DeepClone()).ToArray()).ToJsonString());
         Assert.Contains(problems, p => p["code"]?.ToString() == "HTML_INVALID" && p["patch"] is JsonArray);
         var required = Assert.Single(problems, p => p["code"]?.ToString() == "ArgumentRequiredExpression");
-        Assert.True(required["afterPatch"]?.GetValue<bool>() == true, required.ToJsonString());
+        // C-21 (onda 2): the refused document keeps its shell, so the flow text of its action applies in the first run and its
+        // Verify is a problem of the refusal itself (before, only the patch round saw it: afterPatch).
+        Assert.Equal("/ops/2/data/flow", required["pointer"]?.ToString());
         Assert.Contains("Reset=False", required["patch"]![0]!["value"]!.ToString());
     }
 

@@ -100,8 +100,13 @@ public class PrototypeCssTests
                 [module, "prototype css verbatim", (Action<object>)(_ => written = ThemeCss.WriteThemeVerbatim(theme, css))]);
             var report = written!;
             Assert.True(report["verbatim"]!.GetValue<bool>(), report.ToJsonString());
-            Assert.True(report["importsFirst"]!.GetValue<bool>(), report.ToJsonString());
-            Assert.StartsWith("@import url('https://fonts.googleapis.com/", report["firstStatement"]!.ToString());
+            // B4: the fixture's theme has Theme Editor CSS: the author's half (the composed stylesheet, verbatim) starts with its
+            // @import, the effective StyleSheet is the platform's composition (the Theme Editor CSS first), so the report says the
+            // @import is not first there and is ignored by the browser (cssImportsIgnored), never that it was put first.
+            Assert.Equal("UserStyleSheet", report["half"]!.ToString());
+            Assert.False(report["importsFirst"]!.GetValue<bool>(), report.ToJsonString());
+            Assert.StartsWith("@import url('https://fonts.googleapis.com/", report["cssImportsIgnored"]!["imports"]![0]!.ToString());
+            Assert.StartsWith("@import url('https://fonts.googleapis.com/", css.TrimStart());
         }
         finally { typeof(ModelHost).GetMethod("Release")!.Invoke(null, [module]); }
     }

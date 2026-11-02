@@ -72,13 +72,16 @@ docker run --init -d --name ssam-server -p 127.0.0.1:7310:7310 -v ssam-server-st
 
 ## Extensões .NET O11 (XIF) no servidor hospedado
 
-- `o11_extension` é recusado antes de rodar qualquer coisa com:
+- Com um agente que roda o kind `o11.xif` (app SSAM Agent 0.3.7 / 0.4.4-native ou mais novo, com o motor no pacote), `o11_extension` funciona hospedado:
+  - as etapas `model` e `final` rodam na máquina do usuário, com o Integration Studio dele;
+  - este servidor confere o spec, compila a DLL (com `ref/net472` ao lado do CLI O11, conferido no estágio `kernel-o11`) e publica pela sessão do Service Studio do usuário.
+- Um agente sem o kind recebe a recusa de antes, antes de rodar qualquer coisa:
   - `code: "HOSTED_UNAVAILABLE"`;
   - `cause: "XIF_ENGINE_WINDOWS_ONLY"`;
-  - o motivo;
+  - o motivo, que diz qual app instalar;
   - a continuação `ssam_discover {intent: "reference an existing .NET extension (XIF) from an O11 module", lane: "o11"}`.
-- O cliente constrói e publica a extensão na própria máquina Windows, pelo Integration Studio ou pelo `o11_extension` de um SSAM instalado lá. Depois, referencia a extensão aqui (`ssam_job` com op `reference`, depois `o11_deliver`).
-- Teste: `platforms/odc/facade/tests/hosted-tools.test.mjs`.
+- Apagar continua desligado hospedado (T2).
+- Testes: `platforms/odc/facade/tests/hosted-xif-agent.test.mjs`, `hosted-xif-served.test.mjs` e `hosted-tools.test.mjs`.
 
 ## Provas
 

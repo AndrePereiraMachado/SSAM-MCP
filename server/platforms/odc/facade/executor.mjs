@@ -291,6 +291,9 @@ export function hostedSpawnEnv(lane) {
     // this server, where it never runs (a false studio-gone abandons a merge or a publish with an uncertain outcome): off
     // until an agent package carries CX14 and probes on the user's machine.
     env.ANVIL_BRIDGE_PROBE_MS = '0';
+    // F4 (PLANO-11H): the Integration Studio stages of `anvil xif build` go to the user's agent through this same relay
+    // (XifEngineClient.Default, kind o11.xif); no engine process ever runs on this server.
+    env.ANVIL_XIF_ENGINE_RELAY = '1';
   } else env.SSAM_HYBRID_ODC_ROOT = path.join(context.workspace, 'odc');
   // servidor/fase4-26 (M2): the module index is shared by every customer of the server and addressed by hashes only: a job
   // reads a kept reading (html keys and text, a data text, an action's flow read) only of the capture it runs on

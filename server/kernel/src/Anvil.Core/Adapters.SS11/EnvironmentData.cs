@@ -579,6 +579,18 @@ public static class EnvironmentData
         ["op"] = op, ["pointer"] = pointer, ["code"] = code, ["severity"] = "error", ["message"] = message,
     };
 
+    /// <summary>C-27: the UUID a write without one can take, the same for the same write (the operation without its operationId,
+    /// and its place in the batch): a refusal offers it ready, and sending it twice is one write.</summary>
+    internal static string SuggestedOperationId(JsonObject operation, int index)
+    {
+        var copy = operation.DeepClone().AsObject();
+        copy.Remove("operationId"); copy.Remove("authorization");
+        var bytes = System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(index + "|" + copy.ToJsonString()));
+        bytes[6] = (byte)((bytes[6] & 0x0F) | 0x50);   // version 5 (name-based)
+        bytes[8] = (byte)((bytes[8] & 0x3F) | 0x80);   // RFC 4122 variant
+        return new Guid(bytes.AsSpan(0, 16), bigEndian: true).ToString();
+    }
+
     private static List<JsonObject> OperationsOf(JsonObject request)
         => request["batch"] is JsonArray batch ? batch.Select(o => o as JsonObject ?? new JsonObject()).ToList() : [request];
 
@@ -634,7 +646,17 @@ public static class EnvironmentData
                 if (string.IsNullOrWhiteSpace(operation["authorization"]?.ToString() ?? request["authorization"]?.ToString()))
                     problems.Add(Problem(k, at + "/authorization", "DATA_REQUEST_INVALID", "Writing data requires the user's original authorization words in authorization (on the operation or on the batch)"));
                 var operationId = operation["operationId"]?.ToString();
-                if (!Guid.TryParse(operationId, out _)) problems.Add(Problem(k, at + "/operationId", "DATA_REQUEST_INVALID", "Writing data requires a stable UUID operationId on every write"));
+                if (!Guid.TryParse(operationId, out _))
+                {
+                    // C-27 (F-FigmaMobile-10a, F-AiChatbot-06c, F-FitBody-52): the form it takes, and one ready for this write.
+                    var suggested = SuggestedOperationId(operation, k);
+                    var problem = Problem(k, at + "/operationId", "DATA_REQUEST_INVALID",
+                        $"Writing data requires an operationId on every write that is a UUID (8-4-4-4-12 hexadecimal, e.g. {suggested})"
+                        + (string.IsNullOrWhiteSpace(operationId) ? "" : $"; '{operationId}' is not one") + ": the same write sent again with the same operationId is never written twice");
+                    problem["fix"] = $"operationId \"{suggested}\" (derived from this write: the same write gets the same one)";
+                    problem["patch"] = new JsonArray(new JsonObject { ["op"] = operation["operationId"] == null ? "add" : "replace", ["path"] = at + "/operationId", ["value"] = suggested });
+                    problems.Add(problem);
+                }
                 else if (!operationIds.Add(operationId!)) problems.Add(Problem(k, at + "/operationId", "DATA_REQUEST_INVALID", $"operationId {operationId} is used by two writes of the batch; each write needs its own UUID"));
             }
             if (kind == "delete")
@@ -651,11 +673,24 @@ public static class EnvironmentData
                 continue;
             }
             var identifier = IdentifierOf(entity);
+            // C-27 (F-FitBody-19): an update names its records by ids, one per record in the same order, as a delete does: each
+            // record without its identifier takes its id (a record that has one keeps it). The request is the one that runs.
+            if (kind == "update" && operation["ids"] is JsonArray updateIds)
+            {
+                if (updateIds.Count != records.Count)
+                    problems.Add(Problem(k, at + "/ids", "DATA_REQUEST_INVALID", $"ids of an update is one id per record, in the order of records ({records.Count}); or write {identifier} in each record"));
+                else
+                {
+                    for (var r = 0; r < records.Count; r++)
+                        if (records[r] is JsonObject withId && withId[identifier] == null) withId[identifier] = updateIds[r]?.DeepClone();
+                    operation.Remove("ids");
+                }
+            }
             for (var r = 0; r < records.Count; r++)
             {
                 if (records[r] is not JsonObject record) { problems.Add(Problem(k, $"{at}/records/{r}", "DATA_REQUEST_INVALID", "Each record must be an object")); continue; }
                 if (kind == "update" && (record[identifier] is not { } id || !IsRef(id, out _, out _) && string.IsNullOrWhiteSpace(id.ToString())))
-                    problems.Add(Problem(k, $"{at}/records/{r}/{identifier}", "DATA_REQUEST_INVALID", $"update needs {identifier} on every record"));
+                    problems.Add(Problem(k, $"{at}/records/{r}/{identifier}", "DATA_REQUEST_INVALID", $"update needs {identifier} on every record, or ids: one id per record, in the same order"));
                 foreach (var (name, value) in record)
                 {
                     var pointer = $"{at}/records/{r}/{name}";

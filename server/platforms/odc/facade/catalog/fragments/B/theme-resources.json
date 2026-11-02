@@ -202,7 +202,8 @@
   {
    "id": "ui.script-resource",
    "supersedes": [
-    "ui.script-resource"
+    "ui.script-resource",
+    "module-image"
    ],
    "category": "ui",
    "title": "Scripts (JS files), resources, required scripts and module images",
@@ -213,12 +214,20 @@
     "required scripts",
     "static file",
     "asset",
-    "module image"
+    "module image",
+    "image file",
+    "imagem",
+    "png",
+    "jpg",
+    "logo",
+    "photo",
+    "foto",
+    "import image"
    ],
-   "summary": "IScript with JavaScript (linked to screens by `link $scr RequiredScripts $script`), IResource with TargetDirectory/DeployAction (its binary content is read-only), module images (IImage) referenced by name; RuntimePath is derived and follows renames. A JavaScript node inside a client action is logic, not a script file.",
+   "summary": "IScript with JavaScript (linked to screens by `link $scr RequiredScripts $script`), IResource with TargetDirectory/DeployAction (its binary content is read-only), module images (IImage) from image files: the image files among the files of ssam_code write (the facade reads the bytes; on a hosted server only files of the workspace; an existing image of that name takes the new content), shown by <img src=\"Name.png\">; RuntimePath is derived and follows renames. A JavaScript node inside a client action is logic, not a script file.",
    "route": {
     "kind": "job",
-    "operation": "create IScript|IResource; set JavaScript/TargetDirectory/DeployAction; link <screen> RequiredScripts <script>; rename/replace/delete by path"
+    "operation": "create IScript|IResource; set JavaScript/TargetDirectory/DeployAction; link <screen> RequiredScripts <script>; rename/replace/delete by path; module images: image files among ssam_code files (create IImage {binary: base64, originalPath})"
    },
    "contract": [
     "verbs.verbs.create",
@@ -288,7 +297,7 @@
    ],
    "operations": {
     "create": {
-     "route": "create {parent: @espace, type: IScript|IResource, name}",
+     "route": "create {parent: @espace, type: IScript|IResource|IImage, name}; IImage: args {binary (base64 of the file), originalPath}, written by the facade from the image files of ssam_code files",
      "preconditions": [
       "IResource: write TargetDirectory after DeployAction or the platform discards it"
      ],
@@ -325,14 +334,18 @@
       },
       "module image": {
        "odc": {
-        "status": "not-applicable",
-        "note": "IImage creation needs binary content (byte[] overloads) the kernel does not expose: limit of the kernel on both lanes (kernel/docs/NAO-DA.md IImage)",
-        "alternative": "import the image in the Studio and reference it by name (html-visual <img src>, image widget)"
+        "status": "applicable",
+        "proofs": [
+         "image-create"
+        ],
+        "scope": "create IImage with args.binary as base64 (a 1x1 PNG); an image file among ssam_code files writes it (at most 6 MB of images per write)"
        },
        "o11": {
-        "status": "not-applicable",
-        "note": "kernel limit on both lanes (kernel/docs/NAO-DA.md IImage)",
-        "alternative": "import the image in the Studio and reference it by name"
+        "status": "applicable",
+        "proofs": [
+         "image-localized"
+        ],
+        "scope": "create IImage with args.binary as base64; an image file among ssam_code files writes it (at most 6 MB of images per write); an image of the same name takes the new content (IMAGE_CONTENT_REPLACED)"
        }
       }
      }
@@ -586,31 +599,6 @@
    }
   }
  ],
- "unavailable": [
-  {
-   "id": "module-image",
-   "supersedes": [
-    "module-image"
-   ],
-   "lanes": [
-    "odc",
-    "o11"
-   ],
-   "keywords": [
-    "image",
-    "imagem",
-    "picture",
-    "logo",
-    "icon file"
-   ],
-   "reason": "Module images (IImage) are not created by jobs: the Model API needs the binary content (byte[] overloads) and the kernel does not expose it; IResource.ResourceContent is read-only. Stated as a kernel limit on both lanes.",
-   "evidence": "kernel/docs/NAO-DA.md IImage (limite-do-kernel, both lanes); tests/jobs-odc/theme-script-resource.json description",
-   "negative": {
-    "odc": [],
-    "o11": []
-   },
-   "alternative": "import the image in the Studio and reference it by name (html-visual <img src>, image widget)"
-  }
- ],
+ "unavailable": [],
  "coverage": []
 }

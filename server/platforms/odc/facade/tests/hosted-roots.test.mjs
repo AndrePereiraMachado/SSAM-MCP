@@ -148,10 +148,12 @@ function assertO11Spawn(call, context) {
   assert.equal(env.ANVIL_BRIDGE_FLAVOR, 'thin'); assert.equal(env.ANVIL_BRIDGE_TIMEOUT_SECONDS, '600');
   // servidor/fase4-26: the CX14 probes off (A1) and kept html readings only for the job's own base capture (M2).
   assert.equal(env.ANVIL_BRIDGE_PROBE_MS, '0'); assert.equal(env.ANVIL_KEPT_READINGS, 'own');
+  // F4 (PLANO-11H): the Integration Studio stages of the kernel go to the user's agent through the relay.
+  assert.equal(env.ANVIL_XIF_ENGINE_RELAY, '1');
   // servidor/fase4-26 (a7, SD): the Studio's defaults of the screen reading are kept in the customer's own folder.
   assert.equal(env.SSAM_STUDIO_DEFAULTS_ROOT, path.join(context.workspace, 'state', 'studio-defaults'));
   assert.equal(env.SSAM_MODULE_INDEX_ROOT, path.isAbsolute(process.env.SSAM_MODULE_INDEX_ROOT ?? '') ? process.env.SSAM_MODULE_INDEX_ROOT : undefined);
-  const foreign = Object.keys(env).filter(k => /^(ANVIL|SSAM|ODC)_/.test(k) && !['ANVIL_BRIDGE_PORT', 'ANVIL_AUTHORITY_DIR', 'ANVIL_STUDIO_DIR', 'ANVIL_LANE', 'ANVIL_ODC_STUDIO_DIR', 'ANVIL_ODC_FEATURES_DIR', 'ANVIL_RUNTIME_CSS_DIR', 'ANVIL_BRIDGE_FLAVOR', 'ANVIL_BRIDGE_TIMEOUT_SECONDS', 'ANVIL_BRIDGE_PROBE_MS', 'ANVIL_KEPT_READINGS', 'SSAM_STUDIO_DEFAULTS_ROOT',
+  const foreign = Object.keys(env).filter(k => /^(ANVIL|SSAM|ODC)_/.test(k) && !['ANVIL_BRIDGE_PORT', 'ANVIL_AUTHORITY_DIR', 'ANVIL_STUDIO_DIR', 'ANVIL_LANE', 'ANVIL_ODC_STUDIO_DIR', 'ANVIL_ODC_FEATURES_DIR', 'ANVIL_RUNTIME_CSS_DIR', 'ANVIL_BRIDGE_FLAVOR', 'ANVIL_BRIDGE_TIMEOUT_SECONDS', 'ANVIL_BRIDGE_PROBE_MS', 'ANVIL_KEPT_READINGS', 'ANVIL_XIF_ENGINE_RELAY', 'SSAM_STUDIO_DEFAULTS_ROOT',
     'SSAM_MODULE_INDEX_ROOT'].includes(k)); // a8: the server's module index (absolute), where its readers keep it
   assert.deepEqual(foreign, []);
 }
@@ -163,7 +165,7 @@ function assertOdcSpawn(call, context) {
   assert.equal(env.TEMP, hostedTempDir(context.workspace, 'odc'));
   assert.equal(env.ANVIL_BRIDGE_PORT, undefined); assert.equal(env.ANVIL_CSHARP_RUNTIME_REGISTRATION, undefined); assert.equal(env.SSAM_HYBRID_ODC_TENANT, undefined);
   assert.equal(env.ANVIL_BRIDGE_FLAVOR, undefined); assert.equal(env.ANVIL_BRIDGE_TIMEOUT_SECONDS, undefined);
-  assert.equal(env.ANVIL_BRIDGE_PROBE_MS, undefined); assert.equal(env.ANVIL_KEPT_READINGS, 'own');
+  assert.equal(env.ANVIL_BRIDGE_PROBE_MS, undefined); assert.equal(env.ANVIL_KEPT_READINGS, 'own'); assert.equal(env.ANVIL_XIF_ENGINE_RELAY, undefined);
   assert.equal(env.SSAM_STUDIO_DEFAULTS_ROOT, path.join(context.workspace, 'state', 'studio-defaults'));
 }
 

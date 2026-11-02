@@ -66,6 +66,7 @@ public sealed partial class ModelSession
         EndOfApplyFailure = null;
         _preparedDocuments = null;
         _documentDeclarationErrors = null;
+        _notRun = new HashSet<int>();
         try
         {
         StudioAdapter.Runtime.Mutate(_espace, "Anvil: apply job", _ =>
@@ -100,7 +101,8 @@ public sealed partial class ModelSession
                 if (KeepFailures && (SkipOps?.Contains(i) == true || node is not JsonObject || node["op"] is not JsonValue))
                 {
                     refusedBefore = true;
-                    if (node is JsonObject refused) blocked.Mark(refused, i);
+                    if (node is JsonObject refused) { blocked.Mark(refused, i); DropPreparedDocument(refused); }
+                    _notRun!.Add(i);
                     log?.Invoke($"#{i} not run: the preflight refused it");
                     continue;
                 }
@@ -112,6 +114,10 @@ public sealed partial class ModelSession
                     var usedAt = blocked.PointerOf(uses.Name);
                     skipped.Add((i, uses.Op, uses.Name, usedAt));
                     blocked.MarkAt(op, uses.Op, usedAt);
+                    // C-21: a skipped document leaves nothing (its declarations were made ahead of it when a logic op or an
+                    // earlier document prepared every page of the job): the Verify never judges a page that did not run.
+                    DropPreparedDocument(op);
+                    _notRun!.Add(i);
                     log?.Invoke($"#{i} {kind} skipped: it uses {uses.Name} of failed op #{uses.Op}");
                     continue;
                 }
@@ -127,7 +133,7 @@ public sealed partial class ModelSession
                 } : null;
                 BeginAnchors(i);
                 _ranOps.Add(i);
-                var opFailed = true;
+                var opFailed = true; var shellFailed = false;
                 // R2-B: a logic op in the text form keeps going after a failed text (its stub, Verbs.FlowStubs.cs) and hands its
                 // refusal back (TakeFlowRefusal below): the rest of the op is applied, and judged by the Verify.
                 _flowKeepFailures = KeepFailures && flowTexts;
@@ -148,6 +154,8 @@ public sealed partial class ModelSession
                         var missingAt = blocked.PointerOf(missing);
                         skipped.Add((i, origin, missing, missingAt));
                         blocked.MarkAt(op, origin, missingAt);
+                        DropPreparedDocument(op);
+                        _notRun!.Add(i);
                         log?.Invoke($"#{i} {kind} skipped: {missing} would come from failed op #{origin}");
                         continue;
                     }
@@ -183,11 +191,15 @@ public sealed partial class ModelSession
                         log?.Invoke($"#{i} {kind} failed: {Unwrap(ex)}; written as its stub for the ops that use it");
                         continue;
                     }
-                    blocked.Mark(op, i);
-                    log?.Invoke($"#{i} {kind} failed: {Unwrap(ex)}");
+                    // C-21: a document whose shell stayed (its root, data and action shells) blocks only its widgets: the
+                    // logic texts that fill its actions and the documents that use its root run, and their problems come
+                    // in this same refusal; what the shell holds is this failure's (never a Verify problem of its own).
+                    if (ShellKept(ex)) { blocked.MarkDocumentWidgets(op, i); shellFailed = true; }
+                    else blocked.Mark(op, i);
+                    log?.Invoke($"#{i} {kind} failed: {Unwrap(ex)}" + (shellFailed ? " (its shell stays: root, data and action shells)" : ""));
                     continue;
                 }
-                finally { _flowBlocked = null; _flowDependencySkipped = null; _flowKeepFailures = false; EndAnchors(opFailed); }
+                finally { _flowBlocked = null; _flowDependencySkipped = null; _flowKeepFailures = false; EndAnchors(opFailed); if (shellFailed) FailAnchorsOf(i); }
                 if (TakeFlowRefusal() is { } partial)
                 {
                     // The failed texts are this op's failure (each problem at its text); what no stub stands for is blocked for
@@ -217,9 +229,14 @@ public sealed partial class ModelSession
             _pendingDeletes.Clear();
             // Every theme the job wrote with no base theme carries the native widgets' CSS (Verbs.NativeWidgets.cs).
             if (failures.Count == 0) NativeWidgetCss(); else _themesWritten.Clear();
+            // B4: where each set StyleSheet landed and what serves it (Verbs.CssPlacement.cs).
+            if (failures.Count == 0) CssPlacementReview(failures); else _styleSheetSets.Clear();
             // Data access on the candidate model (QueryInLoopRule.cs, AggregateConsolidationRule.cs): QUERY_IN_LOOP is one more
             // failure of this refusal; legacy loops, escapes and AGGREGATES_MERGEABLE go to the receipt (highWarnings).
             QueryInLoopReview(ops, failures);
+            // F11 (OnInitializeServerCallRule.cs): a server or service action called from the OnInitialize of a Reactive or Mobile
+            // screen or block, on the candidate model: one more failure of this refusal; a legacy call goes to the receipt (highWarnings).
+            OnInitializeReview(ops, failures);
             // The owner's rules on the JSON form of the logic op (Verbs.OwnerRules.cs): new JavaScript and T1/T2 loops it wrote.
             OwnerRulesReview(ops, failures, opsPointer);
             // Checagem de compilação (CompileCheck.cs): what the OutSystems compiler cannot build is one more failure.
@@ -332,6 +349,7 @@ public sealed partial class ModelSession
         {
             if (kind == "create" && (op["type"]?.ToString() ?? "").EndsWith("Theme", StringComparison.Ordinal) && result?["key"]?.ToString() is { Length: > 0 } themeKey) ThemeWritten(Resolve("@" + themeKey));
             else if (kind == "set" && op["prop"]?.ToString() is "BaseTheme" or "StyleSheet") ThemeWritten(Resolve(Req(op, "target")));
+            if (kind == "set" && op["prop"]?.ToString() == "StyleSheet") StyleSheetSet(_applyIndex, op, result);
         }
         catch (KeyNotFoundException) { }
         RecordDataAccessOrigin(kind, result);
@@ -657,6 +675,27 @@ public sealed partial class ModelSession
 
     private JsonNode Create(JsonObject op) => CreateCore(op, nativeNameProbe: false);
 
+    /// <summary>B15 (C-10, review of W3-CSS, S1 and R2-1): the create of a module image (parent @espace, its bytes in args.binary)
+    /// that an image FILE the facade read made: the call's --image-fill grants name it and the sha256 of its bytes (ImageFills).
+    /// Only that create fills an image of the same name (SetImageContent in <see cref="CreateCore"/>) and is no name collision.
+    /// Nothing of the job's text authorizes it (a _from or any other field is ignored): a create written by hand with the name of
+    /// an existing image is NAME_COLLISION (the module's own Logo, the app's icon, is never replaced by a job's text).</summary>
+    internal static bool FillsExistingImage(JsonObject op) => op["op"]?.ToString() == "create" && op["parent"]?.ToString() == "@espace"
+        && op["type"]?.ToString()?.Split('.').Last() is "IImage" or "Image" && op["name"]?.ToString() is { Length: > 0 } name
+        && op["args"]?["binary"] is JsonValue binary && binary.TryGetValue<string>(out var base64) && ImageFills.Allows(name, base64);
+
+    /// <summary>The size of the content an image holds now, when the model shows it (a byte[] property of the image), else null.</summary>
+    private static int? ImageBytes(object image)
+    {
+        try
+        {
+            foreach (var p in image.GetType().GetProperties())
+                if (p.PropertyType == typeof(byte[]) && p.GetIndexParameters().Length == 0 && p.CanRead && p.GetValue(image) is byte[] content) return content.Length;
+        }
+        catch (Exception) { }
+        return null;
+    }
+
     private JsonNode CreateCore(JsonObject op, bool nativeNameProbe)
     {
         var parent = Resolve(Req(op, "parent"));
@@ -676,6 +715,39 @@ public sealed partial class ModelSession
             var kept = PlatformLimits.Kept(shortType, name, siblings);
             Report("nameTruncations", (PathOf(parent as IObjectSignature ?? (IObjectSignature)_es) is { Length: > 0 } owner ? owner + "/" : "") + name, name, kept);
             op["name"] = kept; name = kept;
+        }
+        // B15 (the proto line's C-10, 968d5605): a module image an image FILE of the write made (FillsExistingImage), named as an
+        // image the module already has, takes the new content (SetImageContent), never a second image nor the collision refusal.
+        // Said in the answer: a high warning IMAGE_CONTENT_REPLACED (the facades relay highWarnings on both lanes), and the
+        // receipt's normalized.
+        if (!nativeNameProbe && ReferenceEquals(parent, _espace) && shortType is "IImage" or "Image" && name != null && args?["binary"] is JsonValue binary
+            && FillsExistingImage(op) && _es.Images.FirstOrDefault(i => string.Equals(TypeResolver.Name(i), name, StringComparison.OrdinalIgnoreCase)) is { } image)
+        {
+            var bytes = (byte[])Convert(binary, typeof(byte[]))!;
+            var previous = ImageBytes(image);
+            // Only a file name: the bytes are the binary; a path of the server never names the content (hosted jobs).
+            var originalPath = args["originalPath"]?.ToString() is { Length: > 0 } given && Path.GetFileName(given.Replace('\\', '/')) is { Length: > 0 } file ? file : name;
+            Touch(image);
+            var imageName = TypeResolver.Name(image);
+            image.SetImageContent(bytes, originalPath);
+            // The platform names the image after the file it is given (fm-hero.gif renamed fm_hero to fmhero, measured 27/10 on
+            // O11): the name the module and the job use stays.
+            if (imageName != null && TypeResolver.Name(image) != imageName && FindProperty(image, "Name") is { CanWrite: true } nameProperty) nameProperty.SetValue(image, imageName);
+            _lastWritten = image as IObjectSignature;
+            if (op["as"]?.GetValue<string>() is { } imageAlias) Register(imageAlias, image);
+            Report("normalized", new JsonObject { ["code"] = "IMAGE_CONTENT_REPLACED", ["image"] = TypeResolver.Name(image), ["bytes"] = bytes.Length,
+                ["note"] = "the module already has this image: it took the new content (the image keeps its key and its uses)" });
+            Report("highWarnings", new JsonObject
+            {
+                ["code"] = "IMAGE_CONTENT_REPLACED", ["severity"] = "high", ["op"] = _applyIndex, ["path"] = "Image:" + TypeResolver.Name(image),
+                ["image"] = TypeResolver.Name(image), ["bytes"] = bytes.Length, ["previousBytes"] = previous,
+                ["message"] = $"the module image {TypeResolver.Name(image)} already existed and took the content of {originalPath} ({bytes.Length} bytes"
+                    + (previous is { } was ? $", it had {was}" : "") + "): every screen that shows it shows the new image",
+                ["fix"] = "to keep the image the module had, give the file another name (it becomes a new module image) and deliver again",
+            });
+            var replaced = Summary(image);
+            if (replaced is JsonObject ro) ro["contentReplaced"] = true;
+            return replaced;
         }
         if (ReferenceEquals(parent, _espace) && typeName.Split('.').Last() is "IServerAction" or "IServiceAction" or "IClientAction")
         {

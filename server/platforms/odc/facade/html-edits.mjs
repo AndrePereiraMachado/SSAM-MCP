@@ -78,12 +78,23 @@ export function readingEditsShape(edits) {
 // {path, part, text, name (html), segments (logic: one per action, offsets in text)} for every text of the job's ops.
 const ACTION_HEAD = /^(?:server action|service action|client action|data action|action|preparation)[ \t]+\S/;
 const ROOT_NAME = /^\s*(?:<!--[\s\S]*?-->\s*)*<(?:screen|block)\b[^>]*?\bname\s*=\s*"([^"]+)"/;
+// The identity of an action by its header: scope (server for server and service actions, client, data, screen for a screen's
+// action, preparation) | owner | name, case-insensitive; the same as the by-name merge of the partial job (fase4-28/r4-w2-flow
+// job-patch.mjs actionIdentity), so a server action A and a client action A are two actions. null for no header.
+const ACTION_SCOPES = { 'server action': 'server', 'service action': 'server', 'client action': 'client', 'data action': 'data', action: 'screen', preparation: 'preparation' };
+function actionIdOf(h) {
+  if (!h?.name || !ACTION_SCOPES[h.kind]) return null;
+  const scope = ACTION_SCOPES[h.kind];
+  let owner = String(h.owner ?? '').split('/').pop().replace(/^I\w*:/, ''), name = h.name;
+  if (scope === 'preparation') { owner = owner || name; name = 'Preparation'; }
+  return `${scope}|${owner.toLowerCase()}|${String(name).toLowerCase()}`;
+}
 function segmentsOf(text) {
   const ls = text.split('\n');
   const offsets = []; let at = 0;
   for (const line of ls) { offsets.push(at); at += line.length + 1; }
   const heads = ls.flatMap((line, i) => (ACTION_HEAD.test(line) ? [i] : []));
-  if (!heads.length) { const h = headerOf(text); return [{ from: 0, to: text.length, owner: h?.owner ?? null, name: h?.name ?? null }]; }
+  if (!heads.length) { const h = headerOf(text); return [{ from: 0, to: text.length, owner: h?.owner ?? null, name: h?.name ?? null, id: actionIdOf(h) }]; }
   // As splitActions: the description and blank lines above a header belong to its action; the first one starts the text.
   const starts = heads.map((i, k) => {
     if (k === 0) return 0;
@@ -94,7 +105,7 @@ function segmentsOf(text) {
   });
   return heads.map((i, k) => {
     const h = headerOf(ls[i]);
-    return { from: offsets[starts[k]], to: k + 1 < starts.length ? offsets[starts[k + 1]] : text.length, owner: h?.owner ?? null, name: h?.name ?? null };
+    return { from: offsets[starts[k]], to: k + 1 < starts.length ? offsets[starts[k + 1]] : text.length, owner: h?.owner ?? null, name: h?.name ?? null, id: actionIdOf(h) };
   });
 }
 function textsOf(job) {
@@ -178,9 +189,44 @@ function nearLines(scopes, find) {
   return [];
 }
 
+// The element of the job a stretch of a text belongs to, as element names it: ddl, the root of a document or the screen of an
+// edit, Owner.Action (or Action) of a logic text.
+function elementAt(t, offset) {
+  if (t.part === 'ddl') return 'ddl';
+  if (t.part === 'html') return lastOf(t.name);
+  const s = t.segments.find(s => s.name && offset >= s.from && offset < s.to);
+  return s ? (s.owner ? `${s.owner}.${s.name}` : s.name) : null;
+}
+// C-18 (F-FitBody-15): an item without element takes the one element every find of it occurs in, once in the whole job.
+function inferElement(item, texts, problems) {
+  const whole = texts.map(t => ({ text: t, from: 0, to: t.text.length }));
+  const found = new Set();
+  for (const [j, e] of item.edits.entries()) {
+    if (!plain(e) || typeof e.find !== 'string' || !e.find) return;
+    const hits = occurrences(whole, e.find);
+    const elements = [...new Set(hits.map(h => elementAt(h.scope.text, h.start)).filter(Boolean))];
+    if (hits.length === 1 && elements.length === 1) { found.add(elements[0]); continue; }
+    problems.push({ at: `${item.at}edits/${j}`, code: 'EDIT_ELEMENT_UNKNOWN', error: hits.length
+      ? `without element, find occurs ${hits.length} times in the job (in ${elements.join(', ')}): give element (one of these) or a longer exact text`
+      : 'without element, find occurs nowhere in the job: copy the exact text of the job; element names what the edits change (ddl, a <screen>/<block>, Screen.Action or Action)',
+      names: hits.length ? elements : namesOfTexts(texts).slice(0, 80) });
+    item.bad = true;
+  }
+  if (item.bad) return;
+  if (found.size !== 1) {
+    problems.push({ at: item.at + 'element', code: 'EDIT_ELEMENT_UNKNOWN', error: `without element, the finds of this item are in ${[...found].join(', ')}: one item per element, each with its element` });
+    item.bad = true;
+    return;
+  }
+  item.element = [...found][0];
+  item.inferred = true;
+}
+
 // The item fields a correction of a job takes; the rest of a write is new content (another write).
 const NEW_CONTENT = ['text', 'files', 'ops'];
-const MIXED = 'a correction of a job is patch + edits over basedOn {job, sha256}; new parts (text, files, ops) and edits of a read (basedOn its textSha or {capture, html}) go in a new write';
+const MIXED = 'a correction of a job is patch + edits [{find, with}] over basedOn {job, sha256}, with new action texts and new <screen>/<block> documents as also {part, text} (merged by name); files, ops and edits of a read (basedOn its textSha or {capture, html}) go in a new write';
+// The flag of a write jobTextEdits rewrote with carried texts: its patch and those texts go together (writeCall).
+export const CARRIED = '__ssamCarriedTexts';
 
 /**
  * Edits of the texts of the job of basedOn {job, sha256} (the nextBasedOn of a refused delivery or check), as a JSON Patch.
@@ -210,7 +256,28 @@ export function jobTextEdits(input, { readJob = file => fs.readFileSync(file) } 
   const given = v => (Array.isArray(v) ? v.length > 0 : typeof v === 'string' ? v.trim() !== '' : v != null);
   for (const k of NEW_CONTENT) if (given(input[k])) problems.push({ at: k, error: MIXED });
   if (input.edits != null && !topBase) problems.push({ at: 'edits', error: MIXED });
-  also.forEach((p, i) => { if (plain(p) && !items.some(x => x.at === `also/${i}/`)) problems.push({ at: `also/${i}`, error: MIXED }); });
+  // C-18 (F-Jesse-03): an also item with a new text over the same job base (no basedOn of its own, or the job's)
+  // is a part of the partial job the correction carries (resolvePatchedJob merges it, mergePartialJob): a new action is
+  // added, a <screen>/<block> document replaces the page of the same screen or is a new op. An action the job already has
+  // is corrected by its edits [{find, with}] (checked below, once the job is read): the merge of an action text by its name
+  // into a logic op of the job is the proto's F13 (3d507b81), not on this line.
+  const carried = [], carriedAt = [];
+  also.forEach((p, i) => {
+    if (!plain(p) || items.some(x => x.at === `also/${i}/`)) return;
+    const sameBase = p.basedOn == null || isJobTextBase(p.basedOn) && topBase && isJobTextBase(topBase) && keyOf(p.basedOn) === keyOf(topBase);
+    const part = p.part != null ? canonicalPart(p.part) : null;
+    const text = Array.isArray(p.text) ? p.text.join('\n') : typeof p.text === 'string' ? p.text : '';
+    const document = /^\s*(?:<!--[\s\S]*?-->\s*)*<(screen|block)[\s/>]/.test(text);
+    const logic = part === 'logic' || part == null && /^[ \t]*(?:server action|service action|client action|data action|action|preparation)[ \t]/m.test(text);
+    if (sameBase && given(p.text) && p.edits == null && (logic || (part === 'html' || part == null) && document)) {
+      carried.push({ ...p, basedOn: undefined, ...(part == null ? { part: logic ? 'logic' : 'html' } : {}) });
+      carriedAt.push(i);
+      return;
+    }
+    problems.push({ at: `also/${i}`, error: sameBase && given(p.text) && (part === 'ddl' || !logic && !document)
+      ? 'over basedOn {job, sha256} a data text is corrected in the job: edits [{find, with}] with element "ddl" (or a patch of /ops/<i>/data/ddl); a new action text or a new <screen>/<block> document goes as also {part, text}'
+      : MIXED });
+  });
   if (input.patch != null && !Array.isArray(input.patch)) problems.push({ at: 'patch', error: 'patch "verified" goes alone; with edits, patch is a list of JSON Patch operations (or none)' });
   // The shape of every edit: {find, with} over the text of a job (it has no k: the other forms address a read).
   for (const item of items) {
@@ -225,7 +292,10 @@ export function jobTextEdits(input, { readJob = file => fs.readFileSync(file) } 
       if (typeof e.with !== 'string') problems.push({ at, error: 'with is the new text (a string; "" removes the text found)' });
     });
     if (item.part != null && !canonicalPart(item.part)) problems.push({ at: item.at + 'part', error: `part "${item.part}" is none of ddl, logic, html` });
-    if (typeof item.element !== 'string' || !item.element.trim()) problems.push({ at: item.at + 'element', code: 'EDIT_ELEMENT_UNKNOWN', error: 'element names what the edits change in the job: a <screen>/<block> document, the screen of an edit, an action (Screen.Action or Action) or ddl' });
+    // C-18 (F-FitBody-15): without element, the text each find occurs in once in the whole job (its element is said in the
+    // note); a find that occurs nowhere or in several texts is refused with the elements that hold it.
+    if (item.element != null && (typeof item.element !== 'string' || !item.element.trim())) problems.push({ at: item.at + 'element', code: 'EDIT_ELEMENT_UNKNOWN', error: 'element names what the edits change in the job: a <screen>/<block> document, the screen of an edit, an action (Screen.Action or Action) or ddl' });
+    else if (item.element == null) item.infer = true;
   }
   // The base: the bytes that were hashed (a changed job is never corrected: its new nextBasedOn is).
   let job = null, sha = null;
@@ -252,6 +322,7 @@ export function jobTextEdits(input, { readJob = file => fs.readFileSync(file) } 
   if (job != null) {
     const texts = textsOf(job);
     for (const item of items) {
+      if (item.infer && !item.bad) inferElement(item, texts, problems);
       if (item.bad || typeof item.element !== 'string' || !item.element.trim()) continue;
       const part = item.part != null ? canonicalPart(item.part) : null;
       const scopes = scopesOf(texts, item.element, part);
@@ -266,7 +337,7 @@ export function jobTextEdits(input, { readJob = file => fs.readFileSync(file) } 
         const hits = occurrences(scopes, e.find);
         const where = hit => ({ line: lineAt(hit.scope.text.text, hit.start), text: lineText(hit.scope.text.text, lineAt(hit.scope.text.text, hit.start)), ...(scopes.length > 1 ? { path: hit.scope.text.path } : {}) });
         if (hits.length !== 1) {
-          problems.push({ at, code: 'EDIT_TEXT_NOT_UNIQUE', error: hits.length ? `find occurs ${hits.length} times in ${item.element}: give a longer exact text that occurs once` : `find occurs nowhere in ${item.element}: copy the exact text of the job (the nearest lines are in lines)`,
+          problems.push({ at, code: hits.length ? 'EDIT_TEXT_NOT_UNIQUE' : 'EDIT_TEXT_NOT_FOUND', error: hits.length ? `find occurs ${hits.length} times in ${item.element}: give a longer exact text that occurs once` : `find occurs nowhere in ${item.element}: copy the exact text of the job (the nearest lines are in lines)`,
             lines: hits.length ? hits.slice(0, 10).map(where) : nearLines(scopes, e.find) });
           return;
         }
@@ -277,6 +348,30 @@ export function jobTextEdits(input, { readJob = file => fs.readFileSync(file) } 
         plans.push({ at, item, text: hit.scope.text, start: hit.start, end: hit.end, with: hit.scope.text.edit ? normalizeEvents(' ' + e.with).slice(1) : e.with, line: where(hit) });
       });
     }
+    // C-18, review round 2: a carried text and the edits of this write name their elements by one identity: a <screen>/<block>
+    // document by its root (html|<name>), an action by its header (actionIdOf). A carried text whose element an edit also
+    // changes is one problem, EDIT_OVERLAP (the edits' patch is computed over the job of basedOn and would replace the carried
+    // text in silence); otherwise a carried action the job already has is PARTIAL_AMBIGUOUS (two texts of one action; the
+    // merge of an action text by its name into the job is the by-name merge of the partial job, not on this line).
+    const editedBy = new Map();
+    for (const p of plans) {
+      const id = p.text.part === 'html' ? (p.text.name ? 'html|' + p.text.name.toLowerCase() : null)
+        : p.text.part === 'logic' ? p.text.segments?.find(sg => p.start >= sg.from && p.start < sg.to)?.id ?? null : null;
+      if (id) editedBy.set(id, [...(editedBy.get(id) ?? []), p.at]);
+    }
+    const known = new Set(texts.filter(t => t.part === 'logic').flatMap(t => t.segments ?? []).map(sg => sg.id).filter(Boolean));
+    carried.forEach((p, k) => {
+      const at = `also/${carriedAt[k]}`;
+      const text = (Array.isArray(p.text) ? p.text.join('\n') : String(p.text)).replace(/\r\n/g, '\n');
+      const elements = p.part === 'logic' ? segmentsOf(text).filter(sg => sg.id).map(sg => ({ id: sg.id, label: sg.owner ? sg.owner + '.' + sg.name : sg.name, action: true }))
+        : (n => n ? [{ id: 'html|' + n.toLowerCase(), label: n }] : [])(ROOT_NAME.exec(text)?.[1]);
+      for (const e of elements) {
+        const edits = editedBy.get(e.id);
+        if (edits) problems.push({ at, code: 'EDIT_OVERLAP', edits, error: `${at} and ${edits.join(', ')} change the same ${e.action ? 'action' : 'screen or block'} ${e.label}: send its whole text in also, or the edits, not both` });
+        else if (e.action && known.has(e.id)) problems.push({ at, code: 'PARTIAL_AMBIGUOUS',
+          error: `${e.label} (${e.id.split('|')[0]} action) is already an action of the job of basedOn: change it with edits [{find, with}] and element "${e.label}" over that job; a new action text in also adds an action` });
+      }
+    });
     for (let a = 0; a < plans.length; a++) for (let b = a + 1; b < plans.length; b++) {
       const x = plans[a], y = plans[b];
       if (x.text !== y.text) continue;
@@ -337,8 +432,9 @@ export function jobTextEdits(input, { readJob = file => fs.readFileSync(file) } 
   const notes = items.map(item => {
     const before = item.scopes.reduce((n, s) => n + Buffer.byteLength(s.text.text.slice(s.from, s.to), 'utf8'), 0);
     const delta = plans.filter(p => p.item === item).reduce((n, p) => n + Buffer.byteLength(p.with, 'utf8') - Buffer.byteLength(p.text.text.slice(p.start, p.end), 'utf8'), 0);
-    return { rule: 'job-text-edits', at: '/' + item.at + 'edits', note: `${item.element}: ${item.edits.length} edit(s) on job ${sha.slice(0, 12)}: ${before} -> ${before + delta} bytes` };
+    return { rule: 'job-text-edits', at: '/' + item.at + 'edits', note: `${item.element}${item.inferred ? ' (the element the finds occur in)' : ''}: ${item.edits.length} edit(s) on job ${sha.slice(0, 12)}: ${before} -> ${before + delta} bytes` };
   });
   const { edits: _e, element: _el, also: _a, removes: _r, ...rest } = input;
-  return { input: { ...rest, basedOn: base, patch: [...generated, ...model] }, notes };
+  if (carried.length) notes.push({ rule: 'job-text-carried', at: '/also', note: `${carried.length} new text(s) beside the edits: added to job ${sha.slice(0, 12)} (a new action, a document that replaces the page of its screen or a new one)` });
+  return { input: { ...rest, basedOn: base, patch: [...generated, ...model], ...(carried.length ? { also: carried, [CARRIED]: true } : {}) }, notes };
 }

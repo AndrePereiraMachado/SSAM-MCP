@@ -35,6 +35,7 @@
 // phaseGuards(ctx) wraps the Studio access of the cycle's context once: in a phased call, a bridge method that is not a
 // read of the build (BUILD_BRIDGE_READS, snapshot_module with module_key) and any CLI verb but apply/check-job take the
 // Studio first (enterApplyPhase), so nothing writes to the Studio without its lock.
+import { imageFillArgs } from './image-fill-grants.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { AsyncLocalStorage } from 'node:async_hooks';
@@ -346,7 +347,7 @@ export async function buildBeforeApply({ input, job, ctx, lane, task, signal }) 
   if (baseModel) { try { const ports = await Promise.all(Array.from({ length: pool.size ?? 1 }, (_, i) => slotPort(i, lanePorts))); prefer = preferredSlots(baseModel, ports.length, i => ports[i]); } catch { prefer = []; } }
   let ranOn = null;
   // Keep the job's directory for relative job: dependencies. The kernel pins every source hash.
-  const argv = ['apply', '--job', job, '--base', checkedBase, '--out', candidate, '--work', path.join(outputFolder, 'model'),
+  const argv = ['apply', '--job', job, ...imageFillArgs(job, { lane: 'o11', module: input?.module ?? null, environment: input?.expectedEnvironment ?? null }), '--base', checkedBase, '--out', candidate, '--work', path.join(outputFolder, 'model'),
     ...(input.autoPatch === false ? ['--auto-patch', 'off'] : []),
     ...producers.flatMap(([name, file]) => ['--producer', name + '=' + file]),
     // the job a patched delivery corrects (o11-cycle.mjs BASED_ON): the preflight refuses CSS the correction dropped

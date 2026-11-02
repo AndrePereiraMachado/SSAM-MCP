@@ -1,5 +1,6 @@
 // Pure recovery continuations shared by the Studio client and delivery projection.
 import { isErrorReportTitle, cleanStall } from './bridge-stall.mjs';
+import { WORDS_MARKER } from './next-steps.mjs';
 export function stallRecovery(raw, continuation) {
   const next=continuation ? [continuation] : [];
   if(!raw) return next;
@@ -11,7 +12,8 @@ export function stallRecovery(raw, continuation) {
   const buttons=Array.isArray(blocked.buttons)?blocked.buttons:[];
   const closable=isErrorReportTitle(blocked.title) || blocked.kind==='UnexpectedError' || blocked.closable===true
     || (buttons.length>0 && buttons.every(b=>/^(ok|close|fechar)$/i.test(String(b).trim())));
-  if(closable && blocked.title) return [{tool:'o11_studio',arguments:{command:'dismiss-dialog',args:{title:blocked.title}},why:'close the dialog that stopped the operation; then reconcile the result'},...next];
+  // Closing it is the person's decision: the step carries the marker of their words (o11_studio refuses it until they are given).
+  if(closable && blocked.title) return [{tool:'o11_studio',arguments:{command:'dismiss-dialog',args:{title:blocked.title,words:WORDS_MARKER}},why:'close the dialog that stopped the operation, only with the person\'s own words in args.words; then reconcile the result'},...next];
   const question=blocked.question ?? [blocked.title,...(Array.isArray(blocked.texts)?blocked.texts:[])].filter(Boolean).join(' | ');
   return [{tool:'o11_studio',arguments:{command:'wait',args:{condition:'no-dialogs'}},question:question || 'Read and answer the dialog open in the Studio.',why:question ? `The person has to answer the dialog in the Studio: ${question}` : 'read and answer the dialog in the Studio before reconciling the operation'},...next];
 }

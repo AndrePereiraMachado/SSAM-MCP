@@ -52,6 +52,7 @@ public static class ScopePhase
             // StaticChecks) says them before the build.
             var callables = ScopeRules.Known(index, job, ops, lane);
             Collect(problems, warnings, () => ScopeRules.Calls(ops, prefix, job, callables));
+            Collect(problems, warnings, () => ScopeOutputs.Check(ops, prefix, lane, callables));
             Collect(problems, warnings, () => ScopeRules.Identifiers(ops, prefix, job, index, callables));
         }
         Collect(problems, warnings, () => ScopeRules.ProducerElements(ops, prefix, facts));

@@ -336,6 +336,8 @@ function mapRequest(input) {
     if (offset > 0) mapOnly.push('offset');
     if (mapOnly.length) throw new Error('view "html" reads one screen or block (screen) in pages (page); ' + mapOnly.join(', ') + ' belong to view "map"');
     if (input.screen != null && (typeof input.screen !== 'string' || !input.screen.trim())) throw new Error('screen must be a non-empty string: a screen or block name, Kind:Name or @key');
+    // C-20 (F-FitBody-53): one screen per read; a list written in one string named no screen (ELEMENT_NOT_FOUND).
+    if (input.screen != null && /[,;|]/.test(input.screen)) throw new Error('screen is ONE screen or block (name, Kind:Name or @key): "' + input.screen.trim() + '" is a list; read each one in its own ssam_map call, all of them in the same message');
     if (input.page != null && input.screen == null) throw new Error('page needs screen: the pages are those of one screen or block');
     return { lane, target: input.target, view, screen: input.screen?.trim() ?? null, page: integer('page', input.page, 1, 100000, 1),
       includeKeys: input.keys === true, budgetBytes: integer('budgetBytes', input.budgetBytes, 2000, 1048576, DEFAULT_MAP_BUDGET()),
@@ -1233,8 +1235,8 @@ export function htmlPages(text, budget) {
 // The delivery of an edit of this reading (C2): the html op in its edit form, in the lane's deliver tool. On ODC the
 // studio_deliver of the ssam server needs feature, module, owners and changes with a job: the call carries them, the screen
 // as its owner.
-export function editCall(lane, html, sha256) {
-  const op = { op: 'html', data: { screen: html.root, basedOn: { capture: sha256, html: html.htmlSha256 }, edits: [{ set: '<k>', attributes: { '<attribute>': '<value>' } }, { find: '<exact text>', with: '<new text>' }] } };
+export function editCall(lane, html, sha256, edits = null) {
+  const op = { op: 'html', data: { screen: html.root, basedOn: { capture: sha256, html: html.htmlSha256 }, edits: edits ?? [{ set: '<k>', attributes: { '<attribute>': '<value>' } }, { find: '<exact text>', with: '<new text>' }] } };
   return lane === 'o11'
     ? { tool: 'o11_deliver', arguments: { module: html.model ?? '<module>', job: { ops: [op] } } }
     : { tool: 'studio_deliver', arguments: { feature: html.root + ' (change)', module: html.model ?? '<module>', job: { ops: [op] }, owners: [html.root], changes: ['<what changes in the screen>'] } };
@@ -1269,6 +1271,8 @@ async function htmlAnswer(q, { file, sha256, canonical, captured, snapshot, star
   const shape = (page, pages, from, to, total, text) => ({ ...head, screen: html.root, kind: html.rootKind, key: html.rootKey, htmlSha256: html.htmlSha256,
     basedOn: { capture: sha256, html: html.htmlSha256 }, bytes: html.bytes, elements: html.elements, widgets: html.widgets,
     opaqueWidgets: html.opaqueWidgets, ...(html.keysFile ? { keysFile: html.keysFile } : {}), ...(html.problems ? { problems: html.problems } : {}),
+    // F8: what the reading sees that renders wrong (HTML_TABLE_LIST_VIRTUALIZED), each with the delivery that repairs it.
+    ...(html.notes?.length ? { notes: html.notes.map(n => n.edit?.edits && WIRED['ui.screen-html-edit'] === true ? { ...n, call: editCall(q.lane, html, sha256, n.edit.edits) } : n) } : {}),
     page, pages, lines: { from: from + 1, to, total }, html: text, ...(q.includeKeys && html.keys ? { keys: html.keys } : {}),
     continuations: { next: page < pages ? { tool: 'ssam_map', arguments: { ...pin, screen: q.screen, page: page + 1 } } : null,
       keys: q.includeKeys ? null : { tool: 'ssam_map', arguments: { ...pin, screen: q.screen, keys: true } }, inspect,

@@ -36,6 +36,9 @@ public static class ScreenHtmlMerge
         public readonly Dictionary<(string Id, string Segment), List<string>> Children = [];
         public readonly Dictionary<string, string> K = new(StringComparer.Ordinal);
         public string? StyleText;
+        // C-14: the theme parts of the root (<style scope="theme" [id]>) by their id ("" the root's own part), in order.
+        public readonly List<(string Id, string Css)> ThemeStyles = [];
+        public string? Theme(string id) => ThemeStyles.Where(t => t.Id == id).Select(t => t.Css).Cast<string?>().FirstOrDefault();
         public bool Has(string id) => Nodes.ContainsKey(id);
         public List<string> Sequence(string id, string segment) => Children.TryGetValue((id, segment), out var list) ? list : [];
     }
@@ -99,6 +102,18 @@ public static class ScreenHtmlMerge
             sheet.Children.Add(new ScreenHtml.Node { Text = style });
             top.Children.Insert(0, sheet);
         }
+        // C-14: each theme part three ways by its id, in the order of the edit, then the ones only the Studio or the base have.
+        var at = style != null ? 1 : 0;
+        foreach (var id in f.ThemeStyles.Select(t => t.Id).Concat(l.ThemeStyles.Select(t => t.Id)).Concat(b.ThemeStyles.Select(t => t.Id)).Distinct(StringComparer.Ordinal).ToList()) {
+            var part = Pick(f.Theme(id), b.Theme(id), l.Theme(id), out var partClash);
+            if (partClash) Conflict(result, l, Root, "style", "the theme part " + (id.Length == 0 ? "of the root" : id) + " changed in the edit and in the Studio: the edit's");
+            if (part == null) continue;
+            var sheet = new ScreenHtml.Node { Tag = "style" };
+            sheet.Attributes.Add(new("scope", "theme"));
+            if (id.Length > 0) sheet.Attributes.Add(new("id", id));
+            sheet.Children.Add(new ScreenHtml.Node { Text = part });
+            top.Children.Insert(at++, sheet);
+        }
         var document = new ScreenHtml.Node { Tag = "#document" };
         document.Children.Add(top);
         result.Document = ScreenHtmlText.Write(document);
@@ -128,9 +143,11 @@ public static class ScreenHtmlMerge
                 continue;
             }
             if (e.Tag == "style") {
+                // C-14: a theme part replaces the part with its id (or is new, after the other <style>); the root's own <style> the own.
                 var t = Top();
-                var old = t.Children.FindIndex(c => c.Tag == "style");
-                if (old >= 0) t.Children[old] = e; else t.Children.Insert(0, e);
+                var theme = ScreenHtmlEdit.IsThemeStyle(e);
+                var old = t.Children.FindIndex(c => c.Tag == "style" && ScreenHtmlEdit.IsThemeStyle(c) == theme && (!theme || c.Get("id") == e.Get("id")));
+                if (old >= 0) t.Children[old] = e; else if (theme) t.Children.Insert(t.Children.FindLastIndex(c => c.Tag == "style") + 1, e); else t.Children.Insert(0, e);
                 continue;
             }
             if (e.Get("k") is not { } key) return null;
@@ -194,7 +211,11 @@ public static class ScreenHtmlMerge
                     foreach (var run in RunsOf(node, child)) { list.Add(Line(run, lines)); lastIf = null; }
                     continue;
                 }
-                if (child.Tag == "style" && id == Root && segment == "self") { side.StyleText = string.Concat(child.Children.Select(c => c.Text)); continue; }
+                if (child.Tag == "style" && id == Root && segment == "self") {
+                    if (ScreenHtmlEdit.IsThemeStyle(child)) side.ThemeStyles.Add((child.Get("id") ?? "", Anvil.Core.ThemeParts.Canon(string.Concat(child.Children.Select(c => c.Text)))));
+                    else side.StyleText = string.Concat(child.Children.Select(c => c.Text));
+                    continue;
+                }
                 if (IsElse(child) && lastIf != null) {
                     Walk(child, lastIf, "else");
                     lastIf = null;

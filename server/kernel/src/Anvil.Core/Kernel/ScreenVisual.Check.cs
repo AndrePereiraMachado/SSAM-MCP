@@ -156,6 +156,18 @@ public static partial class ScreenVisual
                 foreach (var d in rule.Declarations) rootTokens.Add(d.Property + ":" + d.Value.Trim());
 
         var runtimeOnly = predictedElements.Where(p => p.Runtime != null && !authorOf.ContainsKey(p)).ToList();
+        // (k) C-12: the parts of the module theme this document writes (its own, and the named ones of its <style scope="theme"
+        // id>), and where each lies in a theme sheet.
+        var ownKeys = OwnThemeKeys(input);
+        var partRanges = new Dictionary<string, List<(int Start, int End)>>(StringComparer.Ordinal);
+        (int Start, int End)? OwnPart(string css, CssRule rule)
+        {
+            if (!partRanges.TryGetValue(css, out var ranges))
+                partRanges[css] = ranges = ownKeys.Select(k => ThemeParts.Find(css, k)).Where(p => p != null).Select(p => (p!.Value.Start, p.Value.End)).ToList();
+            var at = RuleOffset(css, rule);
+            foreach (var range in ranges) if (at >= range.Start && at < range.End) return range;
+            return null;
+        }
         // (c) R3-A: the positional selectors the List's sentinels move are their own family (the wrapper branch leaves them).
         var positional = PositionalFindings(input, rules);
         var positionalSelectors = positional.Select(f => f.Subject).ToHashSet(StringComparer.Ordinal);
@@ -170,6 +182,19 @@ public static partial class ScreenVisual
                 var matched = authorElements.Where(a => predictedOf.ContainsKey(a) && M(a, complex)).ToList();
                 // (a) a wrapper breaks a child or sibling combinator: the author's element is matched, its runtime element is not.
                 var missed = matched.Where(a => !M(predictedOf[a], complex)).ToList();
+                // (i) C-12 (F-AiChatbot-05): the content of a <popup> is mounted in a portal of the body, outside the page; a
+                // selector scoped by an element around the popup (.ac-page .ac-btn) does not reach it. The patch adds, beside it,
+                // the same selector scoped by the popup's dialog (the elements of the page keep the original).
+                var portaled = missed.Where(a => InPortal(predictedOf[a])).ToList();
+                if (portaled.Count > 0) missed = missed.Except(portaled).ToList();
+                // A rule of the page already styles them in the portal with these properties (the patch applied): nothing to say.
+                if (portaled.Count > 0 && !rules.Any(o => o.Rule.Declarations.Any(d => properties.Contains(d.Property.ToLowerInvariant())) && o.Selectors.Any(x => portaled.All(a => M(predictedOf[a], x.Complex)))))
+                {
+                    var right = PopupScoped(selector, complex, portaled.Select(a => predictedOf[a]).ToList());
+                    Add(new Finding(SelectorMissesRuntime, input.Root, Line(input, portaled[0]), selector, right,
+                        $"{selector} matches <{portaled[0].Tag}> inside the <popup> as written, but the runtime mounts the popup in a portal of the body, outside the page ({PortalPath} > {Compact(predictedOf[portaled[0]])}): the rule does not reach it" + (right != null ? $"; the patch adds {right} beside it" : ""), "popup-portal")
+                    { Sheet = sheet.Where, RuleText = ruleText, AddSelector = true, Candidates = right == null ? [PortalPath + " " + Compact(predictedOf[portaled[0]])] : [] });
+                }
                 if (missed.Count > 0 && !positionalSelectors.Contains(selector))
                 {
                     var right = SeeThroughWrappers(selector, input);
@@ -180,8 +205,10 @@ public static partial class ScreenVisual
                 }
                 // (b) the selector also matches an element only the runtime renders (the span of a {{ }}, a wrapper span).
                 var extra = runtimeOnly.FirstOrDefault(p => M(p, complex));
-                // A selector that names the runtime's structure (:has, data-*) means it.
-                if (extra != null && complex.Parts[^1].Compound.Items.Any(s => s.Kind == SimpleKind.Type) && !selector.Contains(":has(", StringComparison.Ordinal) && !selector.Contains("[data-", StringComparison.Ordinal))
+                // A selector that names the runtime's structure (:has, data-*) means it. C-17 (F-AiChatbot-07b, F-FigmaReactive-09e):
+                // so does one that styles no element the author wrote (.ac-chatwin-input > span is the input's own span.input-text):
+                // the patch that left the runtime element out would have undone the intended style.
+                if (extra != null && matched.Count > 0 && complex.Parts[^1].Compound.Items.Any(s => s.Kind == SimpleKind.Type) && !selector.Contains(":has(", StringComparison.Ordinal) && !selector.Contains("[data-", StringComparison.Ordinal))
                 {
                     var right = WithoutRuntimeSpans(selector, input.Platform);
                     var ok = right != null && !SafeMatches(extra, right) && matched.All(a => SafeMatches(predictedOf[a], right));
@@ -250,6 +277,49 @@ public static partial class ScreenVisual
                     { Sheet = sheet.Where, RuleText = ruleText, Candidates = [selector + drawn.Box, selector + drawn.Mark] });
                     break;
                 }
+                // (h) C-12 (F-AiChatbot-04, F-FitBody-35, -43): the runtime writes style="position: relative;" on the element of a
+                // List (inline: it wins over every rule without !important), so a position:absolute (fixed, sticky) of the List's
+                // element is lost and the List stays in the flow (the dropdown pushed the menu 150 px up, the page 32 px down).
+                // The patch appends the same position with !important, which wins over the inline style.
+                if (rule.Declarations.LastOrDefault(d => d.Property.Equals("position", StringComparison.OrdinalIgnoreCase)) is { Important: false } position
+                    && position.Value.Trim().ToLowerInvariant() is { Length: > 0 } wanted && wanted is not ("relative" or "static" or "inherit" or "initial" or "unset" or "revert"))
+                    foreach (var a in matched)
+                    {
+                        var p = predictedOf[a];
+                        if (p.Widget != "IList" || InlinePosition(p) is not { } inline || inline == wanted) continue;
+                        // A rule of the page already gives the List its position with !important (the patch applied).
+                        if (rules.Any(o => o.Rule.Declarations.Any(d => d.Property.Equals("position", StringComparison.OrdinalIgnoreCase) && d.Important) && o.Selectors.Any(x => M(p, x.Complex)))) continue;
+                        var append = selector + "{position:" + wanted + "!important}";
+                        Add(new Finding(SelectorMissesRuntime, input.Root, Line(input, a), selector, null,
+                            $"{selector} sets position:{wanted} on the List <{a.Tag} list=\"{a.Attr("list")}\">, but the runtime writes style=\"position: {inline};\" on the List's element ({RuntimePath(p)}), inline, over every rule without !important: the List stays in the flow; the patch appends {append}", "list-position")
+                        { Sheet = sheet.Where, RuleText = ruleText, Append = SafeMatches(p, selector) ? append : null });
+                        break;
+                    }
+                // (k) C-12 (F-FitBody-44b): the parts of the module theme are one style sheet, in the order of the theme; a rule of a
+                // part this document writes loses a property to a rule of another part, of the same specificity, written after it
+                // (.fb-app .fbn-tabs{position:absolute} under .fb-app .fbx-list{position:relative} of an older part). The author does
+                // not see that order: the patch adds beside the selector the one whose subject repeats its class (one class more of
+                // specificity), checked against the rule it lost to.
+                if (sheet.Where == "theme" && rule.EnclosingRules.Count == 0 && OwnPart(sheetText, rule) is { } ownRange)
+                    foreach (var a in matched)
+                    {
+                        var p = predictedOf[a];
+                        var mine = CssSelectors.Specificity(complex);
+                        var rival = rules.Where(o => ReferenceEquals(o.Sheet, sheet) && o.Rule.EnclosingRules.Count == 0 && RuleOffset(o.Text, o.Rule) is var at && at > ownRange.End
+                                && OwnPart(o.Text, o.Rule) == null)
+                            .SelectMany(o => o.Rule.Declarations.Where(d => !d.Important && rule.Declarations.Any(m => !m.Important && m.Property.Equals(d.Property, StringComparison.OrdinalIgnoreCase) && m.Value.Trim() != d.Value.Trim()))
+                                .SelectMany(d => o.Selectors.Where(x => CssSelectors.Specificity(x.Complex) == mine && M(p, x.Complex)).Select(x => (Selector: x.Text, Property: d.Property.ToLowerInvariant()))))
+                            .FirstOrDefault();
+                        if (rival.Selector == null) continue;
+                        // A rule of a sheet already sets it with a more specific selector (the patch applied): nothing to say.
+                        if (rules.Any(o => o.Rule.Declarations.Any(d => d.Property.Equals(rival.Property, StringComparison.OrdinalIgnoreCase)) && o.Selectors.Any(x => CssSelectors.Specificity(x.Complex).CompareTo(mine) > 0 && M(p, x.Complex)))) continue;
+                        var right = RepeatedClass(selector, complex);
+                        var ok = right != null && SafeMatches(p, right) && CssSelectors.Specificity(right).CompareTo(mine) > 0;
+                        Add(new Finding(SelectorMissesRuntime, input.Root, Line(input, a), selector, ok ? right : null,
+                            $"{selector} {SpecText(mine)} sets {rival.Property} on <{a.Tag}>, but {rival.Selector} {SpecText(mine)}, of another part of the module theme written after this document's part, sets it too and wins by order" + (ok ? $"; the patch adds {right} beside it" : ""), "theme-order")
+                        { Sheet = sheet.Where, RuleText = ruleText, AddSelector = true });
+                        break;
+                    }
             }
             // F5: a token of OutSystems UI declared in a selector that is not :root/html. T18: not for a rule of the installed
             // OutSystems UI base (byte-equal), nor where :root would change nothing (a selector every widget is inside: body) or
@@ -267,6 +337,13 @@ public static partial class ScreenVisual
 
         // F7 and F1 on the author's DOM.
         bool Block(DomNode element) => blockRules.Any(r => r.Selectors.Any(x => M(element, x.Complex)));
+        // (j) C-12 (F-FitBody-35): an inline top of an element in the row of a List is not published on the first render (the
+        // runtime wrote style="cursor: pointer; left: 317px;" for left: 317px; top: 340px): the element sits out of place until the
+        // next render. Its position belongs in a rule of the CSS (a class of the element).
+        foreach (var a in authorElements)
+            if (a.Attr("style") is { } inlineStyle && InlineTop.IsMatch(inlineStyle) && a.Ancestors().Any(x => x.Attr("list") != null) && input.AuthorNodes.TryGetValue(a, out var styled))
+                Add(new Finding(SelectorMissesRuntime, input.Root, styled.Line, $"<{a.Tag} style=\"{inlineStyle}\"> (line {styled.Line})", null,
+                    $"the inline top of <{a.Tag}> in a row of the List is not published on the first render (the runtime keeps the other declarations of its style): the element sits out of place until the next render; write top in a rule of the CSS, on a class of the element", "list-row-inline-top"));
         foreach (var parent in authorElements)
         {
             var children = parent.Children;
@@ -275,6 +352,9 @@ public static partial class ScreenVisual
                 var (a, b) = (children[i], children[i + 1]);
                 if (!a.IsElement || !b.IsElement || !InlineTags.Contains(a.Tag!) || !InlineTags.Contains(b.Tag!)) continue;
                 if (!Visible(a) || !Visible(b) || Layout(parent) || Block(a) || Block(b)) continue;
+                // C-17 (F-AiChatbot-07c): two inline elements that are all the text of their parent, each one word of letters
+                // ("Its" + "Bot" of a logo), are one word styled in parts: glued on purpose.
+                if (OneWordInParts(parent, a, b)) continue;
                 if (!input.AuthorNodes.TryGetValue(b, out var bNode)) continue;
                 var edit = InsertBefore(input.Document, bNode, " ");
                 Add(new Finding(TextJoined, input.Root, bNode.Line, $"</{a.Tag}><{b.Tag}>", $"</{a.Tag}> <{b.Tag}>",
@@ -292,7 +372,9 @@ public static partial class ScreenVisual
             }
             // F1: a List that is the only element of a grid or flex container: the container's items are the List and its sentinels.
             var elements = children.Where(c => c.IsElement).ToList();
-            if (elements is [var only] && only.Attr("list") != null && Layout(parent) && input.AuthorNodes.TryGetValue(only, out var listNode) && input.AuthorNodes.TryGetValue(parent, out var parentNode))
+            // C-17 (F-AiChatbot-07d): a List that is a grid or flex container itself lays out its rows: it is the one item of its
+            // parent on purpose (the message column that is the List).
+            if (elements is [var only] && only.Attr("list") != null && Layout(parent) && !Layout(only) && input.AuthorNodes.TryGetValue(only, out var listNode) && input.AuthorNodes.TryGetValue(parent, out var parentNode))
             {
                 var movable = only.Attributes.All(x => x.Name is "list" or "as") && parent.Attr("list") == null;
                 var edits = movable ? MoveListUp(input.Document, parentNode, listNode) : null;
@@ -308,6 +390,68 @@ public static partial class ScreenVisual
     }
 
     // ---- helpers of the check -------------------------------------------------------------------------------------------------
+
+    /// <summary>C-12: the class of the portal the runtime mounts a popup in, and the path from the body to the popup's content.</summary>
+    internal const string PortalClass = "portal-class";
+    private const string PortalPath = "body > div.portal-class > div > div.popup-backdrop > div.popup-dialog > div.popup-content";
+    private const string PopupScope = ".popup-dialog";
+
+    private static bool InPortal(DomNode element) => element.Ancestors().Any(a => a.Runtime == "IPopup" && a.Classes.Contains(PortalClass));
+
+    /// <summary>The selector with the part before a descendant combinator replaced by the popup's dialog, so it reaches the
+    /// elements of the popup in their portal (the most of the selector kept); null when none does.</summary>
+    private static string? PopupScoped(string selector, ComplexSelector complex, List<DomNode> targets)
+    {
+        for (var k = 1; k < complex.Parts.Count; k++)
+        {
+            if (complex.Parts[k].Combinator != ' ') continue;
+            var candidate = PopupScope + " " + selector[complex.Parts[k].Compound.Start..].Trim();
+            if (targets.All(t => SafeMatches(t, candidate))) return candidate;
+        }
+        return null;
+    }
+
+    private static readonly Regex InlinePositionValue = new(@"(?:^|;)\s*position\s*:\s*([a-z-]+)", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    private static readonly Regex InlineTop = new(@"(?:^|;)\s*top\s*:", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    /// <summary>The position an element's inline style gives it (the runtime's on a List), null without one.</summary>
+    private static string? InlinePosition(DomNode element) =>
+        element.Attr("style") is { } style && InlinePositionValue.Match(style) is { Success: true } m ? m.Groups[1].Value.ToLowerInvariant() : null;
+
+    /// <summary>The keys of the theme parts a document writes: its root's own part and its named ones (style:id).</summary>
+    private static HashSet<string> OwnThemeKeys(CheckInput input)
+    {
+        var keys = new HashSet<string>(StringComparer.Ordinal) { input.Root };
+        try
+        {
+            if (ScreenHtml.Parse(input.Document).Children.FirstOrDefault(c => !c.IsText && c.Tag is "screen" or "block") is { } top)
+                foreach (var (key, _) in ScreenDocument.ThemeParts(ScreenDocument.Styles(top), top.Get("name") ?? input.Root)) keys.Add(key);
+        }
+        catch (Exception) { /* a document the parser does not read: its root's own part only */ }
+        return keys;
+    }
+
+    /// <summary>The offset of a rule in its sheet (its line and column).</summary>
+    private static int RuleOffset(string css, CssRule rule)
+    {
+        var line = 1; var i = 0;
+        while (line < rule.Line && i < css.Length) { if (css[i] == '\n') line++; i++; }
+        return Math.Min(css.Length, i + Math.Max(0, rule.Column - 1));
+    }
+
+    /// <summary>The selector whose subject repeats its first class (.a .b -> .a .b.b): the same elements, one class more of
+    /// specificity; null when the subject has no class.</summary>
+    private static string? RepeatedClass(string selector, ComplexSelector complex)
+    {
+        var first = complex.Parts[^1].Compound.Items.FirstOrDefault(s => s.Kind == SimpleKind.Class);
+        return first == null ? null : selector[..first.End] + selector[first.Start..first.End] + selector[first.End..];
+    }
+
+    private static readonly Regex Word = new(@"^\p{L}+$", RegexOptions.Compiled);
+
+    /// <summary>C-17: two inline siblings that are the whole text of their parent, each a word of letters: one word in parts.</summary>
+    private static bool OneWordInParts(DomNode parent, DomNode a, DomNode b) =>
+        Word.IsMatch(TextOf(a)) && Word.IsMatch(TextOf(b)) && TextOf(parent) == TextOf(a) + TextOf(b);
 
     private static bool M(DomNode element, ComplexSelector selector)
     {

@@ -27,6 +27,7 @@ test('compactDelivery keeps exactly the shared fields on a delivered change, pub
     'phases', // lane wp of the atritos 3 package: a delivery built outside the Studio lock
     'preview', // C04 (servidor/fase4): the structural preview of the delivered html (preview/fragment.mjs)
     'removed', 'removedTotal', // ssam_code (2026-10-12): what an action text or a screen edit removed
+    'nextHtmlBasedOn', 'nextHtmlBasedOnTotal', // C-16 (2026-10-27): the basedOn of the next edit of every root an html edit wrote
     'producerNotes', 'available', 'availableTotal']); // fix/system-reference (2026-10-15): a producer's Studio name, the producers offered
   const queue = { position: 1, waitedMs: 1200, holder: { tool: 'studio_deliver', pid: 4242, startedAt: '2026-10-06T13:38:00Z' } };
   assert.deepEqual(compactDelivery('studio_deliver', {}, { ok: true, merged: true, strictlyEqual: true, manifest: 'm.json', queue, steps: [1] }),

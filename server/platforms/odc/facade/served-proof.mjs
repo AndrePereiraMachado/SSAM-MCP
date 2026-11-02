@@ -20,11 +20,22 @@
 // A cache at the exact URL that is older than the origin (a second read with a query naming the delivery) is "unverified"
 // with that note, never "stale"; an answer that is not text/css (a page: text/html) is "unverified".
 //
-// Where the read runs: only in the person's own SSAM (the stdio entry, runStdio, hands the reader to the O11 cycle); every
-// other way this facade is built (a hosted server among them) has none and answers "unverified" (SERVED_READ_UNAVAILABLE).
-// The fetch goes only to https://<the environment the delivery targets>, carries no cookie, authorization or user info,
-// follows no redirect, reads at most MAX_BYTES while streaming and stays inside one time budget per delivery.
-import { createHash } from 'node:crypto';
+// Where the read runs: only in the person's own SSAM (the stdio entry, runStdio, hands the reader to the O11 cycle and to
+// o11_publish); every other way this facade is built (a hosted server among them) has none and answers "unverified"
+// (SERVED_READ_UNAVAILABLE), and keeps no pending stylesheets. The fetch goes only to https://<the environment the Studio is
+// connected to and the delivery targets>, carries no cookie, authorization or user info, follows no redirect, reads at most
+// MAX_BYTES while streaming and stays inside one time budget per delivery; the person's reader never connects to a link-local or
+// cloud metadata address (an IP literal, or a name that resolves to one, checked when the socket connects).
+//
+// B5 (the proto line's C-04, 46e5012f): a delivery without publish:true leaves its changed stylesheets pending for the module
+// (rememberServedPending, in the lane's folder, per environment and module); the o11_publish of that module reads them before
+// and after its publication through this same proof; a pending element leaves once a publication judged it (served, or
+// SERVED_STALE said once), and only an unverified one waits for the next publication.
+import fs from 'node:fs';
+import net from 'node:net';
+import path from 'node:path';
+import { createHash, randomUUID } from 'node:crypto';
+import { carriedIPv4, createPublicFetch } from './hosted/public-fetch.mjs';
 
 export const SERVED_SCHEMA = 'ssam-served-proof/1';
 export const SERVED_COMPARED = 'Each changed stylesheet of the delivered module against the CSS the environment serves for its element, both in one normal form '
@@ -170,21 +181,50 @@ export function servedUrls(element, { origin, module, theme = null }) {
   return theme ? [{ url: origin + '/' + m + '/css/' + m + '.' + encodeURIComponent(theme) + '.extra.css', kind: 'shared' }] : [];
 }
 
-// The origin of the environment a delivery targets: a bare DNS name or an https origin; never credentials, a path or a query.
+// B5: the addresses no served read ever connects to, even on the person's machine: link-local (169.254/16, the AWS, GCP, Azure
+// and OCI metadata; fe80::/10), the unspecified ones, Azure's wire server, Alibaba's and AWS's IPv6 metadata. An IPv6 address
+// that carries an IPv4 one is judged by it. A private or loopback address stays allowed there: an O11 environment may be on
+// premises; a hosted server never reads at all.
+const METADATA = new net.BlockList();
+for (const [network, prefix] of [['0.0.0.0', 8], ['169.254.0.0', 16], ['168.63.129.16', 32], ['100.100.100.200', 32]]) METADATA.addSubnet(network, prefix, 'ipv4');
+for (const [network, prefix] of [['::', 128], ['fe80::', 10], ['fd00:ec2::254', 128]]) METADATA.addSubnet(network, prefix, 'ipv6');
+export function metadataAddress(ip) {
+  const text = String(ip ?? '').replace(/^\[|\]$/g, '').split('%')[0];
+  const family = net.isIP(text);
+  if (family === 0) return true;
+  try {
+    // ::1 is loopback, allowed as 127.0.0.1 is (review of W3-CSS, S6), never read as the IPv4 0.0.0.1 it would carry.
+    if (family === 6 && METADATA.check(text, 'ipv6') === false && net.isIPv6(text) && /^(?:0{0,4}:){2,7}0{0,3}1$|^::1$/i.test(text)) return false;
+    if (family === 6 && carriedIPv4(text)) return metadataAddress(carriedIPv4(text));
+    return METADATA.check(text, family === 4 ? 'ipv4' : 'ipv6');
+  } catch { return true; }
+}
+
+// The origin of the environment a delivery targets: a bare DNS name or an https origin; never credentials, a path, a query
+// or a link-local / metadata address (B5).
 export function environmentOrigin(environment) {
   if (typeof environment !== 'string' || !environment.trim()) return null;
   try {
     const text = environment.trim();
     const url = new URL(text.includes('://') ? text : 'https://' + text);
     if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash || (url.pathname && url.pathname !== '/')) return null;
+    const host = url.hostname.replace(/^\[|\]$/g, '');
+    if (net.isIP(host) && metadataAddress(host)) return null;
     return url.origin;
   } catch { return null; }
 }
 
-// The reader, given only by the person's own SSAM (runStdio). SSAM_SERVED_READ=off turns it off there too.
-export function localServedReader({ env = process.env, fetchImpl = globalThis.fetch } = {}) {
-  if (String(env.SSAM_SERVED_READ ?? '').toLowerCase() === 'off' || typeof fetchImpl !== 'function') return null;
-  return fetchImpl;
+// The reader, given only by the person's own SSAM (runStdio). SSAM_SERVED_READ=off turns it off there too. B5: by default a
+// GET over node:https whose socket lookup refuses a link-local or metadata address (hosted/public-fetch.mjs createPublicFetch,
+// with this narrower list), never following a redirect and cutting the body after MAX_BYTES; fetchImpl replaces it (tests).
+export function localServedReader({ env = process.env, fetchImpl = null, lookup } = {}) {
+  if (String(env.SSAM_SERVED_READ ?? '').toLowerCase() === 'off') return null;
+  if (fetchImpl != null) return typeof fetchImpl === 'function' ? fetchImpl : null;
+  const client = createPublicFetch({ blocked: metadataAddress, maxBytes: MAX_BYTES + 1, ...(lookup ? { lookup } : {}) });
+  return async (url, init = {}) => {
+    const response = await client(url, { method: 'GET', headers: init.headers ?? {}, signal: init.signal });
+    return { status: response.status, headers: response.headers, text: async () => Buffer.from(await response.arrayBuffer()).toString('utf8') };
+  };
 }
 
 async function bodyText(response, maxBytes) {
@@ -270,7 +310,7 @@ export async function servedBaseline(elements, { environment, module, theme = nu
 }
 
 // After the publication: one verdict per element. Never throws; anything not proven is "unverified".
-export async function proveServed(elements, { environment, module, theme = null, nonce = null, reader, baseline = new Map(), deadline = Date.now() + BUDGET_MS, owner = false } = {}) {
+export async function proveServed(elements, { environment, module, theme = null, nonce = null, reader, baseline = new Map(), deadline = Date.now() + BUDGET_MS, owner = false, earlier = false } = {}) {
   if (!elements?.length) return null;
   const origin = environmentOrigin(environment);
   const unverified = (element, reason, extra = {}) => ({ element: element.target, kind: element.kind, served: 'unverified', reason, ...extra });
@@ -292,6 +332,12 @@ export async function proveServed(elements, { environment, module, theme = null,
       const again = await servedText(plan, { origin, fetchImpl: reader, deadline, query: '?ssam-served=' + encodeURIComponent(nonce) });
       if (again.ok && judgeServed({ base: element.base, delivered: element.delivered, served: again.text, before, kind: plan.kind }).served === true)
         Object.assign(entry, { served: 'unverified', reason: 'SERVED_CACHE_OLDER', note: 'the origin serves the delivered stylesheet; a cache at this URL still has the older one' });
+    }
+    // B5 (earlier: the proof of a pending element at a later o11_publish): a shared file or page that did not change in this
+    // publication but already holds every rule the delivery added and none it removed was served by an earlier one.
+    if (earlier && entry.served !== true && plan.kind !== 'own' && deltaHeld(element, served.text)) {
+      entry.served = true; delete entry.reason; delete entry.firstMissing;
+      entry.note = 'served since an earlier publication: the file already held the delivered rules';
     }
     results.push(entry);
   }
@@ -325,4 +371,76 @@ export function servedRefusal(proof, { module, elements = [] }) {
       attempted: clip('Delivered and published; the environment serves an older stylesheet for ' + names.join(', ') + ' (' + stale.map(e => remedy(e.element)).join('; ') + ').', 500),
       summary: 'A published stylesheet change is not served.' },
       why: 'The delivery already carried the widget change that makes a publication take an element\'s stylesheet, or none could reach the element, so another delivery would not change it: record the case; the person decides in Service Studio.' } };
+}
+
+// ---- B5: the stylesheets a delivery changed, pending until a publication proves them served (o11_publish).
+export const PENDING_MAX_ELEMENTS = 64;
+const PENDING_DIR = 'served-pending';
+// Whether a served text holds the element's delta: every rule the delivery added at least as often as the candidate has it,
+// none it removed. Pure.
+function deltaHeld(element, text) {
+  const delta = cssDelta(element.base, element.delivered);
+  if (delta.size === 0) return false;
+  const now = counts(cssRules(text)), expected = counts(cssRules(element.delivered));
+  return [...delta].every(([rule, change]) => (change > 0 ? (now.get(rule) ?? 0) >= (expected.get(rule) ?? 0) : (now.get(rule) ?? 0) === 0));
+}
+// The file of one environment and module: named by a hash, so neither an environment nor a module name ever makes a path.
+function pendingFile(local, { environment, module }) {
+  const origin = environmentOrigin(environment);
+  if (!origin || typeof module !== 'string' || !module.trim() || typeof local !== 'string' || !path.isAbsolute(local)) return null;
+  return path.join(local, PENDING_DIR, sha256(origin + '\n' + module.trim().toLowerCase()).slice(0, 32) + '.json');
+}
+const PENDING_FIELDS = ['target', 'key', 'kind', 'name', 'flow', 'flavor', 'base', 'delivered', 'touch', 'untouched'];
+const pendingElement = e => Object.fromEntries(PENDING_FIELDS.map(k => [k, e?.[k] ?? null]));
+function readPending(file) {
+  try {
+    const value = JSON.parse(fs.readFileSync(file, 'utf8'));
+    const elements = (Array.isArray(value?.elements) ? value.elements : []).filter(e => e && typeof e.target === 'string' && typeof e.base === 'string' && typeof e.delivered === 'string');
+    return { theme: typeof value?.theme === 'string' ? value.theme : null, elements };
+  } catch { return { theme: null, elements: [] }; }
+}
+function writePending(file, value) {
+  if (!value.elements.length) { fs.rmSync(file, { force: true }); return; }
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const temp = file + '.' + randomUUID() + '.tmp';
+  fs.writeFileSync(temp, JSON.stringify(value));
+  fs.renameSync(temp, file);
+}
+// After a merged delivery (o11_deliver, the person's own SSAM): its changed stylesheets join the module's pending ones. The same
+// element twice keeps the first base (what the environment served before any of them) and the newest candidate; an element
+// whose candidate is its base again leaves. Never throws: the delivery's answer is never changed by this record.
+export function rememberServedPending(local, { environment, module, theme = null, elements = [] } = {}) {
+  try {
+    const file = pendingFile(local, { environment, module });
+    const fresh = (Array.isArray(elements) ? elements : []).filter(e => e && typeof e.target === 'string' && typeof e.base === 'string' && typeof e.delivered === 'string'
+      && Buffer.byteLength(e.base, 'utf8') + Buffer.byteLength(e.delivered, 'utf8') <= 2 * MAX_BYTES);
+    if (!file || !fresh.length) return null;
+    const known = readPending(file);
+    const byTarget = new Map(known.elements.map(e => [e.target, e]));
+    for (const e of fresh) { const was = byTarget.get(e.target); byTarget.delete(e.target); byTarget.set(e.target, { ...pendingElement(e), base: was?.base ?? e.base }); }
+    const kept = [...byTarget.values()].filter(e => cssDelta(e.base, e.delivered).size > 0).slice(-PENDING_MAX_ELEMENTS);
+    writePending(file, { theme: theme ?? known.theme ?? null, elements: kept });
+    return file;
+  } catch { return null; }
+}
+// The pending stylesheets of a module in an environment: {theme, elements} or null when none.
+export function servedPending(local, where) {
+  const file = pendingFile(local, where ?? {});
+  if (!file) return null;
+  const value = readPending(file);
+  return value.elements.length ? value : null;
+}
+// After a proof: the elements it judged leave the pending ones: served (proven), and stale (review of W3-CSS, correction 1:
+// SERVED_STALE is said once, by the publication that found it; the next publication of the module, with no new delivery,
+// answers as a publication again, never the same SERVED_STALE about an old delivery). Only an "unverified" element (the
+// environment could not be read, or the proof could not tell) stays for the next publication. Never throws.
+export function settleServedPending(local, where, proof) {
+  try {
+    const file = pendingFile(local, where ?? {});
+    if (!file || !proof?.elements?.length) return;
+    const judged = new Set(proof.elements.filter(e => e?.served === true || e?.served === false).map(e => e.element));
+    if (!judged.size) return;
+    const value = readPending(file);
+    writePending(file, { ...value, elements: value.elements.filter(e => !judged.has(e.target)) });
+  } catch { /* the record only */ }
 }

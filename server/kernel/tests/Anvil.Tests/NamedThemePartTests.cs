@@ -93,8 +93,15 @@ public sealed class NamedThemePartTests
         Assert.Contains(".root{padding:0}", css);
         Assert.Equal(1, css.Split("/* anvil:html style:NamedA */").Length - 1);
         Assert.Contains(".shared{color:green}", css);
-        foreach (var name in new[] { "NamedA", "NamedB", "NamedC", "NamedD" })
-            Assert.DoesNotContain("<style", host.HtmlRead(File.ReadAllBytes(after), "MobileScreen:" + name, withKeys: false)["documents"]![0]!["html"]!.ToString());
+        // C-14: the reading of a root prints its own part and the named parts whose last writer it is (the owner the marker
+        // records), and nothing of the others: NamedC took style:base over from NamedA and NamedB.
+        string Reading(string name) => host.HtmlRead(File.ReadAllBytes(after), "MobileScreen:" + name, withKeys: false)["documents"]![0]!["html"]!.ToString().Replace("\r\n", "\n");
+        Assert.Contains("/* anvil:html style:base */ /* anvil:owner NamedC */", css);
+        Assert.Equal(["<style scope=\"theme\">\n.root{padding:0}\n</style>"], Styles(Reading("NamedA")));
+        Assert.Empty(Styles(Reading("NamedB")));
+        Assert.Equal(["<style scope=\"theme\" id=\"base\">\n.shared{color:blue}\n</style>"], Styles(Reading("NamedC")));
+        Assert.Equal(["<style scope=\"theme\" id=\"NamedA\">\n.shared{color:green}\n</style>"], Styles(Reading("NamedD")));
+        static List<string> Styles(string html) => System.Text.RegularExpressions.Regex.Matches(html, "<style[^>]*>.*?</style>", System.Text.RegularExpressions.RegexOptions.Singleline).Select(m => m.Value).ToList();
     }
 
     private static bool StudioAvailable() { try { StudioAssemblies.Bind(null); return Directory.Exists(StudioAssemblies.Directory ?? ""); } catch { return false; } }

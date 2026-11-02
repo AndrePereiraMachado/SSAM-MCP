@@ -30,6 +30,8 @@ import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import * as z from 'zod/v4';
 import { anvilRoot } from './workspace.mjs';
+import { usesWorkspace, workspacePath, hostedContext } from './executor.mjs';
+import { insideVisible } from './hosted/mirror.mjs';
 import * as standingGrants from './standing-grants.mjs';
 import { authorizationContext } from './authorization-context.mjs';
 import { consumerNames } from './o11-publish.mjs';
@@ -74,7 +76,11 @@ export const extensionSchema = z.object({
 }).strict();
 
 // ---- the kernel (anvil xif ...): one JSON per command, the refusal shape of the kernel kept as it is.
+// Hosted (ctx.workspace), check and build confine the files of the spec to this account's visible folders in the kernel
+// too (--confine, F4 review A1).
+const confineArgs = ctx => (ctx.workspace ? ['o11', 'inbox', 'odc'].flatMap(folder => ['--confine', path.join(ctx.workspace, folder)]) : []);
 async function kernel(ctx, args) {
+  if (['check', 'build'].includes(args[0])) args = [...args, ...confineArgs(ctx)];
   const result = await ctx.runAnvil(['xif', ...args], { timeoutMs: 900000 });
   const data = result?.envelope?.data;
   if (data && typeof data === 'object' && !Array.isArray(data)) return data;
@@ -154,6 +160,33 @@ function referenceContinuation(ctx, work, name, actions) {
     'reference the extension in the consumer module (the runner captures its signature read-only); then o11_deliver and o11_publish of the consumer with the user\'s words') };
 }
 
+// F4 (PLANO-11H): hosted, every file a spec names (references, sources[].file, resources[].file, in any of the shapes the
+// kernel accepts, and in a specFile too, which the gate does not read) is a file of this account's workspace (ws:<rel> or an
+// absolute path inside it); anything else is PATH_OUTSIDE_WORKSPACE before the kernel reads it, and nothing runs.
+// F4 review A1: the shapes the kernel accepts (XifSpec "loose"): a reference as text or as {file}, a list or one item; a
+// source or resource with a file, in a list or alone. Each keeps its shape (the kernel notes the normalization itself); a
+// file that is not a text, or a reference of another shape, is refused as well. The kernel confines the same files again
+// (--confine, kernel() below), so a shape added there later cannot pass by this function.
+function confineSpec(spec, workspace) {
+  const outside = [];
+  const inside = (value, at) => {
+    if (typeof value !== 'string' || !value) { outside.push(at); return value; }
+    const abs = value.startsWith('ws:') ? path.join(workspace, ...value.slice(3).split(/[\\/]/).filter(Boolean)) : value;
+    if (!path.isAbsolute(abs) || !insideVisible(workspace, abs)) { outside.push(at); return value; }
+    return abs;
+  };
+  const each = (value, fn) => (Array.isArray(value) ? value.map((item, i) => fn(item, '[' + i + ']')) : fn(value, ''));
+  const out = structuredClone(spec);
+  if (out.references != null) out.references = each(out.references, (r, at) => (typeof r === 'string' ? inside(r, 'spec.references' + at)
+    : r && typeof r === 'object' && !Array.isArray(r) ? { ...r, file: inside(r.file, 'spec.references' + at + '.file') } : (outside.push('spec.references' + at), r)));
+  for (const field of ['sources', 'resources'])
+    if (out[field] != null) out[field] = each(out[field], (r, at) => (r && typeof r === 'object' && !Array.isArray(r) && Object.hasOwn(r, 'file')
+      ? { ...r, file: inside(r.file, 'spec.' + field + at + '.file') } : r));
+  if (!outside.length) return { spec: out };
+  return { refused: refusal('PATH_OUTSIDE_WORKSPACE', 'The spec names files outside the workspace of this account: ' + outside.join(', ') + '. Nothing was built or sent.',
+    outside.map(at => problem('PATH_OUTSIDE_WORKSPACE', at + " is not a file of this account's workspace.", 'Put the file in the workspace (ws:o11/...) and name it there.', { path: at }))) };
+}
+
 async function publish(input, ctx) {
   let spec = input.spec ?? null;
   if (!spec && input.specFile) {
@@ -161,6 +194,11 @@ async function publish(input, ctx) {
       return refusal('XIF_SPEC_INVALID', 'specFile is not an existing absolute file.', [problem('XIF_SPEC_FILE', 'specFile must be an absolute JSON file.', 'Give the absolute path of the spec JSON, or pass spec.', { path: 'specFile' })]);
     try { spec = JSON.parse(fs.readFileSync(input.specFile, 'utf8').replace(/^﻿/, '')); }
     catch (error) { return refusal('XIF_SPEC_INVALID', 'specFile is not valid JSON: ' + error.message, [problem('XIF_SPEC_SHAPE', 'specFile is not valid JSON.', 'Fix the JSON.', { path: 'specFile' })]); }
+  }
+  if (ctx.workspace && spec && typeof spec === 'object' && !Array.isArray(spec)) {
+    const confined = confineSpec(spec, ctx.workspace);
+    if (confined.refused) return confined.refused;
+    spec = confined.spec;
   }
   if (!spec || typeof spec !== 'object' || Array.isArray(spec))
     return refusal('XIF_SPEC_INVALID', 'publish needs spec (or specFile).', [problem('XIF_SPEC_REQUIRED', 'spec is required.', 'Pass spec {name, actions:[...]} (o11_extension read gives the current one).', { path: 'spec' })]);
@@ -497,9 +535,13 @@ export function createO11Extension(deps = {}) {
     const parsed = extensionSchema.safeParse(input ?? {});
     if (!parsed.success) return refusal('BAD_REQUEST', 'o11_extension arguments: ' + parsed.error.issues.map(i => i.path.join('.') + ': ' + i.message).join('; '));
     const value = parsed.data;
-    if (value.action === 'read') return read(value, ctx);
-    if (value.action === 'delete') return remove(value, ctx, extra);
-    return publish(value, ctx);
+    // F4 (PLANO-11H): hosted (the default root inside a hosted call), the work, the platform DLLs, the receipts and the
+    // producer ledger of this tool are this account's (<ws>/o11/.local/...), never the server's; the Integration Studio
+    // stages go to the user's agent (the kernel's relay, kind o11.xif).
+    const scoped = usesWorkspace(root, anvilRoot) ? { ...ctx, root: workspacePath('o11'), workspace: hostedContext().workspace } : ctx;
+    if (value.action === 'read') return read(value, scoped);
+    if (value.action === 'delete') return remove(value, scoped, extra);
+    return publish(value, scoped);
   };
 }
 

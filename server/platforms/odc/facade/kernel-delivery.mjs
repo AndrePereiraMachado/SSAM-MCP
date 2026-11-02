@@ -1,3 +1,4 @@
+import { imageFillArgs } from './image-fill-grants.mjs';
 import { stamped } from './correlation.mjs';
 import { beginCut, checkCut, cutJobSha, notWrittenRefusal, settleCut } from './merge-cut.mjs';
 import { judgeMergeAnswer, SECURITY_CODE } from './security-after-merge.mjs';
@@ -12,7 +13,7 @@ import { hostedContext, hostedSpawnEnv } from './executor.mjs';
 import { catalogKind } from './studio-module.mjs';
 import { hashedWords, wordsGiven, wordsRequired } from './destructive-operations.mjs';
 import { warningsFromVerdicts, highWarningsOf, HIGH } from './delivery-warnings.mjs';
-import { diagnosisOf, refusalFields, normalizationsOf, patchesAppliedOf } from './refusal-problems.mjs';
+import { diagnosisOf, refusalFields, normalizationsOf, patchesAppliedOf, withoutDestructivePatches } from './refusal-problems.mjs';
 import * as writeLock from './studio-write-lock.mjs';
 import { jobSummary } from './job-summary.mjs';
 import { appliedJobIdentity, jobIdentity, nextBasedOnOf } from './job-patch.mjs';
@@ -25,7 +26,7 @@ import { prototypeImportRefusal } from './prototype-disabled.mjs';
 import { partReader } from './text-routes.mjs';
 import { prototypeAppUrl, prototypeScreenLinks } from './next-steps.mjs';
 import { kernelStart } from './quality-meter.mjs';
-import { removedOf } from './ssam-code.mjs';
+import { removedOf, nextHtmlBasedOnOf } from './ssam-code.mjs';
 import { RESULT } from './result-values.mjs';
 import { joinPrecheck } from './ui-precheck.mjs';
 // F5, the family rule of producer signatures (producer-signatures.mjs): reference snapshots reused by revision.
@@ -131,6 +132,8 @@ export function interpretKernelResult(result, { output, exitCode = 0 }) {
     ...(ok ? { ...normalizationsOf(result.data), ...patchesAppliedOf(result.data) } : {}),
     // ssam_code: what an action text or a screen edit removed, never silent.
     removed: removedOf(result.data?.results),
+    // C-16: the basedOn of the next edit of every root an html edit wrote (capture "": the ODC delivery takes no capture after the merge).
+    nextHtmlBasedOn: nextHtmlBasedOnOf(result.data?.results),
     // The HIGH warnings of the data-access rules (kernel highWarnings) first, then the Verify ones.
     warnings: [...highWarningsOf(result.data?.highWarnings), ...warningsOf(result.data?.validation)],
     // I7: what each integration op (rest, rest-expose, soap) imported, updated and removed.
@@ -157,7 +160,7 @@ const runOnWorker = async (argv, options) => (await import('./anvil-worker.mjs')
 // author (--developer-id, capability apply:developer-id) with the capture's content identity (--base-content-sha256, its
 // BaseModelCache); else cold, in a private process with ANVIL_DEVELOPER_ID of THIS snapshot, as before. The worker never
 // takes another identity: the author travels in each request. deps (tests): worker (null = cold), contentSha, exec, cli.
-export async function applyKernel({ job, snapshot, output, producers = {}, autoPatch }, deps = {}) {
+export async function applyKernel({ job, snapshot, output, producers = {}, autoPatch, module = null }, deps = {}) {
   const cli = deps.cli ?? kernelCli();
   if (!fs.existsSync(cli)) throw new Error('ODC kernel CLI is not built (' + cli + '): the integrator or the user builds it; ssam_doctor {lane:"odc"} reports the state.');
   if (!snapshot.developerId || !snapshot.host || !snapshot.moduleKey) throw new Error('Snapshot lacks developerId, host or moduleKey; capture a new snapshot.');
@@ -180,7 +183,7 @@ export async function applyKernel({ job, snapshot, output, producers = {}, autoP
   // the request is absolute (job, base, out, work under the customer's workspace) and the author travels in the request.
   const hosted = hostedContext() ? hostedSpawnEnv('odc') : null;
   const content = snapshot.contentSha256 ?? await baseContentSha256(snapshot, deps);
-  const argv = ['apply', '--job', job, '--base', snapshot.path, '--out', candidate, '--work', path.join(output, 'work'), ...producerArgs,
+  const argv = ['apply', '--job', job, ...imageFillArgs(job, { lane: 'odc', module }), '--base', snapshot.path, '--out', candidate, '--work', path.join(output, 'work'), ...producerArgs,
     ...(autoPatch === false ? ['--auto-patch', 'off'] : []), '--developer-id', snapshot.developerId, ...(content ? ['--base-content-sha256', content] : [])];
   const onWorker = await (deps.runOnWorker ?? runOnWorker)(argv, { ...(deps.worker !== undefined ? { worker: deps.worker } : {}), needs: ['apply:developer-id'] });
   if (onWorker.used && onWorker.unknown) {
@@ -211,10 +214,10 @@ export async function applyKernel({ job, snapshot, output, producers = {}, autoP
 // base can be had (the module could not be captured); with a capture the apply over it refuses once with every phase. On
 // a process of its own: it must never queue behind the worker's current apply.
 // -> {ok:true} | {ok:true, skipped} (the check could not say: the apply reports it) | {ok:false, code, problems, error, verifyRan:false}.
-export async function checkJobKernel({ job }, deps = {}) {
+export async function checkJobKernel({ job, module = null }, deps = {}) {
   const cli = deps.cli ?? kernelCli();
   if (!fs.existsSync(cli)) return { ok: true, skipped: 'the ODC kernel CLI is not built' };
-  const argv = ['check-job', '--job', job, '--basis-fresh', 'false'];
+  const argv = ['check-job', '--job', job, ...imageFillArgs(job, { lane: 'odc', module }), '--basis-fresh', 'false'];
   let envelope = null;
   {
     // Hosted: cold in the customer's closed environment and folder (C01: the verify ids never depend on this cwd).
@@ -728,12 +731,16 @@ const publishMessages = log => (Array.isArray(log?.messages) ? log.messages : []
   .sort((a, b) => (a.type === 'Error' ? 0 : 1) - (b.type === 'Error' ? 0 : 1)).slice(0, 10);
 // F1: the one next call of a published revision that is not the delivered module: the bridge's publish receipt, when it
 // is there and holds the published revision (else the Studio's own state of the module).
-export function staleRevisionNext(manifest) {
+// U1: publish {verified:false} (unverifiedPublication): the bridge's own comparison of that revision with the bytes sent.
+export function staleRevisionNext(manifest, publish = null) {
   const evidence = evidenceDirOf(manifest);
   const receipt = evidence ? path.join(evidence, 'publish-receipt.json') : null;
   let published = false;
   try { published = isObject(JSON.parse(fs.readFileSync(receipt, 'utf8').replace(/^\uFEFF/, '')).published); } catch { published = false; }
-  const why = 'The server holds the revision the delivery started from (a change confined to a stylesheet is not taken by a publication): '
+  const why = publish?.verified === false
+    ? 'The bridge did not verify the revision the server holds against the bytes sent (the receipt names each difference); a change confined to a stylesheet may not be taken by a publication: '
+      + 'deliver one widget change of the same element with publish:true. Never repeat the publication alone: the bridge refuses it.'
+    : 'The server holds the revision the delivery started from (a change confined to a stylesheet is not taken by a publication): '
     + 'deliver one widget change of the same element with publish:true. Never repeat the publication alone.';
   return published ? { tool: 'ssam_evidence', arguments: { file: receipt, pointer: '/published' }, why }
     : { tool: 'studio_status', arguments: {}, why };
@@ -802,8 +809,28 @@ export function publishedRevisionProof(published, evidence = {}) {
   return { proven: 'unverified', reason: 'differs from the open module in ' + (leaves?.length ? leaves.slice(0, 3).map(l => l.path + (l.property ? ' ' + l.property : '')).join('; ') : 'its content')
     + ', which an edit during the publication could also explain' };
 }
+// U1 (bridge v106/v107): a publication that completed but whose revision the bridge did not verify against the bytes sent
+// (before-publish.oml) answers ok:false, verified:false and the receipt's published block. It is the F1 family above: the
+// server holds a revision that is not proven to be the delivered module, so it answers PUBLISHED_REVISION_DIFFERS (stale)
+// and staleRevisionNext, never a failed compilation nor an unknown result, and never the same publication again (the bridge
+// refuses it: publish-started.json). null for any other answer.
+export function unverifiedPublication(value) {
+  if (!isObject(value) || value.ok !== false || value.verified !== false || !isObject(value.published)) return null;
+  const published = value.published;
+  const differences = [
+    ...(Array.isArray(published.stylesheetSourceDifferences) && published.stylesheetSourceDifferences.length ? [published.stylesheetSourceDifferences.length + ' stylesheet(s) whose source is not the one sent (' + published.stylesheetSourceDifferences.slice(0, 3).join(', ') + ')'] : []),
+    ...(Array.isArray(published.differencesOutsideReferences) && published.differencesOutsideReferences.length ? [published.differencesOutsideReferences.length + ' difference(s) from the module outside references'] : []),
+  ];
+  const reason = published.error ? 'could not be downloaded and compared with the module sent (' + String(published.error).split(/\r?\n/)[0] + ')'
+    : differences.length ? 'is not the module sent: ' + differences.join(' and ') : 'is not proven to be the module sent';
+  return { requested: true, outcome: 'stale', code: 'PUBLISHED_REVISION_DIFFERS', ...(published.revision != null ? { version: published.revision } : {}),
+    ...(published.sha256 ? { publishedSha256: String(published.sha256).toLowerCase() } : {}), verified: false,
+    error: 'The publication completed, but revision ' + (published.revision ?? '?') + ' the server holds ' + reason + ': the delivered change is not proven published. Nothing was repeated.' };
+}
 // PublishOutcome (section 3) from the answer of studio_publish (publishWithLog), with the bridge's evidence when known.
 export function publishOutcomeOf(value, evidence = {}) {
+  const unverified = unverifiedPublication(value);
+  if (unverified) return unverified;
   if (isObject(value) && value.ok === true) {
     const proof = publishedRevisionProof(value.published, evidence);
     const where = { ...(value.published?.revision != null ? { version: value.published.revision } : {}), ...(value.completedAt ? { at: String(value.completedAt) } : {}) };
@@ -1209,15 +1236,16 @@ export async function deliverKernel(input, deps) {
   const jobAlone = async () => {
     let bytes = null; try { bytes = fs.readFileSync(job); } catch { /* check reads it again and says so */ }
     if (preflighted && preflighted.job === job && bytes && preflighted.sha256 === sha256(bytes)) return preflighted.verdict;
-    return check({ job });
+    return check({ job, module });
   };
   if (check) {
-    const checked = await check({ job });
+    const checked = await check({ job, module });
     try { preflighted = { job, sha256: sha256(fs.readFileSync(job)), verdict: checked }; } catch { preflighted = null; }
     if (checked?.ok === false) {
-      if (checked.static?.complete === true) return { ...checked, ok: false, source: 'kernel-job', module, feature, job, until,
+      // C-01 (c): the problems of the verdict judged on the job (withoutDestructivePatches), never a raw patch that loses what it declares.
+      if (checked.static?.complete === true) return { ...checked, ...(Array.isArray(checked.problems) ? { problems: withoutDestructivePatches(checked.problems, jobDocument ?? job) } : {}), ok: false, source: 'kernel-job', module, feature, job, until,
         failed: 'preflight', code: checked.code ?? 'PREFLIGHT_REFUSED', merged: false, publishInvoked: false, steps: [] };
-      carriedPreflight = { carry: true, problems: checked.problems ?? [], static: checked.static ?? { complete: false }, local: root, lane: 'odc', mode: 'deliver' };
+      carriedPreflight = { carry: true, problems: checked.problems ?? [], static: checked.static ?? { complete: false }, local: root, lane: 'odc', mode: 'deliver', job };
     }
   }
   // fix/a5-lows (B10): with the job's producer names, a binding name with / or \ binds only the ops that write exactly that
@@ -1422,12 +1450,28 @@ export async function deliverKernel(input, deps) {
     report.steps.push({ step: 'reconcile', seconds: (Date.now() - begin) / 1000, ok: value?.ok === true });
     if (value?.ok !== true) {
       report.reconciliation = { code: value?.code ?? 'RECONCILE_FAILED', error: withoutStack(value?.error) ?? 'no answer', ...(isObject(value?.reconciliation) ? value.reconciliation : {}) };
+      // a11-b (U1): the bridge's verification of the merge (reconcile-merge) found a new security warning: that refusal is the answer.
+      if (value?.code === SECURITY_CODE && Array.isArray(value.blocking)) {
+        for (const key of ['outcome', 'gate', 'divergences']) delete report[key];
+        Object.assign(report, { code: SECURITY_CODE, outcome: 'security', gate: 'candidate_validation', error: value.error, refusal: { blocking: value.blocking, fixes: value.fixes, note: value.note },
+          ...(isObject(value.continuation) ? { continuation: value.continuation } : {}) });
+      }
+      // U1 (R2-1): the bridge's verification of the merge did not run (merge-reconcile.mjs bridgeVerificationPending): no difference
+      // is known, so the answer is the reconciliation's own, its text and its next call (studio_status when busy or the agent lacks
+      // reconcile-merge, studio_publish {module, reconcile:true} otherwise), never "differences remain unexplained".
+      else if (value?.code === 'MERGE_UNCERTAIN' && isObject(value.verification)) {
+        delete report.divergences;
+        Object.assign(report, { code: 'MERGE_UNCERTAIN', merged: true, equivalence: 'uncertain', error: value.error, verification: value.verification,
+          ...(isObject(value.continuation) ? { continuation: value.continuation } : {}) });
+      }
       return false;
     }
     if (Array.isArray(report.divergences)) report.nativeDivergences = report.divergences;
     for (const key of ['failed', 'error', 'refusal', 'code', 'outcome', 'gate', 'continuation', 'divergences']) delete report[key];
-    report.merged = true; report.strictlyEqual = false; report.equivalence = 'content-proof';
-    report.reconciliation = value.reconciliation ?? { accepted: true };
+    report.merged = true;
+    // U1: the bridge verified the merge itself (reconcile-merge: G-1/G-2 ran), so its own equivalence, not a content proof.
+    if (value.verifiedBy === 'bridge') { report.strictlyEqual = value.outcome === 'strict'; report.equivalence = value.outcome; report.reconciliation = { verifiedBy: 'bridge', outcome: value.outcome }; }
+    else { report.strictlyEqual = false; report.equivalence = 'content-proof'; report.reconciliation = value.reconciliation ?? { accepted: true }; }
     report.result = RESULT.delivered;
     return true;
   };
@@ -1979,9 +2023,9 @@ export async function deliverKernel(input, deps) {
       // The build of this delivery: a prototype job's (1.4.1: a build problem on a generated item rebuilds ONCE without it; a
       // second failure is an SSAM defect) or the job's own apply.
       const build = async () => {
-        if (!proto) return apply({ job, snapshot: based, output, producers, autoPatch: input.autoPatch });
+        if (!proto) return apply({ job, snapshot: based, output, producers, autoPatch: input.autoPatch, module });
         const begin = Date.now();
-        const b = await buildWithDegradation({ jobFile: job, attempt: file => apply({ job: file, snapshot: based, output, producers, autoPatch: input.autoPatch }), ok: a => a?.ok === true,
+        const b = await buildWithDegradation({ jobFile: job, attempt: file => apply({ job: file, snapshot: based, output, producers, autoPatch: input.autoPatch, module }), ok: a => a?.ok === true,
           problemsOf: buildProblems, inlineDir: path.join(root, '.local', 'jobs', 'inline'), journal: journalTo(path.join(root, '.local', 'journal'), { lane: 'odc' }) });
         proto.degraded = b.degraded; proto.buildMs = Date.now() - begin;
         if (b.refusal) { protoRefusal = b.refusal; return { ...b.result, ok: false, code: 'VALIDATION_REFUSED', error: b.refusal.error, problems: b.refusal.problems }; }
@@ -2038,6 +2082,7 @@ export async function deliverKernel(input, deps) {
       }
       capped(report, 'screenRoles', applied.screenRoles ?? []);
       capped(report, 'removed', applied.removed ?? []);
+      capped(report, 'nextHtmlBasedOn', applied.nextHtmlBasedOn ?? []);
       capped(report, 'integration', Array.isArray(applied.integration) ? applied.integration : [], 10);
       if (applied.entityActions) report.entityActions = applied.entityActions;
       // The merge order (planMergeOrderKernel): a candidate with defaults the Studio drops when the merge creates their
@@ -2257,7 +2302,7 @@ export async function deliverKernel(input, deps) {
           if (report.publish.outcome === 'uncertain') report.outcome = 'uncertain';
           report.error = report.publish.error ?? 'The publication did not succeed.';
           // F1: the revision the server holds is not the delivered module: the receipt of the publication names what differs.
-          if (report.publish.outcome === 'stale') report.continuation = staleRevisionNext(report.manifest);
+          if (report.publish.outcome === 'stale') report.continuation = staleRevisionNext(report.manifest, report.publish);
           else report.continuation = { tool: 'studio_publish', arguments: { manifest: report.manifest, ...(Number.isInteger(pid) ? { pid } : {}) },
             why: report.publish.outcome === 'uncertain' ? 'Merged; the publication result is unknown: read publish-log first and publish again only if it did not run. Never repeat the delivery.'
               : 'Merged; fix what the publication names, then publish this manifest again. Never repeat the delivery.' };

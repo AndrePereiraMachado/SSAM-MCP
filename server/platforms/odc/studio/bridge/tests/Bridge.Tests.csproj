@@ -35,6 +35,9 @@
     <Compile Include="..\TemplateCache.cs" Link="TemplateCache.cs" />
     <Compile Include="..\BridgeServe.cs" Link="BridgeServe.cs" />
     <Compile Include="..\BridgeDeadlines.cs" Link="BridgeDeadlines.cs" />
+    <!-- U1 (v106): when a publication answers ok, and the journal's gate of its refusals. -->
+    <Compile Include="..\PublishVerification.cs" Link="PublishVerification.cs" />
+    <Compile Include="..\..\shared\Journal.cs" Link="Journal.cs" />
     <EmbeddedResource Include="..\..\..\facade\bridge-deadlines.json" LogicalName="bridge-deadlines.json" />
     <!-- The bridge's copy of the kernel's list, the one the bridge compiles (public-signature-drift.test.mjs keeps it equal). -->
     <Compile Include="..\SecurityWarningsCopy.cs" Link="SecurityWarningsCopy.cs" />

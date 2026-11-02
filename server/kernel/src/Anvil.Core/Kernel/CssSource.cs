@@ -322,6 +322,66 @@ public sealed class CssStylesheet
         return spans;
     }
 
+    /// <summary>Two texts of one stylesheet compared byte by byte (lote 4, F2: relatos a935cfde, 5b3dba5f and 35900527, CSS
+    /// the merge or the publication lost, reordered or changed while every receipt said success). <c>bytesEqual</c>: the
+    /// same UTF-8 bytes; <c>lineEndingsOnly</c>: different bytes, the same text once CRLF is LF (the Studio may store either:
+    /// not a change of the CSS). Otherwise the first different byte (offset, line, column and the text on each side) and, by
+    /// the top-level rules (<see cref="SplitTopLevel"/>, compared by <see cref="SharedRuleKey"/>): how many each side has,
+    /// the rules only the expected side has (<c>lost</c>), only the actual one (<c>added</c>), and whether the rules both
+    /// have come in another order (<c>reordered</c>). A text the splitter cannot read keeps the byte comparison only.</summary>
+    public static System.Text.Json.Nodes.JsonObject Compare(string? expected, string? actual)
+    {
+        expected ??= ""; actual ??= "";
+        var bytes = (Encoding.UTF8.GetBytes(expected), Encoding.UTF8.GetBytes(actual));
+        var result = new System.Text.Json.Nodes.JsonObject
+        {
+            ["bytesEqual"] = bytes.Item1.AsSpan().SequenceEqual(bytes.Item2),
+            ["expectedBytes"] = bytes.Item1.Length, ["actualBytes"] = bytes.Item2.Length,
+            ["expectedSha256"] = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes.Item1)).ToLowerInvariant(),
+            ["actualSha256"] = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes.Item2)).ToLowerInvariant(),
+        };
+        if (result["bytesEqual"]!.GetValue<bool>()) return result;
+        result["lineEndingsOnly"] = expected.Replace("\r\n", "\n") == actual.Replace("\r\n", "\n");
+        var offset = 0;
+        while (offset < bytes.Item1.Length && offset < bytes.Item2.Length && bytes.Item1[offset] == bytes.Item2[offset]) offset++;
+        var prefix = Encoding.UTF8.GetString(bytes.Item1, 0, offset);
+        var line = prefix.Count(c => c == '\n') + 1;
+        var column = prefix.Length - (prefix.LastIndexOf('\n') + 1) + 1;
+        static string Around(string text, int at) { at = Math.Clamp(at, 0, text.Length); var end = Math.Min(text.Length, at + 80); return text[at..end]; }
+        result["firstDifference"] = new System.Text.Json.Nodes.JsonObject
+        {
+            ["byte"] = offset, ["line"] = line, ["column"] = column,
+            ["expected"] = Around(expected, prefix.Length), ["actual"] = Around(actual, prefix.Length),
+        };
+        List<string>? Rules(string css)
+        {
+            try { return SplitTopLevel(css).Select(s => SharedRuleKey(css[s.Start..s.End])).ToList(); }
+            // B17: a comparison that only describes a difference never fails the proof it is part of.
+            catch (Exception ex) when (ex is not OutOfMemoryException) { return null; }
+        }
+        if (Rules(expected) is not { } before || Rules(actual) is not { } after) { result["rules"] = null; return result; }
+        static System.Text.Json.Nodes.JsonArray Clip(IEnumerable<string> rules) =>
+            new(rules.Take(10).Select(r => (System.Text.Json.Nodes.JsonNode)System.Text.Json.Nodes.JsonValue.Create(r.Length <= 160 ? r : r[..160] + "...")!).ToArray());
+        List<string> Minus(List<string> from, List<string> take)
+        {
+            var left = take.GroupBy(r => r).ToDictionary(g => g.Key, g => g.Count(), StringComparer.Ordinal);
+            var only = new List<string>();
+            foreach (var rule in from)
+                if (left.TryGetValue(rule, out var n) && n > 0) left[rule] = n - 1; else only.Add(rule);
+            return only;
+        }
+        var lost = Minus(before, after);
+        var added = Minus(after, before);
+        var common = (Before: Minus(before, lost), After: Minus(after, added));
+        result["rules"] = new System.Text.Json.Nodes.JsonObject
+        {
+            ["expected"] = before.Count, ["actual"] = after.Count,
+            ["lost"] = lost.Count, ["added"] = added.Count, ["reordered"] = !common.Before.SequenceEqual(common.After, StringComparer.Ordinal),
+            ["lostRules"] = Clip(lost), ["addedRules"] = Clip(added),
+        };
+        return result;
+    }
+
     /// <summary>Comparison key; strings and escapes retain their exact authored contents.</summary>
     public static string SharedRuleKey(string text)
     {

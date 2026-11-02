@@ -17,6 +17,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { loadFlowReading, expandEditPart } from './flow-edits.mjs';
 import { extendDraftSchema, isDraftCall } from './code-draft-schema.mjs';
+import { traditionalDialectRules } from './traditional-dialect.mjs';
+import { imageOp, isImageFile, IMAGES_MAX_BYTES } from './module-images.mjs';
+import { grantImageFills } from './image-fill-grants.mjs';
 
 export const CODE_TOOL = 'ssam_code';
 export const CODE_PARTS = ['ddl', 'logic', 'html'];
@@ -221,7 +224,7 @@ export const EXAMPLE_SETUP_OPS = [
 // A screen (html) and a screen action need a module with a Reactive or Mobile UI flow: an empty module, or a service
 // (_CS) module, has none and refuses them before any change (PREFLIGHT_REFUSED, FLOW_OWNER_UNKNOWN). Its example is the
 // data and a server action.
-const UI_FLOW_NEEDED = 'a screen, a block and a screen action need a module with a Reactive or Mobile UI flow; an empty or service (_CS) module has none: there, write the data (ddl) and server actions (logic) only';
+const UI_FLOW_NEEDED = 'a screen, a block and a screen action need a module with a UI flow: Reactive or Mobile (this html grammar), or Traditional (Web, lane o11: the traditional card of the html grammar, its own dialect); an empty or service (_CS) module has none: there, write the data (ddl) and server actions (logic) only';
 
 // Screens from entities and blocks (kernel ScreenGenerator, gen-screen/1): the op and its rule live with the other generators
 // (generators.mjs, with its approval), re-exported here under the same names.
@@ -244,7 +247,7 @@ const RULES = {
     'One statement per element, each with its own end. Statements that end with ";": create entity X [public] [label Attr] ( Attr Type [identifier] [auto] [required] [references E on delete Protect|Delete|Ignore] [default v] [label "..."], ... ); | create static entity X (...) values Rec (Attr = v, ...), ...; | create [unique] index N on E (A, B); | drop <what> <Name>; -- @key.',
     'A structure ends with its brace, no ";" after it: type S [public] = { F: Type [required] [json "n"]; ... }.',
     'One-line declarations, NO ";" at the end (the line is the statement; a ";" there is read as part of it): client variable V: Type [= default] | site property P: Type [read-only] [= v] (ODC: setting P: Type [= v]) | session variable V: Type [= default] | timer T action A schedule "When Published" [timeout n]. Example: ' + CODE_FORMS_EXACT.ddl['client variable'] + '. A client variable needs a module with a UI flow.',
-    'A default is an OutSystems literal or expression up to the end of the line (or the attribute): "text", 0, 1.5, True, CurrDateTime(); a Date default is the literal #2026-01-31# (Date Time: #2026-01-31 08:00:00#), never TextToDate("...") (the Verify takes only a literal there).',
+    'A default is an OutSystems literal or expression up to the end of the line (or the attribute): "text", 0, 1.5, True, CurrDateTime(); a Date default is the literal #2026-01-31# (Date Time: #2026-01-31 08:00:00#), never TextToDate("...") (the Verify takes only a literal there); the default of a client variable, site property or session variable is a literal: NullIdentifier(), NullDate() and the other nulls of a type are the value it has without one and are left out (DDL_DEFAULT_NULL_DROPPED).',
     'Types and values are OutSystems ones: Text(120), Integer, Long Integer, Decimal(18,2), Boolean, Date, Time, Date Time, Currency, Email, Phone Number, Binary Data, <Entity> Identifier, a structure or entity name; True/False, "text", 1.5, CurrDateTime(), Entities.<Static>.<Record>.',
     '/// lines right above an element are its description. Any other property: os:<Property>=<value>.',
     'Writing: send only the statements that change. Each element read keeps its trailing -- @key; a statement without a key is new; the same key with another name is a rename; an attribute or record left out of a statement sent whole is deleted; drop entity|static entity|index|type|site property|setting|client variable|timer <Name>; -- @key deletes.',
@@ -252,9 +255,9 @@ const RULES = {
   ],
   logic: [
     'Header: server action N | service action N | client action N | action <Screen>.N (screen/block action) | data action <Screen>.N | preparation <TraditionalOwner>.Preparation; when read, keep the action @key. Preparation has a fixed name, no input/output parameters, and belongs only to Traditional screens, blocks or emails. public/function apply only to module actions.',
-    'One text (or file) may hold several actions: each starts with its /// description and header at column 0, a blank line between; ssam_code splits them.',
+    'One text (or file) may hold several actions: each starts with its /// description and header at column 0, a blank line between; ssam_code splits them. A preparation has no description in the model: /// above it is left out (FLOW_PREPARATION_DESCRIPTION).',
     'Then in P[?]: Type [= default], out P: Type, local L: Type; then the flow from Start, in connector order, indented 2 spaces.',
-    'Nodes: X = Action(P=v, Q) (call; a module or system action: (System).ListAppend); assign X = v on one line, or the word assign alone and then one X = v per line indented 2 spaces deeper than assign (a line at the depth of assign is the next node: "expected \'(\'"); X = aggregate FROM E [JOIN ...] WHERE (cond) [SORT a desc] [MAX n]; if cond: (true branch indented 2 deeper, false branch continues below); foreach L: ... next; switch: case cond: ... otherwise: ...; raise Exc("message"); message Type: expr; navigate Screen(args); refresh Source; X = sql -> Out max n | SELECT ...; end.',
+    'Nodes: X = Action(P=v, Q) (call; a module or system action: (System).ListAppend); assign X = v on one line, or the word assign alone and then one X = v per line indented 2 spaces deeper than assign (a line at the depth of assign is the next node: "expected \'(\'"); X = aggregate FROM E [JOIN ...] WHERE (cond) [SORT a desc] [MAX n]; if cond: (true branch indented 2 deeper, false branch continues below); foreach L: ... next; switch: case cond: ... otherwise: ...; raise Exc("message"); message Type: expr; navigate Screen(args) (navigate () or navigate PreviousScreen(): the previous screen); refresh Source; ajax refresh Widget (Traditional); X = sql -> Out max n | SELECT ...; end.',
     'Pagination: a screen pages its own screen aggregate (html <aggregate max="MaxRecords" os-StartIndex="StartIndex">; the Pagination block: StartIndex and MaxRecords the same variables, TotalCount = <Aggregate>.Count, OnNavigate assigns StartIndex = NewStartIndex then refresh <Aggregate>). A server action pages by SQL: ORDER BY a total order, then ' + CODE_FORMS_EXACT.logic.pagination + ' with in Skip: Integer = StartIndex and in Take: Integer = If(MaxRecords <= 0, 50, MaxRecords) (FETCH NEXT 0 is an error), the total from COUNT(*) OVER() of the same query; its row names the outputs List, List_2, ... in the order of sql -> (mapTo { Title: List_2.Title }). START on an aggregate of a server, service, data or client action is refused (LOGIC_START_SERVER_IGNORED): the Studio hides it there and the runtime ignores it, so every page would show the first rows.',
     'JOIN: FROM A, B, C JOIN Inner A~B ON cond | Left B~C ON cond. Inner = Only With, Left = With or Without, Full = With. SQL-style JOIN input is normalized when its left source is unambiguous; conditions stay literal.',
     'SQL parameters: under X = sql -> Structure max n, write one in P: Type = value per line, then | SELECT ... on the following line. Types include Entity Identifier. Example: ' + CODE_FORMS_EXACT.logic['sql parameter'] + '.',
@@ -265,7 +268,7 @@ const RULES = {
     'Changing an action: send it WHOLE, as read, with the change (every line of the read keeps its @id): a line with its @id keeps its element, a line without @id is new, a line LEFT OUT IS DELETED. A text that leaves out lines of the read (a gap in its @n/@p/@l ids) is refused before the delivery, unless removes:true (or removes:["@n3", ...]) says those deletions are meant. basedOn: the textSha of the read action.',
     'A header without @key creates the action (no read, no basedOn); a screen action needs its screen (' + UI_FLOW_NEEDED + ').',
     'Owner rules: a For Each that only filters, maps or accumulates is refused with the List action as the patch (T1/T2); JavaScript only in an isolated, named client action.',
-    'Changing a few lines: write {element, basedOn: its textSha, edits:[{replace:"@n4", with:"..."}, {after:"@n2", insert:"..."}, {before:"@n2", insert:"..."}, {delete:"@n3"}]}. R1: trailing @id (header @key), @id#2 for repeats, or exact line text. R2: column-zero text inherits indentation. R3: replace keeps the id; deeper lines replace the block, otherwise children stay. R4: delete removes the block and its /// description, never the header. R5: after follows the block (deeper insert starts it); before precedes descriptions; inserts keep order. Several actions: also:[{part:"logic", element, basedOn, edits}].',
+    'Changing a few lines: write {element, basedOn: its textSha, edits:[{replace:"@n4", with:"..."}, {after:"@n2", insert:"..."}, {before:"@n2", insert:"..."}, {delete:"@n3"}]}, or {find:"exact text of the read", with:"new text"} (once in the read; finds and line edits in separate items). R1: trailing @id (header @key), @id#2 for repeats, or exact line text. R2: column-zero text: its first line takes the indentation of the addressed line, the lines after it are relative to it (or written as the action has them, one level under the addressed line). R3: replace keeps the id; deeper lines replace the block, otherwise children stay. R4: delete removes the block and its /// description, never the header. R5: after follows the block (deeper insert starts it); before precedes descriptions; inserts keep order. Several actions: also:[{part:"logic", element, basedOn, edits}].',
     ENTITY_ACTIONS_RULE,
   ],
   html: [
@@ -274,10 +277,20 @@ const RULES = {
     'A new screen: <screen name="S" roles="Role" actions="A, B" [data-actions="D"] [title=\'"Title"\']> with <input name type>, <var name type default>, <aggregate name from sort where max> and the widgets; a block: <block name>. An <input name type> (or a block <event name>) without mandatory is optional; mandatory="True" makes it mandatory.',
     'Widgets: div, form, a, button, input, textarea, select, switch, label, img, i icon, popup, placeholder, upload, {{ expr }} (expression), plain text; <x list="Source.List"> repeats x; <div if="cond"> ... <div else> ... is an If; <Block name="B" :Input="expr" @Event="Handler(...)"><slot name="Content">...</slot></Block> is a block instance.',
     'Events: on<event>="Destination(Param = expr, ...)", and with no argument on<event>="Destination" (ssam_code writes "Destination()" so); bind="Variable" on inputs; class="a b" or class="{{ expr }}"; any other authored property: os-<Property>="value"; a property of an event: os-on<event>.<Property>="value" on an element whose on<event> is set.',
+    'A link to a URL: <a href="https://..." target="_blank"> or href="{{ Expr }}" is the Link\'s On Click through the module\'s external site, written and read back as onclick=\'RedirectToURL(URL = "https://...")\' (target stays); an href beside an onclick, or a #anchor of a Reactive or Mobile page, is refused (HTML_HREF_UNSUPPORTED).',
     'A popup (modal) is <popup show="Var"> ... </popup>, never a <div if> over the page: Var is a Boolean screen variable (' + CODE_FORMS_EXACT.html['popup variable'] + '), a screen action opens it (assign Var = True) and one closes it (assign Var = False). The Studio gives events inside a popup Transition Fade by default: write the event as read, ' + CODE_FORMS_EXACT.html['event in a popup'] + ', and os-onclick.Transition only for another transition. The example below has one.',
+    'A <button> or <a> inside a <form> validates the form when clicked (Built-in Validations ValidateAndContinue, as the Studio creates it there): its screen action checks <FormId>.Valid, so required and type checks run; write os-onclick.BuiltInValidations="None" on one that must not validate (a Cancel). Outside a <form> a click does not validate.',
+    'A message the write expects (the anonymous-access warning of a public screen, a Verify warning it means) goes in expectedMessages [{id, element, why}] of the same write, beside text, edits and also; a refusal that asks for one brings that entry as its patch (add /expectedMessages/-).',
     'A new screen action: a logic text "action <Screen>.A" (no @key) in the same write (also: [{part:"logic", text}]); a data action: "data action <Screen>.D". ssam_code writes a new screen action BEFORE the change of an existing screen (the button names it) and AFTER a new <screen> document (the screen comes first). On a screen read, leave actions="..." as read: the logic text adds the action.',
     'Changing an existing screen: read it (part html, element the screen), then write only the changed elements, each whole with its k, with element the screen and basedOn {capture, html} of the read; a new element has no k; a removed one is left out of its parent. ODC: owners default to the screen (element), the screens of the screen actions and the elements the code names.',
     'Change a few elements of a read screen: edits [{set:"w7",attributes:{...}}, {replace|after|before|into|delete|move:"w7",...}, {find:"exact text",with:"..."}] with element and basedOn {capture, html}; a refused or checked job: basedOn {job, sha256}, element (screen, block, action or ddl) and edits [{find, with}].',
+    'Images: an image file (.png, .jpg, .gif, .svg, .webp, .bmp, .ico) among files is the module image named after it (fm-hero.png is fm_hero; one the module has takes the new content), written before the screens; at most 6 MB of images per write; <img src="fm-hero.png"> or src="fm_hero" shows it.',
+    'The Name of a widget is id="X" (what X.Id names in an expression); name= names only the screen, block, var, input, aggregate, event, placeholder and the block of <Block>: name= on a div, span or other container or text is written as id= and said (HTML_WIDGET_NAME_IS_ID in normalizations).',
+    'The event of a div or other container runs a screen action; <a> and <button> open a screen: onclick="Screen" on a div is refused (HTML_EVENT_OPENS_SCREEN) with the patch that writes <a>; an img or i goes inside <a onclick="Screen">.',
+    'The type of an <input bind="V"> follows the data type of V (Email, Phone Number, a number, a date; password or search on a Text); another type is refused (HTML_INPUT_TYPE_MISMATCH) with the patch that leaves type out.',
+    'A site property (Site.X) belongs to the server: an expression of a Reactive or Mobile page cannot read it (HTML_SITE_PROPERTY_IN_CLIENT); a data action of the page reads it, or a client variable keeps it (an aggregate filter may read it).',
+    'A screen action never takes the name of an action of a module this module references (ToggleSideMenu of OutSystemsUI): the Studio renames it, and HTML_ACTION_NAME_TAKEN names the other one.',
+    'A < inside {{ }} belongs to the expression ({{ If(N < 3, "few", "many") }}); a < that opens a tag ends the text.',
     'Owner rules: a condition is <div if>, never os-Visible; no JavaScript or JSON in the screen; data by aggregate or data action; reuse the module\'s layout block and blocks first.',
   ],
 };
@@ -327,12 +340,34 @@ export function grammarCard(part, lane = 'odc') {
     ...(part === 'logic' ? { uses: 'the data of the ddl example and the exception VisitNotFound (setup op); the screen actions Visits.Complete, OpenSummary and CloseSummary need the screen of the html example',
       ...(offered('entity-actions') ? { generate: { why: 'the standard actions of every entity, generated from the module (no text to write)', card: ENTITY_ACTIONS_CARD, call: entityActionsCall(lane) } } : {}),
       ...(approvedGenerators().length ? { generators: approvedGenerators().map(g => ({ ...generatorCard(g, lane), write: { tool: CODE_TOOL, arguments: { lane, action: 'write', module: '<Module>', ops: [JSON.parse(g.example)] } } })) } : {}) } : {}),
+    ...(part === 'html' && lane === 'o11' ? { traditional: traditionalCard() } : {}),
     ...(part === 'html' ? { uses: 'the data of the ddl example, the role Visitor (setup op) and the screen actions Complete, OpenSummary and CloseSummary of the logic example', needs: UI_FLOW_NEEDED,
       ...(offered('gen-screen') ? { standardScreens: { why: 'list, detail and form screens of entities: generated from the module, nothing to write', call: generateScreensCall(lane) } } : {}) } : {}),
     read: { tool: CODE_TOOL, arguments: { lane, action: 'read', part, target: '<Module or capture.oml>', ...(part === 'ddl' ? {} : { element: part === 'html' ? '<Screen>' : '<Action>' }) } },
     write: { tool: CODE_TOOL, arguments: { lane, action: 'write', part, module: '<Module>', text: '<code>' } } };
   return { ok: true, tool: CODE_TOOL, action: 'grammar', lane, card,
     example: part === 'html' ? { why: 'a module with a UI flow', call: exampleCall(lane) } : { why: 'any module, also an empty or service (_CS) one', call: serviceExampleCall(lane) } };
+}
+
+// C-13: the html of a Traditional (Web) module is another dialect: its card is generated from the kernel's allowlist
+// (traditional-dialect.mjs), with a proven example (TraditionalDialectTests, TraditionalHtmlRecordsTests).
+export const EXAMPLE_TRADITIONAL_HTML = `<screen name="Works" title="Works" roles="Registered" actions="ShowMore, Preparation" layout="blank">
+<var name="Projects" type="Project List"/>
+<var name="ProjectCount" type="Integer" default="6"/>
+<div class="works">
+ <list-records id="ProjectList" source="Projects" line-count="ProjectCount" line-separator="None">
+  <div class="work">{{ ProjectList.List.Current.Title }}</div>
+ </list-records>
+ <div if="Projects.Length > ProjectCount"><a class="Button" onclick="ShowMore" method="Ajax" validation="None">View all</a></div>
+ <div else><span class="works-all">Every work is shown</span></div>
+</div>
+</screen>`;
+function traditionalCard() {
+  return { why: 'a Traditional (Web, WebResponsive) module: its html is this dialect (the Reactive widgets above are refused there, HTML_TRADITIONAL)',
+    rules: traditionalDialectRules(), example: EXAMPLE_TRADITIONAL_HTML,
+    logic: ['preparation Works.Preparation\n  GetProjects = aggregate FROM Project SORT Project.Title\n  assign Projects = GetProjects.List\n  end',
+      'action Works.ShowMore\n  assign ProjectCount = ProjectCount + 3\n  GetMore = aggregate FROM Project SORT Project.Title\n  assign Projects = GetMore.List\n  node AjaxRefreshNode()\n    @{WidgetOrWebBlock=&"ProjectList"}\n  end'],
+    showMore: 'the runtime fetches start-index + line-count + 1 rows of an aggregate a List Records shows (through its variable too): raise the count FIRST, then query again (HTML_LIST_RECORDS_LINE_COUNT)' };
 }
 
 /** The whole example (data, screen, screen action): a module with a Reactive or Mobile UI flow. */
@@ -395,6 +430,11 @@ function normalizeOp(op) {
         o = { ...rest, op: 'spec', data: { ...dataRest, ddl: value } };
       }
     }
+    // C-42: the basedOn of a data text is one sourceSha256 (a list of one is that one).
+    if (plain(o.data) && Array.isArray(o.data.basedOn) && o.data.basedOn.length === 1 && typeof o.data.basedOn[0] === 'string') {
+      o = { ...o, data: { ...o.data, basedOn: o.data.basedOn[0] } };
+      notes.push('spec: data.basedOn is one sourceSha256: the list of one is that one');
+    }
   } else if (o.op === 'logic') {
     const d = plain(o.data) ? o.data : {};
     if (d.flow == null && d.actions == null) {
@@ -403,6 +443,16 @@ function normalizeOp(op) {
         const { flow: _f, text: _t, ...rest } = o; const { text: _dt, ...dataRest } = d;
         o = { ...rest, data: { ...dataRest, flow: Array.isArray(from[1]) ? from[1] : [from[1]] } };
         notes.push(`logic: ${from[0]} is data.flow`);
+      }
+    }
+    // C-42 (F-FitBody-22 seq 26): data.basedOn as a list (the form of ssam_code write: one textSha per text, in order, null
+    // for a new action) is the basedOn of each text of data.flow; the kernel reads it on each text.
+    if (plain(o.data) && Array.isArray(o.data.basedOn) && o.data.flow != null) {
+      const { basedOn, ...rest } = o.data;
+      const flow = Array.isArray(rest.flow) ? rest.flow : [rest.flow];
+      if (basedOn.length === flow.length && basedOn.every(b => b == null || typeof b === 'string')) {
+        o = { ...o, data: { ...rest, flow: flow.map((t, i) => (basedOn[i] == null ? t : typeof t === 'string' ? { text: t, basedOn: basedOn[i] } : plain(t) && t.basedOn == null ? { ...t, basedOn: basedOn[i] } : t)) } };
+        notes.push(`logic: data.basedOn is a list of ${basedOn.length}: the basedOn of each text of data.flow, in order`);
       }
     }
     const current = plain(o.data) ? o.data : {};
@@ -576,7 +626,7 @@ export async function codeRead(input, { map }) {
 
 // ---- write: the op of the part, delivered by the lane's delivery tool
 // CX16: edits by exact text of the texts of a refused or checked job (basedOn {job, sha256}) become a JSON Patch over it.
-import { jobTextEdits } from './html-edits.mjs';
+import { jobTextEdits, CARRIED } from './html-edits.mjs';
 const isJobBase = b => plain(b) && ((typeof b.job === 'string' && typeof b.sha256 === 'string') || typeof b.taskId === 'string');
 const lines = t => String(t ?? '');
 const textList = text => (Array.isArray(text) ? text : [text]).map(lines);
@@ -807,7 +857,9 @@ export function splitActions(text, { preserveWhitespace = false } = {}) {
 const CODE_FILE_PARTS = { '.ddl': 'ddl', '.sql': 'ddl', '.flow': 'logic', '.logic': 'logic', '.html': 'html', '.htm': 'html', '.txt': null, '.json': 'ops' };
 /** Read every file before delivery, collecting all independent input problems with its original file index. */
 export function readCodeFiles(files) {
-  const parts = [], problems = [], notes = [];
+  const parts = [], problems = [], notes = [], grants = [];
+  let imageBytes = 0;
+  const imageNames = new Map();
   if (files == null) return { parts, problems, notes };
   if (!Array.isArray(files) || !files.length || files.length > CODE_LIST_MAX) {
     problems.push({ at: 'files', error: `files must be a list of 1 to ${CODE_LIST_MAX} absolute paths` });
@@ -819,8 +871,25 @@ export function readCodeFiles(files) {
     const absolute = typeof file === 'string' && path.isAbsolute(file);
     if (!absolute) problem('file path must be absolute');
     const ext = typeof file === 'string' ? path.extname(file).toLowerCase() : '';
+    // B15 (the proto line's C-10): an image file is a module image named after the file (module-images.mjs): create IImage with
+    // its bytes, or the new content of the image of that name; written before the screens that show it.
+    if (absolute && isImageFile(file)) {
+      const image = imageOp(file);
+      if (image.problem) { problem(image.problem); return; }
+      const twice = imageNames.get(image.image.name.toLowerCase());
+      if (twice) { problem(`${path.basename(file)} and ${twice} are both the module image ${image.image.name} (names of the module have no case): rename one of the files`); return; }
+      imageNames.set(image.image.name.toLowerCase(), path.basename(file));
+      imageBytes += image.image.bytes;
+      if (imageBytes > IMAGES_MAX_BYTES) { problem(`the image files reach ${imageBytes} bytes; they go in the job as base64 and the job is at most 8 MB: ${IMAGES_MAX_BYTES} bytes of images per write; send the rest in another write, or reduce them`); return; }
+      parts.push({ part: 'ops', ops: [image.op], at, images: true });
+      // R2-1: the grant to fill an existing image of this name with these bytes, outside the job; the write that reads the
+      // files gives it, bound to its module and environment (writeCall, image-fill-grants.mjs).
+      grants.push({ name: image.image.name, sha256: image.image.sha256 });
+      notes.push({ rule: 'files', at: '/' + at, note: `${path.basename(file)}: module image ${image.image.name} (${image.image.bytes} bytes)` });
+      return;
+    }
     const known = Object.hasOwn(CODE_FILE_PARTS, ext);
-    if (!known) problem(`unsupported file extension: ${ext || '(none)'}`);
+    if (!known && !isImageFile(file)) problem(`unsupported file extension: ${ext || '(none)'}`);
     // Never read a relative path or an unrecognized file type.
     if (!absolute || !known) return;
     let text;
@@ -850,7 +919,7 @@ export function readCodeFiles(files) {
     const count = part === 'logic' ? (splitActions(text)?.length ?? 1) : null;
     notes.push({ rule: 'files', at: '/' + at, note: `${path.basename(file)}: part ${part}${count ? `, ${count} actions` : ''}` });
   });
-  return { parts, problems, notes };
+  return { parts, problems, notes, grants };
 }
 // Actions named by timer statements in a data text.
 const timerActions = t => [...lines(t).matchAll(/^\s*timer\s+[A-Za-z_]\w*\b[^\n]*?\baction\s+([A-Za-z_]\w*)/gm)].map(m => m[1].toLowerCase());
@@ -932,7 +1001,7 @@ export function orderParts(parts, { dependencyEdges = [] } = {}) {
     const ddl = p.part === 'ddl' || ddlFragments.has(p);
     const value = ddl ? (f.removes.size && !f.creates.size ? 4 : 0)
       : p.part === 'html' && !isHtmlEdit(p) ? (/^\s*(?:<!--[^]*?-->\s*)*<block\b/.test(p.text) ? 1 : 2)
-      : p.part === 'ops' ? 2.5 : 3;
+      : p.part === 'ops' ? (p.images ? 0 : 2.5) : 3;
     rankCache.set(p, value); return value;
   };
   const edges = list => dependencyEdges.flatMap(({ consumer, provider }) => {
@@ -976,6 +1045,29 @@ export function orderParts(parts, { dependencyEdges = [] } = {}) {
   return { parts: moved ? restored : parts, moved, ...(notes.length ? { notes } : {}), reasons: moved ? [hasTimerDependency ? 'timers follow the parts that create their module actions' + (ddlSplit ? '; timer DDL separated from declarations' : '') : 'data first, then new blocks and screens, then ops and logic, with drop-only data last; explicit dependencies override ties'] : [] };
 }
 
+// C-11 (F-FitBody-50): the messages a write declares it expects, {list, fromPatch} or {error, at}. expectedMessages at the top
+// of the write: a list of {id, element?, why, count?, all?} (the kernel checks each entry: EXPECTED_MESSAGES_INVALID). A patch
+// whose every operation only adds them (add /expectedMessages with a list, add /expectedMessages/- or /<i> with one entry) is
+// the same declaration when the write is new or carries edits (fromPatch); with basedOn {job, sha256} and no edits it stays
+// the correction of that job.
+const EXPECTED_PATH = /^\/?expectedMessages(?:\/(?:-|\d+))?$/;
+export function expectationsOf(input, { jobBase = null, hasEdits = false } = {}) {
+  const list = [];
+  if (input.expectedMessages !== undefined) {
+    if (!Array.isArray(input.expectedMessages) || input.expectedMessages.some(e => !plain(e) || typeof e.id !== 'string' || typeof e.why !== 'string'))
+      return { error: 'expectedMessages is a list of {id, element, why} (count or all optional): the messages this write expects, such as the anonymous-access warning of a public screen', at: 'expectedMessages' };
+    list.push(...input.expectedMessages);
+  }
+  const ops = Array.isArray(input.patch) ? input.patch : null;
+  const declaring = ops && ops.length > 0 && ops.every(op => plain(op) && op.op === 'add' && typeof op.path === 'string' && EXPECTED_PATH.test(op.path)
+    && (/^\/?expectedMessages$/.test(op.path) ? Array.isArray(op.value) && op.value.every(plain) : plain(op.value)));
+  const fromPatch = Boolean(declaring && (hasEdits || !jobBase));
+  if (fromPatch) for (const op of ops) list.push(...(Array.isArray(op.value) ? op.value : [op.value]));
+  if (list.length && input.patch != null && !Array.isArray(input.patch))
+    return { error: 'expectedMessages goes with a patch list (or alone), not with patch "verified" (or its hosted reference): send the verified call first, then the declarations', at: 'expectedMessages' };
+  return { list, fromPatch };
+}
+
 /** The delivery call of a write: {tool, arguments, normalizations?} for o11_deliver / studio_deliver, or {refusal}. deps.readJob reads a job file. */
 export function writeCall(input, { readJob = readJobFile, readReading = loadFlowReading, origins: includeOrigins = false, dependencyEdges = [] } = {}) {
   const lane = input.lane === 'o11' ? 'o11' : 'odc';
@@ -1011,13 +1103,22 @@ export function writeCall(input, { readJob = readJobFile, readReading = loadFlow
   // A correction of a refused write: patch (and/or a partial job) over basedOn {job, sha256} of the refusal.
   const jobBase = isJobBase(input.basedOn) ? input.basedOn : null;
   const hasEdits = input.edits != null || Array.isArray(input.also) && input.also.some(p => p?.edits != null);
+  // C-11 (F-FitBody-50): the messages a write expects (the anonymous-access warning of a public screen), declared with the
+  // code: expectedMessages at the top of the write, or a patch that only adds them beside edits or in a new write (it was
+  // "patch and edits cannot be combined"). They go into the job; on a correction (patch + basedOn {job, sha256}) they join
+  // its patch as add /expectedMessages/-.
+  const expected = expectationsOf(input, { jobBase, hasEdits });
+  if (expected.error) return refuse(expected.error, { problems: [{ at: expected.at, error: expected.error }] });
+  if (expected.fromPatch) note('expected-messages-patch', '/patch', `the patch only declares ${expected.list.length} expected message(s): they go into the job with the code`);
+  const patchInput = expected.fromPatch ? undefined : input.patch;
+  const withExpected = patch => (expected.list.length ? [...(Array.isArray(patch) ? patch : []), ...expected.list.map(value => ({ op: 'add', path: '/expectedMessages/-', value }))] : patch);
   // R1 (loop-correcao): fix "apply" over the nextBasedOn of a refused write: the delivery applies the refusal's own patches.
   if (input.fix === 'apply' && !jobBase) return refuse('fix "apply" goes with basedOn {job, sha256}: the nextBasedOn of the refused write');
-  if (input.fix === 'apply' && lane === 'o11') return { tool, arguments: { module, ...options, fix: 'apply', basedOn: jobBase, ...(Array.isArray(input.patch) ? { patch: input.patch } : {}) } };
-  if ((input.patch != null || input.fix === 'apply') && !hasEdits) {
+  if (input.fix === 'apply' && lane === 'o11') return { tool, arguments: { module, ...options, fix: 'apply', basedOn: jobBase, ...(Array.isArray(patchInput) || expected.list.length ? { patch: withExpected(patchInput) } : {}) } };
+  if ((patchInput != null || input.fix === 'apply') && !hasEdits && !input[CARRIED]) {
     if (input.files != null) return refuse('files cannot be used with patch: a correction is patch + basedOn', { problems: [{ at: 'files', error: 'files cannot be used with patch' }] });
     if (!jobBase) return refuse('patch goes with basedOn {job, sha256} (the nextBasedOn of the refused write) or {taskId}');
-    if (lane === 'o11') return { tool, arguments: { module, ...options, patch: input.patch, basedOn: jobBase, ...(options.until == null ? { until: 'merge' } : {}) } };
+    if (lane === 'o11') return { tool, arguments: { module, ...options, patch: withExpected(patchInput), basedOn: jobBase, ...(options.until == null ? { until: 'merge' } : {}) } };
     // ODC: studio_deliver needs owners and changes: those of the refused write (its job), unless given.
     let base = [];
     if ((!options.owners || !options.changes) && typeof jobBase.job === 'string') { try { base = partsOfJob(readJob(jobBase.job)); } catch { base = []; } }
@@ -1026,16 +1127,18 @@ export function writeCall(input, { readJob = readJobFile, readReading = loadFlow
     if (!owners.length || !changes.length) return refuse('a correction on odc needs owners and changes: give them as the refused write had them (owners: [the screens, actions and entities written], changes: [what changes]); the job of basedOn could not be read');
     const parts = [...new Set(base.map(p => p.part))];
     return { tool, arguments: { module, feature: options.feature ?? 'ssam_code ' + (canonicalPart(input.part) ?? (parts.join('+') || 'code')) + ' (correction)', owners, changes,
-      ...Object.fromEntries(Object.entries(options).filter(([k]) => !['feature', 'owners', 'changes'].includes(k))), ...(input.patch != null ? { patch: input.patch } : {}), ...(input.fix === 'apply' ? { fix: 'apply' } : {}), basedOn: jobBase } };
+      ...Object.fromEntries(Object.entries(options).filter(([k]) => !['feature', 'owners', 'changes'].includes(k))), ...(patchInput != null || expected.list.length ? { patch: withExpected(patchInput) } : {}), ...(input.fix === 'apply' ? { fix: 'apply' } : {}), basedOn: jobBase } };
   }
   const problems = [];
-  if (input.patch != null && hasEdits) problems.push({ at: 'patch', error: 'patch and edits cannot be combined: correct the refused job with patch, or edit a read action with its textSha' });
+  if (patchInput != null && hasEdits) problems.push({ at: 'patch', error: 'patch and edits cannot be combined: correct the refused job with patch, or edit a read action with its textSha' });
   const ops = [];
   if (input.ops != null) {
     if (!Array.isArray(input.ops)) problems.push({ at: 'ops', error: 'ops is a list of job ops placed before the code' });
     else { ops.push(...input.ops); if (includeOrigins) origins.push(...input.ops.map(op => sourceOf('ops', op))); }
   }
   const files = readCodeFiles(input.files);
+  // R3-S1: the image files this write read, granted for its own lane, module and environment only (image-fill-grants.mjs).
+  if (files.grants?.length) grantImageFills(files.grants, { lane, module, environment: lane === 'o11' ? input.expectedEnvironment ?? null : null });
   problems.push(...files.problems);
   normalizations.push(...files.notes);
   const hasText = p => p != null && p.text != null && (Array.isArray(p.text) ? p.text.some(t => String(t ?? '').trim()) : String(p.text).trim() !== '');
@@ -1047,6 +1150,23 @@ export function writeCall(input, { readJob = readJobFile, readReading = loadFlow
       const expanded = expandEditPart({ ...p, module }, lane, { readReading });
       problems.push(...expanded.problems); normalizations.push(...expanded.notes); given[i] = expanded.part;
     } else if (p.at.startsWith('also/') && p.part !== 'ops' && !hasText(p)) problems.push({ at: p.at, error: `${p.at}: text or edits` });
+  }
+  // C-42 (F-FitBody-22): a basedOn at the top of a write without a text of its own is the base of the one part it can read
+  // (a sourceSha256 of a data text, the textSha of an action or a list of them, {capture, html} of a screen), among the files
+  // and the also items without one: it was dropped in silence (DDL_BASE_REQUIRED at the apply).
+  if (!hasText({ text: input.text }) && input.edits == null && input.basedOn != null && !jobBase) {
+    const b = input.basedOn;
+    const kind = typeof b === 'string' && /^[a-f\d]{64}$/i.test(b) ? 'ddl'
+      : typeof b === 'string' && /^[a-f\d]{16}$/i.test(b) || Array.isArray(b) && b.length && b.every(x => x == null || typeof x === 'string' && /^[a-f\d]{16}$/i.test(x)) ? 'logic'
+        : plain(b) && typeof b.capture === 'string' && typeof b.html === 'string' ? 'html' : null;
+    const partOf = p => canonicalPart(p.part) ?? (hasText(p) ? partOfText(p.text) : null);
+    const takers = kind ? given.slice(1).filter(p => p && p.basedOn == null && p.edits == null && partOf(p) === kind) : [];
+    if (takers.length === 1) {
+      takers[0].basedOn = b;
+      note('basedOn-to-part', '/basedOn', `the write has no text of its own: basedOn is the base of ${takers[0].at} (part ${kind})`);
+    } else problems.push({ at: 'basedOn', error: kind
+      ? `basedOn at the top of a write without text is the base of ONE ${kind} part; ${takers.length ? `${takers.length} parts could take it (${takers.map(p => p.at).join(', ')})` : `no ${kind} part without a basedOn takes it`}: give it on its part, also[i].basedOn (a file part: send that text as an also item {part, text, basedOn})`
+      : 'basedOn is {job, sha256} (a correction), a 64-hex sourceSha256 (ddl), a 16-hex textSha or a list of them (logic), or {capture, html} (html)' });
   }
   // No text at all, only ops (or only other parts in also): the ops (and those parts) are the delivery; a part named
   // without a text says nothing to deliver.
@@ -1159,8 +1279,13 @@ export function writeCall(input, { readJob = readJobFile, readReading = loadFlow
   const partOwnersOf = p => p.part === 'ops' ? ownersOfOps(p.ops) : ownersOf(p.part, p.text, p.element);
   const names = [...new Set(parts.flatMap(partNamesOf))];
   const owners = [...new Set(parts.flatMap(partOwnersOf))];
-  const job = { ops };
-  if (lane === 'o11') return withNotes({ tool, arguments: { module, job, until: 'merge', ...options, ...(jobBase ? { basedOn: jobBase } : {}) } });
+  // C-18: the texts a correction carries (jobTextEdits) go as the partial job, merged by name into the job of basedOn, and the
+  // edits' patch is applied after the merge (resolvePatchedJob); the merge never moves an op the patch addresses (an action
+  // text joins its logic op, a document is appended). The expected messages of such a write join that patch as appends.
+  const carriedPatch = input[CARRIED] && Array.isArray(patchInput) && patchInput.length ? { patch: patchInput } : {};
+  const job = { ops, ...(expected.list.length && !input[CARRIED] ? { expectedMessages: expected.list } : {}) };
+  if (input[CARRIED] && expected.list.length) carriedPatch.patch = withExpected(carriedPatch.patch ?? []);
+  if (lane === 'o11') return withNotes({ tool, arguments: { module, job, until: 'merge', ...options, ...(jobBase ? { basedOn: jobBase } : {}), ...carriedPatch } });
   const partNames = [...new Set(parts.map(p => p.part))];
   return withNotes({ tool, arguments: { module, job,
     feature: options.feature ?? ('ssam_code ' + (partNames.join('+') || 'ops') + (names.length ? ': ' + names.slice(0, 4).join(', ') : '')),
@@ -1168,7 +1293,25 @@ export function writeCall(input, { readJob = readJobFile, readReading = loadFlow
     changes: options.changes ?? (descriptionParts.length ? descriptionParts.map(p => (p.part === 'ops' ? `${p.ops.length} job op(s)` : `${p.part} written as ${CODE_FORMS[p.part]}`) + (partOwnersOf(p).length ? ': ' + partOwnersOf(p).join(', ') : ''))
       : [`${ops.length} job op(s)`]),
     ...Object.fromEntries(Object.entries(options).filter(([k]) => !['feature', 'owners', 'changes'].includes(k))),
-    ...(jobBase ? { basedOn: jobBase } : {}) } });
+    ...(jobBase ? { basedOn: jobBase } : {}), ...carriedPatch } });
+}
+
+// C-16 (F-FT-19: 3 html reads of 141-152 pages only to get the basedOn of the next edit): the basedOn {capture, html} of the
+// next edit of every root an html edit of the job wrote, from the kernel's reading of that root after the edit (result.next.html,
+// the text the edit verified, ScreenHtmlEdit.Json) and the capture the delivery took after the merge ("" when it took none: the
+// html alone names the reading, and a next edit on a module that changed since is refused HTML_BASE_CHANGED with the current
+// text). The last edit of a root wins; at most 20 roots plus nextHtmlBasedOnTotal. Empty when the job edited no root.
+export function nextHtmlBasedOnOf(results, capture = null) {
+  const byRoot = new Map();
+  for (const r of Array.isArray(results) ? results : []) {
+    const result = r?.op === 'html' ? r.result : null;
+    const html = result?.next?.html;
+    if (!result || typeof html !== 'string' || !/^[0-9a-f]{64}$/i.test(html)) continue;
+    const screen = result.screen ?? result.root ?? null;
+    if (typeof screen !== 'string' || !screen) continue;
+    byRoot.set(screen, { screen, ...(result.rootKind ? { kind: result.rootKind } : {}), basedOn: { capture: capture ?? '', html } });
+  }
+  return [...byRoot.values()];
 }
 
 // ---- what a delivered text removed (the kernel's apply results): every node, parameter or local an action text left out
@@ -1282,7 +1425,11 @@ function writtenElements(input) {
 // write (feat/ssam-code-hosted): the deps of writeCall a server gives each write ({readReading, readJob}, or a function of
 // the call that returns them): the read of an action an edit expands and the job file a correction reads.
 export function registerSsamCode(server, { fromJsonSchema, map, deliver, check, plan, lanes = ['o11', 'odc'], write = null, drafts = {}, o11PlansDeletes = false } = {}) {
-  const reply = value => ({ content: [{ type: 'text', text: JSON.stringify(value) }], structuredContent: value, ...(value && value.ok === false ? { isError: true } : {}) });
+  // C-33 (F-FT-11): the answer as JSON on the wire: a symbol key a handler keeps for the next call (code-check.mjs
+  // CHECK_CANDIDATE) never reaches structuredContent, where the MCP client refused every successful check ("expected string,
+  // received symbol").
+  const wire = value => (value && typeof value === 'object' ? JSON.parse(JSON.stringify(value)) : value);
+  const reply = value => ({ content: [{ type: 'text', text: JSON.stringify(value) }], structuredContent: wire(value), ...(value && value.ok === false ? { isError: true } : {}) });
   // The lists of a write carry the person's code: no limit of this tool cuts them (the delivery takes any number of texts
   // and ops in one job); the bounds below only keep a runaway call out.
   const text = { anyOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' }, minItems: 1, maxItems: CODE_LIST_MAX }] };
@@ -1316,6 +1463,9 @@ export function registerSsamCode(server, { fromJsonSchema, map, deliver, check, 
     patch: { anyOf: [{ type: 'array', maxItems: 500, items: { type: 'object' } }, { type: 'string', enum: ['verified'] }, { type: 'object' }], description: 'write: JSON Patch over the job of basedOn {job, sha256}, as a refusal returned it; or "verified": every verified patch of that refusal (its verifiedPatch.call).' },
     // Listed without a text: the check's write and until:'apply' give it ready.
     candidateRef: { type: 'string' },
+    // C-11: the messages the write expects, {id, element, why} (count or all optional), with text, edits and also in one write.
+    // Listed without a text and with no maxItems/items (the listing budget): expectationsOf checks the entries.
+    expectedMessages: { type: 'array' },
     // fix (R1): sent as a refusal's fixCall gives it; listed without a text (the listing budget).
     fix: { type: 'string', const: 'apply' },
     publish: { type: 'boolean', description: 'write: true also publishes after a clean merge, with authorize or the standing grant.' },

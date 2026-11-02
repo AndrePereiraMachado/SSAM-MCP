@@ -17,6 +17,7 @@ public static class TypeResolver
         var s = spec.Trim();
         var basic = Basic(es, s);
         if (basic != null) return basic;
+        Qualified(es, s);
         if (s.EndsWith(" Identifier", StringComparison.OrdinalIgnoreCase))
         {
             var ent = FindEntitySignature(es, s[..^" Identifier".Length].Trim()) ?? throw new KeyNotFoundException($"entity not found for identifier type: {spec}");
@@ -91,6 +92,31 @@ public static class TypeResolver
         "binarydata" or "binary" => es.BinaryDataType,
         _ => null,
     };
+
+    private static readonly System.Text.RegularExpressions.Regex QualifiedName = new(@"^(?<producer>[A-Za-z_]\w*)\.(?<name>[A-Za-z_]\w*)(?<suffix> Identifier| List| Record)?$", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+    /// <summary>F10: a type written with its producer ("SSAMCoverageSoapWire.Cliente", "SSAMCoverageSoapWire.Cliente Identifier",
+    /// round 8bc99ec2 of 25/10, written to tell the entity from records of the same name) is no form of the type language: the
+    /// texts read the type back by its name alone, so it is refused here with the exact name the module has for that element.
+    /// Nothing when the qualifier names no producer (the name is read as before).</summary>
+    private static void Qualified(IESpace es, string s)
+    {
+        var m = QualifiedName.Match(s);
+        if (!m.Success) return;
+        var producer = m.Groups["producer"].Value; var name = m.Groups["name"].Value; var suffix = m.Groups["suffix"].Value;
+        object? element = null; string? exact = null;
+        if (string.Equals(Name(es), producer, StringComparison.OrdinalIgnoreCase))
+            element = (object?)es.GetAllDescendantsOfType<IEntity>().FirstOrDefault(e => string.Equals(Name(e), name, StringComparison.OrdinalIgnoreCase))
+                ?? es.GetAllDescendantsOfType<IStructure>().FirstOrDefault(x => string.Equals(Name(x), name, StringComparison.OrdinalIgnoreCase));
+        else if (es.References.FirstOrDefault(r => string.Equals(Name(r), producer, StringComparison.OrdinalIgnoreCase)) is { } reference)
+            element = (object?)reference.Entities.FirstOrDefault(e => string.Equals(Name(e), name, StringComparison.OrdinalIgnoreCase))
+                ?? reference.Structures.FirstOrDefault(x => string.Equals(Name(x), name, StringComparison.OrdinalIgnoreCase));
+        else return;
+        if (element != null) exact = Name(element) + suffix;
+        throw new KeyNotFoundException(exact != null
+            ? $"unknown type: {s}: a type is named without its producer; write '{exact}' (the {(element is IEntitySignature ? "entity" : "structure")} {Name(element)} of {producer})"
+            : $"unknown type: {s} ({producer} has no entity or structure {name})");
+    }
 
     /// <summary>Entidade (server/static/client) do modulo ou de uma referencia, por nome.</summary>
     public static IEntitySignature? FindEntitySignature(IESpace es, string name)

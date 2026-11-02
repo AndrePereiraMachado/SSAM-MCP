@@ -89,6 +89,7 @@ import { anvilRoot, odcRoot, o11Lane, O11_LANES } from './workspace.mjs';
 import { readConnection } from './studio-session.mjs';
 import { usesWorkspace, workspacePath } from './executor.mjs';
 import { systemModuleName } from './studio-module.mjs';
+import { wordsGiven } from './destructive-operations.mjs';
 import { stallRecovery } from './studio-recovery.mjs';
 import { isErrorReportTitle } from './bridge-stall.mjs';
 import { isStudioWrite } from './tool-classification.mjs';
@@ -753,10 +754,14 @@ async function takeTurn({ target, tool, args = {}, ctx, limit, signal, studio, p
 // starts without the Studio lock and takes it at its first Studio write. The ssam server passes isPhased(tool, args).
 // queue: accepted for the callers of the previous in-process queue; every write now waits in the shared queue.
 export const RECOVERY_TOOLS=Object.freeze({o11_studio:'bypass',ssam_task:'first'});
+// A dismiss-dialog without the person's own words never passes the queue: o11_studio refuses it before anything
+// (WORDS_REQUIRED), so it runs without the lock (wordlessDismiss) and never as a recovery.
+const dismissArgsOf=args=>typeof args?.args==='object'&&args.args!==null&&!Array.isArray(args.args)?args.args:{};
+export const wordlessDismiss=(tool,args={})=>tool==='o11_studio'&&args?.command==='dismiss-dialog'&&!wordsGiven(dismissArgsOf(args).words);
 export function recoveryOf(tool,args={},holder=null) {
   if(tool==='ssam_task'&&args.close)return 'first';
-  if(tool!=='o11_studio'||args.command!=='dismiss-dialog')return null;
-  const title=typeof args.args==='object'&&!Array.isArray(args.args)?args.args?.title:null;
+  if(tool!=='o11_studio'||args.command!=='dismiss-dialog'||wordlessDismiss(tool,args))return null;
+  const title=dismissArgsOf(args).title??null;
   const same=(a,b)=>String(a??'').trim().toLowerCase()===String(b??'').trim().toLowerCase();
   return isErrorReportTitle(title)||(title&&holder?.state==='stalled'&&same(title,holder.blockedBy?.title))?'bypass':null;
 }
@@ -775,7 +780,7 @@ async function bypassRecovery({target,tool,ctx,signal,studio},fn) {
  try{return {result:await owned.run([...(owned.getStore()??[]),{slot,lock:turn}],fn)}}finally{turn.release()}
 }
 export async function withStudioWriteLock({ tool, args = {}, lane, studioKey, deps = {}, onBusy, signal, write, phased, deferReservation = false, queue: _queue } = {}, fn) {
-  if (!(write === true || isWrite(tool, args))) return fn();
+  if (!(write === true || isWrite(tool, args)) || wordlessDismiss(tool, args)) return fn();
   const ctx = { now: clock(deps.now), alive: deps.alive ?? processAlive, staleMs: deps.staleMs ?? STALE_MS };
   const key = studioWriteTarget({ tool, args, lane, studioKey, deps });
   // The slot of this write: its Studio key plus the module it names (C07); a record write (o11_data) has its own lane.

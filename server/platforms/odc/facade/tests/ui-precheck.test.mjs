@@ -938,3 +938,29 @@ test('the pieces: producer freshness, referenced libraries, the module of a capt
     problems: [UNKNOWN_BLOCK, { ...UNKNOWN_BLOCK, edit: { ...UNKNOWN_BLOCK.edit, with: '<Block name="Other"/>' } }] });
   assert.deepEqual(conflicting.arguments, { lane: 'o11', target: 'M', view: 'html', screen: 'Stations' });
 });
+
+// C-01 (c), facade review round 3 of B1: the precheck's own refusal (a complete verdict: ssam_job / ssam_code check,
+// o11_deliver, the studio_deliver relay) answered a static problem's patch raw. A patch that would leave the job without
+// what it declares (here: replace the job's ddl of three entities with the module's one) is judged on the job.
+test('C-01 (c): the precheck refusal never answers a patch that loses what the job declares (PATCH_DESTRUCTIVE)', async t => {
+  const box = sandbox(t);
+  const base = capture(box.local, 'Shop_UI-20261015090000-eeeeeeee.oml', 'OML Shop_UI for the destructive patch');
+  const READ = 'create entity Rental label Code (\n  Id Long Integer identifier auto required,\n  Code Text(20) required\n);';
+  const DDL = READ + '\n\ncreate entity Dock label Code (\n  Id Long Integer identifier auto required,\n  Code Text(20) required\n);\n\n'
+    + 'create entity Bike label Code (\n  Id Long Integer identifier auto required,\n  Code Text(20) required\n);';
+  const document = { ops: [...uiJob().ops, { op: 'spec', data: { ddl: DDL } }] };
+  const job = path.join(box.base, 'job.json'); fs.writeFileSync(job, JSON.stringify(document));
+  const pointer = '/ops/4/data/ddl';
+  const lost = { phase: 'static', severity: 'error', op: 4, pointer, code: 'DDL_BASE_REQUIRED', message: 'Rental names elements of a read by their keys and the op has no basedOn',
+    fix: 'send basedOn', patch: [{ op: 'replace', path: pointer, value: READ }], patchCertain: true };
+  const kept = { ...lost, message: 'Rental has no basedOn', fix: 'add basedOn', patch: [{ op: 'add', path: '/ops/4/data/basedOn', value: 'c'.repeat(64) }] };
+  const runAnvil = fakeAnvil({ 'check-job': checkJob([lost, kept]) });
+  const v = await uiPrecheck({ lane: 'o11', job, mode: 'job', base }, { runAnvil, root: box.root, local: box.local, env: box.env });
+  assert.equal(v?.code, 'PREFLIGHT_REFUSED', JSON.stringify(v).slice(0, 1500));
+  const [judged, harmless] = v.problems;
+  assert.equal(judged.patch, undefined, JSON.stringify(judged));
+  assert.equal(judged.patchOmitted, true);
+  assert.match(judged.patchOmittedWhy, /^PATCH_DESTRUCTIVE/);
+  assert.ok(judged.patchLost.some(l => l.group === 'ddl entity' && l.lost.includes('Dock') && l.lost.includes('Bike')), JSON.stringify(judged.patchLost));
+  assert.deepEqual(harmless.patch, kept.patch);
+});

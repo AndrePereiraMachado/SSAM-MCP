@@ -43,15 +43,15 @@ const hosted = (exec = fakeExecutor(), workspace = fs.mkdtempSync(path.join(os.t
   tokenId: 'tok_test', customer: 'Test', lanes: ['odc', 'o11'], workspace, agent: null, executor: exec, o11: { studioDir: 'C:\\server\\Service Studio', lane: 'ss4' }, close: async () => {} });
 const code = expected => error => { assert.equal(error.code, expected, error.message); return true; };
 
-test('the closed list: 14 kinds, 6 that touch a machine, both frozen', () => {
-  assert.equal(CALL_KINDS.length, 14);
+test('the closed list: 15 kinds, 6 that touch a machine, both frozen', () => {
+  assert.equal(CALL_KINDS.length, 15);
   assert.ok(Object.isFrozen(CALL_KINDS) && Object.isFrozen(MACHINE_KINDS));
   // file.sync (C14, servidor/fase4): several file.put in one call, between the mirror and an agent 0.2.0+.
   // net.probe (fase4-24): the network check; file.upload (R2-G, fase4-28/r2): an approved local file of the user's machine;
   // screen.render (fase4-28 r2-preview): the render of a design document; o11.users (fase4-28 r4): the Users application through
   // the user's agent. The last four only to an agent that lists them.
   assert.deepEqual([...CALL_KINDS], ['studio.processes', 'odc.pipe', 'odc.attach', 'o11.bridge', 'o11.connect', 'o11.selected', 'file.put', 'file.get', 'file.list', 'file.sync',
-    'net.probe', 'file.upload', 'screen.render', 'o11.users']);
+    'net.probe', 'file.upload', 'screen.render', 'o11.users', 'o11.xif']); // F4: o11.xif, the Integration Studio stages on the user's machine
   assert.deepEqual([...MACHINE_KINDS], CALL_KINDS.slice(0, 6));
   assert.throws(() => { CALL_KINDS.push('agent.info'); });
 });
@@ -179,12 +179,14 @@ test('hostedSpawnEnv is a closed list: the workspace, the relay, and nothing els
       assert.equal(env.ANVIL_BRIDGE_TIMEOUT_SECONDS, '600');
       assert.equal(env.TMPDIR, runtimeDir(path.join(context.workspace, 'o11', 'tmp')));
       const allowed = new Set([...SPAWN_ALLOWED, 'TEMP', 'TMP', 'TMPDIR', 'ANVIL_AUTHORITY_DIR', 'ANVIL_BRIDGE_PORT', 'ANVIL_STUDIO_DIR', 'ANVIL_LANE',
-        'ANVIL_BRIDGE_FLAVOR', 'ANVIL_BRIDGE_TIMEOUT_SECONDS', 'ANVIL_BRIDGE_PROBE_MS', 'ANVIL_KEPT_READINGS',
+        'ANVIL_BRIDGE_FLAVOR', 'ANVIL_BRIDGE_TIMEOUT_SECONDS', 'ANVIL_BRIDGE_PROBE_MS', 'ANVIL_KEPT_READINGS', 'ANVIL_XIF_ENGINE_RELAY',
     'SSAM_STUDIO_DEFAULTS_ROOT', // a7 (SD): the customer's own folder of the Studio defaults
     'SSAM_MODULE_INDEX_ROOT']); // a8: the server's module index (absolute), where its readers keep it
       assert.deepEqual(Object.keys(env).filter(k => !allowed.has(k)), []);
       // servidor/fase4-26: the CX14 probes off (A1) and kept readings of the job's own capture only (M2), set here.
       assert.equal(env.ANVIL_BRIDGE_PROBE_MS, '0'); assert.equal(env.ANVIL_KEPT_READINGS, 'own');
+      // F4: the Integration Studio stages of the kernel go to the user's agent through this relay.
+      assert.equal(env.ANVIL_XIF_ENGINE_RELAY, '1');
       assert.equal(env.SSAM_MODULE_INDEX_ROOT, path.isAbsolute(process.env.SSAM_MODULE_INDEX_ROOT ?? '') ? process.env.SSAM_MODULE_INDEX_ROOT : undefined, 'a8: the server\'s index root');
       for (const leaked of ['ANVIL_CSHARP_RUNTIME_REGISTRATION', 'SSAM_HYBRID_ODC_TENANT', 'ODC_CLIENT_SECRET', 'SSAM_HYBRID_ODC_ROOT']) assert.equal(env[leaked], undefined, leaked);
     });

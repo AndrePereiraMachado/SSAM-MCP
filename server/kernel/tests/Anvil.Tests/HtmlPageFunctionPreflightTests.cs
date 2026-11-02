@@ -81,7 +81,7 @@ public sealed class HtmlPageFunctionPreflightTests
         var unknown = Assert.Single(problems, p => p["code"]!.GetValue<string>() == "FUNCTION_UNKNOWN");
         Assert.Equal("base", unknown["phase"]!.GetValue<string>());
         Assert.Equal(0, unknown["op"]!.GetValue<int>());
-        Assert.Contains("'" + function + "('", unknown["message"]!.GetValue<string>());
+        Assert.Contains("'" + function + "' ", unknown["message"]!.GetValue<string>());
         Assert.Contains(replacement, unknown["fix"]!.GetValue<string>());
         var patch = unknown["patch"]!.AsArray().OfType<JsonObject>().ToDictionary(p => p["path"]!.GetValue<string>(), p => p["value"]!.GetValue<string>());
         Assert.Equal(PageRepairs(replacement), patch);

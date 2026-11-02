@@ -35,6 +35,22 @@ public static partial class JobRunner
             {
                 case "html" when Preflight.ScreenDocFacts.Of(op, i) is { } doc:
                     Add(whole, doc.Name);
+                    // C-21: a document whose content failed keeps its shell (root, data, action shells): what it no longer
+                    // has is its widgets, named by the logic that reads or focuses them.
+                    foreach (var id in WidgetIds(op)) Add(whole, id);
+                    break;
+                case "spec" when op["data"] is JsonObject spec:
+                    // C-39 (F-FitBody-23): what a data text declares (entities, attributes, structures, statics, client
+                    // variables, site properties) and the entity actions of each entity it creates.
+                    foreach (var name in SpecExpander.DdlNames(spec)) Add(whole, name);
+                    foreach (var section in new[] { "entities", "clientEntities", "static", "structures" })
+                        foreach (var record in (SpecExpander.Sections(spec)[section] as JsonArray ?? []).OfType<JsonObject>())
+                            if (record["name"]?.ToString() is { Length: > 0 } recordName) Add(whole, recordName);
+                    foreach (var entity in DdlEntities(spec))
+                    {
+                        foreach (var action in new[] { "Create", "Update", "Delete", "Get", "CreateOrUpdate" }) Add(whole, action + entity);
+                        Add(whole, "Get" + entity + "ForUpdate");
+                    }
                     break;
                 case "logic" when op["data"] is JsonObject data:
                     if (data["actions"] is JsonArray actions)
@@ -54,17 +70,49 @@ public static partial class JobRunner
         return parts;
     }
 
+    /// <summary>The ids of the widgets a document writes.</summary>
+    private static IEnumerable<string> WidgetIds(JsonObject op)
+    {
+        if (op["data"]?["html"] is not JsonValue v || !v.TryGetValue<string>(out var html)) return [];
+        Anvil.Reading.ScreenHtml.Node document;
+        try { document = Anvil.Reading.ScreenHtml.Parse(html); } catch (FormatException) { return []; }
+        var ids = new List<string>();
+        void Walk(Anvil.Reading.ScreenHtml.Node node)
+        {
+            if (!node.IsText && node.Tag is not ("screen" or "block" or "var" or "input" or "aggregate" or "event" or "style") && node.Get("id") is { Length: > 0 } id) ids.Add(id);
+            foreach (var child in node.Children) Walk(child);
+        }
+        Walk(document);
+        return ids;
+    }
+
+    /// <summary>The entities (server, static, client) a data text creates or names, read by its parser.</summary>
+    private static IEnumerable<string> DdlEntities(JsonObject data)
+    {
+        if (data["ddl"] is not JsonValue v || !v.TryGetValue<string>(out var text)) return [];
+        Anvil.Reading.DdlDocument parsed;
+        try { parsed = Anvil.Reading.DdlParser.Parse(text, MessageExpectations.Lane); }
+        catch (Anvil.Reading.DdlParseException error) when (error.Partial != null) { parsed = error.Partial; }
+        catch { return []; }
+        return parsed.Elements.Where(e => e.Name.Length > 0 && e.Kind.EndsWith("Entity", StringComparison.Ordinal)).Select(e => e.Name).ToList();
+    }
+
     private static bool Error(JsonObject p) => p["severity"]?.ToString() is null or "error";
 
     // The problems that say a name was not found: of the html and logic text compiles, of the base check, and the Verify's.
     private static readonly HashSet<string> NotFound = new(StringComparer.Ordinal) { "HTML_NAME_UNKNOWN", "FLOW_OWNER_UNKNOWN", "FLOW_NAME_UNKNOWN", "REFERENCE_UNRESOLVED", "CHILD_NOT_FOUND" };
-    private static bool SaysNotFound(JsonObject p) => p["code"]?.ToString() is { } code && (NotFound.Contains(code) || p["phase"]?.ToString() == "verify" && code.Contains("Unknown", StringComparison.Ordinal));
+    // C-34 (F-FigmaMobile-05): the Verify names an element it cannot find by its path in the module, 'MainFlow\SendMoney', under
+    // a code that does not say it (RequiredPropertyValue_PropertyIn_WithPrevious: "Unknown 'MainFlow\SendMoney' On Click").
+    private static readonly Regex UnknownPath = new(@"\bUnknown '(?:[^'\\/]+[\\/])+(?<name>[\p{L}_][\p{L}\p{N}_]*)'", RegexOptions.Compiled);
+    private static bool SaysNotFound(JsonObject p) => p["code"]?.ToString() is { } code && (NotFound.Contains(code) || p["phase"]?.ToString() == "verify"
+        && (code.Contains("Unknown", StringComparison.Ordinal) || UnknownPath.IsMatch(p["message"]?.ToString() ?? "")));
 
-    /// <summary>The names a problem says it could not find: the quoted names of its message, and the owner a logic text's
-    /// header names (FLOW_OWNER_UNKNOWN says it unquoted).</summary>
+    /// <summary>The names a problem says it could not find: the quoted names of its message, the owner a logic text's header
+    /// names (FLOW_OWNER_UNKNOWN says it unquoted), and the last name of a path the Verify says is unknown ('Flow\Screen').</summary>
     private static HashSet<string> Missing(JsonObject p)
     {
         var names = Subjects(p);
+        foreach (Match path in UnknownPath.Matches(p["message"]?.ToString() ?? "")) names.Add(path.Groups["name"].Value);
         if (OwnerNamed.Match(p["message"]?.ToString() ?? "") is { Success: true } m) names.Add(m.Groups["name"].Value);
         if (p["code"]?.ToString() == "FLOW_NAME_UNKNOWN" && PropertyNamed.Match(p["message"]?.ToString() ?? "") is { Success: true } n) names.Add(n.Groups["name"].Value);
         return names;
@@ -73,6 +121,22 @@ public static partial class JobRunner
     /// <summary>The problems without the cascade of the failed parts, and each root with blocks/blocked. Pure (the problems and
     /// the job); a job without a pointer prefix (a composite) is returned as it is.</summary>
     internal static List<JsonObject> FoldCascade(List<JsonObject> all, JsonArray ops, string? opsPointer)
+        => SentOps(Fold(all, ops, opsPointer), opsPointer);
+
+    /// <summary>F10: the op of each problem is the one its pointer names, in the job as sent (the pointers are already written
+    /// back into it): an op a normalization inserted before it (HTML_DECLARATIONS_FIRST puts one edit per screen first) shifts
+    /// nothing the author wrote ("op": 8 beside "pointer": "/ops/1/..." before).</summary>
+    private static List<JsonObject> SentOps(List<JsonObject> problems, string? opsPointer)
+    {
+        if (opsPointer == null) return problems;
+        foreach (var p in problems)
+            if (p["op"] is JsonValue v && v.TryGetValue<int>(out var op) && p["pointer"]?.ToString() is { } pointer && pointer.StartsWith(opsPointer + "/", StringComparison.Ordinal)
+                && int.TryParse(pointer[(opsPointer.Length + 1)..].Split('/')[0], out var sent) && sent != op)
+                p["op"] = sent;
+        return problems;
+    }
+
+    private static List<JsonObject> Fold(List<JsonObject> all, JsonArray ops, string? opsPointer)
     {
         if (opsPointer == null || all.Count == 0) return all;
         var declared = Declarations(ops, opsPointer);
@@ -95,7 +159,11 @@ public static partial class JobRunner
         {
             if (PartOf(p) is not { } part) continue;
             (failed.TryGetValue(part, out var list) ? list : failed[part] = []).Add(p);
-            if (p["pointer"]?.ToString() == part.Pointer && part.Pointer == $"{opsPointer}/{part.Op}")
+            // F10: the texts of a logic op apply together (a failing text fails the op, the preflight's syntax error keeps it
+            // from running), so a failure in one text fails them all: the screen actions another text declares are absent too
+            // (rounds 2-5 of 25/10: 22-33 HTML_NAME_UNKNOWN of screen actions the job declared, "closest: <screens>").
+            var flowOp = ops[part.Op] is JsonObject failing && failing["op"]?.ToString() == "logic" && failing["data"]?["flow"] != null;
+            if (flowOp || p["pointer"]?.ToString() == part.Pointer && part.Pointer == $"{opsPointer}/{part.Op}")
                 foreach (var text in declared.Keys.Where(k => k.Op == part.Op && k != part))
                     (failed.TryGetValue(text, out var texts) ? texts : failed[text] = []).Add(p);
         }

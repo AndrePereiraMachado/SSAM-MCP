@@ -144,14 +144,16 @@ public sealed partial class ModelSession
     /// now, ours = the statements. Statements without a key need no read. With keys: without basedOn, refused (DDL_BASE_REQUIRED);
     /// on the capture this job runs on, compared with the module now; without the read kept here, a statement that differs from
     /// the module is refused (DDL_BASE_UNKNOWN), never compiled as sent; a read of another module is refused (DDL_BASE_FOREIGN).
-    /// Every refusal hands back the declarations the text names as they are now, with the basedOn to send them on.</summary>
+    /// Every refusal hands back the declarations the text names as they are now (current, only to read) with the basedOn of
+    /// the module now, and keeps every statement the job sent (RefuseDdl).</summary>
     private (DdlDocument Edit, JsonObject? Note) MergeDdl(DdlDocument edit, DdlDocument current, DataDdl built, string? basedOn, string lane)
     {
         if (!edit.All().Concat(edit.Detached).Any(e => e.Key.Length > 0))
             return (edit, basedOn == null ? null : new JsonObject { ["merge"] = "none", ["basedOn"] = basedOn, ["note"] = "the statements name no element of a read (no -- @key): nothing to merge" });
         if (basedOn == null)
             throw BaseRefusal("DDL_BASE_REQUIRED", edit, current, built, "names elements of a read by their keys (-- @key) and the op has no basedOn: what changed in the Studio since that read cannot be told from what the statement changes",
-                "send the statements with basedOn: the sourceSha256 of the read (ssam_map view ddl) or the nextBasedOn of the last receipt; the edit of this problem is ready on the module now (its ddl and basedOn)");
+                "add data.basedOn to the op, keeping the statements: the sourceSha256 of the read they were written on (ssam_map view ddl) or the nextBasedOn of the last receipt"
+                + " (current.basedOn is the module now: it is that read only when nothing changed in the Studio since); the patch, when there is one, adds it");
         string? read;
         if (BaseSha256 != null && string.Equals(basedOn, BaseSha256, StringComparison.OrdinalIgnoreCase)) {
             // Written on the capture this job runs on: compared with the module now while no earlier op of the job changed its
@@ -172,7 +174,7 @@ public sealed partial class ModelSession
         }
         if (@base.ModuleKey != null && current.ModuleKey != null && !string.Equals(@base.ModuleKey, current.ModuleKey, StringComparison.Ordinal))
             throw BaseRefusal("DDL_BASE_FOREIGN", edit, current, built, "is written on a read of another module (basedOn " + basedOn + " is the data text of @" + @base.ModuleKey
-                + ", this module is @" + current.ModuleKey + "): its keys name nothing here", "send the statements on a read of this module: the edit of this problem is ready on the module now (its ddl and basedOn)");
+                + ", this module is @" + current.ModuleKey + "): its keys name nothing here", "write the statements on a read of this module (ssam_map view ddl; current.ddl has the declarations they name as this module has them now) and send them with its basedOn");
         var result = DdlMerge.ThreeWay(@base, current, edit, lane);
         if (result.Problems.Count > 0) throw RefuseDdl(result.Problems.Select(p => p.Code).Distinct().Count() == 1 ? result.Problems[0].Code : "DDL_MERGE_REFUSED", result.Problems, edit, current, built);
         var note = new JsonObject { ["merge"] = "three-way", ["basedOn"] = basedOn,
@@ -186,17 +188,16 @@ public sealed partial class ModelSession
         return (result.Edit, note);
     }
 
-    /// <summary>The edit a refusal of statements with keys hands back: the declarations of the top-level elements they name, as the
-    /// module has them now (whole blocks), with the basedOn to send them on (that text kept as a read; else the capture this job
-    /// runs on).</summary>
-    private (string Ddl, JsonObject Data) ReadyDdl(DdlDocument edit, DdlDocument current, DataDdl built)
+    /// <summary>What a refusal of statements with keys hands back to read: the declarations of the top-level elements they name,
+    /// as the module has them now (whole blocks), and the basedOn of the module now (that text kept as a read; else the capture
+    /// this job runs on). Never the job's statements: those stay as the job sent them (C-01, F-FitBody-21).</summary>
+    private (string Ddl, string? BasedOn) CurrentDdl(DdlDocument edit, DdlDocument current, DataDdl built)
     {
         var parents = current.All().Where(e => e.Key.Length > 0).GroupBy(e => e.Key).ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
         string? Top(string key) { if (!parents.TryGetValue(key, out var element)) return null; while (element.Parent != null) element = element.Parent; return element.Key; }
         var keys = edit.All().Concat(edit.Detached).Where(e => e.Key.Length > 0).Select(e => Top(e.Key)).OfType<string>().Distinct(StringComparer.Ordinal).ToList();
         var ddl = string.Join("\n\n", keys.Select(k => built.Blocks.FirstOrDefault(b => b.Key == k)?.Text).OfType<string>());
-        var basedOn = KeepDdlReading(built) ?? BaseSha256;
-        return (ddl, new JsonObject { ["edit"] = new JsonObject { ["ddl"] = ddl, ["basedOn"] = basedOn } });
+        return (ddl, KeepDdlReading(built) ?? BaseSha256);
     }
 
     private KernelRefusalException BaseRefusal(string code, DdlDocument edit, DdlDocument current, DataDdl built, string why, string fix)
@@ -207,11 +208,20 @@ public sealed partial class ModelSession
         return RefuseDdl(code, problems, edit, current, built);
     }
 
-    // Every problem with the ready edit: its declarations as the patch of /ddl and the problem's edit with the basedOn to send.
+    // C-01 (F-FitBody-21, 27/10): the patch of this refusal was `replace /ddl` with the module's declarations of the keys the
+    // statements name; fix:"apply" sent a job without its other statements (7 entities, 7 structures, 6 attributes lost). Now
+    // every problem carries the declarations now in `current` (only to read) and the patch never touches the statements: a
+    // refusal of the read (DDL_BASE_REQUIRED, DDL_BASE_UNKNOWN) only adds the basedOn of the module now, and only when the
+    // statements with keys add to what the module has and change nothing of it (DdlMerge.OnlyAdds): then any read they were
+    // written on gives the same edit. Anything else (a statement that changes, leaves out or renames what the module has) has
+    // no certain basedOn: no patch, the fix says which one to send.
     private KernelRefusalException RefuseDdl(string code, IReadOnlyList<DdlProblem> problems, DdlDocument edit, DdlDocument current, DataDdl built)
     {
-        var (ddl, data) = ReadyDdl(edit, current, built);
-        return SpecExpander.DdlRefusal(code, problems.Select(p => p with { Corrected = ddl.Length > 0 ? ddl : p.Corrected, Data = data }).ToList());
+        var (ddl, basedOn) = CurrentDdl(edit, current, built);
+        var data = new JsonObject { ["current"] = new JsonObject { ["ddl"] = ddl, ["basedOn"] = basedOn } };
+        var certain = basedOn != null && DdlMerge.OnlyAdds(current, edit) ? basedOn : null;
+        return SpecExpander.DdlRefusal(code, problems.Select(p => p with { Corrected = null, Data = data,
+            BasedOn = p.Code is "DDL_BASE_REQUIRED" or "DDL_BASE_UNKNOWN" ? certain : null }).ToList());
     }
 
     /// <summary>The ops of one round, in order: a failing op is kept with its line, the ops that use what it would have created

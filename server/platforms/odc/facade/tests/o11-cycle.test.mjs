@@ -917,6 +917,29 @@ test('R1 fix:"apply": a proposed patch that does not apply is refused once with 
   assert.equal(none.code, 'FIX_NONE');
 });
 
+// C-01 (c), F-FitBody-21 (27/10): the kernel's patch of DDL_BASE_REQUIRED replaced the job's data text with the module's read,
+// and fix:"apply" delivered a job without its new entities. A patch that leaves the job without what it declares is left out of
+// the answer (patchOmitted, PATCH_DESTRUCTIVE, patchLost), is never verified, and fix:"apply" applies only the others.
+test('C-01 fix:"apply": a refusal patch that would drop the job\'s statements is never applied; the patch that keeps them is', async t => {
+  const ddl = 'create entity Order label Title ( -- @k1\n  Id Long Integer identifier auto required, -- @k2\n  Title Text(50), -- @k3\n  Notes Text(200)\n);\n\ncreate entity OrderTag (\n  Id Long Integer identifier auto required,\n  Name Text(40)\n);\n\ntype OrderRow = {\n  Title: Text(50);\n}';
+  const read = 'create entity Order label Title ( -- @k1\n  Id Long Integer identifier auto required, -- @k2\n  Title Text(50) -- @k3\n);';
+  const job = { ops: [{ op: 'spec', data: { ddl } }] };
+  const destructive = { phase: 'apply', op: 0, pointer: '/ops/0/data/ddl', code: 'DDL_BASE_REQUIRED', severity: 'error', message: 'line 1: Order names elements of a read by their keys and the op has no basedOn',
+    fix: 'send basedOn', patch: [{ op: 'replace', path: '/ops/0/data/ddl', value: read }], patchCertain: true };
+  const keeping = { ...destructive, message: 'line 1: Order (@k1) has no basedOn', patch: [{ op: 'add', path: '/ops/0/data/basedOn', value: 'c'.repeat(64) }] };
+  const box = setup(t, { handlers: { deliver: queue(refusedWith([destructive, keeping]), envelopes.delivered) } });
+  const { call, close } = await serve(box.deps); t.after(close);
+  const refused = (await call('o11_deliver', { module: 'Orders', job, authorize: WORDS })).structuredContent;
+  assert.equal(refused.ok, false);
+  const [lost, kept] = refused.problems;
+  assert.equal(lost.patch, undefined); assert.equal(lost.patchOmitted, true); assert.match(lost.patchOmittedWhy, /^PATCH_DESTRUCTIVE/);
+  assert.ok(lost.patchLost.some(l => l.group === 'ddl entity' && l.lost.includes('OrderTag')), JSON.stringify(lost.patchLost));
+  assert.deepEqual(kept.patch, keeping.patch);
+  const fixed = (await call(refused.fixCall.tool, { ...refused.fixCall.arguments, authorize: WORDS })).structuredContent;
+  assert.equal(fixed.result, 'delivered', JSON.stringify(fixed));
+  assert.deepEqual(readJson(jobUsed(box.runAnvil.calls[1])), { ops: [{ op: 'spec', data: { ddl, basedOn: 'c'.repeat(64) } }] }, 'every statement sent, the basedOn added');
+});
+
 test('R1 a refused patch comes back mended by name with the ready call, never dry', async t => {
   const box = setup(t, { handlers: { deliver: queue(refusedWith([TARGET_PROBLEM]), envelopes.delivered) } });
   const { call, close } = await serve(box.deps); t.after(close);
@@ -986,4 +1009,27 @@ test('round2 7: direct O11 delivery reads the module usage index once for all de
   await h.call('o11_deliver', { module: 'Orders', job: box.job, authorize: 'Apply the requested test changes' });
   assert.deepEqual(applied.map(op => op.path), ['ServerAction:Action2','ServerAction:Action1','ServerAction:Action0']);
   assert.deepEqual(native.counts(), { calls: 1, reads: 1 });
+});
+
+// C-16 (F-FT-19: 3 html reads of 141-152 pages only to get the basedOn of the next edit; F-FigmaReactive-08): a delivery that
+// edited a screen names the basedOn of its next edit, on the capture the delivery took after the merge.
+test('C-16: a delivered html edit answers nextHtmlBasedOn {capture, html} per edited root, on the delivered capture', async () => {
+  const { deliveryFields } = await import('../o11-cycle.mjs');
+  const { nextHtmlBasedOnOf } = await import('../ssam-code.mjs');
+  const after = 'a'.repeat(64), later = 'b'.repeat(64), block = 'c'.repeat(64), captured = 'D'.repeat(64);
+  const results = [
+    { op: 'html', result: { mode: 'edit', screen: 'Fitmaker', rootKind: 'MobileScreen', next: { html: after, bytes: 900 } } },
+    { op: 'logic', result: { flow: [] } },
+    { op: 'html', result: { mode: 'edit', screen: 'FB_Launch', rootKind: 'MobileBlock', next: { html: block } } },
+    // the last edit of a root is the one the next edit is based on
+    { op: 'html', result: { mode: 'edit', screen: 'Fitmaker', rootKind: 'MobileScreen', next: { html: later } } },
+    // a refused or document op without a reading after it names none
+    { op: 'html', result: { mode: 'create', screen: 'Novo' } }];
+  const fields = deliveryFields({ apply: { results }, deliveredSnapshot: { path: 'x.oml', sha256: captured } });
+  assert.deepEqual(fields.nextHtmlBasedOn, [
+    { screen: 'Fitmaker', kind: 'MobileScreen', basedOn: { capture: captured.toLowerCase(), html: later } },
+    { screen: 'FB_Launch', kind: 'MobileBlock', basedOn: { capture: captured.toLowerCase(), html: block } }]);
+  // Without a capture after the merge, the html alone names the reading (capture "").
+  assert.deepEqual(nextHtmlBasedOnOf(results.slice(0, 1)), [{ screen: 'Fitmaker', kind: 'MobileScreen', basedOn: { capture: '', html: after } }]);
+  assert.equal(deliveryFields({ apply: { results: [{ op: 'logic', result: {} }] } }).nextHtmlBasedOn, undefined);
 });

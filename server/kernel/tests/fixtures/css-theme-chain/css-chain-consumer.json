@@ -1,0 +1,125 @@
+{
+ "description": "Fixture F2 (lote 4, meta 16): the CONSUMER of a shared theme, every place a delivery can put CSS. The producer theme ChainProducerTheme is referenced (a Mobile block cannot be referenced by a Reactive module: the producer block lives in the ODC mirror); a local theme ChainLocalTheme bases on the producer theme and is the theme of the flow ChainFlow; the screen ChainScreen of that flow has CSS of its own and places the local block ChainCard (CSS of its own); ChainOrphanTheme is a local theme no flow, no default and no other theme shows (born without CSS: css-chain-orphan.json writes it and is refused). The module's default theme Headless_UI still serves MainFlow.",
+ "base": "../reactive-ui.oml",
+ "expectValid": true,
+ "ops": [
+  {
+   "op": "reference",
+   "producer": "job:css-chain-producer",
+   "elements": [
+    "IMobileTheme:ChainProducerTheme"
+   ],
+   "as": "$ref"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IMobileTheme",
+   "name": "ChainLocalTheme",
+   "as": "$local"
+  },
+  {
+   "op": "set",
+   "target": "$local",
+   "prop": "BaseTheme",
+   "value": "IMobileTheme:ChainProducerTheme"
+  },
+  {
+   "op": "set",
+   "target": "$local",
+   "prop": "StyleSheet",
+   "value": ".chain-local { color: #223; }"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IMobileTheme",
+   "name": "ChainOrphanTheme",
+   "as": "$orphan"
+  },
+  {
+   "op": "create",
+   "parent": "@espace",
+   "type": "IMobileFlow",
+   "name": "ChainFlow",
+   "as": "$flow"
+  },
+  {
+   "op": "set",
+   "target": "$flow",
+   "prop": "Theme",
+   "value": "$local"
+  },
+  {
+   "op": "create",
+   "parent": "$flow",
+   "type": "IMobileBlock",
+   "name": "ChainCard",
+   "as": "$card"
+  },
+  {
+   "op": "create",
+   "parent": "$card",
+   "type": "IContainer",
+   "name": "CardBox",
+   "as": "$cardbox"
+  },
+  {
+   "op": "set",
+   "target": "$cardbox",
+   "prop": "Style",
+   "value": "\"chain-card\""
+  },
+  {
+   "op": "set",
+   "target": "$card",
+   "prop": "StyleSheet",
+   "value": ".chain-card { margin: 4px; }"
+  },
+  {
+   "op": "create",
+   "parent": "$flow",
+   "type": "IMobileBlock",
+   "name": "ChainUnusedCard",
+   "as": "$unused"
+  },
+  {
+   "op": "create",
+   "parent": "$unused",
+   "type": "IContainer",
+   "name": "UnusedBox"
+  },
+  {
+   "op": "set",
+   "target": "$unused",
+   "prop": "StyleSheet",
+   "value": ".chain-unused { margin: 2px; }"
+  },
+  {
+   "op": "create",
+   "parent": "$flow",
+   "type": "IMobileScreen",
+   "name": "ChainScreen",
+   "as": "$scr"
+  },
+  {
+   "op": "set",
+   "target": "$scr",
+   "prop": "StyleSheet",
+   "value": ".chain-screen { gap: 8px; }"
+  },
+  {
+   "op": "create",
+   "parent": "$scr",
+   "type": "IMobileBlockInstanceWidget",
+   "name": "Card",
+   "as": "$inst"
+  },
+  {
+   "op": "set",
+   "target": "$inst",
+   "prop": "SourceBlock",
+   "value": "$card"
+  }
+ ]
+}

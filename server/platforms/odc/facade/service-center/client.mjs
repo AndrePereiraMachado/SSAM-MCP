@@ -15,7 +15,7 @@ import fs from 'node:fs';
 import { readCheckpoint } from '../read-budget.mjs';
 import path from 'node:path';
 import { redactText } from './bridge.mjs';
-import { BridgeError, LayoutError, ProtocolError, ScheduleInModule, TargetPending, connectStudio, continuation } from './errors.mjs';
+import { ArgumentInvalid, BridgeError, LayoutError, ProtocolError, ScheduleInModule, TargetPending, connectStudio, continuation } from './errors.mjs';
 import { Document, Page, button, caption, classes, confirmText, controlValue, controls, escape, formFields, isVoid, lower, postbackTarget, secretRefs as toSecretRefs } from './html.mjs';
 import { NOT_SENT, STATE, Transport, decode } from './http.mjs';
 import { parseQs, quote, urlsplit } from './urls.mjs';
@@ -1033,7 +1033,8 @@ export class Client {
   }
 
   async modulePage(moduleId) {
-    if (!/^[1-9][0-9]*$/.test(String(moduleId))) throw new ProtocolError('module-id must be the numeric ID from the live module listing');
+    if (!/^[1-9][0-9]*$/.test(String(moduleId))) throw new ArgumentInvalid('moduleId', 'module-id must be the numeric ID from the live module listing',
+      'give module: the exact module name (the call resolves its numeric ID), or moduleId from o11_service_center_read {action:"modules", session:"vault"}');
     return this.get(`eSpace_Edit.aspx?EspaceId=${moduleId}`);
   }
 
@@ -1113,8 +1114,11 @@ export class Client {
       if (matches.length !== 1) throw new ProtocolError('This log page does not expose an unambiguous ' + key + ' filter');
       const n = matches[0];
       if (n.tag === 'select') {
-        const options = n.all('option').filter(o => o.text === value || o.attr('value') === value);
-        if (options.length !== 1) throw new ProtocolError('Log filter does not identify one option: ' + key);
+        let options = n.all('option').filter(o => o.text === value || o.attr('value') === value);
+        // the same option in another case (module "all" for "All") is that option; none or two refuse with the list
+        if (options.length === 0) options = n.all('option').filter(o => String(o.text).toLowerCase() === String(value).toLowerCase());
+        if (options.length !== 1) throw new ArgumentInvalid(key, 'Log filter does not identify one option: ' + key,
+          `give ${key} as one option of the page (${n.all('option').map(o => JSON.stringify(o.text)).slice(0, 30).join(', ')}), or leave ${key} out for every one`);
         value = optionValue(options[0]);
       }
       updates[n.attr('name')] = value;
@@ -1340,7 +1344,8 @@ export class Client {
   // A live capture of one page for calibrating the parsers: GET only; names, never field values, come back, and the
   // content's markup (input values emptied, scripts dropped) is kept locally with its sha256.
   async pageLayout(pagePath) {
-    if (!PAGE_PATH.test(pagePath ?? '')) throw new ProtocolError('path is a Service Center page under /ServiceCenter/, e.g. eSpace_Timer_Edit.aspx?EspaceKey=<key>&Cyclic_Job_Key=<key>');
+    if (!PAGE_PATH.test(pagePath ?? '')) throw new ArgumentInvalid('path', 'path is a Service Center page under /ServiceCenter/, e.g. eSpace_Timer_Edit.aspx?EspaceKey=<key>&Cyclic_Job_Key=<key>',
+      'give path as the page name and its query, without /ServiceCenter/ (e.g. Error_Logs.aspx)');
     if (this.exports === null) throw new ProtocolError('Captures need a local export folder');
     const page = await this.get(pagePath);
     const root = content(page);

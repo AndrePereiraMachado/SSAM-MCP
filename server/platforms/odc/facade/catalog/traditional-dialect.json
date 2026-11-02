@@ -1,0 +1,466 @@
+{
+  "schema": "ssam-traditional-dialect/1",
+  "root": {
+    "tags": [
+      "screen",
+      "block"
+    ],
+    "attributes": [
+      "name",
+      "flow",
+      "title",
+      "description",
+      "roles",
+      "actions",
+      "layout"
+    ],
+    "layout": [
+      "blank",
+      "theme"
+    ]
+  },
+  "data": {
+    "tags": [
+      "var",
+      "input name"
+    ],
+    "attributes": [
+      "name",
+      "type",
+      "default",
+      "mandatory",
+      "description"
+    ]
+  },
+  "tags": {
+    "Block": {
+      "widget": "IWebBlockInstanceWidget",
+      "attributes": [
+        "id",
+        "name",
+        "class",
+        "style",
+        ":\u003CInput\u003E",
+        "@\u003CEvent\u003E",
+        "onnotify"
+      ]
+    },
+    "a": {
+      "widget": "ILinkWidget",
+      "attributes": [
+        "id",
+        "name",
+        "class",
+        "style",
+        "if",
+        "else",
+        "title",
+        "onclick",
+        "method",
+        "validation",
+        "enabled",
+        "href"
+      ]
+    },
+    "button": {
+      "widget": "IButtonWidget",
+      "attributes": [
+        "id",
+        "name",
+        "class",
+        "style",
+        "if",
+        "else",
+        "title",
+        "onclick",
+        "method",
+        "validation",
+        "enabled"
+      ]
+    },
+    "checkbox-input": {
+      "widget": "ICheckBoxWidget",
+      "attributes": [
+        "id",
+        "name",
+        "class",
+        "style",
+        "if",
+        "else",
+        "title",
+        "type",
+        "bind",
+        "placeholder",
+        "mandatory",
+        "required",
+        "maxlength",
+        "rows",
+        "onchange",
+        "enabled",
+        "value"
+      ]
+    },
+    "div": {
+      "widget": "IContainerWidget",
+      "attributes": [
+        "id",
+        "name",
+        "class",
+        "style",
+        "if",
+        "else",
+        "title",
+        "list",
+        "line-separator"
+      ]
+    },
+    "expr": {
+      "widget": "IExpressionWidget",
+      "attributes": [
+        "id",
+        "name",
+        "class",
+        "style",
+        "if",
+        "else",
+        "title",
+        "value",
+        "example"
+      ]
+    },
+    "form": {
+      "widget": "IForm",
+      "attributes": [
+        "id",
+        "name",
+        "class",
+        "style",
+        "if",
+        "else",
+        "title",
+        "record",
+        "editable"
+      ]
+    },
+    "input": {
+      "widget": "IInputWidget",
+      "attributes": [
+        "id",
+        "name",
+        "class",
+        "style",
+        "if",
+        "else",
+        "title",
+        "type",
+        "bind",
+        "placeholder",
+        "mandatory",
+        "required",
+        "maxlength",
+        "rows",
+        "onchange",
+        "enabled",
+        "value"
+      ]
+    },
+    "label": {
+      "widget": "ILabel",
+      "attributes": [
+        "id",
+        "name",
+        "class",
+        "style",
+        "if",
+        "else",
+        "title",
+        "for"
+      ]
+    },
+    "list-records": {
+      "widget": "IListRecordsWidget",
+      "attributes": [
+        "id",
+        "name",
+        "class",
+        "style",
+        "if",
+        "else",
+        "title",
+        "line-separator",
+        "source",
+        "line-count",
+        "start-index"
+      ]
+    },
+    "password-input": {
+      "widget": "IInputPasswordWidget",
+      "attributes": [
+        "id",
+        "name",
+        "class",
+        "style",
+        "if",
+        "else",
+        "title",
+        "type",
+        "bind",
+        "placeholder",
+        "mandatory",
+        "required",
+        "maxlength",
+        "rows",
+        "onchange",
+        "enabled",
+        "value"
+      ]
+    },
+    "placeholder": {
+      "widget": "IPlaceholderWidget",
+      "attributes": [
+        "id",
+        "name",
+        "class",
+        "style",
+        "if",
+        "else",
+        "title"
+      ]
+    },
+    "radio-input": {
+      "widget": "IRadioButtonWidget",
+      "attributes": [
+        "id",
+        "name",
+        "class",
+        "style",
+        "if",
+        "else",
+        "title",
+        "type",
+        "bind",
+        "placeholder",
+        "mandatory",
+        "required",
+        "maxlength",
+        "rows",
+        "onchange",
+        "enabled",
+        "value"
+      ]
+    },
+    "select": {
+      "widget": "IComboBoxWidget",
+      "attributes": [
+        "id",
+        "name",
+        "class",
+        "style",
+        "if",
+        "else",
+        "title",
+        "bind",
+        "source-entity",
+        "source-attribute",
+        "required",
+        "options",
+        "label",
+        "value",
+        "empty",
+        "empty-value",
+        "enabled",
+        "onchange"
+      ]
+    },
+    "span": {
+      "widget": "IContainerWidget",
+      "attributes": [
+        "id",
+        "name",
+        "class",
+        "style",
+        "if",
+        "else",
+        "title"
+      ]
+    },
+    "table": {
+      "widget": "ITableWidget",
+      "attributes": [
+        "id",
+        "name",
+        "class",
+        "style",
+        "if",
+        "else",
+        "title"
+      ]
+    },
+    "table-records": {
+      "widget": "ITableRecordsWidget",
+      "attributes": [
+        "id",
+        "name",
+        "class",
+        "style",
+        "if",
+        "else",
+        "title",
+        "source",
+        "line-count",
+        "start-index"
+      ]
+    },
+    "td": {
+      "widget": "ICellWidget",
+      "attributes": [
+        "id",
+        "name",
+        "class",
+        "style",
+        "if",
+        "else",
+        "title"
+      ]
+    },
+    "text": {
+      "widget": "ITextWidget",
+      "attributes": [
+        "id",
+        "name",
+        "class",
+        "style",
+        "if",
+        "else",
+        "title"
+      ]
+    },
+    "textarea": {
+      "widget": "IInputWidget",
+      "attributes": [
+        "id",
+        "name",
+        "class",
+        "style",
+        "if",
+        "else",
+        "title",
+        "type",
+        "bind",
+        "placeholder",
+        "mandatory",
+        "required",
+        "maxlength",
+        "rows",
+        "onchange",
+        "enabled",
+        "value"
+      ]
+    },
+    "tr": {
+      "widget": "IRowWidget",
+      "attributes": [
+        "id",
+        "name",
+        "class",
+        "style",
+        "if",
+        "else",
+        "title"
+      ]
+    },
+    "upload": {
+      "widget": "IInputFilenameWidget",
+      "attributes": [
+        "id",
+        "name",
+        "class",
+        "style",
+        "if",
+        "else",
+        "title",
+        "required",
+        "enabled"
+      ]
+    }
+  },
+  "method": [
+    "Ajax",
+    "Submit",
+    "Navigate"
+  ],
+  "validation": [
+    "None",
+    "Server",
+    "ClientAndServer"
+  ],
+  "lineSeparator": [
+    "NewLine",
+    "None",
+    "Bullets"
+  ],
+  "adapted": {
+    "address": "div",
+    "article": "div",
+    "aside": "div",
+    "blockquote": "div",
+    "dd": "div",
+    "dl": "div",
+    "dt": "div",
+    "figcaption": "div",
+    "figure": "div",
+    "footer": "div",
+    "h1": "div",
+    "h2": "div",
+    "h3": "div",
+    "h4": "div",
+    "h5": "div",
+    "h6": "div",
+    "header": "div",
+    "li": "div",
+    "main": "div",
+    "nav": "div",
+    "ol": "div",
+    "p": "div",
+    "section": "div",
+    "ul": "div",
+    "abbr": "span",
+    "b": "span",
+    "cite": "span",
+    "code": "span",
+    "em": "span",
+    "kbd": "span",
+    "mark": "span",
+    "q": "span",
+    "s": "span",
+    "small": "span",
+    "strong": "span",
+    "sub": "span",
+    "sup": "span",
+    "time": "span",
+    "u": "span",
+    "th": "td",
+    "thead/tbody/tfoot": "the rows of their table",
+    "table list": "table-records",
+    "i icon": "span class=\u0022fa fa-\u003Cicon\u003E\u0022",
+    "radio": "radio-input",
+    "button with elements": "a class=\u0022Button\u0022",
+    "a href": "a onclick=\u0022ExternalURL(URL = ...)\u0022"
+  },
+  "noWidget": {
+    "audio": "Traditional has no audio widget: use the installed component contract",
+    "br": "end the line with a new \u003Cdiv\u003E (a Container per line); Traditional text has no line break widget",
+    "canvas": "Traditional has no canvas widget: use the installed component contract",
+    "hr": "write \u003Cdiv class=\u0022separator\u0022\u003E and draw the line in CSS",
+    "icon": "write \u003Ci icon=\u0022name\u0022\u003E (written as the Font Awesome class of OutSystemsUIWeb)",
+    "iframe": "Traditional has no frame widget: use the installed component contract (an extension block) or an expr with Escape Content off",
+    "popup": "a Traditional popup is a screen with LayoutPopup opened by a link (Popup_Editor) or the Modal of OutSystemsUIWeb (kernel/AGENTS.md, Traditional components)",
+    "pre": "write \u003Cdiv style=\u0022white-space: pre\u0022\u003E (a Container keeps the text, the style keeps the spacing)",
+    "radio-group": "write one \u003Cradio-input bind=\u0022X\u0022 value=\u0022...\u0022\u003E per choice, all with the same bind",
+    "script": "move the script to a JavaScript of the screen or of a screen action; a document carries no code",
+    "svg": "write the icon as the Font Awesome class (\u003Ci icon=\u0022name\u0022\u003E) or as a CSS mask or background of a div; an image by URL is an Expression with Escape Content off that writes the \u003Cimg\u003E: \u003Cexpr value=\u0022\u0026quot;\u003Cimg src=\u0027\u0026quot; \u002B EncodeHtml(Url) \u002B \u0026quot;\u0027\u003E\u0026quot;\u0022 os-EscapeContent=\u0022False\u0022/\u003E (EncodeHtml around every value; the patch writes it from the \u003Cimg\u003E), or a CSS background-image of a div",
+    "switch": "write \u003Ccheckbox-input bind=\u0022X\u0022\u003E (a Traditional switch is a checkbox with the class of the theme)",
+    "video": "Traditional has no video widget: use the installed component contract",
+    "img": "write it as an Expression with Escape Content off that writes the \u003Cimg\u003E: \u003Cexpr value=\u0022\u0026quot;\u003Cimg src=\u0027\u0026quot; \u002B EncodeHtml(Url) \u002B \u0026quot;\u0027\u003E\u0026quot;\u0022 os-EscapeContent=\u0022False\u0022/\u003E (EncodeHtml around every value; the patch writes it from the \u003Cimg\u003E), or a CSS background-image of a div"
+  }
+}

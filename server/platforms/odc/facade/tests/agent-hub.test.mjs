@@ -18,6 +18,7 @@ import { createTokenStore, tokenCli } from '../server-tokens.mjs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { compatibility, LIMITS, threePart, callVerbs, ENVIRONMENT_OPERATIONS } from '../agent-hub.mjs';
 import { ODC_COMMANDS, O11_METHODS } from '../quality-line.mjs';
+import { AgentExecutor } from '../hosted/agent-executor.mjs';
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ssam-hub-'));
 test.after(() => fs.rmSync(tmp, { recursive: true, force: true }));
@@ -891,6 +892,41 @@ test('C26 and C14: the Hello of an agent 0.2.0 gives its folder and its kinds (i
     assert.equal(link.supports('file.sync'), true);
   } finally { await handle.close(); }
 });
+// fase4-28 r4-f3-import (review B2): the real wire, hello agent.o11Methods -> the hub's link.info().agentO11Methods -> the hosted
+// executor. An agent that lists integration_import sees its bridge's import capabilities; an older agent (no list, or a list
+// without it) never does, and the method itself is refused before anything is sent.
+test('r4-f3: agent.o11Methods of the Hello reaches the hosted executor through the real hub', async () => {
+  const { handle, store, base } = await start();
+  const workspace = freshDir();
+  try {
+    const agentFor = (customer, o11Methods) => {
+      const t = store.issue({ customer });
+      const a = agentOf(base, t.agentCredential);
+      return { t, a, hello: helloOf({ agent: { version: o11Methods ? '0.3.7' : '0.3.6', node: process.version, platform: 'win32', startedAt: new Date().toISOString(),
+        kinds: ['studio.processes', 'odc.pipe', 'odc.attach', 'o11.bridge', 'o11.connect', 'o11.selected', 'file.put', 'file.get', 'file.list', 'file.sync'],
+        ...(o11Methods ? { o11Methods } : {}) } }) };
+    };
+    const capabilities = ['refresh_references', 'integration_import:wsdl', 'integration_import:openapi', 'thin'];
+    for (const [customer, methods, sees] of [['Novo', [...O11_METHODS], true], ['Antigo', null, false], ['Sem', O11_METHODS.filter(m => m !== 'integration_import'), false]]) {
+      const { t, a, hello } = agentFor(customer, methods);
+      assert.equal((await a.hello(hello)).status, 200);
+      const link = handle.hub.link(t.id);
+      assert.deepEqual(link.info().agentO11Methods, methods, customer);
+      const s = await a.stream();
+      const executor = new AgentExecutor({ link, workspace, o11: { studioDir: 'C:\\Kernel\\Service Studio', lane: 'ss4' } });
+      const asked = executor.call('o11.bridge', { method: 'bridge_manifest', params: {} });
+      const call = await s.lines.next(m => m.t === 'call');
+      assert.equal(call.kind, 'o11.bridge');
+      await a.post([{ t: 'result', id: call.id, ok: true, value: { reply: { success: true, data: { flavor: 'thin', capabilities } }, paths: [] } }]);
+      const manifest = await asked;
+      assert.deepEqual(manifest.reply.data.capabilities, sees ? capabilities : ['refresh_references', 'thin'], customer);
+      if (!sees) await assert.rejects(executor.call('o11.bridge', { method: 'integration_import', params: {} }),
+        e => e.code === 'INTEGRATION_IMPORT_NEEDS_BRIDGE' && e.executed === false, customer);
+      s.lines.cancel();
+    }
+  } finally { await handle.close(); }
+});
+
 test('machine alert: the first machine is recorded, another one still connects and is alerted, no machine is not judged', async () => {
   process.env.SSAM_ACCESS_NOTIFY = '0';
   const { handle, store, base, dir, events } = await start();

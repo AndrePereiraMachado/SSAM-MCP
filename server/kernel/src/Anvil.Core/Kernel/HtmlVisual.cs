@@ -77,6 +77,19 @@ public sealed record HtmlVisualScope(
 /// </summary>
 public static class HtmlVisual
 {
+    /// <summary>The InputType an Input bound to a basic data type takes (the Verify demands it: "Input type is a Phone but it
+    /// should be Text to match Telefone"), or null for a type no input edits or a type this side does not know. The one rule of
+    /// the importer and of the document form (C-41).</summary>
+    internal static string? InputTypeOf(string dataType) => dataType.Replace(" ", "").ToLowerInvariant() switch
+    {
+        "text" => "Text", "integer" or "longinteger" or "decimal" or "currency" => "Number", "date" => "Date", "time" => "Time",
+        "datetime" => "Datetime", "email" => "Email", "phonenumber" => "Phone", _ => null,
+    };
+
+    /// <summary>Whether an authored InputType is one the bound data type accepts: its own, or Password and Search on a Text.</summary>
+    internal static bool AcceptsInputType(string authored, string implied)
+        => string.Equals(authored, implied, StringComparison.OrdinalIgnoreCase) || (implied == "Text" && authored.ToLowerInvariant() is "password" or "search");
+
     // <div> is the only tag with a native container; every other tag the HTML Element of the platform accepts (ElementWidgetMap,
     // the one table of the html op and the importer: 103 in O11, 100 in ODC) carries its own tag into an HTML Element widget, a
     // static table included. <br> is an empty Container (a block that breaks the line): the Verify refuses Tag br ("'br' is not a
@@ -805,6 +818,8 @@ public static class HtmlVisual
             var alias = Create(parent, "IList", node);
             Set(alias, "Source", source);
             if (node.Tag != "div") Set(alias, "Tag", node.Tag);
+            // F8: the List renders its Tag only in Mode Custom (Default renders a div: in a table, the rows in the first column).
+            if (ScreenVisual.NeedsCustomMode(node.Tag) && node.Attribute(ScreenVisual.ModeAttribute) == null) Set(alias, "Mode", ScreenVisual.CustomMode);
             if (ScreenVisual.RowGroupTags.Contains(node.Tag)) rowGroups.Add((alias, node.Tag, node.Line));
             Attributes(node, alias, "IList");
             listScopes.Push(new ListScope(Required(node, "as"), source));
@@ -911,18 +926,14 @@ public static class HtmlVisual
             });
         }
 
-        private static bool Accepted(string authored, string implied) => authored == implied || (implied == "Text" && authored is "Password" or "Search");
+        private static bool Accepted(string authored, string implied) => AcceptsInputType(authored, implied);
 
         /// <summary>(the InputType the bound data type implies, the basic data type) — (null, null) when the type is unknown here,
         /// (null, type) when it is a basic type no input edits (Boolean, Binary Data).</summary>
         private (string? Implied, string? DataType) BoundInput(string bind)
         {
             if (resolve.BindTypes?.TryGetValue(bind, out var dataType) == true)
-                return (dataType.Replace(" ", "").ToLowerInvariant() switch
-                {
-                    "text" => "Text", "integer" or "longinteger" or "decimal" or "currency" => "Number", "date" => "Date", "time" => "Time",
-                    "datetime" => "Datetime", "email" => "Email", "phonenumber" => "Phone", _ => null,
-                }, dataType);
+                return (InputTypeOf(dataType), dataType);
             return (resolve.InputTypes?.GetValueOrDefault(bind), null);
         }
 
@@ -1464,7 +1475,8 @@ public sealed partial class ModelSession
         {
             if (!_handles.TryGetValue(alias, out var handle) || handle is not IObjectSignature widget) continue;
             var born = (ModelHost.Prop(widget, "Style") as IExpression)?.Text;
-            if (ScreenVisual.StudioClassOf(type, born) is not { } studio) continue;
+            var tagOf = fragment.RowGroups.FirstOrDefault(g => g.Alias == alias).Tag;   // F8: a List of a table part takes no class
+            if (ScreenVisual.StudioClassOf(type, born, tagOf) is not { } studio) continue;
             if (studio.Writes && studio.Expression != born)
             {
                 try { ApplyOne(new JsonObject { ["op"] = "set", ["target"] = alias, ["prop"] = "Style", ["value"] = studio.Expression }); }
@@ -1478,6 +1490,7 @@ public sealed partial class ModelSession
             var owner = parent;
             while (owner.Parent is IObjectSignature up && !Implements(owner, "IMobileScreen") && !Implements(owner, "IMobileBlock")) owner = up;
             var reachable = RootThemeOf(owner).Reachable;
+            JsonArray? tables = null;
             foreach (var (list, tag, line) in fragment.RowGroups)
             {
                 void Mark(string property, string expression)
@@ -1489,9 +1502,16 @@ public sealed partial class ModelSession
                 }
                 Mark("disable-virtualization", "True");
                 if (reachable) Mark(ScreenVisual.RowsMarker, "\"1\"");
+                // F8: a table part on a page whose theme takes no native layout block gets its display inline.
+                var inline = !reachable ? ScreenVisual.InlineRowsStyle(tag, null) : null;
+                if (inline != null) Mark("style", "\"" + inline + "\"");
                 normalized.Add(new JsonObject { ["code"] = ScreenVisual.ListRendersAllRows, ["element"] = "List", ["line"] = line, ["tag"] = tag,
                     ["rowsMarker"] = reachable, ["note"] = "Native table/list rows keep their layout; the same runtime rule as document creation." });
+                if (ScreenVisual.IsTablePart(tag))
+                    (tables ??= new JsonArray()).Add(ScreenVisual.TableEntry(OwnerName(parent), "a new List at line " + line, tag, reachable, reachable ? "theme" : "inline", RootThemeOf(owner).Name,
+                        new[] { "Mode Custom", "disable-virtualization True", reachable ? ScreenVisual.RowsMarker : "style " + inline }));
             }
+            if (tables != null) report["visual"] = new JsonObject { ["tables"] = tables };
             foreach (var layout in InstallNativeLayouts(owner)) normalized.Add(layout);
             report["normalized"] = normalized;
         }

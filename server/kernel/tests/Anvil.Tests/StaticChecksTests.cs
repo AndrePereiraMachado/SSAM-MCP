@@ -96,6 +96,44 @@ public class StaticChecksTests
         Assert.DoesNotContain(problems, p => p["message"]!.ToString().Contains("'Enter'"));
     }
 
+    // ---- S3: an external site (C-23) ---------------------------------------------------------------------------------------
+
+    /// <summary>C-23 (F-AiChatbot-03, F-FT-14): an external site of the module opens a URL as a screen opens a page, so it is a
+    /// destination of a click (onclick="OpenPortal(URL = ...)"); RedirectToURL, the System's, already was. A name nothing
+    /// carries is still refused.</summary>
+    [Fact]
+    public void AnExternalSiteOfTheModuleIsADestinationOfAClick()
+    {
+        var module = Index("App_UI", root => {
+            var common = root.Add(new("common", "MobileFlow", "Common"));
+            common.Add(new("site", "ExternalSite", "OpenPortal"));
+            root.Add(new("flow", "MobileFlow", "MainFlow"));
+        });
+        var basis = new StaticBasis { Lane = "o11", Module = module, Fresh = true };
+        var r = Run(basis, Ops(Html("<screen name=\"Links\"><a onclick=\"OpenPortal(URL = &quot;https://example.test&quot;)\">x</a><a onclick=\"Nowhere\">y</a></screen>")));
+        var unknown = Errors(r, ScreenHtmlEdit.NameUnknown);
+        Assert.DoesNotContain(unknown, p => p["message"]!.ToString().Contains("'OpenPortal'", StringComparison.Ordinal));
+        Assert.Contains(unknown, p => p["message"]!.ToString().Contains("'Nowhere'", StringComparison.Ordinal));
+    }
+
+    /// <summary>C-23, Traditional (proto 79be4ae2): ExternalURL of the WebFlow Common of the templates, what LINK_HREF_REWRITTEN
+    /// writes for an href and an anchor of an element there, is a destination of a click too.</summary>
+    [Fact]
+    public void TheExternalUrlOfATraditionalModuleIsADestinationOfAClick()
+    {
+        var module = Index("App_TR", root => {
+            var common = root.Add(new("common", "WebFlow", "Common"));
+            common.Add(new("site", "ExternalSite", "ExternalURL"));
+            root.Add(new("flow", "WebFlow", "MainFlow"));
+        });
+        var basis = new StaticBasis { Lane = "o11", Module = module, Fresh = true };
+        var r = Run(basis, Ops(Html("<screen name=\"Links\"><div id=\"Services\">s</div><a onclick='ExternalURL(URL = \"#\" + Services.Id)'>x</a><a onclick=\"Nowhere\">y</a></screen>")));
+        var unknown = Errors(r, ScreenHtmlEdit.NameUnknown);
+        Assert.DoesNotContain(unknown, p => p["message"]!.ToString().Contains("'ExternalURL'", StringComparison.Ordinal));
+        Assert.DoesNotContain(unknown, p => p["message"]!.ToString().Contains("'Services'", StringComparison.Ordinal));
+        Assert.Contains(unknown, p => p["message"]!.ToString().Contains("'Nowhere'", StringComparison.Ordinal));
+    }
+
     // ---- S5: a type used as a value, a path over an entity list, an unknown root ----------------------------------------------
     [Fact]
     public void ATypeUsedAsAValueIsRefusedWithTheRowOfItsListAsTheEdit()
@@ -381,11 +419,26 @@ public class StaticChecksTests
         var html = Html("<screen name=\"Home\"><div>{{ Uper(\"x\") }}</div></screen>");
         var fresh = Run(new StaticBasis { Lane = "o11", Module = module, Fresh = true }, Ops(logic, html));
         var unknown = Errors(fresh, "FUNCTION_UNKNOWN");
-        Assert.Equal(["'Lowr('", "'Uper('"], unknown.Select(p => p["message"]!.ToString()[..p["message"]!.ToString().IndexOf(' ')]).Order(StringComparer.Ordinal));
+        Assert.Equal(["'Lowr'", "'Uper'"], unknown.Select(p => p["message"]!.ToString()[..p["message"]!.ToString().IndexOf(' ')]).Order(StringComparer.Ordinal));
         Assert.Equal(["/ops/0", "/ops/1/data/html"], unknown.Select(p => p["pointer"]!.ToString()).Order(StringComparer.Ordinal));
         Assert.Contains(fresh.Checked, c => c!.ToString() == "functions");
         var stale = Run(new StaticBasis { Lane = "o11", Module = module, Fresh = false }, Ops(logic, html));
         Assert.Empty(Errors(stale, "FUNCTION_UNKNOWN"));
         Assert.Equal(2, stale.Warnings.Count(w => w["code"]!.ToString() == "FUNCTION_UNKNOWN"));
+    }
+
+    // ---- S5 (C-29, port of the C-29 half of proto 79be4ae2) --------------------------------------------------------------------
+
+    /// <summary>C-29 (F-FT-04 x2): the aggregates of `preparation Fitmaker.Preparation` in a logic op of the same job were "no
+    /// variable, input, aggregate ... is named 'GetHeroStats'" for the page, and the session declared 15 list variables to get
+    /// around it. What the Preparation of the screen fetches is data of the screen; a name it does not fetch is still refused.</summary>
+    [Fact]
+    public void TheNodesOfThePreparationOfTheSameJobAreDataOfItsScreen()
+    {
+        var r = Run(Basis(), Ops(Html("<screen name=\"Fitmaker\" actions=\"Preparation\"><div class=\"s\">{{ GetHeroStats.List.Current.Label + Missing.Text }}</div></screen>"),
+            Logic("preparation Fitmaker.Preparation\n  GetHeroStats = aggregate FROM HeroStat\n  end\n")));
+        var unknown = Errors(r, ScreenHtmlEdit.NameUnknown);
+        Assert.DoesNotContain(unknown, p => p["message"]!.ToString().Contains("'GetHeroStats'", StringComparison.Ordinal));
+        Assert.Contains(unknown, p => p["message"]!.ToString().Contains("'Missing'", StringComparison.Ordinal));
     }
 }

@@ -12,6 +12,19 @@ public sealed class FlowTextNormalizeTests
 {
     private static string Lines(params string[] lines) => string.Join("\n", lines) + "\n";
 
+    [Theory]
+    [InlineData("Sonnet_IS.ObterPokemon(IdOuNome=NomePokemon)")]
+    [InlineData("(System).ListAppend(List=Names, Element=NomePokemon)")]
+    [InlineData("(1 + 2)")]
+    [InlineData("\"(Sonnet_IS).ObterPokemon(X)\"")]
+    public void ProducerSyntaxGuardPreservesCallsAndOrdinaryExpressions(string value)
+    {
+        var text = Lines("server action Guard", "  Result = " + value, "  end");
+        Assert.Empty(Anvil.Core.Preflight.TextForms.ProducerCallProblems(text));
+        if (value.Contains("ObterPokemon(") && !value.StartsWith('"') || value.StartsWith("(System)"))
+            Assert.Contains(ModuleFlow.Read(text).Items, i => i.Role == "node" && i.Name == "Result");
+    }
+
     private static FlowSyntaxException Refused(string text)
     {
         var error = Assert.ThrowsAny<FormatException>(() => ModuleFlow.Read(text));

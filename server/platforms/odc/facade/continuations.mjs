@@ -142,7 +142,7 @@ const TABLE = {
   FEATURE_NOT_IN_RELEASE: c('ssam_discover', { intent: '<intent>', lane: 'odc' }, 'this builder feature is not in the release; discover the equivalent job operation'),
 
   // ---- dialogs (DialogPolicy.cs:54-58, MergeHandler.cs:74; D-DONOS-4: a web dialog goes back to the person)
-  DIALOG_OPEN: c('o11_studio', { command: 'dismiss-dialog', args: { title: '<dialog title>' } }, 'closes only a window with an owner, by its title, like the X (Cancel), if the person agrees; a web dialog: ask the person to answer it in the Studio and repeat'),
+  DIALOG_OPEN: c('o11_studio', { command: 'dismiss-dialog', args: { title: '<dialog title>', words: "<the user's own words>" } }, 'closes only a window with an owner, by its title, like the X (Cancel), with the person\'s own words; a web dialog: ask the person to answer it in the Studio and repeat'),
   DIALOG_RECOVERY: noDialogs('recovery dialog (Open | Discard): the person chooses in the Studio; this call waits for it to close, then repeat'),
   DIALOG_MANAGE_DEPENDENCIES: noDialogs('references dialog: the person chooses in the Studio (Manage Dependencies and Apply updates; Cancel opens without updating); never restart the Studio for it'),
   DIALOG_MERGE_EDITOR: noDialogs('a merge editor is open: the person finishes or cancels it in the Studio; never restart the Studio for it'),
@@ -254,10 +254,12 @@ export const KERNEL_CODES = Object.freeze(['DIALOG_RECOVERY', 'DIALOG_MANAGE_DEP
 
 const isPlaceholder = v => typeof v === 'string' ? /<[^<>]+>/.test(v) && v !== WORDS
   : Array.isArray(v) && v.length > 0 && v.every(isPlaceholder);
+const WORD_FIELDS = ['authorize', 'authorization', 'words', 'ownerRequest'];
 function fill(args, values) {
   const out = {};
   for (const [key, v] of Object.entries(args)) {
-    if (key !== 'authorize' && Object.hasOwn(values, key) && values[key] !== undefined && isPlaceholder(v)) out[key] = values[key];
+    // The words of the person are never filled from values (the marker stays): authorize, authorization, words, ownerRequest.
+    if (!WORD_FIELDS.includes(key) && Object.hasOwn(values, key) && values[key] !== undefined && isPlaceholder(v)) out[key] = values[key];
     else if (v && typeof v === 'object' && !Array.isArray(v)) out[key] = fill(v, values);
     else out[key] = Array.isArray(v) ? [...v] : v;
   }

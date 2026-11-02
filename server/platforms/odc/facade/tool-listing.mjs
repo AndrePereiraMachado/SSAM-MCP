@@ -536,8 +536,8 @@ export const PROTECTED_TOOL_CLAUSES = Object.freeze({
       clauses: ["Users/OutSystemsUI/System never opened: ssam_map reads published OML"], review: "6bbd3e5c5ffc563ed8b530e2edc9335e503e55bccec1eda89b9446738d42d8fd" },
     { sentence: "publish-log {module?, max 1..500 = 60}: the last 1-Click Publish of the active (or named, open) module as the Studio shows it, whoever published: status, stage and every compilation/deployment message with type, text, detail and element; the errors TrueChange never sees (SQL the database refuses, code generation, deploy); read only.",
       clauses: ["publish-log: last publish messages incl. errors TrueChange never sees; read only"], review: "7ec5dbafac5f10bd2d24322f45589f3be999a8f7b854f2e744e3da4f56e830c1" },
-    { sentence: "dismiss-dialog {title, type?}: closes an owned dialog window with that exact title like its X (Cancel), only when the person agreed; a web dialog without owner is refused (the person answers it in the Studio).",
-      clauses: ["dismiss-dialog only when the person agreed"], review: "ec7dda6a1f948e7e6404dfcd4cc841f09388f7a78a7c2ade0a325c72a4fbb5af" },
+    { sentence: "dismiss-dialog {title, words, type?}: closes an owned dialog window with that exact title like its X (Cancel), only with the person's own words (WORDS_REQUIRED otherwise); a web dialog without owner is refused (the person answers it in the Studio).",
+      clauses: ["dismiss-dialog needs the person's own words (args.words)"], review: "052744970dbeb5e21190a75779d2f4c6cac2c2952e3ba02dc3684d6c5182a7e5" },
     { sentence: "login {host, timeoutSeconds = 300}: opens the Studio's own sign-in for host; the person types the password or completes SSO there.",
       clauses: ["login: person types password/SSO in Studio"], review: "9674960c470f1bfafc59dff1a74c370adf30fd6e9ed23af82d5bd810c1df9d11" },
   ],
@@ -961,7 +961,7 @@ export const TOOL_LISTING_REVIEWS = Object.freeze({
     "/properties/close": "aa7d61fa95eb78beff2243fde623da5aa1a0f8583e9d17fbbf8d3395ec3e2075"
   },
   "o11_studio": {
-    "description": "8c3b845fe030195c0731023282df474a48a801f6eea8b279c4b63e21eaff1bb3"
+    "description": "8cee34189954db4ffcac5b29aa271ada6b59491270539e4817f7785e6325958e"
   },
   "o11_environment": {
     "description": "dd893c8fe07bf50be10a8f3c4371189c7c6dab31a2f02caa68da3466a60467c1",
@@ -1435,8 +1435,8 @@ export const TOOL_LISTING = Object.freeze({
     }
   },
   "o11_studio": {
-    "sourceSha256": "4d9c1b6ae1b860331a521f3f88669d536e3b666c866bf867d14a12c90f3de806",
-    "description": "Operate the connected O11 Studio: status, open-module, close-module, waits, dialogs, sign-in and publish-log; no script, credential file or sleep loop. Reuse open work; never close/save/reopen to connect. Users/OutSystemsUI/System never opened: ssam_map reads published OML. Wait calls answer when state holds; never sleep/poll. A dialog requiring choice returns its exact question; dismiss-dialog only when the person agreed. login: person types password/SSO in Studio. publish-log: last publish messages incl. errors TrueChange never sees; read only.",
+    "sourceSha256": "7c1744b92324f85e58f13fc4c40648933653c8c41846d94708f0b6360c5d5d13",
+    "description": "Operate the connected O11 Studio: status, open-module, close-module, waits, dialogs, sign-in and publish-log; no script, credential file or sleep loop. Reuse open work; never close/save/reopen to connect. Users/OutSystemsUI/System never opened: ssam_map reads published OML. Wait calls answer when state holds; never sleep/poll. A dialog requiring choice returns its exact question; dismiss-dialog needs the person's own words (args.words). login: person types password/SSO in Studio. publish-log: last publish messages incl. errors TrueChange never sees; read only.",
     "params": {}
   },
   "o11_environment": {

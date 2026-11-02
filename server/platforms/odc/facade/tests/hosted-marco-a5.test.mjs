@@ -143,7 +143,8 @@ test('a8: the hosted instructions send a session to ssam_code as the local ones 
     assert.match(text, /ssam_code (plan|check|write|\{lane)/, 'the ssam_code steps of the session rules');
     assert.doesNotMatch(text, /ssam_code is unavailable/);
     assert.match(text, /files subagents write for it go in the agent inbox folder/);
-    assert.match(text, /GENERATOR_PENDING/);
+    // r4-rest-hosted: the generator ops run here called by name (never offered); rest-consume with its samples inline.
+    assert.match(text, /not offered by ssam_discover but run here when a job names their op; rest-consume needs every input in the job/);
     assert.match(text, /HOSTED_PROMPT_UNAVAILABLE/);
     const [s2, c2] = InMemoryTransport.createLinkedPair();
     const localClient = new Client({ name: 'local-instructions', version: '1.0.0' });

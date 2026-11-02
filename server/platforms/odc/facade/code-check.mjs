@@ -9,6 +9,7 @@ import { cacheEntries, odcCaptures } from './producer-signatures.mjs';
 import { canonicalKeyOf, sameProducer, studioNameOf } from './producer-names.mjs';
 import { writeCall } from './ssam-code.mjs';
 import { runJob, withJobIdentity } from './job-runner.mjs';
+import { withoutDestructivePatches } from './refusal-problems.mjs';
 import { createAnvilRunner } from './anvil-cli.mjs';
 import { residentWorkerClient, hostedWorkerClient, workerDisabled } from './anvil-worker.mjs';
 import { mergeNormalizations } from './normalizations.mjs';
@@ -294,10 +295,11 @@ export async function codeCheck(input = {}, deps = {}) {
   // (its patch route has no job; the model's own patch stays forbidden above): the corrected job is resolved here, before the
   // reference ops are read from it (referenceOps) and before it is written as the job of this check.
   if (call.refusal) for (const p of problems) if (p.code !== 'INPUT_INVALID' && p.code !== 'CAPTURE_MISSING') { p.reason = p.code; p.code = 'INPUT_INVALID'; }
-  if (!call.refusal && call.arguments?.patch != null && call.arguments.job == null) {
+  // C-18: a correction that carries new texts beside its edits is the partial job and the edits' patch together.
+  if (!call.refusal && call.arguments?.patch != null && (call.arguments.job == null || call.arguments.basedOn != null)) {
     const { root: home, local: laneLocal, odcWork } = locations(deps);
     const { resolvePatchedJob } = await import('./job-patch.mjs');
-    const patched = resolvePatchedJob({ patch: call.arguments.patch, basedOn: call.arguments.basedOn }, { root: home,
+    const patched = resolvePatchedJob({ ...(call.arguments.job != null ? { job: call.arguments.job } : {}), patch: call.arguments.patch, basedOn: call.arguments.basedOn }, { root: home,
       inlineDir: path.join(lane === 'o11' ? laneLocal : odcWork, 'jobs', 'check'), ...(deps.uuid ? { uuid: deps.uuid } : {}) });
     if (!patched.ok) problems.push({ code: 'INPUT_INVALID', at: 'basedOn', reason: patched.code, message: patched.error, ...(patched.candidates ? { candidates: patched.candidates } : {}) });
     else { call.arguments.job = readJson(patched.path); fs.rmSync(patched.path, { force: true }); }
@@ -345,7 +347,7 @@ export async function codeCheck(input = {}, deps = {}) {
   const runAnvil = keepingKernelResult(worker ? onWorker(worker, cold, seen) : cold);
   try {
     // With roots, the producers a job runner binds by itself (an ODC job's captures) are the session's too.
-    result = await (deps.runJob ?? runJob)({ lane, job, base: checkedCapture.path, out: path.join(dir, 'candidate.oml'), work: path.join(dir, 'work'), producers: bindings, quiet: true },
+    result = await (deps.runJob ?? runJob)({ lane, module, ...(lane === 'o11' && input.expectedEnvironment ? { expectedEnvironment: input.expectedEnvironment } : {}), job, base: checkedCapture.path, out: path.join(dir, 'candidate.oml'), work: path.join(dir, 'work'), producers: bindings, quiet: true },
       { ...deps, env, runAnvil, ...(confined ? { odcRoot: odcData } : {}) });
     if (!result.ok && result.stage !== 'static') { // CX16 (c): a static refusal carries its own correction; guidance measured ~0.2 s, ~2.9 KB
       if (deps.guidance) result = await deps.guidance(lane, result.job ?? job, result);
@@ -387,7 +389,7 @@ export async function codeCheck(input = {}, deps = {}) {
       base: checkedCapture.path, baseSha256: capture.sha256, baseModelSha256: capture.model ?? null, producers: bindings, via: seen.via };
     return answer;
   }
-  return { ok: false, code: 'CHECK_REFUSED', refusalCode: result.code, ...common, ...refusalFields(result, job), problems: (result.problems ?? []).map(p => withOrigin(p, call.origins)),
+  return { ok: false, code: 'CHECK_REFUSED', refusalCode: result.code, ...common, ...refusalFields(result, job), problems: withoutDestructivePatches((result.problems ?? []).map(p => withOrigin(p, call.origins)), result.job ?? job),
     verifyRan: result.verifyRan ?? false, ...(result.phases ? { phases: result.phases } : {}), ...(result.error ? { error: result.error } : {}), ...normalizations,
     ...(result.discovery ? { discovery: result.discovery } : {}), continuation: result.stage === 'static' && result.continuation ? result.continuation : { tool: 'ssam_code', arguments: { ...input, lane, action: 'check' } } };
 }

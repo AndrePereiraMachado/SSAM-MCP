@@ -87,7 +87,14 @@ usage: anvil-odc <command> [--flags]
     }
 
     /// <summary>Um comando -> um objeto (null = comando desconhecido). O mesmo Dispatch serve o processo frio e o worker.</summary>
-    private static object? Dispatch(string command, string[] args) => command switch
+    private static object? Dispatch(string command, string[] args)
+    {
+        // B15 (R2-1): the images this call may fill, from its own arguments only (never from the job's text).
+        ImageFills.Use(args);
+        return DispatchCommand(command, args);
+    }
+
+    private static object? DispatchCommand(string command, string[] args) => command switch
     {
         // ---- headless ---------------------------------------------------------------------------------
         "apply" => Apply(args),
@@ -539,10 +546,15 @@ usage: anvil-odc <command> [--flags]
             File.WriteAllText(outPath, System.Text.Json.JsonSerializer.Serialize(ids.Select(i => new { id = i }), new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
             return new { wrote = outPath, ideVersion = StudioAdapter.Runtime.IdeVersion, count = ids.Count };
         }
+        // C-11: the SSAM's own codes (HTML_* of the document form, the anonymous-access family) beside the Verify catalog, so a
+        // lookup of a refusal's code or text never comes back empty (the facade's verify-message searches data.ssamCodes too).
         if (Opt(args, "--id") is not { } id)
-            return new { platform = StudioAdapter.Runtime.Platform, ideVersion = StudioAdapter.Runtime.IdeVersion, count = all.Count, definitions = all };
+            return new { platform = StudioAdapter.Runtime.Platform, ideVersion = StudioAdapter.Runtime.IdeVersion, count = all.Count, definitions = all,
+                ssamCodes = CommandSurface.SsamCodes("", exact: false).ToList() };
         var found = all.FirstOrDefault(d => string.Equals(d.Id, id, StringComparison.OrdinalIgnoreCase));
-        return found is null ? new { notFound = id, count = all.Count } : (object)found;
+        var ssam = CommandSurface.SsamCodes(id, exact: true).ToList();
+        if (found is null) return ssam.Count > 0 ? new { id, ssamCodes = ssam } : new { notFound = id, count = all.Count };
+        return ssam.Count > 0 ? new { found.Id, found.Severity, found.Title, found.Detail, ssamCodes = ssam } : (object)found;
     }
 
     private static object Deliver(string[] args)

@@ -39,9 +39,39 @@ public sealed partial class ScreenHtmlModule<T> where T : class
             return known;
         }
     }
-    // The defaults of a screen or block: those of the UI flow it is in.
-    internal ScreenDefaults DefaultsOfRoot(int rootIndex) =>
-        DefaultsIn(rootIndex >= 0 && parent[rootIndex] is var p and >= 0 && role[p] == "flow" ? nodes[p] : null);
+    // The defaults of a screen or block: those of the UI flow it is in; a Traditional page's with the language's own defaults of
+    // its form controls (ScreenDefaults.AsTraditional, C-09).
+    internal ScreenDefaults DefaultsOfRoot(int rootIndex)
+    {
+        var defaults = DefaultsIn(rootIndex >= 0 && parent[rootIndex] is var p and >= 0 && role[p] == "flow" ? nodes[p] : null);
+        return rootIndex >= 0 && kind[rootIndex] is "WebScreen" or "WebBlock" ? defaults.AsTraditional() : defaults;
+    }
+
+    // C-14: the author CSS of the module's own default theme (Reactive and Mobile), read once per reading of the module (a module
+    // read again after a change reads it again); null when the module has no default theme of its own.
+    private string? themeCss;
+    private bool themeRead;
+    internal string? ModuleThemeCss()
+    {
+        lock (gate) {
+            if (themeRead) return themeCss;
+            themeRead = true;
+            try {
+                if (r.PropertyOf(module, "DefaultMobileTheme")?.Invoke() is T theme && at.TryGetValue(theme, out var t) && parent[t] >= 0 && ReferenceEquals(nodes[parent[t]], module))
+                    themeCss = Anvil.Core.ThemeCss.Of(theme) is { } sheet ? Anvil.Core.ThemeCss.Author(sheet) : r.PropertyOf(theme, "StyleSheet")?.Invoke() as string;
+            } catch (Exception) { themeCss = null; }
+            return themeCss;
+        }
+    }
+
+    // C-14: the theme parts a root prints (Anvil.Core.ThemeParts.Owned): its own and the named ones it owns, canonical, in the order
+    // of the theme; a part whose CSS holds </style> cannot be written as a <style> and is left out.
+    internal List<(string? Id, string Css)> ThemePartsOf(int rootIndex)
+    {
+        if (rootIndex < 0 || role[rootIndex] is not ("screen" or "block") || ModuleThemeCss() is not { Length: > 0 } css) return [];
+        return Anvil.Core.ThemeParts.Owned(css, display[rootIndex])
+            .Where(p => !p.Css.Contains("</style>", StringComparison.OrdinalIgnoreCase)).Select(p => (p.Id, p.Css)).ToList();
+    }
 
     internal ScreenHtmlModule(T module, ModelReader<T> reader) : this(module, reader, null, -1) { }
 
@@ -195,7 +225,7 @@ public sealed partial class ScreenHtmlModule<T> where T : class
                 Keys = writer.Keys, Widgets = writer.WidgetCount, OpaqueWidgets = writer.OpaqueCount, Elements = writer.ElementCount,
                 ReadMs = sw.Elapsed.TotalMilliseconds, Problems = writer.Canon.Problems.ToList(), Canon = writer.Canon,
                 Decoder = parsed => { lock (gate) return new Decoder(this, scope, shapes).Run(parsed); },
-                State = new ReadingState(this, index, scope, shapes), DefaultsNote = DefaultsOfRoot(index).Note,
+                State = new ReadingState(this, index, scope, shapes), DefaultsNote = DefaultsOfRoot(index).Note, Notes = writer.Notes.ToList(),
             };
         }
     }
@@ -587,13 +617,25 @@ public sealed partial class ScreenHtmlModule<T> where T : class
 
     // A fact at the default of its property where the element sits (inside a Popup: what the Studio gives it there, such as
     // the Popup's Transition of an event).
-    private static bool IsDefault(ScreenDefaults defaults, string kd, Fact f, bool inPopup = false) => f.Text == defaults.DefaultOf(kd, f.Name, f.Type, inPopup);
+    private static bool IsDefault(ScreenDefaults defaults, string kd, Fact f, bool inPopup = false, bool inForm = false) => f.Text == defaults.DefaultOf(kd, f.Name, f.Type, inPopup, inForm);
 
     // Whether a node of the walk is a Popup or sits inside one (up to its screen or block).
     internal bool InPopup(int i)
     {
         for (var p = i; p >= 0; p = parent[p]) {
             if (kind[p] == "Popup") return true;
+            if (role[p] is "screen" or "block") return false;
+        }
+        return false;
+    }
+
+    // C-02: whether a node of the walk is a Button or a Link with a Form among its ancestors (up to its screen or block): its
+    // click validates the Form by default (ScreenDefaults.FormDefault).
+    internal bool InForm(int i)
+    {
+        if (!ScreenDefaults.ValidatesInForm(kind[i])) return false;
+        for (var p = parent[i]; p >= 0; p = parent[p]) {
+            if (kind[p] == "Form") return true;
             if (role[p] is "screen" or "block") return false;
         }
         return false;
@@ -625,9 +667,11 @@ public sealed partial class ScreenHtmlModule<T> where T : class
         public readonly Dictionary<string, Shape> Shapes = new(StringComparer.Ordinal);
         public readonly Scope Scope = new(rootIndex);
         public int WidgetCount, OpaqueCount, ElementCount;
+        // F8: the Lists of a table part that render as a div (Mode Default) or with virtualization (HTML_TABLE_LIST_VIRTUALIZED).
+        public readonly List<System.Text.Json.Nodes.JsonObject> Notes = [];
         // The defaults of the page: those of the UI flow it is in (ScreenHtmlModule.DefaultsOfRoot).
         private ScreenDefaults? defaults;
-        private bool IsDefault(string kd, Fact f, bool inPopup = false) => ScreenHtmlModule<T>.IsDefault(defaults ??= m.DefaultsOfRoot(rootIndex), kd, f, inPopup);
+        private bool IsDefault(string kd, Fact f, bool inPopup = false, bool inForm = false) => ScreenHtmlModule<T>.IsDefault(defaults ??= m.DefaultsOfRoot(rootIndex), kd, f, inPopup, inForm);
         private int next;
         private string Next() => "w" + (++next).ToString(CultureInfo.InvariantCulture);
         private List<string> Problems => Canon.Problems;
@@ -657,6 +701,12 @@ public sealed partial class ScreenHtmlModule<T> where T : class
             var css = sheet.Name != null && sheet.Text.Length > 0 && !sheet.Text.Contains("</style>", StringComparison.Ordinal) ? sheet.Text : null;
             Encode(m.kind[i], facts.Where(f => css == null || f.Name != "StyleSheet").ToList(), top, element, ScreenHtmlModuleMode.Data);
             if (css != null) { element.Facts["p:StyleSheet"] = "t:" + css; top.Children.Add("<style>" + css + "</style>"); }
+            // C-14: the parts of the module theme this root wrote (its own <style scope="theme"> and the named parts it owns), each
+            // as the <style scope="theme" [id]> that writes it again: an edit changes them with the basedOn of this reading.
+            foreach (var (themeId, part) in m.ThemePartsOf(i)) {
+                element.Facts[ScreenHtmlEdit.ThemeFact(themeId)] = "t:" + part;
+                top.Children.Add("<style scope=\"theme\"" + (themeId != null ? " id=\"" + themeId + "\"" : "") + ">\n" + part + "\n</style>");
+            }
             Events(pointers, children, top, element, shape);
             var data = new List<int>(); var widgets = new List<int>();
             var actions = new List<string>(); var dataActions = new List<string>();
@@ -811,9 +861,15 @@ public sealed partial class ScreenHtmlModule<T> where T : class
             // A Table without Source (dragged in the Studio, not bound yet) is still the <table> of the language: list="" says so,
             // and it reads back as the Table (the review of round 1, B2).
             if (rowStyles != null && !element.Facts.ContainsKey("p:Source")) { element.Facts["p:Source"] = "e:"; node.Attrs.Add(("list", Const(""))); }
-            Events(pointers, children, node, element, shape, m.InPopup(i));
+            Events(pointers, children, node, element, shape, m.InPopup(i), m.InForm(i));
             Arguments(children, node, element);
             Extended(children, node, element, kd);
+            if (kd == "List" && ScreenHtmlTableLists.IsTablePart(node.Tag == "list" ? element.Facts.GetValueOrDefault("p:Tag")?[2..] : node.Tag)) {
+                var custom = facts.FirstOrDefault(f => f.Name == "Mode").Text == ScreenHtmlTableLists.CustomMode
+                    || element.Facts.TryGetValue("p:Mode", out var mode) && mode.EndsWith(":" + ScreenHtmlTableLists.CustomMode, StringComparison.Ordinal);
+                var allRows = node.Attrs.Any(a => a.Name is ScreenHtmlTableLists.VirtualizationAttribute or "ext:" + ScreenHtmlTableLists.VirtualizationAttribute && ScreenHtmlTableLists.IsTrue(a.Value?.Invoke()));
+                if (!custom || !allRows) Notes.Add(ScreenHtmlTableLists.NoteOf(k, element.Facts.GetValueOrDefault("p:Tag")?[2..] ?? node.Tag, custom, allRows));
+            }
             parentNode.Children.Add(node);
             if (kd == "TextWidget") { foreach (var c in children) if (m.role[c] == "widget") Problems.Add("text with widgets inside @" + m.id[c]); return; }
             if (kd == "IfWidget") { WriteIf(i, k, pointers, children, node, element, parentNode); return; }
@@ -1008,7 +1064,7 @@ public sealed partial class ScreenHtmlModule<T> where T : class
             _ => Const(f.Text) };
 
         // ---- events, arguments, extended properties ------------------------------------------------------------------------
-        private void Events(Dictionary<string, T> pointers, List<int> children, PNode node, ScreenHtmlCanon.Element element, Shape shape, bool inPopup = false)
+        private void Events(Dictionary<string, T> pointers, List<int> children, PNode node, ScreenHtmlCanon.Element element, Shape shape, bool inPopup = false, bool inForm = false)
         {
             var named = new Dictionary<int, string>();
             foreach (var (property, target) in pointers)
@@ -1042,7 +1098,7 @@ public sealed partial class ScreenHtmlModule<T> where T : class
                 foreach (var f in facts) {
                     if (f.Name is "Name" or "Destination" or "Handler" or "Event") continue;
                     if (f.Name == "Target" && destinationFact.Name != null && f.Text == destinationFact.Text) continue;
-                    if (IsDefault(ek, f, inPopup)) continue;
+                    if (IsDefault(ek, f, inPopup, inForm)) continue;
                     element.Facts[prefix + ":p:" + f.Name] = f.Type + ":" + f.Text;
                     // An event's property is read back as written (EventProperty): never wrapped.
                     node.Attrs.Add(("os-" + attribute + "." + f.Name, f.Type is 'r' or 'l' ? Value(ek, f, "") : Const(f.Text)));
@@ -1136,8 +1192,15 @@ public sealed partial class ScreenHtmlModule<T> where T : class
                 if (top.Get(list) is { } names) { element.Facts[list] = string.Join("\n", names.Split(", ").Order(StringComparer.Ordinal)); top.Attributes.RemoveAll(a => a.Key == list); }
             DecodeAttributes(top, element, shape, ScreenHtmlModuleMode.Data, shape.Kind);
             var style = top.Children.Where(c => c.Tag == "style").ToList();
-            if (style.Count > 1) canon.Problems.Add("more than one <style>");
-            foreach (var sheet in style) { element.Facts["p:StyleSheet"] = "t:" + string.Concat(sheet.Children.Select(c => c.Text)); top.Children.Remove(sheet); }
+            // C-14: a <style scope="theme" [id]> is a part of the module theme (ScreenHtmlEdit.ThemeFact), the others the root's own.
+            if (style.Count(s => !ScreenHtmlEdit.IsThemeStyle(s)) > 1) canon.Problems.Add("more than one <style>");
+            foreach (var sheet in style) {
+                var text = string.Concat(sheet.Children.Select(c => c.Text));
+                if (!ScreenHtmlEdit.IsThemeStyle(sheet)) element.Facts["p:StyleSheet"] = "t:" + text;
+                else if (!element.Facts.TryAdd(ScreenHtmlEdit.ThemeFact(sheet.Get("id")), "t:" + Anvil.Core.ThemeParts.Canon(text)))
+                    canon.Problems.Add("more than one <style scope=\"theme\"" + (sheet.Get("id") is { } themeId ? " id=\"" + themeId + "\"" : "") + ">");
+                top.Children.Remove(sheet);
+            }
             DecodeChildren(top, "", element.Children);
             return canon;
         }
@@ -1478,7 +1541,8 @@ internal static class ScreenHtmlTables
         ["ComboBoxWidget"] = Map("Variable", "bind", "SourceRecordList", "options", "Enabled", "enabled"),
         ["ExpressionWidget"] = Map("Value", "value", "Example", "example"),
         ["TableRecordsWidget"] = Map("SourceRecordList", "source", "LineCount", "line-count"),
-        ["ListRecordsWidget"] = Map("SourceRecordList", "source", "LineCount", "line-count"),
+        // C-07: the Line Separator is the list's own attribute; an extended property of that name reads ext:line-separator.
+        ["ListRecordsWidget"] = Map("SourceRecordList", "source", "LineCount", "line-count", "LineSeparator", "line-separator"),
     };
     public static readonly Dictionary<string, string> CommonNamed = Map("Name", "id", "Style", "class", "CustomStyle", "style");
     public static readonly Dictionary<string, string> DataNamed = Map("Name", "name", "DataType", "type", "DefaultValue", "default",

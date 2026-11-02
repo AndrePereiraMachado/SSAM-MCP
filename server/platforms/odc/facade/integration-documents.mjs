@@ -14,6 +14,9 @@
 // consumer `breaks` lists; a target is written Type:Name (never $alias or @key); a standing grant never covers them.
 // Samples (rest-consume): a GET method without sample is read once (sampleRestConsume: 10 s, 2 MB, no credentials, JSON,
 // lists cut to 20 items) and the sample pinned in the op with sampledFrom {url, status, bytes, sha256}; never a POST.
+// Hosted (fase4-28 r4-rest-hosted, M3 of the F3 review), never: the method answers DOCUMENT_FETCH_HOSTED_REFUSED (cause
+// REST_CONSUME_SAMPLE_MISSING), the family rule of the documents: the server never fetches what a job names, before any
+// lookup or connection; the gate refused the job before (hosted/policy.mjs restConsumeSampleRequired).
 // Every problem in one refusal, before anything happens; only the words' sha256 is ever journaled (by the callers).
 // Hosted (servidor/fase4-24, findings 1 and 3 of the confinement review): inside a hosted call (or with `workspace`) the
 // documents are read for a customer, so every LOCAL file this module is about to read, the main document and each file a
@@ -24,6 +27,14 @@
 // PATH_OUTSIDE_WORKSPACE naming the job pointer and the reference, before anything is read there. Every URL (the document,
 // each redirect hop, each import) must reach a public address (hosted/public-fetch.mjs: DOCUMENT_HOST_NOT_PUBLIC), and the
 // default fetch checks it again at connect time. A served process that lost its hosted context reads nothing.
+// fase4-28 r4-f3-import (criterion C3; supersedes the public fetch above for documents): a hosted server NEVER fetches a
+// document. A WSDL or OpenAPI URL, a redirect and any import or $ref a document names by URL are refused before any request
+// (DOCUMENT_FETCH_HOSTED_REFUSED); the document comes from the customer: a file of the workspace (ws:<rel>, or agent:inbox/<file>
+// the SSAM Agent brings from the user's machine, where any download happened), or inline. Local use is unchanged.
+// Inline (both modes): "wsdl": {"content": "<the WSDL text>", "name"?: "service.wsdl"} of a soap op, or "openapi": {"content":
+// "<the JSON text>", "name"?, "operations": [...]} of a rest op. The text is written once under <localRoot>/documents/inline/
+// <sha256>/<name> and pinned like a file (sha256, size, DTD/ENTITY refusal); an inline document is self-contained: a file it
+// imports is not there, and is refused naming it. The kernel and the bridge only ever see the pinned path and its sha256.
 import dns from 'node:dns';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -32,7 +43,7 @@ import { fileURLToPath } from 'node:url';
 import { namesWhole } from './studio-create-app.mjs';
 import { pinReferences } from './job-patch.mjs';
 import { hostedContext, servedWithoutContext } from './executor.mjs';
-import { insideVisible } from './hosted/mirror.mjs';
+import { insideVisible, createQuota, workspaceFull } from './hosted/mirror.mjs';
 import { MAX_REDIRECTS, createPublicFetch, publicUrlProblem } from './hosted/public-fetch.mjs';
 
 export const MAX_DOCUMENT_BYTES = 5 * 1024 * 1024;
@@ -207,6 +218,12 @@ const outsideProblem = (reference, from) => problem('PATH_OUTSIDE_WORKSPACE',
     ? 'serve that file next to the document at its URL, or bring the document and its files to the workspace (agent:inbox/<file>) and name each relative to the document'
     : 'put the document and every file it imports in the workspace (ws:<rel>, or agent:inbox/<file>) and name each relative to the document that imports it',
   { reference });
+// fase4-28 r4-f3-import: a hosted server never fetches a document (the URL is shown, nothing was requested).
+export const HOSTED_FETCH_REFUSED = 'DOCUMENT_FETCH_HOSTED_REFUSED';
+const hostedFetchProblem = (url, from) => problem(HOSTED_FETCH_REFUSED,
+  `${from ? `the document ${path.basename(String(from))} names ${url}; ` : ''}the SSAM server never fetches a document for a hosted account, so ${url} was not requested`,
+  'download it on the user\'s machine and give the file (agent:inbox/<file>, or ws:<rel>; a WSDL with its imports next to it, named relative to it), or put the document inline: "wsdl": {"content": "<text>"} or "openapi": {"content": "<JSON text>", "operations": [...]}',
+  { url });
 const hostProblem = refused => problem(refused.code, refused.message,
   refused.code === 'DOCUMENT_HOST_NOT_PUBLIC' ? 'give the document\'s public URL, or put the file in the agent inbox (agent:inbox/<file>) and name it'
     : refused.code === 'UNSUPPORTED_DOCUMENT_SCHEME' ? 'give an http(s) URL or the file in the workspace' : 'check the URL, or put the file in the agent inbox (agent:inbox/<file>)');
@@ -223,6 +240,7 @@ async function readDocument(source, { fetchImpl, base, wsdl, confine = null, fro
     if (confine) { resolved = fileUrlPath(resolved); if (!resolved) return { problem: outsideProblem(source, from) }; }
     else if (/^file:\/\//i.test(resolved)) resolved = decodeURIComponent(new URL(resolved).pathname.replace(/^\/([A-Za-z]:)/, '$1'));
   }
+  if (isUrl(resolved) && confine) return { problem: hostedFetchProblem(resolved, from) };
   if (isUrl(resolved)) {
     if (typeof fetchImpl !== 'function') return { problem: problem('UNSUPPORTED_DOCUMENT_SCHEME', `no HTTP client to read ${resolved}`, 'pass the downloaded file\'s absolute path') };
     // Hosted: every hop is checked (scheme and a public address) before it is requested, and a redirect is followed here,
@@ -312,19 +330,39 @@ function pinnedName(reference, absolute) {
  * Pins one document and the files it imports (recursively, at most 32 in all) under <localRoot>/documents/<sha256>/.
  * Answers {document: {path, sha256, source, imports|external}, files: [{source, path, sha256, bytes}]} or {problems}.
  */
-async function pin(source, { kind, localRoot, fetchImpl, at, jobDir, confine = null }) {
+// inline (fase4-28 r4-f3-import, review M1/B1): {bytes, name} of an inline document, pinned straight from the buffer (one
+// write); it may name no file at all. written: the files this call created (removed again when the job is refused).
+// review A1: a name relative to the document (no scheme, no drive, not rooted), and the place an import resolves to,
+// relative to the main document's folder (posix), or null when it leaves that folder or is on another server.
+const relativeName = reference => { const text = String(reference); return !isUrl(text) && !hasScheme(text) && !isDrive(text) && !/^[\\/]/.test(text); };
+function insideName(mainLocation, absolute) {
+  let rel;
+  if (isUrl(mainLocation)) {
+    if (!isUrl(absolute)) return null;
+    const main = new URL(mainLocation), target = new URL(absolute);
+    if (main.origin !== target.origin || target.search) return null;
+    rel = path.posix.relative(path.posix.dirname(main.pathname), target.pathname);
+  } else {
+    if (typeof absolute !== 'string' || isUrl(absolute) || !path.isAbsolute(absolute)) return null;
+    rel = path.relative(path.dirname(mainLocation), absolute).split(path.sep).join('/');
+  }
+  return rel && !rel.startsWith('..') && !path.posix.isAbsolute(rel) && !isDrive(rel) ? rel : null;
+}
+
+async function pin(source, { kind, localRoot, fetchImpl, at, jobDir, confine = null, inline = null, written = [] }) {
   const wsdl = kind === 'wsdl';
   // A path relative to the job's own folder is a local file too; one that is not there is left to the kernel (suite jobs;
   // hosted: refused). Hosted, the candidate is looked at only inside the workspace.
-  const candidate = !isUrl(source) && !hasScheme(source) && !path.isAbsolute(source) && jobDir ? path.resolve(jobDir, source) : null;
+  const candidate = !inline && !isUrl(source) && !hasScheme(source) && !path.isAbsolute(source) && jobDir ? path.resolve(jobDir, source) : null;
   const local = candidate && (!confine || insideVisible(confine.workspace, candidate)) && fs.existsSync(candidate) ? candidate : source;
-  const main = await readDocument(local, { fetchImpl, wsdl, confine });
+  const main = inline ? { bytes: inline.bytes, location: path.join(localRoot, 'documents', 'inline', inline.name), source: 'inline' }
+    : await readDocument(local, { fetchImpl, wsdl, confine });
   if (main.relative) return { unchanged: true };
   if (main.problem) return { problems: [{ ...main.problem, path: at }] };
   if (wsdl && unsafeXml(main.bytes)) return { problems: [problem('UNSAFE_WSDL_XML', `the WSDL of ${main.source} declares a DTD or ENTITY`, 'use the service\'s own WSDL without <!DOCTYPE>/<!ENTITY>', { path: at })] };
   const digest = sha256(main.bytes);
   const folder = path.join(localRoot, 'documents', digest);
-  const mainName = (isUrl(main.location) ? path.basename(new URL(main.location).pathname) : path.basename(main.location)) || (wsdl ? 'service.wsdl' : 'openapi.json');
+  const mainName = inline ? inline.name : (isUrl(main.location) ? path.basename(new URL(main.location).pathname) : path.basename(main.location)) || (wsdl ? 'service.wsdl' : 'openapi.json');
   const files = [{ source: main.source, name: mainName.replace(/[^A-Za-z0-9._-]/g, '_').replace(/^\.+$/, '') || 'document', bytes: main.bytes }];
   const dependencies = {};
   const queue = [{ bytes: main.bytes, location: main.location }];
@@ -336,8 +374,25 @@ async function pin(source, { kind, localRoot, fetchImpl, at, jobDir, confine = n
     if (wsdl) references = wsdlImports(current.bytes.toString('utf8'));
     else { try { references = openApiReferences(JSON.parse(current.bytes.toString('utf8').replace(/^﻿/, ''))); } catch { references = []; } }
     for (const reference of references) {
+      if (inline) { problems.push(problem('DOCUMENT_INLINE_INVALID', `the inline ${wsdl ? 'WSDL' : 'OpenAPI document'} names the file '${reference}'; an inline document cannot import files`,
+        `give the document and its files as files instead: agent:inbox/<folder>/${mainName} with each file it ${wsdl ? 'imports' : 'references'} in that folder, named relative to it`, { path: at, target: reference })); continue; }
       const absolute = referenceTarget(reference, current.location, confine);
       if (absolute?.outside) { problems.push({ ...outsideProblem(reference, current.location), path: at, target: reference }); continue; }
+      // review A1: the Studio's SOAP importer reads the pinned WSDL and resolves each import BY ITS NAME next to it (on the
+      // customer's machine, in the agent's folder): an import that is not relative or leaves the main document's folder
+      // (../x.xsd, an absolute path, file:, a URL) would be read from somewhere else, or not at all. Refused at every level.
+      if (wsdl && !absolute?.outside && confine && typeof absolute === 'string' && !isUrl(absolute) && path.isAbsolute(absolute) && !insideVisible(confine.workspace, absolute)) {
+        problems.push({ ...outsideProblem(reference, current.location), path: at, target: reference }); continue;
+      }
+      // Hosted, an import by URL is DOCUMENT_FETCH_HOSTED_REFUSED (readDocument), which says how to give the file.
+      if (wsdl && !absolute?.outside && !(confine && isUrl(absolute))) {
+        const inside = insideName(main.location, absolute);
+        if (!relativeName(reference) || inside === null) {
+          problems.push(problem('DOCUMENT_NAME_INVALID', `the WSDL import '${reference}'${current.location !== main.location ? ` (named by ${path.basename(String(current.location))})` : ''} is not a name relative to the WSDL inside its folder`,
+            'name each import relative to the WSDL, inside its folder (the Studio\'s importer reads it by that name): put the WSDL and every file it imports in one folder (agent:inbox/<folder>/...)', { path: at, target: reference }));
+          continue;
+        }
+      }
       if (seen.has(absolute)) continue;
       seen.add(absolute);
       if (files.length >= MAX_DOCUMENTS) { problems.push(problem('DOCUMENT_TOO_LARGE', `${main.source} imports more than ${MAX_DOCUMENTS} documents`, 'import a smaller contract (one service, its own types)', { path: at })); break; }
@@ -346,20 +401,33 @@ async function pin(source, { kind, localRoot, fetchImpl, at, jobDir, confine = n
       if (read.relative) continue;
       if (wsdl && unsafeXml(read.bytes)) { problems.push(problem('UNSAFE_WSDL_XML', `the imported ${absolute} declares a DTD or ENTITY`, 'use documents without <!DOCTYPE>/<!ENTITY>', { path: at })); continue; }
       // The relative name is kept so the importer resolves it next to the main document; any other gets its own.
-      const relative = pinnedName(reference, absolute);
+      const relative = wsdl ? insideName(main.location, absolute) : pinnedName(reference, absolute);
       files.push({ source: read.source, name: relative, bytes: read.bytes });
       dependencies[reference] = { name: relative, sha256: sha256(read.bytes) };
       queue.push({ bytes: read.bytes, location: read.location });
     }
   }
   if (problems.length) return { problems };
-  for (const file of files) {
-    const target = path.join(folder, ...file.name.split('/'));
-    if (!within(folder, target)) return { problems: [problem('DOCUMENT_NAME_INVALID', `the import '${file.name}' would be pinned outside ${folder}`, 'name imports relative to the document, inside its folder', { path: at })] };
-    fs.mkdirSync(path.dirname(target), { recursive: true });
-    if (!fs.existsSync(target) || sha256(fs.readFileSync(target)) !== sha256(file.bytes)) fs.writeFileSync(target, file.bytes);
-    file.path = target;
+  const targets = files.map(file => path.join(folder, ...file.name.split('/')));
+  const outside = files.find((file, n) => !within(folder, targets[n]));
+  if (outside) return { problems: [problem('DOCUMENT_NAME_INVALID', `the import '${outside.name}' would be pinned outside ${folder}`, 'name imports relative to the document, inside its folder', { path: at })] };
+  const fresh = files.filter((file, n) => !fs.existsSync(targets[n]) || sha256(fs.readFileSync(targets[n])) !== sha256(file.bytes));
+  // Hosted (review M1): the bytes this call adds count against the customer's workspace quota (hosted/mirror.mjs).
+  const adding = fresh.reduce((sum, file) => sum + file.bytes.length, 0);
+  if (confine?.quota && adding > 0 && confine.quota.full(adding)) {
+    const full = workspaceFull(confine.quota);
+    return { problems: [problem(full.code, full.message, 'remove what the workspace no longer needs (old captures, documents, deliveries), then send the job again', { path: at })] };
   }
+  files.forEach((file, n) => {
+    const target = targets[n];
+    if (fresh.includes(file)) {
+      if (!fs.existsSync(target)) written.push(target);
+      fs.mkdirSync(path.dirname(target), { recursive: true });
+      fs.writeFileSync(target, file.bytes);
+    }
+    file.path = target;
+  });
+  if (adding > 0) confine?.quota?.add?.(adding);
   const document = { path: files[0].path, sha256: digest, source: main.source };
   const deps = Object.fromEntries(Object.entries(dependencies).map(([uri, d]) => [uri, { path: path.join(folder, ...d.name.split('/')), sha256: d.sha256 }]));
   if (Object.keys(deps).length) document[wsdl ? 'imports' : 'external'] = deps;
@@ -430,7 +498,9 @@ export async function fetchSample(url, { fetchImpl = globalThis.fetch, at = '' }
 }
 
 /** The samples of a rest-consume op: each GET method without one is sampled once and pinned in the op. */
-async function sampleRestConsume(op, i, { fetchImpl }) {
+// The code of the family (the same text a WSDL or OpenAPI URL answers hosted).
+const SAMPLE_FETCH_REFUSED = 'DOCUMENT_FETCH_HOSTED_REFUSED';
+async function sampleRestConsume(op, i, { fetchImpl, hosted = false }) {
   const problems = [];
   let changed = false;
   const methods = Array.isArray(op.data?.methods) ? op.data.methods : [];
@@ -441,6 +511,16 @@ async function sampleRestConsume(op, i, { fetchImpl }) {
     if (!method || typeof method !== 'object' || method.sample !== undefined) continue;
     if (String(method.verb ?? 'GET').toUpperCase() !== 'GET') continue; // no request is ever sent that could change data
     const at = `/ops/${i}/data/methods/${j}`;
+    // fase4-28 r4-rest-hosted (M3 of the F3 review): the family rule of the documents, DOCUMENT_FETCH_HOSTED_REFUSED: a
+    // hosted server never fetches what a job names, here the sample GET, before any lookup or connection. Local use keeps it.
+    if (hosted) {
+      const shown = sampleUrl(op.data, method, at).url ?? method.url ?? null;
+      problems.push(problem(SAMPLE_FETCH_REFUSED, `rest-consume: method '${method.name}' has no sample; the SSAM server never fetches for a hosted account, so `
+        + (shown ? `${shown} was not requested` : 'nothing was requested'),
+        'give the response inline in the method: "sample": <the JSON response> (from the API documentation, or a call the user made on their machine)',
+        { path: `${at}/sample`, cause: 'REST_CONSUME_SAMPLE_MISSING', ...(shown ? { url: shown } : {}) }));
+      continue;
+    }
     if (auth !== 'none') {
       problems.push(problem('REST_CONSUME_SAMPLE_MISSING', `rest-consume: method '${method.name}' has no sample and the API is authenticated (auth ${auth}): the sampler never sends credentials`,
         'give "sample": <the JSON response> (from the API\'s documentation or a call made with the credentials)', { path: `${at}/sample` }));
@@ -509,8 +589,23 @@ function documentPaths(op) {
  * normalizations: OP_DATA_WRAPPED of each op written without data (wrapData); the job written keeps the op as sent, its
  * document pinned in place, so the kernel wraps it the same way and its receipt lists the same entry.
  */
+// fase4-28 r4-f3-import: the inline text of a document ({content, name?}), at most MAX_DOCUMENT_BYTES, read for pin (which
+// writes it once, under <root>/documents/<sha256>/<name>, within the quota). -> {bytes, name} | {problem}.
+function inlineDocument(owner, { kind, at, path: alsoPath }) {
+  const label = kind === 'wsdl' ? 'WSDL' : 'OpenAPI document';
+  if (typeof owner.content !== 'string' || owner.content.trim() === '')
+    return { problem: problem('DOCUMENT_INLINE_INVALID', `the inline ${label} is not text`, '"content": "<the whole document as text>"', { path: at }) };
+  if (alsoPath !== undefined && alsoPath !== null)
+    return { problem: problem('DOCUMENT_INLINE_INVALID', `the ${label} has both "content" and "path"`, 'give one: the inline text ("content") or the file ("path")', { path: at }) };
+  const bytes = Buffer.from(owner.content, 'utf8');
+  if (bytes.length > MAX_DOCUMENT_BYTES) return { problem: problem('DOCUMENT_TOO_LARGE', `the inline ${label} has ${bytes.length} bytes, more than ${MAX_DOCUMENT_BYTES}`, 'use a document of at most 5 MB', { path: at }) };
+  const fallback = kind === 'wsdl' ? 'service.wsdl' : 'openapi.json';
+  const name = (typeof owner.name === 'string' ? path.basename(owner.name) : fallback).replace(/[^A-Za-z0-9._-]/g, '_').replace(/^\.+$/, '') || fallback;
+  return { bytes, name };
+}
+
 export async function prepareIntegrationJob(jobFile, { lane = 'o11', words = '', localRoot, fetchImpl, destructive = true, grant = false, exposed = null,
-  workspace = hostedContext()?.workspace ?? null, lookup = dns.lookup } = {}) {
+  workspace = hostedContext()?.workspace ?? null, lookup = dns.lookup, quota = null } = {}) {
   let document;
   try { document = readJson(jobFile); } catch { return { ok: true, job: jobFile, changed: false, documents: [] }; }
   const ops = opsOf(document);
@@ -523,7 +618,7 @@ export async function prepareIntegrationJob(jobFile, { lane = 'o11', words = '',
   if (workspace) {
     let workspaceReal;
     try { workspaceReal = fs.realpathSync.native(workspace); } catch { workspaceReal = path.resolve(workspace); }
-    confine = { workspace: path.resolve(workspace), workspaceReal, lookup };
+    confine = { workspace: path.resolve(workspace), workspaceReal, lookup, quota: quota ?? createQuota(path.resolve(workspace)) };
   }
   const client = fetchImpl ?? (confine ? createPublicFetch({ lookup, maxBytes: MAX_DOCUMENT_BYTES }) : globalThis.fetch);
   const problems = [];
@@ -534,6 +629,7 @@ export async function prepareIntegrationJob(jobFile, { lane = 'o11', words = '',
   const normalizations = wrapped.map(({ keys, ...entry }) => entry);
   if (destructive) problems.push(...(await destructiveProblems(copyOps, { words, grant, exposed })).problems);
   const documents = [];
+  const written = [];
   let changed = false;
   const root = localRoot ?? path.join(path.dirname(jobFile), '.local');
   for (const [i, op] of copyOps.entries()) {
@@ -543,29 +639,47 @@ export async function prepareIntegrationJob(jobFile, { lane = 'o11', words = '',
       continue;
     }
     if (op.op === 'rest-consume') {
-      // servidor/fase4-25: the same client as the documents (hosted, the public-only one; local, fetchImpl or the global
-      // fetch, as before), never the server's global fetch for a hosted customer.
-      const sampled = await sampleRestConsume(op, i, { fetchImpl: client });
+      // servidor/fase4-25: the same client as the documents (local, fetchImpl or the global fetch, as before).
+      // fase4-28 r4-rest-hosted: for a hosted customer (confine) nothing is fetched at all, not even by the public-only client:
+      // the server never calls an API a job names (rest-consume's hosted input mode, every sample inline; the gate refuses
+      // the job first, hosted/policy.mjs restConsumeSampleRequired; this is the same rule where the request would be made).
+      const sampled = await sampleRestConsume(op, i, { fetchImpl: client, hosted: Boolean(confine) });
       problems.push(...sampled.problems);
       if (sampled.changed) changed = true;
       continue;
     }
     const slot = op.op === 'soap' ? { owner: op.data, key: 'wsdl', kind: 'wsdl' } : op.op === 'rest' && op.data.openapi && typeof op.data.openapi === 'object' ? { owner: op.data.openapi, key: 'path', kind: 'openapi' } : null;
     if (!slot) continue;
-    const value = slot.owner[slot.key];
+    let value = slot.owner[slot.key];
+    // fase4-28 r4-f3-import: an inline document is written once to the documents folder and read from there like a file.
+    const inlineOwner = slot.kind === 'wsdl' ? (value && typeof value === 'object' && !Array.isArray(value) ? value : null) : op.data.openapi;
+    const inlined = !!inlineOwner && Object.hasOwn(inlineOwner, 'content');
+    let inline = null;
+    if (inlined) {
+      inline = inlineDocument(inlineOwner, { kind: slot.kind, at: `/ops/${i}/data/${slot.kind === 'wsdl' ? 'wsdl' : 'openapi'}/content`, path: inlineOwner.path });
+      if (inline.problem) { problems.push(inline.problem); continue; }
+      delete inlineOwner.content; delete inlineOwner.name;
+      value = 'inline';
+      changed = true;
+    }
     const source = typeof value === 'string' ? value : value && typeof value === 'object' && typeof value.path === 'string' && !value.sha256 ? value.path : null;
     if (!source) continue; // already pinned ({path, sha256}) or absent: the kernel judges it
-    const at = `/ops/${i}/data/${slot.kind === 'wsdl' ? 'wsdl' : 'openapi/path'}`;
-    const pinned = await pin(source, { kind: slot.kind, localRoot: root, fetchImpl: client, at, jobDir: path.dirname(path.resolve(jobFile)), confine });
+    const at = inline ? `/ops/${i}/data/${slot.kind === 'wsdl' ? 'wsdl' : 'openapi'}/content` : `/ops/${i}/data/${slot.kind === 'wsdl' ? 'wsdl' : 'openapi/path'}`;
+    const pinned = await pin(source, { kind: slot.kind, localRoot: root, fetchImpl: client, at, jobDir: path.dirname(path.resolve(jobFile)), confine, inline, written });
     if (pinned.unchanged) continue;
     if (pinned.problems) { problems.push(...pinned.problems); continue; }
     documents.push(...pinned.files);
+    if (inlined) pinned.document.source = 'inline';
     if (slot.kind === 'wsdl') op.data.wsdl = pinned.document;
     else Object.assign(op.data.openapi, { path: pinned.document.path, sha256: pinned.document.sha256, source: pinned.document.source, ...(pinned.document.external ? { external: { ...(op.data.openapi.external ?? {}), ...pinned.document.external } } : {}) });
     changed = true;
   }
   if (addBinaryDataReference(copyOps, lane)) changed = true;
   if (problems.length) {
+    // review M1: a refused job leaves none of the documents this call pinned (the ones already there stay).
+    for (const file of written) { try { fs.rmSync(file, { force: true }); } catch { /* gone */ } }
+    for (const dir of [...new Set(written.map(file => path.dirname(file)))].sort((a, b) => b.length - a.length))
+      for (let d = dir; d.startsWith(path.join(root, 'documents')) && d !== path.join(root, 'documents'); d = path.dirname(d)) { try { fs.rmdirSync(d); } catch { break; } }
     const codes = [...new Set(problems.map(p => p.code))];
     return { ok: false, code: codes.length === 1 ? codes[0] : codes.includes('INTEGRATION_DELETE_WORDS') ? 'INTEGRATION_DELETE_WORDS' : codes[0],
       error: problems.map(p => p.message).join(' | ').slice(0, 900) + '. Nothing was captured or sent.', problems, ...(normalizations.length ? { normalizations } : {}) };

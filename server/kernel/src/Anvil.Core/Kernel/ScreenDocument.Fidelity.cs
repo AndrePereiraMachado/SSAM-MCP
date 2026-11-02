@@ -23,6 +23,8 @@ public static partial class ScreenDocument
     public const string ExpressionEmpty = "HTML_EXPRESSION_EMPTY";
     public const string ClassNoRule = "HTML_CLASS_NO_RULE";
     public const string BindingLiteral = "HTML_BINDING_LITERAL";
+    /// <summary>C-05: an @import of &lt;style scope="theme"&gt; put first in the root's own style sheet (normalized, never refused).</summary>
+    public const string ImportMoved = "CSS_IMPORT_MOVED";
 
     /// <summary>One &lt;style&gt; of a document and where its CSS goes: the root's own style sheet (in the order of the
     /// document, wherever the element is: a style element applies to the whole page), or the theme (scope="theme").</summary>
@@ -304,12 +306,19 @@ public static partial class ScreenDocument
             if (words.Count == 0) continue;
             var before = expression[..literal.Index].TrimEnd();
             var after = expression[(literal.Index + literal.Length)..].TrimStart();
+            // C-17 (F-FigmaReactive-09d): a literal compared with something (If(Active = "Home", "on", "")) is a value, never a
+            // class: "Home", "Programs" and "About" were warned as classes without a rule.
+            if (Comparison.IsMatch(before) || ComparedNext.IsMatch(after)) continue;
             if (after.StartsWith('+') && !char.IsWhiteSpace(text[^1])) words.RemoveAt(words.Count - 1);
             if (words.Count > 0 && before.EndsWith('+') && !char.IsWhiteSpace(text[0])) words.RemoveAt(0);
             foreach (var word in words)
                 if (!word.Contains('{') && !word.Contains('}') && !word.Contains('"')) yield return word;
         }
     }
+
+    // A comparison operator right before a literal (... = "Home") or right after it ("Home" = ...).
+    private static readonly Regex Comparison = new(@"(?:<>|<=|>=|=|<|>|\blike)$", RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    private static readonly Regex ComparedNext = new(@"^(?:<>|<=|>=|=|<|>|like\b)", RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
     private static readonly Regex ClassSelector = new(@"\.((?:-?[_a-zA-Z -￿]|\\.)(?:[_a-zA-Z0-9 -￿-]|\\.)*)", RegexOptions.Compiled);
 

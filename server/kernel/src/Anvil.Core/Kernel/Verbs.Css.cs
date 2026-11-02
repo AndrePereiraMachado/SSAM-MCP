@@ -10,8 +10,10 @@ namespace Anvil.Core;
 /// ten times, 34-43 s each, to change 3-20 lines):
 /// <list type="bullet">
 /// <item><c>basedOn</c>: the sha256 of the author CSS the edits were written against (<see cref="ThemeCss.Sha256"/>; every set of
-/// StyleSheet, every css op, the html op's theme parts and the native widgets' CSS say the new one). A stale one is refused
-/// THEME_CHANGED with the current hash and which edits still apply to the current text.</item>
+/// StyleSheet, every css op, the html op's theme parts and the native widgets' CSS say the new one). A stale one (the CSS
+/// changed after the edits were written, e.g. by the person in the Studio) is merged: when every edit applies to the CSS as it
+/// is now they are applied there with a THEME_CHANGED note (mergedOver); otherwise it is refused THEME_CHANGED with the current
+/// hash and which edits still apply to the current text.</item>
 /// <item><c>edits</c>, applied in order: <c>{append}</c> (CSS at the end), <c>{replaceRule: selector, body}</c> (the declarations
 /// of that rule, in place), <c>{deleteRule: selector}</c>, <c>{find, with}</c> (one exact occurrence). A rule inside an at-rule is
 /// named with <c>in</c> (its exact prelude, e.g. "@media (max-width: 767px)"); a selector written in several rules is named
@@ -39,7 +41,17 @@ public sealed partial class ModelSession
         var plan = CssEdits.Apply(current, edits, at);
         var basedOn = op["basedOn"]?.ToString();
         var actual = ThemeCss.Sha256(current);
-        if (!ThemeCss.Matches(basedOn, current))
+        // F1b stop 3 (owner 2026-11-02: SSAM programs together with the person): a stale basedOn means the CSS changed after the
+        // edits were written, usually an edit of the person in the Studio. Edits by rule or by text merge over that CSS like
+        // any three-way merge: when every edit still applies to the CSS as it is now, they are applied there (a rule both
+        // changed takes the delivery's body), the person's other changes stay, and a note says so. Only an edit that no longer
+        // applies (its rule or text is gone) is refused, with the current hash, as before.
+        var rebased = !ThemeCss.Matches(basedOn, current) && !string.IsNullOrWhiteSpace(basedOn) && !plan.Unbalanced && plan.Problems.Count == 0
+            && plan.Applied.Count == edits.Count && plan.Applied.All(a => a["applied"]?.GetValue<bool>() == true);
+        if (rebased)
+            Note(ThemeChanged, $"css {reference}: the author CSS changed after basedOn {Short(basedOn)} (now {actual}, {current.Length} chars), an edit made in the Studio; "
+                + $"the {edits.Count} edit(s) were applied by rule over the CSS as it is now, and its other changes stay");
+        if (!rebased && !ThemeCss.Matches(basedOn, current))
         {
             var missing = string.IsNullOrWhiteSpace(basedOn);
             var code = missing ? CssEdits.BasedOnMissing : ThemeChanged;
@@ -76,6 +88,7 @@ public sealed partial class ModelSession
             ["chars"] = written.Length, ["charsBefore"] = current.Length,
             ["edits"] = new JsonArray(plan.Applied.Select(a => (JsonNode)a.DeepClone()).ToArray()),
         };
+        if (rebased) result["mergedOver"] = new JsonObject { ["basedOn"] = basedOn, ["current"] = actual, ["code"] = ThemeChanged };
         // What the one normalization changed (R2-D: a target reached through its property too).
         if (settled != null)
             foreach (var (key, value) in settled) result[key] = value?.DeepClone();

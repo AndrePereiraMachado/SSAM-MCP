@@ -150,6 +150,8 @@ public static class Program
     /// <summary>Um comando -> um objeto (null = comando desconhecido). O mesmo Dispatch serve o processo frio (Main) e o worker (Serve).</summary>
     private static object? Dispatch(string command, string[] args)
     {
+            // B15 (R2-1): the images this call may fill, from its own arguments only (never from the job's text).
+            ImageFills.Use(args);
             object? data = command switch
             {
                 "--version" => new { version = typeof(Program).Assembly.GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false).Cast<System.Reflection.AssemblyInformationalVersionAttribute>().FirstOrDefault()?.InformationalVersion },

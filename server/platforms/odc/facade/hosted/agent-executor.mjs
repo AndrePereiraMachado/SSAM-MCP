@@ -16,8 +16,9 @@ import { PipeError, replyTimeoutMs } from '../odc-pipe.mjs';
 import { BridgeError, timeoutFor } from '../o11-bridge.mjs';
 import { Mirror, createQuota, QUOTA_BYTES } from './mirror.mjs';
 import { stageOdcPipe } from './odc-stage.mjs';
-import { stageO11Bridge } from './o11-stage.mjs';
+import { stageO11Bridge, IMPORT_METHOD } from './o11-stage.mjs';
 import { startRelay } from './o11-relay.mjs';
+import { stageXif, hopRefusal, XIF_KIND, XIF_TIMEOUT_MS, XIF_UPDATE_REQUIRED, XIF_UPDATE_TEXT } from './xif-stage.mjs';
 import { studioIdentity, studioRefusal } from '../studio-identity.mjs';
 import { studioScope } from './studio-scope.mjs';
 
@@ -31,6 +32,20 @@ export const AGENT_KINDS = MACHINE_KINDS;
 export const HOSTED_REFUSED_COMMANDS = Object.freeze(['portal-private-call', 'portal-private-download', 'portal-api-client-fixture-cleanup', 'portal-upload']);
 export const HOSTED_REFUSED_METHODS = Object.freeze(['sc_private_http', 'sc_private_http_cookie']);
 const HOSTED_ONLY_SESSION = 'HOSTED_STUDIO_SESSION_ONLY';
+// fase4-28 r4-f3-import (criterion C3): the Studio's own SOAP/OpenAPI import runs in the customer's Service Studio through the
+// thin bridge 1.1.0 of the agent pack (integration_import, capabilities integration_import:wsdl and integration_import:openapi).
+// The server sends it only to an agent whose hello lists the method (agent.o11Methods, agent 0.3.7 / 0.4.4-native and later):
+// for any other agent (0.4.0-native and every agent before this one) the capabilities are taken out of the bridge's manifest,
+// so the kernel refuses the job before the snapshot with INTEGRATION_IMPORT_NEEDS_BRIDGE (Delivery.cs), and the method itself
+// is refused here, nothing sent. Local use (the owner's own bridge) never passes here.
+export const IMPORT_CAPABILITIES = Object.freeze(['integration_import:wsdl', 'integration_import:openapi']);
+export const IMPORT_NEEDS_AGENT = 'INTEGRATION_IMPORT_NEEDS_BRIDGE';
+export const importNeedsAgentText = version => 'The SSAM Agent on the user\'s machine (' + (version ?? 'an older version') + ') does not run the Service Studio '
+  + 'integration import (integration_import), so the SOAP or OpenAPI import of this job was not sent: nothing was captured, imported or merged. '
+  + 'Install the current SSAM Agent app on that machine (it carries the Service Studio bridge with the import), reopen the Service Studio, '
+  + 'then resume this task. For REST, explicit methods (op rest without openapi) need no import.';
+// Whether the connected agent declares an O11 bridge method in its hello (agent.o11Methods); an agent without the list never does.
+export const agentRunsO11Method = (info, method) => Array.isArray(info?.agentO11Methods) && info.agentO11Methods.includes(method);
 // ODC Studio 1.7.28 (2026-10-12) gave IReferencesManagerService.RefreshSpecificReferencesByKey a sixth optional parameter
 // (nonSharedProducerKeys). A bridge compiled against an older ODC Studio references the five-parameter method, which
 // 1.7.28 no longer has: in a 1.7.28 Studio its library update (refresh-references <Module> --producer <Library>) cannot
@@ -162,6 +177,7 @@ export class AgentExecutor {
     if (kind === 'odc.pipe') return this.pipe(this.bridgeVersionFor(params ?? {}), options);
     if (kind === 'odc.attach') params = this.bridgeVersionFor(params ?? {});
     if (kind === 'o11.bridge') return this.bridge(params ?? {}, options);
+    if (kind === XIF_KIND) return this.xif(params ?? {});
     if (!AGENT_KINDS.includes(kind)) throw coded('KIND_NOT_ALLOWED', 'Call kind not allowed through the hosted executor: ' + kind, false);
     // A1, and B1 of round 3 (C:\t\revisoes\studio-build-id-2\REVISAO.md): an attach is judged by the process it attaches,
     // the o11.connect like the odc.attach. An o11.connect without pid is judged by the only Service Studio the agent would
@@ -179,6 +195,21 @@ export class AgentExecutor {
     if (kind === 'o11.connect' || kind === 'o11.selected') this.remember(value);
     if (kind === 'studio.processes') this.rememberProcesses(params?.image, value);
     return value;
+  }
+
+  // F4 (PLANO-11H): one Integration Studio stage of o11_extension on the user's machine (hosted/xif-stage.mjs), asked by the
+  // kernel through the relay (method xif_engine). Always answers the engine's shape: the hop's own failures are refusals the
+  // kernel reads (hopRefusal), since a stage writes only local files and nothing of it reaches the environment.
+  async xif(request) {
+    let supported = false;
+    try { supported = this.link.supports?.(XIF_KIND) === true; } catch { supported = false; }
+    if (!supported) return hopRefusal(coded(XIF_UPDATE_REQUIRED, XIF_UPDATE_TEXT, false));
+    try {
+      const staged = await stageXif(request, this.mirror);
+      await this.mirror.putMany(staged.puts);
+      const value = await this.link.call(XIF_KIND, staged.params, { timeoutMs: XIF_TIMEOUT_MS });
+      return await staged.after(value);
+    } catch (error) { return hopRefusal(error); }
   }
 
   // A1 (review of studio-build-identity, round 2): the versions of the processes of one Studio image, as the agent listed them.
@@ -276,6 +307,10 @@ export class AgentExecutor {
     const { method, params: inner, timeoutMs } = params;
     if (HOSTED_REFUSED_METHODS.includes(String(method)))
       throw new BridgeError(privateTransport('The bridge method ' + method), { code: HOSTED_ONLY_SESSION, method, executed: false });
+    let info = null; try { info = this.link?.info?.() ?? null; } catch { info = null; }
+    const imports = agentRunsO11Method(info, IMPORT_METHOD);
+    if (method === IMPORT_METHOD && !imports)
+      throw new BridgeError(importNeedsAgentText(info?.agentVersion), { code: IMPORT_NEEDS_AGENT, method, executed: false });
     let staged;
     try { staged = await stageO11Bridge({ method, params: inner }, this.mirror); }
     catch (error) { throw bridgeError(error, method, 'before'); }
@@ -284,8 +319,13 @@ export class AgentExecutor {
     let value;
     try { value = await this.link.call('o11.bridge', request, { timeoutMs: options.timeoutMs ?? DEADLINES['o11.bridge'](request) }); }
     catch (error) { throw bridgeError(error, method, 'link'); }
-    try { return await staged.after(value); }
+    let answer;
+    try { answer = await staged.after(value); }
     catch (error) { throw bridgeError(error, method, 'after'); }
+    // An agent that does not run the import never shows its bridge's import capabilities to the kernel (see IMPORT_CAPABILITIES).
+    if (!imports && (method === 'bridge_manifest' || method === 'ping') && Array.isArray(answer?.reply?.data?.capabilities))
+      answer.reply.data.capabilities = answer.reply.data.capabilities.filter(c => !IMPORT_CAPABILITIES.includes(c));
+    return answer;
   }
 
   // The O11 record the agent reported last (Hello, pong.versions), as the hub keeps it in link.info().

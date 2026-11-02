@@ -34,6 +34,13 @@ export class UsersTransport extends Transport {
     this.base = `https://${this.host}/Users/`; this.secretSend = noting(secretSend);
   }
   url(value, base) { return usersUrl(this.host, value, base ?? this.base); }
+  // HTTP 404 of a Users page: the page, or the user, group or role its ID names, is not on this host; never a Service Center
+  // protocol refusal (SC_PROTOCOL_INVALID). Any other status keeps the transport's refusal.
+  statusRefusal(status, context) {
+    if (status !== 404) return super.statusRefusal(status, context);
+    const page = String(context?.path ?? '').split('/').at(-1) || 'the page';
+    return new UsersError('USERS_PAGE_NOT_FOUND', `Users answered HTTP 404 for ${page}: the page, or the user, group or role its ID names, does not exist on ${this.host}. Repeating the same request answers the same.`);
+  }
   async fetch(url, fields = null, accept = 'html', secrets = null, firstHop = null) {
     if (secrets?.length) {
       if (!this.secretSend) fail('USERS_SECRET_TRANSPORT_REQUIRED', 'A private vault transport is required.');

@@ -27,7 +27,7 @@ namespace Anvil.Reading;
 // its own text, and a set goes with the move of its element.
 public static class HtmlElementEdits
 {
-    public const string TargetUnknown = "HTML_EDIT_TARGET_UNKNOWN", TextNotUnique = "HTML_EDIT_TEXT_NOT_UNIQUE";
+    public const string TargetUnknown = "HTML_EDIT_TARGET_UNKNOWN", TextNotUnique = "HTML_EDIT_TEXT_NOT_UNIQUE", TextNotFound = "HTML_EDIT_TEXT_NOT_FOUND";
     public const int MaxEdits = 500;
     // The attribute of a widget's name: null in a set removes the name (id=""), never only the attribute (which keeps it).
     private const string NameAttribute = "id";
@@ -180,8 +180,15 @@ public static class HtmlElementEdits
     /// (R2-C, HTML_TEXT_ESCAPED: the index of the edit and what was escaped).</summary>
     public static (string Document, List<JsonObject> Problems, List<string> Touched) Apply(string baseText, JsonArray edits, IReadOnlyDictionary<string, string>? keyTable,
         out Dictionary<string, int> editOf, out List<(int Edit, Anvil.Core.Preflight.HtmlLooseText.Escaped Escaped)> escapedWith)
+        => Apply(baseText, edits, keyTable, out editOf, out escapedWith, out _);
+
+    /// <summary>The same, with the find edits written without the k of the reading and matched with them left out (C-35: the
+    /// index of the edit and the k it took), for the note of the receipt.</summary>
+    public static (string Document, List<JsonObject> Problems, List<string> Touched) Apply(string baseText, JsonArray edits, IReadOnlyDictionary<string, string>? keyTable,
+        out Dictionary<string, int> editOf, out List<(int Edit, Anvil.Core.Preflight.HtmlLooseText.Escaped Escaped)> escapedWith, out List<(int Edit, List<string> Keys)> keyedFind)
     {
         var escapes = escapedWith = [];
+        var keyedFinds = keyedFind = [];
         var problems = new List<JsonObject>();
         var read = Read(edits, problems);
         var touched = new List<string>();
@@ -200,11 +207,11 @@ public static class HtmlElementEdits
             if (edit == null) continue;
             var before = problems.Count;
             var mark = touched.Count;
-            try { Plan(b, edit, spans, claims, keysWritten, touched, problems, setBesideMove, escapes); }
+            try { Plan(b, edit, spans, claims, keysWritten, touched, problems, setBesideMove, escapes, keyedFinds); }
             catch (FormatException error) {
                 problems.Add(Problem(At(edit), ScreenHtmlEdit.Invalid, error.Message, "every element closes (or is <x/>), every attribute value is quoted, & is written &amp; and < inside text &lt;"));
             }
-            if (problems.Count > before) { spans.RemoveAll(s => s.Edit == edit.Index); claims.RemoveAll(c => c.Edit == edit.Index); touched.RemoveRange(mark, touched.Count - mark); escapes.RemoveAll(e => e.Edit == edit.Index); }
+            if (problems.Count > before) { spans.RemoveAll(s => s.Edit == edit.Index); claims.RemoveAll(c => c.Edit == edit.Index); touched.RemoveRange(mark, touched.Count - mark); escapes.RemoveAll(e => e.Edit == edit.Index); keyedFinds.RemoveAll(e => e.Edit == edit.Index); }
             else foreach (var k in touched.Skip(mark)) editOf.TryAdd(k, edit.Index);
         }
         Overlaps(b, claims, problems);
@@ -397,7 +404,7 @@ public static class HtmlElementEdits
     }
 
     private static void Plan(Base b, Edit edit, List<Span> spans, List<Claim> claims, List<(int, string)> keysWritten, List<string> touched, List<JsonObject> problems,
-        Dictionary<HtmlText.Element, Edit> setBesideMove, List<(int Edit, Anvil.Core.Preflight.HtmlLooseText.Escaped Escaped)> escapes)
+        Dictionary<HtmlText.Element, Edit> setBesideMove, List<(int Edit, Anvil.Core.Preflight.HtmlLooseText.Escaped Escaped)> escapes, List<(int Edit, List<string> Keys)> keyedFinds)
     {
         var j = edit.Index;
         var order = 0;
@@ -414,10 +421,27 @@ public static class HtmlElementEdits
                 var with = edit.With!.Replace("\r\n", "\n");
                 var found = new List<int>();
                 for (var at = b.Source.IndexOf(find, StringComparison.Ordinal); at >= 0; at = b.Source.IndexOf(find, at + 1, StringComparison.Ordinal)) found.Add(at);
+                // C-35 (F-Jesse-09): the text an author wrote has no k; the reading writes k="wNN" in every tag. A find without k
+                // that is in the reading once with its k left out is that text: find takes the k it spans and with takes them in
+                // its tags of the same names, in order (the identity of each element stays). Said in a note.
+                if (found.Count == 0 && KeysIn(find).Count == 0 && WithoutKeys(b.Source, find) is { } keyed) {
+                    if (KeyedWith(keyed.Text, with) is { } rewritten) {
+                        found.Add(keyed.Start); find = keyed.Text; with = rewritten;
+                        keyedFinds.Add((j, KeysIn(keyed.Text)));
+                    } else {
+                        var mismatch = Problem(At(edit), TextNotFound, "find: the text is in the reading once, with the k of its elements: " + Clip(keyed.Text)
+                            + "; with does not have the same tags in the same order to take them",
+                            "copy find and with as the reading has them (with each k=\"...\"), or change the element by set (attributes) or replace (the element whole, with its k)");
+                        mismatch["lines"] = new JsonArray((JsonNode)new JsonObject { ["line"] = b.Text.Position(keyed.Start).Line, ["text"] = Clip(LineText(b.Source, keyed.Start)) });
+                        problems.Add(mismatch);
+                        return;
+                    }
+                }
                 if (found.Count != 1) {
-                    var problem = Problem(At(edit), TextNotUnique, found.Count == 0 ? "find: the text is not in the reading" : "find: the text is " + found.Count + " times in the reading",
-                        found.Count == 0 ? "copy the text exactly as the reading has it (spaces and quotes included), or address the element by its k" : "take more of the text around it (until it is once in the reading), or address the element by its k");
-                    problem["lines"] = new JsonArray(found.Take(10).Select(at => (JsonNode)new JsonObject { ["line"] = b.Text.Position(at).Line, ["text"] = Clip(LineText(b.Source, at)) }).ToArray());
+                    // C-35: "nowhere" and "several times" are two codes; nowhere says the nearest lines of the reading.
+                    var problem = Problem(At(edit), found.Count == 0 ? TextNotFound : TextNotUnique, found.Count == 0 ? "find: the text is not in the reading" : "find: the text is " + found.Count + " times in the reading",
+                        found.Count == 0 ? "copy the text exactly as the reading has it (spaces and quotes included; the nearest lines are in lines), or address the element by its k" : "take more of the text around it (until it is once in the reading), or address the element by its k");
+                    problem["lines"] = new JsonArray((found.Count == 0 ? NearLines(b.Source, find) : found).Take(10).Select(at => (JsonNode)new JsonObject { ["line"] = b.Text.Position(at).Line, ["text"] = Clip(LineText(b.Source, at)) }).ToArray());
                     if (found.Count > 10) problem["occurrences"] = found.Count;
                     problems.Add(problem);
                     return;
@@ -858,6 +882,75 @@ public static class HtmlElementEdits
     }
 
     private static string Clip(string text) => text.Length > 160 ? text[..160] + "…" : text;
+
+    // ---- C-35: find without the k the reading writes ---------------------------------------------------------------------
+
+    // A k attribute inside an opening tag, with the space before it (` k="w140"`).
+    private static readonly System.Text.RegularExpressions.Regex TagKey = new(@"(?<=<[A-Za-z][^<>]*?)\s+k\s*=\s*(?:""[^""]*""|'[^']*')", System.Text.RegularExpressions.RegexOptions.Compiled);
+    // An opening tag: its name (never a closing tag, a comment or a declaration).
+    private static readonly System.Text.RegularExpressions.Regex OpenTag = new(@"<([A-Za-z][\w:.-]*)", System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    /// <summary>The one stretch of the reading that is <paramref name="find"/> once the k attributes of its tags are left out
+    /// (its start in the reading and its text there, with them), or null when there is none or more than one.</summary>
+    private static (int Start, string Text)? WithoutKeys(string source, string find)
+    {
+        if (find.Length == 0) return null;
+        var stripped = new StringBuilder(source.Length);
+        var map = new List<int>(source.Length + 1);
+        var last = 0;
+        foreach (System.Text.RegularExpressions.Match m in TagKey.Matches(source))
+        {
+            for (var i = last; i < m.Index; i++) { stripped.Append(source[i]); map.Add(i); }
+            last = m.Index + m.Length;
+        }
+        for (var i = last; i < source.Length; i++) { stripped.Append(source[i]); map.Add(i); }
+        map.Add(source.Length);
+        var text = stripped.ToString();
+        var at = text.IndexOf(find, StringComparison.Ordinal);
+        if (at < 0 || text.IndexOf(find, at + 1, StringComparison.Ordinal) >= 0) return null;
+        var start = map[at]; var end = map[at + find.Length - 1] + 1;
+        return (start, source[start..end]);
+    }
+
+    /// <summary>The with of a find matched without its k, with the k of the reading's text in its tags: the n-th opening tag of
+    /// with takes the k of the n-th opening tag of the reading's text, when both have the same tag names in the same order;
+    /// else null.</summary>
+    private static string? KeyedWith(string reading, string with)
+    {
+        var tags = OpenTag.Matches(reading).ToList();
+        var mine = OpenTag.Matches(with).ToList();
+        if (tags.Count != mine.Count || tags.Zip(mine).Any(p => !string.Equals(p.First.Groups[1].Value, p.Second.Groups[1].Value, StringComparison.OrdinalIgnoreCase))) return null;
+        var output = new StringBuilder(with);
+        for (var n = mine.Count - 1; n >= 0; n--)
+        {
+            // The k of that tag of the reading: the first k attribute between its name and the end of the tag.
+            var open = tags[n]; var close = reading.IndexOf('>', open.Index);
+            var head = reading[open.Index..(close < 0 ? reading.Length : close)];
+            if (KeyAttribute.Match(head) is not { Success: true } k) continue;
+            output.Insert(mine[n].Index + mine[n].Length, " " + k.Value);
+        }
+        return output.ToString();
+    }
+
+    /// <summary>The starts of the lines of the reading nearest to a find that is nowhere: those that hold its first line,
+    /// else the longest prefix of it (at least 8 characters) the reading has.</summary>
+    private static List<int> NearLines(string source, string find)
+    {
+        var first = find.Split('\n').Select(l => l.Trim()).FirstOrDefault(l => l.Length > 0) ?? "";
+        // The text of the author has no k: the lines are found in the reading with its k left out of them.
+        for (var probe = first; probe.Length >= 8; probe = probe[..(probe.Length / 2)])
+        {
+            var hits = new List<int>();
+            var lineStart = 0;
+            foreach (var line in source.Split('\n'))
+            {
+                if (TagKey.Replace(line, "").Contains(probe, StringComparison.Ordinal)) hits.Add(lineStart);
+                lineStart += line.Length + 1;
+            }
+            if (hits.Count > 0) return hits;
+        }
+        return [];
+    }
 
     private static JsonObject Problem(string pointer, string code, string message, string fix, string? element = null)
     {

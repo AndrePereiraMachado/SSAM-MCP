@@ -410,6 +410,11 @@ public sealed class XifSpec
                 Add("XIF_SPEC_FILE", path, $"'{file}' is not an absolute file path.", "Give the absolute path of the file on this machine.");
                 return null;
             }
+            if (context.Confine != null && !XifPaths.Confined(file, context.Confine))
+            {
+                Add(XifPaths.OutsideCode, path, "This file is not a file of this account's workspace; it was not opened.", "Put the file in the workspace (ws:o11/...) and name it there.");
+                return null;
+            }
             if (extension != null && !file.EndsWith(extension, StringComparison.OrdinalIgnoreCase))
             {
                 Add("XIF_SPEC_FILE", path, $"'{file}' is not a {extension} file.", $"Give a {extension} file.");
@@ -539,6 +544,9 @@ public sealed class XifSpecContext
     public IReadOnlySet<string> ExistingStructures { get; init; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
     /// <summary>false only for a check without the files at hand (paths are still checked to be absolute).</summary>
     public bool RequireFiles { get; init; } = true;
+    /// <summary>F4 review A1: hosted, the folders of the account (--confine); a file of the spec outside them is
+    /// PATH_OUTSIDE_WORKSPACE before it is opened or looked for. null: no confinement (local).</summary>
+    public IReadOnlyList<string>? Confine { get; init; }
     public Func<IReadOnlySet<string>> FrameworkAssemblies { get; init; } = XifCompiler.FrameworkAssemblyNames;
 }
 

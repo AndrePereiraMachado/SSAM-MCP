@@ -22,22 +22,43 @@
 // To approve one: state "approved", the reason and the path of the blind test's verdict (and, for entity-actions, its
 // AGENTS.md line of c8ca0579 back). States: GENERATOR_STATES.
 export const GENERATOR_STATES = Object.freeze(['approved', 'blind-test-pending']);
+// fase4-28 r4-rest-hosted (C2 and C7 of PLANO-11H): the hosted input mode of a generator, `hosted: {mode, reason, proof}`.
+// The state rules what discover OFFERS (an approved generator only, on every server); the mode rules what a hosted server
+// RUNS when the op is called by name, as a local server does: a generator with a mode passes the hosted gate
+// (hosted/policy.mjs pendingGenerator) in that mode only; one without is refused there (GENERATOR_PENDING). Each mode is a
+// rule on where the op's inputs come from: the server never reads its own disk outside the customer's workspace and never
+// fetches a URL a job names.
+// - 'job-only': the kernel op reads only the job and the module the job runs on (entity-actions, screen with
+//   data.generate: no file, no network, no other input);
+// - 'inline-samples': rest-consume. Every input is in the job, each GET method with its "sample" (the one input the facade
+//   would fetch, integration-documents.mjs sampleRestConsume): a job that lacks one is refused at the gate
+//   (DOCUMENT_FETCH_HOSTED_REFUSED, cause REST_CONSUME_SAMPLE_MISSING, hosted/policy.mjs restConsumeSampleRequired) and the documents step never fetches it.
+// Setting a mode to null refuses that generator on hosted servers again; nothing else changes.
+export const HOSTED_MODES = Object.freeze(['job-only', 'inline-samples']);
+const HOSTED_JOB_ONLY = 'the kernel op reads only the job and the module it runs on (no file, no network)';
+const HOSTED_PROOF = 'C:\\t\\r4\\RESULTADO-REST-HOSTED.md';
 export const GENERATOR_APPROVAL = Object.freeze({
   'entity-actions': Object.freeze({ op: 'entity-actions', names: Object.freeze(['entity-actions', 'gen-entity']), state: 'blind-test-pending',
     reason: 'failed two independent blind tests (c8ca0579, then ba0afb3d); this release carries c8ca0579/d2b3e085',
-    report: 'C:\\t\\prova-gen-entity-2\\VEREDITO.md' }),
+    report: 'C:\\t\\prova-gen-entity-2\\VEREDITO.md',
+    hosted: Object.freeze({ mode: 'job-only', reason: HOSTED_JOB_ONLY, proof: HOSTED_PROOF }) }),
   'rest-consume': Object.freeze({ op: 'rest-consume', names: Object.freeze(['rest-consume', 'gen-rest']), state: 'blind-test-pending',
     reason: 'no independent blind test yet (only the author\'s report)',
-    report: 'docs/integracoes-rest-soap.md' }),
+    report: 'docs/integracoes-rest-soap.md',
+    hosted: Object.freeze({ mode: 'inline-samples', reason: 'the kernel op is pure (no file, no network); the only server-side read was the sample GET, never made hosted',
+      proof: HOSTED_PROOF }) }),
   'gen-screen': Object.freeze({ op: 'screen', with: 'data.generate', names: Object.freeze(['gen-screen', 'data.generate']), state: 'blind-test-pending',
     reason: 'no independent blind test yet (only the author\'s report)',
-    report: 'docs/SSAM-HTML.md' }),
+    report: 'docs/SSAM-HTML.md',
+    hosted: Object.freeze({ mode: 'job-only', reason: HOSTED_JOB_ONLY, proof: HOSTED_PROOF }) }),
 });
 let approvalOverride = null;
 /** The declared approval of a generator ({op, names, state, reason, report}), or null for an unknown id. */
 export function generatorApproval(id) { return (approvalOverride ?? GENERATOR_APPROVAL)[id] ?? null; }
 /** Whether discover, the work packet, the text section, the grammar and the catalog may offer the generator. */
 export function offered(id) { return generatorApproval(id)?.state === 'approved'; }
+/** The input mode a hosted server runs a generator in before its approval (HOSTED_MODES), or null (refused hosted). */
+export function hostedGeneratorMode(id) { return generatorApproval(id)?.hosted?.mode ?? null; }
 /** The generators' states as one line each (a part of the discovery index identity: another state is another index). */
 export function approvalIdentity() {
   const table = approvalOverride ?? GENERATOR_APPROVAL;
@@ -66,6 +87,10 @@ export function entityActionsCall(lane = 'odc') {
 export const REST_CONSUME_EXAMPLE = Object.freeze({ op: 'rest-consume', data: { name: 'BrasilApi', methods: [
   { name: 'Feriados', url: 'https://brasilapi.com.br/api/feriados/v1/{ano=2026}' },
   { name: 'Cep', url: 'https://brasilapi.com.br/api/cep/v1/{cep=01001000}' }] } });
+// The same op in rest-consume's hosted input mode: each GET method with its sample (a hosted server never calls the API).
+export const REST_CONSUME_HOSTED_EXAMPLE = Object.freeze({ op: 'rest-consume', data: { name: 'BrasilApi', methods: [
+  { name: 'Feriados', url: 'https://brasilapi.com.br/api/feriados/v1/{ano=2026}', sample: [{ date: '2026-01-01', name: 'New Year', type: 'national' }] },
+  { name: 'Cep', url: 'https://brasilapi.com.br/api/cep/v1/{cep=01001000}', sample: { cep: '01001000', city: 'Sao Paulo' } }] } });
 
 export const GENERATORS = Object.freeze([{
   op: 'rest-consume',
@@ -184,13 +209,20 @@ export function jobOffered(job, request = '') { return generatorShown(generatorO
 export function generatorShown(id, request = '') { return !id || offered(id) || namedGenerators(request).includes(id); }
 /** What ssam_discover says of a generator asked about by name: its op, state, reason and report, its contract and the
  * explicit call (the op stays callable by name whatever its state). */
-export function describeGenerator(id, lane = 'odc') {
+// hosted: the answer of a hosted server, where a generator with a hosted input mode runs in that mode only: its use says
+// so, and rest-consume's call carries its inputs inline (each GET method's sample).
+export function describeGenerator(id, lane = 'odc', { hosted = false } = {}) {
   const a = generatorApproval(id);
   if (!a) return null;
   const pending = a.state !== 'approved';
-  const op = id === 'gen-screen' ? GENERATE_SCREENS_OP : id === 'entity-actions' ? ENTITY_ACTIONS_OP : structuredClone(REST_CONSUME_EXAMPLE);
+  const mode = hosted ? a.hosted?.mode ?? null : null;
+  const inline = mode === 'inline-samples';
+  const op = id === 'gen-screen' ? GENERATE_SCREENS_OP : id === 'entity-actions' ? ENTITY_ACTIONS_OP : structuredClone(inline ? REST_CONSUME_HOSTED_EXAMPLE : REST_CONSUME_EXAMPLE);
+  const tools = '(ssam_job, ' + (lane === 'o11' ? 'o11_job, o11_deliver' : 'studio_deliver') + ', ssam_code write ops)';
   return { id, op: a.op, ...(a.with ? { with: a.with } : {}), state: a.state, reason: a.reason, report: a.report,
-    use: pending ? 'not offered by ssam_discover until an independent blind test approves it; callable explicitly with its op (ssam_job, ' + (lane === 'o11' ? 'o11_job, o11_deliver' : 'studio_deliver') + ', ssam_code write ops)'
+    use: mode && pending ? 'not offered by ssam_discover; this hosted server runs it called explicitly with its op ' + tools
+      + (inline ? ' with every input in the job: "sample" (the JSON response) in each GET method, as the server never calls the API' : '')
+      : pending ? 'not offered by ssam_discover until an independent blind test approves it; callable explicitly with its op ' + tools
       : 'approved: ssam_discover offers it for the intents of its family',
     contract: { tool: 'ssam_reference', arguments: { lane, kind: 'api', query: { op: a.op } } },
     call: { tool: 'ssam_code', arguments: { lane, action: 'write', module: '<Module>', ops: [op] } } };

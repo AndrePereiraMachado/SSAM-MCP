@@ -84,7 +84,7 @@ public static class FlowGeneral
         public IReadOnlyList<FlowTextEdit> Certain { get; init; } = [];
     }
 
-    private static readonly Regex Header = new(@"^(?:server action|service action|client action|data action|action) \S", RegexOptions.CultureInvariant);
+    private static readonly Regex Header = new(@"^(?:server action|service action|client action|data action|callback action|action) \S", RegexOptions.CultureInvariant);
     private static readonly Regex ContextLine = new(@"^context ([A-Za-z_][A-Za-z0-9_]*): (\S.*)$", RegexOptions.CultureInvariant);
     private static readonly Regex Statement = new(@"^(?:let |require |return(?: |$)|load |insert |update |delete |use )", RegexOptions.CultureInvariant);
     private static readonly Regex ContractHead = new(@"^contract ([A-Za-z_][A-Za-z0-9_]*):$", RegexOptions.CultureInvariant);

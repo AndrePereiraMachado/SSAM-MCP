@@ -29,9 +29,112 @@ public static class TextForms
     public const string FlowEnd = "FLOW_END_AFTER_TERMINATOR";
     public const string FlowAssign = "FLOW_ASSIGN_WRITTEN";
     public const string FlowKindPrefix = "FLOW_KIND_PREFIX_DROPPED";
+    public const string FlowProducerCall = "FLOW_PRODUCER_CALL_SYNTAX";
+
+    // A producer call is a node even when its qualifier is misspelled. Never turn it into an expression. `(P).A(`, `P::A(` and
+    // `P->A(` are no expression of the language; `P/A(` is also a division (`Avg = Total/Max(Count, 1)`), so it is a producer
+    // call only when ProducerCallAt says so.
+    private static readonly Regex ProducerCall = new(@"^(?<prefix>\s*(?:[A-Za-z_]\w*\s*=\s*)?)(?:\((?<wrapped>[A-Za-z_]\w*)\)\s*\.|(?<producer>[A-Za-z_]\w*)\s*(?<sep>::|/|->))\s*(?<action>[A-Za-z_]\w*)\s*\(", RegexOptions.Compiled);
+    private static readonly Regex ScopeLine = new(@"^\s*(?:in|out|local)\s+(?<name>[A-Za-z_]\w*)", RegexOptions.Compiled);
+    private static readonly Regex NodeLine = new(@"^\s*(?<name>[A-Za-z_]\w*)\s*=", RegexOptions.Compiled);
+    private static readonly Regex BareName = new(@"^[A-Za-z_]\w*$", RegexOptions.Compiled);
+
+    /// <summary>Review of r4-w2-flow, correction 1: the modules a job names in its reference ops (the producer or its `as`, when
+    /// it is a bare name), the only ones the preflight and the normalization can tell a `P/A(` call of.</summary>
+    public static HashSet<string> ReferencedModules(JsonArray? ops)
+    {
+        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var op in ops?.OfType<JsonObject>() ?? [])
+            if (op["op"]?.ToString() == "reference")
+                foreach (var key in new[] { "producer", "as" })
+                    if (op[key] is JsonValue v && v.TryGetValue<string>(out var name) && BareName.IsMatch(name)) names.Add(name);
+        return names;
+    }
+
+    /// <summary>The producer call a line of <paramref name="lines"/> writes in a malformed form, or null. `P/A(` is one only when
+    /// P is not a name of the text's scope (an in, out or local line, a node another line names) and the line is not inside
+    /// an `assign` block (there it is an expression: a division by a call), and either P names a module
+    /// (<paramref name="isModule"/>: the job's reference ops, or the references of the module at apply) or, without that
+    /// knowledge (round 3, the reviewer's R2-1: a module referenced only by the base), the text is a module action (server,
+    /// service or client action: every value it reads is in the text) and the target X of `X = P/A(` is no name of its scope
+    /// either: then the line assigns nothing the action has, so it is no assignment, and it is refused in the preflight with
+    /// the Producer.Action(args) patch. A screen action or a data action reads the variables of its screen, which the text
+    /// does not declare: there the base decides.</summary>
+    private static Match? ProducerCallAt(string[] lines, int index, TextScope scope, Func<string, bool>? isModule)
+    {
+        var match = ProducerCall.Match(lines[index]);
+        if (!match.Success || match.Groups["wrapped"].Value == "System") return null;
+        if (match.Groups["sep"].Value != "/") return match;
+        var left = match.Groups["producer"].Value;
+        if (scope.Has(left, index) || InAssignBlock(lines, index)) return null;
+        if (isModule?.Invoke(left) == true) return match;
+        var target = Target.Match(match.Groups["prefix"].Value) is { Success: true } t ? t.Groups["name"].Value : null;
+        return scope.ModuleAction && (target == null || !scope.Has(target, index)) ? match : null;
+    }
+
+    private static readonly Regex Target = new(@"^\s*(?<name>[A-Za-z_]\w*)\s*=", RegexOptions.Compiled);
+    private static readonly Regex ModuleActionHeader = new(@"^(?:server|service|client) action\s", RegexOptions.Compiled);
+
+    /// <summary>The names of a text: its declarations (in, out, local) and the nodes each line names (a node of the line itself
+    /// is not the scope of that line).</summary>
+    private sealed class TextScope(HashSet<string> declared, Dictionary<string, List<int>> nodes, bool moduleAction)
+    {
+        public bool ModuleAction { get; } = moduleAction;
+        public bool Has(string name, int line) => declared.Contains(name) || nodes.TryGetValue(name, out var at) && at.Any(l => l != line);
+    }
+
+    private static bool InAssignBlock(string[] lines, int index)
+    {
+        var depth = lines[index].Length - lines[index].TrimStart(' ').Length;
+        for (var i = index - 1; i >= 0; i--)
+        {
+            if (string.IsNullOrWhiteSpace(lines[i])) continue;
+            var above = lines[i].Length - lines[i].TrimStart(' ').Length;
+            if (above >= depth) continue;
+            return lines[i].Trim() == "assign";
+        }
+        return false;
+    }
+
+    private static TextScope ScopeNames(string[] lines)
+    {
+        var declared = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var nodes = new Dictionary<string, List<int>>(StringComparer.OrdinalIgnoreCase);
+        for (var i = 0; i < lines.Length; i++)
+        {
+            var line = lines[i];
+            if (ScopeLine.Match(line) is { Success: true } scoped) declared.Add(scoped.Groups["name"].Value);
+            else if (NodeLine.Match(line) is { Success: true } node && !Keyword.IsMatch(line.TrimStart()))
+            {
+                if (!nodes.TryGetValue(node.Groups["name"].Value, out var at)) nodes[node.Groups["name"].Value] = at = [];
+                at.Add(i);
+            }
+        }
+        var header = lines.FirstOrDefault(l => !string.IsNullOrWhiteSpace(l) && !l.StartsWith("///", StringComparison.Ordinal));
+        return new(declared, nodes, header != null && ModuleActionHeader.IsMatch(header));
+    }
+
+    public static IReadOnlyList<FlowProblem> ProducerCallProblems(string text, Func<string, bool>? isModule = null)
+    {
+        var lines = text.Replace("\r\n", "\n").Split('\n');
+        var scope = ScopeNames(lines);
+        var edits = new List<(int Line, string From, string To)>();
+        for (var i = 0; i < lines.Length; i++)
+        {
+            if (ProducerCallAt(lines, i, scope, isModule) is not { } match) continue;
+            var producer = match.Groups["wrapped"].Success ? match.Groups["wrapped"].Value : match.Groups["producer"].Value;
+            var written = match.Groups["prefix"].Value + producer + "." + match.Groups["action"].Value + "(" + lines[i][match.Length..];
+            edits.Add((i + 1, lines[i].Trim(), written.Trim()));
+            lines[i] = written;
+        }
+        var corrected = string.Join("\n", lines);
+        return edits.Select(e => new FlowProblem(FlowProducerCall, $"line {e.Line}: invalid producer call `{e.From}`", null,
+            $"write `{e.To}`; use Producer.Action(args); only the System module is named (System)") { Corrected = corrected }).ToArray();
+    }
 
     public static void Normalize(JsonArray ops, string? prefix, string lane, List<JsonObject> done)
     {
+        var modules = ReferencedModules(ops);
         for (var i = 0; i < ops.Count; i++)
         {
             if (ops[i] is not JsonObject op || op["data"] is not JsonObject data) continue;
@@ -42,7 +145,7 @@ public static class TextForms
                     && Ddl(ddl, lane, at == null ? null : at + "/data/ddl", done) is { } written)
                     data["ddl"] = written;
                 if (op["op"]?.ToString() == "logic" && data.ContainsKey("flow"))
-                    FlowTexts.Rewrite(data, at, (text, path) => Flow(text, path, done));
+                    FlowTexts.Rewrite(data, at, (text, path) => Flow(text, path, done, modules.Contains));
             }
             catch { /* a normalization never refuses: the checks judge what stays */ }
         }
@@ -155,7 +258,7 @@ public static class TextForms
     // named endDate or assignedTo is not one of them).
     private static readonly Regex Keyword = new(@"^(?:(?:if|switch|foreach|assign|end|raise|navigate|refresh|message|trigger|opaque|node|aggregate|javascript|sql|on|in|out|local|next|case|otherwise|unreached)\b|//|->|@\{|\||JSONSerialize\(|JSONDeserialize\()", RegexOptions.Compiled);
 
-    private static string? Flow(string text, string? path, List<JsonObject> done)
+    private static string? Flow(string text, string? path, List<JsonObject> done, Func<string, bool>? isModule = null)
     {
         var lines = text.Replace("\r\n", "\n").Split('\n');
         var changed = false;
@@ -180,7 +283,7 @@ public static class TextForms
                     written = ""; rule = FlowEnd;
                     why = $"line {line}: `end` after `{ended.Kind}` (line {ended.Line}), which already ends the branch: the line is dropped";
                 }
-                else if (Assignment.Match(body) is { Success: true } m && !Keyword.IsMatch(body) && !NamedNode(m.Groups["target"].Value, m.Groups["value"].Value))
+                else if (Assignment.Match(body) is { Success: true } m && !Keyword.IsMatch(body) && ProducerCallAt(lines, line - 1, ScopeNames(lines), isModule) == null && !NamedNode(m.Groups["target"].Value, m.Groups["value"].Value))
                 {
                     written = raw[..depth] + "assign " + body; rule = FlowAssign;
                     why = $"line {line}: `{m.Groups["target"].Value} = ...` is an assignment, written `assign {m.Groups["target"].Value} = ...`";

@@ -7,6 +7,7 @@ import { createRequire } from 'node:module';
 import { ORIGIN, RejectingDispatcher, sourceInterceptor, installNetwork, localPath } from './network.mjs';
 import { planScripts, runModules, siteOf, describeError, RenderFailure, registerEvaluated } from './scripts.mjs';
 import { isRemote } from './vendor.mjs';
+import { types as nodeTypes } from 'node:util';
 
 const require = createRequire(import.meta.url);
 const { JSDOM, VirtualConsole, requestInterceptor } = require('jsdom');
@@ -284,6 +285,9 @@ export class Page {
       Object.defineProperty(D.prototype, 'constructor', { value: FakeDate, configurable: true, writable: true });
       globalThis.Date = FakeDate;
     })`, window)(clock);
+    // jsdom does not expose structuredClone: the page's is a function of its realm whose results and errors are the
+    // realm's (installStructuredClone, below), installed after the clock's Date so a cloned date is a Date of the page.
+    installStructuredClone(window, vm);
     const random = mulberry32(this.options.seed ?? 1);
     window.Math.random = random;
     const cryptoObject = window.crypto ?? {};
@@ -457,6 +461,8 @@ export class Page {
     if (!realmProto || realmProto === Function.prototype) return;
     const reparent = fn => { if (typeof fn === 'function' && Object.getPrototypeOf(fn) === Function.prototype) { try { Object.setPrototypeOf(fn, realmProto); } catch { /* frozen */ } } };
     for (const name of ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'requestAnimationFrame', 'cancelAnimationFrame', 'requestIdleCallback', 'cancelIdleCallback', 'fetch', 'XMLHttpRequest', 'WebSocket', 'EventSource', 'alert', 'confirm', 'prompt', 'print', 'open', 'scrollTo', 'scroll', 'scrollBy', 'matchMedia', 'IntersectionObserver', 'ResizeObserver']) reparent(window[name]);
+    // The thrown DOMException of a refused clone (and any other): its constructor is jsdom's class.
+    reparent(window.DOMException);
     reparent(window.Math?.random);
     if (window.CSS) { reparent(window.CSS.escape); reparent(window.CSS.supports); }
     if (window.crypto) { reparent(window.crypto.getRandomValues); reparent(window.crypto.randomUUID); }
@@ -1004,6 +1010,164 @@ export async function openPage(options) {
   page.document = dom.window.document;
   await page.load();
   return page;
+}
+
+// ---- structuredClone ------------------------------------------------------------------------------------------
+// structuredClone for the captured page (jsdom does not expose it), in the page's realm. The native clone algorithm of the
+// host does the serialization (cycles, undefined, dates, maps, typed arrays, transfer); what it returns, and what it
+// throws, belongs to the host realm, so a page that tests `copy instanceof Object` or `copy.constructor === Object`
+// renders differently from a browser, and `copy.constructor.constructor('return process')()` reaches the capture
+// child's process. So:
+//   - the page's structuredClone is a function of the realm (vm.runInContext over the window) closing over the host
+//     clone, which no page script can reach;
+//   - the input is walked first: a platform object of jsdom (a node, the window, any interface of its constructor
+//     registry) throws DataCloneError, as in a browser, instead of cloning to an empty object;
+//   - the host result is rebuilt with the realm's intrinsics, captured at install (before any page script): Object,
+//     Array, Date, RegExp, Map, Set, ArrayBuffer, the typed arrays, DataView, the Error types and the boxed primitives,
+//     keeping cycles and shared references; a transferred buffer is detached in the page and comes back as a realm
+//     ArrayBuffer with the same bytes;
+//   - an error of the host clone is thrown again as the realm's DOMException (or TypeError, RangeError...) with the same
+//     name and message; a value a page getter threw passes through as it is.
+// Notes (left as they are, each refused rather than returned from the host realm):
+//   - serializable platform objects of a browser (DOMException, Blob, File, FileList, ImageData, DOMRect, DOMPoint,
+//     DOMMatrix) throw DataCloneError here: jsdom's are wrappers the host cannot serialize;
+//   - SharedArrayBuffer throws DataCloneError, as in a page without cross-origin isolation;
+//   - a platform object reached only through a getter is not seen by the walk (the walk reads data properties only, so it
+//     runs no page code); the host clone then gives an empty realm object;
+//   - any other kind the host returns throws DataCloneError.
+
+const CTOR_REGISTRY = Symbol.for('[webidl2js] constructor registry');
+const ERRORS = ['Error', 'EvalError', 'RangeError', 'ReferenceError', 'SyntaxError', 'TypeError', 'URIError'];
+const VIEWS = ['Int8Array', 'Uint8Array', 'Uint8ClampedArray', 'Int16Array', 'Uint16Array', 'Int32Array', 'Uint32Array',
+  'Float16Array', 'Float32Array', 'Float64Array', 'BigInt64Array', 'BigUint64Array'];
+const tagOf = value => Object.prototype.toString.call(value).slice(8, -1);
+
+function installStructuredClone(window, vm) {
+  // The realm's intrinsics, before any page script can replace them. Date is the original realm Date under the fixed
+  // clock's FakeDate (whose prototype is the same), so `copy.date instanceof Date` holds.
+  const R = {};
+  for (const name of ['Object', 'Array', 'RegExp', 'Map', 'Set', 'ArrayBuffer', 'DataView', 'Boolean', 'Number', 'String', 'DOMException', ...ERRORS, ...VIEWS]) R[name] = window[name];
+  const fakeDate = window.Date;
+  R.Date = typeof fakeDate === 'function' && typeof Object.getPrototypeOf(fakeDate) === 'function' && Object.getPrototypeOf(fakeDate).prototype === fakeDate.prototype
+    ? Object.getPrototypeOf(fakeDate) : fakeDate;
+  const create = R.Object.create, define = R.Object.defineProperty, objectProto = R.Object.prototype;
+  const mapSet = R.Map.prototype.set, setAdd = R.Set.prototype.add;
+
+  // The prototypes of jsdom's interfaces (its constructor registry), by name for the message.
+  const platform = new Map();
+  const registry = Object.prototype.hasOwnProperty.call(window, CTOR_REGISTRY) ? window[CTOR_REGISTRY] : null;
+  if (registry) for (const name of Object.keys(registry)) {
+    if (name.startsWith('%')) continue;
+    const proto = registry[name]?.prototype;
+    if (proto && typeof proto === 'object') platform.set(proto, name);
+  }
+
+  const cloneError = name => new R.DOMException("Failed to execute 'structuredClone' on 'Window': " + name + ' object could not be cloned.', 'DataCloneError');
+
+  // The platform object an input holds, by data properties and Map/Set entries; a proxy is left to the host clone,
+  // which refuses it without running its traps twice.
+  function platformIn(value) {
+    const seen = new Set();
+    const pending = [value];
+    while (pending.length) {
+      const item = pending.pop();
+      if ((typeof item !== 'object' && typeof item !== 'function') || item === null || seen.has(item)) continue;
+      seen.add(item);
+      if (item === window) return 'Window';
+      if (nodeTypes.isProxy(item)) continue;
+      for (let proto = Reflect.getPrototypeOf(item); proto; proto = Reflect.getPrototypeOf(proto))
+        if (platform.has(proto)) return platform.get(proto);
+      if (nodeTypes.isMap(item)) { for (const [k, v] of Map.prototype.entries.call(item)) pending.push(k, v); continue; }
+      if (nodeTypes.isSet(item)) { for (const v of Set.prototype.values.call(item)) pending.push(v); continue; }
+      if (nodeTypes.isArrayBufferView(item) || nodeTypes.isAnyArrayBuffer(item)) continue;
+      for (const key of Reflect.ownKeys(item)) {
+        const descriptor = Reflect.getOwnPropertyDescriptor(item, key);
+        if (descriptor && 'value' in descriptor) pending.push(descriptor.value);
+      }
+    }
+    return null;
+  }
+
+  // The host result, rebuilt with the realm's intrinsics. The host objects are plain data of the host clone; no page
+  // function ever receives one.
+  function rebuild(value, memo) {
+    if ((typeof value !== 'object' && typeof value !== 'function') || value === null) return value;
+    if (memo.has(value)) return memo.get(value);
+    const own = (out, source) => {
+      for (const key of Object.keys(source)) define(out, key, { value: rebuild(source[key], memo), writable: true, enumerable: true, configurable: true });
+      return out;
+    };
+    if (Array.isArray(value)) { const out = new R.Array(value.length); memo.set(value, out); return own(out, value); }
+    if (nodeTypes.isDate(value)) { const out = new R.Date(Date.prototype.getTime.call(value)); memo.set(value, out); return out; }
+    if (nodeTypes.isRegExp(value)) { const out = new R.RegExp(value.source, value.flags); memo.set(value, out); return out; }
+    if (nodeTypes.isMap(value)) {
+      const out = new R.Map(); memo.set(value, out);
+      for (const [k, v] of Map.prototype.entries.call(value)) Reflect.apply(mapSet, out, [rebuild(k, memo), rebuild(v, memo)]);
+      return out;
+    }
+    if (nodeTypes.isSet(value)) {
+      const out = new R.Set(); memo.set(value, out);
+      for (const v of Set.prototype.values.call(value)) Reflect.apply(setAdd, out, [rebuild(v, memo)]);
+      return out;
+    }
+    if (nodeTypes.isArrayBuffer(value)) {
+      const out = value.resizable ? new R.ArrayBuffer(value.byteLength, { maxByteLength: value.maxByteLength }) : new R.ArrayBuffer(value.byteLength);
+      new Uint8Array(out).set(new Uint8Array(value));
+      memo.set(value, out);
+      return out;
+    }
+    if (nodeTypes.isDataView(value)) {
+      const out = new R.DataView(rebuild(value.buffer, memo), value.byteOffset, value.byteLength); memo.set(value, out); return out;
+    }
+    if (nodeTypes.isTypedArray(value)) {
+      const Ctor = R[tagOf(value)];
+      if (typeof Ctor !== 'function') throw cloneError(tagOf(value));
+      const out = new Ctor(rebuild(value.buffer, memo), value.byteOffset, value.length); memo.set(value, out); return out;
+    }
+    if (nodeTypes.isNativeError(value)) {
+      const name = ERRORS.includes(value.name) ? value.name : 'Error';
+      const out = new R[name](); memo.set(value, out);
+      for (const key of ['message', 'stack', 'cause'])
+        if (Object.prototype.hasOwnProperty.call(value, key)) define(out, key, { value: rebuild(value[key], memo), writable: true, enumerable: false, configurable: true });
+        else if (key === 'stack') delete out.stack;
+      return out;
+    }
+    if (nodeTypes.isBooleanObject(value)) { const out = new R.Boolean(Boolean.prototype.valueOf.call(value)); memo.set(value, out); return out; }
+    if (nodeTypes.isNumberObject(value)) { const out = new R.Number(Number.prototype.valueOf.call(value)); memo.set(value, out); return out; }
+    if (nodeTypes.isStringObject(value)) { const out = new R.String(String.prototype.valueOf.call(value)); memo.set(value, out); return out; }
+    if (nodeTypes.isBigIntObject(value)) { const out = R.Object(BigInt.prototype.valueOf.call(value)); memo.set(value, out); return out; }
+    if (nodeTypes.isSharedArrayBuffer(value)) throw cloneError('SharedArrayBuffer');
+    if (tagOf(value) === 'Object' && Object.getPrototypeOf(value) === Object.prototype) { const out = create(objectProto); memo.set(value, out); return own(out, value); }
+    throw cloneError(tagOf(value));
+  }
+
+  // A host error of the clone, as the realm's own error; a value a page getter threw is the page's, passed through.
+  function realmError(error) {
+    if (!(error instanceof Error)) return error;
+    const name = String(error.name ?? 'Error'), message = String(error.message ?? '');
+    if (nodeTypes.isNativeError(error) && ERRORS.includes(name) && Object.getPrototypeOf(error) === globalThis[name].prototype) return new R[name](message);
+    return new R.DOMException(message, name);
+  }
+
+  // Every error that leaves it is the realm's (or the page's own value): also one of this code, a stack overflow
+  // of a deep input, for instance.
+  function core(value, options) {
+    try {
+      const found = platformIn(value);
+      if (found) throw cloneError(found);
+      const copy = options === undefined ? structuredClone(value) : structuredClone(value, options);
+      return rebuild(copy, new Map());
+    } catch (error) { throw realmError(error); }
+  }
+
+  window.structuredClone = vm.runInContext(`(function (core) {
+    'use strict';
+    const TypeErrorOfRealm = globalThis.TypeError;
+    return function structuredClone(value, options = undefined) {
+      if (arguments.length === 0) throw new TypeErrorOfRealm("Failed to execute 'structuredClone' on 'Window': 1 argument required, but only 0 present.");
+      return core(value, options);
+    };
+  })`, window)(core);
 }
 
 export { isRemote };

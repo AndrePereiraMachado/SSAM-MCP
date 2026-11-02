@@ -59,6 +59,9 @@ public static class DocumentNameRules
         public Dictionary<string, string> Out { get; } = new(StringComparer.OrdinalIgnoreCase);
         public Dictionary<string, string> Local { get; } = new(StringComparer.OrdinalIgnoreCase);
         public List<(string Name, string Line)> Assigned { get; } = [];
+        /// <summary>C-29: the names of the nodes of the flow (X = aggregate ..., X = sql -> ..., X = Action(...)): what a
+        /// Traditional Preparation fetches is data of its screen (GetHeroStats.List in the page).</summary>
+        public List<string> Nodes { get; } = [];
         public string Header { get; init; } = "";
         public string Element => Owner == null ? Name : Owner + "." + Name;
     }
@@ -88,6 +91,7 @@ public static class DocumentNameRules
     private static readonly HashSet<string> ExpressionAttributes = new(StringComparer.OrdinalIgnoreCase) { "if", "list", "bind", "value", "show", "enabled", "default", "options", "label", "visible" };
     private static readonly Regex Header = new(@"^(server action|service action|client action|data action|preparation|action)[ \t]+(?:([\w/]+)\.)?([A-Za-z_]\w*)", RegexOptions.Compiled);
     private static readonly Regex Parameter = new(@"^\s+(in|out|local)\s+([A-Za-z_]\w*)\s*:\s*([^@\n=]+?)\s*(?:=.*?)?(?:\s@\w+)?\s*$", RegexOptions.Compiled);
+    private static readonly Regex NodeOutput = new(@"^\s+([A-Za-z_]\w*)\s*=(?!=)\s*(?:aggregate\b|sql\b|[A-Za-z_(][\w().]*\s*\()", RegexOptions.Compiled);
     private static readonly Regex Assignment = new(@"^\s*(?:assign\s+)?([A-Za-z_]\w*)(?:\.[A-Za-z_][\w.]*)?\s*=(?!=)", RegexOptions.Compiled);
 
     public static List<JsonObject> Check(JsonArray ops, string? prefix, string lane, IndexBaseFacts facts, StaticBasis basis, List<JsonObject> skipped, IReadOnlyList<Rule>? more = null)
@@ -212,7 +216,9 @@ public static class DocumentNameRules
             if (assignIndent >= 0 && Indent(line) <= assignIndent) assignIndent = -1;
             if (trimmed == "assign") { assignIndent = Indent(line); continue; }
             if (trimmed.StartsWith("assign ", StringComparison.Ordinal) && Assignment.Match(trimmed) is { Success: true } single) { current.Assigned.Add((single.Groups[1].Value, trimmed)); continue; }
-            if (assignIndent >= 0 && Assignment.Match(line) is { Success: true } assigned) current.Assigned.Add((assigned.Groups[1].Value, trimmed));
+            if (assignIndent >= 0 && Assignment.Match(line) is { Success: true } assigned) { current.Assigned.Add((assigned.Groups[1].Value, trimmed)); continue; }
+            // A node with an output outside an assign block (X = aggregate ..., X = sql -> ..., X = Action(...)).
+            if (assignIndent < 0 && NodeOutput.Match(line) is { Success: true } node) current.Nodes.Add(node.Groups[1].Value);
         }
     }
 
@@ -465,6 +471,10 @@ public static class DocumentNameRules
         var records = new HashSet<string>(c.Job.Records.Keys, StringComparer.OrdinalIgnoreCase);
         foreach (var d in c.Documents) {
             var scope = new HashSet<string>(d.Facts.Names().Select(n => n.Name), StringComparer.OrdinalIgnoreCase);
+            // C-29 (F-FT-04 x2): what the Preparation of this screen or block fetches in a logic text of the same job is its data
+            // (Traditional: GetHeroStats.List in the page), never "no aggregate is named" with 15 list variables as the way out.
+            foreach (var preparation in c.Actions.Where(a => a.Kind == "preparation" && string.Equals(a.Owner, d.Name, StringComparison.OrdinalIgnoreCase)))
+                scope.UnionWith(preparation.Nodes);
             foreach (var e in d.Text.Elements()) {
                 if (e.Get("id") is { Length: > 0 } id) scope.Add(id);
                 if (e.Get("as") is { Length: > 0 } alias) scope.Add(alias);

@@ -1,5 +1,7 @@
 // The texts of the hosted server at b606ee7b (fase4-26/marco-a7), before ssam_code was served hosted: what the session
-// reads while the switch (the class of ssam_code in hosted/tools.json) is off. Copied verbatim from that commit.
+// reads while the switch (the class of ssam_code in hosted/tools.json) is off. Copied verbatim from that commit, but for one
+// sentence (fase4-28 r4-rest-hosted): the generator ops, which follow the gate's hosted modes (generators.mjs) whatever the
+// ssam_code switch; that commit said they were refused (GENERATOR_PENDING).
 export const OFF_HOSTED_INSTRUCTIONS = 'This SSAM server is hosted: it runs on the SSAM owner\'s machine and drives the user\'s own '
   + 'Studios through the SSAM agent on the user\'s machine. ssam_debug, ssam_debug_run, ssam_debug_invoke, context, propose, '
   + 'continue and status are unavailable here (HOSTED_UNAVAILABLE). Files are named ws:<path> (the workspace of this account on '
@@ -8,8 +10,8 @@ export const OFF_HOSTED_INSTRUCTIONS = 'This SSAM server is hosted: it runs on t
   + 'pass agent:inbox/<file>. Before any O11 tool, connect the Service Studio with ssam_connect {lane:"o11"}. When the agent is '
   + 'not connected, tools that need the user\'s Studio answer AGENT_NOT_CONNECTED; ssam_doctor shows the agent and the Studio '
   + 'versions of both sides. ssam_code is unavailable here too: read a module as text with ssam_map (views ddl, flow, html) and deliver '
-  + 'the change as ONE job of o11_deliver or studio_deliver. The generator ops not offered here yet (entity-actions, '
-  + 'rest-consume, screen with data.generate) are refused (GENERATOR_PENDING). No credential window opens here: odc_portal_login '
+  + 'the change as ONE job of o11_deliver or studio_deliver. The generator ops entity-actions, rest-consume and screen with data.generate are not offered by ssam_discover '
+  + 'but run here when a job names their op; rest-consume needs every input in the job: "sample" (the JSON response) in each GET method, as this server never calls the API. No credential window opens here: odc_portal_login '
   + 'prompt and focus answer HOSTED_PROMPT_UNAVAILABLE.';
 export const OFF_HOSTED_RULES = 'Jobs: ONE job per module, with every change of the request for that module (separate jobs only for different modules, '
   + 'never one action or one step per call), sent inline in the job argument as compact JSON (no indentation), whatever its size: '

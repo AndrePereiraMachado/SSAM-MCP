@@ -122,6 +122,12 @@ internal sealed partial class FlowExtractor<T>(ModelReader<T> reader, T root) wh
         if (FlowOwners.Owned(item.Kind) && reader.ParentOf(action) is { } holder && !ReferenceEquals(holder, root)) item.Owner = FlowOwners.Text(reader, root, holder);
         claimed.Add(action);
         Capture(action, item);
+        // A REST callback's inputs and outputs are the client's contract, given by the platform: never part of the text, kept
+        // native (their whole subtrees accounted, no parameter written). FlowDiff refuses a text that declares one.
+        if (item.Kind == "RestCallbackActionFlow")
+            foreach (var child in reader.ChildrenOf(action).Where(c => reader.KindOf(c).StartsWith("RestCallbackActionFlowInput", StringComparison.Ordinal)
+                || reader.KindOf(c).StartsWith("RestCallbackActionFlowOutput", StringComparison.Ordinal)))
+                foreach (var native in reader.Walk(child)) claimed.Add(native);
         // Duplicates kept only when they disagree.
         Same(item, "IsFunction", "Function");
         Same(item, "Shareable", "Public");

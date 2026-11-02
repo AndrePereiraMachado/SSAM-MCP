@@ -1,0 +1,217 @@
+{
+ "source": "o11_publish task dda06de9 (2026-10-19T16:41:07Z..16:41:17Z, Demandas_TW) and the Service Center reads of that session (answers 31f32723, 8e615de6)",
+ "note": "The publish log message text is the one the answer quoted (\"Internal Error\" at compile); its detail was not preserved. The error detail is verbatim up to the feature toggle lists (cut).",
+ "publishStartedAt": "2026-10-19T16:41:09.558Z",
+ "publishEndedAt": "2026-10-19T16:41:17.479Z",
+ "publishLog": {
+  "found": true,
+  "module": "Demandas_TW",
+  "moduleKey": "wVrEO7yfXE6nyIsjFW+edw",
+  "environment": "tenant-a.example.outsystemscloud.com",
+  "serverOperationId": 41,
+  "operation": "Publish",
+  "status": "failed",
+  "state": "CompletedWithFailure",
+  "stage": "compile",
+  "failedStage": "compile",
+  "startedAt": "16:41:10",
+  "endedAt": "16:41:16",
+  "lastUploadDateTime": "2026-10-19T13:41:12",
+  "triggeredBy": "bridge",
+  "errors": 1,
+  "warnings": 2,
+  "steps": [
+   {
+    "stage": "save",
+    "text": "Saving Demandas_TW",
+    "shownAt": "16:41:10"
+   },
+   {
+    "stage": "upload",
+    "text": "Uploading to tenant-a.example.outsystemscloud.com",
+    "shownAt": "16:41:11"
+   },
+   {
+    "stage": "compile",
+    "text": "Compiling Demandas_TW",
+    "shownAt": "16:41:13"
+   }
+  ],
+  "messages": [
+   {
+    "type": "Warning",
+    "stage": "compile",
+    "text": "Unused Site Property 'TamanhoPagina'",
+    "element": {
+     "name": "TamanhoPagina",
+     "key": "k-site-property",
+     "kind": "SiteProperty",
+     "path": "Demandas_TW (ESpace) / TamanhoPagina (SiteProperty)"
+    },
+    "shownAt": "16:41:14"
+   },
+   {
+    "type": "Warning",
+    "stage": "compile",
+    "text": "Unused Structure 'MembroLinha'",
+    "shownAt": "16:41:14"
+   },
+   {
+    "type": "Error",
+    "stage": "compile",
+    "text": "Internal Error",
+    "id": "InternalError",
+    "shownAt": "16:41:16"
+   }
+  ],
+  "omitted": 0
+ },
+ "serviceCenter": {
+  "listing": {
+   "rows": [
+    {
+     "fields": {
+      "Time of Log": "2026-10-19 16:42:42",
+      "Module": "",
+      "Tenant": "",
+      "Message": "Internal Error: Invalid compiler output. Condition is false",
+      "Source": "CompilerService",
+      "Server": "SERVER-01",
+      "column7": "Detail"
+     },
+     "links": [
+      {
+       "name": "Detail",
+       "href": "https://tenant-a.example.outsystemscloud.com/ServiceCenter/Show_Error.aspx?Error_Id=c67c37c3-b5b8-4d6d-b0fd-3e8afe85464b"
+      }
+     ]
+    },
+    {
+     "fields": {
+      "Time of Log": "2026-10-19 16:42:42",
+      "Module": "",
+      "Tenant": "",
+      "Message": "Internal Error: Invalid compiler output. Condition is false",
+      "Source": "CompilerService",
+      "Server": "SERVER-01",
+      "column7": "Detail"
+     },
+     "links": [
+      {
+       "name": "Detail",
+       "href": "https://tenant-a.example.outsystemscloud.com/ServiceCenter/Show_Error.aspx?Error_Id=a9b1e77f-3e51-466e-bb4c-0eb1e0f44d8d"
+      }
+     ]
+    },
+    {
+     "fields": {
+      "Time of Log": "2026-10-19 16:41:55",
+      "Module": "",
+      "Tenant": "",
+      "Message": "Unable to view or edit records of entities from a protected module.",
+      "Source": "Server.API",
+      "Server": "SERVER-01",
+      "column7": "Detail"
+     },
+     "links": [
+      {
+       "name": "Detail",
+       "href": "https://tenant-a.example.outsystemscloud.com/ServiceCenter/Show_Error.aspx?Error_Id=5facd712-9250-4ebd-ac66-df70f98e8414"
+      }
+     ]
+    },
+    {
+     "fields": {
+      "Time of Log": "2026-10-19 16:41:55",
+      "Module": "",
+      "Tenant": "",
+      "Message": "(System) EditData | Exception | Get Records | User: ''person@example.com' ('9')' | Module: 'unknown' | Module key: 'unknown' | Entity key: 'NuqV5Rtc2D6TqrunUsf4kg' | Record keys: '' - Unable to view or edit records of entities from a protected module.",
+      "Source": "Infrastructure",
+      "Server": "SERVER-01",
+      "column7": "Detail"
+     },
+     "links": [
+      {
+       "name": "Detail",
+       "href": "https://tenant-a.example.outsystemscloud.com/ServiceCenter/Show_Error.aspx?Error_Id=93a0660e-adae-416a-909e-ef7f9f67f005"
+      }
+     ]
+    },
+    {
+     "fields": {
+      "Time of Log": "2026-10-19 16:41:54",
+      "Module": "",
+      "Tenant": "",
+      "Message": "(System) EditData | Exception | Get Records | User: ''person@example.com' ('9')' | Module: 'unknown' | Module key: 'unknown' | Entity key: 'NuqV5Rtc2D6TqrunUsf4kg' | Record keys: '' - Unable to view or edit records of entities from a protected module.",
+      "Source": "Infrastructure",
+      "Server": "SERVER-01",
+      "column7": "Detail"
+     },
+     "links": [
+      {
+       "name": "Detail",
+       "href": "https://tenant-a.example.outsystemscloud.com/ServiceCenter/Show_Error.aspx?Error_Id=752cdca3-fb53-4f2f-96f4-98cc253f931e"
+      }
+     ]
+    },
+    {
+     "fields": {
+      "Time of Log": "2026-10-19 16:41:54",
+      "Module": "",
+      "Tenant": "",
+      "Message": "Unable to view or edit records of entities from a protected module.",
+      "Source": "Server.API",
+      "Server": "SERVER-01",
+      "column7": "Detail"
+     },
+     "links": [
+      {
+       "name": "Detail",
+       "href": "https://tenant-a.example.outsystemscloud.com/ServiceCenter/Show_Error.aspx?Error_Id=ea1bf14d-5ce3-488a-b620-8008ecb78d55"
+      }
+     ]
+    },
+    {
+     "fields": {
+      "Time of Log": "2026-10-19 16:41:15",
+      "Module": "",
+      "Tenant": "",
+      "Message": "Internal Error: Invalid compiler output. Condition is false",
+      "Source": "CompilerService",
+      "Server": "SERVER-01",
+      "column7": "Detail"
+     },
+     "links": [
+      {
+       "name": "Detail",
+       "href": "https://tenant-a.example.outsystemscloud.com/ServiceCenter/Show_Error.aspx?Error_Id=13a7dc64-9492-4feb-8596-f2a8fbd94920"
+      }
+     ]
+    },
+    {
+     "fields": {
+      "Time of Log": "2026-10-19 16:41:15",
+      "Module": "",
+      "Tenant": "",
+      "Message": "Internal Error: Invalid compiler output. Condition is false",
+      "Source": "CompilerService",
+      "Server": "SERVER-01",
+      "column7": "Detail"
+     },
+     "links": [
+      {
+       "name": "Detail",
+       "href": "https://tenant-a.example.outsystemscloud.com/ServiceCenter/Show_Error.aspx?Error_Id=fb0aa7a4-3baf-4c31-a843-e768320cd59b"
+      }
+     ]
+    }
+   ]
+  },
+  "errorDetail": {
+   "errorId": "13a7dc64-9492-4feb-8596-f2a8fbd94920",
+   "detail": "Error detail\nBack to Log\nId\n13a7dc64-9492-4feb-8596-f2a8fbd94920\nTime of Log\n2026-10-19 16:41:15\nRequest Key\nModule\nTenant\nUser\nSession Id\n[redacted]\nServer\nSERVER-01\nSource\nCompilerService\nMessage\nInternal Error: Invalid compiler output.\nCondition is false\nEnvironment Information\nStack\nError logged at:\n   at OutSystems.HubEdition.Compiler.Context.CompilationContext.AddMessage(HEMessage message)\n   at OutSystems.HubEdition.Compiler.Utils.CompilerUtils.TrapExceptionsInContext(Action action, CompilationContext context)\n   at OutSystems.HubEdition.Compiler.Compiler.<>c__DisplayClass23_0.<InvokeCompilerAPI>b__1()\n   at OutSystems.HubEdition.Compiler.Compiler.<>c__DisplayClass23_0.<InvokeCompilerAPI>b__0()\n   at System.Threading.ExecutionContext.RunInternal(ExecutionContext executionContext, ContextCallback callback, Object state, Boolean preserveSyncCtx)\n   at System.Threading.ExecutionContext.Run(ExecutionContext executionContext, ContextCallback callback, Object state, Boolean preserveSyncCtx)\n   at System.Threading.ExecutionContext.Run(ExecutionContext executionContext, ContextCallback callback, Object state)\n   at System.Threading.ThreadHelper.ThreadStart()\nExtra Info:\nException Details:\n[1] System.InvalidOperationException: Condition is false\n   at DebugExtensions.MustBeTrue(Boolean cond)\n   at OutSystems.HubEdition.Compiler.ESpace.Dump()\n   at OutSystems.HubEdition.Compiler.Compiler.DumpEspaceCode(ESpace eSpace, CompilationContext context)\n   at OutSystems.HubEdition.Compiler.Compiler.InnerGenerateCode(ESpace eSpace, CompilationContext context)\n   at OutSystems.HubEdition.Compiler.Utils.CompilerUtils.TrapExceptionsInContext(Action action, CompilationContext context)\nSupported Model Features:\n\tAdditional widgets in Mobile and Reactive emails (ModelFeature_ReactiveEmailV2)\n\tAdditional widgets in Mobile and Reactive emails (ModelFeature_OutSystems_Plugin_NRWidgets_ReactiveEmailV2)\n\tAttachments in Mobile and Reactive emails (ModelFeature_ReactiveEmailAttachments)\n\tBuilt-in emails for Mobile and Reactive Web apps (ModelFeature_ReactiveEmail)\n\tClient Variables for Mobile and Reactive Apps (ModelFeature_ClientVariables)\n\tClient Variables in Data Sources (ModelFeature_ClientVariableInsideDataSource)\n\tClient-side optimizations for Mobile Apps (ModelFeature_OptimizerMobile)\n\tClient-side optimizations for Reactive Web Apps (ModelFeature_OptimizerReactive)\n\tCustom Tool Name on Login Screen (ModelFeature_CustomToolNameOnLogin)\n\tDownload Node for Mobile and Reactive Apps (ModelFeature_ReactiveDownloadNode)\n\tDynamic titles for Mobile and Reactive Web app screens (ModelFeature_DynamicTitles)\n\tExtensions Without Source Code (ModelFeature_ExtensionsWithoutSourceCode)\n\tIs Form Default Property for Buttons in Mobile and Reactive modules (ModelFeature_OutSystems_Plugin_NRWidgets_IsDefaultPropertyForButtons)\n\tIsolated Databases (ModelFeature_MarkInIsolatedDB)\n\tLibrary Modules (ModelFeature_LibraryModules)\n\tMultilingual for Mobile and Reactive (ModelFeature_MultilingualClientSide)\n\tMultipart request format in REST APIs (ModelFeature_OutSystems_Plugin_REST_MultipartFormat)\n\tNon-queryable Static Entities (ModelFeature_NonQueryableStaticEntities)\n\tOAuth2.0 client credentials in REST consume (ModelFeature_OutSystems_Plugin_REST_RestConsumeOAuth2)\n\tOptions Content Property for Dropdown in Mobile and Reactive modules (ModelFeature_OutSystems_Plugin_NRWidgets_OptionsContentPropertyForDropdown)\n\tOutSystems UI for Reactive Apps (ModelFeature_OutSystemsUIForReactive)\n\tPATCH method in exposed REST APIs (ModelFeature_OutSystems_Plugin_RESTService_PATCHMethod)\n\tProgressive Web Apps (ModelFeature_PWAMobile)\n\tRadio Button Widget (ModelFeature_OutSystems_Plugin_NRWidgets_RadioButtonWidget)\n\tRaise invalid login exceptions (ModelFeature_RaiseInvalidLoginExceptions)\n\tReactive screen as destination on Human Activities (ModelFeature_HumanActivitiesReactiveDestination)\n\tReactive Web (ModelFeature_CrossDeviceKind)\n\tReactive Web - Aggregate Start Index (ModelFeature_AggregateStartIndex)\n\tReactive Web - Public Screens (ModelFeature_PublicNRScreens)\n\tReactive Web - Table Widget (ModelFeature_OutSystems_Plugin_NRWidgets_MobileTableRecords)\n\tRepeated SOAP structure attribute names (ModelFeature_OutSystems_Plugin_SOAP_OrderInSOAPElements)\n\tRest Consume Interoperability (ModelFeature_OutSystems_Plugin_REST_RestClientInteroperability)\n\tREST Consume log redaction (ModelFeature_OutSystems_Plugin_REST_RedactedIntegrationLogs)\n\tRest Expose Interoperability (ModelFeature_OutSystems_Plugin_RESTService_RestServiceInteroperability)\n\tREST Expose log redaction (ModelFeature_OutSystems_Plugin_RESTService_RedactedIntegrationLogs)\n\tRuntime using React 16 (ModelFeature_CRWithReact16)\n\tSAML Authentication for End-Users (ModelFeature_SAMLAuthentication)\n\tSAML Authentication for End-Users in Reactive Web (ModelFeature_ReactiveSAMLAuthentication)\n\tScreen Data Dependencies (ModelFeature_ScreenDataDependencies)\n\tSecret Site Properties (ModelFeature_SitePropertiesSupportsSecretsO11)\n\tSEO-friendly URLs for Reactive Web apps (ModelFeature_SEOReactive)\n\tSOAP Action names with special characters (ModelFeature_OutSystems_Plugin_SOAP_NameclashingMethodNames)\n\tSOAP Action with parameters placed in headers (ModelFeature_OutSystems_Plugin_SOAP_ManyHeadersProcessingModelFeature)\n\tSSO SAML Authentication for Mobile Apps (ModelFeature_MobileSSO)\n\tSwagger Enums as Static Entities (ModelFeature_OutSystems_Plugin_REST_SwaggerEnums)\n\tTheme Editor (ModelFeature_ThemeEditor)\n\tTheme Editor Font Resource (ModelFeature_ThemeEditorFontResource)\n\tUsersSecurity extension usage (ModelFeature_UsersSecurityExtension)",
+   "source": "https://tenant-a.example.outsystemscloud.com/ServiceCenter/Show_Error.aspx?Error_Id=13a7dc64-9492-4feb-8596-f2a8fbd94920",
+   "observedAt": "2026-10-19T16:42:23.149000+00:00"
+  }
+ }
+}

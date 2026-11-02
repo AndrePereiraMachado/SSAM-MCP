@@ -94,15 +94,21 @@ test('credential prompt windows open only from the openPrompt of the Service Cen
   // The prompt is a PowerShell -File of a credential script, detached in its own window.
   // servidor/fase4-25: marco-a5 moved the ODC prompt out of lib.mjs into the verified credential window of
   // portal/runtime/credential-prompt.mjs (createCredentialPrompt), checked below with its two locks.
-  const inPrompt = { 'facade/service-center/auth.mjs': 1 };
+  // fase4-28 r4-w2-diag (B13): the O11 Service Center prompt is the managed window too (auth.mjs openPrompt builds it after
+  // its hosted refusal, checked below); auth.mjs starts no -File of its own any more.
+  const inPrompt = {};
   const credentialWindow = 'portal/runtime/credential-prompt.mjs';
   const statusOnly = new Set(['portal/runtime/api-client-credential.mjs', 'portal/runtime/odc3-context.mjs']); // -NonInteractive status reads
   // servidor/fase4-24: the private credential-profile selector of the 24th release (credential-profiles.mjs lists and
   // launches scripts/credential-profiles.ps1) is the third -File site; both of its helpers refuse hosted before they start.
   const selector = 'facade/credential-profiles.mjs';
+  // fase4-28 r4 (o11_users): the Users vault helper (facade/users/vault.ps1) has two -File sites, privateCall (-NonInteractive)
+  // and its private window openUsersPrompt. Hosted, hosted/users-agent.mjs replaces both with the account's agent; each also
+  // refuses a hosted call or a served process without context as its first statement (localOnly), checked below.
+  const users = 'facade/o11-users.mjs';
   const files = hits(/'-File'/g);
   for (const [name, n] of Object.entries(files)) {
-    if (/^facade\/debug-[^/]*\.mjs$/.test(name) || statusOnly.has(name) || name === selector || name === credentialWindow) continue;
+    if (/^facade\/debug-[^/]*\.mjs$/.test(name) || statusOnly.has(name) || name === selector || name === credentialWindow || name === users) continue;
     assert.equal(n, inPrompt[name], name + ' starts a PowerShell -File outside openPrompt');
     const lines = sources.find(s => s.name === name).text.split(/\r?\n/);
     const start = lines.findIndex(l => /^(export )?function openPrompt\(/.test(l));
@@ -120,7 +126,15 @@ test('credential prompt windows open only from the openPrompt of the Service Cen
   assert.match(windowText, /export function createCredentialPrompt\([^\n]*\) \{\r?\n  return async \([^\n]*\) => \{\r?\n    if \(hostedContext\(\)\) return hostedWindow\(\);/, credentialWindow + ': refuses hosted first');
   const libText = sources.find(s => s.name === 'facade/lib.mjs').text;
   assert.equal(files['facade/lib.mjs'], undefined, 'lib.mjs starts no PowerShell -File of its own');
-  assert.deepEqual(Object.keys(hits(/createCredentialPrompt\(/g)).sort(), ['facade/lib.mjs', credentialWindow].sort(), 'only lib.mjs builds the window');
+  assert.deepEqual(Object.keys(hits(/createCredentialPrompt\(/g)).sort(), ['facade/lib.mjs', 'facade/service-center/auth.mjs', credentialWindow].sort(),
+    'only lib.mjs and the Service Center openPrompt build the window');
+  // The Service Center builds it once, inside openManagedPrompt, which only openPrompt calls, after its hosted refusal.
+  const authText = sources.find(s => s.name === 'facade/service-center/auth.mjs').text;
+  assert.match(authText, /export function openPrompt\([^\n]*\) \{\r?\n  if \(hostedContext\(\)\) throw hostedNoPrompt\([^\n]*\r?\n  return openManagedPrompt\(/, 'auth.mjs: openPrompt refuses hosted, then opens');
+  assert.equal(count(authText, /createCredentialPrompt\(/g), 1, 'auth.mjs: one window build');
+  assert.equal(count(authText, /(?<![\w.])openManagedPrompt\(/g), 2, 'auth.mjs: openManagedPrompt is declared and called once, from openPrompt');
+  const managed = authText.slice(authText.indexOf('async function openManagedPrompt('));
+  assert.ok(managed.indexOf('createCredentialPrompt(') > 0 && managed.indexOf('createCredentialPrompt(') < managed.search(/\r?\n\}/), 'auth.mjs: the build is inside openManagedPrompt');
   const local = libText.indexOf('const credentialPrompt = createCredentialPrompt(');
   assert.ok(local > libText.indexOf('hostedAccess.set(context, value);') && libText.indexOf('hostedAccess.set(context, value);') > 0, 'built after the hosted branch returned');
   const after = libText.slice(local);
@@ -133,6 +147,19 @@ test('credential prompt windows open only from the openPrompt of the Service Cen
   assert.equal(files[selector], 1, selector + ': one -File, shared by its two helpers');
   assert.match(selectorText, /function nativeList\(context\) \{\r?\n  if \(hostedContext\(\)\) return Promise\.reject\(hostedError\(\)\);/, selector + ': list refuses hosted');
   assert.match(selectorText, /async function nativeOpen\([^)]*\) \{\r?\n  if \(hostedContext\(\)\) throw hostedError\(\);/, selector + ': the selector refuses hosted');
+  // The Users helper: two -File sites, one in each entry, each entry's first statement the lock, and the lock refuses
+  // a hosted call and then a served process without context before anything else.
+  const usersText = sources.find(s => s.name === users)?.text ?? '';
+  assert.equal(files[users], 2, users + ': two -File, privateCall and openUsersPrompt');
+  const usersLines = usersText.split(/\r?\n/);
+  const entryOf = re => { const start = usersLines.findIndex(l => re.test(l)); return [start, usersLines.findIndex((l, i) => i > start && /^}/.test(l))]; };
+  const usersEntries = [entryOf(/^export function privateCall\(/), entryOf(/^export async function openUsersPrompt\(/)];
+  const fileAt = usersLines.flatMap((l, i) => (l.includes("'-File'") ? [i] : []));
+  assert.ok(usersEntries.every(([s, e]) => s >= 0 && e > s), users + ': both entries exist');
+  assert.ok(fileAt.every(at => usersEntries.some(([s, e]) => at > s && at < e)), users + ': every -File is inside privateCall or openUsersPrompt');
+  assert.match(usersText, /export function privateCall\([^\n]*\) \{\r?\n  try\{localOnly\('[^']+'\);\}catch\(e\)\{return Promise\.reject\(e\);\}\r?\n/, users + ': privateCall locks first');
+  assert.match(usersText, /export async function openUsersPrompt\([^\n]*\) \{\r?\n  localOnly\('[^']+'\);\r?\n/, users + ': openUsersPrompt locks first');
+  assert.match(usersText, /function localOnly\(what\)\{\r?\n  if\(hostedContext\(\)\)throw [^\n]+\r?\n  if\(servedWithoutContext\(\)\)throw contextLost\(/, users + ': the lock refuses hosted, then a lost context');
 });
 
 test('the Portal runtime keeps its HTTP, vault helpers and Cognito login in today\'s modules', () => {

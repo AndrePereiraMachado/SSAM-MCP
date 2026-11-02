@@ -326,14 +326,17 @@ public static class SpecExpander
     }
 
     /// <summary>A refusal of a data text: one problem per fault, each with the pointer of the text in the op's data (/ddl),
-    /// its line and its fix; the corrected text, when the fix is certain, is the patch.</summary>
+    /// its line and its fix; the corrected text, when the fix is certain, is the patch (`replace /ddl`: the job's own text with
+    /// that one correction, never another text). C-01 (F-FitBody-21): the basedOn an op certainly takes is `add /basedOn`,
+    /// every statement kept.</summary>
     public static KernelRefusalException DdlRefusal(string code, IReadOnlyList<Anvil.Reading.DdlProblem> problems)
     {
         var list = new JsonArray();
         foreach (var p in problems)
         {
-            var problem = JobPreflight.Problem(null, "/ddl", p.Code, "error", $"line {p.Line}: {p.Message}", p.Fix,
-                p.Corrected == null ? null : new JsonArray(new JsonObject { ["op"] = "replace", ["path"] = "/ddl", ["value"] = p.Corrected }), "spec");
+            var patch = p.Corrected != null ? new JsonArray(new JsonObject { ["op"] = "replace", ["path"] = "/ddl", ["value"] = p.Corrected })
+                : p.BasedOn != null ? new JsonArray(new JsonObject { ["op"] = "add", ["path"] = "/basedOn", ["value"] = p.BasedOn }) : null;
+            var problem = JobPreflight.Problem(null, "/ddl", p.Code, "error", $"line {p.Line}: {p.Message}", p.Fix, patch, "spec");
             problem["line"] = p.Line;
             if (p.Data != null) foreach (var (name, value) in p.Data) problem[name] = value?.DeepClone();
             list.Add(JobPreflight.PublicProblem(problem));

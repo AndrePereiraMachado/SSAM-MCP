@@ -85,7 +85,7 @@ server action AlterarStatusPedido public @MrB+ndLCeEidaZwSA+2WWg
   Depois do fluxo principal: os handlers (`on exception Exc abort log: @id`) e `unreached:` com os nós que nenhum
   conector alcança (ilhas, cada uma até o fim).
 - **Construções.** `X = Acao(P=v, Q)` (argumento sem `=` passa a variável do mesmo nome; o nome do nó só aparece quando
-  difere do da action; action de outro módulo com o produtor, como no digest: `(System).ListAppend`);
+  difere do da action); chamadas a produtores usam `Produtor.Action(args)`, como `Sonnet_IS.ObterPokemon(IdOuNome=NomePokemon)`, e só o módulo System usa `(System).Action(args)`, porque seu nome é `(System)`;
   `assign X = v` ou `assign` + uma atribuição por linha; `X = aggregate FROM … JOIN … WHERE (…) AND (…) GROUP BY … AGG
   N=Sum(…) CALC N=… SORT a desc … MAX m` (o parser também lê `START s`, que só a leitura de um módulo antigo traz: numa
   action é recusado, LOGIC_START_SERVER_IGNORED); `X = sql -> Saida max m` + `in P: Tipo inline = valor @p` + `| sql`;

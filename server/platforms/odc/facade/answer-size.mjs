@@ -130,6 +130,8 @@ export function answerKind(tool, args = {}, value) {
   if (delivery.has(tool) || (tool === 'ssam_code' && (args.action ?? args.mode) === 'write')) return 'receipt';
   // X1: the answer of ssam_code plan is the launch of its subagents (fitAnswer keeps every batch's launchPrompt).
   if (tool === 'ssam_code' && (args.action ?? args.mode) === 'plan') return 'plan';
+  // C-19: the grammar card is the content asked for, inline (context-budget.mjs ANSWER_BUDGETS.grammar).
+  if (tool === 'ssam_code' && (args.action ?? args.mode) === 'grammar') return 'grammar';
   if (tool === 'ssam_discover' && !['expand', 'detail', 'type', 'packet', 'catalog'].some(k => args[k])) return 'discoverFirst';
   if (value?.paged || VERBATIM.has(tool)) return 'read';
   if (['ssam_map', 'ssam_reference', 'o11_inspect', 'studio_inspect'].includes(tool)) return 'read';
@@ -261,6 +263,9 @@ function fitAnswerImpl(tool, args = {}, full, { root, directory, budgets = ANSWE
   const expanded = full?.ok !== false && tool === 'ssam_discover' && ['expand', 'detail', 'type', 'catalog'].some(k => args[k]);
   const kind = answerKind(tool, args, full);
   const budget = tool === 'ssam_discover' && Number.isFinite(args.budgetBytes) ? args.budgetBytes : expanded ? EXPANSION_DEFAULT_BYTES : (budgets[kind] ?? ANSWER_BUDGETS[kind]);
+  // C-19: the grammar card is the content asked for, as a work packet is (it owns its budget, ANSWER_BUDGETS.grammar): whole
+  // within it, never cut to the visible ceiling of refusals and content lists (8-15 KB per part; a refusal stays bounded).
+  if (kind === 'grammar' && full?.ok !== false && object(full) && bytes(full) <= Math.min(budget, maxBytes)) return full;
   if (!object(full)) {
     if (kind === 'read') return full;
     if (bytes(full) <= budget) return full;

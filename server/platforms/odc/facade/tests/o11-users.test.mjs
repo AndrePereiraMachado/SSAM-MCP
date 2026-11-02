@@ -5,7 +5,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { usersRequest, registerO11Users } from '../o11-users.mjs';
+import { usersRequest, registerO11Users, privateCall, openUsersPrompt } from '../o11-users.mjs';
+import { runWithExecutor, setDefaultExecutor, DenyExecutor } from '../executor.mjs';
 import { UsersClient, UsersTransport, UsersError, usersUrl, userRows, userDetail } from '../users/client.mjs';
 import { Page, Document } from '../service-center/html.mjs';
 
@@ -162,4 +163,24 @@ test('C2: on an SSAM installed here, a new password nobody used leaves by a time
     await gone;
     assert.deepEqual(forgotten, [asked.passwordRef]);
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+// fase4-28 r4-seam-fix: the two PowerShell -File entries of this file (the vault helper and its private window) refuse a hosted call
+// and a served process without context before anything starts. SystemRoot points nowhere, so not even a base without the lock
+// can start a PowerShell or show a window here.
+test('the local vault helper and private window refuse a hosted call and a served process without context, before any spawn', async () => {
+  const saved = process.env.SystemRoot;
+  process.env.SystemRoot = path.join(os.tmpdir(), 'ssam-no-windows-' + randomUUID());
+  try {
+    const hosted = { hosted: true, id: 'tok_seam', executor: { call: async () => { throw new Error('no machine call'); } } };
+    await runWithExecutor(hosted, async () => {
+      await assert.rejects(privateCall('status', host), e => e.code === 'SEAM_LOCAL_IN_HOSTED' && e.executed === false);
+      await assert.rejects(openUsersPrompt(host), e => e.code === 'SEAM_LOCAL_IN_HOSTED' && e.executed === false);
+    });
+    const previous = setDefaultExecutor(new DenyExecutor());
+    try {
+      await assert.rejects(privateCall('status', host), e => e.code === 'HOSTED_CONTEXT_LOST');
+      await assert.rejects(openUsersPrompt(host), e => e.code === 'HOSTED_CONTEXT_LOST');
+    } finally { setDefaultExecutor(previous); }
+  } finally { if (saved === undefined) delete process.env.SystemRoot; else process.env.SystemRoot = saved; }
 });

@@ -13,12 +13,24 @@ const inFlight = new Map();
 // servidor/fase4-25: the window of the machine that runs SSAM never opens for a hosted call (the second lock; lib.mjs refuses
 // first with ownerSecrets). Same shape as a window that could not be confirmed, with the hosted code.
 const hostedWindow = () => ({ state: 'failed', visible: false, opened: false, code: 'HOSTED_PROMPT_UNAVAILABLE' });
+// Lote 4, F3 (relato 88a0d528): the O11 Service Center prompt (service-center/auth.mjs openPrompt) uses this same manager
+// with its own kinds, for the targets of the legacy prompt (SSAM/O11/<host>/ServiceCenter, LifeTime, DatabaseConnection/<name>,
+// SiteProperty/<name>), instead of a detached Get-Credential whose window nobody confirmed.
+export const O11_PROMPT_KINDS = Object.freeze({ ServiceCenter: 'o11-service-center', LifeTime: 'o11-lifetime',
+  DatabaseConnection: 'o11-database', SiteProperty: 'o11-setting' });
+const NAMED = { database: /^[A-Za-z0-9_.-]{1,64}$/, setting: /^[A-Za-z0-9_.-]{1,64}$/,
+  'o11-database': /^[A-Za-z0-9_.-]{1,100}$/, 'o11-setting': /^[A-Za-z0-9_.-]{1,100}$/ };
 export function promptContext(kind, host, name = '') {
-  if (!['portal', 'api-client', 'database', 'setting'].includes(kind)
+  if (!['portal', 'api-client', 'database', 'setting', ...Object.values(O11_PROMPT_KINDS)].includes(kind)
       || !/^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$/.test(host)
-      || (['database', 'setting'].includes(kind) ? !/^[A-Za-z0-9_.-]{1,64}$/.test(name) : name !== ''))
+      || (NAMED[kind] ? !NAMED[kind].test(name) : name !== ''))
     throw new Error('Invalid private prompt context');
   return { kind, host, name, key: createHash('sha256').update(JSON.stringify([kind, host, name])).digest('hex') };
+}
+// The folder of one prompt's window metadata (window.json, focus.json): odc-<key>, or o11-<key> for the O11 kinds.
+export function promptStateDir(kind, host, name = '', env = process.env) {
+  const context = promptContext(kind, host, name);
+  return path.join(env.USERPROFILE || os.homedir(), '.ssam-hybrid', 'auth', 'prompts', (kind.startsWith('o11-') ? 'o11-' : 'odc-') + context.key);
 }
 export function projectPrompt(raw) {
   const allowed = ['visible', 'starting', 'absent', 'cancelled', 'stored', 'failed'];
@@ -37,7 +49,7 @@ export function createCredentialPrompt({ env = process.env, run = execFile, plat
     if (!['ensure', 'status', 'focus'].includes(action)) throw new Error('Invalid private prompt action');
     if (platform !== 'win32' || env.SSAM_ODC_OFFLINE === '1')
       return { state: 'failed', visible: false, opened: false, code: 'CREDENTIAL_PROMPT_UNAVAILABLE' };
-    const state = path.join(env.USERPROFILE || os.homedir(), '.ssam-hybrid', 'auth', 'prompts', 'odc-' + context.key);
+    const state = promptStateDir(kind, host, name, env);
     const key = state + ':' + action;
     if (inFlight.has(key)) return inFlight.get(key);
     const work = (async () => {

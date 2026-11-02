@@ -92,11 +92,15 @@ public static partial class ScreenVisual
     /// widget the Studio created carries), or with its trimmed form (<see cref="DecisionFor"/>). Null: the kind is born without
     /// class, or the Studio gave this one none (nothing to keep). The caller asks only for a widget without k (an element of a
     /// reading keeps the class it has) whose text writes no class (the author's class always wins).</summary>
-    public static StudioClass? StudioClassOf(string kind, string? born)
+    public static StudioClass? StudioClassOf(string kind, string? born, string? tag = null)
     {
         if (DecisionFor(kind) is not { } decision) return null;
         var name = decision.Widget[1..];
         var studio = born ?? "";
+        // F8: a List of a table part takes no class at all (TableListClass).
+        if (decision.Widget == "IList" && IsTablePart(tag))
+            return new(StudioClassTrimmed, name, TableListClass, true,
+                $"a new List of a <{tag}> without class gets \"\" (the Studio gives it {(studio.Length > 0 ? studio : decision.StudioClass)}): {TableListClassWhy}; the reading writes it as class=\"\"");
         if (decision.Rule == ClassRule.Kept)
             return studio.Length == 0 ? null : new(StudioClassKept, name, studio, false,
                 $"a new {name} without class keeps the class the Studio gives it ({studio}; reset to the empty default the runtime publishes it between quotes): {decision.Why}; the reading writes it as class=\"{studio.Trim('"')}\"");
@@ -120,11 +124,7 @@ public static partial class ScreenVisual
     // ---- F1: a List that is part of a table, a list or a layout container -------------------------------------------------
 
     /// <summary>The tags of a List that is a part of a table or of an HTML list: its rows are the table's or the list's rows.</summary>
-    public static readonly IReadOnlySet<string> RowGroupTags = new HashSet<string>(StringComparer.Ordinal) { "thead", "tbody", "tfoot", "ul", "ol" };
-
-    /// <summary>The tags of a List that is a part of a table: the native layout block lays it out as the table's row group
-    /// (its rule is written from this list, <see cref="NativeLayoutCss"/>).</summary>
-    public static readonly IReadOnlyList<string> TablePartTags = ["thead", "tbody", "tfoot"];
+    public static readonly IReadOnlySet<string> RowGroupTags = new HashSet<string>(StringComparer.Ordinal) { "thead", "tbody", "tfoot", "tr", "ul", "ol" };
 
     /// <summary>The value of a marker of the native layout block (an extended property, an attribute at runtime).</summary>
     public const string MarkerValue = "\"1\"";
@@ -184,7 +184,7 @@ public static partial class ScreenVisual
     internal const string NativeLayoutBegin = "/* ssam:native-layout */", NativeLayoutEnd = "/* /ssam:native-layout */";
 
     /// <summary>The version of the block's content: a theme with another version gets this one (replaced, never duplicated).</summary>
-    public const string NativeLayoutVersion = "4";
+    public const string NativeLayoutVersion = "5";
 
     /// <summary>The markers the html op writes on the elements it creates (extended properties, attributes at runtime); every
     /// rule of the block needs one, so a screen or block the op did not create keeps its CSS (review 1, A1). Only the engine writes
@@ -211,27 +211,131 @@ public static partial class ScreenVisual
     public static string NativeLayoutCss => NativeLayoutBegin + "\n/* version " + NativeLayoutVersion + ", written by the html op; replaced whole, never by hand; every rule needs a data-ssam-* marker of the op */\n"
         + "[" + GapMarker + "].ThemeGrid_MarginGutter{margin-left:0}\n"
         + ".layout :is(.main,.content,.main-content):has([" + PageMarker + "]){min-width:0}\n"
-        + ":is(" + string.Join(",", TablePartTags) + ")[" + RowsMarker + "]{display:table-row-group;width:auto}\n"
+        + TableRowsCss
         + "[" + RowsMarker + "]>script{display:none!important}\n"
         + NativeLayoutEnd;
     /// <summary>The author CSS of a theme with the native layout block of this version: appended once ("added"), an older block
     /// replaced in place ("replaced"), or the CSS as it is ("present").</summary>
-    public static string WithNativeLayout(string author, out string action)
+    public static string WithNativeLayout(string author, out string action) => WithNativeLayout(author, out action, out _, out _);
+
+    /// <summary>Every rule the engine wrote in a native layout block, in any version (1 to this one, and the proto line's "4",
+    /// which is this version's table rules): what an older block may hold without its author having written it.</summary>
+    private static readonly HashSet<string> EngineRules = new(StringComparer.Ordinal)
     {
+        ".ThemeGrid_MarginGutter.ThemeGrid_MarginGutter{margin-left:0}",
+        ".layout .main,.layout .content,.layout .main-content{min-width:0}",
+        ".layout :is(.main,.content,.main-content):has([" + PageMarker + "]){min-width:0}",
+        ":is(thead,tbody,tfoot)[" + RowsMarker + "]{display:table-row-group;width:auto}",
+        "[" + GapMarker + "].ThemeGrid_MarginGutter{margin-left:0}",
+        "[" + RowsMarker + "]>script{display:none!important}",
+        "[data-list][data-virtualization-disabled]>script{display:none!important}",
+        "table>:is(thead,tbody,tfoot)[data-list]{display:table-row-group;width:auto}",
+    };
+
+    private static readonly Regex BlockVersion = new(@"^/\*\s*version\s+(?<v>[^,\s*]+)", RegexOptions.Compiled);
+
+    /// <summary>The same, and what an older block held: its version (<paramref name="from"/>, from its comment, or the "vN" of the
+    /// marker line of version 1; null when there was none) and the lines of it the engine never writes (<paramref name="kept"/>:
+    /// rules the author added inside the markers), which are kept, written right after the new block, outside its markers: a
+    /// replacement never drops what an author wrote.</summary>
+    public static string WithNativeLayout(string author, out string action, out string? from, out List<string> kept) =>
+        WithNativeLayout(author, out action, out from, out kept, out _);
+
+    /// <summary>The same, and what was kept only as a comment (<paramref name="keptAsComment"/>): text of the old block that is no
+    /// complete rule nor comment (review W3-EDIT round 2, R2-1: kept as CSS after the block, a stray "v0" became the selector
+    /// "v0 .b" of the author's next rule). Kept, never dropped; inside one comment it never joins what follows.</summary>
+    public static string WithNativeLayout(string author, out string action, out string? from, out List<string> kept, out List<string> keptAsComment)
+    {
+        from = null;
+        kept = [];
+        keptAsComment = [];
         var begin = author.IndexOf(NativeLayoutBegin, StringComparison.Ordinal);
         if (begin >= 0)
         {
             var end = author.IndexOf(NativeLayoutEnd, begin, StringComparison.Ordinal);
             if (end >= 0)
             {
+                var body = author[(begin + NativeLayoutBegin.Length)..end];
                 end += NativeLayoutEnd.Length;
                 if (author[begin..end] == NativeLayoutCss) { action = "present"; return author; }
                 action = "replaced";
-                return author[..begin] + NativeLayoutCss + author[end..];
+                var current = new HashSet<string>(NativeLayoutCss.Split('\n').Select(l => l.Trim()), StringComparer.Ordinal);
+                var lines = body.Replace("\r\n", "\n").Split('\n').Select(l => l.Trim()).ToList();
+                // Version 1 wrote its version on the marker line: "/* ssam:native-layout */ v1".
+                if (lines.Count > 0 && MarkerVersion.Match(lines[0]) is { Success: true } marker) { from = marker.Groups["v"].Value; lines[0] = ""; }
+                var others = new List<string>();
+                foreach (var line in lines)
+                {
+                    if (line.Length == 0) continue;
+                    if (from == null && BlockVersion.Match(line) is { Success: true } version) { from = version.Groups["v"].Value; continue; }
+                    if (EngineRules.Contains(line) || current.Contains(line)) continue;
+                    others.Add(line);
+                }
+                SplitKept(others, kept, keptAsComment);
+                var tail = kept.Count > 0 ? "\n" + string.Join("\n", kept) : "";
+                if (keptAsComment.Count > 0)
+                    tail += "\n/* ssam: kept from the native layout block of version " + (from ?? "?") + " (no complete rule): "
+                        + string.Join(" | ", keptAsComment).Replace("*/", "* /", StringComparison.Ordinal) + " */";
+                return author[..begin] + NativeLayoutCss + tail + author[end..];
             }
         }
         action = "added";
         return (author.TrimEnd().Length > 0 ? author.TrimEnd() + "\n\n" : "") + NativeLayoutCss + "\n";
+    }
+
+    private static readonly Regex MarkerVersion = new(@"^v(?<v>\d+)\b", RegexOptions.Compiled);
+
+    /// <summary>The lines kept from an old block: complete comments and complete rules (a selector, its continuation lines ending
+    /// in a comma, the block up to its balanced brace) stay CSS; anything else, a stray word or an unclosed rule, goes to the
+    /// comment, so no leftover reads as part of the selector of the rule after it.</summary>
+    private static void SplitKept(List<string> lines, List<string> css, List<string> comment)
+    {
+        var pending = new List<string>();
+        for (var i = 0; i < lines.Count; i++)
+        {
+            var line = lines[i];
+            if (line.StartsWith("/*", StringComparison.Ordinal))
+            {
+                var j = i;
+                while (j < lines.Count && !lines[j].Contains("*/", StringComparison.Ordinal)) j++;
+                comment.AddRange(pending); pending.Clear();
+                if (j >= lines.Count) { comment.AddRange(lines[i..]); return; }
+                // Review W3-EDIT round 3 (R3-1): what follows the comment on its last line ("/* a note */ stray") is classified by
+                // the same rule as a line of its own, never kept as CSS with the comment.
+                var close = lines[j].IndexOf("*/", j == i ? 2 : 0, StringComparison.Ordinal) + 2;
+                var rest = lines[j][close..].Trim();
+                css.Add(string.Join("\n", lines[i..j].Append(lines[j][..close])));
+                if (rest.Length > 0) lines.Insert(j + 1, rest);
+                i = j;
+                continue;
+            }
+            if (line.Contains('{'))
+            {
+                var depth = 0; var j = i; var closed = -1;
+                for (; j < lines.Count && closed < 0; j++)
+                    foreach (var c in lines[j])
+                    {
+                        if (c == '{') depth++;
+                        else if (c == '}' && --depth == 0) { closed = j; break; }
+                    }
+                if (closed < 0 || lines[closed].TrimEnd().EndsWith('}') == false || depth < 0)
+                {
+                    comment.AddRange(pending); pending.Clear();
+                    comment.AddRange(lines[i..(closed < 0 ? lines.Count : closed + 1)]);
+                    if (closed < 0) return;
+                    i = closed;
+                    continue;
+                }
+                css.Add(string.Join("\n", pending.Concat(lines[i..(closed + 1)])));
+                pending.Clear();
+                i = closed;
+                continue;
+            }
+            if (line.EndsWith(',')) { pending.Add(line); continue; }   // a selector list that goes on in the next line
+            comment.AddRange(pending); pending.Clear();
+            comment.Add(line);
+        }
+        comment.AddRange(pending);
     }
 
     // ---- the author's DOM: the document as the browser of the author would build it ------------------------------------

@@ -79,6 +79,27 @@ public sealed class ScreenVisualPlatformTests(ITestOutputHelper output)
         Assert.True(CssSelectors.Matches(input.Counterparts[input.Counterparts.Keys.First()], f.Right!));
     }
 
+    /// <summary>C-12 (F-FigmaReactive-09a), mapped onto family (a): OutSystems UI sizes the headings by device (.phone h1, 0,1,1);
+    /// the author's .fm-hero-title{font-size} (0,1,0) on an h1 loses on the phone and the tablet, and comes back with the selector
+    /// that wins there. The prototype's hand-written "device-heading" rule is this cascade.</summary>
+    [Fact]
+    public void AHeadingOutSystemsUiSizesByDeviceLosesItsFontSizeOnThePhone()
+    {
+        var html = "<screen name=\"Page\"><div class=\"fm-page\"><h1 id=\"t\" class=\"fm-hero-title\">Hero</h1></div></screen>";
+        var input = Input(html, a =>
+        {
+            var fragment = DomNode.Fragment();
+            var map = new Dictionary<DomNode, DomNode>(ReferenceEqualityComparer.Instance);
+            var page = El(fragment, "div", "fm-page", null, ("data-container", ""));
+            map[a["t"]] = Keyed(El(page, "h1", "fm-hero-title", null, ("data-advancedhtml", "")), "KeyTitle", "IAdvancedHtml");
+            return (fragment, map);
+        }, Platform("OutSystemsUI.OutSystemsUI.css", ".phone h1{font-size:20px}\n.tablet h1{font-size:24px}"), new ScreenVisual.Sheet(".fm-hero-title{font-size:28px}", "page"));
+        // One finding per breakpoint OutSystems UI sizes it at: the phone's and the tablet's.
+        var found = Run(input).Where(x => x.Code == Specificity && x.Property == "font-size").ToList();
+        Assert.Equal([".phone h1", ".tablet h1"], found.Select(f => f.Winner!.Split(' ', 2)[1]).Order(StringComparer.Ordinal));
+        Assert.All(found, f => { Assert.Equal(".fm-hero-title", f.Subject); Assert.NotNull(f.Right); });
+    }
+
     [Fact]
     public void ATextPropertyThePlatformSetsAgainOnTheElementOfTheTextComesBackAsInherit()
     {

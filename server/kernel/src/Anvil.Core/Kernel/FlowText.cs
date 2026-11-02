@@ -188,17 +188,27 @@ public static class FlowMapping
 // way back use the same index, so the owner a read writes is the owner a text resolves.
 public static class FlowOwners
 {
-    // The kinds an owner is: Reactive and Mobile screens and blocks (both lanes), Traditional screens, blocks and emails.
+    // Two classes of owner, each its own index: the screens, blocks and emails (Reactive and Mobile screens and blocks on both
+    // lanes, Traditional screens, blocks and emails) own screen actions, data actions and Preparation; a consumed REST client
+    // owns its callbacks. A name one class shares with the other never changes how the other reads or resolves (a client
+    // Login beside a screen Login: action Login.Save stays Login, callback action Login.OnAfterResponse stays Login).
     private static readonly string[] Kinds = ["MobileScreen", "MobileBlock", "WebScreen", "WebBlock", "WebEmail"];
+    private static readonly string[] ClientKinds = ["RestClient"];
     private static readonly string[] Flows = ["UIFlow", "MobileFlow", "WebFlow"];
 
     // The kinds of action that belong to an owner (the others belong to the module).
-    public static bool Owned(string kind) => kind is "ScreenAction" or "DataAction" or "Preparation";
+    public static bool Owned(string kind) => kind is "ScreenAction" or "DataAction" or "Preparation" or "RestCallbackActionFlow";
+
+    // Whether the owners of this kind of action are REST clients (else screens, blocks and emails).
+    private static bool ClientOwned(string? actionKind) => actionKind == "RestCallbackActionFlow";
 
     // A written owner: a name, or a path of names (Flow/Name).
     public static bool Valid(string text) => text.Length > 0 && text.Split('/').All(FlowSyntax.IsIdentifier);
 
+    // A screen, block or email (the owner of screen and data actions and Preparation).
     internal static bool IsOwner<T>(ModelReader<T> reader, T node) where T : class => Kinds.Any(k => reader.IsKind(node, k));
+
+    private static bool IsClient<T>(ModelReader<T> reader, T node) where T : class => ClientKinds.Any(k => reader.IsKind(node, k));
 
     // Its path from the module: the names of the elements between the module and it.
     internal static string PathOf<T>(ModelReader<T> reader, T root, T owner) where T : class
@@ -208,46 +218,53 @@ public static class FlowOwners
         return string.Join("/", path);
     }
 
-    // The owners of a module by name, kept per module object (the reader and every text of a job read the same module).
+    // The owners of a module by name, kept per module object (the reader and every text of a job read the same module), one
+    // table per class of owner.
     private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<object, object> Indexes = new();
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<object, object> ClientIndexes = new();
 
-    // The owners of the module by name, without case: the screens, blocks and emails of its UI flows (and any directly under
-    // it). Built again when an owner or a name is not in it (a screen created or renamed since).
-    private static Dictionary<string, List<T>> ByName<T>(ModelReader<T> reader, T root, bool fresh) where T : class
+    // The owners of one class by name, without case: those directly under the module and those of its UI flows (a REST
+    // client is under the module). Built again when an owner or a name is not in it (a screen created or renamed since).
+    private static Dictionary<string, List<T>> ByName<T>(ModelReader<T> reader, T root, bool fresh, bool clients) where T : class
     {
-        if (!fresh && Indexes.TryGetValue(root, out var held) && held is Dictionary<string, List<T>> cached) return cached;
+        var table = clients ? ClientIndexes : Indexes;
+        if (!fresh && table.TryGetValue(root, out var held) && held is Dictionary<string, List<T>> cached) return cached;
+        bool Of(T node) => clients ? IsClient(reader, node) : IsOwner(reader, node);
         var index = new Dictionary<string, List<T>>(StringComparer.OrdinalIgnoreCase);
         void Add(T owner) { var name = reader.DisplayOf(owner); (index.TryGetValue(name, out var list) ? list : index[name] = []).Add(owner); }
         foreach (var child in reader.ChildrenOf(root)) {
-            if (IsOwner(reader, child)) { Add(child); continue; }
+            if (Of(child)) { Add(child); continue; }
             if (Flows.Any(f => reader.IsKind(child, f)) || reader.KindOf(child).EndsWith("Flow", StringComparison.Ordinal))
-                foreach (var grandchild in reader.ChildrenOf(child)) if (IsOwner(reader, grandchild)) Add(grandchild);
+                foreach (var grandchild in reader.ChildrenOf(child)) if (Of(grandchild)) Add(grandchild);
         }
-        Indexes.AddOrUpdate(root, index);
+        table.AddOrUpdate(root, index);
         return index;
     }
 
-    // How the header writes this owner: its name, or its path when another owner of the module has the same name.
+    // How the header writes this owner: its name, or its path when another owner of its class has the same name.
     public static string Text<T>(ModelReader<T> reader, T root, T owner) where T : class
     {
         var name = reader.DisplayOf(owner);
-        var index = ByName(reader, root, false);
-        if (!index.TryGetValue(name, out var same) || !same.Any(o => ReferenceEquals(o, owner))) index = ByName(reader, root, true);
+        var clients = IsClient(reader, owner);
+        var index = ByName(reader, root, false, clients);
+        if (!index.TryGetValue(name, out var same) || !same.Any(o => ReferenceEquals(o, owner))) index = ByName(reader, root, true, clients);
         return index.TryGetValue(name, out same) && same.Any(o => !ReferenceEquals(o, owner)) ? PathOf(reader, root, owner) : name;
     }
 
-    // The owners a written owner names: by name (without case), or by path when it has one.
-    public static List<T> Find<T>(ModelReader<T> reader, T root, string text) where T : class
+    // The owners a written owner names for this kind of action: by name (without case), or by path when it has one; a
+    // screen, block or data action and a Preparation find screens, blocks and emails, a callback finds REST clients.
+    public static List<T> Find<T>(ModelReader<T> reader, T root, string text, string? actionKind = null) where T : class
     {
+        var clients = ClientOwned(actionKind);
         var last = text[(text.LastIndexOf('/') + 1)..];
         List<T> Match(Dictionary<string, List<T>> index) => (index.GetValueOrDefault(last) ?? [])
             .Where(o => !text.Contains('/') || string.Equals(PathOf(reader, root, o), text, StringComparison.OrdinalIgnoreCase)).ToList();
-        var found = Match(ByName(reader, root, false));
-        return found.Count > 0 ? found : Match(ByName(reader, root, true));
+        var found = Match(ByName(reader, root, false, clients));
+        return found.Count > 0 ? found : Match(ByName(reader, root, true, clients));
     }
 
-    // Every owner of the module (the nearest names of an owner the text names wrong).
-    public static IEnumerable<string> Names<T>(ModelReader<T> reader, T root) where T : class => ByName(reader, root, true).Keys;
+    // Every owner of the module for this kind of action (the nearest names of an owner the text names wrong).
+    public static IEnumerable<string> Names<T>(ModelReader<T> reader, T root, string? actionKind = null) where T : class => ByName(reader, root, true, ClientOwned(actionKind)).Keys;
 
     // Whether two written owners can name the same owner (the same text without case, or a path and the name it ends in).
     public static bool Same(string a, string b) =>

@@ -5,7 +5,7 @@
   "[ARGUMENT_UNKNOWN]: 'Quantty' is not an input of PcCalc",
   "[EXPR_UNKNOWN_IDENTIFIER]: can't identify 'Totl' in Calc.Totl",
   "[EXPRESSION_SYNTAX]: R == 1",
-  "[FUNCTION_UNKNOWN]: 'NullDateTime('",
+  "[FUNCTION_UNKNOWN]: 'NullDateTime' is not a built-in",
   "op #0 (logic PcBroken)",
   "[ExpressionInvalidExpressionType]"
  ],

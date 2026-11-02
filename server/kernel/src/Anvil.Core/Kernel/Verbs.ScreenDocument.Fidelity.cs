@@ -60,6 +60,7 @@ public sealed partial class ModelSession
     {
         private List<ScreenDocument.StyleBlock> styles = [];
         private string? ownSheet;
+        private readonly JsonArray importsMoved = [];                           // C-05: the @import of the theme's part put first in the root's sheet
         private string sheetBefore = "";                                        // R2-D: the root's own sheet before this compile
         private JsonObject? sheetSaid;                                          // R2-D: what the write of the sheet said (replaced, cssStages, images)
         private int joined;                                                     // lines of text with bindings joined in one Expression
@@ -176,11 +177,82 @@ public sealed partial class ModelSession
             return false;
         }
 
+        // C-02: whether a widget is a Button or a Link with a Form among its ancestors (up to the root): its click validates the
+        // Form by default (ScreenDefaults.FormDefault), as the Studio creates it there.
+        private bool InForm(IObjectSignature element, string kind)
+        {
+            if (!ScreenDefaults.ValidatesInForm(kind)) return false;
+            for (var o = element.Parent as IObjectSignature; o != null && !ReferenceEquals(o, root); o = o.Parent as IObjectSignature)
+                if (Is(o, "IForm")) return true;
+            return false;
+        }
+
         // The CSS of a screen's or block's own style sheet ("" without one).
         private static string SheetOf(object element) => ApiValue(element, "StyleSheet") switch { string text => text, IExpression e => e.Text ?? "", _ => "" };
 
         // A property as the Model API answers it (the interface's, not the concrete class's: a style sheet is its CSS text there).
         private static object? ApiValue(object element, string property) => FindProperty(element, property) is { } pi ? SafeGet(pi, element) : null;
+
+        /// <summary>C-05 (F-FigmaMobile-02, F-FigmaReactive-02): the @import statements of the document's &lt;style scope="theme"&gt;
+        /// blocks when the module's default theme has Theme Editor CSS. The platform serves such a theme as the Theme Editor's CSS
+        /// (its :root{...} first) and then the author's (ThemeCss: generated + author, recomputed when it saves and publishes), so
+        /// an @import in the author's half comes after rules and the browser ignores it: the fonts never loaded, silently, while
+        /// the receipt said cssImportsHoisted. They are taken out of the theme's part and put first in the root's own style sheet,
+        /// whose served CSS starts with them; each one is said in cssImportsMoved and normalized (CSS_IMPORT_MOVED), with where it
+        /// now loads. A theme without Theme Editor CSS serves the author's half alone: its @import stay in the theme, at its top.
+        /// Returns the statements moved, in order, each once.</summary>
+        private List<string> ThemeImportsToOwnSheet()
+        {
+            var moved = new List<string>();
+            if (!styles.Any(b => b.Theme && b.Css.Contains("@import", StringComparison.OrdinalIgnoreCase))) return moved;
+            try
+            {
+                var defaultTheme = s._es.DefaultMobileTheme;
+                var theme = defaultTheme == null ? null : s._es.MobileThemes.FirstOrDefault(t => t.ObjectKey?.ToString() == defaultTheme.ObjectKey?.ToString());
+                // No theme of this module: InstallTheme refuses the theme's part (HTML_STYLE_UNPLACED) with every other problem.
+                if (theme == null || ThemeCss.Of(theme) is not { } sheet || !ThemeCss.IsSplit(sheet)) return moved;
+            }
+            catch (Exception) { return moved; }
+            var where = rootKind.EndsWith("Screen", StringComparison.Ordinal)
+                ? $"the browser loads it with the screen {TypeResolver.Name(root)}"
+                : $"the browser loads it on the pages that place the block {TypeResolver.Name(root)} (a block placed on no page loads nothing)";
+            for (var i = 0; i < styles.Count; i++)
+            {
+                var block = styles[i];
+                if (!block.Theme) continue;
+                var (imports, rest) = CssCompat.Imports(block.Css);
+                if (imports.Count == 0) continue;
+                styles[i] = block with { Css = rest };
+                foreach (var import in imports)
+                {
+                    if (moved.Contains(import.Statement, StringComparer.Ordinal)) continue;
+                    moved.Add(import.Statement);
+                    var note = new JsonObject
+                    {
+                        ["code"] = ScreenDocument.ImportMoved, ["line"] = block.Node.Line + import.Line - 1, ["column"] = block.Node.Column, ["element"] = "style",
+                        ["from"] = import.Statement + " in <style scope=\"theme\">" + (block.Id != null ? " id=\"" + block.Id + "\"" : ""),
+                        ["to"] = $"the first line(s) of the style sheet of {TypeResolver.Name(root)}",
+                        ["note"] = "the module's theme has Theme Editor CSS, served first (its :root{...}): an @import after it is ignored by the browser; " + where,
+                    };
+                    importsMoved.Add(note.DeepClone());
+                    normalized.Add(note);
+                }
+            }
+            return moved;
+        }
+
+        // The root's own style sheet with the @import statements of the theme's part first (after an @charset), each once.
+        private static string WithImportsFirst(string? sheet, IReadOnlyList<string> imports)
+        {
+            var own = sheet ?? "";
+            var already = CssCompat.Imports(own).Imports.Select(x => x.Statement).ToHashSet(StringComparer.Ordinal);
+            var head = string.Join("\n", imports.Where(x => !already.Contains(x)));
+            if (head.Length == 0) return own;
+            var body = own.TrimStart((char)0xFEFF);
+            if (body.TrimStart().StartsWith("@charset", StringComparison.OrdinalIgnoreCase) && body.IndexOf(';') is var semi and > 0)
+                return body[..(semi + 1)] + "\n" + head + "\n" + body[(semi + 1)..].TrimStart('\r', '\n');
+            return head + (own.Length > 0 ? "\n" + own : "\n");
+        }
 
         /// <summary>The theme's part of the document (its &lt;style scope="theme"&gt; blocks) in the module's default theme, as
         /// written, between each named part's markers or the root's markers for unnamed blocks (a second compile replaces
@@ -209,7 +281,8 @@ public sealed partial class ModelSession
                 var installed = new JsonArray();
                 foreach (var part in parts)
                 {
-                    report["theme"] = s.InstallStylesheet(part.Key, part.Css, report, format: false);
+                    // C-14: a named part records this root as its owner (the reading of the root prints it).
+                    report["theme"] = s.InstallStylesheet(part.Key, part.Css, report, format: false, owner: part.Key.StartsWith("style:", StringComparison.Ordinal) ? key : null);
                     installed.Add(new JsonObject { ["key"] = part.Key, ["chars"] = part.Css.Length, ["marker"] = $"/* anvil:html {part.Key} */" });
                     if (part.Key == key)
                     {
@@ -250,15 +323,8 @@ public sealed partial class ModelSession
         private object? iconTheme;
         private WebStyleSheetBackup? iconThemeBefore;
 
-        // The text between the markers of a key in a theme's author CSS ("" without them).
-        private static string Block(string css, string key)
-        {
-            var begin = $"/* anvil:html {key} */"; var end = $"/* /anvil:html {key} */";
-            var i = css.IndexOf(begin, StringComparison.Ordinal);
-            if (i < 0) return "";
-            var j = css.IndexOf(end, i, StringComparison.Ordinal);
-            return j < 0 ? "" : css[(i + begin.Length)..j];
-        }
+        // The text between the markers of a key in a theme's author CSS ("" without them), without the owner a named part records.
+        private static string Block(string css, string key) => ThemeParts.Find(css, key)?.Css ?? "";
 
         // The same CSS but for what the theme does to every author block (an @import goes to the top, #reactContainer is written
         // :is(#reactContainer, body), the ends of lines): the rules as written.
@@ -305,23 +371,14 @@ public sealed partial class ModelSession
             // R2-D: bytes before and after, the rules added and removed, and what the write said.
             foreach (var (key, value) in StyleSheetReport(sheetBefore, root == null ? ownSheet ?? "" : SheetOf(root), sheetSaid)) report[key] = value?.DeepClone();
             if (theme != null) report["theme"] = theme;
+            if (importsMoved.Count > 0) report["cssImportsMoved"] = importsMoved.DeepClone();
             return report;
         }
 
-        /// <summary>The producer module of a referenced element: the name of the Reference it hangs from (null for an element
-        /// of this module).</summary>
-        private static string? ProducerOf(IObjectSignature element)
-        {
-            for (var up = element.Parent as IObjectSignature; up != null; up = up.Parent as IObjectSignature)
-                if (up.GetType().Name.StartsWith("Reference", StringComparison.Ordinal) || up.GetType().GetInterfaces().Any(i => i.Name == "IReference"))
-                    return TypeResolver.Name(up);
-            return null;
-        }
-
         /// <summary>The classes the document uses that no rule defines where this page reads CSS: its own style sheet, the
-        /// themes of the module, OutSystems UI. Each with the element that uses it; where else the module writes it (another
-        /// screen's or block's own style sheet, which that page alone loads); and the default theme when it is of another
-        /// module (its CSS is not in this capture). Null when every class has its rule.</summary>
+        /// themes of the module and of its chain, OutSystems UI. Each with the element that uses it; where else the module writes it
+        /// (another screen's or block's own style sheet, which that page alone loads); and a theme of another module whose CSS the
+        /// capture has no copy of. Null when every class has its rule.</summary>
         internal JsonObject? ClassesWithoutRule()
         {
             if (root == null) return null;
@@ -330,6 +387,9 @@ public sealed partial class ModelSession
             var used = ScreenDocument.UsedClasses(top);
             if (used.Count == 0) return null;
             var defined = ScreenDocument.CssClasses(SheetOf(root));
+            // C-17 (F-FigmaMobile-12: 16 classes of the BottomNav "without rule" that the same job writes in the theme): the parts
+            // of the theme the documents of this job write (<style scope="theme">, a later op's too) are rules of the module.
+            foreach (var css in JobThemeParts()) defined.UnionWith(ScreenDocument.CssClasses(css));
             string? themeElsewhere = null;
             try
             {
@@ -339,23 +399,19 @@ public sealed partial class ModelSession
                 // defines): the theme the page shows and every theme of the module are followed through BaseTheme; the first
                 // one of another module (its CSS is not in this capture) is named, and the warning says the classes may be its.
                 var shown = (root.Parent is IObjectSignature flow ? PrototypeBuilder.Prop(flow, "Theme") as IObjectSignature : null) ?? s._es.DefaultMobileTheme as IObjectSignature;
+                // B4 (the proto line's 0abbad00): a theme of another module is read too, through the signature the capture keeps
+                // (its StyleSheet is the producer's CSS at the reference's version, ThemeCss.Chain); only one with no readable CSS
+                // is named, and the chain goes on through its BaseTheme.
                 foreach (var start in new[] { shown }.Concat(s._es.MobileThemes.OfType<IObjectSignature>()))
-                {
-                    var seen = new HashSet<string>(StringComparer.Ordinal);
-                    for (var at = start; at != null && seen.Add(at.ObjectKey?.ToString() ?? "") && themeElsewhere == null; )
+                    foreach (var link in ThemeCss.Chain(start))
                     {
-                        if (!own.Contains(at.ObjectKey?.ToString() ?? ""))
-                        {
-                            // The theme of OutSystems UI is the base of every theme and its classes are the allowlist already
-                            // (OutSystemsUiClass): only another producer's theme may hold the rules this capture cannot read.
-                            var producer = ProducerOf(at);
-                            if (producer is not ("OutSystemsUI" or "OutSystemsUIWeb")) themeElsewhere = (producer != null ? producer + "." : "") + TypeResolver.Name(at);
-                            break;
-                        }
-                        at = PrototypeBuilder.Prop(at, "BaseTheme") as IObjectSignature;
+                        if (own.Contains(link.Theme.ObjectKey?.ToString() ?? "")) continue;
+                        // The theme of OutSystems UI is the base of every theme and its classes are the allowlist already
+                        // (OutSystemsUiClass): only another producer's theme may hold the rules this capture cannot read.
+                        if (link.Producer is "OutSystemsUI" or "OutSystemsUIWeb") continue;
+                        if (link.Css != null) defined.UnionWith(ScreenDocument.CssClasses(link.Css));
+                        else themeElsewhere ??= (link.Producer != null ? link.Producer + "." : "") + link.Name;
                     }
-                    if (themeElsewhere != null) break;
-                }
             }
             catch (Exception) { /* a module without themes: only its own CSS and OutSystems UI */ }
             var missing = used.Where(u => !defined.Contains(u.Class) && !ScreenDocument.OutSystemsUiClass(u.Class)).ToList();
@@ -376,6 +432,24 @@ public sealed partial class ModelSession
             if (elsewhere.Count > 0) result["elsewhere"] = elsewhere;
             if (themeElsewhere != null) result["themeElsewhere"] = themeElsewhere;
             return result;
+        }
+
+        // C-17, C-12: the CSS of every <style scope="theme"> of the html documents of this job (the parts of the theme they write,
+        // whatever the order of the ops): rules of the module for the classes without a rule and for the layout of a List.
+        private List<string>? jobThemeParts;
+        private IEnumerable<string> JobThemeParts()
+        {
+            if (jobThemeParts != null) return jobThemeParts;
+            jobThemeParts = [];
+            foreach (var op in (s._applyOps ?? []).OfType<JsonObject>())
+            {
+                if (op["op"]?.ToString() != "html" || op["data"]?["html"] is not JsonValue value || !value.TryGetValue<string>(out var html) || !html.Contains("scope", StringComparison.Ordinal)) continue;
+                ScreenHtml.Node parsed;
+                try { parsed = ScreenHtml.Parse(html); } catch (FormatException) { continue; }
+                foreach (var (node, _) in ScreenHtmlText.Elements(parsed))
+                    if (Anvil.Reading.ScreenHtmlEdit.IsThemeStyle(node)) jobThemeParts.Add(string.Concat(node.Children.Select(c => c.Text)));
+            }
+            return jobThemeParts;
         }
 
         // The other screens and blocks of the module (every UI flow).

@@ -410,3 +410,25 @@ test('a plan keeps every launch at the exit; generator receipts keep configure a
   assert.deepEqual([fitted.entityActions.created, fitted.entityActions.unchanged, fitted.entityActions.kept], [40, 0, receipt.entityActions.kept]);
   assert.ok(await checkReachability(receiptRow, fitted, root) >= 1, 'what the exit left out of the receipt is recovered exactly');
 });
+
+
+// W4 item 6 (C-19, F-FigmaMobile-11, F-FigmaReactive-11): ssam_code grammar answered only ssam_evidence pointers (budgeted as
+// "other", 4 KB) and each part cost one more call; its card is the content asked for, inline.
+test('W4 ssam_code grammar answers its card inline: every part whole, every part together within the ceiling', async () => {
+  const { grammarCard } = await import('../ssam-code.mjs');
+  const root = fs.mkdtempSync(path.join(process.env.TEMP ?? process.env.TMP ?? '.', 'w4-grammar-'));
+  try {
+    assert.equal(answerKind('ssam_code', { action: 'grammar', part: 'html' }, { ok: true }), 'grammar');
+    assert.ok(ANSWER_BUDGETS.grammar >= 24576, 'at least 24 KB inline');
+    for (const lane of ['o11', 'odc']) for (const part of ['ddl', 'logic', 'html']) {
+      const full = { ...grammarCard(part, lane), plan: 'the plan hint' };
+      const fitted = fitAnswer('ssam_code', { lane, action: 'grammar', part }, full, { root });
+      assert.deepEqual(fitted, full, lane + ' ' + part + ': the card whole, no pointer');
+      // The old budget gave pointers only: the regression this guards.
+      const before = fitAnswer('ssam_code', { lane, action: 'grammar', part }, full, { root, budgets: { ...ANSWER_BUDGETS, grammar: ANSWER_BUDGETS.other } });
+      assert.ok(before.omitted, lane + ' ' + part + ': at 4 KB the card is cut');
+    }
+    const all = fitAnswer('ssam_code', { lane: 'o11', action: 'grammar' }, { ...grammarCard(null, 'o11'), plan: 'the plan hint' }, { root });
+    assert.ok(Buffer.byteLength(JSON.stringify(all)) <= ANSWER_BUDGETS.grammar);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});

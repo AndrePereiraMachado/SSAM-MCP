@@ -82,6 +82,17 @@ test('F1: VALIDATION_REFUSED with 20 distinct Verify problems still declares the
   declared(answer, 4);
 });
 
+test('C-06: a refused delivery after the Manage Dependencies says what stays in the module and how the person removes it', () => {
+  // F-FitBody-05 (27/10): the bridge has no undo of its own for that command; the kernel's record says what stays and how it goes.
+  const remove = 'Ctrl+Z in Service Studio right after this answer removes them (before any other change in that module); later, untick GenerateTemplatePowerPoint and TemplateSection of ZZ_Report_Ext in the Studio\'s Manage Dependencies';
+  const answer = seen({ delivered: false, writeState: 'not-sent', stage: 'apply', studioWrites: [{ ...manage(2), remove }], referencesAdded: detail(2),
+    error: 'job rejected by validation contract (the Verify of the candidate: 1 error); merge was not attempted. ' + manage(2).text + ' If this delivery is not merged, they stay in ZZ_Report_CS: ' + remove + '.',
+    apply: { isValid: false, accepted: false, validation: { errors: 1 } } });
+  assert.equal(answer.ok, false);
+  declared(answer, 2);
+  assert.equal(answer.studioWrites[0].remove, remove);
+});
+
 test('F2: the Refresh References after the dependencies dialog is declared in a rolled-back answer, never "nothing was applied"', () => {
   const open = { command: 'Refresh References', stage: 'open', module: 'ZZ_Report_CS', outcome: 'changed', refreshed: ['ZZ_Report_Ext'], added: [], moved: [],
     undo: 'Ctrl+Z in Service Studio undoes it (its own Studio command, "Refresh References"); nothing was published',

@@ -55,6 +55,16 @@ export function mergeState(evidence) {
   return { clean: false, outcome: 'uncertain', receipt };
 }
 
+// U1 (bridge v106/v107): the bridge's own verification of a returned merge did not run: its job was never started by the tab
+// (verification-not-started.json) or it refused a tab whose active module changed (verification-refused.json), and nothing of
+// it is on record (no receipt, no incomplete receipt, no new-messages.json). Then G-1/G-2 (errors and security warnings after the
+// merge, a11-b) and the stylesheet caches never ran, and a content proof alone must not make the merge clean.
+export const VERIFICATION_MARKERS = Object.freeze(['verification-not-started.json', 'verification-refused.json']);
+export function bridgeVerificationPending(evidence) {
+  if (!evidence || !VERIFICATION_MARKERS.some(name => fs.existsSync(path.join(evidence, name)))) return false;
+  return !['receipt.json', 'incomplete-receipt.json', 'new-messages.json'].some(name => fs.existsSync(path.join(evidence, name)));
+}
+
 // Whether the SSAM may try to prove a merge that is not clean: never one with known losses (its repair continues).
 export const reconcilable = state => !!state && state.clean !== true && state.outcome !== 'incomplete' && state.outcome !== 'security';
 
@@ -104,9 +114,32 @@ const atBaseOf = (merge, capture) => {
 export async function reconcileMerge({ merge, module, pid, studioPid = null } = {}, { studio, prove, now = () => new Date() } = {}) {
   if (!isObject(merge) || !merge.evidence || !isObject(merge.document))
     return refusal('RECONCILE_NOT_APPLICABLE', 'No SSAM merge evidence to reconcile.', { tool: 'studio_status', arguments: withPid({ view: 'brief' }, pid), why: 'which modules are open in this Studio' });
-  const state = mergeState(merge.evidence);
+  let state = mergeState(merge.evidence);
   if (state.clean) return { ok: true, reconciled: false, outcome: state.outcome, receipt: path.join(merge.evidence, 'receipt.json'), ...(state.reconciliationFile ? { reconciliation: { file: state.reconciliationFile } } : {}) };
   const reading = why => ({ tool: 'studio_status', arguments: withPid({ view: 'brief' }, pid), why });
+  // U1: a merge whose bridge verification never ran is verified by the bridge first: reconcile-merge runs VerifyMerged on the merge
+  // that returned (stylesheet caches, the native equivalence, G-1/G-2, the receipt), never another CompareAndMerge. Only a
+  // verification that stays uncertain (MergeUncertain: its divergences) goes on to the content proof, as any uncertain merge;
+  // a bridge that cannot verify it leaves it MERGE_UNCERTAIN, merged, never clean.
+  if (state.outcome === 'uncertain' && !fs.existsSync(path.join(merge.evidence, 'publish-started.json')) && bridgeVerificationPending(merge.evidence)) {
+    let verified;
+    try { verified = await studio(['reconcile-merge', merge.manifest], pid); } catch (error) { verified = { ok: false, code: error.code ?? null, error: error.message }; }
+    state = mergeState(merge.evidence);
+    if (state.clean) return { ok: true, reconciled: true, outcome: state.outcome, receipt: path.join(merge.evidence, 'receipt.json'), verifiedBy: 'bridge' };
+    const uncertain = isObject(verified) && verified.ok === false && Array.isArray(verified.divergences) && state.outcome === 'uncertain';
+    if (!uncertain && state.outcome === 'uncertain') {
+      // Busy: another command holds the bridge (BRIDGE_BUSY). A verification its tab did not start again is not that: asking again is the way.
+      const busy = verified?.code === 'BRIDGE_BUSY';
+      return refusal('MERGE_UNCERTAIN', 'The merge of ' + module + ' is in the module, and the bridge did not verify it (' + String(verified?.error ?? 'no answer').split(/\r?\n/)[0]
+        + '): the errors and security warnings after the merge were not checked, so nothing makes it clean and nothing was published.',
+        verified?.code === 'COMMAND_NOT_ALLOWED'
+          ? reading('the agent of this machine does not run reconcile-merge, the bridge\'s verification of a returned merge: update the agent package, then studio_publish {module, reconcile:true}. Never deliver it again')
+          : busy ? reading('the Studio is busy: once studio_status names no busy command, studio_publish {module, reconcile:true} asks the bridge again. Never deliver it again')
+            : reconcileCall(module, pid, 'asks the bridge to verify the merge that returned (reconcile-merge: nothing is merged or published). Never deliver it again'),
+        { merged: true, verification: { bridge: verified?.code ?? verified?.gate ?? 'refused' } });
+    }
+    // Merged and verified as incomplete or security: the branches below answer it, as for a merge the bridge verified at once.
+  }
   if (state.outcome === 'security')
     return { ...securityRefusal(state.blocking, { module }), executed: false,
       continuation: { tool: 'studio_status', arguments: withPid({ view: 'brief' }, pid), why: 'the module stays merged and unpublished; a new delivery whose job fixes the warning comes next' } };

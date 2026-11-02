@@ -7,26 +7,29 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { redact } from './bridge.mjs';
-import { BridgeError, ProtocolError, Refusal, continuation } from './errors.mjs';
+import { ArgumentInvalid, BridgeError, ProtocolError, Refusal, continuation } from './errors.mjs';
 import { runWrite } from './client.mjs';
 import { fold, sha256, utc, waitFor } from './util.mjs';
 
 const KEY = /^[A-Za-z0-9*_+/=-]{1,100}$/;
 const flag = name => '--' + name.replaceAll('_', '-');
+const camel = name => name.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
+const LISTING = { module_key: 'modules', extension_key: 'extensions', application_key: 'applications' };
 
 function key(a, name) {
   const value = a[name];
-  if (!value || !KEY.test(value)) throw new ProtocolError(flag(name) + ' must be the key from a Service Center listing');
+  if (!value || !KEY.test(value)) throw new ArgumentInvalid(camel(name), flag(name) + ' must be the key from a Service Center listing',
+    `give ${camel(name)} from o11_service_center_read {action:"${LISTING[name] ?? 'modules'}"}` + (LISTING[name] && name !== 'extension_key' ? `, or ${name === 'module_key' ? 'module' : 'application'}: the exact name (the call resolves the key)` : ''));
   return value;
 }
 function text(a, name) {
   const value = a[name];
-  if (!value || value.length > 200) throw new ProtocolError(flag(name) + ' is required');
+  if (!value || value.length > 200) throw new ArgumentInvalid(camel(name), flag(name) + ' is required', `give ${camel(name)} (at most 200 characters)`);
   return value;
 }
 function number(a, name) {
   const value = a[name];
-  if (!value || !/^[0-9]{1,10}$/.test(String(value))) throw new ProtocolError(flag(name) + ' must be the numeric ID returned by the operation');
+  if (!value || !/^[0-9]{1,10}$/.test(String(value))) throw new ArgumentInvalid(camel(name), flag(name) + ' must be the numeric ID returned by the operation', `give ${camel(name)}: the numeric ID the operation answered`);
   return Number(value);
 }
 // datetime.fromisoformat(...).astimezone(timezone.utc): a naive value is local time.
@@ -160,6 +163,16 @@ export class StudioApi {
     return found[0];
   }
 
+  // The key of one module (or extension) by its exact name: what a Studio API read takes (index.mjs resolveKeys).
+  async moduleKey(a, kinds = null) {
+    try { const [, row] = await this.module(a, kinds); return moduleKey(row); }
+    catch (error) {
+      if (error instanceof ProtocolError && /^Expected exactly one/.test(error.message))
+        throw new ArgumentInvalid('module', error.message.replace('that name/key', JSON.stringify(a.module)), 'give module: the exact name as o11_service_center_read {action:"modules"} lists it, or its moduleKey');
+      throw error;
+    }
+  }
+
   async applications() { return items(await this.call('soap', 'ListApplications', { withIcons: false })); }
   async numericModuleId(args) {
     const [, row] = await this.module(args, ['eSpace']);
@@ -174,7 +187,7 @@ export class StudioApi {
     if (givenKey) return [key(a, keyAttr), givenKey];
     if (!givenName) throw new ProtocolError(`Use ${flag(nameAttr)} <name> or ${flag(keyAttr)} <key>`);
     const matches = (await this.applications()).filter(r => field(r, 'Name') === givenName);
-    if (matches.length !== 1) throw new ProtocolError(`Expected exactly one application named ${pyRepr(givenName)}; found ${matches.length}`);
+    if (matches.length !== 1) throw new ArgumentInvalid(camel(nameAttr), `Expected exactly one application named ${pyRepr(givenName)}; found ${matches.length}`, `give ${camel(nameAttr)}: the exact name as o11_service_center_read {action:"applications"} lists it, or its ${camel(keyAttr)}`);
     return [field(matches[0], 'Key', 'ApplicationKey'), givenName];
   }
 
