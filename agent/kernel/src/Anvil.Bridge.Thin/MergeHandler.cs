@@ -259,13 +259,14 @@ internal static class MergeHandler
             // A conflict the selection cannot settle throws before the native merge starts, inside the command the SDK rolls back:
             // nothing was written, and the answer is today's (merged:false, "conflicts: use mode=dialog"), so the server's own
             // conflict pass (ConflictRebase) still runs.
-            var entered = false;
+            // Review A2: a failure inside tree.Merge() is proven rolled back against the module as it was right before this merge
+            // (not against the base, which the person's edits always differ from): proven, the answer is today's too.
             PreferForeign.Resolution resolution;
-            try { resolution = MergePreferForeign(aggregator, local, foreign, baseEs!, byStructure, () => { entered = true; enteringNativeMerge(); }); }
-            catch (InvalidOperationException unresolved) when (!entered)
+            try { resolution = MergePreferForeign(aggregator, local, foreign, baseEs!, byStructure, enteringNativeMerge, LiveSha(aggregator, local)); }
+            catch (PreferForeignNotApplied notApplied)
             {
                 data["merged"] = false;
-                data["reason"] = "conflicts: use mode=dialog (prefer foreign did not resolve them: " + unresolved.Message + ")";
+                data["reason"] = "conflicts: use mode=dialog (" + notApplied.Message + ")";
                 record(data);
                 var unchanged = ReadMessages(local, timings, "verifyUnchangedMs");
                 SetDelta(data, MessageDelta.Compute(unchanged.Messages, unchanged.Messages), unchanged.IsValid);
@@ -358,23 +359,49 @@ internal static class MergeHandler
     /// unit with an unresolved conflict, as the merge dialog does when the person picks the incoming side), then tree.Merge() and
     /// ClearCurrentMergeState(), all in ONE Studio command of the module's aggregator: one undo step, rolled back by the SDK as a
     /// whole when anything throws (QuietCommand, as MergeSignatures). Internal for the headless tests.</summary>
+    /// A selection that cannot settle the conflicts (or a Studio without one of the members PreferForeign reads) throws before the
+    /// native merge: PreferForeignNotApplied, nothing written. A failure after the native merge started is PreferForeignNotApplied
+    /// only when the module's sha256 equals <paramref name="liveSha"/>'s reading taken right before the command (review A2);
+    /// otherwise the failure goes out as it is (outcome unknown, the journal and the rollback proof decide).</summary>
     internal static PreferForeign.Resolution MergePreferForeign(IAggregatorPresenter aggregator, ESpace local, ESpace foreign, ESpace basis,
-        bool byStructure, Action enteringNativeMerge)
+        bool byStructure, Action enteringNativeMerge, Func<string> liveSha)
     {
+        var shaBefore = liveSha();
         PreferForeign.Resolution? resolution = null;
+        var entered = false;
         var failure = QuietCommand.Execute(aggregator.GetPresenterContext(), "Anvil: merge module, conflicts resolved for the delivery", stage =>
         {
             stage("prefer-foreign");
             using var tree = new MatchTree(local, foreign, basis, byStructure, true);
             resolution = PreferForeign.Resolve(tree);
+            // Review A5: the typed check of the bound Studio, after the reflected one.
+            if (tree.HasUnresolvedConflicts) throw new InvalidOperationException("prefer foreign: the merge tree still has an unresolved conflict; nothing was merged");
+            entered = true;
             enteringNativeMerge();
             tree.Merge();
             tree.ClearCurrentMergeState();
             if (tree.CanMerge) throw new InvalidOperationException("The native merge did not merge its tree.");
         });
-        if (failure != null) throw new InvalidOperationException("merge_from_oml: stage " + failure.Text + " (the Studio rolled the command back)");
+        if (failure != null)
+        {
+            var text = "merge_from_oml: stage " + failure.Text + " (the Studio rolled the command back)";
+            if (!entered) throw new PreferForeignNotApplied("prefer foreign did not resolve them: " + text);
+            if (string.Equals(liveSha(), shaBefore, StringComparison.Ordinal))
+                throw new PreferForeignNotApplied("prefer foreign failed inside the merge and the Studio rolled it back; the module is as it was before this merge: " + text);
+            throw new InvalidOperationException(text);
+        }
         return resolution ?? throw new InvalidOperationException("The native merge command did not complete its prefer-foreign callback.");
     }
+
+    /// <summary>The prefer-foreign merge did not change the module (proven): the answer is today's merged:false.</summary>
+    internal sealed class PreferForeignNotApplied(string message) : InvalidOperationException(message);
+
+    // The sha256 of the live module, read on the UI thread as snapshot_module and the rollback proof do.
+    private static Func<string> LiveSha(IAggregatorPresenter aggregator, ESpace local) => () => Ui.RunSync(() =>
+    {
+        using var ms = local.SaveToMemoryStream();
+        return MergeRollbackProof.Sha256Hex(ms.ToArray());
+    }, UiGate.Model, "merge_from_oml: module sha256");
 
     // Second merge of the merge order, as the full bridge: the candidate over the first-pass copy. The copy differs from
     // the candidate only by the deferred defaults (no producer reference to select), so a native 3-way merge with it as
