@@ -101,9 +101,9 @@ test('build.mjs: a Windows release without the signing identity refuses before a
   assert.equal(mac.status, 1); assert.match(mac.stderr, /Windows test app only/);
 });
 
-test('the app version is 0.2.0, the first that updates itself from dist.ssam.pro', () => {
+test('the app version is 0.2.x (0.2.0 is the first that updates itself from dist.ssam.pro; 0.2.1 adds prefer-foreign)', () => {
   const pkg = JSON.parse(fs.readFileSync(path.join(app, 'package.json'), 'utf8'));
-  assert.equal(pkg.version, '0.2.0');
+  assert.match(pkg.version, /^0\.2\.[1-9]\d*$/, 'above 0.2.0, so an installed 0.2.0 takes it as an update');
   const yml = fs.readFileSync(path.join(app, 'electron-builder.yml'), 'utf8').split('\r\n').join('\n');
   assert.match(yml, /^publish:\n  provider: generic\n  url: https:\/\/dist\.ssam\.pro\/u\/ssam-agent\n  channel: latest$/m);
   assert.doesNotMatch(yml, /verifyUpdateCodeSignature:\s*false/);
