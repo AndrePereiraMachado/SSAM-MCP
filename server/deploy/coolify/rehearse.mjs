@@ -65,7 +65,7 @@ try{
    await wait(2000);memoryOf(backend.name,'warm-idle');
   }else start(backend.name,[...args,'-e','SSAM_NO_WARM=1','-e','ANVIL_WORKER=0','-e','ANVIL_ODC_NO_WORKER=1','--entrypoint','node',image,'facade/ssam.mjs','serve','--host','0.0.0.0','--allow-remote','--port','7310','--log-file','/data/server/versions/'+backend.name+'/server.log']);
  }
- start('router',[...db,...mounts,'-e','SSAM_SERVER_DIR=/data/server','-e','SSAM_ROUTER_BACKENDS='+JSON.stringify(backends),'--entrypoint','node',image,'facade/router.mjs']);
+ start('router',[...db,...mounts,'-e','SSAM_SERVER_DIR=/data/server','-e','SSAM_VERSION_WINDOW='+Math.max(3,backends.length),'-e','SSAM_ROUTER_BACKENDS='+JSON.stringify(backends),'--entrypoint','node',image,'facade/router.mjs']);
  fs.writeFileSync(path.join(out,'traefik.yml'),`http:\n  routers:\n    ssam:\n      rule: PathPrefix(\u0060/\u0060)\n      service: ssam\n  services:\n    ssam:\n      loadBalancer:\n        serversTransport: ssam\n        servers:\n          - url: http://router:7300\n  serversTransports:\n    ssam:\n      forwardingTimeouts:\n        dialTimeout: 3900s\n        responseHeaderTimeout: 3900s\n        idleConnTimeout: 3900s\n`);
  start('traefik',['-p','127.0.0.1::80',...mount(path.join(out,'traefik.yml'),'/etc/traefik/dynamic.yml'),'traefik:v3.7','--entrypoints.web.address=:80','--entrypoints.web.transport.respondingtimeouts.readtimeout=3900s','--entrypoints.web.transport.respondingtimeouts.writetimeout=3900s','--providers.file.filename=/etc/traefik/dynamic.yml']);
  await wait(1500);const bindings=JSON.parse(run(['inspect','--format','{{json .NetworkSettings.Ports}}',prefix+'-traefik']));const url='http://127.0.0.1:'+bindings['80/tcp'][0].HostPort;
