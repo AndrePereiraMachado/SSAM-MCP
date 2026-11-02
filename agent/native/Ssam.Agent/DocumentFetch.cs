@@ -13,6 +13,10 @@ namespace Ssam.Agent;
 // only http(s) without user or password, one GET with no cookies, no credentials and no header of the server, at most 5 MB and 30 s
 // (never past the call's deadline), at most 5 redirects followed here, each to http(s) again; the answer must be the document asked
 // for (XML without DOCTYPE/ENTITY, or JSON); a final status that is not 2xx answers its status with no content.
+// Review of r40 (findings 1, 2): sameOrigin true keeps every redirect on the origin asked; a link-local address (169.254.0.0/16,
+// fe80::/10, fd00:ec2::254: the machine's cloud metadata) or a metadata name is never requested (the URL, a redirect, a name that
+// resolves there, and the address the socket connects to); a redirect never moves from another host into this machine's loopback.
+// Unlike the Node agent this client uses the system proxy (as the person's browser); no proxy credential is ever sent.
 // -> {finalUrl, status, contentType, bytes, sha256, contentBase64}. The protocol cases are the Node agent's
 // (tests/native-protocol/document-fetch-cases.json).
 internal sealed partial class DocumentFetch
@@ -20,7 +24,11 @@ internal sealed partial class DocumentFetch
     internal const string Name = "document.fetch";
     internal const int MaxBytes = 5 * 1024 * 1024, DefaultTimeoutMs = 30000, MinTimeoutMs = 1000, MaxRedirects = 5;
     internal const string UserAgent = "SSAM-Agent document fetch";
-    private static readonly string[] Keys = ["url", "accept", "maxBytes", "timeoutMs"];
+    private static readonly string[] Keys = ["url", "accept", "maxBytes", "timeoutMs", "sameOrigin"];
+    private static readonly HashSet<string> MetadataNames = new(StringComparer.OrdinalIgnoreCase) { "metadata", "metadata.google.internal", "metadata.goog", "instance-data", "instance-data.ec2.internal" };
+    private static readonly IPAddress AwsV6Metadata = IPAddress.Parse("fd00:ec2::254");
+    // The tests' resolver seam (a name's addresses), else the system's.
+    internal Func<string, CancellationToken, Task<IPAddress[]>> Resolve = (host, token) => Dns.GetHostAddressesAsync(host, token);
     private static readonly HashSet<int> Redirects = [301, 302, 303, 307, 308];
     private readonly HttpClient client;
     // The tests' clock seam (the call's deadline is in this machine's clock, milliseconds since the epoch).
@@ -32,7 +40,46 @@ internal sealed partial class DocumentFetch
     {
         // Never the channel's client: no cookie container, no credentials (default or explicit), redirects followed by hand.
         client = new HttpClient(handler ?? new SocketsHttpHandler { AllowAutoRedirect = false, UseCookies = false, Credentials = null, PreAuthenticate = false,
-            DefaultProxyCredentials = null, AutomaticDecompression = DecompressionMethods.All }, true) { Timeout = Timeout.InfiniteTimeSpan };
+            DefaultProxyCredentials = null, AutomaticDecompression = DecompressionMethods.All, ConnectCallback = ConnectChecked }, true) { Timeout = Timeout.InfiniteTimeSpan };
+    }
+
+    // The socket of a request never reaches a link-local address, whatever the name resolved to (a name that changes its answer).
+    private static async ValueTask<Stream> ConnectChecked(SocketsHttpConnectionContext context, CancellationToken token)
+    {
+        var socket = new System.Net.Sockets.Socket(System.Net.Sockets.SocketType.Stream, System.Net.Sockets.ProtocolType.Tcp) { NoDelay = true };
+        try
+        {
+            await socket.ConnectAsync(context.DnsEndPoint, token);
+            if (socket.RemoteEndPoint is IPEndPoint remote && LinkLocal(remote.Address))
+                throw new HttpRequestException("the connection reached a link-local address, which is never requested");
+            return new System.Net.Sockets.NetworkStream(socket, true);
+        }
+        catch { socket.Dispose(); throw; }
+    }
+
+    internal static bool LinkLocal(IPAddress address)
+    {
+        if (address.IsIPv4MappedToIPv6) address = address.MapToIPv4();
+        if (address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork) { var b = address.GetAddressBytes(); return b[0] == 169 && b[1] == 254; }
+        return address.IsIPv6LinkLocal || address.Equals(AwsV6Metadata);
+    }
+    internal static bool Loopback(string host)
+    {
+        var h = host.Trim('[', ']');
+        if (h.Equals("localhost", StringComparison.OrdinalIgnoreCase) || h.EndsWith(".localhost", StringComparison.OrdinalIgnoreCase)) return true;
+        if (!IPAddress.TryParse(h, out var address)) return false;
+        if (address.IsIPv4MappedToIPv6) address = address.MapToIPv4();
+        return IPAddress.IsLoopback(address) || address.Equals(IPAddress.Any) || address.Equals(IPAddress.IPv6Any);
+    }
+    // The host of a URL may be asked: never link-local or a metadata name, nor a name that resolves to a link-local address.
+    private async Task<string?> HostProblem(Uri url, CancellationToken token)
+    {
+        var host = url.IdnHost.TrimEnd('.');
+        if (MetadataNames.Contains(host)) return "its host is a link-local or metadata address, which is never requested";
+        if (IPAddress.TryParse(host.Trim('[', ']'), out var literal)) return LinkLocal(literal) ? "its host is a link-local or metadata address, which is never requested" : null;
+        IPAddress[] addresses;
+        try { addresses = await Resolve(host, token); } catch (Exception e) when (e is System.Net.Sockets.SocketException or OperationCanceledException or ArgumentException) { return null; }
+        return addresses.Any(LinkLocal) ? "its name resolves to a link-local address, which is never requested" : null;
     }
 
     private static AgentFault Refuse(string code, string message) => new(code, message);
@@ -50,17 +97,18 @@ internal sealed partial class DocumentFetch
         return string.IsNullOrEmpty(url.Fragment) ? url : new UriBuilder(url) { Fragment = "" }.Uri;
     }
 
-    internal static (Uri Url, string Accept, int MaxBytes, int TimeoutMs) Plan(JsonObject p)
+    internal static (Uri Url, string Accept, int MaxBytes, int TimeoutMs, bool SameOrigin) Plan(JsonObject p)
     {
         var extra = p.Select(e => e.Key).Where(k => !Keys.Contains(k)).Take(4).ToArray();
-        if (extra.Length > 0) throw StudioKinds.Invalid("document.fetch takes only url, accept, maxBytes and timeoutMs; not " + string.Join(", ", extra));
+        if (extra.Length > 0) throw StudioKinds.Invalid("document.fetch takes only url, accept, maxBytes, timeoutMs and sameOrigin; not " + string.Join(", ", extra));
+        var sameOrigin = p["sameOrigin"] switch { null => false, JsonValue s when s.TryGetValue<bool>(out var flag) => flag, _ => throw StudioKinds.Invalid("sameOrigin must be true or false") };
         var url = p["url"] is JsonValue u && u.TryGetValue<string>(out var text) && text.Length <= 4096 ? text : throw StudioKinds.Invalid("url must be a text of at most 4096 characters");
         var accept = p["accept"] is JsonValue a && a.TryGetValue<string>(out var kind) && kind is "xml" or "json" ? kind : throw StudioKinds.Invalid("accept must be 'xml' or 'json'");
         var max = Whole(p["maxBytes"], MaxBytes);
         if (max is null or < 1 or > MaxBytes) throw StudioKinds.Invalid("maxBytes must be 1 to " + MaxBytes);
         var timeout = Whole(p["timeoutMs"], DefaultTimeoutMs);
         if (timeout is null or < MinTimeoutMs or > DefaultTimeoutMs) throw StudioKinds.Invalid("timeoutMs must be 1000 to " + DefaultTimeoutMs);
-        return (Fetchable(url), accept, (int)max, (int)timeout);
+        return (Fetchable(url), accept, (int)max, (int)timeout, sameOrigin);
     }
     // A whole number of the JSON (absent: the default; anything else: null).
     private static long? Whole(JsonNode? node, long fallback)
@@ -80,13 +128,15 @@ internal sealed partial class DocumentFetch
             if (!text.TrimStart().StartsWith('<')) return Refuse("DOCUMENT_FETCH_NOT_DOCUMENT", "the answer is not an XML document");
             return UnsafeXml().IsMatch(text) ? Refuse("DOCUMENT_FETCH_UNSAFE_XML", "the XML declares a DTD or ENTITY, which is never downloaded") : null;
         }
-        try { using var _ = JsonDocument.Parse(text); return null; }
+        // The depth of the Node agent's JSON.parse has no small limit: 1024 here (the reader's default is 64).
+        try { using var _ = JsonDocument.Parse(text, new JsonDocumentOptions { MaxDepth = 1024 }); return null; }
         catch (JsonException) { return Refuse("DOCUMENT_FETCH_NOT_DOCUMENT", "the answer is not a JSON document"); }
     }
 
     internal async Task<JsonObject> Execute(JsonObject p, long? deadline, CancellationToken token)
     {
         var plan = Plan(p);
+        if (await HostProblem(plan.Url, token) is string first) throw Refuse("DOCUMENT_FETCH_URL_REFUSED", plan.Url + " was not requested: " + first);
         var budget = deadline is long due ? Math.Min(plan.TimeoutMs, due - Now()) : plan.TimeoutMs;
         if (budget <= 0) throw Refuse("DOCUMENT_FETCH_FAILED", "the call's deadline has passed; nothing was requested");
         using var timer = CancellationTokenSource.CreateLinkedTokenSource(token);
@@ -113,8 +163,15 @@ internal sealed partial class DocumentFetch
                     if (string.IsNullOrEmpty(location)) throw Refuse("DOCUMENT_FETCH_REDIRECT_REFUSED", "GET " + url + " answered " + status + " without a Location");
                     if (hop >= MaxRedirects) throw Refuse("DOCUMENT_FETCH_REDIRECT_REFUSED", "GET " + plan.Url + " was redirected more than " + MaxRedirects + " times");
                     if (!Uri.TryCreate(url, location, out var next)) throw Refuse("DOCUMENT_FETCH_REDIRECT_REFUSED", "GET " + url + " redirected to a text that is not a URL");
-                    try { url = Checked(next, "the redirect"); }
+                    Uri target;
+                    try { target = Checked(next, "the redirect"); }
                     catch (AgentFault e) { throw Refuse("DOCUMENT_FETCH_REDIRECT_REFUSED", "GET " + url + " redirected: " + e.Message); }
+                    var origin = plan.Url.GetLeftPart(UriPartial.Authority);
+                    if (plan.SameOrigin && !string.Equals(target.GetLeftPart(UriPartial.Authority), origin, StringComparison.OrdinalIgnoreCase))
+                        throw Refuse("DOCUMENT_FETCH_REDIRECT_REFUSED", "GET " + url + " redirected to another server (" + target.GetLeftPart(UriPartial.Authority) + "), and this download stays on " + origin);
+                    if (Loopback(target.Host) && !Loopback(url.Host)) throw Refuse("DOCUMENT_FETCH_REDIRECT_REFUSED", "GET " + url + " redirected into this machine (" + target.Authority + "), which a redirect never does");
+                    if (await HostProblem(target, timer.Token) is string hopProblem) throw Refuse("DOCUMENT_FETCH_REDIRECT_REFUSED", "GET " + url + " redirected to " + target.Authority + ": " + hopProblem);
+                    url = target;
                     continue;
                 }
                 var contentType = response.Content.Headers.TryGetValues("Content-Type", out var types) ? string.Join(", ", types) : "";

@@ -146,4 +146,33 @@ public class DocumentFetchTests
         Assert.Equal("DOCUMENT_FETCH_FAILED", fault.Code);
     }
 
+    // Review of r40 (finding 2): a name that resolves to a link-local address is never requested, nor a redirect from another host
+    // into this machine; the user's intranet and this machine named by the job stay reachable. A scripted handler, no network.
+    private sealed class Scripted(Func<HttpRequestMessage, HttpResponseMessage> answer) : HttpMessageHandler
+    {
+        internal readonly List<string> Asked = [];
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken token) { Asked.Add(request.RequestUri!.AbsoluteUri); return Task.FromResult(answer(request)); }
+    }
+
+    [Fact]
+    public async Task ALinkLocalNameAndARedirectIntoThisMachineAreNeverRequested()
+    {
+        var handler = new Scripted(r => r.RequestUri!.AbsolutePath switch
+        {
+            "/a.wsdl" => new HttpResponseMessage(HttpStatusCode.Found) { Headers = { Location = new Uri("http://127.0.0.1:8080/secret.wsdl") } },
+            "/b.wsdl" => new HttpResponseMessage(HttpStatusCode.Found) { Headers = { Location = new Uri("http://evil.example.test/x.wsdl") } },
+            _ => new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("<definitions/>") },
+        });
+        var kind = new DocumentFetch(handler) { Resolve = (host, _) => Task.FromResult(new[] { IPAddress.Parse(host == "evil.example.test" ? "169.254.169.254" : "93.184.216.34") }) };
+        async Task<string?> Code(string url) { try { await kind.Execute(new JsonObject { ["url"] = url, ["accept"] = "xml" }, null, CancellationToken.None); return null; } catch (AgentFault f) { return f.Code; } }
+        Assert.Equal("DOCUMENT_FETCH_URL_REFUSED", await Code("http://evil.example.test/x.wsdl"));
+        Assert.Equal("DOCUMENT_FETCH_REDIRECT_REFUSED", await Code("http://docs.example.test/a.wsdl"));
+        Assert.Equal("DOCUMENT_FETCH_REDIRECT_REFUSED", await Code("http://docs.example.test/b.wsdl"));
+        Assert.Equal(new[] { "http://docs.example.test/a.wsdl", "http://docs.example.test/b.wsdl" }, handler.Asked);
+        Assert.Null(await Code("http://10.0.0.5/svc.wsdl"));
+        Assert.Null(await Code("http://127.0.0.1:8080/svc.wsdl"));
+        Assert.True(DocumentFetch.LinkLocal(IPAddress.Parse("::ffff:169.254.169.254")) && DocumentFetch.LinkLocal(IPAddress.Parse("fe80::1")) && DocumentFetch.LinkLocal(IPAddress.Parse("fd00:ec2::254")));
+        Assert.False(DocumentFetch.LinkLocal(IPAddress.Parse("10.0.0.1")));
+    }
+
 }

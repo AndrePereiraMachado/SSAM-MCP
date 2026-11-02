@@ -68,7 +68,7 @@ test('protocol cases (the native core runs the same file)', async t => {
 
 test('the limits of the kind are the ones the server asks for', () => {
   assert.deepEqual({ ...DOCUMENT_FETCH_LIMITS }, { maxBytes: 5 * 1024 * 1024, timeoutMs: 30000, maxRedirects: 5 });
-  assert.deepEqual(Object.keys(fetchPlan({ url: 'https://example.test/a?wsdl', accept: 'xml' })).sort(), ['accept', 'maxBytes', 'timeoutMs', 'url']);
+  assert.deepEqual(Object.keys(fetchPlan({ url: 'https://example.test/a?wsdl', accept: 'xml' })).sort(), ['accept', 'maxBytes', 'sameOrigin', 'timeoutMs', 'url']);
 });
 
 test('the call deadline cuts the timeout; a passed deadline requests nothing', async () => {
@@ -97,4 +97,19 @@ test('the hello lists document.fetch on every platform, and the kinds table runs
   assert.equal(asked[0].init.redirect, 'manual');
   assert.equal(asked[0].init.credentials, 'omit');
   assert.deepEqual(Object.keys(asked[0].init.headers).sort(), ['accept', 'user-agent']);
+});
+
+test('review of r40: a name that resolves to a link-local address is never requested, nor a redirect from another host into this machine', async () => {
+  const asked = [];
+  const lookup = (host, options, callback) => callback(null, host === 'evil.example.test' ? [{ address: '169.254.169.254', family: 4 }] : [{ address: '93.184.216.34', family: 4 }]);
+  const answers = { 'http://docs.example.test/a.wsdl': new Response('', { status: 302, headers: { location: 'http://127.0.0.1:8080/secret.wsdl' } }),
+    'http://docs.example.test/b.wsdl': new Response('', { status: 302, headers: { location: 'http://evil.example.test/x.wsdl' } }) };
+  const run = createDocumentFetch({ lookup, fetchImpl: async url => { asked.push(url); return answers[url] ?? new Response('<definitions/>', { status: 200 }); } });
+  await assert.rejects(run({ url: 'http://evil.example.test/x.wsdl', accept: 'xml' }), { code: 'DOCUMENT_FETCH_URL_REFUSED' });
+  await assert.rejects(run({ url: 'http://docs.example.test/a.wsdl', accept: 'xml' }), { code: 'DOCUMENT_FETCH_REDIRECT_REFUSED' });
+  await assert.rejects(run({ url: 'http://docs.example.test/b.wsdl', accept: 'xml' }), { code: 'DOCUMENT_FETCH_REDIRECT_REFUSED' });
+  assert.deepEqual(asked, ['http://docs.example.test/a.wsdl', 'http://docs.example.test/b.wsdl']);
+  // The user's own intranet and this machine named by the job stay reachable.
+  assert.equal((await run({ url: 'http://10.0.0.5/svc.wsdl', accept: 'xml' })).status, 200);
+  assert.equal((await run({ url: 'http://127.0.0.1:8080/svc.wsdl', accept: 'xml' })).status, 200);
 });
