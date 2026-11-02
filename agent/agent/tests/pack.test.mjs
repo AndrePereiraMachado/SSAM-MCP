@@ -223,7 +223,9 @@ test('IP scan rule 4: any client text refuses the pack; the exception table is e
     // r40a: the scan lists the two exact public identity hosts of credential-auth.ps1 (rule public-identity-host, vendor
     // infrastructure, not client content); no client text is ever a known exception.
     const known = [...formerlyKnown.out.matchAll(/conhecid[oa] no pacote: ([^\r\n]*?\))/g)].map(m => m[1]);
-    assert.deepEqual(known.filter(k => !/^agent\/lib\/credential-auth\.ps1 \(public-identity-host: (?:os-community-id\.outsystems\.app|id\.outsystems\.dev);/.test(k)), [], 'no warning: nothing is a known exception');
+    const why = 'Exact public OutSystems identity infrastructure used by the authentication protocol, not a customer environment.';
+    assert.deepEqual([...new Set(known)].sort(), ['id.outsystems.dev', 'os-community-id.outsystems.app'].map(host => `agent/lib/credential-auth.ps1 (public-identity-host: ${host}; ${why})`),
+      'no warning: nothing is a known exception but the two exact public identity hosts');
 
     const unknown = packWith(work, prebuilt => {
       write(source(prebuilt, ODC_CLIENT), Buffer.concat([Buffer.from([0x41]), utf16('unimed')]));
