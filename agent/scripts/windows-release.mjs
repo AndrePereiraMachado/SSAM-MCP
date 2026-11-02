@@ -2,14 +2,18 @@
 // updater configuration a signed build must carry. scripts/build.mjs uses it; the owner only gives the certificate's public
 // identity (never the certificate itself, which stays non-exportable in Cert:\CurrentUser\My of the account that builds):
 //   --cert-sha1 <40 hex>        (SSAM_WIN_CERT_SHA1)       the thumbprint of the code signing certificate;
-//   --publisher-name <CN>       (SSAM_WIN_PUBLISHER_NAME)  the CN of its subject: the only publisher the updater accepts;
+//   --publisher-name <CN | DN>  (SSAM_WIN_PUBLISHER_NAME)  the CN of its subject, or better its full DN (CN=..., O=..., C=...):
+//                               the only publisher the updater accepts; checked against the real signer at the end of the build;
 //   --timestamp-url <https://>  (SSAM_WIN_TIMESTAMP_URL)   RFC 3161 timestamp server (default http://timestamp.digicert.com).
 // --test-unsigned builds the owner's own test app instead: no signature, no trust anchors, no updates (no app-update.yml),
 // pack.json bridgeOffer false (the agent never asks for a bridge offer). It is never published.
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
 import { publisherNames } from '../src/main/core/update-model.mjs';
+import { recomputePins } from './pack-pins.mjs';
 
 export const DEFAULT_TIMESTAMP_URL = 'http://timestamp.digicert.com';
 const THUMBPRINT = /^[0-9A-Fa-f]{40}$/;
@@ -21,7 +25,8 @@ export function signingOf(options = {}, env = process.env) {
   const timestampUrl = String(options.timestampUrl ?? env.SSAM_WIN_TIMESTAMP_URL ?? DEFAULT_TIMESTAMP_URL).trim();
   const problems = [];
   if (!THUMBPRINT.test(certSha1)) problems.push('--cert-sha1 <the 40-hex thumbprint of the code signing certificate> (or SSAM_WIN_CERT_SHA1)');
-  if (!publisherName || /[\r\n,]/.test(publisherName)) problems.push('--publisher-name <the CN of the certificate subject> (or SSAM_WIN_PUBLISHER_NAME)');
+  // A full DN (with commas) is allowed: electron-updater compares every key of a DN, which is stronger than the CN alone.
+  if (!publisherName || /[\r\n]/.test(publisherName)) problems.push('--publisher-name <the CN or the full DN of the certificate subject> (or SSAM_WIN_PUBLISHER_NAME)');
   if (!/^https?:\/\/[^\s]+$/.test(timestampUrl)) problems.push('--timestamp-url <an RFC 3161 server URL>');
   return problems.length ? { ok: false, problem: 'A signed Windows release needs ' + problems.join(', ') + '. For the unsigned test app use --test-unsigned.' }
     : { ok: true, certSha1: certSha1.toUpperCase(), publisherName, timestampUrl };
@@ -59,7 +64,8 @@ export function signPackExecutables(packDir, signing, { run = spawnSync, signtoo
     entry.size = bytes.length; entry.sha256 = sha256(bytes);
     signed.push(entry.path);
   }
-  fs.writeFileSync(file, JSON.stringify(pack, null, 2) + '\n');
+  // Every pin naming a signed file (xifEngine, o11Bridge, o11Builds) follows its new bytes (review A1).
+  fs.writeFileSync(file, JSON.stringify(recomputePins(pack), null, 2) + '\n');
   return signed;
 }
 
@@ -113,4 +119,26 @@ export function signNative(executable, signing, workDir, { run = spawnSync, sign
   if (signed.status !== 0) throw new Error('signtool could not sign the native core with certificate ' + signing.certSha1 + ' (is it in Cert:\\CurrentUser\\My of this account?)');
   if (signerThumbprint(copy, run) !== signing.certSha1) throw new Error('The signed native core does not carry a valid signature of certificate ' + signing.certSha1);
   return copy;
+}
+
+// The subject DN of the certificate that signed a file, when Windows says the signature is valid; null otherwise.
+export function signerSubject(file, run = spawnSync) {
+  const script = "$s = Get-AuthenticodeSignature -LiteralPath $env:SSAM_SIGNED_FILE; if ($s.Status -eq 'Valid') { $s.SignerCertificate.Subject }";
+  const result = run('powershell', ['-NoProfile', '-NonInteractive', '-Command', script], { encoding: 'utf8', windowsHide: true, env: { ...process.env, SSAM_SIGNED_FILE: file } });
+  const value = String(result.stdout ?? '').trim();
+  return result.status === 0 && value ? value : null;
+}
+
+// electron-updater's own DN parser (builder-util-runtime, the dependency it verifies with), so the build judges a publisher
+// name exactly as the installed app will.
+const appRequire = createRequire(fileURLToPath(new URL('../package.json', import.meta.url)));
+export const parseDn = text => appRequire('builder-util-runtime').parseDn(text);
+
+// Whether the updater (electron-updater 6 windowsExecutableCodeSignatureVerifier) accepts a signer subject for this
+// publisher name: a DN must match the subject on every key it names; a bare name must equal the subject's CN.
+export function publisherMatches(name, subject) {
+  if (!name || !subject) return false;
+  const want = parseDn(name), have = parseDn(subject);
+  if (want.size) return [...want.keys()].every(key => want.get(key) === have.get(key));
+  return name === have.get('CN');
 }

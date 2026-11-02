@@ -26,7 +26,7 @@ test('the signing identity: a 40-hex thumbprint and the subject CN, from options
   assert.equal(missing.ok, false);
   assert.match(missing.problem, /--cert-sha1/); assert.match(missing.problem, /--publisher-name/); assert.match(missing.problem, /--test-unsigned/);
   assert.equal(signingOf({ certSha1: 'xyz', publisherName: 'A' }, {}).ok, false);
-  assert.equal(signingOf({ certSha1: THUMB, publisherName: 'A, B' }, {}).ok, false, 'one publisher only');
+  assert.equal(signingOf({ certSha1: THUMB, publisherName: 'A\nB' }, {}).ok, false, 'one publisher, one line (a DN with commas is fine: review M1)');
 });
 
 test('electron-builder: signtool by thumbprint, the publisher written for the updater, signing forced; the test app has no publish', () => {
@@ -72,14 +72,14 @@ test('after electron-builder: a release whose app-update.yml lacks the publisher
     fs.writeFileSync(path.join(dist, 'ssam-agent-app-0.2.0-setup.exe'), 'x');
     const options = { updateUrl: DEFAULT_UPDATE_URL, signing: { certSha1: THUMB, publisherName: 'Andre Machado' } };
     fs.writeFileSync(path.join(resources, 'app-update.yml'), SIGNED_YML);
-    assert.doesNotThrow(() => checkWindowsOutput(dist, options, { thumbprint: () => THUMB }));
-    assert.throws(() => checkWindowsOutput(dist, options, { thumbprint: () => null }), /setup\.exe is not signed by certificate/);
+    assert.doesNotThrow(() => checkWindowsOutput(dist, options, { thumbprint: () => THUMB, subject: () => 'CN=Andre Machado', pack: () => [] }));
+    assert.throws(() => checkWindowsOutput(dist, options, { thumbprint: () => null, subject: () => 'CN=Andre Machado', pack: () => [] }), /setup\.exe is not signed by certificate/);
     fs.writeFileSync(path.join(resources, 'app-update.yml'), UNSIGNED_YML);
-    assert.throws(() => checkWindowsOutput(dist, options, { thumbprint: () => THUMB }), /updates would not be verified/);
+    assert.throws(() => checkWindowsOutput(dist, options, { thumbprint: () => THUMB, subject: () => 'CN=Andre Machado', pack: () => [] }), /updates would not be verified/);
     // the test app: no updater configuration at all
-    assert.throws(() => checkWindowsOutput(dist, { testUnsigned: true, noUpdates: true }), /must not carry resources\/app-update.yml/);
+    assert.throws(() => checkWindowsOutput(dist, { testUnsigned: true, noUpdates: true }, { pack: () => [] }), /must not carry resources\/app-update.yml/);
     fs.rmSync(path.join(resources, 'app-update.yml'));
-    assert.doesNotThrow(() => checkWindowsOutput(dist, { testUnsigned: true, noUpdates: true }));
+    assert.doesNotThrow(() => checkWindowsOutput(dist, { testUnsigned: true, noUpdates: true }, { pack: () => [] }));
   } finally { fs.rmSync(dist, { recursive: true, force: true }); }
 });
 

@@ -8,7 +8,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import updater from 'electron-updater';
-import { INITIAL, reduce, canCheck, describeUpdateError, updateTrustProblem } from '../core/update-model.mjs';
+import { execFileSync } from 'node:child_process';
+import { INITIAL, reduce, canCheck, describeUpdateError, updateTrustProblem, installerVersionProblem } from '../core/update-model.mjs';
 
 const { autoUpdater } = updater;
 const FIRST_CHECK_MS = 20000;
@@ -29,20 +30,32 @@ export function buildUpdateUrl(resourcesPath) {
   } catch { return null; }
 }
 
+// The version resource of a downloaded installer: {productVersion, productName}, or {} when it cannot be read.
+export function readInstallerVersion(file) {
+  if (!file) return {};
+  try {
+    const out = execFileSync('powershell', ['-NoProfile', '-NonInteractive', '-Command', '$v = (Get-Item -LiteralPath $env:SSAM_INSTALLER).VersionInfo; @{ productVersion = $v.ProductVersion; productName = $v.ProductName } | ConvertTo-Json -Compress'],
+      { encoding: 'utf8', windowsHide: true, timeout: 20000, env: { ...process.env, SSAM_INSTALLER: file } });
+    const value = JSON.parse(out);
+    return { productVersion: value.productVersion ?? null, productName: value.productName ?? null };
+  } catch { return {}; }
+}
+
 export function createUpdates({ url: wanted, hours = 6, autoInstall = true, log, onChange = () => {}, isPackaged = true, devConfig = null, stopAgent = async () => {},
-  platform = process.platform, appUpdateYml = null }) {
+  platform = process.platform, appUpdateYml = null, currentVersion = null, readInstaller = readInstallerVersion }) {
   // A Windows build that cannot verify who signed an update never installs one (update-model.mjs updateTrustProblem).
   const untrusted = wanted ? updateTrustProblem({ platform, isPackaged, appUpdateYml }) : null;
   const url = untrusted ? null : wanted;
   if (untrusted) log.write('updates-off', { reason: untrusted });
   let state = url ? reduce(INITIAL, { type: 'configured', url }) : reduce(INITIAL, { type: 'off', reason: untrusted });
-  let timer = null; let installTimer = null;
+  let timer = null; let installTimer = null; let verified = false;
   const emit = event => { state = reduce(state, event); onChange(state); };
 
   if (url) {
     autoUpdater.logger = log.updaterLogger;
     autoUpdater.autoDownload = true;
-    autoUpdater.autoInstallOnAppQuit = true;
+    // Never installed on quit before the downloaded installer's own version was checked (installerVersionProblem).
+    autoUpdater.autoInstallOnAppQuit = false;
     autoUpdater.allowPrerelease = false;
     autoUpdater.allowDowngrade = false;
     // A checkout run (not packaged) checks only with a dev-app-update.yml.
@@ -53,6 +66,14 @@ export function createUpdates({ url: wanted, hours = 6, autoInstall = true, log,
     autoUpdater.on('update-not-available', () => emit({ type: 'update-not-available', at: new Date().toISOString() }));
     autoUpdater.on('download-progress', progress => emit({ type: 'download-progress', percent: progress?.percent ?? 0 }));
     autoUpdater.on('update-downloaded', info => {
+      const problem = platform === 'win32' ? installerVersionProblem({ ...readInstaller(info?.downloadedFile), label: info?.version, current: currentVersion }) : null;
+      if (problem) {
+        verified = false; autoUpdater.autoInstallOnAppQuit = false;
+        log.write('update-refused', { version: info?.version ?? null, reason: problem });
+        emit({ type: 'error', message: problem });
+        return;
+      }
+      verified = true; autoUpdater.autoInstallOnAppQuit = true;
       emit({ type: 'update-downloaded', version: info?.version ?? null });
       log.write('update-ready', { version: info?.version ?? null, autoInstall });
       if (autoInstall) {
@@ -82,7 +103,7 @@ export function createUpdates({ url: wanted, hours = 6, autoInstall = true, log,
 
   // The agent stopped cleanly, then the app replaced by the downloaded update and started again (silent install).
   async function installNow() {
-    if (state.status !== 'ready') return false;
+    if (state.status !== 'ready' || !verified) return false;
     if (installTimer) { clearTimeout(installTimer); installTimer = null; }
     log.write('update-install', { version: state.version });
     await stopAgent();

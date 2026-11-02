@@ -44,7 +44,10 @@ export function saveSettings(file, settings) {
 
 // The update server the app asks, by precedence: the environment (SSAM_UPDATE_URL, for a test), the setting, the one
 // the build fixed (resources/app-update.yml, which electron-updater reads itself), or none (updates off).
-export function resolveUpdateUrl({ env = {}, settings = DEFAULTS, build = null } = {}) {
+// pinned (a signed packaged build, review M2 of F5): only the feed the build wrote into app-update.yml; the environment and
+// the setting cannot move a signed app to another server.
+export function resolveUpdateUrl({ env = {}, settings = DEFAULTS, build = null, pinned = false } = {}) {
+  if (pinned) return typeof build === 'string' && build.trim() && !updateUrlProblem(build.trim()) ? { url: build.trim().replace(/\/+$/, ''), source: 'build', pinned: true } : { url: null, source: null, pinned: true };
   for (const [source, value] of [['env', env.SSAM_UPDATE_URL], ['settings', settings.updateUrl], ['build', build]]) {
     if (typeof value === 'string' && value.trim() && !updateUrlProblem(value.trim())) return { url: value.trim().replace(/\/+$/, ''), source };
   }

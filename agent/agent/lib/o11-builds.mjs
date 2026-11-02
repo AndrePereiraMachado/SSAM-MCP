@@ -15,16 +15,22 @@ const BRIDGE_PATH = /^bin\/o11\/(?:bridge|bridges\/\d+\.\d+\.\d+)\/Anvil\.Bridge
 export const DEFAULT_O11_BRIDGE = 'bin/o11/bridge/Anvil.Bridge.dll';
 export const three = value => /^(\d+\.\d+\.\d+)(?:\.|$)/.exec(String(value ?? ''))?.[1] ?? null;
 
+// Set by readPack on the builds it already checked against the integrity list (readPack keeps no files list); a symbol, so
+// it survives a spread of the pack and never reaches JSON.
+export const O11_BUILDS_CHECKED = Symbol.for('ssam.o11Builds.checked');
+
 // The valid builds of the pack, in pack order. An entry whose file is not in the integrity list with the same sha256, whose
-// path is outside bin/o11/, or that repeats a version is dropped: the agent never loads a bridge the pack does not list.
+// path is outside bin/o11/, or that repeats a version is dropped: the agent never loads a bridge the pack does not list. A
+// pack with no integrity list (and no readPack check) has no valid build: refused closed (review B1 of F5).
 export function o11Builds(pack) {
+  const checked = pack?.[O11_BUILDS_CHECKED] === true && !Array.isArray(pack?.files);
   const listed = new Map((Array.isArray(pack?.files) ? pack.files : []).map(f => [String(f?.path ?? '').replaceAll('\\', '/'), f?.sha256]));
   const seen = new Set();
   const out = [];
   for (const build of Array.isArray(pack?.o11Builds) ? pack.o11Builds : []) {
     const version = String(build?.version ?? ''), file = String(build?.path ?? ''), sha256 = String(build?.sha256 ?? '');
     if (!VERSION.test(version) || !BRIDGE_PATH.test(file) || !SHA256.test(sha256) || seen.has(version)) continue;
-    if (listed.size && listed.get(file) !== sha256) continue;
+    if (!checked && listed.get(file) !== sha256) continue;
     seen.add(version);
     out.push({ version, path: file, sha256, ...(typeof build.runtime === 'string' ? { runtime: build.runtime } : {}) });
   }

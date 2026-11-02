@@ -81,4 +81,25 @@ public class O11BuildsTests
         Assert.False(AgentChannel.NoAnchors(new JsonObject { ["bridgeOffer"] = true }));
         Assert.False(AgentChannel.NoAnchors(null));
     }
+
+    // Review B1 of F5: a pack with no integrity list has no valid build (refused closed).
+    [Fact]
+    public void APackWithoutItsFilesListHasNoValidBuild()
+    {
+        var pack = Pack(); pack.Remove("files");
+        Assert.Empty(O11Builds.All(pack));
+        Assert.Null(O11Builds.For(pack, "11.55.93"));
+        Assert.Same(pack, O11Builds.PackFor(pack, "11.55.93"));
+    }
+
+    // Review B3 of F5: the hello's o11BuiltFor follows the connected (attached) Service Studio before the installed one.
+    [Fact]
+    public void TheHelloPrefersTheConnectedStudio()
+    {
+        var root = AppContext.BaseDirectory;
+        while (root != null && !File.Exists(Path.Combine(root, "native", "Ssam.Agent", "AgentChannel.cs"))) root = Path.GetDirectoryName(root);
+        Assert.NotNull(root);
+        var source = File.ReadAllText(Path.Combine(root!, "native", "Ssam.Agent", "AgentChannel.cs"));
+        Assert.Contains("O11Builds.PackFor(pack, StudioKinds.Text(versions[\"o11Connection\"]?[\"studioVersion\"]) ?? StudioKinds.Text(installed?[\"o11\"]?[\"installed\"]?[\"version\"]))", source);
+    }
 }

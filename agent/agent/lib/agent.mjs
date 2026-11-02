@@ -24,7 +24,7 @@ import { createMacAttach } from './attach-unix.mjs';
 import { createUnixPipe } from './odc-pipe-unix.mjs';
 import { AgentError } from './errors.mjs';
 import { createBridgeUpdates, MAC_BRIDGE_REASON } from './bridge-updates.mjs';
-import { o11Builds, o11PackFor, o11BuildVersions } from './o11-builds.mjs';
+import { o11Builds, o11PackFor, o11BuildVersions, O11_BUILDS_CHECKED } from './o11-builds.mjs';
 import { studioRuntime } from './studio-runtime.mjs';
 import { createStudioSnapshot } from './studio-snapshot.mjs';
 import { completeInstances } from './studio-instance.mjs';
@@ -101,7 +101,7 @@ export function readPack(root) {
       o11Hook: typeof pack.o11Hook === 'string' ? pack.o11Hook : null, o11Bridge: bridgeOf(pack.o11Bridge),
       ...Object.fromEntries(['studioBuilds', 'odcBuiltFor', 'odcRuntime', 'o11Runtime', 'renderer', 'xifEngine'].filter(key => pack[key] !== undefined).map(key => [key, pack[key]])),
       // o11Builds (0.3.7): one thin bridge per Service Studio version, checked here against the integrity list (o11-builds.mjs).
-      ...(Array.isArray(pack.o11Builds) ? { o11Builds: o11Builds(pack) } : {}),
+      ...(Array.isArray(pack.o11Builds) ? { o11Builds: o11Builds(pack), [O11_BUILDS_CHECKED]: true } : {}),
       // bridgeOffer false: a pack built without the bridge trust anchors (the owner's unsigned test app); never asks for offers.
       ...(pack.bridgeOffer === false ? { bridgeOffer: false } : {}) };
   } catch { return { id: null, lanes: [], odcBridge: null, o11BuiltFor: null, o11Hook: null, o11Bridge: null }; }
@@ -207,8 +207,9 @@ export function createAgent({ root, runtimeRoot = root, config = {}, deps = {}, 
       // (kinds.mjs O11_METHODS); the server sends integration_import only to an agent that lists it.
       agent: { version: AGENT_VERSION, node: process.version, platform, startedAt, root: base, kinds: helloKinds(renderer, xifEngine), odcCommands: [...ODC_COMMANDS],
         o11Methods: [...O11_METHODS], machine },
-      // o11BuiltFor (0.3.7): the bridge of the Service Studio installed here, when the pack has one per version (o11Builds).
-      pack: { id: pack.id, lanes: pack.lanes, odcBridge: pack.odcBridge, o11BuiltFor: o11PackFor(pack, studios.o11?.installed?.version).o11BuiltFor, o11Hook: pack.o11Hook,
+      // o11BuiltFor (0.3.7): the bridge of the Service Studio this agent is connected to (the one actually attached, review B3
+      // of F5: a machine may have more than one), else of the one installed here, when the pack has one per version (o11Builds).
+      pack: { id: pack.id, lanes: pack.lanes, odcBridge: pack.odcBridge, o11BuiltFor: o11PackFor(pack, connection?.studioVersion ?? studios.o11?.installed?.version).o11BuiltFor, o11Hook: pack.o11Hook,
         ...(pack.o11Builds?.length ? { o11Builds: o11BuildVersions(pack) } : {}) },
       capabilities: helloCapabilities(platform, pack),
       bridges: updates.reports(), bridgeUpdate: updates.wireStatus(), studios, o11Connection: connection };

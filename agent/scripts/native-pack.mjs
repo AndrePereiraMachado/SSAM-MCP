@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { verifyPack } from '../src/main/core/pack-sync.mjs';
+import { recomputePins } from './pack-pins.mjs';
 
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 export function validateNativeImage(binary, platform, arch = process.arch) {
@@ -63,6 +64,8 @@ export function stageNativePack(source, executable, destination) {
       : ['bin/o11/hook/Anvil.RuntimeHook.Agent.dll', 'bin/o11/bridge/Anvil.Bridge.dll'])];
     for (const relative of required) if (!files.some(f => f.path === relative)) throw new Error('Missing O11 runtime binary: ' + relative);
   }
-  fs.writeFileSync(path.join(destination, 'pack.json'), JSON.stringify(pack, null, 2) + '\n');
-  return pack;
+  // The pins (xifEngine, o11Bridge, o11Builds) follow the files as staged here, in one central place (review A1).
+  const pinned = recomputePins(pack);
+  fs.writeFileSync(path.join(destination, 'pack.json'), JSON.stringify(pinned, null, 2) + '\n');
+  return pinned;
 }

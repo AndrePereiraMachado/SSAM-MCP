@@ -42,9 +42,27 @@ export function publisherNames(appUpdateYml) {
   const lines = String(appUpdateYml ?? '').split(/\r?\n/);
   const at = lines.findIndex(line => /^publisherName:/.test(line));
   if (at < 0) return [];
-  const clean = value => value.trim().replace(/^['"]|['"]$/g, '').trim();
+  // A YAML scalar: 'single' ('' is a quote), "double" (\" is a quote) or plain. A full DN keeps its commas (review M1).
+  const clean = value => {
+    const v = value.trim();
+    if (/^'.*'$/.test(v)) return v.slice(1, -1).replace(/''/g, "'");
+    if (/^".*"$/.test(v)) return v.slice(1, -1).replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+    return v;
+  };
+  // A flow list [a, 'b, c'] splits on the commas outside quotes; a plain scalar is one name, commas included.
+  const flow = text => {
+    const items = []; let current = '', quote = null;
+    for (const ch of text) {
+      if (quote) { if (ch === quote) quote = null; current += ch; continue; }
+      if (ch === "'" || ch === '"') { quote = ch; current += ch; continue; }
+      if (ch === ',') { items.push(current); current = ''; continue; }
+      current += ch;
+    }
+    items.push(current);
+    return items.map(clean).filter(Boolean);
+  };
   const inline = lines[at].slice('publisherName:'.length).trim();
-  if (inline) return inline.replace(/^\[|\]$/g, '').split(',').map(clean).filter(Boolean);
+  if (inline) return /^\[.*\]$/.test(inline) ? flow(inline.slice(1, -1)) : [clean(inline)].filter(Boolean);
   const names = [];
   for (const line of lines.slice(at + 1)) {
     const item = /^\s+-\s*(.*)$/.exec(line);
@@ -57,6 +75,21 @@ export function updateTrustProblem({ platform, isPackaged, appUpdateYml }) {
   if (platform !== 'win32' || !isPackaged) return null;
   if (publisherNames(appUpdateYml).length === 0)
     return 'this build cannot verify the signature of an update (no publisherName in app-update.yml); install the signed SSAM Agent by hand';
+  return null;
+}
+
+// The installer electron-updater downloaded must BE the version latest.yml announced, and newer than this app (review M2 of
+// F5): allowDowngrade only compares the label of latest.yml, and its sha512 comes from the same file, so a feed could serve
+// an older, genuinely signed installer under a higher label and roll every machine back. productVersion is the installer's
+// own version resource (electron-builder writes the app version there); productName must be the app's.
+export function installerVersionProblem({ productVersion, productName, label, current, appName = 'SSAM Agent' }) {
+  const parts = value => /^(\d+)\.(\d+)\.(\d+)/.exec(String(value ?? ''))?.slice(1).map(Number) ?? null;
+  const cmp = (a, b) => { for (let i = 0; i < 3; i++) if (a[i] !== b[i]) return a[i] - b[i]; return 0; };
+  const got = parts(productVersion), want = parts(label), now = parts(current);
+  if (!got) return 'the downloaded installer has no readable version; it is not installed';
+  if (productName !== undefined && productName !== appName) return `the downloaded installer is "${productName}", not ${appName}; it is not installed`;
+  if (!want || cmp(got, want) !== 0) return `the downloaded installer is version ${productVersion}, but the update server announced ${label}; it is not installed`;
+  if (now && cmp(got, now) <= 0) return `the downloaded installer is version ${productVersion}, not newer than this app (${current}); it is not installed`;
   return null;
 }
 

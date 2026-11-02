@@ -24,7 +24,8 @@ internal static class O11Builds
         {
             var version = Text(build["version"]) ?? ""; var file = Text(build["path"]) ?? ""; var sha = Text(build["sha256"]) ?? "";
             if (!VersionText.IsMatch(version) || !BridgePath.IsMatch(file) || !Sha.IsMatch(sha) || !seen.Add(version)) continue;
-            if (listed.Count > 0 && (!listed.TryGetValue(file, out var recorded) || recorded != sha)) continue;
+            // No integrity list, or no entry with this sha256: no valid build (refused closed, review B1 of F5).
+            if (!listed.TryGetValue(file, out var recorded) || recorded != sha) continue;
             var entry = new JsonObject { ["version"] = version, ["path"] = file, ["sha256"] = sha };
             if (Text(build["runtime"]) is { } runtime) entry["runtime"] = runtime;
             builds.Add(entry);

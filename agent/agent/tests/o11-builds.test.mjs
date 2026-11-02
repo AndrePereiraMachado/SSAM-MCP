@@ -179,3 +179,33 @@ test('hello: a pack built without the trust anchors (bridgeOffer false) never as
   assert.equal(hello.capabilities.bridgeOffer, false);
   assert.match(hello.capabilities.bridgeOfferReason, /without the bridge trust anchors/);
 });
+
+test('review B1: a pack with no integrity list has no valid O11 build (refused closed); readPack keeps the checked ones', () => {
+  const good = 'a'.repeat(64);
+  const builds = [{ version: '11.55.93', path: 'bin/o11/bridges/11.55.93/Anvil.Bridge.dll', sha256: good }];
+  assert.deepEqual(o11Builds({ o11Builds: builds }), []);
+  assert.deepEqual(o11Builds({ o11Builds: builds, files: [] }), []);
+  const { root } = multiRoot();
+  try {
+    const pack = readPack(root);
+    assert.deepEqual(o11Builds(pack).map(b => b.version), ['11.55.94', '11.55.93', '11.55.92'], 'readPack checked them against files');
+    assert.deepEqual(o11Builds({ ...pack }).map(b => b.version), ['11.55.94', '11.55.93', '11.55.92'], 'a spread keeps the check');
+    assert.deepEqual(o11Builds(JSON.parse(JSON.stringify(pack))), [], 'a copy through JSON does not');
+  } finally { removeRoot(root); }
+});
+
+test('review B3: the hello reports the build of the Service Studio this agent is connected to, not only the installed one', async () => {
+  const { root } = multiRoot();
+  const hub = await fakeHub({ credential: CREDENTIAL, kernel: { o11: '11.55.93', odc: '1.7.30', odcBridge: 'v106' } });
+  // installed: 11.55.94; connected (the attached, running Studio): 11.55.93
+  fs.writeFileSync(path.join(root, 'private', 'o11-connection.json'), JSON.stringify({ pid: 7100, port: 4516, startedUtc: STARTED, studioVersion: '11.55.93.65289' }));
+  const agent = createAgent({ root, config: { server: hub.url, credential: CREDENTIAL }, log: () => {},
+    deps: { locate: async lane => (lane === 'o11' ? root : null), fileVersion: async () => '11.55.94.65328', studioRuntime: async () => null,
+      processes: async image => (image === 'ServiceStudio.exe' ? [{ pid: 7100, path: 'C:\SS\ServiceStudio.exe', version: '11.55.93.65289' }] : []), machine: null } });
+  try {
+    agent.run();
+    await hub.until(() => hub.hellos.length >= 1);
+    assert.equal(hub.hellos[0].pack.o11BuiltFor, '11.55.93');
+    assert.equal(hub.hellos[0].o11Connection.studioVersion, '11.55.93.65289');
+  } finally { await agent.stop(); await hub.close(); removeRoot(root); }
+});

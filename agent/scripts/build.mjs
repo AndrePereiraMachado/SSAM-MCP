@@ -22,7 +22,8 @@ import { verifyPack } from '../src/main/core/pack-sync.mjs';
 import { updateUrlProblem } from '../src/main/core/settings.mjs';
 import { stageNativePack } from './native-pack.mjs';
 import { assertBridgeTrust } from './bridge-trust-gate.mjs';
-import { signingOf, signingConfig, testUnsignedConfig, updaterConfigProblems, signNative, signerThumbprint, signPackExecutables, packExecutables } from './windows-release.mjs';
+import { signingOf, signingConfig, testUnsignedConfig, updaterConfigProblems, signNative, signerThumbprint, signerSubject, publisherMatches, signPackExecutables, packExecutables } from './windows-release.mjs';
+import { packProblems } from './pack-pins.mjs';
 import { createHash } from 'node:crypto';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -136,24 +137,35 @@ export function withoutOffers(packDir) {
   return next;
 }
 
-// After electron-builder: the updater configuration of the built app, the feed files and the signatures. A signed release
-// that would not verify its updates, or an installer that is not signed by the release certificate, stops here.
-export function checkWindowsOutput(dist, options, { thumbprint = signerThumbprint } = {}) {
+// After electron-builder: the pack the app will run, the updater configuration and the signatures. A build whose installed
+// pack the app would refuse (verifyPack) or whose pins do not match their files (review M3), a release that would not verify
+// its updates, an installer not signed by the release certificate, or a publisherName the updater would never match with
+// the real signer (review M1: every update would then fail), stops here.
+export function checkWindowsOutput(dist, options, { thumbprint = signerThumbprint, subject = signerSubject, pack = packProblems } = {}) {
   const unpacked = path.join(dist, 'win-unpacked');
+  const problems = pack(path.join(unpacked, 'resources', 'pack')).map(problem => 'resources/pack: ' + problem);
   const yml = path.join(unpacked, 'resources', 'app-update.yml');
   const text = fs.existsSync(yml) ? fs.readFileSync(yml, 'utf8') : null;
   if (options.testUnsigned || options.noUpdates) {
-    if (text !== null) throw new Error('a build without updates must not carry resources/app-update.yml');
-    return;
-  }
-  const problems = updaterConfigProblems(text, { url: options.updateUrl.replace(/\/+$/, ''), publisherName: options.signing?.publisherName });
-  if (!fs.existsSync(path.join(dist, 'latest.yml'))) problems.push('dist/latest.yml is missing: the feed would have nothing to announce');
-  if (options.signing) {
-    for (const file of [path.join(unpacked, 'SSAM Agent.exe'), ...fs.readdirSync(dist).filter(n => /-setup\.exe$/.test(n)).map(n => path.join(dist, n))])
-      if (thumbprint(file) !== options.signing.certSha1) problems.push(path.basename(file) + ' is not signed by certificate ' + options.signing.certSha1);
+    if (text !== null) problems.push('a build without updates must not carry resources/app-update.yml');
+  } else {
+    problems.push(...updaterConfigProblems(text, { url: options.updateUrl.replace(/\/+$/, ''), publisherName: options.signing?.publisherName }));
+    if (!fs.existsSync(path.join(dist, 'latest.yml'))) problems.push('dist/latest.yml is missing: the feed would have nothing to announce');
+    if (options.signing) {
+      const installers = fs.readdirSync(dist).filter(n => /-setup\.exe$/.test(n)).map(n => path.join(dist, n));
+      for (const file of [path.join(unpacked, 'SSAM Agent.exe'), ...installers])
+        if (thumbprint(file) !== options.signing.certSha1) problems.push(path.basename(file) + ' is not signed by certificate ' + options.signing.certSha1);
+      for (const file of installers) {
+        const signer = subject(file);
+        if (!publisherMatches(options.signing.publisherName, signer))
+          problems.push(`publisherName "${options.signing.publisherName}" does not match the signer of ${path.basename(file)} ("${signer ?? 'unknown'}"): the updater would refuse every update`);
+      }
+    }
   }
   if (problems.length) throw new Error('the Windows build is not releasable: ' + problems.join('; '));
-  console.log('updater: app-update.yml names ' + options.updateUrl + ' and requires publisher ' + (options.signing?.publisherName ?? '-'));
+  console.log('pack: resources/pack is whole and every pin matches its file');
+  if (!options.testUnsigned && !options.noUpdates)
+    console.log('updater: app-update.yml names ' + options.updateUrl + ' and requires publisher ' + (options.signing?.publisherName ?? '-'));
 }
 
 async function main() {

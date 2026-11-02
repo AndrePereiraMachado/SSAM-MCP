@@ -15,6 +15,7 @@ import { createAppLog } from './electron/app-log.mjs';
 import { createTray } from './electron/tray.mjs';
 import { createPanel } from './electron/window.mjs';
 import { createUpdates, buildUpdateUrl, buildUpdateConfig } from './electron/updates.mjs';
+import { publisherNames } from './core/update-model.mjs';
 import { loadSettings, saveSettings, resolveUpdateUrl, updateUrlProblem } from './core/settings.mjs';
 import { defaultRoot, bundledPackDir } from './core/paths.mjs';
 import { resolveDataLocation } from './core/data-location.mjs';
@@ -73,9 +74,11 @@ async function run() {
     iconPath: process.platform === 'win32' ? path.join(appDir, 'build', 'icon.png') : null, onReady: () => push() });
   const tray = createTray({ iconsDir: path.join(appDir, 'assets', 'tray'), onAction: action => act(action).catch(error => log.write('action-failed', { action, error: error.message })) });
 
-  const updateUrl = resolveUpdateUrl({ env: process.env, settings, build: buildUpdateUrl(process.resourcesPath) });
+  // A signed packaged build (publisherName in app-update.yml) keeps the feed it was built with (review M2 of F5).
+  const appUpdateYml = buildUpdateConfig(process.resourcesPath);
+  const updateUrl = resolveUpdateUrl({ env: process.env, settings, build: buildUpdateUrl(process.resourcesPath), pinned: app.isPackaged && publisherNames(appUpdateYml).length > 0 });
   const updates = createUpdates({ url: updateUrl.url, hours: settings.updateCheckHours, autoInstall: settings.updateAutoInstall, log, isPackaged: app.isPackaged,
-    devConfig: path.join(appDir, 'dev-app-update.yml'), appUpdateYml: buildUpdateConfig(process.resourcesPath), onChange: state => { updateState = state; push(); }, stopAgent: async () => { if (supervisor) await supervisor.stop(); } });
+    devConfig: path.join(appDir, 'dev-app-update.yml'), appUpdateYml, currentVersion: appVersion, onChange: state => { updateState = state; push(); }, stopAgent: async () => { if (supervisor) await supervisor.stop(); } });
   updateState = updates.state;
   log.write('updates', { url: updateUrl.url, source: updateUrl.source, autoInstall: settings.updateAutoInstall });
 
