@@ -30,3 +30,19 @@ test('R1 image carries the reference maps and all three current-window compatibi
   assert.ifError(result.error);
   assert.equal(result.status,0,result.stderr || result.stdout);
 });
+
+// F1c A5: the hosted run lease is tried with flock(1), the advisory lock .NET holds on run.lock; without it the lease is never
+// reported free (platforms/odc/facade/delivery-lineage.mjs). Every runtime image carries it (util-linux), and it really locks.
+test('R4 image carries flock(1) and it reports a held lock as held', () => {
+  const image = process.env.SSAM_TEST_IMAGE;
+  assert.ok(image, 'Set SSAM_TEST_IMAGE to the local R1 image');
+  const script = 'command -v flock && f=/tmp/ssam-flock-probe && : > $f && flock $f sleep 3 & sleep 1; '
+    + 'if flock -n /tmp/ssam-flock-probe true; then echo FREE; else echo HELD; fi; wait; flock -n /tmp/ssam-flock-probe true && echo FREE-AFTER';
+  const result = spawnSync(process.env.DOCKER_EXE ?? 'docker', ['--context','desktop-linux','run','--rm','--pull=never','--network=none','--read-only',
+    '--tmpfs','/tmp','--entrypoint=sh',image,'-c',script], {encoding:'utf8',timeout:60000,windowsHide:true});
+  assert.ifError(result.error);
+  assert.equal(result.status,0,result.stderr || result.stdout);
+  assert.match(result.stdout,/\/flock\n/);
+  assert.match(result.stdout,/\nHELD\n/);
+  assert.match(result.stdout,/FREE-AFTER/);
+});

@@ -241,12 +241,15 @@ COPY --from=node /usr/local/bin/node /usr/local/bin/node
 # libsqlite3-0 for the SQLite provider of the Studio model libraries (the Studios ship only the Windows e_sqlite3.dll); the
 # .NET image already carries ICU, OpenSSL, CA certificates and tzdata. The ssam user has no home of its own: HOME is /tmp
 # (below) and its passwd entry points there too, because the hosted kernel processes get a closed environment without HOME
-# and .NET then falls back to the passwd home for its per-user folders.
+# and .NET then falls back to the passwd home for its per-user folders. util-linux for flock(1): the hosted run lease of a
+# delivery is tried with the same advisory flock .NET holds on run.lock (platforms/odc/facade/delivery-lineage.mjs, F1c A5);
+# without flock the lease is never reported free and a killed kernel keeps the module reserved.
 RUN apt-get update \
- && apt-get install -y --no-install-recommends libsqlite3-0 \
+ && apt-get install -y --no-install-recommends libsqlite3-0 util-linux \
  && rm -rf /var/lib/apt/lists/* \
  && groupadd --system --gid 10001 ssam \
  && useradd --system --uid 10001 --gid 10001 --home-dir /tmp --no-create-home --shell /usr/sbin/nologin ssam
+RUN command -v flock && flock --version
 
 COPY --from=studio-o11 /studio/o11 /studio/o11
 COPY --from=studio-odc /studio/odc /studio/odc
