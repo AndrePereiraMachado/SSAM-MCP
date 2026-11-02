@@ -34,6 +34,7 @@ internal sealed partial class XifKinds
     private readonly string root;
     private readonly Workspace workspace;
     internal readonly string? Engine;
+    internal readonly string? EngineSha256;
     // The tests' seams (check-xif-run): the Integration Studio folder and the engine process.
     internal Func<string?>? Locate;
     internal Func<string, string, Dictionary<string, string?>, string, TimeSpan, CancellationToken, Task<(bool TimedOut, string Stdout)>>? Spawn;
@@ -43,23 +44,66 @@ internal sealed partial class XifKinds
     {
         this.root = Path.GetFullPath(root);
         workspace = new Workspace(root);
-        Engine = ResolveEngine(runtime, pack);
+        (Engine, EngineSha256) = ResolveEngine(runtime, pack) is { } pinned ? (pinned.Path, pinned.Sha256) : ((string?)null, (string?)null);
     }
 
     internal bool Available => Engine != null;
 
-    // pack.json xifEngine {path, sha256}; without it, xif-engine\Anvil.Xif.Engine.exe of the runtime. Windows only.
-    internal static string? ResolveEngine(string? runtime, JsonObject? pack)
+    // F4 review M1: only the engine pack.json pins (xifEngine {path, sha256}); no pin, another file or a changed one is no
+    // engine. Checked here and again on the open handle right before every run (Execute), which stays open, sharing reads only,
+    // until the process ends: the file cannot be replaced between the check and the start. Windows only.
+    internal static (string Path, string Sha256)? ResolveEngine(string? runtime, JsonObject? pack)
     {
         if (!OperatingSystem.IsWindows() || runtime == null) return null;
-        var relative = (pack?["xifEngine"] as JsonObject)?["path"]?.GetValue<string>() ?? "xif-engine/" + EngineExe;
+        if (pack?["xifEngine"] is not JsonObject pin || Text(pin["path"]) is not string relative || Text(pin["sha256"]) is not string expected
+            || !Regex.IsMatch(expected, "^[0-9a-fA-F]{64}\\z")) return null;
         if (Path.IsPathRooted(relative) || relative.Split('/', '\\').Contains("..")) return null;
         var file = Path.Combine([runtime, .. relative.Split('/', '\\')]);
         if (!File.Exists(file)) return null;
-        if ((pack?["xifEngine"] as JsonObject)?["sha256"]?.GetValue<string>() is string expected)
-            try { if (!Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(file))).Equals(expected, StringComparison.OrdinalIgnoreCase)) return null; }
-            catch (IOException) { return null; }
-        return file;
+        try { using var stream = File.OpenRead(file); if (!Convert.ToHexStringLower(SHA256.HashData(stream)).Equals(expected, StringComparison.OrdinalIgnoreCase)) return null; }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return null; }
+        return (file, expected.ToLowerInvariant());
+    }
+
+    // The engine opened for the run, sharing reads only, with its sha256 checked on that same handle; null when it changed.
+    internal static FileStream? OpenIntact(string file, string sha256)
+    {
+        FileStream? stream = null;
+        try
+        {
+            stream = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.Read);
+            if (!Convert.ToHexStringLower(SHA256.HashData(stream)).Equals(sha256, StringComparison.OrdinalIgnoreCase)) { stream.Dispose(); return null; }
+            return stream;
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { stream?.Dispose(); return null; }
+    }
+
+    internal static readonly TimeSpan SweepAge = TimeSpan.FromHours(1);
+    [GeneratedRegex("^[0-9a-f]{8,16}\\z", RegexOptions.CultureInvariant)] private static partial Regex FolderPattern();
+    [GeneratedRegex("^[0-9a-fA-F]{32}\\z", RegexOptions.CultureInvariant)] private static partial Regex NativeWorkPattern();
+    internal Func<DateTime> UtcNow = () => DateTime.UtcNow;
+    internal string? NativeRoot = Environment.GetEnvironmentVariable("LOCALAPPDATA") is { Length: > 0 } local ? Path.Combine(local, "SSAM", "xif") : null;
+
+    // B2 (F4 review): the folders of earlier operations leave after an hour (their out/ was pulled, or the stage never ran).
+    internal void Sweep(string current)
+    {
+        var dir = Path.Combine(root, "o11", "xif");
+        if (!Directory.Exists(dir)) return;
+        foreach (var item in new DirectoryInfo(dir).EnumerateDirectories())
+        {
+            if (item.Name == current || !FolderPattern().IsMatch(item.Name) || item.LinkTarget != null) continue;
+            try { if (UtcNow() - item.LastWriteTimeUtc > SweepAge) item.Delete(true); }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
+        }
+    }
+
+    // The engine's native work folder of a run (%LOCALAPPDATA%\SSAM\xif\<guid>, kept by the engine on a failure) leaves with it.
+    private void DropNative(JsonObject? answer)
+    {
+        if (NativeRoot == null || Text(answer?["nativeWork"]) is not string reported) return;
+        var dir = Path.GetFullPath(reported);
+        if (!string.Equals(Path.GetDirectoryName(dir), Path.GetFullPath(NativeRoot), StringComparison.OrdinalIgnoreCase) || !NativeWorkPattern().IsMatch(Path.GetFileName(dir))) return;
+        try { Directory.Delete(dir, true); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
     }
 
     // The Integration Studio folder: the candidates in order, the first with the marker DLL.
@@ -170,6 +214,13 @@ internal sealed partial class XifKinds
     {
         if (!OperatingSystem.IsWindows() && Spawn == null) throw new AgentFault("XIF_PLATFORM_UNAVAILABLE", "Integration Studio runs only on Windows; this SSAM agent does not build extensions on this system. Nothing was generated or sent.");
         var (request, output, folder) = Prepare(p);
+        Sweep(Text(p["operationId"])!);
+        try { return await Stage(p, request, output, deadline, token); }
+        finally { try { Directory.Delete(Path.Combine(folder, "in"), true); } catch (Exception e) when (e is IOException or UnauthorizedAccessException or DirectoryNotFoundException) { } }
+    }
+
+    private async Task<JsonNode> Stage(JsonObject p, JsonObject request, string output, long? deadline, CancellationToken token)
+    {
         if (Engine == null && Spawn == null) throw new AgentFault("XIF_ENGINE_UNAVAILABLE", "This SSAM agent package does not carry the Integration Studio engine host; install the current SSAM Agent app. Nothing was generated or sent.");
         var studio = (Locate ?? LocateIntegrationStudio)();
         if (studio == null) throw new AgentFault("XIF_ENGINE_UNAVAILABLE", "Integration Studio 11 is not installed on the machine of the SSAM agent (it comes with the OutSystems Development Environment installer); install it, then call again. Nothing was generated or sent.");
@@ -180,23 +231,27 @@ internal sealed partial class XifKinds
         Directory.CreateDirectory(Path.GetDirectoryName(output)!);
         var left = deadline is long due ? TimeSpan.FromMilliseconds(Math.Max(1000, due - DateTimeOffset.UtcNow.ToUnixTimeMilliseconds())) : EngineTimeout;
         var timeout = left < EngineTimeout ? left : EngineTimeout;
-        var env = new Dictionary<string, string?>
-        {
-            ["TEMP"] = temp, ["TMP"] = temp, ["ANVIL_INTEGRATION_STUDIO_DIR"] = studio,
-        };
+        // B3: the engine gets the Node agent's environment, not this process's: the system folders, a private TEMP and the folder found.
+        var env = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+        foreach (var name in new[] { "SystemRoot", "windir", "PATH", "LOCALAPPDATA", "USERPROFILE", "ProgramFiles", "ProgramFiles(x86)" })
+            if (Environment.GetEnvironmentVariable(name) is { } value) env[name] = value;
+        env["TEMP"] = temp; env["TMP"] = temp; env["ANVIL_INTEGRATION_STUDIO_DIR"] = studio;
         var masks = new List<(string, string)> { (root, "[data]"), (studio, "[Integration Studio]") };
         if (Engine != null) masks.Add((Path.GetDirectoryName(Engine)!, "[runtime]"));
         if (!string.IsNullOrEmpty(Profile)) masks.Add((Profile, "[profile]"));
         (bool TimedOut, string Stdout) result;
+        using var held = Engine != null && EngineSha256 != null ? OpenIntact(Engine, EngineSha256) : null;
+        if (Spawn == null && held == null)
+            return Refusal("XIF_ENGINE_UNAVAILABLE", "The Integration Studio engine host of this SSAM agent changed since the app was installed, so it was not run; reinstall the SSAM Agent app. Nothing was generated or sent.", null, masks);
         try { result = await (Spawn ?? Run)(Engine ?? "", request.ToJsonString(), env, work, timeout, token); }
         catch (Exception e) when (e is System.ComponentModel.Win32Exception or IOException or InvalidOperationException)
         { return Refusal("XIF_ENGINE_UNAVAILABLE", "The Integration Studio engine host did not start; nothing was sent.", null, masks); }
-        finally { try { Directory.Delete(Path.Combine(folder, "in"), true); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { } }
         if (result.TimedOut) return Refusal("XIF_ENGINE_UNAVAILABLE", "Integration Studio did not finish the " + Text(request["command"]) + " stage within " + (int)Math.Round(timeout.TotalMinutes) + " minutes; nothing was sent.", null, masks);
         var line = result.Stdout.Split('\n').Select(l => l.Trim()).LastOrDefault(l => l.StartsWith('{'));
         JsonObject? answer = null;
         try { answer = line == null ? null : JsonNode.Parse(line) as JsonObject; } catch (System.Text.Json.JsonException) { }
         if (answer == null) return Refusal("XIF_ENGINE_UNAVAILABLE", "The Integration Studio engine host answered nothing readable; nothing was sent.", null, masks);
+        DropNative(answer);
         if (answer["ok"] is not JsonValue ok || !ok.TryGetValue<bool>(out var good) || !good)
             return Refusal(Text(answer["code"]) ?? "XIF_ENGINE_FAILED", Text(answer["error"]) ?? "engine failure", answer["problems"] as JsonArray, masks);
         if (!System.IO.File.Exists(output)) return Refusal("XIF_ENGINE_FAILED", "The engine reported a XIF it did not write; nothing was sent.", null, masks);
@@ -254,6 +309,16 @@ internal sealed partial class XifKinds
         return (JsonObject)Masked(new JsonObject { ["ok"] = false, ["code"] = code, ["error"] = error, ["problems"] = list }, masks);
     }
 
+    // At most limit characters of a stream (the Node agent's 64 MB), the rest read and dropped.
+    private static async Task<string> Bounded(StreamReader reader, int limit, CancellationToken token)
+    {
+        var text = new StringBuilder();
+        var buffer = new char[65536];
+        int read;
+        while ((read = await reader.ReadAsync(buffer, token)) > 0) if (text.Length < limit) text.Append(buffer, 0, Math.Min(read, limit - text.Length));
+        return text.ToString();
+    }
+
     // The engine process: one JSON request on stdin, its stdout; killed at the timeout.
     private static async Task<(bool TimedOut, string Stdout)> Run(string exe, string input, Dictionary<string, string?> env, string work, TimeSpan timeout, CancellationToken token)
     {
@@ -262,9 +327,10 @@ internal sealed partial class XifKinds
             RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false, CreateNoWindow = true,
             WorkingDirectory = work, StandardOutputEncoding = Encoding.UTF8, StandardErrorEncoding = Encoding.UTF8,
         };
+        start.Environment.Clear();
         foreach (var (key, value) in env) start.Environment[key] = value;
         using var process = Process.Start(start) ?? throw new InvalidOperationException("The engine did not start");
-        var stdout = process.StandardOutput.ReadToEndAsync(token);
+        var stdout = Bounded(process.StandardOutput, 64 * 1024 * 1024, token);
         _ = process.StandardError.ReadToEndAsync(token);
         await using (var stdin = new StreamWriter(process.StandardInput.BaseStream, new UTF8Encoding(false))) await stdin.WriteAsync(input);
         using var limit = CancellationTokenSource.CreateLinkedTokenSource(token);

@@ -24,6 +24,7 @@ export const ENGINE_EXE = 'Anvil.Xif.Engine.exe';
 // pack.json xifEngine {path, sha256}; without it, xif-engine/Anvil.Xif.Engine.exe of the runtime.
 export const ENGINE_DEFAULT = 'xif-engine/' + ENGINE_EXE;
 export const ENGINE_TIMEOUT_MS = 10 * 60000;
+export const SWEEP_MS = 60 * 60000;
 export const INTEGRATION_STUDIO = Object.freeze({ marker: 'OutSystems.IntegrationStudio.Core.dll', uninstall: 'OutSystems Integration Studio 11',
   folders: Object.freeze(['', 'Integration Studio']), programFiles: Object.freeze(['OutSystems', 'Integration Studio']) });
 const KEYS = Object.freeze({ model: ['command', 'operationId', 'output', 'spec', 'references', 'base'], final: ['command', 'operationId', 'output', 'model', 'dll', 'name', 'sources'] });
@@ -48,17 +49,22 @@ export async function locateIntegrationStudio({ env = process.env, exists = fs.e
 }
 
 // The pack's engine: {path} when this installation carries it (and its sha256 matches pack.json), else null.
+// F4 review M1: only an engine pack.json pins (xifEngine {path, sha256}); none, another file, or a changed one is no engine.
+// The sha256 is checked here and again right before every run (engineChanged), so a file replaced after the start never runs.
+const SHA = /^[0-9a-f]{64}$/;
+export const fileSha256 = (file, read = fs.readFileSync) => createHash('sha256').update(read(file)).digest('hex');
 export function resolveXifEngine({ runtimeRoot, pack = {}, platform = process.platform, exists = fs.existsSync, read = fs.readFileSync } = {}) {
   if (platform !== 'win32' || !runtimeRoot) return null;
-  const relative = typeof pack?.xifEngine?.path === 'string' ? pack.xifEngine.path : ENGINE_DEFAULT;
+  const pin = pack?.xifEngine;
+  if (!pin || typeof pin.path !== 'string' || typeof pin.sha256 !== 'string' || !SHA.test(pin.sha256.toLowerCase())) return null;
+  const relative = pin.path;
   if (path.isAbsolute(relative) || relative.split(/[\\/]/).includes('..')) return null;
   const file = path.join(runtimeRoot, ...relative.split(/[\\/]/));
   if (!exists(file)) return null;
-  if (typeof pack?.xifEngine?.sha256 === 'string') {
-    try { if (createHash('sha256').update(read(file)).digest('hex') !== pack.xifEngine.sha256.toLowerCase()) return null; } catch { return null; }
-  }
-  return { path: file };
+  try { if (fileSha256(file, read) !== pin.sha256.toLowerCase()) return null; } catch { return null; }
+  return { path: file, sha256: pin.sha256.toLowerCase() };
 }
+const engineChanged = (engine, read) => { try { return !engine?.sha256 || fileSha256(engine.path, read) !== engine.sha256; } catch { return true; } };
 
 // The engine request of one stage, every agent: path confined to this operation's folder: {request, output, folder}.
 // Pure (tests and the native core answer the same table, tests/fixtures/xif-table.mjs).
@@ -127,7 +133,7 @@ function spawnEngine(exe, input, { env, cwd, timeoutMs }) {
 const CODE = /^[A-Z][A-Z0-9_]{1,60}$/;
 // The engine's refusal, with this machine's folders masked.
 function masked(value, masks) {
-  if (typeof value === 'string') { let text = value; for (const [from, to] of masks) if (from) text = text.split(from).join(to); return text.slice(0, 2000); }
+  if (typeof value === 'string') { let text = value; for (const [from, to] of masks) if (from) text = text.replace(new RegExp(String(from).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'), () => to); return text.slice(0, 2000); }
   if (Array.isArray(value)) return value.slice(0, 100).map(item => masked(item, masks));
   if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, masked(v, masks)]));
   return value;
@@ -154,10 +160,36 @@ export function createXifKind({ root, ws, engine = null, platform = process.plat
   const profile = deps.profile ?? (env.USERPROFILE || os.homedir());
   const locate = deps.locate ?? (() => locateIntegrationStudio({ env, query: deps.query }));
   const run = deps.spawnEngine ?? spawnEngine;
+  const read = deps.read ?? fs.readFileSync;
+  const now = deps.now ?? Date.now;
+  // B2 (F4 review): the folders of earlier operations (their out/ the server has pulled, or a stage that never ran) leave
+  // after an hour; the engine's own native work folder of a run leaves with the run.
+  const sweep = current => {
+    const base = path.join(root, 'o11', 'xif');
+    let items = [];
+    try { items = fs.readdirSync(base, { withFileTypes: true }); } catch { return; }
+    for (const item of items) {
+      if (!item.isDirectory() || item.name === current || !/^[0-9a-f]{8,16}$/.test(item.name)) continue;
+      const dir = path.join(base, item.name);
+      try { if (now() - fs.statSync(dir).mtimeMs > SWEEP_MS) fs.rmSync(dir, { recursive: true, force: true }); } catch { /* the next sweep */ }
+    }
+  };
+  const nativeRoot = env.LOCALAPPDATA ? path.join(env.LOCALAPPDATA, 'SSAM', 'xif') : null;
+  const dropNative = answer => {
+    const dir = typeof answer?.nativeWork === 'string' ? path.resolve(answer.nativeWork) : null;
+    if (!dir || !nativeRoot || path.dirname(dir).toLowerCase() !== path.resolve(nativeRoot).toLowerCase() || !/^[0-9a-f]{32}$/i.test(path.basename(dir))) return;
+    try { fs.rmSync(dir, { recursive: true, force: true }); } catch { /* kept */ }
+  };
   return {
     async execute(params, { deadline = null } = {}) {
       if (platform !== 'win32') throw new AgentError('XIF_PLATFORM_UNAVAILABLE', 'Integration Studio runs only on Windows; this SSAM agent does not build extensions on this system. Nothing was generated or sent.', { executed: false });
       const { request, output, folder } = prepareXifRequest(params, { ws });
+      sweep(params.operationId);
+      try { return await stage(request, output, folder, params, deadline); }
+      finally { try { fs.rmSync(path.join(folder, 'in'), { recursive: true, force: true }); } catch { /* the next sweep */ } }
+    },
+  };
+  async function stage(request, output, folder, params, deadline) {
       if (!engine?.path) throw unavailable('This SSAM agent package does not carry the Integration Studio engine host; install the current SSAM Agent app. Nothing was generated or sent.');
       const studio = await locate();
       if (!studio) throw unavailable('Integration Studio 11 is not installed on the machine of the SSAM agent (it comes with the OutSystems Development Environment installer); install it, then call again. Nothing was generated or sent.');
@@ -171,15 +203,15 @@ export function createXifKind({ root, ws, engine = null, platform = process.plat
         USERPROFILE: env.USERPROFILE, ProgramFiles: env.ProgramFiles, 'ProgramFiles(x86)': env['ProgramFiles(x86)'], ANVIL_INTEGRATION_STUDIO_DIR: studio };
       for (const key of Object.keys(childEnv)) if (childEnv[key] === undefined) delete childEnv[key];
       const masks = [[root, '[data]'], [path.dirname(engine.path), '[runtime]'], [studio, '[Integration Studio]'], [profile, '[profile]']];
-      let result;
-      try { result = await run(engine.path, JSON.stringify(request), { env: childEnv, cwd: request.work, timeoutMs }); }
-      finally { try { fs.rmSync(path.join(folder, 'in'), { recursive: true, force: true }); } catch { /* the next run uses a new folder */ } }
+      if (engineChanged(engine, read)) return refusalOf({ code: 'XIF_ENGINE_UNAVAILABLE', error: 'The Integration Studio engine host of this SSAM agent changed since the app was installed, so it was not run; reinstall the SSAM Agent app. Nothing was generated or sent.' }, masks);
+      const result = await run(engine.path, JSON.stringify(request), { env: childEnv, cwd: request.work, timeoutMs });
       if (result.timedOut) return refusalOf({ code: 'XIF_ENGINE_UNAVAILABLE', error: 'Integration Studio did not finish the ' + request.command + ' stage within ' + Math.round(timeoutMs / 60000) + ' minutes; nothing was sent.' }, masks);
       if (result.error) return refusalOf({ code: 'XIF_ENGINE_UNAVAILABLE', error: 'The Integration Studio engine host did not start (' + (result.error.code ?? 'error') + '); nothing was sent.' }, masks);
       const line = String(result.stdout ?? '').split('\n').map(l => l.trim()).filter(l => l.startsWith('{')).at(-1);
       let answer = null;
       try { answer = line ? JSON.parse(line) : null; } catch { answer = null; }
       if (!answer || typeof answer !== 'object') return refusalOf({ code: 'XIF_ENGINE_UNAVAILABLE', error: 'The Integration Studio engine host answered nothing readable; nothing was sent.' }, masks);
+      dropNative(answer);
       if (answer.ok !== true) return refusalOf(answer, masks);
       if (!fs.existsSync(output)) return refusalOf({ code: 'XIF_ENGINE_FAILED', error: 'The engine reported a XIF it did not write; nothing was sent.' }, masks);
       const bytes = fs.readFileSync(output);
@@ -191,6 +223,5 @@ export function createXifKind({ root, ws, engine = null, platform = process.plat
       return { ok: true, xif: params.output, sha256: createHash('sha256').update(bytes).digest('hex'),
         studio: { version: typeof answer.studio?.version === 'string' ? answer.studio.version : null, lastUpgradeVersion: typeof answer.studio?.lastUpgradeVersion === 'string' ? answer.studio.lastUpgradeVersion : null },
         reports: masked(Array.isArray(answer.reports) ? answer.reports.slice(0, 200) : [], masks) };
-    },
-  };
+  }
 }

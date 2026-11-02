@@ -37,9 +37,15 @@ function fakeEngine({ answer = null, xml = '<Extension Name="ZZHybridXifLab"/>' 
     return { code: 0, stdout: 'log line\n' + JSON.stringify({ ok: true, xif: request.output, sha256: 'x', studio: { dir: options.env.ANVIL_INTEGRATION_STUDIO_DIR, version: '11.14.25.134', lastUpgradeVersion: '11.0.0.200' }, reports: [] }) + '\n' };
   } };
 }
-const kindFor = (root, engine, { locate = async () => 'C:\\IS', platform = 'win32', profile = 'C:\\Users\\someone' } = {}) =>
-  createXifKind({ root, ws: createWorkspace(root, { platform: 'win32' }), engine: { path: 'C:\\pack\\xif-engine\\Anvil.Xif.Engine.exe' }, platform,
-    deps: { locate, spawnEngine: engine.spawnEngine, env: { SystemRoot: 'C:\\Windows', PATH: 'C:\\Windows' }, profile } });
+// The pinned engine host of a pack (M1): a real file and its sha256, under the test's own folder.
+function pinnedEngine(root) {
+  const file = path.join(root, 'runtime', 'xif-engine', 'Anvil.Xif.Engine.exe');
+  fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, 'engine host');
+  return { path: file, sha256: sha('engine host') };
+}
+const kindFor = (root, engine, { locate = async () => 'C:\\IS', platform = 'win32', profile = 'C:\\Users\\someone', env = {}, now } = {}) =>
+  createXifKind({ root, ws: createWorkspace(root, { platform: 'win32' }), engine: engine.pinned ?? (engine.pinned = pinnedEngine(root)), platform,
+    deps: { locate, spawnEngine: engine.spawnEngine, env: { SystemRoot: 'C:\\Windows', PATH: 'C:\\Windows', ...env }, profile, ...(now ? { now } : {}) } });
 
 test('the hello lists o11.xif only when this installation carries the engine host', () => {
   assert.equal(XIF_KIND, 'o11.xif');
@@ -56,14 +62,16 @@ test('M10: the server box knows the kind and sends it only to an agent whose Hel
   assert.ok(HELLO_ONLY_KINDS.has(XIF_KIND));
 });
 
-test('the engine host of the pack: its path, its sha256, and nothing off Windows', t => {
+test('M1: the engine host is only the one pack.json pins (path and sha256); no pin, another file or nothing off Windows is no engine', t => {
   const runtime = tmp(t);
   const exe = path.join(runtime, 'xif-engine', 'Anvil.Xif.Engine.exe');
-  assert.equal(resolveXifEngine({ runtimeRoot: runtime, platform: 'win32' }), null, 'not in the pack');
+  const pin = { path: 'xif-engine/Anvil.Xif.Engine.exe', sha256: sha('engine') };
+  assert.equal(resolveXifEngine({ runtimeRoot: runtime, platform: 'win32', pack: { xifEngine: pin } }), null, 'not in the pack');
   fs.mkdirSync(path.dirname(exe), { recursive: true }); fs.writeFileSync(exe, 'engine');
-  assert.deepEqual(resolveXifEngine({ runtimeRoot: runtime, platform: 'win32' }), { path: exe });
-  assert.deepEqual(resolveXifEngine({ runtimeRoot: runtime, platform: 'win32', pack: { xifEngine: { path: 'xif-engine/Anvil.Xif.Engine.exe', sha256: sha('engine') } } }), { path: exe });
-  assert.equal(resolveXifEngine({ runtimeRoot: runtime, platform: 'win32', pack: { xifEngine: { sha256: sha('other') } } }), null, 'a changed engine is not run');
+  assert.equal(resolveXifEngine({ runtimeRoot: runtime, platform: 'win32' }), null, 'a file at the usual place without a pin never runs');
+  assert.equal(resolveXifEngine({ runtimeRoot: runtime, platform: 'win32', pack: { xifEngine: { path: pin.path } } }), null, 'a pin without sha256 is no pin');
+  assert.deepEqual(resolveXifEngine({ runtimeRoot: runtime, platform: 'win32', pack: { xifEngine: pin } }), { path: exe, sha256: sha('engine') });
+  assert.equal(resolveXifEngine({ runtimeRoot: runtime, platform: 'win32', pack: { xifEngine: { ...pin, sha256: sha('other') } } }), null, 'a changed engine is not run');
   assert.equal(resolveXifEngine({ runtimeRoot: runtime, platform: 'win32', pack: { xifEngine: { path: '../x.exe' } } }), null);
   assert.equal(resolveXifEngine({ runtimeRoot: runtime, platform: 'darwin' }), null);
   fs.writeFileSync(path.join(runtime, 'pack.json'), JSON.stringify({ id: 'p', lanes: ['o11'], xifEngine: { path: 'xif-engine/Anvil.Xif.Engine.exe', sha256: sha('engine') } }));
@@ -99,12 +107,51 @@ test('a model stage runs the pack engine with the found Integration Studio, a pr
   assert.equal(value.sha256, sha(fs.readFileSync(file)));
   assert.deepEqual(value.studio, { version: '11.14.25.134', lastUpgradeVersion: '11.0.0.200' }, 'no folder of this machine');
   const [run] = engine.runs;
-  assert.equal(run.exe, 'C:\\pack\\xif-engine\\Anvil.Xif.Engine.exe');
+  assert.equal(run.exe, engine.pinned.path);
   assert.equal(run.options.env.ANVIL_INTEGRATION_STUDIO_DIR, 'C:\\IS');
   assert.ok(run.options.env.TEMP.startsWith(path.join(root, 'o11', 'xif', OP, 'work')), 'a TEMP of this operation');
   assert.equal(run.request.references[0], path.join(root, 'o11', 'xif', OP, 'in', '0', 'Vendor.dll'));
   assert.equal(run.request.output, file);
   assert.ok(!fs.existsSync(path.join(root, 'o11', 'xif', OP, 'in')), 'the inputs leave once the stage ran');
+});
+
+test('M1: an engine host replaced after the start is not run', async t => {
+  const root = agentRoot(t);
+  put(root, 'in/0/Vendor.dll', 'vendor');
+  const engine = fakeEngine();
+  const kind = kindFor(root, engine);
+  fs.writeFileSync(engine.pinned.path, 'another program');
+  const value = await kind.execute(structuredClone(MODEL));
+  assert.equal(value.code, 'XIF_ENGINE_UNAVAILABLE'); assert.match(value.error, /changed since the app was installed/);
+  assert.equal(engine.runs.length, 0);
+  assert.ok(!fs.existsSync(path.join(root, 'o11', 'xif', OP, 'in')), 'the inputs leave even when nothing ran');
+});
+
+test('B2: older operation folders leave after an hour, the inputs leave on every outcome, the engine\'s native work leaves with its run', async t => {
+  const root = agentRoot(t);
+  const old = path.join(root, 'o11', 'xif', 'aaaaaaaaaaaaaaaa', 'out'); fs.mkdirSync(old, { recursive: true }); fs.writeFileSync(path.join(old, 'X.xif'), 'x');
+  const recent = path.join(root, 'o11', 'xif', 'bbbbbbbbbbbbbbbb'); fs.mkdirSync(recent, { recursive: true });
+  const other = path.join(root, 'o11', 'xif', 'not-an-operation'); fs.mkdirSync(other, { recursive: true });
+  const past = new Date(Date.now() - 2 * 3600000); fs.utimesSync(path.dirname(old), past, past);
+  const local = tmp(t), native = path.join(local, 'SSAM', 'xif', 'c'.repeat(32)); fs.mkdirSync(native, { recursive: true });
+  const engine = fakeEngine({ answer: { ok: false, code: 'XIF_VERIFY_FAILED', error: 'failed', nativeWork: native } });
+  const none = await kindFor(root, engine, { locate: async () => null, env: { LOCALAPPDATA: local } }).execute(structuredClone(MODEL)).catch(error => error);
+  assert.equal(none.code, 'XIF_ENGINE_UNAVAILABLE');
+  assert.ok(!fs.existsSync(path.dirname(old)), 'an operation older than an hour is swept');
+  assert.ok(fs.existsSync(recent) && fs.existsSync(other), 'a recent operation and a folder of another name stay');
+  put(root, 'in/0/Vendor.dll', 'vendor');
+  const failed = await kindFor(root, engine, { env: { LOCALAPPDATA: local } }).execute(structuredClone(MODEL));
+  assert.equal(failed.code, 'XIF_VERIFY_FAILED');
+  assert.ok(!fs.existsSync(native), 'the native work of the failed run left');
+  assert.ok(!fs.existsSync(path.join(root, 'o11', 'xif', OP, 'in')));
+});
+
+test('B3: this machine\'s folders are masked whatever their case', async t => {
+  const root = agentRoot(t);
+  const engine = fakeEngine({ answer: { ok: false, code: 'XIF_VERIFY_FAILED', error: 'failed in c:\\USERS\\SOMEONE\\AppData and ' + root.toUpperCase() } });
+  const value = await kindFor(root, engine).execute(structuredClone(MODEL));
+  assert.ok(!/someone/i.test(JSON.stringify(value)), JSON.stringify(value));
+  assert.ok(!JSON.stringify(value).toLowerCase().includes(root.toLowerCase().replaceAll('\\', '\\\\')));
 });
 
 test('negatives: no Integration Studio, no engine in the pack, not Windows: nothing runs', async t => {
@@ -145,5 +192,5 @@ test('the kinds table runs o11.xif only with the engine host; without it KIND_NO
   const root = agentRoot(t);
   const base = { root, ws: createWorkspace(root, { platform: 'win32' }), pack: { lanes: ['o11'] }, deps: { processes: async () => [], xif: { locate: async () => null } }, platform: 'win32' };
   await assert.rejects(createKinds(base).execute(XIF_KIND, structuredClone(MODEL)), { code: 'KIND_NOT_ALLOWED' });
-  await assert.rejects(createKinds({ ...base, xifEngine: { path: 'C:\\pack\\e.exe' } }).execute(XIF_KIND, structuredClone(MODEL)), { code: 'XIF_ENGINE_UNAVAILABLE' });
+  await assert.rejects(createKinds({ ...base, xifEngine: pinnedEngine(root) }).execute(XIF_KIND, structuredClone(MODEL)), { code: 'XIF_ENGINE_UNAVAILABLE' });
 });

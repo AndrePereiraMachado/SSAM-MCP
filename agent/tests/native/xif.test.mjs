@@ -77,6 +77,16 @@ test('native negatives: no Integration Studio, a build failure masked, a path es
   assert.equal(failed.value.code, 'XIF_VERIFY_FAILED'); assert.equal(failed.value.problems[0].path, 'Add');
   assert.ok(!JSON.stringify(failed.value).includes(root) && !JSON.stringify(failed.value).includes('C:\\\\Users\\\\someone'), JSON.stringify(failed.value));
   assert.equal(failed.value.nativeWork, undefined);
+  // B2: the inputs leave even when nothing ran, and the engine's native work of a failed run leaves with it.
+  const inputs = path.join(root, 'o11', 'xif', OP, 'in');
+  fs.mkdirSync(inputs, { recursive: true }); fs.writeFileSync(path.join(inputs, 'x'), 'x');
+  run({ params: MODEL, studio: null });
+  assert.ok(!fs.existsSync(inputs), 'no Integration Studio: the inputs left');
+  const nativeRoot = path.join(root, 'local', 'SSAM', 'xif'), nativeWork = path.join(nativeRoot, 'c'.repeat(32));
+  fs.mkdirSync(nativeWork, { recursive: true });
+  const kept = run({ params: MODEL, studio: 'C:\\IS', nativeRoot, answer: { ok: false, code: 'XIF_VERIFY_FAILED', error: 'failed', nativeWork } });
+  assert.equal(kept.value.code, 'XIF_VERIFY_FAILED');
+  assert.ok(!fs.existsSync(nativeWork), 'the native work of the failed run left');
   const escape = run({ params: { ...MODEL, references: ['C:\\Windows\\win.ini'] }, studio: 'C:\\IS' });
   assert.equal(escape.error, 'PATH_FORBIDDEN'); assert.equal(escape.seen, null);
   const leaky = run({ params: MODEL, studio: 'C:\\IS', profile: 'C:\\Users\\Someone', xml: '<Extension><R Path="c:\\users\\someone\\x.dll"/></Extension>' });

@@ -162,7 +162,7 @@ internal static class Program
                 JsonNode? seen = null;
                 var kind = new XifKinds(runRoot, null, null)
                 {
-                    Locate = () => input["studio"]?.GetValue<string>(), Profile = input["profile"]?.GetValue<string>() ?? "",
+                    Locate = () => input["studio"]?.GetValue<string>(), Profile = input["profile"]?.GetValue<string>() ?? "", NativeRoot = input["nativeRoot"]?.GetValue<string>(),
                     Spawn = (exe, text, env, work, timeout, token) =>
                     {
                         var request = JsonNode.Parse(text)!.AsObject();
