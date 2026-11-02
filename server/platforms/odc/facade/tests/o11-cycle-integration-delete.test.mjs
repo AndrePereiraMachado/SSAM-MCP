@@ -122,3 +122,22 @@ test('the rule is pure: every problem of a job at once', async () => {
   assert.deepEqual(targets, ['ISOAPAction:Subtract']);
   assert.equal((await prepareIntegrationJob(path.join(os.tmpdir(), 'missing-' + Date.now() + '.json'))).ok, true, 'an unreadable job is the kernel\'s to judge');
 });
+
+// r40: the URLs the customer's agent downloaded for the documents step (prepareIntegrationJob notes) are on o11_deliver's answer.
+test('o11_deliver lists the documents the agent downloaded, delivered or refused', async t => {
+  const box = sandbox(t);
+  const note = { rule: 'DOCUMENT_DOWNLOADED_BY_AGENT', at: '/ops/0/data/wsdl', note: 'http://www.dneonline.com/calculator.asmx?WSDL was downloaded by the SSAM Agent on the user\'s machine: 10 bytes, sha256 ' + 'c'.repeat(64) + '; the SSAM server made no request' };
+  const listed = value => (Array.isArray(value?.normalizations) ? value.normalizations : value?.normalizations?.items ?? []).filter(n => n.rule === 'DOCUMENT_DOWNLOADED_BY_AGENT');
+  const refusing = await serve(t, box, { prepareIntegrationJob: async () => ({ ok: false, code: 'UNSAFE_WSDL_XML', error: 'x', problems: [{ code: 'UNSAFE_WSDL_XML', message: 'x', fix: 'y' }], notes: [note] }) });
+  const refused = await refusing.call('o11_deliver', { module: 'Orders', job: box.job([{ op: 'soap', data: { wsdl: 'http://www.dneonline.com/calculator.asmx?WSDL', methods: ['Add'] } }]), authorize: 'pode entregar' });
+  assert.equal(refused.structuredContent.code, 'UNSAFE_WSDL_XML');
+  assert.deepEqual(listed(refused.structuredContent), [note]);
+  assert.equal(refused.structuredContent.notes, undefined);
+  assert.equal(refusing.runAnvil.calls.length, 0);
+  const box2 = sandbox(t);
+  const plain = box2.job([{ op: 'rest', data: { client: { name: 'ViaCepApi', description: 'x' } } }]);
+  const delivering = await serve(t, box2, { prepareIntegrationJob: async () => ({ ok: true, job: plain, changed: false, documents: [], notes: [note] }) });
+  const delivered = await delivering.call('o11_deliver', { module: 'Orders', job: plain, authorize: 'pode entregar' });
+  assert.equal(delivered.isError, undefined, JSON.stringify(delivered.structuredContent).slice(0, 400));
+  assert.deepEqual(listed(delivered.structuredContent), [note]);
+});

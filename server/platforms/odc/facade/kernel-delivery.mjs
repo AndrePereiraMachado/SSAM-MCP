@@ -14,6 +14,7 @@ import { catalogKind } from './studio-module.mjs';
 import { hashedWords, wordsGiven, wordsRequired } from './destructive-operations.mjs';
 import { warningsFromVerdicts, highWarningsOf, HIGH } from './delivery-warnings.mjs';
 import { diagnosisOf, refusalFields, normalizationsOf, patchesAppliedOf, withoutDestructivePatches } from './refusal-problems.mjs';
+import { mergeNormalizations } from './normalizations.mjs';
 import * as writeLock from './studio-write-lock.mjs';
 import { jobSummary } from './job-summary.mjs';
 import { appliedJobIdentity, jobIdentity, nextBasedOnOf } from './job-patch.mjs';
@@ -1300,6 +1301,8 @@ export async function deliverKernel(input, deps) {
   const started = Date.now();
   const report = { ok: false, source: 'kernel-job', startedAt: new Date().toISOString(), module, feature, job, until, steps: [], merged: false, publishInvoked: false };
   let stage = 'snapshot', claimed = false;
+  // r40: the notes of the URLs the customer's agent downloaded for the documents step (integration-documents.mjs downloadNotes).
+  let documentNotes = [];
   // proto: the expansion of a prototype op (captures, warnings, timings), its degraded items and its receipt.
   let proto = null, protoRefusal = null;
   // order: the merge order of this delivery when the candidate has deferred defaults ({deferred, firstPass}); then the
@@ -1532,7 +1535,12 @@ export async function deliverKernel(input, deps) {
     if (prepare) {
       stage = 'documents';
       const prepared = await prepare(job, { lane: 'odc', words: authorize ?? '', localRoot: path.join(root, '.local') });
-      if (prepared?.ok !== true) { refuse('documents', prepared ?? { error: 'The integration documents of the job could not be prepared.' }); return completed(report); }
+      // r40: the URLs the customer's agent downloaded (prepared.notes) are listed on the answer (normalizations), refused or not.
+      if (Array.isArray(prepared?.notes) && prepared.notes.length) { documentNotes = prepared.notes; report.normalizations = mergeNormalizations(report.normalizations, documentNotes); }
+      // review 4: after refuse, whose fields may carry the kernel's normalizations of the refusal (OP_DATA_WRAPPED): merged, never replaced.
+      if (prepared?.ok !== true) { const { notes: _notes, ...refused } = prepared ?? {}; refuse('documents', prepared ? refused : { error: 'The integration documents of the job could not be prepared.' });
+        if (documentNotes.length) report.normalizations = mergeNormalizations(report.normalizations, documentNotes.filter(n => !(Array.isArray(report.normalizations) ? report.normalizations : report.normalizations?.items ?? []).includes(n)));
+        return completed(report); }
       if (typeof prepared.job === 'string' && prepared.job && path.resolve(prepared.job) !== job) {
         job = path.resolve(prepared.job); report.job = job; jobDocument = readJob(job); requestedProducers = producersOf(jobDocument);
       }
@@ -2099,7 +2107,7 @@ export async function deliverKernel(input, deps) {
       }
       report.kernelReceipt = applied.receipt; candidate = applied.candidate;
       capped(report, 'leftovers', applied.leftovers ?? []);
-      if (applied.normalizations) report.normalizations = applied.normalizations;
+      if (applied.normalizations || documentNotes.length) report.normalizations = mergeNormalizations(applied.normalizations, documentNotes);
       Object.assign(report, patchesAppliedOf(applied));
       if (report.patchedJob) {
         const corrected = appliedJobIdentity(report.patchedJob, { path: job, sha256: jobIdentity(job).jobSha256 },

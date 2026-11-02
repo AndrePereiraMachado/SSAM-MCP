@@ -150,7 +150,7 @@ const noSecrets = (text, label) => { for (const value of Object.values(SECRET)) 
 
 test('the closed lists know the kind: last of CALL_KINDS, sent only to an agent whose Hello lists it', () => {
   // F4 (PLANO-11H): o11.xif came after it; o11.users keeps its place.
-  assert.deepEqual(CALL_KINDS.slice(-2), [USERS_KIND, 'o11.xif']);
+  assert.deepEqual(CALL_KINDS.slice(-3), [USERS_KIND, 'o11.xif', 'document.fetch']); // r40: document.fetch after o11.xif
   assert.ok(HELLO_ONLY_KINDS.has(USERS_KIND));
 });
 

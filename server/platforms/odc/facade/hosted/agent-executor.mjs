@@ -77,6 +77,9 @@ const outdatedBridge = (version, studioVersion, b) => 'The ODC bridge ' + versio
 const privateTransport = what => what + ' uses a private transport of the machine that runs SSAM (a local pipe and its vault), which is never used in hosted mode: '
   + 'only the session of the user\'s own Studio is a path. Nothing was sent.';
 const MARGIN_MS = 60000;
+// r40: the kind of a document downloaded on the user's machine (integration-documents.mjs) and its longest own deadline (30 s).
+export const DOCUMENT_FETCH_KIND = 'document.fetch';
+const DOCUMENT_FETCH_TIMEOUT_MS = 30000;
 const EVIDENCE_PULL_MS = 60000;
 // The server-side deadline of each kind (4.4): the agent applies the operation's own timeout; this is the safety net.
 const DEADLINES = {
@@ -200,6 +203,27 @@ export class AgentExecutor {
   // F4 (PLANO-11H): one Integration Studio stage of o11_extension on the user's machine (hosted/xif-stage.mjs), asked by the
   // kernel through the relay (method xif_engine). Always answers the engine's shape: the hop's own failures are refusals the
   // kernel reads (hopRefusal), since a stage writes only local files and nothing of it reaches the environment.
+  // r40 (integration-documents.mjs agentRead): whether this customer's agent downloads an integration document on the user's
+  // machine now: 'ready' (connected, its Hello lists document.fetch), 'update' (connected without it: the apps 0.2.1/0.2.2),
+  // 'absent' (not connected: nothing is asked, nothing waits for a reconnection).
+  documentFetchState() {
+    let connected = false;
+    try { connected = this.link.connected?.() === true; } catch { connected = false; }
+    if (!connected) return 'absent';
+    let supported = false;
+    try { supported = this.link.supports?.(DOCUMENT_FETCH_KIND) === true; } catch { supported = false; }
+    return supported ? 'ready' : 'update';
+  }
+
+  // One document.fetch on the user's machine through this customer's link (the one channel of every kind); the server never
+  // requests the URL. params {url, accept, maxBytes, timeoutMs, sameOrigin?}; the agent's own deadline plus the margin of the other kinds.
+  async documentFetch(params) {
+    const timeoutMs = Math.min(Number(params?.timeoutMs) || DOCUMENT_FETCH_TIMEOUT_MS, DOCUMENT_FETCH_TIMEOUT_MS) + MARGIN_MS;
+    // review 1: sameOrigin (what a downloaded document names) keeps the agent's redirects on that document's server.
+    return this.link.call(DOCUMENT_FETCH_KIND, { url: params?.url, accept: params?.accept, maxBytes: params?.maxBytes, timeoutMs: params?.timeoutMs,
+      ...(params?.sameOrigin === true ? { sameOrigin: true } : {}) }, { timeoutMs });
+  }
+
   async xif(request) {
     let supported = false;
     try { supported = this.link.supports?.(XIF_KIND) === true; } catch { supported = false; }
