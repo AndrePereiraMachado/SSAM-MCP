@@ -133,7 +133,7 @@ internal static class IntegrationImportHandler
                 client = create?.MakeGenericMethod(clientInterface!).Invoke(es, create.GetParameters().Select((pp, i) => i == 0 ? (object?)clientName : pp.HasDefaultValue ? pp.DefaultValue : null).ToArray()) as OutSystems.Model.IObjectSignature;
                 if (client == null) { error = "IESpace.CreateIntegration<ISOAPClient> is not available in this Studio"; return; }
                 created = true;
-                SetString(client, "WSDLLocation", p["source"]?.ToString() is { Length: > 0 } source && source.StartsWith("http", StringComparison.OrdinalIgnoreCase) ? source : fileUri);
+                SetString(client, "WSDLLocation", WsdlLocation(p["source"]?.ToString(), p["document_path"]!.ToString()));
             }
             var descriptor = client.GetType().GetMethod("GetCustomObjectDescriptor", Any, Type.EmptyTypes)?.Invoke(client, null) ?? Studio.Prop(client, "Descriptor");
             var import = descriptor?.GetType().GetMethods(Any).FirstOrDefault(m => m.Name == "ImportFromWSDLDefinition" && m.GetParameters().Length == 3)
@@ -281,8 +281,37 @@ internal static class IntegrationImportHandler
         return result;
     }
 
-    private static Type? FindType(string fullName) => AppDomain.CurrentDomain.GetAssemblies().Where(a => !a.IsDynamic)
-        .Select(a => { try { return a.GetType(fullName); } catch { return null; } }).FirstOrDefault(t => t != null);
+    /// <summary>A type of the Studio by its full name: in the loaded assemblies, else (review B3 of fase4-28 r4-f3-import) in the
+    /// Studio's own plugin assembly of that namespace, Plugins\ServiceStudio\ServiceStudio.Plugin.&lt;Name&gt;.dll next to the
+    /// model assembly (install-agnostic), loaded into the model's load context when the Studio has not loaded it yet. A plugin
+    /// already loaded without the type is the answer (null): nothing else is loaded.</summary>
+    internal static Type? FindType(string fullName)
+    {
+        var loaded = AppDomain.CurrentDomain.GetAssemblies().Where(a => !a.IsDynamic)
+            .Select(a => { try { return a.GetType(fullName); } catch { return null; } }).FirstOrDefault(t => t != null);
+        if (loaded != null) return loaded;
+        var parts = fullName.Split('.');
+        if (parts.Length < 4 || parts[0] != "ServiceStudio" || parts[1] != "Plugin") return null;
+        var assemblyName = string.Join('.', parts.Take(3));
+        if (AppDomain.CurrentDomain.GetAssemblies().Any(a => string.Equals(a.GetName().Name, assemblyName, StringComparison.OrdinalIgnoreCase))) return null;
+        try
+        {
+            var studio = Path.GetDirectoryName(typeof(ESpace).Assembly.Location);
+            if (string.IsNullOrEmpty(studio)) return null;
+            var file = Path.Combine(studio, "Plugins", "ServiceStudio", assemblyName + ".dll");
+            if (!File.Exists(file)) return null;
+            var context = System.Runtime.Loader.AssemblyLoadContext.GetLoadContext(typeof(ESpace).Assembly) ?? System.Runtime.Loader.AssemblyLoadContext.Default;
+            return context.LoadFromAssemblyPath(file).GetType(fullName);
+        }
+        catch (Exception ex) when (ex is IOException or BadImageFormatException or UnauthorizedAccessException or ArgumentException) { return null; }
+    }
+
+    /// <summary>The WSDLLocation a new SOAP client keeps (review B4): the service's own http(s) address when the job named one
+    /// (informative: the import never fetched it), else only the pinned file's name, never a path of the machine that ran the
+    /// import (the customer's agent folder, or the server's workspace).</summary>
+    internal static string WsdlLocation(string? source, string documentPath)
+        => source is { Length: > 0 } && (source.StartsWith("http://", StringComparison.OrdinalIgnoreCase) || source.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+            ? source : Path.GetFileName(documentPath);
 
     private static IEnumerable<object> Enumerate(object? value) => value is IEnumerable e and not string ? e.Cast<object?>().Where(x => x != null).Cast<object>() : [];
     private static IEnumerable<string> Strings(JsonNode? node) => node is JsonArray a ? a.Select(x => x?.ToString() ?? "").Where(x => x.Length > 0) : [];
