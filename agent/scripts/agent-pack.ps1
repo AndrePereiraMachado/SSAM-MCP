@@ -67,7 +67,11 @@ param(
   [ValidateSet('net8.0', 'net10.0')][string]$OdcRuntime,
   # One thin bridge per Service Studio version (see the header): the Studio folders to compile against.
   [string[]]$O11Studios,
-  [switch]$NoBridgeOffer
+  [switch]$NoBridgeOffer,
+  # F4 of PLANO-11H (kind o11.xif): the built Integration Studio engine host of the server line (kernel\src\Anvil.Xif.Engine, net472
+  # x86, Authenticode-signed for a release), copied to xif-engine\Anvil.Xif.Engine.exe with its .config; pack.json names it in
+  # xifEngine {path, sha256}. Without it the agent does not list o11.xif in its hello. Windows only; no OutSystems binary.
+  [string]$XifEngine
 )
 $ErrorActionPreference = 'Stop'
 $mac = $Platform -eq 'mac'
@@ -336,6 +340,16 @@ try {
   Copy-Item -Path (Join-Path $root 'agent\lib\*.json') -Destination (Join-Path $agentOut 'lib')
   # The vault helper of o11.users is Windows only: a macOS pack carries no .ps1, and its agent answers USERS_PLATFORM_UNAVAILABLE.
   if (-not $mac) { Copy-Item -LiteralPath (Join-Path $root 'agent\lib\users-vault.ps1') -Destination (Join-Path $agentOut 'lib') }
+  $xifEngineEntry = $null
+  if ($XifEngine) {
+    if ($mac) { throw '-XifEngine is Windows only (Integration Studio runs only on Windows).' }
+    if ((Split-Path -Leaf $XifEngine) -ne 'Anvil.Xif.Engine.exe' -or -not (Test-Path -LiteralPath $XifEngine -PathType Leaf)) { throw "-XifEngine must be an existing Anvil.Xif.Engine.exe: $XifEngine" }
+    $engineDir = Join-Path $tree 'xif-engine'
+    New-Item -ItemType Directory -Force $engineDir | Out-Null
+    Copy-Item -LiteralPath $XifEngine -Destination $engineDir
+    if (Test-Path -LiteralPath ($XifEngine + '.config')) { Copy-Item -LiteralPath ($XifEngine + '.config') -Destination $engineDir }
+    $xifEngineEntry = [ordered]@{ path = 'xif-engine/Anvil.Xif.Engine.exe'; sha256 = (Get-Sha256 (Join-Path $engineDir 'Anvil.Xif.Engine.exe')) }
+  }
   if ($mac) {
     Copy-Item -LiteralPath (Join-Path $root 'agent\install.sh') -Destination (Join-Path $tree 'install.sh')
     # bash on macOS stops at a CR: the scripts go with LF only (the box's .gitattributes says eol=lf).
@@ -572,6 +586,7 @@ try {
   if ($odcRuntimeOfPack) { $pack.Insert(3, 'odcRuntime', $odcRuntimeOfPack) }
   if ($o11Builds) { $pack.Insert($pack.Count - 1, 'o11Builds', @($o11Builds)) }
   if ($NoBridgeOffer) { $pack.Insert($pack.Count - 1, 'bridgeOffer', $false) }
+  if ($xifEngineEntry) { $pack.xifEngine = $xifEngineEntry }
   [IO.File]::WriteAllText((Join-Path $tree 'pack.json'), ($pack | ConvertTo-Json -Depth 5), $utf8)
 
   if ($Stage) {

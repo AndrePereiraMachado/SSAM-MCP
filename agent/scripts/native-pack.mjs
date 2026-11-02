@@ -41,7 +41,10 @@ export function stageNativePack(source, executable, destination) {
     }
     // Explicit binary/runtime metadata roots. Source, launch scripts, symbols,
     // captured data and tool trees cannot enter the installed native pack.
-    if (!/^(?:odc\/studio\/bridge\/|bin\/o11\/|studio\/o11\/)/.test(relative) || !/\.(?:dll|exe|json)$/i.test(relative)) continue;
+    // xif-engine/: the Integration Studio engine host of o11.xif (F4) and its .exe.config; without it the native core never
+    // lists o11.xif (XifKinds.cs checks it against pack.json xifEngine).
+    const xif = !mac && /^xif-engine\/Anvil\.Xif\.Engine\.exe(?:\.config)?$/.test(relative);
+    if (!xif && (!/^(?:odc\/studio\/bridge\/|bin\/o11\/|studio\/o11\/)/.test(relative) || !/\.(?:dll|exe|json)$/i.test(relative))) continue;
     add(relative, fs.readFileSync(path.join(source, relative)));
   }
   for (const relative of ['release.json', 'release.sig.jws']) if (fs.existsSync(path.join(source, relative))) add(relative, fs.readFileSync(path.join(source, relative)));

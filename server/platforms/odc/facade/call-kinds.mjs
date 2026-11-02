@@ -8,11 +8,13 @@
 // screen.render (fase4-28 r2-preview, DESENHO-PREVIEW-UPLOAD 2.3), sent only to an agent whose Hello lists them. New kinds
 // go at the END, so the hub's supports() keeps the nine of protocol 1 for an agent without kinds. o11.users (fase4-28 r4,
 // hosted/users-agent.mjs): the Users application through the user's agent, sent only to an agent whose Hello lists it.
+// o11.xif (F4 of PLANO-11H, hosted/xif-stage.mjs): one Integration Studio stage (model or final) of o11_extension on the
+// user's machine, with the user's own Integration Studio; sent only to an agent whose Hello lists it.
 export const CALL_KINDS = Object.freeze(['studio.processes', 'odc.pipe', 'odc.attach', 'o11.bridge', 'o11.connect', 'o11.selected',
-  'file.put', 'file.get', 'file.list', 'file.sync', 'net.probe', 'file.upload', 'screen.render', 'o11.users']);
+  'file.put', 'file.get', 'file.list', 'file.sync', 'net.probe', 'file.upload', 'screen.render', 'o11.users', 'o11.xif']);
 // The kinds that touch a machine: the only ones the local executor runs and the hosted executor forwards.
 export const MACHINE_KINDS = Object.freeze(CALL_KINDS.slice(0, 6));
 // The kinds of protocol 1: what an agent whose Hello lists no kinds supports.
 export const PROTOCOL1_KINDS = Object.freeze(CALL_KINDS.slice(0, 9));
 // The kinds sent only to an agent whose Hello lists them (the hub refuses KIND_NOT_ALLOWED before anything is written).
-export const HELLO_ONLY_KINDS = Object.freeze(new Set(['file.upload', 'screen.render', 'o11.users']));
+export const HELLO_ONLY_KINDS = Object.freeze(new Set(['file.upload', 'screen.render', 'o11.users', 'o11.xif']));

@@ -131,6 +131,53 @@ internal static class Program
                 Console.WriteLine(answers.ToJsonString());
                 return 0;
             }
+            // check-xif-request <root>: stdin [params] -> [{ok:true} | {error}], the checks of o11.xif (tests/native/xif.test.mjs compares them
+            // with the Node agent's table). check-xif-locate: stdin {locations, programFiles, existing} -> the folder or null.
+            // check-xif-run <root>: stdin {params, studio, answer?, xml?, profile}: one stage on the real kind with a stand-in engine that
+            // writes xml (zlib) at the request's output and answers answer, else ok; prints {request, value} or {error}.
+            if (args is ["check-xif-request", var xifRoot])
+            {
+                var requests = JsonNode.Parse(await Console.In.ReadToEndAsync()) as JsonArray ?? throw new ArgumentException("Expected a JSON array");
+                var kind = new XifKinds(xifRoot, null, null);
+                var answers = new JsonArray();
+                foreach (var request in requests)
+                {
+                    try { kind.Prepare(request); answers.Add((JsonNode)new JsonObject { ["ok"] = true }); }
+                    catch (AgentFault e) { answers.Add((JsonNode)new JsonObject { ["error"] = e.Code }); }
+                }
+                Console.WriteLine(answers.ToJsonString());
+                return 0;
+            }
+            if (args is ["check-xif-locate"])
+            {
+                var input = JsonNode.Parse(await Console.In.ReadToEndAsync())!.AsObject();
+                var existing = (input["existing"]?.AsArray() ?? []).Select(n => n!.GetValue<string>()).ToHashSet(StringComparer.OrdinalIgnoreCase);
+                var found = XifKinds.LocateIn((input["locations"]?.AsArray() ?? []).Select(n => n?.GetValue<string>()), (input["programFiles"]?.AsArray() ?? []).Select(n => n?.GetValue<string>()), existing.Contains);
+                Console.WriteLine(found == null ? "null" : JsonValue.Create(found)!.ToJsonString());
+                return 0;
+            }
+            if (args is ["check-xif-run", var runRoot])
+            {
+                var input = JsonNode.Parse(await Console.In.ReadToEndAsync())!.AsObject();
+                JsonNode? seen = null;
+                var kind = new XifKinds(runRoot, null, null)
+                {
+                    Locate = () => input["studio"]?.GetValue<string>(), Profile = input["profile"]?.GetValue<string>() ?? "",
+                    Spawn = (exe, text, env, work, timeout, token) =>
+                    {
+                        var request = JsonNode.Parse(text)!.AsObject();
+                        seen = new JsonObject { ["request"] = request.DeepClone(), ["studio"] = env["ANVIL_INTEGRATION_STUDIO_DIR"], ["temp"] = env["TEMP"], ["work"] = work };
+                        if (input["answer"] is JsonObject scripted) return Task.FromResult((false, scripted.ToJsonString()));
+                        var output = request["output"]!.GetValue<string>();
+                        using (var file = File.Create(output)) using (var z = new System.IO.Compression.ZLibStream(file, System.IO.Compression.CompressionLevel.Optimal))
+                            z.Write(System.Text.Encoding.UTF8.GetBytes(input["xml"]?.GetValue<string>() ?? "<Extension/>"));
+                        return Task.FromResult((false, "log\n" + new JsonObject { ["ok"] = true, ["xif"] = output, ["studio"] = new JsonObject { ["dir"] = env["ANVIL_INTEGRATION_STUDIO_DIR"], ["version"] = "11.14.25.134", ["lastUpgradeVersion"] = "11.0.0.200" }, ["reports"] = new JsonArray() }.ToJsonString()));
+                    },
+                };
+                try { var value = await kind.Execute(input["params"]!.AsObject(), null, CancellationToken.None); Console.WriteLine(new JsonObject { ["seen"] = seen, ["value"] = value }.ToJsonString()); }
+                catch (AgentFault e) { Console.WriteLine(new JsonObject { ["seen"] = seen, ["error"] = e.Code, ["executed"] = e.Executed }.ToJsonString()); }
+                return 0;
+            }
             // check-users-request: stdin [request] -> [{ok:true} | {error}], the checks of o11.users (tests/native/users.test.mjs compares
             // them with the Node agent's). users-helper-sha256: the embedded vault helper's sha.
             if (args is ["check-users-request"])
