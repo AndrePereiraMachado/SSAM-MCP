@@ -179,3 +179,11 @@ kernel/debug/tests-witness
 
 # Tests may live beside their implementation (the version router).
 **/*.test.mjs
+
+# Local qualification source links are build tooling, never server payload.
+**/.q3-agent-source
+# Test projects and their direct source files are not runtime examples or fixtures.
+**/tests/*.cs
+**/tests/*.csproj
+**/tests/**/*.cs
+**/tests/**/*.csproj
