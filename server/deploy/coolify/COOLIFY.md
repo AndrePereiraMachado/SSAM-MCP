@@ -183,8 +183,12 @@ O `backup.sh` e o `restore.sh` da pasta de cima dependem do `compose.prod.yml` e
 VPS e um heartbeat, use o cron da VPS sobre o `ssamctl.sh backup` (o arquivo tem dados de clientes e hashes de tokens:
 cifre antes de copiar para fora).
 
-O dump é SQL puro (`pg_dump --no-owner`, num container avulso da imagem `postgres`), carregado de volta com `psql` contra
-a mesma URL; o restore do dump apaga a tabela e a recria do arquivo. Os dois arquivos têm dados de clientes e hashes de tokens: cifre antes de
+O dump é SQL puro (`pg_dump --no-owner`, num container avulso da imagem do próprio container do banco, o host da
+`SSAM_DATABASE_URL`, para o `pg_dump` ter sempre a versão do servidor; `PG_IMAGE` força outra), carregado de volta com `psql` contra
+a mesma URL. O backup recusa alto (código `BACKUP_*`, nada fica com o nome final) um dump vazio, um dump sem as tabelas
+de licença (`server_tokens`, `schema_migrations`) e um `pg_dump` mais velho que o servidor (01/11: o 17 contra o 18.6
+gerava arquivo vazio). Antes de todo Stop/Redeploy, rode desta pasta, na sua máquina, `sh backup-before-redeploy.sh <sha>`:
+ele leva este `ssamctl.sh` por SSH e grava em `/var/backups/ssam-server/pre-<sha>`; o restore do dump apaga a tabela e a recria do arquivo. Os dois arquivos têm dados de clientes e hashes de tokens: cifre antes de
 copiar para fora.
 
 ## 9. O que é diferente de Caddy para Traefik

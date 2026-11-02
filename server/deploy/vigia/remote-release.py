@@ -132,6 +132,10 @@ def dispatch(request):
         dump = docker("exec", pg, "sh", "-c", 'exec pg_dump -U "${POSTGRES_USER:-postgres}" "${POSTGRES_DB:-postgres}"')
         if not dump:
             raise RuntimeError("Empty PostgreSQL backup.")
+        # postgresContainer must be the licenses database (2026-11-01: the update_server's PostgreSQL was dumped instead).
+        for table in ("server_tokens", "schema_migrations"):
+            if not re.search(rb"^CREATE TABLE (public\.)?" + table.encode() + rb" \(", dump, re.M):
+                raise RuntimeError("PostgreSQL backup has no license table " + table + ": postgresContainer is not the licenses database.")
         with gzip.open(directory / "postgres.sql.gz", "wb") as stream:
             stream.write(dump)
         volumes = sorted({m["Name"] for server in servers for m in server["Mounts"] if m["Type"] == "volume"})

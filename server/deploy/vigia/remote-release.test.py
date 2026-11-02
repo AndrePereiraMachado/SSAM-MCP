@@ -51,7 +51,7 @@ class RemoteTests(unittest.TestCase):
         if args[0] == "image":
             return json.dumps(["image@sha256:" + "a" * 64]).encode()
         if args[0] == "exec" and args[1] == "postgres-fixture":
-            return b"SQL backup"
+            return getattr(self, "dump", b"CREATE TABLE public.schema_migrations (\n);\nCREATE TABLE public.server_tokens (\n);\n")
         if args[0] == "exec" and args[1] == "-i":
             return json.dumps({"ok": True, "kernel": {"odc": "1.7.29", "o11": "11.55.93"}, "budget": {"tools": 90}, "telemetry": {"tokens": {}}}).encode()
         if args[0] == "run":
@@ -89,6 +89,12 @@ class RemoteTests(unittest.TestCase):
         directory = pathlib.Path(result["directory"])
         self.assertTrue((directory / "postgres.sql.gz").exists())
         self.assertEqual(json.loads((directory / "volumes.json").read_text()), ["fixture_state"])
+
+    def test_backup_refuses_a_database_without_the_license_tables(self):
+        self.dump = b"CREATE TABLE public.releases (\n);\n"
+        with self.assertRaisesRegex(RuntimeError, "no license table server_tokens"):
+            self.request("backup", id="wrong-db")
+        self.assertFalse(any((pathlib.Path(self.temp.name) / "backups").glob("wrong-db-*/complete")))
 
     def test_prepare_stays_stopped_writes_via_ssamctl_and_preserves_volumes(self):
         result = self.request("prepare", id="o11-11.55.94-odc-1.7.30", archive=self.archive(), features=base64.b64encode(b"<Features/>").decode(), kernel={},
