@@ -32,7 +32,8 @@ test('build: pack.json names the app executable as the renderer on Windows and m
   const written = withRenderer(pack, 'win', '44.9.2');
   assert.deepEqual(written.renderer, rendererFor('win', '44.9.2'));
   assert.equal(verifyPack(pack).ok, true, verifyPack(pack).detail);
-  const resolved = resolveRenderer({ runtimeRoot: pack, dataRoot: path.join(base, 'data'), pack: readPack(pack), platform: 'win32' });
+  // The host's path flavor: the files are real, so a forced 'win32' cannot resolve them on a macOS runner.
+  const resolved = resolveRenderer({ runtimeRoot: pack, dataRoot: path.join(base, 'data'), pack: readPack(pack), platform: process.platform });
   assert.equal(resolved.path, path.join(install, 'SSAM Agent.exe'));
   assert.equal(resolved.version, '44.9.2');
 });
