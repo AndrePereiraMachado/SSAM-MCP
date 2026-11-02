@@ -46,7 +46,8 @@ win:
     - target: nsis
       arch: [x64]
   icon: build/icon.png
-  # verifyUpdateCodeSignature is left on: a signed build is checked by the updater; an unsigned one is accepted as is.
+  # verifyUpdateCodeSignature stays on: a release build (scripts/windows-release.mjs) writes publisherName to app-update.yml and
+  # electron-updater installs only an update signed by that publisher; a build without it never updates itself (update-model.mjs).
 nsis:
   oneClick: true
   perMachine: false

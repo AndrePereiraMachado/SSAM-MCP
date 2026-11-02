@@ -8,12 +8,17 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import updater from 'electron-updater';
-import { INITIAL, reduce, canCheck, describeUpdateError } from '../core/update-model.mjs';
+import { INITIAL, reduce, canCheck, describeUpdateError, updateTrustProblem } from '../core/update-model.mjs';
 
 const { autoUpdater } = updater;
 const FIRST_CHECK_MS = 20000;
 // The pause between the download and the automatic install: time for a call in flight on the agent to finish.
 const AUTO_INSTALL_DELAY_MS = 15000;
+
+// The text of resources/app-update.yml, or null.
+export function buildUpdateConfig(resourcesPath) {
+  try { return fs.readFileSync(path.join(resourcesPath, 'app-update.yml'), 'utf8'); } catch { return null; }
+}
 
 // The url of resources/app-update.yml (what electron-builder wrote at build time), or null.
 export function buildUpdateUrl(resourcesPath) {
@@ -24,8 +29,13 @@ export function buildUpdateUrl(resourcesPath) {
   } catch { return null; }
 }
 
-export function createUpdates({ url, hours = 6, autoInstall = true, log, onChange = () => {}, isPackaged = true, devConfig = null, stopAgent = async () => {} }) {
-  let state = url ? reduce(INITIAL, { type: 'configured', url }) : reduce(INITIAL, { type: 'off' });
+export function createUpdates({ url: wanted, hours = 6, autoInstall = true, log, onChange = () => {}, isPackaged = true, devConfig = null, stopAgent = async () => {},
+  platform = process.platform, appUpdateYml = null }) {
+  // A Windows build that cannot verify who signed an update never installs one (update-model.mjs updateTrustProblem).
+  const untrusted = wanted ? updateTrustProblem({ platform, isPackaged, appUpdateYml }) : null;
+  const url = untrusted ? null : wanted;
+  if (untrusted) log.write('updates-off', { reason: untrusted });
+  let state = url ? reduce(INITIAL, { type: 'configured', url }) : reduce(INITIAL, { type: 'off', reason: untrusted });
   let timer = null; let installTimer = null;
   const emit = event => { state = reduce(state, event); onChange(state); };
 

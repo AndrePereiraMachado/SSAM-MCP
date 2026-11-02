@@ -6,7 +6,7 @@ export const INITIAL = Object.freeze({ status: 'idle', url: null, version: null,
 
 export function reduce(state, event) {
   switch (event.type) {
-    case 'off': return { ...INITIAL, status: 'off' };
+    case 'off': return { ...INITIAL, status: 'off', error: event.reason ? String(event.reason).slice(0, 300) : null };
     case 'configured': return { ...state, status: state.status === 'off' ? 'idle' : state.status, url: event.url };
     case 'scheduled': return { ...state, nextCheckAt: event.at };
     case 'checking-for-update': return { ...state, status: 'checking', error: null };
@@ -22,7 +22,7 @@ export function reduce(state, event) {
 // One line for the tray and the panel.
 export function updateText(state, appVersion) {
   switch (state.status) {
-    case 'off': return `Version ${appVersion}. Updates are off: no update server is configured.`;
+    case 'off': return `Version ${appVersion}. Updates are off: ${state.error ?? 'no update server is configured'}.`;
     case 'checking': return `Version ${appVersion}. Checking for updates...`;
     case 'available': return `Version ${appVersion}. Update ${state.version ?? ''} found; downloading.`;
     case 'downloading': return `Version ${appVersion}. Downloading update ${state.version ?? ''}: ${state.percent ?? 0}%.`;
@@ -31,6 +31,33 @@ export function updateText(state, appVersion) {
     case 'error': return `Version ${appVersion}. The last update check failed: ${state.error}`;
     default: return `Version ${appVersion}.`;
   }
+}
+
+// Whether this build may install updates by itself (agent app 0.2.0): on Windows a packaged app installs only an update
+// signed by its own publisher. electron-updater checks the Authenticode signature of the downloaded installer against the
+// publisherName list of resources/app-update.yml, and skips the check when the list is missing, so a build without it
+// (an unsigned build) never updates itself: the update would be accepted unverified. The sha512 of latest.yml only proves
+// the download matches the feed, not who made it. macOS: Squirrel.Mac checks the code signature itself.
+export function publisherNames(appUpdateYml) {
+  const lines = String(appUpdateYml ?? '').split(/\r?\n/);
+  const at = lines.findIndex(line => /^publisherName:/.test(line));
+  if (at < 0) return [];
+  const clean = value => value.trim().replace(/^['"]|['"]$/g, '').trim();
+  const inline = lines[at].slice('publisherName:'.length).trim();
+  if (inline) return inline.replace(/^\[|\]$/g, '').split(',').map(clean).filter(Boolean);
+  const names = [];
+  for (const line of lines.slice(at + 1)) {
+    const item = /^\s+-\s*(.*)$/.exec(line);
+    if (!item) break;
+    if (clean(item[1])) names.push(clean(item[1]));
+  }
+  return names;
+}
+export function updateTrustProblem({ platform, isPackaged, appUpdateYml }) {
+  if (platform !== 'win32' || !isPackaged) return null;
+  if (publisherNames(appUpdateYml).length === 0)
+    return 'this build cannot verify the signature of an update (no publisherName in app-update.yml); install the signed SSAM Agent by hand';
+  return null;
 }
 
 // Whether a check may start now (never over a download or an install that is ready).

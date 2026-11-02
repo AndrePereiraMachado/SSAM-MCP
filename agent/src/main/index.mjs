@@ -14,7 +14,7 @@ import { forkWithUtilityProcess } from './electron/runtime.mjs';
 import { createAppLog } from './electron/app-log.mjs';
 import { createTray } from './electron/tray.mjs';
 import { createPanel } from './electron/window.mjs';
-import { createUpdates, buildUpdateUrl } from './electron/updates.mjs';
+import { createUpdates, buildUpdateUrl, buildUpdateConfig } from './electron/updates.mjs';
 import { loadSettings, saveSettings, resolveUpdateUrl, updateUrlProblem } from './core/settings.mjs';
 import { defaultRoot, bundledPackDir } from './core/paths.mjs';
 import { resolveDataLocation } from './core/data-location.mjs';
@@ -75,7 +75,7 @@ async function run() {
 
   const updateUrl = resolveUpdateUrl({ env: process.env, settings, build: buildUpdateUrl(process.resourcesPath) });
   const updates = createUpdates({ url: updateUrl.url, hours: settings.updateCheckHours, autoInstall: settings.updateAutoInstall, log, isPackaged: app.isPackaged,
-    devConfig: path.join(appDir, 'dev-app-update.yml'), onChange: state => { updateState = state; push(); }, stopAgent: async () => { if (supervisor) await supervisor.stop(); } });
+    devConfig: path.join(appDir, 'dev-app-update.yml'), appUpdateYml: buildUpdateConfig(process.resourcesPath), onChange: state => { updateState = state; push(); }, stopAgent: async () => { if (supervisor) await supervisor.stop(); } });
   updateState = updates.state;
   log.write('updates', { url: updateUrl.url, source: updateUrl.source, autoInstall: settings.updateAutoInstall });
 

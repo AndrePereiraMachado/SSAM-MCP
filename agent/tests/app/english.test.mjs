@@ -11,7 +11,7 @@ import { portugueseIn } from '../../agent/tests/fixtures/portuguese.mjs';
 
 const box = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const walk = dir => fs.readdirSync(dir, { withFileTypes: true }).flatMap(entry => (entry.isDirectory() ? walk(path.join(dir, entry.name)) : [path.join(dir, entry.name)]));
-const APP_SCRIPTS = ['build.mjs', 'zip.mjs', 'verify-pack.mjs', 'make-icons.mjs'];
+const APP_SCRIPTS = ['build.mjs', 'windows-release.mjs', 'zip.mjs', 'verify-pack.mjs', 'make-icons.mjs'];
 
 test('the app sources, the panel, the app scripts, the build configuration and the customer guide are English only', () => {
   // src/: the main process, the preload and the React panel (src/renderer).

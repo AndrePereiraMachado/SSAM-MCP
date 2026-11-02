@@ -5,6 +5,11 @@
 //   node scripts/build.mjs --platform win|mac --pack <ssam-agent.zip | ssam-agent-mac.tar.gz | folder>
 //                          [--update-url https://...] [--no-updates] [--pack-only]
 //   Without --update-url the build publishes to https://dist.ssam.pro/u/ssam-agent (the owner's update server).
+//   Windows release (app 0.2.0, scripts/windows-release.mjs): --cert-sha1 <thumbprint> --publisher-name <subject CN>
+//   [--timestamp-url <url>] (or SSAM_WIN_CERT_SHA1, SSAM_WIN_PUBLISHER_NAME, SSAM_WIN_TIMESTAMP_URL): the native core and the
+//   installer are signed with that certificate of Cert:\CurrentUser\My, and app-update.yml requires that publisher for every
+//   update. --test-unsigned: the owner's own test app (no signature, no trust anchors, no updates, bridgeOffer false), never
+//   published. --dry-run: everything up to electron-builder, then prints its configuration and arguments.
 //   SSAM_UPDATE_URL in the environment stands for --update-url. --pack-only stops after pack/ is ready.
 // A macOS build (DMG, ZIP for the updater, signing) only runs on a Mac; a Windows build runs on Windows (or on
 // Linux with wine, which this script does not set up).
@@ -17,6 +22,7 @@ import { verifyPack } from '../src/main/core/pack-sync.mjs';
 import { updateUrlProblem } from '../src/main/core/settings.mjs';
 import { stageNativePack } from './native-pack.mjs';
 import { assertBridgeTrust } from './bridge-trust-gate.mjs';
+import { signingOf, signingConfig, testUnsignedConfig, updaterConfigProblems, signNative, signerThumbprint } from './windows-release.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const app = path.resolve(here, '..');
@@ -24,14 +30,16 @@ const app = path.resolve(here, '..');
 export const DEFAULT_UPDATE_URL = 'https://dist.ssam.pro/u/ssam-agent';
 
 function parse(argv) {
-  const options = { platform: null, pack: null, updateUrl: process.env.SSAM_UPDATE_URL ?? DEFAULT_UPDATE_URL, noUpdates: false, packOnly: false, notarize: false };
+  const options = { platform: null, pack: null, updateUrl: process.env.SSAM_UPDATE_URL ?? DEFAULT_UPDATE_URL, noUpdates: false, packOnly: false, notarize: false, testUnsigned: false, dryRun: false };
   for (let i = 0; i < argv.length; i++) {
     const name = argv[i];
     if (name === '--no-updates') { options.noUpdates = true; continue; }
     if (name === '--pack-only') { options.packOnly = true; continue; }
+    if (name === '--test-unsigned') { options.testUnsigned = true; continue; }
+    if (name === '--dry-run') { options.dryRun = true; continue; }
     // macOS only: notarize with APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD and APPLE_TEAM_ID (electron-builder reads them).
     if (name === '--notarize') { options.notarize = true; continue; }
-    if (!['--platform', '--pack', '--update-url', '--native', '--bridge-public-key'].includes(name)) throw new Error('unknown option: ' + name);
+    if (!['--platform', '--pack', '--update-url', '--native', '--bridge-public-key', '--cert-sha1', '--publisher-name', '--timestamp-url'].includes(name)) throw new Error('unknown option: ' + name);
     if (i + 1 >= argv.length) throw new Error('missing the value of ' + name);
     const value = argv[++i];
     if (name === '--platform') options.platform = value;
@@ -39,9 +47,22 @@ function parse(argv) {
     if (name === '--native') options.native = value;
     if (name === '--bridge-public-key') options.bridgePublicKey = value;
     if (name === '--update-url') options.updateUrl = value;
+    if (name === '--cert-sha1') options.certSha1 = value;
+    if (name === '--publisher-name') options.publisherName = value;
+    if (name === '--timestamp-url') options.timestampUrl = value;
   }
   if (!['win', 'mac'].includes(options.platform)) throw new Error('use --platform win or --platform mac');
   if (options.platform === 'win' && !options.native) throw new Error('Windows app builds require --native <qualified ssam-agent.exe>.');
+  if (options.testUnsigned) {
+    if (options.platform !== 'win') throw new Error('--test-unsigned is the Windows test app only');
+    if (options.certSha1 || options.publisherName) throw new Error('--test-unsigned takes no signing certificate');
+    options.noUpdates = true;
+  } else if (options.platform === 'win' && !options.packOnly) {
+    // A Windows app that reaches customers is signed, and its updater accepts only updates of the same publisher.
+    const signing = signingOf(options);
+    if (!signing.ok) throw new Error(signing.problem);
+    options.signing = signing;
+  }
   if (!options.packOnly && !options.noUpdates) {
     if (!options.updateUrl) throw new Error('give the update server with --update-url https://... (or SSAM_UPDATE_URL), or pass --no-updates for a build that never updates itself');
     const problem = updateUrlProblem(options.updateUrl);
@@ -98,9 +119,40 @@ export async function preparePack(source, platform, packDir = path.join(app, 'pa
   return check.pack;
 }
 
+// pack.json of the staged pack with bridgeOffer false (the unsigned test app; pack.json is not in its own integrity list).
+export function withoutOffers(packDir) {
+  const file = path.join(packDir, 'pack.json');
+  const next = { ...JSON.parse(fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, '')), bridgeOffer: false };
+  fs.writeFileSync(file, JSON.stringify(next, null, 2) + '\n');
+  return next;
+}
+
+// After electron-builder: the updater configuration of the built app, the feed files and the signatures. A signed release
+// that would not verify its updates, or an installer that is not signed by the release certificate, stops here.
+export function checkWindowsOutput(dist, options, { thumbprint = signerThumbprint } = {}) {
+  const unpacked = path.join(dist, 'win-unpacked');
+  const yml = path.join(unpacked, 'resources', 'app-update.yml');
+  const text = fs.existsSync(yml) ? fs.readFileSync(yml, 'utf8') : null;
+  if (options.testUnsigned || options.noUpdates) {
+    if (text !== null) throw new Error('a build without updates must not carry resources/app-update.yml');
+    return;
+  }
+  const problems = updaterConfigProblems(text, { url: options.updateUrl.replace(/\/+$/, ''), publisherName: options.signing?.publisherName });
+  if (!fs.existsSync(path.join(dist, 'latest.yml'))) problems.push('dist/latest.yml is missing: the feed would have nothing to announce');
+  if (options.signing) {
+    for (const file of [path.join(unpacked, 'SSAM Agent.exe'), ...fs.readdirSync(dist).filter(n => /-setup\.exe$/.test(n)).map(n => path.join(dist, n))])
+      if (thumbprint(file) !== options.signing.certSha1) problems.push(path.basename(file) + ' is not signed by certificate ' + options.signing.certSha1);
+  }
+  if (problems.length) throw new Error('the Windows build is not releasable: ' + problems.join('; '));
+  console.log('updater: app-update.yml names ' + options.updateUrl + ' and requires publisher ' + (options.signing?.publisherName ?? '-'));
+}
+
 async function main() {
   const options = parse(process.argv.slice(2));
-  assertBridgeTrust({ nativeExecutable: options.native, publicKeyFile: options.bridgePublicKey });
+  // The native core is signed first (its hash goes into pack.json), then its trust anchors are checked. The unsigned test
+  // app has no anchors: its agent never takes a bridge offer (bridgeOffer false).
+  if (options.signing && !options.dryRun) options.native = signNative(options.native, options.signing, path.join(app, '.local/build/native-signed-' + Date.now()));
+  if (!options.testUnsigned) assertBridgeTrust({ nativeExecutable: options.native, publicKeyFile: options.bridgePublicKey });
   if (options.notarize) {
     if (options.platform !== 'mac' || process.platform !== 'darwin' || !options.native)
       throw new Error('Notarized releases require a native executable and a Mac build host.');
@@ -127,6 +179,7 @@ async function main() {
   }
   if (options.platform === 'win' && !pack.nativeCore) throw new Error('Windows app builds require --native <qualified ssam-agent.exe>.');
   pack = withRenderer(path.join(app, 'pack'), options.platform);
+  if (options.testUnsigned) pack = withoutOffers(path.join(app, 'pack'));
   console.log(`pack ${pack.id} ready in pack/ (${pack.files.length} files, lanes ${(pack.lanes ?? []).join(',')}, ODC bridge ${pack.odcBridge ?? '-'}, Service Studio ${pack.o11BuiltFor ?? '-'})`);
   if (options.packOnly) return;
   if (options.platform === 'mac' && process.platform !== 'darwin') throw new Error('a macOS build (DMG, ZIP, signing) only runs on a Mac');
@@ -138,12 +191,13 @@ async function main() {
   let config = 'electron-builder.yml';
   const nativeMac = options.platform === 'mac' && pack.nativeCore;
   if (nativeMac && pack.nativeCore.arch !== process.arch) throw new Error('Build the installer on the native core target architecture.');
-  if (options.noUpdates || nativeMac) {
+  if (options.noUpdates || nativeMac || options.signing || options.testUnsigned) {
     // The CLI treats -c.publish=null as the string provider "null". A JSON
     // configuration preserves a real null and produces an offline test build.
     config = path.join(app, '.local/build/installer-config.json');
     fs.mkdirSync(path.dirname(config), { recursive: true });
     fs.writeFileSync(config, JSON.stringify({ extends: path.join(app, 'electron-builder.yml'), ...(options.noUpdates ? { publish: null } : {}),
+      ...(options.signing ? signingConfig(options.signing) : {}), ...(options.testUnsigned ? testUnsignedConfig() : {}),
       ...(options.notarize ? { forceCodeSigning: true } : {}),
       ...(nativeMac ? { mac: { target: [{ target: 'dmg', arch: [process.arch] }, { target: 'zip', arch: [process.arch] }],
         // Ad-hoc sealing needs no Apple certificate and keeps ARM64 code valid.
@@ -160,11 +214,13 @@ async function main() {
     args.push('-c.mac.notarize=true');
   }
   console.log('electron-builder ' + args.slice(1).join(' '));
+  if (options.dryRun) { console.log('dry-run config ' + fs.readFileSync(config, 'utf8')); return; }
   const result = spawnSync(process.execPath, args, { cwd: app, stdio: 'inherit', env: { ...process.env, CSC_IDENTITY_AUTO_DISCOVERY: process.env.CSC_IDENTITY_AUTO_DISCOVERY ?? 'false' } });
   if (result.status !== 0) throw new Error('electron-builder failed with code ' + result.status);
   const dist = path.join(app, 'dist');
   const files = fs.readdirSync(dist).filter(name => /\.(exe|dmg|zip|yml|blockmap)$/.test(name));
   console.log('dist: ' + files.join(', '));
+  if (options.platform === 'win') checkWindowsOutput(dist, options);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href)
