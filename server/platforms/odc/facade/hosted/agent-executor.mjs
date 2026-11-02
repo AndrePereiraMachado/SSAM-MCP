@@ -34,7 +34,7 @@ export const HOSTED_REFUSED_METHODS = Object.freeze(['sc_private_http', 'sc_priv
 const HOSTED_ONLY_SESSION = 'HOSTED_STUDIO_SESSION_ONLY';
 // fase4-28 r4-f3-import (criterion C3): the Studio's own SOAP/OpenAPI import runs in the customer's Service Studio through the
 // thin bridge 1.1.0 of the agent pack (integration_import, capabilities integration_import:wsdl and integration_import:openapi).
-// The server sends it only to an agent whose hello lists the method (agent.o11Methods, agent 0.3.7 / 0.4.4-native and later):
+// The server sends it only to an agent whose hello lists the method (agent.o11Methods, agent 0.3.8 / 0.4.5-native and later, the SSAM Agent app 0.2.0):
 // for any other agent (0.4.0-native and every agent before this one) the capabilities are taken out of the bridge's manifest,
 // so the kernel refuses the job before the snapshot with INTEGRATION_IMPORT_NEEDS_BRIDGE (Delivery.cs), and the method itself
 // is refused here, nothing sent. Local use (the owner's own bridge) never passes here.

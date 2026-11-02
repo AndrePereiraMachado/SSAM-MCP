@@ -41,6 +41,8 @@
   <ItemGroup>
     <None Include="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
     <Compile Include="../Shared/ModelReadingTests.cs" Link="ModelReadingTests.cs" />
+    <Compile Include="../Shared/MergeIntentProofTests.cs" Link="MergeIntentProofTests.cs" />
+    <Compile Include="../Shared/ConflictRebaseLaneTests.cs" Link="ConflictRebaseLaneTests.cs" />
     <Compile Include="../Shared/ReactiveClientRulesTests.cs" Link="ReactiveClientRulesTests.cs" />
     <Compile Include="../Shared/ReactiveClientRulesReviewTests.cs" Link="ReactiveClientRulesReviewTests.cs" />
     <Compile Include="../Shared/PublicReferenceSurfaceTests.cs" Link="PublicReferenceSurfaceTests.cs" />

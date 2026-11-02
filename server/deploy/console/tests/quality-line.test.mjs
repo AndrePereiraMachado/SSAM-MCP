@@ -17,7 +17,7 @@ const FIXTURES = process.env.QUALITY_FIXTURES ?? path.join(HERE, 'fixtures', 'qu
 const native = loadNativeIds(path.join(FIXTURES, 'catalog'), { readDir: fs.readdirSync, readFile: fs.readFileSync, join: path.join });
 const lines = text => text.split('\n').filter(Boolean);
 // agent/r4-v106: reconcile-merge in ODC_COMMANDS (A1 of U1); the box's union of codes is unchanged until the line is copied again.
-// agent/r4-f3-import: integration_import in O11_METHODS (thin O11 bridge 1.1.0, agent 0.3.7 / 0.4.4-native).
+// agent/r4-f3-import: integration_import in O11_METHODS (thin O11 bridge 1.1.0, agent 0.3.8 / 0.4.5-native, app 0.2.0).
 export const CONTRACT_SHA256 = 'ce0d578702f214d63a2b9e29963966660e8314dfe45b9f900e8378933e00bdd0';
 const lfSha = file => createHash('sha256').update(fs.readFileSync(file, 'utf8').replace(/\r\n/g, '\n'), 'utf8').digest('hex');
 

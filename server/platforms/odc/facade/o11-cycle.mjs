@@ -52,7 +52,7 @@ import { clipText } from './text-clip.mjs';
 import { appendJsonLine } from './correlation.mjs';
 import { wordsGiven } from './destructive-operations.mjs';
 import fs from 'node:fs';
-import { sameDeliveryLineage, reservationContinuation } from './delivery-lineage.mjs';
+import { sameDeliveryLineage, reservationContinuation, runLeaseFree } from './delivery-lineage.mjs';
 import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import * as z from 'zod/v4';
@@ -621,6 +621,9 @@ export function closeState(state) {
   if (state.closed === true) return 'closed';
   if (state.delivered === true) return 'delivered';
   if (deliveryOutcome(state) === 'uncertain') return 'uncertain';
+  // F1 (2a, production 2026-11-02 task c150…): a write never sent and with no pending Studio call is closable without a
+  // recorded failure (a run killed during its capture); the kernel's close takes the task's run lease, so a running one stays.
+  if (state.writeState === 'not-sent' && !state.pendingBridgeOperation && !state.pendingOperationRecovery && (state.error != null || runLeaseFree(state))) return 'refused';
   return state.error != null && ['applied', 'unchanged', 'not-sent', 'not-applied'].includes(state.writeState) ? 'refused' : 'unsettled';
 }
 // The refusal for an earlier task that cannot be closed (null when it is refused or already closed).
@@ -801,7 +804,23 @@ export function deliveryFields(state) {
     // fam-deps review (finding 1): the dialogs the bridge closed for this delivery.
     ...dialogsOf(state),
     // R3-C (K2): the names the Studio gave on its own in the merge, which the content proof accepted only as predicted.
-    ...nativeRenamesOf(state) };
+    ...nativeRenamesOf(state),
+    // Hotfix (owner 2026-11-02): what the content proof accepted without requiring it (editor state, the person's edits).
+    ...mergeNotesOf(state),
+    // F1 (owner 2026-11-02, Delivery.cs Reserve): an earlier task that had ended and still held the module, closed with its
+    // known content so this delivery could merge.
+    ...previousClosedOf(state) };
+}
+export function previousClosedOf(state) {
+  const p = state?.previousClosed;
+  return p && typeof p === 'object' && /^[0-9a-f]{32}$/i.test(String(p.taskId ?? ''))
+    ? { previousClosed: { taskId: String(p.taskId), was: clean(String(p.was ?? ''), 40), note: clean(String(p.note ?? ''), 300) } } : {};
+}
+// Hotfix (owner 2026-11-02, Delivery.cs mergeNotes): the proof requires only what the delivery wrote; positions on the canvas
+// and the values the person edited in the Studio while it ran are kept and said here, never a refusal and never silent.
+export function mergeNotesOf(state) {
+  const notes = (Array.isArray(state?.mergeNotes) ? state.mergeNotes : []).filter(n => typeof n === 'string' && n);
+  return notes.length ? { mergeNotes: notes.slice(0, 6).map(n => clean(n, 600)) } : {};
 }
 // F1b stop 4 (Delivery.cs StudioBusyBridge): each step the busy Studio withdrew before it ran, waited for and sent again, as a
 // normalization {rule: STUDIO_BUSY, at: <bridge method>, note}; nothing when the Studio was never busy.
@@ -1017,7 +1036,7 @@ function deliverOutcomeCore(run, { trackId, work, job, taskId, since, input = {}
   if (state.code === 'MERGE_CONTENT_MISMATCH') return {
     ok: false, outcome: 'refused', code: 'MERGE_CONTENT_MISMATCH', stage: state.stage ?? 'checks', taskId: state.taskId ?? taskId ?? null,
     ...(state.writeState === 'applied' ? { merged: true } : {}), writeState: state.writeState,
-    error: 'The post-merge snapshot differs from the validated candidate. Nothing was published; inspect the content proof before any further merge.',
+    error: 'The post-merge snapshot differs from the validated candidate in what this delivery wrote. Nothing was published; inspect the content proof before any further merge. The next delivery of this module closes this task by itself and merges over the module as it is now.',
     ...(state.mergeOrder ? { mergeOrder: state.mergeOrder } : {}),
     ...(state.contentProof ? { contentProof: proofSummary(state.contentProof) } : {}),
     continuation: { tool: 'ssam_evidence', arguments: { file: resultFileOf(state, work), pointer: '/contentProof' },

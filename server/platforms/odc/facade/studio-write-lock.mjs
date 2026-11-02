@@ -93,7 +93,7 @@ import { wordsGiven } from './destructive-operations.mjs';
 import { stallRecovery } from './studio-recovery.mjs';
 import { isErrorReportTitle } from './bridge-stall.mjs';
 import { isStudioWrite } from './tool-classification.mjs';
-import { moduleReservation, sameDeliveryLineage, reservationContinuation } from './delivery-lineage.mjs';
+import { moduleReservation, sameDeliveryLineage, reservationContinuation, holderEnded } from './delivery-lineage.mjs';
 import { pendingMerge, hasPendingMerge, INTENT_GRACE_MS } from './studio-work-order.mjs';
 import { laneLocalDir, laneWorkDir } from './lane-folders.mjs';
 const APP_TOOLS = new Set(['context', 'propose', 'continue', 'status']);
@@ -1052,7 +1052,9 @@ async function runPhased({ target, tool, args, deps, ctx, limit, signal, studio,
       : path.join(record?.authorityDir ?? deps.env?.ANVIL_AUTHORITY_DIR ?? process.env.ANVIL_AUTHORITY_DIR ?? '', 'reservations');
     reservation = () => {
       const held = moduleReservation({ directory, work: laneWorkDir(local), module: args.module, environment: args.expectedEnvironment });
-      return held && !sameDeliveryLineage(args, args.job, held.task) ? held : null;
+      // F1 (owner 2026-11-02): a holder that already ended (a known failure, or closed/delivered and left its reservation)
+      // is closed by the kernel itself when this delivery reserves the module (Delivery.Reserve), so nothing waits for it.
+      return held && !sameDeliveryLineage(args, args.job, held.task) && !holderEnded(held.task) ? held : null;
     };
     const configured = Number(deps.env?.SSAM_RESERVATION_QUEUE_MS ?? process.env.SSAM_RESERVATION_QUEUE_MS ?? 120000);
     reservation.waitMs = Number.isFinite(configured) && configured >= 0 ? configured : 120000;

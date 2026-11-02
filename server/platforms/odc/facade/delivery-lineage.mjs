@@ -19,6 +19,33 @@ export function readDeliveryTask(work, id) {
   } catch { return null; }
 }
 
+// F1 (owner 2026-11-02, "o ssam deve permitir que o usuario programe junto com ele"): a holder task that already ended, so
+// it never frees the module by itself: a known failure (a recorded error, writeState not-sent or not-applied, or an applied
+// merge whose verification ran or whose content proof refused), or one closed or delivered that left its reservation. The
+// kernel closes it with its known content when the next delivery reserves the module (Delivery.Reserve, the rule of
+// Delivery.EndedHolder); a running, uncertain or unsettled holder is never one.
+export function holderEnded(task) {
+  if (!task || task.pendingBridgeOperation || task.pendingOperationRecovery) return false;
+  if (task.closed === true || task.delivered === true) return true;
+  // 2a: a write never sent, error recorded or not, once no process runs it (its run lease is free).
+  if (task.writeState === 'not-sent' && task.error == null) return runLeaseFree(task);
+  if (task.error == null) return false;
+  if (['not-sent', 'not-applied'].includes(task.writeState)) return true;
+  // after the merge: every checker ran (failures recorded once all ran: Verify, checks, data and content proofs)
+  return ['applied', 'unchanged'].includes(task.writeState) && ((Array.isArray(task.failures) && task.failures.length > 0) || task.validation?.newErrors != null || task.code === 'MERGE_CONTENT_MISMATCH');
+}
+
+// The kernel's run lease of a task (<work>/deliver/<id>/run.lock, FileShare.None while a process runs it): free when this
+// process can open it exclusively. Without a task folder, never free.
+const EXCLUSIVE = process.platform === 'win32' ? 0x10000000 : 0;
+export function runLeaseFree(task) {
+  if (typeof task?.work !== 'string' || !fs.existsSync(task.work)) return false;
+  let fd;
+  try { fd = fs.openSync(path.join(task.work, 'run.lock'), fs.constants.O_RDWR | fs.constants.O_CREAT | EXCLUSIVE); return true; }
+  catch { return false; }
+  finally { if (fd !== undefined) fs.closeSync(fd); }
+}
+
 // A shared MCP session is not an owner. Only a reference to this task/job or identical job bytes proves lineage.
 export function sameDeliveryLineage(input, job, holder) {
   if (!holder) return false;

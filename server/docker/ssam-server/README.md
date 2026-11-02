@@ -72,7 +72,7 @@ docker run --init -d --name ssam-server -p 127.0.0.1:7310:7310 -v ssam-server-st
 
 ## Extensões .NET O11 (XIF) no servidor hospedado
 
-- Com um agente que roda o kind `o11.xif` (app SSAM Agent 0.3.7 / 0.4.4-native ou mais novo, com o motor no pacote), `o11_extension` funciona hospedado:
+- Com um agente que roda o kind `o11.xif` (app SSAM Agent 0.2.0, agente 0.3.8 / 0.4.5-native ou mais novo, com o motor no pacote), `o11_extension` funciona hospedado:
   - as etapas `model` e `final` rodam na máquina do usuário, com o Integration Studio dele;
   - este servidor confere o spec, compila a DLL (com `ref/net472` ao lado do CLI O11, conferido no estágio `kernel-o11`) e publica pela sessão do Service Studio do usuário.
 - Um agente sem o kind recebe a recusa de antes, antes de rodar qualquer coisa:

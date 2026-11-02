@@ -7,13 +7,25 @@ namespace Anvil.Core;
 
 /// <summary>The delivery's merge order on files, headless (MergeOrder over ModelHost): Plan before the merge, Missing on
 /// the delivered snapshot. The O11 deliver path calls it through Delivery.IMergePlanner; MergeProbe uses Plan.</summary>
-public sealed class MergePlanner : Delivery.IMergePlanner, Delivery.IMergeContentVerifier
+public sealed class MergePlanner : Delivery.IMergePlanner, Delivery.IMergeContentVerifier, Delivery.IConflictRebaser
 {
     private readonly Func<string, ModelHost> host;
     public MergePlanner(Func<string, ModelHost> host) => this.host = host;
 
     public JsonObject VerifyContent(string expectedPath, string snapshotPath)
         => MergeContentProof.Check(host(Path.GetDirectoryName(snapshotPath)!), expectedPath, snapshotPath);
+
+    /// <summary>The proof with the open module captured right before the merge (MergeContentProof.PersonsEdits).</summary>
+    public JsonObject VerifyContent(string expectedPath, string snapshotPath, string? basePath, string? minePath)
+        => MergeContentProof.Check(host(Path.GetDirectoryName(snapshotPath)!), expectedPath, snapshotPath, basePath, minePath);
+
+    /// <summary>The proof of what the delivery wrote over basePath (MergeContentProof.IntentRule).</summary>
+    public JsonObject VerifyContent(string expectedPath, string snapshotPath, string? basePath)
+        => MergeContentProof.Check(host(Path.GetDirectoryName(snapshotPath)!), expectedPath, snapshotPath, basePath);
+
+    /// <summary>F1 conflict: the candidate rebased on the live module, the candidate's value kept on a conflict (NativeConflictRebase).</summary>
+    public void Rebase(string candidatePath, string livePath, string basePath, string outputPath)
+        => NativeConflictRebase.Build(host(Path.GetDirectoryName(outputPath)!), File.ReadAllBytes(candidatePath), File.ReadAllBytes(livePath), File.ReadAllBytes(basePath), outputPath);
 
     public static (IReadOnlyList<DeferredDefault> Deferred, byte[]? FirstPass) Plan(ModelHost host, byte[] baseBytes, byte[] foreignBytes)
         => Plan(host, baseBytes, foreignBytes, MergeOrder.ReadOnlyRule);

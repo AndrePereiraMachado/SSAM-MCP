@@ -95,6 +95,37 @@ public sealed class DeliveryTask : IDisposable
         return true;
     }
 
+    /// <summary>F1 conflict (ConflictRebase): prepares the second attempt of a delivery the first attempt of this call merged
+    /// and the content proof refused only on same-property conflicts. The first attempt is kept in attempts; the new one
+    /// captures the module as it is now (the first merge and the person's edits) and merges the first candidate rebased on it.
+    /// Once per task; never for a task delivered, closed, uncertain or with a pending Studio call.</summary>
+    public static bool PrepareConflictRebase(string work, string id, JsonArray conflicts)
+    {
+        var request = ResumeRequest(work, id);
+        using var task = new DeliveryTask(request);
+        var state = task.State;
+        if (state["delivered"]?.GetValue<bool>() == true || state["closed"]?.GetValue<bool>() == true || state["conflictRebase"] != null
+            || state["writeState"]?.ToString() != "applied" || state["pendingBridgeOperation"] != null || state["apply"] is not JsonObject applied) return false;
+        var attempt = state["attempt"]?.GetValue<int>() ?? 0;
+        var directory = Path.Combine(task.DirectoryPath, "attempt-" + attempt);
+        var candidate = Path.Combine(directory, "foreign.oml"); var basis = Path.Combine(directory, "base.oml");
+        if (!File.Exists(candidate) || !File.Exists(basis)) return false;
+        var previous = new JsonObject();
+        foreach (var key in new[] { "operationId", "snapshot", "apply", "merge", "mergePlan", "mergeOrder", "validation", "dataProof", "contentProof", "artifacts", "writeState", "error", "code" })
+            previous[key] = state[key]?.DeepClone();
+        var attempts = state["attempts"] as JsonArray ?? new JsonArray();
+        if (state["attempts"] == null) state["attempts"] = attempts;
+        attempts.Add(previous);
+        state["conflictRebase"] = new JsonObject { ["rule"] = ConflictRebase.Rule, ["fromAttempt"] = attempt, ["candidate"] = candidate, ["base"] = basis,
+            ["candidateSha256"] = DeliveryReceipt.Hash(candidate), ["applied"] = applied.DeepClone(), ["conflicts"] = conflicts.DeepClone() };
+        state["attempt"] = attempt + 1;
+        state["hasAppliedWrites"] = true;
+        foreach (var key in new[] { "operationId", "snapshot", "apply", "merge", "mergePlan", "mergeOrder", "mergeContentPreview", "mergeProof", "validation", "dataProof", "contentProof",
+            "deliveredSnapshot", "artifacts", "assertions", "failures", "error", "code", "mergeNotes", "contract", "newErrors", "checks" }) state.Remove(key);
+        state["writeState"] = "not-sent"; state["delivered"] = false;
+        task.Save("conflict-rebase-prepared");
+        return true;
+    }
     /// <summary>Close a rejected, reconciled maintenance delivery so a corrected contract can be submitted.
     /// Never converts failure to success or permits replay of an uncertain write.
     /// A17: a task whose write never reached the module (writeState not-sent) or was proven not applied (not-applied) closes
@@ -185,7 +216,10 @@ public sealed class DeliveryTask : IDisposable
         var uncertain = writeState is "unknown" or "intent";
         var baseSha = uncertain ? RollbackProof.BaseSha256(state) : null;
         if (state["delivered"]?.GetValue<bool>() == true || (uncertain ? baseSha == null || state["moduleKey"] == null || state["environment"] == null
-                : state["error"] == null || writeState is not ("applied" or "unchanged" or "not-sent" or "not-applied")))
+                // F1 (2a, production 2026-11-02 task c150…): a write never sent closes without a recorded failure; nothing of
+                // it reached the module (a run killed during its capture records no error). This close holds the task's
+                // run lease, so a delivery still running is never closed here.
+                : (state["error"] == null && writeState != "not-sent") || writeState is not ("applied" or "unchanged" or "not-sent" or "not-applied")))
             throw new InvalidOperationException(uncertain
                 ? "This uncertain delivery has no recorded base to prove that nothing was applied; resume it to reconcile instead"
                 : "Only a known failed delivery can be closed; reconcile uncertain writes first");

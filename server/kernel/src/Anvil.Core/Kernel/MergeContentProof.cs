@@ -53,9 +53,84 @@ public static class MergeContentProof
     /// its attribute, a placeholder content its placeholder, an event handler its event, a role exception its role).</summary>
     private static readonly string[] DefiningReferences = ["Parameter", "Attribute", "Placeholder", "Event", "Role"];
 
-    public static JsonObject Check(ModelHost host, string expectedPath, string actualPath)
+    /// <summary>The rule of the proof for editor state, named in its receipt.</summary>
+    public const string EditorStateRule = "ssam-editor-state/1: where a flow node sits on its canvas (HorizontalPosition, VerticalPosition) and how the editor shows an element (ExpandedInWebEditor, DesignMode) are editor state, not content: the Studio's merge keeps, drops or rearranges them on its own, so a difference in them is a note of the proof, never a difference";
+
+    /// <summary>The rule of the proof given the delivery's base, named in its receipt.</summary>
+    public const string IntentRule = "ssam-merge-intent/1: with the delivery's base, the proof requires what the delivery wrote (each value the candidate holds differently from the base, each element it created or removed) to be in the merged module as the candidate holds it; a value the delivery did not write that differs in the merged module (an edit made in the Studio while the delivery ran, or the Studio's own) is kept as it is and said as a note, never a difference";
+
+    /// <summary>The editor-state properties (EditorStateRule): the canvas, never the content.</summary>
+    internal static readonly HashSet<string> EditorState = new(StringComparer.Ordinal) { "HorizontalPosition", "VerticalPosition", "ExpandedInWebEditor", "DesignMode" };
+    private static bool IsEditorState(string property) => property.StartsWith("api:", StringComparison.Ordinal) && EditorState.Contains(property[4..]);
+    /// <summary>The elements a note section lists by name; the counts are always whole.</summary>
+    private const int NoteElements = 20;
+
+    /// <summary><paramref name="basePath"/>: the delivery's base, the model the merge took as its base. Given, only what the
+    /// delivery wrote is required (<see cref="IntentRule"/>); null, every value of the candidate is.</summary>
+    public static JsonObject Check(ModelHost host, string expectedPath, string actualPath, string? basePath = null)
+        => Check(host, expectedPath, actualPath, basePath != null && File.Exists(basePath) ? File.ReadAllBytes(basePath) : null, basePath);
+
+    /// <summary>F1 review A3/A8: with <paramref name="minePath"/>, the open module captured right before the merge (the person's
+    /// edits), the proof also says which of the person's edits the merged module does not have: overridden by the delivery
+    /// (on what the job wrote) or lost by the merge (elsewhere), each a note with its elements.</summary>
+    public static JsonObject Check(ModelHost host, string expectedPath, string actualPath, string? basePath, string? minePath)
     {
-        ESpace? expected = null, actual = null;
+        var proof = Check(host, expectedPath, actualPath, basePath);
+        if (basePath == null || minePath == null || !File.Exists(minePath) || !File.Exists(basePath)) return proof;
+        ESpace? expected = null, actual = null, basis = null, mine = null;
+        try
+        {
+            expected = host.Load(File.ReadAllBytes(expectedPath)); actual = host.Load(File.ReadAllBytes(actualPath));
+            basis = host.Load(File.ReadAllBytes(basePath)); mine = host.Load(File.ReadAllBytes(minePath));
+            var labels = new Dictionary<string, string>(StringComparer.Ordinal);
+            var expectedValues = Read(expected); var actualValues = Read(actual, null, labels); var baseValues = Read(basis); var mineValues = Read(mine, null, labels);
+            PersonsEdits(proof, expectedValues, actualValues, baseValues, mineValues, labels);
+        }
+        catch (Exception error) when (error is not OutOfMemoryException) { proof["personsEditsError"] = error.Message; }
+        finally { ModelHost.Release(expected); ModelHost.Release(actual); ModelHost.Release(basis); ModelHost.Release(mine); }
+        return proof;
+    }
+
+    /// <summary>The person's edits (mine against base) the merged module does not hold as the person left them.</summary>
+    internal static void PersonsEdits(JsonObject proof, Dictionary<(string Key, string Property), string> expected, Dictionary<(string Key, string Property), string> actual,
+        Dictionary<(string Key, string Property), string> basis, Dictionary<(string Key, string Property), string> mine, IReadOnlyDictionary<string, string> labels)
+    {
+        static bool Same(bool a, string? x, bool b, string? y) => a == b && (!a || Normalize(x!) == Normalize(y!));
+        var written = new HashSet<string>(expected.Keys.Union(basis.Keys)
+            .Where(f => !Same(expected.TryGetValue(f, out var v), v, basis.TryGetValue(f, out var w), w)).Select(f => f.Key), StringComparer.Ordinal);
+        bool Under(string key) => written.Any(w => w == key || w.StartsWith(key + "/", StringComparison.Ordinal));
+        var overridden = new SortedSet<string>(StringComparer.Ordinal); var lost = new SortedSet<string>(StringComparer.Ordinal);
+        foreach (var field in mine.Keys.Union(basis.Keys))
+        {
+            if (IsEditorState(field.Property)) continue;
+            var minePresent = mine.TryGetValue(field, out var edited);
+            if (Same(minePresent, edited, basis.TryGetValue(field, out var before), before)) continue;
+            if (Same(actual.TryGetValue(field, out var now), now, minePresent, edited)) continue;
+            var name = labels.GetValueOrDefault(field.Key) ?? field.Key;
+            if (Under(field.Key) || !Same(expected.TryGetValue(field, out var wanted), wanted, basis.TryGetValue(field, out var b2), b2)) overridden.Add(name);
+            else lost.Add(name);
+        }
+        var notes = proof["notes"] as JsonArray ?? new JsonArray();
+        static string List(SortedSet<string> names) => string.Join(", ", names.Take(5)) + (names.Count > 5 ? ", ..." : "");
+        if (overridden.Count > 0)
+        {
+            proof["personsEditsOverridden"] = new JsonArray(overridden.Take(NoteElements).Select(n => (JsonNode)n).ToArray());
+            notes.Add(overridden.Count + " element(s) the person edited or removed in the Studio while the delivery ran are now as the delivery wrote them (" + List(overridden)
+                + "): the delivery's version wins where both changed the same element");
+        }
+        if (lost.Count > 0)
+        {
+            proof["personsEditsLost"] = new JsonArray(lost.Take(NoteElements).Select(n => (JsonNode)n).ToArray());
+            notes.Add(lost.Count + " element(s) the person edited in the Studio while the delivery ran are not as the person left them after the merge, outside what the delivery wrote ("
+                + List(lost) + "): said so they can be delivered again if they are needed");
+        }
+        if (notes.Count > 0) proof["notes"] = notes;
+    }
+
+    /// <summary>The same proof with the base given as bytes (the disposable previews hold it in memory).</summary>
+    internal static JsonObject Check(ModelHost host, string expectedPath, string actualPath, byte[]? baseBytes, string? basePath = null)
+    {
+        ESpace? expected = null, actual = null, basis = null;
         try
         {
             var expectedBytes = File.ReadAllBytes(expectedPath); var actualBytes = File.ReadAllBytes(actualPath);
@@ -65,15 +140,18 @@ public static class MergeContentProof
             var expectedLabels = new Dictionary<string, string>(StringComparer.Ordinal); var actualLabels = new Dictionary<string, string>(StringComparer.Ordinal);
             var identitiesOfExpected = new Dictionary<IObjectSignature, string>(ReferenceEqualityComparer.Instance);
             var expectedValues = Read(expected, omittedExpected, expectedLabels, identitiesOfExpected); var actualValues = Read(actual, omittedActual, actualLabels);
-            var proof = Compare(expectedValues, actualValues, expectedLabels, actualLabels);
+            Dictionary<(string Key, string Property), string>? baseValues = null;
+            if (baseBytes != null) { basis = host.Load(baseBytes); baseValues = Read(basis); ModelHost.Release(basis); basis = null; }
+            var proof = Compare(expectedValues, actualValues, expectedLabels, actualLabels, baseValues);
             // R3-C (K2): a name the Studio gave on its own in the merge is accepted only as NativeNames predicted it from the
             // candidate (NativeRenamed); anything else keeps this refusal.
             if (proof["accepted"]?.GetValue<bool>() != true
-                && NativeRenamed(expected, expectedValues, actualValues, identitiesOfExpected, expectedLabels, actualLabels, proof) is { } renamed)
+                && NativeRenamed(expected, expectedValues, actualValues, identitiesOfExpected, expectedLabels, actualLabels, proof, baseValues) is { } renamed)
                 proof = renamed;
             proof["inputs"] = new JsonObject {
                 ["expected"] = new JsonObject { ["path"] = Path.GetFullPath(expectedPath), ["sha256"] = Convert.ToHexString(SHA256.HashData(expectedBytes)).ToLowerInvariant() },
                 ["actual"] = new JsonObject { ["path"] = Path.GetFullPath(actualPath), ["sha256"] = Convert.ToHexString(SHA256.HashData(actualBytes)).ToLowerInvariant() },
+                ["base"] = baseBytes == null ? null : new JsonObject { ["sha256"] = Convert.ToHexString(SHA256.HashData(baseBytes)).ToLowerInvariant() },
                 ["nativeModelVersion"] = typeof(ESpace).Assembly.GetName().Version?.ToString()
             };
             proof["coverage"] = new JsonObject {
@@ -86,7 +164,7 @@ public static class MergeContentProof
             };
             return proof;
         }
-        finally { ModelHost.Release(expected); ModelHost.Release(actual); }
+        finally { ModelHost.Release(expected); ModelHost.Release(actual); ModelHost.Release(basis); }
     }
 
     /// <summary><paramref name="identityMap"/>: when given, receives the identity of every element read (NativeRenamed reads the
@@ -100,6 +178,8 @@ public static class MergeContentProof
         var identityOwners = new Dictionary<string, IObjectSignature>(StringComparer.Ordinal);
         var slotsOf = new Dictionary<IObjectSignature, Dictionary<IObjectSignature, Slot>>(ReferenceEqualityComparer.Instance);
         var signatures = new Dictionary<IObjectSignature, string>(ReferenceEqualityComparer.Instance);
+        var placedSignatures = new Dictionary<IObjectSignature, string>(ReferenceEqualityComparer.Instance);
+        Dictionary<IObjectSignature, List<(IObjectSignature Referer, string Property)>>? referersOf = null;
         var root = (IObjectSignature)model;
         var moduleKey = root.ObjectKey?.ToString() ?? "";
         string Kind(IObjectSignature node) => node.GetInterface()?.Name ?? node.GetType().Name;
@@ -194,14 +274,19 @@ public static class MergeContentProof
         }
         // The content of an element without any identity in it: its kind, its values (a reference by the kind and name of
         // its target), and the content of its children, sorted. It tells apart unnamed siblings of an unordered slot.
-        string Signature(IObjectSignature node)
+        // A7 (F1 review): the content of an element without editor state (EditorStateRule), so a node the Studio or the person
+        // moved on the canvas keeps its identity; exact twins that only their canvas place tells apart use PlacedSignature.
+        string Signature(IObjectSignature node) => SignatureOf(node, false);
+        string PlacedSignature(IObjectSignature node) => SignatureOf(node, true);
+        string SignatureOf(IObjectSignature node, bool placed)
         {
-            if (signatures.TryGetValue(node, out var known)) return known;
+            var cache = placed ? placedSignatures : signatures;
+            if (cache.TryGetValue(node, out var known)) return known;
             var parts = new List<string> { Kind(node) };
             foreach (var property in ModelApiMetadata.Properties(node.GetType())
                 .Where(p => p.GetIndexParameters().Length == 0 && p.CanRead && (p.CanWrite || OrderedCollections.Contains(p.Name) || SetCollections.Contains(p.Name)))
                 .DistinctBy(p => p.Name).OrderBy(p => p.Name, StringComparer.Ordinal)) {
-                if (ModelReader<IObjectSignature>.IsNoise(property.Name)) continue;
+                if (ModelReader<IObjectSignature>.IsNoise(property.Name) || (!placed && EditorState.Contains(property.Name))) continue;
                 object? value;
                 try { value = property.GetValue(node); } catch { continue; }
                 var shallow = value switch {
@@ -214,8 +299,8 @@ public static class MergeContentProof
                 if (shallow != null) parts.Add(property.Name + "=" + shallow);
             }
             if (node is IExpression own) parts.Add("$expression=" + own.Text);
-            parts.AddRange(node.Children.OfType<IObjectSignature>().Select(Signature).OrderBy(s => s, StringComparer.Ordinal));
-            return signatures[node] = Hash(string.Join("\n", parts));
+            parts.AddRange(node.Children.OfType<IObjectSignature>().Select(child => SignatureOf(child, placed)).OrderBy(s => s, StringComparer.Ordinal));
+            return cache[node] = Hash(string.Join("\n", parts));
         }
         // What points at an element, without any identity in it: the readable path of each referer and the property, sorted.
         // It tells apart twins, siblings of one kind whose own content is the same (two folders of one name in two trees of
@@ -259,7 +344,45 @@ public static class MergeContentProof
             if (slot.Ordered) return "#" + siblings.FindIndex(s => ReferenceEquals(s, node)).ToString(CultureInfo.InvariantCulture);
             var signature = Signature(node);
             if (siblings.Count(s => Signature(s) == signature) == 1) return "~" + signature[..16];
-            return "~" + Hash(signature + "\n" + Incoming(node))[..16];
+            var referred = Hash(signature + "\n" + Incoming(node));
+            if (siblings.Count(s => Signature(s) == signature && Hash(signature + "\n" + Incoming(s)) == referred) == 1) return "~" + referred[..16];
+            // Twins whose referers read alike (two Ends, each the target of one of two twin Assigns): the referers' own
+            // referers tell them apart (the If's true and false branches), never the canvas.
+            var twoSteps = Hash(signature + "\n" + ReferersTwoSteps(node));
+            if (siblings.Count(s => Signature(s) == signature && Hash(signature + "\n" + ReferersTwoSteps(s)) == twoSteps) == 1) return "~" + twoSteps[..16];
+            // Exact twins (same content, same referers): only their place on the canvas tells them apart, as before A7.
+            return "~" + Hash(PlacedSignature(node) + "\n" + Incoming(node))[..16];
+        }
+        // What points at an element two steps back, in readable paths only (never an identity, so no order of computation
+        // enters): each referer and its property, followed by what points at that referer. Two Ends, each the target of one
+        // of two twin Assigns, differ here by the If's true and false branches.
+        string ReferersTwoSteps(IObjectSignature node)
+        {
+            Incoming(node);
+            if (referersOf == null)
+            {
+                referersOf = new Dictionary<IObjectSignature, List<(IObjectSignature Referer, string Property)>>(ReferenceEqualityComparer.Instance);
+                var walk = new Stack<IObjectSignature>(); walk.Push(root);
+                var seen = new HashSet<IObjectSignature>(ReferenceEqualityComparer.Instance);
+                while (walk.TryPop(out var n)) {
+                    if (!seen.Add(n) || n is ServiceStudio.Model.Interfaces.ITopLevelReferenceElement) continue;
+                    foreach (var property in ModelApiMetadata.Properties(n.GetType())
+                        .Where(p => p.GetIndexParameters().Length == 0 && p.CanRead && p.CanWrite).DistinctBy(p => p.Name)) {
+                        if (ModelReader<IObjectSignature>.IsNoise(property.Name)) continue;
+                        object? value;
+                        try { value = property.GetValue(n); } catch { continue; }
+                        if (value is IObjectSignature target && !ReferenceEquals(ParentOf(target), n)) {
+                            if (!referersOf.TryGetValue(target, out var list)) referersOf[target] = list = new();
+                            list.Add((n, property.Name));
+                        }
+                    }
+                    IEnumerable<IObjectSignature> children;
+                    try { children = n.Children.OfType<IObjectSignature>().ToList(); } catch { continue; }
+                    foreach (var child in children) walk.Push(child);
+                }
+            }
+            if (!referersOf.TryGetValue(node, out var referers)) return "";
+            return string.Join("\n", referers.Select(r => Label(r.Referer) + "." + r.Property + "<" + Incoming(r.Referer).Replace("\n", "|")).OrderBy(i => i, StringComparer.Ordinal));
         }
         string Identity(IObjectSignature node)
         {
@@ -457,7 +580,8 @@ public static class MergeContentProof
     /// </summary>
     private static JsonObject? NativeRenamed(ESpace expected, Dictionary<(string Key, string Property), string> expectedValues,
         Dictionary<(string Key, string Property), string> actualValues, IReadOnlyDictionary<IObjectSignature, string> identities,
-        IReadOnlyDictionary<string, string> expectedLabels, IReadOnlyDictionary<string, string> actualLabels, JsonObject plain)
+        IReadOnlyDictionary<string, string> expectedLabels, IReadOnlyDictionary<string, string> actualLabels, JsonObject plain,
+        Dictionary<(string Key, string Property), string>? baseValues = null)
     {
         List<NativeNames.Rename> predicted;
         try { predicted = NativeNames.Predict(expected); }
@@ -478,7 +602,7 @@ public static class MergeContentProof
         catch { return null; }
         if (!applied) return null;
         var labels = new Dictionary<string, string>(StringComparer.Ordinal);
-        var proof = Compare(Read(expected, null, labels), actualValues, labels, actualLabels);
+        var proof = Compare(Read(expected, null, labels), actualValues, labels, actualLabels, baseValues);
         proof["nativeNames"] = new JsonObject
         {
             ["rule"] = NativeNamesRule,
@@ -532,9 +656,34 @@ public static class MergeContentProof
     };
 
     internal static JsonObject Compare(Dictionary<(string Key, string Property), string> expected, Dictionary<(string Key, string Property), string> actual,
-        IReadOnlyDictionary<string, string>? expectedLabels = null, IReadOnlyDictionary<string, string>? actualLabels = null)
+        IReadOnlyDictionary<string, string>? expectedLabels = null, IReadOnlyDictionary<string, string>? actualLabels = null,
+        Dictionary<(string Key, string Property), string>? basis = null)
     {
         var differences = new JsonArray();
+        // Editor state (EditorStateRule) and, given the base, what the delivery did not write (IntentRule): notes, never
+        // differences. Counted whole; the first NoteElements of each are named.
+        var editorState = new JsonArray(); var outside = new JsonArray();
+        int editorStateTotal = 0, outsideTotal = 0;
+        var sameElement = new SortedSet<string>(StringComparer.Ordinal);
+        static bool Same(bool presentA, string? a, bool presentB, string? b) => presentA == presentB && (!presentA || Normalize(a!) == Normalize(b!));
+        // A field the delivery wrote: the candidate holds it otherwise than the base (another value, or present on one side only).
+        bool Written((string Key, string Property) field, bool expectedPresent, string? value)
+            => basis == null || !Same(expectedPresent, value, basis.TryGetValue(field, out var before), before);
+        var writtenElements = basis == null ? null : new HashSet<string>(expected.Keys.Union(basis.Keys)
+            .Where(f => Written(f, expected.TryGetValue(f, out var v), v)).Select(f => f.Key), StringComparer.Ordinal);
+        bool OrderedIntentHolds((string Key, string Property) field, string expectedList, string actualList, out List<string> extra)
+        {
+            extra = new List<string>();
+            if (!field.Property.StartsWith("ordered:", StringComparison.Ordinal) || field.Property == "ordered:Conditions") return false;
+            static List<string> Items(string list) => Normalize(list).Split('\n', StringSplitOptions.RemoveEmptyEntries).ToList();
+            var wanted = Items(expectedList); var got = Items(actualList);
+            var before = basis!.TryGetValue(field, out var baseList) ? Items(baseList) : new List<string>();
+            if (wanted.Except(before).Any(item => !got.Contains(item)) || before.Except(wanted).Any(got.Contains)) return false;
+            var kept = got.Where(wanted.Contains).ToList();
+            if (!kept.SequenceEqual(wanted.Where(got.Contains))) return false;
+            extra = got.Where(item => !wanted.Contains(item)).ToList();
+            return true;
+        }
         // Each difference names its element (the readable path of the candidate's element, else the module's) and, for a
         // reference or an expression, the readable value on each side: a refusal lists what differs, never only hashes.
         string Element(string key) => expectedLabels?.GetValueOrDefault(key) ?? actualLabels?.GetValueOrDefault(key) ?? key;
@@ -555,6 +704,38 @@ public static class MergeContentProof
             var expectedPresent = expected.TryGetValue(field, out var value);
             var present = actual.TryGetValue(field, out var got);
             if (expectedPresent && present && Normalize(value!) == Normalize(got!)) continue;
+            // The canvas place of an element added or removed as a whole is part of that addition or removal, said there.
+            if (IsEditorState(field.Property) && (!present || !expectedPresent)) continue;
+            if (IsEditorState(field.Property))
+            {
+                if (editorStateTotal++ < NoteElements)
+                    editorState.Add(new JsonObject { ["element"] = Element(field.Key), ["property"] = field.Property[4..],
+                        ["expectedValue"] = expectedPresent ? Readable(field.Property, value, expectedLabels) : null,
+                        ["actualValue"] = present ? Readable(field.Property, got, actualLabels) : null });
+                continue;
+            }
+            if (!Written(field, expectedPresent, value))
+            {
+                // The owner's rule (same element edited by both): counted whole, named in a note of its own.
+                if (writtenElements!.Contains(field.Key)) sameElement.Add(Element(field.Key));
+                if (outsideTotal++ < NoteElements)
+                    outside.Add(new JsonObject { ["element"] = Element(field.Key), ["property"] = field.Property,
+                        ["change"] = !present ? "removed" : !expectedPresent ? "added" : "changed",
+                        // (c) of the owner's rule: an element this delivery wrote, whose other values were edited outside it.
+                        ["onWrittenElement"] = writtenElements!.Contains(field.Key) });
+                continue;
+            }
+            // A1 (F1 review): an ordered child list the job wrote and the person also added to (two attributes of one entity,
+            // two widgets of one container): only the job's intention is required. Its added children are present, its
+            // removed ones absent, and its children keep their relative order; the person's extra children stay, noted.
+            if (basis != null && expectedPresent && present && OrderedIntentHolds(field, value!, got!, out var extra))
+            {
+                if (writtenElements!.Contains(field.Key)) sameElement.Add(Element(field.Key));
+                if (outsideTotal++ < NoteElements)
+                    outside.Add(new JsonObject { ["element"] = Element(field.Key), ["property"] = field.Property, ["change"] = "added",
+                        ["children"] = new JsonArray(extra.Take(5).Select(e => (JsonNode)Element(e)).ToArray()), ["onWrittenElement"] = true });
+                continue;
+            }
             differences.Add(new JsonObject { ["objectKey"] = field.Key.Split('/')[0], ["address"] = field.Key, ["property"] = field.Property,
                 ["element"] = Element(field.Key),
                 ["kind"] = expected.GetValueOrDefault((field.Key, "$kind")) ?? actual.GetValueOrDefault((field.Key, "$kind")),
@@ -569,9 +750,50 @@ public static class MergeContentProof
                 // acceptance itself is unchanged (modulo line endings, Normalize).
                 ["css"] = IsStyleSheet(field.Property) && expectedPresent && present ? CssSummary(CssStylesheet.Compare(value, got)) : null });
         }
-        return new JsonObject { ["schema"] = "ssam-merge-content-proof/1", ["accepted"] = differences.Count == 0,
+        var proof = new JsonObject { ["schema"] = "ssam-merge-content-proof/1", ["accepted"] = differences.Count == 0,
             ["scope"] = "Object identity/parent, public writable scalar/reference/expression properties, expression text/references, ESpace.DefaultScreen, refresh targets, Traditional links and all stylesheet values outside producer references; unsupported property value types are not covered",
             ["checked"] = expected.Count, ["differences"] = differences, ["css"] = CssSection(expected, actual, Element) };
+        if (basis != null) proof["intent"] = new JsonObject { ["rule"] = IntentRule, ["written"] = writtenElements!.Count };
+        var notes = new JsonArray();
+        if (editorStateTotal > 0)
+        {
+            proof["editorState"] = new JsonObject { ["rule"] = EditorStateRule, ["total"] = editorStateTotal, ["elements"] = editorState };
+            notes.Add(editorStateTotal + " editor-state value(s) (canvas positions, expanded or design state) differ from the candidate (" + Names(editorState)
+                + "): moved by the Studio's merge or by the person; editor state is no content, so the module keeps them as they are");
+        }
+        if (outsideTotal > 0)
+        {
+            proof["outsideDelivery"] = new JsonObject { ["rule"] = IntentRule, ["total"] = outsideTotal, ["elements"] = outside };
+            // A3/A9 (F1 review): each kind of change said apart, with the elements; a removal is never called kept.
+            foreach (var (change, verb) in new[] { ("changed", "changed"), ("added", "added"), ("removed", "removed") })
+            {
+                var these = outside.OfType<JsonObject>().Where(o => o["change"]?.ToString() == change).ToList();
+                if (these.Count == 0) continue;
+                // An element added or removed as a whole is one entry, by its element; a changed value is one per property.
+                var whole = change != "changed";
+                var listed = whole ? these.Where(o => o["property"]?.ToString() == "$kind" || o["children"] != null).Select(o => { var e = (JsonObject)o.DeepClone(); e.Remove("property"); return (JsonNode)e; }).ToArray()
+                    : these.Select(o => (JsonNode)o.DeepClone()).ToArray();
+                if (listed.Length == 0) listed = these.Select(o => { var e = (JsonObject)o.DeepClone(); e.Remove("property"); return (JsonNode)e; }).ToArray();
+                var count = whole ? listed.Select(e => e!["element"]?.ToString()).Distinct().Count() : listed.Length;
+                notes.Add(count + (outsideTotal > NoteElements ? "+" : "") + (whole ? " element(s)" : " value(s)") + " this delivery did not write were " + verb
+                    + " in the Studio while it ran (" + Names(new JsonArray(listed))
+                    + "): the module has them as the person left them; what the delivery wrote is in the module");
+            }
+        }
+        if (sameElement.Count > 0)
+        {
+            proof["sameElement"] = new JsonObject { ["total"] = sameElement.Count, ["elements"] = new JsonArray(sameElement.Take(NoteElements).Select(e => (JsonNode)e).ToArray()) };
+            notes.Add(sameElement.Count + " element(s) this delivery wrote were also edited in the Studio while it ran (" + string.Join(", ", sameElement.Take(5)) + (sameElement.Count > 5 ? ", ..." : "") + "): the values the delivery wrote are in the module, and the person's other values of the same element(s) stay");
+        }
+        if (notes.Count > 0) proof["notes"] = notes;
+        return proof;
+
+        static string Names(JsonArray entries)
+        {
+            var names = entries.OfType<JsonObject>().Select(e => e["element"]?.ToString() + (e["property"]?.ToString() is { Length: > 0 } p && !p.StartsWith('$') ? " " + p.Replace("api:", "") : "")
+                + (e["children"] is JsonArray { Count: > 0 } children ? " +" + string.Join(" +", children.Select(c => c?.ToString())) : "")).Distinct().ToList();
+            return string.Join(", ", names.Take(5)) + (names.Count > 5 ? ", ..." : "");
+        }
     }
     private static bool IsBinding(string property) => property is "DataSource" or "DefaultScreen" or "WidgetOrWebBlock" or "Method" or "Validation" or "Destination"
         or "$references" or "$parent" or "ordered:Widgets";

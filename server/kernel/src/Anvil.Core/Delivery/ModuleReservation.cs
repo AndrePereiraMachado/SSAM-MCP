@@ -15,9 +15,28 @@ public sealed class ModuleReservation : IDisposable
     private readonly string path;
     private readonly FileStream lease;
     private readonly string owner;
+    /// <summary>The reservation file of a module in an environment.</summary>
+    public static string PathOf(string directory, string environment, string moduleKey)
+        => Path.Combine(directory, DurableJson.Hash(environment.ToLowerInvariant() + "\n" + moduleKey) + ".json");
+
+    /// <summary>The task that holds the module now (null: free, or the file cannot be read). A read, never a lease.</summary>
+    public static string? OwnerOf(string directory, string environment, string moduleKey)
+    {
+        var file = PathOf(directory, environment, moduleKey);
+        try { return File.Exists(file) ? DurableJson.Read(file)["owner"]?.ToString() : null; }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { return null; }
+    }
+
+    /// <summary>F1: frees a reservation an ended task (closed or delivered) left behind, as that task's own Release would.</summary>
+    public static void ReleaseFor(string directory, string environment, string moduleKey, string endedTask)
+    {
+        using var held = new ModuleReservation(directory, environment, moduleKey, endedTask);
+        held.Release();
+    }
+
     public ModuleReservation(string directory, string environment, string moduleKey, string taskId)
     {
-        path = Path.Combine(directory, DurableJson.Hash(environment.ToLowerInvariant() + "\n" + moduleKey) + ".json");
+        path = PathOf(directory, environment, moduleKey);
         lease = DurableJson.Lease(path + ".lock"); owner = taskId;
         try
         {

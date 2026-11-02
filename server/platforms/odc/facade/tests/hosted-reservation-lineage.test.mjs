@@ -14,7 +14,7 @@ const durable = value => {
   return JSON.stringify({ format: 1, sha256: createHash('sha256').update(payload).digest('hex'), payload });
 };
 const readDurable = file => JSON.parse(JSON.parse(fs.readFileSync(file, 'utf8')).payload);
-function setup(t) {
+function setup(t, { settling = false } = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'reservation-lineage-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const kernel = path.join(root, 'kernel'), work = path.join(kernel, '.local', 'work'), authority = path.join(root, 'authority');
@@ -22,7 +22,7 @@ function setup(t) {
   fs.writeFileSync(job, JSON.stringify({ ops: [{ op: 'get', target: 'ServerAction:Read' }] }));
   fs.writeFileSync(other, JSON.stringify({ ops: [{ op: 'get', target: 'ServerAction:Write' }] }));
   const task = { taskId: id, module: 'Orders', moduleKey: 'key1', request: { JobPath: job }, delivered: false,
-    writeState: 'applied', stage: 'checks', validation: { newErrors: 0 }, error: 'Snapshot was not sent', failures: [{ stage: 'checks', error: 'PATH_OUTSIDE_WORKSPACE' }] };
+    writeState: 'applied', stage: 'checks', validation: settling ? undefined : { newErrors: 0 }, error: 'Snapshot was not sent', failures: settling ? undefined : [{ stage: 'checks', error: 'PATH_OUTSIDE_WORKSPACE' }] };
   fs.mkdirSync(path.join(work, 'deliver', id), { recursive: true });
   fs.writeFileSync(path.join(work, 'deliver', id, 'task.json'), durable(task));
   const reservations = path.join(authority, 'reservations'); fs.mkdirSync(reservations, { recursive: true });
@@ -71,7 +71,7 @@ test('every delivery failure without a kernel answer has a read continuation', t
 });
 
 test('the module guard waits for a durable reservation to be released before running', async t => {
-  const box = setup(t); let ran = false;
+  const box = setup(t, { settling: true }); let ran = false;
   // Success under concurrent suite load needs scheduling margin; the separate deadline test keeps its 90 ms limit.
   box.deps.env.SSAM_RESERVATION_QUEUE_MS = '500';
   const timer = setTimeout(() => fs.writeFileSync(box.reservation, durable({ owner: null })), 35);
@@ -84,7 +84,7 @@ test('the module guard waits for a durable reservation to be released before run
 });
 
 test('the module guard deadline reports owner and position and never runs the waiting job', async t => {
-  const box = setup(t); let ran = false;
+  const box = setup(t, { settling: true }); let ran = false;
   const result = await withStudioWriteLock({ tool: 'o11_deliver', args: { module: 'Orders', job: box.other }, phased: true, deps: box.deps }, () => { ran = true; });
   assert.equal(ran, false); assert.equal(result.code, 'MODULE_RESERVED');
   assert.equal(result.holder.taskId, id); assert.equal(result.position, 1); assert.equal(result.queueMs, 90);
@@ -92,7 +92,7 @@ test('the module guard deadline reports owner and position and never runs the wa
 });
 
 test('a reservation waiter never prevents the holder from resuming or closing', async t => {
-  const box = setup(t);
+  const box = setup(t, { settling: true });
   const waiting = withStudioWriteLock({ tool: 'o11_deliver', args: { module: 'Orders', job: box.other }, phased: true, deps: box.deps }, () => ({ ok: true }));
   await new Promise(resolve => setTimeout(resolve, 10));
   await withStudioWriteLock({ tool: 'o11_deliver', args: { resume: id }, phased: true, deps: box.deps }, () => {
@@ -102,7 +102,7 @@ test('a reservation waiter never prevents the holder from resuming or closing', 
 });
 
 async function ownerPassesReservationWaiters(t, count, ownerArguments) {
-  const box = setup(t);
+  const box = setup(t, { settling: true });
   box.deps.env.SSAM_RESERVATION_QUEUE_MS = '500';
   const finished = Array(count).fill(false);
   const waiters = Array.from({ length: count }, (_, index) => withStudioWriteLock({
@@ -135,7 +135,7 @@ test('the module owner passes all three foreign reservation waiters', async t =>
 });
 
 test('a reservation deadline runs nothing and holds no module guard while waiting', async t => {
-  const box = setup(t); let ran = false;
+  const box = setup(t, { settling: true }); let ran = false;
   const waiting = withStudioWriteLock({ tool: 'o11_deliver', args: { module: 'Orders', job: box.other }, phased: true,
     deps: box.deps }, () => { ran = true; return { ok: true }; });
   await new Promise(resolve => setTimeout(resolve, 20));
@@ -154,15 +154,26 @@ const assertOwnershipGuidance = continuation => {
 };
 
 test('the reservation wait explains how the owner establishes its job lineage', async t => {
-  const box = setup(t);
+  const box = setup(t, { settling: true });
   const result = await withStudioWriteLock({ tool: 'o11_deliver', args: { module: 'Orders', job: box.other }, phased: true,
     deps: box.deps }, () => assert.fail('a foreign delivery cannot run'));
   assertOwnershipGuidance(result.continuation);
 });
 
 test('the cycle reservation refusal explains how the owner establishes its job lineage', t => {
-  const box = setup(t);
+  const box = setup(t, { settling: true });
   const result = answer(box, { module: 'Orders', job: box.other }, { taskId: 'b'.repeat(32), code: 'MODULE_RESERVED',
     writeState: 'not-sent', error: 'resume task ' + id });
   assertOwnershipGuidance(result.continuation);
+});
+
+// F1 (owner 2026-11-02): the fixture's holders above are still settling (an applied merge whose verification never ran), so
+// they are waited for. A holder that already ended (a known failure after its verification) never frees the module by
+// itself: the next delivery does not wait for it, and the kernel closes it when it reserves the module (Delivery.Reserve).
+test('a holder that already ended is not waited for: the kernel closes it when the next delivery reserves', async t => {
+  const box = setup(t); let ran = false; const started = Date.now();
+  box.deps.env.SSAM_RESERVATION_QUEUE_MS = '5000';
+  const result = await withStudioWriteLock({ tool: 'o11_deliver', args: { module: 'Orders', job: box.other }, phased: true, deps: box.deps }, () => { ran = true; return { ok: true }; });
+  assert.equal(ran, true); assert.equal(result.ok, true);
+  assert.ok(Date.now() - started < 2000, 'no reservation wait');
 });

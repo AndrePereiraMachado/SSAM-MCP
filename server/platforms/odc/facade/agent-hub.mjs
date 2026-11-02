@@ -501,7 +501,7 @@ export function createAgentHub({ dir, store, kernel, kernelRefused = null, log =
         const hello = state.hello;
         return { connected: !!state.channel, credential: !!rec?.credential, instance: state.instance, agentVersion: hello?.agent?.version ?? null,
           agentRoot: hello?.agent?.root ?? null, agentKinds: hello?.agent?.kinds ?? null,
-          // fase4-28 r4-f3-import: the O11 bridge methods the agent passes (agent.o11Methods; null for an agent before 0.3.7 / 0.4.4-native).
+          // fase4-28 r4-f3-import: the O11 bridge methods the agent passes (agent.o11Methods; null for an agent before 0.3.8 / 0.4.5-native, the SSAM Agent app 0.2.0).
           agentO11Methods: Array.isArray(hello?.agent?.o11Methods) ? hello.agent.o11Methods.filter(m => typeof m === 'string') : null, agentPlatform: hello?.agent?.platform ?? null,
           connectedAt: state.connectedAt, lastSeenAt: state.lastSeenAt, lanes: [...state.lanes], pack: hello?.pack ?? null,
           studios: hello?.studios ?? null, o11Connection: hello?.o11Connection ?? null, kernel: { ...serverKernel },

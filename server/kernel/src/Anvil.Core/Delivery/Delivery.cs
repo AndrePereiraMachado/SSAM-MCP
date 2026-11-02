@@ -16,6 +16,12 @@ public interface IBridgeClient
 public interface IMergeContentVerifier
 {
     JsonObject VerifyContent(string expectedPath, string snapshotPath);
+    /// <summary>The same proof given the delivery's base (the model the merge took as its base): only what the delivery wrote
+    /// (the candidate against that base) is required in the merged module, the rest is said as notes
+    /// (MergeContentProof.IntentRule). A verifier without its own ignores the base.</summary>
+    JsonObject VerifyContent(string expectedPath, string snapshotPath, string? basePath) => VerifyContent(expectedPath, snapshotPath);
+    /// <summary>F1 review A3/A8: the same, with the open module captured right before the merge (the person's edits).</summary>
+    JsonObject VerifyContent(string expectedPath, string snapshotPath, string? basePath, string? minePath) => VerifyContent(expectedPath, snapshotPath, basePath);
 }
 
 /// <summary>The merge order on the task's files: plan deferred defaults and detect losses after merge.</summary>
@@ -93,6 +99,30 @@ public static partial class Delivery
         IMergePlanner? mergePlanner = null,
         Func<string, string, string, JsonObject>? previewSignatures = null,
         Func<string, JsonArray>? referenceInventory = null)
+    {
+        var first = RunAttempt(bridge, request, apply, log, inspectData, inspectSpecification, dependencyRuntime, producerAuthority, applyWithProducers, mergePlanner, previewSignatures, referenceInventory);
+        // F1 conflict (owner 2026-11-02: stopping because the person was programming is "imperdoável"): the person and the job
+        // changed the same property, and the Studio's merge kept the person's value. The delivery's value wins in this same
+        // call: a second attempt merges, over the module as it is now, the candidate rebased on it (ConflictRebase).
+        if (mergePlanner is IConflictRebaser && ConflictRebase.Eligible(first) is { } conflicts
+            && DeliveryTask.PrepareConflictRebase(request.WorkDirectory, first["taskId"]!.ToString(), conflicts))
+        {
+            log?.Invoke("deliver: " + conflicts.Count + " value(s) changed both in the Studio and by this delivery; the delivery's value is merged again over the module as it is now");
+            return RunAttempt(bridge, request with { TaskId = first["taskId"]!.ToString() }, apply, log, inspectData, inspectSpecification, dependencyRuntime, producerAuthority, applyWithProducers, mergePlanner, previewSignatures, referenceInventory);
+        }
+        return first;
+    }
+
+    private static JsonObject RunAttempt(IBridgeClient bridge, DeliveryRequest request,
+        Func<string, string, string, JsonObject> apply, Action<string>? log,
+        Func<string, JsonArray, JsonObject>? inspectData,
+        Func<string, JsonObject, JsonObject?, JsonObject>? inspectSpecification,
+        IDeliveryDependencyRuntime? dependencyRuntime,
+        IProducerSignatureAuthority? producerAuthority,
+        Func<string, string, string, IReadOnlyDictionary<string, string>, JsonObject>? applyWithProducers,
+        IMergePlanner? mergePlanner,
+        Func<string, string, string, JsonObject>? previewSignatures,
+        Func<string, JsonArray>? referenceInventory)
     {
         using var autoPatch = JobPreflight.UseAutoPatch(request.AutoPatch);
         var clock = Stopwatch.StartNew();
@@ -243,7 +273,7 @@ public static partial class Delivery
             result["moduleKey"] = key;
             result["environment"] = active["environment"]?.DeepClone();
             if (result["environment"] is { } environment)
-                reservation = new ModuleReservation(Path.Combine(BridgeAccess.DirectoryPath, "reservations"), environment.ToString(), key, request.ReservationOwner ?? task.Id);
+                reservation = Reserve(bridge, request, task.Id, result, environment.ToString(), key, log);
             // MB2: the bridge answered the dependencies dialog (Cancel) in the open; the Studio's own Refresh References of
             // every producer runs now, by the module's key, before the snapshot, and the delivery goes on.
             if (dependencyDialogs != null)
@@ -591,8 +621,25 @@ public static partial class Delivery
                 if (request.CaptureProducers is { Count: > 0 } && (applyWithProducers == null || dependencies != null || frozenCompilation != null))
                     return Fail("Captured producer signatures require the producer-aware job apply; nothing was applied");
                 JsonObject applied;
-                // K1: every producer signature of the task (bound, captured, owners) is linked to the apply, so a frozen import
-                // refreshes the owners of its foreign types in the same native refresh.
+                // F1 conflict: the second attempt does not apply the job again. Its candidate is the first attempt's candidate
+                // rebased on the module as it is now (ConflictRebase.Build: the person's edits come in, the job's value stays
+                // where both changed the same property), with the first attempt's apply result (its contract and assertions).
+                if (result["conflictRebase"] is JsonObject rebase && rebase["applied"] is JsonObject rebaseApplied)
+                {
+                    try { ((IConflictRebaser)mergePlanner!).Rebase(rebase["candidate"]!.ToString(), basePath, rebase["base"]!.ToString(), foreignPath); }
+                    catch (Exception rebaseError) when (rebaseError is not OutOfMemoryException)
+                    {
+                        // The first attempt's merge stays in the module and its refusal stands (nothing more was sent).
+                        result["writeState"] = "applied"; result["code"] = "MERGE_CONTENT_MISMATCH";
+                        if (result["attempts"] is JsonArray { Count: > 0 } kept && kept[^1]?["contentProof"] is { } firstProof) result["contentProof"] = firstProof.DeepClone();
+                        return Fail("Merge kept for review: the person and this delivery changed the same value(s) and the candidate could not be rebased on the module as it is now ("
+                            + Errors.Text(rebaseError) + "); nothing more was merged. The next delivery of this module closes this task by itself and merges over it.");
+                    }
+                    applied = rebaseApplied.DeepClone().AsObject();
+                    rebase.Remove("applied");
+                    rebase["candidateSha256"] = DeliveryReceipt.Hash(foreignPath);
+                }
+                else
                 using (LinkSignatures(producers))
                     applied = frozenCompilation != null && dependencyRuntime is IDeliveryCompilationRuntime compiledRuntime
                     ? compiledRuntime.ApplyCompilation(applyBase, request.JobPath, foreignPath, frozenCompilation, dependencies)
@@ -696,6 +743,20 @@ public static partial class Delivery
                     // preview's model reuses its verdict, (c) any other is proved again.
                     var decision = OpenModuleAgainstBase();
                     result["mergeProof"] = decision;
+                    // F1 review A3/A8: the open module differs from the base (an edit of the person reached it after the
+                    // capture): it is captured once more, right before the merge, so the proof can say which of the person's
+                    // edits the merged module does not hold. A capture that fails decides nothing.
+                    result.Remove("mineSnapshot");
+                    if (decision["localModelSha256"] != null && decision["rule"]?.ToString() == "c")
+                    {
+                        var minePath = Path.Combine(attemptDirectory, "mine.oml");
+                        try
+                        {
+                            var mine = bridge.Call("snapshot_module", Target(new() { ["path"] = minePath }));
+                            if (mine["key"]?.ToString() == key && File.Exists(minePath)) result["mineSnapshot"] = new JsonObject { ["path"] = minePath, ["sha256"] = DeliveryReceipt.Hash(minePath) };
+                        }
+                        catch (Exception mineError) when (mineError is not OutOfMemoryException and not BridgeCallException { Stall: not null }) { result["mineSnapshotError"] = Errors.Text(mineError); }
+                    }
                     var sameAsBase = decision["rule"]?.ToString() == "a";
                     var planClock = Stopwatch.StartNew();
                     var plan = sameAsBase ? mergePlanner.PlanOrder(basePath, foreignPath, Path.Combine(attemptDirectory, "first-pass.oml"))
@@ -907,7 +968,17 @@ public static partial class Delivery
                 {
                     var deliveredPath = Path.Combine(work, "delivered-" + Guid.NewGuid().ToString("N") + ".oml");
                     var deliveredSnapshot = bridge.Call("snapshot_module", Target(new() { ["path"] = deliveredPath }));
-                    if (deliveredSnapshot["key"]?.ToString() != key) throw new InvalidOperationException("Active module changed before content proof; merge kept for review");
+                    // F1 (owner 2026-11-02): the person (or another session) selected another tab after the merge. The task
+                    // selects its own module again and captures it once more (an older bridge snapshots the selected tab);
+                    // it refuses only when its module cannot be selected (closed by the person).
+                    if (deliveredSnapshot["key"]?.ToString() != key)
+                    {
+                        var other = deliveredSnapshot["name"]?.ToString() ?? deliveredSnapshot["key"]?.ToString();
+                        SelectOwnTab();
+                        deliveredSnapshot = bridge.Call("snapshot_module", Target(new() { ["path"] = deliveredPath }));
+                        if (deliveredSnapshot["key"]?.ToString() != key) throw new InvalidOperationException("Active module changed before content proof and the module of this task could not be selected again; merge kept for review");
+                        (result["reselected"] as JsonArray ?? (JsonArray)(result["reselected"] = new JsonArray())).Add(new JsonObject { ["stage"] = stage, ["from"] = other });
+                    }
                     result["deliveredSnapshot"] = deliveredSnapshot;
                     deliveredFile = deliveredPath;
                     result["artifacts"]!.AsArray().Add(Artifact(deliveredPath));
@@ -922,7 +993,12 @@ public static partial class Delivery
                         else
                         {
                             var proofClock = Stopwatch.StartNew();
-                            try { result["contentProof"] = contentVerifier.VerifyContent(foreignPath, deliveredPath); }
+                            // A3 (F1 review): with rule (a) the open module equalled the base right before the merge, so no edit of
+                            // the person can be in it: anything outside what the job wrote is the merge's own, and the proof stays
+                            // strict (editor state still a note). Otherwise the person may have edited it: the job's intention.
+                            var personMayHaveEdited = result["mergeProof"]?["rule"]?.ToString() != "a";
+                            var minePath = result["mineSnapshot"]?["path"]?.ToString();
+                            try { result["contentProof"] = contentVerifier.VerifyContent(foreignPath, deliveredPath, personMayHaveEdited ? basePath : null, personMayHaveEdited ? minePath : null); }
                             catch (Exception proofError) when (proofError is not OutOfMemoryException and not BridgeCallException) { result["contentProofError"] = Errors.Text(proofError); }
                             finally { Timings()["contentProofMs"] = proofClock.ElapsedMilliseconds; }
                         }
@@ -931,6 +1007,14 @@ public static partial class Delivery
                         if (result["contentProof"] is JsonObject proved && proved["accepted"]?.GetValue<bool>() == true
                             && proved["nativeNames"]?["renames"] is JsonArray { Count: > 0 } nativeRenames)
                             result["nativeRenames"] = nativeRenames.DeepClone();
+                        // Hotfix (owner 2026-11-02, "o ssam deve permitir que o usuario programe junto com ele"): what the proof
+                        // accepted without requiring it, editor state and the values this delivery did not write (the person's
+                        // edits in the Studio while it ran), is said in the answer as notes, never hidden.
+                        if (result["contentProof"] is JsonObject noted && noted["notes"] is JsonArray { Count: > 0 } proofNotes)
+                            result["mergeNotes"] = proofNotes.DeepClone();
+                        // F1 conflict: the second attempt says which values the person and the delivery both changed.
+                        if (result["conflictRebase"]?["conflicts"] is JsonArray { Count: > 0 } rebased)
+                            (result["mergeNotes"] as JsonArray ?? (JsonArray)(result["mergeNotes"] = new JsonArray())).Insert(0, ConflictRebase.Note(rebased));
                     }
                     // Deferred defaults are checked on the delivered module itself: logic parameters have no data assertion.
                     var lost = deferred is { Count: > 0 } && mergePlanner != null ? mergePlanner.Missing(deliveredPath, deferred) : new JsonArray();
@@ -2242,6 +2326,77 @@ public static partial class Delivery
         => new() { ["path"] = Path.GetFullPath(jobPath), ["sha256"] = DeliveryReceipt.Hash(jobPath) };
 
     /// <summary>The refusal codes this delivery writes in result.code (section 3.2 of the session package contract).</summary>
+    /// <summary>F1 (owner 2026-11-02, "o ssam deve permitir que o usuario programe junto com ele"): the module reservation of
+    /// this delivery. A reservation held by an earlier task of the same delivery store that already ended (EndedHolder: a
+    /// known failure, the one DeliveryTask.CloseKnownFailure accepts, or a task closed or delivered that left its reservation
+    /// behind) never stops the next delivery: that task is closed here with its known content (the same close ssam_task runs;
+    /// the module keeps what it holds, nothing is undone or repeated) or its reservation is released, and this delivery takes
+    /// the module, said in previousClosed. A running, uncertain or unsettled holder, or one of another store, keeps the module
+    /// (MODULE_RESERVED as before).</summary>
+    internal static ModuleReservation Reserve(IBridgeClient bridge, DeliveryRequest request, string taskId, JsonObject result, string environment, string key, Action<string>? log = null)
+    {
+        var directory = Path.Combine(BridgeAccess.DirectoryPath, "reservations");
+        var owner = request.ReservationOwner ?? taskId;
+        try { return new ModuleReservation(directory, environment, key, owner); }
+        catch (Exception refused) when (refused is not OutOfMemoryException && ModuleReservation.OwnerOf(directory, environment, key) is { } holder
+            && holder != owner && EndedHolder(request.WorkDirectory, holder) is { } how)
+        {
+            JsonObject? closed = null;
+            try
+            {
+                log?.Invoke($"deliver: task {holder} ended ({how}) and still holds the module; closing it with its known content");
+                if (how == EndedRefused) closed = DeliveryTask.CloseKnownFailure(request.WorkDirectory, holder, PreviousClosedReason, bridge);
+                else ModuleReservation.ReleaseFor(directory, environment, key, holder);
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException and not BridgeCallException { Stall: not null })
+            {
+                result["previousNotClosed"] = new JsonObject { ["taskId"] = holder, ["was"] = how, ["error"] = Errors.Text(ex) };
+                System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(refused).Throw();
+            }
+            result["previousClosed"] = new JsonObject { ["taskId"] = holder, ["was"] = how,
+                ["closedReason"] = closed?["closedReason"]?.DeepClone(),
+                ["note"] = how == EndedRefused
+                    ? "task " + holder + " had ended refused and still held this module: it was closed with the module's content as it is (nothing undone or repeated), and this delivery merges over it"
+                    : "task " + holder + " had ended and left its reservation of this module: the reservation was released" };
+            return new ModuleReservation(directory, environment, key, owner);
+        }
+    }
+
+    private const string EndedRefused = "refused";
+    private const string EndedLeftBehind = "ended";
+    /// <summary>The closedReason of a task Reserve closes for the next delivery.</summary>
+    public const string PreviousClosedReason = "closed by the next delivery of the same module: this task had ended refused, and its module keeps its content as it is";
+
+    /// <summary>How a holder task of this store ended, or null when it may still write (running, uncertain, unsettled, a pending
+    /// Studio call) or is not a task of this store. "refused": a recorded error with nothing to settle (writeState not-sent or
+    /// not-applied, or an applied/unchanged merge whose verification ran or whose content proof refused); "ended": closed or
+    /// delivered. The facade's twin is delivery-lineage.mjs holderEnded.</summary>
+    internal static string? EndedHolder(string work, string holder)
+    {
+        if (!Guid.TryParseExact(holder, "N", out _)) return null;
+        var file = Path.Combine(Path.GetFullPath(work), "deliver", holder, "task.json");
+        JsonObject state;
+        try { if (!File.Exists(file)) return null; state = DurableJson.Read(file); }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { return null; }
+        if (state["pendingBridgeOperation"] != null || state["pendingOperationRecovery"] != null || DeliveryTask.UnsettledUiCall(state) != null) return null;
+        if (state["closed"]?.GetValue<bool>() == true || state["delivered"]?.GetValue<bool>() == true) return EndedLeftBehind;
+        var writeState = state["writeState"]?.ToString();
+        // F1 (2a): a write never sent holds nothing to settle, error recorded or not (a run killed during its capture), once
+        // no process runs it (its run lease is free; CloseKnownFailure takes that lease again).
+        if (writeState == "not-sent" && state["error"] == null)
+        {
+            try { using var free = DurableJson.Lease(Path.Combine(Path.GetDirectoryName(file)!, "run.lock")); }
+            catch (Exception ex) when (ex is not OutOfMemoryException) { return null; }
+            return EndedRefused;
+        }
+        if (state["error"] == null) return null;
+        if (writeState is "not-sent" or "not-applied") return EndedRefused;
+        // After the merge: every checker ran and recorded its failures (failures, written once all of them ran: Verify,
+        // checks, data and content proofs), or the Verify itself answered, or the content proof refused.
+        return writeState is "applied" or "unchanged" && (state["failures"] is JsonArray { Count: > 0 } || state["validation"]?["newErrors"] != null
+            || state["code"]?.ToString() == "MERGE_CONTENT_MISMATCH") ? EndedRefused : null;
+    }
+
     public const string PreflightRefused = "PREFLIGHT_REFUSED";
     public const string VerifyUnavailableCode = "VERIFY_UNAVAILABLE";
     public const string MergeRolledBackCode = "MERGE_ROLLED_BACK";
