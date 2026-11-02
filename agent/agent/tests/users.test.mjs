@@ -32,7 +32,7 @@ test('M10: the closed list of the server box is this agent\'s: no pass when it c
   const file = new URL('../../../server/platforms/odc/facade/call-kinds.mjs', import.meta.url);
   assert.ok(fs.existsSync(file), 'the server box must be next to the agent box: ' + file.href);
   const { CALL_KINDS, HELLO_ONLY_KINDS } = await import(file.href);
-  assert.deepEqual([...CALL_KINDS].sort(), [...helloKinds({ path: 'renderer' })].sort());
+  assert.deepEqual([...CALL_KINDS].sort(), [...helloKinds({ path: 'renderer' }, { path: 'xif-engine' })].sort()); // F4: o11.xif with the engine host
   assert.ok(HELLO_ONLY_KINDS.has(USERS_KIND));
 });
 

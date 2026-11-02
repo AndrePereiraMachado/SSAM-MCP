@@ -13,10 +13,11 @@ import { createChannel, PROTOCOL } from './channel.mjs';
 import { createOutbox } from './outbox.mjs';
 import { createKinds, helloKinds, ODC_COMMANDS } from './kinds.mjs';
 import { resolveRenderer } from './render.mjs';
+import { resolveXifEngine } from './xif.mjs';
 import { createWorkspace } from './workspace.mjs';
 import { uploadBlob, downloadBlob, downloadBuffer, PART_BYTES, MAX_FILE_BYTES } from './blobs.mjs';
 import { createHttp } from './net.mjs';
-import { listProcesses, fileVersion, locateInstalled, installedStudios, macFileVersion, macLocate } from './studios.mjs';
+import { listProcesses, fileVersion, locateInstalled, installedStudios, macFileVersion, macLocate, regQuery } from './studios.mjs';
 import { attachOdc } from './odc-attach.mjs';
 import { connector, readConnection } from './o11-connect.mjs';
 import { createMacAttach } from './attach-unix.mjs';
@@ -48,7 +49,10 @@ import { completeInstances } from './studio-instance.mjs';
 // the ODC commands this agent runs (agent.odcCommands), so the server offers the ODC bridges from v106 on only to an agent that
 // runs reconcile-merge (bridge-store.mjs). The other kinds and the wire are those of 0.3.5. The native core of the same change
 // is 0.4.3-native.
-export const AGENT_VERSION = '0.3.6';
+// 0.3.7 (agent/r4-xif, F4 of PLANO-11H): o11.xif, the model and final stages of o11_extension with the Integration Studio of
+// this machine (xif.mjs), announced in the hello only when the pack carries the engine host. The other kinds and the wire are
+// those of 0.3.6. The native core of the same change is 0.4.4-native.
+export const AGENT_VERSION = '0.3.7';
 const INLINE_MAX_BYTES = 524288;
 const MAX_VALUE_BYTES = 16 * 1024 * 1024;
 const PARAMS_MEMORY_BYTES = 64 * 1024 * 1024;
@@ -87,7 +91,7 @@ export function readPack(root) {
     const pack = readJson(path.join(root, 'pack.json'));
     return { id: pack.id ?? null, lanes: Array.isArray(pack.lanes) ? pack.lanes : [], odcBridge: pack.odcBridge ?? null, o11BuiltFor: pack.o11BuiltFor ?? null,
       o11Hook: typeof pack.o11Hook === 'string' ? pack.o11Hook : null, o11Bridge: bridgeOf(pack.o11Bridge),
-      ...Object.fromEntries(['studioBuilds', 'odcBuiltFor', 'odcRuntime', 'o11Runtime', 'renderer'].filter(key => pack[key] !== undefined).map(key => [key, pack[key]])) };
+      ...Object.fromEntries(['studioBuilds', 'odcBuiltFor', 'odcRuntime', 'o11Runtime', 'renderer', 'xifEngine'].filter(key => pack[key] !== undefined).map(key => [key, pack[key]])) };
   } catch { return { id: null, lanes: [], odcBridge: null, o11BuiltFor: null, o11Hook: null, o11Bridge: null }; }
 }
 
@@ -115,6 +119,9 @@ export function createAgent({ root, runtimeRoot = root, config = {}, deps = {}, 
   const pack = readPack(runtimeRoot);
   // The render worker of this installation (render.mjs): deps.renderer in tests, else pack.json renderer, checked.
   const renderer = deps.renderer ?? resolveRenderer({ runtimeRoot: path.resolve(runtimeRoot), dataRoot: base, pack, platform });
+  // The Integration Studio engine host of this installation (xif.mjs, kind o11.xif): deps.xifEngine in tests, else the pack's.
+  const xifEngine = deps.xifEngine !== undefined ? deps.xifEngine : resolveXifEngine({ runtimeRoot: path.resolve(runtimeRoot), pack, platform });
+  d.regQuery ??= regQuery;
   const bridgeAbort = new AbortController();
   const processSnapshot = deps.bridgeProcessSnapshot ?? (deps.processes ? async () => {
     try { const rows = (await Promise.all(['ODCStudio.exe', 'ServiceStudio.exe'].map(image => d.processes(image)))).flat(); return completeInstances(rows) ? rows : null; }
@@ -177,7 +184,7 @@ export function createAgent({ root, runtimeRoot = root, config = {}, deps = {}, 
       // kind it does not have.
       // odcCommands (0.3.6): the commands odc.pipe passes (kinds.mjs ODC_COMMANDS); the server offers a bridge only to an agent that
       // runs what that bridge needs (reconcile-merge from v106 on).
-      agent: { version: AGENT_VERSION, node: process.version, platform, startedAt, root: base, kinds: helloKinds(renderer), odcCommands: [...ODC_COMMANDS], machine },
+      agent: { version: AGENT_VERSION, node: process.version, platform, startedAt, root: base, kinds: helloKinds(renderer, xifEngine), odcCommands: [...ODC_COMMANDS], machine },
       pack: { id: pack.id, lanes: pack.lanes, odcBridge: pack.odcBridge, o11BuiltFor: pack.o11BuiltFor, o11Hook: pack.o11Hook },
       capabilities: { bridgeOffer: platform !== 'darwin', ...(platform === 'darwin' ? { bridgeOfferReason: MAC_BRIDGE_REASON } : {}) },
       bridges: updates.reports(), bridgeUpdate: updates.wireStatus(), studios, o11Connection: connection };
@@ -196,7 +203,7 @@ export function createAgent({ root, runtimeRoot = root, config = {}, deps = {}, 
   // probe: the uploads of the network check (kind net.probe, net-probe.mjs); a kinds.mjs without that kind ignores it.
   const kinds = createKinds({ root: base, runtimeRoot: path.resolve(runtimeRoot), ws, pack, kernel: () => channel.welcome()?.kernel ?? null, deps: d, blobs, limits,
     o11Port: Number.isInteger(config.o11Port) ? config.o11Port : 4516, onConnection: record => { connection = view(record); },
-    probe: (id, body, options) => channel.probePut(id, body, options), platform, renderer });
+    probe: (id, body, options) => channel.probePut(id, body, options), platform, renderer, xifEngine });
 
   // One call -> its result message. A value above inlineMaxBytes (measured on the whole serialized message) goes as
   // a blob, up to maxValueBytes (the server assembles a value in memory and refuses a larger one: VALUE_TOO_LARGE, sent

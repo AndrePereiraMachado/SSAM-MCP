@@ -62,7 +62,7 @@ export async function fileVersion(exe) {
   catch { return null; }
 }
 
-async function regQuery(key, value, view) {
+export async function regQuery(key, value, view) {
   const exe = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'reg.exe');
   try {
     const { stdout } = await exec(exe, ['query', key, '/v', value, '/reg:' + view], { windowsHide: true, timeout: 30000 });
