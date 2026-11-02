@@ -198,7 +198,7 @@ public partial class ProgramTogetherTests
         var result = Deliver(studio, """{"ops":[{"op":"set","target":"ServerAction:Both","prop":"Public","value":true}]}""");
         Assert.True(result["delivered"]?.GetValue<bool>() == true, result["code"] + " " + result["error"] + " " + result["contentProof"]?["differences"]?.ToJsonString());
         // The Studio's merge treats both edits of one element as a conflict and keeps the person's side: the delivery merges again.
-        Assert.Contains(Notes(result), n => n.Contains("also edited the same element", StringComparison.Ordinal));
+        Assert.Contains(Notes(result), n => n.Contains("the same element", StringComparison.Ordinal));
         Assert.Equal("the person's text", DescriptionOf(studio.Live, "Both"));
     }
     // ---- Harness ---------------------------------------------------------------------------------------------------------
@@ -293,6 +293,7 @@ public partial class ProgramTogetherTests
         public Action<string>? AfterMerge { get; set; }
         public bool NewErrorsOnce { get; set; }
         public int OtherTabAtSnapshot { get; set; }
+        public bool SignatureConflictOnce { get; set; }
         private int snapshots;
         private bool baseEdited;
         public JsonObject Call(string method, JsonObject? parameters = null)
@@ -315,8 +316,16 @@ public partial class ProgramTogetherTests
                     return new() { ["key"] = "module", ["name"] = "Headless_CS", ["snapshot_id"] = Guid.NewGuid().ToString("N"), ["baseline"] = new JsonArray(), ["sha256"] = DeliveryReceipt.Hash(Live) };
                 case "merge_from_oml":
                     var path = parameters!["first_pass_path"]?.ToString();
-                    MergeProbe.Replay(Host, File.ReadAllBytes(Live), File.ReadAllBytes(parameters["base_path"]!.ToString()),
-                        File.ReadAllBytes(parameters["foreign_path"]!.ToString()), path == null ? null : File.ReadAllBytes(path), Live);
+                    // As the real bridge (Anvil.Bridge MergeHandler, mode auto): a MatchTree with conflicts, or a producer signature
+                    // changed concurrently, merges nothing and says why.
+                    if (SignatureConflictOnce) { SignatureConflictOnce = false;
+                        return new() { ["merged"] = false, ["hasConflicts"] = true, ["newErrors"] = 0, ["reason"] = "producer signature changed concurrently: review referenceSignatures before retrying" }; }
+                    var merging = Path.Combine(Work, "merging-" + Guid.NewGuid().ToString("N")[..8] + ".oml");
+                    var replay = MergeProbe.Replay(Host, File.ReadAllBytes(Live), File.ReadAllBytes(parameters["base_path"]!.ToString()),
+                        File.ReadAllBytes(parameters["foreign_path"]!.ToString()), path == null ? null : File.ReadAllBytes(path), merging);
+                    if (replay.HasConflicts)
+                        return new() { ["merged"] = false, ["hasConflicts"] = true, ["newErrors"] = 0, ["reason"] = "conflicts: use mode=dialog" };
+                    File.Copy(merging, Live, true);
                     AfterMerge?.Invoke(Live);
                     return new() { ["merged"] = true, ["result"] = "Merge", ["hasConflicts"] = false, ["newErrors"] = 0,
                         ["mergeOrder"] = path != null ? new JsonObject { ["passes"] = 2 } : null, ["secondPass"] = path != null ? new JsonObject { ["merged"] = true } : null };

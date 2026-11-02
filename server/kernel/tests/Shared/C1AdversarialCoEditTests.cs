@@ -533,9 +533,9 @@ public sealed class C1AdversarialCoEditTests
         public string? KillAt { get; set; }
         private readonly Dictionary<string, JsonObject> journal = new();
         private readonly Dictionary<string, (double H, double V)> seeded = new();
-        private bool captured, merged, afterMerged;
+        private bool captured, merged, afterMerged, duringMergeDone;
         /// <summary>A new delivery run: the hooks fire once per run again.</summary>
-        public void BeginRun() { captured = false; merged = false; afterMerged = false; }
+        public void BeginRun() { captured = false; merged = false; afterMerged = false; duringMergeDone = false; }
         private string? frozenTask, frozenState;
 
         public void SeedPositions()
@@ -635,7 +635,9 @@ public sealed class C1AdversarialCoEditTests
                     return answer;
                 case "merge_from_oml":
                     RequireOpen(parameters);
-                    if (!merged) DuringMerge?.Invoke(Live);
+                    // F1 (merge of the suite): the person's edit during the merge happens once; a second merge of the same call
+                    // (the conflict pass) meets the module as the person left it, never the same edit made again.
+                    if (!merged && !duringMergeDone) { duringMergeDone = true; DuringMerge?.Invoke(Live); }
                     RequireOpen(parameters);
                     var operation = parameters!["operation_id"]?.ToString() ?? Guid.NewGuid().ToString("N");
                     var path = parameters["first_pass_path"]?.ToString();

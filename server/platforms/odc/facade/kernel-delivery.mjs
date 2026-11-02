@@ -114,7 +114,9 @@ export function interpretKernelResult(result, { output, exitCode = 0 }) {
   // expectValid=false is useful in negative tests, but never authorizes delivery of an invalid candidate.
   // A lab that builds a consumed SOAP service by verbs (allowSoapWithoutImport, kernel CompileCheck) is never delivered either.
   const lab = (Array.isArray(result.data?.highWarnings) ? result.data.highWarnings : []).find(w => w?.code === 'COMPILE_SOAP_DEFINITION_ALLOWED');
-  const ok = exitCode === 0 && result.ok === true && result.data?.accepted === true && result.data?.isValid === true && !lab;
+  const ok = exitCode === 0 && result.ok === true && result.data?.accepted === true
+    // F1c A2: invalid only by errors its base already had (the person's edit in progress), the job added none (preexistingErrors).
+    && (result.data?.isValid === true || isObject(result.data?.preexistingErrors)) && !lab;
   return { ok, candidate, receipt,
     ...(ok ? {} : { error: lab ? `The job builds a consumed SOAP service by verbs under the lab escape allowSoapWithoutImport (${lab.message ?? ''}); a lab is never delivered.`
         : withoutStack(result.error) ?? 'Kernel candidate must be accepted and valid before delivery.', diagnostics: result.data?.policyMessages,

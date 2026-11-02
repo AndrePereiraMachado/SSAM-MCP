@@ -674,13 +674,15 @@ public static class MergeContentProof
         bool OrderedIntentHolds((string Key, string Property) field, string expectedList, string actualList, out List<string> extra)
         {
             extra = new List<string>();
-            if (!field.Property.StartsWith("ordered:", StringComparison.Ordinal) || field.Property == "ordered:Conditions") return false;
+            // A set (set:Roles) is the same rule without the order: what the job added and removed, never the whole set.
+            var isSet = field.Property.StartsWith("set:", StringComparison.Ordinal);
+            if ((!field.Property.StartsWith("ordered:", StringComparison.Ordinal) && !isSet) || field.Property == "ordered:Conditions") return false;
             static List<string> Items(string list) => Normalize(list).Split('\n', StringSplitOptions.RemoveEmptyEntries).ToList();
             var wanted = Items(expectedList); var got = Items(actualList);
             var before = basis!.TryGetValue(field, out var baseList) ? Items(baseList) : new List<string>();
             if (wanted.Except(before).Any(item => !got.Contains(item)) || before.Except(wanted).Any(got.Contains)) return false;
             var kept = got.Where(wanted.Contains).ToList();
-            if (!kept.SequenceEqual(wanted.Where(got.Contains))) return false;
+            if (!isSet && !kept.SequenceEqual(wanted.Where(got.Contains))) return false;
             extra = got.Where(item => !wanted.Contains(item)).ToList();
             return true;
         }

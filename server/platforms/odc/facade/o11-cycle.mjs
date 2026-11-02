@@ -813,8 +813,14 @@ export function deliveryFields(state) {
 }
 export function previousClosedOf(state) {
   const p = state?.previousClosed;
-  return p && typeof p === 'object' && /^[0-9a-f]{32}$/i.test(String(p.taskId ?? ''))
-    ? { previousClosed: { taskId: String(p.taskId), was: clean(String(p.was ?? ''), 40), note: clean(String(p.note ?? ''), 300) } } : {};
+  if (!p || typeof p !== 'object' || !/^[0-9a-f]{32}$/i.test(String(p.taskId ?? ''))) return {};
+  // F1c A4: what the closed task's merge left in the module (its errors, the elements it did not leave as written) is part of
+  // this delivery's base: relayed by element, never inherited in silence.
+  const i = p.inherited && typeof p.inherited === 'object' ? p.inherited : null;
+  const names = list => (Array.isArray(list) ? list : []).filter(e => typeof e === 'string' && e).slice(0, 5).map(e => clean(e, 160));
+  const inherited = i ? { inherited: { newErrors: Number.isInteger(i.newErrors) ? i.newErrors : 0, errors: names(i.errors),
+    differences: Number.isInteger(i.differences) ? i.differences : 0, elements: names(i.elements) } } : {};
+  return { previousClosed: { taskId: String(p.taskId), was: clean(String(p.was ?? ''), 40), note: clean(String(p.note ?? ''), i ? 700 : 300), ...inherited } };
 }
 // Hotfix (owner 2026-11-02, Delivery.cs mergeNotes): the proof requires only what the delivery wrote; positions on the canvas
 // and the values the person edited in the Studio while it ran are kept and said here, never a refusal and never silent.

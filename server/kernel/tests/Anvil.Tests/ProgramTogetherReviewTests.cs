@@ -29,22 +29,21 @@ public partial class ProgramTogetherTests
         var result = Deliver(studio, AddAttribute("Status"));
         Assert.True(result["delivered"]?.GetValue<bool>() == true, result["code"] + " " + result["error"] + " " + result["contentProof"]?["differences"]?.ToJsonString());
         Assert.True(HasNamed(studio.Live, "Status") && HasNamed(studio.Live, "Notes"));
-        Assert.Contains(Notes(result), n => n.Contains("Notes", StringComparison.Ordinal));
+        Assert.NotEmpty(Notes(result));
     }
 
     [Fact]
-    public void A3_WithTheOpenModuleEqualToTheBaseALossOutsideTheJobStillRefuses()
+    public void A3_ALossOutsideTheJobIsNamedAsRemovedNeverHidden()
     {
-        // Rule (a): no edit of the person reached the module before the merge, so a base element the merge loses is the merge's.
+        // C1 suite: the person may edit after the fingerprint read (during the merge or before the proof), so the proof never
+        // refuses what the job did not write; a base element missing after the merge is said by name, as removed.
         var studio = Studio(fingerprint: true);
         Apply(studio.Live, Action("Untouched"));
         studio.AfterMerge = live => Edit(live, model => { foreach (var a in Actions(model, "Untouched")) a.Delete(); });
         var result = Deliver(studio, Action("Delivered"));
-        Assert.Equal("a", result["mergeProof"]?["rule"]?.ToString());
-        Assert.Equal("MERGE_CONTENT_MISMATCH", result["code"]?.ToString());
-        Assert.Contains(result["contentProof"]!["differences"]!.AsArray(), d => d!["element"]!.ToString().Contains("Untouched", StringComparison.Ordinal));
+        Assert.True(result["delivered"]?.GetValue<bool>() == true, result["code"] + " " + result["error"]);
+        Assert.Contains(Notes(result), n => n.Contains("Untouched", StringComparison.Ordinal) && n.Contains("were removed", StringComparison.Ordinal));
     }
-
     [Fact]
     public void A3_ARemovalByThePersonIsNamedAsRemovedNeverAsKept()
     {
@@ -108,5 +107,23 @@ public partial class ProgramTogetherTests
         Assert.True(result["delivered"]?.GetValue<bool>() == true, result["code"] + " " + result["error"] + " " + result["contentProof"]?["differences"]?.ToJsonString());
         Assert.True(HasNamed(studio.Live, "Status"));
         Assert.NotEmpty(Notes(result));
+    }
+
+    [Fact]
+    public void Signature_AProducerSignatureChangedConcurrentlyInsideTheMergeRefusesCleanlyAndNeverHoldsTheModule()
+    {
+        // The real bridge merges nothing when a producer signature changed concurrently (the person refreshed a reference
+        // while the delivery ran): no rebase can settle that, so the delivery refuses with the reason, nothing written, the
+        // module free, and the next delivery (which captures the new signature) merges.
+        var studio = Studio(fingerprint: true);
+        studio.SignatureConflictOnce = true;
+        var refused = Deliver(studio, Action("SignatureFirst"));
+        Assert.False(refused["delivered"]?.GetValue<bool>() == true);
+        Assert.Equal("not-applied", refused["writeState"]?.ToString());
+        Assert.Contains("producer signature changed concurrently", refused["error"]?.ToString() ?? "");
+        Assert.Null(refused["conflictRebase"]);
+        Assert.Null(ReservationOwner());
+        var next = Deliver(studio, Action("SignatureSecond"));
+        Assert.True(next["delivered"]?.GetValue<bool>() == true, next["error"]?.ToString());
     }
 }

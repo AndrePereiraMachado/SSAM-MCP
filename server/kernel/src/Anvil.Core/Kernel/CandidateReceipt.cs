@@ -85,7 +85,7 @@ public static class CandidateReceipt
             : null;
         var same = reason == null;
         var applier = Text(data["developerId"]);
-        reason ??= !True(data["accepted"]) || !True(data["isValid"]) ? "the kernel did not accept the candidate as valid"
+        reason ??= !True(data["accepted"]) || !JobRunner.ValidAsJudged(data) ? "the kernel did not accept the candidate as valid"
             : author != null && applier == null ? "the receipt does not name the author of the apply (developerId)"
             : author != null && !string.Equals(applier, author, StringComparison.OrdinalIgnoreCase) ? "the kernel applied the job as " + applier + ", not as the snapshot author"
             : created + changed == 0 ? "the kernel footprint names nothing created or changed" : null;

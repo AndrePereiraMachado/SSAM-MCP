@@ -105,7 +105,7 @@ public sealed class DeliveryTask : IDisposable
         using var task = new DeliveryTask(request);
         var state = task.State;
         if (state["delivered"]?.GetValue<bool>() == true || state["closed"]?.GetValue<bool>() == true || state["conflictRebase"] != null
-            || state["writeState"]?.ToString() != "applied" || state["pendingBridgeOperation"] != null || state["apply"] is not JsonObject applied) return false;
+            || state["writeState"]?.ToString() is not ("applied" or "not-applied") || state["pendingBridgeOperation"] != null || state["apply"] is not JsonObject applied) return false;
         var attempt = state["attempt"]?.GetValue<int>() ?? 0;
         var directory = Path.Combine(task.DirectoryPath, "attempt-" + attempt);
         var candidate = Path.Combine(directory, "foreign.oml"); var basis = Path.Combine(directory, "base.oml");
@@ -119,7 +119,7 @@ public sealed class DeliveryTask : IDisposable
         state["conflictRebase"] = new JsonObject { ["rule"] = ConflictRebase.Rule, ["fromAttempt"] = attempt, ["candidate"] = candidate, ["base"] = basis,
             ["candidateSha256"] = DeliveryReceipt.Hash(candidate), ["applied"] = applied.DeepClone(), ["conflicts"] = conflicts.DeepClone() };
         state["attempt"] = attempt + 1;
-        state["hasAppliedWrites"] = true;
+        state["hasAppliedWrites"] = state["hasAppliedWrites"]?.GetValue<bool>() == true || state["writeState"]?.ToString() == "applied";
         foreach (var key in new[] { "operationId", "snapshot", "apply", "merge", "mergePlan", "mergeOrder", "mergeContentPreview", "mergeProof", "validation", "dataProof", "contentProof",
             "deliveredSnapshot", "artifacts", "assertions", "failures", "error", "code", "mergeNotes", "contract", "newErrors", "checks" }) state.Remove(key);
         state["writeState"] = "not-sent"; state["delivered"] = false;
@@ -558,7 +558,9 @@ public sealed class DeliveryTask : IDisposable
     /// is not this task's to free: it is left as it is and named in the task.</summary>
     private static void ReleaseReservation(JsonObject state, DeliveryRequest request, string id)
     {
-        if (state["moduleKey"]?.ToString() is not { Length: > 0 } moduleKey || state["environment"]?.ToString() is not { Length: > 0 } environment) return;
+        // F1c (C1 P7): never silent: a task without its module identity says that a reservation it holds was not released here.
+        if (state["moduleKey"]?.ToString() is not { Length: > 0 } moduleKey || state["environment"]?.ToString() is not { Length: > 0 } environment)
+        { state["reservationNotReleased"] = "the task has no module identity recorded; a reservation it holds is released by the next delivery of that module"; return; }
         try
         {
             using var reservation = new ModuleReservation(Path.Combine(BridgeAccess.DirectoryPath, "reservations"), environment, moduleKey, request.ReservationOwner ?? id);

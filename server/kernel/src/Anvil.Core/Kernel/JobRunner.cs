@@ -6,6 +6,14 @@ namespace Anvil.Core;
 /// <summary>Carrega a base, aplica um job de verbos num unico comando, verifica e salva o foreign.</summary>
 public static partial class JobRunner
 {
+    /// <summary>F1c A2: the rule of an apply that found errors only where the base already had them (preexistingErrors).</summary>
+    public const string PreexistingErrorsRule = "ssam-preexisting-errors/1: a job that expects a valid module is judged on the TrueChange errors it adds; errors its base already had (an edit in progress in the Studio, or an earlier merge kept for review) stay as they are and are said, never a refusal";
+
+    /// <summary>F1c A2: an apply answer whose candidate is valid, or invalid only by errors its base already had and the job
+    /// added none of (preexistingErrors): the candidate a delivery may merge.</summary>
+    public static bool ValidAsJudged(System.Text.Json.Nodes.JsonObject applied)
+        => applied["isValid"]?.GetValue<bool>() == true || applied["preexistingErrors"] is System.Text.Json.Nodes.JsonObject;
+
     public static object Run(ModelHost host, string? basePath, string jobPath, string outPath, Action<string>? log = null,
         IReadOnlyDictionary<string, string>? bindings = null)
         => new Sources(host, bindings, log).Build(jobPath, basePath, outPath);
@@ -255,7 +263,13 @@ public static partial class JobRunner
             var judged = footprint.Footprint with { AnonymousIntent = session.AnonymousIntentOf(footprint.Footprint) };
             footprintMs += sw.ElapsedMilliseconds - phase;
             var policy = MessageExpectations.Evaluate(delta.New, expected, delta.Preexisting, judged, delta.Fixed);
-            var accepted = snap.IsValid == expectedValid && policy.Accepted && dataContract["accepted"]!.GetValue<bool>();
+            // F1c A2 (owner 2026-11-02, "o ssam deve permitir que o usuario programe junto com ele"): an error the base already
+            // had (the person was typing an expression in the Studio when the delivery captured the module) is not this job's.
+            // A job that expects a valid module is judged on the errors it adds; the base's own stay as they are and are said in
+            // preexistingErrors, never a refusal. An error the job adds still refuses.
+            var baseErrors = expectedValid && !snap.IsValid && !delta.New.Any(m => m.IsError) ? delta.Preexisting.Count(m => m.IsError) : 0;
+            var validAsExpected = snap.IsValid == expectedValid || baseErrors > 0;
+            var accepted = validAsExpected && policy.Accepted && dataContract["accepted"]!.GetValue<bool>();
             // The verdict of every new message (K1), the expectations used (K2) and those no message used (K3, informative).
             var validation = new { @new = delta.New, @fixed = delta.Fixed, preexisting = delta.Preexisting,
                 unexpected = policy.Unexpected, missingExpected = policy.MissingExpected, ambiguous = policy.Ambiguous, tolerated = policy.Tolerated,
@@ -265,7 +279,7 @@ public static partial class JobRunner
             var policyMessages = policy.Diagnostics().ToList();
             foreach (var mismatch in dataContract["differences"]!.AsArray())
                 policyMessages.Add("Data property mismatch: " + mismatch!.ToJsonString());
-            if (snap.IsValid != expectedValid) policyMessages.Add($"expectValid={expectedValid}, but Verify isValid={snap.IsValid}");
+            if (!validAsExpected) policyMessages.Add($"expectValid={expectedValid}, but Verify isValid={snap.IsValid}");
             foreach (var d in details.Concat(policyMessages)) log?.Invoke("  " + d);
             // primeira-certa A3: a candidate only the Verify refuses answers its errors as the single refusal does too: each
             // with the op, the pointer into the job, the element, the key and a fix (the delivery shows them, never only text).
@@ -294,7 +308,7 @@ public static partial class JobRunner
                         unmapped.Add(message.ToString());
                 if (dataContract["accepted"]!.GetValue<bool>() != true)
                     unmapped.AddRange(policyMessages.Where(m => m.StartsWith("Data property mismatch:", StringComparison.Ordinal)));
-                if (snap.IsValid != expectedValid && certainVerifyErrors.Count == 0) unmapped.Add($"expectValid={expectedValid}, but Verify isValid={snap.IsValid}");
+                if (!validAsExpected && certainVerifyErrors.Count == 0) unmapped.Add($"expectValid={expectedValid}, but Verify isValid={snap.IsValid}");
                 if (unmapped.Count == 0 && certainVerifyErrors.Count == 0) unmapped.AddRange(policyMessages);
                 if (unmapped.Count > 0)
                 {
@@ -401,7 +415,9 @@ public static partial class JobRunner
             var entityActions = new System.Text.Json.Nodes.JsonArray(results.OfType<JsonObject>()
                 .Where(r => r["op"]?.ToString() == EntityActionsExpander.Op && r["result"]?["entityActions"] is JsonObject)
                 .Select(r => { var copy = r["result"]!["entityActions"]!.DeepClone().AsObject(); if (r["result"]?["noChange"] is { } same) copy["noChange"] = same.DeepClone(); return (JsonNode)copy; }).ToArray());
-            var answer = new { outPath, outSha256, ops = ops.Count, loadMs, applyMs, objects = snap.Objects, isValid = snap.IsValid, messages = snap.Validation.Total, details, validation, accepted, expectedValid, policyMessages, handles, results, footprint = footprint.Json, hoistedReferences = hoisted.Length > 0 ? hoisted : null, flowLayoutEngine = FlowLayout.EngineRevision, automaticLayouts = session.AutomaticLayouts, layoutRefused, released, baseCache = spare?.Receipt, hot = HotModule.Receipt(spare?.Receipt, BaseModelCache.Current != null, builtBase), referenceInventory, timings, hotTimings, preflight, dataContract, refactorProof, coverage = session.CoverageLedger(), styleSheets = styleSheets.Count > 0 ? styleSheets : null, styleSheetsTheme = styleSheets.Count > 0 ? StyleSheetTouch.ThemeName(espace) : null };
+            var preexistingErrors = baseErrors == 0 ? null : new { total = baseErrors, rule = PreexistingErrorsRule,
+                note = baseErrors + " TrueChange error(s) were already in the module this job was applied to (an edit in progress in the Studio, or an earlier merge kept for review): the job adds none, so they do not refuse it and stay as they are" };
+            var answer = new { outPath, outSha256, ops = ops.Count, loadMs, applyMs, objects = snap.Objects, isValid = snap.IsValid, messages = snap.Validation.Total, details, validation, accepted, expectedValid, preexistingErrors, policyMessages, handles, results, footprint = footprint.Json, hoistedReferences = hoisted.Length > 0 ? hoisted : null, flowLayoutEngine = FlowLayout.EngineRevision, automaticLayouts = session.AutomaticLayouts, layoutRefused, released, baseCache = spare?.Receipt, hot = HotModule.Receipt(spare?.Receipt, BaseModelCache.Current != null, builtBase), referenceInventory, timings, hotTimings, preflight, dataContract, refactorProof, coverage = session.CoverageLedger(), styleSheets = styleSheets.Count > 0 ? styleSheets : null, styleSheetsTheme = styleSheets.Count > 0 ? StyleSheetTouch.ThemeName(espace) : null };
             // What the kernel applied that the author did not write (atritos 3, section 5.1): notes, iconConversions,
             // expressionRewrites, nameTruncations, indexNoOps, anonymousExposure, ... each only when it has entries.
             var receipt = session.ReceiptFields(policy, footprint.Footprint);

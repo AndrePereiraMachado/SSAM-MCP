@@ -53,7 +53,7 @@ public static class PrebuiltCandidate
             if (!string.Equals(Path.GetFullPath(Need("job")), Path.GetFullPath(jobPath), StringComparison.OrdinalIgnoreCase)) { reason = "job-path"; return null; }
             if (ModelSha256(buildBase) != ModelSha256(basePath)) { reason = "base-changed"; return null; }
             var result = JsonNode.Parse(File.ReadAllText(resultPath))!.AsObject();
-            if (result["isValid"]?.GetValue<bool>() != true || result["accepted"]?.GetValue<bool>() != true) { reason = "build-not-accepted"; return null; }
+            if (!JobRunner.ValidAsJudged(result) || result["accepted"]?.GetValue<bool>() != true) { reason = "build-not-accepted"; return null; }
             if (result["patchesApplied"] is JsonArray { Count: > 0 })
             {
                 var job = JobDocument.Parse(jobPath);

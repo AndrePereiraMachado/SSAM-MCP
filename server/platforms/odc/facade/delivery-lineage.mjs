@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
+import { spawnSync } from 'node:child_process';
 
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 const fileHash = file => { try { return hash(fs.readFileSync(file)); } catch { return null; } };
@@ -24,11 +25,11 @@ export function readDeliveryTask(work, id) {
 // merge whose verification ran or whose content proof refused), or one closed or delivered that left its reservation. The
 // kernel closes it with its known content when the next delivery reserves the module (Delivery.Reserve, the rule of
 // Delivery.EndedHolder); a running, uncertain or unsettled holder is never one.
-export function holderEnded(task) {
+export function holderEnded(task, deps = {}) {
   if (!task || task.pendingBridgeOperation || task.pendingOperationRecovery) return false;
   if (task.closed === true || task.delivered === true) return true;
   // 2a: a write never sent, error recorded or not, once no process runs it (its run lease is free).
-  if (task.writeState === 'not-sent' && task.error == null) return runLeaseFree(task);
+  if (task.writeState === 'not-sent' && task.error == null) return runLeaseFree(task, deps);
   if (task.error == null) return false;
   if (['not-sent', 'not-applied'].includes(task.writeState)) return true;
   // after the merge: every checker ran (failures recorded once all ran: Verify, checks, data and content proofs)
@@ -36,12 +37,23 @@ export function holderEnded(task) {
 }
 
 // The kernel's run lease of a task (<work>/deliver/<id>/run.lock, FileShare.None while a process runs it): free when this
-// process can open it exclusively. Without a task folder, never free.
-const EXCLUSIVE = process.platform === 'win32' ? 0x10000000 : 0;
-export function runLeaseFree(task) {
+// process can take it exclusively. Without a task folder, never free.
+// On Windows FileShare.None is a share mode, and an exclusive open fails while it is held. F1c A5: elsewhere (the hosted
+// server, Linux) .NET holds FileShare.None as an advisory flock(LOCK_EX) on the file, which a plain open never sees; the
+// lease is then tried with the same lock, flock(1) without waiting (util-linux or busybox). A lock that cannot be tried
+// (no flock) is never claimed free: the holder then counts as running, and the reservation waits as before.
+const SHARE_EXCLUSIVE = 0x10000000;
+const tryFlock = file => spawnSync('flock', ['-n', file, 'true'], { stdio: 'ignore', timeout: 5000, windowsHide: true });
+export function runLeaseFree(task, deps = {}) {
   if (typeof task?.work !== 'string' || !fs.existsSync(task.work)) return false;
+  const lock = path.join(task.work, 'run.lock');
+  if ((deps.platform ?? process.platform) !== 'win32') {
+    let tried;
+    try { tried = (deps.flock ?? tryFlock)(lock); } catch { return false; }
+    return Boolean(tried) && !tried.error && tried.status === 0;
+  }
   let fd;
-  try { fd = fs.openSync(path.join(task.work, 'run.lock'), fs.constants.O_RDWR | fs.constants.O_CREAT | EXCLUSIVE); return true; }
+  try { fd = fs.openSync(lock, fs.constants.O_RDWR | fs.constants.O_CREAT | SHARE_EXCLUSIVE); return true; }
   catch { return false; }
   finally { if (fd !== undefined) fs.closeSync(fd); }
 }

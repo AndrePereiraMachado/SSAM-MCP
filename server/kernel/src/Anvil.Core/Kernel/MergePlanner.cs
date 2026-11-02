@@ -7,10 +7,14 @@ namespace Anvil.Core;
 
 /// <summary>The delivery's merge order on files, headless (MergeOrder over ModelHost): Plan before the merge, Missing on
 /// the delivered snapshot. The O11 deliver path calls it through Delivery.IMergePlanner; MergeProbe uses Plan.</summary>
-public sealed class MergePlanner : Delivery.IMergePlanner, Delivery.IMergeContentVerifier, Delivery.IConflictRebaser
+public sealed class MergePlanner : Delivery.IMergePlanner, Delivery.IMergeContentVerifier, Delivery.IConflictRebaser, Delivery.IMergeErrorAttribution
 {
     private readonly Func<string, ModelHost> host;
     public MergePlanner(Func<string, ModelHost> host) => this.host = host;
+
+    /// <summary>F1c A2: the new errors after the merge, the delivery's or the person's edit (MergeErrorAttribution.Rule).</summary>
+    public JsonObject AttributeErrors(string candidatePath, string basePath, string livePath, IReadOnlyList<MessageInfo> errors)
+        => MergeErrorAttribution.Attribute(host(Path.GetDirectoryName(livePath)!), candidatePath, basePath, livePath, errors);
 
     public JsonObject VerifyContent(string expectedPath, string snapshotPath)
         => MergeContentProof.Check(host(Path.GetDirectoryName(snapshotPath)!), expectedPath, snapshotPath);

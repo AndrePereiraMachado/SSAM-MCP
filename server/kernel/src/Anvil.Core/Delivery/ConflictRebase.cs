@@ -24,14 +24,20 @@ public static class ConflictRebase
     /// added, a known loss of the merge order, a failure outside the proofs, or an attempt that already rebased.</summary>
     public static JsonArray? Eligible(JsonObject result)
     {
-        if (result["code"]?.ToString() != "MERGE_CONTENT_MISMATCH" || result["writeState"]?.ToString() != "applied"
-            || result["delivered"]?.GetValue<bool>() == true || result["closed"]?.GetValue<bool>() == true
+        if (result["delivered"]?.GetValue<bool>() == true || result["closed"]?.GetValue<bool>() == true
             || result["conflictRebase"] != null || result["mergeOrder"] != null || result["pendingBridgeOperation"] != null) return null;
-        // Only when the person may have edited the module (the proof ran by the job's intention, not rule a): every
-        // difference is then something the job wrote that the Studio's merge did not keep against the person's edit (the same
+        // The real bridge (Anvil.Bridge MergeHandler, mode auto) merges nothing when the Studio's MatchTree has conflicts:
+        // writeState not-applied, hasConflicts, "conflicts: use mode=dialog". The candidate rebased on the module as it is
+        // now (the person's side of every conflict replaced by the delivery's) merges without a conflict.
+        // A producer signature changed concurrently (the person refreshed a reference) is no conflict a rebase settles: the
+        // refusal stands and the next delivery captures the new signature.
+        if (result["writeState"]?.ToString() == "not-applied" && result["merge"]?["hasConflicts"]?.GetValue<bool>() == true
+            && result["merge"]?["reason"]?.ToString()?.Contains("producer signature", StringComparison.Ordinal) != true)
+            return new JsonArray(new JsonObject { ["element"] = "the elements the Studio's merge reported in conflict", ["property"] = "", ["change"] = "conflict" });
+        if (result["code"]?.ToString() != "MERGE_CONTENT_MISMATCH" || result["writeState"]?.ToString() != "applied") return null;
+        // Every difference is something the job wrote that the Studio's merge did not keep against the person's edit (the same
         // property, the same element, a renamed or removed parent, an index the person shifted). The second attempt proves
         // all of it again, so a real loss still refuses there; nothing is accepted without that proof.
-        if (result["mergeProof"]?["rule"]?.ToString() == "a") return null;
         if (result["contentProof"] is not JsonObject proof || proof["intent"] == null || proof["differences"] is not JsonArray { Count: > 0 } differences) return null;
         if (result["failures"] is JsonArray failures && failures.Any(f => f?["stage"]?.ToString() != "data-proof")) return null;
         var conflicts = new JsonArray();
@@ -44,7 +50,9 @@ public static class ConflictRebase
 
     /// <summary>The note the answer carries after the second attempt.</summary>
     public static string Note(JsonArray conflicts)
-        => conflicts.Count + " value(s) this delivery wrote were not kept by the Studio's merge because the person also edited the same element(s) in the Studio while it ran ("
+        => conflicts.OfType<JsonObject>().Any(c => c["change"]?.ToString() == "conflict")
+            ? "The Studio's merge found a conflict with edits the person made in the Studio while the delivery ran, and merged nothing: the delivery was rebased on the module as it is now and merged again in this call, the delivery's values winning where both changed the same element; the person's other edits stay"
+            : conflicts.Count + " value(s) this delivery wrote were not kept by the Studio's merge because the person also edited the same element(s) in the Studio while it ran ("
             + string.Join(", ", conflicts.OfType<JsonObject>().Select(c => c["element"] + (c["property"]?.ToString() is { Length: > 0 } p && !p.StartsWith('$') ? " " + p.Replace("api:", "") : "")).Distinct().Take(5))
             + (conflicts.Count > 5 ? ", ..." : "")
             + "): a merge conflict, resolved in this call by a second merge in which the delivery's values win; the person's other edits stay";
