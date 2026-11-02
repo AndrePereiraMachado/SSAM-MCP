@@ -131,6 +131,9 @@ const BEFORE = [
     () => studio('wait', { condition: 'idle' }, 'Wait for the running operation to finish in the Studio; then call o11_publish again with the user\'s words.')],
   [/already has a server operation running/i, 'STUDIO_BUSY', 'The module already has a server operation running in the Studio; nothing was published.',
     () => studio('status', null, 'Wait for the running operation to finish in the Studio; nothing was published.')],
+  // Review F1b (6): the module key of the call is open in no tab (the person closed it): MODULE_NOT_ACTIVE, never a retry.
+  [/not open in any Studio tab/i, 'MODULE_NOT_ACTIVE', 'The module is not open in any Studio tab; nothing was published.',
+    name => studio('open-module', { name }, 'Open the module in the Studio; then call o11_publish with the user\'s words.')],
   [/nothing was executed/i, 'TARGET_CHANGED', 'Another module or environment became active before the publication; nothing was published.',
     name => studio('open-module', { name }, 'Select the module again; then call o11_publish with the user\'s words.')],
   [/no module open in the Studio|no aggregator presenter|is not open in the Studio/i, 'MODULE_NOT_ACTIVE', 'No module is active in the Studio; nothing was published.',
@@ -569,7 +572,9 @@ async function publish(input, ctx, options = {}) {
     // TARGET_CHANGED, STUDIO_BUSY: the checks of PublishHandler.cs before the dispatch). The same publication, addressed by
     // the module key, waits briefly and goes again (at most twice), and the answer says so; any other answer stands.
     for (const waitMs of PUBLISH_BUSY_WAITS_MS) {
-      if (value?.ok !== false || !PUBLISH_NOT_STARTED.has(value.code) || value.outcome === 'uncertain' || signal?.aborted) break;
+      // Review F1b (5): only a publication addressed by the module key goes again: without it the bridge publishes the tab
+      // selected at the time, which the person may have changed during the wait.
+      if (value?.ok !== false || !PUBLISH_NOT_STARTED.has(value.code) || value.outcome === 'uncertain' || signal?.aborted || !params.module_key) break;
       busyNotes.push({ rule: 'STUDIO_BUSY', at: 'publish', note: 'The Studio was busy or had another tab selected when the publication was sent (' + value.code
         + ', nothing started); SSAM waited ' + waitMs / 1000 + ' s and sent it again to the module by its key.' });
       await ctx.sleep(waitMs);

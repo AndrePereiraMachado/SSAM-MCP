@@ -121,6 +121,51 @@ public sealed class CssPathModelTests
         Assert.Contains(result["notes"]!.AsArray(), n => n!["code"]!.ToString() == ModelSession.ThemeChanged);
     }
 
+    /// <summary>Review F1b (1): the same css op sent twice (a lost answer, a job sent again) appends its CSS once; the second
+    /// is a CSS_APPEND_PRESENT note. Before the fix the second append was rebased and the rule doubled.</summary>
+    [Fact]
+    public void F1bReview_TheSameCssOpTwiceAppendsItsCssOnce()
+    {
+        if (!StudioAvailable()) return;
+        var (host, work, fixture) = Setup("css-op-f1b-twice", "traditional-ui.oml");
+        var (target, _, author) = Elements(host, fixture).First(e => e.Kind == "block");
+        const string delivery = ".f1b-twice{color:#123456}";
+        JsonObject Op() => new() { ["op"] = "css", ["target"] = target, ["basedOn"] = ThemeCss.Sha256(author), ["edits"] = new JsonArray(new JsonObject { ["append"] = delivery }) };
+        var result = RunJob(host, fixture, new JsonArray(Op(), Op(), new JsonObject { ["op"] = "get", ["target"] = target }), Path.Combine(work, "twice.oml"));
+        Assert.True(result["accepted"]!.GetValue<bool>(), Clip(result));
+        var properties = Results(result).OfType<JsonObject>().Last(r => r["properties"] != null)["properties"]!.AsObject();
+        var written = (properties["UserStyleSheet"] ?? properties["StyleSheet"])!.ToString();
+        Assert.Equal(1, System.Text.RegularExpressions.Regex.Matches(written, System.Text.RegularExpressions.Regex.Escape(delivery)).Count);
+        Assert.Contains(result["notes"]!.AsArray(), n => n!["code"]!.ToString() == "CSS_APPEND_PRESENT");
+        Assert.Contains(result["notes"]!.AsArray(), n => n!["message"]!.ToString().Contains("in the Studio or by an earlier delivery"));
+    }
+
+    /// <summary>Review F1b (2): a rule both changed takes the delivery's body, and the answer names it with its earlier text
+    /// (mergedOver.rules); an edit by position (nth) over a changed CSS is refused THEME_CHANGED, never moved to another rule.</summary>
+    [Fact]
+    public void F1bReview_ARuleThePersonChangedIsNamedAndAnEditByPositionIsNotRebased()
+    {
+        if (!StudioAvailable()) return;
+        var (host, work, fixture) = Setup("css-op-f1b-rules", "traditional-ui.oml");
+        var (target, _, author) = Elements(host, fixture).First(e => e.Kind == "block");
+        var result = RunJob(host, fixture, new JsonArray(
+            new JsonObject { ["op"] = "set", ["target"] = target, ["prop"] = "StyleSheet", ["value"] = author + "\n.f1b-card{color:red;border:0}" },
+            new JsonObject { ["op"] = "css", ["target"] = target, ["basedOn"] = ThemeCss.Sha256(author), ["edits"] = new JsonArray(new JsonObject { ["replaceRule"] = ".f1b-card", ["body"] = "color:blue" }) }),
+            Path.Combine(work, "rules.oml"));
+        Assert.True(result["accepted"]!.GetValue<bool>(), Clip(result));
+        var css = Results(result).OfType<JsonObject>().Last(r => r["css"] != null && r["edits"] != null);
+        var rule = Assert.Single(css["mergedOver"]!["rules"]!.AsArray())!;
+        Assert.Equal(".f1b-card", rule["selector"]!.ToString());
+        Assert.Contains("border:0", rule["was"]!.ToString());
+        Assert.DoesNotContain(css["edits"]!.AsArray(), e => e!["_was"] != null);
+        Assert.Contains(result["notes"]!.AsArray(), n => n!["code"]!.ToString() == ModelSession.ThemeChanged && n["message"]!.ToString().Contains(".f1b-card"));
+        var (code, _) = Refusal(() => RunJob(host, fixture, new JsonArray(
+            new JsonObject { ["op"] = "set", ["target"] = target, ["prop"] = "StyleSheet", ["value"] = author + "\n.f1b-btn{color:red}\n.f1b-btn{color:green}" },
+            new JsonObject { ["op"] = "css", ["target"] = target, ["basedOn"] = ThemeCss.Sha256(author), ["edits"] = new JsonArray(new JsonObject { ["replaceRule"] = ".f1b-btn", ["nth"] = 2, ["body"] = "color:blue" }) }),
+            Path.Combine(work, "nth.oml")));
+        Assert.Equal(ModelSession.ThemeChanged, code);
+    }
+
     [Fact]
     public void ASetStyleSheetTakesTheSameNormalizationAndTheSameBasedOnCheck()
     {

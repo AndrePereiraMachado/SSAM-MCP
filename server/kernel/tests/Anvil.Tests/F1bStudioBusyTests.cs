@@ -56,6 +56,49 @@ public sealed class F1bStudioBusyTests
         Assert.Equal("not-sent", result["writeState"]!.ToString());
     }
 
+    /// <summary>Review F1b (8a): the merge goes again only when the step that finds the module was withdrawn (before its
+    /// journal); a withdrawn step after it (check the target) is never sent again.</summary>
+    [Fact]
+    public void F1bReview_OnlyTheMergeStepThatFindsTheModuleIsSentAgain()
+    {
+        using var _ = Waits("0,0,0");
+        var (work, job) = Pa2F1WarningTests.Job();
+        var find = new BusyStudio { BusyOnce = ["merge_from_oml"], Step = "find the module" };
+        Assert.True(Delivery.Run(find, new DeliveryRequest("Probe", job, work, []), Apply)["delivered"]!.GetValue<bool>());
+        Assert.Equal(2, find.Calls.Count(c => c == "merge_from_oml"));
+        var (work2, job2) = Pa2F1WarningTests.Job();
+        var check = new BusyStudio { BusyOnce = ["merge_from_oml"], Step = "check the target" };
+        Assert.False(Delivery.Run(check, new DeliveryRequest("Probe", job2, work2, []), Apply)["delivered"]!.GetValue<bool>());
+        Assert.Equal(1, check.Calls.Count(c => c == "merge_from_oml"));
+    }
+
+    /// <summary>Review F1b (3): a second attempt of the same call (F1's conflict rebase wraps the bridge again over the same
+    /// task) keeps the waits of the first; a wait of an earlier call (older than the call window) is dropped.</summary>
+    [Fact]
+    public void F1bReview_TheWaitsOfEveryAttemptOfACallAccumulate()
+    {
+        using var _ = Waits("0,0,0");
+        var result = new JsonObject { ["studioWaits"] = new JsonArray(new JsonObject { ["code"] = "STUDIO_BUSY", ["method"] = "open_module", ["at"] = DateTime.UtcNow.AddHours(-2).ToString("o"), ["note"] = "old" }) };
+        var studio = new BusyStudio { BusyOnce = ["get_active_module"] };
+        StudioBusyBridge.Wrap(studio, result).Call("get_active_module");
+        Assert.Equal(["get_active_module"], result["studioWaits"]!.AsArray().Select(w => w!["method"]!.ToString()));
+        studio.BusyOnce.Add("snapshot_module");
+        StudioBusyBridge.Wrap(studio, result).Call("snapshot_module", new JsonObject { ["path"] = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".oml") });
+        Assert.Equal(["get_active_module", "snapshot_module"], result["studioWaits"]!.AsArray().Select(w => w!["method"]!.ToString()));
+    }
+
+    /// <summary>Review F1b (7): a step the Studio held for minutes before it withdrew it (a model step) goes again once at
+    /// most, so the waits never multiply the bridge's own bound.</summary>
+    [Fact]
+    public void F1bReview_ALongStepTheStudioWithdrewGoesAgainOnceAtMost()
+    {
+        using var _ = Waits("0,0,0");
+        var (work, job) = Pa2F1WarningTests.Job();
+        var bridge = new BusyStudio { AlwaysBusy = "snapshot_module", Text = "the Studio UI thread did not run this step in 240 s (withdrawn from the UI queue; nothing of it ran)" };
+        Assert.False(Delivery.Run(bridge, new DeliveryRequest("Probe", job, work, []), Apply)["delivered"]!.GetValue<bool>());
+        Assert.Equal(2, bridge.Calls.Count(c => c == "snapshot_module"));
+    }
+
     private static readonly Func<string, string, string, JsonObject> Apply = (_, _, output) =>
     {
         File.WriteAllText(output, "foreign");
@@ -75,11 +118,12 @@ public sealed class F1bStudioBusyTests
     {
         public HashSet<string> BusyOnce = [], StartedOnce = [];
         public string? AlwaysBusy;
+        public string Step = "read", Text = Withdrawn;
         public List<string> Calls { get; } = [];
         public JsonObject Call(string method, JsonObject? parameters = null)
         {
             Calls.Add(method);
-            if (AlwaysBusy == method || BusyOnce.Remove(method)) throw new BridgeCallException(method + ": " + method + ": read: " + Withdrawn, executed: false);
+            if (AlwaysBusy == method || BusyOnce.Remove(method)) throw new BridgeCallException(method + ": " + method + ": " + Step + ": " + Text, executed: false);
             if (StartedOnce.Remove(method)) throw new BridgeCallException(method + ": " + method + ": read: " + Started, executed: null);
             switch (method)
             {

@@ -1918,25 +1918,45 @@ async function deliverWith(input, auth, ctx, lane, signal) {
   // refreshed in the Studio, between the capture and the merge wrote nothing (PRODUCER_CHANGED, its continuation is this
   // same delivery with closePrevious of the refused task). This call does it itself, on the version it just observed, and
   // says so in normalizations; at most PRODUCER_REDO_LIMIT times, then the refusal stands as before.
-  const notes = [];
+  const notes = [], previous = [];
   for (let i = 0; i < PRODUCER_REDO_LIMIT; i++) {
     const next = producerRedoOf(answer, input);
     if (!next) break;
+    // Review F1b (4): what the Studio wrote outside the merge in the attempt that is closed (its Manage Dependencies or
+    // Refresh References) stays in the module; the note says what it wrote, and the answer keeps those records.
+    const wrote = closedAttemptWrites(answer);
     notes.push({ rule: 'PRODUCER_CHANGED', at: 'merge', ...(answer.taskId ? { taskId: answer.taskId } : {}),
-      note: 'A producer of this module changed between the capture and the merge (published again, or its references refreshed in the Studio); nothing was merged then. SSAM closed that attempt and delivered the same job again on the version it observed.' });
+      note: 'A producer of this module changed between the capture and the merge (published again, or its references refreshed in the Studio); nothing was merged then. SSAM closed that attempt and delivered the same job again on the version it observed.'
+        + (wrote ? ' ' + wrote : '') });
+    if (wrote) previous.push({ taskId: answer.taskId ?? null, studioWrites: answer.studioWrites });
     input = next;
     answer = await deliverRun(input, auth, ctx, lane, signal);
   }
-  if (notes.length && answer && typeof answer === 'object') answer = { ...answer, normalizations: mergeNormalizations(answer.normalizations, notes) };
+  if (notes.length && answer && typeof answer === 'object') answer = { ...answer, normalizations: mergeNormalizations(answer.normalizations, notes),
+    ...(previous.length ? { previousAttempts: previous } : {}) };
   return fixes && answer && typeof answer === 'object' ? { ...answer, fixesApplied: fixes } : answer;
 }
 const PRODUCER_REDO_LIMIT = 2;
+// What the Studio wrote outside the merge in a closed attempt (studioWritesOf records of its answer), said as what it wrote:
+// the command, the stage, the elements it added and the producers it moved. Empty when it wrote nothing.
+export function closedAttemptWrites(answer) {
+  const writes = (Array.isArray(answer?.studioWrites) ? answer.studioWrites : []).filter(w => w && ['changed', 'ended', 'unknown'].includes(w.outcome));
+  if (!writes.length) return '';
+  return 'Before that, ' + writes.map(w => 'the Studio\'s ' + (w.command ?? 'Refresh References') + ' (' + (w.stage ?? 'before-merge') + ') '
+    + (w.outcome === 'changed' ? 'changed the module' : 'may have changed the module')
+    + (Array.isArray(w.elements) && w.elements.length ? ', adding ' + w.elements.join(', ') + (w.elementsTotal ? ' (' + w.elementsTotal + ' in all)' : '') : '')
+    + (Array.isArray(w.producers) && w.producers.length ? ', producers ' + w.producers.join(', ') : '')).join('; ')
+    + '; that stays in the module and the new delivery was merged over it (previousAttempts).';
+}
 // The same delivery again that a PRODUCER_CHANGED refusal names (closeAndDeliver): the same module and the job file it ran.
 export function producerRedoOf(answer, input) {
   const next = answer?.ok === false && answer.code === 'PRODUCER_CHANGED' && answer.merged !== true ? answer.continuation : null;
   const args = next?.tool === 'o11_deliver' ? next.arguments : null;
   if (!args || typeof args.job !== 'string' || !args.module || String(args.module).toLowerCase() !== String(input.module ?? '').toLowerCase()) return null;
   if (input.resume || input.close) return null;
+  // Review F1b (4): a Studio write of that attempt outside the merge whose end no run saw (pending, or unknown without the
+  // evidence of its end) may still change the module: no new delivery runs beside it, the refusal stands.
+  if ((Array.isArray(answer.studioWrites) ? answer.studioWrites : []).some(w => w?.outcome === 'pending' || (w?.outcome === 'unknown' && !w.endedBy))) return null;
   const { patch: _patch, basedOn: _basedOn, closePrevious: _closed, ...rest } = input;
   return { ...rest, job: args.job, ...(args.closePrevious ? { closePrevious: args.closePrevious } : {}),
     ...(args.producers ? { producers: args.producers } : {}), ...(args.captureProducers ? { captureProducers: args.captureProducers } : {}) };

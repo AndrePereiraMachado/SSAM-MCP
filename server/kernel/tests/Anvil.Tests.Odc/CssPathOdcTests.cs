@@ -101,6 +101,33 @@ public sealed class CssPathOdcTests
         Assert.Contains(result["notes"]!.AsArray(), n => n!["code"]!.ToString() == ModelSession.ThemeChanged);
     }
 
+    /// <summary>Review F1b (1, 2) on ODC: the same css op twice appends once (CSS_APPEND_PRESENT); a rule both changed is named
+    /// with its earlier text (mergedOver.rules); an edit by position (nth) over a changed CSS is refused THEME_CHANGED.</summary>
+    [Fact]
+    public void F1bReview_AppendOnceRulesNamedAndNoRebaseByPosition()
+    {
+        if (!StudioAvailable()) return;
+        var (target, _, author, _) = Elements().First(e => e.Kind == "block");
+        const string delivery = ".f1b-twice{color:#123456}";
+        JsonObject Op() => new() { ["op"] = "css", ["target"] = target, ["basedOn"] = ThemeCss.Sha256(author), ["edits"] = new JsonArray(new JsonObject { ["append"] = delivery }) };
+        var twice = Run("f1b-twice", new JsonArray(Op(), Op(), new JsonObject { ["op"] = "get", ["target"] = target }));
+        Assert.True(twice["accepted"]!.GetValue<bool>(), Clip(twice));
+        var properties = Results(twice).OfType<JsonObject>().Last(r => r["properties"] != null)["properties"]!.AsObject();
+        var written = (properties["UserStyleSheet"] ?? properties["StyleSheet"])!.ToString();
+        Assert.Equal(1, System.Text.RegularExpressions.Regex.Matches(written, System.Text.RegularExpressions.Regex.Escape(delivery)).Count);
+        Assert.Contains(twice["notes"]!.AsArray(), n => n!["code"]!.ToString() == "CSS_APPEND_PRESENT");
+        var rules = Run("f1b-rules", new JsonArray(
+            new JsonObject { ["op"] = "set", ["target"] = target, ["prop"] = "StyleSheet", ["value"] = author + "\n.f1b-card{color:red;border:0}" },
+            new JsonObject { ["op"] = "css", ["target"] = target, ["basedOn"] = ThemeCss.Sha256(author), ["edits"] = new JsonArray(new JsonObject { ["replaceRule"] = ".f1b-card", ["body"] = "color:blue" }) }));
+        Assert.True(rules["accepted"]!.GetValue<bool>(), Clip(rules));
+        var css = Results(rules).OfType<JsonObject>().Last(r => r["css"] != null && r["edits"] != null);
+        Assert.Contains("border:0", Assert.Single(css["mergedOver"]!["rules"]!.AsArray())!["was"]!.ToString());
+        var error = Assert.ThrowsAny<Exception>(() => Run("f1b-nth", new JsonArray(
+            new JsonObject { ["op"] = "set", ["target"] = target, ["prop"] = "StyleSheet", ["value"] = author + "\n.f1b-btn{color:red}\n.f1b-btn{color:green}" },
+            new JsonObject { ["op"] = "css", ["target"] = target, ["basedOn"] = ThemeCss.Sha256(author), ["edits"] = new JsonArray(new JsonObject { ["replaceRule"] = ".f1b-btn", ["nth"] = 2, ["body"] = "color:blue" }) })));
+        Assert.Equal(ModelSession.ThemeChanged, Assert.IsType<KernelRefusalException>(Errors.FindCoded(error)).Code);
+    }
+
     /// <summary>The block whose first widgets are HTML Elements with a class attribute (they have no Style of their own): the
     /// touch of the CSS takes a container of the block, nothing adds a second class, and the answer names the touch. It was
     /// refused with InvalidHTMLAttribute_Replicated (C:/t/r3/ESTUDO-CSSPATH.md); the walk's order hid it in about 1 run of 10.</summary>

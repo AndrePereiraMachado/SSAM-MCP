@@ -424,3 +424,18 @@ test('F1b stop 4: a publication the busy Studio did not start goes again by the 
     assert.deepEqual(items.map(n => n.rule), ['STUDIO_BUSY'], JSON.stringify(value));
   }
 });
+
+// Review F1b (5, 6): a publication without the module key never goes again (the bridge would publish whatever tab is
+// selected after the wait), and a module key open in no tab (the person closed it) is MODULE_NOT_ACTIVE, never retried.
+test('F1b review: no retry without the module key; a closed tab is MODULE_NOT_ACTIVE at once', async t => {
+  const changed = fail('InvalidOperationException: Requested module identity is no longer active; nothing was executed');
+  const keyless = await harness(t, { active: { ...ACTIVE, key: undefined }, publish: () => changed });
+  const value = await keyless.call({ module: 'Orders', authorize: WORDS });
+  assert.equal(value.code, 'TARGET_CHANGED', JSON.stringify(value));
+  assert.equal(keyless.sent('publish').length, 1);
+  assert.equal(keyless.sent('publish')[0].params.module_key, undefined);
+  const closed = await harness(t, { publish: () => fail('InvalidOperationException: Requested module identity is not open in any Studio tab; nothing was executed') });
+  const gone = await closed.call({ module: 'Orders', authorize: WORDS });
+  assert.equal(gone.code, 'MODULE_NOT_ACTIVE', JSON.stringify(gone));
+  assert.equal(closed.sent('publish').length, 1);
+});

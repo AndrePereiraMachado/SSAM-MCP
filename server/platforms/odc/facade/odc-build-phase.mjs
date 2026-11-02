@@ -124,7 +124,7 @@ export async function afterOdcMerge({ merge, snapshot, module } = {}, deps = {})
 // (merged is not true, nothing was sent or the merge refused before it ran) and their own continuation is the same
 // delivery again; this call does it itself, on the module as it is now (a new capture, so the person's edits are the base
 // of the three-way merge), and the answer says so in normalizations (never silent). A cut merge (MODULE_NOT_AT_BASE), a
-// merge that may have run, a conflict or a security warning are never redone here: they keep their own answer.
+// merge that may have run or a security warning are never redone here: they keep their own answer.
 //   BASE_DRIFT (stop 3): the open module changed after the capture: captured again and rebuilt over it.
 //   BRIDGE_BUSY / PIPE_BUSY at the merge, nothing sent (stop 4): the Studio was busy; waited briefly and sent again.
 //   PRODUCER_CHANGED before the merge (stop 5): a producer was published or its references refreshed between the capture
@@ -135,6 +135,12 @@ const redoOf = value => {
   if (!value || value.ok !== false || value.merged === true) return null;
   if (value.code === 'BASE_DRIFT' && value.failed === 'merge' && !value.afterCut && value.continuation?.tool !== 'studio_publish') return { rule: 'BASE_DRIFT', wait: false,
     note: 'The open module changed after the capture (an edit in the Studio); nothing was merged then. SSAM captured the module again, with that edit, and merged this delivery over it.' };
+  // C1 adversarial suite (RESULTADO-C1-ADV.md, P1): the ODC bridge refuses MERGE_CONFLICT (the person changed the element the
+  // delivery writes) before the native merge starts (StartupHook.cs Require(!conflicts), before merge-started.json), so
+  // nothing was written. A new capture holds the person's value as the base, the job written over it holds the delivery's,
+  // and the conflict is gone: the delivery's value wins, and the note says which attempt's match tree names the element.
+  if (value.code === 'MERGE_CONFLICT' && value.failed === 'merge' && value.merged === false && !value.afterCut) return { rule: 'MERGE_CONFLICT', wait: false,
+    note: 'The person changed an element this delivery writes, so the Studio refused that merge (nothing was merged). SSAM captured the module again, with the person\'s change, and merged this delivery over it: the delivery\'s value of that element replaced the person\'s (the match tree of the refused attempt, in from, names it).' };
   if ((value.code === 'BRIDGE_BUSY' || value.code === 'PIPE_BUSY') && value.failed === 'merge' && value.outcome === 'not-sent') return { rule: 'STUDIO_BUSY', wait: true,
     note: 'The Studio was busy when the merge was sent (nothing of it ran); SSAM waited and sent this delivery again over the module as it is now.' };
   if (value.code === 'PRODUCER_CHANGED' && value.failed === 'reference-snapshot' && value.continuation?.tool === 'studio_deliver') return { rule: 'PRODUCER_CHANGED', wait: false,

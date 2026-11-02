@@ -46,11 +46,41 @@ public sealed partial class ModelSession
         // any three-way merge: when every edit still applies to the CSS as it is now, they are applied there (a rule both
         // changed takes the delivery's body), the person's other changes stay, and a note says so. Only an edit that no longer
         // applies (its rule or text is gone) is refused, with the current hash, as before.
-        var rebased = !ThemeCss.Matches(basedOn, current) && !string.IsNullOrWhiteSpace(basedOn) && !plan.Unbalanced && plan.Problems.Count == 0
+        // Review F1b (1, 2): an edit addressed by position (nth) is never rebased: another rule of the same selector the
+        // person added moves it to a rule the edits were not written for. An append whose text is already in the CSS (an
+        // earlier delivery of the same op, or the person) is not applied again. Each rule the edits replace or delete over
+        // the changed CSS is named with what it was (mergedOver.rules), so nothing of the person's is lost in silence.
+        var stale = !ThemeCss.Matches(basedOn, current) && !string.IsNullOrWhiteSpace(basedOn);
+        var byPosition = edits.OfType<JsonObject>().Any(e => e["nth"] != null);
+        var present = new List<int>();
+        if (stale && !byPosition)
+        {
+            var squashed = CssEdits.Squash(current);
+            for (var i = 0; i < edits.Count; i++)
+                if (edits[i] is JsonObject e && e["append"] is JsonValue add && add.TryGetValue<string>(out var text) && CssEdits.Squash(text) is { Length: > 0 } piece
+                    && squashed.Contains(piece, StringComparison.Ordinal)) present.Add(i);
+            if (present.Count > 0)
+            {
+                var keptIndex = Enumerable.Range(0, edits.Count).Where(i => !present.Contains(i)).ToList();
+                var replanned = CssEdits.Apply(current, new JsonArray(keptIndex.Select(i => edits[i]!.DeepClone()).ToArray()), at);
+                foreach (var entry in replanned.Applied) if (entry["edit"]?.GetValue<int>() is int k && k < keptIndex.Count) entry["edit"] = keptIndex[k];
+                foreach (var i in present) replanned.Applied.Insert(Math.Min(i, replanned.Applied.Count), new JsonObject { ["edit"] = i, ["applied"] = true, ["alreadyPresent"] = true });
+                // A replan with a problem keeps the plan of every edit, so the refusal names the edits as they were sent.
+                if (replanned.Problems.Count == 0 && !replanned.Unbalanced) plan = replanned; else present.Clear();
+            }
+        }
+        var rebased = stale && !byPosition && !plan.Unbalanced && plan.Problems.Count == 0
             && plan.Applied.Count == edits.Count && plan.Applied.All(a => a["applied"]?.GetValue<bool>() == true);
+        var overwritten = rebased ? plan.Applied.Where(a => a["_was"] != null).Select(a => (JsonNode)new JsonObject { ["edit"] = a["edit"]?.DeepClone(),
+            ["selector"] = a["_selector"]?.DeepClone(), ["line"] = a["line"]?.DeepClone(), ["action"] = a["deleted"] != null ? "deleteRule" : "replaceRule", ["was"] = a["_was"]?.DeepClone() }).ToArray() : [];
         if (rebased)
-            Note(ThemeChanged, $"css {reference}: the author CSS changed after basedOn {Short(basedOn)} (now {actual}, {current.Length} chars), an edit made in the Studio; "
-                + $"the {edits.Count} edit(s) were applied by rule over the CSS as it is now, and its other changes stay");
+        {
+            Note(ThemeChanged, $"css {reference}: the author CSS changed after basedOn {Short(basedOn)} (now {actual}, {current.Length} chars), in the Studio or by an earlier delivery; "
+                + $"the {edits.Count - present.Count} edit(s) were applied by rule over the CSS as it is now, and its other changes stay"
+                + (overwritten.Length > 0 ? "; the delivery's version replaced " + string.Join(", ", overwritten.Select(r => r!["selector"] + " (line " + r["line"] + ")")) + ", whose earlier text is in mergedOver.rules" : ""));
+            if (present.Count > 0)
+                Note(CssEdits.AppendPresent, $"css {reference}: the CSS of {present.Count} append edit(s) (edit {string.Join(", ", present)}) is already in the stylesheet; it was not appended again");
+        }
         if (!rebased && !ThemeCss.Matches(basedOn, current))
         {
             var missing = string.IsNullOrWhiteSpace(basedOn);
@@ -64,7 +94,7 @@ public sealed partial class ModelSession
                     : $"read the stylesheet again (get {reference}) and write the edits against it with basedOn {actual}",
                 new JsonArray(new JsonObject { ["op"] = missing ? "add" : "replace", ["path"] = at + "/basedOn", ["value"] = actual }));
             problem["expected"] = basedOn; problem["actual"] = actual;
-            problem["edits"] = new JsonArray(plan.Applied.Select(a => (JsonNode)a.DeepClone()).ToArray());
+            problem["edits"] = new JsonArray(plan.Applied.Select(a => (JsonNode)CssEdits.Public(a)).ToArray());
             throw new KernelRefusalException(code, problem["message"]!.ToString(), new JsonArray(JobPreflight.PublicProblem(problem)));
         }
         // The hygiene verdict: only what the edits bring (by offender, as many times as it is new). An absolute url to an
@@ -86,9 +116,10 @@ public sealed partial class ModelSession
         {
             ["css"] = TypeResolver.Name(target), ["basedOn"] = ThemeCss.Sha256(written), ["was"] = actual,
             ["chars"] = written.Length, ["charsBefore"] = current.Length,
-            ["edits"] = new JsonArray(plan.Applied.Select(a => (JsonNode)a.DeepClone()).ToArray()),
+            ["edits"] = new JsonArray(plan.Applied.Select(a => (JsonNode)CssEdits.Public(a)).ToArray()),
         };
-        if (rebased) result["mergedOver"] = new JsonObject { ["basedOn"] = basedOn, ["current"] = actual, ["code"] = ThemeChanged };
+        if (rebased) result["mergedOver"] = new JsonObject { ["basedOn"] = basedOn, ["current"] = actual, ["code"] = ThemeChanged,
+            ["rules"] = new JsonArray(overwritten), ["alreadyPresent"] = new JsonArray(present.Select(i => (JsonNode)i).ToArray()) };
         // What the one normalization changed (R2-D: a target reached through its property too).
         if (settled != null)
             foreach (var (key, value) in settled) result[key] = value?.DeepClone();
@@ -152,6 +183,12 @@ public static class CssEdits
     public const string Invalid = "CSS_EDIT_INVALID";
     public const string NoStyleSheet = "CSS_TARGET_WITHOUT_STYLESHEET";
     public const string BasedOnMissing = "CSS_BASED_ON_MISSING";
+    /// <summary>Review F1b (1): an append of a rebase whose CSS the stylesheet already holds (a note; nothing appended).</summary>
+    public const string AppendPresent = "CSS_APPEND_PRESENT";
+    /// <summary>The text without white space, to tell whether an append is already in a stylesheet.</summary>
+    public static string Squash(string css) => Regex.Replace(css ?? "", @"\s+", "");
+    /// <summary>An applied entry without its private fields (those starting with _).</summary>
+    public static JsonObject Public(JsonObject entry) { var copy = entry.DeepClone().AsObject(); foreach (var key in copy.Select(p => p.Key).Where(k => k.StartsWith('_')).ToList()) copy.Remove(key); return copy; }
 
     /// <summary>The registration point of the op (the Verbs.cs dispatch line and the VerbSurface table): the verb and its shape.</summary>
     public static VerbSurface.VerbShape Verb { get; } = new(Op, "write", ["target", "edits"], ["basedOn"],
@@ -315,7 +352,8 @@ public static class CssEdits
             return (css, new JsonObject { ["edit"] = j }, JobPreflight.Problem(null, pointer + "/" + key, Nested, "error",
                 $"edit #{j}: the rule {Clip(selector, 80)} at line {rule.Line} holds nested rules: replacing its body would drop them", "edit it with find/with, which keeps what it does not name"));
         var sb = new StringBuilder(css);
-        var entry = new JsonObject { ["edit"] = j, ["line"] = rule.Line };
+        // Review F1b (2): the rule as it was, for a rebase over a changed CSS to name what the delivery replaced (never public).
+        var entry = new JsonObject { ["edit"] = j, ["line"] = rule.Line, ["_selector"] = selector, ["_was"] = css[rule.Start..rule.End] };
         if (replace)
         {
             // The declarations of the rule in place: its selector as written, its position, the other rules untouched.

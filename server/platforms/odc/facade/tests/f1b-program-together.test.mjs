@@ -59,7 +59,8 @@ test('F1b stop 5 (ODC): a producer that changed between the capture and the merg
 test('F1b (ODC): what may have written, or what the person must see, is never redone', async () => {
   for (const answer of [
     { ok: false, code: 'MODULE_NOT_AT_BASE', failed: 'merge', merged: null, outcome: 'not-sent' },   // a cut merge may be in the module
-    { ok: false, code: 'MERGE_CONFLICT', failed: 'merge' },
+    { ok: false, code: 'MERGE_CONFLICT', failed: 'merge' },                          // merged not proven false: never redone
+    { ok: false, code: 'MERGE_CONFLICT', failed: 'merge', merged: false, afterCut: true },
     { ok: false, code: 'BASE_DRIFT', failed: 'merge', merged: false, afterCut: true },
     { ok: false, code: 'BASE_DRIFT', failed: 'merge', merged: false, continuation: { tool: 'studio_publish', arguments: { reconcile: true } } },
     { ok: false, code: 'BRIDGE_BUSY', failed: 'merge', outcome: 'incomplete', merged: true },
@@ -143,4 +144,41 @@ test('F1b stop 4 (O11): the waits of the kernel for a busy Studio (studioWaits) 
   assert.deepEqual(items.map(n => [n.rule, n.at, n.note]), [['STUDIO_BUSY', 'snapshot_module', note]]);
   // Never a note without a wait: the answers of before stay as they were.
   assert.equal(deliverOutcome({ envelope: O11_DELIVERED }, { trackId: 't', work: 'C:\\w' }).normalizations, undefined);
+});
+
+// Review F1b (4): the closed attempt's Studio write outside the merge (its Manage Dependencies) is said in the note as what it
+// wrote (never an undo the owner would have to click), kept in previousAttempts; a write whose end no run saw stops the redo.
+const withWrite = outcome => work => {
+  const reply = producerChanged(work);
+  reply.data.studioWrites = [{ command: 'Manage Dependencies', stage: 'before-merge', outcome, added: [{ element: 'Orders_IS.GetOrders' }],
+    requested: [{ elements: ['Action:Orders_IS.GetOrders'] }], producers: ['Orders_IS'] }];
+  return reply;
+};
+test('F1b review (O11): a Manage Dependencies of the closed attempt is said in the note; one still open stops the redo', async t => {
+  const box = o11Box(t, [withWrite('changed'), O11_DELIVERED]);
+  const call = await o11Serve(t, box.deps);
+  const value = await call({ module: 'Orders_CS', job: box.job });
+  assert.equal(value.result, 'delivered', JSON.stringify(value));
+  const note = (Array.isArray(value.normalizations) ? value.normalizations : value.normalizations?.items ?? []).find(n => n.rule === 'PRODUCER_CHANGED');
+  assert.match(note.note, /Manage Dependencies \(before-merge\) changed the module, adding Orders_IS\.GetOrders/);
+  assert.doesNotMatch(note.note, /Ctrl\+Z/);
+  assert.equal(value.previousAttempts?.[0]?.taskId, TASK);
+  const open = o11Box(t, [withWrite('pending'), O11_DELIVERED]);
+  const call2 = await o11Serve(t, open.deps);
+  const refused = await call2({ module: 'Orders_CS', job: open.job });
+  assert.equal(refused.code, 'PRODUCER_CHANGED', JSON.stringify(refused));
+  assert.equal(open.runAnvil.calls.filter(c => c.args[0] === 'deliver').length, 1, 'no new delivery beside a write that may still change the module');
+});
+
+// C1 adversarial suite (P1): the person changed the element the delivery writes; the ODC bridge refused MERGE_CONFLICT before
+// any merge (merged:false). The delivery is captured again and merged over the person's value: the delivery's value wins.
+test('F1b C1 (ODC): MERGE_CONFLICT with nothing merged is captured again and merged over, with a note', async () => {
+  const conflict = { ok: false, code: 'MERGE_CONFLICT', failed: 'merge', merged: false, evidence: 'C:\\lab\\1' };
+  const { asked, deliver } = odc([conflict, DELIVERED]);
+  const value = await phase.phasedDeliver({ module: 'App', feature: 'f', job: 'j.json', output: 'lab-1' }, {}, { deliver, sleep: noSleep });
+  assert.equal(value.result, 'delivered', JSON.stringify(value));
+  assert.equal(asked.length, 2); assert.equal(asked[1].output, undefined, 'a new capture');
+  assert.deepEqual(rules(value), ['MERGE_CONFLICT']);
+  assert.match(value.normalizations[0].note, /delivery's value of that element replaced the person's/);
+  assert.equal(value.normalizations[0].from, 'C:\\lab\\1');
 });
