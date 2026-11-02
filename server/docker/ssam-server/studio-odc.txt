@@ -8,7 +8,8 @@
 #   assembly of the folder named by a string literal of one of them;
 # - closed over the assembly references, minus what the shared .NET 10 runtime carries.
 # ODCStudio.exe is left out on purpose: on Linux FileVersionInfo reads only managed files, and without the exe the IDE
-# version comes from ServiceStudio.Framework.dll (same value). Windows-only native DLLs are left out as for O11.
+# version comes from ServiceStudio.Framework.dll (same value). Windows-only native DLLs are left out as for O11, and the image puts the Linux ones (libe_sqlite3.so, libSkiaSharp.so,
+# libHarfBuzzSharp.so) next to the managed DLLs as for O11.
 # Proven on Windows: anvil-odc and the builder built against exactly these files give the same results as the full
 # installation (verify-catalog, 9 jobs, builder list and inspect).
 Antlr4.Runtime.Standard.dll

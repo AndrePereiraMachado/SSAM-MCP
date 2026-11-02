@@ -14,7 +14,9 @@
 #     runtime caches the server keeps inside its own tree (see "Writable by ssam" below);
 #   - HEALTHCHECK on /health; run it with an init (compose `init: true`, or `docker run --init`) so signals reach node and
 #     the kernel processes are reaped;
-#   - OCI labels; no secret; nothing in the runtime beyond the base image, node and libsqlite3-0.
+#   - OCI labels; no secret; nothing in the runtime beyond the base image, node, libsqlite3-0 and the linux-x64 natives of the
+#     Studios' SkiaSharp and HarfBuzzSharp (NuGet, pinned by SHA256: stage skia-native), with their probe;
+#   - no core files: ssam-server-start sets `ulimit -c 0` for the server and every kernel process, DOTNET_DbgEnableMiniDump=0.
 #
 # Build it with deploy/build.sh, the only documented way: it runs the client-name guard
 # (platforms/odc/facade/tests/hosted-image-denylist.test.mjs) first and builds only when no client name would ship. It
@@ -82,6 +84,33 @@ COPY deploy/vigia/no-provenance.json /provenance.json
 
 FROM scratch AS client-bridges
 COPY docker/ssam-server/empty-bridges/ /
+
+# ---- SkiaSharp and HarfBuzzSharp natives for linux-x64 (build only) -----------------------------------------------------------
+# R4 (C:\t\r4\CAPTURA-FALHA.md, family B): the Studios ship SkiaSharp.dll 2.88.9.0 and HarfBuzzSharp.dll 8.3.1.1 (the same in
+# the six Studios of the three pairs: Service Studio 11.55.92/93/94, ODC Studio 1.7.28/29/30) with only their WINDOWS native
+# DLLs, which the studio lists leave out. Studio code builds an SKPaint during a headless apply; without libSkiaSharp.so the
+# P/Invoke fails, the Studio swallows it, and the SKPaint finalizer then throws on the finalizer thread: the kernel aborts
+# (SIGABRT, core dump, no envelope; 02/11, ProdSSAM_CS). The Linux natives come from NuGet, never from the installers:
+# SkiaSharp.NativeAssets.Linux.NoDependencies 2.88.9 (no fontconfig/freetype needed in the image) and
+# HarfBuzzSharp.NativeAssets.Linux 8.3.1.1, each pinned by the SHA256 of its .nupkg (ADD --checksum refuses any other
+# file). Change them only with the managed DLLs of the Studios (their FileVersion), and the probe below proves the pair.
+FROM ${PYTHON_IMAGE} AS skia-native
+ADD --checksum=sha256:5a3a5c33bf10ea4696d1e5398aa0d1e7e7c6705fb4ebfb5ac161ec2512b9ec4b \
+    https://api.nuget.org/v3-flatcontainer/skiasharp.nativeassets.linux.nodependencies/2.88.9/skiasharp.nativeassets.linux.nodependencies.2.88.9.nupkg \
+    /nupkg/skiasharp.nupkg
+ADD --checksum=sha256:b016decfa7dcf5ac5572c05b2076e9421fcc33934794c2604aee85cae6735725 \
+    https://api.nuget.org/v3-flatcontainer/harfbuzzsharp.nativeassets.linux/8.3.1.1/harfbuzzsharp.nativeassets.linux.8.3.1.1.nupkg \
+    /nupkg/harfbuzzsharp.nupkg
+RUN python3 - <<'PY'
+import os, zipfile
+os.makedirs('/native', exist_ok=True)
+for package, library in (('/nupkg/skiasharp.nupkg', 'libSkiaSharp.so'), ('/nupkg/harfbuzzsharp.nupkg', 'libHarfBuzzSharp.so')):
+    with zipfile.ZipFile(package) as archive:
+        data = archive.read('runtimes/linux-x64/native/' + library)
+    with open('/native/' + library, 'wb') as out:
+        out.write(data)
+    os.chmod('/native/' + library, 0o644)
+PY
 
 # ---- The reader of the installers and bundles (build only) -------------------------------------------------------------------
 FROM ${PYTHON_IMAGE} AS studio-reader
@@ -162,6 +191,13 @@ ENV DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_NOLOGO=1 DOTNET_SKIP_FIRST_TIME_EXPERIE
 WORKDIR /src
 COPY kernel/ kernel/
 
+# ---- The SkiaSharp probe (ssam-skia-probe.dll), against the Studio's own SkiaSharp.dll and HarfBuzzSharp.dll -------------------
+FROM sdk AS skia-probe
+COPY docker/ssam-server/skia-probe/ /probe/src/
+RUN --mount=type=bind,from=studio-o11,source=/studio/o11,target=/studio/o11 \
+    --mount=type=cache,id=ssam-nuget-skia-probe,sharing=locked,target=/root/.nuget/packages \
+    dotnet build /probe/src/skia-probe.csproj -c Release -nologo -v q -nodeReuse:false -p:StudioDir=/studio/o11 -o /probe/out
+
 # ---- O11 kernel (anvil.dll), against /studio/o11 -----------------------------------------------------------------------------------
 FROM sdk AS kernel-o11
 ARG SERVICE_STUDIO_TFM
@@ -213,6 +249,15 @@ COPY --from=studio-o11 /studio/o11 /studio/o11
 COPY --from=studio-odc /studio/odc /studio/odc
 RUN sqlite=$(find /usr/lib -name 'libsqlite3.so.0' | head -n 1) && test -n "$sqlite" \
  && ln -s "$sqlite" /studio/o11/libe_sqlite3.so && ln -s "$sqlite" /studio/odc/libe_sqlite3.so
+# The Linux natives of SkiaSharp and HarfBuzzSharp next to the managed DLLs of each Studio (the folder their DllImport looks
+# in first: the 02/11 abort tried /studio/o11/libSkiaSharp.so), and the probe that proves them: the build stops unless both
+# Studios create and finalize SKPaint, SKTypeface and a HarfBuzz buffer (deploy/tests/skia-native-image.test.mjs runs the
+# same probe on a built image).
+COPY --from=skia-native /native/libSkiaSharp.so /native/libHarfBuzzSharp.so /studio/o11/
+COPY --from=skia-native /native/libSkiaSharp.so /native/libHarfBuzzSharp.so /studio/odc/
+COPY --from=skia-probe /probe/out/ /usr/local/lib/ssam-skia-probe/
+RUN dotnet /usr/local/lib/ssam-skia-probe/ssam-skia-probe.dll /studio/o11 \
+ && dotnet /usr/local/lib/ssam-skia-probe/ssam-skia-probe.dll /studio/odc
 
 WORKDIR /app
 # The SSAM tree the MCP reads at run time (facade, catalogs, kernel data, docs served by the MCP, the job suites with the
@@ -282,6 +327,10 @@ JS
 COPY --chmod=0755 <<'EOF' /usr/local/bin/ssam-server-start
 #!/bin/sh
 set -eu
+# No core files (R4, family C): a kernel that aborts must not write hundreds of MB into the customer's workspace (10 cores,
+# ~2.8 GB in 3 minutes on 02/11, core_pattern "core" in the process's folder). The limit is inherited by every kernel
+# process node starts, whatever environment it gives them; DOTNET_DbgEnableMiniDump=0 (ENV) keeps .NET's createdump off.
+ulimit -c 0
 authority=${ANVIL_AUTHORITY_DIR:-/app/.local/authority}
 if [ ! -s "$authority/bridge.key" ]; then
   umask 077
@@ -323,6 +372,7 @@ ENV HOME=/tmp \
     SSAM_NODE=/usr/local/bin/node \
     DOTNET_CLI_TELEMETRY_OPTOUT=1 \
     DOTNET_NOLOGO=1 \
+    DOTNET_DbgEnableMiniDump=0 \
     SSAM_PORT=7310 \
     SSAM_PUBLIC_HOST= \
     SSAM_IMAGE_O11=${SSAM_IMAGE_O11} \
