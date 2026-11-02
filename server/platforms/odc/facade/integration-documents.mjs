@@ -33,7 +33,7 @@
 // (DOCUMENT_FETCH_HOSTED_REFUSED); the document comes from the customer: a file of the workspace (ws:<rel>, or agent:inbox/<file>
 // the SSAM Agent brings from the user's machine, where any download happened), or inline. Local use is unchanged.
 // r40 (agent fetch; supersedes the refusal above when the customer's agent downloads): a URL is downloaded by the customer's
-// SSAM Agent ON THE USER'S MACHINE (kind document.fetch, the agent 0.3.11 / 0.4.8-native, the SSAM Agent app 0.2.3), never by
+// SSAM Agent ON THE USER'S MACHINE (kind document.fetch, the agent 0.3.12 / 0.4.9-native, the SSAM Agent app 0.2.4), never by
 // this server: the user's network, an intranet that machine reaches included, is the user's intent. The bytes it answers are
 // read as the bytes of a URL read locally, with the same rules (the .wso companion, DTD/ENTITY, imports and $ref resolved
 // against the final URL, the names of a WSDL's imports relative to it inside its folder, MAX_DOCUMENTS, the workspace quota,
@@ -97,7 +97,7 @@ export const DOCUMENT_DOWNLOADED_BY_AGENT = 'DOCUMENT_DOWNLOADED_BY_AGENT';
 export const AGENT_FETCH_INVALID = 'DOCUMENT_FETCH_AGENT_INVALID';
 // A reference a downloaded document names on another server than its own (pin): never asked of the agent.
 export const AGENT_FETCH_ORIGIN = 'DOCUMENT_FETCH_OTHER_SERVER';
-const AGENT_VERSIONS = 'the SSAM Agent 0.3.11 / 0.4.8-native, the SSAM Agent app 0.2.3 or later';
+const AGENT_VERSIONS = 'the SSAM Agent 0.3.12 / 0.4.9-native, the SSAM Agent app 0.2.4 or later';
 // What a hosted refusal adds for the agent: 'update' (the connected agent does not download), 'absent' (none connected).
 export const agentHint = state => state === 'update' ? ` Or update the SSAM Agent to let it download on the user's machine (${AGENT_VERSIONS}).`
   : state === 'absent' ? ` Or connect the SSAM Agent on the user's machine (${AGENT_VERSIONS}) to let it download there.` : '';

@@ -20,7 +20,7 @@ export function agentPaths(value, keys = [], out = []) {
 }
 
 // sync: the agent runs file.sync (agent 0.2.0+, C14); the link then says so in supports() and keeps the released transfers.
-// fetches (r40): the agent runs document.fetch (0.3.11 / 0.4.8-native, the app 0.2.3); by default an agent before it.
+// fetches (r40): the agent runs document.fetch (0.3.12 / 0.4.9-native, the app 0.2.4); by default an agent before it.
 export function fakeAgentLink({ tokenId = 'tok_test', customer = 'Test', agentRoot, connected = true, info = {}, handlers = {}, sync = false, fetches = false } = {}) {
   const calls = [], protocolErrors = [], puts = [], gets = [], released = [];
   const blobs = new Map();

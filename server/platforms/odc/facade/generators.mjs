@@ -224,7 +224,7 @@ export function describeGenerator(id, lane = 'odc', { hosted = false } = {}) {
   return { id, op: a.op, ...(a.with ? { with: a.with } : {}), state: a.state, reason: a.reason, report: a.report,
     use: mode && pending ? 'not offered by ssam_discover; this hosted server runs it called explicitly with its op ' + tools
       + (inline ? ' with every input in the job: "sample" (the JSON response) in each GET method, as the server never calls the API'
-        + ' (an SSAM Agent 0.3.11 or the app 0.2.3 on the user\'s machine samples a GET method without one there)' : '')
+        + ' (an SSAM Agent 0.3.12 or the app 0.2.4 on the user\'s machine samples a GET method without one there)' : '')
       : pending ? 'not offered by ssam_discover until an independent blind test approves it; callable explicitly with its op ' + tools
       : 'approved: ssam_discover offers it for the intents of its family',
     contract: { tool: 'ssam_reference', arguments: { lane, kind: 'api', query: { op: a.op } } },
