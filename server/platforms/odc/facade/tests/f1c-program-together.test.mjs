@@ -38,7 +38,9 @@ test('A5: off Windows the run lease is tried as the flock .NET holds, never clai
 test('A5: with flock installed (Linux), a lease another process holds is not free', { skip: process.platform === 'win32' || spawnSync('flock', ['--version']).status !== 0 }, async t => {
   const work = folder(t);
   const lock = path.join(work, 'run.lock');
-  const holder = spawn('flock', [lock, 'sleep', '5'], { stdio: 'ignore' });
+  // -o: flock itself holds the lock and its command does not inherit it, so killing the holder frees the lease (without -o the
+  // orphaned sleep kept the lock, F6 run inside the image).
+  const holder = spawn('flock', ['-o', lock, 'sleep', '5'], { stdio: 'ignore' });
   t.after(() => holder.kill());
   await new Promise(r => setTimeout(r, 400));
   assert.equal(lineage.runLeaseFree({ work }), false);
