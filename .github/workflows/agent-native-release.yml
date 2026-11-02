@@ -87,6 +87,8 @@ jobs:
           npm test
       - name: Check resources before filtered native tests
         run: &resources |
+          # Release disposable filesystem cache, then enforce the same free-RAM floor.
+          sudo purge
           node --input-type=module <<'JS'
           import os from 'node:os';
           import fs from 'node:fs';
@@ -230,4 +232,5 @@ jobs:
             agent/dist/SHA256SUMS
             agent/dist/installed-pack.json
             agent/dist/verify-native.json
+
 
