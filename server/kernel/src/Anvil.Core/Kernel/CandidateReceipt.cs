@@ -14,6 +14,12 @@ namespace Anvil.Core;
 /// </summary>
 public static class CandidateReceipt
 {
+    /// <summary>F1c A2: an apply answer whose candidate is valid, or invalid only by errors its base already had and the job
+    /// added none of (preexistingErrors): the candidate a delivery may merge. Here, not in JobRunner, because the ODC builder
+    /// (platforms/odc/studio/builder/Builder.csproj) compiles this file without JobRunner (F6: the image build broke).</summary>
+    public static bool ValidAsJudged(JsonObject applied)
+        => applied["isValid"]?.GetValue<bool>() == true || applied["preexistingErrors"] is JsonObject;
+
     public const string FileName = "kernel-result.json";
 
     public sealed record Judgement(bool Applies, string? Reason, IReadOnlyList<string> Accepted, IReadOnlyList<string> Refused);
@@ -85,7 +91,7 @@ public static class CandidateReceipt
             : null;
         var same = reason == null;
         var applier = Text(data["developerId"]);
-        reason ??= !True(data["accepted"]) || !JobRunner.ValidAsJudged(data) ? "the kernel did not accept the candidate as valid"
+        reason ??= !True(data["accepted"]) || !ValidAsJudged(data) ? "the kernel did not accept the candidate as valid"
             : author != null && applier == null ? "the receipt does not name the author of the apply (developerId)"
             : author != null && !string.Equals(applier, author, StringComparison.OrdinalIgnoreCase) ? "the kernel applied the job as " + applier + ", not as the snapshot author"
             : created + changed == 0 ? "the kernel footprint names nothing created or changed" : null;

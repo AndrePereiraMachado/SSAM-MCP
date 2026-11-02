@@ -11,8 +11,8 @@ public static partial class JobRunner
 
     /// <summary>F1c A2: an apply answer whose candidate is valid, or invalid only by errors its base already had and the job
     /// added none of (preexistingErrors): the candidate a delivery may merge.</summary>
-    public static bool ValidAsJudged(System.Text.Json.Nodes.JsonObject applied)
-        => applied["isValid"]?.GetValue<bool>() == true || applied["preexistingErrors"] is System.Text.Json.Nodes.JsonObject;
+    // The predicate lives in CandidateReceipt, which the ODC builder compiles without JobRunner (F6).
+    public static bool ValidAsJudged(System.Text.Json.Nodes.JsonObject applied) => CandidateReceipt.ValidAsJudged(applied);
 
     public static object Run(ModelHost host, string? basePath, string jobPath, string outPath, Action<string>? log = null,
         IReadOnlyDictionary<string, string>? bindings = null)
