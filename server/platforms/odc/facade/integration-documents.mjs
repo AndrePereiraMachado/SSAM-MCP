@@ -26,7 +26,8 @@
 // main document the job's folder does not have is refused (the kernel would look in the repository). Anything else is
 // PATH_OUTSIDE_WORKSPACE naming the job pointer and the reference, before anything is read there. Every URL (the document,
 // each redirect hop, each import) must reach a public address (hosted/public-fetch.mjs: DOCUMENT_HOST_NOT_PUBLIC), and the
-// default fetch checks it again at connect time. A served process that lost its hosted context reads nothing.
+// default fetch checks it again at connect time (superseded by fase4-28 r4-f3-import below: a hosted server fetches nothing).
+// A served process that lost its hosted context reads nothing.
 // fase4-28 r4-f3-import (criterion C3; supersedes the public fetch above for documents): a hosted server NEVER fetches a
 // document. A WSDL or OpenAPI URL, a redirect and any import or $ref a document names by URL are refused before any request
 // (DOCUMENT_FETCH_HOSTED_REFUSED); the document comes from the customer: a file of the workspace (ws:<rel>, or agent:inbox/<file>
@@ -38,7 +39,8 @@
 // against the final URL, the names of a WSDL's imports relative to it inside its folder, MAX_DOCUMENTS, the workspace quota,
 // the pin under <localRoot>/documents/<sha256>/), after the server checks them again (fields, size, sha256: agentRead). One
 // rule more than locally: what a downloaded document names is asked of the agent only on that document's own server
-// (DOCUMENT_FETCH_OTHER_SERVER), so a document from the internet never makes the user's agent read another server for it.
+// (DOCUMENT_FETCH_OTHER_SERVER), so a document from the internet never makes the user's agent read another server for it: the
+// agent is asked with sameOrigin (its redirects stay on that server) and the final URL it answers is checked again here.
 // The sample GET of rest-consume goes the same way (10 s, 2 MB, JSON). Every URL the agent downloaded is listed on the answer
 // (DOCUMENT_DOWNLOADED_BY_AGENT, with its sha256 and bytes). An agent without the kind (the apps 0.2.1/0.2.2), or none
 // connected, keeps DOCUMENT_FETCH_HOSTED_REFUSED before anything is asked, its fix saying to update or connect the agent; the
@@ -56,7 +58,7 @@ import { namesWhole } from './studio-create-app.mjs';
 import { pinReferences } from './job-patch.mjs';
 import { hostedContext, servedWithoutContext } from './executor.mjs';
 import { insideVisible, createQuota, workspaceFull } from './hosted/mirror.mjs';
-import { MAX_REDIRECTS, publicUrlProblem } from './hosted/public-fetch.mjs';
+import { MAX_REDIRECTS } from './hosted/public-fetch.mjs';
 
 export const MAX_DOCUMENT_BYTES = 5 * 1024 * 1024;
 export const MAX_DOCUMENTS = 32;
@@ -78,14 +80,18 @@ const problem = (code, message, fix, extra = {}) => ({ code, ...extra, message, 
 
 export const DOCUMENT_FETCH_KIND = 'document.fetch';
 // The refusals of the agent's kind (agent/lib/document-fetch.mjs, DocumentFetch.cs), each with the fix the server gives.
+// The keys are quoted: the quality registry lists a code only from a quoted literal (quality-registry.mjs).
 export const AGENT_FETCH_FIXES = Object.freeze({
-  DOCUMENT_FETCH_URL_REFUSED: 'give an http(s) URL without a user or password, or the file (agent:inbox/<file>), or the document inline',
-  DOCUMENT_FETCH_REDIRECT_REFUSED: 'give the document\'s final http(s) URL (at most 5 redirects, each to http or https)',
-  DOCUMENT_FETCH_TOO_LARGE: 'use a document of at most 5 MB (a sample of at most 2 MB)',
-  DOCUMENT_FETCH_UNSAFE_XML: 'use the service\'s own WSDL and schemas without <!DOCTYPE>/<!ENTITY>',
-  DOCUMENT_FETCH_NOT_DOCUMENT: 'give the URL of the document itself (a WSDL is often <service>?WSDL; an OpenAPI document or a sample is JSON)',
-  DOCUMENT_FETCH_FAILED: 'check that the user\'s machine reaches the URL (in a browser there), or give the file (agent:inbox/<file>) or the document inline',
+  'DOCUMENT_FETCH_URL_REFUSED': 'give an http(s) URL without a user or password and not a link-local (cloud metadata) address, or the file (agent:inbox/<file>), or the document inline',
+  'DOCUMENT_FETCH_REDIRECT_REFUSED': 'give the document\'s final http(s) URL (at most 5 redirects, each to http or https; what a document names stays on its own server)',
+  'DOCUMENT_FETCH_TOO_LARGE': 'use a document of at most 5 MB (a sample of at most 2 MB)',
+  'DOCUMENT_FETCH_UNSAFE_XML': 'use the service\'s own WSDL and schemas without <!DOCTYPE>/<!ENTITY>',
+  'DOCUMENT_FETCH_NOT_DOCUMENT': 'give the URL of the document itself (a WSDL is often <service>?WSDL; an OpenAPI document or a sample is JSON)',
+  'DOCUMENT_FETCH_FAILED': 'check that the user\'s machine reaches the URL (in a browser there), or give the file (agent:inbox/<file>) or the document inline',
 });
+// The link's answers that mean no agent downloads now (the rest of the preparation is refused at once, nothing waits again).
+const LINK_GONE = new Set(['AGENT_NOT_CONNECTED', 'AGENT_RECONNECTING', 'AGENT_DISCONNECTED', 'KIND_NOT_ALLOWED']);
+const MAX_URL = 4096;
 export const DOCUMENT_DOWNLOADED_BY_AGENT = 'DOCUMENT_DOWNLOADED_BY_AGENT';
 // The agent's answer that the server's own check refuses (fields, base64, size or sha256 not as declared).
 export const AGENT_FETCH_INVALID = 'DOCUMENT_FETCH_AGENT_INVALID';
@@ -111,21 +117,37 @@ function agentFetcher(agent) {
  * requests anything itself; a refusal of the link (no agent, an agent without the kind) is the hosted refusal of the family.
  */
 async function agentRead(url, { agent, accept, maxBytes, timeoutMs, from = null, at = null }) {
+  if (!agent.fetch) return { problem: hostedFetchProblem(url, from, agent.state) };
+  if (url.length > MAX_URL) return { problem: problem('DOCUMENT_FETCH_URL_REFUSED', `${url.slice(0, 200)}... has more than ${MAX_URL} characters, so it was not requested`, AGENT_FETCH_FIXES.DOCUMENT_FETCH_URL_REFUSED, { downloadedBy: 'agent' }) };
+  // review 1: what a document names (from) is downloaded only from that document's own server, its redirects included.
+  const sameOrigin = from !== null && isUrl(from);
   let value;
-  try { value = await agent.fetch({ url, accept, maxBytes, timeoutMs }); }
+  try { value = await agent.fetch({ url, accept, maxBytes, timeoutMs, ...(sameOrigin ? { sameOrigin: true } : {}) }); }
   catch (error) {
     const code = String(error?.code ?? '');
     if (Object.hasOwn(AGENT_FETCH_FIXES, code))
       return { problem: problem(code, `the SSAM Agent on the user's machine did not download ${url}: ${String(error?.message ?? '').slice(0, 300)}`, AGENT_FETCH_FIXES[code], { url, downloadedBy: 'agent' }) };
-    // KIND_NOT_ALLOWED: the agent changed under the call; anything of the link (not connected, reconnecting, a deadline): no answer.
-    return { problem: hostedFetchProblem(url, from, code === 'KIND_NOT_ALLOWED' ? 'update' : 'absent', code || 'AGENT_ERROR') };
+    // review 3: the link lost the agent (or the agent changed under the call): the rest of this preparation is refused at once.
+    if (LINK_GONE.has(code)) {
+      agent.state = code === 'KIND_NOT_ALLOWED' ? 'update' : 'absent';
+      agent.fetch = null;
+      return { problem: hostedFetchProblem(url, from, agent.state, code) };
+    }
+    // review 5: any other answer (busy, a deadline, parameters the agent refused) is named as it is, the agent still connected.
+    return { problem: problem('DOCUMENT_FETCH_FAILED', `the SSAM Agent on the user's machine did not download ${url} (${code || 'AGENT_ERROR'}): ${String(error?.message ?? '').slice(0, 300)}`,
+      'send the call again; if it repeats, give the file (agent:inbox/<file>) or the document inline', { url, cause: code || 'AGENT_ERROR', downloadedBy: 'agent' }) };
   }
   const invalid = what => ({ problem: problem(AGENT_FETCH_INVALID, `the SSAM Agent answered the download of ${url} with ${what}, so its bytes were not used`, 'update the SSAM Agent on the user\'s machine, then send the call again', { url }) });
   if (!value || typeof value !== 'object') return invalid('no answer');
   const { finalUrl, status, contentBase64, sha256: declared, bytes: size } = value;
   if (typeof finalUrl !== 'string' || !isUrl(finalUrl) || !Number.isInteger(status) || typeof contentBase64 !== 'string' || !/^[0-9a-f]{64}$/.test(String(declared)) || !Number.isSafeInteger(size))
     return invalid('fields that are not the kind\'s');
-  try { const parsed = new URL(finalUrl); if (parsed.username || parsed.password) return invalid('a final URL that carries a user or password'); } catch { return invalid('a final URL that is not a URL'); }
+  let parsed;
+  try { parsed = new URL(finalUrl); if (parsed.username || parsed.password) return invalid('a final URL that carries a user or password'); } catch { return invalid('a final URL that is not a URL'); }
+  // review 1: an agent that followed a redirect to another server for a reference (sameOrigin unknown to an older kind): not used.
+  if (sameOrigin && parsed.origin !== new URL(url).origin)
+    return { problem: problem(AGENT_FETCH_ORIGIN, `the download of ${url} ended on another server (${parsed.origin}), so its bytes were not used`,
+      'download that file on the user\'s machine and give the document with its files (agent:inbox/<folder>/...), or put the document inline', { url, downloadedBy: 'agent' }) };
   if (contentBase64.length > Math.ceil(maxBytes / 3) * 4) return { problem: problem('DOCUMENT_TOO_LARGE', `${url} has more than ${maxBytes} bytes`, 'use a document of at most 5 MB (a sample of at most 2 MB)', { url }) };
   const bytes = Buffer.from(contentBase64, 'base64');
   if (bytes.toString('base64') !== contentBase64) return invalid('content that is not base64');
@@ -344,10 +366,6 @@ async function readDocument(source, { fetchImpl, base, wsdl, confine = null, fro
     const get = async first => {
       let url = first;
       for (let hop = 0; ; hop++) {
-        if (confine) {
-          const refused = await publicUrlProblem(url, { lookup: confine.lookup });
-          if (refused) return { problem: hostProblem(refused) };
-        }
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
         try {

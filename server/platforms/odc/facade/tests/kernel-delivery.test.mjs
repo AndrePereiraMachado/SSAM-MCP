@@ -379,3 +379,16 @@ test('bad metadata is refused before contacting the Studio', async t => {
   await assert.rejects(deliverKernel({ ...f.input, until: 'publish' }, f.deps), /until/);
   assert.deepEqual(f.calls, []);
 });
+
+// The review of r40 (finding 4): a documents refusal that carries the kernel's normalizations keeps the agent's notes too.
+test('a documents refusal with normalizations keeps the notes of the documents the agent downloaded', async t => {
+  const note = { rule: 'DOCUMENT_DOWNLOADED_BY_AGENT', at: '/ops/0/data/openapi/path', note: 'x was downloaded by the SSAM Agent on the user\'s machine: 1 bytes, sha256 ' + 'a'.repeat(64) + '; the SSAM server made no request' };
+  const refused = fixture(t);
+  refused.deps.prepareIntegrationJob = async () => ({ ok: false, code: 'DOCUMENT_NAME_INVALID', error: 'x', problems: [{ code: 'DOCUMENT_NAME_INVALID', message: 'x', fix: 'y' }],
+    normalizations: [{ rule: 'OP_DATA_WRAPPED', path: '/ops/0', from: 'openapi', to: 'data', message: 'm' }], notes: [note] });
+  const out = await deliverKernel(refused.input, refused.deps);
+  assert.equal(out.failed, 'documents');
+  const items = Array.isArray(out.normalizations) ? out.normalizations : out.normalizations?.items ?? [];
+  assert.ok(items.some(n => n.rule === 'DOCUMENT_DOWNLOADED_BY_AGENT'), JSON.stringify(out.normalizations));
+  assert.equal(items.filter(n => n.rule === 'DOCUMENT_DOWNLOADED_BY_AGENT').length, 1);
+});

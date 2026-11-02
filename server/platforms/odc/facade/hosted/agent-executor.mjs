@@ -216,10 +216,12 @@ export class AgentExecutor {
   }
 
   // One document.fetch on the user's machine through this customer's link (the one channel of every kind); the server never
-  // requests the URL. params {url, accept, maxBytes, timeoutMs}; the agent's own deadline plus the margin of the other kinds.
+  // requests the URL. params {url, accept, maxBytes, timeoutMs, sameOrigin?}; the agent's own deadline plus the margin of the other kinds.
   async documentFetch(params) {
     const timeoutMs = Math.min(Number(params?.timeoutMs) || DOCUMENT_FETCH_TIMEOUT_MS, DOCUMENT_FETCH_TIMEOUT_MS) + MARGIN_MS;
-    return this.link.call(DOCUMENT_FETCH_KIND, { url: params?.url, accept: params?.accept, maxBytes: params?.maxBytes, timeoutMs: params?.timeoutMs }, { timeoutMs });
+    // review 1: sameOrigin (what a downloaded document names) keeps the agent's redirects on that document's server.
+    return this.link.call(DOCUMENT_FETCH_KIND, { url: params?.url, accept: params?.accept, maxBytes: params?.maxBytes, timeoutMs: params?.timeoutMs,
+      ...(params?.sameOrigin === true ? { sameOrigin: true } : {}) }, { timeoutMs });
   }
 
   async xif(request) {

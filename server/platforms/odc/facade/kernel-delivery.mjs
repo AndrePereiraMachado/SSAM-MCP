@@ -1537,7 +1537,10 @@ export async function deliverKernel(input, deps) {
       const prepared = await prepare(job, { lane: 'odc', words: authorize ?? '', localRoot: path.join(root, '.local') });
       // r40: the URLs the customer's agent downloaded (prepared.notes) are listed on the answer (normalizations), refused or not.
       if (Array.isArray(prepared?.notes) && prepared.notes.length) { documentNotes = prepared.notes; report.normalizations = mergeNormalizations(report.normalizations, documentNotes); }
-      if (prepared?.ok !== true) { const { notes: _notes, ...refused } = prepared ?? {}; refuse('documents', prepared ? refused : { error: 'The integration documents of the job could not be prepared.' }); return completed(report); }
+      // review 4: after refuse, whose fields may carry the kernel's normalizations of the refusal (OP_DATA_WRAPPED): merged, never replaced.
+      if (prepared?.ok !== true) { const { notes: _notes, ...refused } = prepared ?? {}; refuse('documents', prepared ? refused : { error: 'The integration documents of the job could not be prepared.' });
+        if (documentNotes.length) report.normalizations = mergeNormalizations(report.normalizations, documentNotes.filter(n => !(Array.isArray(report.normalizations) ? report.normalizations : report.normalizations?.items ?? []).includes(n)));
+        return completed(report); }
       if (typeof prepared.job === 'string' && prepared.job && path.resolve(prepared.job) !== job) {
         job = path.resolve(prepared.job); report.job = job; jobDocument = readJob(job); requestedProducers = producersOf(jobDocument);
       }

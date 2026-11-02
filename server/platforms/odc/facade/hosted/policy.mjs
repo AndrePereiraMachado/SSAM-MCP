@@ -290,8 +290,8 @@ export function restConsumeSampleRequired(name, lane, unsampled) {
       + (unreadable ? '; the gate could not read the whole job' : '') + '. Nothing was requested and nothing ran.',
     problems: unsampled.slice(0, 20).map(u => ({ code: 'DOCUMENT_FETCH_HOSTED_REFUSED', cause: 'REST_CONSUME_SAMPLE_MISSING', path: u.path, ...(u.method ? { method: u.method } : {}) })),
     fix: 'give the response inline in each GET method: "sample": <the JSON response> (from the API documentation, or a call the user made on their machine); a POST/PUT/PATCH '
-      + 'gives "request": <the JSON body> and, for a typed answer, "sample". Then send the same call again. Or update the SSAM Agent to let it '
-      + 'download on the user\'s machine (the SSAM Agent 0.3.11 / 0.4.8-native, the SSAM Agent app 0.2.3 or later).',
+      + 'gives "request": <the JSON body> and, for a typed answer, "sample". Then send the same call again. Or connect the SSAM Agent on the '
+      + 'user\'s machine, updated to let it download there (the SSAM Agent 0.3.11 / 0.4.8-native, the SSAM Agent app 0.2.3 or later).',
     continuation: { tool: 'ssam_reference', arguments: { lane: lane === 'odc' ? 'odc' : 'o11', kind: 'api', query: { op: 'rest-consume' } },
       why: 'The closed keys of rest-consume: sample, request, verb, auth, headers.' } };
 }

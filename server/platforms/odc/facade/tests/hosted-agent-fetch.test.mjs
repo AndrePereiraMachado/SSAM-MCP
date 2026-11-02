@@ -212,6 +212,9 @@ test('the AgentExecutor: the state from the link (connected, the Hello\'s kinds)
   assert.equal(new AgentExecutor({ link: link({ connected: () => { throw new Error('x'); } }), workspace: dirs.workspace }).documentFetchState(), 'absent');
   await executor.documentFetch({ url: 'https://h.example.test/a.wsdl', accept: 'xml', maxBytes: 10, timeoutMs: 30000, extra: 'dropped' });
   assert.deepEqual(calls, [{ kind: 'document.fetch', params: { url: 'https://h.example.test/a.wsdl', accept: 'xml', maxBytes: 10, timeoutMs: 30000 }, options: { timeoutMs: 90000 } }]);
+  // review 1: sameOrigin goes through to the agent (and only a true one).
+  await executor.documentFetch({ url: 'https://h.example.test/b.xsd', accept: 'xml', maxBytes: 10, timeoutMs: 30000, sameOrigin: true });
+  assert.deepEqual(calls[1].params, { url: 'https://h.example.test/b.xsd', accept: 'xml', maxBytes: 10, timeoutMs: 30000, sameOrigin: true });
   // A link that loses the agent during the call: the hosted refusal, cause the link's code.
   const lost = new AgentExecutor({ link: link({ call: async () => { throw Object.assign(new Error('The SSAM agent of this account is not connected.'), { code: 'AGENT_NOT_CONNECTED', executed: false }); } }), workspace: dirs.workspace });
   const b = box();
@@ -232,7 +235,7 @@ test('the gate: an agent whose Hello lists document.fetch lets an unsampled rest
     if (fetches) { assert.equal(handled.length, 1, JSON.stringify(value).slice(0, 300)); continue; }
     assert.equal(value.code, 'DOCUMENT_FETCH_HOSTED_REFUSED');
     assert.equal(handled.length, 0);
-    assert.match(value.fix, /update the SSAM Agent to let it download on the user's machine/);
+    assert.match(value.fix, /connect the SSAM Agent on the user's machine, updated to let it download there/);
   }
 });
 
@@ -288,4 +291,36 @@ test('what a downloaded document names on another server (an intranet one includ
   assert.deepEqual([prepared.ok, prepared.code], [false, 'DOCUMENT_FETCH_OTHER_SERVER']);
   assert.deepEqual(agent.asked.map(a => a.url), ['https://api.example.test/openapi.json']);
   assert.match(prepared.problems[0].fix, /agent:inbox\/<folder>\//);
+});
+
+// The review of r40 (REVISAO-R40-AGENT-FETCH.md): findings 1, 3, 5.
+test('review 1: a reference is asked with sameOrigin, and one whose download ended on another server is not used (a redirect cannot bypass the rule)', async () => {
+  const b = box();
+  const api = JSON.stringify({ openapi: '3.0.0', info: { title: 'X', version: '1' }, paths: { '/a': { get: { operationId: 'getA', responses: { 200: { content: { 'application/json': { schema: { $ref: 'other.json#/A' } } } } } } } } });
+  const agent = fakeAgent({ 'https://api.example.test/openapi.json': api, 'https://api.example.test/other.json': { body: '{"A":{"$ref":"secret.json"}}', finalUrl: 'http://192.168.0.1/admin/other.json' } });
+  const job = b.job([{ op: 'rest', data: { client: { name: 'X' }, openapi: { path: 'https://api.example.test/openapi.json', operations: ['getA'] } } }]);
+  const prepared = await offline(fetchImpl => prepareIntegrationJob(job, { ...b.hosted, agent, fetchImpl }));
+  assert.deepEqual([prepared.ok, prepared.code], [false, 'DOCUMENT_FETCH_OTHER_SERVER'], JSON.stringify(prepared).slice(0, 300));
+  assert.deepEqual(agent.asked.map(a => [a.url, a.sameOrigin]), [['https://api.example.test/openapi.json', undefined], ['https://api.example.test/other.json', true]]);
+  assert.ok(!agent.asked.some(a => a.url.includes('192.168.0.1')), 'what the other server names is never asked');
+});
+
+test('review 3 and 5: an agent lost in the middle refuses the rest at once; another answer of the link is named as it is; a URL above 4096 characters is not asked', async () => {
+  const b = box();
+  let calls = 0;
+  const lost = { documentFetchState: () => 'ready', async documentFetch() { calls++; throw Object.assign(new Error('The SSAM agent of this account is not connected.'), { code: 'AGENT_NOT_CONNECTED' }); } };
+  const job = b.job([{ op: 'soap', data: { wsdl: 'https://h.example.test/a.wsdl', methods: ['A'] } }, { op: 'soap', data: { wsdl: 'https://h.example.test/b.wsdl', methods: ['B'] } },
+    { op: 'rest-consume', data: { name: 'N', methods: [{ name: 'A', url: 'https://api.example.test/a' }, { name: 'B', url: 'https://api.example.test/b' }] } }]);
+  const prepared = await offline(fetchImpl => prepareIntegrationJob(job, { ...b.hosted, agent: lost, fetchImpl }));
+  assert.equal(calls, 1, 'one call reached the lost link; the rest were refused at once');
+  assert.deepEqual(prepared.problems.map(p => p.code), ['DOCUMENT_FETCH_HOSTED_REFUSED', 'DOCUMENT_FETCH_HOSTED_REFUSED', 'DOCUMENT_FETCH_HOSTED_REFUSED', 'DOCUMENT_FETCH_HOSTED_REFUSED']);
+  assert.match(prepared.problems[1].fix, /connect the SSAM Agent/);
+  const busy = { documentFetchState: () => 'ready', async documentFetch() { throw Object.assign(new Error('The agent already has 32 calls pending.'), { code: 'AGENT_BUSY' }); } };
+  const named = await offline(fetchImpl => prepareIntegrationJob(b.soap('https://h.example.test/a.wsdl'), { ...b.hosted, agent: busy, fetchImpl }));
+  assert.deepEqual([named.code, named.problems[0].cause], ['DOCUMENT_FETCH_FAILED', 'AGENT_BUSY']);
+  assert.doesNotMatch(named.problems[0].message, /no SSAM Agent/);
+  const agent = fakeAgent({});
+  const long = await offline(fetchImpl => prepareIntegrationJob(b.soap('https://h.example.test/' + 'a'.repeat(4100)), { ...b.hosted, agent, fetchImpl }));
+  assert.equal(long.code, 'DOCUMENT_FETCH_URL_REFUSED');
+  assert.deepEqual(agent.asked, []);
 });
