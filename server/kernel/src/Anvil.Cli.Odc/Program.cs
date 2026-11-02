@@ -71,6 +71,8 @@ usage: anvil-odc <command> [--flags]
         var sw = Stopwatch.StartNew();
         try
         {
+            // Bind before the model-backed apply helpers are JIT-compiled in a cold process.
+            if (args[0] == "apply") StudioAssembliesOdc.Bind(null);
             var data = Dispatch(args[0], args);
             if (data == null) { Console.Error.WriteLine("unknown command: " + args[0] + Environment.NewLine + Usage); return 2; }
             var envelope = Envelope(args[0], data, sw.ElapsedMilliseconds);
@@ -87,6 +89,7 @@ usage: anvil-odc <command> [--flags]
     }
 
     /// <summary>Um comando -> um objeto (null = comando desconhecido). O mesmo Dispatch serve o processo frio e o worker.</summary>
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
     private static object? Dispatch(string command, string[] args) => command switch
     {
         // ---- headless ---------------------------------------------------------------------------------
