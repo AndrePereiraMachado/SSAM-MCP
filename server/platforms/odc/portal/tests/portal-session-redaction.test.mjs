@@ -49,7 +49,8 @@ function portalFixture() {
   broker.credentialRegistry.add(token); broker.authenticated = true;
   let sends = 0;
   logs(broker, async () => { sends++; started.resolve(); await release.promise; return response('echo ' + token); });
-  const self = { portalReadWithinBudget: ({ operationId, input }) => new PortalReadAdapter({ target: 'odc3', origin, broker }).execute({ operationId, input }) };
+  // r40a: portalRead and read also use the instance's credentialReadBudget and credentialContinuation (not hosted here: no change).
+  const self = Object.assign(Object.create(OdcAccess.prototype), { portalReadWithinBudget: ({ operationId, input }) => new PortalReadAdapter({ target: 'odc3', origin, broker }).execute({ operationId, input }) });
   const tool = facade({ portalRead: args => OdcAccess.prototype.portalRead.call(self, args) }, 'odc_portal_read');
   return { token, started, release, tool, sends: () => sends, args: { tenant: new URL(origin).host, operationId: 'monitoring.logs', input } };
 }
@@ -82,7 +83,7 @@ async function apiFixture() {
   } });
   await bridge.auth.getToken();
   const operationId = 'asset-repository-api-v1:get:/assets';
-  const self = { readWithinBudget: () => bridge.execute(operationId) };
+  const self = Object.assign(Object.create(OdcAccess.prototype), { readWithinBudget: () => bridge.execute(operationId) });
   const tool = facade({ read: args => OdcAccess.prototype.read.call(self, args) }, 'odc_read');
   const args = { tenant: new URL(config.origin).host, auth: 'api-client', operationId };
   return { secret, token, started, release, tool, args, sends: () => sends };
