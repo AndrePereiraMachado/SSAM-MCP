@@ -832,7 +832,7 @@ public static partial class Delivery
                 // merge_from_oml {prefer:"foreign"} (PLANO-11H): a bridge that resolves a conflict with the person's edits inside the
                 // Studio's own merge, in favour of the delivery, and lists what it resolved (the note below). Only to a bridge that
                 // declares it; an older one keeps today's path (no conflict merged, ConflictRebase's second attempt).
-                if (HasCapability(bridge, PreferForeignCapability)) parameters["prefer"] = "foreign";
+                if (Offers(bridge, PreferForeignCapability)) parameters["prefer"] = "foreign";
                 try { RecordMerge(bridge.Call("merge_from_oml", parameters)); }
                 catch (BridgeCallException ex) when (ex.Executed == null)
                 {
