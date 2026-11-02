@@ -37,3 +37,19 @@ test('R4: v106 on the net10 pair with v101 kept; v102 and v107 accepted on the t
     assert.equal(compatibility(as('v107'), pair, ['odc', 'o11']).odc.code, 'AGENT_PACK_MISMATCH', name + ' v107 without reconcile-merge');
   }
 });
+// R4 (ODC 1.7.31.10988): a fourth pair, appended after v1-v3 so their names, kernels and the default stay as they were. It is the
+// net10 pair of v1 with ODC Studio 1.7.31: the same v106 metadata, the agent pack's v107 accepted (with reconcile-merge), and
+// the 1.7.31 Studio is served there, while the 1.7.30 kernel does not take it.
+test('R4: the 1.7.31 pair serves ODC Studio 1.7.31 with the v1 net10 bridge metadata; v1-v3 unchanged', () => {
+  assert.deepEqual(Object.keys(kernels), ['v1', 'v2', 'v3', 'v4']);
+  assert.deepEqual({ ...kernels.v4, odc: kernels.v1.odc }, kernels.v1);
+  assert.equal(kernels.v4.odc, '1.7.31');
+  const served = { odc: ['1.7.30', '1.7.29', '1.7.28', '1.7.31'], o11: ['11.55.94', '11.55.93', '11.55.92', '11.55.94'] };
+  const h = pack => ({ ...hello(pack), studios: { odc: { installed: { version: '1.7.31.10988' } }, o11: { installed: { version: '11.55.94.65328' } } } });
+  const v4 = { ...kernels.v4, servedVersions: served };
+  assert.equal(compatibility(withCommands(h('v107')), v4, ['odc', 'o11']).odc.ok, true, 'v107 with reconcile-merge');
+  assert.equal(compatibility(withCommands(h('v107')), v4, ['odc', 'o11']).o11.ok, true, 'O11 11.55.94');
+  assert.equal(compatibility(h('v107'), v4, ['odc', 'o11']).odc.code, 'AGENT_PACK_MISMATCH', 'v107 without reconcile-merge');
+  assert.equal(compatibility(h('v97'), v4, ['odc', 'o11']).odc.code, 'AGENT_PACK_MISMATCH', 'v97');
+  assert.notEqual(compatibility(withCommands(h('v107')), { ...kernels.v1, servedVersions: served }, ['odc', 'o11']).odc.ok, true, 'the 1.7.30 kernel does not serve 1.7.31');
+});

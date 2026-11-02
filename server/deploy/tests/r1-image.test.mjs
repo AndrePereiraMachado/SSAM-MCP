@@ -24,6 +24,8 @@ test('R1 image carries the reference maps and all three current-window compatibi
     }
     assert.equal(kernels.v2.odc,'1.7.29');
     assert.equal(kernels.v3.odc,'1.7.28');
+    // R4 (ODC 1.7.31): a fourth pair, appended so v1-v3 keep their names and default; the same net10 kernel metadata as v1.
+    assert.deepEqual(kernels.v4,{o11:'11.55.94',odc:'1.7.31',odcBridge:'v106',odcBridgeAccepted:['v98','v101','v102','v107']});
   `;
   const result = spawnSync(process.env.DOCKER_EXE ?? 'docker', ['--context','desktop-linux','run','--rm','--pull=never','--network=none','--read-only',
     '--entrypoint=node',image,'--input-type=module','-e',code], {encoding:'utf8',timeout:60000,windowsHide:true});
