@@ -36,8 +36,12 @@ test('ODC prefer manifest, unreadable fallback and no concurrent BASE_DRIFT redo
   assert.equal(JSON.parse(fs.readFileSync(file, 'utf8')).preferForeign, true);
   calls = 0;
   await runWithExecutor({ hosted: true, agent, executor: { call: async () => ({}) } }, async () => {
-    const studio = phasedStudio(async () => ({ ok: false, code: 'BASE_DRIFT', failed: 'merge', merged: false, preferForeign: false, preferForeignUnavailable: 'missing member' }));
-    await phasedDeliver({}, {}, { deliver: async () => { calls++; return calls === 1 ? studio(['merge', file]) : { ok: true }; } });
+    const studio = phasedStudio(async () => ({ ok: false, code: 'BASE_DRIFT', failed: 'merge', merged: false, preferForeign: false, preferForeignUnavailable: 'missing member', fallbackAuditUnavailable: 'Native person-edit audit unavailable: Match.Properties', fallbackPersonEdits: [{ Element: 'Action:A', Property: 'Description', Delivery: 'person before retry' }] }));
+    const result = await phasedDeliver({}, {}, { deliver: async () => { calls++; return calls === 1 ? studio(['merge', file]) : { ok: true }; } });
+    assert.match(result.mergeNotes.join(' '), /missing member/);
+    assert.match(result.mergeNotes.join(' '), /person before retry/);
+    assert.match(result.mergeNotes.join(' '), /Match.Properties/);
+    assert.match(result.mergeNotes.join(' '), /Some replaced person values may be absent/);
   });
   assert.equal(calls, 2, 'a bridge missing a native member keeps the old retry');
 });

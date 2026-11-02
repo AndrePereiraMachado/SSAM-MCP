@@ -75,6 +75,8 @@ internal static partial class Bridge {
         // Set by commands that answer a refusal instead of throwing (the portal lane), so the journal line tells the truth.
         public string? Outcome, GateName, Note;
         public string? PreferForeignUnavailable;
+        public NativeMergeIntent.Change[] FallbackPersonEdits = Array.Empty<NativeMergeIntent.Change>();
+        public string? FallbackAuditUnavailable;
         public bool HandedOff;
         // The Studio turn of this command: past its deadline it has answered, and a job not started yet never starts (QueuedOnTab).
         public BusyCommand? Turn;
@@ -162,6 +164,8 @@ internal static partial class Bridge {
                     if (context.PreferForeignUnavailable != null && JsonSerializer.SerializeToNode(response) is JsonObject fallback) {
                         fallback["preferForeign"] = false;
                         fallback["preferForeignUnavailable"] = context.PreferForeignUnavailable;
+                        fallback["fallbackPersonEdits"] = JsonSerializer.SerializeToNode(context.FallbackPersonEdits, Json);
+                        if (context.FallbackAuditUnavailable != null) fallback["fallbackAuditUnavailable"] = context.FallbackAuditUnavailable;
                         response = fallback;
                     }
                     // G-3 (C16): a merge that failed after CompareAndMerge took the candidate is integrated in the open
@@ -1249,6 +1253,11 @@ internal static partial class Bridge {
         var basisBytes = m.ReadBase();
         m.RequireFreshBase();
         using var basis = Load(basisBytes);
+        if (m.PreferForeign && !prefer && preferUnavailable != null) {
+            var observation = NativeMergeIntent.ReadForFallback(basis, local);
+            c.FallbackPersonEdits = observation.Changes;
+            c.FallbackAuditUnavailable = observation.Unavailable;
+        }
         bool exactCapturedBase;
         using (var current = new MatchTree(local, basis, basis, false, true)) {
             exactCapturedBase = current.HasNoDifferences;
@@ -1338,6 +1347,8 @@ internal static partial class Bridge {
             } else if (m.PreferForeign) {
                 nativeReturn["preferForeign"] = false;
                 nativeReturn["preferForeignUnavailable"] = preferUnavailable;
+                nativeReturn["fallbackPersonEdits"] = JsonSerializer.SerializeToNode(c.FallbackPersonEdits, Json);
+                if (c.FallbackAuditUnavailable != null) nativeReturn["fallbackAuditUnavailable"] = c.FallbackAuditUnavailable;
             }
             File.WriteAllText(Path.Combine(m.EvidenceDir, "native-return.json"), nativeReturn.ToJsonString(Json));
             return new PendingMergeVerification(local, outcome, expectedMessages);
@@ -1495,6 +1506,8 @@ internal static partial class Bridge {
             var fallback = JsonSerializer.SerializeToNode(receipt, Json)!.AsObject();
             fallback["preferForeign"] = false;
             fallback["preferForeignUnavailable"] = nativeReceipt["preferForeignUnavailable"]!.DeepClone();
+            fallback["fallbackPersonEdits"] = nativeReceipt["fallbackPersonEdits"]?.DeepClone();
+            if (nativeReceipt["fallbackAuditUnavailable"] != null) fallback["fallbackAuditUnavailable"] = nativeReceipt["fallbackAuditUnavailable"]!.DeepClone();
             File.WriteAllText(Path.Combine(m.EvidenceDir, "receipt.json"), fallback.ToJsonString(Json));
             return fallback;
         }

@@ -6,6 +6,12 @@ using System.Text.Json.Nodes;
 // Read-only native comparisons against the actual pre-merge model prove preservation.
 internal static class NativeMergeIntent {
     internal sealed record Change(string Key, string Element, string Property, string? Local, string? Delivery, bool Whole, string[] Ancestors);
+    internal sealed record FallbackObservation(Change[] Changes, string? Unavailable);
+    // Diagnostics must not depend on the very native members whose absence selected the legacy path.
+    internal static FallbackObservation ReadForFallback(ESpace basis, ESpace person, Func<Change[]>? read = null) {
+        try { return new((read ?? (() => Read(basis, person)))(), null); }
+        catch (Exception error) { return new(Array.Empty<Change>(), "Native person-edit audit unavailable (" + error.GetType().Name + "): " + error.Message); }
+    }
     internal sealed record Audit(Change[] Preserved, Change[] Replaced) {
         internal bool IsPreserved(Match match, PropertyPair? pair) {
             var key = (match.LocalObject ?? match.ForeignObject ?? match.BaseObject)?.Key.ToString();

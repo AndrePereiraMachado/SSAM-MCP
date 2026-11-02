@@ -51,8 +51,13 @@ export function phasedStudio(studio, { env = process.env, now = Date.now } = {})
     }
     try {
       const result = await guarded(args, pid, options);
-      if (args?.[0] === 'merge' && result?.preferForeign === false && preferCall.getStore())
-        preferCall.getStore().requested = false;
+      if (args?.[0] === 'merge' && result?.preferForeign === false && preferCall.getStore()) {
+        const state = preferCall.getStore();
+        state.requested = false;
+        if (result.preferForeignUnavailable) state.unavailable = result.preferForeignUnavailable;
+        if (result.fallbackAuditUnavailable) state.auditUnavailable = result.fallbackAuditUnavailable;
+        if (Array.isArray(result.fallbackPersonEdits)) state.observed.push(...result.fallbackPersonEdits);
+      }
       return result;
     }
     catch (error) { if (error instanceof StudioTurnRefused) return error.refusal; throw error; }
@@ -162,12 +167,20 @@ const redoOf = value => {
 // The delivery of one call (lib.mjs deliver), redone on the answers above (at most REDO_LIMIT times); the build and the
 // receipt go to the call's phases, the first redo to phases.rebased.
 export async function phasedDeliver(args, deps, { deliver, sleep: wait = sleep } = {}) {
-  return preferCall.run({ requested: false }, async () => {
+  return preferCall.run({ requested: false, observed: [] }, async () => {
   const settle = value => {
     if (Array.isArray(value?.steps) && value.steps.some(s => s?.step === 'build')) notePhase({ built: true });
     if (typeof value?.evidence === 'string' && value.evidence) notePhase({ receipt: path.join(value.evidence, 'deliver-result.json') });
     const note = preferredNote(value?.merge?.resolvedConflicts);
-    return note ? { ...value, mergeNotes: [...(value.mergeNotes ?? []), note] } : value;
+    const state = preferCall.getStore();
+    const notes = note ? [note] : [];
+    if (state.unavailable) {
+      notes.push('Native prefer-foreign is unavailable: ' + state.unavailable + '. The compatibility merge path was used.');
+      const observed = [...new Set(state.observed.map(e => `${e.Element} ${e.Property}: the person's value before the compatibility retry was ${JSON.stringify(e.Delivery)}`))];
+      if (observed.length) notes.push('Observed person edits (this is not a claim that every edit was replaced): ' + observed.join('; '));
+      if (state.auditUnavailable) notes.push(state.auditUnavailable + '. Some replaced person values may be absent from this note.');
+    }
+    return notes.length ? { ...value, mergeNotes: [...(value.mergeNotes ?? []), ...notes] } : value;
   };
   let value = settle(await deliver(args, deps));
   const notes = [];
