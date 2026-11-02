@@ -25,7 +25,7 @@ function ReadVault([string]$target,[bool]$secret) {
   return @{UserName=$c.UserName;Secret=$value}
  } finally { [UsersVault]::CredFree($p) }
 }
-# FILETIME uses signed Int32 fields in COM interop, but both halves are unsigned bits.
+# FILETIME uses signed Int32 fields in the Win32 interop structure, but both halves are unsigned bits.
 # Reinterpret those bits with a 64-bit mask; casting a negative half to UInt32 throws.
 function Convert-VaultFileTime($fileTime) {
  $low=([int64]$fileTime.dwLowDateTime -band 4294967295L)
