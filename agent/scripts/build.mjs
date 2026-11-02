@@ -123,7 +123,7 @@ export async function preparePack(source, platform, packDir = path.join(app, 'pa
 // A command on PATH (with the PATHEXT extensions on Windows), as electron-builder looks it up; null when absent.
 export function findOnPath(name, env = process.env, platform = process.platform) {
   const dirs = String(env.PATH ?? env.Path ?? '').split(path.delimiter).filter(Boolean);
-  const exts = platform === 'win32' ? String(env.PATHEXT ?? '.COM;.EXE;.BAT;.CMD').split(';').filter(Boolean) : [''];
+  const exts = platform === 'win32' ? String(env.PATHEXT ?? '.EXE;.CMD;.BAT').split(';').filter(Boolean) : [''];
   for (const dir of dirs) for (const ext of exts) { const file = path.join(dir, name + ext); if (fs.existsSync(file)) return file; }
   return null;
 }

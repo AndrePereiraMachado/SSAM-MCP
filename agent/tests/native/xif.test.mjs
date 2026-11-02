@@ -88,5 +88,5 @@ test('the native channel lists o11.xif in the Hello only with the engine host, r
   const channel = fs.readFileSync(path.join(app, 'native/Ssam.Agent/AgentChannel.cs'), 'utf8');
   assert.match(channel, /\.Concat\(xif\.Available \? new\[\] \{ XifKinds\.Name \}/);
   assert.match(channel, /kind == XifKinds\.Name\) value = await xif\.Execute/);
-  assert.match(channel, /AgentVersion = "0\.4\.4-native"/);
+  assert.match(channel, /AgentVersion = "0\.4\.5-native"/);
 });
