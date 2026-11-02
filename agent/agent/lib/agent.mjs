@@ -11,7 +11,7 @@ import { execFileSync } from 'node:child_process';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { createChannel, PROTOCOL } from './channel.mjs';
 import { createOutbox } from './outbox.mjs';
-import { createKinds, helloKinds, ODC_COMMANDS, O11_METHODS } from './kinds.mjs';
+import { createKinds, helloKinds, ODC_COMMANDS, O11_DECLARED } from './kinds.mjs';
 import { resolveRenderer } from './render.mjs';
 import { resolveXifEngine } from './xif.mjs';
 import { createWorkspace } from './workspace.mjs';
@@ -60,7 +60,9 @@ import { completeInstances } from './studio-instance.mjs';
 // (the unsigned test app) never asks for bridge offers.
 // 0.3.8 (agent/r4-f5-app, the app 0.2.0): the three 0.3.7 lines above in one agent, so the version of the merged app is unique.
 // The native core of the same agent is 0.4.5-native.
-export const AGENT_VERSION = '0.3.8';
+// 0.3.9 (agent/r4-prefer-foreign, the app 0.2.1): the pack's thin O11 bridge 1.2.0 serves merge_from_oml {prefer:"foreign"} and the
+// hello's agent.o11Methods declares merge_from_oml:prefer_foreign (kinds.mjs O11_DECLARED). The native core is 0.4.6-native.
+export const AGENT_VERSION = '0.3.9';
 const INLINE_MAX_BYTES = 524288;
 const MAX_VALUE_BYTES = 16 * 1024 * 1024;
 const PARAMS_MEMORY_BYTES = 64 * 1024 * 1024;
@@ -204,9 +206,10 @@ export function createAgent({ root, runtimeRoot = root, config = {}, deps = {}, 
       // kind it does not have.
       // odcCommands (0.3.6): the commands odc.pipe passes (kinds.mjs ODC_COMMANDS); the server offers a bridge only to an agent that
       // runs what that bridge needs (reconcile-merge from v106 on). o11Methods (0.3.7): the O11 bridge methods o11.bridge passes
-      // (kinds.mjs O11_METHODS); the server sends integration_import only to an agent that lists it.
+      // (kinds.mjs O11_METHODS); the server sends integration_import only to an agent that lists it. 0.3.9: and merge_from_oml:prefer_foreign
+      // (kinds.mjs O11_DECLARED, thin bridge 1.2.0), so the server asks for prefer:"foreign" only of an agent that ships it.
       agent: { version: AGENT_VERSION, node: process.version, platform, startedAt, root: base, kinds: helloKinds(renderer, xifEngine), odcCommands: [...ODC_COMMANDS],
-        o11Methods: [...O11_METHODS], machine },
+        o11Methods: [...O11_DECLARED], machine },
       // o11BuiltFor (0.3.7): the bridge of the Service Studio this agent is connected to (the one actually attached, review B3
       // of F5: a machine may have more than one), else of the one installed here, when the pack has one per version (o11Builds).
       pack: { id: pack.id, lanes: pack.lanes, odcBridge: pack.odcBridge, o11BuiltFor: o11PackFor(pack, connection?.studioVersion ?? studios.o11?.installed?.version).o11BuiltFor, o11Hook: pack.o11Hook,
