@@ -55,7 +55,7 @@ internal static class Dispatch
         "sc_api:integration-studio", ScHttpHandler.Capability,
         DialogScope.BlockedCapability, DialogScope.DialogsCapability, DialogScope.WindowCapability, DialogScope.DependenciesCapability,
         "list_open_modules:model_sha256", "open_module:references_check_optional",
-        "thin", "merge:reference-plan"];
+        "thin", "merge:reference-plan", PreferForeign.Capability];
 
     public static JsonObject BridgeInfo() => new()
     {

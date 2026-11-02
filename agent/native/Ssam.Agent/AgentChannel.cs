@@ -126,7 +126,8 @@ internal sealed class AgentChannel : IDisposable
     // bridge methods (agent.o11Methods). 0.4.4-native (agent/r4-xif): o11.xif with this machine's Integration Studio (XifKinds.cs),
     // announced only when the pack carries the engine host. 0.4.4-native (agent/r4-f5-app): one O11 bridge per Service Studio
     // version (pack.json o11Builds) and bridgeOffer false packs. 0.4.5-native: the three in one core (the Node agent's 0.3.8, app 0.2.0).
-    internal const string AgentVersion = "0.4.5-native";
+    // 0.4.6-native (agent/r4-prefer-foreign, app 0.2.1): the hello declares merge_from_oml:prefer_foreign (thin O11 bridge 1.2.0).
+    internal const string AgentVersion = "0.4.6-native";
     // pack.json bridgeOffer false: a pack built without the bridge trust anchors (the owner's unsigned test app) never asks for offers.
     internal const string NoAnchorsReason = "This agent package was built without the bridge trust anchors (a test build); it uses only its bundled bridges.";
     internal static bool NoAnchors(JsonObject? pack) => pack?["bridgeOffer"] is JsonValue v && v.TryGetValue<bool>(out var offer) && !offer;
@@ -148,7 +149,7 @@ internal sealed class AgentChannel : IDisposable
             // odcCommands (0.4.3-native): what odc.pipe passes, so the server offers an ODC bridge only to an agent that runs what it needs.
             ["odcCommands"] = studios == null ? null : new JsonArray(StudioKinds.OdcCommandList.Select(n => (JsonNode?)JsonValue.Create(n)).ToArray()),
             // o11Methods (0.4.4-native): what o11.bridge passes, so the server sends integration_import only to an agent that runs it.
-            ["o11Methods"] = studios == null ? null : new JsonArray(StudioKinds.O11MethodList.Select(n => (JsonNode?)JsonValue.Create(n)).ToArray()),
+            ["o11Methods"] = studios == null ? null : new JsonArray(StudioKinds.O11DeclaredList.Select(n => (JsonNode?)JsonValue.Create(n)).ToArray()),
             ["kinds"] = new JsonArray((studios == null ? new[] { "qualification.bridge", "file.put", "file.get", "file.list", "file.sync", UploadKinds.Name, UsersKinds.Name } : StudioKinds.Names.Concat(FileKinds.Names).Append("net.probe").Append(UploadKinds.Name).Append(UsersKinds.Name).ToArray()).Concat(renders.Available ? new[] { RenderRequest.Kind } : Array.Empty<string>()).Concat(xif.Available ? new[] { XifKinds.Name } : Array.Empty<string>()).Select(n => (JsonNode?)JsonValue.Create(n)).ToArray())
         },
         ["pack"] = pack == null ? new JsonObject { ["id"] = "native-qualification", ["lanes"] = new JsonArray() } : new JsonObject { ["id"] = pack["id"]?.DeepClone(), ["lanes"] = pack["lanes"]?.DeepClone(), ["odcBridge"] = pack["odcBridge"]?.DeepClone(), ["o11BuiltFor"] = O11Builds.PackFor(pack, StudioKinds.Text(versions["o11Connection"]?["studioVersion"]) ?? StudioKinds.Text(installed?["o11"]?["installed"]?["version"]))["o11BuiltFor"]?.DeepClone(), ["o11Hook"] = pack["o11Hook"]?.DeepClone(), ["o11Builds"] = O11Builds.All(pack).Count > 0 ? O11Builds.Versions(pack) : null },

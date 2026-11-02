@@ -50,6 +50,12 @@ export const O11_METHODS = Object.freeze(['ping', 'bridge_manifest', 'get_active
   'close_module', 'publish', 'windows', 'ui_alive', 'close_dialog', 'snapshot_module', 'merge_from_oml', 'merge_status',
   'environment_session', 'sc_api', 'sc_web', 'sc_http', 'studio_login', 'sc_session', 'publish_log', 'refresh_references',
   'integration_import', 'answer_dependencies_dialog']);
+// What the hello's agent.o11Methods declares (0.3.9): the methods above and what the pack's thin O11 bridge serves beyond a verb.
+// merge_from_oml:prefer_foreign (thin bridge 1.2.0): merge_from_oml {prefer:"foreign"} resolves a conflict with the person's edits
+// inside the Studio's merge for the delivery and lists what it resolved; the server sends prefer only to an agent and a bridge
+// that declare it. Never a method o11.bridge passes (O11_METHODS above is that list).
+export const O11_PREFER_FOREIGN = 'merge_from_oml:prefer_foreign';
+export const O11_DECLARED = Object.freeze([...O11_METHODS, O11_PREFER_FOREIGN]);
 const MANIFEST_COMMANDS = new Set(['check-base', 'preview', 'merge', 'reconcile-merge', 'publish', 'publish-status', 'create', 'authorize', 'create-app']);
 const LANE_IMAGE = { odc: 'ODCStudio.exe', o11: 'ServiceStudio.exe' };
 const STUDIO_NAME = { odc: 'ODC Studio', o11: 'Service Studio' };

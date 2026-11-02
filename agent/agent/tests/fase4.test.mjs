@@ -48,14 +48,16 @@ test('C03: a pong goes in a POST of its own while a batch POST is stuck; the Hel
     await hub.until(() => hub.streams === 1);
     const [hello] = hub.hellos;
     assert.equal(hello.agent.version, AGENT_VERSION);
-    assert.equal(AGENT_VERSION, '0.3.8'); // 0.3.8: the three 0.3.7 lines in one agent (app 0.2.0); 0.3.7: integration_import and the hello's o11Methods (F3), o11.xif only with the engine host in the pack (F4), one O11 bridge per Service Studio (o11Builds) and bridgeOffer false packs (F5); 0.3.6: reconcile-merge and the hello's odcCommands; 0.3.5: o11.users; 0.3.4: file.upload and screen.render; 0.3.3: the macOS side (server/agent-mac; Windows unchanged); 0.3.2: the English agent with the O11 bridge of a8; 0.3.1: sc_http, reference-producers, net.probe
+    assert.equal(AGENT_VERSION, '0.3.9'); // 0.3.9: the hello declares merge_from_oml:prefer_foreign (thin bridge 1.2.0, app 0.2.1); 0.3.8: the three 0.3.7 lines in one agent (app 0.2.0); 0.3.7: integration_import and the hello's o11Methods (F3), o11.xif only with the engine host in the pack (F4), one O11 bridge per Service Studio (o11Builds) and bridgeOffer false packs (F5); 0.3.6: reconcile-merge and the hello's odcCommands; 0.3.5: o11.users; 0.3.4: file.upload and screen.render; 0.3.3: the macOS side (server/agent-mac; Windows unchanged); 0.3.2: the English agent with the O11 bridge of a8; 0.3.1: sc_http, reference-producers, net.probe
     assert.equal(hello.agent.root, path.resolve(root));
     assert.deepEqual(hello.agent.kinds, [...KINDS]);
     // 0.3.6: the ODC commands odc.pipe passes, reconcile-merge among them (the server offers bridges from v106 on only then).
     assert.deepEqual(hello.agent.odcCommands, [...ODC_COMMANDS]);
     assert.ok(hello.agent.odcCommands.includes('reconcile-merge'));
     // 0.3.7 (r4-f3-import): the O11 bridge methods o11.bridge passes, integration_import among them (the server sends the import only then).
-    assert.deepEqual(hello.agent.o11Methods, [...O11_METHODS]);
+    // 0.3.9: the methods o11.bridge passes, then merge_from_oml:prefer_foreign, which is no method (never passed).
+    assert.deepEqual(hello.agent.o11Methods, [...O11_METHODS, 'merge_from_oml:prefer_foreign']);
+    assert.equal(O11_METHODS.includes('merge_from_oml:prefer_foreign'), false);
     assert.ok(hello.agent.o11Methods.includes('integration_import'));
     assert.ok(KINDS.includes('file.sync'));
     // The batch with `accepted` of a call is stuck in flight; the hub's ping is answered by a pong in another POST.

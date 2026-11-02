@@ -56,6 +56,11 @@ internal static class MergeHandler
         var byStructure = p?["match_by_structure"]?.GetValue<bool>() ?? false;
         var dumpChars = p?["dump_chars"]?.GetValue<int>() ?? 3000;
         var firstPassPath = p?["first_pass_path"]?.GetValue<string>();
+        // prefer:"foreign" (thin 1.2.0, PreferForeign.cs): a conflict with the person's edits is resolved inside this merge for
+        // the delivery, and the receipt lists each value it replaced (resolvedConflicts). Any other value is refused.
+        var prefer = p?["prefer"]?.ToString();
+        if (prefer is not (null or "foreign")) return Server.NotExecuted("merge_from_oml: prefer must be \"foreign\" or absent");
+        var preferForeign = prefer == "foreign";
         foreignPath = BridgeKit.Absolute("merge_from_oml", "foreign_path", foreignPath);
         if (basePath != null) basePath = BridgeKit.Absolute("merge_from_oml", "base_path", basePath);
         if (firstPassPath != null) firstPassPath = BridgeKit.Absolute("merge_from_oml", "first_pass_path", firstPassPath);
@@ -126,7 +131,7 @@ internal static class MergeHandler
                     Ui.RunSync(() => Studio.RequireTarget(aggregator, aggregator.ActiveESpace, new JsonObject {
                         ["module_key"] = local.Key.ToString(), ["environment"] = operation.State["binding"]!["environment"]?.DeepClone() }), UiGate.Read, "merge_from_oml: check the target");
                     var response = Run(aggregator, local, foreignBytes, baseBytes, firstPassBytes, plan, foreignPath, mode, byStructure, dumpChars,
-                        data => { data["operationId"] = id; operation.Record(data); }, () => nativeStarted = true);
+                        data => { data["operationId"] = id; operation.Record(data); }, () => nativeStarted = true, preferForeign);
                     return response;
                 }
                 catch (Exception ex)
@@ -170,7 +175,7 @@ internal static class MergeHandler
         finally { execution.Release(); }
     }
 
-    private static string Run(IAggregatorPresenter aggregator, ESpace local, byte[] foreignBytes, byte[]? baseBytes, byte[]? firstPassBytes, ReferencePlan? plan, string foreignPath, string mode, bool byStructure, int dumpChars, Action<JsonObject> record, Action enteringNativeMerge)
+    private static string Run(IAggregatorPresenter aggregator, ESpace local, byte[] foreignBytes, byte[]? baseBytes, byte[]? firstPassBytes, ReferencePlan? plan, string foreignPath, string mode, bool byStructure, int dumpChars, Action<JsonObject> record, Action enteringNativeMerge, bool preferForeign = false)
     {
         var sw = Stopwatch.StartNew();
         var timings = new JsonObject { ["thread"] = Dispatcher.UIThread.CheckAccess() ? "ui" : "worker" };
@@ -193,7 +198,7 @@ internal static class MergeHandler
         }
 
         var t1 = sw.ElapsedMilliseconds;
-        bool hasNoDiff, hasConflicts, nativeHasNoDiff; string dump;
+        bool hasNoDiff, hasConflicts, nativeHasNoDiff, nativeConflicts; string dump;
         // The plan on the live module, where the full bridge runs Analyze(local, foreign, base).
         var signaturePlan = baseEs == null
             ? new ReferencePlan([], [new ReferencePlanConflict("", "missing-base", "Reference signature selection requires the original base model.")])
@@ -202,7 +207,8 @@ internal static class MergeHandler
         {
             nativeHasNoDiff = tree.HasNoDifferences;
             hasNoDiff = nativeHasNoDiff && !signaturePlan.HasChanges && !signaturePlan.HasConflicts;
-            hasConflicts = tree.HasConflicts || signaturePlan.HasConflicts;
+            nativeConflicts = tree.HasConflicts;
+            hasConflicts = nativeConflicts || signaturePlan.HasConflicts;
             dump = tree.Dump();
         }
         timings["matchTreeMs"] = sw.ElapsedMilliseconds - t1;
@@ -217,7 +223,11 @@ internal static class MergeHandler
             ["dumpPath"] = dumpPath, ["dumpChars"] = dump.Length,
             ["dumpHead"] = dump.Length > dumpChars ? dump[..dumpChars] : dump, ["timings"] = timings,
         };
-        var needsHuman = hasConflicts || baseEs == null;
+        // prefer:"foreign": a native conflict of an automatic three-way merge is resolved for the delivery inside the same merge
+        // (MergePreferForeign). Not with a producer signature conflict or a signature change: those keep their own path.
+        var resolveForDelivery = preferForeign && mode == "auto" && baseEs != null && nativeConflicts && !signaturePlan.HasConflicts && !signaturePlan.HasChanges;
+        if (preferForeign) data["prefer"] = "foreign";
+        var needsHuman = (hasConflicts && !resolveForDelivery) || baseEs == null;
         // The native dialog does not invoke its automatic-merge callback. Do not apply a
         // partial merge whose selected producer version cannot be preserved by that path.
         var unsupportedSignatureDialog = mode == "dialog" && signaturePlan.HasChanges;
@@ -242,6 +252,14 @@ internal static class MergeHandler
         var t2 = sw.ElapsedMilliseconds;
         MergeOperationResult result = MergeOperationResult.Merge;
         if (hasNoDiff) data["reason"] = "first pass: no differences";
+        else if (resolveForDelivery)
+        {
+            // The conflicts resolved for the delivery inside the same Studio command as the merge; the list is the receipt's,
+            // and the server turns it into the note (never resolved silently).
+            var resolution = MergePreferForeign(aggregator, local, foreign, baseEs!, byStructure, enteringNativeMerge);
+            data[PreferForeign.ResolvedField] = resolution.Receipt();
+            result = MergeOperationResult.Merge;
+        }
         else if (signaturePlan.HasChanges)
         {
             // ReferenceHash is invisible to native diff. Merge the structural changes and
@@ -317,6 +335,36 @@ internal static class MergeHandler
         });
         if (failure != null) throw new InvalidOperationException("merge_from_oml: stage " + failure.Text + " (the Studio rolled the command back)");
         return applied ?? throw new InvalidOperationException("The native merge command did not complete its apply callback.");
+    }
+
+    /// <summary>merge_from_oml {prefer:"foreign"}: the native three-way tree of the delivery over the base, its conflicts resolved for
+    /// the delivery (PreferForeign.Resolve: the Studio's own MergeUtils.SetIsChecked(match, MergeUnitCheck.Foreign) on each merge
+    /// unit with an unresolved conflict, as the merge dialog does when the person picks the incoming side), then tree.Merge() and
+    /// ClearCurrentMergeState(), all in ONE Studio command of the module's aggregator: one undo step, rolled back by the SDK as a
+    /// whole when anything throws (QuietCommand, as MergeSignatures). Internal for the headless tests.</summary>
+    internal static PreferForeign.Resolution MergePreferForeign(IAggregatorPresenter aggregator, ESpace local, ESpace foreign, ESpace basis,
+        bool byStructure, Action enteringNativeMerge)
+    {
+        PreferForeign.Resolution? resolution = null;
+        var failure = QuietCommand.Execute(aggregator.GetPresenterContext(), "Anvil: merge module, conflicts resolved for the delivery", stage =>
+        {
+            stage("prefer-foreign");
+            resolution = MergeResolvingForDelivery(local, foreign, basis, byStructure, enteringNativeMerge);
+        });
+        if (failure != null) throw new InvalidOperationException("merge_from_oml: stage " + failure.Text + " (the Studio rolled the command back)");
+        return resolution ?? throw new InvalidOperationException("The native merge command did not complete its prefer-foreign callback.");
+    }
+
+    /// <summary>The body of <see cref="MergePreferForeign"/> inside the caller's command (headless tests run it in their own).</summary>
+    internal static PreferForeign.Resolution MergeResolvingForDelivery(ESpace local, ESpace foreign, ESpace basis, bool byStructure, Action enteringNativeMerge)
+    {
+        using var tree = new MatchTree(local, foreign, basis, byStructure, true);
+        var resolution = PreferForeign.Resolve(tree);
+        enteringNativeMerge();
+        tree.Merge();
+        tree.ClearCurrentMergeState();
+        if (tree.CanMerge) throw new InvalidOperationException("The native merge did not merge its tree.");
+        return resolution;
     }
 
     // Second merge of the merge order, as the full bridge: the candidate over the first-pass copy. The copy differs from

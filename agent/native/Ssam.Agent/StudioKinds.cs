@@ -18,6 +18,10 @@ internal sealed class StudioKinds(string root, string runtime, JsonObject pack, 
     // order), and the server sends the import only to an agent that lists it.
     internal static readonly string[] O11MethodList = ["ping", "bridge_manifest", "get_active_module", "list_open_modules", "get_errors", "open_module", "close_module", "publish", "windows", "ui_alive", "close_dialog", "snapshot_module", "merge_from_oml", "merge_status", "environment_session", "sc_api", "sc_web", "sc_http", "studio_login", "sc_session", "publish_log", "refresh_references", "integration_import", "answer_dependencies_dialog"];
     internal static readonly HashSet<string> O11Methods = [.. O11MethodList];
+    // 0.4.6-native (agent/r4-prefer-foreign): what the hello's agent.o11Methods declares, the methods above and merge_from_oml:prefer_foreign
+    // (thin O11 bridge 1.2.0: merge_from_oml {prefer:"foreign"}); never a method o11.bridge passes (O11Methods is that list).
+    internal const string O11PreferForeign = "merge_from_oml:prefer_foreign";
+    internal static readonly string[] O11DeclaredList = [.. O11MethodList, O11PreferForeign];
     private static readonly HashSet<string> Manifests = ["check-base", "preview", "merge", "reconcile-merge", "publish", "publish-status", "create", "authorize", "create-app"];
     private readonly Workspace workspace = new(root);
     private readonly SemaphoreSlim attachGate = new(1, 1);
