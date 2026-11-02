@@ -6,7 +6,7 @@ namespace Anvil.Bridge;
 
 /// <summary>Verb table of the thin bridge (docs/O11-BRIDGE-FINA.md section 3.2): the full bridge's protocol 2 minus the
 /// verbs whose logic is the kernel's (login, export_modules, export_status, find_element, get_flow_nodes), which the
-/// server computes on captures or refuses. Any other method is not executed. The ninth release added refresh_references
+/// server computes on captures or refuses. integration_import (fase4-28 r4-f3-import) is served: the Studio's own importers. Any other method is not executed. The ninth release added refresh_references
 /// (the Studio's own Refresh References, C26) to the full bridge; the thin bridge serves it too (section 14). The atritos 3 package
 /// added the dialogs of every tab and window (publish blocked by a dialog, the second window, answer_dependencies_dialog): Studio
 /// primitives, served here too (linked DialogScope and DependenciesDialog); query_test is not (its runtime is the product's).
@@ -17,6 +17,8 @@ namespace Anvil.Bridge;
 internal static class Dispatch
 {
     internal const string Flavor = "thin";
+    internal const string IntegrationImportWsdl = "integration_import:wsdl";
+    internal const string IntegrationImportOpenApi = "integration_import:openapi";
 
     /// <summary>The ABI of the release hook that loads this bridge (Anvil.Hook.h1: Start(int, string, string), then
     /// bridge_manifest with the Studio pid and the bridge id). bridge_manifest says it with pid, bridgeId (null outside the
@@ -26,13 +28,17 @@ internal static class Dispatch
     internal static readonly string[] Verbs = ["ping", "bridge_manifest", "get_active_module", "list_open_modules", "get_errors",
         "open_module", "close_module", "publish", "windows", "ui_alive", "close_dialog", "snapshot_module",
         "merge_from_oml", "merge_status", "environment_session", "sc_api", "sc_web", "sc_http", "studio_login", "sc_session", "publish_log",
-        "refresh_references", DialogScope.DependenciesVerb];
+        "refresh_references", "integration_import", DialogScope.DependenciesVerb];
 
     /// <summary>The full bridge's capabilities (same order, Anvil.Bridge Dispatch.Capabilities) plus the thin markers:
     /// callers check a capability, not the version. The 16th release's sc_api:integration-studio (ScApiHandler, linked) and
-    /// the 24th's sc_http:studioSession (ScHttpHandler, linked) are served; integration_import:wsdl/openapi and
-    /// environment_session:users-read are not (their logic is the kernel's: Anvil.Core.IntegrationImport and UserDirectory),
-    /// so the kernel refuses those jobs and lookups before any change (INTEGRATION_IMPORT_NEEDS_BRIDGE, STUDIO_BRIDGE_OUTDATED).
+    /// the 24th's sc_http:studioSession (ScHttpHandler, linked) are served; environment_session:users-read is not (its logic is
+    /// the kernel's UserDirectory), so the kernel refuses those lookups before any change (STUDIO_BRIDGE_OUTDATED).
+    /// fase4-28 r4-f3-import (thin bridge 1.1.0): integration_import:wsdl and integration_import:openapi are served, right after
+    /// refresh_references:add and in the full bridge's order: the full bridge's IntegrationImportHandler.cs is linked unchanged and
+    /// what it needs beyond the Studio is the thin ImportKit (Studio types and the BCL only). The Studio's own SOAP and OpenAPI
+    /// importers run on a detached copy of the delivery's snapshot, never on the open module; the server sends the verb only
+    /// through an agent whose hello lists it (agent.o11Methods), and without it keeps INTEGRATION_IMPORT_NEEDS_BRIDGE.
     /// Neither are sc_private_http:secretRefs and sc_private_http:cookieUpdates (the private transport stays local).
     /// servidor/fase4-24 (speed lane vel-entrega): list_open_modules:model_sha256 and open_module:references_check_optional are
     /// served as in the full bridge (Reads.cs, OpenHandler.cs and MergeRollbackProof.cs are linked), so a hosted delivery
@@ -45,7 +51,8 @@ internal static class Dispatch
     internal static readonly string[] Capabilities = [.. UiGate.Capabilities, "environment_session", "sc_api:soap", "sc_api:server-api", "sc_api:sc-rest", "sc_web",
         "sc_web:secretRefs", "sc_session", "publish_log", "merge_from_oml:first_pass",
         MergeRollbackProof.Capability, "merge_from_oml:module_key", "get_errors:generation", "publish:wait_running", "publish:dialogs_seen",
-        "list_open_modules:server_operation", "refresh_references", ManageDependencies.Capability, "sc_api:integration-studio", ScHttpHandler.Capability,
+        "list_open_modules:server_operation", "refresh_references", ManageDependencies.Capability, IntegrationImportWsdl, IntegrationImportOpenApi,
+        "sc_api:integration-studio", ScHttpHandler.Capability,
         DialogScope.BlockedCapability, DialogScope.DialogsCapability, DialogScope.WindowCapability, DialogScope.DependenciesCapability,
         "list_open_modules:model_sha256", "open_module:references_check_optional",
         "thin", "merge:reference-plan"];
@@ -84,6 +91,7 @@ internal static class Dispatch
         "sc_session" => await ScApiHandler.Session(p),
         "publish_log" => await PublishLogHandler.Handle(p),
         "refresh_references" => ManageDependencies.Asks(p) ? await ManageDependenciesHandler.Handle(p) : await RefreshReferencesHandler.Handle(p),
+        "integration_import" => await IntegrationImportHandler.Handle(p),
         DialogScope.DependenciesVerb => await DependenciesDialog.Handle(p),
         _ => Server.NotExecuted("Unknown method: " + method),
     };
