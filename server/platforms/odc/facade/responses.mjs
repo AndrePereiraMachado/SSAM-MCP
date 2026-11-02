@@ -357,7 +357,7 @@ export const DELIVERY_FIELDS = ['publish', 'lastPublication', 'leftovers', 'left
   'nextHtmlBasedOn', 'nextHtmlBasedOnTotal',
   // fix/system-reference: a producer taken under the name the Studio lists it by ("System" -> "(System)") says so; a name the
   // consumer session does not offer answers the producers it offers.
-  'producerNotes', 'available', 'availableTotal'];
+  'producerNotes', 'mergeNotes', 'available', 'availableTotal'];
 // I8: a refusal that says the merge already reached the Studio (merged:true, uncertain) is read, never delivered again.
 const mergedReading = (value, args) => (typeof value.evidence === 'string' && value.evidence
   ? { tool: 'ssam_evidence', arguments: { file: value.evidence.replace(/[\\/]+$/, '') + (/\\/.test(value.evidence) || !/\//.test(value.evidence) ? '\\' : '/') + 'deliver-result.json' }, why: 'the merge is already integrated; read its receipt and do not repeat the delivery' }
