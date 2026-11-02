@@ -8,6 +8,20 @@ namespace Ssam.Agent;
 internal sealed class StudioKinds(string root, string runtime, JsonObject pack, Func<JsonNode?> kernel, BridgeUpdates? bridges = null)
 {
     public static readonly string[] Names = ["studio.processes", "odc.pipe", "odc.attach", "o11.bridge", "o11.connect", "o11.selected"];
+
+    // Informational inventory. This does not grant an executable capability.
+    internal static JsonArray BundledOdcProtocols(JsonObject? pack)
+    {
+        var protocols = new HashSet<string>();
+        foreach (var f in pack?["files"] as JsonArray ?? [])
+        {
+            if (f is not JsonObject file || !Regex.IsMatch(Text(file["sha256"]) ?? "", "^[a-fA-F0-9]{64}$")
+                || file["size"] is not JsonValue sizeValue || !sizeValue.TryGetValue<long>(out var size) || size <= 0 || size > 9007199254740991L) continue;
+            var match = Regex.Match((Text(file["path"]) ?? "").Replace('\\', '/'), @"(?:^|/)ODC3\.Bridge\.(v[1-9][0-9]*)\.dll$");
+            if (match.Success) protocols.Add(match.Groups[1].Value);
+        }
+        return new JsonArray(protocols.OrderBy(x => x.Length).ThenBy(x => x, StringComparer.Ordinal).Select(x => (JsonNode?)JsonValue.Create(x)).ToArray());
+    }
     // reconcile-merge (0.4.3-native, U1 of the server line): the ODC bridge's verification of a merge that returned, nothing merged or
     // published; from bridge v106 on a merge may return before it ran. The hello lists these commands (agent.odcCommands, in this
     // order), and the server offers the bridges from v106 on only to an agent that runs reconcile-merge (bridge-store.mjs).

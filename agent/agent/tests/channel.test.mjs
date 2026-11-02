@@ -56,7 +56,7 @@ test('hello, stream, call -> accepted -> result, pong, clean stop', async () => 
     assert.equal(hello.t, 'hello'); assert.equal(hello.protocol, 'ssam-agent/1');
     assert.match(hello.instance, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
     assert.equal(hello.instance, agent.instance);
-    assert.deepEqual(hello.pack, { id: 'pack-test', lanes: ['odc', 'o11'], odcBridge: 'v35', o11BuiltFor: '11.55.91', o11Hook: null });
+    assert.deepEqual(hello.pack, { id: 'pack-test', lanes: ['odc', 'o11'], odcBridge: 'v35', odcBridges: [], o11BuiltFor: '11.55.91', o11Hook: null });
     assert.deepEqual(hello.studios, { odc: { installed: null }, o11: { installed: null } });
     assert.equal(hello.o11Connection, null);
     assert.equal(hello.agent.platform, process.platform); assert.equal(hello.agent.node, process.version);

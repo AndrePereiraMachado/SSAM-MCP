@@ -91,6 +91,13 @@ export function machineIdentity({ platform = process.platform, run = execFileSyn
 export const credentialFile = root => path.join(root, 'private', 'credential');
 export const CREDENTIAL_PATTERN = /^ssam_agent_[A-Za-z0-9_-]{43}$/;
 
+// Informational inventory only. Capability gates still use odcBridge and odcCommands.
+export const bundledOdcProtocols = files => [...new Set((Array.isArray(files) ? files : []).flatMap(f => {
+  if (!/^[a-f0-9]{64}$/i.test(f?.sha256 ?? '') || !Number.isSafeInteger(f?.size) || f.size <= 0) return [];
+  const match = /(?:^|\/)ODC3\.Bridge\.(v[1-9][0-9]*)\.dll$/.exec(String(f.path ?? '').replaceAll('\\', '/'));
+  return match ? [match[1]] : [];
+}))].sort((a,b) => a.length - b.length || (a < b ? -1 : a > b ? 1 : 0));
+
 // pack.json of the extracted pack (I-9): {id, lanes, odcBridge, o11BuiltFor, o11Hook, o11Bridge, files}. o11Hook is
 // "dev" (development hook) or "h1" (signed release layout); o11Bridge {id, hookAbi, path, sha256} is the thin bridge the
 // version handshake compares with bridge_manifest. Packs before servidor/fase3 have neither (null).
@@ -100,7 +107,7 @@ export function readPack(root) {
   try {
     const pack = readJson(path.join(root, 'pack.json'));
     return { id: pack.id ?? null, lanes: Array.isArray(pack.lanes) ? pack.lanes : [], odcBridge: pack.odcBridge ?? null, o11BuiltFor: pack.o11BuiltFor ?? null,
-      o11Hook: typeof pack.o11Hook === 'string' ? pack.o11Hook : null, o11Bridge: bridgeOf(pack.o11Bridge),
+      o11Hook: typeof pack.o11Hook === 'string' ? pack.o11Hook : null, o11Bridge: bridgeOf(pack.o11Bridge), odcBridges: bundledOdcProtocols(pack.files),
       ...Object.fromEntries(['studioBuilds', 'odcBuiltFor', 'odcRuntime', 'o11Runtime', 'renderer', 'xifEngine'].filter(key => pack[key] !== undefined).map(key => [key, pack[key]])),
       // o11Builds (0.3.7): one thin bridge per Service Studio version, checked here against the integrity list (o11-builds.mjs).
       ...(Array.isArray(pack.o11Builds) ? { o11Builds: o11Builds(pack), [O11_BUILDS_CHECKED]: true } : {}),
@@ -213,7 +220,7 @@ export function createAgent({ root, runtimeRoot = root, config = {}, deps = {}, 
       // o11BuiltFor (0.3.7): the bridge of the Service Studio this agent is connected to (the one actually attached, review B3
       // of F5: a machine may have more than one), else of the one installed here, when the pack has one per version (o11Builds).
       pack: { id: pack.id, lanes: pack.lanes, odcBridge: pack.odcBridge, o11BuiltFor: o11PackFor(pack, connection?.studioVersion ?? studios.o11?.installed?.version).o11BuiltFor, o11Hook: pack.o11Hook,
-        ...(pack.o11Builds?.length ? { o11Builds: o11BuildVersions(pack) } : {}) },
+        ...(pack.o11Builds?.length ? { o11Builds: o11BuildVersions(pack) } : {}), odcBridges: pack.odcBridges ?? [] },
       capabilities: helloCapabilities(platform, pack),
       bridges: updates.reports(), bridgeUpdate: updates.wireStatus(), studios, o11Connection: connection };
   }
