@@ -9,7 +9,8 @@
 //   [--timestamp-url <url>] (or SSAM_WIN_CERT_SHA1, SSAM_WIN_PUBLISHER_NAME, SSAM_WIN_TIMESTAMP_URL): the native core and the
 //   installer are signed with that certificate of Cert:\CurrentUser\My, and app-update.yml requires that publisher for every
 //   update. --test-unsigned: the owner's own test app (no signature, no trust anchors, no updates, bridgeOffer false), never
-//   published. --dry-run: everything up to electron-builder, then prints its configuration and arguments.
+//   published; on macOS too (ad-hoc sealed, never notarized: build/mac-022-native). --dry-run: everything up to
+//   electron-builder, then prints its configuration and arguments.
 //   SSAM_UPDATE_URL in the environment stands for --update-url. --pack-only stops after pack/ is ready.
 // A macOS build (DMG, ZIP for the updater, signing) only runs on a Mac; a Windows build runs on Windows (or on
 // Linux with wine, which this script does not set up).
@@ -56,8 +57,8 @@ function parse(argv) {
   if (!['win', 'mac'].includes(options.platform)) throw new Error('use --platform win or --platform mac');
   if (options.platform === 'win' && !options.native) throw new Error('Windows app builds require --native <qualified ssam-agent.exe>.');
   if (options.testUnsigned) {
-    if (options.platform !== 'win') throw new Error('--test-unsigned is the Windows test app only');
     if (options.certSha1 || options.publisherName) throw new Error('--test-unsigned takes no signing certificate');
+    if (options.notarize) throw new Error('--test-unsigned is never notarized');
     options.noUpdates = true;
   } else if (options.platform === 'win' && !options.packOnly) {
     // A Windows app that reaches customers is signed, and its updater accepts only updates of the same publisher.
@@ -229,6 +230,7 @@ async function main() {
         // Ad-hoc sealing needs no Apple certificate and keeps ARM64 code valid.
         // The native core is already sealed before its manifest hash is recorded.
         ...(!options.notarize ? { identity: '-', hardenedRuntime: false } : {}),
+        ...(options.testUnsigned ? { artifactName: '${name}-${version}-test-unsigned-${os}-${arch}.${ext}' } : {}),
         signIgnore: ['Contents/Resources/pack/native/ssam-agent$'] } } : {}) }));
   }
   // Explicit CLI target names bypass merged YAML target arrays. Otherwise the

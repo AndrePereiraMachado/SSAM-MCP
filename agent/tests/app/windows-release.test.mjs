@@ -97,8 +97,11 @@ test('build.mjs: a Windows release without the signing identity refuses before a
   assert.equal(unsigned.status, 1); assert.match(unsigned.stderr, /A signed Windows release needs --cert-sha1/);
   const mixed = run(['--test-unsigned', '--cert-sha1', THUMB]);
   assert.equal(mixed.status, 1); assert.match(mixed.stderr, /--test-unsigned takes no signing certificate/);
-  const mac = spawnSync(process.execPath, [path.join(app, 'scripts/build.mjs'), '--platform', 'mac', '--test-unsigned'], { encoding: 'utf8', windowsHide: true });
-  assert.equal(mac.status, 1); assert.match(mac.stderr, /Windows test app only/);
+  // The macOS test app (build/mac-022-native) is unsigned too: never notarized, and no certificate.
+  const mac = spawnSync(process.execPath, [path.join(app, 'scripts/build.mjs'), '--platform', 'mac', '--test-unsigned', '--notarize'], { encoding: 'utf8', windowsHide: true });
+  assert.equal(mac.status, 1); assert.match(mac.stderr, /--test-unsigned is never notarized/);
+  const macCert = spawnSync(process.execPath, [path.join(app, 'scripts/build.mjs'), '--platform', 'mac', '--test-unsigned', '--cert-sha1', THUMB], { encoding: 'utf8', windowsHide: true });
+  assert.equal(macCert.status, 1); assert.match(macCert.stderr, /--test-unsigned takes no signing certificate/);
 });
 
 test('the app version is 0.2.x (0.2.0 is the first that updates itself from dist.ssam.pro; 0.2.1 adds prefer-foreign)', () => {

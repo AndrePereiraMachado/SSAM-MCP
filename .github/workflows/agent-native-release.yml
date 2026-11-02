@@ -108,7 +108,7 @@ jobs:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
         run: |
           test "$(uname -m)" = arm64
-          node scripts/build.mjs --platform mac --pack "$RUNNER_TEMP/ssam-pack/$PACK_ASSET" --native native/Ssam.Agent/bin/Release/net10.0/osx-arm64/publish/ssam-agent --no-updates
+          node scripts/build.mjs --platform mac --pack "$RUNNER_TEMP/ssam-pack/$PACK_ASSET" --native native/Ssam.Agent/bin/Release/net10.0/osx-arm64/publish/ssam-agent --no-updates --test-unsigned
       - name: Verify the installed app
         run: |
           set -o pipefail
