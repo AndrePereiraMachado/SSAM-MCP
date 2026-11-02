@@ -38,6 +38,7 @@ permissions:
   contents: write
 
 env:
+  MSBUILDDISABLENODEREUSE: '1'
   PACK_RELEASE: ${{ inputs.pack_release }}
   PACK_ASSET: ${{ inputs.pack_asset }}
   PACK_SHA256: ${{ inputs.pack_sha256 }}
@@ -101,14 +102,14 @@ jobs:
       - name: Test r40 native credentials and protocol
         run: >-
           dotnet test tests/native-protocol/NativeProtocol.Tests.csproj -c Release
-          --filter 'FullyQualifiedName~Mac|FullyQualifiedName~CredentialSession|FullyQualifiedName~PrivatePromptCompletion|FullyQualifiedName~Users|FullyQualifiedName~Hello|FullyQualifiedName~OdcInventory'
+          -p:UseSharedCompilation=false --filter 'FullyQualifiedName~Mac|FullyQualifiedName~CredentialSession|FullyQualifiedName~PrivatePromptCompletion|FullyQualifiedName~Users|FullyQualifiedName~Hello|FullyQualifiedName~OdcInventory'
           --logger 'trx;LogFileName=r40-mac.trx' --results-directory ci-results
       - name: Check resources before Native AOT publish
         run: *resources
       - name: Build native ARM64 executable from this checkout
         run: |
           test "$(uname -m)" = arm64
-          dotnet publish native/Ssam.Agent/Ssam.Agent.csproj -c Release -r osx-arm64 --nologo
+          dotnet publish native/Ssam.Agent/Ssam.Agent.csproj -c Release -r osx-arm64 --nologo -p:UseSharedCompilation=false
       - name: Qualify the Native AOT executable
         env:
           SSAM_NATIVE_EXE: ${{ github.workspace }}/agent/native/Ssam.Agent/bin/Release/net10.0/osx-arm64/publish/ssam-agent
@@ -232,5 +233,6 @@ jobs:
             agent/dist/SHA256SUMS
             agent/dist/installed-pack.json
             agent/dist/verify-native.json
+
 
 
