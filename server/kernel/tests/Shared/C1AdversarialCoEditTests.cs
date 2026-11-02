@@ -743,7 +743,8 @@ public sealed class C1AdversarialCoEditTests
                 if (conflicts && !merged) return (false, true, null);
                 if (firstPass != null)
                 {
-                    var (second, secondConflicts, _) = One(host, local, foreignBytes, firstPass, preferForeign);
+                    // As the real thin bridge (MergeHandler.SecondPass): the second merge of the merge order never prefers.
+                    var (second, secondConflicts, _) = One(host, local, foreignBytes, firstPass, preferForeign: false);
                     merged |= second;
                     if (secondConflicts && !merged) return (false, true, null);
                 }

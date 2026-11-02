@@ -57,14 +57,21 @@ public static class ConflictRebase
     /// with the person's value and the delivery's, up to five, and how many in all.</summary>
     public static string PreferredNote(JsonObject resolved)
     {
+        // Review A4: the values the delivery also changed (conflict) and the other edits of the person the delivery's version replaced
+        // (in the same element, a parent or a dependency the Studio's selection took) are counted and named apart.
         var entries = resolved["entries"]!.AsArray().OfType<JsonObject>().ToList();
-        var count = resolved["count"]?.GetValue<int>() is int n && n > entries.Count ? n : entries.Count;
+        bool IsConflict(JsonObject e) => e["conflict"]?.GetValue<bool>() == true;
+        var total = resolved["count"]?.GetValue<int>() is int n && n > entries.Count ? n : entries.Count;
+        var conflicts = resolved["conflicts"]?.GetValue<int>() ?? entries.Count(IsConflict);
+        var others = total - conflicts;
         string Value(JsonNode? v) => v == null ? "(none)" : "\"" + (v.ToString() is { Length: > 60 } s ? s[..60] + "..." : v.ToString()) + "\"";
-        string One(JsonObject e) => e["element"] + (e["property"]?.ToString() is { Length: > 0 } p ? " " + p : "") + ": the person's " + Value(e["user"]) + ", now the delivery's " + Value(e["delivery"]);
-        return "The person edited in the Studio, while this delivery ran, " + count + " value(s) the delivery also changed; the Studio's merge resolved "
-            + (count == 1 ? "that conflict" : "those conflicts") + " in this same merge in favour of the delivery (prefer foreign): "
-            + string.Join("; ", entries.Take(5).Select(One)) + (count > 5 ? "; and " + (count - 5) + " more (resolvedConflicts)" : "")
-            + ". The person's edits outside these elements stay.";
+        string One(JsonObject e) => e["element"] + (e["property"]?.ToString() is { Length: > 0 } p ? " " + p : "") + ": the person's " + Value(e["user"]) + ", now the delivery's " + Value(e["delivery"])
+            + (IsConflict(e) || e["cause"] is null ? "" : " (" + e["cause"] + ")");
+        string Named(IEnumerable<JsonObject> list, int count) { var shown = list.Take(5).ToList(); return string.Join("; ", shown.Select(One)) + (count > shown.Count ? "; and " + (count - shown.Count) + " more (resolvedConflicts)" : ""); }
+        var text = "While this delivery ran the person edited in the Studio what the delivery also changed; the Studio's merge resolved it in this same merge in favour of the delivery (prefer foreign), replacing "
+            + total + " value(s) of the person: " + conflicts + " the delivery also changed (" + Named(entries.Where(IsConflict), conflicts) + ")";
+        if (others > 0) text += ", and " + others + " other edit(s) of the person that came with the delivery's version of those elements (" + Named(entries.Where(e => !IsConflict(e)), others) + ")";
+        return text + ". Every value of the person it replaced is listed in resolvedConflicts; the person's other edits stay.";
     }
 
     /// <summary>The note the answer carries after the second attempt.</summary>

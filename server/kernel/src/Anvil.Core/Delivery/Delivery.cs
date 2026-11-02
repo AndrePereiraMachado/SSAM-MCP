@@ -2685,9 +2685,28 @@ public static partial class Delivery
         catch (BridgeCallException) { return false; }
         return manifest["capabilities"] is JsonArray list && list.Any(c => c?.ToString() == capability);
     }
+    // Review A6: merge_from_oml:prefer_foreign is optional (any failure to read the manifest means "not offered", never a stopped
+    // delivery), and the manifest is read once per bridge connection (the IBridgeClient), not once per merge.
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<IBridgeClient, System.Runtime.CompilerServices.StrongBox<bool>> PreferForeignOffered = new();
+    internal static bool OffersPreferForeign(IBridgeClient bridge)
+    {
+        if (PreferForeignOffered.TryGetValue(bridge, out var known)) return known.Value;
+        bool offered;
+        try
+        {
+            var manifest = bridge.Call("bridge_manifest");
+            offered = manifest["capabilities"] is JsonArray list && list.Any(c => c?.ToString() == PreferForeignCapability);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { return false; }   // not cached: the next merge asks again
+        PreferForeignOffered.AddOrUpdate(bridge, new System.Runtime.CompilerServices.StrongBox<bool>(offered));
+        return offered;
+    }
+
     /// <summary>An optional capability: a bridge that cannot answer bridge_manifest at all simply does not offer it.</summary>
     private static bool Offers(IBridgeClient bridge, string capability)
     {
+        // merge_from_oml:prefer_foreign is asked before every merge: its manifest is read once per bridge connection.
+        if (capability == PreferForeignCapability) return OffersPreferForeign(bridge);
         try { return HasCapability(bridge, capability); }
         catch (Exception ex) when (ex is not OutOfMemoryException) { return false; }
     }
