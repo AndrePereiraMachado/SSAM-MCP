@@ -18,6 +18,7 @@ internal sealed class AgentChannel : IDisposable
     private readonly UploadKinds uploads;
     private readonly UsersKinds users;
     private readonly RenderKinds renders;
+    private readonly XifKinds xif;
     // The server's clock minus this machine's, from the welcome's Date (to the second) and each ping's at (to the
     // millisecond): a call's deadline is the server's time.
     private long? serverOffset;
@@ -73,6 +74,8 @@ internal sealed class AgentChannel : IDisposable
         _ = users.Startup();
         // screen.render: the installed pack's renderer (qualification passes its own); announced only when it resolved.
         renders = render ?? new RenderKinds(runtime, pack, state.Root);
+        // o11.xif: the installed pack's Integration Studio engine host; announced only when the pack carries it (Windows).
+        xif = new XifKinds(state.Root, runtime, pack);
         cleanup = new Timer(_ => ReconcileBridges(), null, TimeSpan.FromSeconds(30), Timeout.InfiniteTimeSpan);
     }
     private void ReconcileBridges()
@@ -119,7 +122,9 @@ internal sealed class AgentChannel : IDisposable
         return new() { ["studios"] = installed.DeepClone(), ["o11Connection"] = connection };
     }
     // 0.4.3-native (agent/r4-v106): odc.pipe runs reconcile-merge and the hello lists the ODC commands (the Node agent's 0.3.6).
-    internal const string AgentVersion = "0.4.3-native";
+    // 0.4.4-native (agent/r4-xif, F4 of PLANO-11H): o11.xif, the model and final stages of o11_extension with this machine's
+    // Integration Studio (XifKinds.cs), announced only when the pack carries the engine host (the Node agent's 0.3.7).
+    internal const string AgentVersion = "0.4.4-native";
     private async Task<JsonObject> Hello(CancellationToken token) {
         var versions = Versions();
         try { await bridges.Initialize(installed, token); } catch { }
@@ -137,7 +142,7 @@ internal sealed class AgentChannel : IDisposable
             ["startedAt"] = startedAt, ["root"] = state.Root, ["machine"] = machine?.DeepClone(),
             // odcCommands (0.4.3-native): what odc.pipe passes, so the server offers an ODC bridge only to an agent that runs what it needs.
             ["odcCommands"] = studios == null ? null : new JsonArray(StudioKinds.OdcCommandList.Select(n => (JsonNode?)JsonValue.Create(n)).ToArray()),
-            ["kinds"] = new JsonArray((studios == null ? new[] { "qualification.bridge", "file.put", "file.get", "file.list", "file.sync", UploadKinds.Name, UsersKinds.Name } : StudioKinds.Names.Concat(FileKinds.Names).Append("net.probe").Append(UploadKinds.Name).Append(UsersKinds.Name).ToArray()).Concat(renders.Available ? new[] { RenderRequest.Kind } : Array.Empty<string>()).Select(n => (JsonNode?)JsonValue.Create(n)).ToArray())
+            ["kinds"] = new JsonArray((studios == null ? new[] { "qualification.bridge", "file.put", "file.get", "file.list", "file.sync", UploadKinds.Name, UsersKinds.Name } : StudioKinds.Names.Concat(FileKinds.Names).Append("net.probe").Append(UploadKinds.Name).Append(UsersKinds.Name).ToArray()).Concat(renders.Available ? new[] { RenderRequest.Kind } : Array.Empty<string>()).Concat(xif.Available ? new[] { XifKinds.Name } : Array.Empty<string>()).Select(n => (JsonNode?)JsonValue.Create(n)).ToArray())
         },
         ["pack"] = pack == null ? new JsonObject { ["id"] = "native-qualification", ["lanes"] = new JsonArray() } : new JsonObject { ["id"] = pack["id"]?.DeepClone(), ["lanes"] = pack["lanes"]?.DeepClone(), ["odcBridge"] = pack["odcBridge"]?.DeepClone(), ["o11BuiltFor"] = pack["o11BuiltFor"]?.DeepClone(), ["o11Hook"] = pack["o11Hook"]?.DeepClone() },
         ["capabilities"] = new JsonObject { ["bridgeOffer"] = !OperatingSystem.IsMacOS(), ["bridgeOfferReason"] = OperatingSystem.IsMacOS() ? BridgeUpdates.MacReason : null },
@@ -290,7 +295,7 @@ internal sealed class AgentChannel : IDisposable
         var kind = call["kind"]?.GetValue<string>();
         try
         {
-            if (!(kind == "qualification.bridge" && studios == null) && !FileKinds.Names.Contains(kind) && kind != UploadKinds.Name && kind != UsersKinds.Name && kind != RenderRequest.Kind && !(studios != null && (StudioKinds.Names.Contains(kind) || kind == "net.probe")))
+            if (!(kind == "qualification.bridge" && studios == null) && !FileKinds.Names.Contains(kind) && kind != UploadKinds.Name && kind != UsersKinds.Name && kind != RenderRequest.Kind && !(kind == XifKinds.Name && xif.Available) && !(studios != null && (StudioKinds.Names.Contains(kind) || kind == "net.probe")))
                 throw new AgentFault("KIND_NOT_ALLOWED", "This kind is not available on the agent");
             var parameters = call["params"];
             // Parameters up to 64 MiB, and every screen.render request, are read into memory: the style sheets of a render
@@ -315,6 +320,7 @@ internal sealed class AgentChannel : IDisposable
             if (FileKinds.Names.Contains(kind)) value = await files.Execute(kind!, (JsonObject?)parameters ?? new JsonObject(), token);
             else if (kind == UploadKinds.Name) value = await uploads.Execute((JsonObject?)parameters ?? new JsonObject(), callDeadline, token);
             else if (kind == UsersKinds.Name) value = await users.Execute((JsonObject?)parameters ?? new JsonObject(), token);
+            else if (kind == XifKinds.Name) value = await xif.Execute((JsonObject?)parameters ?? new JsonObject(), callDeadline, token);
             else if (kind == RenderRequest.Kind) value = await renders.Execute((JsonObject?)parameters ?? new JsonObject(), callDeadline, token);
             else if (kind == "net.probe") value = await NetworkProbe((JsonObject?)parameters ?? new(), token);
             else if (studios != null) value = await studios.Execute(kind!, (JsonObject?)parameters ?? new(), token);
