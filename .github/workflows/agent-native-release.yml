@@ -2,7 +2,8 @@ name: Native agent installer (Mac)
 
 on:
   push:
-    branches: [codex/mac-native-installer]
+    # build/mac-022-*: the owner's test app 0.2.2 for macOS (unsigned), from the pack of the draft release below.
+    branches: [codex/mac-native-installer, 'build/mac-022-**']
   workflow_dispatch:
     inputs:
       pack_release:
@@ -25,9 +26,9 @@ permissions:
   contents: write
 
 env:
-  PACK_RELEASE: ${{ inputs.pack_release || 'agent-mac-runtime-20261027-ipramm' }}
-  PACK_ASSET: ${{ inputs.pack_asset || 'mac-release-input-IkWeIb.tar.gz' }}
-  PACK_SHA256: ${{ inputs.pack_sha256 || '554c7b845ae04880398ddb7d28825f0abb93abec047fe3eeacb02370a79cb722' }}
+  PACK_RELEASE: ${{ inputs.pack_release || 'agent-mac-pack-022-20261102' }}
+  PACK_ASSET: ${{ inputs.pack_asset || 'ssam-agent-mac-022.tar.gz' }}
+  PACK_SHA256: ${{ inputs.pack_sha256 || '8dc9832aed70ed50efc34f089bce108535629ed0d2383b71ed35da2f5434296a' }}
 
 jobs:
   mac:
@@ -110,9 +111,44 @@ jobs:
           node scripts/build.mjs --platform mac --pack "$RUNNER_TEMP/ssam-pack/$PACK_ASSET" --native native/Ssam.Agent/bin/Release/net10.0/osx-arm64/publish/ssam-agent --no-updates
       - name: Verify the installed app
         run: |
-          node scripts/verify-native-distribution.mjs 'dist/mac-arm64/SSAM Agent.app'
+          set -o pipefail
+          node scripts/verify-native-distribution.mjs 'dist/mac-arm64/SSAM Agent.app' | tee dist/verify-native.json
           codesign --verify --deep --strict 'dist/mac-arm64/SSAM Agent.app'
           shasum -a 256 dist/*.dmg dist/*.zip > dist/SHA256SUMS
+      - name: Record the hello and the pack of the installed app
+        run: |
+          # The native core of the packaged app, run from its own resources/pack against the fake hub of the tests
+          # (no network, a throwaway credential that is never stored): its hello and the installed pack's listing.
+          node --input-type=module - <<'EOF'
+          import fs from 'node:fs'; import path from 'node:path'; import os from 'node:os'; import cp from 'node:child_process'; import { randomBytes, createHash } from 'node:crypto';
+          import { fakeHub } from './agent/tests/fixtures/fake-hub.mjs';
+          import { packProblems } from './scripts/pack-pins.mjs';
+          const pack = path.resolve('dist/mac-arm64/SSAM Agent.app/Contents/Resources/pack');
+          const problems = packProblems(pack);
+          const manifest = JSON.parse(fs.readFileSync(path.join(pack, 'pack.json'), 'utf8'));
+          fs.writeFileSync('dist/installed-pack.json', JSON.stringify({ problems, pack: manifest }, null, 2) + '\n');
+          if (problems.length) throw new Error('installed pack: ' + problems.join('; '));
+          const credential = 'ssam_agent_' + randomBytes(32).toString('base64url');
+          const hub = await fakeHub({ credential });
+          const data = fs.mkdtempSync(path.join(os.homedir(), '.ssam-hello-'));
+          fs.mkdirSync(path.join(data, 'private'), { recursive: true });
+          fs.writeFileSync(path.join(data, 'private/config.json'), JSON.stringify({ server: hub.url, o11Port: 4599 }));
+          const child = cp.spawn(path.join(pack, manifest.nativeCore.path), ['run', '--root', data, '--runtime-root', pack, '--credential-stdin'], { stdio: ['pipe', 'ignore', 'pipe'] });
+          let stderr = ''; child.stderr.on('data', c => { stderr += c; }); child.stdin.end(credential + '\n');
+          try {
+            await hub.until(() => hub.hellos.length > 0, 30000);
+            const hello = hub.hellos[0];
+            fs.writeFileSync('dist/hello.json', JSON.stringify(hello, null, 2) + '\n');
+            const summary = { version: hello.agent.version, runtime: hello.agent.runtime, platform: hello.agent.platform, kinds: hello.agent.kinds,
+              pack: hello.pack, credentialStored: fs.existsSync(path.join(data, 'private/credential')),
+              native: createHash('sha256').update(fs.readFileSync(path.join(pack, manifest.nativeCore.path))).digest('hex') };
+            console.log(JSON.stringify(summary, null, 2));
+            if (hello.agent.version !== '0.4.7-native' || hello.agent.runtime !== 'native-aot' || hello.agent.platform !== 'darwin') throw new Error('unexpected agent');
+            if (JSON.stringify(hello.pack.odcBridges) !== '["v108","v109"]' || hello.pack.odcBridge !== 'v108') throw new Error('unexpected ODC bridges');
+            if (summary.credentialStored) throw new Error('the throwaway credential was stored');
+          } catch (error) { console.error(stderr.slice(-4000)); throw error; }
+          finally { fs.writeFileSync(path.join(data, 'private/agent.stop'), 'stop'); await hub.close(); await new Promise(r => { child.on('exit', r); setTimeout(() => { child.kill(); r(); }, 5000).unref(); }); fs.rmSync(data, { recursive: true, force: true }); }
+          EOF
       - name: Exercise the Mac desktop interface and native agent
         run: |
           npm install --prefix "$RUNNER_TEMP/ssam-ui-test" --no-save --package-lock=false playwright@1.62.1
@@ -135,3 +171,6 @@ jobs:
             agent/dist/*-mac-arm64.dmg
             agent/dist/*-mac-arm64.zip
             agent/dist/SHA256SUMS
+            agent/dist/verify-native.json
+            agent/dist/installed-pack.json
+            agent/dist/hello.json
