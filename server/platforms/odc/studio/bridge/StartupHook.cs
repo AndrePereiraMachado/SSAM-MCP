@@ -29,14 +29,14 @@ public static class StartupHook { public static void Initialize() => Bridge.Star
 // Loaded once per Studio session through the .NET diagnostics startup hook. Every command is
 // parameterized by a manifest file, never by constants compiled into this assembly.
 // The bridge never initializes the ModelAPI runtime inside the Studio and never edits the open
-// model directly: every mutation goes through the native CompareAndMerge with a hash-checked base
+// model directly: every mutation goes through a native merge with a hash-checked base
 // and an immutable candidate, and every command appends one line to the operations journal.
 internal static partial class Bridge {
-    // One source, one name per Studio runtime (Bridge.csproj): v101 for the net10 ODC Studios, v102 for the net8 ones.
+    // One source, one name per Studio runtime (Bridge.csproj): v109 for the net10 ODC Studios, v108 for the net8 ones.
 #if NET10_0_OR_GREATER
-    public const string Version = "v101";
+    public const string Version = "v109";
 #else
-    public const string Version = "v102";
+    public const string Version = "v108";
 #endif
     // A command that outlives its deadline is reported as uncertain and keeps running; the server stays available, status
     // answers beside it, and every other command is refused at once until it completes (BridgeServe.cs CommandRunner).
@@ -74,6 +74,7 @@ internal static partial class Bridge {
         public string? Module, ModuleKey, BaseSha, CandidateSha, EvidenceDir, Feature;
         // Set by commands that answer a refusal instead of throwing (the portal lane), so the journal line tells the truth.
         public string? Outcome, GateName, Note;
+        public string? PreferForeignUnavailable;
         public bool HandedOff;
         // The Studio turn of this command: past its deadline it has answered, and a job not started yet never starts (QueuedOnTab).
         public BusyCommand? Turn;
@@ -151,15 +152,24 @@ internal static partial class Bridge {
                     // A publication that ended without success answers every message of its log (publish-log), not only the state.
                     // The answer carries the message, never the .NET stack trace (last-error.json keeps it as evidence); an
                     // uncertain merge also lists each divergence of the comparison (element, property, local, candidate).
-                    response = error is PublishFailedException failedPublish
+                    response = error is PublishFailedException { Unverified: not null } unverified
+                        ? new { ok = false, outcome = Journal.Outcome(error, context.HandedOff), gate = Journal.Gate(error.Message), error = error.Message, verified = false, published = unverified.Unverified, dialogsClosed = context.Closed.ToArray(), publishLog = unverified.PublishLog }
+                        : error is PublishFailedException failedPublish
                         ? new { ok = false, outcome = Journal.Outcome(error, context.HandedOff), gate = Journal.Gate(error.Message), error = error.Message, dialogsClosed = context.Closed.ToArray(), publishLog = failedPublish.PublishLog }
                         : error is MergeDiagnostics.MergeUncertainException uncertain
                         ? new { ok = false, outcome = Journal.Outcome(error, context.HandedOff), gate = Journal.Gate(error.Message), error = uncertain.Detailed, divergences = uncertain.Divergences, dialogsClosed = context.Closed.ToArray() }
                         : (object)new { ok = false, outcome = Journal.Outcome(error, context.HandedOff), gate = Journal.Gate(error.Message), error = MergeDiagnostics.Answer(error), dialogsClosed = context.Closed.ToArray() };
+                    if (context.PreferForeignUnavailable != null && JsonSerializer.SerializeToNode(response) is JsonObject fallback) {
+                        fallback["preferForeign"] = false;
+                        fallback["preferForeignUnavailable"] = context.PreferForeignUnavailable;
+                        response = fallback;
+                    }
                     // G-3 (C16): a merge that failed after CompareAndMerge took the candidate is integrated in the open
                     // module: the answer says merged:true (equal:false), so nobody repeats it.
                     if (command == "merge" && context.HandedOff && JsonSerializer.SerializeToNode(response) is JsonObject handed) {
-                        handed["merged"] = true; handed["equal"] = false; handed["equivalence"] = "uncertain";
+                        handed["merged"] = error is NativePreferForeign.Unknown ? null : JsonValue.Create(true);
+                        if (error is NativePreferForeign.Unknown) handed["outcome"] = "unknown";
+                        handed["equal"] = false; handed["equivalence"] = "uncertain";
                         response = handed;
                     }
                     if (context.EvidenceDir != null) {
@@ -901,7 +911,7 @@ internal static partial class Bridge {
     // I10: what this build does that older bridges do not; the facade uses each behavior only when it is here (status, brief).
     // merge:normalized: a merge proven equal but for the Studio's own rewrites answers ok:true, merged:true, normalized (G-1);
     // template-download:have: a template whose revision the caller already has answers cached:true without bytes (C25).
-    private static readonly string[] Capabilities = { "merge:normalized", "template-download:have", "agent-root:1", "reference-snapshot:every-kind" };
+    private static readonly string[] Capabilities = { "merge:normalized", "template-download:have", "agent-root:1", "reference-snapshot:every-kind", NativePreferForeign.Capability };
     private static object Status() {
         var providers = ProvidersState();
         object? topState = null;
@@ -1141,8 +1151,21 @@ internal static partial class Bridge {
         var m = Manifest.Load(manifestPath); c.Bind(m);
         var p = await Ui(() => Active(m.ModuleKey));
         var what = mode switch { Mode.CheckBase => "check-base", Mode.Preview => "preview", Mode.Reconcile => "reconcile-merge", _ => "merge" };
-        return await QueuedOnTab(p, c, what, m.Module, m.EvidenceDir, () => Run(m, p, mode, c));
+        var result = await QueuedOnTab(p, c, what, m.Module, m.EvidenceDir, () => Run(m, p, mode, c));
+        if (result is not PendingMergeVerification pending) return result;
+        // U1: the merge's job has returned; its verification is a job of its own, in a fresh context (BridgeServe.cs VerifyAfterMerge).
+        return await VerifyAfterMerge.Run(job => p.ExecuteInContext(job, executeWhenTopLevelIsIdle: true), m.Module, BridgeDeadlines.QueueStart,
+            () => VerifyMerged(m, p, pending.Local, pending.Outcome, pending.Messages, c), async queuedAt => {
+                string? state = null;
+                try { state = JsonSerializer.Serialize(await Ui(() => State(p)).WaitAsync(BridgeDeadlines.Dialogs)); } catch { }
+                TryWrite(Path.Combine(m.EvidenceDir, "verification-not-started.json"), new { at = DateTimeOffset.UtcNow, queuedAt, command = what, module = m.Module, limitSeconds = (int)BridgeDeadlines.QueueStart.TotalSeconds, merged = true, verified = false, tabState = state });
+                return state;
+            });
     }
+
+    // What the merge's job hands to its verification (U1): the open module it merged into, the native outcome and the messages
+    // the candidate already had.
+    private sealed record PendingMergeVerification(ESpace Local, string Outcome, object[] Messages);
 
     // Every job the bridge queues on a tab goes through here (BridgeServe.cs TabQueue). The Studio runs it only when its top
     // level is idle: it starts within BridgeDeadlines.QueueStart, or it is abandoned, and not-started.json says so in the
@@ -1186,11 +1209,20 @@ internal static partial class Bridge {
         Guard(m, p);
         var capturedAt = m.CapturedAt();
         var local = p.ActiveESpace;
+        var prefer = false;
+        string? preferUnavailable = null;
+        if (mode == Mode.Merge && m.PreferForeign) {
+            prefer = NativePreferForeign.Available(out preferUnavailable);
+            c.PreferForeignUnavailable = preferUnavailable;
+            File.WriteAllText(Path.Combine(m.EvidenceDir, "prefer-foreign.json"), JsonSerializer.Serialize(new { requested = true, available = prefer, reason = preferUnavailable }, Json));
+        }
         if (mode == Mode.Reconcile) {
-            // A read of an already returned native merge, never another CompareAndMerge.
+            // A read of an already returned native merge, never another CompareAndMerge. Its verification (VerifyMerged) does write
+            // one thing since v106: the native caches of the delivery's stylesheets, rebuilt in a transaction, never their text.
             using var started = JsonDocument.Parse(File.ReadAllText(Path.Combine(m.EvidenceDir, "merge-started.json")));
             using var returned = JsonDocument.Parse(File.ReadAllText(Path.Combine(m.EvidenceDir, "native-return.json")));
             var start = started.RootElement;
+            Require(!returned.RootElement.TryGetProperty("merged", out var applied) || applied.ValueKind != JsonValueKind.False, "Reconciliation requires a merge that was applied.");
             Require(start.GetProperty("module").GetString() == m.Module
                 && start.GetProperty("baseSha256").GetString() == m.BaseSha256
                 && start.GetProperty("candidateSha256").GetString() == m.CandidateSha256,
@@ -1200,7 +1232,7 @@ internal static partial class Bridge {
             Require(!File.Exists(Path.Combine(m.EvidenceDir, "publish-started.json")), "Publication already started; read publish-status.");
             using var reconciledCandidate = Load(m.ReadCandidate());
             var messages = Messages(reconciledCandidate);
-            return Dispatcher.UIThread.InvokeAsync(() => VerifyMerged(m, p, local, "reconciled", messages, c)).GetAwaiter().GetResult();
+            return new PendingMergeVerification(local, "reconciled", messages);
         }
         // Producer -> consumer: a producer merged or published in this bridge session after the base capture
         // invalidates only the bases of modules that reference it. Any other module goes on to the native
@@ -1217,7 +1249,9 @@ internal static partial class Bridge {
         var basisBytes = m.ReadBase();
         m.RequireFreshBase();
         using var basis = Load(basisBytes);
+        bool exactCapturedBase;
         using (var current = new MatchTree(local, basis, basis, false, true)) {
+            exactCapturedBase = current.HasNoDifferences;
             var file = mode switch { Mode.CheckBase => "current-vs-base.txt", Mode.Preview => "current-vs-base-preview.txt", _ => "current-vs-base-before-merge.txt" };
             File.WriteAllText(Path.Combine(m.EvidenceDir, file), current.Dump());
             if (mode == Mode.CheckBase) {
@@ -1227,7 +1261,7 @@ internal static partial class Bridge {
                 Require(current.HasNoDifferences, "Open " + m.Module + " differs from the captured base; capture a new snapshot and rebuild the candidate.");
                 return check;
             }
-            Require(current.HasNoDifferences, "Open " + m.Module + " differs from the captured base; capture a new snapshot and rebuild the candidate.");
+            Require(prefer || current.HasNoDifferences, "Open " + m.Module + " differs from the captured base; capture a new snapshot and rebuild the candidate.");
         }
         var candidateBytes = m.ReadCandidate();
         var candidate = Load(candidateBytes);
@@ -1242,14 +1276,20 @@ internal static partial class Bridge {
                 conflicts = tree.HasConflicts; noDifferences = tree.HasNoDifferences;
                 File.WriteAllText(Path.Combine(m.EvidenceDir, "match-tree.txt"), tree.Dump());
             }
-            var preview = new { ok = true, module = m.Module, conflicts, noDifferences, exactCapturedBase = true, baseSha256 = m.BaseSha256, candidateSha256 = m.CandidateSha256, unreferencedProducers, publishInvoked = false };
+            var preview = new { ok = true, module = m.Module, conflicts, noDifferences, exactCapturedBase, baseSha256 = m.BaseSha256, candidateSha256 = m.CandidateSha256, unreferencedProducers, publishInvoked = false };
             File.WriteAllText(Path.Combine(m.EvidenceDir, "preview.json"), JsonSerializer.Serialize(preview, Json));
             if (mode == Mode.Preview) return preview;
             // The merge proves the preview's conditions itself (studio_deliver until=merge calls it without a preview).
             Require(!noDifferences, "Automatic merge requires clean, non-empty changes: the candidate has no changes over the open module (NO_CHANGE); nothing was merged.");
-            Require(!conflicts, "Automatic merge requires clean, non-empty changes: the candidate conflicts with the open module (MERGE_CONFLICT; match-tree.txt names each conflict); nothing was merged.");
+            Require(prefer || !conflicts, "Automatic merge requires clean, non-empty changes: the candidate conflicts with the open module (MERGE_CONFLICT; match-tree.txt names each conflict); nothing was merged.");
             Require(!File.Exists(Path.Combine(m.EvidenceDir, "merge-started.json")), "A merge was already attempted in this evidence directory; inspect its journal, never retry here.");
             var expectedMessages = Messages(candidate);
+            var preMergeErrors = prefer ? Errors(local) : null;
+            var preMergeMessages = prefer ? Messages(local) : null;
+            if (prefer) {
+                using var beforeStream = local.SaveToMemoryStream();
+                File.WriteAllBytes(Path.Combine(m.EvidenceDir, "before-prefer-merge.oml"), beforeStream.ToArray());
+            }
             // Merge order: defaults the Studio drops on elements a merge creates go in a second native merge of this command.
             var order = NativeMergeOrder.Prepare(candidate, basis, candidateBytes, Load);
             if (order.FirstPass != null) {
@@ -1262,7 +1302,25 @@ internal static partial class Bridge {
             handedOff = true; c.HandedOff = true;
             string NativeMerge(ESpace into, ESpace foreign, ESpace over) => CompareAndMergeCommands.CompareAndMerge(p, into, foreign, over, false, automaticMerge: true, isFrom1CP: false).ToString();
             string outcome; object? second = null;
-            if (order.FirstPass == null) outcome = NativeMerge(local, candidate, basis);
+            JsonObject? resolved = null;
+            if (prefer) {
+                string LiveSha() { using var stream = local.SaveToMemoryStream(); return Hash(stream.ToArray()); }
+                try {
+                    if (order.FirstPass == null) resolved = NativePreferForeign.Merge(p, local, candidate, basis, LiveSha);
+                    else {
+                        using var first = Load(order.FirstPass);
+                        resolved = NativePreferForeign.Merge(p, local, first, basis, LiveSha, finalCandidate: candidate);
+                        second = new { merged = true, outcome = "Merge", reason = "Deferred defaults merged in the same command." };
+                    }
+                    outcome = "Merge";
+                } catch (NativePreferForeign.NotApplied ex) {
+                    c.HandedOff = false; c.Outcome = "refused"; c.GateName = "merge_conflict"; c.Note = ex.Message;
+                    var refused = new { ok = false, merged = false, code = "MERGE_CONFLICT", preferForeign = true, error = ex.Message, publishInvoked = false };
+                    File.WriteAllText(Path.Combine(m.EvidenceDir, "native-return.json"), JsonSerializer.Serialize(refused, Json));
+                    return refused;
+                } finally { candidate.Close(); }
+            }
+            else if (order.FirstPass == null) outcome = NativeMerge(local, candidate, basis);
             else {
                 candidate.Close();
                 outcome = NativeMerge(local, Load(order.FirstPass), basis);
@@ -1272,14 +1330,32 @@ internal static partial class Bridge {
                 second = new { merged = pass.Merged, outcome = pass.Outcome, reason = pass.Reason };
                 if (pass.Merged) outcome = pass.Outcome!;
             }
-            File.WriteAllText(Path.Combine(m.EvidenceDir, "native-return.json"), JsonSerializer.Serialize(new { outcome, secondPass = second, publishInvoked = false }, Json));
-            return Dispatcher.UIThread.InvokeAsync(() => VerifyMerged(m, p, local, outcome, expectedMessages, c)).GetAwaiter().GetResult();
+            var nativeReturn = JsonSerializer.SerializeToNode(new { outcome, secondPass = second, publishInvoked = false }, Json)!.AsObject();
+            if (prefer) {
+                nativeReturn["preferForeign"] = true; nativeReturn["resolvedConflicts"] = resolved;
+                nativeReturn["preMergeErrors"] = JsonSerializer.SerializeToNode(preMergeErrors, Json);
+                nativeReturn["preMergeMessages"] = JsonSerializer.SerializeToNode(preMergeMessages, Json);
+            } else if (m.PreferForeign) {
+                nativeReturn["preferForeign"] = false;
+                nativeReturn["preferForeignUnavailable"] = preferUnavailable;
+            }
+            File.WriteAllText(Path.Combine(m.EvidenceDir, "native-return.json"), nativeReturn.ToJsonString(Json));
+            return new PendingMergeVerification(local, outcome, expectedMessages);
         } finally { if (!handedOff) candidate.Close(); }
     }
 
     private static object VerifyMerged(Manifest m, IAggregatorPresenter p, ESpace local, string outcome, object[] expectedMessages, Context c) {
+        // U1: the verification runs in a job of its own after the merge's; the tab must still show the module it merged into.
+        // The record says the verification did not run (the facade then asks reconcile-merge before any content proof).
+        if (!ReferenceEquals(p.ActiveESpace, local))
+            TryWrite(Path.Combine(m.EvidenceDir, "verification-refused.json"), new { at = DateTimeOffset.UtcNow, module = m.Module, merged = true, verified = false, reason = "active module changed" });
+        Require(ReferenceEquals(p.ActiveESpace, local), "The active module of the tab changed during the native merge of " + m.Module + "; the merge is not verified and nothing was published. Once studio_status names no busy command, studio_publish {module, reconcile:true} verifies it.");
         Require(local.Match == null, "Native merge has a pending state.");
         using var expected = Load(m.ReadCandidate());
+        using var basis = Load(m.ReadBase());
+        // U1: the changed stylesheets equal the candidate's text (effective, author, generated), and their native caches are rebuilt
+        // before anything is proven or saved (NativeStyleSheetCache.cs): after-merge.oml and its sha256 carry the fresh caches.
+        File.WriteAllText(Path.Combine(m.EvidenceDir, "stylesheet-caches.json"), JsonSerializer.Serialize(NativeStyleSheetCache.Refresh(local, expected, basis), Json));
         NativeMergeVerification.Proof proof; var refreshedReferences = Array.Empty<string>();
         var lost = Array.Empty<DeferredDefault>();
         var forced = Array.Empty<NativeMergeVerification.ForcedDeleteRule>();
@@ -1288,7 +1364,36 @@ internal static partial class Bridge {
         // element; with forced delete rules they are the only differences a merge may keep and still answer ok:true.
         var rewrites = Array.Empty<NativeMergeVerification.Normalization>();
         var equivalence = Path.Combine(m.EvidenceDir, "native-equivalence.txt");
-        try { proof = NativeMergeVerification.Verify(local, expected, m.Owners.ToHashSet(), equivalence); }
+        var nativeReceipt = JsonNode.Parse(File.ReadAllText(Path.Combine(m.EvidenceDir, "native-return.json")))!.AsObject();
+        var preferred = nativeReceipt["preferForeign"]?.GetValue<bool>() == true;
+        var personEdits = Array.Empty<NativeMergeIntent.Change>();
+        NativeMergeIntent.Audit? audit = null;
+        if (preferred) {
+            using var before = Load(File.ReadAllBytes(Path.Combine(m.EvidenceDir, "before-prefer-merge.oml")));
+            audit = NativeMergeIntent.Observe(local, expected, basis, before);
+            personEdits = audit.Preserved;
+            nativeReceipt["resolvedConflicts"] = audit.Receipt(nativeReceipt["resolvedConflicts"] as JsonObject, NativeMergeIntent.Read(basis, expected));
+            nativeReceipt["observedReplacements"] = JsonSerializer.SerializeToNode(audit.Replaced, Json);
+            File.WriteAllText(Path.Combine(m.EvidenceDir, "native-return.json"), nativeReceipt.ToJsonString(Json));
+            File.WriteAllText(Path.Combine(m.EvidenceDir, "person-edits.json"), JsonSerializer.Serialize(audit, Json));
+        }
+        Func<Match, PropertyPair?, bool>? preserved = audit == null ? null : audit.IsPreserved;
+        object PreferredResult(object value, string filename) {
+            var result = JsonSerializer.SerializeToNode(value, Json)!.AsObject();
+            result["preferForeign"] = true;
+            result["resolvedConflicts"] = nativeReceipt["resolvedConflicts"]?.DeepClone();
+            result["observedReplacements"] = nativeReceipt["observedReplacements"]?.DeepClone();
+            result["preservedValidationMessages"] = nativeReceipt["preMergeMessages"]?.DeepClone();
+            result["preservedEdits"] = JsonSerializer.SerializeToNode(personEdits.Select(e => new {
+                element = e.Element, property = e.Property, local = e.Local, candidate = e.Delivery,
+                note = "The person's edit outside the delivery's changes was preserved." }), Json);
+            if (personEdits.Length > 0 && result["equivalence"]?.GetValue<string>() is null or "strict") result["equivalence"] = "normalized";
+            File.WriteAllText(Path.Combine(m.EvidenceDir, filename), result.ToJsonString(Json));
+            return result;
+        }
+        try {
+            proof = NativeMergeVerification.Verify(local, expected, m.Owners.ToHashSet(), equivalence, preserved: preserved);
+        }
         catch (InvalidOperationException strict) {
             // Known classes: defaults the Studio removed (MergeOrder), delete rules it forced to Ignore, the properties it
             // rewrites on merge (Refresh Data Max. Records, Structure Public in an app) and the G-1 rewrites (a block instance's
@@ -1304,7 +1409,7 @@ internal static partial class Bridge {
             var named = lost.Select(d => { var parts = d.Element.Split('.'); return new NativeMergeVerification.LostDefault(parts.Length > 1 ? parts[^2] : "", parts[^1], d.Value); }).ToArray();
             NativeMergeVerification.Proof? knownOnly = null;
             if (lost.Length + forced.Length + all.Length > 0)
-                try { knownOnly = NativeMergeVerification.Verify(local, expected, m.Owners.ToHashSet(), equivalence, named, forced, all, icons); }
+                try { knownOnly = NativeMergeVerification.Verify(local, expected, m.Owners.ToHashSet(), equivalence, named, forced, all, icons, preserved); }
                 catch (InvalidOperationException) { }
             if (knownOnly != null) proof = knownOnly;
             else {
@@ -1324,10 +1429,11 @@ internal static partial class Bridge {
                 proof = new NativeMergeVerification.Proof(true, false, 0, Array.Empty<NativeMergeVerification.LayoutAddition>());
             }
         }
-        using var basis = Load(m.ReadBase());
-        var addedErrors = Errors(local).Except(Errors(basis)).ToArray();
+        var precedingErrors = preferred ? nativeReceipt["preMergeErrors"]?.Deserialize<string[]>(Json) ?? [] : [];
+        var precedingMessages = preferred ? nativeReceipt["preMergeMessages"]?.Deserialize<object[]>(Json) ?? [] : [];
+        var addedErrors = Errors(local).Except(Errors(basis)).Except(precedingErrors).ToArray();
         Require(addedErrors.Length == 0, "Merge introduces validation errors: " + string.Join(" | ", addedErrors));
-        var newMessages = NewMessages(local, expectedMessages);
+        var newMessages = NewMessages(local, expectedMessages.Concat(precedingMessages).ToArray());
         File.WriteAllText(Path.Combine(m.EvidenceDir, "new-messages.json"), JsonSerializer.Serialize(newMessages, Json));
         // G-2 (A03, C16): after the merge only errors and security warnings (SecurityWarnings.IsSecurity) block, as in the
         // kernel, the builder and the O11 LiveContract; every other new live message is a warning of the receipt.
@@ -1349,6 +1455,7 @@ internal static partial class Bridge {
             };
             File.WriteAllText(Path.Combine(m.EvidenceDir, "receipt.json"), JsonSerializer.Serialize(normalizedReceipt, Json));
             c.Note = "merged; normalized by the Studio: " + string.Join(", ", notes.Select(n => n.Rule).Distinct());
+            if (preferred) return PreferredResult(normalizedReceipt, "receipt.json");
             return normalizedReceipt;
         }
         if (lost.Length + forced.Length + normalized.Length > 0) {
@@ -1375,6 +1482,7 @@ internal static partial class Bridge {
             // A gate of its own: "equivalence" means a merge pending in the Studio (never repeat); this one is merged and
             // proven equal but for the named losses, whose repair the facade delivers as a new job.
             c.Outcome = "incomplete"; c.GateName = "known_losses"; c.Note = error;
+            if (preferred) return PreferredResult(incomplete, "incomplete-receipt.json");
             return incomplete;
         }
         var receipt = new {
@@ -1382,6 +1490,14 @@ internal static partial class Bridge {
             strictlyEqual = proof.StrictlyEqual, equivalence = proof.StrictlyEqual ? "strict" : null, emptyLayoutProperties = proof.EmptyLayoutProperties, refreshedReferences, warnings,
             developerId = Developer(local), publishInvoked = false, completedAt = DateTimeOffset.UtcNow, otherOpenModules = others
         };
+        if (preferred) return PreferredResult(receipt, "receipt.json");
+        if (nativeReceipt["preferForeignUnavailable"] != null) {
+            var fallback = JsonSerializer.SerializeToNode(receipt, Json)!.AsObject();
+            fallback["preferForeign"] = false;
+            fallback["preferForeignUnavailable"] = nativeReceipt["preferForeignUnavailable"]!.DeepClone();
+            File.WriteAllText(Path.Combine(m.EvidenceDir, "receipt.json"), fallback.ToJsonString(Json));
+            return fallback;
+        }
         File.WriteAllText(Path.Combine(m.EvidenceDir, "receipt.json"), JsonSerializer.Serialize(receipt, Json));
         return receipt;
     }
@@ -1414,11 +1530,15 @@ internal static partial class Bridge {
     // Their state is recorded so the next builder knows it must start from a fresh snapshot.
     private static object[] RecordOthers(Manifest m, IAggregatorPresenter merged) {
         var list = new List<object>();
-        foreach (var a in RuntimeImplementation.Instance.Aggregators.Where(x => x.ActiveESpace != null && !ReferenceEquals(x, merged))) {
-            var s = a.ActiveESpace!;
-            try { list.Add(new { module = s.Name, moduleKey = s.Key.ToString(), mergePending = s.Match != null, modified = s.WasModifiedSinceLastSave, dependencies = ((IESpace)s).Dependencies.Select(d => new { d.Name, d.Revision }).ToArray() }); }
-            catch (Exception error) { list.Add(new { module = s.Name, error = error.Message }); }
-        }
+        // U1: this runs in the verification's own job now, off the Studio's UI: a tab opened or closed in the same instant changes
+        // the collection, and the record says so instead of failing the merge.
+        try {
+            foreach (var a in RuntimeImplementation.Instance.Aggregators.Where(x => x.ActiveESpace != null && !ReferenceEquals(x, merged)).ToArray()) {
+                var s = a.ActiveESpace!;
+                try { list.Add(new { module = s.Name, moduleKey = s.Key.ToString(), mergePending = s.Match != null, modified = s.WasModifiedSinceLastSave, dependencies = ((IESpace)s).Dependencies.Select(d => new { d.Name, d.Revision }).ToArray() }); }
+                catch (Exception error) { list.Add(new { module = s.Name, error = error.Message }); }
+            }
+        } catch (InvalidOperationException error) { list.Add(new { error = "The other open modules could not be listed: " + error.Message }); }
         var result = list.ToArray();
         File.WriteAllText(Path.Combine(m.EvidenceDir, "consumer-capture-required.json"), JsonSerializer.Serialize(new { note = "Modules listed here that reference " + m.Module + " need a new snapshot before their next candidate; the bridge refuses their older bases. Modules that do not reference it are checked by the native MatchTree as usual.", mergedModule = m.Module, at = DateTimeOffset.UtcNow, modules = result }, Json));
         return result;
@@ -1451,32 +1571,47 @@ internal static partial class Bridge {
         await CloseInformational(c);
         var state = processes.Select(x => Member(x, "state")?.ToString()).FirstOrDefault(x => x != null) ?? "unknown";
         var success = state.StartsWith("CompletedWithSuccess", StringComparison.OrdinalIgnoreCase);
-        object? download = null; string? note = null;
+        object? download = null; string? note = null; PublishVerification.Verdict? verdict = null; object? revision = null;
         if (success) {
+            // U1: the downloaded revision is verified when it is the bytes sent (before-publish.oml, the line's F1/H3 rule: whatever the
+            // open module became meanwhile), or when it equals the open module (MatchTree, outside references) and the stylesheet
+            // sources submitted in before-publish.oml (NativeStyleSheetCache.Differences), with nothing missing.
+            string? failure = null; string[]? outside = null, refreshed = null, styles = null; var equal = false; bool? sentEqual = null; object? path = null, sha256 = null;
             try {
                 var latest = await Latest(m.Module, new Context());
-                var path = Member(latest, "path")!.ToString()!;
-                var (outside, refreshed, equal) = await Ui(() => {
-                    using var published = Load(File.ReadAllBytes(path));
+                revision = Member(latest, "revision"); sha256 = Member(latest, "sha256");
+                var file = Member(latest, "path")!.ToString()!; path = file;
+                var sent = File.ReadAllBytes(Path.Combine(m.EvidenceDir, "before-publish.oml"));
+                sentEqual = string.Equals(Hash(File.ReadAllBytes(file)), Hash(sent), StringComparison.OrdinalIgnoreCase);
+                // The submitted module is read off the Studio's UI; only the comparison with the open module needs it.
+                using var submitted = Load(sent);
+                var submittedStyles = NativeStyleSheetCache.Capture(submitted);
+                (outside, refreshed, equal, styles) = await Ui(() => {
+                    using var published = Load(File.ReadAllBytes(file));
+                    var differentStyles = NativeStyleSheetCache.Differences(published, submittedStyles);
                     using var tree = new MatchTree(p.ActiveESpace, published, published, false, true);
                     TryWrite(Path.Combine(m.EvidenceDir, "open-vs-published.txt"), tree.Dump());
                     var (o, r) = DifferencesOutsideReferences(tree, p.ActiveESpace);
-                    return (o, r, tree.HasNoDifferences);
+                    return (o, r, tree.HasNoDifferences, differentStyles);
                 });
-                download = new { revision = Member(latest, "revision"), path, sha256 = Member(latest, "sha256"), matchesOpenModule = outside.Length == 0, strictlyEqual = equal, refreshedReferences = refreshed, differencesOutsideReferences = outside };
-                note = outside.Length == 0 ? "Published revision equals the open module." : "Published revision differs from the open module outside references; inspect open-vs-published.txt.";
-            } catch (Exception error) { download = new { error = error.Message }; note = "Publication completed but the revision could not be downloaded and compared."; }
+            } catch (Exception error) { failure = error.Message; }
+            verdict = PublishVerification.Of(outside, styles, equal, failure, sentEqual == true);
+            download = failure != null && sentEqual != true ? new { error = failure, verified = false }
+                : new { revision, path, sha256, verified = verdict.Verified, sentBytes = sentEqual == true, matchesOpenModule = outside != null && styles != null && outside.Length == 0 && styles.Length == 0, strictlyEqual = verdict.StrictlyEqual, refreshedReferences = refreshed, differencesOutsideReferences = outside, stylesheetSourceDifferences = styles, comparisonError = failure };
+            note = verdict.Note;
             PublishedAt[m.Module] = DateTimeOffset.UtcNow;
         } else note = "Publication did not complete with success; publishLog carries every message of the Studio messages pane (type, text, element, stage).";
+        var verified = verdict?.Verified == true;
         // The log of this publication, read from the same pane the person sees (publish-log): every message on failure.
-        var publishLog = success ? null : await SafePublishLog(p, true);
-        var receipt = new { ok = success, module = m.Module, moduleKey = m.ModuleKey, dispatched = true, completed = true, state, processes, serverSeconds, published = download, dialogsClosed = c.Closed.ToArray(), completedAt = DateTimeOffset.UtcNow, note, publishLog };
+        var publishLog = success && verified ? null : await SafePublishLog(p, !success);
+        var receipt = new { ok = success && verified, module = m.Module, moduleKey = m.ModuleKey, dispatched = true, completed = true, verified, state, processes, serverSeconds, published = download, dialogsClosed = c.Closed.ToArray(), completedAt = DateTimeOffset.UtcNow, note, publishLog };
         TryWrite(Path.Combine(m.EvidenceDir, "publish-receipt.json"), receipt);
         if (!success) {
             // Counts only: the message texts stay in publishLog, so they never steer the journal's gate classification.
             var counts = publishLog != null && Member(publishLog, "lastPublish") is object last && Member(last, "counts") is object n ? " with " + Member(n, "errors") + " error(s) and " + Member(n, "warnings") + " warning(s)" : "";
             throw new PublishFailedException("Publication of " + m.Module + " ended in state " + state + counts + ". " + note, publishLog!);
         }
+        if (!verified) throw new PublishFailedException(PublishVerification.Refusal(m.Module, state, revision, verdict!), publishLog!) { Unverified = download };
         return receipt;
     }
 
@@ -1517,6 +1652,15 @@ internal static partial class Bridge {
                         Require(outside.Length == 0, "Open module differs from the created candidate outside its references; do not publish an unverified model: " + string.Join("; ", outside.Take(10)));
                     } else Require(Hash(bytes) == expectedOpenHash, "Open module differs from the merged receipt; do not publish an unverified model.");
                     File.WriteAllBytes(Path.Combine(m.EvidenceDir, "before-publish.oml"), bytes);
+                }
+                // U1: right before the publication, the stylesheets of this delivery are checked against its candidate and their native
+                // caches refreshed once more (a created module has no base: every sheet of its candidate is the delivery's), and
+                // before-publish.oml, what the published revision is verified against, is the module as it goes to the server.
+                using (var source = Load(m.ReadCandidate()))
+                using (var basis = created ? null : Load(m.ReadBase())) {
+                    File.WriteAllText(Path.Combine(m.EvidenceDir, "before-publish-stylesheet-caches.json"), JsonSerializer.Serialize(NativeStyleSheetCache.Refresh(s, source, basis), Json));
+                    using var refreshed = s.SaveToMemoryStream();
+                    File.WriteAllBytes(Path.Combine(m.EvidenceDir, "before-publish.oml"), refreshed.ToArray());
                 }
                 Require(!((IESpace)s).GetValidationMessages().Any(x => x.Type.ToString() == "Error"), "Native validation errors block publication.");
                 File.WriteAllText(Path.Combine(m.EvidenceDir, "publish-started.json"), JsonSerializer.Serialize(new { at = DateTimeOffset.UtcNow, pid = Environment.ProcessId, module = m.Module, authorization = m.PublishAuthorization, openSha256 = expectedOpenHash }, Json));

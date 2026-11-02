@@ -4,6 +4,7 @@ using System.Text.Json;
 using OutSystems.Model;
 using OutSystems.Model.Logic.Nodes;
 using OutSystems.Model.Merge;
+using Match = OutSystems.Model.Merge.Match;
 using ServiceStudio.Model;
 #endif
 
@@ -44,16 +45,37 @@ internal static class NativeMergeVerification {
  static readonly HashSet<string> LayoutNames=new(){"GridColumns","GridRows","ColumnGap","RowGap","ColumnSpan","RowSpan"};
  static void Require(bool pass,string message){if(!pass)throw new InvalidOperationException(message);}
 #if !NATIVE_MERGE_OFFLINE
- public static Proof Verify(ESpace live,ESpace expected,IReadOnlySet<string> owners,string output,LostDefault[]? lostDefaults=null,ForcedDeleteRule[]? forcedDeleteRules=null,Normalization[]? normalizations=null,IconChange[]? icons=null){
+ public static Proof Verify(ESpace live,ESpace expected,IReadOnlySet<string> owners,string output,LostDefault[]? lostDefaults=null,ForcedDeleteRule[]? forcedDeleteRules=null,Normalization[]? normalizations=null,IconChange[]? icons=null,Func<Match,PropertyPair?,bool>? preserved=null){
   string Identity(CustomProperty p)=>p.Parent.Key.ToString()!.Split('/').Last().Split('.').Last()+"/"+p.Name;
   var existing=expected.GetAllChildrenOfType<CustomProperty>().Select(Identity).ToHashSet();
   var added=live.GetAllChildrenOfType<CustomProperty>().Where(p=>!existing.Contains(Identity(p))).Select(p=>new LayoutAddition(p.Parent.Key.ToString()!,p.Name,p.EffectiveValue?.ToString(),OwnerOf(p))).ToArray();
   var recreated=Recreations(live,expected);
   if(recreated.Length>0)File.WriteAllText(output+".recreated-parameters.json",JsonSerializer.Serialize(recreated,new JsonSerializerOptions{WriteIndented=true}));
-  using var tree=new MatchTree(live,expected,expected,false,true);var dump=tree.Dump();File.WriteAllText(output,dump);
+  using var tree=new MatchTree(live,expected,expected,false,true);var dump=tree.Dump();
+  File.WriteAllText(output,dump);
+  if(preserved!=null){
+   File.WriteAllText(output+".complete.txt",dump);
+   using var text=new StringWriter();using var writer=new OutSystems.Model.Merge.IndentedWriter(text);
+   var matches=new List<Match>();tree.Dump(writer,m=>{matches.Add(m);return false;});
+   dump=WithoutPreserved(text.ToString(),matches,preserved);
+   bool InPreservedSubtree(Match m){for(var n=m;n!=null;n=n.Parent)if(preserved(n,null))return true;return false;}
+   var kept=matches.Where(InPreservedSubtree).Select(m=>m.LocalObject).OfType<CustomProperty>()
+    .Select(p=>(Parent:p.Parent.Key.ToString(),p.Name)).ToHashSet();
+   added=added.Where(a=>!kept.Contains((a.Parent,a.Name))).ToArray();
+  }
+  File.WriteAllText(output,dump);
   Validate(dump,added,owners,recreated,lostDefaults,forcedDeleteRules,normalizations,icons);
   var proof=new Proof(true,tree.HasNoDifferences,added.Length,added);File.WriteAllText(output+".proof.json",JsonSerializer.Serialize(proof,new JsonSerializerOptions{WriteIndented=true}));return proof;
  }
+ // Bind dump nodes to the actual native traversal, not to possibly duplicate display names.
+ // Only differences proven unchanged since the pre-merge snapshot can be removed here.
+ static string WithoutPreserved(string dump,List<Match> matches,Func<Match,PropertyPair?,bool> preserved) =>
+  FilterPreserved(dump,matches.Count,(index,name)=>{
+   var match=matches[index];if(name==null)return preserved(match,null);
+   var pairs=match.Properties.Where(p=>p.PropertyName==name).ToArray();
+   Require(pairs.Length==1,"The native property comparison cannot be verified.");
+   return preserved(match,pairs[0]);
+  });
  // The owner is the screen or block that holds the widget, by name. The key segment after NodesShownInESpaceTree names the
  // first tree node, which for a block of another UI flow (Menu in Common) is not the block, so it is only the fallback.
  static string OwnerOf(CustomProperty p){
@@ -118,6 +140,32 @@ internal static class NativeMergeVerification {
   return table;
  });
 #endif
+ public static string FilterPreserved(string dump,int matchCount,Func<int,string?,bool> preserved){
+  var lines=dump.Split('\n');var nodes=ReadTree(lines);var objects=nodes.Where(n=>n.Kind!="Folder").ToArray();
+  Require(objects.Length==matchCount,"The native comparison traversal cannot be verified.");
+  var removed=new HashSet<int>();
+  for(var i=0;i<objects.Length;i++){
+   var node=objects[i];
+   if(preserved(i,null)){
+    foreach(var n in Descendants(node).Prepend(node)){removed.Add(n.Line);removed.UnionWith(PropertyLines(n));}
+    continue;
+   }
+   foreach(var property in node.Properties){
+    if(preserved(i,property.Name))removed.UnionWith(Enumerable.Range(property.First,property.Last-property.First+1));
+   }
+  }
+  foreach(var node in nodes.AsEnumerable().Reverse()){
+   if(removed.Contains(node.Line))continue;
+   var hadOwn=node.Properties.Count>0;var hasOwn=node.Properties.Any(p=>!removed.Contains(p.First));
+   var hasChildren=node.Children.Any(n=>!removed.Contains(n.Line));
+   if(node.Kind=="Folder"&&!hasChildren){removed.Add(node.Line);continue;}
+   if(hadOwn&&!hasOwn)node.Flags.Remove("ChangedInLocal");
+   if(!hasChildren)node.Flags.Remove("DifferenceInLocalChildren");
+   if(!hasOwn&&!hasChildren&&node.Flags.All(f=>f is "None" or "DifferenceInLocalMergeUnit")) {removed.Add(node.Line);continue;}
+   if(node.Kind!="Folder")lines[node.Line]=Regex.Replace(lines[node.Line],@"\[[A-Za-z, ]+\]\r?$","["+(node.Flags.Count==0?"None":string.Join(", ",node.Flags))+"]");
+  }
+  return string.Join("\n",lines.Where((_,i)=>!removed.Contains(i)));
+ }
  public static void Validate(string dump,LayoutAddition[] added,IReadOnlySet<string> owners,ParameterRecreation[]? recreated=null,LostDefault[]? lostDefaults=null,ForcedDeleteRule[]? forcedDeleteRules=null,Normalization[]? normalizations=null,IconChange[]? icons=null){
   Require(added.All(p=>LayoutNames.Contains(p.Name)&&p.EffectiveValue==null&&owners.Contains(p.Owner)),"Native merge contains nonempty or out-of-scope layout metadata");
   var lines=dump.Split('\n');

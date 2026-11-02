@@ -127,7 +127,7 @@ internal sealed class AgentChannel : IDisposable
     // announced only when the pack carries the engine host. 0.4.4-native (agent/r4-f5-app): one O11 bridge per Service Studio
     // version (pack.json o11Builds) and bridgeOffer false packs. 0.4.5-native: the three in one core (the Node agent's 0.3.8, app 0.2.0).
     // 0.4.6-native (agent/r4-prefer-foreign, app 0.2.1): the hello declares merge_from_oml:prefer_foreign (thin O11 bridge 1.2.0).
-    internal const string AgentVersion = "0.4.6-native";
+    internal const string AgentVersion = "0.4.7-native";
     // pack.json bridgeOffer false: a pack built without the bridge trust anchors (the owner's unsigned test app) never asks for offers.
     internal const string NoAnchorsReason = "This agent package was built without the bridge trust anchors (a test build); it uses only its bundled bridges.";
     internal static bool NoAnchors(JsonObject? pack) => pack?["bridgeOffer"] is JsonValue v && v.TryGetValue<bool>(out var offer) && !offer;
@@ -147,7 +147,7 @@ internal sealed class AgentChannel : IDisposable
             ["platform"] = OperatingSystem.IsWindows() ? "win32" : "darwin",
             ["startedAt"] = startedAt, ["root"] = state.Root, ["machine"] = machine?.DeepClone(),
             // odcCommands (0.4.3-native): what odc.pipe passes, so the server offers an ODC bridge only to an agent that runs what it needs.
-            ["odcCommands"] = studios == null ? null : new JsonArray(StudioKinds.OdcCommandList.Select(n => (JsonNode?)JsonValue.Create(n)).ToArray()),
+            ["odcCommands"] = studios == null ? null : new JsonArray(StudioKinds.OdcDeclared(pack).Select(n => (JsonNode?)JsonValue.Create(n)).ToArray()),
             // o11Methods (0.4.4-native): what o11.bridge passes, so the server sends integration_import only to an agent that runs it.
             ["o11Methods"] = studios == null ? null : new JsonArray(StudioKinds.O11DeclaredList.Select(n => (JsonNode?)JsonValue.Create(n)).ToArray()),
             ["kinds"] = new JsonArray((studios == null ? new[] { "qualification.bridge", "file.put", "file.get", "file.list", "file.sync", UploadKinds.Name, UsersKinds.Name } : StudioKinds.Names.Concat(FileKinds.Names).Append("net.probe").Append(UploadKinds.Name).Append(UsersKinds.Name).ToArray()).Concat(renders.Available ? new[] { RenderRequest.Kind } : Array.Empty<string>()).Concat(xif.Available ? new[] { XifKinds.Name } : Array.Empty<string>()).Select(n => (JsonNode?)JsonValue.Create(n)).ToArray())

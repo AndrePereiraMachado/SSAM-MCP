@@ -13,6 +13,11 @@ internal sealed class StudioKinds(string root, string runtime, JsonObject pack, 
     // order), and the server offers the bridges from v106 on only to an agent that runs reconcile-merge (bridge-store.mjs).
     internal static readonly string[] OdcCommandList = ["status", "wait", "authorize", "open", "snapshot", "latest", "check-base", "preview", "merge", "reconcile-merge", "publish", "publish-status", "publish-log", "dismiss-dialog", "close", "module-info", "assets", "consumers", "create", "create-app", "templates", "template-download", "refresh-references", "reference-snapshot", "reference-producers", "data", "data-insert", "data-update", "data-delete", "portal-call", "portal-session", "auth-status", "stop", "query-test"];
     internal static readonly HashSet<string> OdcCommands = [.. OdcCommandList];
+    internal static IEnumerable<string> OdcDeclared(JsonObject? pack) {
+        var version = Text(pack?["odcBridge"]);
+        return version is { Length: > 1 } && version[0] == 'v' && int.TryParse(version[1..], out var n) && n >= 108
+            ? OdcCommandList.Append("merge:prefer-foreign") : OdcCommandList;
+    }
     // integration_import (0.4.4-native, thin O11 bridge 1.1.0, fase4-28 r4-f3-import): the Studio's own SOAP/OpenAPI importer on a
     // detached copy of the snapshot, its paths agent paths (MapO11). The hello lists these methods (agent.o11Methods, in this
     // order), and the server sends the import only to an agent that lists it.

@@ -10,11 +10,11 @@ using Microsoft.Diagnostics.NETCore.Client;
 //           | merge <manifest> | publish <manifest> | publish-status <manifest> | data <Module> <Entity> ...
 //           | portal-call <request.json> [--tenant <host>] | portal-session status|open|close|fetch ... | auth-status | stop
 // A client timeout never cancels the native operation: inspect the evidence directory instead of retrying.
-const string Version = "v106";
-// The bridge built for each Studio runtime (Bridge.csproj): v106 for the net10 ODC Studios (1.7.30 on), v107, the same sources,
-// for the net8 ones (up to 1.7.29). The agent pack carries v107, which also loads in a net10 Studio, as v102 did; a net10 v106
+const string Version = "v109";
+// The bridge built for each Studio runtime (Bridge.csproj): v109 for the net10 ODC Studios (1.7.30 on), v108, the same sources,
+// for the net8 ones (up to 1.7.29). The agent pack carries v108, which also loads in a net10 Studio, as v102 did; a net10 v109
 // never loads in a net8 one. The runtime is the Studio's own ODCStudio.runtimeconfig.json.
-const string EarlierVersion = "v107";
+const string EarlierVersion = "v108";
 if (args.Length < 2) throw new ArgumentException("Usage: <pid> attach <dll> | <pid> <command> [argument]");
 var pid = int.Parse(args[0]);
 var process = Process.GetProcessById(pid);

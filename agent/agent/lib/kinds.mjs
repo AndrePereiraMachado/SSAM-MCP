@@ -56,6 +56,8 @@ export const O11_METHODS = Object.freeze(['ping', 'bridge_manifest', 'get_active
 // that declare it. Never a method o11.bridge passes (O11_METHODS above is that list).
 export const O11_PREFER_FOREIGN = 'merge_from_oml:prefer_foreign';
 export const O11_DECLARED = Object.freeze([...O11_METHODS, O11_PREFER_FOREIGN]);
+export const odcDeclared = pack => /^v\d+$/.test(pack?.odcBridge ?? '') && Number(pack.odcBridge.slice(1)) >= 108
+  ? [...ODC_COMMANDS, 'merge:prefer-foreign'] : [...ODC_COMMANDS];
 const MANIFEST_COMMANDS = new Set(['check-base', 'preview', 'merge', 'reconcile-merge', 'publish', 'publish-status', 'create', 'authorize', 'create-app']);
 const LANE_IMAGE = { odc: 'ODCStudio.exe', o11: 'ServiceStudio.exe' };
 const STUDIO_NAME = { odc: 'ODC Studio', o11: 'Service Studio' };

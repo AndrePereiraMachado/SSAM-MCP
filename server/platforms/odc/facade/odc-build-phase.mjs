@@ -10,24 +10,28 @@
 //   Studio lock; the kernel apply of a slot gets the slot's TEMP and TMP (deps.exec) and its resident ODC worker
 //   (deps.worker: slot 0 is the lane's worker, slot i listens on base + i * poolStep).
 // - check: the job preflight of the kernel delivery (C31 of lane mb) when kernel-delivery.mjs has it.
-// phasedDeliver: the delivery, rebuilt once in the same call when the merge proves the open module changed after the
-// capture (BASE_DRIFT, nothing merged): the second build captures the module as it is now (phases.rebased).
+// phasedDeliver: the delivery, redone in the same call (at most REDO_LIMIT times) when its answer wrote nothing and names the
+// same delivery again: BASE_DRIFT, a busy Studio at the merge, PRODUCER_CHANGED (phases.rebased, normalizations; see below).
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import * as kernelDelivery from './kernel-delivery.mjs';
 import { phaseOfCall, phaseGuard, studioMoment, notePhase, StudioTurnRefused, queueWaitMs } from './studio-write-lock.mjs';
 import { pooledBuild, sharedBuildPool, BuildQueueRefused, slotWorkerPort } from './build-pool.mjs';
 import { workspaceRoot } from './workspace.mjs';
 import { hostedContext } from './executor.mjs';
+import { withNormalizationsOf } from './normalizations.mjs';
+import { preparePreferForeign, preferredNote } from './odc-prefer-foreign.mjs';
 
 // reference-producers (fix/system-reference): the listing a delivery reads once when the session offers no producer of the job's name.
 export const BUILD_STUDIO_READS = new Set(['snapshot', 'reference-snapshot', 'reference-producers']);
 const busy = error => error?.code === 'BRIDGE_BUSY' && error?.sent !== true;
 const isFile = file => { try { return fs.statSync(file).isFile(); } catch { return false; } };
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+const preferCall = new AsyncLocalStorage();
 
 // The studio(args, pid) of a phased call (see the header). A refused turn answers its refusal as the step's value.
 export function phasedStudio(studio, { env = process.env, now = Date.now } = {}) {
@@ -41,7 +45,16 @@ export function phasedStudio(studio, { env = process.env, now = Date.now } = {})
         catch (error) { if (!busy(error) || now() + wait > deadline) throw error; await sleep(wait); }
       }
     }
-    try { return await guarded(args, pid, options); }
+    if (args?.[0] === 'merge' && typeof args[1] === 'string') {
+      const preferred = preparePreferForeign(args[1], hostedContext()?.agent);
+      if (preferred && preferCall.getStore()) preferCall.getStore().requested = true;
+    }
+    try {
+      const result = await guarded(args, pid, options);
+      if (args?.[0] === 'merge' && result?.preferForeign === false && preferCall.getStore())
+        preferCall.getStore().requested = false;
+      return result;
+    }
     catch (error) { if (error instanceof StudioTurnRefused) return error.refusal; throw error; }
   };
 }
@@ -118,17 +131,59 @@ export async function afterOdcMerge({ merge, snapshot, module } = {}, deps = {})
   } catch { return null; }
 }
 
-// The delivery of one call (lib.mjs deliver), rebuilt once on BASE_DRIFT (see the header); the build and the receipt go
-// to the call's phases.
-export async function phasedDeliver(args, deps, { deliver }) {
+// F1b (owner 2026-11-02, "o ssam deve permitir que o usuario programe junto com ele"): the person works in the same Studio,
+// so a delivery never stops because the person changed something there. The answers below wrote NOTHING to the module
+// (merged is not true, nothing was sent or the merge refused before it ran) and their own continuation is the same
+// delivery again; this call does it itself, on the module as it is now (a new capture, so the person's edits are the base
+// of the three-way merge), and the answer says so in normalizations (never silent). A cut merge (MODULE_NOT_AT_BASE), a
+// merge that may have run or a security warning are never redone here: they keep their own answer.
+//   BASE_DRIFT (stop 3): the open module changed after the capture: captured again and rebuilt over it.
+//   BRIDGE_BUSY / PIPE_BUSY at the merge, nothing sent (stop 4): the Studio was busy; waited briefly and sent again.
+//   PRODUCER_CHANGED before the merge (stop 5): a producer was published or its references refreshed between the capture
+//     and the merge: the redo builds on the version this call acquired (the continuation drops a stale bound capture).
+export const REDO_LIMIT = 3;
+const REDO_WAIT_MS = [1000, 2000, 4000];
+const redoOf = value => {
+  if (!value || value.ok !== false || value.merged === true) return null;
+  if (value.code === 'BASE_DRIFT' && value.failed === 'merge' && !value.afterCut && value.continuation?.tool !== 'studio_publish') return { rule: 'BASE_DRIFT', wait: false,
+    note: 'The open module changed after the capture (an edit in the Studio); nothing was merged then. SSAM captured the module again, with that edit, and merged this delivery over it.' };
+  // C1 adversarial suite (RESULTADO-C1-ADV.md, P1): the ODC bridge refuses MERGE_CONFLICT (the person changed the element the
+  // delivery writes) before the native merge starts (StartupHook.cs Require(!conflicts), before merge-started.json), so
+  // nothing was written. A new capture holds the person's value as the base, the job written over it holds the delivery's,
+  // and the conflict is gone: the delivery's value wins, and the note says which attempt's match tree names the element.
+  if (value.code === 'MERGE_CONFLICT' && value.failed === 'merge' && value.merged === false && !value.afterCut) return { rule: 'MERGE_CONFLICT', wait: false,
+    note: 'The person changed an element this delivery writes, so the Studio refused that merge (nothing was merged). SSAM captured the module again, with the person\'s change, and merged this delivery over it: the delivery\'s value of that element replaced the person\'s (the match tree of the refused attempt, in from, names it).' };
+  if ((value.code === 'BRIDGE_BUSY' || value.code === 'PIPE_BUSY') && value.failed === 'merge' && value.outcome === 'not-sent') return { rule: 'STUDIO_BUSY', wait: true,
+    note: 'The Studio was busy when the merge was sent (nothing of it ran); SSAM waited and sent this delivery again over the module as it is now.' };
+  if (value.code === 'PRODUCER_CHANGED' && value.failed === 'reference-snapshot' && value.continuation?.tool === 'studio_deliver') return { rule: 'PRODUCER_CHANGED', wait: false,
+    args: value.continuation.arguments, note: 'A producer of this module changed between the capture and the merge (published again, or its references refreshed); nothing was merged then. SSAM built this delivery again on the version it acquired.' };
+  return null;
+};
+// The delivery of one call (lib.mjs deliver), redone on the answers above (at most REDO_LIMIT times); the build and the
+// receipt go to the call's phases, the first redo to phases.rebased.
+export async function phasedDeliver(args, deps, { deliver, sleep: wait = sleep } = {}) {
+  return preferCall.run({ requested: false }, async () => {
   const settle = value => {
     if (Array.isArray(value?.steps) && value.steps.some(s => s?.step === 'build')) notePhase({ built: true });
     if (typeof value?.evidence === 'string' && value.evidence) notePhase({ receipt: path.join(value.evidence, 'deliver-result.json') });
-    return value;
+    const note = preferredNote(value?.merge?.resolvedConflicts);
+    return note ? { ...value, mergeNotes: [...(value.mergeNotes ?? []), note] } : value;
   };
-  const first = settle(await deliver(args, deps));
-  if (!(first && first.ok === false && first.code === 'BASE_DRIFT' && first.failed === 'merge' && first.merged !== true)) return first;
-  notePhase({ rebased: { reason: 'BASE_DRIFT', ...(first.evidence ? { from: first.evidence } : {}) } });
-  const { output: _used, ...again } = args;
-  return settle(await deliver(again, deps));
+  let value = settle(await deliver(args, deps));
+  const notes = [];
+  for (let i = 0; i < REDO_LIMIT; i++) {
+    const redo = redoOf(value);
+    if (!redo) break;
+    if (redo.rule === 'BASE_DRIFT' && preferCall.getStore().requested) break;
+    if (i === 0) notePhase({ rebased: { reason: redo.rule, ...(value.evidence ? { from: value.evidence } : {}) } });
+    notes.push({ rule: redo.rule, at: 'merge', note: redo.note, ...(value.evidence ? { from: value.evidence } : {}) });
+    if (redo.wait) await wait(REDO_WAIT_MS[i] ?? REDO_WAIT_MS.at(-1));
+    const { output: _used, ...again } = args;
+    // PRODUCER_CHANGED: the arguments the refusal itself names (the same job, owners and changes, without the stale capture).
+    const next = redo.args ? { ...again, producers: redo.args.producers } : again;
+    if (redo.args && redo.args.producers === undefined) delete next.producers;
+    value = settle(await deliver(next, deps));
+  }
+  return notes.length ? withNormalizationsOf(value, notes) : value;
+  });
 }

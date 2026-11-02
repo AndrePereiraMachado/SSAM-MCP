@@ -8,6 +8,18 @@ using Xunit;
 // bridges from v106 on only to this agent.
 public class ReconcileMergeTests
 {
+    [Theory]
+    [InlineData("v107", false)]
+    [InlineData("v108", true)]
+    [InlineData("v109", true)]
+    [InlineData("invalid", false)]
+    public void PreferForeignIsDeclaredOnlyByANewPack(string version, bool expected)
+    {
+        var declared = StudioKinds.OdcDeclared(new JsonObject { ["odcBridge"] = version }).ToArray();
+        Assert.Equal(expected, declared.Contains("merge:prefer-foreign"));
+        Assert.Contains("reconcile-merge", declared);
+        Assert.DoesNotContain("merge:prefer-foreign", StudioKinds.OdcCommands);
+    }
     [Fact]
     public void ReconcileMergeIsAnOdcCommandNextToMerge()
     {
@@ -15,7 +27,7 @@ public class ReconcileMergeTests
         var list = StudioKinds.OdcCommandList;
         Assert.Equal(Array.IndexOf(list, "merge") + 1, Array.IndexOf(list, "reconcile-merge"));
         Assert.Equal(list.Length, StudioKinds.OdcCommands.Count);
-        Assert.Equal("0.4.6-native", AgentChannel.AgentVersion); // 0.4.6-native: the hello declares merge_from_oml:prefer_foreign; 0.4.5-native: F3 (integration_import), F4 (o11.xif) and F5 (o11Builds) in one core
+        Assert.Equal("0.4.7-native", AgentChannel.AgentVersion); // 0.4.7-native: the hello declares merge_from_oml:prefer_foreign; 0.4.5-native: F3 (integration_import), F4 (o11.xif) and F5 (o11Builds) in one core
     }
 
     [Theory]
