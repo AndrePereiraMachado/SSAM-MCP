@@ -74,3 +74,36 @@ test('a composite part reached through a junction that leads out is refused befo
   }
   assert.deepEqual(h.calls, []);
 });
+
+// Review B6 (C:\t\r4\REVISAO-REST-HOSTED.md): ONE rule for a file: URL, the safer one. A job took a file: URL inside the
+// workspace as that file while a tool argument refused it; now both refuse it (PATH_OUTSIDE_WORKSPACE), and when the URL
+// names a file of the workspace the fix says the same file as ws:<rel>.
+test('B6: a file: URL is refused alike in a job and at a tool argument; inside the workspace the fix names it as ws:<rel>', async () => {
+  const h = harness();
+  fs.mkdirSync(h.ws('inbox'), { recursive: true }); fs.writeFileSync(h.ws('inbox', 'frag.html'), '<div>x</div>');
+  write(h.ws('o11', 'jobs', 'plain.json'), PLAIN);
+  const { pathToFileURL } = await import('node:url');
+  const inJob = pathToFileURL(h.ws('inbox', 'frag.html')).href;
+  for (const name of TOOLS) {
+    const content = (await h.gate(name)({ ...h.lane(name), job: { ops: [{ op: 'html', parent: '$s', file: inJob }] } })).structuredContent;
+    assert.equal(content.code, 'PATH_OUTSIDE_WORKSPACE', name + ' in a job: ' + JSON.stringify(content).slice(0, 300));
+    assert.match(String(content.fix), /ws:inbox\/frag\.html/, name + ' in a job: ' + content.fix);
+  }
+  const argument = (await h.gate('o11_deliver')({ module: 'M', job: pathToFileURL(h.ws('o11', 'jobs', 'plain.json')).href })).structuredContent;
+  assert.equal(argument.code, 'PATH_OUTSIDE_WORKSPACE');
+  assert.match(String(argument.fix), /ws:o11\/jobs\/plain\.json/, argument.fix);
+  assert.equal(JSON.stringify(argument).includes(h.workspace), false, 'no server path in the answer');
+  assert.deepEqual(h.calls, []);
+});
+
+// Review B5: the call's inputs as the deadline reads them (replayInputs, policy.mjs inputValue) follow the same URL rule as the
+// gate: a URL at a path argument stays as it came, never a relative name under the workspace.
+test('B5: replayInputs keeps a URL at a path argument as it came (the gate refuses it), as resolveValue does', async () => {
+  const { replayInputs } = await import('../hosted/policy.mjs');
+  const h = harness();
+  const context = { hosted: true, workspace: h.workspace, lanes: ['odc', 'o11'], executor: { lists: [] } };
+  for (const job of ['https://example.com/job.json', 'http://127.0.0.1:9/job.json', 'ftp://host/job.json']) {
+    const out = await replayInputs('o11_deliver', { module: 'M', job }, context, { lanes: ['odc', 'o11'] });
+    assert.equal(out.job, job, job + ': ' + JSON.stringify(out));
+  }
+});

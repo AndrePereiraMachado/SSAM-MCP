@@ -60,6 +60,19 @@ const shapedJob = doc => { try { return normalizeCodeOps(doc).job; } catch { ret
 
 export class PathRefusal extends Error { constructor(code, message, value, fix) { super(message); this.code = code; this.value = value; if (fix) this.fix = fix; } }
 export const outside = value => new PathRefusal('PATH_OUTSIDE_WORKSPACE', 'Path outside the workspace of this account: ' + JSON.stringify(String(value).slice(0, 300)), value);
+// fase4-28 r4-rest-hosted (review B6): ONE rule for a file: URL, in a job and at a tool argument alike, the safer one: it is
+// never a path of this account (PATH_OUTSIDE_WORKSPACE). Before, a job took a file: URL inside the workspace as that file
+// while a tool argument refused it. When the URL names a file of the visible workspace the fix names it as ws:<rel>.
+export const FILE_URL = /^file:/i;
+export function fileUrlRefusal(value, workspace) {
+  let abs = null;
+  try { abs = fileURLToPath(String(value)); } catch { abs = null; }
+  const rel = abs && workspace && insideVisible(workspace, abs) ? path.relative(workspace, path.resolve(abs)).split(path.sep).join('/') : null;
+  const error = outside(value);
+  error.fix = rel ? 'name the same file as ws:' + rel + ' (a file: URL is no path of this account)'
+    : 'a file: URL is no path of this account: name a file of the workspace as ws:<rel>, or put the user\'s file in the agent inbox folder and pass agent:inbox/<file>';
+  return error;
+}
 
 export const JOB_TOOLS = Object.freeze(['o11_deliver', 'studio_deliver', 'ssam_job', 'o11_job']);
 export const MAX_JOB_BYTES = 16 * 1024 * 1024;
@@ -401,10 +414,8 @@ class JobWalk {
 
   // A path value -> its absolute workspace path, or null after a refusal.
   async path(value, kind, { mode, dir, pointer }) {
-    let text = value;
-    if (/^file:/i.test(text)) {
-      try { text = fileURLToPath(text); } catch { return this.refuse(outside(value), pointer); }
-    }
+    const text = value;
+    if (FILE_URL.test(text)) return this.refuse(fileUrlRefusal(value, this.workspace), pointer);
     try {
       if (text.startsWith('ws:') || text.startsWith('agent:') || absoluteText(text) || mode === 'inline') return await this.resolve(text);
     } catch (error) { return this.refuse(error, pointer); }

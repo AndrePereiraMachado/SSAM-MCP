@@ -25,6 +25,7 @@ import { spawn } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { ODC_BRIDGE } from './fixtures/odc-bridge-version.mjs';
+import { watchNetwork } from './fixtures/no-network.mjs';
 
 const facade = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
 const repo = path.resolve(facade, '..', '..', '..');
@@ -143,13 +144,14 @@ for (const backend of [undefined, 'o11-11.55.92-odc-1.7.28']) {
         assert.notEqual(connected?.ok, false, JSON.stringify(connected).slice(0, 600));
 
         // No request leaves the server process while the job runs (the kernel never reads the network either).
-        const original = globalThis.fetch;
-        const asked = [];
-        globalThis.fetch = async (url, options) => { const text = String(url); if (text.startsWith(`http://127.0.0.1:${port}/`)) return original(url, options); asked.push(text); throw new Error('the network was asked: ' + text); };
+        // Review B4: fetch, node:http/https, net and DNS are watched; only this machine's loopback (the server, the agent's
+        // channel and the fake bridge in this test) and named pipes pass.
+        const watch = watchNetwork({ allow: t => /^(https?:\/\/)?(127\.0\.0\.1|localhost|\[::1\]|::1)([:/]|$)/i.test(t) });
+        const asked = watch.asked;
         const started = Date.now();
         let answer;
         try { answer = await call('o11_deliver', { module: O11_MODULE.name, job: RUN_JOB, checks: RUN_CHECKS, authorize: 'pode entregar a integracao REST no Headless_CS' }); }
-        finally { globalThis.fetch = original; }
+        finally { watch.restore(); }
         const ms = Date.now() - started;
         const shown = JSON.stringify(answer);
         const work = path.join(workspace, 'o11', 'work', 'deliver');

@@ -416,11 +416,18 @@ public static partial class JobRunner
                 receipt["verifyRan"] = true;
                 receipt["phases"] = preflight == null ? new JsonArray("base", "apply", "verify") : new JsonArray("preflight", "base", "apply", "verify");
             }
-            if (integration.Count == 0 && receipt.Count == 0) return answer;
+            if (integration.Count == 0 && entityActions.Count == 0 && receipt.Count == 0) return answer;
             var withIntegration = System.Text.Json.JsonSerializer.SerializeToNode(answer, Json.Compact)!.AsObject();
             if (integration.Count > 0) withIntegration["integration"] = integration;
             if (entityActions.Count > 0) withIntegration["entityActions"] = entityActions;
-            foreach (var field in receipt.ToArray()) { receipt.Remove(field.Key); withIntegration[field.Key] = field.Value; }
+            // A receipt field never replaces a field of the result (blind test F2, 2026-11-02: a receipt field named entityActions,
+            // {created: <count>}, replaced the reports of the op, and the delivery answer said created: 0 over 8 created actions).
+            foreach (var field in receipt.ToArray())
+            {
+                receipt.Remove(field.Key);
+                if (withIntegration.ContainsKey(field.Key)) throw new InvalidOperationException($"the receipt field '{field.Key}' has the name of a field of the apply result (an SSAM defect: name the receipt field apart)");
+                withIntegration[field.Key] = field.Value;
+            }
             return withIntegration;
         }
         finally

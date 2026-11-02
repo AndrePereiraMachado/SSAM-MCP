@@ -18,6 +18,7 @@ import { describeGenerator, generatorFor, offered, hostedGeneratorMode } from '.
 import { HOSTED_INSTRUCTIONS, HOSTED_INSTRUCTIONS_CODE_OFF } from '../ssam.mjs';
 import { fakeAgentLink, hostedDirs, cleanupHostedDirs } from './fixtures/fake-agent-link.mjs';
 import { portuguese } from './fixtures/portuguese.mjs';
+import { watchNetwork } from './fixtures/no-network.mjs';
 
 test.after(cleanupHostedDirs);
 const TOOLS = ['o11_deliver', 'studio_deliver', 'ssam_job', 'o11_job'];
@@ -54,12 +55,11 @@ function harness({ connected = true } = {}) {
   return { ...dirs, link, executor, context, calls, pulls, gate, lane, ws };
 }
 // No request leaves this process while fn runs: the global fetch records and fails.
+// No request leaves this process while fn runs (review B4: fetch, node:http/https, net and DNS; fixtures/no-network.mjs).
 async function noNetwork(fn) {
-  const original = globalThis.fetch;
-  const asked = [];
-  globalThis.fetch = async url => { asked.push(String(url)); throw new Error('network'); };
-  try { await fn(); } finally { globalThis.fetch = original; }
-  return asked;
+  const watch = watchNetwork();
+  try { await fn(); } finally { watch.restore(); }
+  return watch.asked;
 }
 const sampleRefusal = (result, label) => {
   const value = result.structuredContent;

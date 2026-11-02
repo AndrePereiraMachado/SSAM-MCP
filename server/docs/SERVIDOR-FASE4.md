@@ -749,7 +749,9 @@ fam-deps, CX1-CX5, CX7, CX9, CX10, X1, os geradores atrás da aprovação e as c
 3. **Ajustes hospedados.**
    - `ssam_code` indisponível (`SSAM_CODE_HOSTED_PENDING`), fora das instruções hospedadas.
    - Geradores pendentes recusados no portão (`GENERATOR_PENDING`, chave `HOSTED_GENERATOR_OPS`).
+     Desde fase4-28 r4-rest-hosted, só os que não têm modo hospedado: os três rodam chamados pelo nome (`generators.mjs`, campo `hosted`).
    - Amostra do `rest-consume` pelo cliente só-público.
+     Desde fase4-28 r4-rest-hosted, nunca no hospedado: sem `sample`, `DOCUMENT_FETCH_HOSTED_REFUSED`.
    - Componentes do ambiente desligados (`COMPONENTS_HOSTED_PENDING`).
    - `hosted/tools.json`: 96 ferramentas (23 / 33 / 22 / 18).
    - Guarda de nomes de cliente: 0 achados (comentários anonimizados; corpora de teste, `tools/benchmark` e 3 docs do

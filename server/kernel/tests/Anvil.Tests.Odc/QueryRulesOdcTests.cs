@@ -36,5 +36,8 @@ public sealed class QueryRulesOdcTests
     [Fact] public void ALegacyLoopIsAHighWarningNotARefusal() => Run(QueryRulesScenarios.ALegacyLoopIsAHighWarningNotARefusal);
     [Fact] public void RelatedAggregatesUsedTogetherAreAHighWarning() => Run(QueryRulesScenarios.RelatedAggregatesUsedTogetherAreAHighWarning);
     [Fact] public void UnrelatedAggregatesAreNotAWarning() => Run(QueryRulesScenarios.UnrelatedAggregatesAreNotAWarning);
+    [Fact] public void AReferenceCheckBesideTheStoredRecordIsNotAWarning() => Run(QueryRulesScenarios.AReferenceCheckBesideTheStoredRecordIsNotAWarning);
+    [Fact] public void TheEntityActionsReceiptReportsTheActionsItCreated() => Run(QueryRulesScenarios.TheEntityActionsReceiptReportsTheActionsItCreated);
+    [Fact] public void TheGeneratedSaveIsNoMergeCandidateAndTheRemoveStaysOne() => Run(QueryRulesScenarios.TheGeneratedSaveIsNoMergeCandidateAndTheRemoveStaysOne);
     [Fact] public void ConsolidationRequiresSemanticReview() => Run(QueryRulesScenarios.ConsolidationNeverRewritesIndependentPagesOrInterveningReads);
 }

@@ -22,6 +22,7 @@ import { wrapHostedTool } from '../hosted/policy.mjs';
 import { runWithExecutor } from '../executor.mjs';
 import { prepareIntegrationJob } from '../integration-documents.mjs';
 import { fakeAgentLink, hostedDirs, cleanupHostedDirs } from './fixtures/fake-agent-link.mjs';
+import { watchNetwork } from './fixtures/no-network.mjs';
 
 test.after(cleanupHostedDirs);
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -90,9 +91,8 @@ for (const lane of ['o11', 'odc']) {
     const handled = [];
     const wrapped = wrapHostedTool('ssam_job', { inputSchema: {} }, async args => { handled.push(args); return { content: [{ type: 'text', text: '{}' }], structuredContent: { ok: true } }; },
       { context: h.context, link: h.link, lanes: h.context.lanes, run: (ctx, fn) => fn(), waitMs: 10 });
-    const original = globalThis.fetch;
-    const asked = [];
-    globalThis.fetch = async url => { asked.push(String(url)); throw new Error('the network was asked: ' + url); };
+    const watch = watchNetwork(); // review B4: fetch, node:http/https, net and DNS
+    const asked = watch.asked;
     try {
       // One job with the five APIs (one op per host), as a model writes it.
       const job = { ops: Object.values(APIS) };
@@ -126,7 +126,7 @@ for (const lane of ['o11', 'odc']) {
         verdict.ms = Date.now() - started;
       }
       verdicts.push(verdict);
-    } finally { globalThis.fetch = original; }
+    } finally { watch.restore(); }
     assert.deepEqual(asked, [], 'no request left the server');
   });
 }
@@ -159,9 +159,8 @@ for (const lane of ['o11', 'odc']) {
     const handled = [];
     const wrapped = wrapHostedTool('ssam_job', { inputSchema: {} }, async args => { handled.push(args); return { content: [{ type: 'text', text: '{}' }], structuredContent: { ok: true } }; },
       { context: h.context, link: h.link, lanes: h.context.lanes, run: (ctx, fn) => fn(), waitMs: 10 });
-    const original = globalThis.fetch;
-    const asked = [];
-    globalThis.fetch = async url => { asked.push(String(url)); throw new Error('the network was asked: ' + url); };
+    const watch = watchNetwork(); // review B4: fetch, node:http/https, net and DNS
+    const asked = watch.asked;
     try {
       for (const [id, file, base] of JOB_ONLY[lane]) {
         const { base: _, description: __, ...job } = JSON.parse(fs.readFileSync(path.join(kernel, 'tests', lane === 'o11' ? 'jobs' : 'jobs-odc', file), 'utf8'));
@@ -177,7 +176,7 @@ for (const lane of ['o11', 'odc']) {
         }
         verdicts.push(verdict);
       }
-    } finally { globalThis.fetch = original; }
+    } finally { watch.restore(); }
     assert.deepEqual(asked, [], 'no request left the server');
   });
 }

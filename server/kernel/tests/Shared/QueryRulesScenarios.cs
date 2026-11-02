@@ -177,6 +177,65 @@ public static class QueryRulesScenarios
         }
     }
 
+    public static void AReferenceCheckBesideTheStoredRecordIsNotAWarning(string dir, string fixture)
+    {
+        // Blind test F2 (2026-11-02): the stored record by its id and a check that the NEW reference exists are filtered by
+        // two independent values; a join over QrLine.OrderId -> QrOrder would read the stored line's order, another record.
+        var job = $$$"""
+            {"base":"{{{fixture}}}","ops":[{{{Spec}}},
+             {"op":"logic","data":{"actions":[{"name":"QrSaveCheck","inputs":[{"name":"LineId","type":"QrLine Identifier"},{"name":"NewOrderId","type":"QrOrder Identifier"}],
+               "outputs":[{"name":"Ok","type":"Boolean"}],"steps":[
+               {"get":"QrLine","as":"ReadQrLine","where":"QrLine.Id = LineId"},
+               {"get":"QrOrder","as":"CheckOrderId","where":"QrOrder.Id = NewOrderId"},
+               {"assign":{"Ok":"not ReadQrLine.List.Empty and not CheckOrderId.List.Empty"}}]}]}}]}
+            """;
+        var result = Run(dir, "qr-reference-check", job);
+        Assert.True(result["accepted"]!.GetValue<bool>(), result["policyMessages"]?.ToJsonString() + result["details"]);
+        Assert.DoesNotContain(High(result), w => w!["code"]!.GetValue<string>() == AggregateConsolidationRule.Code);
+        // The same two reads keyed by one value (the order and the lines of that order) stay a candidate.
+        var keyed = Run(dir, "qr-reference-keyed", job.Replace("QrLine.Id = LineId", "QrLine.OrderId = NewOrderId"));
+        Assert.Single(High(keyed), w => w!["code"]!.GetValue<string>() == AggregateConsolidationRule.Code);
+        // A dependent filter (the order of the line read) stays a candidate.
+        var dependent = Run(dir, "qr-reference-dependent", job.Replace("QrOrder.Id = NewOrderId", "QrOrder.Id = ReadQrLine.List.Current.QrLine.OrderId"));
+        Assert.Single(High(dependent), w => w!["code"]!.GetValue<string>() == AggregateConsolidationRule.Code);
+    }
+
+    private const string LibraryDdl = "/// A library author.\\ncreate entity Author public label Name (\\n  Id Long Integer identifier auto required,\\n  Name Text(120) required,\\n  Country Text(60)\\n);\\n\\n/// A book written by an author.\\ncreate entity Book public label Title (\\n  Id Long Integer identifier auto required,\\n  Title Text(200) required,\\n  AuthorId Author Identifier required references Author on delete Protect,\\n  PublishedOn Date,\\n  Pages Integer\\n);\\n";
+
+    private static JsonNode LibraryEntityActions(string dir, string fixture, string name) =>
+        Run(dir, name, $$$"""
+            {"base":"{{{fixture}}}","ops":[{"op":"spec","data":{"ddl":"{{{LibraryDdl}}}"}},
+             {"op":"entity-actions","data":{"entities":["Author","Book"],"expose":{"server":true} } }]}
+            """);
+
+    public static void TheEntityActionsReceiptReportsTheActionsItCreated(string dir, string fixture)
+    {
+        // Blind test F2 (2026-11-02): a receipt field of the same name ({created: <count>}) replaced the op's report in the
+        // result, and the delivery answer said created: 0 over the 8 actions the op created.
+        var result = LibraryEntityActions(dir, fixture, "ea-receipt");
+        Assert.True(result["accepted"]!.GetValue<bool>(), result["policyMessages"]?.ToJsonString() + result["details"]);
+        var report = Assert.Single(result["entityActions"]!.AsArray())!.AsObject();
+        var created = Assert.IsType<JsonArray>(report["created"]);
+        Assert.Equal(new[] { "GetAuthorById", "GetAuthorList", "GetBookById", "GetBookList", "RemoveAuthor", "RemoveBook", "SaveAuthor", "SaveBook" },
+            created.Select(c => c!["name"]!.GetValue<string>()).Order(StringComparer.Ordinal).ToArray());
+        Assert.All(created, c => Assert.False(string.IsNullOrEmpty(c!["key"]?.ToString())));
+        Assert.Equal(new[] { "Author", "Book" }, report["entities"]!.AsArray().Select(e => e!.GetValue<string>()).Order(StringComparer.Ordinal).ToArray());
+    }
+
+    public static void TheGeneratedSaveIsNoMergeCandidateAndTheRemoveStaysOne(string dir, string fixture)
+    {
+        // Save<E>: the stored record and the check of the new reference (independent values): no warning. Remove<E>: the record
+        // and the records that still reference it, both by the same Id: a real candidate (a Left join of Book on Author reads
+        // both), the shape of RelatedAggregatesUsedTogetherAreAHighWarning, so it stays.
+        var result = LibraryEntityActions(dir, fixture, "ea-mergeable");
+        Assert.True(result["accepted"]!.GetValue<bool>(), result["policyMessages"]?.ToJsonString() + result["details"]);
+        var mergeable = High(result).Where(w => w!["code"]!.GetValue<string>() == AggregateConsolidationRule.Code).ToList();
+        Assert.DoesNotContain(mergeable, w => w!["owner"]!.GetValue<string>() == "SaveBook");
+        var remove = Assert.Single(mergeable)!;
+        Assert.Equal("RemoveAuthor", remove["owner"]!.GetValue<string>());
+        Assert.Contains("Book.AuthorId -> Author", remove["relations"]!.AsArray().Select(r => r!.GetValue<string>()));
+    }
+
     public static void UnrelatedAggregatesAreNotAWarning(string dir, string fixture)
     {
         var job = $$$"""

@@ -42,7 +42,7 @@ import { localUploadEnabled, uploadLocalFile } from './local-upload.mjs';
 import { scrubDiscover, scrubEvidence, thirdPartyJobs } from './evidence.mjs';
 import { agentReadable, agentSegments, insideVisible } from './mirror.mjs';
 import { agentPath, outsideWorkspaceRefusal, isAgentMachinePath } from '../agent-paths.mjs';
-import { CODE_TOOL, JOB_TOOLS, JobTextError, PathRefusal, confineJobs, jobTextPointers, namesGenerator, namesPrototype, namesVerifiedPatch, outside, parseJobTexts, restConsumeUnsampled } from './job-paths.mjs';
+import { CODE_TOOL, JOB_TOOLS, JobTextError, PathRefusal, confineJobs, jobTextPointers, namesGenerator, namesPrototype, namesVerifiedPatch, outside, parseJobTexts, restConsumeUnsampled, FILE_URL, fileUrlRefusal } from './job-paths.mjs';
 import { generatorApproval, hostedGeneratorMode, offered } from '../generators.mjs';
 import { holdPointers, pointersOf, scrubText } from '../exposure.mjs';
 import { hostedCatalog } from './served.mjs';
@@ -212,7 +212,7 @@ function jobPathRefused(error, agentRoot, shown = text => text) {
   const pointer = error.pointer ?? null;
   if (error.code !== 'PATH_OUTSIDE_WORKSPACE') return { ...pathRefused(error.code, shown(error.message)), ...(pointer ? { pointer } : {}), ...(error.fields ?? {}), ...(error.fix ? { fix: error.fix } : {}) };
   // a9: generic, as outsideWorkspaceRefusal: the path is never said back (the gate answers before any presenter).
-  return { ok: false, ...outsideWorkspaceRefusal(error.value, { agentRoot }), pointer,
+  return { ok: false, ...outsideWorkspaceRefusal(error.value, { agentRoot }), ...(error.fix ? { fix: error.fix } : {}), pointer,
     error: 'The job names, at ' + pointer + ', a path outside your own workspace. Files a job names (base, composite parts, a reference producer, an html file, '
       + 'a WSDL/OpenAPI document, a prototype folder) must be ws:<rel> or agent:inbox/<file>; nothing was read there and nothing ran.' };
 }
@@ -268,6 +268,9 @@ export const GENERATOR_TOOLS = JOB_TOOLS;
 export { namesGenerator, restConsumeUnsampled };
 // Whether the gate refuses this generator id ('unreadable': a part it could not read whole, fails closed).
 export const pendingGenerator = id => id === 'unreadable' || (typeof id === 'string' && !offered(id) && hostedGeneratorMode(id) === null);
+// The calls whose job the sample rule reads: the four job tools, ssam_code, and ssam_reference check-job (review B1: every job
+// pointer, jobTextPointers; a check-job without samples got the kernel's local advice to deliver so the url is sampled).
+export const samplesAsked = (name, args) => GENERATOR_TOOLS.includes(name) || name === CODE_TOOL || (name === 'ssam_reference' && args?.kind === 'check-job');
 // rest-consume in its hosted input mode: the GET methods without a sample a call names, refused before anything runs, with
 // the family code of the documents (DOCUMENT_FETCH_HOSTED_REFUSED, M3 of the F3 review: a hosted server never fetches what a
 // job names), cause REST_CONSUME_SAMPLE_MISSING.
@@ -456,6 +459,7 @@ async function resolveValue(value, role, lane, context, agentRoot = null) {
   }
   // fase4-28 r4-rest-hosted (blind test): a URL of any scheme (file:, http:, ...) is no path of this account: it names a
   // file or a resource elsewhere, never a relative name under the workspace (a file: URL was taken as ws:o11/file:/...).
+  if (FILE_URL.test(value)) throw fileUrlRefusal(value, workspace);
   if (URL_SCHEME.test(value)) throw outside(value);
   // Relative: inputs under ws:<lane>/, outputs under ws:odc/lab/ (ODC) or ws:o11/ (O11). A tool without a lane takes
   // ws:<rel> as given (it must start with odc/, o11/ or inbox/).
@@ -521,6 +525,8 @@ async function inputValue(value, role, lane, context, agentRoot) {
   const workspace = path.resolve(context.workspace);
   const mapped = isAgentMachinePath(value, agentRoot) ? agentPath(value, { agentRoot }) : null;
   if (mapped) value = mapped;
+  // Review B5: the URL rule of resolveValue (a URL of any scheme is no path of this account; the gate refuses it).
+  if (!value.startsWith('ws:') && !value.startsWith('agent:') && !value.startsWith('local:') && URL_SCHEME.test(value)) return null;
   if (value.startsWith('ws:') || value.startsWith('agent:')) {
     const agent = value.startsWith('agent:');
     const parsed = agentSegments('agent:' + value.slice(agent ? 6 : 3));
@@ -587,7 +593,7 @@ export function refusalBeforeAgent(name, args, { entry, config = null, raw = arg
     if (generator) return { refusal: generatorUnavailable(name, lane, generator) };
   }
   // r4-rest-hosted: rest-consume's hosted input mode, whatever the switch (the server never fetches a url of a job).
-  if ((GENERATOR_TOOLS.includes(name) || name === CODE_TOOL) && hasArgs) {
+  if (samplesAsked(name, args) && hasArgs) {
     const unsampled = restConsumeUnsampled(args);
     if (unsampled.length) return { refusal: restConsumeSampleRequired(name, lane, unsampled) };
   }
@@ -953,7 +959,7 @@ export function wrapHostedTool(name, config, handler, { context, link = context?
           const role = (entry.paths?.out ?? []).includes(error.pointer) ? 'out' : 'in';
           const agentRoot = info?.agentRoot ?? null;
           return refusal({ ok: false, ...outsideWorkspaceRefusal(error.value, { agentRoot, role, ...(error.pointer ? { tool: name, args, pointer: error.pointer,
-            refused: value => pathOnlyWhen(name, entry, error.pointer, args, value) && outsideValue(value, role, lane, context, agentRoot) } : {}) }) });
+            refused: value => pathOnlyWhen(name, entry, error.pointer, args, value) && outsideValue(value, role, lane, context, agentRoot) } : {}) }), ...(error.fix ? { fix: error.fix } : {}) });
         }
         // (a9 follow-up, review vps-a9 L1: a copy from the agent that failed names its destination in the workspace)
         return refusal({ ...pathRefused(error.code, present.string(String(error.message ?? ''))), ...(error.fields ?? {}) });
@@ -963,7 +969,7 @@ export function wrapHostedTool(name, config, handler, { context, link = context?
       // (directly, or a part the gate cannot read whole), then every path inside them confined and, inline, rewritten to
       // the absolute workspace path the kernel reads (job-paths.mjs). Before the handler and any capture.
       const jobs = await confineJobs(name, resolved, { workspace: context.workspace, prototype: refusesPrototype,
-        generator: refusesGenerators ? pendingGenerator : null, samples: GENERATOR_TOOLS.includes(name) || name === CODE_TOOL, resolve: value => resolveValue(value, 'in', lane, context, info?.agentRoot ?? null) });
+        generator: refusesGenerators ? pendingGenerator : null, samples: samplesAsked(name, resolved), resolve: value => resolveValue(value, 'in', lane, context, info?.agentRoot ?? null) });
       if (jobs.prototype) return refusal(prototypeUnavailable(name, lane));
       if (jobs.refusal) {
         const answer = jobPathRefused(jobs.refusal, info?.agentRoot ?? null, text => present.string(String(text ?? '')));

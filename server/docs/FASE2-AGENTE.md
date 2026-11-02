@@ -781,7 +781,9 @@ Regras novas do marco-a5 no portão e na costura:
   recusados no portão das 4 ferramentas de job e entrega, antes do agente e de qualquer captura: `HOSTED_UNAVAILABLE`,
   `cause:"GENERATOR_PENDING"`, `policy:"HOSTED_GENERATOR_OPS"`. A chave é uma só (`HOSTED_GENERATOR_OPS = 'refuse'`). Um
   gerador que o dono aprovar (`generators.mjs`) passa como qualquer op.
+  **Atualizado em fase4-28 r4-rest-hosted:** cada gerador tem um modo hospedado (`generators.mjs`, campo `hosted`) e roda chamado pelo nome nesse modo: `entity-actions` e `screen` com `data.generate` em `job-only`, `rest-consume` em `inline-samples`. Só um gerador com modo `null` continua recusado com `GENERATOR_PENDING`.
 - A amostra GET do `rest-consume` usa o cliente só-público (`hosted/public-fetch.mjs`), nunca o `fetch` global do servidor.
+  **Atualizado em fase4-28 r4-rest-hosted:** no hospedado a amostra nunca é buscada, nem pelo cliente só-público. Um GET sem `sample` responde `DOCUMENT_FETCH_HOSTED_REFUSED` (causa `REST_CONSUME_SAMPLE_MISSING`) no portão e no passo de documentos, antes de DNS ou conexão.
 - O mapa `handlers` do `ssam.mjs` (por onde o `ssam_code write` entrega) guarda o handler com o portão.
 - Os componentes do ambiente no `ssam_discover` O11 ficam desligados (`HOSTED_UNAVAILABLE`, `cause:"COMPONENTS_HOSTED_PENDING"`);
   o pacote de trabalho não lê o cache de produtores do servidor.

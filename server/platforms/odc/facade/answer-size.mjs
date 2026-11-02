@@ -535,7 +535,10 @@ function fitAnswerImpl(tool, args = {}, full, { root, directory, budgets = ANSWE
   // (o11-cycle.mjs studioWritesOf), is never dropped: the person always sees that the Studio changed the module.
   const protectedKeys = new Set(['ok', 'result', 'code', 'error', 'module', 'nextBasedOn', 'continuation', 'highWarnings', 'removed', 'removedTotal', 'counts', 'problems', 'grouped', 'verifiedPatch', 'patchIn', 'studioWrites', 'errorDetail',
     // The generators' receipts, compacted above, and the launch of a plan.
-    ...(kind === 'receipt' ? ['integration', 'entityActions'] : []), ...(kind === 'plan' ? ['lane', 'action', 'planId', 'dir', 'data', 'batches', 'final', 'launch'] : [])]);
+    ...(kind === 'receipt' ? ['integration', 'entityActions'] : []), ...(kind === 'plan' ? ['lane', 'action', 'planId', 'dir', 'data', 'batches', 'final', 'launch'] : []),
+    // fase4-28 r4-rest-hosted (review M1): the generators asked about BY NAME (tool-routing.mjs discoverAll took their room from
+    // the budget) are the answer to the question; the hosted block, which teaches the inline "sample", is larger than the local one.
+    ...(kind === 'discoverFirst' ? ['generators'] : [])]);
   if (kind !== 'read' && !expanded) {
     for (const key of Object.keys(value).filter(k => !protectedKeys.has(k) && !contentKeys.includes(k) && !/(?:Total|Count)$/.test(k)).sort((a, b) => bytes(value[b]) - bytes(value[a]))) {
       if (!tooLarge()) break;

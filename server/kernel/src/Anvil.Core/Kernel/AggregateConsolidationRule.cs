@@ -37,15 +37,99 @@ internal sealed record AggregateShape(IObjectSignature Node, string Name, IReadO
     internal static string Text(object? value) => value switch { null => "", IExpression e => (e.Text ?? "").Trim(), _ => (value.ToString() ?? "").Trim() };
 
     /// <summary>The reference attribute from one entity to the other (either direction), or null.</summary>
-    public static Link? Relation(Entity a, Entity b)
+    public static Link? Relation(Entity a, Entity b) => Relations(a, b).FirstOrDefault();
+
+    /// <summary>Every reference attribute from one entity to the other (either direction).</summary>
+    public static IEnumerable<Link> Relations(Entity a, Entity b)
     {
         foreach (var (owner, target) in new[] { (a, b), (b, a) })
             if (ModelHost.Prop(owner.Model, "Attributes") is System.Collections.IEnumerable attributes)
                 foreach (var attribute in attributes)
                     if (ModelHost.Prop(attribute, "DataType") is OutSystems.Model.Types.IIdentifierType { Entity: { } points }
                         && ((points as IObjectSignature)?.ObjectKey?.ToString() ?? "name:" + TypeResolver.Name(points)) == target.Key)
-                        return new(owner.Name, TypeResolver.Name(attribute) ?? "?", target.Name, ModelHost.Prop(attribute, "IsMandatory") is true);
-        return null;
+                        yield return new(owner.Name, TypeResolver.Name(attribute) ?? "?", target.Name, ModelHost.Prop(attribute, "IsMandatory") is true);
+    }
+
+    /// <summary>The name of an entity's identifier attribute (Id when the model does not say).</summary>
+    public static string IdentifierOf(Entity e) => ModelHost.Prop(e.Model, "IdentifierAttribute") is { } id && TypeResolver.Name(id) is { Length: > 0 } name ? name : "Id";
+
+    /// <summary>The values the filter conjuncts of this aggregate equate Entity.Attribute to (`E.A = v` or `v = E.A`), normalized.</summary>
+    public IReadOnlyList<string> Pins(string entity, string attribute)
+    {
+        var column = entity + "." + attribute;
+        var values = new List<string>();
+        foreach (var conjunct in Filters.SelectMany(Conjuncts))
+        {
+            var at = Equality(conjunct);
+            if (at < 0) continue;
+            var left = Normal(conjunct[..at]); var right = Normal(conjunct[(at + 1)..]);
+            if (left.Equals(column, StringComparison.OrdinalIgnoreCase)) values.Add(right);
+            else if (right.Equals(column, StringComparison.OrdinalIgnoreCase)) values.Add(left);
+        }
+        return values;
+    }
+
+    /// <summary>An expression as compared here: no outer parentheses, no blanks, lower case.</summary>
+    public static string Normal(string text) => Regex.Replace(Unwrap(text.Trim()), @"\s+", "").ToLowerInvariant();
+
+    private static string Unwrap(string t)
+    {
+        while (t.Length > 1 && t[0] == '(' && t[^1] == ')' && Closes(t) == t.Length - 1) t = t[1..^1].Trim();
+        return t;
+    }
+
+    // The index of the parenthesis that closes the one at 0 (outside quotes), or -1.
+    private static int Closes(string t)
+    {
+        var depth = 0; var quoted = false;
+        for (var i = 0; i < t.Length; i++)
+        {
+            var c = t[i];
+            if (c == '"') quoted = !quoted;
+            else if (quoted) continue;
+            else if (c == '(') depth++;
+            else if (c == ')' && --depth == 0) return i;
+        }
+        return -1;
+    }
+
+    // The top-level `and` parts of a condition (outside parentheses and quotes).
+    private static IEnumerable<string> Conjuncts(string condition)
+    {
+        var t = Unwrap(condition.Trim());
+        var depth = 0; var quoted = false; var start = 0;
+        for (var i = 0; i < t.Length; i++)
+        {
+            var c = t[i];
+            if (c == '"') quoted = !quoted;
+            else if (quoted) continue;
+            else if (c == '(') depth++;
+            else if (c == ')') depth--;
+            else if (depth == 0 && i > 0 && char.IsWhiteSpace(t[i - 1]) && i + 4 <= t.Length
+                && string.Compare(t, i, "and", 0, 3, StringComparison.OrdinalIgnoreCase) == 0 && char.IsWhiteSpace(t[i + 3]))
+            {
+                yield return Unwrap(t[start..i].Trim());
+                start = i + 3;
+            }
+        }
+        yield return Unwrap(t[start..].Trim());
+    }
+
+    // The index of the single top-level `=` of an equality (not <=, >=, <>), or -1.
+    private static int Equality(string conjunct)
+    {
+        var depth = 0; var quoted = false; var found = -1;
+        for (var i = 0; i < conjunct.Length; i++)
+        {
+            var c = conjunct[i];
+            if (c == '"') quoted = !quoted;
+            else if (quoted) continue;
+            else if (c == '(') depth++;
+            else if (c == ')') depth--;
+            else if (depth == 0 && c is '<' or '>') return -1;
+            else if (depth == 0 && c == '=') { if (found >= 0) return -1; found = i; }
+        }
+        return found;
     }
 }
 
@@ -96,6 +180,22 @@ public sealed partial class ModelSession
         return node.Parent as IObjectSignature;
     }
 
+    /// <summary>A link between x (a source of a) and y (a source of b) that the filters do not follow: the target's identifier is
+    /// equated to a value that is neither the owner side's reference attribute value nor read from the owner aggregate, so no
+    /// join over the link reads the same rows. Unpinned sources, a dependent filter and both ends equated to one value (the
+    /// record and the records that reference it) keep the warning.</summary>
+    private static bool Independent(AggregateShape a, AggregateShape b, AggregateShape.Link link, AggregateShape.Entity x, AggregateShape.Entity y)
+    {
+        if (x.Name.Equals(y.Name, StringComparison.OrdinalIgnoreCase)) return false;
+        var (ownerShape, targetShape, targetEntity) = x.Name.Equals(link.Owner, StringComparison.OrdinalIgnoreCase) ? (a, b, y) : (b, a, x);
+        var targetKeys = targetShape.Pins(link.Target, AggregateShape.IdentifierOf(targetEntity));
+        if (targetKeys.Count == 0) return false;
+        var readsOwner = new Regex(@"(?<![\w.])" + Regex.Escape(ownerShape.Name.ToLowerInvariant()) + @"\.");
+        if (targetKeys.Any(k => readsOwner.IsMatch(k))) return false;
+        var ownerKeys = ownerShape.Pins(link.Owner, link.Attribute);
+        return !targetKeys.Any(ownerKeys.Contains);
+    }
+
     private void Consolidate(IObjectSignature owner, JsonArray ops, Func<IObjectSignature, bool> inJob)
     {
         // The aggregates of the owner: flow nodes of an action, or the screen aggregates of a screen/block (not nested owners).
@@ -131,7 +231,12 @@ public sealed partial class ModelSession
                 var a = shapes[i]; var b = shapes[j];
                 if (!used.Contains(a) || !used.Contains(b)) continue;
                 if (a.Entities[0].Key == b.Entities[0].Key) { edges.Add((a, b, null)); continue; }
-                var link = a.Entities.SelectMany(x => b.Entities.Select(y => AggregateShape.Relation(x, y))).FirstOrDefault(l => l != null);
+                // A reference between the sources relates the two only when their filters follow it (blind test F2, 2026-11-02:
+                // Save<E> of entity-actions checks that the NEW reference exists, Author.Id = BookRecord.AuthorId, and reads the
+                // STORED record, Book.Id = BookRecord.Id; a join over Book.AuthorId -> Author reads the stored book's author,
+                // another record, so the two are no candidates).
+                var link = a.Entities.SelectMany(x => b.Entities.SelectMany(y => AggregateShape.Relations(x, y).Select(l => (Link: l, X: x, Y: y))))
+                    .Where(l => !Independent(a, b, l.Link, l.X, l.Y)).Select(l => l.Link).FirstOrDefault();
                 if (link != null) edges.Add((a, b, link));
             }
         if (edges.Count == 0) return;

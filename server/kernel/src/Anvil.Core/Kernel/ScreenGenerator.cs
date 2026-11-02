@@ -236,8 +236,10 @@ public static class ScreenGenerator
         if (module.Runtime == "Library" && request.Entities.Count > 0)
             Problem(pointer + "/generate/entities", "GEN_SCREEN_RUNTIME", $"module {module.Name} is a library: it holds blocks, not screens",
                 "patterns:true here (the reusable blocks), and the screens in the app that references it");
+        // A module that cannot hold screens (a Service or Traditional module) is refused here, before any plan: the layout and
+        // the blocks a plan reads are not there, and the advice of their problems (create a layout) would be wrong for it.
         var g = new Generator(module, request, Problem) { Raw = problems };
-        g.Run();
+        if (!problems.Any(p => p["code"]?.ToString() == "GEN_SCREEN_RUNTIME")) g.Run();
         if (problems.Count > 0)
             throw new KernelRefusalException("GEN_SCREEN_REFUSED", "screen generate: " + string.Join(" | ", problems.Select(p => p["message"]!.ToString())),
                 new JsonArray(problems.Select(p => (JsonNode)JobPreflight.PublicProblem(p)).ToArray()));
@@ -325,6 +327,9 @@ public static class ScreenGenerator
             }
             if (plans.Count == 0) return;
             foreach (var plan in plans) plan.Decide();
+            // Every problem of the request is known here (the entities, their attributes, the names, the layout): a request with
+            // one is refused whole, so nothing is emitted over facts that are not there (no layout: the pages had no frame).
+            if (Raw.Count > 0) return;
             // A role the screens need and no block plays: created once here (auto), or plain markup (inline).
             CreatePatternBlocks(all: false, needPager: plans.Any(p => p.Has("list")), needConfirm: plans.Any(p => p.CanDelete && (p.Has("list") || p.Has("detail"))),
                 needFilter: plans.Any(p => p.Has("list")), needHeader: layout?.Title == null);

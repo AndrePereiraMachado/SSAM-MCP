@@ -81,6 +81,7 @@ import { withCall, noteAnswer } from './quality-meter.mjs';
 import { warmModules, spareStatus } from './warm-modules.mjs';
 import { registerQueryTestTools } from './query-test.mjs';
 import { codeServedHosted } from './hosted/served.mjs';
+import { hostedGeneratorMode } from './generators.mjs';
 
 const print = value => process.stdout.write(JSON.stringify(value, null, 2) + '\n');
 const fail = message => { process.stderr.write(JSON.stringify({ ok: false, error: message }) + '\n'); process.exitCode = 1; };
@@ -487,22 +488,39 @@ export function hostedRelease(freeing, { context }) {
 // the rules are the ones of the line before ssam_code was served hosted, word for word (HOSTED_*_CODE_OFF).
 // fase4-28 r4-rest-hosted: the sentence on the generator ops follows the gate (generators.mjs hosted modes), whatever the
 // ssam_code switch: the only sentence of the code-off paragraph that is not the one of that line (tests/fixtures/hosted-code-off.mjs).
-const HOSTED_GENERATORS = 'The generator ops entity-actions, rest-consume and screen with data.generate are not offered by ssam_discover '
-  + 'but run here when a job names their op; rest-consume needs every input in the job: "sample" (the JSON response) in each GET method, as this server never calls the API.';
-const hostedParagraph = code => 'This SSAM server is hosted: it runs on the SSAM owner\'s machine and drives the user\'s own '
+// Review B2: built from each generator's hosted mode when the instructions are served (generators.mjs hostedGeneratorMode), so
+// a generator switched off (mode null) is said to be refused, as the gate refuses it. All three with a mode: the sentence of
+// r4-rest-hosted; none: the sentence of the line before it, word for word.
+const GENERATOR_LABELS = [['entity-actions', 'entity-actions'], ['rest-consume', 'rest-consume'], ['gen-screen', 'screen with data.generate']];
+const listed = names => names.length < 3 ? names.join(' and ') : names.slice(0, -1).join(', ') + ' and ' + names.at(-1);
+export function hostedGeneratorsSentence(mode = hostedGeneratorMode) {
+  const running = GENERATOR_LABELS.filter(([id]) => mode(id) !== null).map(([, label]) => label);
+  const refused = GENERATOR_LABELS.filter(([id]) => mode(id) === null).map(([, label]) => label);
+  if (!running.length) return 'The generator ops not offered here yet (entity-actions, rest-consume, screen with data.generate) are refused (GENERATOR_PENDING).';
+  const one = running.length === 1;
+  return 'The generator op' + (one ? ' ' : 's ') + listed(running) + (one ? ' is' : ' are') + ' not offered by ssam_discover but run'
+    + (one ? 's' : '') + ' here when a job names ' + (one ? 'its' : 'their') + ' op'
+    + (running.includes('rest-consume') ? '; rest-consume needs every input in the job: "sample" (the JSON response) in each GET method, as this server never calls the API' : '')
+    + '.' + (refused.length ? ' The generator op' + (refused.length > 1 ? 's ' : ' ') + listed(refused) + (refused.length > 1 ? ' are' : ' is')
+      + ' not offered here yet and refused (GENERATOR_PENDING).' : '');
+}
+const hostedParagraph = (code, generators = hostedGeneratorsSentence()) => 'This SSAM server is hosted: it runs on the SSAM owner\'s machine and drives the user\'s own '
   + 'Studios through the SSAM agent on the user\'s machine. ssam_debug, ssam_debug_run, ssam_debug_invoke, context, propose, '
   + 'continue and status are unavailable here (HOSTED_UNAVAILABLE). Files are named ws:<path> (the workspace of this account on '
   + 'the server: ODC files under ws:odc/, O11 files under ws:o11/, files the user delivered under ws:inbox/); pass them back '
   + 'exactly as returned. A file from the user\'s machine reaches SSAM when the user puts it in the agent inbox folder and you '
   + 'pass agent:inbox/<file>. Before any O11 tool, connect the Service Studio with ssam_connect {lane:"o11"}. When the agent is '
   + 'not connected, tools that need the user\'s Studio answer AGENT_NOT_CONNECTED; ssam_doctor shows the agent and the Studio '
-  + 'versions of both sides. ' + code + ' ' + HOSTED_GENERATORS + ' No credential window opens here: odc_portal_login '
+  + 'versions of both sides. ' + code + ' ' + generators + ' No credential window opens here: odc_portal_login '
   + 'prompt and focus answer HOSTED_PROMPT_UNAVAILABLE.';
-export const HOSTED_INSTRUCTIONS = hostedParagraph('ssam_code reads and writes the module as code here too, its texts inline (text, also); the files '
+const CODE_ON = 'ssam_code reads and writes the module as code here too, its texts inline (text, also); the files '
   + 'subagents write for it go in the agent inbox folder (an ssam_code plan names each one there and brings its prompts to the '
-  + 'agent folder).');
-export const HOSTED_INSTRUCTIONS_CODE_OFF = hostedParagraph('ssam_code is unavailable here too: read a module as text with ssam_map (views ddl, flow, html) and deliver '
-  + 'the change as ONE job of o11_deliver or studio_deliver.');
+  + 'agent folder).';
+const CODE_OFF = 'ssam_code is unavailable here too: read a module as text with ssam_map (views ddl, flow, html) and deliver '
+  + 'the change as ONE job of o11_deliver or studio_deliver.';
+// The paragraphs as the shipped modes give them (tests, docs); a session's own are built when served (hostedInstructions).
+export const HOSTED_INSTRUCTIONS = hostedParagraph(CODE_ON);
+export const HOSTED_INSTRUCTIONS_CODE_OFF = hostedParagraph(CODE_OFF);
 // The working rules a hosted session adds (servidor/fase4: C26, C03 and the model behaviour of the first client session).
 // fase4-24 (production test of 2026-10-11): a job goes INLINE, the job itself as compact JSON in the job argument. The MCP
 // request goes straight to this server (up to 16 MiB), while a job file in the agent inbox costs one more upload from the
@@ -533,8 +551,8 @@ export function hostedInstructions(hosted) {
   try { root = (hosted?.session?.agent ?? hosted?.context?.agent)?.info?.()?.agentRoot ?? null; } catch { root = null; }
   const inbox = typeof root === 'string' && root ? ' The agent inbox folder of this account is ' + agentJoin(root, 'inbox') + '.' : ' ssam_doctor shows the agent inbox folder (agent.inbox).';
   return codeServedHosted(hosted?.tools ?? null)
-    ? HOSTED_INSTRUCTIONS + ' ' + HOSTED_RULES + inbox
-    : HOSTED_INSTRUCTIONS_CODE_OFF + ' ' + HOSTED_RULES_CODE_OFF + inbox;
+    ? hostedParagraph(CODE_ON) + ' ' + HOSTED_RULES + inbox
+    : hostedParagraph(CODE_OFF) + ' ' + HOSTED_RULES_CODE_OFF + inbox;
 }
 
 // The gate of each tool of a hosted session (hosted/policy.mjs), set by createSsamServer and used by registerServedTool.

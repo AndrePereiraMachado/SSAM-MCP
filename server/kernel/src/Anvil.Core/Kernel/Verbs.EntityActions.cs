@@ -78,7 +78,6 @@ public sealed partial class ModelSession
             ["notes"] = plan.Notes.Count > 0 ? plan.Notes : null,
             ["ms"] = new JsonObject { ["read"] = readMs, ["total"] = clock.ElapsedMilliseconds },
         };
-        Report("entityActions", new JsonObject { ["created"] = created.Count, ["unchanged"] = plan.Unchanged.Count, ["kept"] = plan.Kept.Count });
         var answer = new JsonObject { ["entityActions"] = report };
         if (plan.NoChange) { answer["noChange"] = true; answer["code"] = "NO_CHANGE"; }
         return answer;

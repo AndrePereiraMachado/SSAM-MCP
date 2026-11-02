@@ -257,7 +257,54 @@ public sealed class ScreenGeneratorTests(ITestOutputHelper output)
         Assert.Contains("GEN_SCREEN_RUNTIME", refusal.Problems!.ToJsonString());
     }
 
+    [Fact]
+    public void AServiceModuleOrAModuleWithoutALayoutIsRefusedWithATypedProblemNotAnException()
+    {
+        // Blind test F2 (2026-11-02): screen generate on an O11 Service module (no UI flow, no layout) threw a
+        // NullReferenceException in the page frame (the layout is null), reported as APPLY_FAILED. Every problem of the request
+        // is a typed refusal before anything is emitted.
+        var service = Assert.Throws<KernelRefusalException>(() => ScreenGenerator.Plan(Request("""{"generate":{"entities":["Customer"]}}"""),
+            Module(blocks: [], roots: [], runtime: "Service")));
+        Assert.Equal("GEN_SCREEN_REFUSED", service.Code);
+        var codes = service.Problems!.Select(p => p!["code"]!.ToString()).ToList();
+        Assert.Equal(["GEN_SCREEN_RUNTIME"], codes);
+        Assert.Contains("is Service", service.Problems!.ToJsonString());
+        // A Reactive module whose layout block is gone: the layout problem, with the other problems of the request, at once.
+        var noLayout = Assert.Throws<KernelRefusalException>(() => ScreenGenerator.Plan(Request("""{"generate":{"entities":["Customer","Custmer"]}}"""),
+            Module(blocks: [], roots: [])));
+        Assert.Equal("GEN_SCREEN_REFUSED", noLayout.Code);
+        var noLayoutCodes = noLayout.Problems!.Select(p => p!["code"]!.ToString()).ToList();
+        Assert.Contains("GEN_SCREEN_NO_LAYOUT", noLayoutCodes);
+        Assert.Contains("GEN_SCREEN_ENTITY_UNKNOWN", noLayoutCodes);
+    }
+
     // ---- with the Service Studio: the proof job, the fixed point, the second run and the render -------------------------
+    [Fact]
+    public void AnO11ServiceModuleIsRefusedWithTheRuntimeProblemBeforeAnyWrite()
+    {
+        if (!StudioAvailable()) return;
+        var dir = Path.Combine(Work, "service-module");
+        Directory.CreateDirectory(dir);
+        var job = Path.Combine(dir, "job.json");
+        File.WriteAllText(job, """
+            {"base":"blank-service.oml","expectValid":true,"ops":[
+             {"op":"spec","data":{"entities":[{"name":"BtVendor","attributes":[{"name":"Name","type":"Text","mandatory":true,"length":100}]}]}},
+             {"op":"screen","data":{"generate":{"entities":["BtVendor"]}}}]}
+            """);
+        var output = Path.Combine(dir, "out.oml");
+        if (File.Exists(output)) File.Delete(output);
+        var error = Assert.ThrowsAny<Exception>(() => JobRunner.Run(new ModelHost(dir), null, job, output));
+        Assert.DoesNotContain("NullReferenceException", error.ToString());
+        var refusal = Assert.IsType<KernelRefusalException>(Errors.FindCoded(error));
+        Assert.Equal("GEN_SCREEN_REFUSED", refusal.Code);
+        var problems = refusal.Problems!.ToJsonString();
+        Assert.DoesNotContain("APPLY_FAILED", problems);
+        Assert.Contains("GEN_SCREEN_RUNTIME", problems);
+        Assert.Contains("is Service", problems);
+        Assert.False(File.Exists(output));
+    }
+
+
     [Fact]
     public void TheProofJobCompilesWithoutNewMessagesIsAFixedPointAndTheSecondRunIsNoChange()
     {
