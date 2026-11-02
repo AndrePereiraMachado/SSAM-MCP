@@ -23,7 +23,7 @@ import { createXifKind, XIF_KIND } from './xif.mjs';
 import { createDocumentFetch, DOCUMENT_FETCH_KIND } from './document-fetch.mjs';
 
 // file.upload (0.3.4): one file of a folder the person approved (upload.mjs); the hub sends it only to an agent whose hello
-// lists it. document.fetch (0.3.11, r40): one integration document downloaded on this machine for a hosted server, which never
+// lists it. document.fetch (0.3.12, r40): one integration document downloaded on this machine for a hosted server, which never
 // makes a network request for what a job names (document-fetch.mjs); on every platform, so the hello always lists it.
 export const KINDS = Object.freeze(['studio.processes', 'odc.pipe', 'odc.attach', 'o11.bridge', 'o11.connect', 'o11.selected',
   'file.put', 'file.get', 'file.list', 'file.sync', NET_PROBE_KIND, UPLOAD_KIND, USERS_KIND, DOCUMENT_FETCH_KIND, CREDENTIAL_KIND]);

@@ -7,7 +7,7 @@ using System.Text.RegularExpressions;
 
 namespace Ssam.Agent;
 
-// document.fetch (0.4.8-native, r40), the rules of agent/lib/document-fetch.mjs in the same order: one integration document (a WSDL,
+// document.fetch (0.4.9-native, r40), the rules of agent/lib/document-fetch.mjs in the same order: one integration document (a WSDL,
 // an XSD it imports, an OpenAPI document, the JSON answer of a rest-consume sample GET) downloaded HERE, on the user's machine, for a
 // hosted SSAM server that never makes a network request for what a job names. params {url, accept: xml|json, maxBytes?, timeoutMs?}:
 // only http(s) without user or password, one GET with no cookies, no credentials and no header of the server, at most 5 MB and 30 s

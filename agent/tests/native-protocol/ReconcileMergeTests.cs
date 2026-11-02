@@ -27,7 +27,7 @@ public class ReconcileMergeTests
         var list = StudioKinds.OdcCommandList;
         Assert.Equal(Array.IndexOf(list, "merge") + 1, Array.IndexOf(list, "reconcile-merge"));
         Assert.Equal(list.Length, StudioKinds.OdcCommands.Count);
-        Assert.Equal("0.4.8-native", AgentChannel.AgentVersion); // 0.4.8-native: document.fetch (DocumentFetchTests.cs); 0.4.7-native: the hello declares merge_from_oml:prefer_foreign; 0.4.5-native: F3 (integration_import), F4 (o11.xif) and F5 (o11Builds) in one core
+        Assert.Equal("0.4.9-native", AgentChannel.AgentVersion); // 0.4.9-native: document.fetch (DocumentFetchTests.cs); 0.4.8-native: credential.session (r40a); 0.4.7-native: the hello declares merge_from_oml:prefer_foreign; 0.4.5-native: F3 (integration_import), F4 (o11.xif) and F5 (o11Builds) in one core
     }
 
     [Theory]

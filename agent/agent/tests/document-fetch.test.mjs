@@ -1,4 +1,4 @@
-// document.fetch (0.3.11, r40): one integration document downloaded on this machine for a hosted server. The protocol cases are
+// document.fetch (0.3.12, r40): one integration document downloaded on this machine for a hosted server. The protocol cases are
 // the native core's too (tests/native-protocol/document-fetch-cases.json, DocumentFetchTests.cs): a local HTTP server built
 // from the cases' routes, no other network.
 import { test } from 'node:test';
@@ -79,7 +79,7 @@ test('the call deadline cuts the timeout; a passed deadline requests nothing', a
 });
 
 test('the hello lists document.fetch on every platform, and the kinds table runs it with its own client (never the channel\'s)', async t => {
-  assert.equal(AGENT_VERSION, '0.3.11');
+  assert.equal(AGENT_VERSION, '0.3.12');
   assert.ok(KINDS.includes(DOCUMENT_FETCH_KIND));
   assert.ok(helloKinds(null).includes(DOCUMENT_FETCH_KIND));
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ssam-docfetch-'));

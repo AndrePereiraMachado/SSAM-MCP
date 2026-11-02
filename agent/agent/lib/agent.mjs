@@ -62,9 +62,10 @@ import { completeInstances } from './studio-instance.mjs';
 // The native core of the same agent is 0.4.5-native.
 // 0.3.9 (agent/r4-prefer-foreign, the app 0.2.1): the pack's thin O11 bridge 1.2.0 serves merge_from_oml {prefer:"foreign"} and the
 // hello's agent.o11Methods declares merge_from_oml:prefer_foreign (kinds.mjs O11_DECLARED). The native core is 0.4.6-native.
-// 0.3.11 (agent/r40-agent-fetch, the app 0.2.3): document.fetch (document-fetch.mjs), one integration document downloaded on this
-// machine for a hosted server; the hello always lists it. The native core is 0.4.8-native.
-export const AGENT_VERSION = '0.3.11';
+// 0.3.11 (r40a, the app 0.2.3): credential.session (credential-session.mjs), private Service Center and Portal sign-in on this
+// machine. 0.3.12 (agent/r40, the app 0.2.4): document.fetch (document-fetch.mjs), one integration document downloaded on this
+// machine for a hosted server; the hello always lists it. The native core is 0.4.9-native.
+export const AGENT_VERSION = '0.3.12';
 const INLINE_MAX_BYTES = 524288;
 const MAX_VALUE_BYTES = 16 * 1024 * 1024;
 const PARAMS_MEMORY_BYTES = 64 * 1024 * 1024;

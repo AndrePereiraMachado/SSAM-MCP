@@ -6,7 +6,7 @@ using System.Text.Json.Nodes;
 using Ssam.Agent;
 using Xunit;
 
-// document.fetch (0.4.8-native, r40) in the native core: the protocol cases of the Node agent (document-fetch-cases.json, run by
+// document.fetch (0.4.9-native, r40) in the native core: the protocol cases of the Node agent (document-fetch-cases.json, run by
 // agent/agent/tests/document-fetch.test.mjs) against a local HTTP server built from the same routes. No other network.
 public class DocumentFetchTests
 {

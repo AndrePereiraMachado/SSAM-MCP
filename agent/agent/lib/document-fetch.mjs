@@ -1,4 +1,4 @@
-// document.fetch (0.3.11, r40): one integration document (a WSDL, an XSD it imports, an OpenAPI document, the JSON answer of
+// document.fetch (0.3.12, r40): one integration document (a WSDL, an XSD it imports, an OpenAPI document, the JSON answer of
 // a rest-consume sample GET) downloaded HERE, on the user's machine, for a hosted SSAM server that never makes a network
 // request for what a job names (integration-documents.mjs of the server line). The user's network (an intranet this machine
 // reaches included) is the user's intent; the server pins the bytes it gets back as it pins a document read by URL locally.
