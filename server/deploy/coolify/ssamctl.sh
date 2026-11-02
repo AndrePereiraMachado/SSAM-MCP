@@ -27,7 +27,8 @@
 # deploy folder of the approved commit, as DEPLOY.md section 5 copies it).
 # Tokens live in the Postgres of SSAM_DATABASE_URL (the server's environment; a database resource of Coolify, COOLIFY.md
 # 6): the token commands run on the server's network with that URL; db, psql, the dump of backup (pg_dump) and the load of
-# restore (psql) run a one-off container of the official postgres image (PG_IMAGE) on that network, against that URL. A
+# restore (psql) run a one-off container of the database's own postgres image (pg_image) on that network, against that
+# URL; backup refuses an empty dump, a dump without the license tables and a pg_dump older than the server. A
 # server without SSAM_DATABASE_URL keeps tokens.json, and the same commands work on it (without dump, psql and db).
 set -eu
 here=$(cd "$(dirname "$0")" && pwd)
@@ -86,11 +87,54 @@ network_of() {
   nets=$($DOCKER inspect --format '{{range $k, $v := .NetworkSettings.Networks}}{{println $k}}{{end}}' "$1")
   printf '%s\n' "$nets" | grep -x coolify || printf '%s\n' "$nets" | head -n 1
 }
-# The official postgres client tools (pg_dump, psql), pinned; pulled once.
-PG_IMAGE=${PG_IMAGE:-postgres:17.11-alpine@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24}
+# The postgres client tools (pg_dump, psql). pg_dump refuses a server of a newer major version, and on 2026-11-01 the
+# pinned 17 client against the Coolify database (18.6) left an empty dump that looked like a backup. So the client is the
+# image of the database container itself when it runs on this host (the host of SSAM_DATABASE_URL is that container's
+# name on the coolify network): always the server's own major version. PG_IMAGE (environment) forces an image; the
+# pinned fallback below is only for a database that is not a container here, and backup refuses it when it is older
+# than the server.
+PG_IMAGE_SET=${PG_IMAGE:-}
+PG_IMAGE_FALLBACK=postgres:17.11-alpine@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24
 db_url() { env_of "$1" SSAM_DATABASE_URL; }
-# pg_tool <container> <tool> [args...]: the tool of PG_IMAGE on the server's network, with stdin and stdout as given.
-pg_tool() { c=$1; shift; $DOCKER run --rm -i --network "$(network_of "$c")" --security-opt no-new-privileges:true --cap-drop ALL --user 70:70 "$PG_IMAGE" "$@"; }
+# The host of a postgres URL (postgres://user:password@host:port/db), never printed with the rest of the URL.
+db_host() { printf '%s' "$1" | sed -n 's#^[A-Za-z][A-Za-z0-9+.-]*://\([^@/]*@\)\{0,1\}\([^:/?]*\).*#\2#p'; }
+# The container on this host named as the host of the server's SSAM_DATABASE_URL (empty when there is none).
+db_container() {
+  db_name=$(db_host "$(db_url "$1")")
+  [ -n "$db_name" ] || return 0
+  $DOCKER ps -a --filter "name=$db_name" --format '{{.Names}}' | grep -x -- "$db_name" | head -n 1 || true
+}
+pg_image() {
+  if [ -n "$PG_IMAGE_SET" ]; then printf '%s' "$PG_IMAGE_SET"; return; fi
+  db_found=$(db_container "$1")
+  if [ -n "$db_found" ]; then $DOCKER inspect --format '{{.Image}}' "$db_found"; else printf '%s' "$PG_IMAGE_FALLBACK"; fi
+}
+# pg_tool <container> <tool> [args...]: the client tool (pg_image) on the server's network, with stdin and stdout as given.
+pg_tool() { c=$1; shift; $DOCKER run --rm -i --network "$(network_of "$c")" --security-opt no-new-privileges:true --cap-drop ALL --user 70:70 -e HOME=/tmp "$(pg_image "$c")" "$@"; }
+# The license tables a dump of the tokens' database must hold (migrations/0001-server-tokens.sql and db.mjs).
+LICENSE_TABLES=${SSAM_LICENSE_TABLES:-server_tokens schema_migrations}
+# dump_tokens <container> <url> <file.sql.gz>: the tokens' database as plain SQL, refused loudly (exit 2, nothing left
+# with the final name) when the client is older than the server, when pg_dump fails, when the dump is empty, or when a
+# license table is missing from it. A dump that is not a backup must never look like one.
+dump_tokens() {
+  dt_c=$1; dt_url=$2; dt_out=$3; dt_raw=$dt_out.partial
+  rm -f "$dt_out" "$dt_raw"
+  dt_server=$(pg_tool "$dt_c" psql "$dt_url" -XtAc 'show server_version_num' < /dev/null | tr -d '[:space:]') || true
+  case "$dt_server" in ''|*[!0-9]*) die "BACKUP_DB_UNREACHABLE: could not read the version of the tokens' database (SSAM_DATABASE_URL of $dt_c); no dump was made";; esac
+  dt_client=$(pg_tool "$dt_c" pg_dump --version < /dev/null | sed -n 's/^pg_dump (PostgreSQL) \([0-9][0-9]*\).*/\1/p' | head -n 1) || true
+  case "$dt_client" in ''|*[!0-9]*) die "BACKUP_PG_DUMP_MISSING: the client image $(pg_image "$dt_c") has no pg_dump; no dump was made";; esac
+  dt_major=$((dt_server / 10000))
+  [ "$dt_client" -ge "$dt_major" ] || die "BACKUP_PG_DUMP_TOO_OLD: pg_dump $dt_client cannot dump a PostgreSQL $dt_major server; run where the database container is visible, or set PG_IMAGE to a postgres:$dt_major image. No dump was made"
+  if ! pg_tool "$dt_c" pg_dump "$dt_url" --no-owner --no-privileges < /dev/null > "$dt_raw"; then rm -f "$dt_raw"; die "BACKUP_DUMP_FAILED: pg_dump $dt_client against PostgreSQL $dt_major failed; no dump was kept"; fi
+  [ -s "$dt_raw" ] || { rm -f "$dt_raw"; die "BACKUP_DUMP_EMPTY: pg_dump wrote nothing; no dump was kept"; }
+  for dt_table in $LICENSE_TABLES; do
+    grep -q "^CREATE TABLE \(public\.\)\{0,1\}$dt_table (" "$dt_raw" || { rm -f "$dt_raw"; die "BACKUP_DUMP_NO_LICENSE_TABLES: the dump has no table $dt_table: SSAM_DATABASE_URL does not point at the licenses database; no dump was kept"; }
+  done
+  dt_rows=$(awk '/^COPY (public\.)?server_tokens /{on=1;next} on&&/^\\\.$/{on=0} on{n++} END{print n+0}' "$dt_raw")
+  gzip -c "$dt_raw" > "$dt_raw.gz" && gzip -t "$dt_raw.gz" || { rm -f "$dt_raw" "$dt_raw.gz"; die "BACKUP_DUMP_FAILED: could not compress the dump"; }
+  rm -f "$dt_raw"; mv "$dt_raw.gz" "$dt_out"
+  echo "tokens database: PostgreSQL $dt_major dumped by pg_dump $dt_client, tables: $LICENSE_TABLES, server_tokens rows: $dt_rows"
+}
 # The docker run options that give a one-off container the tokens' store of the server: the network and the URL when the
 # server has a database, nothing (tokens.json in the volume) otherwise.
 store_opts() {
@@ -173,7 +217,7 @@ case "$cmd" in
     ;;
   psql)
     c=$(container); url=$(db_url "$c"); [ -n "$url" ] || die "the server has no SSAM_DATABASE_URL"
-    if [ $# -gt 0 ]; then pg_tool "$c" psql "$url" -c "$*"; else $DOCKER run --rm $tty --network "$(network_of "$c")" --security-opt no-new-privileges:true --cap-drop ALL --user 70:70 "$PG_IMAGE" psql "$url"; fi
+    if [ $# -gt 0 ]; then pg_tool "$c" psql "$url" -c "$*"; else $DOCKER run --rm $tty --network "$(network_of "$c")" --security-opt no-new-privileges:true --cap-drop ALL --user 70:70 -e HOME=/tmp "$(pg_image "$c")" psql "$url"; fi
     ;;
   features)
     [ "${1:-}" = put ] || die "features put [--version x.y.z] <Features.plain.xml>"
@@ -197,16 +241,20 @@ case "$cmd" in
     ;;
   backup)
     c=$(container); dir=${1:-/var/backups/ssam-server}
+    umask 077
     [ -d "$dir" ] && [ -w "$dir" ] || die "the folder $dir must exist and be writable (sudo install -d -o \$USER -m 0700 $dir)"
     stamp=$(date -u +%Y%m%dT%H%M%SZ); archive=$dir/ssam-state-$stamp.tar.gz
+    url=$(db_url "$c")
+    # The tokens' database first, as plain SQL (loads back with psql): a refused dump stops the backup before the long
+    # volume copy. SSAM_BACKUP_REQUIRE_DATABASE=1 (backup-before-redeploy.sh) refuses a server without SSAM_DATABASE_URL.
+    if [ -n "$url" ]; then
+      dump_tokens "$c" "$url" "$dir/ssam-tokens-$stamp.sql.gz"
+      (cd "$dir" && sha256sum "ssam-tokens-$stamp.sql.gz" > "ssam-tokens-$stamp.sql.gz.sha256")
+    elif [ "${SSAM_BACKUP_REQUIRE_DATABASE:-0}" = 1 ]; then
+      die "BACKUP_NO_DATABASE_URL: $c has no SSAM_DATABASE_URL, so this backup would hold no licenses"
+    fi
     # shellcheck disable=SC2086
     window_backup
-    url=$(db_url "$c")
-    if [ -n "$url" ]; then
-      # The tokens' database as plain SQL (loads back with psql).
-      pg_tool "$c" pg_dump "$url" --no-owner --no-privileges < /dev/null | gzip > "$dir/ssam-tokens-$stamp.sql.gz"
-      (cd "$dir" && sha256sum "ssam-tokens-$stamp.sql.gz" > "ssam-tokens-$stamp.sql.gz.sha256")
-    fi
     (cd "$dir" && sha256sum "$(basename "$archive")" > "$archive.sha256")
     printf 'image=%s\nimageId=%s\nrevision=%s\ncontainer=%s\nmode=%s\n' "$($DOCKER inspect --format '{{.Config.Image}}' "$c")" "$(image_of "$c")" \
       "$($DOCKER inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$c")" "$c" \
