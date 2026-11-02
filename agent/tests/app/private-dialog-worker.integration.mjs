@@ -1,9 +1,11 @@
+import {createRequire} from 'node:module';
+const electronExecutable=createRequire(import.meta.url)('electron');
 import fs from 'node:fs';import path from 'node:path';import {spawn} from 'node:child_process';import assert from 'node:assert/strict';
 const base=process.cwd();const dir=process.env.SSAM_TEST_OUTPUT;assert.ok(dir,'SSAM_TEST_OUTPUT is required');const results=[];
 for(const form of ['login','password','approve','profile','forget','cancel','invalid']){
  console.log('Testing '+form);
  const id='worker-test-123456';const resultPath=dir+'/worker-'+form+'-driver.json';const model={schema:'ssam-private-dialog/1',id,form:form==='cancel'?'login':form,host:'tenant.example.test',service:'users',...(form==='approve'?{rows:[{label:'Operation',value:'Synthetic only',data:true}]}:{}),...(form==='profile'?{profiles:[{profile:'a'.repeat(64),principal:'fixture@example.invalid'}]}:{})};
- const child=spawn(base+'/node_modules/electron/dist/electron.exe',[base+'/tests/app/fixtures/private-dialog-worker-driver.cjs'],{windowsHide:false,stdio:['pipe','pipe','ignore'],env:{...process.env,TEMP:dir,TMP:dir,SSAM_TEST_APP_ENTRY:base+'/out/main/index.js',SSAM_TEST_RESULT:resultPath,SSAM_TEST_ACTION:form==='cancel'?'cancel':'submit'}});let text='',visible=0,submits=0,closed=null,exitCode;
+ const child=spawn(electronExecutable,[base+'/tests/app/fixtures/private-dialog-worker-driver.cjs'],{windowsHide:false,stdio:['pipe','pipe','ignore'],env:{...process.env,TEMP:dir,TMP:dir,SSAM_TEST_APP_ENTRY:base+'/out/main/index.js',SSAM_TEST_RESULT:resultPath,SSAM_TEST_ACTION:form==='cancel'?'cancel':'submit'}});let text='',visible=0,submits=0,closed=null,exitCode;
  child.stdin.write(JSON.stringify(model)+'\n');
  child.stdout.on('data',chunk=>{text+=chunk;for(;;){const at=text.indexOf('\n');if(at<0)break;const line=text.slice(0,at);text=text.slice(at+1);if(!line.trim())continue;const f=JSON.parse(line);assert.equal(f.id,form==='invalid'?null:id);console.log(JSON.stringify({form,type:f.type,accepted:f.accepted,reason:f.reason}));if(f.type==='visible')visible++;if(f.type==='closed'){closed=f;child.stdin.end();}if(f.type==='submit'){submits++;setTimeout(()=>child.stdin.write(JSON.stringify({type:'decision',id,ok:submits===2,...(submits===1?{code:'CREDENTIAL_STORE_FAILED'}:{})})+'\n'),submits===1?100:250)}}});
  await new Promise((resolve,reject)=>{const timer=setTimeout(()=>{child.kill();reject(Error('worker timeout'))},15000);child.on('exit',code=>{exitCode=code;clearTimeout(timer);resolve()})});
