@@ -46,7 +46,7 @@ env:
 jobs:
   mac:
     runs-on: macos-15
-    timeout-minutes: 45
+    timeout-minutes: 120
     defaults:
       run:
         working-directory: agent
@@ -146,7 +146,12 @@ jobs:
           native="native/Ssam.Agent/bin/Release/net10.0/osx-arm64/publish/ssam-agent"
           codesign --force --timestamp --options runtime --keychain "$keychain" --sign "$identity" "$native"
           codesign --verify --strict "$native"
-          node scripts/build.mjs --platform mac --pack "$RUNNER_TEMP/ssam-pack/$PACK_ASSET" --native "$native" --no-updates --notarize
+          node scripts/build.mjs --platform mac --pack "$RUNNER_TEMP/ssam-pack/$PACK_ASSET" --native "$native" --no-updates --notarize --bundled-bridges-only
+          mkdir -p ci-results
+          xcrun notarytool submit dist/*-mac-arm64.dmg --apple-id "$APPLE_ID" --password "$APPLE_APP_SPECIFIC_PASSWORD" --team-id "$APPLE_TEAM_ID" --no-s3-acceleration --wait --output-format json > ci-results/notary-dmg.json
+          node --input-type=module -e 'import fs from "node:fs"; const r=JSON.parse(fs.readFileSync("ci-results/notary-dmg.json","utf8")); if(r.status!=="Accepted") throw Error("DMG notarization was not accepted"); console.log("DMG notarization accepted: "+r.id);'
+          xcrun stapler staple dist/*-mac-arm64.dmg
+          xcrun stapler validate dist/*-mac-arm64.dmg
       - name: Package the unsigned installer
         if: ${{ !inputs.sign_and_notarize }}
         env:
@@ -191,6 +196,7 @@ jobs:
             console.log(JSON.stringify(summary, null, 2));
             if (hello.agent.version !== '0.4.8-native' || hello.agent.runtime !== 'native-aot' || hello.agent.platform !== 'darwin') throw new Error('unexpected agent');
             if (JSON.stringify(hello.pack.odcBridges) !== '["v108","v109"]' || hello.pack.odcBridge !== 'v108') throw new Error('unexpected ODC bridges');
+            if (manifest.bridgeOffer !== false) throw new Error('Remote bridge offers must remain disabled');
             if (!hello.agent.kinds.includes('credential.session')) throw new Error('credential.session missing');
             if (summary.credentialStored) throw new Error('the throwaway credential was stored');
           } catch (error) { throw error; }
@@ -223,6 +229,11 @@ jobs:
           codesign --verify --deep --strict 'dist/mac-arm64/SSAM Agent.app'
           xcrun stapler validate 'dist/mac-arm64/SSAM Agent.app'
           spctl --assess --type execute --verbose=2 'dist/mac-arm64/SSAM Agent.app'
+          mkdir -p "$RUNNER_TEMP/ssam-dmg-check"
+          hdiutil attach dist/*-mac-arm64.dmg -mountpoint "$RUNNER_TEMP/ssam-dmg-check" -nobrowse -readonly
+          trap 'hdiutil detach "$RUNNER_TEMP/ssam-dmg-check" >/dev/null' EXIT
+          codesign --verify --deep --strict "$RUNNER_TEMP/ssam-dmg-check/SSAM Agent.app"
+          spctl --assess --type execute --verbose=2 "$RUNNER_TEMP/ssam-dmg-check/SSAM Agent.app"
       - uses: actions/upload-artifact@v4
         with:
           name: ssam-agent-mac-arm64-${{ inputs.sign_and_notarize && 'signed' || 'unsigned' }}
