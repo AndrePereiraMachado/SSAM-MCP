@@ -6,6 +6,8 @@ public sealed class AuthenticodeTests
     [Fact]
     public async Task RealClientInvalidDllIsAnAttemptedBridgeFailure()
     {
+        // The Windows attach client against this machine's fixture Studio (C:/t/vigia-auto): Windows only.
+        if (!OperatingSystem.IsWindows()) return;
         var baseDir = "C:/t/vigia-auto/round2-e2e";
         using var host = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(Path.Combine(baseDir, "host/bin/Release/net10.0/ODCStudio.exe")) { UseShellExecute = false, RedirectStandardInput = true, RedirectStandardOutput = true, CreateNoWindow = true })!;
         var file = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"), "ODC3.Bridge.v100.dll"); Directory.CreateDirectory(Path.GetDirectoryName(file)!);
@@ -33,6 +35,8 @@ public sealed class AuthenticodeTests
     [InlineData("Microsoft.Extensions.Logging.Abstractions.dll")]
     public void RealMicrosoftDependencyUsesProviderChain(string name)
     {
+        // Real Authenticode chains of this machine's fixture DLLs: Windows only (elsewhere Inspect refuses, UnsignedFileIsRefused).
+        if (!OperatingSystem.IsWindows()) return;
         var file = Path.Combine("C:/t/vigia-auto/round2-e2e/v100/bin/Release/net10.0", name);
         var evidence = AuthenticodeTrust.Inspect(file);
         Assert.True(AuthenticodeTrust.Accept(evidence, "microsoft", "not-the-owner", BridgeTrust.MicrosoftRoots));
@@ -43,7 +47,12 @@ public sealed class AuthenticodeTests
     public void UnsignedFileIsRefused()
     {
         var file = Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".dll");
-        try { File.WriteAllText(file, "not signed"); Assert.False(AuthenticodeTrust.Inspect(file).Valid); }
+        try {
+            File.WriteAllText(file, "not signed");
+            // Outside Windows there is no Authenticode: the file is refused by the inspection itself.
+            if (!OperatingSystem.IsWindows()) { Assert.Equal("Authenticode requires Windows", Assert.Throws<IOException>(() => AuthenticodeTrust.Inspect(file)).Message); return; }
+            Assert.False(AuthenticodeTrust.Inspect(file).Valid);
+        }
         finally { File.Delete(file); }
     }
 
@@ -52,7 +61,10 @@ public sealed class AuthenticodeTests
     {
         var file = Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".dll");
         try {
-            File.WriteAllText(file, "one"); var stamp = File.GetLastWriteTimeUtc(file); var before = NativeFileIdentity.Read(file);
+            File.WriteAllText(file, "one");
+            // Downloaded bridge identities are a Windows feature: elsewhere the read refuses instead of answering a weaker identity.
+            if (!OperatingSystem.IsWindows()) { Assert.Throws<IOException>(() => NativeFileIdentity.Read(file)); return; }
+            var stamp = File.GetLastWriteTimeUtc(file); var before = NativeFileIdentity.Read(file);
             File.WriteAllText(file + ".new", "two"); File.SetLastWriteTimeUtc(file + ".new", stamp); File.Move(file + ".new", file, true);
             Assert.NotEqual(before, NativeFileIdentity.Read(file)); Assert.Equal(stamp, File.GetLastWriteTimeUtc(file));
         } finally { File.Delete(file); File.Delete(file + ".new"); }
