@@ -256,7 +256,23 @@ internal static class MergeHandler
         {
             // The conflicts resolved for the delivery inside the same Studio command as the merge; the list is the receipt's,
             // and the server turns it into the note (never resolved silently).
-            var resolution = MergePreferForeign(aggregator, local, foreign, baseEs!, byStructure, enteringNativeMerge);
+            // A conflict the selection cannot settle throws before the native merge starts, inside the command the SDK rolls back:
+            // nothing was written, and the answer is today's (merged:false, "conflicts: use mode=dialog"), so the server's own
+            // conflict pass (ConflictRebase) still runs.
+            var entered = false;
+            PreferForeign.Resolution resolution;
+            try { resolution = MergePreferForeign(aggregator, local, foreign, baseEs!, byStructure, () => { entered = true; enteringNativeMerge(); }); }
+            catch (InvalidOperationException unresolved) when (!entered)
+            {
+                data["merged"] = false;
+                data["reason"] = "conflicts: use mode=dialog (prefer foreign did not resolve them: " + unresolved.Message + ")";
+                record(data);
+                var unchanged = ReadMessages(local, timings, "verifyUnchangedMs");
+                SetDelta(data, MessageDelta.Compute(unchanged.Messages, unchanged.Messages), unchanged.IsValid);
+                data["totalMs"] = sw.ElapsedMilliseconds;
+                record(data);
+                return Server.Ok(data);
+            }
             data[PreferForeign.ResolvedField] = resolution.Receipt();
             result = MergeOperationResult.Merge;
         }
@@ -349,22 +365,15 @@ internal static class MergeHandler
         var failure = QuietCommand.Execute(aggregator.GetPresenterContext(), "Anvil: merge module, conflicts resolved for the delivery", stage =>
         {
             stage("prefer-foreign");
-            resolution = MergeResolvingForDelivery(local, foreign, basis, byStructure, enteringNativeMerge);
+            using var tree = new MatchTree(local, foreign, basis, byStructure, true);
+            resolution = PreferForeign.Resolve(tree);
+            enteringNativeMerge();
+            tree.Merge();
+            tree.ClearCurrentMergeState();
+            if (tree.CanMerge) throw new InvalidOperationException("The native merge did not merge its tree.");
         });
         if (failure != null) throw new InvalidOperationException("merge_from_oml: stage " + failure.Text + " (the Studio rolled the command back)");
         return resolution ?? throw new InvalidOperationException("The native merge command did not complete its prefer-foreign callback.");
-    }
-
-    /// <summary>The body of <see cref="MergePreferForeign"/> inside the caller's command (headless tests run it in their own).</summary>
-    internal static PreferForeign.Resolution MergeResolvingForDelivery(ESpace local, ESpace foreign, ESpace basis, bool byStructure, Action enteringNativeMerge)
-    {
-        using var tree = new MatchTree(local, foreign, basis, byStructure, true);
-        var resolution = PreferForeign.Resolve(tree);
-        enteringNativeMerge();
-        tree.Merge();
-        tree.ClearCurrentMergeState();
-        if (tree.CanMerge) throw new InvalidOperationException("The native merge did not merge its tree.");
-        return resolution;
     }
 
     // Second merge of the merge order, as the full bridge: the candidate over the first-pass copy. The copy differs from

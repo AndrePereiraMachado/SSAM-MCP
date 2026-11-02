@@ -91,22 +91,76 @@ internal static class PreferForeign
         var units = new List<object>();
         foreach (var root in Enumerate(Get(tree, "Roots"))) CollectUnits(root, units, new HashSet<object>(ReferenceEqualityComparer.Instance));
         var entries = new JsonArray(); var total = 0;
+        var selected = 0;
         foreach (var unit in units)
         {
-            // What the person changed inside this unit, read before the selection (afterwards the actions say foreign).
-            foreach (var entry in Losses(unit))
+            // The module itself (the tree's root: a conflict in a collection of the module, such as Roles added and deleted by
+            // the two sides) is never taken whole from the delivery: that would undo every edit of the person in the module.
+            // Its native three-way selection (Both) stays, and only the elements in conflict inside it take the delivery's side.
+            var sites = Get(unit, "Parent") == null ? RootSites(unit, members, entry => { total++; if (entries.Count < MaxEntries) entries.Add(entry); }) : [unit];
+            foreach (var site in sites)
             {
-                total++;
-                if (entries.Count < MaxEntries) entries.Add(entry);
+                // What the person changed inside this element, read before the selection (afterwards the actions say foreign).
+                foreach (var entry in Losses(site))
+                {
+                    total++;
+                    if (entries.Count < MaxEntries) entries.Add(entry);
+                }
+                members.SetIsChecked.Invoke(null, [site, members.ForeignCheck, true, false]);
+                selected++;
             }
-            members.SetIsChecked.Invoke(null, [unit, members.ForeignCheck, true, false]);
         }
         if (units.Count == 0)
             throw new InvalidOperationException("prefer foreign: the merge tree has conflicts but no merge unit with an unresolved conflict was found; nothing was merged");
         if (Flag(tree, "HasUnresolvedConflicts"))
             throw new InvalidOperationException("prefer foreign: the merge tree still has an unresolved conflict after selecting the delivery's side of "
                 + units.Count + " merge unit(s); nothing was merged");
-        return new Resolution(entries, units.Count, total, members);
+        return new Resolution(entries, selected, total, members);
+    }
+
+    /// <summary>The module root in conflict: its Both selection (MergeUnitCheck.Both, the Studio's native three-way choice for every
+    /// difference without a conflict), then the elements whose OWN difference is a conflict (a property both changed, or one side
+    /// deleted what the other changed), outermost first, which then take the delivery's side one by one.</summary>
+    private static List<object> RootSites(object root, Members members, Action<JsonObject> report)
+    {
+        members.SetIsChecked.Invoke(null, [root, Enum.Parse(members.ForeignCheck.GetType(), "Both"), false, false]);
+        var sites = new List<object>();
+        void Walk(object match, int depth)
+        {
+            foreach (var child in Enumerate(Get(match, "Children")))
+            {
+                var difference = Get(child, "Difference")?.ToString() ?? "";
+                if (!difference.Contains("Conflict", StringComparison.Ordinal)) continue;
+                if (OwnConflict(child, difference)) sites.Add(child);
+                else if (depth < 24) Walk(child, depth + 1);
+            }
+        }
+        Walk(root, 0);
+        // A conflicting property of the module itself takes the delivery's value (MergeAction Update, as CheckMergeElementToForeign).
+        foreach (var pair in Enumerate(Get(root, "Properties")))
+        {
+            var pd = Get(pair, "Difference")?.ToString() ?? "";
+            if (!pd.Contains("Conflict", StringComparison.Ordinal)) continue;
+            report(Entry("(module)", (Get(pair, "PropertyName") ?? Get(pair, "DisplayName"))?.ToString() ?? "", Value(pair, "Local"), Value(pair, "Foreign"), pd, conflict: true));
+            SetAction(pair, "Update");
+        }
+        return sites;
+    }
+
+    private static void SetAction(object element, string action)
+    {
+        PropertyInfo? property = null;
+        for (var t = element.GetType(); t != null && property?.SetMethod == null; t = t.BaseType)
+            property = t.GetProperty("MergeAction", Public | BindingFlags.DeclaredOnly);
+        if (property?.SetMethod == null) throw new InvalidOperationException("prefer foreign: " + element.GetType().FullName + ".MergeAction cannot be set");
+        property.SetValue(element, Enum.Parse(property.PropertyType, action));
+    }
+
+    // A conflict of the element itself: one of its own properties, or a delete on one side of what the other side changed.
+    private static bool OwnConflict(object match, string difference)
+    {
+        if (Get(match, "MatchType")?.ToString() is "InLocalESpaceOnly" or "InForeignESpaceOnly" && difference.Contains("Conflict", StringComparison.Ordinal)) return true;
+        return Enumerate(Get(match, "Properties")).Any(p => (Get(p, "Difference")?.ToString() ?? "").Contains("Conflict", StringComparison.Ordinal));
     }
 
     // The merge units with an unresolved conflict of their own (MergeAction Unknown), outermost first; a unit selected as foreign
