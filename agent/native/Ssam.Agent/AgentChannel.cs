@@ -129,7 +129,7 @@ internal sealed class AgentChannel : IDisposable
     // announced only when the pack carries the engine host. 0.4.4-native (agent/r4-f5-app): one O11 bridge per Service Studio
     // version (pack.json o11Builds) and bridgeOffer false packs. 0.4.5-native: the three in one core (the Node agent's 0.3.8, app 0.2.0).
     // 0.4.6-native (agent/r4-prefer-foreign, app 0.2.1): the hello declares merge_from_oml:prefer_foreign (thin O11 bridge 1.2.0).
-    internal const string AgentVersion = "0.4.7-native";
+    internal const string AgentVersion = "0.4.8-native";
     // pack.json bridgeOffer false: a pack built without the bridge trust anchors (the owner's unsigned test app) never asks for offers.
     internal const string NoAnchorsReason = "This agent package was built without the bridge trust anchors (a test build); it uses only its bundled bridges.";
     internal static bool NoAnchors(JsonObject? pack) => pack?["bridgeOffer"] is JsonValue v && v.TryGetValue<bool>(out var offer) && !offer;
