@@ -204,7 +204,10 @@ ARG SERVICE_STUDIO_TFM
 RUN --mount=type=bind,from=studio-o11,source=/studio/o11,target=/studio/o11 \
     --mount=type=cache,id=ssam-nuget-kernel-o11,sharing=locked,target=/root/.nuget/packages \
     dotnet build kernel/src/Anvil.Cli -c Release -nologo -v q -nodeReuse:false \
-      -p:SSDir=/studio/o11 ${SERVICE_STUDIO_TFM:+-p:AnvilO11StudioTfm=$SERVICE_STUDIO_TFM} -o /out/kernel/.local/cli
+      -p:SSDir=/studio/o11 ${SERVICE_STUDIO_TFM:+-p:AnvilO11StudioTfm=$SERVICE_STUDIO_TFM} -o /out/kernel/.local/cli \
+ && for ref in mscorlib.dll System.dll System.Core.dll Facades/netstandard.dll; do \
+      test -s "/out/kernel/.local/cli/ref/net472/$ref" || { echo "kernel-o11: ref/net472/$ref missing next to the O11 CLI (the XIF final stage compiles against it: Anvil.Xif.csproj, XifCompiler.DefaultReferenceAssemblies)" >&2; exit 1; }; \
+    done
 
 # ---- ODC kernel (anvil-odc.dll), against /studio/odc ------------------------------------------------------------------------------
 FROM sdk AS kernel-odc
@@ -279,6 +282,8 @@ COPY --from=builder-odc /out/ /app/
 ARG SSAM_IMAGE_O11
 ARG SSAM_IMAGE_ODC
 RUN node /app/platforms/odc/facade/kernel-image.mjs check-image "/studio/o11=${SSAM_IMAGE_O11}" "/studio/odc=${SSAM_IMAGE_ODC}"
+# The net472 reference assemblies of the XIF final stage (O11 .NET extensions) reached the runtime next to the O11 CLI.
+RUN test -s /app/kernel/.local/cli/ref/net472/mscorlib.dll && test -s /app/kernel/.local/cli/ref/net472/Facades/netstandard.dll
 
 # Writable by ssam (everything else under /app and /studio is root's and read-only for it):
 #   /data/server, /data/friction, /data/odc-features   the state volumes (below)

@@ -1,4 +1,5 @@
-// R4 families B and C (C:\t\r4\CAPTURA-FALHA.md, 02/11): on a built image (SSAM_TEST_IMAGE), every Studio folder carries the
+// R4 families B and C (C:\t\r4\CAPTURA-FALHA.md, 02/11) and the XIF references of the F4 review: on a built image (SSAM_TEST_IMAGE),
+// every Studio folder carries the
 // Linux natives of SkiaSharp and HarfBuzzSharp, the Studio's own SkiaSharp creates and FINALIZES an SKPaint, an SKTypeface
 // and a HarfBuzz buffer there (the finalizer of an SKPaint aborted the hosted O11 kernel when libSkiaSharp.so was missing),
 // and the server's start leaves no core file behind a process that aborts.
@@ -57,4 +58,14 @@ test('the server start lowers the core limit to 0 for itself and the kernels it 
   assert.ifError(r.error);
   assert.equal(r.status, 0, r.stderr || r.stdout);
   assert.equal(r.stdout.trim(), 'core=0 minidump=0');
+});
+
+test('the net472 reference assemblies of the XIF final stage sit next to the O11 CLI (ref/net472, with its Facades)', () => {
+  assert.ok(image, 'Set SSAM_TEST_IMAGE to the local image');
+  const dir = '/app/kernel/.local/cli/ref/net472';
+  const r = run(['--entrypoint=sh', image, '-c', `test -s ${dir}/mscorlib.dll && test -s ${dir}/System.Core.dll && test -s ${dir}/Facades/netstandard.dll && ls ${dir} | wc -l && ls ${dir}/Facades | wc -l`]);
+  assert.ifError(r.error);
+  assert.equal(r.status, 0, r.stderr || r.stdout || 'ref/net472 incomplete');
+  const [top, facades] = r.stdout.trim().split(/\s+/).map(Number);
+  assert.ok(top >= 90 && facades >= 100, `ref/net472 holds ${top} entries and Facades ${facades}`);
 });
