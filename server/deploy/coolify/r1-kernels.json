@@ -2,49 +2,55 @@
   "v1": {
     "o11": "11.55.94",
     "odc": "1.7.30",
-    "odcBridge": "v106",
+    "odcBridge": "v109",
     "odcBridgeAccepted": [
       "v98",
       "v101",
       "v102",
-      "v107"
+      "v107",
+      "v106",
+      "v108"
     ]
   },
   "v2": {
     "o11": "11.55.93",
     "odc": "1.7.29",
-    "odcBridge": "v97",
+    "odcBridge": "v108",
     "odcBridgeAccepted": [
       "v98",
       "v96",
       "v48",
       "v45",
       "v102",
-      "v107"
+      "v107",
+      "v97"
     ]
   },
   "v3": {
     "o11": "11.55.92",
     "odc": "1.7.28",
-    "odcBridge": "v97",
+    "odcBridge": "v108",
     "odcBridgeAccepted": [
       "v98",
       "v96",
       "v48",
       "v45",
       "v102",
-      "v107"
+      "v107",
+      "v97"
     ]
   },
   "v4": {
     "o11": "11.55.94",
     "odc": "1.7.31",
-    "odcBridge": "v106",
+    "odcBridge": "v109",
     "odcBridgeAccepted": [
       "v98",
       "v101",
       "v102",
-      "v107"
+      "v107",
+      "v106",
+      "v108"
     ]
   }
 }

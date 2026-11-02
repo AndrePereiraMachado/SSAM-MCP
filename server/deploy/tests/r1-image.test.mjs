@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 
-test('R1 image carries the reference maps and all three current-window compatibility manifests', () => {
+test('R1 image carries the reference maps and all four current-window compatibility manifests', () => {
   const image = process.env.SSAM_TEST_IMAGE;
   assert.ok(image, 'Set SSAM_TEST_IMAGE to the local R1 image');
   const code = `
@@ -15,9 +15,9 @@ test('R1 image carries the reference maps and all three current-window compatibi
     }
     const kernels = JSON.parse(fs.readFileSync('/app/deploy/coolify/r1-kernels.json','utf8'));
     // R4 (U1): v106 on the net10 pair, v101 kept so a Studio that loaded it keeps service, v107 (the net8 pack) accepted.
-    assert.deepEqual(kernels.v1,{o11:'11.55.94',odc:'1.7.30',odcBridge:'v106',odcBridgeAccepted:['v98','v101','v102','v107']});
+    assert.deepEqual(kernels.v1,{o11:'11.55.94',odc:'1.7.30',odcBridge:'v109',odcBridgeAccepted:['v98','v101','v102','v107','v106','v108']});
     for (const name of ['v2','v3']) {
-      assert.equal(kernels[name].odcBridge,'v97');
+      assert.equal(kernels[name].odcBridge,'v108');
       assert.ok(kernels[name].odcBridgeAccepted.includes('v98'));
       assert.ok(kernels[name].odcBridgeAccepted.includes('v102'));
       assert.ok(kernels[name].odcBridgeAccepted.includes('v107'));
@@ -25,7 +25,7 @@ test('R1 image carries the reference maps and all three current-window compatibi
     assert.equal(kernels.v2.odc,'1.7.29');
     assert.equal(kernels.v3.odc,'1.7.28');
     // R4 (ODC 1.7.31): a fourth pair, appended so v1-v3 keep their names and default; the same net10 kernel metadata as v1.
-    assert.deepEqual(kernels.v4,{o11:'11.55.94',odc:'1.7.31',odcBridge:'v106',odcBridgeAccepted:['v98','v101','v102','v107']});
+    assert.deepEqual(kernels.v4,{o11:'11.55.94',odc:'1.7.31',odcBridge:'v109',odcBridgeAccepted:['v98','v101','v102','v107','v106','v108']});
   `;
   const result = spawnSync(process.env.DOCKER_EXE ?? 'docker', ['--context','desktop-linux','run','--rm','--pull=never','--network=none','--read-only',
     '--entrypoint=node',image,'--input-type=module','-e',code], {encoding:'utf8',timeout:60000,windowsHide:true});
