@@ -13,7 +13,11 @@ internal sealed class StudioKinds(string root, string runtime, JsonObject pack, 
     // order), and the server offers the bridges from v106 on only to an agent that runs reconcile-merge (bridge-store.mjs).
     internal static readonly string[] OdcCommandList = ["status", "wait", "authorize", "open", "snapshot", "latest", "check-base", "preview", "merge", "reconcile-merge", "publish", "publish-status", "publish-log", "dismiss-dialog", "close", "module-info", "assets", "consumers", "create", "create-app", "templates", "template-download", "refresh-references", "reference-snapshot", "reference-producers", "data", "data-insert", "data-update", "data-delete", "portal-call", "portal-session", "auth-status", "stop", "query-test"];
     internal static readonly HashSet<string> OdcCommands = [.. OdcCommandList];
-    internal static readonly HashSet<string> O11Methods = ["ping", "bridge_manifest", "get_active_module", "list_open_modules", "get_errors", "open_module", "close_module", "publish", "windows", "ui_alive", "close_dialog", "snapshot_module", "merge_from_oml", "merge_status", "environment_session", "sc_api", "sc_web", "sc_http", "studio_login", "sc_session", "publish_log", "refresh_references", "answer_dependencies_dialog"];
+    // integration_import (0.4.4-native, thin O11 bridge 1.1.0, fase4-28 r4-f3-import): the Studio's own SOAP/OpenAPI importer on a
+    // detached copy of the snapshot, its paths agent paths (MapO11). The hello lists these methods (agent.o11Methods, in this
+    // order), and the server sends the import only to an agent that lists it.
+    internal static readonly string[] O11MethodList = ["ping", "bridge_manifest", "get_active_module", "list_open_modules", "get_errors", "open_module", "close_module", "publish", "windows", "ui_alive", "close_dialog", "snapshot_module", "merge_from_oml", "merge_status", "environment_session", "sc_api", "sc_web", "sc_http", "studio_login", "sc_session", "publish_log", "refresh_references", "integration_import", "answer_dependencies_dialog"];
+    internal static readonly HashSet<string> O11Methods = [.. O11MethodList];
     private static readonly HashSet<string> Manifests = ["check-base", "preview", "merge", "reconcile-merge", "publish", "publish-status", "create", "authorize", "create-app"];
     private readonly Workspace workspace = new(root);
     private readonly SemaphoreSlim attachGate = new(1, 1);
@@ -156,6 +160,19 @@ internal sealed class StudioKinds(string root, string runtime, JsonObject pack, 
         if (method == "snapshot_module") p["path"] = At(p["path"], true);
         if (method == "merge_from_oml") foreach (var name in new[] { "foreign_path", "base_path", "first_pass_path" })
             if (name == "foreign_path" || p[name] != null) p[name] = At(p[name], false);
+        if (method == "integration_import")
+        {
+            p["base_path"] = At(p["base_path"], false);
+            p["document_path"] = At(p["document_path"], false);
+            if (p["dependencies"] is JsonArray dependencies)
+                foreach (var dependency in dependencies)
+                {
+                    if (dependency is not JsonObject d) throw Invalid("Each integration_import dependency is {uri, path, sha256}");
+                    d["path"] = At(d["path"], false);
+                }
+            else if (p["dependencies"] != null) throw Invalid("integration_import dependencies is a list of {uri, path, sha256}");
+            p["out_path"] = At(p["out_path"], true);
+        }
         if (method == "environment_session" && Text(p["operation"]) == "download")
         {
             if (p["arguments"] is not JsonObject a) throw new AgentFault("PATH_NOT_AGENT", "Download requires arguments.outputDirectory");

@@ -11,7 +11,7 @@ import { execFileSync } from 'node:child_process';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { createChannel, PROTOCOL } from './channel.mjs';
 import { createOutbox } from './outbox.mjs';
-import { createKinds, helloKinds, ODC_COMMANDS } from './kinds.mjs';
+import { createKinds, helloKinds, ODC_COMMANDS, O11_METHODS } from './kinds.mjs';
 import { resolveRenderer } from './render.mjs';
 import { createWorkspace } from './workspace.mjs';
 import { uploadBlob, downloadBlob, downloadBuffer, PART_BYTES, MAX_FILE_BYTES } from './blobs.mjs';
@@ -48,7 +48,11 @@ import { completeInstances } from './studio-instance.mjs';
 // the ODC commands this agent runs (agent.odcCommands), so the server offers the ODC bridges from v106 on only to an agent that
 // runs reconcile-merge (bridge-store.mjs). The other kinds and the wire are those of 0.3.5. The native core of the same change
 // is 0.4.3-native.
-export const AGENT_VERSION = '0.3.6';
+// 0.3.7 (agent/r4-f3-import): o11.bridge passes integration_import (the Studio's own SOAP/OpenAPI importer, thin O11 bridge 1.1.0,
+// its paths mapped as agent paths) and the hello lists the O11 bridge methods this agent passes (agent.o11Methods), so the server
+// sends the import only to an agent that runs it and keeps INTEGRATION_IMPORT_NEEDS_BRIDGE for any other. The other kinds and the
+// wire are those of 0.3.6. The native core of the same change is 0.4.4-native.
+export const AGENT_VERSION = '0.3.7';
 const INLINE_MAX_BYTES = 524288;
 const MAX_VALUE_BYTES = 16 * 1024 * 1024;
 const PARAMS_MEMORY_BYTES = 64 * 1024 * 1024;
@@ -176,8 +180,10 @@ export function createAgent({ root, runtimeRoot = root, config = {}, deps = {}, 
       // since 0.2.0; file.upload and, with a renderer, screen.render since 0.3.4), so the server never asks an older agent for a
       // kind it does not have.
       // odcCommands (0.3.6): the commands odc.pipe passes (kinds.mjs ODC_COMMANDS); the server offers a bridge only to an agent that
-      // runs what that bridge needs (reconcile-merge from v106 on).
-      agent: { version: AGENT_VERSION, node: process.version, platform, startedAt, root: base, kinds: helloKinds(renderer), odcCommands: [...ODC_COMMANDS], machine },
+      // runs what that bridge needs (reconcile-merge from v106 on). o11Methods (0.3.7): the O11 bridge methods o11.bridge passes
+      // (kinds.mjs O11_METHODS); the server sends integration_import only to an agent that lists it.
+      agent: { version: AGENT_VERSION, node: process.version, platform, startedAt, root: base, kinds: helloKinds(renderer), odcCommands: [...ODC_COMMANDS],
+        o11Methods: [...O11_METHODS], machine },
       pack: { id: pack.id, lanes: pack.lanes, odcBridge: pack.odcBridge, o11BuiltFor: pack.o11BuiltFor, o11Hook: pack.o11Hook },
       capabilities: { bridgeOffer: platform !== 'darwin', ...(platform === 'darwin' ? { bridgeOfferReason: MAC_BRIDGE_REASON } : {}) },
       bridges: updates.reports(), bridgeUpdate: updates.wireStatus(), studios, o11Connection: connection };
