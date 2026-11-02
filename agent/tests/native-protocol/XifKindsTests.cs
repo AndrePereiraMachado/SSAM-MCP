@@ -24,15 +24,47 @@ public class XifKindsTests
             var exe = Path.Combine(runtime, "xif-engine", XifKinds.EngineExe);
             Directory.CreateDirectory(Path.GetDirectoryName(exe)!);
             File.WriteAllText(exe, "engine");
-            if (!OperatingSystem.IsWindows()) { Assert.Null(XifKinds.ResolveEngine(runtime, null)); return; }
-            Assert.Equal(exe, XifKinds.ResolveEngine(runtime, null));
-            Assert.True(new XifKinds(runtime, runtime, null).Available);
             var sha = Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(exe)));
-            Assert.Equal(exe, XifKinds.ResolveEngine(runtime, new JsonObject { ["xifEngine"] = new JsonObject { ["path"] = "xif-engine/Anvil.Xif.Engine.exe", ["sha256"] = sha } }));
-            Assert.Null(XifKinds.ResolveEngine(runtime, new JsonObject { ["xifEngine"] = new JsonObject { ["sha256"] = new string('0', 64) } }));
-            Assert.Null(XifKinds.ResolveEngine(runtime, new JsonObject { ["xifEngine"] = new JsonObject { ["path"] = "../x.exe" } }));
+            JsonObject Pin(string? path, string? hash) => new() { ["xifEngine"] = new JsonObject { ["path"] = path, ["sha256"] = hash } };
+            if (!OperatingSystem.IsWindows()) { Assert.Null(XifKinds.ResolveEngine(runtime, Pin("xif-engine/Anvil.Xif.Engine.exe", sha))); return; }
+            // M1 (F4 review): a file at the usual place without a pin never runs, nor a pin without its sha256.
+            Assert.Null(XifKinds.ResolveEngine(runtime, null));
+            Assert.False(new XifKinds(runtime, runtime, new JsonObject()).Available);
+            Assert.Null(XifKinds.ResolveEngine(runtime, Pin("xif-engine/Anvil.Xif.Engine.exe", null)));
+            Assert.Equal((exe, sha), XifKinds.ResolveEngine(runtime, Pin("xif-engine/Anvil.Xif.Engine.exe", sha)));
+            Assert.True(new XifKinds(runtime, runtime, Pin("xif-engine/Anvil.Xif.Engine.exe", sha)).Available);
+            Assert.Null(XifKinds.ResolveEngine(runtime, Pin("xif-engine/Anvil.Xif.Engine.exe", new string('0', 64))));
+            Assert.Null(XifKinds.ResolveEngine(runtime, Pin("../x.exe", sha)));
+            // Checked again on the handle the run holds: a file replaced after the start is not run, and while held it cannot be replaced.
+            using (var held = XifKinds.OpenIntact(exe, sha))
+            {
+                Assert.NotNull(held);
+                Assert.Throws<IOException>(() => File.WriteAllText(exe, "another program"));
+            }
+            File.WriteAllText(exe, "another program");
+            Assert.Null(XifKinds.OpenIntact(exe, sha));
         }
         finally { Directory.Delete(runtime, true); }
+    }
+
+    [Fact]
+    public void OperationFoldersOlderThanAnHourAreSweptAndNothingElse()
+    {
+        var root = Root();
+        try
+        {
+            var xif = Path.Combine(root, "o11", "xif");
+            var old = Directory.CreateDirectory(Path.Combine(xif, "aaaaaaaaaaaaaaaa", "out")).Parent!;
+            var recent = Directory.CreateDirectory(Path.Combine(xif, "bbbbbbbbbbbbbbbb"));
+            var other = Directory.CreateDirectory(Path.Combine(xif, "not-an-operation"));
+            Directory.SetLastWriteTimeUtc(old.FullName, DateTime.UtcNow.AddHours(-2));
+            Directory.SetLastWriteTimeUtc(other.FullName, DateTime.UtcNow.AddHours(-2));
+            new XifKinds(root, null, null).Sweep("cccccccccccccccc");
+            Assert.False(old.Exists && Directory.Exists(old.FullName));
+            Assert.True(Directory.Exists(recent.FullName));
+            Assert.True(Directory.Exists(other.FullName));
+        }
+        finally { Directory.Delete(root, true); }
     }
 
     [Fact]
