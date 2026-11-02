@@ -289,7 +289,9 @@ async function runJobOnce(request, deps, carried) {
   // A headless job writes nothing to a Studio, so the destructive-words rule of the deliveries does not apply here.
   const prepare = deps.prepareIntegrationJob ?? (await import('./integration-documents.mjs')).prepareIntegrationJob;
   const prepared = await prepare(job, { lane, localRoot: laneLocal, destructive: false, ...(deps.fetch ? { fetchImpl: deps.fetch } : {}) });
-  if (prepared?.ok === false) return { ...prepared, lane, job, stage: 'documents' };
+  // r40: the URLs the customer's agent downloaded (prepared.notes) are listed on the answer, refused or not.
+  if (Array.isArray(prepared?.notes) && prepared.notes.length) jobNotes = [...jobNotes, ...prepared.notes];
+  if (prepared?.ok === false) { const { notes: _notes, ...refused } = prepared; return withNormalizationsOf({ ...refused, lane, job, stage: 'documents' }, prepared.notes ?? []); }
   if (prepared?.changed) job = prepared.job;
   const stem = path.parse(job).name;
   const producers = producerList(request.producers).map(p => producerArg(p, abs));

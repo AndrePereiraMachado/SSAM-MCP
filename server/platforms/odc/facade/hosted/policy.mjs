@@ -261,7 +261,9 @@ export function prototypeUnavailable(name, lane) {
 // nothing else. 'inline-samples' (rest-consume): its one server-side read was the sample GET of a job's url
 // (integration-documents.mjs sampleRestConsume, the server's network); hosted, every input is in the job, each GET method
 // carries its "sample", and a job that lacks one is refused at the gate (restConsumeSampleRequired, whatever the switch),
-// before the agent and any capture; the documents step never fetches it either (defence in depth). The job's files are
+// before the agent and any capture; the documents step never fetches it either (defence in depth). r40: an agent whose Hello
+// lists document.fetch samples it on the user's machine (integration-documents.mjs agentSample), so the gate lets the job
+// through for that agent only; the server still never makes the request. The job's files are
 // confined like every other job file (job-paths.mjs confineJobs); a generator without a mode stays refused here.
 export const HOSTED_GENERATOR_OPS = 'refuse';
 export const GENERATOR_TOOLS = JOB_TOOLS;
@@ -274,6 +276,9 @@ export const samplesAsked = (name, args) => GENERATOR_TOOLS.includes(name) || na
 // rest-consume in its hosted input mode: the GET methods without a sample a call names, refused before anything runs, with
 // the family code of the documents (DOCUMENT_FETCH_HOSTED_REFUSED, M3 of the F3 review: a hosted server never fetches what a
 // job names), cause REST_CONSUME_SAMPLE_MISSING.
+// r40: an agent whose Hello lists document.fetch samples on the user's machine (integration-documents.mjs agentSample), so the gate
+// lets the job through; this refusal is for any other agent, and its fix says to update it.
+export const SAMPLE_FETCH_KIND = 'document.fetch';
 export function restConsumeSampleRequired(name, lane, unsampled) {
   const named = [...new Set(unsampled.map(u => u.method).filter(Boolean))];
   const unreadable = unsampled.some(u => u.unreadable);
@@ -285,7 +290,8 @@ export function restConsumeSampleRequired(name, lane, unsampled) {
       + (unreadable ? '; the gate could not read the whole job' : '') + '. Nothing was requested and nothing ran.',
     problems: unsampled.slice(0, 20).map(u => ({ code: 'DOCUMENT_FETCH_HOSTED_REFUSED', cause: 'REST_CONSUME_SAMPLE_MISSING', path: u.path, ...(u.method ? { method: u.method } : {}) })),
     fix: 'give the response inline in each GET method: "sample": <the JSON response> (from the API documentation, or a call the user made on their machine); a POST/PUT/PATCH '
-      + 'gives "request": <the JSON body> and, for a typed answer, "sample". Then send the same call again.',
+      + 'gives "request": <the JSON body> and, for a typed answer, "sample". Then send the same call again. Or update the SSAM Agent to let it '
+      + 'download on the user\'s machine (the SSAM Agent 0.3.11 / 0.4.8-native, the SSAM Agent app 0.2.3 or later).',
     continuation: { tool: 'ssam_reference', arguments: { lane: lane === 'odc' ? 'odc' : 'o11', kind: 'api', query: { op: 'rest-consume' } },
       why: 'The closed keys of rest-consume: sample, request, verb, auth, headers.' } };
 }
@@ -592,8 +598,9 @@ export function refusalBeforeAgent(name, args, { entry, config = null, raw = arg
     const generator = namesGenerator(args, pendingGenerator);
     if (generator) return { refusal: generatorUnavailable(name, lane, generator) };
   }
-  // r4-rest-hosted: rest-consume's hosted input mode, whatever the switch (the server never fetches a url of a job).
-  if (samplesAsked(name, args) && hasArgs) {
+  // r4-rest-hosted: rest-consume's hosted input mode, whatever the switch (the server never fetches a url of a job); r40: unless
+  // the customer's agent samples it on the user's machine (document.fetch).
+  if (samplesAsked(name, args) && hasArgs && !agentRuns(supports, SAMPLE_FETCH_KIND)) {
     const unsampled = restConsumeUnsampled(args);
     if (unsampled.length) return { refusal: restConsumeSampleRequired(name, lane, unsampled) };
   }
@@ -980,7 +987,7 @@ export function wrapHostedTool(name, config, handler, { context, link = context?
       // servidor/fase4-25: after the paths (a part the gate refused is named by its own refusal, never as 'unreadable').
       if (jobs.generator) return refusal(generatorUnavailable(name, lane, jobs.generator));
       // r4-rest-hosted: a job file, the job of basedOn, a patched job or a composite part with a GET method without sample.
-      if (jobs.unsampled?.length) return refusal(restConsumeSampleRequired(name, lane, jobs.unsampled));
+      if (jobs.unsampled?.length && !agentRuns(supports, SAMPLE_FETCH_KIND)) return refusal(restConsumeSampleRequired(name, lane, jobs.unsampled));
       resolved = jobs.resolved;
       if (name === 'ssam_job' && lane === 'odc' && (resolved.base === undefined || resolved.base === null || resolved.base === ''))
         resolved = { ...resolved, base: NEUTRAL_ODC_BASE };

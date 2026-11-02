@@ -33,6 +33,8 @@ export const GENERATOR_STATES = Object.freeze(['approved', 'blind-test-pending']
 // - 'inline-samples': rest-consume. Every input is in the job, each GET method with its "sample" (the one input the facade
 //   would fetch, integration-documents.mjs sampleRestConsume): a job that lacks one is refused at the gate
 //   (DOCUMENT_FETCH_HOSTED_REFUSED, cause REST_CONSUME_SAMPLE_MISSING, hosted/policy.mjs restConsumeSampleRequired) and the documents step never fetches it.
+//   r40: unless the customer's SSAM Agent runs document.fetch: then the GET is made by that agent on the user's machine (never by
+//   the server; integration-documents.mjs agentSample), and the gate lets the job through.
 // Setting a mode to null refuses that generator on hosted servers again; nothing else changes.
 export const HOSTED_MODES = Object.freeze(['job-only', 'inline-samples']);
 const HOSTED_JOB_ONLY = 'the kernel op reads only the job and the module it runs on (no file, no network)';
@@ -221,7 +223,8 @@ export function describeGenerator(id, lane = 'odc', { hosted = false } = {}) {
   const tools = '(ssam_job, ' + (lane === 'o11' ? 'o11_job, o11_deliver' : 'studio_deliver') + ', ssam_code write ops)';
   return { id, op: a.op, ...(a.with ? { with: a.with } : {}), state: a.state, reason: a.reason, report: a.report,
     use: mode && pending ? 'not offered by ssam_discover; this hosted server runs it called explicitly with its op ' + tools
-      + (inline ? ' with every input in the job: "sample" (the JSON response) in each GET method, as the server never calls the API' : '')
+      + (inline ? ' with every input in the job: "sample" (the JSON response) in each GET method, as the server never calls the API'
+        + ' (an SSAM Agent 0.3.11 or the app 0.2.3 on the user\'s machine samples a GET method without one there)' : '')
       : pending ? 'not offered by ssam_discover until an independent blind test approves it; callable explicitly with its op ' + tools
       : 'approved: ssam_discover offers it for the intents of its family',
     contract: { tool: 'ssam_reference', arguments: { lane, kind: 'api', query: { op: a.op } } },

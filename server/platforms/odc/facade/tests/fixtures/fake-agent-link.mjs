@@ -20,7 +20,8 @@ export function agentPaths(value, keys = [], out = []) {
 }
 
 // sync: the agent runs file.sync (agent 0.2.0+, C14); the link then says so in supports() and keeps the released transfers.
-export function fakeAgentLink({ tokenId = 'tok_test', customer = 'Test', agentRoot, connected = true, info = {}, handlers = {}, sync = false } = {}) {
+// fetches (r40): the agent runs document.fetch (0.3.11 / 0.4.8-native, the app 0.2.3); by default an agent before it.
+export function fakeAgentLink({ tokenId = 'tok_test', customer = 'Test', agentRoot, connected = true, info = {}, handlers = {}, sync = false, fetches = false } = {}) {
   const calls = [], protocolErrors = [], puts = [], gets = [], released = [];
   const blobs = new Map();
   const closers = new Set();
@@ -86,7 +87,7 @@ export function fakeAgentLink({ tokenId = 'tok_test', customer = 'Test', agentRo
   const link = {
     tokenId, customer, calls, protocolErrors, puts, gets, blobs, agentRoot, released,
     connected: () => isConnected,
-    supports: kind => kind !== 'file.sync' || sync,
+    supports: kind => (kind !== 'file.sync' || sync) && (kind !== 'document.fetch' || fetches),
     releaseTransfer(ref) { released.push(ref?.transfer ?? null); },
     // C03: a test schedules reconnectIn (ms) to make waitConnected see the Hello of a reconnecting agent.
     reconnectIn: null,

@@ -352,6 +352,27 @@ test('prepareIntegrationJob runs before the snapshot; its refusal stops there an
   assert.deepEqual(pinned.calls, ['snapshot', 'apply', 'manifest']);
 });
 
+// r40: the URLs the customer's agent downloaded for the documents step are listed on the answer (normalizations), on a delivery
+// and on a refusal of the documents step alike, next to what the kernel normalized.
+test('the notes of the documents the agent downloaded are on the answer, delivered or refused', async t => {
+  const note = { rule: 'DOCUMENT_DOWNLOADED_BY_AGENT', at: '/ops/0/data/openapi/path', note: 'https://api.example.test/openapi.json was downloaded by the SSAM Agent on the user\'s machine: 10 bytes, sha256 ' + 'a'.repeat(64) + '; the SSAM server made no request' };
+  const refused = fixture(t);
+  refused.deps.prepareIntegrationJob = async () => ({ ok: false, code: 'DOCUMENT_NAME_INVALID', error: 'x', problems: [{ code: 'DOCUMENT_NAME_INVALID', message: 'x', fix: 'y' }], notes: [note] });
+  const out = await deliverKernel(refused.input, refused.deps);
+  assert.equal(out.ok, false); assert.equal(out.failed, 'documents');
+  assert.deepEqual(out.normalizations, [note]);
+  assert.equal(out.notes, undefined, 'the notes are listed once, as normalizations');
+  const pinned = fixture(t);
+  const pinnedJob = path.join(pinned.root, 'job.pinned.json');
+  fs.writeFileSync(pinnedJob, JSON.stringify({ ops: [] }));
+  pinned.deps.prepareIntegrationJob = async () => ({ ok: true, job: pinnedJob, changed: true, documents: [], notes: [note] });
+  pinned.deps.apply = async () => ({ ok: true, candidate: 'candidate.oml', receipt: 'kernel-result.json', normalizations: { total: 1, byRule: { OP_DATA_WRAPPED: 1 }, items: [{ rule: 'OP_DATA_WRAPPED' }] } });
+  const ok = await deliverKernel({ ...pinned.input, until: 'build' }, pinned.deps);
+  assert.equal(ok.ok, true);
+  assert.deepEqual(ok.normalizations.items, [note, { rule: 'OP_DATA_WRAPPED' }]);
+  assert.equal(ok.normalizations.byRule.DOCUMENT_DOWNLOADED_BY_AGENT, 1);
+});
+
 test('bad metadata is refused before contacting the Studio', async t => {
   const f = fixture(t);
   await assert.rejects(deliverKernel({ ...f.input, owners: [] }, f.deps), /owners/);

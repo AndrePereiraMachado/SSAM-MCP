@@ -2120,7 +2120,9 @@ async function deliverRun(input, { words, authorization, wordsSha256 = words ? s
     if (!input.resume) {
       const prepared = await ctx.prepareIntegration(resolved.path, { lane: 'o11', words: words ?? '', grant: authorization?.source === 'standing-grant' || authorization?.source === 'inherited', localRoot: lane.local,
         exposed: service => exposedMethods(service, input.module, ctx, lane) });
-      if (prepared?.ok === false) return withJob({ ...prepared, outcome: 'refused', stage: 'documents', failed: 'documents' }, resolved);
+      // r40: the URLs the customer's agent downloaded (prepared.notes) are listed on every answer that names the job.
+      if (Array.isArray(prepared?.notes) && prepared.notes.length) resolved = { ...resolved, normalizations: [...(resolved.normalizations ?? []), ...prepared.notes] };
+      if (prepared?.ok === false) { const { notes: _notes, ...refused } = prepared; return withJob({ ...refused, outcome: 'refused', stage: 'documents', failed: 'documents' }, resolved); }
       if (prepared?.changed) resolved = { ...resolved, path: prepared.job, sha256: sha256(fs.readFileSync(prepared.job)) };
     }
     await selected(ctx);

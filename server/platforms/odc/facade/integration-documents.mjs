@@ -31,6 +31,18 @@
 // document. A WSDL or OpenAPI URL, a redirect and any import or $ref a document names by URL are refused before any request
 // (DOCUMENT_FETCH_HOSTED_REFUSED); the document comes from the customer: a file of the workspace (ws:<rel>, or agent:inbox/<file>
 // the SSAM Agent brings from the user's machine, where any download happened), or inline. Local use is unchanged.
+// r40 (agent fetch; supersedes the refusal above when the customer's agent downloads): a URL is downloaded by the customer's
+// SSAM Agent ON THE USER'S MACHINE (kind document.fetch, the agent 0.3.11 / 0.4.8-native, the SSAM Agent app 0.2.3), never by
+// this server: the user's network, an intranet that machine reaches included, is the user's intent. The bytes it answers are
+// read as the bytes of a URL read locally, with the same rules (the .wso companion, DTD/ENTITY, imports and $ref resolved
+// against the final URL, the names of a WSDL's imports relative to it inside its folder, MAX_DOCUMENTS, the workspace quota,
+// the pin under <localRoot>/documents/<sha256>/), after the server checks them again (fields, size, sha256: agentRead). One
+// rule more than locally: what a downloaded document names is asked of the agent only on that document's own server
+// (DOCUMENT_FETCH_OTHER_SERVER), so a document from the internet never makes the user's agent read another server for it.
+// The sample GET of rest-consume goes the same way (10 s, 2 MB, JSON). Every URL the agent downloaded is listed on the answer
+// (DOCUMENT_DOWNLOADED_BY_AGENT, with its sha256 and bytes). An agent without the kind (the apps 0.2.1/0.2.2), or none
+// connected, keeps DOCUMENT_FETCH_HOSTED_REFUSED before anything is asked, its fix saying to update or connect the agent; the
+// server's own HTTP client is never called for a hosted customer.
 // Inline (both modes): "wsdl": {"content": "<the WSDL text>", "name"?: "service.wsdl"} of a soap op, or "openapi": {"content":
 // "<the JSON text>", "name"?, "operations": [...]} of a rest op. The text is written once under <localRoot>/documents/inline/
 // <sha256>/<name> and pinned like a file (sha256, size, DTD/ENTITY refusal); an inline document is self-contained: a file it
@@ -44,7 +56,7 @@ import { namesWhole } from './studio-create-app.mjs';
 import { pinReferences } from './job-patch.mjs';
 import { hostedContext, servedWithoutContext } from './executor.mjs';
 import { insideVisible, createQuota, workspaceFull } from './hosted/mirror.mjs';
-import { MAX_REDIRECTS, createPublicFetch, publicUrlProblem } from './hosted/public-fetch.mjs';
+import { MAX_REDIRECTS, publicUrlProblem } from './hosted/public-fetch.mjs';
 
 export const MAX_DOCUMENT_BYTES = 5 * 1024 * 1024;
 export const MAX_DOCUMENTS = 32;
@@ -61,6 +73,74 @@ const sha256 = data => createHash('sha256').update(data).digest('hex');
 const readJson = file => JSON.parse(fs.readFileSync(file, 'utf8').replace(/^﻿/, ''));
 const isUrl = text => /^https?:\/\//i.test(String(text ?? ''));
 const problem = (code, message, fix, extra = {}) => ({ code, ...extra, message, fix: fix ?? null });
+
+// ---- r40: documents downloaded by the customer's agent ----------------------------------------------------------------
+
+export const DOCUMENT_FETCH_KIND = 'document.fetch';
+// The refusals of the agent's kind (agent/lib/document-fetch.mjs, DocumentFetch.cs), each with the fix the server gives.
+export const AGENT_FETCH_FIXES = Object.freeze({
+  DOCUMENT_FETCH_URL_REFUSED: 'give an http(s) URL without a user or password, or the file (agent:inbox/<file>), or the document inline',
+  DOCUMENT_FETCH_REDIRECT_REFUSED: 'give the document\'s final http(s) URL (at most 5 redirects, each to http or https)',
+  DOCUMENT_FETCH_TOO_LARGE: 'use a document of at most 5 MB (a sample of at most 2 MB)',
+  DOCUMENT_FETCH_UNSAFE_XML: 'use the service\'s own WSDL and schemas without <!DOCTYPE>/<!ENTITY>',
+  DOCUMENT_FETCH_NOT_DOCUMENT: 'give the URL of the document itself (a WSDL is often <service>?WSDL; an OpenAPI document or a sample is JSON)',
+  DOCUMENT_FETCH_FAILED: 'check that the user\'s machine reaches the URL (in a browser there), or give the file (agent:inbox/<file>) or the document inline',
+});
+export const DOCUMENT_DOWNLOADED_BY_AGENT = 'DOCUMENT_DOWNLOADED_BY_AGENT';
+// The agent's answer that the server's own check refuses (fields, base64, size or sha256 not as declared).
+export const AGENT_FETCH_INVALID = 'DOCUMENT_FETCH_AGENT_INVALID';
+// A reference a downloaded document names on another server than its own (pin): never asked of the agent.
+export const AGENT_FETCH_ORIGIN = 'DOCUMENT_FETCH_OTHER_SERVER';
+const AGENT_VERSIONS = 'the SSAM Agent 0.3.11 / 0.4.8-native, the SSAM Agent app 0.2.3 or later';
+// What a hosted refusal adds for the agent: 'update' (the connected agent does not download), 'absent' (none connected).
+export const agentHint = state => state === 'update' ? ` Or update the SSAM Agent to let it download on the user's machine (${AGENT_VERSIONS}).`
+  : state === 'absent' ? ` Or connect the SSAM Agent on the user's machine (${AGENT_VERSIONS}) to let it download there.` : '';
+
+// The downloads of one preparation through the customer's agent, read once. agent: the hosted executor (documentFetchState,
+// documentFetch), or null. -> {state: 'ready'|'update'|'absent', fetch|null, downloads: []}.
+function agentFetcher(agent) {
+  let state = 'absent';
+  try { state = agent?.documentFetchState?.() ?? 'absent'; } catch { state = 'absent'; }
+  if (!['ready', 'update', 'absent'].includes(state)) state = 'absent';
+  return { state, fetch: state === 'ready' ? params => agent.documentFetch(params) : null, downloads: [] };
+}
+
+/**
+ * One GET by the customer's agent, checked again here (fields, canonical base64, bytes, sha256, the limit; DTD/ENTITY stay with
+ * the rules of the caller, as for a local read). -> {bytes, finalUrl, status, contentType} | {problem}. The server never
+ * requests anything itself; a refusal of the link (no agent, an agent without the kind) is the hosted refusal of the family.
+ */
+async function agentRead(url, { agent, accept, maxBytes, timeoutMs, from = null, at = null }) {
+  let value;
+  try { value = await agent.fetch({ url, accept, maxBytes, timeoutMs }); }
+  catch (error) {
+    const code = String(error?.code ?? '');
+    if (Object.hasOwn(AGENT_FETCH_FIXES, code))
+      return { problem: problem(code, `the SSAM Agent on the user's machine did not download ${url}: ${String(error?.message ?? '').slice(0, 300)}`, AGENT_FETCH_FIXES[code], { url, downloadedBy: 'agent' }) };
+    // KIND_NOT_ALLOWED: the agent changed under the call; anything of the link (not connected, reconnecting, a deadline): no answer.
+    return { problem: hostedFetchProblem(url, from, code === 'KIND_NOT_ALLOWED' ? 'update' : 'absent', code || 'AGENT_ERROR') };
+  }
+  const invalid = what => ({ problem: problem(AGENT_FETCH_INVALID, `the SSAM Agent answered the download of ${url} with ${what}, so its bytes were not used`, 'update the SSAM Agent on the user\'s machine, then send the call again', { url }) });
+  if (!value || typeof value !== 'object') return invalid('no answer');
+  const { finalUrl, status, contentBase64, sha256: declared, bytes: size } = value;
+  if (typeof finalUrl !== 'string' || !isUrl(finalUrl) || !Number.isInteger(status) || typeof contentBase64 !== 'string' || !/^[0-9a-f]{64}$/.test(String(declared)) || !Number.isSafeInteger(size))
+    return invalid('fields that are not the kind\'s');
+  try { const parsed = new URL(finalUrl); if (parsed.username || parsed.password) return invalid('a final URL that carries a user or password'); } catch { return invalid('a final URL that is not a URL'); }
+  if (contentBase64.length > Math.ceil(maxBytes / 3) * 4) return { problem: problem('DOCUMENT_TOO_LARGE', `${url} has more than ${maxBytes} bytes`, 'use a document of at most 5 MB (a sample of at most 2 MB)', { url }) };
+  const bytes = Buffer.from(contentBase64, 'base64');
+  if (bytes.toString('base64') !== contentBase64) return invalid('content that is not base64');
+  if (bytes.length !== size || sha256(bytes) !== declared) return invalid('content whose size or sha256 is not the one it declared');
+  if (bytes.length > maxBytes) return { problem: problem('DOCUMENT_TOO_LARGE', `${url} has ${bytes.length} bytes, more than ${maxBytes}`, 'use a document of at most 5 MB (a sample of at most 2 MB)', { url }) };
+  const download = status >= 200 && status <= 299 ? { url, finalUrl, status, bytes: bytes.length, sha256: declared, ...(at ? { at } : {}) } : null;
+  if (download) agent.downloads.push(download);
+  return { bytes, finalUrl, status, download, contentType: typeof value.contentType === 'string' ? value.contentType.slice(0, 200) : null };
+}
+
+/** The notes of an answer: one per URL the customer's agent downloaded ({rule, at, note}, the facade's normalizations list). */
+export function downloadNotes(downloads) {
+  return (Array.isArray(downloads) ? downloads : []).map(d => ({ rule: DOCUMENT_DOWNLOADED_BY_AGENT, at: d.at ?? '/ops',
+    note: `${d.url}${d.finalUrl !== d.url ? ` (final URL ${d.finalUrl})` : ''} was downloaded by the SSAM Agent on the user's machine: ${d.bytes} bytes, sha256 ${d.sha256}; the SSAM server made no request` }));
+}
 
 /** The ops of a job document (array or {ops}); a composite {jobs} is left to the kernel. */
 const opsOf = document => (Array.isArray(document) ? document : Array.isArray(document?.ops) ? document.ops : []);
@@ -220,10 +300,12 @@ const outsideProblem = (reference, from) => problem('PATH_OUTSIDE_WORKSPACE',
   { reference });
 // fase4-28 r4-f3-import: a hosted server never fetches a document (the URL is shown, nothing was requested).
 export const HOSTED_FETCH_REFUSED = 'DOCUMENT_FETCH_HOSTED_REFUSED';
-const hostedFetchProblem = (url, from) => problem(HOSTED_FETCH_REFUSED,
-  `${from ? `the document ${path.basename(String(from))} names ${url}; ` : ''}the SSAM server never fetches a document for a hosted account, so ${url} was not requested`,
-  'download it on the user\'s machine and give the file (agent:inbox/<file>, or ws:<rel>; a WSDL with its imports next to it, named relative to it), or put the document inline: "wsdl": {"content": "<text>"} or "openapi": {"content": "<JSON text>", "operations": [...]}',
-  { url });
+// r40: state (agentFetcher) adds how the agent would download it; cause: what the agent link answered, when it was asked.
+const hostedFetchProblem = (url, from, state = null, cause = null) => problem(HOSTED_FETCH_REFUSED,
+  `${from ? `the document ${path.basename(String(from))} names ${url}; ` : ''}the SSAM server never fetches a document for a hosted account, so ${url} was not requested`
+    + (state === 'update' ? '; the SSAM Agent on the user\'s machine does not download documents' : state === 'absent' ? '; no SSAM Agent that downloads documents is connected' : ''),
+  'download it on the user\'s machine and give the file (agent:inbox/<file>, or ws:<rel>; a WSDL with its imports next to it, named relative to it), or put the document inline: "wsdl": {"content": "<text>"} or "openapi": {"content": "<JSON text>", "operations": [...]}.' + agentHint(state),
+  { url, ...(cause ? { cause } : {}) });
 const hostProblem = refused => problem(refused.code, refused.message,
   refused.code === 'DOCUMENT_HOST_NOT_PUBLIC' ? 'give the document\'s public URL, or put the file in the agent inbox (agent:inbox/<file>) and name it'
     : refused.code === 'UNSUPPORTED_DOCUMENT_SCHEME' ? 'give an http(s) URL or the file in the workspace' : 'check the URL, or put the file in the agent inbox (agent:inbox/<file>)');
@@ -232,7 +314,7 @@ const hostProblem = refused => problem(refused.code, refused.message,
  * Reads one document (URL or local path) with the limits; a refusal is {problem}. confine (hosted): {workspace,
  * workspaceReal, lookup}; from: the location of the document that names this one (null for the main document).
  */
-async function readDocument(source, { fetchImpl, base, wsdl, confine = null, from = null }) {
+async function readDocument(source, { fetchImpl, base, wsdl, confine = null, from = null, accept = 'xml', at = null }) {
   let resolved = source;
   if (base && !isUrl(source) && !path.isAbsolute(source) && !/^[A-Za-z][A-Za-z0-9+.-]*:/.test(source))
     resolved = isUrl(base) ? new URL(source, base).toString() : path.resolve(path.dirname(base), source);
@@ -240,7 +322,21 @@ async function readDocument(source, { fetchImpl, base, wsdl, confine = null, fro
     if (confine) { resolved = fileUrlPath(resolved); if (!resolved) return { problem: outsideProblem(source, from) }; }
     else if (/^file:\/\//i.test(resolved)) resolved = decodeURIComponent(new URL(resolved).pathname.replace(/^\/([A-Za-z]:)/, '$1'));
   }
-  if (isUrl(resolved) && confine) return { problem: hostedFetchProblem(resolved, from) };
+  // r40: hosted, a URL is downloaded by the customer's agent on the user's machine, or refused before anything is asked.
+  if (isUrl(resolved) && confine) {
+    if (!confine.agent?.fetch) return { problem: hostedFetchProblem(resolved, from, confine.agent?.state ?? null) };
+    const get = url => agentRead(url, { agent: confine.agent, accept, maxBytes: MAX_DOCUMENT_BYTES, timeoutMs: FETCH_TIMEOUT_MS, from, at });
+    const ok = read => !read.problem && read.status >= 200 && read.status <= 299;
+    let read = await get(resolved);
+    // The .wso companion, as locally: its HTML page (a DOCTYPE the agent refuses, or no WSDL) gives way to its ?WSDL.
+    if (wsdl && /\.wso$/i.test(new URL(resolved).pathname) && !new URL(resolved).search && !(ok(read) && looksLikeWsdl(read.bytes))) {
+      if (read.download) confine.agent.downloads.splice(confine.agent.downloads.indexOf(read.download), 1);
+      read = await get(resolved + '?WSDL');
+    }
+    if (read.problem) return read;
+    if (!ok(read)) return { problem: problem('DOCUMENT_NOT_FOUND', `GET ${read.finalUrl} answered ${read.status} on the user's machine (downloaded by the SSAM Agent)`, 'check the URL (the service\'s own ?WSDL or OpenAPI address)', { url: resolved, downloadedBy: 'agent' }) };
+    return { bytes: read.bytes, source: read.finalUrl, location: read.finalUrl };
+  }
   if (isUrl(resolved)) {
     if (typeof fetchImpl !== 'function') return { problem: problem('UNSUPPORTED_DOCUMENT_SCHEME', `no HTTP client to read ${resolved}`, 'pass the downloaded file\'s absolute path') };
     // Hosted: every hop is checked (scheme and a public address) before it is requested, and a redirect is followed here,
@@ -356,7 +452,7 @@ async function pin(source, { kind, localRoot, fetchImpl, at, jobDir, confine = n
   const candidate = !inline && !isUrl(source) && !hasScheme(source) && !path.isAbsolute(source) && jobDir ? path.resolve(jobDir, source) : null;
   const local = candidate && (!confine || insideVisible(confine.workspace, candidate)) && fs.existsSync(candidate) ? candidate : source;
   const main = inline ? { bytes: inline.bytes, location: path.join(localRoot, 'documents', 'inline', inline.name), source: 'inline' }
-    : await readDocument(local, { fetchImpl, wsdl, confine });
+    : await readDocument(local, { fetchImpl, wsdl, confine, accept: wsdl ? 'xml' : 'json', at });
   if (main.relative) return { unchanged: true };
   if (main.problem) return { problems: [{ ...main.problem, path: at }] };
   if (wsdl && unsafeXml(main.bytes)) return { problems: [problem('UNSAFE_WSDL_XML', `the WSDL of ${main.source} declares a DTD or ENTITY`, 'use the service\'s own WSDL without <!DOCTYPE>/<!ENTITY>', { path: at })] };
@@ -384,8 +480,9 @@ async function pin(source, { kind, localRoot, fetchImpl, at, jobDir, confine = n
       if (wsdl && !absolute?.outside && confine && typeof absolute === 'string' && !isUrl(absolute) && path.isAbsolute(absolute) && !insideVisible(confine.workspace, absolute)) {
         problems.push({ ...outsideProblem(reference, current.location), path: at, target: reference }); continue;
       }
-      // Hosted, an import by URL is DOCUMENT_FETCH_HOSTED_REFUSED (readDocument), which says how to give the file.
-      if (wsdl && !absolute?.outside && !(confine && isUrl(absolute))) {
+      // Hosted, an import by URL is DOCUMENT_FETCH_HOSTED_REFUSED (readDocument), which says how to give the file; r40: unless
+      // the customer's agent downloads it, when its name is judged as locally.
+      if (wsdl && !absolute?.outside && !(confine && isUrl(absolute) && !confine.agent?.fetch)) {
         const inside = insideName(main.location, absolute);
         if (!relativeName(reference) || inside === null) {
           problems.push(problem('DOCUMENT_NAME_INVALID', `the WSDL import '${reference}'${current.location !== main.location ? ` (named by ${path.basename(String(current.location))})` : ''} is not a name relative to the WSDL inside its folder`,
@@ -393,10 +490,19 @@ async function pin(source, { kind, localRoot, fetchImpl, at, jobDir, confine = n
           continue;
         }
       }
+      // r40: the customer's agent downloads what a document names only from that document's own server (its final URL's
+      // origin; a WSDL import is already inside its folder above): a document read from the internet never makes the user's
+      // agent read another server, an intranet one included, on its behalf. Deviation from local use (which follows any
+      // $ref), written in the design: the file can always be given (agent:inbox/<folder>/...) or the document inline.
+      if (confine?.agent?.fetch && isUrl(absolute) && isUrl(current.location) && new URL(absolute).origin !== new URL(current.location).origin) {
+        problems.push(problem(AGENT_FETCH_ORIGIN, `the document ${current.location} names ${absolute}, on another server: the SSAM Agent downloads what a document names only from that document's own server, so it was not requested`,
+          `download that file on the user's machine and give the document with its files (agent:inbox/<folder>/${mainName} and each file it ${wsdl ? 'imports' : 'references'}, named relative to it), or put the document inline`, { path: at, target: reference }));
+        continue;
+      }
       if (seen.has(absolute)) continue;
       seen.add(absolute);
       if (files.length >= MAX_DOCUMENTS) { problems.push(problem('DOCUMENT_TOO_LARGE', `${main.source} imports more than ${MAX_DOCUMENTS} documents`, 'import a smaller contract (one service, its own types)', { path: at })); break; }
-      const read = await readDocument(absolute, { fetchImpl, wsdl: false, confine, from: current.location });
+      const read = await readDocument(absolute, { fetchImpl, wsdl: false, confine, from: current.location, accept: wsdl ? 'xml' : 'json', at });
       if (read.problem) { problems.push({ ...read.problem, path: at, target: reference }); continue; }
       if (read.relative) continue;
       if (wsdl && unsafeXml(read.bytes)) { problems.push(problem('UNSAFE_WSDL_XML', `the imported ${absolute} declares a DTD or ENTITY`, 'use documents without <!DOCTYPE>/<!ENTITY>', { path: at })); continue; }
@@ -497,10 +603,32 @@ export async function fetchSample(url, { fetchImpl = globalThis.fetch, at = '' }
   } finally { clearTimeout(timer); }
 }
 
+// r40: one sample GET by the customer's agent on the user's machine (agentRead: 10 s, 2 MB, JSON), read as fetchSample reads its
+// answer; the agent's refusals keep the sample codes (REST_CONSUME_SAMPLE_*), with the agent's code as the cause.
+async function agentSample(url, { agent, at }) {
+  const read = await agentRead(url, { agent, accept: 'json', maxBytes: SAMPLE_MAX_BYTES, timeoutMs: SAMPLE_TIMEOUT_MS, at: at.replace(/\/url$/, '') });
+  if (read.problem) {
+    const code = read.problem.code;
+    const mapped = code === 'DOCUMENT_FETCH_TOO_LARGE' || code === 'DOCUMENT_TOO_LARGE' ? 'REST_CONSUME_SAMPLE_TOO_LARGE' : code === 'DOCUMENT_FETCH_NOT_DOCUMENT' ? 'REST_CONSUME_SAMPLE_NOT_JSON'
+      : code === HOSTED_FETCH_REFUSED ? HOSTED_FETCH_REFUSED : 'REST_CONSUME_SAMPLE_FETCH_FAILED';
+    return { problem: { ...read.problem, code: mapped, path: at, ...(mapped !== code ? { cause: code } : {}),
+      fix: mapped === HOSTED_FETCH_REFUSED ? read.problem.fix : `${read.problem.fix}; or give "sample": <the JSON response>` } };
+  }
+  if (read.status < 200 || read.status > 299) return { problem: problem('REST_CONSUME_SAMPLE_FETCH_FAILED', `GET ${url} answered ${read.status} on the user's machine (downloaded by the SSAM Agent)`,
+    'check the url and its example values ({p=value} or "try"), or give "sample": <the JSON response>', { path: at, status: read.status, downloadedBy: 'agent' }) };
+  let json;
+  try { json = JSON.parse(read.bytes.toString('utf8').replace(/^\uFEFF/, '')); } catch {
+    return { problem: problem('REST_CONSUME_SAMPLE_NOT_JSON', `GET ${url} answered ${read.contentType || 'no content type'}, not JSON`, 'give "sample": <the JSON response>, or consume a JSON endpoint', { path: at }) };
+  }
+  const { value, trimmed } = trimSample(json);
+  return { sample: value, sampledFrom: { url, status: read.status, bytes: read.bytes.length, sha256: sha256(read.bytes), ...(trimmed ? { trimmedTo: SAMPLE_LIST_ITEMS } : {}) } };
+}
+
 /** The samples of a rest-consume op: each GET method without one is sampled once and pinned in the op. */
 // The code of the family (the same text a WSDL or OpenAPI URL answers hosted).
 const SAMPLE_FETCH_REFUSED = 'DOCUMENT_FETCH_HOSTED_REFUSED';
-async function sampleRestConsume(op, i, { fetchImpl, hosted = false }) {
+// r40: agent (agentFetcher), hosted: the customer's agent samples on the user's machine when it downloads; else the refusal.
+async function sampleRestConsume(op, i, { fetchImpl, hosted = false, agent = null }) {
   const problems = [];
   let changed = false;
   const methods = Array.isArray(op.data?.methods) ? op.data.methods : [];
@@ -513,11 +641,11 @@ async function sampleRestConsume(op, i, { fetchImpl, hosted = false }) {
     const at = `/ops/${i}/data/methods/${j}`;
     // fase4-28 r4-rest-hosted (M3 of the F3 review): the family rule of the documents, DOCUMENT_FETCH_HOSTED_REFUSED: a
     // hosted server never fetches what a job names, here the sample GET, before any lookup or connection. Local use keeps it.
-    if (hosted) {
+    if (hosted && !agent?.fetch) {
       const shown = sampleUrl(op.data, method, at).url ?? method.url ?? null;
       problems.push(problem(SAMPLE_FETCH_REFUSED, `rest-consume: method '${method.name}' has no sample; the SSAM server never fetches for a hosted account, so `
         + (shown ? `${shown} was not requested` : 'nothing was requested'),
-        'give the response inline in the method: "sample": <the JSON response> (from the API documentation, or a call the user made on their machine)',
+        'give the response inline in the method: "sample": <the JSON response> (from the API documentation, or a call the user made on their machine).' + agentHint(agent?.state ?? null),
         { path: `${at}/sample`, cause: 'REST_CONSUME_SAMPLE_MISSING', ...(shown ? { url: shown } : {}) }));
       continue;
     }
@@ -528,7 +656,7 @@ async function sampleRestConsume(op, i, { fetchImpl, hosted = false }) {
     }
     const target = sampleUrl(op.data, method, at);
     if (target.problem) { problems.push(target.problem); continue; }
-    const read = await fetchSample(target.url, { fetchImpl, at: `${at}/url` });
+    const read = hosted ? await agentSample(target.url, { agent, at: `${at}/url` }) : await fetchSample(target.url, { fetchImpl, at: `${at}/url` });
     if (read.problem) { problems.push(read.problem); continue; }
     method.sample = read.sample;
     method.sampledFrom = read.sampledFrom;
@@ -584,8 +712,10 @@ function documentPaths(op) {
  * exposed(service): the current methods of an exposed service (o11_deliver reads them from a capture).
  * workspace: the customer's workspace when the documents are read for a hosted customer (default: the one of the hosted
  * call this runs in, else none: local use); null forces local use. lookup: dns.lookup's signature (tests). fetchImpl:
- * the HTTP client (default: hosted, the public-only client of hosted/public-fetch.mjs; local, the global fetch).
- * -> {ok:true, job, changed, documents:[{source, path, sha256, bytes}], normalizations?} | {ok:false, code, error, problems, continuation?}
+ * the HTTP client of local use (default the global fetch); hosted, none is ever called (r40). agent: the hosted executor whose
+ * documentFetch downloads on the user's machine (default: the hosted call's; tests: a fake), asked only for a URL.
+ * -> {ok:true, job, changed, documents:[{source, path, sha256, bytes}], normalizations?, notes?} | {ok:false, code, error, problems, continuation?, notes?}
+ * notes (r40): DOCUMENT_DOWNLOADED_BY_AGENT, one {rule, at, note} per URL the agent downloaded (downloadNotes).
  * normalizations: OP_DATA_WRAPPED of each op written without data (wrapData); the job written keeps the op as sent, its
  * document pinned in place, so the kernel wraps it the same way and its receipt lists the same entry.
  */
@@ -605,7 +735,7 @@ function inlineDocument(owner, { kind, at, path: alsoPath }) {
 }
 
 export async function prepareIntegrationJob(jobFile, { lane = 'o11', words = '', localRoot, fetchImpl, destructive = true, grant = false, exposed = null,
-  workspace = hostedContext()?.workspace ?? null, lookup = dns.lookup, quota = null } = {}) {
+  workspace = hostedContext()?.workspace ?? null, lookup = dns.lookup, quota = null, agent = hostedContext()?.executor ?? null } = {}) {
   let document;
   try { document = readJson(jobFile); } catch { return { ok: true, job: jobFile, changed: false, documents: [] }; }
   const ops = opsOf(document);
@@ -618,9 +748,11 @@ export async function prepareIntegrationJob(jobFile, { lane = 'o11', words = '',
   if (workspace) {
     let workspaceReal;
     try { workspaceReal = fs.realpathSync.native(workspace); } catch { workspaceReal = path.resolve(workspace); }
-    confine = { workspace: path.resolve(workspace), workspaceReal, lookup, quota: quota ?? createQuota(path.resolve(workspace)) };
+    // r40: the customer's agent, which downloads on the user's machine (agentFetcher); asked only when a URL is named.
+    confine = { workspace: path.resolve(workspace), workspaceReal, lookup, quota: quota ?? createQuota(path.resolve(workspace)), agent: agentFetcher(agent) };
   }
-  const client = fetchImpl ?? (confine ? createPublicFetch({ lookup, maxBytes: MAX_DOCUMENT_BYTES }) : globalThis.fetch);
+  // r40: hosted (confine), no HTTP client at all: a URL goes to the customer's agent or is refused (the server never requests it).
+  const client = confine ? null : fetchImpl ?? globalThis.fetch;
   const problems = [];
   // F7: every rule reads an op written without data as the kernel will (its document pinned, its remove and breaks named).
   const copy = structuredClone(document);
@@ -643,7 +775,7 @@ export async function prepareIntegrationJob(jobFile, { lane = 'o11', words = '',
       // fase4-28 r4-rest-hosted: for a hosted customer (confine) nothing is fetched at all, not even by the public-only client:
       // the server never calls an API a job names (rest-consume's hosted input mode, every sample inline; the gate refuses
       // the job first, hosted/policy.mjs restConsumeSampleRequired; this is the same rule where the request would be made).
-      const sampled = await sampleRestConsume(op, i, { fetchImpl: client, hosted: Boolean(confine) });
+      const sampled = await sampleRestConsume(op, i, { fetchImpl: client, hosted: Boolean(confine), agent: confine?.agent ?? null });
       problems.push(...sampled.problems);
       if (sampled.changed) changed = true;
       continue;
@@ -681,10 +813,15 @@ export async function prepareIntegrationJob(jobFile, { lane = 'o11', words = '',
     for (const dir of [...new Set(written.map(file => path.dirname(file)))].sort((a, b) => b.length - a.length))
       for (let d = dir; d.startsWith(path.join(root, 'documents')) && d !== path.join(root, 'documents'); d = path.dirname(d)) { try { fs.rmdirSync(d); } catch { break; } }
     const codes = [...new Set(problems.map(p => p.code))];
+    // r40: what the agent downloaded before the refusal is listed too (nothing of it was pinned).
+    const fetched = downloadNotes(confine?.agent?.downloads);
     return { ok: false, code: codes.length === 1 ? codes[0] : codes.includes('INTEGRATION_DELETE_WORDS') ? 'INTEGRATION_DELETE_WORDS' : codes[0],
-      error: problems.map(p => p.message).join(' | ').slice(0, 900) + '. Nothing was captured or sent.', problems, ...(normalizations.length ? { normalizations } : {}) };
+      error: problems.map(p => p.message).join(' | ').slice(0, 900) + '. Nothing was captured or sent.', problems, ...(normalizations.length ? { normalizations } : {}), ...(fetched.length ? { notes: fetched } : {}) };
   }
-  if (!changed) return { ok: true, job: jobFile, changed: false, documents, ...(normalizations.length ? { normalizations } : {}) };
+  // r40: notes, one per URL the customer's agent downloaded (DOCUMENT_DOWNLOADED_BY_AGENT); every caller lists them on its answer.
+  const notes = downloadNotes(confine?.agent?.downloads);
+  const noted = notes.length ? { notes } : {};
+  if (!changed) return { ok: true, job: jobFile, changed: false, documents, ...(normalizations.length ? { normalizations } : {}), ...noted };
   // The copy lives in the lane's folder, so every name the kernel resolves against the job's folder first keeps naming the
   // file it named there (else the kernel would go on to the repository: on a hosted server, the server's own files): a
   // relative base, a job:<name> base or producer (job-patch.mjs pinReferences) and a document of another op.
@@ -704,5 +841,5 @@ export async function prepareIntegrationJob(jobFile, { lane = 'o11', words = '',
   const target = path.join(folder, sha256(text) + '.json');
   fs.mkdirSync(path.dirname(target), { recursive: true });
   fs.writeFileSync(target, text);
-  return { ok: true, job: target, changed: true, documents, ...(normalizations.length ? { normalizations } : {}) };
+  return { ok: true, job: target, changed: true, documents, ...(normalizations.length ? { normalizations } : {}), ...noted };
 }
