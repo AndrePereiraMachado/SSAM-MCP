@@ -130,6 +130,8 @@ jobs:
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
+          export CSC_KEY_PASSWORD="$(node -e 'process.stdout.write(process.env.CSC_KEY_PASSWORD.replace(/[\r\n]+$/, ""))')"
+          export APPLE_TEAM_ID="$(node -e 'process.stdout.write(process.env.APPLE_TEAM_ID.trim())')"
           keychain="$RUNNER_TEMP/ssam-signing.keychain-db"
           certificate="$RUNNER_TEMP/ssam-signing.p12"
           keychain_password=$(openssl rand -hex 32)
@@ -139,7 +141,13 @@ jobs:
           security create-keychain -p "$keychain_password" "$keychain"
           security set-keychain-settings -lut 21600 "$keychain"
           security unlock-keychain -p "$keychain_password" "$keychain"
-          security import "$certificate" -k "$keychain" -P "$CSC_KEY_PASSWORD" -T /usr/bin/codesign >/dev/null
+          if ! security import "$certificate" -k "$keychain" -P "$CSC_KEY_PASSWORD" -T /usr/bin/codesign >/dev/null; then
+            # Rewrap encrypted PKCS12 for Apple's importer; private material stays in a pipe.
+            compatible="$RUNNER_TEMP/ssam-compatible.p12"
+            openssl pkcs12 -in "$certificate" -passin env:CSC_KEY_PASSWORD -nodes | openssl pkcs12 -export -out "$compatible" -passout env:CSC_KEY_PASSWORD -keypbe PBE-SHA1-3DES -certpbe PBE-SHA1-3DES -macalg sha1
+            mv "$compatible" "$certificate"
+            security import "$certificate" -k "$keychain" -P "$CSC_KEY_PASSWORD" -T /usr/bin/codesign >/dev/null
+          fi
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$keychain_password" "$keychain" >/dev/null
           identity=$(security find-identity -v -p codesigning "$keychain" | sed -n '/Developer ID Application/s/.*\([A-F0-9]\{40\}\).*/\1/p' | head -1)
           test -n "$identity" || { echo 'Developer ID Application identity missing'; exit 1; }
@@ -244,6 +252,7 @@ jobs:
             agent/dist/SHA256SUMS
             agent/dist/installed-pack.json
             agent/dist/verify-native.json
+
 
 
 
