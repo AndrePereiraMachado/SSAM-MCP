@@ -109,6 +109,7 @@ import { timerConfigurationApproval } from './timer-configuration-approval.mjs';
 import { PORTAL_READS, PORTAL_WRITES, checkSecretRefs, dbSecretTarget, envelope, rawInput, routeOf, routesModule, settingSecretTarget } from './portal-routes.mjs';
 import { AUTH_CODES, authContinuation } from '../../facade/refusal-codes.mjs';
 import { hostedContext } from '../../facade/executor.mjs';
+import { credentialAgent, CREDENTIAL_UPDATE } from '../../facade/hosted/credential-agent.mjs';
 
 const HOST = /^(?=.{1,253}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/;
 const TYPED_PORTAL_READS = new Set(['monitoring.stages', 'monitoring.applications', 'monitoring.logs', 'monitoring.errors', 'monitoring.detail',
@@ -146,6 +147,18 @@ export class OdcAccess {
     this.profiles = profiles;
     this.fixtureVaultStatus=fixtureVaultStatus;
     this.profileSessions = new Map();
+    this.credentialAgent = hosted ? credentialAgent() : null;
+  }
+
+  async resolveAgent(host, auth, options = {}) {
+    try {
+      const selected = await this.credentialAgent.resolve(host, 'odc-portal', { auth, ...options });
+      return { path: 'agent-vault', host, user: selected.principal, profile: selected.profile, agentAuth: auth,
+        ...(auth === 'credential' ? { broker: this.credentialAgent.portalBroker(host, selected.profile) } : {}) };
+    } catch (error) {
+      return refusal(error.code ?? 'CREDENTIAL_AGENT_FAILED', error.message, { host,
+        ...(error.code === 'CREDENTIAL_PROMPT_PENDING' ? { resumable: true } : {}) });
+    }
   }
 
   // ---- tenants and the Studio
@@ -210,10 +223,11 @@ export class OdcAccess {
   // ---- resolver: public REST
   async resolvePublic(host, auth = 'auto') {
     if (!['auto', 'studio', 'api-client'].includes(auth)) fail('INPUT_INVALID', 'auth must be auto, studio or api-client.');
-    if (this.hosted && auth === 'api-client') return hostedOnlyStudio(host, 'api-client');
+    if (this.hosted && auth === 'api-client') return this.credentialAgent?.supported ? this.resolveAgent(host, 'api-client') : hostedOnlyStudio(host, 'api-client');
     const studio = await this.studioState();
     const session = this.session(studio, host);
-    if (this.hosted) return session ? { path: 'studio', host, user: session.user } : studioRefusal(studio, host, {}, true);
+    if (this.hosted) return session ? { path: 'studio', host, user: session.user }
+      : auth === 'auto' && this.credentialAgent?.supported ? this.resolveAgent(host, 'api-client') : studioRefusal(studio, host, {}, true);
     if (auth !== 'api-client') {
       if (session) return { path: 'studio', host, user: session.user };
       if (auth === 'studio' || studio.running) {
@@ -230,10 +244,10 @@ export class OdcAccess {
   // ---- resolver: internal Portal
   async resolvePortal(host, auth = 'auto') {
     if (!['auto', 'studio', 'portal-credential'].includes(auth)) fail('INPUT_INVALID', 'auth must be auto, studio or portal-credential.');
-    if (this.hosted && auth === 'portal-credential') return hostedOnlyStudio(host, 'portal-credential');
+    if (this.hosted && auth === 'portal-credential') return this.credentialAgent?.supported ? this.resolveAgent(host, 'credential') : hostedOnlyStudio(host, 'portal-credential');
     const studio = await this.studioState();
     const session = this.session(studio, host);
-    if (this.hosted && !session) return studioRefusal(studio, host, {}, true);
+    if (this.hosted && !session) return auth === 'auto' && this.credentialAgent?.supported ? this.resolveAgent(host, 'credential') : studioRefusal(studio, host, {}, true);
     if (auth !== 'portal-credential') {
       if (session) {
         if (studio.capabilities?.includes('portal-session:headless')) {
@@ -244,6 +258,7 @@ export class OdcAccess {
         }
         if (auth === 'studio') return refusal('HEADLESS_AUTH_UNAVAILABLE',
           'The attached Studio has no authenticated headless Portal transport. No Portal window was opened.', { host });
+        if (this.hosted && this.credentialAgent?.supported) return this.resolveAgent(host, 'credential', { principal: session.user });
         // Hosted, no credential profile, private sender or private download of the server is ever used.
         if (this.profiles && !this.hosted) {
           const resolved = await this.resolveProfilePortal(host, session.user);
@@ -289,6 +304,7 @@ export class OdcAccess {
     return this.studioBrokers.get(host);
   }
   async resolveProfilePortal(host, principal, { force = false } = {}) {
+    if (this.hosted && this.credentialAgent?.supported) return force ? this.openPrompt('portal', host, undefined, undefined, 'select-profile') : this.resolveAgent(host, 'credential', { principal });
     if (this.hosted) return hostedOnlyStudio(host, 'portal-credential');
     const interactive = false;
     const selected = await this.profiles.resolve({ lane: 'odc', host, principal }, { interactive, force });
@@ -331,8 +347,17 @@ export class OdcAccess {
   // Only concurrent calls share a promise; later calls always recheck and recover the actual window.
   // Hosted (servidor/fase4): no credential window ever opens on the server (HOSTED_PROMPT_UNAVAILABLE), whatever the action.
   async openPrompt(kind, host, database, setting, action = 'ensure') {
+    if (this.hosted && this.credentialAgent?.supported && !database && !setting) {
+      try {
+        const window = await this.credentialAgent.call(host, 'odc-portal', 'prompt', { auth: kind === 'api-client' ? 'api-client' : 'credential',
+          ...(action === 'select-profile' ? { mode: 'select-profile' } : {}) });
+        return refusal(window.visible ? 'CREDENTIAL_PROMPT_PENDING' : 'CREDENTIAL_PROMPT_WINDOW_UNAVAILABLE',
+          window.visible ? 'Enter the credential in the private SSAM Agent window, never in chat; then repeat the original call.' : 'The private credential window was not confirmed visible.',
+          { host, kind, resumable: true, window: { visible: window.visible, opened: window.opened, alreadyOpen: window.alreadyOpen } });
+      } catch (error) { return refusal(error.code ?? 'CREDENTIAL_AGENT_FAILED', error.message, { host, kind }); }
+    }
     if (this.hosted) return refusal('HOSTED_PROMPT_UNAVAILABLE', 'No credential prompt opens in hosted mode for ' + host + ': only what the user\'s own ODC Studio session '
-      + '(and its vault, read by its bridge) already holds is used.', { host, kind });
+      + '(and its vault, read by its bridge) already holds is used. ' + CREDENTIAL_UPDATE, { host, kind });
     const opener = kind === 'api-client' ? this.prompt?.apiClient : this.prompt?.portal;
     if (typeof opener !== 'function')
       return refusal('AUTH_NOT_CONFIGURED', 'No Studio session and no stored credential for ' + host + '; no private prompt is available here.', { host, kind });
@@ -432,7 +457,12 @@ export class OdcAccess {
       return {...result,tenant:host,auth:authOf(resolved)};
     }catch(error){return {ok:false,...(host?{tenant:host}:{}),error:publicError(error)};}
   }
-  async read(input) { return projectForAgent(() => boundedRead({ scope: 'odc-public', input }, () => this.readWithinBudget(input))); }
+  credentialReadBudget(input) { return this.hosted && this.credentialAgent?.supported && input.auth !== 'studio' ? { timeoutMs: 120000 } : {}; }
+  async read(input) { return projectForAgent(async () => this.credentialContinuation(await boundedRead({ scope: 'odc-public', input }, () => this.readWithinBudget(input), this.credentialReadBudget(input)), 'odc_read', input)); }
+  credentialContinuation(result, tool, input) {
+    return result?.code === 'CREDENTIAL_PROMPT_PENDING' ? { ...result, continuation: { tool, arguments: input,
+      why: 'Repeat this original read after saving in the private SSAM Agent window.' } } : result;
+  }
   async readWithinBudget({ tenant, auth = 'auto', operationId, ...input }) {
     const start = new Date(this.now()).toISOString();
     let host;
@@ -755,6 +785,17 @@ export class OdcAccess {
   // (portal-call) and maps the bridge answer to the OdcBridge shape; the vault path is the existing OdcBridge.
   async send(host, resolved, operationId, input, { write, operationUuid, authorizeSha256, confirmTenant, secretRefs = [] }) {
     readCheckpoint('transport');
+    if (resolved.path === 'agent-vault') {
+      if (secretRefs.length) fail('HEADLESS_AUTH_UNAVAILABLE', 'The agent credential transport does not fill secret references. Nothing was sent.');
+      const request = prepareRequest(this.catalog, operationId, input, this.config(host));
+      if (request.body instanceof FormData) fail('HEADLESS_AUTH_UNAVAILABLE', 'Multipart uploads require the Studio transport. Nothing was sent.');
+      if (write) writeCheckpoint('before the write was sent');
+      const response = await this.credentialAgent.call(host, 'odc-portal', 'request', { auth: 'api-client', ...(resolved.profile ? { profile: resolved.profile } : {}),
+        url: request.url.href, method: request.method, ...(request.body == null ? {} : { body: Buffer.from(request.body).toString('base64'), contentType: request.headers['content-type'] ?? 'application/json' }),
+        write, ...(write ? { operationId: operationUuid, authorizeSha256 } : {}) });
+      let data; try { data = JSON.parse(Buffer.from(response.body, 'base64').toString('utf8')); } catch { fail('CREDENTIAL_AGENT_RESPONSE_INVALID', 'The private API response is not JSON.'); }
+      return { ok: response.status >= 200 && response.status < 300, operationId, status: response.status, data, ...(response.notes?.length ? { notes: response.notes } : {}) };
+    }
     if (resolved.path === 'vault') {
       if (secretRefs.length) fail('STUDIO_REQUIRED', secretStudioRequired(host));
       const bridge = await this.vault.bridge(host);
@@ -1052,7 +1093,7 @@ export class OdcAccess {
   }
 
   // ---- internal Portal
-  async portalRead(input) { return projectForAgent(() => boundedRead({ scope: 'odc-portal', input }, () => this.portalReadWithinBudget(input))); }
+  async portalRead(input) { return projectForAgent(async () => this.credentialContinuation(await boundedRead({ scope: 'odc-portal', input }, () => this.portalReadWithinBudget(input), this.credentialReadBudget(input)), 'odc_portal_read', input)); }
   async portalReadWithinBudget({ tenant, auth = 'auto', operationId, input = {}, maxPages = 3 }) {
     const start = new Date(this.now()).toISOString();
     let host;
@@ -1710,6 +1751,22 @@ export class OdcAccess {
       const host = await this.pickTenant(tenant);
       if (!['open', 'status', 'close', 'select-profile', 'prompt', 'focus'].includes(action)) fail('INPUT_INVALID', 'action must be open, status, close, select-profile, prompt or focus.');
       if(action!=='select-profile'&&(profile!==undefined||authorize!==undefined))fail('INPUT_INVALID','Profile selection fields require action select-profile.');
+      if (this.hosted && this.credentialAgent?.supported && (auth === 'portal-credential' || ['prompt', 'focus', 'select-profile'].includes(action))) {
+        if (action === 'prompt' || action === 'focus') return this.openPrompt('portal', host, undefined, undefined, action);
+        if (action === 'select-profile') {
+          if (auth !== 'portal-credential' || !profile || !wordsGiven(authorize)
+            || !authorize.toLowerCase().includes(host) || typeof profile.principal !== 'string' || !profile.principal.trim()
+            || !authorize.toLowerCase().includes(profile.principal.trim().toLowerCase()))
+            return refusal('CREDENTIAL_SELECTION_AUTHORIZATION_REQUIRED', 'Explicit words must identify the tenant and existing profile principal. No profile was selected.', { host });
+          const selected = await this.credentialAgent.profile(host, 'odc-portal', profile.target, profile.principal);
+          const window = await this.credentialAgent.call(host, 'odc-portal', 'prompt', { profile: selected, mode: 'select-profile' });
+          return { ok: true, tenant: host, configurationOnly: true, authenticationPerformed: false, selectionPending: true, window };
+        }
+        if (action === 'status') return { ok: true, tenant: host, session: await this.credentialAgent.call(host, 'odc-portal', 'status'), auth: { path: 'agent-vault', host } };
+        if (action === 'close') { await this.credentialAgent.call(host, 'odc-portal', 'sign-out'); return { ok: true, tenant: host, closed: true }; }
+        const resolved = await this.resolveAgent(host, 'credential');
+        return resolved.ok === false ? resolved : { ok: true, tenant: host, signedIn: true, auth: authOf(resolved) };
+      }
       if (this.hosted && auth === 'portal-credential') return hostedOnlyStudio(host, 'portal-credential');
       // servidor/fase4-24 (R3): a credential profile of the SSAM server is never selected for a customer, whatever auth says.
       if (this.hosted && action === 'select-profile') return refusal('HOSTED_STUDIO_SESSION_ONLY', 'action:"select-profile" selects a credential profile of the SSAM server\'s vault, '
@@ -1788,6 +1845,14 @@ export class OdcAccess {
       const window = studio.portalWindows.find(w => w.host === host) ?? null;
       const studioEntry = session ? { loggedIn: true, user: session.user, tokenValidUntil: session.tokenValidUntil, ...(session.permissions ? { permissions: session.permissions } : {}) } : null;
       const noSession = studio.connected ? 'STUDIO_NOT_SIGNED_IN' : 'STUDIO_NOT_CONNECTED';
+      if (this.hosted && this.credentialAgent?.supported) {
+        const apiClient = await this.credentialAgent.call(host, 'odc-portal', 'status', { auth: 'api-client' });
+        const account = await this.credentialAgent.call(host, 'odc-portal', 'status');
+        entries.push({ ...this.tenantInfo(host), studio: studioEntry, apiClient: { available: apiClient.available, source: 'private-agent' },
+          portal: { studioWindow: window, account: { available: account.available, authenticated: account.authenticated, source: 'private-agent' } },
+          resolves: { public: session ? 'studio' : apiClient.available ? 'agent-vault' : 'AUTH_REQUIRED', portal: account.authenticated ? 'agent-vault' : 'AUTH_REQUIRED' } });
+        continue;
+      }
       if (this.hosted) {
         // The vault columns: never read in hosted mode (only the customer's Studio session is a path).
         entries.push({ ...this.tenantInfo(host), studio: studioEntry, apiClient: { available: null, hosted: 'unavailable in hosted mode' },
@@ -1809,7 +1874,8 @@ export class OdcAccess {
         privateHttpSecretRefs: (studio.capabilities ?? []).includes('portal-private-call:headless:secretRefs'),
         nativeHttpSecretRefs: (studio.capabilities ?? []).includes('portal-session:secretRefs') && (studio.capabilities ?? []).includes('portal-call:secretRefs') } : {}),
       ...(studio.hint ? { hint: studio.hint } : {}) },
-      order: this.hosted ? 'Hosted: only the headless session of the user\'s own ODC Studio; no vault, API Client, credential profile or prompt of the server. Writes always need the user\'s words.'
+      order: this.hosted ? this.credentialAgent?.supported ? 'Hosted: the Studio session first, then a compatible private credential on the SSAM Agent. No credential, token or cookie is read on this server. Writes always need the user\'s words.'
+        : 'Hosted: only the headless session of the user\'s own ODC Studio; no vault, API Client, credential profile or prompt of the server. Writes always need the user\'s words.'
         : 'Headless Studio session first, then a compatible stored Windows credential profile, then (nothing stored) the private Windows prompt in its own window; never a browser. Writes always need the user\'s words.',
       tenants: entries, secretsExposed: false };
   }
@@ -2478,7 +2544,7 @@ function studioRefusal(studio, host, extra, hosted = false) {
 // Hosted: a path other than the customer's Studio session is never taken.
 function hostedOnlyStudio(host, auth) {
   return refusal('HOSTED_STUDIO_SESSION_ONLY', 'auth:"' + auth + '" uses a credential of the SSAM server, which is never used in hosted mode: the call runs only through the session '
-    + 'of the user\'s own ODC Studio (auth "auto" or "studio").', { host });
+    + 'of the user\'s own ODC Studio (auth "auto" or "studio"). ' + CREDENTIAL_UPDATE, { host });
 }
 // An authentication code without its own continuation gets the one of refusal-codes.mjs (AUTH_CODES); hosted, never a
 // prompt or a stored profile of the server.
@@ -2604,7 +2670,8 @@ function studioAnswer(answer, operationId, host) {
       message: answer.status === 401 ? 'The gateway did not accept the Studio session for this API family; repeat with auth:"api-client" if a vault API Client exists.'
         : answer.status === 403 ? 'The signed-in user is not authorized for this operation.' : 'The API returned an unsuccessful response.' } } : {}) });
 }
-const authOf = resolved => ({ path: resolved.path, host: resolved.host, ...(resolved.user ? { user: resolved.user } : {}) });
+const authOf = resolved => ({ path: resolved.path, host: resolved.host, ...(resolved.user ? { user: resolved.user } : {}),
+  ...(resolved.broker?.privateNotes?.length ? { notes: [...resolved.broker.privateNotes] } : {}) });
 const noteOf = (host, resolved, output) => '[' + host + '] auth=' + resolved.path + ' status=' + (output.status ?? output.error?.code ?? '?');
 const receiptOf = receipt => ({ operationUuid: receipt.operationUuid, state: receipt.state, file: receipt.receipt, createdAt: receipt.createdAt, updatedAt: receipt.updatedAt ?? null,
   ...(receipt.response ? { response: receipt.response } : {}), ...(receipt.reconciliations ? { reconciliations: receipt.reconciliations.length } : {}) });

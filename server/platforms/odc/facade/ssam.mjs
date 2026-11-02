@@ -1363,7 +1363,10 @@ export async function createSsamServer({ o11 = true, odc = true, profile = 'app'
           return handler(...params);
         });
       };
-      const readTimeoutMs = name.startsWith('o11_service_center_') || (name === 'odc_portal_login' && (!args.action || args.action === 'open')) ? 90000 : 29000;
+      const privateCredentialRead = (hosted?.context?.agent ?? hosted?.session?.agent)?.supports?.('credential.session') === true && (
+        (['odc_read', 'odc_portal_read'].includes(name) && args.auth !== 'studio') ||
+        (name === 'o11_service_center_read' && !['studio', 'studio-web'].includes(args.session)));
+      const readTimeoutMs = privateCredentialRead ? 120000 : name.startsWith('o11_service_center_') || (name === 'odc_portal_login' && (!args.action || args.action === 'open')) ? 90000 : 29000;
       let result = bounded ? await boundedRead({ scope: 'mcp:' + name, args }, execute, { timeoutMs: deps.readTimeoutMs ?? readTimeoutMs }) : await execute();
       if (result?.code === 'READ_DEADLINE_EXCEEDED') result.continuation = { tool: name, arguments: args,
         why: 'Check the original pending read without resending it. Its eventual result belongs to the original request context.' };
@@ -1532,7 +1535,7 @@ export async function createSsamServer({ o11 = true, odc = true, profile = 'app'
   // Read-only final matrix (req 19): same generator as `ssam debug matrix [--check]`.
   const { registerMatrixTool, debugMatrix } = await import('./debug-final-matrix.mjs');
   registerMatrixTool(server, debugMatrix, debugReply);
-  registerO11Operations(server, fromJsonSchema);
+  registerO11Operations(server, fromJsonSchema, deps.o11Operations ?? {});
   // The O11 lane in this process (no Python): the controlled app session, the read/deliver cycle, the Studio,
   // the environment, references and long tasks. Each module keeps its own gates and words. They share o11Runner (above).
   if (o11) {

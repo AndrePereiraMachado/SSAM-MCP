@@ -23,6 +23,7 @@ import { hostName } from './http.mjs';
 import { O11_PROMPT_KINDS, createCredentialPrompt, promptStateDir } from '../../portal/runtime/credential-prompt.mjs';
 import { fold } from './util.mjs';
 import { readCheckpoint, readOptions } from '../read-budget.mjs';
+import { credentialAgent, CREDENTIAL_UPDATE } from '../hosted/credential-agent.mjs';
 
 export const KINDS = ['ServiceCenter', 'LifeTime', 'DatabaseConnection', 'SiteProperty'];
 export const hostsFile = (root = anvilRoot) => path.join(root, 'scripts', 'service_center', 'hosts.json');
@@ -32,10 +33,10 @@ export const promptScript = (root = anvilRoot) => path.join(root, 'scripts', 'se
 export const stateDir = (env = process.env) => (hostedContext() ? workspacePath('state', 'service-center') : path.join(env.USERPROFILE || os.homedir(), '.ssam-hybrid'));
 
 export const hostedStudioOnly = what => new AuthRequired('HOSTED_STUDIO_SESSION_ONLY', what + ' uses the vault of the SSAM server, which is never used in hosted mode: '
-  + 'Service Center calls run only through the user\'s own Service Studio session (session "studio" or "studio-web").',
+  + 'Service Center calls run only through the user\'s own Service Studio session (session "studio" or "studio-web"). ' + CREDENTIAL_UPDATE,
 { continuation: connectStudio('connect the user\'s Service Studio; its session is the only path in hosted mode') });
 export const hostedNoPrompt = (host, why) => new AuthRequired('HOSTED_PROMPT_UNAVAILABLE', `${why}; no credential prompt opens in hosted mode. The user signs `
-  + `their own Service Studio in on ${host} and repeats the call; its session is the only path in hosted mode.`);
+  + `their own Service Studio in on ${host} and repeats the call; its session is the only path in hosted mode. ${CREDENTIAL_UPDATE}`);
 
 export function credentialTarget(host, kind, name = null) {
   if (!KINDS.includes(kind)) throw new ProtocolError('Unknown credential kind');
@@ -51,12 +52,13 @@ export function credentialTarget(host, kind, name = null) {
 // Lote 4, F3 (relatos af6dbc48, e2179576): which source answered a call, beside the session the caller asked for.
 // studio, studio-http and studio-web are the connected Studio's login; vault, vault-sso and vault-sso-cache the stored
 // credential of the private Windows vault; local-receipt answers from a receipt, without any session.
-export const sessionSource = pathName => (/^studio/.test(String(pathName)) ? 'studio' : /^(?:vault|profiles)/.test(String(pathName)) ? 'vault'
+export const sessionSource = pathName => (/^studio/.test(String(pathName)) ? 'studio' : /^(?:vault|profiles|agent)/.test(String(pathName)) ? 'vault'
   : pathName === 'local-receipt' ? 'local' : 'unknown');
 
 export class Auth {
   constructor(pathName, host, user = null, bridge = null, attempts = []) { this.path = pathName; this.host = host; this.user = user; this.bridge = bridge; this.attempts = attempts; }
-  describe() { return { path: this.path, host: this.host, ...(this.user ? { user: this.user } : {}), attempts: this.attempts }; }
+  describe() { return { path: this.path, host: this.host, ...(this.user ? { user: this.user } : {}), attempts: this.attempts,
+    ...(this.bridge?.privateNotes?.length ? { notes: [...this.bridge.privateNotes] } : {}) }; }
   // requested: the caller's session (auto, studio, studio-web or vault), set by the Resolver; source: who answered.
   session() { return { requested: this.requested ?? 'auto', source: sessionSource(this.path) }; }
 }
@@ -83,6 +85,8 @@ export async function studioRunning() {
 export const promptTitle = (host, kind) => `SSAM - ${hostName(host)} - ${O11_PROMPT_KINDS[kind]}`;
 // Hosted, the refusal is thrown at once (synchronously), before any window or manager: the server never opens one.
 export function openPrompt(host, kind, name = null, options = {}) {
+  if (hostedContext() && kind === 'ServiceCenter' && credentialAgent()?.supported)
+    return credentialAgent().call(hostName(host), 'service-center', 'prompt');
   if (hostedContext()) throw hostedNoPrompt(host, `No credential of ${host} can be stored from here`);
   return openManagedPrompt(host, kind, name, options);
 }
@@ -197,6 +201,10 @@ const promptPending = (why, host, target, opened, waited, attempts, kind = 'Serv
 // does not arrive in time. Returns the attempt that records the stored entry. Without an opener (tests, offline) the
 // call is refused as before: AUTH_REQUIRED, nothing opened.
 export async function promptAndWait({ host, kind = 'ServiceCenter', name = null, target, opener, present, wait = {}, why, attempts = [] }) {
+  if (hostedContext() && kind === 'ServiceCenter' && credentialAgent()?.supported) {
+    await credentialAgent().resolve(hostName(host), 'service-center', { authenticate: false });
+    return { path: 'agent-vault', outcome: 'stored', headless: true };
+  }
   if (hostedContext()) throw hostedNoPrompt(host, why);
   if (typeof opener !== 'function' || typeof present !== 'function')
     throw new AuthRequired('AUTH_REQUIRED', `${why}; no credential prompt is available here.`, { attempts, auth: { target } });
@@ -214,6 +222,12 @@ export async function promptAndWait({ host, kind = 'ServiceCenter', name = null,
 // window stores one and the call goes on with it, remembered for the next calls. An entry that exists (of any principal)
 // is never overwritten through the window: a profile refusal is reported as it is.
 export async function storedProfile({ profiles, host, principal = null, target = null, present, opener, prompt = 'auto', wait = {}, attempts = [] }) {
+  if (hostedContext() && credentialAgent()?.supported) {
+    const agent = credentialAgent(), profile = target ? await agent.profile(host, 'service-center', target, principal) : null;
+    const selected = await agent.resolve(host, 'service-center', { profile, principal, prompt, authenticate: false });
+    return { selected: { ok: true, target: selected.profile, principal: selected.principal, source: 'private-agent' },
+      attempts: [...attempts, { path: 'agent-vault', outcome: 'selected', headless: true }] };
+  }
   if (hostedContext()) throw hostedStudioOnly('A stored credential profile');
   const context = { lane: 'o11', host, principal };
   const selected = await profiles.resolve(context, { interactive: false, ...(target ? { target } : {}) });
@@ -285,10 +299,18 @@ export class Resolver {
     if (!['api', 'web', 'lifetime'].includes(need)) throw new ProtocolError('Unknown authentication need');
     const hosted = hostedContext() !== null;
     if (hosted && need === 'lifetime') throw hostedStudioOnly('LifeTime (its service-account token)');
-    if (hosted && this.session === 'vault') throw hostedStudioOnly('session "vault"');
+    const agent = hosted ? credentialAgent() : null;
+    if (hosted && this.session === 'vault' && !agent?.supported) throw hostedStudioOnly('session "vault"');
     let bridge = null, info = null, attempts = [];
     // Resolve identity metadata without opening a browser or a private dialog.
-    if (need !== 'lifetime') [bridge, info, attempts] = await this.studio();
+    if (need !== 'lifetime') {
+      try { [bridge, info, attempts] = await this.studio(); }
+      catch (error) {
+        if (!(need === 'web' && agent?.supported && ['auto', 'vault'].includes(this.session)
+          && ['STUDIO_NOT_CONNECTED', 'O11_NOT_CONNECTED', 'STUDIO_REQUIRED'].includes(error.code))) throw error;
+        attempts.push({ path: 'studio', outcome: 'absent' });
+      }
+    }
     const studio = info?.studio ?? info;
     const principal = studio?.signedIn === true ? studio.user ?? null : null;
     if (need === 'api') {
@@ -315,14 +337,26 @@ export class Resolver {
     if (need === 'web' && this.session !== 'vault' && principal && (await bridge.capabilities()).has('sc_http:studioSession')) {
       // Probe before selecting a fallback, never after a protected POST. Explicit
       // Studio selection keeps its identity source, even when the web session expired.
-      const probe = this.session === 'auto' && this.profiles && this.login
-        ? await bridge.web(this.host, 'status') : null;
+      let probe = null;
+      if (this.session === 'auto' && (this.profiles || agent?.supported) && this.login) {
+        try { probe = await bridge.web(this.host, 'status'); }
+        catch (error) {
+          if (!agent?.supported || !['WEB_SIGN_IN_REQUIRED', 'STUDIO_NOT_SIGNED_IN', 'SC_AUTH_EXPIRED'].includes(error.code)) throw error;
+          probe = { signedIn: false };
+        }
+      }
       if (probe === null || probe?.signedIn === true)
         return new Auth('studio-http', this.host, principal, bridge,
           [...attempts, { path: 'studio-http', outcome: 'selected', headless: true }]);
       attempts = [...attempts, { path: 'studio-http', outcome: probe?.signedIn === false ? 'web-session-absent' : 'web-session-unverified', headless: true }];
     }
     // Hosted, the user's Studio session (studio-http) is the only path: no profile, vault, window or prompt of the server.
+    if (hosted && need === 'web' && agent?.supported && ['auto', 'vault'].includes(this.session)) {
+      const profile = this.target ? await agent.profile(this.host, 'service-center', this.target, principal) : null;
+      const selected = await agent.resolve(this.host, 'service-center', { prompt: this.prompt, login: this.login, profile, principal });
+      return Object.assign(new Auth('agent-vault', this.host, selected.principal ?? null, agent.scBridge(this.host, selected.profile),
+        [...attempts, { path: 'agent-vault', outcome: 'selected', source: 'private-agent', headless: true }]), { credentialTarget: selected.profile ?? null });
+    }
     if (hosted) {
       if (!bridge)
         throw new AuthRequired('STUDIO_NOT_CONNECTED', `No Service Studio of the user is connected to SSAM for ${this.host}; the user opens it, `

@@ -1,6 +1,8 @@
 import {createPowerShellRunner,CREDENTIAL} from './vault.mjs';
 import {hostName} from './http.mjs';
 import {ProtocolError} from './errors.mjs';
+import {credentialAgent,CREDENTIAL_UPDATE} from '../hosted/credential-agent.mjs';
+import {hostedContext} from '../executor.mjs';
 
 // Dedicated GET transport: Basic credentials remain inside the short-lived
 // vault process. No arbitrary URL, redirects, cookies or response headers.
@@ -68,6 +70,8 @@ try {
 finally{if($response){$response.Close()};$secret=$null;$basic=$null;$authorization=$null;$user=$null}
 `;
 export async function readPerformanceEvents(input,{run=createPowerShellRunner(),credential=CREDENTIAL}={}){
+ if(credentialAgent()?.supported)return readAgentPerformanceEvents(input);
+ if(hostedContext())throw new ProtocolError(CREDENTIAL_UPDATE,'HOSTED_STUDIO_SESSION_ONLY');
  const request=performanceEventsRequest(input);
  const script=BODY.replace('<SETUP>',()=>credential.setup).replace('<READ>',()=>credential.read);
  const result=await run(script,request);
@@ -81,6 +85,30 @@ export async function readPerformanceEvents(input,{run=createPowerShellRunner(),
   monitoringEnabledVerified:completions.length>0,completionEvents:completions,executionCausalityVerified:false,
   verificationScope:'authenticated-timer-completion-events; no administrative-run attribution',auth:{path:request.eventAuth==='service-token'?'vault-service-token':'vault-basic',principal:request.principal??null,
    ...(request.eventAuth==='service-token'?{serviceAccountIdentityVerified:false}: {})}};
+}
+
+// Same endpoint, UTC-window checks and event-identity projection as the local
+// transport. Basic/Bearer material is assembled only on the user's agent.
+async function readAgentPerformanceEvents(input){
+ const agent=credentialAgent(),host=hostName(input.host),auth=input.eventAuth??'basic';
+ const validated=performanceEventsRequest({...input,target:auth==='service-token'?`SSAM/O11/${host}/LifeTime`:`SSAM/O11/${host}/ServiceCenter`,
+   principal:auth==='service-token'?null:input.principal??'private-agent'});
+ const profile=input.profile??null;
+ await agent.resolve(host,'service-center',{auth,profile,prompt:input.prompt??'auto',authenticate:false,principal:input.principal??null});
+ const response=await agent.call(host,'service-center','request',{auth,...(profile?{profile}:{}),method:'GET',url:validated.url,accept:'application/json'});
+ if(response.status!==200)return {ok:false,host,status:response.status,authenticated:[401,403].includes(response.status)?false:null,error:{code:'PERFORMANCE_EVENTS_ACCESS_UNVERIFIED'}};
+ let data;try{data=JSON.parse(Buffer.from(response.body,'base64').toString('utf8'));}catch{throw new ProtocolError('Invalid private monitoring result.');}
+ if(!Array.isArray(data.RequestEventList)||typeof data.ResultsTruncated!=='boolean')throw new ProtocolError('Invalid private monitoring result.');
+ const events=data.RequestEventList.map(event=>{
+   let detail=event.RequestEventDetails??event.Details;if(typeof detail==='string'){try{detail=JSON.parse(detail);}catch{throw new ProtocolError('Invalid private monitoring event.');}}
+   return {Instant:event.Instant,RequestKey:event.RequestKey,RequestEventName:event.RequestEventName,ModuleKey:event.ModuleKey,ModuleName:event.ModuleName,
+     ApplicationKey:event.ApplicationKey,ApplicationName:event.ApplicationName,Details:{AN:detail?.AN,AK:detail?.AK,EC:detail?.EC,D:detail?.D}};
+ });
+ const completions=timerCompletionEvents(events,input);
+ return {ok:true,host,status:200,authenticated:true,events,truncated:data.ResultsTruncated,monitoringEnabledVerified:completions.length>0,
+   completionEvents:completions,executionCausalityVerified:false,verificationScope:'authenticated-timer-completion-events; no administrative-run attribution',
+   auth:{path:auth==='service-token'?'agent-service-token':'agent-basic',principal:input.principal??null,...(auth==='service-token'?{serviceAccountIdentityVerified:false}:{})},
+   ...(response.notes?.length?{notes:response.notes}:{})};
 }
 
 // TimerExecuted records completion of one server request. EC describes errors

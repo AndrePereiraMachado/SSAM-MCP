@@ -130,7 +130,7 @@ test('credential prompt windows open only from the openPrompt of the Service Cen
     'only lib.mjs and the Service Center openPrompt build the window');
   // The Service Center builds it once, inside openManagedPrompt, which only openPrompt calls, after its hosted refusal.
   const authText = sources.find(s => s.name === 'facade/service-center/auth.mjs').text;
-  assert.match(authText, /export function openPrompt\([^\n]*\) \{\r?\n  if \(hostedContext\(\)\) throw hostedNoPrompt\([^\n]*\r?\n  return openManagedPrompt\(/, 'auth.mjs: openPrompt refuses hosted, then opens');
+  assert.match(authText, /export function openPrompt\([^\n]*\) \{\r?\n  if \(hostedContext\(\) && kind === 'ServiceCenter' && credentialAgent\(\)\?\.supported\)\r?\n    return credentialAgent\(\)\.call\(hostName\(host\), 'service-center', 'prompt'\);\r?\n  if \(hostedContext\(\)\) throw hostedNoPrompt\([^\n]*\r?\n  return openManagedPrompt\(/, 'auth.mjs: openPrompt refuses hosted, then opens');
   assert.equal(count(authText, /createCredentialPrompt\(/g), 1, 'auth.mjs: one window build');
   assert.equal(count(authText, /(?<![\w.])openManagedPrompt\(/g), 2, 'auth.mjs: openManagedPrompt is declared and called once, from openPrompt');
   const managed = authText.slice(authText.indexOf('async function openManagedPrompt('));
@@ -142,7 +142,7 @@ test('credential prompt windows open only from the openPrompt of the Service Cen
   const locked = after.match(/\{ ownerSecrets\(hostedPromptRefusal\);\s*(?:return )?credentialPrompt\(/g) ?? [];
   assert.equal(entries.length, 3, 'api-client, portal and status');
   assert.equal(locked.length, entries.length, 'every prompt entry refuses hosted first');
-  assert.match(sources.find(s => s.name === 'facade/service-center/auth.mjs').text, /export function openPrompt\([^\n]*\) \{\r?\n  if \(hostedContext\(\)\) throw hostedNoPrompt\(/);
+  assert.match(sources.find(s => s.name === 'facade/service-center/auth.mjs').text, /export function openPrompt\([^\n]*\) \{\r?\n  if \(hostedContext\(\) && kind === 'ServiceCenter' && credentialAgent\(\)\?\.supported\)\r?\n    return credentialAgent\(\)\.call\(hostName\(host\), 'service-center', 'prompt'\);\r?\n  if \(hostedContext\(\)\) throw hostedNoPrompt\(/);
   const selectorText = sources.find(s => s.name === selector)?.text ?? '';
   assert.equal(files[selector], 1, selector + ': one -File, shared by its two helpers');
   assert.match(selectorText, /function nativeList\(context\) \{\r?\n  if \(hostedContext\(\)\) return Promise\.reject\(hostedError\(\)\);/, selector + ': list refuses hosted');
@@ -153,10 +153,11 @@ test('credential prompt windows open only from the openPrompt of the Service Cen
   assert.equal(files[users], 2, users + ': two -File, privateCall and openUsersPrompt');
   const usersLines = usersText.split(/\r?\n/);
   const entryOf = re => { const start = usersLines.findIndex(l => re.test(l)); return [start, usersLines.findIndex((l, i) => i > start && /^}/.test(l))]; };
-  const usersEntries = [entryOf(/^export function privateCall\(/), entryOf(/^export async function openUsersPrompt\(/)];
+  const usersEntries = [entryOf(/^function rawPrivateCall\(/), entryOf(/^export async function openUsersPrompt\(/)];
   const fileAt = usersLines.flatMap((l, i) => (l.includes("'-File'") ? [i] : []));
   assert.ok(usersEntries.every(([s, e]) => s >= 0 && e > s), users + ': both entries exist');
-  assert.ok(fileAt.every(at => usersEntries.some(([s, e]) => at > s && at < e)), users + ': every -File is inside privateCall or openUsersPrompt');
+  assert.ok(fileAt.every(at => usersEntries.some(([s, e]) => at > s && at < e)), users + ': every -File is inside guarded rawPrivateCall or openUsersPrompt');
+  assert.match(usersText, /function rawPrivateCall\([^\n]*\) \{\r?\n  localOnly\('[^']+'\);\r?\n/, users + ': rawPrivateCall locks first');
   assert.match(usersText, /export function privateCall\([^\n]*\) \{\r?\n  try\{localOnly\('[^']+'\);\}catch\(e\)\{return Promise\.reject\(e\);\}\r?\n/, users + ': privateCall locks first');
   assert.match(usersText, /export async function openUsersPrompt\([^\n]*\) \{\r?\n  localOnly\('[^']+'\);\r?\n/, users + ': openUsersPrompt locks first');
   assert.match(usersText, /function localOnly\(what\)\{\r?\n  if\(hostedContext\(\)\)throw [^\n]+\r?\n  if\(servedWithoutContext\(\)\)throw contextLost\(/, users + ': the lock refuses hosted, then a lost context');

@@ -14,6 +14,7 @@ import { canonicalUuid, falsyScalar } from './util.mjs';
 import { readOptions } from '../read-budget.mjs';
 import { withPrivateSessionHandoff } from '../../portal/runtime/private-session-pipe.mjs';
 import {withPrivateCookieExchange} from './private-cookie-pipe.mjs';
+import { credentialAgent } from '../hosted/credential-agent.mjs';
 
 export const VERBS = ['sc_session', 'sc_api', 'sc_web', 'studio_login'];
 // SECRET_NOT_FOUND: a sc_web secretRefs (or login) entry is missing from the vault (the bridge names its target, never a value).
@@ -153,6 +154,11 @@ export class StudioBridge {
   session(host) { return this.verb('sc_session', { host: hostName(host) }); }
   async privateWeb(host, options, { principal, cookie, applyCookies, handoff = withPrivateSessionHandoff, cookieExchange = withPrivateCookieExchange } = {}) {
     host = hostName(host);
+    if (currentExecutor().hosted && credentialAgent()?.supported) {
+      const agent = credentialAgent();
+      const selected = await agent.resolve(host, 'service-center', { principal, prompt: 'never' });
+      return agent.scBridge(host, selected.profile).web(host, 'fetch', options);
+    }
     // Hosted, the private transport (a local pipe and the server's vault) never crosses machines: refused before any call.
     if (currentExecutor().hosted)
       throw new BridgeError('HOSTED_STUDIO_SESSION_ONLY', 'The private Service Center HTTP transport is not available in hosted mode; only the user\'s Studio session is a path.',

@@ -30,7 +30,7 @@ const S = { name: 'SENTINELNAME Person', username: 'sentinel.username', email: '
 // What only the agent may ever hold: never in a parameter, an answer, or a file of the server.
 const SECRET = { password: 'SENTINELPASSWORD-9f', cookie: 'SENTINELCOOKIE-77' };
 // Both sides name this sha: this file and agent/agent/tests/users.test.mjs in the agent's box.
-const VAULT_SHA256 = 'a18fe3be53edf15ab5f232e9c7ca9e16ac7156a55ae9d9bdf36abc68f60c24e4';
+const VAULT_SHA256 = 'fe3d41b6c7e2241cf04cf9e00ea82e4832a3ff779026edd788d0a6035f689263';
 const b64 = text => Buffer.from(text).toString('base64');
 
 function site(state) {
@@ -150,7 +150,7 @@ const noSecrets = (text, label) => { for (const value of Object.values(SECRET)) 
 
 test('the closed lists know the kind: last of CALL_KINDS, sent only to an agent whose Hello lists it', () => {
   // F4 (PLANO-11H): o11.xif came after it; o11.users keeps its place.
-  assert.deepEqual(CALL_KINDS.slice(-2), [USERS_KIND, 'o11.xif']);
+  assert.deepEqual(CALL_KINDS.slice(13, 15), [USERS_KIND, 'o11.xif']);
   assert.ok(HELLO_ONLY_KINDS.has(USERS_KIND));
 });
 

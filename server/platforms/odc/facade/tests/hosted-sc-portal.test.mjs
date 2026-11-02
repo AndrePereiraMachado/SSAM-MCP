@@ -72,6 +72,9 @@ function customer({ handlers = {} } = {}) {
   for (const dir of ['odc/snapshots', 'odc/journal', 'odc/lab', 'o11', 'inbox', 'private']) fs.mkdirSync(path.join(agentRoot, dir), { recursive: true });
   const link = fakeAgentLink({ agentRoot, handlers: {
     'studio.processes': ({ image }) => ({ processes: image === 'ODCStudio.exe' ? [{ pid: 4120, path: 'C:\\Customer\\ODCStudio.exe', version: '1.7.28.4021' }] : [] }), ...handlers } });
+  // This suite covers installed agents predating private credential sessions.
+  const supports = link.supports;
+  link.supports = kind => kind !== 'credential.session' && supports(kind);
   const executor = new AgentExecutor({ link, workspace, o11: {} });
   const context = { id: randomUUID(), hosted: true, tokenId: link.tokenId, customer: 'Cliente X', lanes: ['odc', 'o11'], workspace, agent: link, executor, close: async () => {} };
   return { root, workspace, agentRoot, link, executor, context };

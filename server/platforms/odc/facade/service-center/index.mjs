@@ -14,6 +14,7 @@ import path from 'node:path';
 import { anvilRoot } from '../workspace.mjs';
 import { SEAM_CODES, hostedContext, seamFields, usesWorkspace, workspacePath } from '../executor.mjs';
 import { ArgumentInvalid, AuthRequired, BridgeError, ProtocolError, Refusal, connectStudio, continuation } from './errors.mjs';
+import { credentialAgent } from '../hosted/credential-agent.mjs';
 import { ProtocolMismatch, genericProtocol, protocolContinuation } from './protocol.mjs';
 import { Auth, Resolver, credentialTarget, guardWrite, hostClass, hostedNoPrompt, hostedStudioOnly, hostsFile, openPrompt, promptAndWait, promptWaitMs, storedProfile,
   studioRunning } from './auth.mjs';
@@ -232,6 +233,21 @@ function memoPresent(single, many) {
 
 async function session(args, { locate, present, opener, running, registry, profiles = null, wait = {} }) {
   const host = args.host ? hostName(args.host) : null;
+  const agent = credentialAgent();
+  if (host && agent?.supported && args.surface !== 'lifetime' && args.session === 'vault') {
+    if (args.action === 'session-status') {
+      const state = await agent.call(host, 'service-center', 'status');
+      return { ok: true, host, vault: { ServiceCenter: state.available }, session: { requested: 'vault', source: 'vault' },
+        privateAgent: state, wouldUse: { web: state.available ? 'agent-vault' : 'AUTH_REQUIRED', api: 'VAULT_API_UNAVAILABLE' } };
+    }
+    if (args.action === 'session-sign-in' || args.action === 'session-web-sign-in') {
+      const profile = args.credential_target ? await agent.profile(host, 'service-center', args.credential_target) : null;
+      const state = await agent.resolve(host, 'service-center', { prompt: args.auth_prompt, profile });
+      return { ok: true, host, authenticated: true, auth: { path: 'agent-vault', host, user: state.principal }, session: { requested: 'vault', source: 'vault' } };
+    }
+    await agent.call(host, 'service-center', 'sign-out');
+    return { ok: true, host, closed: true };
+  }
   if (args.action === 'session-status') {
     let bridge = null; let problem = null;
     try { bridge = await locate(); }
@@ -243,8 +259,13 @@ async function session(args, { locate, present, opener, running, registry, profi
       const [serviceCenter, lifeTime] = hostedContext() ? [null, null] : await present.many([credentialTarget(host, 'ServiceCenter'), credentialTarget(host, 'LifeTime')]);
       Object.assign(out, { host, hostClass: hostClass(host, registry),
         vault: hostedContext() ? 'not used in hosted mode' : { ServiceCenter: Boolean(serviceCenter), LifeTime: Boolean(lifeTime) } });
+      if (agent?.supported) {
+        const privateState = await agent.call(host, 'service-center', 'status');
+        out.vault = { ServiceCenter: privateState.available, LifeTime: null, source: 'private-agent' };
+        out.privateAgent = privateState;
+      }
       if (bridge && verbs) out.session = redact(await bridge.session(host));
-      const dry = new Resolver(host, { session: args.session, prompt: 'never', locate: () => bridge, present, running, opener, profiles, login: false, wait: { waitMs: 0 } });
+      const dry = new Resolver(host, { session: args.session, prompt: 'never', credentialTarget: args.credential_target, locate: () => bridge, present, running, opener, profiles, login: false, wait: { waitMs: 0 } });
       out.wouldUse = {};
       for (const need of ['api', 'web']) {
         try { out.wouldUse[need] = (await dry.resolve(need)).path; }
@@ -607,7 +628,7 @@ export async function main(argv, deps = {}) {
     return result;
   }
   // servidor/fase4-24 (R3): credentialTarget names an entry (a profile) of the SSAM server's vault: refused before anything.
-  if (hosted && args.credential_target) throw hostedStudioOnly('credentialTarget (a credential profile of the server)');
+  if (hosted && args.credential_target && !credentialAgent()?.supported) throw hostedStudioOnly('credentialTarget (a credential profile of the server)');
   // The bounded wait of a pending private prompt (A13): SSAM_PROMPT_WAIT_MS; deps.promptWaitMs, promptSleep and now in tests.
   const wait = { waitMs: promptWaitMs(env, deps.promptWaitMs), ...(deps.promptSleep ? { sleep: deps.promptSleep } : {}), ...(deps.now ? { now: deps.now } : {}) };
   if (SESSION.includes(args.action)) return session(args, { locate, present, opener, running, registry, profiles, wait });
@@ -663,7 +684,7 @@ export async function main(argv, deps = {}) {
   // Hosted, LifeTime (single sign-on with a stored account profile, or its service-account token) and the timer events of
   // session "vault" use the server's vault and direct HTTPS: refused before any attempt.
   if (hosted && ['lifetime-web-status', 'lifetime-capabilities'].includes(args.action)) throw hostedStudioOnly('LifeTime (a stored account profile)');
-  if (hosted && args.action === 'timer-events') throw hostedStudioOnly('Timer events (session "vault")');
+  if (hosted && args.action === 'timer-events' && !credentialAgent()?.supported) throw hostedStudioOnly('Timer events (session "vault")');
   if(['lifetime-web-status','lifetime-capabilities'].includes(args.action)){
     if(args.session!=='vault')throw new ProtocolError('lifetime-web-status requires session=vault and a compatible private account profile.');
     const auth=await resolver.resolve('web');
@@ -687,6 +708,11 @@ export async function main(argv, deps = {}) {
   if(args.action==='timer-events'){
     if(args.session!=='vault')throw new ProtocolError('timer-events requires session=vault for its private Basic or service-token authentication transport.');
     required(args,'since','until');
+    if (hosted && credentialAgent()?.supported) {
+      const profile = args.credential_target ? await credentialAgent().profile(host, 'service-center', args.credential_target) : null;
+      return readPerformanceEvents({ host, profile, eventAuth: args.event_auth ?? 'basic', prompt: args.auth_prompt,
+        since: args.since, until: args.until, limit: args.limit });
+    }
     if(args.event_auth==='service-token'){
       const target=credentialTarget(host,'LifeTime');
       if(args.credential_target&&args.credential_target!==target)throw new ProtocolError('Service-token events require the exact same-host LifeTime vault entry.');
@@ -703,11 +729,11 @@ export async function main(argv, deps = {}) {
   const pagesClient = async () => {
     const auth = studio(await resolver.resolve('web'));
     // Hosted, the direct HTTPS transport (vault form login, private transport, single sign-on) is never used.
-    if (hosted && !['studio-web', 'studio-http'].includes(auth.path)) throw hostedStudioOnly('Service Center pages over direct HTTPS (vault form login)');
-    const transport = ['studio-web', 'studio-http'].includes(auth.path) ? new StudioWebTransport(host, auth.bridge, { reenter: auth.reenter })
+    if (hosted && !['studio-web', 'studio-http', 'agent-vault'].includes(auth.path)) throw hostedStudioOnly('Service Center pages over direct HTTPS (vault form login)');
+    const transport = ['studio-web', 'studio-http', 'agent-vault'].includes(auth.path) ? new StudioWebTransport(host, auth.bridge, { reenter: auth.reenter })
       : new Transport(host, { send: deps.send ?? null, origin: deps.origin ?? null,
         privateBridge: auth.bridge, privatePrincipal: auth.user });
-    const vault = createVault(host, auth.credentialTarget ?? args.credential_target, { present, ...vaultOptions });
+    const vault = createVault(host, auth.path === 'agent-vault' ? null : auth.credentialTarget ?? args.credential_target, { present, ...vaultOptions });
     if (auth.path === 'vault' && auth.user && auth.credentialTarget && deps.authResources) {
       const cached=deps.ssoCache.get(auth);
       if(cached){
