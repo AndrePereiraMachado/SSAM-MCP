@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- The SkiaSharp / HarfBuzzSharp probe of the image (server/Dockerfile, stage skia-probe; deploy/tests/skia-native-image.test.mjs).
+       Compiled against the Studio's own managed SkiaSharp.dll and HarfBuzzSharp.dll (StudioDir), never with a copy of them:
+       at run time it loads them from the Studio folder given on its command line, as the kernels do, so the native library
+       is looked for next to them exactly as in a headless apply. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <AssemblyName>ssam-skia-probe</AssemblyName>
+    <RollForward>Major</RollForward>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <StudioDir Condition="'$(StudioDir)' == ''">/studio/o11</StudioDir>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="SkiaSharp"><HintPath>$(StudioDir)/SkiaSharp.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="HarfBuzzSharp"><HintPath>$(StudioDir)/HarfBuzzSharp.dll</HintPath><Private>false</Private></Reference>
+  </ItemGroup>
+</Project>

@@ -9,8 +9,10 @@
 # - closed over the assembly references, minus what the shared .NET 10 runtime carries (it wins over a Studio copy);
 # - plus the Studio copies of framework assemblies ABOVE the net8.0 targeting pack (System.Text.Json and others at 10.0),
 #   which kernel/Directory.Build.targets compiles against.
-# Windows-only native DLLs (e_sqlite3, libSkiaSharp, libHarfBuzzSharp, libEGL) are left out: the image links
-# libe_sqlite3.so to the distribution's libsqlite3. Proven on Windows: anvil built against exactly these files and run
+# Windows-only native DLLs (e_sqlite3, libSkiaSharp, libHarfBuzzSharp, libEGL) are left out, and the image puts the Linux ones
+# next to the managed DLLs: libe_sqlite3.so links the distribution's libsqlite3, and libSkiaSharp.so / libHarfBuzzSharp.so come from
+# NuGet (server/Dockerfile, stage skia-native, pinned by SHA256). They are NOT optional: on 02/11 the kernel aborted mid-apply on
+# an SKPaint finalizer without libSkiaSharp.so (C:\t\r4\CAPTURA-FALHA.md); the image build runs ssam-skia-probe on both Studios. Proven on Windows: anvil built against exactly these files and run
 # with ANVIL_STUDIO_DIR on them gives the same results as the full installation (6 jobs, verify-catalog, inspect).
 Antlr4.Runtime.dll
 Avalonia.Base.dll
