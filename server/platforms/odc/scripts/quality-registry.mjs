@@ -27,6 +27,8 @@
 //                                                              a compiled source or a hosted tool's handler is not scanned
 //   node platforms/odc/scripts/quality-registry.mjs --write    rewrite the generated block of the line's two copies of
 //                                                              the contract (facade and tests/fixtures/quality)
+//   --agent-source <directory> uses the customer Agent source directory (containing ssam-agent.mjs) in split checkouts.
+// Writes require every source root. An incomplete checkout must never remove codes still emitted by supported agents.
 // After --write the contract's sha256 changes: the parity tests and the console's copies follow (docs/QUALIDADE.md).
 import fs from 'node:fs';
 import path from 'node:path';
@@ -158,12 +160,13 @@ export const gateCodeOf = gate => stepCode({ gate });
 
 // scanSources(root) -> {codes, rules, roots: {dir: files}, absent: [dir...], families}: what the sources under root declare.
 // steps: the contract's STEPS (the <STEP>_FAILED family); read from the contract when not given.
-export async function scanSources(root = ROOT, { steps = null } = {}) {
+export async function scanSources(root = ROOT, { steps = null, agentSource = null } = {}) {
   const codes = new Set(), roots = {}, absent = [];
   const words = { steps: new Set(), gates: new Set(), integrationOps: new Set() };
   for (const { dir, ext } of ROOTS) {
-    const abs = path.join(root, dir);
+    const abs = dir === 'agent' && agentSource ? path.resolve(agentSource) : path.join(root, dir);
     if (!fs.existsSync(abs)) { absent.push(dir); continue; }
+    if (dir === 'agent' && agentSource && !fs.existsSync(path.join(abs, 'ssam-agent.mjs'))) { absent.push('agent (the supplied source must contain ssam-agent.mjs)'); continue; }
     let n = 0;
     for (const file of filesOf(abs, ext)) {
       n++;
@@ -320,23 +323,33 @@ export function driftOf(scan, registry) {
     missingRules: [...scan.rules].filter(r => !rules.has(r)).sort(), staleRules: [...rules].filter(r => !scan.rules.has(r)).sort() };
 }
 
+export async function writeRegistry(root = ROOT, options = {}) {
+  const scan = await scanSources(root, options);
+  if (scan.absent.length) throw new Error('Refusing to rewrite the registry from incomplete sources: ' + scan.absent.join(', ') + '. Supply all source roots; use --agent-source for a split Agent checkout.');
+  const block = renderBlock(scan);
+  // Validate both destinations before changing either one.
+  const changes = CONTRACTS.map(rel => {
+    const file = path.join(root, rel), text = fs.readFileSync(file, 'utf8'), old = blockOf(text);
+    if (!old) throw new Error('no generated block in ' + rel);
+    return { rel, file, unchanged: old === block, text: text.replace(old, () => block) };
+  });
+  for (const change of changes) fs.writeFileSync(change.file, change.text);
+  return { scan, changes: changes.map(({ rel, unchanged }) => ({ rel, unchanged })) };
+}
+
 async function main() {
   const write = process.argv.includes('--write');
-  const scan = await scanSources(ROOT);
-  if (scan.absent.length) console.log('absent here (not scanned): ' + scan.absent.join(', '));
+  const agentAt = process.argv.indexOf('--agent-source');
+  const agentSource = agentAt >= 0 ? process.argv[agentAt + 1] : null;
+  if (agentAt >= 0 && (!agentSource || agentSource.startsWith('--'))) throw new Error('--agent-source needs the customer Agent source directory.');
   if (write) {
-    const block = renderBlock(scan);
-    for (const rel of CONTRACTS) {
-      const file = path.join(ROOT, rel);
-      const text = fs.readFileSync(file, 'utf8');
-      const old = blockOf(text);
-      if (!old) throw new Error('no generated block in ' + rel);
-      fs.writeFileSync(file, text.replace(old, () => block));
-      console.log((old === block ? 'unchanged ' : 'rewritten ') + rel);
-    }
-    console.log(`codes ${scan.codes.size}, rules ${scan.rules.size}`);
+    const result = await writeRegistry(ROOT, { agentSource });
+    for (const change of result.changes) console.log((change.unchanged ? 'unchanged ' : 'rewritten ') + change.rel);
+    console.log(`codes ${result.scan.codes.size}, rules ${result.scan.rules.size}`);
     return;
   }
+  const scan = await scanSources(ROOT, { agentSource });
+  if (scan.absent.length) console.log('absent here (not scanned): ' + scan.absent.join(', '));
   const registry = await import(pathToFileURL(path.join(ROOT, CONTRACTS[0])).href + '?' + Date.now());
   const d = driftOf(scan, registry);
   const cover = coverageOf(ROOT);

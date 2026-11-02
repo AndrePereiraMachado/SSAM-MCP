@@ -13,6 +13,7 @@ import { promisify } from 'node:util';
 import { randomUUID } from 'node:crypto';
 import { writePortalRequest } from './portal-request-file.mjs';
 import { CredentialProfiles } from './credential-profiles.mjs';
+import { credentialAgent } from './hosted/credential-agent.mjs';
 import { readSnapshot, presentReading } from './reader-client.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -826,6 +827,10 @@ const hostedPromptRefusal = () => Object.assign(new Error('In hosted mode no cre
 // A served process without a context fails closed here too: nothing of the owner's vault is read for a lost call.
 const ownerSecrets = refusal => { if (hostedContext()) throw refusal(); if (servedWithoutContext()) throw contextLost('the vault of the server'); };
 export async function credentialStatus(tenant) {
+  if (hostedContext() && credentialAgent()?.supported) {
+    const host = new URL(tenant.portalOrigin).hostname;
+    return (await credentialAgent().call(host, 'odc-portal', 'status', { auth: 'api-client' })).available;
+  }
   if (offline() || hostedContext() || servedWithoutContext()) return false;
   const m = await portal();
   try { return (await m.windowsApiClientCredential('status', tenant.portalOrigin))?.available === true; } catch { return false; }

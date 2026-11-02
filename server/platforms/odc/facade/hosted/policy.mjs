@@ -612,10 +612,20 @@ export function refusalBeforeAgent(name, args, { entry, config = null, raw = arg
   if (LANED.has(lane) && !lanes.includes(lane)) return { refusal: laneDisabled(lane) };
   const need = agentNeed(entry.agent, args);
   // O.6.1: a lane the image refused at start is off for every tool but the state reports, before the agent and any path.
-  if (LANED.has(lane) && need !== 'report' && kernelRefused?.[lane]) return { refusal: kernelLaneOff(lane, kernelRefused[lane]) };
-  return { args, lane, need };
+  const privateCredential = privateCredentialPath(name, entry, args, supports);
+  if (LANED.has(lane) && need !== 'report' && !privateCredential && kernelRefused?.[lane]) return { refusal: kernelLaneOff(lane, kernelRefused[lane]) };
+  return { args, lane, need, ...(privateCredential ? { privateCredential: true } : {}) };
 }
 const agentRuns = (supports, kind) => { try { return typeof supports === 'function' && supports(kind) === true; } catch { return false; } };
+// Tenant HTTP does not require a compiler or a Studio when this account's agent
+// owns authentication. The handler still decides the exact permitted transport;
+// API-only O11 steps and private field injection retain their Studio refusal.
+export function privateCredentialPath(name, entry, args, supports) {
+  if (entry?.class !== 'tenant-agent' || !agentRuns(supports, 'credential.session')) return false;
+  if (entry.lane === 'odc') return args.auth !== 'studio';
+  return entry.lane === 'o11' && /^o11_service_center_(?:session|read|write)$/.test(name)
+    && !['studio', 'studio-web'].includes(args.session);
+}
 // The kinds the agent of a session runs (AgentLink supports), for refusalBeforeAgent; never throws.
 export const supportsOf = link => kind => { try { return link?.supports?.(kind) === true; } catch { return false; } };
 // Whether the gate refuses this call before the agent and any path (refusalBeforeAgent). The deadline's inputs never ask the
@@ -911,7 +921,7 @@ export function wrapHostedTool(name, config, handler, { context, link = context?
     const early = refusalBeforeAgent(name, args, { entry, config, raw: params[0], hasArgs, lanes, kernelRefused, prototypeOp, generatorOps, destructive, workspace: context?.workspace ?? null, supports });
     if (early.refusal) return refusal(early.refusal);
     args = early.args;
-    const { lane, need } = early;
+    const { lane, need, privateCredential } = early;
     // Only server-owned handles are expanded; the ordinary gate then checks the
     // complete resulting job, including its paths, prototype and generators.
     const unexpandedArgs = args;
@@ -942,13 +952,13 @@ export function wrapHostedTool(name, config, handler, { context, link = context?
       }
       if (!connected || info?.credential === false) return refusal(agentNotConnected(info, { tool: name, args }));
       const compat = LANED.has(lane) ? info?.compatible?.[lane] : null;
-      if (compat && compat.ok === false) {
+      if (!privateCredential && compat && compat.ok === false) {
         const problem = incompatible(lane, compat, info);
         if (problem) return refusal(problem);
       }
-      if (lane === 'o11' && name !== 'ssam_connect' && !context.executor?.o11Connection?.()) return refusal(o11NotConnected());
+      if (!privateCredential && lane === 'o11' && name !== 'ssam_connect' && !context.executor?.o11Connection?.()) return refusal(o11NotConnected());
       // A1 + A2 (review round 2): the process each touched lane runs (O11 record) and the lanes a tool without a lane touches.
-      const studio = studioGate({ name, lane, args, info, context, lanes, link });
+      const studio = privateCredential ? {} : studioGate({ name, lane, args, info, context, lanes, link });
       if (studio.refusal) return refusal(studio.refusal);
       if (studio.args) ({ args, skipped } = studio);
     }
@@ -1012,7 +1022,7 @@ export function wrapHostedTool(name, config, handler, { context, link = context?
     const { scope, result } = await withStudioScope(() => offer ? withCheckedCandidate(offer, invoke) : invoke());
     if (result?.resultType === 'input_required') return result;
     // A-M1 + E2, round 2 (A1, A2): the Studio of every lane the call touched, never silent when it is not the server's build.
-    const verdict = studioVerdict({ name, lane, need, info, context, lanes, scope, skipped, link });
+    const verdict = studioVerdict({ name, lane, need: privateCredential ? 'report' : need, info, context, lanes, scope, skipped, link });
     if (verdict.refusal) return refusal(verdict.refusal);
     // fase4-28 R1 (F3): once per session and lane touched, again when the lane's verdict changes (studioNoticeMemory).
     // fase4-28 r2-preview: conditional() -> {available: [tool], project(name, args, result)}: the conditional tools served now

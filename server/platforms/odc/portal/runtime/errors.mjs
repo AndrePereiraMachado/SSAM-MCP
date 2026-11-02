@@ -1,7 +1,7 @@
 import { observeCredentials } from './projection-context.mjs';
 import { processCredentials, credentialStateVersion } from './credential-registry.mjs';
 import { createCredentialMatcher } from './credential-matcher.mjs';
-import { AUTH_CODES, authContinuation } from '../../facade/refusal-codes.mjs';
+import { AUTH_CODES, CREDENTIAL_CODES, authContinuation } from '../../facade/refusal-codes.mjs';
 import { hostedContext } from '../../facade/executor.mjs';
 
 let processMatcher, matcherVersion = -1;
@@ -60,6 +60,8 @@ export class OdcError extends Error {
 }
 
 export function publicError(error) {
+  if (CREDENTIAL_CODES.includes(error?.code)) return { code: error.code, message: 'The private credential operation did not complete. No automatic retry was sent.',
+    ...([true, false, null].includes(error.executed) ? { executed: error.executed } : {}) };
   // R2-I: a written authorization that does not name a target keeps its code, message and the targets it misses.
   if (error?.name === 'WrittenAuthorizationError' && typeof error.code === 'string') return { code: error.code, message: error.message, ...(error.details ?? {}) };
   if (error?.code === 'AUTHORIZATION_CONTEXT_INVALID')

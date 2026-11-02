@@ -15,7 +15,7 @@ import path from 'node:path';
 import { CODES, RULES, STEPS, codeOf, ruleOf, CODE_UNLISTED, RULE_UNLISTED } from '../quality-line.mjs';
 import { scanSources, driftOf, renderBlock, blockOf, literalsOf, rulesOf, verbsOf, operationsOf, composedWordsOf, invalidCodeOf, refusedCodeOf,
   publishGateCodeOf, coverageOf, compiledSources, hostedHandlers, isScanned, ROOT, ROOTS, CONTRACTS, TOOLS_JSON, BRIDGES, VERB_SURFACE,
-  COMMAND_SURFACE } from '../../scripts/quality-registry.mjs';
+  COMMAND_SURFACE, NORMALIZER, writeRegistry } from '../../scripts/quality-registry.mjs';
 import { HTML_CODES, HTML_WARNING_CODES, PROTOTYPE_CODES, refusalCode } from '../refusal-codes.mjs';
 import { publishOutcomeOf } from '../kernel-delivery.mjs';
 
@@ -225,4 +225,45 @@ test('the registry holds the shaper\'s own families and none of the review\'s cu
   for (const step of STEPS) assert.ok(codes.has(step.toUpperCase().replaceAll('-', '_') + '_FAILED'), step);
   for (const word of ['OSUSR_K3X_FOLHA_SNTL', 'DEBUG_FOLHA_PAGAMENTO_SNTL', 'CLIENTE_ACME_SNTL']) assert.ok(!codes.has(word) && !RULES.includes(word), word);
   assert.ok(![...codes].some(c => /DEBUG_[A-Z0-9_]*SNTL/.test(c)));
+});
+
+function splitRegistryFixture() {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ssam-quality-split-agent-'));
+  const put = (rel, text) => { const file = path.join(dir, rel); fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, text); };
+  for (const { dir: source } of ROOTS) if (source !== 'agent') fs.mkdirSync(path.join(dir, source), { recursive: true });
+  put(TOOLS_JSON, '{"tools":{}}'); put(VERB_SURFACE, ''); put(COMMAND_SURFACE, ''); put(NORMALIZER, '');
+  const original = renderBlock({ codes: new Set(['ACTIVE_MODULE_CHANGED']), rules: new Set() });
+  for (const contract of CONTRACTS) put(contract, original);
+  return { dir, put, original };
+}
+
+test('split agent: an incomplete source scan cannot rewrite either registry copy', async () => {
+  const { dir, original } = splitRegistryFixture();
+  await assert.rejects(writeRegistry(dir, { steps: [] }), /incomplete sources: agent/);
+  for (const contract of CONTRACTS) assert.equal(fs.readFileSync(path.join(dir, contract), 'utf8'), original, contract + ' preserves old Agent codes');
+});
+
+test('split agent: explicit Agent sources retain legacy codes and include new codes', async () => {
+  const { dir, put } = splitRegistryFixture();
+  put('separate-agent/ssam-agent.mjs', "export const oldCode = 'ACTIVE_MODULE_CHANGED';");
+  put('separate-agent/lib/credential-session.mjs', "export const newCode = 'CREDENTIAL_LOGIN_PAUSED';");
+  put('separate-agent/tests/fixture.mjs', "export const fake = 'SHOULD_NOT_BECOME_A_CODE';");
+  const { scan } = await writeRegistry(dir, { steps: [], agentSource: path.join(dir, 'separate-agent') });
+  assert.deepEqual(scan.absent, []);
+  assert.ok(scan.codes.has('ACTIVE_MODULE_CHANGED'));
+  assert.ok(scan.codes.has('CREDENTIAL_LOGIN_PAUSED'));
+  assert.ok(!scan.codes.has('SHOULD_NOT_BECOME_A_CODE'));
+  assert.equal(scan.roots.agent, 2);
+  for (const contract of CONTRACTS) {
+    const text = fs.readFileSync(path.join(dir, contract), 'utf8');
+    assert.ok(text.includes('ACTIVE_MODULE_CHANGED'));
+    assert.ok(text.includes('CREDENTIAL_LOGIN_PAUSED'));
+  }
+});
+
+test('split agent: an explicit wrong directory cannot silently substitute an empty source set', async () => {
+  const { dir, original } = splitRegistryFixture();
+  fs.mkdirSync(path.join(dir, 'wrong-source'));
+  await assert.rejects(writeRegistry(dir, { steps: [], agentSource: path.join(dir, 'wrong-source') }), /supplied source must contain ssam-agent.mjs/);
+  for (const contract of CONTRACTS) assert.equal(fs.readFileSync(path.join(dir, contract), 'utf8'), original);
 });

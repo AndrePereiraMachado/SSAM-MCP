@@ -12,6 +12,7 @@ import { hostName } from './service-center/http.mjs';
 import { UsersClient, UsersTransport, UsersError, identifier } from './users/client.mjs';
 import { hostedContext, servedWithoutContext, seamError, contextLost } from './executor.mjs';
 import { hostedUsersDeps, usersAgentRefusal, sweepUsersState, minimalReceipt, fitHostedAnswer } from './hosted/users-agent.mjs';
+import { capturePrivatePrompt, createLocalCredentialRuntime } from './users/private-runtime.mjs';
 
 const helper=fileURLToPath(new URL('./users/vault.ps1',import.meta.url));
 const hash=x=>createHash('sha256').update(x).digest('hex');
@@ -25,6 +26,8 @@ function keyOf(root){
   return fs.readFileSync(file);
 }
 const localSessions=new Map(),prompts=new Map(),locks=new Map();
+const localNotes=new Set();
+const localCredentials=createLocalCredentialRuntime({normalized:host=>localNotes.add(host),invalidate:host=>{for(const key of localSessions.keys())if(key===host||key.endsWith('|'+host))localSessions.delete(key);}});
 const stateRoot=path.join(process.env.USERPROFILE||os.homedir(),'.ssam-hybrid','o11','users');
 export const USER_OPERATIONS=['capabilities','status','sign-in','password-prompt','list','get','create','update','activate','deactivate','delete','grant-role','revoke-role','add-group','remove-group','set-password','sign-out','receipt'];
 const writes=new Set(['create','update','activate','deactivate','delete','grant-role','revoke-role','add-group','remove-group','set-password']);
@@ -45,6 +48,10 @@ const reply=value=>({content:[{type:'text',text:JSON.stringify(value)}],structur
 
 export function privateCall(mode,host,extra={},input=null) {
   try{localOnly('vault helper');}catch(e){return Promise.reject(e);}
+  return localCredentials.call(mode,host,extra,input,rawPrivateCall);
+}
+function rawPrivateCall(mode,host,extra={},input=null) {
+  localOnly('vault helper');
   return new Promise((resolve,reject)=>{
     const args=['-NoLogo','-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',helper,'-Mode',mode,'-HostName',host];
     for(const [k,v]of Object.entries(extra))args.push('-'+k,String(v));
@@ -59,33 +66,38 @@ export function privateCall(mode,host,extra={},input=null) {
 export async function openUsersPrompt(host,{kind='login',entry,subject=''}={}) {
   localOnly('private window');
   const key=[host,kind,entry||''].join('|');const pending=prompts.get(key);
-  if(pending&&pending.exitCode===null)return {opened:false,alreadyOpen:true};
+  if(pending)return {opened:false,alreadyOpen:true};
   const args=['-NoLogo','-NoProfile','-STA','-ExecutionPolicy','Bypass','-File',helper,'-Mode','prompt','-HostName',host,'-Kind',kind,'-Subject',subject];
   if(entry)args.push('-Entry',entry);
   const statusPath=path.join(os.tmpdir(),'ssam-users-prompt-'+randomUUID()+'.status');
   args.push('-PromptStatusPath',statusPath);
   const child=spawn(powershellPath(),args,{windowsHide:true,stdio:['ignore','pipe','pipe']});prompts.set(key,child);
-  // Drain handles while PowerShell initializes WinForms; discard all process output.
-  child.stdout.on('data',()=>{});child.stderr.on('data',()=>{});
-  child.on('error',()=>prompts.delete(key));child.on('exit',()=>prompts.delete(key));child.unref();
+  const expected=localCredentials.generation(host),capture=kind==='login'?capturePrivatePrompt(child):null;
+  if(!capture)child.stdout.on('data',()=>{});child.stderr.on('data',()=>{});
+  const complete=()=>{
+    if(capture&&!capture.done)return;
+    if(capture&&!capture.failed){try{localCredentials.accept(host,capture.value,expected);}catch{/* fixed private failure; no raw output */}}
+    prompts.delete(key);try{fs.unlinkSync(statusPath);}catch{}
+  };
+  child.on('error',complete);child.on('close',complete);child.unref();
   try {
     for(let attempt=0;attempt<120;attempt++) {
       if(fs.existsSync(statusPath)){
         const phase=fs.readFileSync(statusPath,'utf8');
-        if(['visible','saved'].includes(phase))return {opened:true,alreadyOpen:false,visible:true,...(phase==='saved'?{saved:true}:{})};
+        if(['visible','saved'].includes(phase))return {opened:true,alreadyOpen:false,visible:true,...(kind==='password'&&phase==='saved'?{saved:true}:capture?.done&&!capture.failed&&capture.value.saved?{saved:true,remembered:capture.value.remembered}:{})};
       }
       if(child.exitCode!==null||child.killed)break;
       await new Promise(resolve=>setTimeout(resolve,100));
     }
     throw new UsersError('USERS_PROMPT_NOT_VISIBLE',`The private credential window could not be confirmed visible (exit ${child.exitCode ?? 'pending'}). No credential was requested in chat.`);
-  } finally {try{fs.unlinkSync(statusPath);}catch{}}
+  } finally {if(child.exitCode!==null)complete();}
 }
 const decode=s=>Buffer.from(s||'','base64').toString('utf8');
 async function exchange(host,input,call) {
   const r=await call('request',host,{},input);
   return {status:r.status,location:decode(r.location),contentType:decode(r.contentType),setCookie:(r.setCookie||[]).map(decode),body:Buffer.from(decode(r.body))};
 }
-async function defaultSession(host,{prompt=true,key=host,call=privateCall,openPrompt=openUsersPrompt,sessions=localSessions,confirm=null,makeClient=null}={}) {
+export async function defaultSession(host,{prompt=true,key=host,call=privateCall,openPrompt=openUsersPrompt,sessions=localSessions,confirm=null,makeClient=null}={}) {
   if(sessions.has(key))return sessions.get(key);
   const status=await call('status',host);
   if(!status.available){
@@ -121,7 +133,8 @@ export async function usersRequest(input,deps={}) {
     deps={...deps,...hostedUsersDeps(context)};
     sweepUsersState(deps.root,{now:(deps.now||Date.now)()});
   }
-  try {const answer=markPageData(await executeUsersRequest(input,deps));return context?fitHostedAnswer(answer):answer;}
+  if(!context)localNotes.delete(input.host);
+  try {const answer=markPageData(await executeUsersRequest(input,deps));if(!context&&localNotes.delete(input.host))answer.notes=[...(answer.notes||[]),'Sensitive authentication values were removed from the response.'];return context?fitHostedAnswer(answer):answer;}
   catch(e){return refusal(e);}
 }
 // What comes from the pages may have been written by anybody who can edit a user. The model is told so in the answer.

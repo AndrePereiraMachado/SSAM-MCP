@@ -12,9 +12,10 @@ import { execFile } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { readCheckpoint } from './read-budget.mjs';
 import { hostedContext } from './executor.mjs';
+import { credentialAgent, CREDENTIAL_UPDATE } from './hosted/credential-agent.mjs';
 
 const HOSTED_REFUSAL = Object.freeze({ ok: false, code: 'HOSTED_STUDIO_SESSION_ONLY', stage: 'authentication',
-  reason: 'Credential profiles are the vault of the machine that runs SSAM, never used in hosted mode: only the session of the user\'s own Studio is a path.' });
+  reason: 'Credential profiles are the vault of the machine that runs SSAM, never used in hosted mode: only the session of the user\'s own Studio is a path. ' + CREDENTIAL_UPDATE });
 const hostedError = () => Object.assign(new Error(HOSTED_REFUSAL.reason), { code: HOSTED_REFUSAL.code, executed: false });
 
 const helper = fileURLToPath(new URL('../../../scripts/credential-profiles.ps1', import.meta.url));
@@ -42,6 +43,19 @@ export class CredentialProfiles {
     this.nativeDialog = !open;
   }
   async resolve(input, { interactive = true, force = false, target = null } = {}) {
+    if (hostedContext() && credentialAgent()?.supported) {
+      const agent = credentialAgent(), service = input.lane === 'o11' ? 'service-center' : 'odc-portal';
+      try {
+        if (force) {
+          if (!interactive) return { ok: false, code: 'CREDENTIAL_SELECTION_REQUIRED', stage: 'authentication' };
+          await agent.call(input.host, service, 'prompt', { mode: 'select-profile' });
+          return { ok: false, code: 'CREDENTIAL_SELECTION_PENDING', resumable: true, reason: 'Select a profile in the private SSAM Agent window, then repeat the same call.' };
+        }
+        const profile = target ? await agent.profile(input.host, service, target, input.principal) : null;
+        const selected = await agent.resolve(input.host, service, { profile, principal: input.principal, prompt: interactive ? 'auto' : 'never', login: false });
+        return { ok: true, target: selected.profile, principal: selected.principal, source: 'private-agent' };
+      } catch (error) { return { ok: false, code: error.code, stage: 'authentication', reason: error.message }; }
+    }
     if (hostedContext()) return { ...HOSTED_REFUSAL };
     readCheckpoint('authentication');
     const context = profileContext(input);
@@ -85,6 +99,7 @@ export class CredentialProfiles {
   // becomes its choice, so the next calls reuse it from the vault. Only a profile still offered by a fresh listing of
   // the same context is remembered; nothing else is written.
   async remember(input, { target, principal } = {}) {
+    if (hostedContext() && credentialAgent()?.supported) return this.resolve({ ...input, principal }, { target, interactive: false });
     if (hostedContext()) return { ...HOSTED_REFUSAL };
     const context = profileContext(input);
     let available;
@@ -99,6 +114,18 @@ export class CredentialProfiles {
   }
 
   async select(input, { target, principal, authorize } = {}) {
+    if (hostedContext() && credentialAgent()?.supported) {
+      const context = profileContext(input), chosen = principalName(principal);
+      if (!chosen || !wordsGiven(authorize) || !authorize.toLowerCase().includes(context.host) || !authorize.toLowerCase().includes(chosen))
+        return { ok: false, code: 'CREDENTIAL_SELECTION_AUTHORIZATION_REQUIRED', reason: 'Explicit words must identify the tenant and existing profile principal. No profile was selected.' };
+      const service = input.lane === 'o11' ? 'service-center' : 'odc-portal';
+      try {
+        const profile = await credentialAgent().profile(input.host, service, target, chosen);
+        const window = await credentialAgent().call(input.host, service, 'prompt', { mode: 'select-profile', profile });
+        return { ok: false, code: 'CREDENTIAL_SELECTION_PENDING', resumable: true, window,
+          reason: 'Confirm the existing profile in the private SSAM Agent window, then repeat the same call.' };
+      } catch (error) { return { ok: false, code: error.code, reason: error.message }; }
+    }
     if (hostedContext()) return { ...HOSTED_REFUSAL };
     const context=profileContext(input), chosen=principalName(principal);
     const words=wordsGiven(authorize)?authorize.trim():''; // CX15 r7: one predicate (a server text names nothing)
