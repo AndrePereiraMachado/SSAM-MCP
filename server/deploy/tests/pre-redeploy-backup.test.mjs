@@ -165,8 +165,11 @@ test('backup-before-redeploy runs ssamctl backup of its own folder over ssh and 
       assert.equal(r.status, status, r.stdout + r.stderr);
       const dir = path.join(s.out, 'pre-test-label');
       if (status === 0) {
-        assert.match(r.stdout, /OK: licenses .*ssam-tokens-.*\.sql\.gz \(\d+ bytes, PostgreSQL 18\.6\), volumes .*ssam-state-/);
+        assert.match(r.stdout, /OK: licenses .*ssam-tokens-.*\.sql\.gz \(\d+ bytes, PostgreSQL 18\.6\), window .*ssam-state-.*kernels state .*\/state-/);
         assert.equal(fs.readdirSync(dir).filter((f) => /^ssam-tokens-.*\.sql\.gz$/.test(f)).length, 1);
+        // The layout rollback-kernels.sh reads: server-state and friction of the default backend.
+        assert.equal(fs.readdirSync(dir).filter((f) => /^state-.*\.tar\.gz$/.test(f)).length, 1);
+        assert.match(s.calls(), /run .*volume-x:\/source\/state:ro .*--entrypoint tar sha256:serverimage -czf - -C \/source state friction/);
       } else {
         assert.match(r.stderr, /BACKUP_DUMP_NO_LICENSE_TABLES/);
         assert.deepEqual(fs.readdirSync(dir).filter((f) => /^ssam-(tokens|state)-/.test(f)), []);
