@@ -43,15 +43,15 @@ const hosted = (exec = fakeExecutor(), workspace = fs.mkdtempSync(path.join(os.t
   tokenId: 'tok_test', customer: 'Test', lanes: ['odc', 'o11'], workspace, agent: null, executor: exec, o11: { studioDir: 'C:\\server\\Service Studio', lane: 'ss4' }, close: async () => {} });
 const code = expected => error => { assert.equal(error.code, expected, error.message); return true; };
 
-test('the closed list: 16 kinds, 6 that touch a machine, both frozen', () => {
-  assert.equal(CALL_KINDS.length, 16);
+test('the closed list: 17 kinds, 6 that touch a machine, both frozen', () => {
+  assert.equal(CALL_KINDS.length, 17);
   assert.ok(Object.isFrozen(CALL_KINDS) && Object.isFrozen(MACHINE_KINDS));
   // file.sync (C14, servidor/fase4): several file.put in one call, between the mirror and an agent 0.2.0+.
   // net.probe (fase4-24): the network check; file.upload (R2-G, fase4-28/r2): an approved local file of the user's machine;
   // screen.render (fase4-28 r2-preview): the render of a design document; o11.users (fase4-28 r4): the Users application through
   // the user's agent. The last four only to an agent that lists them.
   assert.deepEqual([...CALL_KINDS], ['studio.processes', 'odc.pipe', 'odc.attach', 'o11.bridge', 'o11.connect', 'o11.selected', 'file.put', 'file.get', 'file.list', 'file.sync',
-    'net.probe', 'file.upload', 'screen.render', 'o11.users', 'o11.xif', 'document.fetch']); // F4: o11.xif, the Integration Studio stages on the user's machine; r40: document.fetch, a document downloaded there
+    'net.probe', 'file.upload', 'screen.render', 'o11.users', 'o11.xif', 'credential.session', 'document.fetch']); // F4: o11.xif, the Integration Studio stages on the user's machine; r40a: credential.session, a private sign-in there; r40: document.fetch, a document downloaded there
   assert.deepEqual([...MACHINE_KINDS], CALL_KINDS.slice(0, 6));
   assert.throws(() => { CALL_KINDS.push('agent.info'); });
 });

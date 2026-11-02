@@ -73,9 +73,9 @@ const relayStage = (port, authorization, params) => new Promise((resolve, reject
 });
 const write = (file, content) => { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, content); return file; };
 
-test('the kind is in the closed list, followed only by document.fetch, and is sent only to an agent whose Hello lists it', () => {
-  // r40: document.fetch came after it; o11.xif keeps its place.
-  assert.equal(CALL_KINDS.at(-2), XIF_KIND);
+test('the kind is in the closed list, followed only by credential.session and document.fetch, and is sent only to an agent whose Hello lists it', () => {
+  // r40a: credential.session, then r40: document.fetch came after it; o11.xif keeps its place.
+  assert.equal(CALL_KINDS.at(-3), XIF_KIND);
   assert.ok(HELLO_ONLY_KINDS.has(XIF_KIND));
 });
 
