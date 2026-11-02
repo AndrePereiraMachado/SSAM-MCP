@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <!-- The runtime of the Studio it compiles against (kernel/StudioRuntime.props): v106 runs inside the net10 ODC Studios
+    <!-- The runtime of the Studio it compiles against (kernel/StudioRuntime.props): v109 runs inside the net10 ODC Studios
          (1.7.30 on) only, see OdcBridgeRuntime below. -->
     <TargetFramework>$(AnvilOdcTargetFramework)</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
@@ -17,11 +17,11 @@
          the verification runs as a job of its own after the merge's job returned (BridgeServe.cs VerifyAfterMerge), a module
          that is no longer the active one is refused, and a publication answers ok only when its downloaded revision equals
          before-publish.oml (PublishVerification.cs). -->
-    <AssemblyName>ODC3.Bridge.v106</AssemblyName>
+    <AssemblyName>ODC3.Bridge.v109</AssemblyName>
     <OdcBridgeRuntime>net10.0</OdcBridgeRuntime>
-    <!-- v107: the v106 sources built for the net8 ODC Studios (up to 1.7.29), against a bundle of 1.7.28 or 1.7.29:
+    <!-- v108: the v109 sources built for the net8 ODC Studios (up to 1.7.29), against a bundle of 1.7.28 or 1.7.29:
          -p:OdcInstall=<its folder> -p:AnvilOdcStudioTfm=net8.0. A net8 DLL also loads in the net10 Studios, as the v98 does. -->
-    <AssemblyName Condition="'$(TargetFramework)' == 'net8.0'">ODC3.Bridge.v107</AssemblyName>
+    <AssemblyName Condition="'$(TargetFramework)' == 'net8.0'">ODC3.Bridge.v108</AssemblyName>
     <OdcBridgeRuntime Condition="'$(TargetFramework)' == 'net8.0'">net8.0</OdcBridgeRuntime>
     <!-- IncrementalClean must never treat a prior resident version as an orphan. -->
     <CleanFile>$(MSBuildProjectFile).$(AssemblyName).FileListAbsolute.txt</CleanFile>
@@ -60,6 +60,8 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="StartupHook.cs" />
+    <Compile Include="NativePreferForeign.cs" /><Compile Include="NativeMergeIntent.cs" />
+    <Compile Include="../../../../kernel/src/Anvil.Bridge/PreferForeign.cs" Link="shared/PreferForeign.cs" />
     <Compile Include="AgentDataRoot.cs" />
     <Compile Include="BridgeServe.cs" />
     <Compile Include="BridgeDeadlines.cs" />

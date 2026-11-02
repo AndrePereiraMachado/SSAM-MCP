@@ -151,4 +151,23 @@
       <_Parameter2>$(AssemblyName)</_Parameter2>
     </AssemblyAttribute>
   </ItemGroup>
+<ItemGroup>
+  <Compile Include="../../../platforms/odc/studio/bridge/NativePreferForeign.cs" Link="NativePreferForeign.cs" />
+  <Compile Include="../../../platforms/odc/studio/bridge/NativeMergeIntent.cs" Link="NativeMergeIntent.cs" />
+  <Reference Include="$(OdcInstall)/ServiceStudio.Presenter.dll" Private="false" />
+  <Reference Include="$(OdcInstall)/ServiceStudio.ServerCommunications.dll" Private="false" />
+  </ItemGroup>
+  <ItemGroup>
+  <ProjectReference Include="../../../platforms/odc/studio/bridge/Bridge.csproj" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+  <ItemGroup>
+  <Compile Include="../../../platforms/odc/studio/shared/Manifest.cs" Link="PreferManifest.cs" />
+  <Compile Include="../Anvil.Bridge.Thin.Tests/FakeMergeTypes.cs" Link="FakeMergeTypes.cs" />
+  </ItemGroup>
+  <ItemGroup>
+  <ProjectReference Include="../../../platforms/odc/studio/bridge/client/Client.csproj" ReferenceOutputAssembly="false" SkipGetTargetFrameworkProperties="true" />
+  </ItemGroup>
+    <ItemGroup>
+    <ProjectReference Include="../../src/Anvil.Cli.Odc/Anvil.Cli.Odc.csproj" ReferenceOutputAssembly="false" />
+  </ItemGroup>
 </Project>

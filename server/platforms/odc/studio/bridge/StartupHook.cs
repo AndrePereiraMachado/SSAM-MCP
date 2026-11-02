@@ -29,14 +29,14 @@ public static class StartupHook { public static void Initialize() => Bridge.Star
 // Loaded once per Studio session through the .NET diagnostics startup hook. Every command is
 // parameterized by a manifest file, never by constants compiled into this assembly.
 // The bridge never initializes the ModelAPI runtime inside the Studio and never edits the open
-// model directly: every mutation goes through the native CompareAndMerge with a hash-checked base
+// model directly: every mutation goes through a native merge with a hash-checked base
 // and an immutable candidate, and every command appends one line to the operations journal.
 internal static partial class Bridge {
-    // One source, one name per Studio runtime (Bridge.csproj): v106 for the net10 ODC Studios, v107 for the net8 ones.
+    // One source, one name per Studio runtime (Bridge.csproj): v109 for the net10 ODC Studios, v108 for the net8 ones.
 #if NET10_0_OR_GREATER
-    public const string Version = "v106";
+    public const string Version = "v109";
 #else
-    public const string Version = "v107";
+    public const string Version = "v108";
 #endif
     // A command that outlives its deadline is reported as uncertain and keeps running; the server stays available, status
     // answers beside it, and every other command is refused at once until it completes (BridgeServe.cs CommandRunner).
@@ -74,6 +74,9 @@ internal static partial class Bridge {
         public string? Module, ModuleKey, BaseSha, CandidateSha, EvidenceDir, Feature;
         // Set by commands that answer a refusal instead of throwing (the portal lane), so the journal line tells the truth.
         public string? Outcome, GateName, Note;
+        public string? PreferForeignUnavailable;
+        public NativeMergeIntent.Change[] FallbackPersonEdits = Array.Empty<NativeMergeIntent.Change>();
+        public string? FallbackAuditUnavailable;
         public bool HandedOff;
         // The Studio turn of this command: past its deadline it has answered, and a job not started yet never starts (QueuedOnTab).
         public BusyCommand? Turn;
@@ -158,10 +161,19 @@ internal static partial class Bridge {
                         : error is MergeDiagnostics.MergeUncertainException uncertain
                         ? new { ok = false, outcome = Journal.Outcome(error, context.HandedOff), gate = Journal.Gate(error.Message), error = uncertain.Detailed, divergences = uncertain.Divergences, dialogsClosed = context.Closed.ToArray() }
                         : (object)new { ok = false, outcome = Journal.Outcome(error, context.HandedOff), gate = Journal.Gate(error.Message), error = MergeDiagnostics.Answer(error), dialogsClosed = context.Closed.ToArray() };
+                    if (context.PreferForeignUnavailable != null && JsonSerializer.SerializeToNode(response) is JsonObject fallback) {
+                        fallback["preferForeign"] = false;
+                        fallback["preferForeignUnavailable"] = context.PreferForeignUnavailable;
+                        fallback["fallbackPersonEdits"] = JsonSerializer.SerializeToNode(context.FallbackPersonEdits, Json);
+                        if (context.FallbackAuditUnavailable != null) fallback["fallbackAuditUnavailable"] = context.FallbackAuditUnavailable;
+                        response = fallback;
+                    }
                     // G-3 (C16): a merge that failed after CompareAndMerge took the candidate is integrated in the open
                     // module: the answer says merged:true (equal:false), so nobody repeats it.
                     if (command == "merge" && context.HandedOff && JsonSerializer.SerializeToNode(response) is JsonObject handed) {
-                        handed["merged"] = true; handed["equal"] = false; handed["equivalence"] = "uncertain";
+                        handed["merged"] = error is NativePreferForeign.Unknown ? null : JsonValue.Create(true);
+                        if (error is NativePreferForeign.Unknown) handed["outcome"] = "unknown";
+                        handed["equal"] = false; handed["equivalence"] = "uncertain";
                         response = handed;
                     }
                     if (context.EvidenceDir != null) {
@@ -903,7 +915,7 @@ internal static partial class Bridge {
     // I10: what this build does that older bridges do not; the facade uses each behavior only when it is here (status, brief).
     // merge:normalized: a merge proven equal but for the Studio's own rewrites answers ok:true, merged:true, normalized (G-1);
     // template-download:have: a template whose revision the caller already has answers cached:true without bytes (C25).
-    private static readonly string[] Capabilities = { "merge:normalized", "template-download:have", "agent-root:1", "reference-snapshot:every-kind" };
+    private static readonly string[] Capabilities = { "merge:normalized", "template-download:have", "agent-root:1", "reference-snapshot:every-kind", NativePreferForeign.Capability };
     private static object Status() {
         var providers = ProvidersState();
         object? topState = null;
@@ -1201,12 +1213,20 @@ internal static partial class Bridge {
         Guard(m, p);
         var capturedAt = m.CapturedAt();
         var local = p.ActiveESpace;
+        var prefer = false;
+        string? preferUnavailable = null;
+        if (mode == Mode.Merge && m.PreferForeign) {
+            prefer = NativePreferForeign.Available(out preferUnavailable);
+            c.PreferForeignUnavailable = preferUnavailable;
+            File.WriteAllText(Path.Combine(m.EvidenceDir, "prefer-foreign.json"), JsonSerializer.Serialize(new { requested = true, available = prefer, reason = preferUnavailable }, Json));
+        }
         if (mode == Mode.Reconcile) {
             // A read of an already returned native merge, never another CompareAndMerge. Its verification (VerifyMerged) does write
             // one thing since v106: the native caches of the delivery's stylesheets, rebuilt in a transaction, never their text.
             using var started = JsonDocument.Parse(File.ReadAllText(Path.Combine(m.EvidenceDir, "merge-started.json")));
             using var returned = JsonDocument.Parse(File.ReadAllText(Path.Combine(m.EvidenceDir, "native-return.json")));
             var start = started.RootElement;
+            Require(!returned.RootElement.TryGetProperty("merged", out var applied) || applied.ValueKind != JsonValueKind.False, "Reconciliation requires a merge that was applied.");
             Require(start.GetProperty("module").GetString() == m.Module
                 && start.GetProperty("baseSha256").GetString() == m.BaseSha256
                 && start.GetProperty("candidateSha256").GetString() == m.CandidateSha256,
@@ -1233,7 +1253,14 @@ internal static partial class Bridge {
         var basisBytes = m.ReadBase();
         m.RequireFreshBase();
         using var basis = Load(basisBytes);
+        if (m.PreferForeign && !prefer && preferUnavailable != null) {
+            var observation = NativeMergeIntent.ReadForFallback(basis, local);
+            c.FallbackPersonEdits = observation.Changes;
+            c.FallbackAuditUnavailable = observation.Unavailable;
+        }
+        bool exactCapturedBase;
         using (var current = new MatchTree(local, basis, basis, false, true)) {
+            exactCapturedBase = current.HasNoDifferences;
             var file = mode switch { Mode.CheckBase => "current-vs-base.txt", Mode.Preview => "current-vs-base-preview.txt", _ => "current-vs-base-before-merge.txt" };
             File.WriteAllText(Path.Combine(m.EvidenceDir, file), current.Dump());
             if (mode == Mode.CheckBase) {
@@ -1243,7 +1270,7 @@ internal static partial class Bridge {
                 Require(current.HasNoDifferences, "Open " + m.Module + " differs from the captured base; capture a new snapshot and rebuild the candidate.");
                 return check;
             }
-            Require(current.HasNoDifferences, "Open " + m.Module + " differs from the captured base; capture a new snapshot and rebuild the candidate.");
+            Require(prefer || current.HasNoDifferences, "Open " + m.Module + " differs from the captured base; capture a new snapshot and rebuild the candidate.");
         }
         var candidateBytes = m.ReadCandidate();
         var candidate = Load(candidateBytes);
@@ -1258,14 +1285,20 @@ internal static partial class Bridge {
                 conflicts = tree.HasConflicts; noDifferences = tree.HasNoDifferences;
                 File.WriteAllText(Path.Combine(m.EvidenceDir, "match-tree.txt"), tree.Dump());
             }
-            var preview = new { ok = true, module = m.Module, conflicts, noDifferences, exactCapturedBase = true, baseSha256 = m.BaseSha256, candidateSha256 = m.CandidateSha256, unreferencedProducers, publishInvoked = false };
+            var preview = new { ok = true, module = m.Module, conflicts, noDifferences, exactCapturedBase, baseSha256 = m.BaseSha256, candidateSha256 = m.CandidateSha256, unreferencedProducers, publishInvoked = false };
             File.WriteAllText(Path.Combine(m.EvidenceDir, "preview.json"), JsonSerializer.Serialize(preview, Json));
             if (mode == Mode.Preview) return preview;
             // The merge proves the preview's conditions itself (studio_deliver until=merge calls it without a preview).
             Require(!noDifferences, "Automatic merge requires clean, non-empty changes: the candidate has no changes over the open module (NO_CHANGE); nothing was merged.");
-            Require(!conflicts, "Automatic merge requires clean, non-empty changes: the candidate conflicts with the open module (MERGE_CONFLICT; match-tree.txt names each conflict); nothing was merged.");
+            Require(prefer || !conflicts, "Automatic merge requires clean, non-empty changes: the candidate conflicts with the open module (MERGE_CONFLICT; match-tree.txt names each conflict); nothing was merged.");
             Require(!File.Exists(Path.Combine(m.EvidenceDir, "merge-started.json")), "A merge was already attempted in this evidence directory; inspect its journal, never retry here.");
             var expectedMessages = Messages(candidate);
+            var preMergeErrors = prefer ? Errors(local) : null;
+            var preMergeMessages = prefer ? Messages(local) : null;
+            if (prefer) {
+                using var beforeStream = local.SaveToMemoryStream();
+                File.WriteAllBytes(Path.Combine(m.EvidenceDir, "before-prefer-merge.oml"), beforeStream.ToArray());
+            }
             // Merge order: defaults the Studio drops on elements a merge creates go in a second native merge of this command.
             var order = NativeMergeOrder.Prepare(candidate, basis, candidateBytes, Load);
             if (order.FirstPass != null) {
@@ -1278,7 +1311,25 @@ internal static partial class Bridge {
             handedOff = true; c.HandedOff = true;
             string NativeMerge(ESpace into, ESpace foreign, ESpace over) => CompareAndMergeCommands.CompareAndMerge(p, into, foreign, over, false, automaticMerge: true, isFrom1CP: false).ToString();
             string outcome; object? second = null;
-            if (order.FirstPass == null) outcome = NativeMerge(local, candidate, basis);
+            JsonObject? resolved = null;
+            if (prefer) {
+                string LiveSha() { using var stream = local.SaveToMemoryStream(); return Hash(stream.ToArray()); }
+                try {
+                    if (order.FirstPass == null) resolved = NativePreferForeign.Merge(p, local, candidate, basis, LiveSha);
+                    else {
+                        using var first = Load(order.FirstPass);
+                        resolved = NativePreferForeign.Merge(p, local, first, basis, LiveSha, finalCandidate: candidate);
+                        second = new { merged = true, outcome = "Merge", reason = "Deferred defaults merged in the same command." };
+                    }
+                    outcome = "Merge";
+                } catch (NativePreferForeign.NotApplied ex) {
+                    c.HandedOff = false; c.Outcome = "refused"; c.GateName = "merge_conflict"; c.Note = ex.Message;
+                    var refused = new { ok = false, merged = false, code = "MERGE_CONFLICT", preferForeign = true, error = ex.Message, publishInvoked = false };
+                    File.WriteAllText(Path.Combine(m.EvidenceDir, "native-return.json"), JsonSerializer.Serialize(refused, Json));
+                    return refused;
+                } finally { candidate.Close(); }
+            }
+            else if (order.FirstPass == null) outcome = NativeMerge(local, candidate, basis);
             else {
                 candidate.Close();
                 outcome = NativeMerge(local, Load(order.FirstPass), basis);
@@ -1288,7 +1339,18 @@ internal static partial class Bridge {
                 second = new { merged = pass.Merged, outcome = pass.Outcome, reason = pass.Reason };
                 if (pass.Merged) outcome = pass.Outcome!;
             }
-            File.WriteAllText(Path.Combine(m.EvidenceDir, "native-return.json"), JsonSerializer.Serialize(new { outcome, secondPass = second, publishInvoked = false }, Json));
+            var nativeReturn = JsonSerializer.SerializeToNode(new { outcome, secondPass = second, publishInvoked = false }, Json)!.AsObject();
+            if (prefer) {
+                nativeReturn["preferForeign"] = true; nativeReturn["resolvedConflicts"] = resolved;
+                nativeReturn["preMergeErrors"] = JsonSerializer.SerializeToNode(preMergeErrors, Json);
+                nativeReturn["preMergeMessages"] = JsonSerializer.SerializeToNode(preMergeMessages, Json);
+            } else if (m.PreferForeign) {
+                nativeReturn["preferForeign"] = false;
+                nativeReturn["preferForeignUnavailable"] = preferUnavailable;
+                nativeReturn["fallbackPersonEdits"] = JsonSerializer.SerializeToNode(c.FallbackPersonEdits, Json);
+                if (c.FallbackAuditUnavailable != null) nativeReturn["fallbackAuditUnavailable"] = c.FallbackAuditUnavailable;
+            }
+            File.WriteAllText(Path.Combine(m.EvidenceDir, "native-return.json"), nativeReturn.ToJsonString(Json));
             return new PendingMergeVerification(local, outcome, expectedMessages);
         } finally { if (!handedOff) candidate.Close(); }
     }
@@ -1313,7 +1375,36 @@ internal static partial class Bridge {
         // element; with forced delete rules they are the only differences a merge may keep and still answer ok:true.
         var rewrites = Array.Empty<NativeMergeVerification.Normalization>();
         var equivalence = Path.Combine(m.EvidenceDir, "native-equivalence.txt");
-        try { proof = NativeMergeVerification.Verify(local, expected, m.Owners.ToHashSet(), equivalence); }
+        var nativeReceipt = JsonNode.Parse(File.ReadAllText(Path.Combine(m.EvidenceDir, "native-return.json")))!.AsObject();
+        var preferred = nativeReceipt["preferForeign"]?.GetValue<bool>() == true;
+        var personEdits = Array.Empty<NativeMergeIntent.Change>();
+        NativeMergeIntent.Audit? audit = null;
+        if (preferred) {
+            using var before = Load(File.ReadAllBytes(Path.Combine(m.EvidenceDir, "before-prefer-merge.oml")));
+            audit = NativeMergeIntent.Observe(local, expected, basis, before);
+            personEdits = audit.Preserved;
+            nativeReceipt["resolvedConflicts"] = audit.Receipt(nativeReceipt["resolvedConflicts"] as JsonObject, NativeMergeIntent.Read(basis, expected));
+            nativeReceipt["observedReplacements"] = JsonSerializer.SerializeToNode(audit.Replaced, Json);
+            File.WriteAllText(Path.Combine(m.EvidenceDir, "native-return.json"), nativeReceipt.ToJsonString(Json));
+            File.WriteAllText(Path.Combine(m.EvidenceDir, "person-edits.json"), JsonSerializer.Serialize(audit, Json));
+        }
+        Func<Match, PropertyPair?, bool>? preserved = audit == null ? null : audit.IsPreserved;
+        object PreferredResult(object value, string filename) {
+            var result = JsonSerializer.SerializeToNode(value, Json)!.AsObject();
+            result["preferForeign"] = true;
+            result["resolvedConflicts"] = nativeReceipt["resolvedConflicts"]?.DeepClone();
+            result["observedReplacements"] = nativeReceipt["observedReplacements"]?.DeepClone();
+            result["preservedValidationMessages"] = nativeReceipt["preMergeMessages"]?.DeepClone();
+            result["preservedEdits"] = JsonSerializer.SerializeToNode(personEdits.Select(e => new {
+                element = e.Element, property = e.Property, local = e.Local, candidate = e.Delivery,
+                note = "The person's edit outside the delivery's changes was preserved." }), Json);
+            if (personEdits.Length > 0 && result["equivalence"]?.GetValue<string>() is null or "strict") result["equivalence"] = "normalized";
+            File.WriteAllText(Path.Combine(m.EvidenceDir, filename), result.ToJsonString(Json));
+            return result;
+        }
+        try {
+            proof = NativeMergeVerification.Verify(local, expected, m.Owners.ToHashSet(), equivalence, preserved: preserved);
+        }
         catch (InvalidOperationException strict) {
             // Known classes: defaults the Studio removed (MergeOrder), delete rules it forced to Ignore, the properties it
             // rewrites on merge (Refresh Data Max. Records, Structure Public in an app) and the G-1 rewrites (a block instance's
@@ -1329,7 +1420,7 @@ internal static partial class Bridge {
             var named = lost.Select(d => { var parts = d.Element.Split('.'); return new NativeMergeVerification.LostDefault(parts.Length > 1 ? parts[^2] : "", parts[^1], d.Value); }).ToArray();
             NativeMergeVerification.Proof? knownOnly = null;
             if (lost.Length + forced.Length + all.Length > 0)
-                try { knownOnly = NativeMergeVerification.Verify(local, expected, m.Owners.ToHashSet(), equivalence, named, forced, all, icons); }
+                try { knownOnly = NativeMergeVerification.Verify(local, expected, m.Owners.ToHashSet(), equivalence, named, forced, all, icons, preserved); }
                 catch (InvalidOperationException) { }
             if (knownOnly != null) proof = knownOnly;
             else {
@@ -1349,9 +1440,11 @@ internal static partial class Bridge {
                 proof = new NativeMergeVerification.Proof(true, false, 0, Array.Empty<NativeMergeVerification.LayoutAddition>());
             }
         }
-        var addedErrors = Errors(local).Except(Errors(basis)).ToArray();
+        var precedingErrors = preferred ? nativeReceipt["preMergeErrors"]?.Deserialize<string[]>(Json) ?? [] : [];
+        var precedingMessages = preferred ? nativeReceipt["preMergeMessages"]?.Deserialize<object[]>(Json) ?? [] : [];
+        var addedErrors = Errors(local).Except(Errors(basis)).Except(precedingErrors).ToArray();
         Require(addedErrors.Length == 0, "Merge introduces validation errors: " + string.Join(" | ", addedErrors));
-        var newMessages = NewMessages(local, expectedMessages);
+        var newMessages = NewMessages(local, expectedMessages.Concat(precedingMessages).ToArray());
         File.WriteAllText(Path.Combine(m.EvidenceDir, "new-messages.json"), JsonSerializer.Serialize(newMessages, Json));
         // G-2 (A03, C16): after the merge only errors and security warnings (SecurityWarnings.IsSecurity) block, as in the
         // kernel, the builder and the O11 LiveContract; every other new live message is a warning of the receipt.
@@ -1373,6 +1466,7 @@ internal static partial class Bridge {
             };
             File.WriteAllText(Path.Combine(m.EvidenceDir, "receipt.json"), JsonSerializer.Serialize(normalizedReceipt, Json));
             c.Note = "merged; normalized by the Studio: " + string.Join(", ", notes.Select(n => n.Rule).Distinct());
+            if (preferred) return PreferredResult(normalizedReceipt, "receipt.json");
             return normalizedReceipt;
         }
         if (lost.Length + forced.Length + normalized.Length > 0) {
@@ -1399,6 +1493,7 @@ internal static partial class Bridge {
             // A gate of its own: "equivalence" means a merge pending in the Studio (never repeat); this one is merged and
             // proven equal but for the named losses, whose repair the facade delivers as a new job.
             c.Outcome = "incomplete"; c.GateName = "known_losses"; c.Note = error;
+            if (preferred) return PreferredResult(incomplete, "incomplete-receipt.json");
             return incomplete;
         }
         var receipt = new {
@@ -1406,6 +1501,16 @@ internal static partial class Bridge {
             strictlyEqual = proof.StrictlyEqual, equivalence = proof.StrictlyEqual ? "strict" : null, emptyLayoutProperties = proof.EmptyLayoutProperties, refreshedReferences, warnings,
             developerId = Developer(local), publishInvoked = false, completedAt = DateTimeOffset.UtcNow, otherOpenModules = others
         };
+        if (preferred) return PreferredResult(receipt, "receipt.json");
+        if (nativeReceipt["preferForeignUnavailable"] != null) {
+            var fallback = JsonSerializer.SerializeToNode(receipt, Json)!.AsObject();
+            fallback["preferForeign"] = false;
+            fallback["preferForeignUnavailable"] = nativeReceipt["preferForeignUnavailable"]!.DeepClone();
+            fallback["fallbackPersonEdits"] = nativeReceipt["fallbackPersonEdits"]?.DeepClone();
+            if (nativeReceipt["fallbackAuditUnavailable"] != null) fallback["fallbackAuditUnavailable"] = nativeReceipt["fallbackAuditUnavailable"]!.DeepClone();
+            File.WriteAllText(Path.Combine(m.EvidenceDir, "receipt.json"), fallback.ToJsonString(Json));
+            return fallback;
+        }
         File.WriteAllText(Path.Combine(m.EvidenceDir, "receipt.json"), JsonSerializer.Serialize(receipt, Json));
         return receipt;
     }

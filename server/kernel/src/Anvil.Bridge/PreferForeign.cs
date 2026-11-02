@@ -53,7 +53,7 @@ internal static class PreferForeign
     private static readonly (string Name, bool Setter)[] TreeMembers = [("Roots", false), ("HasUnresolvedConflicts", false), ("HasConflicts", false), ("IsProgrammaticMerge", true)];
     private static readonly (string Name, bool Setter)[] MatchMembers = [("Parent", false), ("Children", false), ("Properties", false), ("MergeAction", true),
         ("Difference", false), ("MatchType", false), ("HasUnresolvedConflicts", false), ("HasConflicts", false), ("LocalObject", false), ("ForeignObject", false), ("BaseObject", false)];
-    private static readonly (string Name, bool Setter)[] PairMembers = [("Difference", false), ("MergeAction", true)];
+    private static readonly (string Name, bool Setter)[] PairMembers = [("Difference", false), ("MergeAction", true), ("Match", false), ("PropertyName", false), ("LocalDisplayValue", false), ("ForeignDisplayValue", false), ("LocalValue", false), ("ForeignValue", false)];
 
     /// <summary>The Studio's own selection API next to the tree's type: MergeUtils.SetIsChecked(Match, MergeUnitCheck, bool, bool),
     /// MergeUnitCheck.Foreign and Both, and every property the resolution reads on MatchTree, Match and PropertyPair. Throws when
@@ -100,7 +100,7 @@ internal static class PreferForeign
     /// <summary>Selects the delivery's (foreign) side of every element of <paramref name="tree"/> in conflict, and returns
     /// everything of the person the selection replaces. Call inside the command that then runs tree.Merge(). Throws, before any
     /// write, when a member is missing or a conflict stays unresolved.</summary>
-    internal static Resolution Resolve(object tree)
+    internal static Resolution Resolve(object tree, int maxEntries = MaxEntries)
     {
         var members = Find(tree.GetType());
         // As the Studio's own Match.UpdateMergeAction: a programmatic selection, so SetIsChecked does not refresh the views of the
@@ -108,11 +108,11 @@ internal static class PreferForeign
         var programmatic = Property(tree.GetType(), "IsProgrammaticMerge")!;
         var wasProgrammatic = programmatic.GetValue(tree) is true;
         programmatic.SetValue(tree, true);
-        try { return ResolveSelected(tree, members); }
+        try { return ResolveSelected(tree, members, maxEntries); }
         finally { programmatic.SetValue(tree, wasProgrammatic); }
     }
 
-    private static Resolution ResolveSelected(object tree, Members members)
+    private static Resolution ResolveSelected(object tree, Members members, int maxEntries)
     {
         var units = new List<object>();
         foreach (var root in Enumerate(Get(tree, "Roots"))) CollectUnits(root, units, new HashSet<object>(ReferenceEqualityComparer.Instance));
@@ -146,7 +146,7 @@ internal static class PreferForeign
             if (Describe(element, siteSet, action) is { } entry) all.Add(entry);
         }
         var ordered = all.OrderByDescending(e => e["conflict"]!.GetValue<bool>()).ToList();
-        var entries = new JsonArray(ordered.Take(MaxEntries).Select(e => (JsonNode)e).ToArray());
+        var entries = new JsonArray(ordered.Take(maxEntries).Select(e => (JsonNode)e).ToArray());
         return new Resolution(entries, sites.Count, ordered.Count, ordered.Count(e => e["conflict"]!.GetValue<bool>()), members);
     }
 
@@ -267,7 +267,7 @@ internal static class PreferForeign
     private static string? Value(object pair, string side)
     {
         try { return (Get(pair, side + "DisplayValue") ?? Get(pair, side + "Value"))?.ToString(); }
-        catch (Exception) { try { return Get(pair, side + "Value")?.ToString(); } catch (Exception) { return null; } }
+        catch (Exception ex) { throw new InvalidOperationException("prefer foreign: the person's or delivery's value could not be read; nothing was merged", ex); }
     }
 
     private static string? Clip(string? text) => text == null ? null : text.Length > 200 ? text[..200] + "..." : text;
@@ -302,8 +302,7 @@ internal static class PreferForeign
         if (target == null) return null;
         var property = Property(target.GetType(), name);
         if (property?.GetMethod == null) return null;
-        try { return property.GetValue(target); }
-        catch (TargetInvocationException) { return null; }
+        return property.GetValue(target);
     }
 
     private static bool Flag(object target, string name) => Get(target, name) is true;

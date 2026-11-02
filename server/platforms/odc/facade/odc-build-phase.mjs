@@ -17,18 +17,21 @@ import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import * as kernelDelivery from './kernel-delivery.mjs';
 import { phaseOfCall, phaseGuard, studioMoment, notePhase, StudioTurnRefused, queueWaitMs } from './studio-write-lock.mjs';
 import { pooledBuild, sharedBuildPool, BuildQueueRefused, slotWorkerPort } from './build-pool.mjs';
 import { workspaceRoot } from './workspace.mjs';
 import { hostedContext } from './executor.mjs';
 import { withNormalizationsOf } from './normalizations.mjs';
+import { preparePreferForeign, preferredNote } from './odc-prefer-foreign.mjs';
 
 // reference-producers (fix/system-reference): the listing a delivery reads once when the session offers no producer of the job's name.
 export const BUILD_STUDIO_READS = new Set(['snapshot', 'reference-snapshot', 'reference-producers']);
 const busy = error => error?.code === 'BRIDGE_BUSY' && error?.sent !== true;
 const isFile = file => { try { return fs.statSync(file).isFile(); } catch { return false; } };
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+const preferCall = new AsyncLocalStorage();
 
 // The studio(args, pid) of a phased call (see the header). A refused turn answers its refusal as the step's value.
 export function phasedStudio(studio, { env = process.env, now = Date.now } = {}) {
@@ -42,7 +45,21 @@ export function phasedStudio(studio, { env = process.env, now = Date.now } = {})
         catch (error) { if (!busy(error) || now() + wait > deadline) throw error; await sleep(wait); }
       }
     }
-    try { return await guarded(args, pid, options); }
+    if (args?.[0] === 'merge' && typeof args[1] === 'string') {
+      const preferred = preparePreferForeign(args[1], hostedContext()?.agent);
+      if (preferred && preferCall.getStore()) preferCall.getStore().requested = true;
+    }
+    try {
+      const result = await guarded(args, pid, options);
+      if (args?.[0] === 'merge' && result?.preferForeign === false && preferCall.getStore()) {
+        const state = preferCall.getStore();
+        state.requested = false;
+        if (result.preferForeignUnavailable) state.unavailable = result.preferForeignUnavailable;
+        if (result.fallbackAuditUnavailable) state.auditUnavailable = result.fallbackAuditUnavailable;
+        if (Array.isArray(result.fallbackPersonEdits)) state.observed.push(...result.fallbackPersonEdits);
+      }
+      return result;
+    }
     catch (error) { if (error instanceof StudioTurnRefused) return error.refusal; throw error; }
   };
 }
@@ -150,16 +167,27 @@ const redoOf = value => {
 // The delivery of one call (lib.mjs deliver), redone on the answers above (at most REDO_LIMIT times); the build and the
 // receipt go to the call's phases, the first redo to phases.rebased.
 export async function phasedDeliver(args, deps, { deliver, sleep: wait = sleep } = {}) {
+  return preferCall.run({ requested: false, observed: [] }, async () => {
   const settle = value => {
     if (Array.isArray(value?.steps) && value.steps.some(s => s?.step === 'build')) notePhase({ built: true });
     if (typeof value?.evidence === 'string' && value.evidence) notePhase({ receipt: path.join(value.evidence, 'deliver-result.json') });
-    return value;
+    const note = preferredNote(value?.merge?.resolvedConflicts);
+    const state = preferCall.getStore();
+    const notes = note ? [note] : [];
+    if (state.unavailable) {
+      notes.push('Native prefer-foreign is unavailable: ' + state.unavailable + '. The compatibility merge path was used.');
+      const observed = [...new Set(state.observed.map(e => `${e.Element} ${e.Property}: the person's value before the compatibility retry was ${JSON.stringify(e.Delivery)}`))];
+      if (observed.length) notes.push('Observed person edits (this is not a claim that every edit was replaced): ' + observed.join('; '));
+      if (state.auditUnavailable) notes.push(state.auditUnavailable + '. Some replaced person values may be absent from this note.');
+    }
+    return notes.length ? { ...value, mergeNotes: [...(value.mergeNotes ?? []), ...notes] } : value;
   };
   let value = settle(await deliver(args, deps));
   const notes = [];
   for (let i = 0; i < REDO_LIMIT; i++) {
     const redo = redoOf(value);
     if (!redo) break;
+    if (redo.rule === 'BASE_DRIFT' && preferCall.getStore().requested) break;
     if (i === 0) notePhase({ rebased: { reason: redo.rule, ...(value.evidence ? { from: value.evidence } : {}) } });
     notes.push({ rule: redo.rule, at: 'merge', note: redo.note, ...(value.evidence ? { from: value.evidence } : {}) });
     if (redo.wait) await wait(REDO_WAIT_MS[i] ?? REDO_WAIT_MS.at(-1));
@@ -170,4 +198,5 @@ export async function phasedDeliver(args, deps, { deliver, sleep: wait = sleep }
     value = settle(await deliver(next, deps));
   }
   return notes.length ? withNormalizationsOf(value, notes) : value;
+  });
 }

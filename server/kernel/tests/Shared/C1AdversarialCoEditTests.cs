@@ -746,7 +746,9 @@ public sealed class C1AdversarialCoEditTests
                     // As the real thin bridge (MergeHandler.SecondPass): the second merge of the merge order never prefers.
                     var (second, secondConflicts, _) = One(host, local, foreignBytes, firstPass, preferForeign: false);
                     merged |= second;
-                    if (secondConflicts && !merged) return (false, true, null);
+                    // The native ODC command rolls back both passes when the second cannot merge.
+                    // This disposable model must likewise never persist a successful first pass alone.
+                    if (secondConflicts) return (false, true, null);
                 }
                 if (merged) File.WriteAllBytes(livePath, host.Save(local));
                 return (merged, conflicts, resolved);

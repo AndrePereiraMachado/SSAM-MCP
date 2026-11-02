@@ -205,6 +205,61 @@ RECORDED.v102 = RECORDED.v101;
 // v107: the same sources as v106 for the net8 ODC Studios.
 RECORDED.v107 = RECORDED.v106;
 
+
+
+
+
+
+
+// BEGIN ODC PREFER HASHES
+RECORDED.v108 = {
+  "kernel/query-test/NativeQueryTest.cs": "89e2889b8a6c05380124c98239a1b4bb16eed266f031466444b76e06b4f39177",
+  "kernel/query-test/QueryTestContract.cs": "989486b6d85fee5f53794f29ce823a0133f6bc69e7aa0d3ba3dcc8c9aa65425f",
+  "kernel/query-test/QueryTestOutput.cs": "a9bb3f539accf807984d6798355ae648642568d43950b2ec01ff51784568eebf",
+  "kernel/query-test/QueryTestRunner.cs": "b9f96ac09f1aeb20493843df77a6ff6f4a59d26e485de0f603922fcfd464844c",
+  "kernel/src/Anvil.Bridge/PreferForeign.cs": "08d2913d78a92c39e55d0eba3e73c680fa0486f567a36dc88fcadce05fb241d0",
+  "kernel/src/Anvil.Bridge/PrivateHttpContext.cs": "73785bbd6483074d865848ef9bc4f13423aabc7d371d8931e2936ffe85fdbca8",
+  "kernel/src/Anvil.Core.Odc/Adapters.ODC/PublicSignatureReader.cs": "0896ab08fd3de902f6731b3100ee995a9cbb8d7e3ee8549e808690f38bff849e",
+  "platforms/odc/facade/bridge-deadlines.json": "a8b59d634cf1d2d126dd21604ff48e3f2d19523e47cf01a9fc3a6e48b9c9d6d2",
+  "platforms/odc/studio/bridge/AgentDataRoot.cs": "dad2cf57b23e27c6dd49070fe38268cab5670bf5d7aba8404899c2ddf9c1e68e",
+  "platforms/odc/studio/bridge/AppCreationCommands.cs": "416c95f5bf1a86476109aa07d4950d12c05c72450a6d860a9dec4924b1341ccf",
+  "platforms/odc/studio/bridge/Bridge.csproj": "86e7bf84cdf4017169c3a50a24254c79d8cdfc89872c14696990fc3d52e20411",
+  "platforms/odc/studio/bridge/BridgeDeadlines.cs": "dba4c72414278e7c08dbe6f8d1bba969048e4896a5e095c9488788bc086c6126",
+  "platforms/odc/studio/bridge/BridgeServe.cs": "10d6fd17709cf35c80fb800402e78c4c91f7539a02fa56b55c58b1e09bfcf095",
+  "platforms/odc/studio/bridge/DataCommands.cs": "2c8eb954b4b1d1ccace550179399a4418f43fee308f3014fe1490a30f4196aa6",
+  "platforms/odc/studio/bridge/MergeDiagnostics.cs": "8a1d4b6206278e146729c6a3515d0962d0db6b64156dc9cee313dd9adf3b8573",
+  "platforms/odc/studio/bridge/MergeOrderCopy.cs": "4e7a187554154662f5ffcecf401904eb4b59ef656192f7fa57afc73b13a4d2d9",
+  "platforms/odc/studio/bridge/NativeMergeIntent.cs": "d6abb779b8e06a7bbc0bfabb82b53bb2c7734775842b0ab7f254d6f8abf9a4d3",
+  "platforms/odc/studio/bridge/NativePreferForeign.cs": "cbe095bd2a05f7ddd8ed7260eaa91d19e872a78159efdd3352f2789a003ef64c",
+  "platforms/odc/studio/bridge/PortalApiClientCleanup.cs": "8e16426f6382149808da6cf169ab9d3e3e3bfc516b8a055467e0a6532728fd48",
+  "platforms/odc/studio/bridge/PortalApiClientSecret.cs": "2bf23662976750d82ee96ca742cfd8efb3c7ea5428e5af8c2050208243f8d959",
+  "platforms/odc/studio/bridge/PortalCommands.cs": "242b2e5a79eb00a78e49da9dee2b0dc42511ca3484422f7cac3a63fc7c6656c5",
+  "platforms/odc/studio/bridge/PortalCore.cs": "8ad3ed73d9d362d55cd5266fc63742fbb8b395ae4296e4662286399965b4697a",
+  "platforms/odc/studio/bridge/PortalKnowledgeDownload.cs": "198d3aff0965210d288e5ca17d3f19335a49856311a060813ceeecf25ceeedba",
+  "platforms/odc/studio/bridge/PortalMobileDownload.cs": "14f22439e5addfb29f90292ed5c8a25a0f45ce1edd8576097a0bb73f2708fb7c",
+  "platforms/odc/studio/bridge/PortalMobileUpload.cs": "c94e420a777d52017cfa963c1f8170213d7e045f472b7d5b388a8aa72955e695",
+  "platforms/odc/studio/bridge/PortalPrivateHttp.cs": "71d15be9b8394ddbd87ad084f264a2fdcefb157ef57021ca42caf54bc49c89a2",
+  "platforms/odc/studio/bridge/PortalUpload.cs": "945c40b566a21546ecf36b2a0029d357f465ef8b74e5008b28acb79cfcd55736",
+  "platforms/odc/studio/bridge/PortalVault.cs": "e8780ab773dab88a75b48737b7aa29047d29aa7394206662400b4a4c652ecf7c",
+  "platforms/odc/studio/bridge/PublishLogCommands.cs": "650db1466bb588a97cfe745b8ecd6ae13c13336b0af62bb0aa02e360001e6a9a",
+  "platforms/odc/studio/bridge/PublishLogCore.cs": "33b820a24c909f5528e3aaa50d5ac7410ae3721d3e0f819d3c4dd586cf9db730",
+  "platforms/odc/studio/bridge/PublishVerification.cs": "0f11e8a734093d56bfe1c689ebe667131047282c4304b64b3c44011129b2f9be",
+  "platforms/odc/studio/bridge/QueryTestCommands.cs": "0aafe20f964fea6c0dc7e9ee0599b1b5828dc6d1451eaf26175383be9a286c36",
+  "platforms/odc/studio/bridge/ReferenceCommands.cs": "a254f69279bec866d457cf6c3f30f5389b4154bc6c14ebceb93f6c059aef9e75",
+  "platforms/odc/studio/bridge/SecurityWarningsCopy.cs": "9994c72f57a32b74fd8ca92299198e44dea11efed1023d5526f72eeb5307b698",
+  "platforms/odc/studio/bridge/StartupHook.cs": "ac31f82be8aaa544c76a6ea8e15d1bf5fd878a25d6eaa20fd522811319dc8373",
+  "platforms/odc/studio/bridge/TemplateCache.cs": "a57ef89f222983393d3249c75d543e6a2fc06aef456340a63272d8f127b3f20c",
+  "platforms/odc/studio/bridge/client/Client.csproj": "9fc76085a82277606b476ec5e838f314af4012e8b9d9f96077306381b37bf1aa",
+  "platforms/odc/studio/bridge/client/Program.cs": "388d5ec6ff053a16b1600b4b1f339c59edc9bbbbe48fc8f4cc86b284dd7cb071",
+  "platforms/odc/studio/engine/NativeMergeOrder.cs": "3ec32ca130504f0375a12704b58123e88539fc0472dd8174945430ac10c7e127",
+  "platforms/odc/studio/engine/NativeMergeVerification.cs": "604dc84ec70fa58dbc3830b5aaff98964ae06c91a3d827c593e525ad2c0a95eb",
+  "platforms/odc/studio/engine/NativeStyleSheetCache.cs": "e937667736be2f78d92d53677b9479ce30f429516e28a2a65f06346ec36854be",
+  "platforms/odc/studio/shared/Journal.cs": "e0cc116aec478a3092b9e31c04f470b6d5a47f7af72974234a3d7fa93586185e",
+  "platforms/odc/studio/shared/Manifest.cs": "a61259143bd49e1397faf2adf0cd3785a3aaa70f9d190f562f7ddf293db4105c"
+};
+RECORDED.v109 = RECORDED.v108;
+// END ODC PREFER HASHES
+
 const lf = file => crypto.createHash('sha256')
   .update(Buffer.from(fs.readFileSync(file).toString('latin1').replace(/\r\n/g, '\n'), 'latin1')).digest('hex');
 const rel = file => path.relative(BOX, file).split(path.sep).join('/');
@@ -255,13 +310,13 @@ test('the three version marks of the ODC bridge name one version', () => {
   assert.ok(Object.values(marks)[0], 'no version mark found: ' + JSON.stringify(marks));
 });
 
-test('v106 and v107 are one source: the runtime it is built for names it, in the DLL, the pipe and the client', () => {
+test('v109 and v108 are one source: the runtime it is built for names it, in the DLL, the pipe and the client', () => {
   const read = file => fs.readFileSync(path.join(BOX, BRIDGE, file), 'utf8');
-  assert.match(read('Bridge.csproj'), /<AssemblyName Condition="'\$\(TargetFramework\)' == 'net8\.0'">ODC3\.Bridge\.v107<\/AssemblyName>/);
+  assert.match(read('Bridge.csproj'), /<AssemblyName Condition="'\$\(TargetFramework\)' == 'net8\.0'">ODC3\.Bridge\.v108<\/AssemblyName>/);
   assert.match(read('Bridge.csproj'), /<OdcBridgeRuntime Condition="'\$\(TargetFramework\)' == 'net8\.0'">net8\.0<\/OdcBridgeRuntime>/);
-  assert.match(codeOf(path.join(BOX, BRIDGE, 'StartupHook.cs')), /#if NET10_0_OR_GREATER\s+public const string Version = "v106";\s+#else\s+public const string Version = "v107";\s+#endif/);
-  assert.match(read('client/Program.cs'), /const string EarlierVersion = "v107";/, 'the client attaches v107 to a net8 Studio');
-  assert.ok(fromDataRoot('v107') && Object.hasOwn(RECORDED.v107, AGENT_DATA_ROOT), 'v107 implements agent-root');
+  assert.match(codeOf(path.join(BOX, BRIDGE, 'StartupHook.cs')), /#if NET10_0_OR_GREATER\s+public const string Version = "v109";\s+#else\s+public const string Version = "v108";\s+#endif/);
+  assert.match(read('client/Program.cs'), /const string EarlierVersion = "v108";/, 'the client attaches v108 to a net8 Studio');
+  assert.ok(fromDataRoot('v108') && Object.hasOwn(RECORDED.v108, AGENT_DATA_ROOT), 'v108 implements agent-root');
 });
 
 // The proto (C:\Users\andre\SSAM-Hybrid-proto, 2026-10-25 to 10-28) loaded v100, v101, v102, v104 and v105 into the owner's ODC Studio
