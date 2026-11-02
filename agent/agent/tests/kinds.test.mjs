@@ -113,13 +113,13 @@ test('24th release: reference-producers passes odc.pipe; the private Portal comm
   } finally { await pipe.close(); removeRoot(root); }
 });
 
-test('o11.bridge passes exactly the 23 verbs of the thin bridge, in the order of its manifest (docs/O11-BRIDGE-FINA.md 3.2, 14, 16)', async () => {
+test('o11.bridge passes exactly the 24 verbs of the thin bridge, in the order of its manifest (docs/O11-BRIDGE-FINA.md 3.2, 14, 16)', async () => {
   // refresh_references (ninth release): the Studio's own Refresh References; answer_dependencies_dialog (servidor/fase4): the
   // Manage Dependencies dialog answered as Cancel; sc_http (24th release): the Service Center over the Studio's own HTTP
   // session. No path in any of them, so nothing to confine (sc_http args.outFile is refused like sc_web's).
   assert.deepEqual(O11_METHODS, ['ping', 'bridge_manifest', 'get_active_module', 'list_open_modules', 'get_errors', 'open_module', 'close_module',
     'publish', 'windows', 'ui_alive', 'close_dialog', 'snapshot_module', 'merge_from_oml', 'merge_status', 'environment_session', 'sc_api',
-    'sc_web', 'sc_http', 'studio_login', 'sc_session', 'publish_log', 'refresh_references', 'answer_dependencies_dialog']);
+    'sc_web', 'sc_http', 'studio_login', 'sc_session', 'publish_log', 'refresh_references', 'integration_import', 'answer_dependencies_dialog']);
   const root = makeRoot();
   const bridge = await fakeBridge(request => ({ success: true, data: { method: request.method } }));
   try {
@@ -127,7 +127,8 @@ test('o11.bridge passes exactly the 23 verbs of the thin bridge, in the order of
     fs.writeFileSync(path.join(root, 'private', 'authority', 'bridge.key'), 'local-agent-key');
     const { kinds } = kindsFor(root);
     const params = { snapshot_module: { path: 'agent:o11/snapshots/M.oml' }, merge_from_oml: { foreign_path: 'agent:o11/work/c.oml', base_path: 'agent:o11/snapshots/M.oml',
-      reference_plan: { Changes: [], Conflicts: [], HasChanges: false, HasConflicts: false } } };
+      reference_plan: { Changes: [], Conflicts: [], HasChanges: false, HasConflicts: false } },
+      integration_import: { base_path: 'agent:o11/snapshots/M.oml', document_path: 'agent:o11/imports/w/service.wsdl', out_path: 'agent:o11/work/import-0.oml' } };
     for (const method of O11_METHODS) {
       const { reply } = await kinds.execute('o11.bridge', { method, params: params[method] ?? {} });
       assert.equal(reply.data.method, method);
@@ -135,6 +136,44 @@ test('o11.bridge passes exactly the 23 verbs of the thin bridge, in the order of
     assert.deepEqual(bridge.seen.map(r => r.method), O11_METHODS);
     // reference_plan is not a path: it reaches the bridge unchanged.
     assert.deepEqual(bridge.seen.find(r => r.method === 'merge_from_oml').params.reference_plan, params.merge_from_oml.reference_plan);
+  } finally { await bridge.close(); removeRoot(root); }
+});
+
+// fase4-28 r4-f3-import (agent 0.3.7, thin bridge 1.1.0): integration_import reads the snapshot, the pinned document and each
+// dependency, and writes the candidate under agent:o11/: every path an agent path, mapped to this machine; the candidate the
+// bridge reports comes back as agent:o11/<rel>. A path outside the agent folder, an output outside o11/ and a malformed
+// dependency list are refused before anything reaches the bridge.
+test('r4-f3: integration_import maps its paths as agent paths and refuses anything else before the bridge', async () => {
+  const root = makeRoot();
+  const bridge = await fakeBridge(request => ({ success: true, data: { candidate_path: request.params.out_path, candidate_sha256: 'ab'.repeat(32),
+    client: { name: 'Calc', key: null, created: true }, imported: ['Add'], skipped: [], warnings: [], errors: [] } }));
+  try {
+    fs.writeFileSync(path.join(root, 'private', 'o11-connection.json'), JSON.stringify({ ok: true, lane: 'o11', pid: 6000, startedUtc: 'x', port: bridge.port }));
+    fs.writeFileSync(path.join(root, 'private', 'authority', 'bridge.key'), 'local-agent-key');
+    const { kinds } = kindsFor(root);
+    const params = { kind: 'wsdl', module_key: 'k1', operation_id: 'op1', base_path: 'agent:o11/snapshots/M.oml', base_sha256: 'cd'.repeat(32),
+      document_path: 'agent:o11/imports/aa/service.wsdl', document_sha256: 'aa'.repeat(32),
+      dependencies: [{ uri: 'types.xsd', path: 'agent:o11/imports/aa/types.xsd', sha256: 'ef'.repeat(32) }], client: 'Calc',
+      selection: { port: 'CalculatorSoap', methods: ['Add'] }, out_path: 'agent:o11/work/import-0.oml' };
+    const value = await kinds.execute('o11.bridge', { method: 'integration_import', params });
+    const seen = bridge.seen.find(r => r.method === 'integration_import');
+    const local = rel => path.join(root, ...rel.slice('agent:'.length).split('/'));
+    assert.equal(seen.params.base_path, local('agent:o11/snapshots/M.oml'));
+    assert.equal(seen.params.document_path, local('agent:o11/imports/aa/service.wsdl'));
+    assert.equal(seen.params.dependencies[0].path, local('agent:o11/imports/aa/types.xsd'));
+    assert.equal(seen.params.dependencies[0].uri, 'types.xsd');
+    assert.equal(seen.params.out_path, local('agent:o11/work/import-0.oml'));
+    assert.deepEqual(seen.params.selection, params.selection);
+    assert.equal(seen.authorization, 'local-agent-key');
+    assert.equal(value.reply.data.candidate_path, 'agent:o11/work/import-0.oml');
+    const before = bridge.seen.length;
+    for (const [change, code] of [[p => { p.base_path = 'C:\\x\\base.oml'; }, 'PATH_NOT_AGENT'], [p => { p.document_path = 'https://example.com/service?wsdl'; }, 'PATH_NOT_AGENT'],
+      [p => { p.dependencies[0].path = 'C:\\x\\types.xsd'; }, 'PATH_NOT_AGENT'], [p => { p.out_path = 'agent:inbox/candidate.oml'; }, 'PATH_FORBIDDEN'],
+      [p => { p.dependencies = 'types.xsd'; }, 'PARAMS_INVALID'], [p => { p.dependencies = ['types.xsd']; }, 'PARAMS_INVALID'], [p => { delete p.out_path; }, 'PATH_NOT_AGENT']]) {
+      const wrong = structuredClone(params); change(wrong);
+      await refused(kinds.execute('o11.bridge', { method: 'integration_import', params: wrong }), code);
+    }
+    assert.equal(bridge.seen.length, before, 'nothing refused reached the bridge');
   } finally { await bridge.close(); removeRoot(root); }
 });
 

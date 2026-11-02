@@ -54,7 +54,7 @@ export const ODC_COMMANDS = Object.freeze(['status', 'wait', 'authorize', 'open'
 export const O11_METHODS = Object.freeze(['ping', 'bridge_manifest', 'get_active_module', 'list_open_modules', 'get_errors', 'open_module',
   'close_module', 'publish', 'windows', 'ui_alive', 'close_dialog', 'snapshot_module', 'merge_from_oml', 'merge_status',
   'environment_session', 'sc_api', 'sc_web', 'sc_http', 'studio_login', 'sc_session', 'publish_log', 'refresh_references',
-  'answer_dependencies_dialog']);
+  'integration_import', 'answer_dependencies_dialog']);
 export const AGENT_VERBS = Object.freeze({ 'odc.pipe': ODC_COMMANDS, 'o11.bridge': O11_METHODS });
 // The op of a call: the values of the multi-verb tools' own enums (quality-record.mjs VERB_FIELDS, whose test compares the
 // two) and close/resume of o11_deliver. A reader keeps no other op, whatever its shape.

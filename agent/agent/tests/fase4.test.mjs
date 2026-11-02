@@ -9,7 +9,7 @@ import net from 'node:net';
 import path from 'node:path';
 import { createHash, randomBytes } from 'node:crypto';
 import { createAgent, readPack, AGENT_VERSION } from '../lib/agent.mjs';
-import { createKinds, KINDS, ODC_COMMANDS } from '../lib/kinds.mjs';
+import { createKinds, KINDS, ODC_COMMANDS, O11_METHODS } from '../lib/kinds.mjs';
 import { createWorkspace } from '../lib/workspace.mjs';
 import { messagesTimeoutMs, MESSAGES_MS, STREAM_HEADERS_MS } from '../lib/channel.mjs';
 import { listProcesses, parseTasklist } from '../lib/studios.mjs';
@@ -48,12 +48,15 @@ test('C03: a pong goes in a POST of its own while a batch POST is stuck; the Hel
     await hub.until(() => hub.streams === 1);
     const [hello] = hub.hellos;
     assert.equal(hello.agent.version, AGENT_VERSION);
-    assert.equal(AGENT_VERSION, '0.3.7'); // 0.3.7: one O11 bridge per Service Studio (o11Builds), bridgeOffer false packs; 0.3.6: reconcile-merge and the hello's odcCommands; 0.3.5: o11.users; 0.3.4: file.upload and screen.render; 0.3.3: the macOS side (server/agent-mac; Windows unchanged); 0.3.2: the English agent with the O11 bridge of a8; 0.3.1: sc_http, reference-producers, net.probe
+    assert.equal(AGENT_VERSION, '0.3.7'); // 0.3.7: integration_import and the hello's o11Methods, one O11 bridge per Service Studio (o11Builds), bridgeOffer false packs; 0.3.6: reconcile-merge and the hello's odcCommands; 0.3.5: o11.users; 0.3.4: file.upload and screen.render; 0.3.3: the macOS side (server/agent-mac; Windows unchanged); 0.3.2: the English agent with the O11 bridge of a8; 0.3.1: sc_http, reference-producers, net.probe
     assert.equal(hello.agent.root, path.resolve(root));
     assert.deepEqual(hello.agent.kinds, [...KINDS]);
     // 0.3.6: the ODC commands odc.pipe passes, reconcile-merge among them (the server offers bridges from v106 on only then).
     assert.deepEqual(hello.agent.odcCommands, [...ODC_COMMANDS]);
     assert.ok(hello.agent.odcCommands.includes('reconcile-merge'));
+    // 0.3.7 (r4-f3-import): the O11 bridge methods o11.bridge passes, integration_import among them (the server sends the import only then).
+    assert.deepEqual(hello.agent.o11Methods, [...O11_METHODS]);
+    assert.ok(hello.agent.o11Methods.includes('integration_import'));
     assert.ok(KINDS.includes('file.sync'));
     // The batch with `accepted` of a call is stuck in flight; the hub's ping is answered by a pong in another POST.
     hub.holdPosts = 1;

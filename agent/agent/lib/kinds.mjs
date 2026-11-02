@@ -47,7 +47,7 @@ export const ODC_COMMANDS = Object.freeze(['status', 'wait', 'authorize', 'open'
 export const O11_METHODS = Object.freeze(['ping', 'bridge_manifest', 'get_active_module', 'list_open_modules', 'get_errors', 'open_module',
   'close_module', 'publish', 'windows', 'ui_alive', 'close_dialog', 'snapshot_module', 'merge_from_oml', 'merge_status',
   'environment_session', 'sc_api', 'sc_web', 'sc_http', 'studio_login', 'sc_session', 'publish_log', 'refresh_references',
-  'answer_dependencies_dialog']);
+  'integration_import', 'answer_dependencies_dialog']);
 const MANIFEST_COMMANDS = new Set(['check-base', 'preview', 'merge', 'reconcile-merge', 'publish', 'publish-status', 'create', 'authorize', 'create-app']);
 const LANE_IMAGE = { odc: 'ODCStudio.exe', o11: 'ServiceStudio.exe' };
 const STUDIO_NAME = { odc: 'ODC Studio', o11: 'Service Studio' };
@@ -300,6 +300,21 @@ export function createKinds({ root, runtimeRoot = root, ws, pack = {}, kernel = 
       if (p.base_path !== undefined && p.base_path !== null) p.base_path = at(p.base_path, 'read');
       // The merge order's first-pass copy, read like the candidate (two native merges in one call).
       if (p.first_pass_path !== undefined && p.first_pass_path !== null) p.first_pass_path = at(p.first_pass_path, 'read');
+    }
+    // integration_import (agent 0.3.7, thin O11 bridge 1.1.0, fase4-28 r4-f3-import): the Studio's own SOAP/OpenAPI importer on a
+    // detached copy of the snapshot. It reads base_path, document_path and each dependencies[].path and writes out_path (the
+    // candidate, under agent:o11/): every one an agent path, nothing else of the machine. The bridge never fetches a URL.
+    if (method === 'integration_import') {
+      p.base_path = at(p.base_path, 'read');
+      p.document_path = at(p.document_path, 'read');
+      if (p.dependencies !== undefined && p.dependencies !== null) {
+        if (!Array.isArray(p.dependencies)) throw invalid('integration_import dependencies is a list of {uri, path, sha256}');
+        p.dependencies = p.dependencies.map(d => {
+          if (!d || typeof d !== 'object' || Array.isArray(d)) throw invalid('each integration_import dependency is {uri, path, sha256}');
+          return { ...d, path: at(d.path, 'read') };
+        });
+      }
+      p.out_path = at(p.out_path, 'write');
     }
     if (method === 'environment_session' && p.operation === 'download') {
       if (!p.arguments || typeof p.arguments !== 'object') throw refuse('PATH_NOT_AGENT', 'environment_session download takes arguments.outputDirectory as agent:o11/<folder>');

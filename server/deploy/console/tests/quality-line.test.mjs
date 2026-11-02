@@ -17,7 +17,8 @@ const FIXTURES = process.env.QUALITY_FIXTURES ?? path.join(HERE, 'fixtures', 'qu
 const native = loadNativeIds(path.join(FIXTURES, 'catalog'), { readDir: fs.readdirSync, readFile: fs.readFileSync, join: path.join });
 const lines = text => text.split('\n').filter(Boolean);
 // agent/r4-v106: reconcile-merge in ODC_COMMANDS (A1 of U1); the box's union of codes is unchanged until the line is copied again.
-export const CONTRACT_SHA256 = 'bc2eec34cc77fd3b823980b6e9cd9428c9ba37dc92370c58b95ce561f70c998c';
+// agent/r4-f3-import: integration_import in O11_METHODS (thin O11 bridge 1.1.0, agent 0.3.7 / 0.4.4-native).
+export const CONTRACT_SHA256 = 'a49bb55f8ec496318ca70f602c254e543d7025458fa5c8cb3f8c5a08a9537004';
 const lfSha = file => createHash('sha256').update(fs.readFileSync(file, 'utf8').replace(/\r\n/g, '\n'), 'utf8').digest('hex');
 
 test('parity (D9): the console copy of quality-line.mjs is the shared contract, byte for byte (CRLF read as LF)', () => {
