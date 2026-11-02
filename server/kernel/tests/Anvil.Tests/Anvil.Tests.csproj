@@ -51,6 +51,8 @@
     <Compile Include="../../src/Anvil.Bridge/PublishLog.cs" Link="Bridge/PublishLog.cs" />
     <!-- C15/C10: the pure rollback proof of merge_from_oml and the dialogs-seen labels of publish (no Studio type). -->
     <Compile Include="../../src/Anvil.Bridge/MergeRollbackProof.cs" Link="Bridge/MergeRollbackProof.cs" />
+    <!-- merge_from_oml {prefer:"foreign"}: the bridges' conflict resolution by reflection, run by the C1 suite's bridge model. -->
+    <Compile Include="../../src/Anvil.Bridge/PreferForeign.cs" Link="Bridge/PreferForeign.cs" />
     <Compile Include="../../src/Anvil.Bridge/DialogScope.cs" Link="Bridge/DialogScope.cs" />
     <!-- UI freeze of 2026-10-08: the bounded UI dispatch, the idle gate of close_module and the headless publications (pure). -->
     <Compile Include="../../src/Anvil.Bridge/UiGate.cs" Link="Bridge/UiGate.cs" />

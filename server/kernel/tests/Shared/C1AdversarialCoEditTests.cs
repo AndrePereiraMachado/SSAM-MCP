@@ -133,13 +133,61 @@ public sealed class C1AdversarialCoEditTests
         kindOfRun = "action";
         var studio = Studio();
         Seed(studio, "action");
+        // No retry from the server wins here (the Studio's automatic merge keeps the person's side of a conflict): only a bridge
+        // that resolves the conflict inside the merge does. The agent declares it (merge_from_oml:prefer_foreign).
+        studio.PreferForeign = true;
         var round = 0;
         studio.AfterCapture = live => SetDescription(live, "C1E", "by the person " + ++round);
         studio.AfterCaptureEveryTime = true;
         var result = Deliver(studio, DeliveryJob("action"));
         var verdict = Verdict(studio, "action", "same-element", result);
+        if (!studio.Prefers.Contains("foreign")) verdict.Add("the delivery never asked the bridge to prefer the delivery's side");
+        // Never silently: the answer names the element, the person's value and the delivery's.
+        var resolved = result["resolvedConflicts"]?["entries"]?.AsArray().OfType<JsonObject>().ToList() ?? new();
+        if (!resolved.Any(e => e["element"]?.ToString()?.Contains("C1E", StringComparison.Ordinal) == true && e["user"]?.ToString()?.StartsWith("by the person", StringComparison.Ordinal) == true
+                && e["delivery"]?.ToString() == "by delivery"))
+            verdict.Add("resolvedConflicts does not name C1E with the person's and the delivery's values: " + (result["resolvedConflicts"]?.ToJsonString() ?? "none"));
+        if (result["mergeNotes"] is not JsonArray notes || !notes.Any(n => n?.ToString().Contains("prefer foreign", StringComparison.Ordinal) == true && n.ToString().Contains("C1E", StringComparison.Ordinal)))
+            verdict.Add("no note says the conflict on C1E was resolved for the delivery: " + (result["mergeNotes"]?.ToJsonString() ?? "none"));
         Record("action", "same-element-repeated", "after-capture", result, verdict);
         Assert.True(verdict.Count == 0, string.Join(" | ", verdict) + " :: " + Brief(result));
+    }
+
+    // ---- Old agents: a bridge without merge_from_oml:prefer_foreign keeps today's path ------------------------------------
+
+    [Fact]
+    public void AnOldAgentIsNeverAskedToPreferAndKeepsTodaysConflictPath()
+    {
+        kindOfRun = "action";
+        var studio = Studio();
+        Seed(studio, "action");
+        studio.PreferForeign = false;
+        studio.AfterCapture = live => SetDescription(live, "C1E", "by the person");
+        var result = Deliver(studio, DeliveryJob("action"));
+        var problems = Verdict(studio, "action", "same-element", result);
+        if (studio.Prefers.Any(p => p != null)) problems.Add("an old bridge was sent prefer: " + string.Join(",", studio.Prefers));
+        // Today's path: the first merge merged nothing (the conflict), the second attempt rebased and merged.
+        if (studio.Prefers.Count != 2) problems.Add("expected the conflict pass of today (two merges), got " + studio.Prefers.Count + " merge(s)");
+        if (result["resolvedConflicts"] != null) problems.Add("resolvedConflicts from a bridge that has no prefer");
+        Record("action", "same-element-old-agent", "after-capture", result, problems);
+        Assert.True(problems.Count == 0, string.Join(" | ", problems) + " :: " + Brief(result));
+    }
+
+    [Fact]
+    public void AnAgentThatPrefersForeignResolvesTheSameElementInOneMerge()
+    {
+        kindOfRun = "action";
+        var studio = Studio();
+        Seed(studio, "action");
+        studio.PreferForeign = true;
+        studio.AfterCapture = live => SetDescription(live, "C1E", "by the person");
+        var result = Deliver(studio, DeliveryJob("action"));
+        var problems = Verdict(studio, "action", "same-element", result);
+        if (studio.Prefers.Count != 1 || studio.Prefers[0] != "foreign") problems.Add("expected one merge with prefer foreign, got: " + string.Join(",", studio.Prefers.Select(p => p ?? "none")));
+        if (result["conflictRebase"] != null) problems.Add("a second attempt ran although the bridge resolved the conflict");
+        if (result["resolvedConflicts"]?["entries"] is not JsonArray { Count: > 0 }) problems.Add("no resolvedConflicts");
+        Record("action", "same-element-prefer", "after-capture", result, problems);
+        Assert.True(problems.Count == 0, string.Join(" | ", problems) + " :: " + Brief(result));
     }
 
     // ---- The hardest cases (coordinator, 02/11 03:35) ---------------------------------------------------------------
@@ -530,6 +578,10 @@ public sealed class C1AdversarialCoEditTests
         public bool RealErrors { get; set; }
         private JsonArray Messages() { var m = Read(Live); try { return JsonSerializer.SerializeToNode(ModelHost.Messages(m))!.AsArray(); } finally { ModelHost.Release(m); } }
         public bool MovedOnce { get; set; }
+        /// <summary>The bridge (and the agent that ships it) serves merge_from_oml {prefer:"foreign"}; false is an older agent.</summary>
+        public bool PreferForeign { get; set; } = Environment.GetEnvironmentVariable("SSAM_C1_PREFER_FOREIGN") == "1";   // the whole matrix with the new agent
+        /// <summary>The prefer value of every merge_from_oml call, in order (null when the call sent none).</summary>
+        public List<string?> Prefers { get; } = new();
         public string? KillAt { get; set; }
         private readonly Dictionary<string, JsonObject> journal = new();
         private readonly Dictionary<string, (double H, double V)> seeded = new();
@@ -601,7 +653,10 @@ public sealed class C1AdversarialCoEditTests
             }
             switch (method)
             {
-                case "bridge_manifest": return new() { ["protocolVersion"] = 2, ["capabilities"] = new JsonArray("publish_log", Delivery.MergeOrderCapability, "list_open_modules:model_sha256", "merge_from_oml:module_key") };
+                case "bridge_manifest":
+                    var capabilities = new JsonArray("publish_log", Delivery.MergeOrderCapability, "list_open_modules:model_sha256", "merge_from_oml:module_key");
+                    if (PreferForeign) capabilities.Add(Anvil.Bridge.PreferForeign.Capability);
+                    return new() { ["protocolVersion"] = 2, ["capabilities"] = capabilities };
                 case "ping": return new() { ["pid"] = 4242 };
                 case "open_module":
                     Closed = false; Active = "own";
@@ -641,12 +696,16 @@ public sealed class C1AdversarialCoEditTests
                     RequireOpen(parameters);
                     var operation = parameters!["operation_id"]?.ToString() ?? Guid.NewGuid().ToString("N");
                     var path = parameters["first_pass_path"]?.ToString();
+                    var prefer = parameters["prefer"]?.ToString();
+                    Prefers.Add(prefer);
+                    // A bridge without the capability ignores prefer, as the real older bridges do (they never read it).
                     var outcome = C1Merge.Run(Host, Live, File.ReadAllBytes(parameters["base_path"]!.ToString()), File.ReadAllBytes(parameters["foreign_path"]!.ToString()),
-                        path == null ? null : File.ReadAllBytes(path));
+                        path == null ? null : File.ReadAllBytes(path), PreferForeign && prefer == "foreign");
                     var data = new JsonObject { ["mode"] = "auto", ["merged"] = outcome.Merged, ["hasConflicts"] = outcome.Conflicts, ["newErrors"] = 0,
                         ["result"] = outcome.Merged ? "Merge" : null, ["undoSteps"] = outcome.Merged ? (path != null ? 2 : 1) : 0,
                         ["mergeOrder"] = path != null ? new JsonObject { ["passes"] = 2 } : null, ["secondPass"] = path != null ? new JsonObject { ["merged"] = outcome.Merged } : null };
                     if (!outcome.Merged) data["reason"] = outcome.Conflicts ? "conflicts: use mode=dialog" : "no differences";
+                    if (outcome.Resolved != null) data[Anvil.Bridge.PreferForeign.ResolvedField] = outcome.Resolved;
                     journal[operation] = new JsonObject { ["state"] = outcome.Merged ? "applied" : outcome.Conflicts ? "not-applied" : "unchanged", ["receipt"] = data.DeepClone() };
                     if (outcome.Merged) { merged = true; MaybeFreeze("merge-sent"); }
                     if (outcome.Merged && !afterMerged) { afterMerged = true; AfterMerge?.Invoke(Live); }
@@ -672,41 +731,48 @@ public sealed class C1AdversarialCoEditTests
         private static Type Tree => AppDomain.CurrentDomain.GetAssemblies().Select(a => a.GetType("ServiceStudio.Merge.MatchTree") ?? a.GetType("OutSystems.Model.Merge.MatchTree")).FirstOrDefault(t => t != null)
             ?? throw new InvalidOperationException("no MatchTree in the bound Studio assemblies");
 
-        public static (bool Merged, bool Conflicts) Run(ModelHost host, string livePath, byte[] baseBytes, byte[] foreignBytes, byte[]? firstPass)
+        /// <summary>With <paramref name="preferForeign"/> (a bridge with merge_from_oml:prefer_foreign asked for prefer:"foreign"), a
+        /// tree with conflicts is resolved for the delivery inside the same tree (Anvil.Bridge PreferForeign, the code the real
+        /// bridges link) and merged; Resolved is the receipt's resolvedConflicts.</summary>
+        public static (bool Merged, bool Conflicts, JsonObject? Resolved) Run(ModelHost host, string livePath, byte[] baseBytes, byte[] foreignBytes, byte[]? firstPass, bool preferForeign = false)
         {
             var local = host.Load(File.ReadAllBytes(livePath));
             try
             {
-                var (merged, conflicts) = One(host, local, firstPass ?? foreignBytes, baseBytes);
-                if (conflicts) return (false, true);
+                var (merged, conflicts, resolved) = One(host, local, firstPass ?? foreignBytes, baseBytes, preferForeign);
+                if (conflicts && !merged) return (false, true, null);
                 if (firstPass != null)
                 {
-                    var (second, secondConflicts) = One(host, local, foreignBytes, firstPass);
+                    var (second, secondConflicts, _) = One(host, local, foreignBytes, firstPass, preferForeign);
                     merged |= second;
-                    if (secondConflicts && !merged) return (false, true);
+                    if (secondConflicts && !merged) return (false, true, null);
                 }
                 if (merged) File.WriteAllBytes(livePath, host.Save(local));
-                return (merged, conflicts);
+                return (merged, conflicts, resolved);
             }
             finally { ModelHost.Release(local); }
         }
 
-        private static (bool, bool) One(ModelHost host, ESpace local, byte[] foreignBytes, byte[] baseBytes)
+        private static (bool, bool, JsonObject?) One(ModelHost host, ESpace local, byte[] foreignBytes, byte[] baseBytes, bool preferForeign)
         {
             ESpace? foreign = null, basis = null;
             try
             {
                 foreign = host.Load(foreignBytes); basis = host.Load(baseBytes);
-                bool conflicts = false, none = false;
+                bool conflicts = false, none = false, merged = false; JsonObject? resolved = null;
                 StudioAdapter.Runtime.Mutate(local, "test: merge_from_oml auto", _ =>
                 {
                     var ctor = Tree.GetConstructors().First(c => c.GetParameters() is { Length: 5 } p && p[3].ParameterType == typeof(bool) && p[4].ParameterType == typeof(bool));
                     using var tree = (IDisposable)ctor.Invoke([local, foreign, basis, false, true]);
                     conflicts = (bool)Tree.GetProperty("HasConflicts")!.GetValue(tree)!;
                     none = (bool)Tree.GetProperty("HasNoDifferences")!.GetValue(tree)!;
-                    if (!conflicts && !none) Tree.GetMethod("Merge", Type.EmptyTypes)!.Invoke(tree, null);
+                    // As MergeHandler.Run: a conflict the selection cannot settle merges nothing (today's answer).
+                    if (conflicts && preferForeign)
+                        try { resolved = Anvil.Bridge.PreferForeign.Resolve(tree).Receipt(); }
+                        catch (InvalidOperationException) { resolved = null; }
+                    if ((!conflicts || resolved != null) && !none) { Tree.GetMethod("Merge", Type.EmptyTypes)!.Invoke(tree, null); merged = true; }
                 });
-                return (!conflicts && !none, conflicts);
+                return (merged, conflicts, resolved);
             }
             finally { ModelHost.Release(foreign); ModelHost.Release(basis); }
         }

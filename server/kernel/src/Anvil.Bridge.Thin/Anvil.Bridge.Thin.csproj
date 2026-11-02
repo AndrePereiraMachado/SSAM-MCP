@@ -76,6 +76,9 @@
     <!-- Ninth release (docs/O11-BRIDGE-FINA.md section 14): the rollback proof and the dialogs seen of a publication
          (pure, no Studio type) and the Studio's own Refresh References (its error count is Reads.ErrorCount). -->
     <Compile Include="..\Anvil.Bridge\MergeRollbackProof.cs" Link="Shared\MergeRollbackProof.cs" />
+    <!-- merge_from_oml {prefer:"foreign"} (thin 1.2.0): the conflict resolution for the delivery inside the Studio's merge, by
+         reflection on the bound Studio's ServiceStudio.Merge (no Studio type at compile time; also linked by the ODC bridge). -->
+    <Compile Include="..\Anvil.Bridge\PreferForeign.cs" Link="Shared\PreferForeign.cs" />
     <Compile Include="..\Anvil.Bridge\RefreshReferencesHandler.cs" Link="Shared\RefreshReferencesHandler.cs" />
     <!-- Atritos 3 (lane mb2 and D5): the dialogs seen in every tab and window (DialogScope), the Manage Dependencies dialog
          answered without stopping SSAM (DependenciesDialog); ScWindowLifetime lives in ScProtocol.cs (the copy above). -->

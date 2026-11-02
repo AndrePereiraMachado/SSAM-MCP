@@ -68,6 +68,7 @@
     <Compile Include="../Shared/PatchCertaintyArgumentOrderTests.cs" Link="PatchCertaintyArgumentOrderTests.cs" />
     <Compile Include="../Shared/AutoPatchOptOutTests.cs" Link="AutoPatchOptOutTests.cs" />
     <Compile Include="../Shared/C1AdversarialCoEditTests.cs" Link="C1AdversarialCoEditTests.cs" />
+    <Compile Include="../../src/Anvil.Bridge/PreferForeign.cs" Link="Bridge/PreferForeign.cs" />
     <Compile Include="../Shared/AutoPatchSourceRevisionTests.cs" Link="AutoPatchSourceRevisionTests.cs" />
     <Compile Include="../Shared/DataTableNativeCases.cs" Link="DataTableNativeCases.cs" />
     <Compile Include="../Shared/PrototypeImportDisabledTests.cs" Link="PrototypeImportDisabledTests.cs" />

@@ -48,6 +48,25 @@ public static class ConflictRebase
         return conflicts;
     }
 
+    /// <summary>merge_from_oml {prefer:"foreign"}: the list a bridge returns of the conflicts it resolved inside the Studio's merge in
+    /// favour of the delivery (receipt merge.resolvedConflicts, Anvil.Bridge PreferForeign), or null when it resolved none.</summary>
+    public static JsonObject? Preferred(JsonNode? merge)
+        => merge?["resolvedConflicts"] is JsonObject resolved && resolved["entries"] is JsonArray { Count: > 0 } ? resolved : null;
+
+    /// <summary>The note of a merge in which the bridge resolved conflicts for the delivery: every value of the person it replaced,
+    /// with the person's value and the delivery's, up to five, and how many in all.</summary>
+    public static string PreferredNote(JsonObject resolved)
+    {
+        var entries = resolved["entries"]!.AsArray().OfType<JsonObject>().ToList();
+        var count = resolved["count"]?.GetValue<int>() is int n && n > entries.Count ? n : entries.Count;
+        string Value(JsonNode? v) => v == null ? "(none)" : "\"" + (v.ToString() is { Length: > 60 } s ? s[..60] + "..." : v.ToString()) + "\"";
+        string One(JsonObject e) => e["element"] + (e["property"]?.ToString() is { Length: > 0 } p ? " " + p : "") + ": the person's " + Value(e["user"]) + ", now the delivery's " + Value(e["delivery"]);
+        return "The person edited in the Studio, while this delivery ran, " + count + " value(s) the delivery also changed; the Studio's merge resolved "
+            + (count == 1 ? "that conflict" : "those conflicts") + " in this same merge in favour of the delivery (prefer foreign): "
+            + string.Join("; ", entries.Take(5).Select(One)) + (count > 5 ? "; and " + (count - 5) + " more (resolvedConflicts)" : "")
+            + ". The person's edits outside these elements stay.";
+    }
+
     /// <summary>The note the answer carries after the second attempt.</summary>
     public static string Note(JsonArray conflicts)
         => conflicts.OfType<JsonObject>().Any(c => c["change"]?.ToString() == "conflict")

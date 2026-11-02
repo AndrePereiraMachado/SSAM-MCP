@@ -829,6 +829,10 @@ public static partial class Delivery
                     ["operation_id"] = result["operationId"]!.DeepClone(), ["base_sha256"] = DeliveryReceipt.Hash(basePath),
                     ["foreign_sha256"] = DeliveryReceipt.Hash(foreignPath) });
                 if (firstPassPath != null) { parameters["first_pass_path"] = firstPassPath; parameters["first_pass_sha256"] = DeliveryReceipt.Hash(firstPassPath); }
+                // merge_from_oml {prefer:"foreign"} (PLANO-11H): a bridge that resolves a conflict with the person's edits inside the
+                // Studio's own merge, in favour of the delivery, and lists what it resolved (the note below). Only to a bridge that
+                // declares it; an older one keeps today's path (no conflict merged, ConflictRebase's second attempt).
+                if (HasCapability(bridge, PreferForeignCapability)) parameters["prefer"] = "foreign";
                 try { RecordMerge(bridge.Call("merge_from_oml", parameters)); }
                 catch (BridgeCallException ex) when (ex.Executed == null)
                 {
@@ -1046,6 +1050,12 @@ public static partial class Delivery
                         // F1 conflict: the second attempt says which values the person and the delivery both changed.
                         if (result["conflictRebase"]?["conflicts"] is JsonArray { Count: > 0 } rebased)
                             (result["mergeNotes"] as JsonArray ?? (JsonArray)(result["mergeNotes"] = new JsonArray())).Insert(0, ConflictRebase.Note(rebased));
+                        // prefer:"foreign": the conflicts the bridge resolved inside the merge for the delivery, never silently.
+                        if (ConflictRebase.Preferred(result["merge"]) is { } preferred)
+                        {
+                            result["resolvedConflicts"] = preferred.DeepClone();
+                            (result["mergeNotes"] as JsonArray ?? (JsonArray)(result["mergeNotes"] = new JsonArray())).Insert(0, ConflictRebase.PreferredNote(preferred));
+                        }
                     }
                     // Deferred defaults are checked on the delivered module itself: logic parameters have no data assertion.
                     var lost = deferred is { Count: > 0 } && mergePlanner != null ? mergePlanner.Missing(deliveredPath, deferred) : new JsonArray();
@@ -2635,6 +2645,8 @@ public static partial class Delivery
     private static string MergeOrderRule => MergeOrder.Rule;
     /// <summary>The bridge capability of merge_from_oml with first_pass_path (Anvil.Bridge Dispatch.Capabilities).</summary>
     public const string MergeOrderCapability = "merge_from_oml:first_pass";
+    /// <summary>The bridge capability of merge_from_oml {prefer:"foreign"} (Anvil.Bridge PreferForeign.Capability).</summary>
+    public const string PreferForeignCapability = "merge_from_oml:prefer_foreign";
     /// <summary>list_open_modules {model_sha256_of} answers the model fingerprint of the open tab (Anvil.Bridge Reads.OpenModules):
     /// rule (a) of the merge proof compares it with the delivery's base.</summary>
     public const string OpenModelFingerprintCapability = "list_open_modules:model_sha256";
