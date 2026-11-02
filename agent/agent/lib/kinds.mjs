@@ -18,11 +18,13 @@ import { RENDER_KIND } from './render-request.mjs';
 import { createUsersKind, USERS_KIND } from './users.mjs';
 import { o11PackFor } from './o11-builds.mjs';
 import { createXifKind, XIF_KIND } from './xif.mjs';
+import { createDocumentFetch, DOCUMENT_FETCH_KIND } from './document-fetch.mjs';
 
 // file.upload (0.3.4): one file of a folder the person approved (upload.mjs); the hub sends it only to an agent whose hello
-// lists it.
+// lists it. document.fetch (0.3.11, r40): one integration document downloaded on this machine for a hosted server, which never
+// makes a network request for what a job names (document-fetch.mjs); on every platform, so the hello always lists it.
 export const KINDS = Object.freeze(['studio.processes', 'odc.pipe', 'odc.attach', 'o11.bridge', 'o11.connect', 'o11.selected',
-  'file.put', 'file.get', 'file.list', 'file.sync', NET_PROBE_KIND, UPLOAD_KIND, USERS_KIND]);
+  'file.put', 'file.get', 'file.list', 'file.sync', NET_PROBE_KIND, UPLOAD_KIND, USERS_KIND, DOCUMENT_FETCH_KIND]);
 // The kinds of the hello: KINDS, and screen.render (0.3.4, render.mjs) only when this installation has a renderer; o11.xif
 // (0.3.7, xif.mjs, F4 of PLANO-11H) only when this installation carries the Integration Studio engine host (Windows).
 export const helloKinds = (renderer, xifEngine = null) => [...KINDS, ...(renderer?.path ? [RENDER_KIND] : []), ...(xifEngine?.path ? [XIF_KIND] : [])];
@@ -522,6 +524,7 @@ export function createKinds({ root, runtimeRoot = root, ws, pack = {}, kernel = 
   users.startup();
   // o11.xif: xifEngine is agent.mjs's resolveXifEngine answer; deps.xif the tests' Integration Studio and engine process.
   const xif = createXifKind({ root, ws, engine: xifEngine, platform, deps: { query: deps.regQuery, ...(deps.xif ?? {}) } });
+  const documents = createDocumentFetch({ fetchImpl: deps.documentFetch ?? globalThis.fetch, now: deps.now ?? Date.now });
   const screens = createRenderer({ renderer, tempRoot: path.join(root, 'private', 'tmp'), platform, now: deps.now ?? Date.now, ...(deps.renderSpawn ? { spawn: deps.renderSpawn } : {}) });
 
   const handlers = { 'studio.processes': studioProcesses, 'odc.pipe': odcPipe, 'odc.attach': odcAttach, 'o11.bridge': o11Bridge,
@@ -532,6 +535,8 @@ export function createKinds({ root, runtimeRoot = root, ws, pack = {}, kernel = 
     [UPLOAD_KIND]: (params, context) => uploads.upload(params, context),
     [RENDER_KIND]: (params, context) => screens.render(params, context),
     [USERS_KIND]: params => users.execute(params),
+    // document.fetch: deps.documentFetch is the tests' HTTP client; never deps.fetch, the channel's client to the server.
+    [DOCUMENT_FETCH_KIND]: (params, context) => documents(params, context),
     ...(xifEngine?.path ? { [XIF_KIND]: (params, context) => xif.execute(params, context) } : {}) };
 
   return {
