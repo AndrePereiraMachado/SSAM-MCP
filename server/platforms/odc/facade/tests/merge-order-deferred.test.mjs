@@ -85,6 +85,24 @@ test('a candidate without deferred defaults is still one merge, and the answer h
   assert.deepEqual(f.calls, ['snapshot', 'apply', 'merge-order', 'manifest', 'merge', 'status']);
 });
 
+for (const pass of [1, 2, 'both']) test(`preserved person edits are explained in merge order pass ${pass}`, async t => {
+  const f = fixture(t);
+  const studio = f.deps.studio;
+  let merges = 0;
+  f.deps.studio = async args => {
+    const result = await studio(args);
+    if (args[0] === 'merge' && (++merges === pass || pass === 'both')) return { ...result, strictlyEqual: false, equivalence: 'normalized', preferForeign: true,
+      preservedEdits: [{ element: 'UserAction:Sibling', property: 'Description', local: 'person', candidate: null,
+        note: "The person's edit outside the delivery's changes was preserved." }] };
+    return result;
+  };
+  const result = await deliverKernel(f.input, f.deps);
+  assert.equal(result.ok, true, result.error);
+  assert.equal(f.merges.length, 2);
+  assert.ok(result.normalized.some(n => n.rule === 'PreservedPersonEdit' && n.local === 'person'));
+  assert.equal(result.normalized.length, pass === 'both' ? 2 : 1);
+});
+
 test('the merge order is planned only for a merge: a review (until preview) keeps the full candidate', async t => {
   const f = fixture(t);
   const result = await deliverKernel({ ...f.input, until: 'preview' }, f.deps);

@@ -180,6 +180,29 @@ test('C31: without a capture, a job with three pure errors is refused with all o
   assert.equal(result.evidence, undefined);
 });
 
+for (const variant of ['preserved', 'mixed', 'missing-prefer', 'empty', 'malformed', 'unverified']) test(`native preservation receipt: ${variant}`, async t => {
+  const preserved = { element: 'UserAction:Sibling', property: 'Description', local: 'person value', candidate: 'base value', note: "The person's edit outside the delivery's changes was preserved." };
+  const merge = { ok: true, merged: true, strictlyEqual: false, equivalence: 'normalized', preferForeign: true, preservedEdits: [preserved] };
+  if (variant === 'mixed') merge.normalized = [{ element: 'Screen/Icon', rule: 'IconConversion', local: 'new', candidate: 'old' }];
+  if (variant === 'missing-prefer') delete merge.preferForeign;
+  if (variant === 'empty') merge.preservedEdits = [];
+  if (variant === 'malformed') merge.preservedEdits = [{ element: 'Sibling' }];
+  if (variant === 'unverified') merge.equivalence = 'uncertain';
+  const f = delivery(t, { merge });
+  const result = await deliverKernel(f.input, f.deps);
+  if (['preserved', 'mixed'].includes(variant)) {
+    assert.equal(result.ok, true, result.error);
+    assert.equal(result.result, 'delivered');
+    assert.equal(result.equivalence, 'normalized');
+    assert.ok(result.normalized.some(n => n.rule === 'PreservedPersonEdit' && n.local === 'person value' && n.note === preserved.note));
+    if (variant === 'mixed') assert.equal(result.normalized.length, 2);
+  } else {
+    assert.equal(result.ok, false);
+    assert.equal(result.code, 'MERGE_UNCERTAIN');
+  }
+  assert.equal(f.calls.filter(c => c === 'merge').length, 1);
+});
+
 test('C31 with the real ODC CLI: check-job names the three problems', { skip: !fs.existsSync(kernelCli()) }, async t => {
   const dir = tmp(t);
   const job = path.join(dir, 'bad.json');

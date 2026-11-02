@@ -103,6 +103,31 @@ const capped = (report, field, list, max = 20) => {
   if (list.length > max) report[field + 'Total'] = list.length;
 };
 
+// Native prefer-foreign proves edits outside the delivery separately from Studio rewrites.
+// Both are explained differences, and both must remain visible in the delivery receipt.
+function mergeProof(value) {
+  if (value?.merged !== true) return null;
+  const edits = value.preferForeign === true && Array.isArray(value.preservedEdits)
+    && value.preservedEdits.every(e => e && typeof e.element === 'string' && e.element
+      && typeof e.property === 'string' && typeof e.note === 'string' && e.note
+      && Object.hasOwn(e, 'local') && Object.hasOwn(e, 'candidate'))
+    ? value.preservedEdits.map(e => ({ ...e, rule: 'PreservedPersonEdit' })) : [];
+  if (value.equivalence === 'normalized' && (Array.isArray(value.normalized) || edits.length)) {
+    const rewrites = value.normalized ?? [];
+    return { equivalence: 'normalized', normalized: [...rewrites, ...edits],
+      normalizedTotal: Math.max(rewrites.length, Number.isInteger(value.normalizedTotal) ? value.normalizedTotal : 0) + edits.length };
+  }
+  return value.strictlyEqual === true ? { equivalence: 'strict' } : null;
+}
+
+function recordMergeNormalizations(report, proof) {
+  if (!proof?.normalized) return;
+  const prior = report.normalized ?? [];
+  const total = (report.normalizedTotal ?? prior.length) + proof.normalizedTotal;
+  capped(report, 'normalized', [...prior, ...proof.normalized]);
+  if (total > (report.normalized?.length ?? 0)) report.normalizedTotal = total;
+}
+
 // The kernel CLI's answer, as the delivery reads it: accepted and valid, or the refusal with its code and problems (I2).
 export function interpretKernelResult(result, { output, exitCode = 0 }) {
   const candidate = path.join(output, 'kernel-candidate.oml');
@@ -2191,7 +2216,7 @@ export async function deliverKernel(input, deps) {
       // Merge order, pass 1: the candidate without its deferred defaults creates the elements (the bridge's own plan finds
       // no default on an element it creates, so it runs one plain merge).
       const first = await call('merge', () => studio(['merge', report.manifest], pid), { pass: 1 });
-      const proven = first && first.merged === true && (first.strictlyEqual === true || first.equivalence === 'normalized');
+      const proven = mergeProof(first);
       if (!proven) {
         report.mergeOrder.failedPass = 1;
         if (first) {
@@ -2206,8 +2231,9 @@ export async function deliverKernel(input, deps) {
         return completed(report);
       }
       report.merged = true;
-      report.mergeOrder.firstPass = { manifest: report.manifest, equivalence: first.equivalence ?? (first.strictlyEqual ? 'strict' : null),
-        ...(Array.isArray(first.normalized) ? { normalized: first.normalized.slice(0, 20) } : {}) };
+      report.mergeOrder.firstPass = { manifest: report.manifest, equivalence: proven.equivalence,
+        ...(proven.normalized ? { normalized: proven.normalized.slice(0, 20), normalizedTotal: proven.normalizedTotal } : {}) };
+      recordMergeNormalizations(report, proven);
       // Pass 2: the full candidate over the module as pass 1 left it, a new capture; the elements exist now, so the bridge's
       // plan is empty again and the defaults are merged onto them.
       const again = await call('snapshot', () => studio(['snapshot', module], pid), { pass: 2 });
@@ -2254,10 +2280,10 @@ export async function deliverKernel(input, deps) {
         // C16 G-1 (I8): the bridge proved the module equal to the candidate but for rewrites the ODC Studio makes on every
         // merge (a block instance's derived name, Max. Records of a Data Action refresh, a FontAwesome icon converted to
         // Phosphor, a delete rule forced to Ignore): delivered, with one note per element.
-        if (report.merged && value.equivalence === 'normalized' && Array.isArray(value.normalized)) {
+        const proof = mergeProof(value);
+        if (proof?.equivalence === 'normalized') {
           report.equivalence = 'normalized';
-          capped(report, 'normalized', value.normalized);
-          if (Number.isInteger(value.normalizedTotal) && value.normalizedTotal > (report.normalized?.length ?? 0)) report.normalizedTotal = value.normalizedTotal;
+          recordMergeNormalizations(report, proof);
         } else if (report.merged && report.strictlyEqual) report.equivalence = 'strict';
         if (!report.merged || (!report.strictlyEqual && report.equivalence !== 'normalized')) {
           report.failed = step; report.outcome = 'uncertain'; report.code = 'MERGE_UNCERTAIN';
