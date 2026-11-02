@@ -1,3 +1,4 @@
+import { privateChild } from './fixtures/private-child.mjs';
 // The kind o11.users (agent/lib/users.mjs, users-page.mjs): the table of what passes, the behaviour as a table of steps (fixtures/users-flow.mjs,
 // the same one the native core runs), the session that stays here, the platform answer and the vault helper shared with the server by its
 // sha. The helper's pure parts run in Windows PowerShell with no vault, window or network. The real vault test only runs on request.
@@ -16,7 +17,7 @@ import { usersRows, addressRows, lookalikeRows, HOST, b64 } from './fixtures/use
 import { flows, runNode, verify, tempDir } from './fixtures/users-flow.mjs';
 
 // The sha both sides name: here and platforms/odc/facade/tests/o11-users-hosted.test.mjs in the server line.
-const VAULT_SHA256 = 'a18fe3be53edf15ab5f232e9c7ca9e16ac7156a55ae9d9bdf36abc68f60c24e4';
+const VAULT_SHA256 = 'fe3d41b6c7e2241cf04cf9e00ea82e4832a3ff779026edd788d0a6035f689263';
 const tmp = t => { const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ssam-users-')); t.after(() => fs.rmSync(dir, { recursive: true, force: true })); return dir; };
 const codeOf = fn => { try { fn(); return 'ok'; } catch (error) { return error.code; } };
 
@@ -29,7 +30,7 @@ test('the vault helper is the one the server line carries, byte for byte (sha)',
   assert.equal(createHash('sha256').update(fs.readFileSync(USERS_HELPER)).digest('hex'), VAULT_SHA256);
 });
 test('M10: the closed list of the server box is this agent\'s: no pass when it cannot be read, or when one side has a kind the other lacks', async () => {
-  const file = new URL('../../../server/platforms/odc/facade/call-kinds.mjs', import.meta.url);
+  const file = process.env.SSAM_SERVER_ROOT ? new URL('file:///' + path.join(process.env.SSAM_SERVER_ROOT, 'platforms/odc/facade/call-kinds.mjs').replaceAll('\\', '/')) : new URL('../../../server/platforms/odc/facade/call-kinds.mjs', import.meta.url);
   assert.ok(fs.existsSync(file), 'the server box must be next to the agent box: ' + file.href);
   const { CALL_KINDS, HELLO_ONLY_KINDS } = await import(file.href);
   assert.deepEqual([...CALL_KINDS].sort(), [...helloKinds({ path: 'renderer' }, { path: 'xif-engine' })].sort()); // F4: o11.xif with the engine host
@@ -82,7 +83,7 @@ test('the session stays here: setCookie never leaves, and the next request carri
 });
 test('the helper runs hidden, with this installation\'s scope, and takes no secret in its arguments', async t => {
   const k = kind(t, { answers: [{ ok: true, available: true, principal: 'admin' }] });
-  assert.deepEqual(await k.users.execute({ op: 'status', host: HOST }), { available: true, principal: 'admin', consent: true });
+  assert.deepEqual(await k.users.execute({ op: 'status', host: HOST }), { available: true, principal: 'admin', consent: true, remembered: true });
   const { file, args } = k.calls[0];
   assert.match(file, /powershell\.exe$/i);
   assert.equal(args[args.indexOf('-Scope') + 1], usersScope(k.dataRoot));
@@ -112,7 +113,7 @@ test('the helper\'s refusal is a code and a fixed text', async t => {
 });
 test('another platform answers in plain words before anything, whatever the request', async t => {
   for (const params of [request(), { op: 'status', host: HOST }, { op: 'nonsense' }]) {
-    const k = kind(t, { platform: 'darwin' });
+    const k = kind(t, { platform: 'linux' });
     await assert.rejects(k.users.execute(params), e => e.code === 'USERS_PLATFORM_UNAVAILABLE' && e.executed === false && /not available on this platform/.test(e.message));
     assert.equal(k.calls.length, 0);
   }
@@ -120,7 +121,7 @@ test('another platform answers in plain words before anything, whatever the requ
 test('the prompt: its status file is under the agent\'s own folder and goes when the window closes; a second one is not opened', async t => {
   const dataRoot = tmp(t);
   const started = [];
-  const child = { exitCode: null, on() {}, unref() {} };
+  const child = privateChild();
   const users = createUsersKind({ dataRoot, platform: 'win32', env: { SystemRoot: 'C:\\Windows' }, wait: async () => {}, lookup: async () => [{ address: '93.184.216.34' }],
     exec: async () => JSON.stringify({ ok: true, hosts: [], available: true }),
     start: (file, args) => { started.push(args); fs.writeFileSync(args[args.indexOf('-PromptStatusPath') + 1], 'visible'); return child; } });
@@ -130,27 +131,26 @@ test('the prompt: its status file is under the agent\'s own folder and goes when
   assert.deepEqual(await users.execute({ op: 'prompt', host: HOST }), { opened: false, alreadyOpen: true });
   assert.equal(started.length, 1);
   assert.equal((await users.execute({ op: 'status', host: HOST })).consent, false);
-  fs.writeFileSync(statusFile, 'saved');
-  child.exitCode = 0;
+  child.finish();
   assert.equal((await users.execute({ op: 'status', host: HOST })).consent, true, 'saving the window is the yes to sign in');
   assert.deepEqual(fs.readdirSync(path.join(dataRoot, 'private', 'users')), []);
 });
 test('the prompt that never shows is an answer, not a wait', async t => {
   const users = createUsersKind({ dataRoot: tmp(t), platform: 'win32', env: { SystemRoot: 'C:\\Windows' }, wait: async () => {}, lookup: async () => [{ address: '93.184.216.34' }], exec: async () => JSON.stringify({ ok: true, hosts: [] }), start: () => ({ exitCode: 1, on() {}, unref() {} }) });
-  await assert.rejects(users.execute({ op: 'prompt', host: HOST }), e => e.code === 'USERS_PROMPT_NOT_VISIBLE');
+  await assert.rejects(users.execute({ op: 'prompt', host: HOST }), e => e.code === 'USERS_PROMPT_FAILED');
 });
 test('M5: one window at a time and a ceiling in ten minutes (the probe of the review opened 25)', async t => {
   let clock = 1000, open = null, starts = 0;
   const users = createUsersKind({ dataRoot: tmp(t), platform: 'win32', now: () => clock, wait: async () => {}, lookup: async () => [{ address: '93.184.216.34' }], env: { SystemRoot: 'C:\\Windows' },
     exec: async () => JSON.stringify({ ok: true, hosts: [], available: true }),
-    start: (file, args) => { starts++; fs.writeFileSync(args[args.indexOf('-PromptStatusPath') + 1], 'saved'); open = { exitCode: null, on() {}, unref() {} }; return open; } });
+    start: (file, args) => { starts++; fs.writeFileSync(args[args.indexOf('-PromptStatusPath') + 1], 'visible'); open = privateChild(); return open; } });
   const prompt = i => users.execute({ op: 'prompt', host: `tenant${i}x${i * 7}y.example${i}.test` });
   await prompt(0);
   await assert.rejects(prompt(1), e => e.code === 'USERS_WINDOW_BUSY');
   await assert.rejects(users.execute({ op: 'confirm', host: HOST, action: 'sign-in' }), e => e.code === 'USERS_WINDOW_BUSY');
   assert.equal(starts, 1);
-  for (let i = 1; i < 20; i++) { open.exitCode = 0; await prompt(i); }
-  open.exitCode = 0;
+  for (let i = 1; i < 20; i++) { open.finish(); await prompt(i); }
+  open.finish();
   await assert.rejects(prompt(20), e => e.code === 'USERS_WINDOW_LIMIT');
   assert.equal(starts, 20);
   clock += 600001;
@@ -187,10 +187,14 @@ test('P1: the plan reads only its own page: another form, two forms or a comment
 function helperFunctions(t, body) {
   const script = path.join(tmp(t), 'run.ps1');
   fs.writeFileSync(script, `$ErrorActionPreference='Stop'
-$ast=[Management.Automation.Language.Parser]::ParseFile(${JSON.stringify(USERS_HELPER).replace(/^"|"$/g, "'").replace(/\\\\/g, '\\')},[ref]$null,[ref]$null)
-foreach($fn in $ast.FindAll({param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst]},$true)){ if($fn.Name -in 'Attr','Form','Redact','LoginPlan','LoginResult','LoginAnswer','ConfirmForm','ReadCapped','Prefix','Sweep','SweepPasswords','SweepAllPasswords','B64','PageAnswer'){ . ([ScriptBlock]::Create($fn.Extent.Text)) } }
+$helper=${JSON.stringify(USERS_HELPER).replace(/^"|"$/g, "'").replace(/\\\\/g, '\\')}
+foreach($file in @((Join-Path (Split-Path $helper) 'private-vault.ps1'),$helper)){
+ $ast=[Management.Automation.Language.Parser]::ParseFile($file,[ref]$null,[ref]$null)
+ foreach($fn in $ast.FindAll({param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst]},$true)){ if($fn.Name -in 'Attr','Form','Redact','LoginPlan','LoginResult','LoginAnswer','ConfirmForm','ReadCapped','Prefix','Sweep','SweepPasswords','SweepAllPasswords','B64','PageAnswer'){ . ([ScriptBlock]::Create($fn.Extent.Text)) } }
+}
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
+. (Join-Path (Split-Path $helper) 'private-dialog.ps1')
 ${body}
 `);
   return JSON.parse(execFileSync('powershell', ['-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', script], { encoding: 'utf8', windowsHide: true, timeout: 120000 }).trim().split(/\r?\n/).at(-1));
@@ -308,9 +312,11 @@ test('the helper keeps its own rules: no redirect, no page over the limit, the v
   assert.match(text, /\$MaxPage=262144/);
   assert.ok(text.indexOf("Fail 'USERS_HOST_NOT_AUTHENTICATED'") < text.indexOf("$page=Http $uri 'GET'"), 'the vault is read before the sign-in');
   assert.ok(text.indexOf("code='USERS_HOST_NOT_AUTHENTICATED'") < text.indexOf('$page=Http $uri $r.method'), 'the vault is read before any request');
-  assert.match(text, /\$approving=\(\$Kind -eq 'login'\) -and \(\$null -eq \(ReadVault \(Target 'login' ''\) \$false\)\)/);
-  assert.match(text, /\$again\.Text\.Trim\(\) -cne \$HostName/);
-  assert.ok(text.indexOf('-cne $HostName') < text.indexOf('[UsersVault]::Write([ref]$c,0)'));
+  // Explicit r40 UX change: show the exact host, with no redundant host retyping.
+  assert.match(text, /New-SsamDialog \$title \$description 'Users' \$HostName/);
+  assert.match(text, /Add-SsamRemember/);
+  assert.match(text, /\$Kind -eq 'login' -and -not \$remember.Checked/);
+  assert.doesNotMatch(text, /\$again\.Text\.Trim\(\) -cne \$HostName/);
   assert.match(text, /function SweepPasswords/);
   assert.match(text, /AddMinutes\(-15\)/);
   assert.match(text, /\$ref\.field -notmatch/);
@@ -319,7 +325,7 @@ test('the helper keeps its own rules: no redirect, no page over the limit, the v
 // It reaches the Windows vault API, even on a scope nobody has: never by default, only with SSAM_USERS_REAL_VAULT_TEST=1.
 test('the real helper: an environment with no administrator stored is refused before any request', { skip: (process.platform !== 'win32' || process.env.SSAM_USERS_REAL_VAULT_TEST !== '1') && 'only with SSAM_USERS_REAL_VAULT_TEST=1 on Windows: it touches the vault API', timeout: 120000 }, async t => {
   const users = createUsersKind({ dataRoot: tmp(t) });
-  assert.deepEqual(await users.execute({ op: 'status', host: HOST }), { available: false, principal: null, consent: false });
-  assert.deepEqual(await users.execute({ op: 'status', host: HOST, kind: 'password', entry: 'a'.repeat(64) }), { available: false, principal: null, consent: false });
+  assert.deepEqual(await users.execute({ op: 'status', host: HOST }), { available: false, principal: null, consent: false, remembered: false });
+  assert.deepEqual(await users.execute({ op: 'status', host: HOST, kind: 'password', entry: 'a'.repeat(64) }), { available: false, principal: null, consent: false, remembered: false });
   assert.deepEqual(await users.execute({ op: 'forget', host: HOST, kind: 'password', entry: 'a'.repeat(64) }), {});
 });

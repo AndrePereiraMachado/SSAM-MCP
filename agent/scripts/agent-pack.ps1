@@ -121,6 +121,8 @@ $tree = Join-Path $work 'tree'
 # What never goes into a pack, whatever a source folder holds.
 function Test-Forbidden([string]$relative) {
   $r = $relative -replace '/', '\'
+  # These are versioned program sources, not runtime credential storage.
+  if ($r -in @('agent\lib\credential-session.mjs','agent\lib\credential-vault.ps1','agent\lib\credential-auth.ps1')) { return $false }
   if ($r -match '\.(cs|csproj|sln|pdb|key|pfx|snk)$') { return $true }
   if ($r -match '(^|\\)\.local(\\|$)') { return $true }
   if ($r -match '(^|\\)(credential[^\\]*|tokens\.json|[^\\]*\.credentials\.json|config\.json)$') { return $true }
@@ -339,7 +341,11 @@ try {
   Copy-Item -Path (Join-Path $root 'agent\lib\*.mjs') -Destination (Join-Path $agentOut 'lib')
   Copy-Item -Path (Join-Path $root 'agent\lib\*.json') -Destination (Join-Path $agentOut 'lib')
   # The vault helper of o11.users is Windows only: a macOS pack carries no .ps1, and its agent answers USERS_PLATFORM_UNAVAILABLE.
-  if (-not $mac) { Copy-Item -LiteralPath (Join-Path $root 'agent\lib\users-vault.ps1') -Destination (Join-Path $agentOut 'lib') }
+  if (-not $mac) {
+    foreach ($helper in @('users-vault.ps1','private-vault.ps1','private-dialog.ps1','credential-vault.ps1','credential-auth.ps1')) {
+      Copy-Item -LiteralPath (Join-Path $root "agent\lib\$helper") -Destination (Join-Path $agentOut 'lib')
+    }
+  }
   $xifEngineEntry = $null
   if ($XifEngine) {
     if ($mac) { throw '-XifEngine is Windows only (Integration Studio runs only on Windows).' }

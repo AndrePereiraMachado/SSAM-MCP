@@ -1,6 +1,6 @@
 // The kind o11.users (fase4-28 r4, docs/FASE2-AGENTE.md 4.4): the Users application of an O11 environment through this machine. What can
-// sign in never leaves it: the administrator's password and new passwords are entries of this Windows account's Credential Manager, typed
-// only in a private window (users-vault.ps1), and the session cookies live in this process's memory. The server reads pages and keeps
+// sign in never leaves it: the administrator password stays in memory unless Remember me stores it in Windows Credential Manager.
+// New passwords use one-operation vault permits. Both are typed only in a private window, and session cookies stay in process memory. The server reads pages and keeps
 // receipts, and it never builds a POST: it names an operation and its ids, and the agent reads the real page, builds the request from
 // the table of users-page.mjs and shows the person what it will send. No field carries a password or a cookie, in either direction.
 // The HTTP goes only to https://<host>/Users/ of a host the person approved in a window, never redirected. Windows only: elsewhere the kind
@@ -23,9 +23,11 @@ import path from 'node:path';
 import dns from 'node:dns';
 import net from 'node:net';
 import { execFile, spawn } from 'node:child_process';
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { AgentError, refuse } from './errors.mjs';
+import { privateScope, createPrivateRuntime, createCookieStore, createLoginBrake, createPrivateCredentialMemory, capturePrivatePrompt, createSecretRedactor } from './private-runtime.mjs';
+import { macPrivateCommand } from './mac-private-helper.mjs';
 import { ACTIONS, PageNotKnown, planWrite, planSavePassword, planSearch, plainValue, isLoginPage, userPage, parsePage } from './users-page.mjs';
 
 export const USERS_KIND = 'o11.users';
@@ -42,7 +44,6 @@ const PROMPT_WAIT_MS = 12000, HELPER_MS = 45000;
 const ID = /^[1-9][0-9]{0,18}$/;
 const CHANGE_LIMITS = Object.freeze({ name: 256, username: 250, email: 250, phone: 20 });
 const CONSENT_MS = 8 * 3600 * 1000, PASSWORD_PERMIT_MS = 300000, CONFIRM_MS = 130000;
-const WINDOWS_MAX = 20, REFUSALS_MAX = 3, WINDOWS_MS = 600000;
 // Stops well before the lockout of the Users application: two wrong passwords, then a person.
 const LOGIN_FAILURES_MAX = 2;
 const SWEEP_HOST = 'sweep.invalid';
@@ -157,10 +158,10 @@ export function validateUsersRequest(params) {
 
 // The vault scope: this installation and this account of the server. Its entries are its own: another token on this installation inherits
 // nothing, and an SSAM installed on the same Windows account is apart. No account in tests.
-const short = value => createHash('sha256').update(value).digest('hex').slice(0, 16);
-export const usersScope = (dataRoot, account = '') => short(path.resolve(dataRoot).toLowerCase()) + short('account|' + account);
+export const usersScope = privateScope;
 const powershell = env => path.join(env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
 const FAILURES = Object.freeze({
+  USERS_PRIVATE_RESPONSE_REFUSED: 'The private response contained authentication values and was withheld. No automatic retry was made.',
   USERS_PAGE_TOO_LARGE: 'This page is larger than a Users page can be; it was not read.',
   USERS_LOGIN_LAYOUT_CHANGED: 'The sign-in page of this environment is not the one this agent knows; nothing was sent.',
   USERS_HOST_LOOKALIKE: 'This name reads like an environment already approved on this machine, so no window was opened and nothing was sent. If it really is another environment, sign out of the other one first.',
@@ -171,8 +172,12 @@ const FAILURES = Object.freeze({
 const LOGIN_PAUSED = 'Signing in failed twice, so it stopped before the Users application locks this administrator. A person signs in again in the window of this agent, or checks the account in the Users application first.';
 
 // exec(file, args, input, timeoutMs) -> stdout, start(file, args) -> a child: the tests' seams.
-export function createUsersKind({ dataRoot, account = '', platform = process.platform, env = process.env, helper = USERS_HELPER, exec, start, wait = ms => new Promise(r => setTimeout(r, ms)), lookup = name => dns.promises.lookup(name, { all: true }), now = Date.now, permitMs = PASSWORD_PERMIT_MS } = {}) {
-  const jars = new Map(), prompts = new Map(), consents = new Map();
+export function createUsersKind({ dataRoot, runtimeRoot = path.resolve(path.dirname(USERS_HELPER), '../..'), account = '', platform = process.platform, env = process.env, helper = USERS_HELPER, exec, start, wait = ms => new Promise(r => setTimeout(r, ms)), lookup = name => dns.promises.lookup(name, { all: true }), now = Date.now, permitMs = PASSWORD_PERMIT_MS, privateRuntime } = {}) {
+  const jars = createCookieStore(), prompts = new Map(), consents = new Map();
+  const memory = createPrivateCredentialMemory('USERS'), generations = new Map(), promptFailures = new Set();
+  const privateInput = (host, value = {}) => Buffer.from(JSON.stringify({ ...value, ...(memory.get(host) ? { privateCredential: memory.get(host) } : {}) })).toString('base64');
+  const invalidate = host => { generations.set(host, (generations.get(host) ?? 0) + 1); jars.delete(host); };
+  const runtime = privateRuntime ?? createPrivateRuntime({ dataRoot, account, now });
   let permits = [];
   const scope = usersScope(dataRoot, account);
   const promptDir = path.join(dataRoot, 'private', 'users');
@@ -180,12 +185,18 @@ export function createUsersKind({ dataRoot, account = '', platform = process.pla
     const child = execFile(file, args, { windowsHide: true, timeout: timeoutMs, maxBuffer: 32 * 1024 * 1024 }, (error, stdout) => (stdout ? resolve(String(stdout)) : reject(error ?? new Error('no answer'))));
     child.stdin?.end(input ?? '');
   }));
-  const startHelper = start ?? ((file, args) => spawn(file, args, { windowsHide: true, stdio: ['ignore', 'ignore', 'ignore'] }));
+  const startHelper = start ?? ((file, args, input) => {
+    const child = spawn(file, args, { windowsHide: true, stdio: [input === undefined ? 'ignore' : 'pipe', 'pipe', 'ignore'] });
+    child.stdin?.on('error', () => {}); child.stdin?.end(input); return child;
+  });
+  const command = (args, input) => platform === 'darwin'
+    ? macPrivateCommand({ runtimeRoot, dataRoot, family: 'users', argv: args, input })
+    : { file: powershell(env), args, input };
   const base = (mode, host) => ['-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', helper, '-Mode', mode, '-HostName', host, '-Scope', scope];
   const entryArgs = p => [...(p.kind ? ['-Kind', p.kind] : []), ...(p.entry ? ['-Entry', p.entry] : [])];
   async function helperCall(args, input, executed, timeoutMs = HELPER_MS) {
     let stdout;
-    try { stdout = await runHelper(powershell(env), args, input, timeoutMs); }
+    try { const cmd = command(args, input); stdout = await runHelper(cmd.file, cmd.args, cmd.input, timeoutMs); }
     catch { throw new AgentError('USERS_PRIVATE_REQUEST_FAILED', 'The private Users helper did not finish; no automatic retry.', { executed }); }
     let value = null;
     try { value = JSON.parse(stdout.trim().split(/\r?\n/).at(-1)); } catch { /* below */ }
@@ -204,26 +215,15 @@ export function createUsersKind({ dataRoot, account = '', platform = process.pla
     if (addresses.some(item => isPrivateAddress(item.address))) throw refuse('USERS_HOST_PRIVATE', FAILURES.USERS_HOST_PRIVATE);
     resolved.set(host, now());
   }
-  const cookieHeader = host => [...(jars.get(host)?.entries() ?? [])].map(([name, value]) => name + '=' + value).join('; ');
-  function storeCookies(host, encoded) {
-    for (const item of Array.isArray(encoded) ? encoded : []) {
-      const first = Buffer.from(String(item), 'base64').toString('utf8').split(';')[0], mark = first.indexOf('=');
-      if (mark <= 0) continue;
-      const jar = jars.get(host) ?? new Map(), name = first.slice(0, mark).trim(), value = first.slice(mark + 1).trim();
-      if (value) jar.set(name, value); else jar.delete(name);
-      jars.set(host, jar);
-    }
-  }
+  const cookieHeader = jars.header;
+  const storeCookies = jars.store;
   // One window at a time; a person who keeps saying no is not asked again for a while; and a ceiling, so a window is never a way to wear a
   // person down. A yes does not count against the second: approving seven changes is work, not pressure. A closed window is a no.
-  let confirming = false, opened = [], refusals = [];
+  let confirming = false;
+  runtime.registerBusy(() => { settle(); return confirming || prompts.size > 0; });
   function takeWindow() {
     settle();
-    if (confirming || prompts.size > 0) throw refuse('USERS_WINDOW_BUSY', 'Another window of this agent is open: answer that one first.');
-    opened = opened.filter(at => now() - at < WINDOWS_MS);
-    refusals = refusals.filter(at => now() - at < WINDOWS_MS);
-    if (opened.length >= WINDOWS_MAX || refusals.length >= REFUSALS_MAX) throw refuse('USERS_WINDOW_LIMIT', 'Too many windows in a few minutes, so no other was opened.');
-    opened.push(now());
+    runtime.takeWindow('USERS');
   }
   const hasConsent = host => (consents.get(host) ?? 0) > now();
   const needConsent = host => { if (!hasConsent(host)) throw refuse('USERS_LOGIN_CONSENT_REQUIRED', 'No person on this machine approved signing in to this environment, so nothing was sent.'); };
@@ -231,15 +231,9 @@ export function createUsersKind({ dataRoot, account = '', platform = process.pla
   // happens after, since the password may have reached the site. Only a person's window, or a sign-in that a page then proves, resets it: an answer
   // of the helper can be wrong (a redirect to an error page), and a page alone says nothing about the tries in between.
   const failuresFile = path.join(promptDir, 'sign-in-failures.json');
-  const readFailures = () => { try { return JSON.parse(fs.readFileSync(failuresFile, 'utf8')); } catch { return {}; } };
-  const failuresOf = host => Number(readFailures()[scope + '|' + host]) || 0;
-  function setFailures(host, count) {
-    const all = readFailures();
-    if ((Number(all[scope + '|' + host]) || 0) === count) return;
-    if (count > 0) all[scope + '|' + host] = count; else delete all[scope + '|' + host];
-    fs.mkdirSync(promptDir, { recursive: true });
-    fs.writeFileSync(failuresFile, JSON.stringify(all));
-  }
+  const brake = createLoginBrake({ file: failuresFile, scope, unavailableCode: 'USERS_LOGIN_PAUSED' });
+  const failuresOf = brake.count;
+  const setFailures = brake.set;
   const unproven = new Set();
   // A sign-in that said yes may read the page that proves it, even as the last try.
   const notPaused = (host, tryingAgain = false) => { if (failuresOf(host) >= LOGIN_FAILURES_MAX && (tryingAgain || !unproven.has(host))) throw refuse('USERS_LOGIN_PAUSED', LOGIN_PAUSED); };
@@ -262,16 +256,30 @@ export function createUsersKind({ dataRoot, account = '', platform = process.pla
   }
   let started = null;
   const startup = () => (started ??= (async () => {
-    if (platform !== 'win32' || !fs.existsSync(pendingFile)) return;
+    if (!['win32', 'darwin'].includes(platform) || !fs.existsSync(pendingFile)) return;
     try { await helperCall(base('sweep', SWEEP_HOST), '', false); fs.rmSync(pendingFile, { force: true }); } catch { /* the next start */ }
   })());
-  // What a window the person filled gives: a prompt's status file says saved only after the vault has it.
+  // Login completion travels only over the private pipe; password permits retain their vault-backed status marker.
   function settle() {
     for (const [key, record] of prompts) {
       let phase = null;
       try { phase = fs.readFileSync(record.statusFile, 'utf8'); } catch { /* not yet, or gone */ }
+      if (record.kind === 'login' && phase !== 'visible') phase = null;
       if (phase) record.phase = phase;
-      if (phase === 'saved' && !record.applied) {
+      if (record.kind === 'login' && record.capture.done && !record.completionApplied) {
+        record.completionApplied = true;
+        const completion = record.capture.value;
+        if (record.generation === (generations.get(record.host) ?? 0)) {
+          if (record.capture.failed) promptFailures.add(record.host);
+          else if (completion?.saved) {
+            invalidate(record.host); memory.delete(record.host);
+            if (!completion.remembered) memory.set([record.host], completion.privateCredential);
+            record.remembered = completion.remembered; record.phase = phase = 'saved';
+          }
+        }
+        record.capture.value = null;
+      }
+      if (phase === 'saved' && !record.applied && (record.kind === 'password' || record.capture.done && !record.capture.failed && record.remembered !== undefined)) {
         record.applied = true;
         if (record.kind === 'password') {
           // A second window for the same password replaces the first, and the first one's timer finds nothing.
@@ -282,8 +290,8 @@ export function createUsersKind({ dataRoot, account = '', platform = process.pla
         }
         else { consents.set(record.host, now() + CONSENT_MS); setFailures(record.host, 0); }
       }
-      if ((record.child.exitCode ?? null) !== null) {
-        if (!record.applied) refusals.push(now());
+      if (record.kind === 'login' ? record.capture.done : (record.child.exitCode ?? null) !== null) {
+        if (!record.applied) runtime.windowRefused();
         fs.rmSync(record.statusFile, { force: true });
         prompts.delete(key);
         if (record.kind === 'password') clearPending();
@@ -302,14 +310,14 @@ export function createUsersKind({ dataRoot, account = '', platform = process.pla
     confirming = true;
     let answer;
     try { answer = await helperCall(args, input, false, CONFIRM_MS); }
-    catch { refusals.push(now()); throw refuse('USERS_CONFIRMATION_TIMEOUT', 'No answer from the person on this machine, so nothing was sent.'); }
+    catch { runtime.windowRefused(); throw refuse('USERS_CONFIRMATION_TIMEOUT', 'No answer from the person on this machine, so nothing was sent.'); }
     finally { confirming = false; }
     if (answer.approved === true) return;
-    refusals.push(now());
+    runtime.windowRefused();
     throw refuse(answer.timedOut ? 'USERS_CONFIRMATION_TIMEOUT' : 'USERS_CONFIRMATION_DECLINED', answer.timedOut ? 'No answer from the person on this machine, so nothing was sent.' : 'The person on this machine declined, so nothing was sent.');
   }
   async function storedLogin(host) {
-    const stored = await helperCall(base('status', host), '', false);
+    const stored = await helperCall(base('status', host), privateInput(host), false);
     if (stored.available !== true) throw refuse('USERS_HOST_NOT_AUTHENTICATED', FAILURES.USERS_HOST_NOT_AUTHENTICATED);
     return stored;
   }
@@ -343,28 +351,41 @@ export function createUsersKind({ dataRoot, account = '', platform = process.pla
     const args = ['-NoLogo', '-NoProfile', '-STA', '-ExecutionPolicy', 'Bypass', '-File', helper, '-Mode', 'prompt', '-HostName', p.host, '-Scope', scope, ...entryArgs(p),
       '-Subject', subject, '-Rows', Buffer.from(JSON.stringify(rows)).toString('base64'), '-PromptStatusPath', statusFile];
     if ((p.kind ?? 'login') === 'password') fs.writeFileSync(pendingFile, '');
-    const child = startHelper(powershell(env), args);
-    const record = { child, statusFile, host: p.host, kind: p.kind ?? 'login', entry: p.entry, action: p.action, userId: p.userId, changes: p.changes, applied: false, phase: null };
+    const cmd = command(args); const child = startHelper(cmd.file, cmd.args, cmd.input);
+    const record = { capture: (p.kind ?? 'login') === 'login' ? capturePrivatePrompt(child) : null, generation: generations.get(p.host) ?? 0, child, statusFile, host: p.host, kind: p.kind ?? 'login', entry: p.entry, action: p.action, userId: p.userId, changes: p.changes, applied: false, phase: null };
     prompts.set(key, record);
     child.on?.('error', () => prompts.delete(key));
     // The status file stays until the window closes: it says saved only then.
-    child.on?.('exit', () => settle());
+    child.on?.((p.kind ?? 'login') === 'login' ? 'close' : 'exit', () => { try { settle(); } catch { /* a damaged brake remains fail-closed on the next call */ } });
     child.unref?.();
     // A window that was shown counts, even if it has already closed by the time this looks.
     for (let waited = 0; waited < PROMPT_WAIT_MS; waited += 100) {
       settle();
-      if (record.phase === 'visible' || record.phase === 'saved') return { opened: true, alreadyOpen: false, visible: true, ...(record.phase === 'saved' ? { saved: true } : {}) };
-      if ((child.exitCode ?? null) !== null) break;
+      if (record.phase === 'visible' || record.phase === 'saved') return { opened: true, alreadyOpen: false, visible: true, ...(record.phase === 'saved' ? { saved: true, ...(record.kind === 'login' ? { remembered: record.remembered } : {}) } : {}) };
+      if (record.capture?.failed) throw refuse('USERS_PROMPT_FAILED', 'The private credential window did not complete safely. No new credential was accepted.');
+      if (record.kind === 'login' ? record.capture.done : (child.exitCode ?? null) !== null) break;
       await wait(100);
     }
-    fs.rmSync(statusFile, { force: true });
-    prompts.delete(key);
+    // A late private window still occupies the shared window budget.
+    if (record.kind === 'login' ? record.capture.done : (child.exitCode ?? null) !== null) {
+      fs.rmSync(statusFile, { force: true }); prompts.delete(key);
+    }
     throw new AgentError('USERS_PROMPT_NOT_VISIBLE', 'The private window could not be confirmed visible.', { executed: null });
   }
   // One request of this agent, with this agent's session. A page that asks to sign in again ends that session.
   async function send(host, url, method, fields = [], secretRefs = []) {
-    const input = Buffer.from(JSON.stringify({ url, method, fields, secretRefs, cookie: cookieHeader(host) })).toString('base64');
+    const generation = generations.get(host) ?? 0;
+    const secret = memory.get(host)?.password;
+    const input = privateInput(host, { url, method, fields, secretRefs, cookie: cookieHeader(host) });
     const value = await helperCall(base('request', host), input, method === 'POST' ? null : false);
+    settle();
+    if (generation !== (generations.get(host) ?? 0)) throw new AgentError('USERS_SESSION_CHANGED', 'The private credential selection changed during the request. No automatic retry was made.', { executed: method === 'POST' ? null : false });
+    if (secret) {
+      const redactor = createSecretRedactor(); redactor.add(secret);
+      const raw = Buffer.from(value.body ?? '', 'base64').toString('utf8');
+      const envelope = JSON.stringify({ location: value.location, contentType: value.contentType, decodedLocation: Buffer.from(value.location ?? '', 'base64').toString('utf8'), decodedType: Buffer.from(value.contentType ?? '', 'base64').toString('utf8') });
+      if (redactor.text(raw) !== raw || redactor.text(envelope) !== envelope) throw new AgentError('USERS_PRIVATE_RESPONSE_REFUSED', 'The private response contained authentication values and was withheld. No automatic retry was made.', { executed: method === 'POST' ? null : false });
+    }
     // A larger answer would go through the server's disk as a blob, and stop the server that reads it.
     if ((value.body ?? '').length > MAX_PAGE_BASE64) throw new AgentError('USERS_PAGE_TOO_LARGE', FAILURES.USERS_PAGE_TOO_LARGE, { executed: method === 'POST' ? null : false });
     storeCookies(host, value.setCookie);
@@ -414,19 +435,21 @@ export function createUsersKind({ dataRoot, account = '', platform = process.pla
   return {
     startup,
     async execute(params) {
-      if (platform !== 'win32') throw refuse('USERS_PLATFORM_UNAVAILABLE', 'Users administration is not available on this platform.');
+      if (!['win32', 'darwin'].includes(platform)) throw refuse('USERS_PLATFORM_UNAVAILABLE', 'Users administration is not available on this platform.');
       validateUsersRequest(params);
       await startup();
       settle();
       for (const permit of permits.filter(item => item.until <= now())) await expire(permit);
       const { op, host } = params;
+      if (promptFailures.delete(host) && !['prompt', 'sign-out'].includes(op)) throw refuse('USERS_PROMPT_FAILED', 'The private credential window did not complete safely. No new credential was accepted.');
       if (op === 'status') {
-        const value = await helperCall([...base('status', host), ...entryArgs(params)], '', false);
-        return { available: value.available === true, principal: typeof value.principal === 'string' ? value.principal : null, consent: hasConsent(host) };
+        const value = await helperCall([...base('status', host), ...entryArgs(params)], params.kind === 'password' ? '' : privateInput(host), false);
+        return { available: value.available === true, principal: typeof value.principal === 'string' ? value.principal : null, consent: hasConsent(host), remembered: value.available === true && !memory.get(host) };
       }
       if (op === 'sign-out') {
-        jars.delete(host); consents.delete(host); permits = permits.filter(item => item.host !== host); setFailures(host, 0);
-        await helperCall(base('sign-out', host), '', false);
+        const signOutInput = privateInput(host);
+        invalidate(host); memory.delete(host); consents.delete(host); permits = permits.filter(item => item.host !== host); setFailures(host, 0);
+        await helperCall(base('sign-out', host), signOutInput, false);
         clearPending();
         return { signedOut: true };
       }
@@ -451,8 +474,11 @@ export function createUsersKind({ dataRoot, account = '', platform = process.pla
         setFailures(host, failuresOf(host) + 1);
         unproven.delete(host);
         let value;
+        const loginGeneration = generations.get(host) ?? 0;
         // Only a helper that says it sent nothing gives the try back.
-        try { value = await helperCall(base('login', host), '', null); } catch (error) { if (error.executed === false) setFailures(host, Math.max(0, failuresOf(host) - 1)); throw error; }
+        try { value = await helperCall(base('login', host), privateInput(host), null); } catch (error) { if (error.executed === false) setFailures(host, Math.max(0, failuresOf(host) - 1)); throw error; }
+        settle();
+        if (loginGeneration !== (generations.get(host) ?? 0)) throw new AgentError('USERS_SESSION_CHANGED', 'The private credential selection changed during the request. No automatic retry was made.', { executed: null });
         storeCookies(host, value.setCookie);
         const authenticated = value.authenticated === true;
         if (authenticated) unproven.add(host);

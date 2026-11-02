@@ -1,8 +1,6 @@
 name: Native agent installer (Mac)
 
 on:
-  push:
-    branches: [codex/mac-native-installer]
   workflow_dispatch:
     inputs:
       pack_release:
@@ -19,15 +17,30 @@ on:
         type: boolean
         default: false
 
+  workflow_call:
+    inputs:
+      pack_release:
+        required: true
+        type: string
+      pack_asset:
+        required: true
+        type: string
+      pack_sha256:
+        required: true
+        type: string
+      sign_and_notarize:
+        type: boolean
+        default: false
+
 permissions:
   # GitHub requires write-level release access to read unpublished drafts.
   # This workflow downloads the input and never publishes a release.
   contents: write
 
 env:
-  PACK_RELEASE: ${{ inputs.pack_release || 'agent-mac-runtime-20261027-ipramm' }}
-  PACK_ASSET: ${{ inputs.pack_asset || 'mac-release-input-IkWeIb.tar.gz' }}
-  PACK_SHA256: ${{ inputs.pack_sha256 || '554c7b845ae04880398ddb7d28825f0abb93abec047fe3eeacb02370a79cb722' }}
+  PACK_RELEASE: ${{ inputs.pack_release }}
+  PACK_ASSET: ${{ inputs.pack_asset }}
+  PACK_SHA256: ${{ inputs.pack_sha256 }}
 
 jobs:
   mac:
@@ -72,8 +85,38 @@ jobs:
         run: |
           npm ci --no-audit --no-fund
           npm test
-      - name: Build and qualify the native ARM64 executable
-        run: node scripts/build-native.mjs osx-arm64
+      - name: Check resources before filtered native tests
+        run: &resources |
+          node --input-type=module <<'JS'
+          import os from 'node:os';
+          import fs from 'node:fs';
+          const disk = fs.statfsSync(process.cwd());
+          const freeDisk = disk.bavail * disk.bsize;
+          console.log(JSON.stringify({freeRam: os.freemem(), freeDisk}));
+          if (os.freemem() < 3 * 1024 ** 3 || freeDisk < 8 * 1024 ** 3)
+            throw new Error('At least 3 GiB free RAM and 8 GiB free disk are required.');
+          JS
+      - name: Test r40 native credentials and protocol
+        run: >-
+          dotnet test tests/native-protocol/NativeProtocol.Tests.csproj -c Release
+          --filter 'FullyQualifiedName~Mac|FullyQualifiedName~CredentialSession|FullyQualifiedName~PrivatePromptCompletion|FullyQualifiedName~Users|FullyQualifiedName~Hello|FullyQualifiedName~OdcInventory'
+          --logger 'trx;LogFileName=r40-mac.trx' --results-directory ci-results
+      - name: Check resources before Native AOT publish
+        run: *resources
+      - name: Build native ARM64 executable from this checkout
+        run: |
+          test "$(uname -m)" = arm64
+          dotnet publish native/Ssam.Agent/Ssam.Agent.csproj -c Release -r osx-arm64 --nologo
+      - name: Qualify the Native AOT executable
+        env:
+          SSAM_NATIVE_EXE: ${{ github.workspace }}/agent/native/Ssam.Agent/bin/Release/net10.0/osx-arm64/publish/ssam-agent
+        run: >-
+          node --test tests/native/channel.test.mjs tests/native/workspace.test.mjs
+          tests/native/studio-policy.test.mjs tests/native/app-integration.test.mjs
+          tests/native/studio-build-plan.test.mjs tests/native/mac-bridge-build.test.mjs
+      - name: Test r40 Node routing
+        run: node --test agent/tests/mac-private-helper.test.mjs
+
       - name: Sign, package and notarize
         if: inputs.sign_and_notarize
         env:
@@ -121,6 +164,19 @@ jobs:
           node node_modules/electron/install.js
           PLAYWRIGHT_MODULE="$RUNNER_TEMP/ssam-ui-test/node_modules/playwright" node --test tests/native/electron-smoke.test.mjs
           SSAM_PACKAGED_APP="$PWD/dist/mac-arm64/SSAM Agent.app/Contents/MacOS/SSAM Agent" PLAYWRIGHT_MODULE="$RUNNER_TEMP/ssam-ui-test/node_modules/playwright" node --test tests/native/electron-smoke.test.mjs
+      - name: Exercise all private dialog forms with synthetic data
+        env:
+          SSAM_TEST_OUTPUT: ${{ github.workspace }}/agent/ci-results
+        run: |
+          mkdir -p "$SSAM_TEST_OUTPUT"
+          node tests/app/private-dialog-worker.integration.mjs
+      - name: Preserve test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: r40-mac-arm64-test-evidence
+          if-no-files-found: warn
+          path: agent/ci-results/
       - name: Verify Developer ID and Gatekeeper
         if: inputs.sign_and_notarize
         run: |

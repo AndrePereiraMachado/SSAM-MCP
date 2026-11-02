@@ -17,19 +17,26 @@ namespace Ssam.Agent;
 internal sealed partial class UsersKinds
 {
     internal const string Name = "o11.users";
-    private const int HelperSeconds = 45, PromptWaitMs = 12000, MaxSearch = 256, WindowsMax = 20, RefusalsMax = 3, LoginFailuresMax = 2;
+    private const int HelperSeconds = 45, PromptWaitMs = 12000, MaxSearch = 256, LoginFailuresMax = 2;
     private const int MaxPageBase64 = (262144 + 2) / 3 * 4 + 8;
     private readonly string dataRoot;
+    private readonly string? runtimeRoot;
     private readonly string scope;
     // The tests' seams, set only by check-users-flow. Production runs the embedded helper with the system's PowerShell, DNS and clock.
     internal string[]? HelperCommand;
+    internal Func<string, string, string, Task<JsonObject>>? HelperCall;
     internal Func<string, Task<string[]>>? Lookup;
     internal Func<DateTimeOffset> Now = () => DateTimeOffset.UtcNow;
     internal bool ForceWindows;
+    internal bool ForceMac;
+    internal Func<JsonObject, CancellationToken, Task<JsonObject>>? MacBackend;
     internal TimeSpan PermitTime = TimeSpan.FromMinutes(5);
     private readonly Dictionary<string, Dictionary<string, string>> jars = new(StringComparer.Ordinal);
     private readonly Dictionary<string, OpenPrompt> prompts = new(StringComparer.Ordinal);
-    private readonly object sync = new();
+    private readonly Dictionary<string, JsonObject> privateCredentials = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, long> credentialGenerations = new(StringComparer.Ordinal);
+    internal readonly PrivateSessionRuntime Runtime;
+    private object sync => Runtime.Sync;
 
     [GeneratedRegex("^(?=.{1,253}\\z)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+\\z", RegexOptions.CultureInvariant)] private static partial Regex HostPattern();
     [GeneratedRegex("^[a-f0-9]{64}\\z", RegexOptions.CultureInvariant)] private static partial Regex EntryPattern();
@@ -40,7 +47,18 @@ internal sealed partial class UsersKinds
     [GeneratedRegex("^[1-9][0-9]{0,18}\\z", RegexOptions.CultureInvariant)] private static partial Regex IdPattern();
 
     private sealed class Permit { public required string Host; public required string Action; public string? UserId; public string? Changes; public required string Entry; public DateTimeOffset Until; }
-    private sealed class OpenPrompt { public required Process Child; public required string StatusFile; public required string Host; public required string Kind; public string? Entry; public string? Action; public string? UserId; public string? Changes; public bool Applied; public string? Phase; }
+    private sealed class OpenPrompt { public required Process Child; public required string StatusFile; public required string Host; public required string Kind; public string? Entry; public string? Action; public string? UserId; public string? Changes; public bool Applied; public string? Phase; public long Generation; public Task<JsonObject>? Completion; }
+    internal long CredentialGeneration(string host) => credentialGenerations.GetValueOrDefault(host);
+    internal void ApplyLoginCompletion(string host, string output, long expectedGeneration)
+        => ApplyLoginCompletion(host, PrivatePromptCompletion.Parse(output), expectedGeneration);
+    private void ApplyLoginCompletion(string host, JsonObject completion, long expectedGeneration)
+    {
+        if (CredentialGeneration(host) != expectedGeneration || completion["saved"]?.GetValue<bool>() != true) return;
+        credentialGenerations[host] = expectedGeneration + 1;
+        if (completion["remembered"]?.GetValue<bool>() == true) privateCredentials.Remove(host);
+        else privateCredentials[host] = (JsonObject)completion["privateCredential"]!.DeepClone();
+        jars.Remove(host); consents[host] = Now().AddHours(8); SetFailures(host, 0);
+    }
     private readonly Dictionary<string, DateTimeOffset> consents = new(StringComparer.Ordinal);
     private readonly List<Permit> permits = [];
     private readonly string promptDir;
@@ -50,9 +68,11 @@ internal sealed partial class UsersKinds
     private int writing;
     private Task? started;
 
-    internal UsersKinds(string dataRoot, string account = "")
+    internal UsersKinds(string dataRoot, string account = "", string? runtimeRoot = null)
     {
-        this.dataRoot = dataRoot;
+        Runtime = new PrivateSessionRuntime();
+        Runtime.Register(() => { Settle(); return confirming || prompts.Count > 0; });
+        this.dataRoot = dataRoot; this.runtimeRoot = runtimeRoot;
         scope = Scope(dataRoot, account);
         promptDir = Path.Combine(dataRoot, "private", "users");
         failuresFile = Path.Combine(promptDir, "sign-in-failures.json");
@@ -208,6 +228,8 @@ internal sealed partial class UsersKinds
         var bytes = HelperBytes();
         var directory = Path.Combine(dataRoot, "private", "users");
         Directory.CreateDirectory(directory);
+        PrivateHelperResources.Write(directory, "private-dialog.ps1");
+        PrivateHelperResources.Write(directory, "private-vault.ps1");
         var file = Path.Combine(directory, "vault-" + Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant()[..16] + ".ps1");
         if (!File.Exists(file) || !File.ReadAllBytes(file).AsSpan().SequenceEqual(bytes))
         {
@@ -221,6 +243,7 @@ internal sealed partial class UsersKinds
 
     private ProcessStartInfo Start(bool interactive, string mode, string host, JsonObject p, bool redirect, IEnumerable<string>? extra = null)
     {
+        if (OperatingSystem.IsMacOS() && HelperCommand == null) return MacPrivateBackend.StartInfo();
         var start = new ProcessStartInfo(HelperCommand?[0] ?? PowerShell()) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardInput = redirect, RedirectStandardOutput = redirect, RedirectStandardError = redirect };
         var args = new List<string>();
         if (HelperCommand != null) args.AddRange(HelperCommand.Skip(1));
@@ -235,9 +258,28 @@ internal sealed partial class UsersKinds
 
     private async Task<JsonObject> Call(string mode, string host, JsonObject p, string input, bool? executed, CancellationToken token, bool interactive = false, int seconds = HelperSeconds)
     {
+        string? privatePassword = null;
+        long expectedGeneration;
+        lock (sync) expectedGeneration = CredentialGeneration(host);
+        if (mode is "status" or "login" or "request") lock (sync) {
+            if (privateCredentials.TryGetValue(host, out var credential)) {
+                privatePassword = Word(credential["password"]);
+                var request = input.Length == 0 ? new JsonObject() : JsonNode.Parse(Encoding.UTF8.GetString(Convert.FromBase64String(input)))!.AsObject();
+                request["privateCredential"] = credential.DeepClone();
+                input = Convert.ToBase64String(Encoding.UTF8.GetBytes(request.ToJsonString()));
+            }
+        }
         JsonObject? value = null;
         try
         {
+            if (HelperCall != null) value = await HelperCall(mode, host, input);
+            else if ((OperatingSystem.IsMacOS() || ForceMac) && HelperCommand == null) {
+                var privateRequest = input.Length == 0 ? new JsonObject() : JsonNode.Parse(Encoding.UTF8.GetString(Convert.FromBase64String(input)))!.AsObject();
+                var options = new JsonObject { ["kind"] = p["kind"]?.DeepClone(), ["entry"] = p["entry"]?.DeepClone() };
+                var envelope = MacPrivateBackend.Envelope("users", mode, scope, host, privateRequest, dataRoot, runtimeRoot, options);
+                value = MacBackend != null ? await MacBackend(envelope, token) : await MacPrivateBackend.ExecuteAsync(envelope, token);
+            }
+            else {
             using var process = Process.Start(Start(interactive, mode, host, p, true)) ?? throw new IOException("no helper");
             var output = process.StandardOutput.ReadToEndAsync(token);
             var errors = process.StandardError.ReadToEndAsync(token);
@@ -250,15 +292,36 @@ internal sealed partial class UsersKinds
             await errors;
             var line = (await output).Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).LastOrDefault();
             value = line == null ? null : JsonNode.Parse(line) as JsonObject;
+            }
         }
         catch (Exception e) when (e is IOException or System.ComponentModel.Win32Exception or OperationCanceledException or System.Text.Json.JsonException)
         {
             throw new AgentFault("USERS_PRIVATE_REQUEST_FAILED", "The private Users helper did not finish; no automatic retry.", executed);
         }
-        if (value?["ok"] is JsonValue ok && ok.TryGetValue<bool>(out var done) && done) return value;
+        Settle();
+        lock (sync) if ((mode is "status" or "login" or "request") && expectedGeneration != CredentialGeneration(host))
+            throw new AgentFault("CREDENTIAL_SESSION_CHANGED", "The private account changed during the request. No automatic retry was made.", executed);
+        if (value?["ok"] is JsonValue ok && ok.TryGetValue<bool>(out var done) && done) {
+            if (!string.IsNullOrEmpty(privatePassword)) {
+                string Clean(string text) {
+                    foreach (var form in new[] { privatePassword, WebUtility.HtmlEncode(privatePassword), Uri.EscapeDataString(privatePassword), WebUtility.UrlEncode(privatePassword), Convert.ToBase64String(Encoding.UTF8.GetBytes(privatePassword)), Convert.ToBase64String(Encoding.Unicode.GetBytes(privatePassword)) })
+                        text = text.Replace(form, "[redacted]", StringComparison.OrdinalIgnoreCase);
+                    return text;
+                }
+                var changed = false;
+                foreach (var field in new[] { "principal", "location", "contentType" }) if (Word(value[field]) is { } text) { var clean = Clean(text); changed |= clean != text; value[field] = clean; }
+                if (Word(value["body"]) is { } body) {
+                    var text = Encoding.UTF8.GetString(Convert.FromBase64String(body)); var clean = Clean(text);
+                    if (clean != text) { changed = true; value["body"] = Convert.ToBase64String(Encoding.UTF8.GetBytes(clean)); }
+                }
+                if (changed) value["notes"] = new JsonArray("Sensitive authentication values were removed from the response.");
+            }
+            return value;
+        }
         var code = Word(value?["code"]) is { } said && CodePattern().IsMatch(said) ? said : "USERS_PRIVATE_REQUEST_FAILED";
         throw code switch
         {
+            "USERS_PRIVATE_RESPONSE_REFUSED" => new AgentFault(code, "The private response contained authentication values and was withheld. No automatic retry was made.", executed),
             "USERS_HOST_NOT_AUTHENTICATED" => new AgentFault(code, "No Users administrator is stored for this environment on this machine; nothing was sent.", false),
             "USERS_PAGE_TOO_LARGE" => new AgentFault(code, "This page is larger than a Users page can be; it was not read.", executed),
             "USERS_LOGIN_LAYOUT_CHANGED" => new AgentFault(code, "The sign-in page of this environment is not the one this agent knows; nothing was sent.", false),
@@ -300,18 +363,11 @@ internal sealed partial class UsersKinds
     // One window at a time; a person who keeps saying no is not asked again for a while; and a ceiling, so a window is never a way to wear a
     // person down. A yes does not count against the second: approving seven changes is work, not pressure. A closed window is a no.
     private bool confirming;
-    private readonly List<DateTimeOffset> opened = [], refusals = [];
+    private List<DateTimeOffset> refusals => Runtime.Refusals;
     private void TakeWindow()
     {
         Settle();
-        lock (sync)
-        {
-            if (confirming || prompts.Count > 0) throw new AgentFault("USERS_WINDOW_BUSY", "Another window of this agent is open: answer that one first.", false);
-            opened.RemoveAll(at => Now() - at >= TimeSpan.FromMinutes(10));
-            refusals.RemoveAll(at => Now() - at >= TimeSpan.FromMinutes(10));
-            if (opened.Count >= WindowsMax || refusals.Count >= RefusalsMax) throw new AgentFault("USERS_WINDOW_LIMIT", "Too many windows in a few minutes, so no other was opened.", false);
-            opened.Add(Now());
-        }
+        Runtime.TakeWindow(Now(), "USERS");
     }
     private bool HasConsent(string host) { lock (sync) return consents.TryGetValue(host, out var until) && until > Now(); }
     private void NeedConsent(string host) { if (!HasConsent(host)) throw new AgentFault("USERS_LOGIN_CONSENT_REQUIRED", "No person on this machine approved signing in to this environment, so nothing was sent.", false); }
@@ -372,7 +428,7 @@ internal sealed partial class UsersKinds
     internal Task Startup() { lock (sync) return started ??= SweepOrphans(); }
     private async Task SweepOrphans()
     {
-        if (!(OperatingSystem.IsWindows() || ForceWindows) || !File.Exists(pendingFile)) return;
+        if (!(OperatingSystem.IsWindows() || OperatingSystem.IsMacOS() || ForceWindows) || !File.Exists(pendingFile)) return;
         try
         {
             await Call("sweep", "sweep.invalid", new JsonObject(), "", false, CancellationToken.None);
@@ -389,7 +445,8 @@ internal sealed partial class UsersKinds
                 string? phase = null;
                 try { phase = File.Exists(record.StatusFile) ? File.ReadAllText(record.StatusFile) : null; } catch (IOException) { }
                 if (phase != null) record.Phase = phase;
-                if (phase == "saved" && !record.Applied)
+                var completedLogin = record.Kind != "password" && record.Completion?.IsCompletedSuccessfully == true;
+                if (!record.Applied && (record.Kind == "password" ? phase == "saved" : completedLogin))
                 {
                     record.Applied = true;
                     if (record.Kind == "password")
@@ -400,9 +457,12 @@ internal sealed partial class UsersKinds
                         permits.Add(permit);
                         _ = ExpireLater(permit);
                     }
-                    else { consents[record.Host] = Now().AddHours(8); SetFailures(record.Host, 0); }
+                    else {
+                        try { ApplyLoginCompletion(record.Host, record.Completion!.Result, record.Generation); if (record.Completion.Result["saved"]?.GetValue<bool>() == true) record.Phase = "saved"; }
+                        catch { refusals.Add(Now()); }
+                    }
                 }
-                if (record.Child.HasExited)
+                if (record.Child.HasExited && (record.Kind == "password" || record.Completion?.IsCompleted == true))
                 {
                     if (!record.Applied) refusals.Add(Now());
                     try { File.Delete(record.StatusFile); } catch (IOException) { }
@@ -491,15 +551,22 @@ internal sealed partial class UsersKinds
         Directory.CreateDirectory(promptDir);
         if (kind == "password") File.WriteAllText(pendingFile, "");
         var status = Path.Combine(promptDir, "prompt-" + Guid.NewGuid().ToString("N") + ".status");
-        var start = Start(true, "prompt", host, p, false, ["-Subject", subject, "-Rows", Convert.ToBase64String(Encoding.UTF8.GetBytes(rows.ToJsonString())), "-PromptStatusPath", status]);
+        var start = Start(true, "prompt", host, p, kind != "password", ["-Subject", subject, "-Rows", Convert.ToBase64String(Encoding.UTF8.GetBytes(rows.ToJsonString())), "-PromptStatusPath", status]);
         Process process;
         try { process = Process.Start(start) ?? throw new IOException("no helper"); }
         catch (Exception e) when (e is IOException or System.ComponentModel.Win32Exception) { throw new AgentFault("USERS_PROMPT_NOT_VISIBLE", "The private window could not be confirmed visible.", null); }
-        var record = new OpenPrompt { Child = process, StatusFile = status, Host = host, Kind = kind, Entry = Word(p["entry"]), Action = Word(p["action"]), UserId = Word(p["userId"]), Changes = ChangesKey(p["changes"]) };
+        var record = new OpenPrompt { Child = process, StatusFile = status, Host = host, Kind = kind, Entry = Word(p["entry"]), Action = Word(p["action"]), UserId = Word(p["userId"]), Changes = ChangesKey(p["changes"]), Generation = CredentialGeneration(host) };
+        if (kind != "password") record.Completion = PrivatePromptCompletion.Capture(process);
+        if (OperatingSystem.IsMacOS() && HelperCommand == null) {
+            if (kind == "password") { _ = process.StandardOutput.BaseStream.CopyToAsync(Stream.Null); _ = process.StandardError.BaseStream.CopyToAsync(Stream.Null); }
+            var options = new JsonObject { ["kind"] = kind, ["entry"] = p["entry"]?.DeepClone(), ["subject"] = subject, ["rows"] = rows.DeepClone(), ["promptStatusPath"] = status };
+            await process.StandardInput.WriteAsync(MacPrivateBackend.Envelope("users", "prompt", scope, host, new JsonObject(), dataRoot, runtimeRoot, options).ToJsonString()); process.StandardInput.Close();
+        } else if (kind != "password") process.StandardInput.Close();
         lock (sync) prompts[key] = record;
         // The status file stays until the window closes: it says saved only then.
         process.EnableRaisingEvents = true;
-        process.Exited += (_, _) => Settle();
+        process.Exited += (_, _) => { try { Settle(); } catch { } };
+        if (record.Completion != null) _ = record.Completion.ContinueWith(_ => { try { Settle(); } catch { } }, TaskScheduler.Default);
         // A window that was shown counts, even if it has already closed by the time this looks.
         for (var waited = 0; waited < PromptWaitMs; waited += 100)
         {
@@ -507,19 +574,21 @@ internal sealed partial class UsersKinds
             if (record.Phase is "visible" or "saved")
             {
                 var answer = new JsonObject { ["opened"] = true, ["alreadyOpen"] = false, ["visible"] = true };
-                if (record.Phase == "saved") answer["saved"] = true;
+                if (record.Phase == "saved" && (kind == "password" || record.Completion?.IsCompletedSuccessfully == true && record.Completion.Result["saved"]?.GetValue<bool>() == true)) {
+                    answer["saved"] = true;
+                    if (kind != "password") answer["remembered"] = record.Completion!.Result["remembered"]!.GetValue<bool>();
+                }
                 return answer;
             }
             if (process.HasExited) break;
             await Task.Delay(100, token);
         }
-        lock (sync) prompts.Remove(key);
-        try { File.Delete(status); } catch (IOException) { }
+        // A delayed owned window remains tracked until it closes.
         throw new AgentFault("USERS_PROMPT_NOT_VISIBLE", "The private window could not be confirmed visible.", null);
     }
-    private sealed record Answer(JsonNode? Status, string Location, string ContentType, string Body, string Html)
+    private sealed record Answer(JsonNode? Status, string Location, string ContentType, string Body, string Html, JsonNode? Notes)
     {
-        public JsonObject Json() => new() { ["status"] = Status?.DeepClone(), ["location"] = Location, ["contentType"] = ContentType, ["body"] = Body };
+        public JsonObject Json() { var result = new JsonObject { ["status"] = Status?.DeepClone(), ["location"] = Location, ["contentType"] = ContentType, ["body"] = Body }; if (Notes != null) result["notes"] = Notes.DeepClone(); return result; }
     }
     // One request of this agent, with this agent's session. A page that asks to sign in again ends that session.
     private async Task<Answer> Send(string host, string url, string method, IEnumerable<KeyValuePair<string, string>>? fields, JsonArray? secretRefs, CancellationToken token)
@@ -537,7 +606,7 @@ internal sealed partial class UsersKinds
         if (UsersPage.IsLoginPage(html)) lock (sync) { jars.Remove(host); unproven.Remove(host); }
         else if (page["status"] is JsonValue code && code.TryGetValue<int>(out var number) && number == 200)
             lock (sync) if (unproven.Remove(host)) SetFailures(host, 0);
-        return new Answer(page["status"], Word(page["location"]) ?? "", Word(page["contentType"]) ?? "", body, html);
+        return new Answer(page["status"], Word(page["location"]) ?? "", Word(page["contentType"]) ?? "", body, html, page["notes"]);
     }
     private async Task<string> ReadPage(string host, string route, CancellationToken token)
     {
@@ -601,7 +670,7 @@ internal sealed partial class UsersKinds
 
     internal async Task<JsonNode?> Execute(JsonObject p, CancellationToken token)
     {
-        if (!OperatingSystem.IsWindows() && !ForceWindows) throw new AgentFault("USERS_PLATFORM_UNAVAILABLE", "Users administration is not available on this platform.", false);
+        if (!OperatingSystem.IsWindows() && !OperatingSystem.IsMacOS() && !ForceWindows && !ForceMac) throw new AgentFault("USERS_PLATFORM_UNAVAILABLE", "Users administration is not available on this platform.", false);
         Validate(p);
         await Startup();
         Settle();
@@ -615,14 +684,20 @@ internal sealed partial class UsersKinds
             case "status":
             {
                 var value = await Call("status", host, p, "", false, token);
-                return new JsonObject { ["available"] = value["available"]?.GetValue<bool>() == true, ["principal"] = Word(value["principal"]), ["consent"] = HasConsent(host) };
+                return new JsonObject { ["available"] = value["available"]?.GetValue<bool>() == true, ["principal"] = Word(value["principal"]), ["consent"] = HasConsent(host), ["remembered"] = value["available"]?.GetValue<bool>() == true && !privateCredentials.ContainsKey(host) };
             }
             case "sign-out":
-                lock (sync) { jars.Remove(host); consents.Remove(host); permits.RemoveAll(item => item.Host == host); }
+            {
+                var signOutInput = "";
+                lock (sync) {
+                    if (privateCredentials.TryGetValue(host, out var credential)) signOutInput = Convert.ToBase64String(Encoding.UTF8.GetBytes(new JsonObject { ["privateCredential"] = credential.DeepClone() }.ToJsonString()));
+                    credentialGenerations[host] = CredentialGeneration(host) + 1; privateCredentials.Remove(host); jars.Remove(host); consents.Remove(host); permits.RemoveAll(item => item.Host == host);
+                }
                 SetFailures(host, 0);
-                await Call("sign-out", host, new JsonObject(), "", false, token);
+                await Call("sign-out", host, new JsonObject(), signOutInput, false, token);
                 ClearPending();
                 return new JsonObject { ["signedOut"] = true };
+            }
             case "confirm":
                 return await ConfirmSignIn(host, token);
             case "forget":
@@ -636,7 +711,7 @@ internal sealed partial class UsersKinds
                     var hosts = await Call("hosts", host, new JsonObject(), "", false, token);
                     if (LookalikeOf(host, (hosts["hosts"] as JsonArray ?? []).Select(item => Word(item) ?? "").Where(item => item.Length > 0)) != null)
                         throw new AgentFault("USERS_HOST_LOOKALIKE", "This name reads like an environment already approved on this machine, so no window was opened and nothing was sent. If it really is another environment, sign out of the other one first.", false);
-                    lock (sync) jars.Remove(host);
+                    // Keep the current session until the replacement is accepted.
                 }
                 else await StoredLogin(host, token);
                 return await Prompt(host, p, token);

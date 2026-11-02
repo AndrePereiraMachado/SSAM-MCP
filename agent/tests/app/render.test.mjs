@@ -31,10 +31,19 @@ test('build: pack.json names the app executable as the renderer on Windows and m
   fs.writeFileSync(path.join(pack, 'pack.json'), JSON.stringify({ id: 'p', lanes: [], files }));
   const written = withRenderer(pack, 'win', '44.9.2');
   assert.deepEqual(written.renderer, rendererFor('win', '44.9.2'));
+  assert.deepEqual(written.privateDialog, rendererFor('win', '44.9.2'));
   assert.equal(verifyPack(pack).ok, true, verifyPack(pack).detail);
   const resolved = resolveRenderer({ runtimeRoot: pack, dataRoot: path.join(base, 'data'), pack: readPack(pack), platform: 'win32' });
   assert.equal(resolved.path, path.join(install, 'SSAM Agent.exe'));
   assert.equal(resolved.version, '44.9.2');
+});
+
+test('build: Mac private dialogs explicitly name the packaged Electron worker', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ssam-mac-private-pack-'));
+  fs.writeFileSync(path.join(root, 'pack.json'), JSON.stringify({ id: 'mac-test', files: [] }));
+  const written = withRenderer(root, 'mac', '44.9.2');
+  assert.deepEqual(written.privateDialog, { kind: 'electron-worker', protocol: 1, path: '../../MacOS/SSAM Agent', electron: '44.9.2' });
+  assert.deepEqual(written.files, []);
 });
 
 test('worker page: the CSP first, the style sheets in the order the document names them, the viewport classes on body', () => {

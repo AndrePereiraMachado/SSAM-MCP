@@ -31,6 +31,9 @@ export function portugueseIn(text, { allow = [] } = {}) {
     let line = raw;
     for (const entry of allow) line = line.split(entry).join(' ');
     for (const piece of line.split(SPLIT)) {
+      // A complete CSS hexadecimal color is data, not a natural-language word.
+      // Keep this before stripping digits: #da2337 must not become the word da.
+      if (/^#(?:[a-f0-9]{3}|[a-f0-9]{4}|[a-f0-9]{6}|[a-f0-9]{8})$/i.test(piece)) continue;
       const token = piece.replace(EDGES, '').toLowerCase();
       if (token && (ACCENTED.test(token) || PORTUGUESE_WORDS.has(token))) findings.push({ line: index + 1, token, text: raw.trim().slice(0, 160) });
     }

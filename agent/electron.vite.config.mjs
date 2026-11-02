@@ -13,9 +13,10 @@ export default defineConfig({
   },
   preload: {
     plugins: [externalizeDepsPlugin()],
-    build: { rolldownOptions: { input: 'src/preload/index.mjs', output: { format: 'cjs', entryFileNames: '[name].cjs' } } },
+    build: { rolldownOptions: { input: { index: 'src/preload/index.mjs', 'private-dialog': 'src/preload/private-dialog.mjs' }, output: { format: 'cjs', entryFileNames: '[name].cjs' } } },
   },
   renderer: {
     plugins: [react()],
+    build: { rolldownOptions: { input: { index: 'src/renderer/index.html', 'private-dialog': 'src/renderer/private-dialog/index.html' } } },
   },
 });
