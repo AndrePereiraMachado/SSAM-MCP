@@ -10,6 +10,7 @@ internal static class Program
         Console.OutputEncoding = new System.Text.UTF8Encoding(false);
         try
         {
+            if (args is ["private-helper"]) return await MacPrivateHelperCommand.Run();
             if (args is ["studio-instances"]) { Console.WriteLine(StudioInstance.Snapshot().ToJsonString()); return 0; }
             if (args is ["authenticode", "--file", var signatureFile, "--signer", var signatureClass])
             {
@@ -29,6 +30,17 @@ internal static class Program
             }
             if (args is ["mac-inspect"]) { Console.WriteLine((await MacPlatform.InspectHost()).ToJsonString(new() { WriteIndented = true })); return 0; }
             if (args.Length > 0 && args[0] is "run" or "setup" or "doctor") return await NativeHost.Command(args);
+            if (args is ["check-credential-request"])
+            {
+                var requests = JsonNode.Parse(await Console.In.ReadToEndAsync()) as JsonArray ?? throw new ArgumentException("Expected credential requests");
+                var answers = new JsonArray();
+                foreach (var request in requests)
+                {
+                    try { CredentialKinds.Validate(request as JsonObject ?? throw new AgentFault("PARAMS_INVALID", "Expected an object.")); answers.Add((JsonNode)new JsonObject { ["ok"] = true }); }
+                    catch (AgentFault error) { answers.Add((JsonNode)new JsonObject { ["error"] = error.Code }); }
+                }
+                Console.WriteLine(answers.ToJsonString()); return 0;
+            }
             // roots add --folder <folder> --root <data> | roots remove --folder <folder> --root <data> | roots list --root <data> [--json]:
             // the folders file.upload may read, changed only by the person (UploadRoots.cs).
             if (args is ["roots", var op, ..])

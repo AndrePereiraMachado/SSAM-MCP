@@ -95,7 +95,7 @@ export function electronVersion(appDir = app) {
 export function withRenderer(packDir, platform, electron = electronVersion()) {
   const file = path.join(packDir, 'pack.json');
   const pack = JSON.parse(fs.readFileSync(file, 'utf8').replace(/^﻿/, ''));
-  const next = { ...pack, renderer: rendererFor(platform, electron) };
+  const next = { ...pack, renderer: rendererFor(platform, electron), privateDialog: rendererFor(platform, electron) };
   fs.writeFileSync(file, JSON.stringify(next, null, 2) + '\n');
   return next;
 }
@@ -201,6 +201,7 @@ async function main() {
     fs.renameSync(destination, target);
   }
   if (options.platform === 'win' && !pack.nativeCore) throw new Error('Windows app builds require --native <qualified ssam-agent.exe>.');
+  if (options.platform === 'mac' && !pack.nativeCore) throw new Error('Mac app builds require --native <ssam-agent> to provide the private Keychain helper. Build the native core on the target Mac first.');
   pack = withRenderer(path.join(app, 'pack'), options.platform);
   if (options.testUnsigned) pack = withoutOffers(path.join(app, 'pack'));
   console.log(`pack ${pack.id} ready in pack/ (${pack.files.length} files, lanes ${(pack.lanes ?? []).join(',')}, ODC bridge ${pack.odcBridge ?? '-'}, Service Studio ${pack.o11BuiltFor ?? '-'})`);

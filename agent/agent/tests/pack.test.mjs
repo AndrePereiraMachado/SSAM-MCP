@@ -100,7 +100,7 @@ test('agent-pack.ps1 -NoBuild -Prebuilt -NoNode builds the 6.2 layout with the t
     assert.ok(files.every(name => !name.includes('\\')), 'zip entries use forward slashes');
 
     const libs = fs.readdirSync(path.join(repo, 'agent', 'lib')).filter(name => /\.(mjs|json)$/.test(name)).map(name => 'agent/lib/' + name);
-    const expected = ['agent/ssam-agent.mjs', 'agent/ssam-agent.ps1', ...libs, 'agent/lib/users-vault.ps1',
+    const expected = ['agent/ssam-agent.mjs', 'agent/ssam-agent.ps1', ...libs, ...['users-vault', 'private-dialog', 'private-vault', 'credential-vault', 'credential-auth'].map(name => 'agent/lib/' + name + '.ps1'),
       'bin/o11/bridge/Anvil.Bridge.deps.json', THIN,
       CONNECT, 'bin/o11/connect/Anvil.Connect.runtimeconfig.json', 'bin/o11/connect/Microsoft.Diagnostics.NETCore.Client.dll', HOOK,
       'docs/AGENTE-CLIENTE.md',

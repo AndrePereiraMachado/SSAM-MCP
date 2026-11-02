@@ -13,5 +13,9 @@
   <ItemGroup>
     <InternalsVisibleTo Include="NativeProtocol.Tests" />
     <EmbeddedResource Include="..\..\agent\lib\users-vault.ps1" LogicalName="users-vault.ps1" />
+    <EmbeddedResource Include="..\..\agent\lib\private-dialog.ps1" LogicalName="private-dialog.ps1" />
+    <EmbeddedResource Include="..\..\agent\lib\private-vault.ps1" LogicalName="private-vault.ps1" />
+    <EmbeddedResource Include="..\..\agent\lib\credential-vault.ps1" LogicalName="credential-vault.ps1" />
+    <EmbeddedResource Include="..\..\agent\lib\credential-auth.ps1" LogicalName="credential-auth.ps1" />
   </ItemGroup>
 </Project>
