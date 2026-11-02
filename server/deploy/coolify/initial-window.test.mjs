@@ -3,8 +3,8 @@ import test from 'node:test';import assert from 'node:assert/strict';import fs f
 // window (2026-10-21) had the last two.
 test('the window pins its real Studio pairs by immutable digest, newest first',()=>{
  const manifest=JSON.parse(fs.readFileSync(new URL('./versions.json',import.meta.url),'utf8'));
- const pairs=versionPairs(manifest);assert.equal(pairs.length,3);
- assert.deepEqual(pairs.map(p=>[p.o11,p.odc]),[['11.55.94','1.7.30'],['11.55.93','1.7.29'],['11.55.92','1.7.28']]);
+ const pairs=versionPairs(manifest);assert.equal(pairs.length,4);
+ assert.deepEqual(pairs.map(p=>[p.o11,p.odc]),[['11.55.94','1.7.30'],['11.55.93','1.7.29'],['11.55.92','1.7.28'],['11.55.94','1.7.31']]);
  for(const p of pairs)assert.match(p.image,/^docker\.io\/andrepereiramachado\/ssam-server:prod-[\w.-]+@sha256:[a-f0-9]{64}$/);
- assert.equal(new Set(pairs.map(p=>p.image)).size,3);
+ assert.equal(new Set(pairs.map(p=>p.image)).size,4);
 });
