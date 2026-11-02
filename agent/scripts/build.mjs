@@ -120,6 +120,14 @@ export async function preparePack(source, platform, packDir = path.join(app, 'pa
   return check.pack;
 }
 
+// A command on PATH (with the PATHEXT extensions on Windows), as electron-builder looks it up; null when absent.
+export function findOnPath(name, env = process.env, platform = process.platform) {
+  const dirs = String(env.PATH ?? env.Path ?? '').split(path.delimiter).filter(Boolean);
+  const exts = platform === 'win32' ? String(env.PATHEXT ?? '.COM;.EXE;.BAT;.CMD').split(';').filter(Boolean) : [''];
+  for (const dir of dirs) for (const ext of exts) { const file = path.join(dir, name + ext); if (fs.existsSync(file)) return file; }
+  return null;
+}
+
 // pack.json of the staged pack with bridgeOffer false (the unsigned test app; pack.json is not in its own integrity list).
 export function withoutOffers(packDir) {
   const file = path.join(packDir, 'pack.json');
@@ -189,8 +197,7 @@ async function main() {
   if (options.platform === 'win' && process.platform === 'darwin') throw new Error('build the Windows installer on Windows');
   // electron-builder lists the production dependencies with `npm list --json` (package-lock.json): without npm on PATH it
   // fails later with "No JSON content found in output".
-  const npm = spawnSync('npm', ['--version'], { encoding: 'utf8', windowsHide: true, shell: true });
-  if (npm.status !== 0) throw new Error('electron-builder needs npm on PATH (it lists the production dependencies with npm list); install Node.js with npm');
+  if (!findOnPath('npm')) throw new Error('electron-builder needs npm on PATH (it lists the production dependencies with npm list); install Node.js with npm');
   // electron-vite first: src/ -> out/ (main, preload, the React panel), what electron-builder packs.
   const vite = spawnSync(process.execPath, [path.join(app, 'node_modules', 'electron-vite', 'bin', 'electron-vite.js'), 'build'], { cwd: app, stdio: 'inherit' });
   if (vite.status !== 0) throw new Error('electron-vite build failed with code ' + vite.status);
