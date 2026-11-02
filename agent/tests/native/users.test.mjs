@@ -56,7 +56,7 @@ test('the helper embedded in the native core is the Node agent\'s file, byte for
 });
 test('the native channel lists the kind in both Hello forms, runs it, and gives it the credential as the account', () => {
   const channel = fs.readFileSync(path.join(app, 'native/Ssam.Agent/AgentChannel.cs'), 'utf8');
-  assert.match(channel, /"file\.sync", UploadKinds\.Name, UsersKinds\.Name \}/);
+  assert.match(channel, /"file\.sync", UploadKinds\.Name, UsersKinds\.Name, DocumentFetch\.Name \}/); // r40: document.fetch after it
   assert.match(channel, /\.Append\(UsersKinds\.Name\)/);
   assert.match(channel, /new UsersKinds\(state\.Root, credential\);\s*_ = users\.Startup\(\);/);
   assert.match(channel, /kind == UsersKinds\.Name\) value = await users\.Execute/);
