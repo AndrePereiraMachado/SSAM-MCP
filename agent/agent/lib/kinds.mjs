@@ -16,6 +16,7 @@ import { createUploads, UPLOAD_KIND } from './upload.mjs';
 import { createRenderer } from './render.mjs';
 import { RENDER_KIND } from './render-request.mjs';
 import { createUsersKind, USERS_KIND } from './users.mjs';
+import { o11PackFor } from './o11-builds.mjs';
 
 // file.upload (0.3.4): one file of a folder the person approved (upload.mjs); the hub sends it only to an agent whose hello
 // lists it.
@@ -342,20 +343,22 @@ export function createKinds({ root, runtimeRoot = root, ws, pack = {}, kernel = 
     const target = await checkPid('o11', candidates[0].pid);
     if (deps.bridgeUpdates) target.startedUtc = (await deps.describe(target.pid)).startedUtc;
     const selected = await selectedBridge('o11', target);
+    // The pack's own bridge for this Service Studio when the pack has one per version (o11Builds), else its default one.
+    const bundled = o11PackFor(pack, target.version);
     const activePack = selected ? { ...pack, o11BuiltFor: selected.studioVersion, o11Hook: 'd1',
-      o11Bridge: { sha256: selected.files.find(f => path.posix.basename(f.path) === 'Anvil.Bridge.dll')?.sha256 } } : pack;
+      o11Bridge: { sha256: selected.files.find(f => path.posix.basename(f.path) === 'Anvil.Bridge.dll')?.sha256 } } : bundled;
     // The server's version window (servedVersions of the hello reply) decides, not the pack alone: a bridge built for one
     // served version is loaded into another served Service Studio with a warning. Without a window from the server, or
     // with either version outside it, the built-for version must match as before.
     let warning;
-    if (!selected && pack.o11BuiltFor && !sameVersion(target.version, pack.o11BuiltFor)) {
+    if (!selected && bundled.o11BuiltFor && !sameVersion(target.version, bundled.o11BuiltFor)) {
       const window = windowOf(kernel(), 'o11');
       const inWindow = version => window.some(v => sameVersion(v, version));
-      if (!(inWindow(target.version) || newerThanWindow(target.version, window)) || !inWindow(pack.o11BuiltFor))
-        throw refuse('STUDIO_VERSION_MISMATCH', `Service Studio ${target.pid} is version ${target.version ?? 'unknown'}; the agent pack bridge is built for ${pack.o11BuiltFor}`
+      if (!(inWindow(target.version) || newerThanWindow(target.version, window)) || !inWindow(bundled.o11BuiltFor))
+        throw refuse('STUDIO_VERSION_MISMATCH', `Service Studio ${target.pid} is version ${target.version ?? 'unknown'}; the agent pack bridge is built for ${bundled.o11BuiltFor}`
           + (window.length ? `, and the server serves Service Studio ${window.join(', ')}. Install the current agent package.` : ''));
-      warning = { code: 'O11_BRIDGE_BUILT_FOR_DIFFERS', builtFor: pack.o11BuiltFor, studio: target.version,
-        message: `The agent's Service Studio bridge was built for Service Studio ${pack.o11BuiltFor} and is loaded into Service Studio ${target.version}; `
+      warning = { code: 'O11_BRIDGE_BUILT_FOR_DIFFERS', builtFor: bundled.o11BuiltFor, studio: target.version,
+        message: `The agent's Service Studio bridge was built for Service Studio ${bundled.o11BuiltFor} and is loaded into Service Studio ${target.version}; `
           + (inWindow(target.version) ? 'the server serves both versions. ' : 'this Service Studio is newer than the versions the server serves (' + window.join(', ') + '). ') + 'Check the result in Service Studio before publishing.' };
     }
     // pack.json decides the hook (o11Hook "h1": the signed release layout) and the bridge file of the version handshake.

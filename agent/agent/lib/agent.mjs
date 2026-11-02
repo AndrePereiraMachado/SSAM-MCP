@@ -23,6 +23,7 @@ import { createMacAttach } from './attach-unix.mjs';
 import { createUnixPipe } from './odc-pipe-unix.mjs';
 import { AgentError } from './errors.mjs';
 import { createBridgeUpdates, MAC_BRIDGE_REASON } from './bridge-updates.mjs';
+import { o11Builds, o11PackFor, o11BuildVersions } from './o11-builds.mjs';
 import { studioRuntime } from './studio-runtime.mjs';
 import { createStudioSnapshot } from './studio-snapshot.mjs';
 import { completeInstances } from './studio-instance.mjs';
@@ -48,7 +49,10 @@ import { completeInstances } from './studio-instance.mjs';
 // the ODC commands this agent runs (agent.odcCommands), so the server offers the ODC bridges from v106 on only to an agent that
 // runs reconcile-merge (bridge-store.mjs). The other kinds and the wire are those of 0.3.5. The native core of the same change
 // is 0.4.3-native.
-export const AGENT_VERSION = '0.3.6';
+// 0.3.7 (agent/r4-f5-app): a pack may carry one O11 thin bridge per Service Studio version (pack.json o11Builds); the hello
+// reports the build of the installed Service Studio as pack.o11BuiltFor and o11.connect loads that build; a pack with
+// bridgeOffer false (the unsigned test app) never asks for bridge offers. The native core of the same change is 0.4.4-native.
+export const AGENT_VERSION = '0.3.7';
 const INLINE_MAX_BYTES = 524288;
 const MAX_VALUE_BYTES = 16 * 1024 * 1024;
 const PARAMS_MEMORY_BYTES = 64 * 1024 * 1024;
@@ -87,8 +91,20 @@ export function readPack(root) {
     const pack = readJson(path.join(root, 'pack.json'));
     return { id: pack.id ?? null, lanes: Array.isArray(pack.lanes) ? pack.lanes : [], odcBridge: pack.odcBridge ?? null, o11BuiltFor: pack.o11BuiltFor ?? null,
       o11Hook: typeof pack.o11Hook === 'string' ? pack.o11Hook : null, o11Bridge: bridgeOf(pack.o11Bridge),
-      ...Object.fromEntries(['studioBuilds', 'odcBuiltFor', 'odcRuntime', 'o11Runtime', 'renderer'].filter(key => pack[key] !== undefined).map(key => [key, pack[key]])) };
+      ...Object.fromEntries(['studioBuilds', 'odcBuiltFor', 'odcRuntime', 'o11Runtime', 'renderer'].filter(key => pack[key] !== undefined).map(key => [key, pack[key]])),
+      // o11Builds (0.3.7): one thin bridge per Service Studio version, checked here against the integrity list (o11-builds.mjs).
+      ...(Array.isArray(pack.o11Builds) ? { o11Builds: o11Builds(pack) } : {}),
+      // bridgeOffer false: a pack built without the bridge trust anchors (the owner's unsigned test app); never asks for offers.
+      ...(pack.bridgeOffer === false ? { bridgeOffer: false } : {}) };
   } catch { return { id: null, lanes: [], odcBridge: null, o11BuiltFor: null, o11Hook: null, o11Bridge: null }; }
+}
+
+// The capabilities of the hello: bridge offers on Windows, never on macOS, and never from a pack built without the trust
+// anchors (pack.json bridgeOffer false: the owner's unsigned test app), whatever the platform.
+export const NO_ANCHORS_REASON = 'This agent package was built without the bridge trust anchors (a test build); it uses only its bundled bridges.';
+export function helloCapabilities(platform, pack) {
+  if (pack?.bridgeOffer === false) return { bridgeOffer: false, bridgeOfferReason: NO_ANCHORS_REASON };
+  return { bridgeOffer: platform !== 'darwin', ...(platform === 'darwin' ? { bridgeOfferReason: MAC_BRIDGE_REASON } : {}) };
 }
 
 // deps.platform (tests): 'darwin' wires the macOS side (macos.mjs, attach-unix.mjs, odc-pipe-unix.mjs; deps.mac goes to
@@ -178,8 +194,10 @@ export function createAgent({ root, runtimeRoot = root, config = {}, deps = {}, 
       // odcCommands (0.3.6): the commands odc.pipe passes (kinds.mjs ODC_COMMANDS); the server offers a bridge only to an agent that
       // runs what that bridge needs (reconcile-merge from v106 on).
       agent: { version: AGENT_VERSION, node: process.version, platform, startedAt, root: base, kinds: helloKinds(renderer), odcCommands: [...ODC_COMMANDS], machine },
-      pack: { id: pack.id, lanes: pack.lanes, odcBridge: pack.odcBridge, o11BuiltFor: pack.o11BuiltFor, o11Hook: pack.o11Hook },
-      capabilities: { bridgeOffer: platform !== 'darwin', ...(platform === 'darwin' ? { bridgeOfferReason: MAC_BRIDGE_REASON } : {}) },
+      // o11BuiltFor (0.3.7): the bridge of the Service Studio installed here, when the pack has one per version (o11Builds).
+      pack: { id: pack.id, lanes: pack.lanes, odcBridge: pack.odcBridge, o11BuiltFor: o11PackFor(pack, studios.o11?.installed?.version).o11BuiltFor, o11Hook: pack.o11Hook,
+        ...(pack.o11Builds?.length ? { o11Builds: o11BuildVersions(pack) } : {}) },
+      capabilities: helloCapabilities(platform, pack),
       bridges: updates.reports(), bridgeUpdate: updates.wireStatus(), studios, o11Connection: connection };
   }
 

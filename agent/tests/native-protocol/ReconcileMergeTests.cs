@@ -15,7 +15,7 @@ public class ReconcileMergeTests
         var list = StudioKinds.OdcCommandList;
         Assert.Equal(Array.IndexOf(list, "merge") + 1, Array.IndexOf(list, "reconcile-merge"));
         Assert.Equal(list.Length, StudioKinds.OdcCommands.Count);
-        Assert.Equal("0.4.3-native", AgentChannel.AgentVersion);
+        Assert.Equal("0.4.4-native", AgentChannel.AgentVersion);
     }
 
     [Theory]

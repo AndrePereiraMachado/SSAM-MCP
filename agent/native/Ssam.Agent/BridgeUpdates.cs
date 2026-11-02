@@ -97,15 +97,17 @@ internal sealed class BridgeUpdates(string root, string runtime, string publicKe
             }).ToArray());
         }
     }
-    internal static bool BundledSupports(JsonObject pack, string root, string lane, string? version, string? framework)
+    internal static bool BundledSupports(JsonObject packOfAgent, string root, string lane, string? version, string? framework)
     {
         if (framework == null || Three(version) == null) return true;
+        // A pack with one O11 bridge per Service Studio (o11Builds) is judged by the build of this version.
+        var pack = lane == "o11" ? O11Builds.PackFor(packOfAgent, version) : packOfAgent;
         var build = pack["studioBuilds"]?[lane]; var builtFor = Text(build?["version"]) ?? Text(pack[lane == "odc" ? "odcBuiltFor" : "o11BuiltFor"]);
         if (builtFor != null && Three(builtFor) != Three(version)) return false;
         var tfm = Text(build?["tfm"]) ?? Text(build?["runtime"]) ?? Text(pack[lane + "Runtime"]);
         if (tfm == null)
         {
-            var file = Path.Combine(root, lane == "odc" ? "odc/studio/bridge/bin/Release/net8.0/ODC3.Bridge." + Text(pack["odcBridge"]) + ".deps.json" : "bin/o11/bridge/Anvil.Bridge.deps.json");
+            var file = Path.Combine(root, lane == "odc" ? "odc/studio/bridge/bin/Release/net8.0/ODC3.Bridge." + Text(pack["odcBridge"]) + ".deps.json" : Path.ChangeExtension(Text(pack["o11Bridge"]?["path"]) is { } bridge && bridge.StartsWith("bin/o11/") ? bridge : O11Builds.DefaultBridge, ".deps.json"));
             var match = Regex.Match(Text(O11Connection.Read(file)?["runtimeTarget"]?["name"]) ?? "", @"Version=v(\d+\.\d+)");
             tfm = match.Success ? "net" + match.Groups[1].Value : "net8.0";
         }

@@ -79,9 +79,10 @@ internal sealed class StudioKinds(string root, string runtime, JsonObject pack, 
             || !Version.TryParse(actual, out var current) || expected != current)
             throw new AgentFault("STUDIO_BRIDGE_REBUILD_REQUIRED", "Rebuild the local bridge for this exact Studio version before connecting");
     }
-    internal JsonObject? CheckO11Build(string? actual)
+    internal JsonObject? CheckO11Build(string? actual, JsonObject? effective = null)
     {
-        var built = Text(pack["o11BuiltFor"]);
+        // effective: the pack as this Studio sees it (O11Builds.PackFor), so a pack with a build for this version matches.
+        var built = Text((effective ?? pack)["o11BuiltFor"]);
         if (built == null || Three(built) == Three(actual)) return null;
         var versions = (kernel()?["servedVersions"]?["o11"] as JsonArray)?.Select(n => Three(Text(n))).Where(v => v != null).ToArray() ?? [];
         var current = Three(actual);

@@ -92,7 +92,9 @@ internal sealed class O11Connection(string root, string runtime, JsonObject pack
         var candidates = Processes("ServiceStudio.exe").OfType<JsonObject>().Where(n => p["pid"] == null || Integer(n["pid"]) == Integer(p["pid"])).ToArray();
         if (candidates.Length != 1) throw new AgentFault("STUDIO_NOT_SELECTED", "Select exactly one running Service Studio with pid");
         var selected = studios.CheckPid("o11", candidates[0]["pid"], !downloaded);
-        var warning = downloaded ? null : studios.CheckO11Build(Text(selected["version"]));
+        // The pack's own bridge for this Service Studio when it has one per version (o11Builds), else its default one.
+        if (!downloaded) pack = O11Builds.PackFor(pack, Text(selected["version"]));
+        var warning = downloaded ? null : studios.CheckO11Build(Text(selected["version"]), pack);
         var pid = Integer(selected["pid"]);
         var config = Read(Path.Combine(root, "private/agent-config.json")) ?? Read(Path.Combine(root, "private/config.json"));
         var port = Integer(config?["o11Port"], 4516);
@@ -150,7 +152,7 @@ internal sealed class O11Connection(string root, string runtime, JsonObject pack
                     hook = Path.Combine(evidence, "Anvil.RuntimeHook.Agent.dll");
                     File.Copy(installedBridge?.FileNamed("Anvil.RuntimeHook.Agent.dll") ?? Path.Combine(runtime, "bin/o11/hook/Anvil.RuntimeHook.Agent.dll"), hook);
                     if (installedBridge != null && Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(hook))) != Text(((JsonArray)installedBridge.Manifest["files"]!).First(f => Text(f?["path"]) == "hook/Anvil.RuntimeHook.Agent.dll")?["sha256"])) throw Fail("The verified hook changed before attach");
-                    Atomic(hook + ".json", new JsonObject { ["pid"] = pid, ["startedUtc"] = started, ["port"] = port, ["bridgePath"] = installedBridge?.FileNamed("Anvil.Bridge.dll") ?? Path.Combine(runtime, "bin/o11/bridge/Anvil.Bridge.dll"), ["authorityDir"] = Path.Combine(root, "private/authority") });
+                    Atomic(hook + ".json", new JsonObject { ["pid"] = pid, ["startedUtc"] = started, ["port"] = port, ["bridgePath"] = installedBridge?.FileNamed("Anvil.Bridge.dll") ?? O11Builds.BridgeFile(runtime, pack), ["authorityDir"] = Path.Combine(root, "private/authority") });
                     receipt = hook + ".receipt.json";
                 }
                 var current = await Describe(pid, token);

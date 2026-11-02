@@ -17,6 +17,14 @@
 #   -NoBuild -Prebuilt <pasta>: binarios ja prontos, nada compilado (modo dos testes), no layout
 #        <pasta>\odc\bridge\ODC3.Bridge.v<N>.dll (+ .deps.json)   <pasta>\odc\client\ODC3.Bridge.Client.dll (+ deps)
 #        <pasta>\o11\connect\   <pasta>\o11\hook\   <pasta>\o11\bridge\ (a fina)   <pasta>\o11\built-for.txt (ex.: 11.55.91)
+#   -O11Studios <pasta>,<pasta>,... (agente 0.3.7 / 0.4.4-native): uma fina POR versao do Service Studio, cada uma compilada
+#        contra a pasta daquela versao (a pasta do Service Studio instalado, ou files\ de um bundle de C:\t\studio-bundles); a
+#        versao vem do ServiceStudio.exe (ou do ServiceStudio.Common.dll) e o runtime do runtimeconfig (ou do System.Runtime que
+#        o ServiceStudio.Common.dll referencia). A mais nova vai em bin\o11\bridge (o padrao: o11BuiltFor e o11Bridge, o que o
+#        agente antigo le); as outras em bin\o11\bridges\<x.y.z>. pack.json o11Builds lista todas; o agente escolhe a do Service
+#        Studio que o cliente tem. Com -Prebuilt, o mesmo vem de <pasta>\o11\builds\<x.y.z>\Anvil.Bridge.dll (+ .deps.json).
+#        So com o gancho dev.
+#   -NoBridgeOffer: pack.json bridgeOffer false, o pacote do app de teste sem as ancoras (o agente nunca pede oferta de bridge).
 #   -ExpectO11 <x.y.z> (imagem interina, desenho multiversao O.6.1): a fina sai compilada contra a pasta do Service Studio
 #        daquela versao (ANVIL_STUDIO_DIR, nunca a copia de faixa 'Service Studio 11 - Anvil ...'), ou o script para. O
 #        servidor so aceita o pacote cujo o11BuiltFor e a versao do kernel dele (AGENT_PACK_MISMATCH).
@@ -56,7 +64,10 @@ param(
   # The ODC Studio runtime of the pack's one ODC bridge (agent/r4-v106): net8.0 (default) takes the bridge the client names
   # EarlierVersion (v107, which also loads in a net10 Studio) from bin\Release\net8.0; net10.0 takes Version (v106) from
   # bin\Release\net10.0. With -Prebuilt the runtime is the one of the bridge's .deps.json, and a different -OdcRuntime refuses.
-  [ValidateSet('net8.0', 'net10.0')][string]$OdcRuntime
+  [ValidateSet('net8.0', 'net10.0')][string]$OdcRuntime,
+  # One thin bridge per Service Studio version (see the header): the Studio folders to compile against.
+  [string[]]$O11Studios,
+  [switch]$NoBridgeOffer
 )
 $ErrorActionPreference = 'Stop'
 $mac = $Platform -eq 'mac'
@@ -88,6 +99,12 @@ if ($Hook -eq 'h1') {
   if ($ReleaseVersion -notmatch '^\d+\.\d+\.\d+(-[0-9A-Za-z][0-9A-Za-z.-]*)?$') { throw "-ReleaseVersion tem de ser A.M.N ou A.M.N-<rotulo>: $ReleaseVersion" }
 } elseif ($HookH1 -or $ReleaseVersion) { throw '-HookH1 e -ReleaseVersion so valem com -Hook h1.' }
 if ($NoBuild -and -not $Prebuilt) { throw '-NoBuild exige -Prebuilt <pasta>.' }
+if ($O11Studios) {
+  if ($laneList -notcontains 'o11') { throw '-O11Studios e da faixa o11: inclua o11 em -Lanes.' }
+  if ($Hook -ne 'dev' -or $mac) { throw '-O11Studios so vale com o gancho dev no Windows.' }
+  if ($Prebuilt) { throw '-O11Studios compila as finas; com -Prebuilt use <pasta>\o11\builds\<x.y.z>.' }
+  if ($ExpectO11) { throw '-O11Studios ja diz as versoes: nao combina com -ExpectO11.' }
+}
 if ($Prebuilt -and -not (Test-Path -LiteralPath $Prebuilt)) { throw "A pasta -Prebuilt nao existe: $Prebuilt" }
 if ($NodeExe -and -not (Test-Path -LiteralPath $NodeExe)) { throw "-NodeExe nao existe: $NodeExe" }
 if ($NodeLicense -and -not (Test-Path -LiteralPath $NodeLicense -PathType Leaf)) { throw "-NodeLicense nao existe: $NodeLicense" }
@@ -121,6 +138,36 @@ function Copy-Folder([string]$from, [string]$to) {
 }
 
 function Get-Sha256([string]$file) { (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLowerInvariant() }
+
+# The Service Studio version (x.y.z) and .NET runtime of a Studio folder, read from its files only (install-agnostic: an
+# installed Studio or the files\ of a pinned bundle). Version: ServiceStudio.exe, else ServiceStudio.Common.dll. Runtime: the
+# tfm of ServiceStudio.runtimeconfig.json, else the System.Runtime version that ServiceStudio.Common.dll references.
+function Get-StudioBuild([string]$dir) {
+  $common = Join-Path $dir 'ServiceStudio.Common.dll'
+  if (-not (Test-Path -LiteralPath $common)) { throw "Nao e uma pasta do Service Studio (falta ServiceStudio.Common.dll): $dir" }
+  $exe = Join-Path $dir 'ServiceStudio.exe'
+  $info = $(if (Test-Path -LiteralPath $exe) { (Get-Item -LiteralPath $exe).VersionInfo.ProductVersion } else { (Get-Item -LiteralPath $common).VersionInfo.ProductVersion })
+  $version = [regex]::Match([string]$info, '^\d+\.\d+\.\d+').Value
+  if (-not $version) { throw "Versao do Service Studio ilegivel em $dir" }
+  $runtime = $null
+  $config = Join-Path $dir 'ServiceStudio.runtimeconfig.json'
+  if (Test-Path -LiteralPath $config) { $runtime = [string](Get-Content -LiteralPath $config -Raw | ConvertFrom-Json).runtimeOptions.tfm }
+  if ($runtime -notmatch '^net\d+\.\d+$') {
+    $script = "`$a = [Reflection.Assembly]::ReflectionOnlyLoadFrom('$($common -replace "'", "''")'); (`$a.GetReferencedAssemblies() | Where-Object Name -eq 'System.Runtime' | Select-Object -First 1).Version.Major"
+    $major = & powershell -NoProfile -NonInteractive -Command $script
+    if ([string]$major -notmatch '^\d+$') { throw "Runtime do Service Studio ilegivel em $dir" }
+    $runtime = "net$major.0"
+  }
+  return [pscustomobject]@{ Version = $version; Runtime = $runtime; Dir = $dir }
+}
+
+# The runtime of a built bridge, from its .deps.json (net8.0 when it has none).
+function Get-BridgeRuntime([string]$folder) {
+  $deps = Join-Path $folder 'Anvil.Bridge.deps.json'
+  if (-not (Test-Path -LiteralPath $deps)) { return 'net8.0' }
+  $m = [regex]::Match([string](Get-Content -LiteralPath $deps -Raw | ConvertFrom-Json).runtimeTarget.name, 'Version=v(\d+\.\d+)')
+  if ($m.Success) { return 'net' + $m.Groups[1].Value } else { return 'net8.0' }
+}
 
 function Get-Node {
   $candidates = @($env:SSAM_NODE, (Join-Path $env:USERPROFILE '.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe'))
@@ -311,6 +358,7 @@ try {
   $signedRuntime = $null
   $o11Bridge = $null
   $o11BuiltFor = $null
+  $o11Builds = $null
   if ($laneList -contains 'odc') {
     $odcRoot = Join-Path $root 'platforms\odc'
     if ($Prebuilt) {
@@ -390,6 +438,25 @@ try {
       $builtFor = Join-Path $Prebuilt 'o11\built-for.txt'
       if (-not (Test-Path -LiteralPath $builtFor)) { throw "Falta $builtFor (a versao do Service Studio para a qual a bridge foi compilada)." }
       $o11BuiltFor = (Get-Content -LiteralPath $builtFor -TotalCount 1).Trim()
+    } elseif ($O11Studios) {
+      # One thin bridge per Service Studio version, each against its own Studio folder and runtime (restore with the runtime
+      # first: a build that only overrides TargetFramework finds no assets for it).
+      $staging = Join-Path $work 'o11'
+      $studios = @($O11Studios | ForEach-Object { $_ -split ',' } | Where-Object { $_ } | ForEach-Object { Get-StudioBuild $_ } | Sort-Object { [version]$_.Version } -Descending)
+      if (@($studios.Version | Select-Object -Unique).Count -ne $studios.Count) { throw '-O11Studios repete uma versao do Service Studio.' }
+      $thin = Join-Path $root 'kernel\src\Anvil.Bridge.Thin\Anvil.Bridge.Thin.csproj'
+      foreach ($s in $studios) {
+        $artifacts = Join-Path $work ('artifacts\bridge-' + $s.Version)
+        & dotnet restore $thin --artifacts-path $artifacts "-p:TargetFramework=$($s.Runtime)" | Out-Host
+        if ($LASTEXITCODE -ne 0) { throw "dotnet restore falhou: fina $($s.Version)" }
+        & dotnet build $thin -c Release --nologo -v minimal --no-restore --artifacts-path $artifacts -o (Join-Path $staging ('builds\' + $s.Version)) "-p:SSDir=$($s.Dir)" "-p:TargetFramework=$($s.Runtime)" | Out-Host
+        if ($LASTEXITCODE -ne 0) { throw "dotnet build falhou: fina $($s.Version)" }
+      }
+      Copy-Folder (Join-Path $staging ('builds\' + $studios[0].Version)) (Join-Path $staging 'bridge')
+      $o11BuiltFor = $studios[0].Version
+      if ($Hook -eq 'dev') { Invoke-Build 'kernel\tools\Anvil.RuntimeHook\Anvil.RuntimeHook.csproj' (Join-Path $staging 'hook') @('-p:AssemblyName=Anvil.RuntimeHook.Agent') 'hook' }
+      Invoke-Build 'kernel\tools\Anvil.Connect\Anvil.Connect.csproj' (Join-Path $staging 'connect') @() 'connect'
+      foreach ($part in $parts) { Copy-Folder (Join-Path $staging $part) $(if ($part -eq 'bridge') { $bridgeOut } else { Join-Path $o11Out $part }) }
     } else {
       $ssDir = Get-KernelStudio
       $exe = Join-Path $ssDir 'ServiceStudio.exe'
@@ -420,6 +487,29 @@ try {
     $bridgeRel = $(if ($Hook -eq 'h1') { 'studio/o11/bridge/b1/Anvil.Bridge.dll' } else { 'bin/o11/bridge/Anvil.Bridge.dll' })
     $o11Bridge = [ordered]@{ id = $(if ($Hook -eq 'h1') { 'b1' } else { $null }); hookAbi = $(if ($Hook -eq 'h1') { 'h1' } else { $null }); path = $bridgeRel
       sha256 = (Get-Sha256 (Join-Path $tree ($bridgeRel -replace '/', '\'))) }
+    # o11Builds: the default bridge first, then one folder per other Service Studio version (bin\o11\bridges\<x.y.z>).
+    $buildsFrom = $(if ($O11Studios) { Join-Path $work 'o11\builds' } elseif ($Prebuilt -and (Test-Path -LiteralPath (Join-Path $Prebuilt 'o11\builds'))) { Join-Path $Prebuilt 'o11\builds' } else { $null })
+    if ($buildsFrom) {
+      if ($Hook -ne 'dev' -or $mac) { throw 'Uma fina por versao (o11\builds) so vale com o gancho dev no Windows.' }
+      $versions = @(Get-ChildItem -LiteralPath $buildsFrom -Directory | Where-Object { $_.Name -match '^\d+\.\d+\.\d+$' } | Sort-Object { [version]$_.Name } -Descending)
+      if ($versions.Count -eq 0) { throw "Nenhuma fina por versao em $buildsFrom" }
+      if ($Prebuilt) {
+        # The default bridge of a prebuilt pack is the newest build, as when it is compiled here.
+        Remove-Item -LiteralPath $bridgeOut -Recurse -Force
+        Copy-Folder $versions[0].FullName $bridgeOut
+        $o11BuiltFor = $versions[0].Name
+        $o11Bridge.sha256 = Get-Sha256 (Join-Path $tree ($bridgeRel -replace '/', '\'))
+      }
+      if ($versions[0].Name -ne $o11BuiltFor) { throw "A fina padrao ($o11BuiltFor) nao e a mais nova ($($versions[0].Name))." }
+      $o11Builds = @([ordered]@{ version = $o11BuiltFor; runtime = (Get-BridgeRuntime $bridgeOut); path = $bridgeRel; sha256 = $o11Bridge.sha256 })
+      foreach ($v in ($versions | Select-Object -Skip 1)) {
+        $target = Join-Path $o11Out ('bridges\' + $v.Name)
+        Copy-Folder $v.FullName $target
+        $rel = 'bin/o11/bridges/' + $v.Name + '/Anvil.Bridge.dll'
+        if (-not (Test-Path -LiteralPath (Join-Path $tree ($rel -replace '/', '\')))) { throw "Falta $rel" }
+        $o11Builds += [ordered]@{ version = $v.Name; runtime = (Get-BridgeRuntime $target); path = $rel; sha256 = (Get-Sha256 (Join-Path $tree ($rel -replace '/', '\'))) }
+      }
+    }
   }
 
   if ($Hook -eq 'h1') {
@@ -480,6 +570,8 @@ try {
     files = $files
   }
   if ($odcRuntimeOfPack) { $pack.Insert(3, 'odcRuntime', $odcRuntimeOfPack) }
+  if ($o11Builds) { $pack.Insert($pack.Count - 1, 'o11Builds', @($o11Builds)) }
+  if ($NoBridgeOffer) { $pack.Insert($pack.Count - 1, 'bridgeOffer', $false) }
   [IO.File]::WriteAllText((Join-Path $tree 'pack.json'), ($pack | ConvertTo-Json -Depth 5), $utf8)
 
   if ($Stage) {

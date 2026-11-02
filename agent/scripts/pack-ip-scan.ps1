@@ -11,7 +11,8 @@
 #   bridge-folder     a bridge O11 fina vai num lugar so: bin/o11/bridge/ (gancho de desenvolvimento) ou
 #                     studio/o11/bridge/b<N>/ (gancho de release h1), com exatamente Anvil.Bridge.dll e, opcional,
 #                     Anvil.Bridge.deps.json; studio/o11/hook/ tem exatamente Anvil.Hook.h1.dll (+ .deps.json); o layout
-#                     h1 exige release.json e release.sig.jws na raiz.
+#                     h1 exige release.json e release.sig.jws na raiz. Uma fina por versao do Service Studio (agente
+#                     0.3.7): bin/o11/bridges/<x.y.z>/ com as mesmas duas, so ao lado de bin/o11/bridge/ (gancho dev).
 #   client-content    um padrao forbidden[].pattern de scripts\release\client-content.json (so leitura), sem diferenciar
 #                     caixa, nos bytes lidos como Latin-1 e como UTF-16LE nos dois alinhamentos (o metodo de
 #                     scripts\release\scan-client-content.mjs). A tabela $knownClientContent esta vazia desde
@@ -125,6 +126,14 @@ function Test-Exactly([string[]]$files, [string[]]$allowedNames, [string]$prefix
 
 $inDev = @($names | Where-Object { $_.StartsWith($devBridge, [StringComparison]::OrdinalIgnoreCase) })
 Test-Exactly $inDev $bridgeFiles $devBridge 'bin/o11/bridge holds only Anvil.Bridge.dll and Anvil.Bridge.deps.json'
+# One thin bridge per Service Studio version (o11Builds): bin/o11/bridges/<x.y.z>/ holds the same two files, and only beside
+# the default bin/o11/bridge/ of the development hook.
+foreach ($name in @($names | Where-Object { $_.StartsWith('bin/o11/bridges/', [StringComparison]::OrdinalIgnoreCase) })) {
+  $m = [regex]::Match($name, '^bin/o11/bridges/(\d+\.\d+\.\d+)/(.+)$', 'IgnoreCase')
+  if (-not $m.Success) { Add-Finding $name 'bridge-folder' 'a bridge per Service Studio lives in bin/o11/bridges/<x.y.z>/'; continue }
+  if (-not @($bridgeFiles | Where-Object { $_ -ieq $m.Groups[2].Value })) { Add-Finding $name 'bridge-folder' "bin/o11/bridges/$($m.Groups[1].Value) holds only Anvil.Bridge.dll and Anvil.Bridge.deps.json" }
+  if ($inDev.Count -eq 0) { Add-Finding $name 'bridge-folder' 'a bridge per Service Studio goes only beside bin/o11/bridge (development hook)' }
+}
 $inHook = @($names | Where-Object { $_.StartsWith($hookPrefix, [StringComparison]::OrdinalIgnoreCase) })
 Test-Exactly $inHook $hookFiles $hookPrefix 'studio/o11/hook holds only Anvil.Hook.h1.dll and Anvil.Hook.h1.deps.json'
 $releaseIds = New-Object Collections.Generic.List[string]

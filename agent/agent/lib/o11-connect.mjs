@@ -18,6 +18,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { bridgeRequest } from './o11-wire.mjs';
 import { AgentError } from './errors.mjs';
+import { o11BridgeFile } from './o11-builds.mjs';
 
 const exec = promisify(execFile);
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -203,7 +204,8 @@ export async function connectO11({ root, runtimeRoot = root, pid, port, studioVe
         if (installedBridge && sha256(fs.readFileSync(hook)) !== installedBridge.files.find(f => f.path === 'hook/Anvil.RuntimeHook.Agent.dll')?.sha256)
           throw fail('The verified hook changed while preparing the attach. Nothing was sent.');
         fs.writeFileSync(hook + '.json', JSON.stringify({ pid: target.pid, startedUtc: target.startedUtc, port,
-          bridgePath: installedBridge ? path.join(runtimeRoot, 'bridge/Anvil.Bridge.dll') : path.join(runtimeRoot, 'bin', 'o11', 'bridge', 'Anvil.Bridge.dll'), authorityDir: path.join(root, 'private', 'authority') }));
+          // The bundled bridge of the pack (o11Bridge.path: the build of this Service Studio when the pack has one per version).
+          bridgePath: installedBridge ? path.join(runtimeRoot, 'bridge/Anvil.Bridge.dll') : o11BridgeFile(runtimeRoot, pack), authorityDir: path.join(root, 'private', 'authority') }));
       }
       // Identity and port again after preparing, right before the single attach request.
       const current = await describe(target.pid);

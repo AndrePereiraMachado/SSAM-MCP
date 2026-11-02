@@ -399,3 +399,48 @@ test('node.exe goes by default and only with its LICENSE (beside, one folder up 
     assert.equal(fs.existsSync(missing.zip), false, 'no ZIP without the license');
   } finally { fs.rmSync(work, { recursive: true, force: true }); }
 });
+
+// One thin bridge per Service Studio version (agent 0.3.7): <prebuilt>\o11\builds\<x.y.z>\ becomes bin/o11/bridge (the newest,
+// the default of o11BuiltFor and o11Bridge) and bin/o11/bridges/<x.y.z> (the others), all listed in pack.json o11Builds.
+const withBuilds = prebuilt => {
+  for (const [version, tfm] of [['11.55.94', '10.0'], ['11.55.93', '8.0'], ['11.55.92', '8.0']]) {
+    write(path.join(prebuilt, 'o11', 'builds', version, 'Anvil.Bridge.dll'), 'thin ' + version);
+    write(path.join(prebuilt, 'o11', 'builds', version, 'Anvil.Bridge.deps.json'), JSON.stringify({ runtimeTarget: { name: '.NETCoreApp,Version=v' + tfm } }));
+  }
+};
+test('agent-pack.ps1 o11 builds: one bridge per Service Studio, the newest as default, all in pack.json o11Builds', () => {
+  const work = tempWork();
+  try {
+    const result = packWith(work, withBuilds);
+    assert.equal(result.code, 0, result.out);
+    const entries = readZip(result.zip);
+    const manifest = JSON.parse(entries.get('pack.json').toString('utf8').replace(/^﻿/, ''));
+    const sha = name => createHash('sha256').update(entries.get(name)).digest('hex');
+    assert.equal(manifest.o11BuiltFor, '11.55.94');
+    assert.equal(entries.get(THIN).toString(), 'thin 11.55.94');
+    assert.deepEqual(manifest.o11Bridge, { id: null, hookAbi: null, path: THIN, sha256: sha(THIN) });
+    assert.deepEqual(manifest.o11Builds, [
+      { version: '11.55.94', runtime: 'net10.0', path: THIN, sha256: sha(THIN) },
+      { version: '11.55.93', runtime: 'net8.0', path: 'bin/o11/bridges/11.55.93/Anvil.Bridge.dll', sha256: sha('bin/o11/bridges/11.55.93/Anvil.Bridge.dll') },
+      { version: '11.55.92', runtime: 'net8.0', path: 'bin/o11/bridges/11.55.92/Anvil.Bridge.dll', sha256: sha('bin/o11/bridges/11.55.92/Anvil.Bridge.dll') }]);
+    assert.equal(entries.get('bin/o11/bridges/11.55.92/Anvil.Bridge.dll').toString(), 'thin 11.55.92');
+    assert.equal(manifest.bridgeOffer, undefined);
+    for (const build of manifest.o11Builds) assert.ok(manifest.files.some(f => f.path === build.path && f.sha256 === build.sha256), build.path);
+  } finally { fs.rmSync(work, { recursive: true, force: true }); }
+});
+test('IP scan bridge-folder for o11 builds: only the two bridge files in bin/o11/bridges/<x.y.z>/', () => {
+  const work = tempWork();
+  try {
+    refusedByScan(packWith(work, prebuilt => { withBuilds(prebuilt); write(path.join(prebuilt, 'o11', 'builds', '11.55.93', 'Extra.dll'), 'x'); }),
+      [['bin/o11/bridges/11.55.93/Extra.dll', 'bridge-folder']]);
+  } finally { fs.rmSync(work, { recursive: true, force: true }); }
+});
+test('agent-pack.ps1 -NoBridgeOffer writes pack.json bridgeOffer false (the unsigned test app never asks for offers)', () => {
+  const work = tempWork();
+  try {
+    const result = packWith(work, () => {}, ['-NoNode', '-NoBridgeOffer']);
+    assert.equal(result.code, 0, result.out);
+    const manifest = JSON.parse(readZip(result.zip).get('pack.json').toString('utf8').replace(/^﻿/, ''));
+    assert.equal(manifest.bridgeOffer, false);
+  } finally { fs.rmSync(work, { recursive: true, force: true }); }
+});
