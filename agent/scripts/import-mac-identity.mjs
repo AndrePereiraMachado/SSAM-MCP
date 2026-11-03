@@ -14,11 +14,15 @@ try{
    const certificates=pem.toString('utf8').match(/-----BEGIN CERTIFICATE-----[\s\S]*?-----END CERTIFICATE-----/g);
    if(!certificates?.length)throw Error('Public certificate missing');
    fs.writeFileSync(certFile,certificates.join('\n'),{mode:0o600});
-   run(openssl,['pkey','-aes-256-cbc','-passout','env:CSC_KEY_PASSWORD','-out',keyFile],pem);
-   run(openssl,['pkcs12','-export','-in',certFile,'-inkey',keyFile,'-passin','env:CSC_KEY_PASSWORD','-out',file,'-passout','env:CSC_KEY_PASSWORD','-keypbe','PBE-SHA1-3DES','-certpbe','PBE-SHA1-3DES','-macalg','sha1']);
+   await new Promise((resolve,reject)=>{
+     const child=cp.spawn(openssl,['pkcs12','-export','-in',certFile,'-inkey','/dev/fd/3','-out',file,'-passout','env:CSC_KEY_PASSWORD','-keypbe','PBE-SHA1-3DES','-certpbe','PBE-SHA1-3DES','-macalg','sha1'],{env:process.env,stdio:['ignore','ignore','pipe','pipe']});
+     child.stderr.resume();child.stdio[3].on('error',()=>{});child.stdio[3].end(pem);
+     child.once('error',reject);child.once('exit',code=>code===0?resolve():reject(Error('Encrypted identity export failed')));
+   });
  } finally {pem.fill(0);fs.rmSync(certFile,{force:true});fs.rmSync(keyFile,{force:true});}
  run('/usr/bin/security',['import',file,'-k',keychain,'-P',process.env.CSC_KEY_PASSWORD,'-T','/usr/bin/codesign']);
  console.log('Encrypted signing identity imported successfully.');
 }finally{fs.rmSync(original,{force:true});fs.rmSync(file,{force:true});}
+
 
 
