@@ -186,7 +186,7 @@ internal sealed class CredentialKinds
     {
         if (OperatingSystem.IsMacOS()) return MacPrivateBackend.StartInfo();
         var directory = SessionDirectory;
-        foreach (var file in new[] { "private-dialog.ps1", "private-vault.ps1", "credential-auth.ps1", "CognitoSrp.cs" }) PrivateHelperResources.Write(directory, file);
+        foreach (var file in new[] { "private-dialog.ps1", "private-vault.ps1", "credential-auth.ps1", "CognitoSrp.cs", "public-cookie-metadata.json", "cookie-sensitivity.ps1" }) PrivateHelperResources.Write(directory, file);
         var helper = PrivateHelperResources.Write(directory, "credential-vault.ps1");
         var interactive = Text(p["op"]) is "prompt" or "forget";
         var start = new ProcessStartInfo(Path.Combine(Environment.GetEnvironmentVariable("SystemRoot") ?? @"C:\Windows", "System32", "WindowsPowerShell", "v1.0", "powershell.exe"))
@@ -389,7 +389,7 @@ internal sealed class CredentialKinds
             if (value.ContainsKey("privateSession")) session.State = value["privateSession"]?.DeepClone();
             Secrets(session, value["secretValues"]);
             foreach (var field in new[] { "secretValues", "password", "token", "accessToken", "refreshToken" }) Secrets(session, value["privateSession"]?[field]);
-            if (value["privateSession"]?["cookies"] is JsonArray cookies) foreach (var cookie in cookies) Secrets(session, cookie?["value"]);
+            if (value["privateSession"]?["cookies"] is JsonArray cookies) foreach (var cookie in cookies) if (CookieSensitivity.IsSensitive(Text(cookie?["name"]), Text(cookie?["value"]))) Secrets(session, cookie?["value"]);
             var result = Project(p, value, session);
             if (Text(p["op"]) == "request" && value["status"] is JsonValue httpStatus && httpStatus.TryGetValue<int>(out var statusCode) && statusCode == 401) session.State = null;
             return result;

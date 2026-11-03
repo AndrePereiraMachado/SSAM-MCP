@@ -14,6 +14,12 @@ import { macPrivateCommand } from './mac-private-helper.mjs';
 
 export const CREDENTIAL_KIND = 'credential.session';
 export const CREDENTIAL_HELPER = fileURLToPath(new URL('./credential-vault.ps1', import.meta.url));
+const publicCookieMetadata = JSON.parse(fs.readFileSync(new URL('./public-cookie-metadata.json', import.meta.url), 'utf8'));
+export function isSensitiveCookie(name, value) {
+  const matches = (pattern, text) => new RegExp('^(?:' + pattern + ')$').exec(text)?.[0] === text;
+  return typeof name !== 'string' || typeof value !== 'string'
+    || !Object.entries(publicCookieMetadata).some(([key, pattern]) => matches(key, name) && matches(pattern, value));
+}
 const BASE_KEYS = ['op', 'host', 'service', 'auth', 'profile'];
 const REQUEST_KEYS = ['url', 'method', 'body', 'contentType', 'accept', 'write', 'operationId', 'authorizeSha256', 'secretRefs'];
 const OPS = new Set(['status', 'prompt', 'login', 'request', 'forget', 'sign-out']);
@@ -51,11 +57,11 @@ function rememberSessionSecrets(redactor, state) {
     if (Array.isArray(value)) { value.forEach(cookie); return; }
     if (typeof value === 'string') {
       redactor.add(value);
-      for (const pair of value.split(';')) { const mark = pair.indexOf('='); if (mark >= 0 && !/^(?:path|domain|expires|max-age|samesite)$/i.test(pair.slice(0, mark).trim())) redactor.add(pair.slice(mark + 1).trim()); }
+      for (const pair of value.split(';')) { const mark = pair.indexOf('='); const name = pair.slice(0, mark).trim(), content = pair.slice(mark + 1).trim(); if (mark >= 0 && !/^(?:path|domain|expires|max-age|samesite)$/i.test(name) && isSensitiveCookie(name, content)) redactor.add(content); }
       return;
     }
     if (!value || typeof value !== 'object') return;
-    if ('value' in value || 'Value' in value) { redactor.add(value.value ?? value.Value); return; }
+    if ('value' in value || 'Value' in value) { if (isSensitiveCookie(value.name ?? value.Name, value.value ?? value.Value)) redactor.add(value.value ?? value.Value); return; }
     for (const entry of Object.values(value)) cookie(entry);
   };
   for (const [key, value] of Object.entries(state)) {

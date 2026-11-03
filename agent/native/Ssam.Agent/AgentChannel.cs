@@ -131,10 +131,9 @@ internal sealed class AgentChannel : IDisposable
     // version (pack.json o11Builds) and bridgeOffer false packs. 0.4.5-native: the three in one core (the Node agent's 0.3.8, app 0.2.0).
     // 0.4.6-native (agent/r4-prefer-foreign, app 0.2.1): the hello declares merge_from_oml:prefer_foreign (thin O11 bridge 1.2.0).
     // 0.4.8-native (r40a, app 0.2.3): credential.session (CredentialKinds.cs). 0.4.9-native (agent/r40, app 0.2.4): document.fetch (DocumentFetch.cs), one integration document downloaded on this
-    // machine for a hosted server, always in the hello (the Node agent's 0.3.12). 0.4.10-native (agent/r42-025, app 0.2.5): the private
-    // credential session keeps its state apart from the connection credential, follows the selected profile and signs in to
-    // Cognito USER_SRP_AUTH tenants (the Node agent's 0.3.13).
-    internal const string AgentVersion = "0.4.10-native";
+    // machine for a hosted server, always in the hello (the Node agent's 0.3.12).
+    // 0.4.11-native: preserve public Portal routing metadata during private response redaction.
+    internal const string AgentVersion = "0.4.11-native";
     // pack.json bridgeOffer false: a pack built without the bridge trust anchors (the owner's unsigned test app) never asks for offers.
     internal const string NoAnchorsReason = "This agent package was built without the bridge trust anchors (a test build); it uses only its bundled bridges.";
     internal static bool NoAnchors(JsonObject? pack) => pack?["bridgeOffer"] is JsonValue v && v.TryGetValue<bool>(out var offer) && !offer;

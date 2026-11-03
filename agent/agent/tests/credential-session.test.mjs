@@ -16,6 +16,18 @@ const base = { host, service: 'service-center', auth: 'credential' };
 const request = { ...base, op: 'request', url: 'https://' + host + '/ServiceCenter/Errors_List.aspx', method: 'GET' };
 const b64 = value => Buffer.from(value).toString('base64');
 const page = (over = {}) => ({ ok: true, status: 200, contentType: 'text/html', body: b64('<html>logs</html>'), ...over });
+
+for (const [service,route] of [['odc-portal','/monitoring/'],['service-center','/ServiceCenter/']]) {
+ test(`public cookie metadata preserves ${service} JSON while secret echoes remain redacted`,async()=>{
+  const k=kind();
+  k.answers.push({ok:true,authenticated:true,privateSession:{cookies:[{name:'TenantGeo',value:'US'},{name:'TenantRing',value:'1'},{name:'osvisit'+'a'.repeat(32),value:'1'},{name:'TenantPref',value:'tenant'},{name:'TenantAccess',value:'private-token'}]}});
+  await k.agent.execute({...base,service,op:'login'});
+  k.answers.push(page({contentType:'application/json',body:b64('{"UserId":"app-123","TotalResults":19,"host":"tenant.example.test","echo":"private-token"}')}));
+  const result=await k.agent.execute({...request,service,url:'https://'+host+route});
+  assert.deepEqual(JSON.parse(Buffer.from(result.body,'base64').toString()),{UserId:'app-123',TotalResults:19,host:'tenant.example.test',echo:'[redacted]'});
+  assert.equal(result.privateSession,undefined);
+ });
+}
 test('prompt preserves the installed connection credential file', async () => {
   const dataRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'credential-storage-'));
   fs.mkdirSync(path.join(dataRoot, 'private'));

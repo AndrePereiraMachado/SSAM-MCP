@@ -107,7 +107,7 @@ internal static class MacPrivateBackend
         if (service == "odc-portal") { headers["Origin"] = "https://" + host; headers["outsystems-client-env"] = "browser"; var csrf = MacCredentialAuth.GetPortalCsrf(jar, uri); if (csrf.Length > 0) headers["x-csrftoken"] = csrf; }
         var response = await http(uri, S(request["method"]), jar, bytes, S(request["contentType"]), authorization, auth == "basic" ? "Basic" : "Bearer", token, headers);
         var cookies = CookieState(jar); var secrets = new JsonArray(S(credential["password"]), authorization);
-        foreach (var cookie in cookies) secrets.Add((JsonNode?)JsonValue.Create(S(cookie?["value"])));
+        foreach (var cookie in cookies) if (CookieSensitivity.IsSensitive(S(cookie?["name"]), S(cookie?["value"]))) secrets.Add((JsonNode?)JsonValue.Create(S(cookie?["value"])));
         if (service == "odc-portal") secrets.Add((JsonNode?)JsonValue.Create(MacCredentialAuth.GetPortalCsrf(jar, uri)));
         return new() { ["ok"] = true, ["status"] = response.Status, ["body"] = Convert.ToBase64String(response.Body), ["contentType"] = response.ContentType, ["url"] = uri.AbsoluteUri, ["location"] = response.Location,
             ["secretValues"] = secrets, ["privateSession"] = staticAuth ? null : new JsonObject { ["profile"] = profile, ["principal"] = S(credential["username"]), ["cookies"] = cookies, ["token"] = authorization, ["expiresAt"] = session?["expiresAt"]?.DeepClone() } };

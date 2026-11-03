@@ -2,6 +2,7 @@
 # Based on the verified SC community-identity/sso and Portal broker protocols.
 # No remote JavaScript is executed. Passwords, tokens and cookies remain local.
 Add-Type -AssemblyName System.Web
+. (Join-Path $PSScriptRoot 'cookie-sensitivity.ps1')
 function Stop-SsamAuth([string]$code) { $e=New-Object InvalidOperationException('Private authentication did not complete.');$e.Data['code']=$code;throw $e }
 function ConvertTo-SsamBase64Url([byte[]]$bytes) { [Convert]::ToBase64String($bytes).TrimEnd('=').Replace('+','-').Replace('/','_') }
 function ConvertFrom-SsamBase64Url([string]$value) {
@@ -35,7 +36,7 @@ function Invoke-SsamAuthHttp($context,[string]$value,[string]$method='GET',$body
  try{$response=$web.GetResponse()}catch [Net.WebException]{$response=$_.Exception.Response;if(-not $response){Stop-SsamAuth 'CREDENTIAL_AUTH_TRANSPORT_FAILED'}}
  try{
   $context.Visited[$u.AbsoluteUri]=$u
-  foreach($cookie in $context.Jar.GetCookies($u)){if($cookie.Value){$context.Secrets.Add($cookie.Value)}}
+  foreach($cookie in $context.Jar.GetCookies($u)){if($cookie.Value -and (Test-SsamSensitiveCookie $cookie.Name $cookie.Value)){$context.Secrets.Add($cookie.Value)}}
   $memory=New-Object IO.MemoryStream;$stream=$response.GetResponseStream();$buffer=New-Object byte[] 65536
   try{while(($count=$stream.Read($buffer,0,$buffer.Length)) -gt 0){if($context.Clock.ElapsedMilliseconds -ge 85000){Stop-SsamAuth 'CREDENTIAL_AUTH_TIMEOUT'};if($memory.Length+$count -gt 4194304){Stop-SsamAuth 'CREDENTIAL_AUTH_RESPONSE_TOO_LARGE'};$memory.Write($buffer,0,$count)}
    return @{status=[int]$response.StatusCode;text=[Text.Encoding]::UTF8.GetString($memory.ToArray());location=[string]$response.Headers['Location']}
@@ -377,7 +378,7 @@ function Invoke-SsamCredentialLogin($request,$credential,$jar){
   else{Stop-SsamAuth 'CREDENTIAL_AUTH_UNSUPPORTED'}
   $cookies=@{}
   foreach($uri in $context.Visited.Values){if($uri.Host -cne $context.Host){continue};foreach($cookie in $jar.GetCookies($uri)){
-   if($cookie.Expired){continue};$context.Secrets.Add($cookie.Value);$key=$cookie.Name+'|'+$cookie.Path;$cookies[$key]=@{name=$cookie.Name;value=$cookie.Value;path=$cookie.Path;secure=$cookie.Secure;httpOnly=$cookie.HttpOnly;expiresAt=$(if($cookie.Expires -ne [DateTime]::MinValue){([DateTimeOffset]$cookie.Expires.ToUniversalTime()).ToUnixTimeMilliseconds()}else{$null})}
+   if($cookie.Expired){continue};if(Test-SsamSensitiveCookie $cookie.Name $cookie.Value){$context.Secrets.Add($cookie.Value)};$key=$cookie.Name+'|'+$cookie.Path;$cookies[$key]=@{name=$cookie.Name;value=$cookie.Value;path=$cookie.Path;secure=$cookie.Secure;httpOnly=$cookie.HttpOnly;expiresAt=$(if($cookie.Expires -ne [DateTime]::MinValue){([DateTimeOffset]$cookie.Expires.ToUniversalTime()).ToUnixTimeMilliseconds()}else{$null})}
   }}
   if(-not $cookies.Count){Stop-SsamAuth 'CREDENTIAL_LOGIN_FAILED'}
   return @{ok=$true;authenticated=$true;cookies=@($cookies.Values);token=$null;expiresAt=[DateTimeOffset]::UtcNow.AddHours(8).ToUnixTimeMilliseconds();secretValues=@($context.Secrets)}

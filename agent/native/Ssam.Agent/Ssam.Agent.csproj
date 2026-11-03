@@ -11,6 +11,8 @@
     <AssemblyName>ssam-agent</AssemblyName>
   </PropertyGroup>
   <ItemGroup>
+    <EmbeddedResource Include="../../agent/lib/public-cookie-metadata.json" LogicalName="public-cookie-metadata.json" />
+    <EmbeddedResource Include="../../agent/lib/cookie-sensitivity.ps1" LogicalName="cookie-sensitivity.ps1" />
     <Compile Include="../../agent/lib/CognitoSrp.cs" Link="CognitoSrp.cs" />
     <EmbeddedResource Include="../../agent/lib/CognitoSrp.cs" LogicalName="CognitoSrp.cs" />
     <InternalsVisibleTo Include="NativeProtocol.Tests" />

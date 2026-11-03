@@ -342,7 +342,7 @@ try {
   Copy-Item -Path (Join-Path $root 'agent\lib\*.json') -Destination (Join-Path $agentOut 'lib')
   # The vault helper of o11.users is Windows only: a macOS pack carries no .ps1, and its agent answers USERS_PLATFORM_UNAVAILABLE.
   if (-not $mac) {
-    foreach ($helper in @('users-vault.ps1','private-vault.ps1','private-dialog.ps1','credential-vault.ps1','credential-auth.ps1')) {
+    foreach ($helper in @('users-vault.ps1','private-vault.ps1','private-dialog.ps1','credential-vault.ps1','credential-auth.ps1','cookie-sensitivity.ps1')) {
       Copy-Item -LiteralPath (Join-Path $root "agent\lib\$helper") -Destination (Join-Path $agentOut 'lib')
     }
     # The legacy Windows helper needs the shared SRP arithmetic, without shipping C# sources.

@@ -10,6 +10,7 @@ $ErrorActionPreference='Stop'
 [Console]::InputEncoding=New-Object Text.UTF8Encoding($false)
 [Console]::OutputEncoding=New-Object Text.UTF8Encoding($false)
 . (Join-Path $PSScriptRoot 'private-vault.ps1')
+. (Join-Path $PSScriptRoot 'cookie-sensitivity.ps1')
 function Stop-Credential([string]$code) { @{ok=$false;code=$code}|ConvertTo-Json -Compress; exit 0 }
 function Save-Credential([string]$target,[string]$user,[string]$secret) {
  $p=[Runtime.InteropServices.Marshal]::StringToCoTaskMemUni($secret)
@@ -197,7 +198,7 @@ try {
  $bytes=if($r.body){[Convert]::FromBase64String($r.body)}else{$null}
  $page=Invoke-PrivateHttp ([Uri]$r.url) ([string]$r.method) $jar $bytes ([string]$r.contentType) $token $authorizationScheme
  $cookies=@(Cookie-State $jar)
- $secrets=@($v.Secret,$token)+@($cookies|ForEach-Object{$_.value})+@($r.privateSession.cookies|ForEach-Object{$_.value})
+ $secrets=@($v.Secret,$token)+@($cookies|Where-Object{Test-SsamSensitiveCookie $_.name $_.value}|ForEach-Object{$_.value})+@($r.privateSession.cookies|Where-Object{Test-SsamSensitiveCookie $_.name $_.value}|ForEach-Object{$_.value})
  if($r.service -eq 'odc-portal'){
   . (Join-Path $PSScriptRoot 'credential-auth.ps1')
   $secrets+=@(Get-SsamPortalCsrf $jar ([Uri]$r.url))

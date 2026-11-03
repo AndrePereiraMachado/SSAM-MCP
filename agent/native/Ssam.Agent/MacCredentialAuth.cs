@@ -144,7 +144,7 @@ internal static class MacCredentialAuth
                 var r = transport is null ? await Http(uri, method, Jar, bytes, contentType, headers, ct) : await transport(uri, method, Jar, bytes, contentType, headers, ct);
                 if (r.Body.Length > 4194304) throw Fault("CREDENTIAL_AUTH_RESPONSE_TOO_LARGE");
                 Visited.Add(uri);
-                foreach (Cookie cookie in Jar.GetCookies(uri)) if (cookie.Value.Length != 0) Secrets.Add(cookie.Value);
+                foreach (Cookie cookie in Jar.GetCookies(uri)) if (cookie.Value.Length != 0 && CookieSensitivity.IsSensitive(cookie.Name, cookie.Value)) Secrets.Add(cookie.Value);
                 return r;
             } finally { if (bytes is not null) CryptographicOperations.ZeroMemory(bytes); }
         }
@@ -463,7 +463,7 @@ internal static class MacCredentialAuth
         else throw Fault("CREDENTIAL_AUTH_UNSUPPORTED");
         var cookies = new Dictionary<string, JsonObject>(StringComparer.Ordinal);
         foreach (var uri in c.Visited.Where(u => u.Host == c.Host)) foreach (Cookie cookie in jar.GetCookies(uri)) {
-            if (cookie.Expired) continue; c.Secrets.Add(cookie.Value);
+            if (cookie.Expired) continue; if (CookieSensitivity.IsSensitive(cookie.Name, cookie.Value)) c.Secrets.Add(cookie.Value);
             cookies[cookie.Name + "|" + cookie.Path] = O(("name", cookie.Name), ("value", cookie.Value), ("path", cookie.Path), ("secure", cookie.Secure), ("httpOnly", cookie.HttpOnly), ("expiresAt", cookie.Expires == DateTime.MinValue ? null : new DateTimeOffset(cookie.Expires.ToUniversalTime()).ToUnixTimeMilliseconds()));
         }
         if (token is null && cookies.Count == 0) throw Fault("CREDENTIAL_LOGIN_FAILED");
