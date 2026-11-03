@@ -13,6 +13,7 @@ test('built Electron panel configures and supervises the native core through its
   { skip: !process.env.PLAYWRIGHT_MODULE, timeout: 60000 }, async t => {
     const { _electron } = createRequire(import.meta.url)(process.env.PLAYWRIGHT_MODULE);
     const app = fileURLToPath(new URL('../../', import.meta.url));
+    fs.mkdirSync(path.join(app, '.local/native'), { recursive: true });
     const folder = fs.mkdtempSync(path.join(app, '.local/native/electron-smoke-'));
     const userData = path.join(folder, 'ui');
     const root = process.env.SSAM_PACKAGED_APP ? path.join(defaultRoot(), path.basename(folder)) : path.join(folder, 'data');
@@ -69,3 +70,4 @@ test('built Electron panel configures and supervises the native core through its
     assert.deepEqual(errors, []);
     assert.deepEqual(fs.readdirSync(root).sort(), ['inbox', 'o11', 'odc', 'private']);
   });
+

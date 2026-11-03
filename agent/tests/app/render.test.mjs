@@ -33,7 +33,7 @@ test('build: pack.json names the app executable as the renderer on Windows and m
   assert.deepEqual(written.renderer, rendererFor('win', '44.9.2'));
   assert.deepEqual(written.privateDialog, rendererFor('win', '44.9.2'));
   assert.equal(verifyPack(pack).ok, true, verifyPack(pack).detail);
-  const resolved = resolveRenderer({ runtimeRoot: pack, dataRoot: path.join(base, 'data'), pack: readPack(pack), platform: 'win32' });
+  const resolved = resolveRenderer({ runtimeRoot: pack, dataRoot: path.join(base, 'data'), pack: readPack(pack), platform: process.platform });
   assert.equal(resolved.path, path.join(install, 'SSAM Agent.exe'));
   assert.equal(resolved.version, '44.9.2');
 });

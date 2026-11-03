@@ -87,7 +87,7 @@ public class MacPrivateBackendTests
     [Fact]
     public async Task NativeUsersDispatchesMacBackendThroughPublicKind() {
         var calls=0;
-        var root=Path.Combine(@"C:\t\r4\tmp-r40-cred", "mac-dispatch-"+Guid.NewGuid().ToString("N"));
+        var root=Path.Combine(Path.GetTempPath(), "mac-dispatch-"+Guid.NewGuid().ToString("N"));
         var users=new UsersKinds(root,"synthetic-license",root) { ForceMac=true,
             MacBackend=(envelope,ct)=> { calls++; Assert.Equal("users",envelope["family"]!.GetValue<string>()); Assert.Equal("status",envelope["mode"]!.GetValue<string>()); return Task.FromResult(new JsonObject { ["ok"]=true,["available"]=true,["principal"]="synthetic" }); } };
         var result=await users.Execute(new JsonObject { ["op"]="status",["host"]="tenant.example" },default);
@@ -102,7 +102,7 @@ public class MacPrivateBackendTests
     [InlineData("contentType","old")]
     [InlineData("contentType","new")]
     public async Task FullUsersKindWithholdsOldAndNewCookieEchoes(string field,string generation) {
-        var root=Path.Combine(@"C:\t\r4\tmp-r40-cred","mac-cookie-"+Guid.NewGuid().ToString("N"));
+        var root=Path.Combine(Path.GetTempPath(),"mac-cookie-"+Guid.NewGuid().ToString("N"));
         var oldCookie="sentinel-old-cookie"; var newCookie="sentinel-new-cookie";
         var users=new UsersKinds(root,"synthetic",root) { ForceMac=true, Lookup=_=>Task.FromResult(new[]{"93.184.216.34"}) };
         users.MacBackend=(envelope,ct)=> {
@@ -133,7 +133,7 @@ public class MacPrivateBackendTests
 
     [Fact]
     public async Task FullUsersKindReportsUncertainPostAfterCookieEchoRefusal() {
-        var root=Path.Combine(@"C:\t\r4\tmp-r40-cred","mac-cookie-post-"+Guid.NewGuid().ToString("N")); var posts=0;
+        var root=Path.Combine(Path.GetTempPath(),"mac-cookie-post-"+Guid.NewGuid().ToString("N")); var posts=0;
         var users=new UsersKinds(root,"synthetic",root) { ForceMac=true, Lookup=_=>Task.FromResult(new[]{"93.184.216.34"}) };
         users.MacBackend=(envelope,ct)=>MacPrivateBackend.ExecuteAsync(envelope,ct,testStore:new Store(),testHttp:(uri,method,jar,body,type,auth,scheme,c,h)=> {
             if(method=="POST") { posts++; jar.Add(uri,new System.Net.Cookie("session","sentinel-new-cookie","/")); return Task.FromResult(new MacHttpResponse(200,Encoding.UTF8.GetBytes("sentinel-new-cookie"),"text/html","")); }
@@ -150,9 +150,10 @@ public class MacPrivateBackendTests
     [InlineData("CREDENTIAL_PRIVATE_HELPER_FAILED")]
     [InlineData("CREDENTIAL_HELPER_UNAVAILABLE")]
     public async Task CredentialKindPreservesFixedPrivateBackendErrorCodes(string code) {
-        var root=Path.Combine(@"C:\t\r4\tmp-r40-cred","mac-code-"+Guid.NewGuid().ToString("N"));
+        var root=Path.Combine(Path.GetTempPath(),"mac-code-"+Guid.NewGuid().ToString("N"));
         var kind=new CredentialKinds(root,"synthetic",new PrivateSessionRuntime()) { ForceWindows=true, Lookup=_=>Task.FromResult(new[]{"93.184.216.34"}), Helper=_=>Task.FromResult(new JsonObject { ["ok"]=false,["code"]=code }) };
         var error=await Assert.ThrowsAsync<AgentFault>(()=>kind.Execute(new JsonObject { ["op"]="status",["host"]="tenant.example",["service"]="service-center",["auth"]="credential" },default));
         Assert.Equal(code,error.Code); Assert.Contains("No automatic retry",error.Message);
     }
 }
+
