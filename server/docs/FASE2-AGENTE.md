@@ -154,7 +154,7 @@ Todas exigem `Authorization: Bearer ssam_agent_...`. Sem credencial ou desconhec
 | Transferências simultâneas por token | 4 (um resultado que chega depois do prazo libera na hora as subidas que nomeia) |
 | Chamadas pendentes por token | 32 (`AGENT_BUSY`) |
 | Transferência ociosa | expira em 10 min (partes apagadas) |
-| Cota do workspace por cliente | 5 GiB (`WORKSPACE_FULL`, seção 6.1) |
+| Cota do workspace por cliente | 10 GiB por padrão (`SSAM_WORKSPACE_QUOTA_GIB`), ou a cota própria da licença; `WORKSPACE_FULL` só depois da limpeza automática (seção 6.1, r41) |
 
 Medir a mensagem serializada, e não o valor, cobre o JSON escapado dentro de JSON (`{line}` do `odc.pipe`) e o texto não
 ASCII: medido pelo valor, um resultado já entregue podia passar de 1 MiB, levar 413 e virar incerto.
@@ -1028,7 +1028,7 @@ conferências daquela faixa; sem `lane`, só as do agente).
 - Sem `tenants.json` com autor, um módulo NOVO pelo builder (`studio_build newModule`) não tem autor e é recusado pelo
   próprio builder (`Program.cs:227`); módulos existentes tiram tenant e autor do `.json` da captura do cliente. Apps e
   bibliotecas novas vão por `studio_create_app`, que usa o usuário da sessão do Studio.
-- Cota: 5 GiB por workspace. O uso é medido por uma varredura guardada por 60 s, somada aos bytes recebidos depois dela.
+- Cota (r41): a da licença (`ssam server-token quota`, painel Licenças), senão `SSAM_WORKSPACE_QUOTA_GIB`, senão 10 GiB. O uso é medido por uma varredura guardada por 60 s, somada aos bytes recebidos depois dela. Acima da cota roda uma vez a limpeza de retenção (`hosted/workspace-retention.mjs`: core dumps, rascunhos com mais de 3 dias, o volume de entregas encerradas, capturas além das 3 mais novas por módulo) e só então recusa. A mesma limpeza roda a cada 30 min em cada backend, com trava por workspace e diário em `state/retention/journal.jsonl`.
   Acima da cota, o portão recusa com `WORKSPACE_FULL` toda ferramenta com ponteiro de saída (6.4) ou que precise do
   agente (exceto as de relatório), e `receiveBlob` recusa uma vinda que passaria da cota.
 
