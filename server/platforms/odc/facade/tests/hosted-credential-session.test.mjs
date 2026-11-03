@@ -52,7 +52,7 @@ test('private error outcomes and metadata normalization notes use closed project
     assert.equal(error.executed, executed); assert.equal(error.arbitrary, undefined); assert.doesNotMatch(error.message, /^private$/);
   }
   assert.equal('executed' in publicError({ code: 'CREDENTIAL_RESPONSE_INVALID', executed: 'private' }), false);
-  const notes = ['Response redirect metadata was normalized or withheld to preserve the approved origin.', 'Response content type was normalized to a recognized media type and charset.'];
+  const notes = ['The private Portal session lifetime is limited to its access-token expiry.', 'Response redirect metadata was normalized or withheld to preserve the approved origin.', 'Response content type was normalized to a recognized media type and charset.'];
   const h = harness({ reply: args => ({ status: 200, body: 'e30=', contentType: 'application/json', url: args.url, notes: [...notes, 'private'] }) });
   const value = await new CredentialAgent(h.context).call(host, 'service-center', 'request', { url: `https://${host}/ServiceCenter/`, method: 'GET' });
   assert.deepEqual(value.notes, notes);

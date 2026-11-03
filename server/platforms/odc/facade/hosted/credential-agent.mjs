@@ -13,7 +13,7 @@ export const CREDENTIAL_UPDATE = 'Update the SSAM Agent from https://dist.ssam.p
 const MAX_BODY = 24 * 1024 * 1024;
 const PROFILE = /^(?:[a-f0-9]{64}|[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12})$/i;
 const REDACTION_NOTE = 'Sensitive authentication values were removed from the response.';
-const PRIVATE_NOTES = [REDACTION_NOTE, 'Response text encoding was normalized to UTF-8.', 'Response redirect metadata was normalized or withheld to preserve the approved origin.', 'Response content type was normalized to a recognized media type and charset.'];
+const PRIVATE_NOTES = ['The private Portal session lifetime is limited to its access-token expiry.', REDACTION_NOTE, 'Response text encoding was normalized to UTF-8.', 'Response redirect metadata was normalized or withheld to preserve the approved origin.', 'Response content type was normalized to a recognized media type and charset.'];
 const collectNotes = (target, notes) => { for (const note of notes ?? []) if (!target.includes(note)) target.push(note); };
 const failure = (code, message, executed = false) => Object.assign(new BridgeError(code, message, { executed }), { executed });
 const CODES = new Set([...CREDENTIAL_CODES, 'PARAMS_INVALID', 'HOST_MISMATCH', 'UNCERTAIN', 'AGENT_NOT_CONNECTED', 'AGENT_TIMEOUT', 'AGENT_DISCONNECTED', 'AGENT_BUSY', 'HOSTED_LANE_OFF']);
