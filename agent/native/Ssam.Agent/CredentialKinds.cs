@@ -186,7 +186,7 @@ internal sealed class CredentialKinds
     {
         if (OperatingSystem.IsMacOS()) return MacPrivateBackend.StartInfo();
         var directory = SessionDirectory;
-        foreach (var file in new[] { "private-dialog.ps1", "private-vault.ps1", "credential-auth.ps1" }) PrivateHelperResources.Write(directory, file);
+        foreach (var file in new[] { "private-dialog.ps1", "private-vault.ps1", "credential-auth.ps1", "CognitoSrp.cs" }) PrivateHelperResources.Write(directory, file);
         var helper = PrivateHelperResources.Write(directory, "credential-vault.ps1");
         var interactive = Text(p["op"]) is "prompt" or "forget";
         var start = new ProcessStartInfo(Path.Combine(Environment.GetEnvironmentVariable("SystemRoot") ?? @"C:\Windows", "System32", "WindowsPowerShell", "v1.0", "powershell.exe"))

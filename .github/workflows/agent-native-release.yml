@@ -99,7 +99,7 @@ jobs:
       - name: Test r40 native credentials and protocol
         run: >-
           dotnet test tests/native-protocol/NativeProtocol.Tests.csproj -c Release
-          --filter 'FullyQualifiedName~Mac|FullyQualifiedName~CredentialSession|FullyQualifiedName~PrivatePromptCompletion|FullyQualifiedName~Users|FullyQualifiedName~Hello|FullyQualifiedName~OdcInventory'
+          --filter 'FullyQualifiedName~Mac|FullyQualifiedName~Cognito|FullyQualifiedName~Credential|FullyQualifiedName~PrivatePromptCompletion|FullyQualifiedName~Users|FullyQualifiedName~Hello|FullyQualifiedName~OdcInventory'
           --logger 'trx;LogFileName=r40-mac.trx' --results-directory ci-results
       - name: Check resources before Native AOT publish
         run: *resources

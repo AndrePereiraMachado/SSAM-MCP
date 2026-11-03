@@ -17,7 +17,7 @@ function Test-SsamPublicAddress([Net.IPAddress]$address) {
 }
 function Resolve-SsamAuthUri($context,[string]$value,[string]$base='') {
  try{$u=if($base){New-Object Uri([Uri]$base,$value)}else{[Uri]$value}}catch{Stop-SsamAuth 'CREDENTIAL_AUTH_ORIGIN_REFUSED'}
- if(-not $u.IsAbsoluteUri -or $u.Scheme -cne 'https' -or $u.Port -ne 443 -or $u.UserInfo -or $u.Fragment -or ($value.Split('?')[0] -match '%2e|%2f|%5c|\\') -or $u.Host -notin @($context.Host,'id.outsystems.com','cognito-idp.us-east-1.amazonaws.com')){Stop-SsamAuth 'CREDENTIAL_AUTH_ORIGIN_REFUSED'}
+ if(-not $u.IsAbsoluteUri -or $u.Scheme -cne 'https' -or $u.Port -ne 443 -or $u.UserInfo -or $u.Fragment -or ($value.Split('?')[0] -match '%2e|%2f|%5c|\\') -or $u.Host -notin @($context.Host,'id.outsystems.com','cognito-idp.us-east-1.amazonaws.com',$context.CognitoHost)){Stop-SsamAuth 'CREDENTIAL_AUTH_ORIGIN_REFUSED'}
  return $u
 }
 function Invoke-SsamAuthHttp($context,[string]$value,[string]$method='GET',$body=$null,[hashtable]$headers=@{},[string]$contentType='application/json') {
@@ -262,12 +262,80 @@ function Invoke-SsamServiceCenterLogin($context,$credential){
  if($proof.status -ne 200 -or -not (Test-SsamProtectedSc $proof.text)){Stop-SsamAuth 'CREDENTIAL_LOGIN_FAILED'}
  return $true
 }
+function Invoke-SsamCognitoSrp($context,$credential,$config){
+ $region=[string]$config.Region;$pool=[string]$config.PoolKey;$client=[string]$config.AmplifyClientKey
+ if($region -cnotmatch '^(us|eu|ap|sa|ca|me|af|il|mx)-[a-z]+-[1-9]$' -or $pool -cnotmatch ('^'+[regex]::Escape($region)+'_[A-Za-z0-9]{1,64}$') -or $client -cnotmatch '^[a-z0-9]{10,128}$'){Stop-SsamAuth 'CREDENTIAL_AUTH_CONTRACT_CHANGED'}
+ $context.CognitoHost='cognito-idp.'+$region+'.amazonaws.com';$endpoint='https://'+$context.CognitoHost+'/'
+ if(-not ('Ssam.Cryptography.CognitoSrp' -as [type])){
+  $compiled=Join-Path $PSScriptRoot 'CognitoSrp.dll'
+  if(Test-Path -LiteralPath $compiled){Add-Type -Path $compiled}else{Add-Type -Path (Join-Path $PSScriptRoot 'CognitoSrp.cs') -ReferencedAssemblies System.Numerics}
+ }
+ $srp=New-Object Ssam.Cryptography.CognitoSrp
+ try {
+  $challenge=Invoke-SsamAuthJson $context $endpoint 'POST' @{AuthFlow='USER_SRP_AUTH';ClientId=$client;AuthParameters=@{USERNAME=$credential.UserName;SRP_A=$srp.PublicA}} @{'X-Amz-Target'='AWSCognitoIdentityProviderService.InitiateAuth'} 'application/x-amz-json-1.1'
+  if($challenge.ChallengeName -cne 'PASSWORD_VERIFIER'){Stop-SsamAuth 'CREDENTIAL_AUTH_INTERACTIVE_REQUIRED'}
+  $cp=$challenge.ChallengeParameters;$user=[string]$cp.USER_ID_FOR_SRP
+  if(-not $user -or $user.Length -gt 1024 -or ($null -ne $challenge.Session -and ($challenge.Session -isnot [string] -or -not $challenge.Session -or $challenge.Session.Length -gt 20000))){Stop-SsamAuth 'CREDENTIAL_AUTH_RESPONSE_INVALID'}
+  $time=[Ssam.Cryptography.CognitoSrp]::Timestamp([DateTime]::UtcNow)
+  try{$signature=$srp.Sign($pool.Substring($region.Length+1),$user,$credential.Secret,[string]$cp.SRP_B,[string]$cp.SALT,[string]$cp.SECRET_BLOCK,$time)}catch{Stop-SsamAuth 'CREDENTIAL_AUTH_RESPONSE_INVALID'}
+  $context.Secrets.Add($signature);$context.Secrets.Add([string]$challenge.Session);$context.Secrets.Add([string]$cp.SECRET_BLOCK)
+  $response=@{ChallengeName='PASSWORD_VERIFIER';ClientId=$client;ChallengeResponses=@{USERNAME=$user;PASSWORD_CLAIM_SECRET_BLOCK=$cp.SECRET_BLOCK;TIMESTAMP=$time;PASSWORD_CLAIM_SIGNATURE=$signature}}
+  if($null -ne $challenge.Session){$response.Session=$challenge.Session}
+  $answer=Invoke-SsamAuthJson $context $endpoint 'POST' $response @{'X-Amz-Target'='AWSCognitoIdentityProviderService.RespondToAuthChallenge'} 'application/x-amz-json-1.1'
+  if($answer.ChallengeName){Stop-SsamAuth 'CREDENTIAL_AUTH_INTERACTIVE_REQUIRED'}
+  $tokens=$answer.AuthenticationResult
+  foreach($name in @('IdToken','AccessToken','RefreshToken')){if($tokens.$name -isnot [string] -or $tokens.$name.Length -lt 10 -or $tokens.$name.Length -gt 20000){Stop-SsamAuth 'CREDENTIAL_IDENTITY_TOKEN_INVALID'};$context.Secrets.Add($tokens.$name)}
+  if($tokens.TokenType -ine 'Bearer'){Stop-SsamAuth 'CREDENTIAL_IDENTITY_TOKEN_INVALID'}
+  $issuer=$endpoint+$pool;$jwks=Invoke-SsamAuthJson $context ($issuer+'/.well-known/jwks.json')
+  $identity=Read-SsamIdentityJwt $tokens.IdToken $jwks $issuer $client
+  $access=Read-SsamIdentityJwt $tokens.AccessToken $jwks $issuer '' '' $identity.sub
+  if($identity.token_use -cne 'id' -or $access.token_use -cne 'access' -or $access.client_id -cne $client -or $identity.'cognito:username' -cne $user -or $access.username -cne $user){Stop-SsamAuth 'CREDENTIAL_IDENTITY_TOKEN_INVALID'}
+  return $tokens
+ }finally{$srp.Dispose()}
+}
+function Invoke-SsamSrpPortalLogin($context,$credential,$config){
+ $origin='https://'+$context.Host
+ $start=Invoke-SsamScreenAction $context $origin 'authentication' 'UnifiedAuthentication.oslogin' 'authentication/UnifiedAuthentication/oslogin/DataActionGetRedirect'
+ $next=Resolve-SsamAuthUri $context $start.data.Url;$initial=Get-SsamQuery $next
+ if($next.Host -cne $context.Host -or $next.AbsolutePath -cnotmatch '^/auth/realms/[a-f0-9-]{36}/protocol/openid-connect/auth$' -or $initial['redirect_uri'] -cne ($origin+'/authentication/redirect') -or -not $initial['state'] -or $initial['response_type'] -cne 'code'){Stop-SsamAuth 'CREDENTIAL_AUTH_STATE_INVALID'}
+ $login=$null
+ for($hop=0;$hop -lt 10;$hop++){
+  if($next.Host -cne $context.Host){Stop-SsamAuth 'CREDENTIAL_AUTH_ORIGIN_REFUSED'}
+  if($next.AbsolutePath -ceq '/authentication/login'){$login=$next;break}
+  $r=Invoke-SsamAuthHttp $context $next.AbsoluteUri
+  if($r.status -notin @(302,303,307,308) -or -not $r.location){Stop-SsamAuth 'CREDENTIAL_AUTH_CONTRACT_CHANGED'}
+  $next=Resolve-SsamAuthUri $context $r.location $next.AbsoluteUri
+ }
+ if(-not $login){Stop-SsamAuth 'CREDENTIAL_AUTH_REDIRECT_LIMIT'}
+ $q=Get-SsamQuery $login;$callback=Resolve-SsamAuthUri $context $q['redirect_uri']
+ if($callback.Host -cne $context.Host -or $callback.AbsolutePath -cnotmatch '^/auth/realms/[a-f0-9-]{36}/broker/os-builtin/endpoint$' -or -not $q['state'] -or -not $q['client_id'] -or $q['response_type'] -cne 'code'){Stop-SsamAuth 'CREDENTIAL_AUTH_STATE_INVALID'}
+ $tokens=Invoke-SsamCognitoSrp $context $credential $config
+ $vars=@{};foreach($key in $q.AllKeys){$vars[$key]=[string]$q[$key]}
+ $code=Invoke-SsamScreenAction $context $origin 'authentication' 'UnifiedAuthentication.login' 'authentication/UnifiedAuthentication/login/ActionProcessCognitoToken' @{ClientId=$q['client_id'];CognitoIdToken=$tokens.IdToken;CognitoAccessToken=$tokens.AccessToken;CognitoRefreshToken=$tokens.RefreshToken;InfoEmail=$credential.UserName;InfoClientId=$initial['client_id'];BId=''} $vars
+ if(-not $code.data.AuthCode -and -not $code.AuthCode){Stop-SsamAuth 'CREDENTIAL_AUTH_RESPONSE_INVALID'}
+ $authCode=if($code.AuthCode){$code.AuthCode}else{$code.data.AuthCode};$context.Secrets.Add([string]$authCode)
+ $next=Set-SsamQuery $callback @{code=$authCode;state=$q['state']};$complete=$null
+ for($hop=0;$hop -lt 10;$hop++){
+  if($next.Host -cne $context.Host){Stop-SsamAuth 'CREDENTIAL_AUTH_ORIGIN_REFUSED'}
+  if($next.AbsolutePath -ceq '/authentication/redirect'){$complete=$next;break}
+  $r=Invoke-SsamAuthHttp $context $next.AbsoluteUri
+  if($r.status -notin @(302,303,307,308) -or -not $r.location){Stop-SsamAuth 'CREDENTIAL_LOGIN_FAILED'}
+  $next=Resolve-SsamAuthUri $context $r.location $next.AbsoluteUri
+ }
+ if(-not $complete){Stop-SsamAuth 'CREDENTIAL_AUTH_REDIRECT_LIMIT'}
+ $final=Get-SsamQuery $complete
+ if($final['state'] -cne $initial['state'] -or -not $final['code'] -or $final['error']){Stop-SsamAuth 'CREDENTIAL_AUTH_STATE_INVALID'}
+ $context.Secrets.Add($final['code'])
+ $null=Invoke-SsamScreenAction $context $origin 'authentication' 'UnifiedAuthentication.redirect' 'authentication/UnifiedAuthentication/redirect/ActionProcessCodeRedirect' @{Code=$final['code'];State=$final['state'];IsFirstLogin=$false;IsRest=$false;BId=''}
+ $proof=Invoke-SsamScreenAction $context $origin 'connections' 'Connections.connections' 'connections/Connections/connections/DataActionGetProviders'
+ if($proof.data.Providers -isnot [array] -and $proof.data.Providers.List -isnot [array]){Stop-SsamAuth 'CREDENTIAL_AUTH_CONTRACT_CHANGED'}
+ return $true
+}
 function Invoke-SsamPortalLogin($context,$credential){
  $origin='https://'+$context.Host
  $providers=Invoke-SsamScreenAction $context $origin 'authentication' 'UnifiedAuthentication.login' 'authentication/UnifiedAuthentication/login/DataActionGetProviders'
- # SRP and legacy id.outsystems.dev require their own proven adapters. Never
- # downgrade SRP to USER_PASSWORD_AUTH or send a credential to a guessed host.
- if($providers.data.CognitoEnabled -eq $true -and $providers.data.CognitoConfig.AuthFlow -ceq 'USER_SRP_AUTH'){Stop-SsamAuth 'CREDENTIAL_AUTH_UNSUPPORTED'}
+ # Legacy id.outsystems.dev remains unsupported; SRP stays on the discovered tenant and Cognito region.
+ if($providers.data.CognitoEnabled -eq $true -and $providers.data.CognitoConfig.AuthFlow -ceq 'USER_SRP_AUTH'){return Invoke-SsamSrpPortalLogin $context $credential $providers.data.CognitoConfig}
  $redirect=if($providers.data.RedirectNowUrl){$providers.data.RedirectNowUrl}else{$providers.data.AuthUrlExternalProvider}
  if(-not $redirect){Stop-SsamAuth 'CREDENTIAL_AUTH_UNSUPPORTED'}
  $next=Resolve-SsamAuthUri $context $redirect $origin

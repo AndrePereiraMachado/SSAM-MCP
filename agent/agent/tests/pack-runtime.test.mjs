@@ -36,7 +36,7 @@ function box(work) {
   const root = path.join(work, 'box');
   for (const name of ['agent-pack.ps1', 'pack-ip-scan.ps1', 'release/client-content.json']) copy(path.join(repo, 'scripts', name), path.join(root, 'scripts', name));
   for (const name of ['ssam-agent.mjs', 'ssam-agent.ps1']) copy(path.join(repo, 'agent', name), path.join(root, 'agent', name));
-  for (const name of fs.readdirSync(path.join(repo, 'agent', 'lib'))) if (/\.(mjs|json|ps1)$/.test(name)) copy(path.join(repo, 'agent', 'lib', name), path.join(root, 'agent', 'lib', name));
+  for (const name of fs.readdirSync(path.join(repo, 'agent', 'lib'))) if (/\.(mjs|json|ps1|cs)$/.test(name)) copy(path.join(repo, 'agent', 'lib', name), path.join(root, 'agent', 'lib', name));
   copy(path.join(repo, 'docs', 'AGENTE-CLIENTE.md'), path.join(root, 'docs', 'AGENTE-CLIENTE.md'));
   const bridge = path.join(root, 'platforms', 'odc', 'studio', 'bridge');
   write(path.join(bridge, 'client', 'Program.cs'), 'const string Version = "v106";\nconst string EarlierVersion = "v107";\n');

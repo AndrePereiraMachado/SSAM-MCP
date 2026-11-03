@@ -345,6 +345,12 @@ try {
     foreach ($helper in @('users-vault.ps1','private-vault.ps1','private-dialog.ps1','credential-vault.ps1','credential-auth.ps1')) {
       Copy-Item -LiteralPath (Join-Path $root "agent\lib\$helper") -Destination (Join-Path $agentOut 'lib')
     }
+    # The legacy Windows helper needs the shared SRP arithmetic, without shipping C# sources.
+    if ($NoBuild) { Write-Host 'Note: -NoBuild skips Studio bridge builds; the private SRP helper is still compiled locally for this package.' }
+    $srpSource = (Join-Path $root 'agent\lib\CognitoSrp.cs').Replace("'", "''")
+    $srpAssembly = (Join-Path $agentOut 'lib\CognitoSrp.dll').Replace("'", "''")
+    & "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -Command "Add-Type -Path '$srpSource' -ReferencedAssemblies System.Numerics -OutputAssembly '$srpAssembly' -OutputType Library"
+    if ($LASTEXITCODE -ne 0) { throw 'Could not compile the private SRP helper.' }
   }
   $xifEngineEntry = $null
   if ($XifEngine) {

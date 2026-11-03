@@ -11,6 +11,8 @@
     <AssemblyName>ssam-agent</AssemblyName>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="../../agent/lib/CognitoSrp.cs" Link="CognitoSrp.cs" />
+    <EmbeddedResource Include="../../agent/lib/CognitoSrp.cs" LogicalName="CognitoSrp.cs" />
     <InternalsVisibleTo Include="NativeProtocol.Tests" />
     <EmbeddedResource Include="..\..\agent\lib\users-vault.ps1" LogicalName="users-vault.ps1" />
     <EmbeddedResource Include="..\..\agent\lib\private-dialog.ps1" LogicalName="private-dialog.ps1" />

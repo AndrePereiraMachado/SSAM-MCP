@@ -131,7 +131,11 @@ internal static class MacCredentialAuth
         internal readonly CookieContainer Jar = jar;
         internal readonly HashSet<Uri> Visited = [];
         internal readonly HashSet<string> Secrets = new(StringComparer.Ordinal);
-        internal Uri Uri(string value, Uri? basis = null) => ValidateUri(Host, value, basis);
+        internal string? CognitoHost;
+        internal Uri Uri(string value, Uri? basis = null) {
+            var candidate = basis is null ? new Uri(value) : new Uri(basis, value);
+            return ValidateUri(candidate.Host == CognitoHost ? CognitoHost : Host, value, basis);
+        }
         internal async Task<MacHttpResponse> Send(string value, string method = "GET", object? body = null,
             Dictionary<string, string>? headers = null, string contentType = "application/json") {
             var uri = Uri(value); byte[]? bytes = body switch { null => null, string s => Encoding.UTF8.GetBytes(s), JsonNode n => Encoding.UTF8.GetBytes(n.ToJsonString()), _ => throw Fault("CREDENTIAL_AUTH_RESPONSE_INVALID") };
@@ -277,10 +281,69 @@ internal static class MacCredentialAuth
         }
         throw Fault("CREDENTIAL_AUTH_REDIRECT_LIMIT");
     }
+    private static async Task<JsonNode> CognitoSrp(Context c, JsonNode? config, string username, string password)
+    {
+        var region = S(config?["Region"]); var pool = S(config?["PoolKey"]); var client = S(config?["AmplifyClientKey"]);
+        if (!M(region, "\\A(us|eu|ap|sa|ca|me|af|il|mx)-[a-z]+-[1-9]\\z").Success || !M(pool, "\\A" + Regex.Escape(region) + "_[A-Za-z0-9]{1,64}\\z").Success || !M(client, "\\A[a-z0-9]{10,128}\\z").Success) throw Fault("CREDENTIAL_AUTH_CONTRACT_CHANGED");
+        c.CognitoHost = "cognito-idp." + region + ".amazonaws.com"; var endpoint = "https://" + c.CognitoHost + "/";
+        using var srp = new Ssam.Cryptography.CognitoSrp();
+        var challenge = await c.Json(endpoint, "POST", O(("AuthFlow", "USER_SRP_AUTH"), ("ClientId", client), ("AuthParameters", O(("USERNAME", username), ("SRP_A", srp.PublicA)))), new() { ["X-Amz-Target"] = "AWSCognitoIdentityProviderService.InitiateAuth" }, "application/x-amz-json-1.1");
+        if (S(challenge["ChallengeName"]) != "PASSWORD_VERIFIER") throw Fault("CREDENTIAL_AUTH_INTERACTIVE_REQUIRED");
+        var cp = challenge["ChallengeParameters"]; var user = S(cp?["USER_ID_FOR_SRP"]); var session = S(challenge["Session"]);
+        if (user.Length is < 1 or > 1024 || challenge["Session"] != null && session.Length is < 1 or > 20000) throw Fault("CREDENTIAL_AUTH_RESPONSE_INVALID");
+        var time = Ssam.Cryptography.CognitoSrp.Timestamp(DateTime.UtcNow); string signature;
+        try { signature = srp.Sign(pool[(region.Length + 1)..], user, password, S(cp?["SRP_B"]), S(cp?["SALT"]), S(cp?["SECRET_BLOCK"]), time); }
+        catch (ArgumentException) { throw Fault("CREDENTIAL_AUTH_RESPONSE_INVALID"); }
+        catch (FormatException) { throw Fault("CREDENTIAL_AUTH_RESPONSE_INVALID"); }
+        c.Secrets.UnionWith([signature, session, S(cp?["SECRET_BLOCK"])]);
+        var response = O(("ChallengeName", "PASSWORD_VERIFIER"), ("ClientId", client), ("ChallengeResponses", O(("USERNAME", user), ("PASSWORD_CLAIM_SECRET_BLOCK", S(cp?["SECRET_BLOCK"])), ("TIMESTAMP", time), ("PASSWORD_CLAIM_SIGNATURE", signature))));
+        if (challenge["Session"] != null) response["Session"] = session;
+        var answer = await c.Json(endpoint, "POST", response, new() { ["X-Amz-Target"] = "AWSCognitoIdentityProviderService.RespondToAuthChallenge" }, "application/x-amz-json-1.1");
+        if (S(answer["ChallengeName"]).Length != 0) throw Fault("CREDENTIAL_AUTH_INTERACTIVE_REQUIRED");
+        var tokens = answer["AuthenticationResult"] ?? throw Fault("CREDENTIAL_IDENTITY_TOKEN_INVALID");
+        foreach (var name in new[] { "IdToken", "AccessToken", "RefreshToken" }) { var value = S(tokens[name]); if (value.Length is < 10 or > 20000) throw Fault("CREDENTIAL_IDENTITY_TOKEN_INVALID"); c.Secrets.Add(value); }
+        if (!S(tokens["TokenType"]).Equals("Bearer", StringComparison.OrdinalIgnoreCase)) throw Fault("CREDENTIAL_IDENTITY_TOKEN_INVALID");
+        var issuer = endpoint + pool; var jwks = await c.Json(issuer + "/.well-known/jwks.json");
+        var identity = VerifyIdentityJwt(S(tokens["IdToken"]), jwks, issuer, client);
+        var access = VerifyIdentityJwt(S(tokens["AccessToken"]), jwks, issuer, subject: S(identity["sub"]));
+        if (S(identity["token_use"]) != "id" || S(access["token_use"]) != "access" || S(access["client_id"]) != client || S(identity["cognito:username"]) != user || S(access["username"]) != user) throw Fault("CREDENTIAL_IDENTITY_TOKEN_INVALID");
+        return tokens;
+    }
+    private static async Task SrpPortal(Context c, JsonNode? config, string username, string password)
+    {
+        var origin = "https://" + c.Host;
+        var start = await Screen(c, origin, "authentication", "UnifiedAuthentication.oslogin", "authentication/UnifiedAuthentication/oslogin/DataActionGetRedirect");
+        var next = c.Uri(S(start["data"]?["Url"])); var initial = Query(next);
+        if (next.Host != c.Host || !M(next.AbsolutePath, "\\A/auth/realms/[a-f0-9-]{36}/protocol/openid-connect/auth\\z").Success || Q(initial, "redirect_uri") != origin + "/authentication/redirect" || Q(initial, "state").Length == 0 || Q(initial, "response_type") != "code") throw Fault("CREDENTIAL_AUTH_STATE_INVALID");
+        Uri? login = null;
+        for (var hop = 0; hop < 10; hop++) {
+            if (next.Host != c.Host) throw Fault("CREDENTIAL_AUTH_ORIGIN_REFUSED");
+            if (next.AbsolutePath == "/authentication/login") { login = next; break; }
+            var r = await c.Send(next.AbsoluteUri); if (r.Status is not (302 or 303 or 307 or 308) || r.Location.Length == 0) throw Fault("CREDENTIAL_AUTH_CONTRACT_CHANGED"); next = c.Uri(r.Location, next);
+        }
+        if (login is null) throw Fault("CREDENTIAL_AUTH_REDIRECT_LIMIT");
+        var q = Query(login); var callback = c.Uri(Q(q, "redirect_uri"));
+        if (callback.Host != c.Host || !M(callback.AbsolutePath, "\\A/auth/realms/[a-f0-9-]{36}/broker/os-builtin/endpoint\\z").Success || Q(q, "state").Length == 0 || Q(q, "client_id").Length == 0 || Q(q, "response_type") != "code") throw Fault("CREDENTIAL_AUTH_STATE_INVALID");
+        var tokens = await CognitoSrp(c, config, username, password);
+        var variables = new JsonObject(); foreach (var pair in q) variables[pair.Key] = pair.Value;
+        var code = await Screen(c, origin, "authentication", "UnifiedAuthentication.login", "authentication/UnifiedAuthentication/login/ActionProcessCognitoToken", O(("ClientId", Q(q, "client_id")), ("CognitoIdToken", S(tokens["IdToken"])), ("CognitoAccessToken", S(tokens["AccessToken"])), ("CognitoRefreshToken", S(tokens["RefreshToken"])), ("InfoEmail", username), ("InfoClientId", Q(initial, "client_id")), ("BId", "")), variables);
+        var authCode = S(code["AuthCode"]); if (authCode.Length == 0) authCode = S(code["data"]?["AuthCode"]); if (authCode.Length == 0) throw Fault("CREDENTIAL_AUTH_RESPONSE_INVALID"); c.Secrets.Add(authCode);
+        next = WithQuery(callback, new() { ["code"] = authCode, ["state"] = Q(q, "state") }); Uri? complete = null;
+        for (var hop = 0; hop < 10; hop++) {
+            if (next.Host != c.Host) throw Fault("CREDENTIAL_AUTH_ORIGIN_REFUSED");
+            if (next.AbsolutePath == "/authentication/redirect") { complete = next; break; }
+            var r = await c.Send(next.AbsoluteUri); if (r.Status is not (302 or 303 or 307 or 308) || r.Location.Length == 0) throw Fault("CREDENTIAL_LOGIN_FAILED"); next = c.Uri(r.Location, next);
+        }
+        if (complete is null) throw Fault("CREDENTIAL_AUTH_REDIRECT_LIMIT"); var final = Query(complete);
+        if (Q(final, "state") != Q(initial, "state") || Q(final, "code").Length == 0 || Q(final, "error").Length != 0) throw Fault("CREDENTIAL_AUTH_STATE_INVALID"); c.Secrets.Add(Q(final, "code"));
+        await Screen(c, origin, "authentication", "UnifiedAuthentication.redirect", "authentication/UnifiedAuthentication/redirect/ActionProcessCodeRedirect", O(("Code", Q(final, "code")), ("State", Q(final, "state")), ("IsFirstLogin", false), ("IsRest", false), ("BId", "")));
+        var proof = await Screen(c, origin, "connections", "Connections.connections", "connections/Connections/connections/DataActionGetProviders");
+        if (proof["data"]?["Providers"] is not JsonArray && proof["data"]?["Providers"]?["List"] is not JsonArray) throw Fault("CREDENTIAL_AUTH_CONTRACT_CHANGED");
+    }
     private static async Task Portal(Context c, string username, string password)
     {
         var origin = "https://" + c.Host; var providers = await Screen(c, origin, "authentication", "UnifiedAuthentication.login", "authentication/UnifiedAuthentication/login/DataActionGetProviders"); var data = providers["data"];
-        if (B(data?["CognitoEnabled"]) && S(data?["CognitoConfig"]?["AuthFlow"]) == "USER_SRP_AUTH") throw Fault("CREDENTIAL_AUTH_UNSUPPORTED");
+        if (B(data?["CognitoEnabled"]) && S(data?["CognitoConfig"]?["AuthFlow"]) == "USER_SRP_AUTH") { await SrpPortal(c, data?["CognitoConfig"], username, password); return; }
         var redirect = S(data?["RedirectNowUrl"]); if (redirect.Length == 0) redirect = S(data?["AuthUrlExternalProvider"]); if (redirect.Length == 0) throw Fault("CREDENTIAL_AUTH_UNSUPPORTED");
         var next = c.Uri(redirect, new Uri(origin)); Uri? login = null;
         for (var hop = 0; hop < 10; hop++) { next = c.Uri(next.AbsoluteUri); if (next.Host == "id.outsystems.com" && next.AbsolutePath == "/community/login") { login = next; break; } var r = await c.Send(next.AbsoluteUri); if (r.Status is not (302 or 303 or 307 or 308) || r.Location.Length == 0) throw Fault("CREDENTIAL_AUTH_UNSUPPORTED"); next = new Uri(next, r.Location); }
