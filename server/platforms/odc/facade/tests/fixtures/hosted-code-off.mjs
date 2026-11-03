@@ -11,8 +11,8 @@ export const OFF_HOSTED_INSTRUCTIONS = 'This SSAM server is hosted: it runs on t
   + 'not connected, tools that need the user\'s Studio answer AGENT_NOT_CONNECTED; ssam_doctor shows the agent and the Studio '
   + 'versions of both sides. ssam_code is unavailable here too: read a module as text with ssam_map (views ddl, flow, html) and deliver '
   + 'the change as ONE job of o11_deliver or studio_deliver. The generator ops entity-actions, rest-consume and screen with data.generate are not offered by ssam_discover '
-  + 'but run here when a job names their op; rest-consume needs every input in the job: "sample" (the JSON response) in each GET method, as this server never calls the API. No credential window opens here: odc_portal_login '
-  + 'prompt and focus answer HOSTED_PROMPT_UNAVAILABLE.';
+  + 'but run here when a job names their op; rest-consume needs every input in the job: "sample" (the JSON response) in each GET method, as this server never calls the API. Private sign-in uses the Agent: odc_portal_login prompt (auth:portal-credential) '
+  + 'or o11_service_center_session sign-in (session:vault). Credentials stay local.';
 export const OFF_HOSTED_RULES = 'Jobs: ONE job per module, with every change of the request for that module (separate jobs only for different modules, '
   + 'never one action or one step per call), sent inline in the job argument as compact JSON (no indentation), whatever its size: '
   + 'the call goes straight to this server (up to 16 MiB), so a large job is still one call, with no upload through the agent. '

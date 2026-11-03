@@ -134,7 +134,10 @@
       "guidance": "To read an application, start with ssam map / ssam_map; then inspect subtrees, properties and usages by @key with the expected sha256 (the map's continuations carry both). ok=true means the query ran, not that the answer is complete: check notices, kindObserved, searchComplete and omissions. Kinds are interface names without the leading I (MobileScreen, ServerAction...). Reuse the same capture between pages; after any Studio change take a new capture (keys are not valid across captures). Cross-cutting questions (where a site property, a variable or a text is used, who calls an action, the impact of a change, usages across the modules of an app) are ONE ssam_map call: view search {text, regex?, property?, kind?, role?} or view uses {element}, with target one capture or the list of the app's modules. A module name as target snapshots the live module first (ODC); in isolated work use .oml captures only. To CHANGE an application, ssam_discover {intent, lane, app, packet:true} already carries the names the change may use (scope, with @keys), the text of the element it edits and every basedOn: read with ssam_map only when the packet says needsReading (its read is the call).",
       "platforms": {
         "odc": {
-          "proofs": ["examples/cap-read-inspect-minimal", "examples/cap-read-inspect-typical"],
+          "proofs": [
+            "examples/cap-read-inspect-minimal",
+            "examples/cap-read-inspect-typical"
+          ],
           "negative": [],
           "limits": [
             {
@@ -496,25 +499,21 @@
         "describe operation",
         "odc_read"
       ],
-      "summary": "odc_status, odc_list_apis, odc_search_operations {apiId?, search?, readOnly?}, odc_describe_operation {operationId} and odc_portal_capabilities/odc_describe_capability are local catalog reads; odc_read {operationId, path?, query?} calls a read operation of the tenant with the API Client credential of the vault (deployments _Filter/_Get/_GetMessages, build feedback, environments). odc_write is registered only with an exact allowlist policy per tenant (none today).",
+      "summary": "ODC Portal public REST and internal monitoring are separate routes. Discover public APIs with odc_search_operations; use odc_portal_read for runtime logs and traces. Authentication can use the user's private SSAM Agent profile; no credential belongs in tool arguments.",
       "route": {
         "kind": "portal",
         "operation": "odc portal status|apis|search <t>|describe <id>|read <id> [--query] [--path] [--tenant] / MCP odc_*"
       },
       "contract": [],
-      "guidance": "Discovering an operation in the catalog is not an authenticated integration nor a write authorization. Reads retry once on 401 and never on 429; local quota 100/min per API (10/min for environment-configurations-api-v1). Errors are coded (INPUT_INVALID, OPERATION_NOT_FOUND, AUTH_NOT_CONFIGURED, API_UNAUTHORIZED, API_FORBIDDEN, WRITE_BLOCKED, LOCAL_RATE_LIMIT, NETWORK_ERROR...) with location and retrySafety. Runtime logs and traces are not served by the facade (odc_portal_read exists only in the ODC3 host).",
+      "guidance": "Public REST operations use odc_search_operations, odc_describe_operation and odc_read. Runtime logs and traces use odc_portal_read, not the public REST catalog. Select ops.portal-monitoring for its input contract and private sign-in path. Catalog presence does not prove permission or live success; writes still require explicit authorization and reconciliation of uncertain outcomes.",
       "platforms": {
         "odc": {
           "proofs": [],
           "negative": [],
           "limits": [
             {
-              "text": "odc_write is not registered while every tenant has policyFile=null; its MCP schema has no authorization field (the CLI requires --authorize); no reconciliation tool exists for a write.",
-              "origin": "platforms/odc/portal/runtime/config.mjs:13-41 (ODC_POLICY_FILE); platforms/odc/tenants.json:13,19,32 (policyFile null); platforms/odc/portal/runtime/server.mjs:89-92; platforms/odc/facade/tests/mcp.test.mjs:25"
-            },
-            {
-              "text": "The MCP odc_read writes no journal line (the CLI does); monitoring answers carry liveVerified:false.",
-              "origin": "platforms/odc/portal/runtime/bridge.mjs:28-38, 58-110; platforms/odc/facade/lib.mjs:337-345"
+              "text": "Authentication, permissions and response compatibility are separate checks. A catalog entry is not a live qualification.",
+              "origin": "platforms/odc/portal/runtime/access.mjs"
             }
           ]
         }
@@ -706,6 +705,96 @@
             {
               "text": "The O11 session tools keep `reconcile` when the write state is unknown; job results use the same Verify validation categories as ODC.",
               "origin": "kernel/src/Anvil.Core/Delivery/AppSessions.cs:23,122,181; kernel/AGENTS.md:143-155"
+            }
+          ]
+        }
+      },
+      "depends": [],
+      "alternatives": []
+    },
+    {
+      "id": "ops.portal-monitoring",
+      "lanes": [
+        "odc"
+      ],
+      "category": "operations",
+      "title": "ODC Portal logs, traces and private sign-in",
+      "keywords": [
+        "portal",
+        "odc portal",
+        "logs",
+        "errors",
+        "error logs",
+        "traces",
+        "spans",
+        "login",
+        "popup",
+        "authentication",
+        "autenticacao",
+        "autenticação",
+        "erros",
+        "credenciais"
+      ],
+      "summary": "Use odc_portal_read with operationId monitoring.stages; then monitoring.applications with input {environmentKey,search?}. Use returned IDs, never names as IDs. monitoring.errors, monitoring.logs and monitoring.traces take input {environmentKey,applicationKey,since,until,limit?,offset?}: ISO timestamps with timezone, at most 30 days, limit 1..100. monitoring.detail takes {environmentKey,logId}; monitoring.trace takes {environmentKey,traceId,maxSpans?}; monitoring.traceLogs takes {environmentKey,traceId,maxLogs?}. Trace search returns summaries, not spans. Start with auth:auto; when native transport is unavailable use auth:portal-credential. For private sign-in call odc_portal_login {tenant,auth:portal-credential,action:prompt}; let the user enter credentials only in the Agent window, then resume the original read. A missing compatible Agent requires an update. Permission, contract, scope and pagination errors are not evidence of expired credentials: do not loop login or switch to a browser. Follow continueTask on the same tool without repeating the original request.",
+      "route": {
+        "kind": "portal",
+        "operation": "MCP odc_portal_read {tenant,auth,operationId,input}; odc_portal_login {tenant,auth,action}"
+      },
+      "contract": [],
+      "guidance": "Use odc_portal_read with operationId monitoring.stages; then monitoring.applications with input {environmentKey,search?}. Use returned IDs, never names as IDs. monitoring.errors, monitoring.logs and monitoring.traces take input {environmentKey,applicationKey,since,until,limit?,offset?}: ISO timestamps with timezone, at most 30 days, limit 1..100. monitoring.detail takes {environmentKey,logId}; monitoring.trace takes {environmentKey,traceId,maxSpans?}; monitoring.traceLogs takes {environmentKey,traceId,maxLogs?}. Trace search returns summaries, not spans. Start with auth:auto; when native transport is unavailable use auth:portal-credential. For private sign-in call odc_portal_login {tenant,auth:portal-credential,action:prompt}; let the user enter credentials only in the Agent window, then resume the original read. A missing compatible Agent requires an update. Permission, contract, scope and pagination errors are not evidence of expired credentials: do not loop login or switch to a browser. Follow continueTask on the same tool without repeating the original request.",
+      "platforms": {
+        "odc": {
+          "proofs": [],
+          "negative": [],
+          "limits": [
+            {
+              "text": "Read success must be established on the selected environment; write operations require explicit authorization. Never replay an uncertain write.",
+              "origin": "platforms/odc/portal/runtime/portal-read.mjs"
+            }
+          ]
+        }
+      },
+      "depends": [],
+      "alternatives": []
+    },
+    {
+      "id": "ops.service-center",
+      "lanes": [
+        "o11"
+      ],
+      "category": "operations",
+      "title": "Service Center operations and private sign-in",
+      "keywords": [
+        "service center",
+        "servicecenter",
+        "logs",
+        "errors",
+        "traces",
+        "timers",
+        "site properties",
+        "integrations",
+        "login",
+        "popup",
+        "authentication",
+        "autenticacao",
+        "autenticação",
+        "credenciais"
+      ],
+      "summary": "Use o11_service_center_read {host,action:capabilities} for supported operations. Reads include applications, modules, timers, site-properties, integrations and logs. Logs use {host,action:logs,kind:error|general|integration|timer,since,until,module?,limit?}; use returned errorId or requestKey for error-detail or trace. Inspect the exact tool schema for action-specific fields. Native API actions such as applications require a connected Studio; a vault login alone does not provide that transport. Web reads such as logs can use the private Agent without Studio. session:auto prefers an available Studio transport; session:vault selects the user's SSAM Agent private profile on a compatible hosted connection. o11_service_center_session {host,action:sign-in,session:vault,authPrompt:auto} opens the private window when no compatible stored profile exists. Ask the user to complete that window, then resume the requested read. Never send credentials through chat or arguments. Permission, response-format and scope errors do not justify repeated sign-in. Follow continueTask; writes are separate o11_service_center_write operations requiring the owner's authorization.",
+      "route": {
+        "kind": "service-center",
+        "operation": "MCP o11_service_center_read {host,action,...}; o11_service_center_session {host,action,session,authPrompt}"
+      },
+      "contract": [],
+      "guidance": "Use o11_service_center_read {host,action:capabilities} for supported operations. Reads include applications, modules, timers, site-properties, integrations and logs. Logs use {host,action:logs,kind:error|general|integration|timer,since,until,module?,limit?}; use returned errorId or requestKey for error-detail or trace. Inspect the exact tool schema for action-specific fields. Native API actions such as applications require a connected Studio; a vault login alone does not provide that transport. Web reads such as logs can use the private Agent without Studio. session:auto prefers an available Studio transport; session:vault selects the user's SSAM Agent private profile on a compatible hosted connection. o11_service_center_session {host,action:sign-in,session:vault,authPrompt:auto} opens the private window when no compatible stored profile exists. Ask the user to complete that window, then resume the requested read. Never send credentials through chat or arguments. Permission, response-format and scope errors do not justify repeated sign-in. Follow continueTask; writes are separate o11_service_center_write operations requiring the owner's authorization.",
+      "platforms": {
+        "o11": {
+          "proofs": [],
+          "negative": [],
+          "limits": [
+            {
+              "text": "Read success must be established on the selected environment; write operations require explicit authorization. Never replay an uncertain write.",
+              "origin": "platforms/odc/facade/service-center/index.mjs"
             }
           ]
         }

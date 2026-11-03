@@ -511,8 +511,8 @@ const hostedParagraph = (code, generators = hostedGeneratorsSentence()) => 'This
   + 'exactly as returned. A file from the user\'s machine reaches SSAM when the user puts it in the agent inbox folder and you '
   + 'pass agent:inbox/<file>. Before any O11 tool, connect the Service Studio with ssam_connect {lane:"o11"}. When the agent is '
   + 'not connected, tools that need the user\'s Studio answer AGENT_NOT_CONNECTED; ssam_doctor shows the agent and the Studio '
-  + 'versions of both sides. ' + code + ' ' + generators + ' No credential window opens here: odc_portal_login '
-  + 'prompt and focus answer HOSTED_PROMPT_UNAVAILABLE.';
+  + 'versions of both sides. ' + code + ' ' + generators + ' Private sign-in uses the Agent: odc_portal_login prompt (auth:portal-credential) '
+  + 'or o11_service_center_session sign-in (session:vault). Credentials stay local.';
 const CODE_ON = 'ssam_code reads and writes the module as code here too, its texts inline (text, also); the files '
   + 'subagents write for it go in the agent inbox folder (an ssam_code plan names each one there and brings its prompts to the '
   + 'agent folder).';
