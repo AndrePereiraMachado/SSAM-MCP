@@ -65,7 +65,9 @@ import { completeInstances } from './studio-instance.mjs';
 // 0.3.11 (r40a, the app 0.2.3): credential.session (credential-session.mjs), private Service Center and Portal sign-in on this
 // machine. 0.3.12 (agent/r40, the app 0.2.4): document.fetch (document-fetch.mjs), one integration document downloaded on this
 // machine for a hosted server; the hello always lists it. The native core is 0.4.9-native.
-export const AGENT_VERSION = '0.3.12';
+// 0.3.13 (agent/r42-025, the app 0.2.5): the private credential session keeps its helpers apart from the connection credential,
+// follows the selected profile and signs in to Cognito USER_SRP_AUTH tenants. The native core is 0.4.10-native.
+export const AGENT_VERSION = '0.3.13';
 const INLINE_MAX_BYTES = 524288;
 const MAX_VALUE_BYTES = 16 * 1024 * 1024;
 const PARAMS_MEMORY_BYTES = 64 * 1024 * 1024;

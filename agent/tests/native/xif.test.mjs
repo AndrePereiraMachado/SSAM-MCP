@@ -94,9 +94,9 @@ test('native negatives: no Integration Studio, a build failure masked, a path es
   assert.ok(!fs.existsSync(path.join(root, 'o11', 'xif', OP, 'out', 'ZZHybridXifLab.xif')));
 });
 
-test('the native channel lists o11.xif in the Hello only with the engine host, runs it, and reports 0.4.9-native', () => {
+test('the native channel lists o11.xif in the Hello only with the engine host, runs it, and reports 0.4.10-native', () => {
   const channel = fs.readFileSync(path.join(app, 'native/Ssam.Agent/AgentChannel.cs'), 'utf8');
   assert.match(channel, /\.Concat\(xif\.Available \? new\[\] \{ XifKinds\.Name \}/);
   assert.match(channel, /kind == XifKinds\.Name\) value = await xif\.Execute/);
-  assert.match(channel, /AgentVersion = "0\.4\.9-native"/);
+  assert.match(channel, /AgentVersion = "0\.4\.10-native"/);
 });
