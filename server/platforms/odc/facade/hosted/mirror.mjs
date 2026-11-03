@@ -258,7 +258,11 @@ export class Mirror {
     const target = path.join(this.workspace, lane, 'journal', 'staging', sha + path.extname(abs).toLowerCase());
     if (!isFile(target)) { fs.mkdirSync(path.dirname(target), { recursive: true }); fs.copyFileSync(abs, target); }
     // r41: a copy used again is fresh again, so the retention cleanup (its staging files older than 3 days) never takes it now.
-    else { try { const t = new Date(); fs.utimesSync(target, t, t); } catch { /* the copy stays as it is */ } }
+    else {
+      try { const t = new Date(); fs.utimesSync(target, t, t); }
+      // removed meanwhile by the cleanup of another backend (review R41 F6): copied again
+      catch (error) { if (error?.code === 'ENOENT') { fs.mkdirSync(path.dirname(target), { recursive: true }); fs.copyFileSync(abs, target); } }
+    }
     return target;
   }
 

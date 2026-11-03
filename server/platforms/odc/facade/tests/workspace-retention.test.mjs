@@ -27,7 +27,9 @@ const exists = p => fs.existsSync(p);
 // An ELF core dump header (e_type 4) and a minidump header; content after them is filler.
 const elfCore = () => { const b = Buffer.alloc(64); b.write('\x7fELF', 0, 'latin1'); b[4] = 2; b[5] = 1; b.writeUInt16LE(4, 16); return b; };
 const minidump = () => Buffer.concat([Buffer.from('MDMP', 'latin1'), Buffer.alloc(60)]);
-const linuxLease = held => ({ platform: 'linux', flock: file => ({ status: held.some(id => file.includes(id)) ? 1 : 0 }) });
+// Linux leases faked: flock -n answers 1 for a held task; the deletion under the lease removes the paths it is given.
+const linuxLease = (held, { takenDuringDelete = [] } = {}) => ({ platform: 'linux', flock: file => ({ status: held.some(id => file.includes(id)) ? 1 : 0 }),
+  underLease: (file, paths) => { if (takenDuringDelete.some(id => file.includes(id))) return { status: 1 }; for (const p of paths) fs.rmSync(p, { recursive: true, force: true }); return { status: 0 }; } });
 const id = c => c.repeat(32);
 const task = (ws, taskId, state, days = 10) => {
   const dir = path.join(ws, 'o11', 'work', 'deliver', taskId);
@@ -64,14 +66,16 @@ function fixture() {
   f.users = age(write(path.join(ws, 'state', 'users', 'r.json'), '{}'), 40);
   f.job = age(write(path.join(ws, 'o11', 'jobs', 'inline', 'j.json'), '{}'), 40);
   // O11 delivery tasks
-  f.ended = task(ws, id('a'), { writeState: 'not-applied', error: 'x', module: 'M' });
+  f.ended = task(ws, id('a'), { closed: true, writeState: 'not-applied', error: 'x', module: 'M' });
+  f.repairable = task(ws, id('6'), { writeState: 'not-applied', error: 'x', module: 'R' });
+  write(path.join(f.ended, 'producers', 'p.avsig'), 'sig'); age(f.ended, 10);
   f.uncertain = task(ws, id('b'), { writeState: 'unknown', module: 'M', snapshot: { path: path.join(ws, 'o11', 'snapshots', 'M-20260101000000.oml') } });
   f.pending = task(ws, id('e'), { writeState: 'applied', pendingBridgeOperation: { id: 'p' }, module: 'M' });
   f.owner = task(ws, id('f'), { writeState: 'not-sent', error: 'x', module: 'N' });
   f.lastDelivered = task(ws, id('1'), { delivered: true, writeState: 'applied', module: 'M', updatedAt: '2026-10-20T00:00:00Z' });
   f.olderDelivered = task(ws, id('2'), { delivered: true, writeState: 'applied', module: 'M', updatedAt: '2026-10-10T00:00:00Z' });
-  f.leaseHeld = task(ws, id('3'), { writeState: 'not-applied', error: 'x', module: 'P' });
-  f.recent = task(ws, id('4'), { writeState: 'not-applied', error: 'x', module: 'Q' }, 1);
+  f.leaseHeld = task(ws, id('3'), { closed: true, module: 'P' });
+  f.recent = task(ws, id('4'), { closed: true, module: 'Q' }, 1);
   f.unreadable = task(ws, id('5'), {}); write(path.join(f.unreadable, 'task.json'), '{"format":1,"sha256":"00","payload":"{}"}'); age(f.unreadable, 10);
   write(path.join(ws, 'state', 'versions', 'b2', 'relay-authority', 'reservations', 'r.json'), JSON.stringify({ owner: id('f'), moduleKey: 'n' }));
   // O11 captures of M: five, all older than a day; the oldest is named by the uncertain task
@@ -130,9 +134,9 @@ test('the cleanup removes dumps, old scratch, ended bulk and older captures, and
   for (const p of [f.stagingNew, f.tmpNew, f.bridgeKey, f.grants, f.users, f.job]) assert.equal(exists(p), true, p);
   // tasks: the ended one loses its bulk only; every kept one is whole
   assert.equal(exists(path.join(f.ended, 'attempt-1')), false); assert.equal(exists(path.join(f.ended, 'delivered-1.oml')), false);
-  for (const keep of ['task.json', 'result.json', 'run.lock']) assert.equal(exists(path.join(f.ended, keep)), true, keep);
+  for (const keep of ['task.json', 'result.json', 'run.lock', 'producers/p.avsig']) assert.equal(exists(path.join(f.ended, keep)), true, keep);
   assert.equal(exists(path.join(f.olderDelivered, 'attempt-1')), false, 'an older delivered task of the same module is trimmed');
-  for (const dir of [f.uncertain, f.pending, f.owner, f.lastDelivered, f.leaseHeld, f.recent, f.unreadable])
+  for (const dir of [f.uncertain, f.pending, f.owner, f.lastDelivered, f.leaseHeld, f.recent, f.unreadable, f.repairable])
     assert.equal(exists(path.join(dir, 'attempt-1', 'base.oml')) && exists(path.join(dir, 'delivered-1.oml')), true, dir);
   // O11 captures of M: the three newest, the one the uncertain task names and the one the running facade task names
   assert.deepEqual(f.o11Caps.map(exists), [true, true, true, true, true]);
@@ -200,7 +204,7 @@ test('four processes sweeping the same customers never hold one workspace at onc
   fs.writeFileSync(script, `import fs from 'node:fs';
 import { sweepCustomers } from ${JSON.stringify(pathToFileURL(path.join(here, '..', 'hosted', 'workspace-retention.mjs')).href)};
 const [customers, holds] = process.argv.slice(2);
-const r = await sweepCustomers(customers, { deps: { platform: 'linux', flock: () => ({ status: 0 }) }, afterLock: () => {
+const r = await sweepCustomers(customers, { force: true, deps: { platform: 'linux', flock: () => ({ status: 0 }), underLease: (f, paths) => { for (const p of paths) fs.rmSync(p, { recursive: true, force: true }); return { status: 0 }; } }, afterLock: () => {
   const start = Date.now(); Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 400);
   fs.appendFileSync(holds, JSON.stringify({ pid: process.pid, start, end: Date.now() }) + '\\n'); } });
 process.stdout.write(JSON.stringify(r));
@@ -242,4 +246,52 @@ test('a missing workspace, a workspace that is a link and a state folder that is
   fs.symlinkSync(elsewhere, path.join(ws, 'state'), 'junction');
   assert.equal(cleanWorkspace(ws).skipped, 'state-not-a-folder');
   assert.deepEqual(fs.readdirSync(elsewhere), []);
+});
+
+test('review round: unversioned reservations, app sessions, job files, the worker folder, a lease taken during the deletion', () => {
+  const root = tmp(); const ws = path.join(root, 'w');
+  const owner = task(ws, id('7'), { closed: true, module: 'A' });
+  write(path.join(ws, 'state', 'relay-authority', 'reservations', 'r.json'), JSON.stringify({ owner: id('7') }));
+  const inSession = task(ws, id('8'), { closed: true, module: 'B', request: { ReservationOwner: id('9') } });
+  write(path.join(ws, 'state', 'versions', 'b1', 'relay-authority', 'app-sessions.json'), JSON.stringify({ sessions: { s: id('9') }, tasks: {} }));
+  const raced = task(ws, id('c'), { closed: true, module: 'C' });
+  const caps = ['20260101000000', '20260102000000', '20260103000000', '20260104000000'].map(ts => age(write(path.join(ws, 'o11', 'snapshots', 'J-' + ts + '.oml'), 'j'), 3));
+  write(path.join(ws, 'o11', 'jobs', 'inline', 'recent.json'), JSON.stringify({ base: 'ws:o11/snapshots/J-20260101000000.oml', ops: [] }));
+  const worker = write(path.join(ws, 'o11', 'tmp', 'o11-worker', 'worker-7000.json'), '{}'); age(path.dirname(worker), 9);
+  const r = cleanWorkspace(ws, { deps: linuxLease([], { takenDuringDelete: [id('c')] }) });
+  assert.equal(r.ok, true);
+  assert.equal(exists(path.join(owner, 'attempt-1')), true, 'the owner of an unversioned reservation stays whole');
+  assert.equal(exists(path.join(inSession, 'attempt-1')), true, 'a task of an app session stays whole');
+  assert.equal(exists(path.join(raced, 'attempt-1')), true, 'a lease taken before the deletion: nothing removed');
+  assert.ok(!r.items.some(i => i.path.includes(id('c'))), 'and nothing journaled for it');
+  assert.deepEqual(caps.map(exists), [true, true, true, true], 'the base a recent job names stays beyond the newest three');
+  assert.equal(exists(worker), true, 'tmp/o11-worker is the worker folder, never scratch');
+});
+
+test('review round: a planted link as lock or journal is never followed; the four backends share the last sweep time', async () => {
+  const root = tmp(); const customers = path.join(root, 'customers'); const ws = path.join(customers, 'tok_00000000000b');
+  write(path.join(ws, 'o11', 'core'), elfCore());
+  const outside = write(path.join(root, 'outside', 'journal.txt'), 'outside');
+  fs.mkdirSync(path.join(ws, 'state', 'retention'), { recursive: true });
+  fs.symlinkSync(path.dirname(outside), lockFileOf(ws), 'junction');
+  fs.symlinkSync(path.dirname(outside), journalFileOf(ws), 'junction');
+  const first = await sweepCustomers(customers, { deps: linuxLease([]) });
+  assert.deepEqual([first.workspaces, first.removed], [1, 1]);
+  assert.equal(exists(path.join(ws, 'o11', 'core')), false);
+  assert.equal(fs.readFileSync(outside, 'utf8'), 'outside');
+  assert.deepEqual(fs.readdirSync(path.dirname(outside)), ['journal.txt'], 'nothing written through the links');
+  write(path.join(ws, 'o11', 'core.9'), elfCore());
+  const second = await sweepCustomers(customers, { deps: linuxLease([]) });
+  assert.deepEqual([second.workspaces, second.skipped], [0, 1], 'swept minutes ago by another backend');
+  assert.equal(exists(path.join(ws, 'o11', 'core.9')), true);
+  assert.equal((await sweepCustomers(customers, { deps: linuxLease([]), force: true })).removed, 1);
+});
+
+test('review round: a stale lock is moved away, a fresh one is never taken from its holder', () => {
+  const f = fixture();
+  fs.mkdirSync(path.dirname(lockFileOf(f.ws)), { recursive: true });
+  fs.writeFileSync(lockFileOf(f.ws), JSON.stringify({ id: 'dead' })); age(lockFileOf(f.ws), 1);
+  const r = cleanWorkspace(f.ws, { deps: linuxLease([]) });
+  assert.equal(r.ok, true); assert.ok(r.removed > 0);
+  assert.deepEqual(fs.readdirSync(path.dirname(lockFileOf(f.ws))).filter(n => n.includes('lock')), [], 'no stale copy left');
 });

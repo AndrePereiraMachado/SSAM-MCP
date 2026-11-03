@@ -154,7 +154,7 @@ export async function startHttpServer({ createServer, dir, host = DEFAULTS.host,
       sweeping = true;
       try {
         const r = await sweepCustomers(path.join(dir, 'customers'), { settings, log, backend: env.SSAM_BACKEND_NAME ?? null });
-        if (r.removed > 0 || r.skipped > 0) log({ event: 'workspace-sweep', ...r });
+        if (r.removed > 0) log({ event: 'workspace-sweep', ...r });
       } catch (error) { log({ event: 'workspace-sweep-failed', code: error?.code ?? 'UNKNOWN' }); } finally { sweeping = false; }
     };
     workspaceStart = setTimeout(() => { workspaceSweep(); workspaceTimer = setInterval(workspaceSweep, workspaceSweepMs); workspaceTimer.unref(); },

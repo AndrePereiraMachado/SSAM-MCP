@@ -9,23 +9,28 @@
 //   - core dumps anywhere: a file named core, core.<digits> or coredump.<digits>, or *.dmp/*.mdmp, whose first bytes are an
 //     ELF core (e_type 4) or a minidump (MDMP); a user file with such a name and other content stays;
 //   - scratch older than scratchDays (default 3): the entries of <lane>/journal/staging (content-named copies, written again
-//     when needed), of <lane>/tmp (the TEMP of the kernel processes), and of state/versions/<backend>/{checks, builds,
+//     when needed), of <lane>/tmp/versions/<backend> (the TEMP of the kernel processes; <lane>/tmp/o11-worker, the worker's
+//     own folder, is never touched), and of state[/versions/<backend>]/{checks, builds,
 //     verified/candidate, verified/patch, transfers} (private build artifacts that expire after 1 h by their own rule, and
 //     agent uploads that never finished);
-//   - the bulk of an ENDED O11 delivery task older than scratchDays (o11/work/deliver/<id>/attempt-*, its .oml files,
-//     producers/ and runtime-producers/): task.json and result.json stay, so ssam_task and basedOn {taskId} still read it;
+//   - the bulk of a FINISHED O11 delivery task older than scratchDays (o11/work/deliver/<id>/attempt-*, its .oml files,
+//     runtime-producers/): finished = closed, or delivered and not the newest delivered of its module (review R41 F2: a
+//     task with a known failure may still be repaired or resumed, and a resume re-hashes its artifacts, so it stays whole).
+//     task.json, result.json and producers/ (the signatures a resume re-hashes) stay; the deletion runs under its run lease;
 //   - the bulk of an ENDED ODC lab delivery older than scratchDays (odc/lab/NN-*/work, work-merge-order and its .oml files):
 //     the manifest and evidence stay;
 //   - captures (o11/snapshots, odc/snapshots) beyond the newest keepCaptures (default 3) per module, once older than
 //     captureMinAgeHours (24), with their .oml.json sibling.
 // What it always keeps:
-//   - a delivery task that is not ended (Delivery.EndedHolder: running, uncertain, a pending Studio call or recovery, an
-//     applied merge still being verified), whose run lease is held or cannot be tried, that owns a module reservation of
-//     any backend, or that is the newest delivered task of its module (the last successful delivery base);
+//   - a delivery task that is not finished (running, uncertain, failed and repairable, a pending Studio call or recovery,
+//     an applied merge still being verified), whose run lease is held or cannot be tried, that a module reservation or an
+//     app session of any backend names, or that is the newest delivered task of its module (the last successful delivery
+//     base);
 //   - a lab delivery in progress (no deliver-result.json), uncertain (outcome uncertain, or merge-started without
 //     native-return), or the newest of its module and tenant (studio_publish reads it);
 //   - everything a pending or uncertain record names (facade tasks running/uncertain, data/portal/Service Center receipts
-//     not settled, data loads not closed, merge cuts): every absolute, ws: or agent: path and every task id in them;
+//     not settled, data loads not closed, merge cuts) or a job file written in the last scratchDays (its base and producer
+//     pins): every absolute, ws: or agent: path and every task id in them;
 //   - files whose name it does not recognize, and the server's state (state/versions/<backend>/relay-authority, locks,
 //     grants, service-center, studio-defaults; state/users, state/exposure), inbox/, jobs/, answers/, receipts and journals.
 // When in doubt it keeps: an unreadable task, manifest or record protects what it could name.
@@ -34,7 +39,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash, randomBytes } from 'node:crypto';
-import { holderEnded, runLeaseFree } from '../delivery-lineage.mjs';
+import { spawnSync } from 'node:child_process';
+import { runLeaseFree } from '../delivery-lineage.mjs';
+import { runtimeDirectories } from './storage.mjs';
 
 export const RETENTION = Object.freeze({ scratchDays: 3, keepCaptures: 3, captureMinAgeHours: 24, sweepEveryMs: 30 * 60000,
   lockStaleMs: 20 * 60000, journalMaxBytes: 2 * 1024 * 1024, journalItems: 500 });
@@ -108,8 +115,19 @@ function acquireLock(workspace, { now, staleMs, backend }) {
     try { fs.writeFileSync(file, body, { flag: 'wx' }); return { file, id }; } catch (error) {
       if (error.code !== 'EEXIST' && !(process.platform === 'win32' && error.code === 'EPERM')) throw error;
       const st = lst(file);
-      if (st && st.isFile() && now() - st.mtimeMs > staleMs && attempt === 0) { try { fs.unlinkSync(file); } catch { /* another process broke it */ } continue; }
-      return null;
+      if (!st || attempt > 0) return null;
+      // A planted link or folder is never a lock: removed (the link itself, never its target) and tried once more.
+      if (!st.isFile()) { try { if (st.isDirectory() && !st.isSymbolicLink()) fs.rmdirSync(file); else fs.unlinkSync(file); } catch { return null; } continue; }
+      if (now() - st.mtimeMs <= staleMs) return null;
+      // Review R41 F10: a stale lock is moved to a unique name first, so two processes breaking it never remove each other's
+      // fresh lock; the one whose rename fails lost the race.
+      const away = file + '.stale.' + id;
+      try { fs.renameSync(file, away); } catch { return null; }
+      const moved = lst(away);
+      // a fresh lock was taken meanwhile and moved by mistake: put back (never over a newer one) and back off
+      if (moved && now() - moved.mtimeMs <= staleMs) { try { fs.linkSync(away, file); } catch { /* a newer lock is there */ } try { fs.unlinkSync(away); } catch { /* idem */ } return null; }
+      try { fs.unlinkSync(away); } catch { /* removed at the next break */ }
+      continue;
     }
   }
   return null;
@@ -133,7 +151,8 @@ function collectRefs(value, workspace, refs, depth = 0) {
   if (Array.isArray(value)) { for (const v of value) collectRefs(v, workspace, refs, depth + 1); return; }
   if (typeof value === 'object') for (const v of Object.values(value)) collectRefs(v, workspace, refs, depth + 1);
 }
-const SETTLED = new Set(['ok', 'failed', 'accepted', 'confirmed', 'rejected', 'not-sent', 'applied', 'done', 'closed', 'settled', 'succeeded', 'completed', 'cancelled', 'canceled']);
+const SETTLED = new Set(['ok', 'failed', 'accepted', 'confirmed', 'rejected', 'refused', 'not-sent', 'not-started', 'applied', 'done', 'closed', 'settled',
+  'succeeded', 'completed', 'cancelled', 'canceled', 'superseded', 'deleted', 'absent']);
 const openRecord = doc => !doc || typeof doc !== 'object' || !SETTLED.has(String(doc.state ?? doc.status ?? '').toLowerCase());
 
 // The O11 delivery tasks with their verdict: {id, dir, task, keep, why}.
@@ -169,6 +188,24 @@ function labDeliveries(workspace) {
     out.push({ dir, name: e.name, manifest, result, progress, group: module ? module + '\n' + tenant : null, started, at, open: uncertain });
   }
   return out;
+}
+
+// Removes paths of one delivery task while holding its run lease (review R41 F3): on Linux under flock(1) without waiting
+// (the kernel's FileShare.None is an advisory flock there), on Windows with the lease file open share-exclusive. false when the
+// lease is taken (the task runs again): nothing is removed then.
+const SHARE_EXCLUSIVE = 0x10000000;
+function underLease(dir, paths, deps) {
+  const lock = path.join(dir, 'run.lock');
+  if (!fs.existsSync(lock)) return false;
+  if ((deps.platform ?? process.platform) !== 'win32') {
+    const run = deps.underLease ?? ((file, list) => spawnSync('flock', ['-n', file, 'rm', '-rf', '--', ...list], { stdio: 'ignore', timeout: 120000, windowsHide: true }));
+    let r;
+    try { r = run(lock, paths); } catch { return false; }
+    return Boolean(r) && !r.error && r.status === 0;
+  }
+  let fd;
+  try { fd = fs.openSync(lock, fs.constants.O_RDWR | SHARE_EXCLUSIVE); } catch { return false; }
+  try { for (const p of paths) fs.rmSync(p, { recursive: true, force: true }); return true; } catch { return false; } finally { fs.closeSync(fd); }
 }
 
 // ---- the cleanup of one workspace
@@ -218,6 +255,7 @@ function runCleanup({ ws, wsReal, now, backend, settings, reason, dryRun, log, d
       catch { return false; }
     }
     gone.push(target); freed += info.bytes; removed++;
+    if (removed % 200 === 0) touchLock(lock);
     byKind[kind] = (byKind[kind] ?? 0) + info.bytes;
     if (items.length < RETENTION.journalItems) items.push({ path: relOf(ws, target), bytes: info.bytes, kind });
     return true;
@@ -239,20 +277,38 @@ function runCleanup({ ws, wsReal, now, backend, settings, reason, dryRun, log, d
       if (openRecord(doc)) protectRecord(doc ?? {});
     }
   for (const e of list(path.join(ws, 'odc', 'journal', 'merge-cuts'))) if (e.isFile()) protectRecord(readJson(path.join(ws, 'odc', 'journal', 'merge-cuts', e.name)) ?? {});
+  // Review R41 F4: a job written in the last scratchDays may still be run or patched: its base and producer pins stay.
+  for (const root of [path.join(ws, 'o11', 'jobs'), path.join(ws, 'odc', 'jobs'), path.join(ws, 'odc', '.local', 'jobs')]) {
+    const stack = [root];
+    while (stack.length) {
+      const dir = stack.pop();
+      for (const e of list(dir)) {
+        const p = path.join(dir, e.name);
+        if (e.isDirectory()) { stack.push(p); continue; }
+        if (!e.isFile() || !/\.json$/i.test(e.name)) continue;
+        const st = lst(p);
+        if (st && t - st.mtimeMs <= scratchMs && st.size <= 8 * 1024 * 1024) protectRecord(readJson(p) ?? {});
+      }
+    }
+  }
   for (const loads of [path.join(ws, 'o11', 'data', 'loads'), path.join(ws, 'odc', 'journal', 'data', 'loads')]) for (const e of list(loads)) {
     if (!e.isDirectory() || e.name.startsWith('.')) continue;
     const plan = readJson(path.join(loads, e.name, 'plan.json'));
     if (!plan || String(plan.state ?? '').toLowerCase() !== 'closed') { refs.paths.add(norm(path.join(loads, e.name))); protectRecord(plan ?? {}); }
   }
   // reservations of every backend: the owner task stays whole
-  for (const b of list(path.join(ws, 'state', 'versions'))) {
-    if (!b.isDirectory()) continue;
-    const dir = path.join(ws, 'state', 'versions', b.name, 'relay-authority', 'reservations');
+  const stateDirs = runtimeDirectories(path.join(ws, 'state'));
+  for (const stateDir of stateDirs) {
+    // app sessions (AppSessions.cs): their task ids own reservations in place of the delivery's own
+    const sessions = readJson(path.join(stateDir, 'relay-authority', 'app-sessions.json'));
+    if (sessions) protectRecord(sessions);
+    const dir = path.join(stateDir, 'relay-authority', 'reservations');
     for (const e of list(dir)) {
       if (!e.isFile() || !e.name.endsWith('.json')) continue;
       const held = checkpoint(path.join(dir, e.name));
       if (held === null) { refs.paths.add(norm(path.join(ws, 'o11', 'work', 'deliver'))); continue; } // unreadable: keep every task
       if (held.owner) { refs.ids.add(String(held.owner).toLowerCase()); protectRecord(held); }
+      else if (fs.existsSync(path.join(dir, e.name + '.lock'))) protectRecord(held);
     }
   }
   const tasks = deliveryTasks(ws, deps);
@@ -260,9 +316,11 @@ function runCleanup({ ws, wsReal, now, backend, settings, reason, dryRun, log, d
   for (const x of tasks) {
     const task = x.task;
     const module = String(task?.moduleKey ?? task?.module ?? task?.request?.Module ?? '').toLowerCase();
-    const ended = task ? holderEnded(task, deps) : false;
+    const ended = !!task && !task.pendingBridgeOperation && !task.pendingOperationRecovery && (task.closed === true || task.delivered === true);
     x.ended = ended;
     if (!task || !ended) { refs.ids.add(x.id); if (task) protectRecord(task); continue; }
+    // a task an app session or a reservation names through its request
+    if (task.request?.ReservationOwner) x.owner = String(task.request.ReservationOwner).toLowerCase();
     if (task.delivered === true && module) {
       const at = Date.parse(task.updatedAt ?? '') || 0;
       const cur = newestDelivered.get(module);
@@ -311,29 +369,33 @@ function runCleanup({ ws, wsReal, now, backend, settings, reason, dryRun, log, d
     const entries = [];
     for (const lane of ['o11', 'odc']) {
       const tmp = path.join(ws, lane, 'tmp');
-      for (const e of list(tmp)) {
-        if (e.name === 'versions' && e.isDirectory()) { for (const b of list(path.join(tmp, 'versions'))) if (b.isDirectory()) roots.push(path.join(tmp, 'versions', b.name)); }
-        else entries.push(path.join(tmp, e.name));
-      }
+      // only the per-backend TEMP folders: tmp/o11-worker (the worker's pid records and lock) and the rest stay
+      for (const b of list(path.join(tmp, 'versions'))) if (b.isDirectory()) roots.push(path.join(tmp, 'versions', b.name));
     }
-    for (const b of list(path.join(ws, 'state', 'versions'))) {
-      if (!b.isDirectory()) continue;
-      for (const rel of ['checks', 'builds', 'verified/candidate', 'verified/patch', 'transfers']) roots.push(path.join(ws, 'state', 'versions', b.name, ...rel.split('/')));
+    for (const stateDir of stateDirs) {
+      for (const rel of ['checks', 'builds', 'verified/candidate', 'verified/patch', 'transfers']) roots.push(path.join(stateDir, ...rel.split('/')));
     }
     for (const root of roots) for (const e of list(root)) entries.push(path.join(root, e.name));
-    for (const p of entries) { const info = treeInfo(p); if (t - info.newest > scratchMs && !protectedPath(p)) remove(p, 'scratch', info); }
+    for (const p of entries) { if (lst(p)?.isSymbolicLink()) continue; const info = treeInfo(p); if (t - info.newest > scratchMs && !protectedPath(p)) remove(p, 'scratch', info); }
   }
 
   // 4. the bulk of ended O11 delivery tasks and ODC lab deliveries
   if (phase()) {
     for (const x of tasks) {
-      if (!x.task || !x.ended || refs.ids.has(x.id) || protectedPath(x.dir)) continue;
+      if (!x.task || !x.ended || refs.ids.has(x.id) || (x.owner && refs.ids.has(x.owner)) || protectedPath(x.dir)) continue;
+      const bulk = list(x.dir).filter(e => (e.isDirectory() && (/^attempt-\d+$/.test(e.name) || e.name === 'runtime-producers')) || (e.isFile() && /\.(oml|xif)$/i.test(e.name)))
+        .map(e => path.join(x.dir, e.name)).filter(p => within(p) && !lst(p)?.isSymbolicLink());
+      if (!bulk.length) continue; // trimmed before: no lease probe
       const info = treeInfo(x.dir);
       if (t - info.newest <= scratchMs || info.symlink) continue;
-      if (!runLeaseFree(x.task.work ? { ...x.task, work: x.dir } : { work: x.dir }, deps)) continue;
-      for (const e of list(x.dir)) {
-        const p = path.join(x.dir, e.name);
-        if ((e.isDirectory() && (/^attempt-\d+$/.test(e.name) || ['producers', 'runtime-producers'].includes(e.name))) || (e.isFile() && /\.(oml|xif)$/i.test(e.name))) remove(p, 'delivery-task');
+      if (!runLeaseFree({ ...x.task, work: x.dir }, deps)) continue;
+      const infos = bulk.map(p => [p, treeInfo(p)]);
+      if (infos.some(([, i]) => i.symlink) || lost) continue;
+      if (!dryRun && !underLease(x.dir, bulk, deps)) continue;
+      for (const [p, i] of infos) {
+        if (!dryRun && lst(p)) continue; // still there: not removed
+        gone.push(p); freed += i.bytes; removed++; byKind['delivery-task'] = (byKind['delivery-task'] ?? 0) + i.bytes;
+        if (items.length < RETENTION.journalItems) items.push({ path: relOf(ws, p), bytes: i.bytes, kind: 'delivery-task' });
       }
     }
     for (const l of labs) {
@@ -403,8 +465,10 @@ function journal(ws, entry) {
   const file = journalFileOf(ws);
   try {
     const st = lst(file);
-    if (st && st.isFile() && st.size > RETENTION.journalMaxBytes) fs.renameSync(file, file.replace(/\.jsonl$/, '.1.jsonl'));
-    fs.appendFileSync(file, JSON.stringify(entry) + '\n');
+    if (st && !st.isFile()) return; // a link or folder there: no journal written through it (review R41 F8)
+    if (st && st.size > RETENTION.journalMaxBytes) { const old = file.replace(/\.jsonl$/, '.1.jsonl'); if (lst(old)?.isSymbolicLink()) fs.unlinkSync(old); fs.renameSync(file, old); }
+    const fd = fs.openSync(file, fs.constants.O_WRONLY | fs.constants.O_APPEND | fs.constants.O_CREAT | (fs.constants.O_NOFOLLOW ?? 0), 0o600);
+    try { fs.writeSync(fd, JSON.stringify(entry) + '\n'); } finally { fs.closeSync(fd); }
   } catch { /* the journal never stops a cleanup */ }
 }
 
@@ -417,7 +481,16 @@ export async function sweepCustomers(customersDir, options = {}) {
     if (!e.isDirectory() || e.isSymbolicLink() || !CUSTOMER_DIR.test(e.name)) continue;
     await new Promise(resolve => setImmediate(resolve));
     let r;
-    try { r = cleanWorkspace(path.join(customersDir, e.name), { ...options, reason: options.reason ?? 'sweep' }); }
+    const ws = path.join(customersDir, e.name);
+    const mark = path.join(ws, 'state', 'retention', 'last-sweep.json');
+    const last = Date.parse(readJson(mark)?.at ?? '');
+    const now = (options.now ?? Date.now)();
+    // review R41 F11: the four backends share the last sweep time of a workspace
+    if (!options.force && Number.isFinite(last) && now - last < 0.9 * (options.everyMs ?? RETENTION.sweepEveryMs)) { out.skipped++; continue; }
+    try {
+      r = cleanWorkspace(ws, { ...options, reason: options.reason ?? 'sweep' });
+      if (r.ok && !r.skipped && !lst(mark)?.isSymbolicLink()) { try { fs.writeFileSync(mark, JSON.stringify({ at: new Date(now).toISOString(), backend: options.backend ?? null }) + '\n'); } catch { /* next sweep */ } }
+    }
     catch (error) { options.log?.({ event: 'workspace-clean-failed', token: e.name, code: error?.code ?? 'UNKNOWN' }); continue; }
     out.workspaces++; out.freedBytes += r.freedBytes; out.removed += r.removed; if (r.skipped) out.skipped++;
   }
