@@ -33,9 +33,6 @@ jobs:
       pack_release: ${{ inputs.pack_release }}
       pack_asset: ${{ inputs.pack_asset }}
       pack_sha256: ${{ inputs.pack_sha256 }}
-      identity_only:
-        type: boolean
-        default: false
       sign_and_notarize: ${{ inputs.sign_and_notarize }}
     secrets: inherit
 
@@ -72,4 +69,5 @@ jobs:
             }
           } finally {fs.unlinkSync(file);}
           JS
+
 
