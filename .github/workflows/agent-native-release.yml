@@ -144,7 +144,7 @@ jobs:
           if ! security import "$certificate" -k "$keychain" -P "$CSC_KEY_PASSWORD" -T /usr/bin/codesign >/dev/null; then
             # Rewrap encrypted PKCS12 for Apple's importer; private material stays in a pipe.
             compatible="$RUNNER_TEMP/ssam-compatible.p12"
-            openssl pkcs12 -in "$certificate" -passin env:CSC_KEY_PASSWORD -nodes | openssl pkcs12 -export -out "$compatible" -passout env:CSC_KEY_PASSWORD -keypbe PBE-SHA1-3DES -certpbe PBE-SHA1-3DES -macalg sha1
+            /opt/homebrew/opt/openssl@3/bin/openssl pkcs12 -in "$certificate" -passin env:CSC_KEY_PASSWORD -nodes | /opt/homebrew/opt/openssl@3/bin/openssl pkcs12 -export -out "$compatible" -passout env:CSC_KEY_PASSWORD -keypbe PBE-SHA1-3DES -certpbe PBE-SHA1-3DES -macalg sha1
             mv "$compatible" "$certificate"
             security import "$certificate" -k "$keychain" -P "$CSC_KEY_PASSWORD" -T /usr/bin/codesign >/dev/null
           fi
@@ -252,6 +252,7 @@ jobs:
             agent/dist/SHA256SUMS
             agent/dist/installed-pack.json
             agent/dist/verify-native.json
+
 
 
 
