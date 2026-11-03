@@ -16,6 +16,29 @@ const base = { host, service: 'service-center', auth: 'credential' };
 const request = { ...base, op: 'request', url: 'https://' + host + '/ServiceCenter/Errors_List.aspx', method: 'GET' };
 const b64 = value => Buffer.from(value).toString('base64');
 const page = (over = {}) => ({ ok: true, status: 200, contentType: 'text/html', body: b64('<html>logs</html>'), ...over });
+test('prompt preserves the installed connection credential file', async () => {
+  const dataRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'credential-storage-'));
+  fs.mkdirSync(path.join(dataRoot, 'private'));
+  const credential = path.join(dataRoot, 'private', 'credential');
+  fs.writeFileSync(credential, 'synthetic-connection-credential');
+  const k = kind({ dataRoot, start: (file, args) => {
+    fs.writeFileSync(args[args.indexOf('-PromptStatusPath') + 1], 'visible');
+    return privateChild();
+  }});
+  assert.equal((await k.agent.execute({ ...base, op: 'prompt' })).visible, true);
+  assert.equal(fs.readFileSync(credential, 'utf8'), 'synthetic-connection-credential');
+});
+test('legacy retry brake remains fail-closed after the directory change', async () => {
+  const dataRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'credential-legacy-'));
+  const legacy = path.join(dataRoot, 'private', 'credential');
+  fs.mkdirSync(legacy, { recursive: true });
+  const file = path.join(legacy, 'sign-in-failures.json');
+  fs.writeFileSync(file, 'invalid-json');
+  const k = kind({ dataRoot });
+  await assert.rejects(k.agent.execute({ ...base, op: 'login' }), e => e.code === 'CREDENTIAL_LOGIN_PAUSED');
+  assert.equal(k.calls.length, 0);
+  assert.equal(fs.readFileSync(file, 'utf8'), 'invalid-json');
+});
 for (const row of credentialRows()) test('shared credential table: ' + row.name, () => {
   let result;
   try { validateCredentialRequest(row.request); result = { ok: true }; } catch (error) { result = { error: error.code }; }
@@ -173,7 +196,7 @@ test('agent result, outbox and log bytes exclude simulated private input and ses
   const wire = agent.outbox.take();
   const bytes = JSON.stringify({ response, wire, logs }) + Buffer.from(response.value.body, 'base64').toString();
   for (const value of [secret, cookie, token, b64(secret), b64(cookie), b64(token)]) assert.ok(!bytes.includes(value));
-  assert.ok(!fs.existsSync(path.join(dataRoot, 'private', 'credential', 'session.json')), 'no session file exists');
+  assert.ok(!fs.existsSync(path.join(dataRoot, 'private', 'credential-session', 'session.json')), 'no session file exists');
 });
 
 test('two uncertain sign-ins stop across restart, and a saved private prompt resets the brake', async () => {
@@ -186,7 +209,7 @@ test('two uncertain sign-ins stop across restart, and a saved private prompt res
   await other.agent.execute({ ...base, op: 'prompt' });
   other.answers.push({ ok: true, authenticated: true });
   assert.deepEqual(await other.agent.execute({ ...base, op: 'login' }), { authenticated: true });
-  const counters = fs.readFileSync(path.join(dataRoot, 'private', 'credential', 'sign-in-failures.json'), 'utf8');
+  const counters = fs.readFileSync(path.join(dataRoot, 'private', 'credential-session', 'sign-in-failures.json'), 'utf8');
   assert.equal(counters, '{}');
 });
 

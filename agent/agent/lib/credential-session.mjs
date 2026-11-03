@@ -169,8 +169,11 @@ export function createCredentialSession({ dataRoot, runtimeRoot = path.resolve(p
   const sessions = new Map(), prompts = new Map(), pending = new Map(), generations = new Map(), promptFailures = new Set();
   const memory = createPrivateCredentialMemory();
   let confirming = false;
-  const promptDir = path.join(dataRoot, 'private', 'credential');
-  const brake = createLoginBrake({ file: path.join(promptDir, 'sign-in-failures.json'), scope: runtime.scope });
+  const promptDir = path.join(dataRoot, 'private', 'credential-session');
+  const legacyDir = path.join(dataRoot, 'private', 'credential');
+  // Keep an existing retry brake; never treat the installed connection file as a directory.
+  const brakeDir = fs.statSync(legacyDir, { throwIfNoEntry: false })?.isDirectory() ? legacyDir : promptDir;
+  const brake = createLoginBrake({ file: path.join(brakeDir, 'sign-in-failures.json'), scope: runtime.scope });
   const powershell = path.join(env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
   const args = (p, extra = []) => ['-NoLogo', '-NoProfile', ...(['prompt', 'forget'].includes(p.op) ? ['-STA'] : ['-NonInteractive']), '-ExecutionPolicy', 'Bypass', '-File', helper, '-Mode', p.op, '-Scope', runtime.scope, '-HostName', p.host, ...extra];
   const command = (argv, input) => platform === 'darwin'
@@ -254,10 +257,9 @@ export function createCredentialSession({ dataRoot, runtimeRoot = path.resolve(p
     if (prompts.has(key)) return { opened: false, alreadyOpen: true };
     promptFailures.delete(key);
     runtime.takeWindow('CREDENTIAL');
-    fs.mkdirSync(promptDir, { recursive: true });
     const status = path.join(promptDir, 'prompt-' + randomUUID() + '.status');
     let child;
-    try { const cmd = command(args(p, ['-PromptStatusPath', status]), JSON.stringify(p)); child = launch(cmd.file, cmd.args, cmd.input); }
+    try { fs.mkdirSync(promptDir, { recursive: true }); const cmd = command(args(p, ['-PromptStatusPath', status]), JSON.stringify(p)); child = launch(cmd.file, cmd.args, cmd.input); }
     catch { runtime.windowRefused(); throw refuse('CREDENTIAL_PROMPT_NOT_VISIBLE', 'The private credential window could not be confirmed visible.'); }
     const record = { child, status, phase: null, request: p, generation: generations.get(groupOf(p)) ?? 0, capture: capturePrivatePrompt(child) };
     prompts.set(key, record);

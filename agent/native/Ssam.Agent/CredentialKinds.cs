@@ -128,7 +128,11 @@ internal sealed class CredentialKinds
         else privateCredentials[Group(request)] = (JsonObject)completion.DeepClone();
         ResetFailures(Key(request));
     }
-    private string FailureFile => Path.Combine(root, "private", "credential", "sign-in-failures.json");
+    private string SessionDirectory => Path.Combine(root, "private", "credential-session");
+    // Preserve the existing retry brake for roots that previously used a directory.
+    // Installed agents instead have their connection credential FILE at that path.
+    private string FailureFile => Path.Combine(Directory.Exists(Path.Combine(root, "private", "credential"))
+        ? Path.Combine(root, "private", "credential") : SessionDirectory, "sign-in-failures.json");
     private string FailureKey(string key) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(scope + "|" + key))).ToLowerInvariant();
     private JsonObject ReadFailures()
     {
@@ -176,7 +180,7 @@ internal sealed class CredentialKinds
     private ProcessStartInfo Start(JsonObject p, string? status = null)
     {
         if (OperatingSystem.IsMacOS()) return MacPrivateBackend.StartInfo();
-        var directory = Path.Combine(root, "private", "credential");
+        var directory = SessionDirectory;
         foreach (var file in new[] { "private-dialog.ps1", "private-vault.ps1", "credential-auth.ps1" }) PrivateHelperResources.Write(directory, file);
         var helper = PrivateHelperResources.Write(directory, "credential-vault.ps1");
         var interactive = Text(p["op"]) is "prompt" or "forget";
@@ -215,14 +219,22 @@ internal sealed class CredentialKinds
     {
         var key = Key(p); lock (runtime.Sync) if (prompts.ContainsKey(key)) return new() { ["opened"] = false, ["alreadyOpen"] = true };
         lock (runtime.Sync) { runtime.TakeWindow(DateTimeOffset.UtcNow, "CREDENTIAL"); privateWindowPending = true; }
-        var directory = Path.Combine(root, "private", "credential"); Directory.CreateDirectory(directory);
-        var status = Path.Combine(directory, "prompt-" + Guid.NewGuid().ToString("N") + ".status");
-        Process process;
-        try { process = Process.Start(Start(p, status)) ?? throw Failed("CREDENTIAL_PROMPT_NOT_VISIBLE"); }
-        catch { lock (runtime.Sync) privateWindowPending = false; throw; }
-        var completion = PrivatePromptCompletion.Capture(process);
-        await process.StandardInput.WriteAsync((OperatingSystem.IsMacOS() ? MacPrivateBackend.Envelope("credential", "prompt", scope, Text(p["host"])!, p, root, runtimeRoot, new JsonObject { ["promptStatusPath"] = status }) : p).ToJsonString()); process.StandardInput.Close();
-        lock (runtime.Sync) { prompts[key] = new(process, status, (JsonObject)p.DeepClone(), generation, completion); privateWindowPending = false; }
+        var status = Path.Combine(SessionDirectory, "prompt-" + Guid.NewGuid().ToString("N") + ".status");
+        Process? process = null;
+        Task<JsonObject> completion;
+        try {
+            Directory.CreateDirectory(SessionDirectory);
+            process = Process.Start(Start(p, status)) ?? throw Failed("CREDENTIAL_PROMPT_NOT_VISIBLE");
+            completion = PrivatePromptCompletion.Capture(process);
+            await process.StandardInput.WriteAsync((OperatingSystem.IsMacOS() ? MacPrivateBackend.Envelope("credential", "prompt", scope, Text(p["host"])!, p, root, runtimeRoot, new JsonObject { ["promptStatusPath"] = status }) : p).ToJsonString()); process.StandardInput.Close();
+            lock (runtime.Sync) prompts[key] = new(process, status, (JsonObject)p.DeepClone(), generation, completion);
+        } catch {
+            if (process != null) {
+                try { if (!process.HasExited) process.Kill(true); } catch (InvalidOperationException) { }
+                process.Dispose();
+            }
+            throw Failed("CREDENTIAL_PROMPT_NOT_VISIBLE");
+        } finally { lock (runtime.Sync) privateWindowPending = false; }
         for (var i = 0; i < 120; i++) {
             string phase = ""; try { phase = File.ReadAllText(status); } catch (IOException) { }
             if (phase is "visible" or "saved") {
