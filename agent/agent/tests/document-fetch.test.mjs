@@ -79,7 +79,7 @@ test('the call deadline cuts the timeout; a passed deadline requests nothing', a
 });
 
 test('the hello lists document.fetch on every platform, and the kinds table runs it with its own client (never the channel\'s)', async t => {
-  assert.equal(AGENT_VERSION, '0.3.13');
+  assert.equal(AGENT_VERSION, '0.3.15');
   assert.ok(KINDS.includes(DOCUMENT_FETCH_KIND));
   assert.ok(helloKinds(null).includes(DOCUMENT_FETCH_KIND));
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ssam-docfetch-'));
