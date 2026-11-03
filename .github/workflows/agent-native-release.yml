@@ -130,7 +130,6 @@ jobs:
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
-          export CSC_KEY_PASSWORD="$(node -e 'process.stdout.write(process.env.CSC_KEY_PASSWORD.replace(/[\r\n]+$/, ""))')"
           export APPLE_TEAM_ID="$(node -e 'process.stdout.write(process.env.APPLE_TEAM_ID.trim())')"
           keychain="$RUNNER_TEMP/ssam-signing.keychain-db"
           certificate="$RUNNER_TEMP/ssam-signing.p12"
