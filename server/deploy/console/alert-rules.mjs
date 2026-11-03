@@ -100,11 +100,13 @@ export function evaluateRules(ctx) {
   const revoked = new Set((ctx.licenses ?? []).filter(t => t.state === 'revoked').map(t => t.id));
   for (const [token, w] of Object.entries(ctx.workspaces ?? {})) {
     if (revoked.has(token) || !(w?.bytes >= 0)) continue;
-    const pct = (w.bytes / QUOTA_BYTES) * 100;
+    // r41: the quota of the account (its own value, else the server's), as the backends count it
+    const quota = w.quotaBytes > 0 ? w.quotaBytes : QUOTA_BYTES;
+    const pct = (w.bytes / quota) * 100;
     if (pct >= 80) {
       add('espaco-cliente', token, pct >= 95 ? 'critical' : 'warning', 'licencas', 'licencas',
-        `Espaço de trabalho de ${nameOf(token)} em ${fmt.pct(pct)}% da cota de 5 GiB (${fmt.bytes(w.bytes)}).`,
-        'Acima da cota as chamadas recebem WORKSPACE_FULL.', { token, customer: nameOf(token) });
+        `Espaço de trabalho de ${nameOf(token)} em ${fmt.pct(pct)}% da cota de ${fmt.bytes(quota)} (${fmt.bytes(w.bytes)}).`,
+        'Acima da cota, depois da limpeza automática, as chamadas recebem WORKSPACE_FULL. Suba a cota da conta em Licenças se ela precisa de mais.', { token, customer: nameOf(token) });
     }
   }
 
@@ -226,13 +228,25 @@ export function evaluateRules(ctx) {
   if (host) {
     for (const d of Array.isArray(host.disks) ? host.disks : []) {
       const mount = cap(d.mount ?? '?', 64);
-      if (num(d.usedPct) != null && d.usedPct >= 80) add('disco', safeKey(mount), d.usedPct >= 90 ? 'critical' : 'warning', 'vps', 'vps',
+      // r41: critical once less than 15% is free
+      if (num(d.usedPct) != null && d.usedPct >= 80) add('disco', safeKey(mount), d.usedPct > 85 ? 'critical' : 'warning', 'vps', 'vps',
         `Disco ${mount} em ${fmt.pct(d.usedPct)}% (${fmt.bytes(d.usedB)} de ${fmt.bytes(d.sizeB)}).`, null, { mount });
       if (num(d.inodesPct) != null && d.inodesPct >= 80) add('disco', `${safeKey(mount)}:inodes`, d.inodesPct >= 90 ? 'critical' : 'warning', 'vps', 'vps',
         `Inodes de ${mount} em ${fmt.pct(d.inodesPct)}%.`, null, { mount });
     }
     if (host.time && host.time.ntpSynced === false) add('relogio', null, 'warning', 'vps', 'vps', 'O relógio da VPS não está sincronizado (NTP).');
     if (num(host.failedUnits) > 0) add('unidades-falhas', null, 'warning', 'vps', 'vps', `${host.failedUnits} unidade(s) do systemd com falha.`);
+  }
+  // r41: a backend whose RSS peak of the last 24 h passed 70% of the VPS memory (backends.mjs)
+  const hostMem = num(host?.mem?.totalB);
+  for (const b of ctx.backends ?? []) {
+    const total = hostMem ?? num(b.hostMemTotalB);
+    const peak = num(b.rssPeak24hB);
+    if (!total || peak == null || peak <= 0.7 * total) continue;
+    const name = cap(b.name ?? '?', 80);
+    add('memoria-backend', safeKey(name), 'warning', 'vps', 'vps',
+      `O backend ${name} chegou a ${fmt.pct((peak / total) * 100)}% da memória da VPS nas últimas 24 h (${fmt.bytes(peak)} de ${fmt.bytes(total)}).`,
+      'Com quatro backends na mesma VPS, um pico assim pode levar ao OOM dos outros. Veja os usuários ativos dele em VPS.', { container: name });
   }
   const samples = (facts.samples ?? []).filter(s => s.availPct != null);
   if (samples.length >= 2) {

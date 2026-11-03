@@ -151,7 +151,7 @@ export const DOCKER_STATE = { running: 'rodando', exited: 'parado', restarting: 
 export const dockerState = s => pick(DOCKER_STATE, s) ?? (s ? cap(s, 20) : 'ausente');
 
 // License texts (console action or external change). dmy formats a date as dd/mm/aaaa in the display time zone.
-export const ACTION_NOUN = { issue: 'Emissão', renew: 'Renovação', lanes: 'Mudança de faixas', 'agent-rotate': 'Troca da credencial do agente', revoke: 'Revogação' };
+export const ACTION_NOUN = { issue: 'Emissão', renew: 'Renovação', lanes: 'Mudança de faixas', quota: 'Mudança de cota', 'agent-rotate': 'Troca da credencial do agente', revoke: 'Revogação' };
 export function licenseText({ action, customer, result, code, detail = {}, external = false }, dmy) {
   const c = customer ?? '?';
   let text;
@@ -163,6 +163,7 @@ export function licenseText({ action, customer, result, code, detail = {}, exter
   else if (action === 'removed') text = `Licença de ${c} removida do arquivo de licenças.`;
   else if (action === 'rename') text = `Nome do cliente mudou: ${detail.previousCustomer ?? '?'} → ${c}.`;
   else if (action === 'lanes') text = `Faixas de ${c}: ${fmt.lanes(detail.previousLanes)} → ${fmt.lanes(detail.lanes)}.`;
+  else if (action === 'quota') { const q = v => (v == null ? 'a do servidor' : `${v} GiB`); text = `Cota de espaço de ${c}: ${q(detail.previousQuotaGiB)} → ${q(detail.quotaGiB)}.`; }
   else if (action === 'agent-rotate') text = `Credencial do agente de ${c} trocada.`;
   else if (action === 'revoke') text = `Licença de ${c} revogada.`;
   else text = `${action}: ${c}.`;

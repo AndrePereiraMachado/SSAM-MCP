@@ -27,6 +27,7 @@ export const CUSTOMER_PATTERN = /^[\p{L}\p{N}][\p{L}\p{N} ._-]{0,63}$/u;
 export const CUSTOMER_RULE = '1 a 64 caracteres: letras, números, espaço, ponto, hífen ou sublinhado';
 export const DAYS_RULE = 'inteiro de 1 a 3650';
 export const LANES_RULE = '"odc", "o11" ou os dois, sem repetir';
+export const QUOTA_RULE = 'inteiro de 1 a 1024 (GiB) ou null para a cota do servidor';
 const LANES = ['odc', 'o11'];
 const FS_CODES = new Set(['EACCES', 'ENOSPC', 'EROFS', 'EIO', 'EPERM', 'EBUSY', 'EDQUOT', 'EMFILE']);
 const SNAPSHOT = 'tokens-snapshot.json';
@@ -48,6 +49,7 @@ export function mapStoreError(verb, error, id = null) {
     case 'TOKEN_REVOKED': case 'TOKEN_NOT_ACTIVE': case 'NO_EXPIRY': case 'EXPIRY_TOO_FAR': return new ApiError(code);
     case 'INVALID_DAYS': return invalidField('days', DAYS_RULE);
     case 'INVALID_LANES': return invalidField('lanes', LANES_RULE);
+    case 'INVALID_QUOTA': return invalidField('quotaGiB', QUOTA_RULE);
     case 'INVALID_CUSTOMER': return invalidField('customer', CUSTOMER_RULE);
     case 'STORE_INVALID': return new ApiError('STORE_UNREADABLE', { código: 'STORE_INVALID' });
     default: if (code && FS_CODES.has(code)) return fsFailure(code);
@@ -76,14 +78,15 @@ export async function createLicenses({ config, state, history, tz, now = Date.no
   const fn = f => typeof f === 'function';
   const writes = config.licenseWrites ?? 'auto';
   // The capabilities object is shared (views, the listening log line): it is updated in place when the store opens.
-  const caps = { issue: false, revoke: false, agentRotate: false, renew: false, lanes: false, readOnly: null };
+  // quota (r41): the module of an image with setQuota (the account's own workspace quota)
+  const caps = { issue: false, revoke: false, agentRotate: false, renew: false, lanes: false, quota: false, readOnly: null };
   function setCaps() {
-    const verbs = { issue: fn(store?.issue), revoke: fn(store?.revoke), agentRotate: fn(store?.agentRotate), renew: fn(store?.renew), lanes: fn(store?.setLanes) };
+    const verbs = { issue: fn(store?.issue), revoke: fn(store?.revoke), agentRotate: fn(store?.agentRotate), renew: fn(store?.renew), lanes: fn(store?.setLanes), quota: fn(store?.setQuota) };
     // renew and setLanes arrived with tokens.json.lock (the 24th image's module): their presence is the sign of the lock.
     // The Postgres store has them too (one transaction under an advisory lock).
     const locked = verbs.renew && verbs.lanes;
     const readOnly = !store ? null : writes === 'off' ? 'desligado' : writes === 'auto' && !locked ? 'sem-trava' : null;
-    Object.assign(caps, readOnly ? { issue: false, revoke: false, agentRotate: false, renew: false, lanes: false, readOnly } : { ...verbs, readOnly: null });
+    Object.assign(caps, readOnly ? { issue: false, revoke: false, agentRotate: false, renew: false, lanes: false, quota: false, readOnly } : { ...verbs, readOnly: null });
     if (readOnly) log({ console: 'license-writes-off', reason: readOnly });
   }
   // The store's own log lines (db-migrated, tokens-store, tokens-store-stale): event and codes only, never the URL.
@@ -141,7 +144,8 @@ export async function createLicenses({ config, state, history, tz, now = Date.no
   function normalize(v) {
     const view = { id: String(v.id), customer: String(v.customer ?? ''), createdAt: v.createdAt ?? null, expiresAt: v.expiresAt ?? null,
       revokedAt: v.revokedAt ?? null, lanes: LANES.filter(l => Array.isArray(v.lanes) && v.lanes.includes(l)),
-      agentIssuedAt: v.agent?.issuedAt ?? null };
+      agentIssuedAt: v.agent?.issuedAt ?? null,
+      quotaGiB: Number.isInteger(v.quotaGiB) && v.quotaGiB >= 1 && v.quotaGiB <= 1024 ? v.quotaGiB : null };
     view.state = stateOf(view);
     return view;
   }
@@ -180,7 +184,7 @@ export async function createLicenses({ config, state, history, tz, now = Date.no
 
   // ---- external changes (3.5)
   const snapOf = tokens => ({ schema: 'ssam-console-tokens-snapshot/1', at: new Date(now()).toISOString(),
-    tokens: tokens.map(t => ({ id: t.id, customer: t.customer, createdAt: t.createdAt, expiresAt: t.expiresAt, revokedAt: t.revokedAt, lanes: t.lanes, agentIssuedAt: t.agentIssuedAt })) });
+    tokens: tokens.map(t => ({ id: t.id, customer: t.customer, createdAt: t.createdAt, expiresAt: t.expiresAt, revokedAt: t.revokedAt, lanes: t.lanes, agentIssuedAt: t.agentIssuedAt, quotaGiB: t.quotaGiB ?? null })) });
   function saveSnapshot(tokens) { snapshot = snapOf(tokens); try { state.writeJson(SNAPSHOT, snapshot); } catch { /* retried at the next poll */ } }
   function detectExternal() {
     const { tokens } = tryList();
@@ -208,6 +212,8 @@ export async function createLicenses({ config, state, history, tz, now = Date.no
       }
       if (lanesKey(p.lanes) !== lanesKey(t.lanes)) { record({ ...base, action: 'lanes', detail: { previousLanes: p.lanes ?? [], lanes: t.lanes } }); changes++; }
       if ((p.agentIssuedAt ?? null) !== (t.agentIssuedAt ?? null)) { record({ ...base, action: 'agent-rotate' }); changes++; }
+      // a snapshot of an older console has no quotaGiB field: no change to report then
+      if (Object.hasOwn(p, 'quotaGiB') && (p.quotaGiB ?? null) !== (t.quotaGiB ?? null)) { record({ ...base, action: 'quota', detail: { previousQuotaGiB: p.quotaGiB ?? null, quotaGiB: t.quotaGiB ?? null } }); changes++; }
     }
     // a record gone from the file: its token and agent credential stopped working
     const ids = new Set(tokens.map(t => t.id));
@@ -317,6 +323,26 @@ export async function createLicenses({ config, state, history, tz, now = Date.no
       return { view, previousLanes: cur.lanes, audit };
     });
   }
+  // r41: the account's own workspace quota (whole GiB) or null for the server's.
+  async function setQuota(id, { quotaGiB, confirm, expectQuotaGiB }) {
+    notSupported('quota');
+    const seen = find(id);
+    confirmOf(seen.customer, confirm);
+    if ((expectQuotaGiB ?? null) !== seen.quotaGiB) throw new ApiError('STALE');
+    return gate.run(async () => {
+      detectExternal();
+      const cur = find(id);
+      const detail = { quotaGiB, previousQuotaGiB: cur.quotaGiB };
+      if ((expectQuotaGiB ?? null) !== cur.quotaGiB) throw refuse('quota', cur, 'STALE', detail);
+      if (cur.state === 'revoked') throw refuse('quota', cur, 'TOKEN_REVOKED', detail);
+      if (quotaGiB === cur.quotaGiB) throw refuse('quota', cur, 'NO_CHANGE', detail);
+      const result = await call('setQuota', 'quota', cur, detail, () => store.setQuota(id, quotaGiB ?? 'default'));
+      const view = normalize(result);
+      await confirmWrite('quota', cur, detail, r => r.quotaGiB === view.quotaGiB);
+      const audit = record({ action: 'quota', token: id, customer: cur.customer, detail: { previousQuotaGiB: cur.quotaGiB, quotaGiB: view.quotaGiB } });
+      return { view, previousQuotaGiB: cur.quotaGiB, audit };
+    });
+  }
   async function agentRotate(id, { confirm }) {
     notSupported('agentRotate');
     const seen = find(id);
@@ -358,6 +384,6 @@ export async function createLicenses({ config, state, history, tz, now = Date.no
     notices: () => { const floor = now() - NOTICE_DAYS * DAY; return notices.filter(n => Date.parse(n.at) >= floor); },
     nameOf: token => names.get(token) ?? null,
     get listError() { return listError; },
-    issue, renew, setLanes, agentRotate, revoke,
+    issue, renew, setLanes, setQuota, agentRotate, revoke,
   };
 }

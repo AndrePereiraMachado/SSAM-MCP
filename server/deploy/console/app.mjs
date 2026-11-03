@@ -31,7 +31,8 @@ import { createUsage } from './usage.mjs';
 import { createViews } from './views.mjs';
 import { createDataViews } from './views-data.mjs';
 import { createQualityViews } from './views-quality.mjs';
-import { createWorkspaces } from './workspaces.mjs';
+import { createWorkspaces, quotaOfLicense } from './workspaces.mjs';
+import { createBackends } from './backends.mjs';
 import { defaultToolsCatalog, loadToolNames } from './tool-names.mjs';
 import { DEFAULT_KERNEL_CATALOG } from './config.mjs';
 
@@ -58,7 +59,10 @@ export async function createConsole({ config, now = Date.now, log = () => {}, wo
   const sources = createSources({ serverDir: config.serverDir, now });
   const live = createLive({ tz, now, nameOf: licenses.nameOf, emit: emitLog, usage, tools: toolNames });
   const host = createHost({ file: config.hostJson, state, tz, now, emit: emitMain, usage });
-  const workspaces = createWorkspaces({ serverDir: config.serverDir, state, now, ...(workspaceEntries ? { maxEntries: workspaceEntries } : {}) });
+  const serverQuotaGiB = config.workspaceQuotaGiB ?? 10;
+  const quotaOf = token => quotaOfLicense((licenses.tryList().tokens ?? []).find(t => t.id === token), serverQuotaGiB);
+  const workspaces = createWorkspaces({ serverDir: config.serverDir, state, now, quotaOf, ...(workspaceEntries ? { maxEntries: workspaceEntries } : {}) });
+  const backends = createBackends({ serverDir: config.serverDir, now });
   const alerts = createAlerts({ state, now, emit: emitMain });
   // The access key (the SSH tunnel) or the GitHub sign-in (the Coolify mode), by the configuration.
   const auth = createAuth({ config, state, history, now, log, emit: emitMain });
@@ -270,7 +274,7 @@ export async function createConsole({ config, now = Date.now, log = () => {}, wo
       serverErrors: live.serverErrors(), serverLogB: sources.statFiles().serverLogB,
       hostStatus: c.state === 'missing' ? 'missing' : c.state === 'invalid' ? 'invalid' : 'ok', hostSchema: c.schema,
       doc: host.doc, facts: host.facts, failedSections: host.failedSections(), restarts24h,
-      studioVersions: sources.studioVersions(), kernelFile: sources.kernel(), workspaces: { ...(workspaces.all.byToken ?? {}) }, access: sources.access(),
+      studioVersions: sources.studioVersions(), kernelFile: sources.kernel(), workspaces: workspaces.withQuota(), backends: backends.list(), access: sources.access(),
       activityBetween, readProblems: { ...readProblems }, lossAt,
     };
   }
@@ -294,7 +298,7 @@ export async function createConsole({ config, now = Date.now, log = () => {}, wo
 
   // ---- HTTP
   const views = createViews({ config, tz, now, startedAt, licenses, live, usage, host, sources, workspaces, history, events, alerts, indexing: indexingView });
-  const data = createDataViews({ tz, now, licenses, live, usage, host, sources, workspaces, indexing: indexingView });
+  const data = createDataViews({ tz, now, licenses, live, usage, host, sources, workspaces, backends, indexing: indexingView });
   const qualityViews = createQualityViews({ tz, now, quality, serverDir: dir, nativeIds, nameOf, indexing: qualityIndexingView,
     qualityFileCount: () => sources.statFiles().qualityFiles });
   const routes = createRoutes({ views, data, quality: qualityViews, licenses, live, alerts, auth, history, gate, log, now });

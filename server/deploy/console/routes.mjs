@@ -3,7 +3,7 @@
 // ranges, no unknown field), then go to licenses.mjs (confirmation, STALE, gate, token module) or to the alert engine and
 // the access key, each recorded in console-audit.jsonl. New secrets exist only in the response of issue and agent-rotate.
 import { onlyFields } from './http.mjs';
-import { CUSTOMER_PATTERN, CUSTOMER_RULE, DAYS_RULE, LANES_RULE } from './licenses.mjs';
+import { CUSTOMER_PATTERN, CUSTOMER_RULE, DAYS_RULE, LANES_RULE, QUOTA_RULE } from './licenses.mjs';
 import { invalidField } from './texts.mjs';
 
 const LANES = ['odc', 'o11'];
@@ -54,6 +54,19 @@ export function createRoutes({ views, data, quality, licenses, live, alerts, aut
     if (!Array.isArray(body.expectLanes) || body.expectLanes.length > 2 || body.expectLanes.some(l => !LANES.includes(l))) throw invalidField('expectLanes', LANES_RULE);
     const r = await licenses.setLanes(params.id, { lanes: next, confirm: confirmField(body), expectLanes: body.expectLanes });
     return { body: { ok: true, license: views.license(r.view), previousLanes: r.previousLanes, openSessions: live.sessionsOf(params.id), audit: r.audit } };
+  }
+  const quotaField = (value, name) => {
+    if (value === null) return null;
+    if (!Number.isInteger(value) || value < 1 || value > 1024) throw invalidField(name, QUOTA_RULE);
+    return value;
+  };
+  async function quota({ params, body }) {
+    onlyFields(body, ['quotaGiB', 'confirm', 'expectQuotaGiB']);
+    required(body, ['quotaGiB', 'confirm', 'expectQuotaGiB']);
+    const next = quotaField(body.quotaGiB, 'quotaGiB');
+    const expect = quotaField(body.expectQuotaGiB, 'expectQuotaGiB');
+    const r = await licenses.setQuota(params.id, { quotaGiB: next, confirm: confirmField(body), expectQuotaGiB: expect });
+    return { body: { ok: true, license: views.license(r.view), previousQuotaGiB: r.previousQuotaGiB, audit: r.audit } };
   }
   async function agentRotate({ params, body }) {
     onlyFields(body, ['confirm']);
@@ -113,6 +126,7 @@ export function createRoutes({ views, data, quality, licenses, live, alerts, aut
     'POST /api/licenses': issue,
     'POST /api/licenses/:id/renew': renew,
     'POST /api/licenses/:id/lanes': lanes,
+    'POST /api/licenses/:id/quota': quota,
     'POST /api/licenses/:id/agent-rotate': agentRotate,
     'POST /api/licenses/:id/revoke': revoke,
     'POST /api/alerts/ack': ack,

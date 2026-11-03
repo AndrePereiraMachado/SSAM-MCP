@@ -510,6 +510,81 @@ export function createDialogs(ctx) {
     });
   }
 
+  // ---------------------------------------------------------------- Cota de espaço (r41)
+
+  const quotaText = (gib) => (gib == null ? 'a do servidor' : `${F.fmtInt(gib)} GiB`);
+  function quota(opener, lic) {
+    show(opener);
+    quotaForm(lic, lic.quotaGiB ?? null);
+  }
+
+  function quotaForm(lic, chosen) {
+    const own = h('input', { type: 'number', class: 'ctl days', min: '1', max: '1024', step: '1', inputmode: 'numeric', 'aria-label': 'Cota própria em GiB' });
+    own.value = chosen == null ? '' : String(chosen);
+    const group = radioGroup('cota', 'Cota de espaço de trabalho', [
+      { value: 'servidor', label: 'A do servidor' }, { value: 'propria', label: 'Própria:' },
+    ], chosen == null ? 'servidor' : 'propria', { input: own, suffix: 'GiB' });
+    const ws = lic.workspace;
+    const usage = ws ? `Uso atual: ${F.fmtBytes(ws.bytes)} de ${F.fmtBytes(ws.quotaBytes)}.` : 'Uso atual: ainda não medido.';
+    const same = h('p', { class: 'muted dlg-text', 'aria-live': 'polite' });
+    const value = () => {
+      if (group.value() === 'servidor') return null;
+      const n = Number(own.value);
+      return Number.isInteger(n) && n >= 1 && n <= 1024 ? n : undefined;
+    };
+    const sc = screen({
+      title: `Cota de espaço de ${lic.customer}`,
+      icon: 'disk',
+      body: [h('p', { class: 'dlg-text' }, `Cota atual: ${quotaText(lic.quotaGiB ?? null)}. ${usage}`), group.el, same],
+      actionLabel: 'Continuar',
+      onSubmit: () => {
+        const v = value();
+        if (v === undefined) {
+          sc.showError('Cota própria: digite um número inteiro de 1 a 1024 GiB.');
+          own.focus();
+          return;
+        }
+        quotaConfirm(lic, v);
+      },
+    });
+    const paint = () => {
+      const v = value();
+      const unchanged = v === (lic.quotaGiB ?? null);
+      same.textContent = unchanged ? 'Nada mudou' : '';
+      sc.action.disabled = unchanged;
+      if (v !== undefined) sc.clearError();
+    };
+    for (const i of group.inputs) i.addEventListener('change', paint);
+    own.addEventListener('input', () => {
+      const r = group.inputs.find((i) => i.value === 'propria');
+      if (r) r.checked = true;
+      paint();
+    });
+    paint();
+    (group.inputs.find((i) => i.checked) || group.inputs[0]).focus();
+  }
+
+  function quotaConfirm(lic, next) {
+    confirmScreen({
+      title: `Cota de espaço de ${lic.customer}`,
+      icon: 'disk',
+      rows: [
+        { label: 'Cliente', value: lic.customer },
+        { label: 'Cota', value: `${quotaText(lic.quotaGiB ?? null)} → ${quotaText(next)}` },
+      ],
+      texts: [{ text: 'Vale na próxima verificação de cota de cada backend. Acima da cota, depois da limpeza automática, as chamadas recebem WORKSPACE_FULL.' }],
+      customer: lic.customer,
+      actionLabel: 'Salvar cota',
+      back: () => quotaForm(lic, next),
+      send: async (confirm) => {
+        const res = await ctx.api.quota(lic.id, { quotaGiB: next, confirm, expectQuotaGiB: lic.quotaGiB ?? null });
+        closeQuiet();
+        ctx.notify(`Cota de espaço de ${lic.customer}: ${quotaText(res.previousQuotaGiB ?? null)} → ${quotaText(res.license?.quotaGiB ?? null)}.`, 'ok');
+        ctx.afterMutation();
+      },
+    });
+  }
+
   // ---------------------------------------------------------------- Credencial do agente
 
   function agentRotate(opener, lic) {
@@ -590,7 +665,7 @@ export function createDialogs(ctx) {
   }
 
   return {
-    issue, renew, lanes, agentRotate, revoke, shortcuts,
+    issue, renew, lanes, quota, agentRotate, revoke, shortcuts,
     isSecretOpen: () => !!st.secret,
   };
 }

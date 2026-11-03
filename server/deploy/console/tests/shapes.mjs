@@ -52,7 +52,7 @@ const ok = literal(true);
 
 export const Event = { seq: I, time: T, level: oneOf('info', 'warning', 'error'), group: oneOf('sessao', 'agente', 'chamada', 'licenca', 'servidor', 'vps', 'painel'),
   token: nS, customer: nS, text: S, code: nS };
-export const History = { time: T, action: oneOf('issue', 'renew', 'lanes', 'agent-rotate', 'revoke', 'key-rotate', 'alert-ack', 'alert-unack',
+export const History = { time: T, action: oneOf('issue', 'renew', 'lanes', 'quota', 'agent-rotate', 'revoke', 'key-rotate', 'alert-ack', 'alert-unack',
     'unrevoke', 'removed', 'expiry-shortened', 'rename'),
   actor: oneOf('painel', 'externo'), token: nS, customer: nS, result: oneOf('ok', 'error'), code: nS, detail: 'object' };
 export const Alert = { id: S, rule: S, severity: oneOf('critical', 'warning', 'info'),
@@ -64,10 +64,10 @@ export const License = { id: S, customer: S, state: oneOf('active', 'expired', '
   agent: { state: oneOf('connected', 'disconnected', 'never'), since: nT, lastSignalAt: nT, version: nS, closedReason: nS },
   sessionsOpen: I, today: { calls: I, failures: I }, daily14: arrayOf(I, 14),
   lastActivity: nullable({ at: T, tool: nS, kind: oneOf('call', 'session', 'agent') }),
-  workspace: nullable({ bytes: I, files: I, truncated: B, measuredAt: nT, quotaBytes: literal(5368709120) }),
-  actions: { renew: Action, lanes: Action, agentRotate: Action, revoke: Action }, history: arrayOf(History) };
+  workspace: nullable({ bytes: I, files: I, truncated: B, measuredAt: nT, quotaBytes: I, quotaSource: oneOf('account', 'server') }),
+  quotaGiB: nI, actions: { renew: Action, lanes: Action, quota: Action, agentRotate: Action, revoke: Action }, history: arrayOf(History) };
 export const Indexing = { state: oneOf('ready', 'running'), progress: N, detail: nS };
-const Capabilities = { issue: B, revoke: B, agentRotate: B, renew: B, lanes: B, readOnly: oneOf(null, 'sem-trava', 'desligado') };
+const Capabilities = { issue: B, revoke: B, agentRotate: B, renew: B, lanes: B, quota: B, readOnly: oneOf(null, 'sem-trava', 'desligado') };
 export const Meta = { ok, console: { version: S, startedAt: T }, now: T, timeZone: S, publicHost: nS, publicUrl: nS, serverUrl: nS,
   capabilities: Capabilities, indexing: Indexing, auth: { mode: oneOf('key', 'github'), login: nS, csrf: nS, expiresAt: nT } };
 const Status = {
@@ -136,6 +136,8 @@ export const Vps = { ok, now: T,
   tls: nullable({ certs: arrayOf({ name: nS, notBefore: nT, notAfter: nT, daysLeft: nN, issuer: nS }) }),
   backups: nullable(open({ ok: B, newest: nullable(open({ ageH: N })) })),
   containers: nullable(arrayOf(open({ sinceS: nI }))), volumes: nullable(arrayOf('object')), systemDf: nullable('object'),
+  backends: arrayOf({ name: S, updatedAt: nT, stale: B, hostMemTotalB: nI, rssNowB: nI, rssPeak24hB: nI, rssPeak7dB: nI, activeNow: nI, activePeak24h: nI,
+    activePeak7d: nI, accountsThisHour: nI, accountsPeakHour24h: nI, accountsPeakHour7d: nI, hours: arrayOf({ hour: T, maxRssB: nI, accounts: nI, peakActive: nI }) }),
   server: { health: nullable({ docker: nS, probe: nullable('object') }), image: nullable('object'),
     kernel: { running: nullable('object'), file: nullable('object'), drift: B, driftFields: arrayOf(S) },
     warm: nullable({ state: oneOf('warm', 'partial', 'warming', 'cold', 'unknown'), time: nT, indexes: nullable('object'), delivery: nullable('object'), ms: nN, workerRunning: nullable(B) }),

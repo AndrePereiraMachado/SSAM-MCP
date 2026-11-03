@@ -51,10 +51,11 @@ export function createViews(app) {
   function actionsOf(t) {
     const revoked = t.state === 'revoked';
     const off = READ_ONLY[licenses.caps.readOnly] ?? null;
-    if (off) return Object.fromEntries(['renew', 'lanes', 'agentRotate', 'revoke'].map(k => [k, { allowed: false, reason: off }]));
+    if (off) return Object.fromEntries(['renew', 'lanes', 'quota', 'agentRotate', 'revoke'].map(k => [k, { allowed: false, reason: off }]));
     const reasons = {
       renew: !licenses.caps.renew ? NOT_IN_IMAGE : revoked ? 'Licença revogada.' : !t.expiresAt ? 'Licença sem validade: não há o que renovar.' : null,
       lanes: !licenses.caps.lanes ? NOT_IN_IMAGE : revoked ? 'Licença revogada.' : null,
+      quota: !licenses.caps.quota ? NOT_IN_IMAGE : revoked ? 'Licença revogada.' : null,
       agentRotate: !licenses.caps.agentRotate ? NOT_IN_IMAGE : revoked ? 'Licença revogada.' : t.state !== 'active' ? 'Só para licença ativa.' : null,
       revoke: !licenses.caps.revoke ? NOT_IN_IMAGE : revoked ? 'Licença revogada.' : null,
     };
@@ -82,6 +83,8 @@ export function createViews(app) {
       id: view.id, customer: view.customer, state: view.state, createdAt: view.createdAt, expiresAt: view.expiresAt, revokedAt: view.revokedAt,
       daysLeft: exp == null ? null : Math.round(((exp - c.t) / DAY) * 10000) / 10000,
       lanes: view.lanes, agentCredentialIssuedAt: view.agentIssuedAt,
+      // r41: the account's own workspace quota (GiB) or null (the server's: workspace.quotaBytes)
+      quotaGiB: view.quotaGiB ?? null,
       machine: c.pins[view.id] ?? null, accessAlerts: sources.accessCount(view.id),
       agent: a ? { state: connected ? 'connected' : 'disconnected', since: connected ? a.since : a.closedAt, lastSignalAt: a.lastSignalAt ?? null,
         version: a.version ?? null, closedReason: connected ? null : a.closedReason ?? null }

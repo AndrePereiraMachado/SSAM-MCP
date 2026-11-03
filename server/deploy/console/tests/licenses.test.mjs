@@ -22,7 +22,7 @@ test('23rd image module (the rollback image): renew and lanes are 501 NOT_SUPPOR
   const c = await startConsole(env);
   t.after(() => c.close());
   const lic = (await c.get('/api/licenses')).body;
-  assert.deepEqual(lic.capabilities, { issue: true, revoke: true, agentRotate: true, renew: false, lanes: false, readOnly: null });
+  assert.deepEqual(lic.capabilities, { issue: true, revoke: true, agentRotate: true, renew: false, lanes: false, quota: false, readOnly: null });
   const alfa = lic.licenses.find(l => l.id === sc.alfa.id);
   assert.deepEqual(alfa.actions.lanes, { allowed: false, reason: 'Indisponível nesta imagem (chega com o 24º envio).' });
   let r = await c.post(`/api/licenses/${sc.alfa.id}/renew`, { days: 30, confirm: 'Cliente Alfa', expectExpiresAt: alfa.expiresAt });
@@ -66,7 +66,7 @@ test('24th image module (this box): auto writes, because it locks tokens.json; r
   const c = await startConsole(env);
   t.after(() => c.close());
   const lic = (await c.get('/api/licenses')).body;
-  assert.deepEqual(lic.capabilities, { issue: true, revoke: true, agentRotate: true, renew: true, lanes: true, readOnly: null });
+  assert.deepEqual(lic.capabilities, { issue: true, revoke: true, agentRotate: true, renew: true, lanes: true, quota: true, readOnly: null });
   const alfa = lic.licenses.find(l => l.id === sc.alfa.id);
   assert.deepEqual(alfa.actions.renew, { allowed: true, reason: null });
   assert.deepEqual(alfa.actions.lanes, { allowed: true, reason: null });
@@ -191,7 +191,7 @@ test('a token module that cannot be loaded: every capability off, 501 for mutati
   const c = await startConsole(env);
   t.after(() => c.close());
   const meta = (await c.get('/api/meta')).body;
-  assert.deepEqual(meta.capabilities, { issue: false, revoke: false, agentRotate: false, renew: false, lanes: false, readOnly: null });
+  assert.deepEqual(meta.capabilities, { issue: false, revoke: false, agentRotate: false, renew: false, lanes: false, quota: false, readOnly: null });
   assert.equal((await c.post('/api/licenses', { customer: 'Cliente Alfa', days: 30, lanes: ['odc'], confirm: 'Cliente Alfa' })).status, 501);
   assert.equal((await c.get('/api/licenses')).status, 503);
   assert.ok(c.logs.some(l => l.includes('"console":"token-module-failed"')));
@@ -376,7 +376,7 @@ test('license writes: auto is read-only on a module without the writers lock (23
   const sc = await buildScenario(env, { module: IMAGE23_MODULE });
   let c = await start(env);
   let lic = (await c.get('/api/licenses')).body;
-  assert.deepEqual(lic.capabilities, { issue: false, revoke: false, agentRotate: false, renew: false, lanes: false, readOnly: 'sem-trava' });
+  assert.deepEqual(lic.capabilities, { issue: false, revoke: false, agentRotate: false, renew: false, lanes: false, quota: false, readOnly: 'sem-trava' });
   const reason = 'Desligado: esta imagem não trava o tokens.json entre o painel e o ssam-admin (DEPLOY.md 15.4).';
   for (const k of ['renew', 'lanes', 'agentRotate', 'revoke']) assert.deepEqual(lic.licenses.find(l => l.id === sc.alfa.id).actions[k], { allowed: false, reason }, k);
   const before = fs.readFileSync(path.join(env.serverDir, 'tokens.json'), 'utf8');
@@ -392,13 +392,13 @@ test('license writes: auto is read-only on a module without the writers lock (23
   env = makeEnv({ licenseWrites: 'auto' });
   c = await start(env);
   lic = (await c.get('/api/licenses')).body;
-  assert.deepEqual(lic.capabilities, { issue: true, revoke: true, agentRotate: true, renew: true, lanes: true, readOnly: null });
+  assert.deepEqual(lic.capabilities, { issue: true, revoke: true, agentRotate: true, renew: true, lanes: true, quota: true, readOnly: null });
   assert.equal((await c.post('/api/licenses', { customer: 'Cliente Delta', days: 30, lanes: ['odc'], confirm: 'Cliente Delta' })).status, 201);
   // the test double of that module: auto writes too
   env = makeEnv({ tokenModule: FAKE_MODULE, licenseWrites: 'auto' });
   c = await start(env);
   lic = (await c.get('/api/licenses')).body;
-  assert.deepEqual(lic.capabilities, { issue: true, revoke: true, agentRotate: true, renew: true, lanes: true, readOnly: null });
+  assert.deepEqual(lic.capabilities, { issue: true, revoke: true, agentRotate: true, renew: true, lanes: true, quota: false, readOnly: null });
   assert.equal((await c.post('/api/licenses', { customer: 'Cliente Delta', days: 30, lanes: ['odc'], confirm: 'Cliente Delta' })).status, 201);
   // off: read-only whatever the module
   env = makeEnv({ tokenModule: FAKE_MODULE, licenseWrites: 'off' });
@@ -417,7 +417,7 @@ test('the Postgres-shaped store (openTokenStore with SSAM_DATABASE_URL): promise
   t.after(() => { delete globalThis.SSAM_TEST_ASYNC_LOSE; return c.close(); });
   assert.equal(c.app.parts.licenses.backend, 'postgres');
   // auto writes: the Postgres store has renew and setLanes (one transaction under an advisory lock)
-  assert.deepEqual((await c.get('/api/meta')).body.capabilities, { issue: true, revoke: true, agentRotate: true, renew: true, lanes: true, readOnly: null });
+  assert.deepEqual((await c.get('/api/meta')).body.capabilities, { issue: true, revoke: true, agentRotate: true, renew: true, lanes: true, quota: false, readOnly: null });
   let r = await c.post('/api/licenses', { customer: 'Cliente Delta', days: 30, lanes: ['odc'], confirm: 'Cliente Delta' });
   assert.equal(r.status, 201);
   assert.match(r.body.secret.token, SECRET);
@@ -458,7 +458,7 @@ test('a store that cannot be opened at start leaves the console read-only and is
   const c = await startConsole(env, { now });
   t.after(() => { delete globalThis.SSAM_TEST_OPEN_FAIL; return c.close(); });
   assert.ok(c.logs.some(l => l.includes('"console":"token-module-failed","code":"STORE_UNAVAILABLE"')));
-  assert.deepEqual((await c.get('/api/meta')).body.capabilities, { issue: false, revoke: false, agentRotate: false, renew: false, lanes: false, readOnly: null });
+  assert.deepEqual((await c.get('/api/meta')).body.capabilities, { issue: false, revoke: false, agentRotate: false, renew: false, lanes: false, quota: false, readOnly: null });
   let r = await c.get('/api/licenses');
   assert.equal(r.status, 503);
   assert.equal(r.body.error.code, 'STORE_UNREADABLE');
@@ -472,7 +472,7 @@ test('a store that cannot be opened at start leaves the console read-only and is
   now.advance(30001);
   await c.app.tickAll();
   assert.ok(c.logs.some(l => l.includes('"console":"token-store-reconnected","backend":"postgres"')));
-  assert.deepEqual((await c.get('/api/meta')).body.capabilities, { issue: true, revoke: true, agentRotate: true, renew: true, lanes: true, readOnly: null });
+  assert.deepEqual((await c.get('/api/meta')).body.capabilities, { issue: true, revoke: true, agentRotate: true, renew: true, lanes: true, quota: false, readOnly: null });
   r = await c.get('/api/licenses');
   assert.equal(r.status, 200);
   assert.equal(r.body.licenses.length, 3);

@@ -65,6 +65,7 @@ export const HISTORY_ACTION = {
   issue: 'Emissão',
   renew: 'Renovação',
   lanes: 'Faixas',
+  quota: 'Cota de espaço',
   'agent-rotate': 'Credencial do agente',
   revoke: 'Revogação',
   'key-rotate': 'Chave do painel trocada',

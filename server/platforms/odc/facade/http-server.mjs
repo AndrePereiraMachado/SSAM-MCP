@@ -31,6 +31,7 @@ import { sweepAllUsersState, usersKeyLost, USERS_KEY_LINE } from './hosted/users
 import { SNAKE, CODE_UNLISTED, isListedCode } from './quality-line.mjs';
 import { assertServerQuota, effectiveQuota } from './hosted/workspace-quota.mjs';
 import { sweepCustomers, RETENTION, retentionSettings } from './hosted/workspace-retention.mjs';
+import { createBackendMetrics } from './hosted/backend-metrics.mjs';
 
 export const DEFAULTS = Object.freeze({ host: '127.0.0.1', port: 7300, ratePerMinute: 240, maxSessionsPerToken: 8,
   maxBodyBytes: 16 * 1024 * 1024, idleMs: 60 * 60 * 1000, sweepMs: 500, keepaliveMs: 25000 });
@@ -159,7 +160,10 @@ export async function startHttpServer({ createServer, dir, host = DEFAULTS.host,
     workspaceStart = setTimeout(() => { workspaceSweep(); workspaceTimer = setInterval(workspaceSweep, workspaceSweepMs); workspaceTimer.unref(); },
       Math.floor(Math.random() * workspaceSweepMs / 10)); workspaceStart.unref();
   }
-  const stopWorkspaceSweep = () => { clearTimeout(workspaceStart); clearInterval(workspaceTimer); };
+  // r41: the load of this backend for the console (hosted/backend-metrics.mjs): RSS each minute, active accounts.
+  const metrics = agents ? createBackendMetrics({ runtimeDir: ensureRuntime(dir), backend: env.SSAM_BACKEND_NAME ?? null }) : null;
+  try { metrics?.start(); } catch { /* the metrics never stop the server */ }
+  const stopWorkspaceSweep = () => { clearTimeout(workspaceStart); clearInterval(workspaceTimer); metrics?.stop(); };
 
   function allowedHost(header, actualPort) {
     if (allowRemote) return true;
@@ -267,6 +271,7 @@ export async function startHttpServer({ createServer, dir, host = DEFAULTS.host,
       let observer = null;
       try { observer = observeCall?.(message.params ?? {}, served) ?? null; } catch { /* the observer never changes the call */ }
       pending.set(message.id, { tool: toolName(message.params?.name), start: performance.now(), observer });
+      try { metrics?.callStarted(auth.id); } catch { /* the metrics never change the call */ }
       try { quality?.callStarted(sid, message); } catch { /* the record never changes the call */ }
     };
     transport.onclose = () => { if (sid) closeSession(sid, 'transport-closed'); };
@@ -274,6 +279,7 @@ export async function startHttpServer({ createServer, dir, host = DEFAULTS.host,
     transport.send = (message, options) => {
       if (message && message.id !== undefined && pending.has(message.id) && ('result' in message || 'error' in message)) {
         const call = pending.get(message.id); pending.delete(message.id);
+        try { metrics?.callEnded(auth.id); } catch { /* the metrics never change the answer */ }
         const ms = Math.round(performance.now() - call.start), outcome = outcomeOf(message), time = now();
         if (outcome.error === 'USERS_RECEIPT_KEY_MISSING') usersKeyLine();
         audit({ token: auth.id, customer: auth.customer, tool: call.tool, ms, ...outcome }, time);

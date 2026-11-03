@@ -13,7 +13,7 @@ const num = v => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 const RANGES = new Set(['today', '7d', '30d', 'day']);
 
 export function createDataViews(app) {
-  const { tz, now, licenses, live, usage, host, sources, workspaces } = app;
+  const { tz, now, licenses, live, usage, host, sources, workspaces, backends } = app;
   const nameOf = token => licenses.nameOf(token) ?? live.logNames[token] ?? null;
 
   function usagePayload(query) {
@@ -59,7 +59,7 @@ export function createDataViews(app) {
     const kernelFile = sources.kernel();
     if (!host.doc) {
       return { ok: true, now: new Date(t).toISOString(), collector, host: null, updates: null, security: null, tls: null, backups: null,
-        containers: null, volumes: null, systemDf: null,
+        containers: null, volumes: null, systemDf: null, backends: backends?.list() ?? [],
         server: { health: null, image: null, kernel: { running: null, file: kernelFile, drift: false, driftFields: [] }, warm: null, logs },
         coolify: null, series: null };
     }
@@ -91,6 +91,8 @@ export function createDataViews(app) {
       },
       coolify: coolify ? (Array.isArray(coolify.containers) ? coolify.containers : []).map(x => ({ name: x.name ?? null, state: x.state ?? null, restartPolicy: x.restartPolicy ?? null })) : null,
       series: { stepS: 900, points: host.seriesPoints() },
+      // r41: the load of each backend (backends.mjs): RSS now and peaks, accounts active per hour and at once
+      backends: backends?.list() ?? [],
     };
   }
 

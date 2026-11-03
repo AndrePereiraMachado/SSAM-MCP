@@ -21,8 +21,8 @@ const FILTERS = [
   { value: 'todas', label: 'Todas', match: () => true },
 ];
 
-const ACTION_LABEL = { renew: 'Renovar', lanes: 'Faixas', agentRotate: 'Credencial do agente', revoke: 'Revogar' };
-const ACTION_ICON = { renew: 'calendar-plus', lanes: 'layers', agentRotate: 'key-rotate', revoke: 'ban' };
+const ACTION_LABEL = { renew: 'Renovar', lanes: 'Faixas', quota: 'Cota de espaço', agentRotate: 'Credencial do agente', revoke: 'Revogar' };
+const ACTION_ICON = { renew: 'calendar-plus', lanes: 'layers', quota: 'disk', agentRotate: 'key-rotate', revoke: 'ban' };
 
 const sum = (a) => (Array.isArray(a) ? a.reduce((s, v) => s + (Number(v) || 0), 0) : 0);
 
@@ -211,6 +211,7 @@ export default function createLicencas(ctx, section) {
     };
     add('renew', (el) => ctx.dialogs.renew(el, lic));
     add('lanes', (el) => ctx.dialogs.lanes(el, lic, sessionsOf(lic)));
+    add('quota', (el) => ctx.dialogs.quota(el, lic));
     add('agentRotate', (el) => ctx.dialogs.agentRotate(el, lic));
     add('revoke', (el) => ctx.dialogs.revoke(el, lic, sessionsOf(lic)));
     td.append(group.childNodes.length ? group : F.DASH);

@@ -21,7 +21,7 @@ test('every endpoint matches the contract shapes on a realistic state volume', a
   assert.equal(meta.publicUrl, 'https://ssam.example.com/mcp');
   assert.equal(meta.serverUrl, 'https://ssam.example.com');
   assert.equal(meta.timeZone, 'America/Sao_Paulo');
-  assert.deepEqual(meta.capabilities, { issue: true, revoke: true, agentRotate: true, renew: true, lanes: true, readOnly: null });
+  assert.deepEqual(meta.capabilities, { issue: true, revoke: true, agentRotate: true, renew: true, lanes: true, quota: true, readOnly: null });
   assert.equal(meta.indexing.state, 'ready');
 
   const ov = (await c.get('/api/overview')).body;

@@ -72,7 +72,7 @@ test('the entry point logs no secret and no customer name on stdout', async t =>
   assert.ok(port, 'listening line: ' + out + err);
   const first = JSON.parse(out.trim().split('\n')[0]);
   assert.deepEqual(Object.keys(first), ['console', 'socket', 'capabilities']);
-  assert.deepEqual(first.capabilities, { issue: true, revoke: true, agentRotate: true, renew: true, lanes: true, readOnly: null });
+  assert.deepEqual(first.capabilities, { issue: true, revoke: true, agentRotate: true, renew: true, lanes: true, quota: true, readOnly: null });
   const key = fs.readFileSync(path.join(env.stateDir, 'access.key'), 'utf8');
   assert.match(key, /^[A-Za-z0-9_-]{43}$/);
   const headers = { 'X-SSAM-Console-Key': key, 'Content-Type': 'application/json' };

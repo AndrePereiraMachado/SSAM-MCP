@@ -89,6 +89,8 @@ export function loadConfig(argv = process.argv.slice(2), env = process.env) {
     tcp,
     // the tokens in Postgres (the token module's openTokenStore); null keeps tokens.json in serverDir
     databaseUrl: text(env.SSAM_DATABASE_URL) || null,
+    // r41: the server's workspace quota (the backends' SSAM_WORKSPACE_QUOTA_GIB); an account's own value wins (licenses).
+    workspaceQuotaGiB: (v => (/^\d{1,4}$/.test(v) && Number(v) >= 1 && Number(v) <= 1024 ? Number(v) : 10))(text(env.SSAM_WORKSPACE_QUOTA_GIB)),
     github,
     stateDir: dir(env.CONSOLE_STATE_DIR, '/state'),
     hostJson: dir(env.CONSOLE_HOST_JSON, '/host/host.json'),

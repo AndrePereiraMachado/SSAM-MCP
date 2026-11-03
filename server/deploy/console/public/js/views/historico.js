@@ -13,6 +13,7 @@ const ACTION_FILTERS = [
   { value: 'issue', label: 'Emissão', match: (a) => a === 'issue' },
   { value: 'renew', label: 'Renovação', match: (a) => a === 'renew' },
   { value: 'lanes', label: 'Faixas', match: (a) => a === 'lanes' },
+  { value: 'quota', label: 'Cota de espaço', match: (a) => a === 'quota' },
   { value: 'agent-rotate', label: 'Credencial do agente', match: (a) => a === 'agent-rotate' },
   { value: 'revoke', label: 'Revogação', match: (a) => a === 'revoke' },
   { value: 'key-rotate', label: 'Chave do painel', match: (a) => a === 'key-rotate' },
@@ -50,6 +51,10 @@ export function historyDetail(e) {
       return d.previousExpiresAt ? `${F.fmtDate(d.previousExpiresAt)} → sem validade` : F.DASH;
     case 'lanes':
       return `${F.fmtLanes(d.previousLanes)} → ${F.fmtLanes(d.lanes)}`;
+    case 'quota': {
+      const q = (v) => (v == null ? 'a do servidor' : `${F.fmtInt(v)} GiB`);
+      return `${q(d.previousQuotaGiB)} → ${q(d.quotaGiB)}`;
+    }
     case 'expiry-shortened':
       return `${d.previousExpiresAt ? F.fmtDate(d.previousExpiresAt) : 'sem validade'} → ${F.fmtDate(d.expiresAt)}`;
     case 'unrevoke':

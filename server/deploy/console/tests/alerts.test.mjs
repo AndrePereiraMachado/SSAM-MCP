@@ -87,7 +87,12 @@ test('licenses: licenca-vence, licenca-venceu, licencas-ilegiveis, acesso-outra-
   assert.equal(acc.detail, 'Se não foi o cliente, troque a credencial do agente ou revogue a licença.');
   expectNone({ access: [line(NOW - 30 * DAY - MIN)] }, `acesso-outra-maquina:${A}:def456`);
   const ws = bytes => ({ workspaces: { [A]: { bytes, files: 1, truncated: false } } });
-  expectFire(ws(Math.ceil(0.8 * QUOTA_BYTES)), `espaco-cliente:${A}`, 'warning', 'Espaço de trabalho de Cliente Alfa em 80% da cota de 5 GiB (4 GiB).');
+  expectFire(ws(Math.ceil(0.8 * QUOTA_BYTES)), `espaco-cliente:${A}`, 'warning', 'Espaço de trabalho de Cliente Alfa em 80% da cota de 10 GiB (8 GiB).');
+  // r41: the quota of the account (its own value) decides, not the server default
+  const own = (bytes, quotaBytes) => ({ workspaces: { [A]: { bytes, files: 1, truncated: false, quotaBytes } } });
+  expectFire(own(Math.ceil(0.95 * 40 * 1024 ** 3), 40 * 1024 ** 3), `espaco-cliente:${A}`, 'critical', 'Espaço de trabalho de Cliente Alfa em 95% da cota de 40 GiB (38 GiB).');
+  expectNone(own(Math.ceil(0.8 * QUOTA_BYTES), 40 * 1024 ** 3), `espaco-cliente:${A}`);
+  expectFire(own(Math.ceil(0.8 * 2 * 1024 ** 3), 2 * 1024 ** 3), `espaco-cliente:${A}`, 'warning');
   expectNone(ws(Math.ceil(0.8 * QUOTA_BYTES) - 1), `espaco-cliente:${A}`);
   expectFire(ws(Math.ceil(0.95 * QUOTA_BYTES)), `espaco-cliente:${A}`, 'critical');
   expectFire(ws(Math.ceil(0.95 * QUOTA_BYTES) - 1), `espaco-cliente:${A}`, 'warning');
@@ -165,8 +170,9 @@ test('kernel, TLS, disks, memory, load', () => {
   const disk = (used, inodes = 1) => ({ doc: doc(d => { Object.assign(d.host.disks[0], { usedPct: used, inodesPct: inodes }); }) });
   expectFire(disk(80), 'disco:/', 'warning', 'Disco / em 80% (5,4 GiB de 94 GiB).');
   expectNone(disk(79), 'disco:/');
-  expectFire(disk(90), 'disco:/', 'critical');
-  expectFire(disk(89), 'disco:/', 'warning');
+  // r41: critical once less than 15% is free
+  expectFire(disk(86), 'disco:/', 'critical');
+  expectFire(disk(85), 'disco:/', 'warning');
   expectFire(disk(6, 80), 'disco:/:inodes', 'warning', 'Inodes de / em 80%.');
   expectNone(disk(6, 79), 'disco:/:inodes');
   const facts = s => ({ facts: { samples: s, restarts: {}, probeFails: 0 } });
@@ -426,4 +432,13 @@ test('license notices: revogacao-desfeita, licenca-removida, gravacao-nao-confir
     'Revogação da licença de Cliente Alfa não se confirmou no tokens.json (12/10/2026 11:00): outro processo gravou o arquivo ao mesmo tempo.');
   const old = { licenseNotices: [{ kind: 'removed', token: A, customer: 'Cliente Alfa', at: iso(NOW - 30 * DAY - MIN) }], licenses: [] };
   assert.equal(run(old).filter(a => a.rule === 'licenca-removida').length, 0, 'older than 30 days');
+});
+
+test('r41: a backend whose RSS peak of the last 24 h passed 70% of the VPS memory raises memoria-backend', () => {
+  const ctx = (peak, total = 8 * 1024 ** 3) => run({ hostStatus: 'missing', backends: [{ name: 'o11-11.55.94-odc-1.7.31', hostMemTotalB: total, rssPeak24hB: peak }] });
+  const fired = ctx(Math.ceil(0.71 * 8 * 1024 ** 3)).find(a => a.id === 'memoria-backend:o11-11.55.94-odc-1.7.31');
+  assert.ok(fired); assert.equal(fired.severity, 'warning');
+  assert.match(fired.title, /^O backend o11-11\.55\.94-odc-1\.7\.31 chegou a 71% da memória da VPS nas últimas 24 h/);
+  assert.equal(ctx(Math.floor(0.7 * 8 * 1024 ** 3)).some(a => a.rule === 'memoria-backend'), false);
+  assert.equal(ctx(null).some(a => a.rule === 'memoria-backend'), false);
 });

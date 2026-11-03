@@ -230,6 +230,7 @@ export const api = {
   issue: (body) => request('POST', '/api/licenses', body),
   renew: (id, body) => request('POST', `/api/licenses/${encodeURIComponent(id)}/renew`, body),
   lanes: (id, body) => request('POST', `/api/licenses/${encodeURIComponent(id)}/lanes`, body),
+  quota: (id, body) => request('POST', `/api/licenses/${encodeURIComponent(id)}/quota`, body),
   agentRotate: (id, body) => request('POST', `/api/licenses/${encodeURIComponent(id)}/agent-rotate`, body),
   revoke: (id, body) => request('POST', `/api/licenses/${encodeURIComponent(id)}/revoke`, body),
   ack: (body) => request('POST', '/api/alerts/ack', body),

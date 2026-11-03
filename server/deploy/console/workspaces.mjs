@@ -4,7 +4,14 @@
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 
-export const QUOTA_BYTES = 5 * 1024 ** 3;
+// r41: the quota of a workspace is the account's own (its license record's quotaGiB), else the server's
+// SSAM_WORKSPACE_QUOTA_GIB (config.workspaceQuotaGiB), else 10 GiB, as the backends count it (hosted/workspace-quota.mjs).
+export const GIB = 1024 ** 3;
+export const QUOTA_BYTES = 10 * GIB;
+export const quotaOfLicense = (license, serverGiB = 10) => {
+  const own = Number.isInteger(license?.quotaGiB) && license.quotaGiB >= 1 && license.quotaGiB <= 1024 ? license.quotaGiB : null;
+  return own !== null ? { bytes: own * GIB, gib: own, source: 'account' } : { bytes: serverGiB * GIB, gib: serverGiB, source: 'server' };
+};
 export const WORKSPACE_EVERY_MS = 10 * 60000;
 const MAX_ENTRIES = 500000;
 const DIR = /^tok_[0-9a-f]{12}$/;
@@ -31,7 +38,7 @@ export async function measure(root, { maxEntries = MAX_ENTRIES } = {}) {
   return { bytes, files, truncated };
 }
 
-export function createWorkspaces({ serverDir, state, now = Date.now, maxEntries = MAX_ENTRIES }) {
+export function createWorkspaces({ serverDir, state, now = Date.now, maxEntries = MAX_ENTRIES, quotaOf = () => ({ bytes: QUOTA_BYTES, gib: 10, source: 'server' }) }) {
   let data = state.readJson('workspaces.json');
   if (!data || typeof data.byToken !== 'object') data = { at: null, byToken: {} };
   let running = false;
@@ -53,7 +60,11 @@ export function createWorkspaces({ serverDir, state, now = Date.now, maxEntries 
   const due = () => !data.at || now() - Date.parse(data.at) >= WORKSPACE_EVERY_MS;
   function get(token) {
     const w = data.byToken[token];
-    return w ? { bytes: w.bytes, files: w.files, truncated: !!w.truncated, measuredAt: data.at, quotaBytes: QUOTA_BYTES } : null;
+    if (!w) return null;
+    const q = quotaOf(token);
+    return { bytes: w.bytes, files: w.files, truncated: !!w.truncated, measuredAt: data.at, quotaBytes: q.bytes, quotaSource: q.source };
   }
-  return { run, due, get, get all() { return data; } };
+  // every measured workspace with its quota (alert-rules.mjs)
+  const withQuota = () => Object.fromEntries(Object.keys(data.byToken ?? {}).map(token => [token, get(token)]));
+  return { run, due, get, withQuota, get all() { return data; } };
 }

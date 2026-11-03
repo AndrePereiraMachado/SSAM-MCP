@@ -426,6 +426,28 @@ export default function createVps(ctx, section) {
   const updP = panel('h-vps-upd', 'Atualizações', { icon: 'update' });
   const secP = panel('h-vps-sec', 'Segurança', { icon: 'shield' });
 
+  // r41: the load of each backend (RSS of its container, accounts active per hour and at once)
+  const beP = panel('h-vps-be', 'Backends', { icon: 'server' });
+  const beTable = createTable({
+    label: 'Backends',
+    rowKey: (r) => r.name,
+    empty: 'Nenhum backend publicou medidas ainda.',
+    columns: [
+      { key: 'name', label: 'Backend', sort: (r) => r.name, text: (r) => r.name + (r.stale ? ' (sem medida recente)' : ''), level: (r) => (r.stale ? 'warn' : '') },
+      { key: 'rssNowB', label: 'Memória agora', num: true, sort: (r) => r.rssNowB ?? null, text: (r) => F.fmtBytes(r.rssNowB) },
+      {
+        key: 'rssPeak24hB', label: 'Pico 24 h', num: true, cls: 'lvstrong', sort: (r) => r.rssPeak24hB ?? null, text: (r) => F.fmtBytes(r.rssPeak24hB),
+        level: (r) => (r.hostMemTotalB && r.rssPeak24hB > 0.7 * r.hostMemTotalB ? 'warn' : ''),
+      },
+      { key: 'rssPeak7dB', label: 'Pico 7 dias', num: true, sort: (r) => r.rssPeak7dB ?? null, text: (r) => F.fmtBytes(r.rssPeak7dB) },
+      { key: 'activeNow', label: 'Contas ativas agora', num: true, sort: (r) => r.activeNow ?? null, text: (r) => F.fmtInt(r.activeNow ?? 0) },
+      { key: 'activePeak24h', label: 'Pico simultâneo 24 h / 7 dias', num: true, sort: (r) => r.activePeak24h ?? null, text: (r) => `${F.fmtInt(r.activePeak24h ?? 0)} / ${F.fmtInt(r.activePeak7d ?? 0)}` },
+      { key: 'accountsThisHour', label: 'Contas nesta hora', num: true, sort: (r) => r.accountsThisHour ?? null, text: (r) => F.fmtInt(r.accountsThisHour ?? 0) },
+      { key: 'accountsPeakHour24h', label: 'Pico por hora 24 h / 7 dias', num: true, sort: (r) => r.accountsPeakHour24h ?? null, text: (r) => `${F.fmtInt(r.accountsPeakHour24h ?? 0)} / ${F.fmtInt(r.accountsPeakHour7d ?? 0)}` },
+    ],
+  });
+  beP.el.append(beTable.el);
+
   const contP = panel('h-vps-cont', 'Containers', { icon: 'container' });
   let coolify = [];
   const contTable = createTable({
@@ -548,6 +570,7 @@ export default function createVps(ctx, section) {
     errLine.el, cards.el, lastDayP.el,
     h('div', { class: 'cols-2 stretch' }, hostP.el, srvP.el),
     h('div', { class: 'cols-2 stretch' }, updP.el, secP.el),
+    beP.el,
     contP.el,
     h('div', { class: 'cols-2' }, volP.el, tlsP.el),
     bkP.el);
@@ -591,6 +614,8 @@ export default function createVps(ctx, section) {
     setKv(secP, securityRows(d.security), false);
     setKv(srvP, serverRows(d.server), false);
     coolify = Array.isArray(d.coolify) ? d.coolify : [];
+    beTable.setRows(d.backends || []);
+    beP.setCount(beTable.countText());
     contTable.setRows(d.containers || []);
     contP.setCount(contTable.countText());
     systemDf = d.systemDf || null;
@@ -606,7 +631,7 @@ export default function createVps(ctx, section) {
     const linesTail = d.backups?.cronLogTail || [];
     cron.textContent = linesTail.length ? linesTail.join('\n') : 'cron.log vazio.';
     cron.classList.toggle('muted', !linesTail.length);
-    for (const p of [hostP, updP, secP, srvP, contP, volP, tlsP, bkP, lastDayP]) p.setStale('');
+    for (const p of [hostP, updP, secP, srvP, beP, contP, volP, tlsP, bkP, lastDayP]) p.setStale('');
   }
 
   return {

@@ -11,10 +11,10 @@ export const AUDIT_FILE = 'console-audit.jsonl';
 // unrevoke, removed, expiry-shortened and rename exist only as external changes (actor "externo", 3.5): a revocation
 // undone, a record gone, an expiry moved earlier, a customer renamed. signin, signin-refused and signout are the GitHub
 // sign-in of the Coolify mode (github-auth.mjs), with the GitHub login in detail.login.
-export const HISTORY_ACTIONS = ['issue', 'renew', 'lanes', 'agent-rotate', 'revoke', 'key-rotate', 'alert-ack', 'alert-unack',
+export const HISTORY_ACTIONS = ['issue', 'renew', 'lanes', 'quota', 'agent-rotate', 'revoke', 'key-rotate', 'alert-ack', 'alert-unack',
   'unrevoke', 'removed', 'expiry-shortened', 'rename', 'signin', 'signin-refused', 'signout'];
 const ACTIONS = new Set(HISTORY_ACTIONS);
-const DETAIL_KEYS = ['days', 'expiresAt', 'previousExpiresAt', 'lanes', 'previousLanes', 'alert', 'hours', 'previousRevokedAt', 'previousState', 'previousCustomer', 'login'];
+const DETAIL_KEYS = ['days', 'expiresAt', 'previousExpiresAt', 'lanes', 'previousLanes', 'alert', 'hours', 'previousRevokedAt', 'previousState', 'previousCustomer', 'login', 'quotaGiB', 'previousQuotaGiB'];
 
 function clean(entry) {
   const detail = {};
