@@ -118,7 +118,7 @@ jobs:
           tests/native/studio-policy.test.mjs tests/native/app-integration.test.mjs
           tests/native/studio-build-plan.test.mjs tests/native/mac-bridge-build.test.mjs
       - name: Test r40 Node routing
-        run: node --test agent/tests/mac-private-helper.test.mjs
+        run: node --test agent/tests/mac-private-helper.test.mjs agent/tests/credential-concurrency.test.mjs
 
       - name: Sign, package and notarize
         if: inputs.sign_and_notarize

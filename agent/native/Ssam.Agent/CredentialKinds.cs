@@ -17,6 +17,7 @@ internal sealed class CredentialKinds
     private readonly PrivateSessionRuntime runtime;
     private readonly SemaphoreSlim serial = new(1);
     private readonly Dictionary<string, Session> sessions = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, TaskCompletionSource<JsonObject>> logins = new(StringComparer.Ordinal);
     private readonly Dictionary<string, Prompt> prompts = new(StringComparer.Ordinal);
     private readonly Dictionary<string, JsonObject> privateCredentials = new(StringComparer.Ordinal);
     private bool privateWindowPending;
@@ -348,6 +349,41 @@ internal sealed class CredentialKinds
     }
     internal async Task<JsonObject> Execute(JsonObject p, CancellationToken token)
     {
+        Validate(p);
+        var key = Key(p);
+        if (Text(p["op"]) != "login") {
+            if (Text(p["op"]) is "prompt" or "sign-out" or "forget")
+                lock (logins) foreach (var k in logins.Keys.Where(k => k.StartsWith(Group(p) + "|", StringComparison.Ordinal)).ToArray()) logins.Remove(k);
+            return await ExecuteSerial(p, token);
+        }
+        TaskCompletionSource<JsonObject> flight;
+        bool owner;
+        lock (logins) {
+            owner = !logins.TryGetValue(key, out flight!);
+            if (owner) {
+                if (logins.Count >= 128) throw Failed("CREDENTIAL_SESSION_LIMIT");
+                logins[key] = flight = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            }
+        }
+        if (owner) _ = CompleteLogin((JsonObject)p.DeepClone(), key, flight, token);
+        // Cancelling a waiter cannot cancel the owner's authentication.
+        return (JsonObject)(await flight.Task.WaitAsync(token)).DeepClone();
+    }
+    private async Task CompleteLogin(JsonObject p, string key, TaskCompletionSource<JsonObject> flight, CancellationToken token)
+    {
+        JsonObject? result = null;
+        Exception? failure = null;
+        try { result = await ExecuteSerial(p, token); }
+        catch (Exception error) { failure = error; }
+        finally { lock (logins) if (logins.TryGetValue(key, out var current) && ReferenceEquals(current, flight)) logins.Remove(key); }
+        // Remove the completed flight before waking callers, so a later request
+        // rechecks expiry rather than inheriting an already-completed result.
+        if (failure is OperationCanceledException) flight.TrySetCanceled(token);
+        else if (failure != null) flight.TrySetException(failure);
+        else flight.TrySetResult(result!);
+    }
+    private async Task<JsonObject> ExecuteSerial(JsonObject p, CancellationToken token)
+    {
         if (!OperatingSystem.IsWindows() && !OperatingSystem.IsMacOS() && !ForceWindows) throw Failed("CREDENTIAL_PLATFORM_UNAVAILABLE");
         Validate(p); await serial.WaitAsync(token);
         var writeResponseReceived = false;
@@ -363,7 +399,21 @@ internal sealed class CredentialKinds
             // receives the current private credential, but a late popup cannot replace it.
             if (Text(p["op"]) == "sign-out") generation++;
             var expectedGeneration = generation;
-            if (Text(p["op"]) == "login") LoginAttempt(key);
+            if (Text(p["op"]) == "login") {
+                if (session.State != null) {
+                    var statusRequest = (JsonObject)p.DeepClone(); statusRequest["op"] = "status";
+                    var checkedSession = await Call(statusRequest, session, token);
+                    Settle();
+                    if (generation != expectedGeneration) throw Failed("CREDENTIAL_SESSION_CHANGED");
+                    if (!Flag(checkedSession["ok"])) throw Failed("CREDENTIAL_REQUEST_FAILED");
+                    if (Flag(checkedSession["available"]) && Flag(checkedSession["authenticated"])) {
+                        ResetFailures(key);
+                        return new() { ["authenticated"] = true, ["notes"] = new JsonArray("The existing authenticated private session was reused.") };
+                    }
+                    session.State = null;
+                }
+                LoginAttempt(key);
+            }
             JsonObject value;
             if (Text(p["op"]) == "forget") {
                 lock (runtime.Sync) { runtime.TakeWindow(DateTimeOffset.UtcNow, "CREDENTIAL"); privateWindowPending = true; }

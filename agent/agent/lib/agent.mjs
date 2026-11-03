@@ -65,8 +65,8 @@ import { completeInstances } from './studio-instance.mjs';
 // 0.3.11 (r40a, the app 0.2.3): credential.session (credential-session.mjs), private Service Center and Portal sign-in on this
 // machine. 0.3.12 (agent/r40, the app 0.2.4): document.fetch (document-fetch.mjs), one integration document downloaded on this
 // machine for a hosted server; the hello always lists it. The native core is 0.4.9-native.
-// 0.3.14: preserve public Portal routing metadata during private response redaction.
-export const AGENT_VERSION = '0.3.14';
+// 0.3.15: coalesce private sign-in attempts and recheck sessions under the queue.
+export const AGENT_VERSION = '0.3.15';
 const INLINE_MAX_BYTES = 524288;
 const MAX_VALUE_BYTES = 16 * 1024 * 1024;
 const PARAMS_MEMORY_BYTES = 64 * 1024 * 1024;

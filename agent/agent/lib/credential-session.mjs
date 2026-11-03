@@ -343,8 +343,8 @@ export function createCredentialSession({ dataRoot, runtimeRoot = path.resolve(p
     return { status: value.status, contentType, body: textual && decoded !== scrubbed ? Buffer.from(scrubbed).toString('base64') : value.body, url, location,
       ...(notes.length ? { notes } : {}) };
   }
-  return {
-    async execute(p) {
+  const logins = new Map();
+  async function execute(p) {
       if (!['win32', 'darwin'].includes(platform)) throw refuse('CREDENTIAL_PLATFORM_UNAVAILABLE', 'Private credential sessions are not available on this platform.');
       validateCredentialRequest(p);
       settle();
@@ -356,6 +356,16 @@ export function createCredentialSession({ dataRoot, runtimeRoot = path.resolve(p
         if (p.op === 'forget') { runtime.takeWindow('CREDENTIAL'); confirming = true; }
         if (p.op === 'forget' || p.op === 'sign-out') invalidate(p);
         if (p.op === 'login') {
+          // A preceding read may have observed the session before another caller
+          // signed in. Recheck under the same queue before starting authentication.
+          if (sessions.get(key)?.value) {
+            const checked = await call({ ...p, op: 'status' });
+            if (checked.value.available && checked.value.authenticated) {
+              brake.set(key, 0);
+              return { authenticated: true, notes: ['The existing authenticated private session was reused.'] };
+            }
+            sessions.delete(key);
+          }
           if (brake.count(key) >= 2) throw fault('CREDENTIAL_LOGIN_PAUSED');
           brake.set(key, brake.count(key) + 1);
         }
@@ -374,6 +384,25 @@ export function createCredentialSession({ dataRoot, runtimeRoot = path.resolve(p
       });
       pending.set(key, operation);
       try { return await operation; } finally { if (pending.get(key) === operation) pending.delete(key); }
-    },
+  }
+  return {
+    async execute(p) {
+      validateCredentialRequest(p);
+      const key = keyOf(p);
+      if (['prompt', 'sign-out', 'forget'].includes(p.op)) {
+        for (const k of logins.keys()) if (groupPrefixes(p).some(prefix => k.startsWith(prefix))) logins.delete(k);
+      }
+      if (p.op !== 'login') return execute(p);
+      // Share failures as well as successes. Waiters must not each consume a
+      // sign-in attempt after the same cold-session observation.
+      let active = logins.get(key);
+      if (!active) {
+        if (logins.size >= 128) throw fault('CREDENTIAL_SESSION_LIMIT');
+        active = Promise.resolve().then(() => execute(p));
+        logins.set(key, active);
+      }
+      try { return structuredClone(await active); }
+      finally { if (logins.get(key) === active) logins.delete(key); }
+    }
   };
 }
