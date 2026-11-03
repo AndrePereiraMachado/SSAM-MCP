@@ -153,7 +153,7 @@ export class PortalReadAdapter {
     this.target = target;
     this.origin = originOnly(origin);
     this.broker = broker;
-    if (!Number.isInteger(timeoutMs) || timeoutMs < 100 || timeoutMs > 30000) fail('PORTAL_CONFIG_INVALID', 'Invalid timeout.');
+    if (!Number.isInteger(timeoutMs) || timeoutMs < 100 || timeoutMs > 120000) fail('PORTAL_CONFIG_INVALID', 'Invalid timeout.');
     this.timeoutMs = timeoutMs;
   }
 

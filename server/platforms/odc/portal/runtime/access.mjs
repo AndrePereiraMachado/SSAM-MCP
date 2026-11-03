@@ -1119,7 +1119,8 @@ export class OdcAccess {
         const body = await resolved.broker.callScreenservice({ operationId, write: false, input: connectionDetailInput(input) });
         output = envelope(operationId, { data: projectConnectionDetail(body?.data, input) });
       } else if (TYPED_PORTAL_READS.has(operationId)) {
-        const adapter = new PortalReadAdapter({ target: 'odc3', origin: resolved.broker.origin, broker: resolved.broker, timeoutMs: 30000 });
+        const adapter = new PortalReadAdapter({ target: 'odc3', origin: resolved.broker.origin, broker: resolved.broker,
+          timeoutMs: resolved.path === 'agent-vault' ? 90000 : 30000 });
         output = await adapter.execute({ operationId, input });
         if (output.ok && operationId === 'monitoring.traces' && output.nextPageAvailable) {
           const offset = Number(output.pagination.NextPageOffset);

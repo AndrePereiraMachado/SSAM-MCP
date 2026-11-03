@@ -8,10 +8,14 @@ import { PortalMetadata } from './portal-metadata.mjs';
 import { PORTAL_READS, checkSecretRefs, pointerValue, routeOf, screenservice, wirePointer } from './portal-routes.mjs';
 import { fail } from './errors.mjs';
 import { readCheckpoint } from '../../facade/read-budget.mjs';
+import { readTraceScreenservice } from './trace-screen-contract.mjs';
+import { readLogScreenservice } from './log-screen-contract.mjs';
+import { decodeLogText } from './log-text.mjs';
 
 const SESSION_CODES = new Set(['HEADLESS_AUTH_UNAVAILABLE', 'WEB_SIGN_IN_REQUIRED', 'STUDIO_NOT_SIGNED_IN', 'NOT_ALLOWED', 'HOST_MISMATCH', 'UNCERTAIN', 'BAD_REQUEST', 'REMOTE_ERROR']);
 
 export class StudioPortalBroker {
+  get nativeTraceContext() { return true; }
   // bridge(args) runs one bridge command; requestFile(json) writes it under journal\portal\requests and returns the path.
   constructor({ host, bridge, requestFile }) {
     this.target = 'odc3'; this.host = host; this.origin = 'https://' + host; this.bridge = bridge; this.requestFile = requestFile;
@@ -63,11 +67,20 @@ export class StudioPortalBroker {
     if (request.target !== this.target || request.origin !== this.origin || request.readOnly !== true) fail('PORTAL_ACCESS_DENIED', 'Broker scope does not match.');
     const expected = Object.hasOwn(PORTAL_READS, request.operationId) ? PORTAL_READS[request.operationId] : null;
     if (!expected || expected[0] !== request.module || expected[1] !== request.view || expected[2] !== request.action || expected[3] !== request.discoveryView) fail('PORTAL_ACCESS_DENIED', 'Internal operation is not allowlisted for this action/view.');
-    const body = await screenservice(this.transport, { module: request.module, view: request.view, action: request.action, discoveryView: request.discoveryView ?? request.view,
-      inputParameters: request.inputParameters, screenVariables: request.screenVariables, clientVariables: request.clientVariables, signal: request.signal });
+    const action = (module, view, action, inputParameters, screenVariables, signal, clientVariables, discoveryView = view) => {
+      if (signal?.aborted) fail('PORTAL_TIMEOUT', 'Portal read was cancelled before its next dependency.');
+      return screenservice(this.transport, { module, view, action, discoveryView, inputParameters, screenVariables, clientVariables, signal });
+    };
+    // The same native dependencies and identity checks apply to Studio and
+    // hosted Agent sessions; a transport choice must not change the contract.
+    const body = await (['monitoring.trace', 'monitoring.traceLogs', 'monitoring.traceSummary'].includes(request.operationId)
+      ? readTraceScreenservice(action, request)
+      : ['monitoring.logs', 'monitoring.errors'].includes(request.operationId)
+        ? readLogScreenservice(action, request)
+        : action(request.module, request.view, request.action, request.inputParameters, request.screenVariables, request.signal, request.clientVariables, request.discoveryView ?? request.view));
     // Keep the wire body intact for PortalReadAdapter scope/pagination checks;
     // that adapter redacts the completed remote projection.
-    return { target: this.target, origin: this.origin, body };
+    return { target: this.target, origin: this.origin, body: decodeLogText(body, request.operationId) };
   }
 
   async callScreenservice({ operationId, write = false, input, secretRefs = [], operationUuid, authorizeSha256, confirmTenant, signal }) {

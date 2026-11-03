@@ -5,6 +5,7 @@ import { readTraceScreenservice } from '../runtime/trace-screen-contract.mjs';
 import { normalizeTraceSummary } from '../runtime/trace-metadata-result.mjs';
 import { PortalReadAdapter } from '../runtime/portal-read.mjs';
 import { Odc3PortalBroker } from '../runtime/odc3-context.mjs';
+import { StudioPortalBroker } from '../runtime/studio-portal.mjs';
 
 const stage = { FoundStage: true, Environment: { Key: 'stage', PortfolioKey: 'portfolio', Name: 'DEV', Purpose: 'Development' } };
 const settings = { MaxSupportedSpans: '8000', MaxSpansExpandDegreeLevel: 3, IsTraceDuratiomFilterEnabled: true };
@@ -78,7 +79,7 @@ test('related log read uses the same block dependencies but does not fetch spans
 });
 
 test('real broker binding preserves final trace scope rejection and does not expose foreign attributes', async () => {
-  const broker = new Odc3PortalBroker(); broker.authenticated = true;
+  const broker = new Odc3PortalBroker({ origin: 'https://wrightflood.outsystems.dev' }); broker.authenticated = true;
   const calls = [];
   broker.action = async (_module, _view, action) => {
     const key = action.split('DataAction')[1]; calls.push(key);
@@ -98,7 +99,7 @@ test('real broker binding preserves final trace scope rejection and does not exp
 test('native summary confirms an empty wire ID only against a scoped matching entry', async () => {
   const root = { TraceId:'trace', SpanId:'entry', ParentSpanId:'', IsEntrySpan:true,
     StartTime:summary.Trace.StartTime, Duration:'42', Status:'Ok' };
-  const broker = new Odc3PortalBroker(); broker.authenticated = true;
+  const broker = new Odc3PortalBroker({ origin: 'https://wrightflood.outsystems.dev' }); broker.authenticated = true;
   const calls=[];
   broker.action=async (_module,_view,action) => {
     const key=action.split('DataAction')[1]; calls.push(key);
@@ -123,4 +124,23 @@ test('cancelled summary dependencies never send a later span request', async () 
   await assert.rejects(readTraceScreenservice(action,{...request,operationId:'monitoring.traceSummary',
     screenVariables:{id:'trace',stageid:'stage'},signal:controller.signal}),error=>error.code==='PORTAL_TIMEOUT');
   assert.deepEqual(calls,['GetStage','GetTraceById','GetSettings']);
+});
+
+test('Studio and inherited Agent transport use native trace prerequisites and reject foreign spans', async () => {
+  for (const foreign of [false, true]) {
+    const calls=[];
+    const broker=new StudioPortalBroker({host:'tenant.example.test'});
+    broker.metadata.resolve=async (_module,_view,action)=>({moduleVersion:'fixture',apiVersion:'fixture',action});
+    broker.request=async (url,{body})=>{
+      const key=new URL(url).pathname.split('DataAction')[1];calls.push(key);
+      if(key==='GetSpans') assert.equal(body.screenData.variables.TraceStartTime,summary.Trace.StartTime);
+      return {status:200,text:JSON.stringify({data:{GetStage:stage,GetSettings:settings,GetTraceById:summary,
+        GetSpans:{SpansList:{traceProcessingStatus:'Finished',MON_SpanItemList:{List:[{TraceId:foreign?'foreign':'trace',SpanId:'root',ParentSpanId:'',IsEntrySpan:true,StartTime:summary.Trace.StartTime,Duration:'42',Status:'Ok'}]}}}}[key]})};
+    };
+    const adapter=new PortalReadAdapter({target:'odc3',origin:broker.origin,broker});
+    const result=await adapter.execute({operationId:'monitoring.trace',input:{environmentKey:'stage',traceId:'trace'}});
+    assert.equal(result.ok,!foreign,JSON.stringify(result));
+    assert.deepEqual(calls,['GetStage','GetSettings','GetTraceById','GetSpans']);
+    if(foreign)assert.equal(result.spans,undefined);else assert.equal(result.spans.length,1);
+  }
 });
