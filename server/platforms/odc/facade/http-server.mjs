@@ -30,6 +30,7 @@ import { createAgentHub } from './agent-hub.mjs';
 import { sweepAllUsersState, usersKeyLost, USERS_KEY_LINE } from './hosted/users-agent.mjs';
 import { SNAKE, CODE_UNLISTED, isListedCode } from './quality-line.mjs';
 import { assertServerQuota, effectiveQuota } from './hosted/workspace-quota.mjs';
+import { sweepCustomers, RETENTION, retentionSettings } from './hosted/workspace-retention.mjs';
 
 export const DEFAULTS = Object.freeze({ host: '127.0.0.1', port: 7300, ratePerMinute: 240, maxSessionsPerToken: 8,
   maxBodyBytes: 16 * 1024 * 1024, idleMs: 60 * 60 * 1000, sweepMs: 500, keepaliveMs: 25000 });
@@ -71,7 +72,7 @@ function jsonError(res, status, code, message, headers = {}, data) {
 export async function startHttpServer({ createServer, dir, host = DEFAULTS.host, port = DEFAULTS.port, allowRemote = false,
   publicHosts = [], logFile = null, agents = false,
   ratePerMinute = DEFAULTS.ratePerMinute, maxSessionsPerToken = DEFAULTS.maxSessionsPerToken, maxBodyBytes = DEFAULTS.maxBodyBytes,
-  idleMs = DEFAULTS.idleMs, sweepMs = DEFAULTS.sweepMs, usersSweepMs = 3600000, keepaliveMs = DEFAULTS.keepaliveMs, log: sink = () => {}, now = () => new Date(), env = process.env,
+  idleMs = DEFAULTS.idleMs, sweepMs = DEFAULTS.sweepMs, usersSweepMs = 3600000, workspaceSweepMs = RETENTION.sweepEveryMs, keepaliveMs = DEFAULTS.keepaliveMs, log: sink = () => {}, now = () => new Date(), env = process.env,
   // observeCall(params, session) -> {finish(response)} | null: the friction record of stdio (facade/friction-boundary.mjs), per call.
   observeCall = null,
   // quality: a recorder (quality-recorder.mjs) or null (records nothing; --local-studios never passes one).
@@ -141,6 +142,24 @@ export async function startHttpServer({ createServer, dir, host = DEFAULTS.host,
   const usersSweep = () => { try { sweepAllUsersState(path.join(dir, 'customers')); if (usersKeyLost(dir)) usersKeyLine(); } catch (error) { log({ event: 'users-sweep-failed', code: error?.code ?? 'UNKNOWN' }); } };
   usersSweep();
   const usersTimer = setInterval(usersSweep, usersSweepMs); usersTimer.unref();
+  // r41: the retention cleanup of every customer workspace (hosted/workspace-retention.mjs), every workspaceSweepMs (30 min)
+  // from a random start in the first tenth of it, so the backends that share /data/server spread their sweeps; the lock of
+  // each workspace keeps two of them off the same one. Hosted mode only; 0 turns it off.
+  let workspaceTimer = null, workspaceStart = null, sweeping = false;
+  if (agents && workspaceSweepMs > 0) {
+    const settings = retentionSettings(env);
+    const workspaceSweep = async () => {
+      if (sweeping) return;
+      sweeping = true;
+      try {
+        const r = await sweepCustomers(path.join(dir, 'customers'), { settings, log, backend: env.SSAM_BACKEND_NAME ?? null });
+        if (r.removed > 0 || r.skipped > 0) log({ event: 'workspace-sweep', ...r });
+      } catch (error) { log({ event: 'workspace-sweep-failed', code: error?.code ?? 'UNKNOWN' }); } finally { sweeping = false; }
+    };
+    workspaceStart = setTimeout(() => { workspaceSweep(); workspaceTimer = setInterval(workspaceSweep, workspaceSweepMs); workspaceTimer.unref(); },
+      Math.floor(Math.random() * workspaceSweepMs / 10)); workspaceStart.unref();
+  }
+  const stopWorkspaceSweep = () => { clearTimeout(workspaceStart); clearInterval(workspaceTimer); };
 
   function allowedHost(header, actualPort) {
     if (allowRemote) return true;
@@ -332,7 +351,7 @@ export async function startHttpServer({ createServer, dir, host = DEFAULTS.host,
   });
   try {
     await new Promise((resolve, reject) => { server.once('error', reject); server.listen(port, host, () => { server.off('error', reject); resolve(); }); });
-  } catch (error) { clearInterval(timer); clearInterval(usersTimer); await hub?.close(); await store.close().catch(() => {}); throw error; }
+  } catch (error) { clearInterval(timer); clearInterval(usersTimer); stopWorkspaceSweep(); await hub?.close(); await store.close().catch(() => {}); throw error; }
   const actual = server.address();
   const shownHost = actual.family === 'IPv6' ? '[' + actual.address + ']' : actual.address;
   log({ event: 'listening', url: 'http://' + shownHost + ':' + actual.port + '/mcp', mode: hub ? 'hosted' : 'local-studios', pid: process.pid,
@@ -340,7 +359,7 @@ export async function startHttpServer({ createServer, dir, host = DEFAULTS.host,
   return {
     url: 'http://' + shownHost + ':' + actual.port + '/mcp', port: actual.port, host: actual.address, sessions, hub,
     async close() {
-      clearInterval(timer); clearInterval(usersTimer);
+      clearInterval(timer); clearInterval(usersTimer); stopWorkspaceSweep();
       await hub?.close();
       await store.close().catch(() => {});
       await Promise.all([...sessions.keys()].map(sid => closeSession(sid, 'server-stop')));

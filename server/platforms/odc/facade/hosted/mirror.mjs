@@ -257,6 +257,8 @@ export class Mirror {
     const sha = await sha256File(abs);
     const target = path.join(this.workspace, lane, 'journal', 'staging', sha + path.extname(abs).toLowerCase());
     if (!isFile(target)) { fs.mkdirSync(path.dirname(target), { recursive: true }); fs.copyFileSync(abs, target); }
+    // r41: a copy used again is fresh again, so the retention cleanup (its staging files older than 3 days) never takes it now.
+    else { try { const t = new Date(); fs.utimesSync(target, t, t); } catch { /* the copy stays as it is */ } }
     return target;
   }
 

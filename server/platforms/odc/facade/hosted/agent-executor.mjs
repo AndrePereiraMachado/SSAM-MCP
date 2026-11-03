@@ -16,6 +16,7 @@ import { PipeError, replyTimeoutMs } from '../odc-pipe.mjs';
 import { BridgeError, timeoutFor } from '../o11-bridge.mjs';
 import { Mirror, createQuota } from './mirror.mjs';
 import { serverQuotaGiB, GIB } from './workspace-quota.mjs';
+import { cleanWorkspace } from './workspace-retention.mjs';
 import { stageOdcPipe } from './odc-stage.mjs';
 import { stageO11Bridge, IMPORT_METHOD } from './o11-stage.mjs';
 import { startRelay } from './o11-relay.mjs';
@@ -130,7 +131,8 @@ export class AgentExecutor {
     this.relayAuthorityDir = relayAuthorityDir ?? path.join(this.workspace, 'state', 'relay-authority');
     this.o11 = { studioDir: o11.studioDir ?? null, lane: o11.lane ?? null };
     this.log = log;
-    this.quota = createQuota(this.workspace, { limitBytes: quotaBytes });
+    // r41: over the quota, the retention cleanup of this workspace runs once before a refusal (hosted/workspace-retention.mjs).
+    this.quota = createQuota(this.workspace, { limitBytes: quotaBytes, cleanup: (ws, options) => cleanWorkspace(ws, { ...options, log }) });
     this.mirror = new Mirror({ workspace: this.workspace, link, quota: this.quota, log });
     this.relay = null;
     this.record = null;

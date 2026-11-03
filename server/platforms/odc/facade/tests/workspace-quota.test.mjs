@@ -12,6 +12,7 @@ import { fileURLToPath } from 'node:url';
 import { effectiveQuota, serverQuotaGiB, assertServerQuota, quotaInput, DEFAULT_QUOTA_GIB, GIB } from '../hosted/workspace-quota.mjs';
 import { createQuota, workspaceFull, workspaceFullText, QUOTA_BYTES } from '../hosted/mirror.mjs';
 import { createTokenStore, tokenActions } from '../server-tokens.mjs';
+import { cleanWorkspace } from '../hosted/workspace-retention.mjs';
 import { startHttpServer } from '../http-server.mjs';
 
 const roots = [];
@@ -63,6 +64,28 @@ test('a license record keeps its own quota: set, read, cleared, refused when inv
   store.revoke(id);
   assert.throws(() => store.setQuota(id, 5), e => e.code === 'TOKEN_REVOKED');
   assert.throws(() => tokenActions(store, ['quota', '--id', id]), e => e.code === 'USAGE');
+});
+
+test('over the quota the cleanup runs once and the walk is redone: a workspace back under passes, one still over refuses with what was freed', () => {
+  const ws = tmp();
+  fs.mkdirSync(path.join(ws, 'o11'), { recursive: true });
+  fs.writeFileSync(path.join(ws, 'o11', 'core.42'), coreDump(4096));
+  fs.writeFileSync(path.join(ws, 'o11', 'keep.bin'), Buffer.alloc(100));
+  let limit = 1000;
+  const quota = createQuota(ws, { limitBytes: () => limit, cleanup: (w, o) => cleanWorkspace(w, o) });
+  assert.equal(quota.limitBytes, 1000);
+  assert.equal(quota.full(), false, 'the core dump went and the workspace is under');
+  assert.equal(fs.existsSync(path.join(ws, 'o11', 'core.42')), false);
+  assert.equal(quota.lastCleanup.freedBytes, 4096);
+  limit = 50;
+  assert.equal(quota.full(), true, 'nothing more can go: still over');
+  const text = workspaceFull(quota).message;
+  assert.match(text, /over its quota/); assert.match(text, /ask the SSAM administrator to raise the workspace quota of this account/);
+  assert.match(workspaceFullText(quota, { nothing: 'nothing ran' }), /nothing ran/);
+  let runs = 0;
+  const counted = createQuota(ws, { limitBytes: 1, cleanup: () => { runs++; return { ok: true, freedBytes: 0 }; } });
+  counted.full(); counted.full();
+  assert.equal(runs, 1, 'at most one cleanup per 10 minutes');
 });
 
 test('the gate refusal and the mirror refusal carry the same text; a quota without cleanup still refuses', () => {
