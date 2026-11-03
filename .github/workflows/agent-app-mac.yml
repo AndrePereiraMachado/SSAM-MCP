@@ -57,3 +57,15 @@ jobs:
           security create-keychain -p "$password" "$keychain"
           security unlock-keychain -p "$password" "$keychain"
           node agent/scripts/import-mac-identity.mjs "$keychain" "$RUNNER_TEMP/import-check.p12"
+          curl --fail --silent --show-error https://www.apple.com/certificateauthority/DeveloperIDG2CA.cer -o "$RUNNER_TEMP/DeveloperIDG2CA.cer"
+          security import "$RUNNER_TEMP/DeveloperIDG2CA.cer" -k "$keychain" >/dev/null
+          security list-keychains -d user -s "$keychain" login.keychain-db
+          echo 'Granting codesign access'
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$password" "$keychain" >/dev/null
+          echo 'Checking signing identity'
+          identity=$(security find-identity -v -p codesigning "$keychain" | sed -n '/Developer ID Application/s/.*\([A-F0-9]\{40\}\).*/\1/p' | head -1)
+          test -n "$identity"
+          cp /usr/bin/true "$RUNNER_TEMP/signing-probe"
+          echo 'Signing isolated probe'
+          codesign --force --timestamp --options runtime --keychain "$keychain" --sign "$identity" "$RUNNER_TEMP/signing-probe"
+          codesign --verify --strict "$RUNNER_TEMP/signing-probe"
