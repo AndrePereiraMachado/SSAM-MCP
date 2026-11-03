@@ -132,8 +132,8 @@ internal sealed class AgentChannel : IDisposable
     // 0.4.6-native (agent/r4-prefer-foreign, app 0.2.1): the hello declares merge_from_oml:prefer_foreign (thin O11 bridge 1.2.0).
     // 0.4.8-native (r40a, app 0.2.3): credential.session (CredentialKinds.cs). 0.4.9-native (agent/r40, app 0.2.4): document.fetch (DocumentFetch.cs), one integration document downloaded on this
     // machine for a hosted server, always in the hello (the Node agent's 0.3.12).
-    // 0.4.12-native: coalesce private sign-in attempts and recheck sessions under the queue.
-    internal const string AgentVersion = "0.4.12-native";
+    // 0.4.13-native: expire private Portal sessions with their access tokens.
+    internal const string AgentVersion = "0.4.13-native";
     // pack.json bridgeOffer false: a pack built without the bridge trust anchors (the owner's unsigned test app) never asks for offers.
     internal const string NoAnchorsReason = "This agent package was built without the bridge trust anchors (a test build); it uses only its bundled bridges.";
     internal static bool NoAnchors(JsonObject? pack) => pack?["bridgeOffer"] is JsonValue v && v.TryGetValue<bool>(out var offer) && !offer;

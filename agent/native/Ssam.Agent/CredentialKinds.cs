@@ -25,7 +25,7 @@ internal sealed class CredentialKinds
     internal Func<string, Task<string[]>> Lookup = async host => (await Dns.GetHostAddressesAsync(host)).Select(x => x.ToString()).ToArray();
     internal Func<JsonObject, Task<JsonObject>>? Helper;
     internal bool ForceWindows;
-    private sealed class Session { internal JsonNode? State; internal readonly HashSet<string> Secrets = new(StringComparer.Ordinal); }
+    private sealed class Session { internal JsonNode? State; internal bool LifetimeLimited; internal readonly HashSet<string> Secrets = new(StringComparer.Ordinal); }
     private sealed record Prompt(Process Process, string Status, JsonObject Request, long Generation, Task<JsonObject> Completion);
     internal long PromptGeneration => generation;
     internal CredentialKinds(string root, string account, PrivateSessionRuntime runtime, string? runtimeRoot = null)
@@ -437,10 +437,15 @@ internal sealed class CredentialKinds
             }
             if (Text(p["op"]) is "forget" or "sign-out" || Text(p["op"]) == "login" && Flag(value["authenticated"])) ResetFailures(key);
             if (value.ContainsKey("privateSession")) session.State = value["privateSession"]?.DeepClone();
+            if (Text(p["service"]) == "odc-portal" && CredentialSessionLifetime.Limit(session.State)) session.LifetimeLimited = true;
             Secrets(session, value["secretValues"]);
             foreach (var field in new[] { "secretValues", "password", "token", "accessToken", "refreshToken" }) Secrets(session, value["privateSession"]?[field]);
             if (value["privateSession"]?["cookies"] is JsonArray cookies) foreach (var cookie in cookies) if (CookieSensitivity.IsSensitive(Text(cookie?["name"]), Text(cookie?["value"]))) Secrets(session, cookie?["value"]);
             var result = Project(p, value, session);
+            if (Text(p["op"]) == "request" && session.LifetimeLimited) {
+                if (result["notes"] is not JsonArray) result["notes"] = new JsonArray();
+                ((JsonArray)result["notes"]!).Add((JsonNode?)JsonValue.Create(CredentialSessionLifetime.Note));
+            }
             if (Text(p["op"]) == "request" && value["status"] is JsonValue httpStatus && httpStatus.TryGetValue<int>(out var statusCode) && statusCode == 401) session.State = null;
             return result;
         } catch (AgentFault error) when (writeResponseReceived) {

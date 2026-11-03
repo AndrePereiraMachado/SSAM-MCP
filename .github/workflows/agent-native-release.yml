@@ -118,7 +118,7 @@ jobs:
           tests/native/studio-policy.test.mjs tests/native/app-integration.test.mjs
           tests/native/studio-build-plan.test.mjs tests/native/mac-bridge-build.test.mjs
       - name: Test r40 Node routing
-        run: node --test agent/tests/mac-private-helper.test.mjs agent/tests/credential-concurrency.test.mjs
+        run: node --test agent/tests/mac-private-helper.test.mjs agent/tests/credential-concurrency.test.mjs agent/tests/credential-lifetime.test.mjs
 
       - name: Sign, package and notarize
         if: inputs.sign_and_notarize
@@ -194,12 +194,12 @@ jobs:
           try {
             await hub.until(() => hub.hellos.length > 0, 30000);
             const hello = hub.hellos[0];
-            fs.writeFileSync('ci-results/hello-026.json', JSON.stringify(hello, null, 2) + '\n');
+            fs.writeFileSync('ci-results/hello-027.json', JSON.stringify(hello, null, 2) + '\n');
             const summary = { version: hello.agent.version, runtime: hello.agent.runtime, platform: hello.agent.platform, kinds: hello.agent.kinds,
               pack: hello.pack, credentialStored: fs.existsSync(path.join(data, 'private/credential')),
               native: createHash('sha256').update(fs.readFileSync(path.join(pack, manifest.nativeCore.path))).digest('hex') };
             console.log(JSON.stringify(summary, null, 2));
-            if (hello.agent.version !== '0.4.12-native' || hello.agent.runtime !== 'native-aot' || hello.agent.platform !== 'darwin') throw new Error('unexpected agent');
+            if (hello.agent.version !== '0.4.13-native' || hello.agent.runtime !== 'native-aot' || hello.agent.platform !== 'darwin') throw new Error('unexpected agent');
             if (JSON.stringify(hello.pack.odcBridges) !== '["v108","v109"]' || hello.pack.odcBridge !== 'v108') throw new Error('unexpected ODC bridges');
             if (manifest.bridgeOffer !== false) throw new Error('Remote bridge offers must remain disabled');
             if (!hello.agent.kinds.includes('credential.session') || !hello.agent.kinds.includes('document.fetch')) throw new Error('Required r40 kinds missing');

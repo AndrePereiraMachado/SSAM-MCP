@@ -11,6 +11,7 @@ import { refuse, AgentError } from './errors.mjs';
 import { validateUsersRequest, isPrivateAddress } from './users.mjs';
 import { createPrivateRuntime, createSecretRedactor, createLoginBrake, createPrivateCredentialMemory, capturePrivatePrompt } from './private-runtime.mjs';
 import { macPrivateCommand } from './mac-private-helper.mjs';
+import { limitPortalSessionLifetime, PORTAL_LIFETIME_NOTE } from './credential-session-lifetime.mjs';
 
 export const CREDENTIAL_KIND = 'credential.session';
 export const CREDENTIAL_HELPER = fileURLToPath(new URL('./credential-vault.ps1', import.meta.url));
@@ -259,6 +260,7 @@ export function createCredentialSession({ dataRoot, runtimeRoot = path.resolve(p
     settle();
     if (generation !== (generations.get(groupOf(p)) ?? 0)) throw fault('CREDENTIAL_SESSION_CHANGED', p.op === 'request' && p.method !== 'GET' ? null : false);
     if (value.privateSession !== undefined) session.value = value.privateSession;
+    if (p.service === 'odc-portal' && limitPortalSessionLifetime(session.value)) session.lifetimeLimited = true;
     session.redactor.add(value.secretValues);
     // Known private fields are also registered defensively. A helper cannot make
     // them public simply by accidentally echoing them in a page or a header.
@@ -325,6 +327,7 @@ export function createCredentialSession({ dataRoot, runtimeRoot = path.resolve(p
       catch { throw fault(); }
     } else decoded = body.toString('utf8');
     const scrubbed = clean(decoded), notes = [];
+    if (session.lifetimeLimited) notes.push(PORTAL_LIFETIME_NOTE);
     if (!textual && (decoded !== scrubbed || body.toString('utf16le') !== clean(body.toString('utf16le')))) throw fault();
     if (/json/i.test(contentType) && scrubbed.trim()) {
       try { JSON.parse(decoded); } catch { throw fault('CREDENTIAL_RESPONSE_INVALID', p.method !== 'GET' ? null : false); }
