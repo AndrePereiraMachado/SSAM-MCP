@@ -160,7 +160,7 @@ export function createDialogs(ctx) {
       if (o.value === checkedValue) inp.checked = true;
       inputs.push(inp);
       const lab = h('label', { for: id, class: 'opt' }, inp, ` ${o.label}`);
-      if (o.value === 'outro' && extra) lab.append(' ', extra.input, ` ${extra.suffix}`);
+      if (extra && o.value === (extra.option ?? 'outro')) lab.append(' ', extra.input, ` ${extra.suffix}`);
       fs.append(lab);
     }
     return { el: fs, value: () => (inputs.find((i) => i.checked) || {}).value, inputs };
@@ -523,7 +523,7 @@ export function createDialogs(ctx) {
     own.value = chosen == null ? '' : String(chosen);
     const group = radioGroup('cota', 'Cota de espaço de trabalho', [
       { value: 'servidor', label: 'A do servidor' }, { value: 'propria', label: 'Própria:' },
-    ], chosen == null ? 'servidor' : 'propria', { input: own, suffix: 'GiB' });
+    ], chosen == null ? 'servidor' : 'propria', { option: 'propria', input: own, suffix: 'GiB' });
     const ws = lic.workspace;
     const usage = ws ? `Uso atual: ${F.fmtBytes(ws.bytes)} de ${F.fmtBytes(ws.quotaBytes)}.` : 'Uso atual: ainda não medido.';
     const same = h('p', { class: 'muted dlg-text', 'aria-live': 'polite' });
