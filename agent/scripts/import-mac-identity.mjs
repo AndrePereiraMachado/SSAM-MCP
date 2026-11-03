@@ -22,7 +22,8 @@ try{
  } finally {pem.fill(0);fs.rmSync(certFile,{force:true});fs.rmSync(keyFile,{force:true});}
  run('/usr/bin/security',['import',file,'-k',keychain,'-P',process.env.CSC_KEY_PASSWORD,'-T','/usr/bin/codesign']);
  console.log('Encrypted signing identity imported successfully.');
-}finally{fs.rmSync(original,{force:true});fs.rmSync(file,{force:true});}
+}finally{fs.rmSync(original,{force:true});}
+
 
 
 

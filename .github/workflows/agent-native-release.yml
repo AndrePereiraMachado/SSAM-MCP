@@ -141,6 +141,9 @@ jobs:
           security set-keychain-settings -lut 21600 "$keychain"
           security unlock-keychain -p "$keychain_password" "$keychain"
           node scripts/import-mac-identity.mjs "$keychain" "$certificate"
+          export CSC_LINK="$certificate"
+          curl --fail --silent --show-error https://www.apple.com/certificateauthority/DeveloperIDG2CA.cer -o "$RUNNER_TEMP/DeveloperIDG2CA.cer"
+          security import "$RUNNER_TEMP/DeveloperIDG2CA.cer" -k "$keychain" >/dev/null
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$keychain_password" "$keychain" >/dev/null
           identity=$(security find-identity -v -p codesigning "$keychain" | sed -n '/Developer ID Application/s/.*\([A-F0-9]\{40\}\).*/\1/p' | head -1)
           test -n "$identity" || { echo 'Developer ID Application identity missing'; exit 1; }
@@ -245,6 +248,7 @@ jobs:
             agent/dist/SHA256SUMS
             agent/dist/installed-pack.json
             agent/dist/verify-native.json
+
 
 
 
