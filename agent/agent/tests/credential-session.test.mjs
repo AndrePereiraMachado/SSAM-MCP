@@ -39,6 +39,15 @@ test('legacy retry brake remains fail-closed after the directory change', async 
   assert.equal(k.calls.length, 0);
   assert.equal(fs.readFileSync(file, 'utf8'), 'invalid-json');
 });
+test('default status rechecks the selected profile with its cached session', async () => {
+  const profile = '0'.repeat(64);
+  const k = kind({ dataRoot: fs.mkdtempSync(path.join(os.tmpdir(), 'credential-selected-')), exec: async (file, args, input) => {
+    const p = JSON.parse(input);
+    return JSON.stringify(p.op === 'login' ? { ok: true, authenticated: true, privateSession: { profile } } : { ok: true, available: true, profile, authenticated: p.privateSession?.profile === profile });
+  }});
+  await k.agent.execute({ ...base, op: 'login', profile });
+  assert.equal((await k.agent.execute({ ...base, op: 'status' })).authenticated, true);
+});
 for (const row of credentialRows()) test('shared credential table: ' + row.name, () => {
   let result;
   try { validateCredentialRequest(row.request); result = { ok: true }; } catch (error) { result = { error: error.code }; }

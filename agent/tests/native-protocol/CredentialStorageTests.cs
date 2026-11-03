@@ -22,6 +22,31 @@ public class CredentialStorageTests
     }
 
     [Fact]
+    public async Task DefaultStatusUsesConfirmedSelectedProfileSession()
+    {
+        var profile = new string('0', 64); var kind = new CredentialKinds(Root(), "fixture", new()) { ForceWindows = true, Lookup = _ => Task.FromResult(new[] { "93.184.216.34" }) };
+        kind.Helper = p => Task.FromResult(p["op"]!.GetValue<string>() == "login"
+            ? new JsonObject { ["ok"] = true, ["authenticated"] = true, ["privateSession"] = new JsonObject { ["profile"] = profile } }
+            : new JsonObject { ["ok"] = true, ["available"] = true, ["profile"] = profile, ["authenticated"] = p["privateSession"]?["profile"]?.GetValue<string>() == profile });
+        var login = Request("login"); login["profile"] = profile;
+        await kind.Execute(login, CancellationToken.None);
+        Assert.True((await kind.Execute(Request("status"), CancellationToken.None))["authenticated"]!.GetValue<bool>());
+    }
+
+    [Fact]
+    public async Task SavingDefaultPromptResetsSelectedProfileBrake()
+    {
+        var root = Root(); var calls = 0; var profile = new string('0', 64);
+        var kind = new CredentialKinds(root, "fixture", new()) { ForceWindows = true, Lookup = _ => Task.FromResult(new[] { "93.184.216.34" }), Helper = _ => { calls++; return Task.FromResult(new JsonObject { ["ok"] = false, ["code"] = "CREDENTIAL_LOGIN_FAILED" }); } };
+        var login = Request("login"); login["profile"] = profile;
+        await Assert.ThrowsAsync<AgentFault>(() => kind.Execute(login, CancellationToken.None));
+        await Assert.ThrowsAsync<AgentFault>(() => kind.Execute(login, CancellationToken.None));
+        kind.ApplyPromptCompletion(Request("prompt"), new JsonObject { ["ok"] = true, ["saved"] = true, ["remembered"] = true, ["profile"] = profile }.ToJsonString(), kind.PromptGeneration);
+        var error = await Assert.ThrowsAsync<AgentFault>(() => kind.Execute(login, CancellationToken.None));
+        Assert.Equal("CREDENTIAL_LOGIN_FAILED", error.Code); Assert.Equal(3, calls);
+    }
+
+    [Fact]
     public async Task LegacyRetryBrakeIsPreserved()
     {
         var root = Root();

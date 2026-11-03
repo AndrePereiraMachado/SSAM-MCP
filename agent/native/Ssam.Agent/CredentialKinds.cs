@@ -127,6 +127,11 @@ internal sealed class CredentialKinds
         if (Flag(completion["remembered"])) privateCredentials.Remove(Group(request));
         else privateCredentials[Group(request)] = (JsonObject)completion.DeepClone();
         ResetFailures(Key(request));
+        // Hosted login pins the selected profile after status, while prompt can
+        // arrive without a profile. A confirmed save resets both aliases only.
+        var selectedRequest = (JsonObject)request.DeepClone();
+        selectedRequest["profile"] = completion["profile"]!.DeepClone();
+        ResetFailures(Key(selectedRequest));
     }
     private string SessionDirectory => Path.Combine(root, "private", "credential-session");
     // Preserve the existing retry brake for roots that previously used a directory.
@@ -365,6 +370,14 @@ internal sealed class CredentialKinds
                 try { value = await Call(p, session, token); }
                 finally { lock (runtime.Sync) privateWindowPending = false; }
             } else value = await Call(p, session, token);
+            if (Text(p["op"]) == "status" && p["profile"] == null && Flag(value["available"]) && Profile(Text(value["profile"]))) {
+                var selected = (JsonObject)p.DeepClone(); selected["profile"] = value["profile"]!.DeepClone();
+                if (sessions.TryGetValue(Key(selected), out var active) && active.State != null && !ReferenceEquals(active, session)) {
+                    // Recheck the currently selected vault profile with its cached session;
+                    // do not turn a default status call into an account selection.
+                    session = active; value = await Call(p, session, token);
+                }
+            }
             writeResponseReceived = Text(p["op"]) == "request" && Text(p["method"]) != "GET";
             Settle();
             if (generation != expectedGeneration) throw Failed("CREDENTIAL_SESSION_CHANGED");

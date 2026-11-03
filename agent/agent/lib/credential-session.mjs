@@ -227,7 +227,8 @@ export function createCredentialSession({ dataRoot, runtimeRoot = path.resolve(p
   }
   async function call(p) {
     if (!sessions.has(keyOf(p)) && sessions.size >= 128) throw refuse('CREDENTIAL_SESSION_LIMIT', 'Too many private credential sessions are active. Sign out of an unused session first.');
-    const key = keyOf(p), session = sessions.get(key) ?? { redactor: createSecretRedactor(), value: null };
+    const key = keyOf(p);
+    let session = sessions.get(key) ?? { redactor: createSecretRedactor(), value: null };
     const generation = generations.get(groupOf(p)) ?? 0;
     const temporary = memory.get(memoryKey(p));
     if (temporary) session.redactor.add(temporary.credential.password);
@@ -235,6 +236,14 @@ export function createCredentialSession({ dataRoot, runtimeRoot = path.resolve(p
     try {
       const cmd = command(args(p), JSON.stringify({ ...p, ...(temporary ? { profile: temporary.profile, privateCredential: temporary.credential } : {}), privateSession: session.value }));
       value = JSON.parse(await run(cmd.file, cmd.args, cmd.input, p.op === 'forget' ? 130000 : 90000));
+      if (p.op === 'status' && !p.profile && value?.ok && value.available && PROFILE.test(value.profile ?? '')) {
+        const active = sessions.get(keyOf({ ...p, profile: value.profile }));
+        if (active?.value && active !== session) {
+          session = active;
+          const selected = command(args(p), JSON.stringify({ ...p, ...(temporary ? { profile: temporary.profile, privateCredential: temporary.credential } : {}), privateSession: session.value }));
+          value = JSON.parse(await run(selected.file, selected.args, selected.input, 90000));
+        }
+      }
     }
     catch (error) {
       if (error?.code === 'CREDENTIAL_HELPER_UNAVAILABLE') throw fault(error.code, false);
