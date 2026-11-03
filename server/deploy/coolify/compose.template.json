@@ -79,6 +79,7 @@
         "CONSOLE_TOKEN_MODULE": "/app/platforms/odc/facade/server-tokens.mjs",
         "SSAM_DATABASE_URL": "${SSAM_DATABASE_URL:?set SSAM_DATABASE_URL}",
         "SSAM_SERVER_DIR": "/data/server",
+        "SSAM_WORKSPACE_QUOTA_GIB": "${SSAM_WORKSPACE_QUOTA_GIB:-10}",
         "TZ": "UTC"
       },
       "expose": [
@@ -238,7 +239,10 @@
         "SSAM_PORT": "7310",
         "SSAM_PUBLIC_HOST": "${SSAM_DOMAIN:?set SSAM_DOMAIN (the DNS name of this VPS, e.g. ssam.example.com)}",
         "SSAM_QUALITY": "${SSAM_QUALITY:-1}",
-        "SSAM_SERVER_RATE_PER_MINUTE": "${SSAM_RATE_PER_MINUTE:-240}"
+        "SSAM_SERVER_RATE_PER_MINUTE": "${SSAM_RATE_PER_MINUTE:-240}",
+        "SSAM_WORKSPACE_KEEP_CAPTURES": "${SSAM_WORKSPACE_KEEP_CAPTURES:-3}",
+        "SSAM_WORKSPACE_QUOTA_GIB": "${SSAM_WORKSPACE_QUOTA_GIB:-10}",
+        "SSAM_WORKSPACE_SCRATCH_DAYS": "${SSAM_WORKSPACE_SCRATCH_DAYS:-3}"
       },
       "expose": [
         "7310"
@@ -299,6 +303,9 @@
         "no-new-privileges:true"
       ],
       "stop_grace_period": "30s",
+      "ulimits": {
+        "core": 0
+      },
       "volumes": [
         {
           "source": "server-state",

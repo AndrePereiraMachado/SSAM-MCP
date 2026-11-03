@@ -29,6 +29,7 @@ import { openTokenStore, AGENT_PREFIX } from './server-tokens.mjs';
 import { createAgentHub } from './agent-hub.mjs';
 import { sweepAllUsersState, usersKeyLost, USERS_KEY_LINE } from './hosted/users-agent.mjs';
 import { SNAKE, CODE_UNLISTED, isListedCode } from './quality-line.mjs';
+import { assertServerQuota, effectiveQuota } from './hosted/workspace-quota.mjs';
 
 export const DEFAULTS = Object.freeze({ host: '127.0.0.1', port: 7300, ratePerMinute: 240, maxSessionsPerToken: 8,
   maxBodyBytes: 16 * 1024 * 1024, idleMs: 60 * 60 * 1000, sweepMs: 500, keepaliveMs: 25000 });
@@ -86,6 +87,8 @@ export async function startHttpServer({ createServer, dir, host = DEFAULTS.host,
   if (!agents && hosts.length) throw new Error('Refused: --public-host. ' + OWNER_ONLY_REFUSAL);
   if (!isLoopback(host) && !allowRemote) throw new Error('Refused: --host ' + host + '. ' + REMOTE_REFUSAL);
   if (!Number.isInteger(ratePerMinute) || ratePerMinute < 1) throw new Error('ratePerMinute must be a positive integer');
+  // r41: the hosted server refuses to start with a workspace quota nobody can have meant (hosted/workspace-quota.mjs).
+  if (agents) assertServerQuota(env, sink);
   const { WebStandardStreamableHTTPServerTransport } = await import('@modelcontextprotocol/server');
   fs.mkdirSync(dir, { recursive: true });
   if (logFile) fs.mkdirSync(path.dirname(path.resolve(logFile)), { recursive: true });
@@ -225,7 +228,10 @@ export async function startHttpServer({ createServer, dir, host = DEFAULTS.host,
     const pending = new Map(); // JSON-RPC id -> {tool, start}
     let sid;
     const served = { tokenId: auth.id, customer: auth.customer, lanes: auth.lanes ?? [], workspace: path.join(dir, 'customers', auth.id),
-      agent: hub ? hub.link(auth.id) : null };
+      agent: hub ? hub.link(auth.id) : null,
+      // r41: the account's quota at each check (its license record first, then SSAM_WORKSPACE_QUOTA_GIB, then 10 GiB), so a
+      // change in the console or the CLI holds without a new session.
+      quotaBytes: () => { let record = null; try { record = store.lookup(auth.id); } catch { /* the last known value below */ } return effectiveQuota(record ?? auth, env).bytes; } };
     const transport = new WebStandardStreamableHTTPServerTransport({
       sessionIdGenerator: () => randomUUID(),
       onsessioninitialized: id => {

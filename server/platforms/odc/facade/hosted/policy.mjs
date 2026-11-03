@@ -40,7 +40,7 @@ import { resolveVerifiedPatch, candidateOffer } from './verified-store.mjs';
 import { withCheckedCandidate } from '../o11-build-phase.mjs';
 import { localUploadEnabled, uploadLocalFile } from './local-upload.mjs';
 import { scrubDiscover, scrubEvidence, thirdPartyJobs } from './evidence.mjs';
-import { agentReadable, agentSegments, insideVisible } from './mirror.mjs';
+import { agentReadable, agentSegments, insideVisible, workspaceFullText } from './mirror.mjs';
 import { agentPath, outsideWorkspaceRefusal, isAgentMachinePath } from '../agent-paths.mjs';
 import { CODE_TOOL, JOB_TOOLS, JobTextError, PathRefusal, confineJobs, jobTextPointers, namesGenerator, namesPrototype, namesVerifiedPatch, outside, parseJobTexts, restConsumeUnsampled, FILE_URL, fileUrlRefusal } from './job-paths.mjs';
 import { generatorApproval, hostedGeneratorMode, offered } from '../generators.mjs';
@@ -200,8 +200,9 @@ export function kernelLaneOff(lane, refused) {
     error: `This SSAM server image carries the kernel for ${studio} ${refused?.image ?? '?'}, but its kernel.json names ${pinned ? studio + ' ' + pinned : 'no ' + studio + ' version'}: the ${lane} lane is off on this server, server-only tools included, and nothing ran.`,
     continuation: doctor('Shows the state of each lane. Ask the server owner to write the kernel.json of this server image.') };
 }
-const workspaceFull = () => ({ ok: false, code: 'WORKSPACE_FULL',
-  error: 'The workspace of this account on the SSAM server is over its quota; nothing ran.', continuation: doctor('Shows the workspace usage. Ask the server owner to free space.') });
+// r41: the same text as the mirror's (hosted/mirror.mjs workspaceFullText): quota, use, what the automatic cleanup freed, the fix.
+const workspaceFull = quota => ({ ok: false, code: 'WORKSPACE_FULL',
+  error: workspaceFullText(quota, { nothing: 'nothing ran' }), continuation: doctor('Shows the workspace usage. Ask the SSAM administrator to raise the workspace quota of this account.') });
 const pathRefused = (code, error) => ({ ok: false, code, error,
   continuation: doctor('Pass paths as SSAM tools return them (ws:odc/..., ws:o11/..., ws:inbox/...), or agent:inbox/<file> for a file the user put in the agent inbox folder.') });
 // Item 1: a path inside the job (base, a part, a producer, an html file, a document...) outside the workspace, named by its
@@ -963,7 +964,7 @@ export function wrapHostedTool(name, config, handler, { context, link = context?
       if (studio.args) ({ args, skipped } = studio);
     }
     // (a8: an entry that writes in the workspace by itself, writesWorkspace: ssam_code's check jobs and plans)
-    if ((need === 'always' || (entry.paths?.out ?? []).length || entry.writesWorkspace === true) && context.executor?.quota?.full?.()) return refusal(workspaceFull());
+    if ((need === 'always' || (entry.paths?.out ?? []).length || entry.writesWorkspace === true) && context.executor?.quota?.full?.()) return refusal(workspaceFull(context.executor.quota));
     let resolved = args;
     if (hasArgs) {
       try { resolved = await resolvePaths(name, entry, args, lane, context, { agentRoot: info?.agentRoot ?? null }); }

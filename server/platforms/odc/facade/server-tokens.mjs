@@ -18,12 +18,13 @@
 // (SSAM-MCP server/deploy/console, reachable only through the owner's SSH tunnel; tokens.json only), both through this
 // module; the server itself never writes. Nothing in this module listens on a network, and no function returns or
 // logs a stored secret. Every error thrown here carries error.code (UNKNOWN_TOKEN, TOKEN_REVOKED, TOKEN_NOT_ACTIVE,
-// NO_EXPIRY, INVALID_DAYS, EXPIRY_TOO_FAR, INVALID_LANES, INVALID_CUSTOMER, STORE_INVALID, STORE_LOCKED,
+// NO_EXPIRY, INVALID_DAYS, EXPIRY_TOO_FAR, INVALID_LANES, INVALID_QUOTA, INVALID_CUSTOMER, STORE_INVALID, STORE_LOCKED,
 // STORE_UNAVAILABLE, USAGE; file-system errors keep their own code); the messages are the ones older images used, so
 // a caller may still match on them.
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
+import { quotaInput, validQuotaGiB } from './hosted/workspace-quota.mjs';
 
 export const TOKEN_PREFIX = 'ssam_';
 export const AGENT_PREFIX = 'ssam_agent_';
@@ -39,6 +40,10 @@ const sha256 = text => createHash('sha256').update(text, 'utf8').digest();
 const customerPattern = /^[\p{L}\p{N}][\p{L}\p{N} ._-]{0,63}$/u;
 // Phase-1 records have no lanes field: they keep the default of a new token.
 const lanesOf = t => Array.isArray(t.lanes) ? t.lanes.filter(l => TOKEN_LANES.includes(l)) : [...TOKEN_LANES];
+// r41: the account's own workspace quota in GiB (hosted/workspace-quota.mjs), or null for the server value. Older records
+// have no field.
+const quotaOf = t => (t.quotaGiB == null ? null : validQuotaGiB(t.quotaGiB));
+const quotaField = t => { const q = quotaOf(t); return q === null ? {} : { quotaGiB: q }; };
 const coded = (code, message) => Object.assign(new Error(message), { code });
 const validDays = days => Number.isInteger(days) && days >= 1 && days <= MAX_DAYS;
 // The writers are synchronous (the CLI and the console's one-at-a-time queue); waiting for the lock blocks this thread.
@@ -68,7 +73,7 @@ export function tokenRecords({ now = () => new Date() } = {}) {
   const stateOf = t => t.revokedAt ? 'revoked' : t.expiresAt && Date.parse(t.expiresAt) <= now().getTime() ? 'expired' : 'active';
   const publicView = t => ({ id: t.id, customer: t.customer, createdAt: t.createdAt, ...(t.expiresAt ? { expiresAt: t.expiresAt } : {}),
     ...(t.revokedAt ? { revokedAt: t.revokedAt } : {}), state: stateOf(t), ...(t.verification===true?{verification:true}:{}), lanes: lanesOf(t),
-    agent: t.agentSha256 ? { issuedAt: t.agentIssuedAt ?? null } : null });
+    ...quotaField(t), agent: t.agentSha256 ? { issuedAt: t.agentIssuedAt ?? null } : null });
   const newAgentCredential = () => AGENT_PREFIX + randomBytes(32).toString('base64url');
   // Every stored hash of the field is compared in constant time, with no early exit.
   function find(tokens, field, presented) {
@@ -126,6 +131,18 @@ export function tokenRecords({ now = () => new Date() } = {}) {
       return { write: true, value: { previousExpiresAt, ...publicView(entry) } };
     },
     checkLanes(lanes) { return parseLanes(lanes); },
+    checkQuota(value) { return quotaInput(value); },
+    // r41: the account's workspace quota (whole GiB), or null to follow the server's SSAM_WORKSPACE_QUOTA_GIB. Active or
+    // expired records; never revoked. The backends read it at every quota check, so it holds at once. The same value writes
+    // nothing.
+    setQuota(tokens, id, next) {
+      const entry = entryOf(tokens, id);
+      notRevoked(entry, id);
+      const previousQuotaGiB = quotaOf(entry);
+      if (previousQuotaGiB === next) return { write: false, value: { previousQuotaGiB, ...publicView(entry) } };
+      if (next === null) delete entry.quotaGiB; else entry.quotaGiB = next;
+      return { write: true, value: { previousQuotaGiB, ...publicView(entry) } };
+    },
     // The lanes of a token (active or expired; never revoked). verify() answers with them at once; sessions already open
     // keep the lanes they were opened with. The same set writes nothing.
     setLanes(tokens, id, next) {
@@ -149,7 +166,7 @@ export function tokenRecords({ now = () => new Date() } = {}) {
       const found = find(tokens, 'sha256', presented);
       if (!found) return { status: 'unknown' };
       const state = stateOf(found);
-      return { status: state === 'active' ? 'ok' : state, id: found.id, customer: found.customer, lanes: lanesOf(found) };
+      return { status: state === 'active' ? 'ok' : state, id: found.id, customer: found.customer, lanes: lanesOf(found), ...quotaField(found) };
     },
     // Verify a presented agent credential. agentSha256 is the stored hash the channel keeps to notice an agent-rotate.
     verifyAgent(tokens, presented) {
@@ -165,7 +182,7 @@ export function tokenRecords({ now = () => new Date() } = {}) {
     // hash of that credential (to close a channel opened with a rotated one). null for an unknown id.
     lookup(tokens, id) {
       const t = tokens.find(x => x.id === id);
-      return t ? { id: t.id, customer: t.customer, state: stateOf(t), ...(t.verification===true?{verification:true}:{}), lanes: lanesOf(t), credential: !!t.agentSha256, agentSha256: t.agentSha256 ?? null } : null;
+      return t ? { id: t.id, customer: t.customer, state: stateOf(t), ...(t.verification===true?{verification:true}:{}), lanes: lanesOf(t), ...quotaField(t), credential: !!t.agentSha256, agentSha256: t.agentSha256 ?? null } : null;
     },
   };
 }
@@ -264,6 +281,7 @@ export function createTokenStore(dir, { now = () => new Date(), lockWaitMs = LOC
     agentRotate(id) { return mutate(tokens => ops.agentRotate(tokens, id)); },
     renew(id, options = {}) { ops.checkRenew(options); return mutate(tokens => ops.renew(tokens, id, options)); },
     setLanes(id, lanes) { const next = ops.checkLanes(lanes); return mutate(tokens => ops.setLanes(tokens, id, next)); },
+    setQuota(id, quota) { const next = ops.checkQuota(quota); return mutate(tokens => ops.setQuota(tokens, id, next)); },
     revoke(id) { return mutate(tokens => ops.revoke(tokens, id)); },
     list() { return load().map(ops.publicView); },
     verify(presented) { return ops.verify(load(), presented); },
@@ -291,7 +309,7 @@ export async function openTokenStore({ dir, env = process.env, now = () => new D
   } catch (error) { await db.close().catch(() => {}); throw error; }
 }
 
-const USAGE = 'Usage: ssam server-token issue --customer <name> [--days N] [--lanes odc,o11] | agent-rotate --id <id> | renew --id <id> --days N | lanes --id <id> --lanes odc,o11 | revoke --id <id> | list';
+const USAGE = 'Usage: ssam server-token issue --customer <name> [--days N] [--lanes odc,o11] | agent-rotate --id <id> | renew --id <id> --days N | lanes --id <id> --lanes odc,o11 | quota --id <id> --gib N|default | revoke --id <id> | list';
 const usage = message => coded('USAGE', message);
 // fn over a value that may be a promise (the Postgres store) or not (the file store), without turning the file store's
 // answers into promises.
@@ -330,6 +348,13 @@ export function tokenActions(store, args) {
     if (!id || lanes === undefined) throw usage('Usage: ssam server-token lanes --id <id> --lanes odc,o11');
     return chain(store.setLanes(id, lanes), ({ previousLanes, ...changed }) => ({ ok: true, changed, previousLanes,
       note: 'It holds for new sessions; the open ones keep the old lanes until they close (60 min unused or a client reconnection).' }));
+  }
+  if (action === 'quota') {
+    const id = value('--id');
+    const gib = value('--gib');
+    if (!id || gib === undefined) throw usage('Usage: ssam server-token quota --id <id> --gib N|default');
+    return chain(store.setQuota(id, gib), ({ previousQuotaGiB, ...changed }) => ({ ok: true, changed, previousQuotaGiB: previousQuotaGiB ?? null,
+      note: 'It holds at the next quota check of every backend. Without an own value the account follows the server value SSAM_WORKSPACE_QUOTA_GIB (default 10 GiB).' }));
   }
   if (action === 'revoke') {
     const id = value('--id');

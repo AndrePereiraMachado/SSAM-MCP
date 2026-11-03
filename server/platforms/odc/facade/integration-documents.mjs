@@ -767,7 +767,7 @@ export async function prepareIntegrationJob(jobFile, { lane = 'o11', words = '',
     let workspaceReal;
     try { workspaceReal = fs.realpathSync.native(workspace); } catch { workspaceReal = path.resolve(workspace); }
     // r40: the customer's agent, which downloads on the user's machine (agentFetcher); asked only when a URL is named.
-    confine = { workspace: path.resolve(workspace), workspaceReal, lookup, quota: quota ?? createQuota(path.resolve(workspace)), agent: agentFetcher(agent) };
+    confine = { workspace: path.resolve(workspace), workspaceReal, lookup, quota: quota ?? (path.resolve(hostedContext()?.workspace ?? '.') === path.resolve(workspace) ? hostedContext()?.executor?.quota : null) ?? createQuota(path.resolve(workspace)), agent: agentFetcher(agent) };
   }
   // r40: hosted (confine), no HTTP client at all: a URL goes to the customer's agent or is refused (the server never requests it).
   const client = confine ? null : fetchImpl ?? globalThis.fetch;

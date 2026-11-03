@@ -354,7 +354,7 @@ export function onHostedContextClose(listener) {
 const closedContext = context => { for (const listener of closeListeners) { try { listener(context); } catch { /* never changes the close */ } } };
 
 // deps.loadExecutor (tests): resolves to {AgentExecutor}; by default hosted/agent-executor.mjs, imported only here.
-export async function createHostedContext({ tokenId, customer, lanes = [], agent, workspace }, { loadExecutor } = {}) {
+export async function createHostedContext({ tokenId, customer, lanes = [], agent, workspace, quotaBytes }, { loadExecutor } = {}) {
   if (typeof tokenId !== 'string' || !/^[A-Za-z0-9_-]+$/.test(tokenId)) throw new Error('createHostedContext needs the tokenId of the session.');
   if (typeof workspace !== 'string' || !workspace) throw new Error('createHostedContext needs the workspace folder.');
   const root = path.resolve(workspace);
@@ -363,7 +363,7 @@ export async function createHostedContext({ tokenId, customer, lanes = [], agent
   const [{ kernelStudioDir }, { o11Lane }] = await Promise.all([import('./o11-lane.mjs'), import('./workspace.mjs')]);
   const o11 = { studioDir: kernelStudioDir(o11Lane.lane), lane: o11Lane.lane };
   const { AgentExecutor } = loadExecutor ? await loadExecutor() : await import('./hosted/agent-executor.mjs');
-  const executor = new AgentExecutor({ link: agent, workspace: root, relayAuthorityDir, o11 });
+  const executor = new AgentExecutor({ link: agent, workspace: root, relayAuthorityDir, o11, ...(quotaBytes !== undefined ? { quotaBytes } : {}) });
   await executor.start();
   let closed = null;
   const context = Object.freeze({ id: randomUUID(), hosted: true, tokenId, customer, lanes: Object.freeze([...lanes]), workspace: root, agent, executor, o11,

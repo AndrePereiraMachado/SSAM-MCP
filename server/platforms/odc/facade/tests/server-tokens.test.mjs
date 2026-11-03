@@ -25,7 +25,7 @@ const fileOf = dir => path.join(dir, 'tokens.json');
 const sleep = ms => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 const VIEW_KEYS = ['agent', 'createdAt', 'customer', 'expiresAt', 'id', 'lanes', 'state'];
 const RECORD_KEYS = ['agentIssuedAt', 'agentSha256', 'createdAt', 'customer', 'expiresAt', 'id', 'lanes', 'revokedAt', 'sha256'];
-const FULL_USAGE = 'Usage: ssam server-token issue --customer <name> [--days N] [--lanes odc,o11] | agent-rotate --id <id> | renew --id <id> --days N | lanes --id <id> --lanes odc,o11 | revoke --id <id> | list';
+const FULL_USAGE = 'Usage: ssam server-token issue --customer <name> [--days N] [--lanes odc,o11] | agent-rotate --id <id> | renew --id <id> --days N | lanes --id <id> --lanes odc,o11 | quota --id <id> --gib N|default | revoke --id <id> | list';
 // Refused with this code and exactly this message.
 const refuses = (fn, code, message) => assert.throws(fn, error => { assert.equal(error.code, code); assert.equal(error.message, message); return true; });
 // tokens.json parses with the schema, its records carry only known fields, and no lock or temp file is left behind.

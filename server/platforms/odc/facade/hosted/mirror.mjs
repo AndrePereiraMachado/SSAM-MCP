@@ -7,7 +7,9 @@
 //   - Inputs (files a bridge only reads) keep their <rel> inside a prefix the agent may write; elsewhere in the
 //     workspace they are copied to <ws>/<lane>/journal/staging/<sha256><ext> first. Outputs must already be in such a
 //     prefix. Server copies go to the agent by sha256 and never replace a file the bridge wrote there.
-//   - Quota: 5 GiB per workspace, measured by a walk kept 60 s plus the bytes received since.
+//   - Quota: per account (hosted/workspace-quota.mjs: the license record, then SSAM_WORKSPACE_QUOTA_GIB, then 10 GiB), read at
+//     each check, measured by a walk kept 60 s plus the bytes received since. r41: over it, the workspace's retention
+//     cleanup (hosted/workspace-retention.mjs) runs once and the walk is redone; only a workspace still over refuses.
 //   - C14 (servidor/fase4): the files of one command go in ONE file.sync call when the agent runs it (agent 0.2.0+; else
 //     one file.put each, as before); a transfer the agent answers skipped is released at once; an agent folder comes back
 //     by up to PULL_PARALLEL file.get at a time, and the caller may leave out evidence nobody reads on success.
@@ -16,6 +18,7 @@ export const SYNC_MAX_FILES = 256;
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
+import { serverQuotaGiB, GIB } from './workspace-quota.mjs';
 
 export const VISIBLE = Object.freeze(['odc', 'o11', 'inbox']);
 export const WRITABLE = Object.freeze(['odc/snapshots/', 'odc/journal/', 'odc/lab/', 'o11/']);
@@ -23,7 +26,10 @@ export const WRITABLE = Object.freeze(['odc/snapshots/', 'odc/journal/', 'odc/la
 // area (odc/tenants.json, odc/tmp/, ...) is the server's, and a path there never comes from the real agent.
 export const AGENT_READABLE = Object.freeze([...WRITABLE, 'inbox/']);
 export const agentReadable = segments => { const rel = segments.join('/').toLowerCase() + '/'; return AGENT_READABLE.some(prefix => rel.startsWith(prefix)); };
-export const QUOTA_BYTES = 5 * 1024 ** 3;
+// The quota of a workspace with no account value and no SSAM_WORKSPACE_QUOTA_GIB (r41: 10 GiB; it was a 5 GiB constant).
+// The live value is serverQuotaGiB() or the account's own (hosted/workspace-quota.mjs).
+export const QUOTA_BYTES = 10 * GIB;
+const serverQuotaBytes = () => { try { return serverQuotaGiB() * GIB; } catch { return QUOTA_BYTES; } };
 const FILE_TIMEOUT_MS = 10 * 60 * 1000;
 const LIST_TIMEOUT_MS = 120 * 1000;
 
@@ -123,21 +129,47 @@ function walkSize(dir) {
   return total;
 }
 
-// The workspace quota (6.1): the walk is kept ttlMs and the bytes received after it are added.
-export function createQuota(workspace, { limitBytes = QUOTA_BYTES, ttlMs = 60000, now = Date.now } = {}) {
-  let walked = null, at = 0, since = 0;
+// The workspace quota (6.1): the walk is kept ttlMs and the bytes received after it are added. limitBytes is a number or a
+// function read at every check (the account's quota can change while its context lives). cleanup(workspace) -> {freedBytes,
+// ...} (hosted/workspace-retention.mjs cleanWorkspace) runs when a check finds the workspace over, at most once per
+// cleanupEveryMs; the walk is then redone and only a workspace still over is full. Its last answer stays in lastCleanup
+// for the refusal (workspaceFull).
+export const CLEANUP_EVERY_MS = 10 * 60000;
+export function createQuota(workspace, { limitBytes = serverQuotaBytes, ttlMs = 60000, now = Date.now, cleanup = null, cleanupEveryMs = CLEANUP_EVERY_MS } = {}) {
+  let walked = null, at = 0, since = 0, cleanedAt = -Infinity;
+  const limit = () => { const value = typeof limitBytes === 'function' ? Number(limitBytes()) : Number(limitBytes); return Number.isFinite(value) && value > 0 ? value : QUOTA_BYTES; };
   return {
-    limitBytes,
+    get limitBytes() { return limit(); },
+    lastCleanup: null,
     used() {
       if (walked === null || now() - at >= ttlMs) { walked = walkSize(workspace); at = now(); since = 0; }
       return walked + since;
     },
     add(bytes) { since += Number(bytes) || 0; },
-    full(extra = 0) { return this.used() + (Number(extra) || 0) > limitBytes; },
+    full(extra = 0) {
+      const over = () => this.used() + (Number(extra) || 0) > limit();
+      if (!over()) return false;
+      if (typeof cleanup !== 'function' || now() - cleanedAt < cleanupEveryMs) return true;
+      cleanedAt = now();
+      try { this.lastCleanup = cleanup(workspace, { reason: 'quota' }) ?? null; } catch (error) { this.lastCleanup = { ok: false, freedBytes: 0, error: error?.code ?? 'CLEANUP_FAILED' }; }
+      walked = null;
+      return over();
+    },
   };
 }
-export const workspaceFull = quota => new MirrorError('WORKSPACE_FULL',
-  'The workspace of this account on the SSAM server is over its quota (' + Math.round(quota.limitBytes / 1024 ** 3) + ' GiB); nothing was copied.');
+const gib = bytes => (Math.round((Number(bytes) || 0) / GIB * 10) / 10) + ' GiB';
+const mib = bytes => Math.round((Number(bytes) || 0) / 1024 ** 2) + ' MiB';
+// The text of WORKSPACE_FULL (the mirror's and the gate's): the quota, what is used, what the automatic cleanup freed, and the fix.
+export function workspaceFullText(quota, { nothing = 'nothing was copied' } = {}) {
+  let used = null;
+  try { used = quota?.used?.(); } catch { /* the quota alone */ }
+  const cleaned = quota?.lastCleanup;
+  return 'The workspace of this account on the SSAM server is over its quota (' + gib(quota?.limitBytes) + (used !== null ? ', ' + gib(used) + ' used' : '') + '); ' + nothing + '. '
+    + (cleaned && cleaned.ok !== false ? 'An automatic cleanup just removed ' + mib(cleaned.freedBytes) + ' (core dumps, old scratch files, older captures) and nothing else can be removed safely. '
+      : 'The automatic cleanup of old scratch files and captures already ran. ')
+    + 'Fix: ask the SSAM administrator to raise the workspace quota of this account.';
+}
+export const workspaceFull = quota => new MirrorError('WORKSPACE_FULL', workspaceFullText(quota));
 
 const listedFiles = dir => {
   const out = [];

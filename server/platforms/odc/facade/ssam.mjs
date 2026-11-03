@@ -2281,7 +2281,7 @@ export async function runServed(args) {
     let pending = contexts.get(session.tokenId);
     if (!pending) {
       pending = executor.createHostedContext({ tokenId: session.tokenId, customer: session.customer, lanes: session.lanes ?? [],
-        agent: session.agent, workspace: session.workspace });
+        agent: session.agent, workspace: session.workspace, ...(session.quotaBytes ? { quotaBytes: session.quotaBytes } : {}) });
       contexts.set(session.tokenId, pending);
       pending.then(context => {
         session.agent.onClose?.(reason => {

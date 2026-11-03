@@ -96,6 +96,8 @@ export function createPgTokenStore({ db, now = () => new Date(), refreshMs = REF
     async agentRotate(id) { return mutate(tokens => ops.agentRotate(tokens, id)); },
     async renew(id, options = {}) { ops.checkRenew(options); return mutate(tokens => ops.renew(tokens, id, options)); },
     async setLanes(id, lanes) { const next = ops.checkLanes(lanes); return mutate(tokens => ops.setLanes(tokens, id, next)); },
+    // r41: the quota lives in the record (jsonb), like every other field: no column and no migration.
+    async setQuota(id, quota) { const next = ops.checkQuota(quota); return mutate(tokens => ops.setQuota(tokens, id, next)); },
     async revoke(id) { return mutate(tokens => ops.revoke(tokens, id)); },
     // Records of a tokens.json (schema ssam-server-tokens/1) copied in: a record already here with the same id is
     // replaced; the plaintext secrets are not in a record, so nothing secret moves. {imported, total}.

@@ -14,7 +14,8 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { PipeError, replyTimeoutMs } from '../odc-pipe.mjs';
 import { BridgeError, timeoutFor } from '../o11-bridge.mjs';
-import { Mirror, createQuota, QUOTA_BYTES } from './mirror.mjs';
+import { Mirror, createQuota } from './mirror.mjs';
+import { serverQuotaGiB, GIB } from './workspace-quota.mjs';
 import { stageOdcPipe } from './odc-stage.mjs';
 import { stageO11Bridge, IMPORT_METHOD } from './o11-stage.mjs';
 import { startRelay } from './o11-relay.mjs';
@@ -118,7 +119,8 @@ const recordOf = value => value && Number.isInteger(value.pid)
   : null;
 
 export class AgentExecutor {
-  constructor({ link, workspace, relayAuthorityDir, o11 = {}, log = () => {}, quotaBytes = QUOTA_BYTES } = {}) {
+  // quotaBytes: a number or a function read at every check (the session's: the account's quota, http-server.mjs).
+  constructor({ link, workspace, relayAuthorityDir, o11 = {}, log = () => {}, quotaBytes = () => serverQuotaGiB() * GIB } = {}) {
     if (!link || typeof link.call !== 'function') throw new Error('AgentExecutor needs an AgentLink');
     if (!workspace || !path.isAbsolute(workspace)) throw new Error('AgentExecutor needs the absolute workspace of the customer');
     this.id = 'agent:' + (link.tokenId ?? 'customer') + ':' + randomUUID();
