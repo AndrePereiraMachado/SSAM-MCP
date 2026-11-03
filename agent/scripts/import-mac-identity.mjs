@@ -5,7 +5,7 @@ if(process.platform!=='darwin'||!keychain||!file)throw Error('Mac identity impor
 const openssl='/opt/homebrew/opt/openssl@3/bin/openssl';
 const original=file+'.original';
 fs.writeFileSync(original,Buffer.from(process.env.CSC_LINK,'base64'),{mode:0o600});
-function run(cmd,args,input){const r=cp.spawnSync(cmd,args,{input,env:process.env,maxBuffer:16*1024*1024});if(r.status!==0)throw Error('Identity operation failed: '+cmd.split('/').pop()+' '+args[0]);return r.stdout;}
+function run(cmd,args,input){const r=cp.spawnSync(cmd,args,{input,env:process.env,maxBuffer:16*1024*1024});if(r.status!==0){const e=r.stderr.toString(); const codes=[...e.matchAll(/error:[0-9A-Fa-f]+:[^:\r\n]+:[^:\r\n]+/g)].map(m=>m[0]); console.log(JSON.stringify({operation:args[0],codes,mismatch:/matches private key/i.test(e),badDecrypt:/bad decrypt|invalid password/i.test(e),cannotRead:/Could not read|Could not find|unable to load/i.test(e)}));throw Error('Identity operation failed: '+cmd.split('/').pop()+' '+args[0]);}return r.stdout;}
 try{
  const pem=run(openssl,['pkcs12','-in',original,'-passin','env:CSC_KEY_PASSWORD','-nodes']);
  if(!pem.includes(Buffer.from('BEGIN CERTIFICATE'))||!pem.includes(Buffer.from('PRIVATE KEY')))throw Error('Identity must contain certificate and private key');
@@ -20,4 +20,5 @@ try{
  run('/usr/bin/security',['import',file,'-k',keychain,'-P',process.env.CSC_KEY_PASSWORD,'-T','/usr/bin/codesign']);
  console.log('Encrypted signing identity imported successfully.');
 }finally{fs.rmSync(original,{force:true});fs.rmSync(file,{force:true});}
+
 
