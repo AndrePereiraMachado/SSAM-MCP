@@ -43,31 +43,17 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
+      - uses: actions/checkout@v4
       - name: Validate encrypted identity without revealing secrets
         env:
           CSC_LINK: ${{ secrets.CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
         shell: bash
         run: |
-          node --input-type=module <<'JS'
-          import fs from 'node:fs'; import cp from 'node:child_process';
-          const file=process.env.RUNNER_TEMP+'/check.p12';
-          const bytes=Buffer.from(process.env.CSC_LINK,'base64');
-          fs.writeFileSync(file,bytes,{mode:0o600});
-          try {
-            console.log(JSON.stringify({certificateBytes:bytes.length,derSequence:bytes[0]===48}));
-            const openssl='/opt/homebrew/opt/openssl@3/bin/openssl';
-            for (const [mode,password] of [['exact',process.env.CSC_KEY_PASSWORD],['trimmed',process.env.CSC_KEY_PASSWORD.trim()]]) {
-              const r=cp.spawnSync(openssl,['pkcs12','-in',file,'-passin','env:IDENTITY_PASSWORD','-noout'],{env:{...process.env,IDENTITY_PASSWORD:password},encoding:'utf8'});
-              console.log(JSON.stringify({mode,valid:r.status===0}));
-              if(r.status===0) {
-                const pem=cp.spawnSync(openssl,['pkcs12','-in',file,'-passin','env:IDENTITY_PASSWORD','-nodes'],{env:{...process.env,IDENTITY_PASSWORD:password},encoding:'utf8'});
-                console.log(JSON.stringify({hasCertificate:pem.stdout.includes('BEGIN CERTIFICATE'),hasPrivateKey:/BEGIN (?:ENCRYPTED |RSA )?PRIVATE KEY/.test(pem.stdout)}));
-                process.exitCode=0; break;
-              }
-              process.exitCode=1;
-            }
-          } finally {fs.unlinkSync(file);}
-          JS
-
-
+          keychain="$RUNNER_TEMP/import-check.keychain-db"
+          password=$(openssl rand -hex 32)
+          echo "::add-mask::$password"
+          trap 'security delete-keychain "$keychain" >/dev/null 2>&1 || true' EXIT
+          security create-keychain -p "$password" "$keychain"
+          security unlock-keychain -p "$password" "$keychain"
+          node agent/scripts/import-mac-identity.mjs "$keychain" "$RUNNER_TEMP/import-check.p12"
