@@ -65,8 +65,8 @@ if (mode === 'prompt') {
     if (kind === 'login') state.vault.login[host] = { user: 'admin@example.invalid', secret: 'x' };
     else state.vault.passwords[host + '|' + entry] = true;
   }
-  fs.writeFileSync(statusFile, answer === 'saved' ? 'saved' : 'visible');
-  done({ ok: true });
+  if (kind !== 'login' || answer !== 'saved') fs.writeFileSync(statusFile, answer === 'saved' ? 'saved' : 'visible');
+  done(kind === 'login' ? { ok: true, saved: answer === 'saved', remembered: answer === 'saved' } : { ok: true });
 }
 if (!state.vault.login[host]) done({ ok: false, code: 'USERS_HOST_NOT_AUTHENTICATED' });
 if (mode === 'login') {

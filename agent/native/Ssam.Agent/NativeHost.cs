@@ -79,9 +79,16 @@ internal static class NativeHost
     internal static async Task<int> Command(string[] args)
     {
         var options = new Dictionary<string, string>();
+        var credentialStdin = false;
         for (var i = 1; i < args.Length; i++)
         {
             if (args[i] == "--json") continue;
+            if (args[i] == "--credential-stdin")
+            {
+                if (args[0] != "run" || credentialStdin) throw new ArgumentException("--credential-stdin is accepted once, with run only");
+                credentialStdin = true;
+                continue;
+            }
             if (!args[i].StartsWith("--") || i + 1 >= args.Length || !options.TryAdd(args[i], args[++i])) throw new ArgumentException("Invalid command options");
         }
         var root = options.GetValueOrDefault("--root") ?? throw new ArgumentException("--root is required");
@@ -150,8 +157,7 @@ internal static class NativeHost
         if (args[0] != "run") throw new ArgumentException("Unknown command");
         var config = O11Connection.Read(Path.Combine(root, "private/config.json")) ?? throw new ArgumentException("Run setup first");
         var url = Server(StudioKinds.Text(config["server"]) ?? "");
-        var secret = File.ReadAllText(Path.Combine(root, "private/credential")).Trim();
-        if (!Regex.IsMatch(secret, @"^ssam_agent_[A-Za-z0-9_-]{43}$")) throw new ArgumentException("Run setup with a valid agent credential");
+        var secret = await RunCredential(root, credentialStdin, Console.In);
         var data = new StateStore(root, false);
         // Kernel ownership is exclusive for this data directory, including crashes.
         using var guard = new FileStream(Path.Combine(data.Private, "native.lock"), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
@@ -165,6 +171,12 @@ internal static class NativeHost
             await Task.WhenAny(run, Task.Delay(100));
         }
         return await run;
+    }
+    internal static async Task<string> RunCredential(string root, bool stdin, TextReader input)
+    {
+        var value = (stdin ? await input.ReadLineAsync() ?? "" : File.ReadAllText(Path.Combine(root, "private/credential"))).Trim();
+        if (!Regex.IsMatch(value, @"^ssam_agent_[A-Za-z0-9_-]{43}$")) throw new ArgumentException(stdin ? "A valid agent credential is required" : "Run setup with a valid agent credential");
+        return value;
     }
     private static void Write(string file, string text)
     {

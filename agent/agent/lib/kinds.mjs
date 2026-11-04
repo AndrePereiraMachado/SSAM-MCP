@@ -16,13 +16,17 @@ import { createUploads, UPLOAD_KIND } from './upload.mjs';
 import { createRenderer } from './render.mjs';
 import { RENDER_KIND } from './render-request.mjs';
 import { createUsersKind, USERS_KIND } from './users.mjs';
+import { createCredentialSession, CREDENTIAL_KIND } from './credential-session.mjs';
+import { createPrivateRuntime } from './private-runtime.mjs';
 import { o11PackFor } from './o11-builds.mjs';
 import { createXifKind, XIF_KIND } from './xif.mjs';
+import { createDocumentFetch, DOCUMENT_FETCH_KIND } from './document-fetch.mjs';
 
 // file.upload (0.3.4): one file of a folder the person approved (upload.mjs); the hub sends it only to an agent whose hello
-// lists it.
+// lists it. document.fetch (0.3.12, r40): one integration document downloaded on this machine for a hosted server, which never
+// makes a network request for what a job names (document-fetch.mjs); on every platform, so the hello always lists it.
 export const KINDS = Object.freeze(['studio.processes', 'odc.pipe', 'odc.attach', 'o11.bridge', 'o11.connect', 'o11.selected',
-  'file.put', 'file.get', 'file.list', 'file.sync', NET_PROBE_KIND, UPLOAD_KIND, USERS_KIND]);
+  'file.put', 'file.get', 'file.list', 'file.sync', NET_PROBE_KIND, UPLOAD_KIND, USERS_KIND, DOCUMENT_FETCH_KIND, CREDENTIAL_KIND]);
 // The kinds of the hello: KINDS, and screen.render (0.3.4, render.mjs) only when this installation has a renderer; o11.xif
 // (0.3.7, xif.mjs, F4 of PLANO-11H) only when this installation carries the Integration Studio engine host (Windows).
 export const helloKinds = (renderer, xifEngine = null) => [...KINDS, ...(renderer?.path ? [RENDER_KIND] : []), ...(xifEngine?.path ? [XIF_KIND] : [])];
@@ -56,6 +60,8 @@ export const O11_METHODS = Object.freeze(['ping', 'bridge_manifest', 'get_active
 // that declare it. Never a method o11.bridge passes (O11_METHODS above is that list).
 export const O11_PREFER_FOREIGN = 'merge_from_oml:prefer_foreign';
 export const O11_DECLARED = Object.freeze([...O11_METHODS, O11_PREFER_FOREIGN]);
+export const odcDeclared = pack => /^v\d+$/.test(pack?.odcBridge ?? '') && Number(pack.odcBridge.slice(1)) >= 108
+  ? [...ODC_COMMANDS, 'merge:prefer-foreign'] : [...ODC_COMMANDS];
 const MANIFEST_COMMANDS = new Set(['check-base', 'preview', 'merge', 'reconcile-merge', 'publish', 'publish-status', 'create', 'authorize', 'create-app']);
 const LANE_IMAGE = { odc: 'ODCStudio.exe', o11: 'ServiceStudio.exe' };
 const STUDIO_NAME = { odc: 'ODC Studio', o11: 'Service Studio' };
@@ -516,10 +522,13 @@ export function createKinds({ root, runtimeRoot = root, ws, pack = {}, kernel = 
   // file.upload: deps.uploadFiles and deps.uploadHooks are the tests' file system and hooks (upload.mjs).
   const uploads = createUploads({ dataRoot: root, runtimeRoot, platform, blobs, limits, now: deps.now ?? Date.now, files: deps.uploadFiles, hooks: deps.uploadHooks });
   // screen.render: renderer is agent.mjs's resolveRenderer answer; without one the kind answers RENDER_UNAVAILABLE.
-  const users = createUsersKind({ dataRoot: root, platform, account: deps.usersAccount ?? '', ...(deps.users ?? {}) });
+  const privateRuntime = createPrivateRuntime({ dataRoot: root, account: deps.usersAccount ?? '', now: deps.now ?? Date.now });
+  const users = createUsersKind({ dataRoot: root, runtimeRoot, platform, account: deps.usersAccount ?? '', privateRuntime, ...(deps.users ?? {}) });
+  const credentials = createCredentialSession({ dataRoot: root, runtimeRoot, platform, account: deps.usersAccount ?? '', privateRuntime, ...(deps.credentials ?? {}) });
   users.startup();
   // o11.xif: xifEngine is agent.mjs's resolveXifEngine answer; deps.xif the tests' Integration Studio and engine process.
   const xif = createXifKind({ root, ws, engine: xifEngine, platform, deps: { query: deps.regQuery, ...(deps.xif ?? {}) } });
+  const documents = createDocumentFetch({ fetchImpl: deps.documentFetch ?? globalThis.fetch, now: deps.now ?? Date.now });
   const screens = createRenderer({ renderer, tempRoot: path.join(root, 'private', 'tmp'), platform, now: deps.now ?? Date.now, ...(deps.renderSpawn ? { spawn: deps.renderSpawn } : {}) });
 
   const handlers = { 'studio.processes': studioProcesses, 'odc.pipe': odcPipe, 'odc.attach': odcAttach, 'o11.bridge': o11Bridge,
@@ -530,6 +539,9 @@ export function createKinds({ root, runtimeRoot = root, ws, pack = {}, kernel = 
     [UPLOAD_KIND]: (params, context) => uploads.upload(params, context),
     [RENDER_KIND]: (params, context) => screens.render(params, context),
     [USERS_KIND]: params => users.execute(params),
+    // document.fetch: deps.documentFetch is the tests' HTTP client; never deps.fetch, the channel's client to the server.
+    [DOCUMENT_FETCH_KIND]: (params, context) => documents(params, context),
+    [CREDENTIAL_KIND]: params => credentials.execute(params),
     ...(xifEngine?.path ? { [XIF_KIND]: (params, context) => xif.execute(params, context) } : {}) };
 
   return {

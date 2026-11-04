@@ -23,6 +23,7 @@ import { serviceAddress } from './core/service-address.mjs';
 import { verifyPack } from './core/pack-sync.mjs';
 import { INITIAL } from './core/update-model.mjs';
 import { isRenderWorker, runRenderWorker } from './render/worker.mjs';
+import { isPrivateDialogWorker, runPrivateDialogWorker } from './private-dialog/worker.mjs';
 
 // out/main -> the app folder (the agent box: assets/, build/, pack/ in a checkout; the asar when packaged).
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -34,7 +35,8 @@ const startedHidden = process.argv.includes('--hidden');
 
 // --ssam-render-worker: the agent's short-lived render worker (render/worker.mjs, screen.render). It branches before the
 // single instance lock (it must never take nor quit the running app) and never touches the app's data, tray or agent.
-if (isRenderWorker()) void runRenderWorker();
+if (isPrivateDialogWorker()) void runPrivateDialogWorker().catch(() => app.exit(1));
+else if (isRenderWorker()) void runRenderWorker();
 else if (!app.requestSingleInstanceLock()) app.quit();
 else void run();
 

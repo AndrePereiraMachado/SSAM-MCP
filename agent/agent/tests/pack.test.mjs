@@ -100,7 +100,7 @@ test('agent-pack.ps1 -NoBuild -Prebuilt -NoNode builds the 6.2 layout with the t
     assert.ok(files.every(name => !name.includes('\\')), 'zip entries use forward slashes');
 
     const libs = fs.readdirSync(path.join(repo, 'agent', 'lib')).filter(name => /\.(mjs|json)$/.test(name)).map(name => 'agent/lib/' + name);
-    const expected = ['agent/ssam-agent.mjs', 'agent/ssam-agent.ps1', ...libs, 'agent/lib/users-vault.ps1',
+    const expected = ['agent/ssam-agent.mjs', 'agent/ssam-agent.ps1', 'agent/lib/CognitoSrp.dll', ...libs, ...['users-vault', 'private-dialog', 'private-vault', 'credential-vault', 'credential-auth'].map(name => 'agent/lib/' + name + '.ps1'),
       'bin/o11/bridge/Anvil.Bridge.deps.json', THIN,
       CONNECT, 'bin/o11/connect/Anvil.Connect.runtimeconfig.json', 'bin/o11/connect/Microsoft.Diagnostics.NETCore.Client.dll', HOOK,
       'docs/AGENTE-CLIENTE.md',
@@ -114,7 +114,8 @@ test('agent-pack.ps1 -NoBuild -Prebuilt -NoNode builds the 6.2 layout with the t
       if (file.endsWith('.mjs')) assert.match(file, /^agent\//);
     }
     // The agent code and the customer guide in the pack are the repository's, byte for byte.
-    for (const file of files.filter(f => f.startsWith('agent/') || f.startsWith('docs/'))) assert.equal(sha(entries.get(file)), sha(fs.readFileSync(path.join(repo, file))), file);
+    for (const file of files.filter(f => (f.startsWith('agent/') || f.startsWith('docs/')) && f !== 'agent/lib/CognitoSrp.dll')) assert.equal(sha(entries.get(file)), sha(fs.readFileSync(path.join(repo, file))), file);
+    assert.equal(entries.get('agent/lib/CognitoSrp.dll').subarray(0, 2).toString(), 'MZ');
 
     const manifest = JSON.parse(entries.get('pack.json').toString('utf8').replace(/^﻿/, ''));
     assert.match(manifest.id, /^pack-\d{8}-\d{6}$/);
@@ -158,7 +159,8 @@ test('the agent of a pack runs by itself: every module loads, and every file its
     // The family, however a file is named or read (double quotes, path.join, createRequire, a template): every file of agent/lib is in the pack.
     const source = path.join(repo, 'agent', 'lib');
     const absent = fs.readdirSync(source, { recursive: true, withFileTypes: true }).filter(e => e.isFile() && !fs.existsSync(path.join(lib, path.relative(source, path.join(e.parentPath, e.name))))).map(e => e.name);
-    assert.deepEqual(absent, [], 'in agent/lib, absent from the pack');
+    assert.deepEqual(absent, ['CognitoSrp.cs'], 'only the compiled SRP source stays out of the pack');
+    assert.ok(fs.existsSync(path.join(lib, 'CognitoSrp.dll')));
     const load = 'for (const m of ' + JSON.stringify(modules.filter(m => path.basename(m) !== 'ssam-agent.mjs').map(m => pathToFileURL(m).href)) + ') await import(m);';
     const ran = spawnSync(process.execPath, ['--input-type=module', '-e', load], { cwd: tree, encoding: 'utf8', timeout: 120000 });
     assert.equal(ran.status, 0, ran.stderr.slice(0, 800));
@@ -220,7 +222,12 @@ test('IP scan rule 4: any client text refuses the pack; the exception table is e
       write(source(prebuilt, ODC_BRIDGE), Buffer.concat([utf16('wrightflood'), Buffer.from([0]), utf16('andre.c.machado')]));
     });
     refusedByScan(formerlyKnown, [[THIN, 'client-content'], [ODC_BRIDGE, 'client-content']]);
-    assert.doesNotMatch(formerlyKnown.out, /conhecid[oa] no pacote/, 'no warning: nothing is a known exception');
+    // r40a: the scan lists the two exact public identity hosts of credential-auth.ps1 (rule public-identity-host, vendor
+    // infrastructure, not client content); no client text is ever a known exception.
+    const known = [...formerlyKnown.out.matchAll(/conhecid[oa] no pacote: ([^\r\n]*?\))/g)].map(m => m[1]);
+    const why = 'Exact public OutSystems identity infrastructure used by the authentication protocol, not a customer environment.';
+    assert.deepEqual([...new Set(known)].sort(), ['id.outsystems.dev', 'os-community-id.outsystems.app'].map(host => `agent/lib/credential-auth.ps1 (public-identity-host: ${host}; ${why})`),
+      'no warning: nothing is a known exception but the two exact public identity hosts');
 
     const unknown = packWith(work, prebuilt => {
       write(source(prebuilt, ODC_CLIENT), Buffer.concat([Buffer.from([0x41]), utf16('unimed')]));

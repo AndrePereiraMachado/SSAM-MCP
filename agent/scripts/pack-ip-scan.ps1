@@ -46,6 +46,9 @@ $knownClientContent = @()
 $tenantHost = '(?<![a-z0-9.-])[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*\.(?:outsystems\.dev|outsystems\.app|outsystemscloud\.com|outsystemsenterprise\.com)(?![a-z0-9-])'
 $email = '(?<![a-z0-9._%+-])[a-z0-9][a-z0-9._%+-]{1,63}@[a-z0-9][a-z0-9-]{1,62}(?:\.[a-z0-9-]{1,63})*\.[a-z]{2,24}(?![a-z])'
 $reserved = '(^|[.@])(example\.(com|org|net)|[a-z0-9-]+\.(example|test|invalid|localhost|local))$'
+# Public vendor identity infrastructure, not customer tenants. Exact host names
+# only: a tenant prefix/suffix or a different host is still a customer finding.
+$identityInfrastructure = @('os-community-id.outsystems.app', 'id.outsystems.dev')
 
 $content = Get-Content -LiteralPath (Join-Path $root 'scripts\release\client-content.json') -Raw | ConvertFrom-Json
 $options = [Text.RegularExpressions.RegexOptions]'IgnoreCase, CultureInvariant'
@@ -109,6 +112,11 @@ try {
       foreach ($view in $views) {
         foreach ($match in $g.regex.Matches($view.text)) {
           if ($g.name -eq 'e-mail' -and $reservedRegex.IsMatch($match.Value.Substring($match.Value.IndexOf('@')))) { continue }
+          $after=$match.Index+$match.Length
+          if ($g.name -eq 'tenant host' -and $identityInfrastructure -contains $match.Value.ToLowerInvariant() -and ($after -ge $view.text.Length -or $view.text[$after] -ne '.')) {
+            $allowed.Add([ordered]@{ entry = $name; rule = 'public-identity-host'; detail = $match.Value; why = 'Exact public OutSystems identity infrastructure used by the authentication protocol, not a customer environment.' })
+            continue
+          }
           if (-not $hits.Contains($match.Value.ToLowerInvariant())) { $hits.Add($match.Value.ToLowerInvariant()) }
         }
       }

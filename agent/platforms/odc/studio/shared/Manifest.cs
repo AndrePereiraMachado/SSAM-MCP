@@ -35,12 +35,18 @@ internal sealed class Manifest {
     public string? ProducerSha256 { get; set; }
     // A delivery after a cut merge (facade merge-cut.mjs): the sha256 the open module must have when the merge takes the candidate.
     public string? ExpectedBaseSha256 { get; set; }
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)]
+    public bool PreferForeign { get; set; }
 
     public static readonly JsonSerializerOptions Json = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase, PropertyNameCaseInsensitive = true, WriteIndented = true };
 
     public static Manifest Load(string path) {
         var full = Path.GetFullPath(path);
+        using var document = JsonDocument.Parse(File.ReadAllText(full));
+        if (document.RootElement.TryGetProperty("prefer", out var prefer))
+            Require(prefer.ValueKind == JsonValueKind.String && prefer.GetString() == "foreign", "prefer must be \"foreign\" or absent");
         var manifest = JsonSerializer.Deserialize<Manifest>(File.ReadAllText(full), Json) ?? throw new InvalidOperationException("Manifest could not be read: " + full);
+        if (document.RootElement.TryGetProperty("prefer", out _)) manifest.PreferForeign = true;
         Require(manifest.Schema == "odc3-manifest/1", "Unsupported manifest schema: " + manifest.Schema);
         var required = new List<(string, string)> { ("module", manifest.Module), ("moduleKey", manifest.ModuleKey), ("candidatePath", manifest.CandidatePath), ("candidateSha256", manifest.CandidateSha256), ("evidenceDir", manifest.EvidenceDir), ("author", manifest.Author), ("tenant", manifest.Tenant) };
         if (!manifest.Create) required.AddRange(new[] { ("basePath", manifest.BasePath), ("baseSha256", manifest.BaseSha256) });

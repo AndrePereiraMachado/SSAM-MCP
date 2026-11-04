@@ -33,7 +33,7 @@ export const flows = () => [
     { ...signIn, expect: { code: 'USERS_CONFIRMATION_DECLINED' } },
     { params: { op: 'login', host: HOST }, expect: { code: 'USERS_LOGIN_CONSENT_REQUIRED' } },
     { ...signIn, expect: { approved: true } }, login,
-    { params: { op: 'status', host: HOST }, expect: { available: true, principal: 'admin@example.invalid', consent: true } },
+    { params: { op: 'status', host: HOST }, expect: { available: true, principal: 'admin@example.invalid', consent: true, remembered: true } },
     { params: { op: 'request', host: HOST, url: url('User_Show.aspx?UserId=42') }, expect: { status: 200 } },
     { advanceMs: 8 * 3600 * 1000 + 1000 },
     { params: { op: 'request', host: HOST, url: url('User_Show.aspx?UserId=42') }, expect: { code: 'USERS_LOGIN_CONSENT_REQUIRED' } },
@@ -134,7 +134,7 @@ export const flows = () => [
     { dns: [] },
     { params: { op: 'prompt', host: 'other-company.example.test' }, expect: { code: 'USERS_HOST_UNRESOLVED' } },
     { dns: ['93.184.216.34'] },
-    { params: { op: 'prompt', host: 'other-company.example.test' }, expect: { opened: true, alreadyOpen: false, visible: true, saved: true } }, WAIT,
+    { params: { op: 'prompt', host: 'other-company.example.test' }, expect: { opened: true, alreadyOpen: false, visible: true, saved: true, remembered: true } }, WAIT,
   ], check: s => same(Object.keys(s.vault.login).sort(), ['other-company.example.test', HOST]) },
   { name: 'A3: the address is asked again after a minute: the cache has an end', steps: [...ready,
     { params: { op: 'request', host: HOST, url: url('User_Show.aspx?UserId=42') }, expect: { status: 200 } },
@@ -156,7 +156,7 @@ export const flows = () => [
     { params: { op: 'login', host: HOST }, expect: { code: 'USERS_LOGIN_PAUSED' } },
     { params: { op: 'request', host: HOST, url: url('User_List.aspx') }, expect: { code: 'USERS_LOGIN_PAUSED' } },
     { ...write('activate', { userId: '42' }), expect: { code: 'USERS_LOGIN_PAUSED' } },
-    { params: { op: 'prompt', host: HOST }, expect: { opened: true, alreadyOpen: false, visible: true, saved: true } }, WAIT,
+    { params: { op: 'prompt', host: HOST }, expect: { opened: true, alreadyOpen: false, visible: true, saved: true, remembered: true } }, WAIT,
     { params: { op: 'login', host: HOST }, expect: { authenticated: true } },
   ], check: s => same(s.logins, 3) },
   { name: 'R4: a sign-in that says yes and a site that asks again count too', state: { loginAnswers: [true, true] }, steps: [signIn, login,
@@ -210,7 +210,7 @@ export const flows = () => [
   ], check: s => { same(Object.keys(s.vault.passwords), []); same(s.http, []); } },
   { name: 'C2: past its term it also leaves at the next call, whatever that call is', steps: [...ready, PASSWORD_WINDOW, WAIT,
     { advanceMs: 300001 },
-    { params: { op: 'status', host: HOST }, expect: { available: true, principal: 'admin@example.invalid', consent: true } },
+    { params: { op: 'status', host: HOST }, expect: { available: true, principal: 'admin@example.invalid', consent: true, remembered: true } },
   ], check: s => same(Object.keys(s.vault.passwords), []) },
   { name: 'C2: a password forgotten is no permit: nothing can use the window after it', steps: [...ready, PASSWORD_WINDOW, WAIT,
     { params: { op: 'forget', host: HOST, kind: 'password', entry: ENTRY }, expect: {} },
@@ -218,9 +218,9 @@ export const flows = () => [
   ], check: s => { same(Object.keys(s.vault.passwords), []); same(s.http, []); } },
   { name: 'C2: an agent that closed with a password in the vault removes it when it starts, once', steps: [...ready, PASSWORD_WINDOW, WAIT,
     { restart: true },
-    { params: { op: 'status', host: HOST }, expect: { available: true, principal: 'admin@example.invalid', consent: false } },
+    { params: { op: 'status', host: HOST }, expect: { available: true, principal: 'admin@example.invalid', consent: false, remembered: true } },
     { restart: true },
-    { params: { op: 'status', host: HOST }, expect: { available: true, principal: 'admin@example.invalid', consent: false } },
+    { params: { op: 'status', host: HOST }, expect: { available: true, principal: 'admin@example.invalid', consent: false, remembered: true } },
   ], check: s => { same(Object.keys(s.vault.passwords), []); same(s.sweeps, 1); } },
   { name: 'C2: nothing to sweep when no password window was open, was closed unsaved, or was used', state: { promptAnswers: ['cancel'] }, steps: [...ready,
     { restart: true }, { params: { op: 'status', host: HOST } },
@@ -302,7 +302,7 @@ export async function runNode(flow, createUsersKind, dir) {
   const windows = [];
   const make = () => createUsersKind({ dataRoot: path.join(dir, 'data'), account: 'ssam_agent_flow', platform: 'win32', helper: 'fake', permitMs: flow.permitMs, now: () => Date.now() + offset, wait: ms => new Promise(r => setTimeout(r, Math.min(ms, 20))), lookup: async () => addresses.map(address => ({ address })),
     exec: (file, args, input) => new Promise((resolve, reject) => { const child = execFile(process.execPath, [SCRIPT, ...args], { env, windowsHide: true, maxBuffer: 16 * 1024 * 1024 }, (error, stdout) => (stdout ? resolve(String(stdout)) : reject(error ?? new Error('no answer')))); child.stdin?.end(input ?? ''); }),
-    start: (file, args) => { const child = spawn(process.execPath, [SCRIPT, ...args], { env, windowsHide: true, stdio: ['ignore', 'ignore', 'ignore'] }); windows.push(new Promise(done => child.on('exit', done))); return child; } });
+    start: (file, args) => { const child = spawn(process.execPath, [SCRIPT, ...args], { env, windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'] }); windows.push(new Promise(done => child.on('close', done))); return child; } });
   let users = make();
   const results = [];
   for (const step of flow.steps) {

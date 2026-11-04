@@ -6,13 +6,13 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <!-- One assembly name per bridge version. A loaded DLL is never replaced: a new version is a new name and a new pipe.
-         v107 (agent/r4-v106, the line's U1): the line's v106 sources built for the net8 ODC Studios (up to 1.7.29), the bridge of
-         the agent pack; v106, the same sources, for the net10 ones. After a merge both check the changed stylesheets against the
+         v108 (agent/r4-v109, the line's U1): the line's v109 sources built for the net8 ODC Studios (up to 1.7.29), the bridge of
+         the agent pack; v109, the same sources, for the net10 ones. After a merge both check the changed stylesheets against the
          candidate and refresh their caches, run that verification as a job of its own (reconcile-merge when it did not start),
          and answer a publication ok only when its downloaded revision is before-publish.oml. The names follow the line: the proto
          loaded v100-v105 into a Studio with other code. -->
-    <AssemblyName>ODC3.Bridge.v107</AssemblyName>
-    <AssemblyName Condition="'$(TargetFramework)' == 'net10.0'">ODC3.Bridge.v106</AssemblyName>
+    <AssemblyName>ODC3.Bridge.v108</AssemblyName>
+    <AssemblyName Condition="'$(TargetFramework)' == 'net10.0'">ODC3.Bridge.v109</AssemblyName>
     <!-- IncrementalClean must never treat a prior resident version as an orphan. -->
     <CleanFile>$(MSBuildProjectFile).$(AssemblyName).FileListAbsolute.txt</CleanFile>
     <DefineConstants>$(DefineConstants);QUERY_TEST_ODC</DefineConstants>
@@ -50,6 +50,10 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="StartupHook.cs" />
+    <Compile Include="NativePreferForeign.cs" />
+    <Compile Include="NativeMergeIntent.cs" />
+    <Compile Include="../../../../kernel/src/Anvil.Bridge/PreferForeign.cs" Link="shared/PreferForeign.cs" />
+
     <Compile Include="AgentDataRoot.cs" />
     <Compile Include="BridgeServe.cs" />
     <Compile Include="BridgeDeadlines.cs" />

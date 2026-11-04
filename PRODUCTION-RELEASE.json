@@ -1,0 +1,31 @@
+{
+  "release": "ssam-v0.2.7-r43b",
+  "app": "0.2.7",
+  "nodeAgent": "0.3.16",
+  "nativeAgent": "0.4.13-native",
+  "serverSource": "60e13ec52fee5603a58fad8b5842bed239d1620a",
+  "serverWithPins": "fd7d4300eff001732ba3f4b7cf6d703f6fd801bd",
+  "agentSource": "c20454cbc78f6165b7e3c58e8348adf81ad656a5",
+  "serverTree": "e09131ff7608bb4c44669be2524e4992984e47c0",
+  "agentTree": "68fceefc5f7c9dee4ae80d7c52ebd7e293e958c2",
+  "macCi": "https://github.com/AndrePereiraMachado/SSAM-MCP/actions/runs/41709022241",
+  "images": [
+    {
+      "tag": "prod-20261103-r43b-60e13ec-o115594-odc1730",
+      "digest": "sha256:3401cc15f08332dcfd35c3e17487e058775e5b727e65afb3155278ec0e577bbf"
+    },
+    {
+      "tag": "prod-20261103-r43b-60e13ec-o115593-odc1729",
+      "digest": "sha256:7a7ba517b6fa1fe09f13a79c7dbda8b04ac5d72c416e8ffc79f6ff15ea08dd1b"
+    },
+    {
+      "tag": "prod-20261103-r43b-60e13ec-o115592-odc1728",
+      "digest": "sha256:00106dcc5c62e155b91c54a89c1a3a2657bce0611728343b413346adb94ab3dd"
+    },
+    {
+      "tag": "prod-20261103-r43b-60e13ec-o115594-odc1731",
+      "digest": "sha256:1fdf39da2d32cf142a9e95d44061392c601ccc4f9ae07c8821f311a8bf5f2013"
+    }
+  ],
+  "distribution": "https://dist.ssam.pro/apps/ssam-agent/releases/9e098981-e83c-4a1f-8bdc-fb26cf612471"
+}

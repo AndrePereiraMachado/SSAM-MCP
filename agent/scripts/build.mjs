@@ -9,7 +9,8 @@
 //   [--timestamp-url <url>] (or SSAM_WIN_CERT_SHA1, SSAM_WIN_PUBLISHER_NAME, SSAM_WIN_TIMESTAMP_URL): the native core and the
 //   installer are signed with that certificate of Cert:\CurrentUser\My, and app-update.yml requires that publisher for every
 //   update. --test-unsigned: the owner's own test app (no signature, no trust anchors, no updates, bridgeOffer false), never
-//   published. --dry-run: everything up to electron-builder, then prints its configuration and arguments.
+//   published; on macOS too (ad-hoc sealed, never notarized: build/mac-022-native). --dry-run: everything up to
+//   electron-builder, then prints its configuration and arguments.
 //   SSAM_UPDATE_URL in the environment stands for --update-url. --pack-only stops after pack/ is ready.
 // A macOS build (DMG, ZIP for the updater, signing) only runs on a Mac; a Windows build runs on Windows (or on
 // Linux with wine, which this script does not set up).
@@ -31,12 +32,13 @@ const app = path.resolve(here, '..');
 // The owner's update server (the publish url of electron-builder.yml); --update-url or SSAM_UPDATE_URL replace it.
 export const DEFAULT_UPDATE_URL = 'https://dist.ssam.pro/u/ssam-agent';
 
-function parse(argv) {
+export function parse(argv) {
   const options = { platform: null, pack: null, updateUrl: process.env.SSAM_UPDATE_URL ?? DEFAULT_UPDATE_URL, noUpdates: false, packOnly: false, notarize: false, testUnsigned: false, dryRun: false };
   for (let i = 0; i < argv.length; i++) {
     const name = argv[i];
     if (name === '--no-updates') { options.noUpdates = true; continue; }
     if (name === '--pack-only') { options.packOnly = true; continue; }
+    if (name === '--bundled-bridges-only') { options.bundledBridgesOnly = true; continue; }
     if (name === '--test-unsigned') { options.testUnsigned = true; continue; }
     if (name === '--dry-run') { options.dryRun = true; continue; }
     // macOS only: notarize with APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD and APPLE_TEAM_ID (electron-builder reads them).
@@ -55,9 +57,16 @@ function parse(argv) {
   }
   if (!['win', 'mac'].includes(options.platform)) throw new Error('use --platform win or --platform mac');
   if (options.platform === 'win' && !options.native) throw new Error('Windows app builds require --native <qualified ssam-agent.exe>.');
+  if (options.bundledBridgesOnly) {
+    if (options.platform !== 'mac' || !options.notarize || !options.native || options.testUnsigned || options.packOnly)
+      throw new Error('--bundled-bridges-only requires a notarized native Mac release');
+    if (options.certSha1 || options.publisherName || options.bridgePublicKey)
+      throw new Error('--bundled-bridges-only takes no Windows or remote bridge identity');
+    options.noUpdates = true;
+  }
   if (options.testUnsigned) {
-    if (options.platform !== 'win') throw new Error('--test-unsigned is the Windows test app only');
     if (options.certSha1 || options.publisherName) throw new Error('--test-unsigned takes no signing certificate');
+    if (options.notarize) throw new Error('--test-unsigned is never notarized');
     options.noUpdates = true;
   } else if (options.platform === 'win' && !options.packOnly) {
     // A Windows app that reaches customers is signed, and its updater accepts only updates of the same publisher.
@@ -95,7 +104,7 @@ export function electronVersion(appDir = app) {
 export function withRenderer(packDir, platform, electron = electronVersion()) {
   const file = path.join(packDir, 'pack.json');
   const pack = JSON.parse(fs.readFileSync(file, 'utf8').replace(/^﻿/, ''));
-  const next = { ...pack, renderer: rendererFor(platform, electron) };
+  const next = { ...pack, renderer: rendererFor(platform, electron), privateDialog: rendererFor(platform, electron) };
   fs.writeFileSync(file, JSON.stringify(next, null, 2) + '\n');
   return next;
 }
@@ -121,6 +130,7 @@ export async function preparePack(source, platform, packDir = path.join(app, 'pa
   return check.pack;
 }
 
+// --bundled-bridges-only is a signed Mac build with remote bridge installation and updates disabled.
 // A command on PATH (with the PATHEXT extensions on Windows), as electron-builder looks it up; null when absent.
 export function findOnPath(name, env = process.env, platform = process.platform) {
   const dirs = String(env.PATH ?? env.Path ?? '').split(path.delimiter).filter(Boolean);
@@ -173,7 +183,7 @@ async function main() {
   // The native core is signed first (its hash goes into pack.json), then its trust anchors are checked. The unsigned test
   // app has no anchors: its agent never takes a bridge offer (bridgeOffer false).
   if (options.signing && !options.dryRun) options.native = signNative(options.native, options.signing, path.join(app, '.local/build/native-signed-' + Date.now()));
-  if (!options.testUnsigned) assertBridgeTrust({ nativeExecutable: options.native, publicKeyFile: options.bridgePublicKey });
+  if (!options.testUnsigned && !options.bundledBridgesOnly) assertBridgeTrust({ nativeExecutable: options.native, publicKeyFile: options.bridgePublicKey });
   if (options.notarize) {
     if (options.platform !== 'mac' || process.platform !== 'darwin' || !options.native)
       throw new Error('Notarized releases require a native executable and a Mac build host.');
@@ -201,8 +211,9 @@ async function main() {
     fs.renameSync(destination, target);
   }
   if (options.platform === 'win' && !pack.nativeCore) throw new Error('Windows app builds require --native <qualified ssam-agent.exe>.');
+  if (options.platform === 'mac' && !pack.nativeCore) throw new Error('Mac app builds require --native <ssam-agent> to provide the private Keychain helper. Build the native core on the target Mac first.');
   pack = withRenderer(path.join(app, 'pack'), options.platform);
-  if (options.testUnsigned) pack = withoutOffers(path.join(app, 'pack'));
+  if (options.testUnsigned || options.bundledBridgesOnly) pack = withoutOffers(path.join(app, 'pack'));
   console.log(`pack ${pack.id} ready in pack/ (${pack.files.length} files, lanes ${(pack.lanes ?? []).join(',')}, ODC bridge ${pack.odcBridge ?? '-'}, Service Studio ${pack.o11BuiltFor ?? '-'})`);
   if (options.packOnly) return;
   if (options.platform === 'mac' && process.platform !== 'darwin') throw new Error('a macOS build (DMG, ZIP, signing) only runs on a Mac');
@@ -224,11 +235,12 @@ async function main() {
     fs.mkdirSync(path.dirname(config), { recursive: true });
     fs.writeFileSync(config, JSON.stringify({ extends: path.join(app, 'electron-builder.yml'), ...(options.noUpdates ? { publish: null } : {}),
       ...(options.signing ? signingConfig(options.signing, packExecutables(pack)) : {}), ...(options.testUnsigned ? testUnsignedConfig() : {}),
-      ...(options.notarize ? { forceCodeSigning: true } : {}),
+      ...(options.notarize ? { forceCodeSigning: true, dmg: { sign: true } } : {}),
       ...(nativeMac ? { mac: { target: [{ target: 'dmg', arch: [process.arch] }, { target: 'zip', arch: [process.arch] }],
         // Ad-hoc sealing needs no Apple certificate and keeps ARM64 code valid.
         // The native core is already sealed before its manifest hash is recorded.
         ...(!options.notarize ? { identity: '-', hardenedRuntime: false } : {}),
+        ...(options.testUnsigned ? { artifactName: '${name}-${version}-test-unsigned-${os}-${arch}.${ext}' } : {}),
         signIgnore: ['Contents/Resources/pack/native/ssam-agent$'] } } : {}) }));
   }
   // Explicit CLI target names bypass merged YAML target arrays. Otherwise the

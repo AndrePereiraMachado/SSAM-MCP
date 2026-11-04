@@ -11,7 +11,15 @@
     <AssemblyName>ssam-agent</AssemblyName>
   </PropertyGroup>
   <ItemGroup>
+    <EmbeddedResource Include="../../agent/lib/public-cookie-metadata.json" LogicalName="public-cookie-metadata.json" />
+    <EmbeddedResource Include="../../agent/lib/cookie-sensitivity.ps1" LogicalName="cookie-sensitivity.ps1" />
+    <Compile Include="../../agent/lib/CognitoSrp.cs" Link="CognitoSrp.cs" />
+    <EmbeddedResource Include="../../agent/lib/CognitoSrp.cs" LogicalName="CognitoSrp.cs" />
     <InternalsVisibleTo Include="NativeProtocol.Tests" />
     <EmbeddedResource Include="..\..\agent\lib\users-vault.ps1" LogicalName="users-vault.ps1" />
+    <EmbeddedResource Include="..\..\agent\lib\private-dialog.ps1" LogicalName="private-dialog.ps1" />
+    <EmbeddedResource Include="..\..\agent\lib\private-vault.ps1" LogicalName="private-vault.ps1" />
+    <EmbeddedResource Include="..\..\agent\lib\credential-vault.ps1" LogicalName="credential-vault.ps1" />
+    <EmbeddedResource Include="..\..\agent\lib\credential-auth.ps1" LogicalName="credential-auth.ps1" />
   </ItemGroup>
 </Project>

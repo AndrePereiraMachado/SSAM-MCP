@@ -35,12 +35,12 @@ test('unsupported and malformed versions fail before reading or compiling a proj
 });
 
 // agent/r4-v106 (A8): one source, one bridge per runtime. Bridge.csproj names it by TargetFramework, and the plan of each ODC
-// Studio carries its own name (v107 for net8, v106 for net10), whatever single name the source pack says.
+// Studio carries its own name (v108 for net8, v109 for net10), whatever single name the source pack says.
 test('the ODC plan names the bridge of the Studio runtime from Bridge.csproj (agent box and line forms)', async t => {
   const { odcBridgeFor } = await import('../../scripts/studio-build-plan.mjs');
   const box = fs.readFileSync(fileURLToPath(new URL('../../platforms/odc/studio/bridge/Bridge.csproj', import.meta.url)), 'utf8');
-  assert.equal(odcBridgeFor(box, 'net8.0'), 'v107');
-  assert.equal(odcBridgeFor(box, 'net10.0'), 'v106');
+  assert.equal(odcBridgeFor(box, 'net8.0'), 'v108');
+  assert.equal(odcBridgeFor(box, 'net10.0'), 'v109');
   const line = '<AssemblyName>ODC3.Bridge.v106</AssemblyName><AssemblyName Condition="\'$(TargetFramework)\' == \'net8.0\'">ODC3.Bridge.v107</AssemblyName>';
   assert.equal(odcBridgeFor(line, 'net8.0'), 'v107');
   assert.equal(odcBridgeFor(line, 'net10.0'), 'v106');
@@ -49,7 +49,7 @@ test('the ODC plan names the bridge of the Studio runtime from Bridge.csproj (ag
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   fs.mkdirSync(path.join(root, 'platforms/odc/studio/bridge'), { recursive: true });
   fs.writeFileSync(path.join(root, 'platforms/odc/studio/bridge/Bridge.csproj'), box);
-  for (const [release, tfm, expected] of [['1.7.30', 'net10.0', 'v106'], ['1.7.29', 'net8.0', 'v107'], ['1.7.28', 'net8.0', 'v107']]) {
+  for (const [release, tfm, expected] of [['1.7.30', 'net10.0', 'v109'], ['1.7.29', 'net8.0', 'v108'], ['1.7.28', 'net8.0', 'v108']]) {
     const dir = path.join(root, 'studios', release); fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(path.join(dir, 'ODCStudio.runtimeconfig.json'), JSON.stringify({ runtimeOptions: { tfm } }));
     fs.writeFileSync(path.join(dir, 'ODCStudio.dll'), 'fixture');
