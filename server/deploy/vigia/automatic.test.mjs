@@ -133,7 +133,7 @@ test('bridge download needs a valid agent token and the served pair, rejects pat
 });
 test('automatic pipeline compiles bridges before the image and never creates an approval proposal',async t=>{
  const f=await fixture(t),events=f.calls;
- const config={...f.config,automatic:true,outDir:f.dir,head:'source-head',manifest:{window:3,odc:[{version:'1.7.29',image:'private/image',tag:'prod-old',sha256:digest}],o11:[{version:'11.55.93',image:'private/image',tag:'prod-old',sha256:digest}]},observed:[{lane:'odc',version:'1.7.30',fullVersion:'1.7.30.10980',studio:'odc',tfm:'net10.0'},{lane:'o11',version:'11.55.94',fullVersion:'11.55.94.65328',studio:'o11',tfm:'net10.0'}]};
+ const config={...f.config,automatic:true,bridgeMode:'signed-offers',outDir:f.dir,head:'source-head',manifest:{window:3,odc:[{version:'1.7.29',image:'private/image',tag:'prod-old',sha256:digest}],o11:[{version:'11.55.93',image:'private/image',tag:'prod-old',sha256:digest}]},observed:[{lane:'odc',version:'1.7.30',fullVersion:'1.7.30.10980',studio:'odc',tfm:'net10.0'},{lane:'o11',version:'11.55.94',fullVersion:'11.55.94.65328',studio:'o11',tfm:'net10.0'}]};
  const ops={...f.ops,preflight:async()=>{},targetFramework:async()=> 'net10.0',dockerReady:async()=>{},
   bundle:async c=>({...c,file:'bundle',sha256:digest,features:'private'}),companion:async(lane,version)=>({lane,version}),
   test:async()=>({passed:1,total:1,failures:[]}),buildBridges:async()=>{events.push('bridges');return {offers:[],kernel:kernel};},
@@ -161,7 +161,7 @@ test('bridge builder targets the Studio runtime, signs through the vault entry p
   assert.ok(args.includes('Artifacts'));assert.ok(!args.includes('b'.repeat(40)));const target=args[args.indexOf('-ArtifactDirectory')+1],records=[];for(const sub of fs.readdirSync(target)){if(!fs.statSync(path.join(target,sub)).isDirectory())continue;for(const name of fs.readdirSync(path.join(target,sub)))if(name.endsWith('.dll'))records.push({path:sub+'/'+name,signer:'owner'});}fs.writeFileSync(path.join(target,'authenticode.json'),JSON.stringify(records));return {stdout:'Bridge signatures verified.'};
  }};
  const fakeRoot=path.join(f.dir,'source');for(const rel of ['server/platforms/odc/studio/bridge/client/Program.cs','server/deploy/coolify/r1-kernels.json']){const dest=path.join(fakeRoot,rel);fs.mkdirSync(path.dirname(dest),{recursive:true});fs.copyFileSync(path.join(f.config.workspace,rel),dest);}
- const adapter=createAutoRuntime({...f.config,workspace:fakeRoot},runtime);
+ const adapter=createAutoRuntime({...f.config,workspace:fakeRoot,bridgeMode:'signed-offers'},runtime);
  const result=await adapter.buildBridges({odc:'1.7.30',o11:'11.55.94'},{odc:{lane:'odc',file:bundle,sha256:sha,version:'1.7.30',tfm:'net10.0',snapshot:'odc'},o11:{lane:'o11',file:bundle,sha256:sha,version:'11.55.94',tfm:'net10.0',snapshot:'o11'}},f.dir);
  assert.equal(result.kernel.o11Hook,undefined);assert.deepEqual(result.kernel.o11BridgeAccepted,['d1']);
  const oldHello={pack:{lanes:['odc','o11'],odcBridge:result.kernel.odcBridge,o11BuiltFor:'11.55.94',o11Hook:'dev'},studios:{odc:{installed:{version:'1.7.30'}},o11:{installed:{version:'11.55.94'}}}};
@@ -221,4 +221,67 @@ test('HTTP hello records amended bridge telemetry and suppresses a failed identi
  assert.equal(response.status,200);const data=await response.json();assert.equal(data.compatible.odc.bridgeOffer,undefined);
  assert.ok(events.some(e=>e.event==='bridge-report'&&e.sequence===1));
  const telemetry=JSON.parse(fs.readFileSync(path.join(dir,'state','studio-versions.json'),'utf8'));assert.equal(telemetry.tokens.fixture.bridges[0].reason,'LOAD_FAILED');
+});
+
+// Server-only bridge mode (the default): the round deploys the server pair only, against the published agent pack.
+const example=JSON.parse(fs.readFileSync(fileURLToPath(new URL('./config.example.json',import.meta.url)),'utf8'));
+const agentFiles=(edit=x=>x)=>{const at=rel=>edit(fs.readFileSync(fileURLToPath(new URL('../../../agent/'+rel,import.meta.url)),'utf8'));return {program:at('platforms/odc/studio/bridge/client/Program.cs'),kinds:at('agent/lib/kinds.mjs'),native:at('native/Ssam.Agent/StudioKinds.cs')};};
+function serverOnlyRound(f,{tfm='net10.0',pack={},edit}={}){
+ const events=f.calls,notes=[],runs=[];f.base.agentReleaseFiles=async()=>agentFiles(edit);f.config.agentReleaseCommit='c'.repeat(40);
+ const original=f.base.run;f.base.run=async(cmd,args,options)=>{runs.push({cmd:String(cmd),args:args.map(String),input:options?.input});return original(cmd,args,options);};
+ const config={...f.config,automatic:true,agentPack:example.agentPack,agentPackByRuntime:{...example.agentPackByRuntime,net10:{...example.agentPackByRuntime.net10,...pack}},agentReleaseCommit:'c'.repeat(40),outDir:f.dir,head:'source-head',manifest:{window:3,odc:[{version:'1.7.29',image:'private/image',tag:'prod-old',sha256:digest}],o11:[{version:'11.55.93',image:'private/image',tag:'prod-old',sha256:digest}]},observed:[{lane:'odc',version:'1.7.30',fullVersion:'1.7.30.10980',studio:'odc',tfm},{lane:'o11',version:'11.55.94',fullVersion:'11.55.94.65328',studio:'o11',tfm:'net10.0'}]};
+ const ops={...f.ops,notify:async title=>notes.push(title),preflight:async()=>{},targetFramework:async c=>c.tfm,dockerReady:async()=>{},
+  bundle:async c=>{events.push('bundle '+c.lane);return {...c,file:'bundle',sha256:digest,features:'private'};},companion:async(lane,version)=>({lane,version,tfm:'net10.0'}),
+  test:async()=>{events.push('test');return {passed:1,total:1,failures:[]};},buildBridges:async()=>{events.push('bridges');throw Error('no bridge is built in server-only');},
+  build:async()=>{events.push('image');return {...release(f.dir).built,odc:'1.7.30',o11:'11.55.94'};},
+  smoke:async()=>{events.push('smoke');ops.smoked=ops.packHello;return {ok:true,publishedPack:!!ops.packHello};},
+  propose:async()=>{throw Error('Approval must not be requested.');}};
+ return {config,ops,notes,runs};
+}
+// A real round reads the vault (and so the journal key) before the pair round: vigia.mjs round.
+const roundOf=async s=>{await s.ops.secrets();return runVigia(s.config,s.ops);};
+const signingCalls=runs=>runs.filter(r=>/dotnet|signtool/i.test(r.cmd)||r.args.some(a=>/odc-runtime-signing|Authenticode/i.test(a)));
+test('server-only round deploys the server pair only: no client bridge build, no signing, the published pack hello is smoked and checked',async t=>{
+ const f=await fixture(t),s=serverOnlyRound(f);
+ const result=await roundOf(s);assert.equal(result.status,'live',JSON.stringify(result));
+ assert.ok(!f.calls.includes('bridges'));assert.deepEqual(signingCalls(s.runs),[]);
+ assert.equal(s.ops.bridgeKernel.odcBridge,'v108');assert.equal(s.ops.smoked.pack.odcBridge,'v108');assert.ok(s.ops.smoked.agent.odcCommands.includes('reconcile-merge'));
+ const check=s.runs.map(r=>{try{return JSON.parse(r.input);}catch{return null;}}).find(r=>r?.action==='check'&&!r.rollback);
+ assert.match(check.checkSource,/"packHellos":\{"11\.55\.94\|1\.7\.30":\{"t":"hello"/);
+ assert.ok(f.calls.indexOf('smoke')<f.calls.indexOf('publish'));
+});
+test('server-only round waits for a client bridge update when no published pack covers the new Studio runtime, and touches nothing',async t=>{
+ const f=await fixture(t),s=serverOnlyRound(f,{tfm:'net11.0'});
+ const result=await roundOf(s);assert.equal(result.status,'deferred');
+ assert.match(result.error,/client bridge update required: odc 1\.7\.30 runtime net11\.0 \(no published agent pack declares a bridge for ODC Studios on net11/);
+ assert.ok(s.notes.includes('SSAM: client bridge update required'),s.notes.join());
+ for(const step of ['bundle odc','test','image','publish','lock','compose','deploy'])assert.ok(!f.calls.includes(step),step);
+ const attempt=readJournal(path.join(f.dir,result.id,'attempt.json'));assert.deepEqual(attempt.deferredLanes,['odc']);assert.equal(attempt.code,'client-bridge-update-required');
+});
+test('server-only round defers a published pack the reviewed release does not attach, before any bundle',async t=>{
+ const f=await fixture(t),s=serverOnlyRound(f,{pack:{odcBridge:'v110'}});
+ const result=await roundOf(s);assert.equal(result.status,'deferred');
+ assert.match(result.error,/client bridge update required: odc 1\.7\.30 runtime net10\.0 \(the reviewed agent release c{7} attaches v109 or v108 to an ODC Studio on net10\.0, not the declared v110\)/);
+ assert.ok(!f.calls.includes('bundle odc')&&!f.calls.includes('publish'));
+});
+test('server-only round defers when the new pair refuses the published pack hello (agent without reconcile-merge), before tests and build',async t=>{
+ const f=await fixture(t),s=serverOnlyRound(f,{edit:text=>text.replace(/['"]reconcile-merge['"],\s*/g,'')});
+ const result=await roundOf(s);assert.equal(result.status,'deferred');
+ assert.match(result.error,/client bridge update required: odc 1\.7\.30 runtime net10\.0 \(the published pack's hello is refused \(AGENT_PACK_MISMATCH/);
+ for(const step of ['test','image','smoke','publish','compose','deploy'])assert.ok(!f.calls.includes(step),step);
+});
+test('a vault without an Authenticode thumbprint is accepted only in server-only; a malformed one never',async t=>{
+ const f=await fixture(t),vault=extra=>({async run(cmd,args,o){if(args.some(x=>String(x).endsWith('read-secrets.ps1'))){const s=JSON.parse((await f.base.run(cmd,args,o)).stdout);delete s.authenticodeThumbprint;return {stdout:JSON.stringify({...s,...extra})};}return f.base.run(cmd,args,o);},executionSource:async()=>{},log:()=>{}});
+ assert.ok((await createAutoRuntime(f.config,vault({})).secrets()).journalKey);
+ await assert.rejects(createAutoRuntime({...f.config,bridgeMode:'signed-offers'},vault({})).secrets(),e=>e.code==='secrets-missing');
+ await assert.rejects(createAutoRuntime(f.config,vault({authenticodeThumbprint:'not-a-thumbprint'})).secrets(),e=>e.code==='secrets-missing');
+ for(const missing of ['manifestPrivateKey','journalKey'])await assert.rejects(createAutoRuntime(f.config,vault({[missing]:''})).secrets(),e=>e.code==='secrets-missing',missing);
+ await assert.rejects(createAutoRuntime({...f.config,bridgeMode:'unsigned'},vault({})).secrets(),e=>e.code==='secrets-missing');
+ // set-secrets.ps1: Enter leaves the thumbprint out; a value must be 40 hex; the Ed25519 and journal keys are always generated.
+ const ps=fs.readFileSync(fileURLToPath(new URL('./set-secrets.ps1',import.meta.url)),'utf8');
+ assert.match(ps,/-notin @\('webhookUrl','authenticodeThumbprint'\)/);assert.match(ps,/\^\[a-fA-F0-9\]\{40\}\$/);assert.match(ps,/\$values\.journalKey = /);assert.match(ps,/\$values\.manifestPrivateKey = /);
+});
+test('server-only never builds or signs a client bridge, even when asked',async t=>{
+ const f=await fixture(t),runs=[];const adapter=createAutoRuntime(f.config,{...f.base,run:async(...a)=>{runs.push(a);return f.base.run(...a);}});
+ await assert.rejects(adapter.buildBridges({odc:'1.7.30',o11:'11.55.94'},{},f.dir),/only in the signed-offers bridge mode/);assert.deepEqual(runs,[]);
 });

@@ -15,17 +15,22 @@ $values = @{}
 foreach ($item in @(
     @('coolifyToken','Coolify API token'),
     @('sshPrivateKey','SSH private key as base64 of the complete key file'),
-    @('authenticodeThumbprint','Authenticode signing certificate thumbprint'),
+    @('authenticodeThumbprint','Authenticode signing certificate thumbprint (Enter for none: bridgeMode server-only signs no client bridge)'),
     @('webhookUrl','Optional webhook URL (Enter to disable)')
 )) {
     $secure = Read-Host $item[1] -AsSecureString
     if ($secure.Length -eq 0) {
-        if ($item[0] -ne 'webhookUrl') { throw 'A required secret is empty.' }
+        # Optional: the webhook, and the thumbprint (empty = none; only bridgeMode signed-offers requires one).
+        if ($item[0] -notin @('webhookUrl','authenticodeThumbprint')) { throw 'A required secret is empty.' }
         continue
     }
     $ptr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
-    try { $values[$item[0]] = Protect-VigiaValue ([Runtime.InteropServices.Marshal]::PtrToStringBSTR($ptr)) }
-    finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($ptr) }
+    try {
+        $plain = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($ptr)
+        if ($item[0] -eq 'authenticodeThumbprint' -and $plain -notmatch '^[a-fA-F0-9]{40}$') { throw 'The Authenticode thumbprint must be 40 hexadecimal characters (or empty for none).' }
+        $values[$item[0]] = Protect-VigiaValue $plain
+    }
+    finally { $plain = $null; [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($ptr) }
 }
 $pair = & $Node (Join-Path $PSScriptRoot 'key-pair.mjs')
 if ($LASTEXITCODE -ne 0) { throw 'Cannot generate the Ed25519 signing key.' }

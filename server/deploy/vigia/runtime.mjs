@@ -395,8 +395,10 @@ export async function createRuntime(config,{log=()=>{}}={}){
    }finally{fs.rmSync(installers,{recursive:true,force:true});}
   },
   async smoke(built,bundles,served,dir){
-   const pack=runtime.bridgeKernel?{...runtime.bridgeKernel,o11BuiltFor:built.o11}:packFor(config,bundles);
    verifyFeaturesUse(bundles.odc.features,bundles.odc.featuresProvenance);
+   // Server-only: the image runs the release kernel and is asked the hello of the published agent pack, nothing synthetic.
+   if(runtime.packHello)return smokeImage({pair:built,bundle:{features:bundles.odc.features},dir,root,docker,served,kernel:runtime.bridgeKernel,presented:runtime.packHello,budget:readListingBudget(root),privateDir:path.join(temp,'smoke')});
+   const pack=runtime.bridgeKernel?{...runtime.bridgeKernel,o11BuiltFor:built.o11}:packFor(config,bundles);
    return smokeImage({pair:built,bundle:{features:bundles.odc.features},dir,root,docker,served,pack,budget:readListingBudget(root),privateDir:path.join(temp,'smoke'),...(config.rehearsal&&runtime.bridgeOffers?{offers:runtime.bridgeOffers,offerCheck:'const expected='+JSON.stringify({budget:readListingBudget(root),offers:runtime.bridgeOffers})+';\n'+fs.readFileSync(path.join(here,'check-backend.mjs'),'utf8')}:{})});
   },
   // The proposal branch starts from HEAD, or from the newest approved pin main does not carry yet (base), so merging the
@@ -497,6 +499,15 @@ export async function createRuntime(config,{log=()=>{}}={}){
    const target=path.join(temp,'agent-source-'+Date.now());fs.mkdirSync(target,{recursive:true});
    const archive=path.join(target,'source.tar');await git(['archive','-o',archive,commit,'agent']);
    await run(exe.tar,['-xf',archive,'-C',target]);fs.rmSync(archive);return target;
+  };
+  // Server-only: the three source files that say what the reviewed agent release ships and runs (its ODC client and both
+  // agents' command lists), read from the pinned commit of the agent release line (git show: nothing is checked out or run).
+  runtime.agentReleaseFiles=async()=>{
+   await runtime.executionSource();const commit=config.agentReleaseCommit,ref=config.agentReleaseRef;
+   agentReleasePin(commit,ref);
+   if((await git(['merge-base','--is-ancestor',commit,ref],{allowFailure:true})).code!==0)throw Error('Agent commit is outside the approved release line.');
+   const show=async rel=>{const r=await git(['show',`${commit}:${rel}`],{allowFailure:true});return r.code===0?r.stdout:null;};
+   return {program:await show('agent/platforms/odc/studio/bridge/client/Program.cs'),kinds:await show('agent/agent/lib/kinds.mjs'),native:await show('agent/native/Ssam.Agent/StudioKinds.cs')};
   };
   runtime.pinExecution=async(manifest,dir,id,kernel,liveKernels)=>{
    await runtime.executionSource();

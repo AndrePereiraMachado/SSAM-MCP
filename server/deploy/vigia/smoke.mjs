@@ -8,13 +8,17 @@ const DEFAULT_PACK={odcBridge:'v97',o11BuiltFor:'11.55.92',o11Hook:'dev',odcBrid
 // privateDir: where the test server's state, its features and its cache live during the smoke (private, outside C:/t;
 // removed in finally). dir keeps only the evidence (kernel.json, the server log without credentials, the commands).
 // offers and offerCheck (a rehearsal): the signed bridges the image must offer and deliver, asked by check-backend.mjs inside it.
-export async function smokeImage({pair,bundle,dir,root,docker,served,pack=DEFAULT_PACK,budget,privateDir,offers,offerCheck}){
+// kernel and presented (server-only bridge mode): the release kernel.json as it is, and the hello of the published agent pack
+// (server-only.mjs packHello) instead of a synthetic one; a refusal reports each refused lane and its code (refused).
+export async function smokeImage({pair,bundle,dir,root,docker,served,pack=DEFAULT_PACK,budget,privateDir,offers,offerCheck,kernel:release,presented}){
  if(!budget||!Number.isInteger(budget.tools)||!Number.isInteger(budget.totalBytes))throw Error('The smoke test needs the listing budget.');
  if(!privateDir||/^c:[\\/]t(?:[\\/]|$)/i.test(path.resolve(privateDir)))throw Error('The smoke test needs a private folder outside C:/t for the test server state.');
+ if(presented&&!release)throw Error('The published pack smoke needs the release kernel.');
  pack={...DEFAULT_PACK,...pack};const hello={odcBridge:pack.odcBridge,o11BuiltFor:pack.o11BuiltFor,o11Hook:pack.o11Hook};
  const name='ssam-vigia-'+randomUUID().slice(0,12),home=path.resolve(privateDir??''),secret=path.join(home,'segredo-'+name),state=path.join(secret,'state'),features=path.join(secret,'features'),cache=path.join(secret,'cache');
  for(const folder of [dir,state,features,cache])fs.mkdirSync(folder,{recursive:true});
- const kernel={o11:pair.o11,odc:pair.odc,odcBridge:pack.odcBridge,odcBridgeAccepted:pack.odcBridgeAccepted,...(pack.o11Hook?{o11Hook:pack.o11Hook}:{}),...(pack.o11BridgeAccepted?{o11BridgeAccepted:pack.o11BridgeAccepted}:{})};
+ const kernel=release??{o11:pair.o11,odc:pair.odc,odcBridge:pack.odcBridge,odcBridgeAccepted:pack.odcBridgeAccepted,...(pack.o11Hook?{o11Hook:pack.o11Hook}:{}),...(pack.o11BridgeAccepted?{o11BridgeAccepted:pack.o11BridgeAccepted}:{})};
+ if(release&&(release.odc!==pair.odc||release.o11!==pair.o11))throw Error('The release kernel names another pair than the image.');
  fs.writeFileSync(path.join(state,'kernel.json'),JSON.stringify(kernel));fs.writeFileSync(path.join(dir,'kernel.json'),JSON.stringify(kernel,null,2));fs.copyFileSync(bundle.features,path.join(features,'Features.plain.xml'));
  const image=pair.image+':'+pair.tag,mount=(from,to)=>['-v',from.replaceAll('\\','/')+':'+to];
  let created=false,credentials=null;
@@ -34,11 +38,14 @@ export async function smokeImage({pair,bundle,dir,root,docker,served,pack=DEFAUL
   if(!credentials.token||!credentials.agentCredential)throw Error('Smoke credentials could not be issued.');
   const script=`import {toolListingBytes} from './platforms/odc/facade/tool-listing.mjs';
 try {
-const credentials=${JSON.stringify(credentials)},pair=${JSON.stringify(pair)},pack=${JSON.stringify(hello)},budget=${JSON.stringify({tools:budget.tools,totalBytes:budget.totalBytes,coreBytes:budget.coreBytes??null,core:budget.core??[]})};
+const credentials=${JSON.stringify(credentials)},pair=${JSON.stringify(pair)},pack=${JSON.stringify(hello)},presented=${JSON.stringify(presented??null)},budget=${JSON.stringify({tools:budget.tools,totalBytes:budget.totalBytes,coreBytes:budget.coreBytes??null,core:budget.core??[]})};
 const parse=text=>{const line=text.split('\\n').find(x=>x.startsWith('data:'));return JSON.parse(line?line.slice(5):text);};
 async function post(route,token,body,headers={}){const r=await fetch('http://127.0.0.1:7310'+route,{method:'POST',headers:{authorization:'Bearer '+token,'content-type':'application/json',accept:'application/json, text/event-stream',...headers},body:JSON.stringify(body)});const text=await r.text();return {status:r.status,sid:r.headers.get('mcp-session-id'),data:text?parse(text):null};}
-const hello=await post('/agent/v1/hello',credentials.agentCredential,{t:'hello',protocol:'ssam-agent/1',instance:'smoke',agent:{version:'0.3.1',odcCommands:['merge','reconcile-merge']},pack:{id:'smoke',lanes:['odc','o11'],...pack},studios:{odc:{installed:{version:pair.odc,dir:'C:/Smoke'}},o11:{installed:{version:pair.o11,dir:'C:/Smoke'}}}});
-if(hello.status!==200||!hello.data?.compatible?.odc?.ok||!hello.data?.compatible?.o11?.ok)throw Error('The unchanged agent pack was not accepted for both lanes.');
+const hello=await post('/agent/v1/hello',credentials.agentCredential,presented??{t:'hello',protocol:'ssam-agent/1',instance:'smoke',agent:{version:'0.3.1',odcCommands:['merge','reconcile-merge']},pack:{id:'smoke',lanes:['odc','o11'],...pack},studios:{odc:{installed:{version:pair.odc,dir:'C:/Smoke'}},o11:{installed:{version:pair.o11,dir:'C:/Smoke'}}}});
+if(hello.status!==200||!hello.data?.compatible?.odc?.ok||!hello.data?.compatible?.o11?.ok){
+ if(presented&&hello.status===200)console.error('SMOKE_REFUSED:'+JSON.stringify(['odc','o11'].filter(l=>!hello.data?.compatible?.[l]?.ok).map(lane=>({lane,code:String(hello.data?.compatible?.[lane]?.code??'UNKNOWN')}))));
+ throw Error(presented?'The published agent pack was not accepted for both lanes.':'The unchanged agent pack was not accepted for both lanes.');
+}
 const init=await post('/mcp',credentials.token,{jsonrpc:'2.0',id:1,method:'initialize',params:{protocolVersion:'2025-03-26',capabilities:{},clientInfo:{name:'vigia',version:'1'}}});
 if(init.status!==200||!init.sid)throw Error('MCP initialization failed.');
 const headers={'mcp-session-id':init.sid};await post('/mcp',credentials.token,{jsonrpc:'2.0',method:'notifications/initialized'},headers);
@@ -49,12 +56,15 @@ const coreBytes=tools.filter(t=>budget.core.includes(t.name)).reduce((n,t)=>n+to
 console.log(JSON.stringify({ok:true,healthy:true,agentAccepted:true,tools:tools.length,totalBytes,coreBytes}));
 } catch(error) { console.error('SMOKE_CHECK:'+error.message); process.exitCode=1; }`;
   const checked=await docker(['exec','-i',name,'node','--input-type=module'],{input:script,dir,secret:true,allowFailure:true});
-  if(checked.code!==0)throw Error(checked.stderr.split('\n').find(x=>x.startsWith('SMOKE_CHECK:'))??'Image smoke script failed.');
+  if(checked.code!==0){
+   let refused=null;try{const line=checked.stderr.split('\n').find(x=>x.startsWith('SMOKE_REFUSED:'));if(line)refused=JSON.parse(line.slice(14)).filter(r=>['odc','o11'].includes(r?.lane)).map(r=>({lane:r.lane,code:/^[A-Z_]+$/.test(r.code)?r.code:'UNKNOWN'}));}catch{refused=null;}
+   return {ok:false,error:checked.stderr.split('\n').find(x=>x.startsWith('SMOKE_CHECK:'))??'Image smoke script failed.',...(refused?.length?{refused}:{})};
+  }
   if(offers){
    const asked=await docker(['exec','-i',name,'node','--input-type=module'],{input:offerCheck,dir,secret:true,allowFailure:true});
    if(asked.code!==0)throw Error('The image did not offer or deliver its signed bridges.');
   }
-  return {...JSON.parse(checked.stdout),warm,...(offers?{offersChecked:offers.length}:{})};
+  return {...JSON.parse(checked.stdout),warm,...(offers?{offersChecked:offers.length}:{}),...(presented?{publishedPack:true}:{})};
  }catch(error){return {ok:false,error:error.message};}
  finally{
   if(created){const logs=await docker(['logs',name],{allowFailure:true});const text=logs.stdout+logs.stderr;

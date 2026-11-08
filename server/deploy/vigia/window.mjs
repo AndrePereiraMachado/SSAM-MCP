@@ -35,6 +35,11 @@ export const pairTag=(p,commit,date)=>`prod-${date}-${commit}-o${p.o11.replaceAl
 export const windowPairs=manifest=>versionPairs(manifest).map(p=>({odc:p.odc,o11:p.o11}));
 export const hasPair=(manifest,pair)=>windowPairs(manifest).some(p=>p.odc===pair.odc&&p.o11===pair.o11);
 export const isRealClient=data=>!data.revokedAt&&!data.revoked&&data.state!=='revoked'&&!data.verification&&data.customer!=='Version verification';
+// The most pairs a rotation may keep (retained clients included): maxWindow, else at least the window the manifest already
+// serves (a pair added by hand never makes every later round fail), and never below 4.
+export const windowLimit=(config,manifest)=>config?.maxWindow??Math.max(4,manifest?.window??3);
+// Newest first by ODC Studio, then Service Studio: the order in which pairs stay in the window.
+const newerPair=(a,b)=>compareVersion(b.odc,a.odc)||compareVersion(b.o11,a.o11);
 export function rotateWindow(manifest,pair,state={}){
  const old=versionPairs(manifest),window=manifest.window??3;
  pair={odc:old[0].odc,o11:old[0].o11,...pair};
@@ -47,9 +52,13 @@ export function rotateWindow(manifest,pair,state={}){
   const uses=LANES.some(l=>version(data[l]?.installed)===p[l]);
   if(active&&uses){held.push({pair:pairId(p),token,lastSeen:data.seen});return true;}return false;
  });
- entries=entries.filter((p,i)=>i<window||recent(p));
- const limit=state.maxWindow??4;
- if(!Number.isInteger(limit)||limit<3||entries.length>limit)throw Object.assign(Error('Active clients require a window above the configured limit; owner review is required.'),{code:'WINDOW_LIMIT',environmental:true});
+ // The new pair and the newest served pairs by version fill the window, whatever their place in the manifest (a pair added by
+ // hand at the end is still the newest); an older pair stays only for a recent client. The order of the manifest is kept.
+ const kept=new Set([entries[0],...entries.slice(1).sort(newerPair).slice(0,Math.max(0,window-1))]);
+ entries=entries.filter(p=>kept.has(p)||recent(p));
+ // Without a configured maxWindow (the replay of approvals), the same default as the round: never below the served window.
+ const limit=state.maxWindow??windowLimit(null,manifest);
+ if(!Number.isInteger(limit)||limit<3||entries.length>limit)throw Object.assign(Error(limit<window?`maxWindow (${limit}) is below the window the manifest already serves (${window}); raise maxWindow in the watcher configuration.`:'Active clients require a window above the configured limit; owner review is required.'),{code:'WINDOW_LIMIT',environmental:true});
  const next={window:Math.max(window,entries.length),odc:[],o11:[]};
  for(const p of entries)for(const lane of LANES)next[lane].push({version:p[lane],tag:p.tag,image:p.image,...(p.sha256?{sha256:p.sha256}:{})});
  versionPairs(next);

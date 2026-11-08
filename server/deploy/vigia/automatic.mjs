@@ -3,7 +3,7 @@
 import fs from 'node:fs';
 import {readJournal,writeJournal} from './journal.mjs';
 import path from 'node:path';
-import {rotateWindow,pinDigest} from './window.mjs';
+import {rotateWindow,windowLimit,pinDigest} from './window.mjs';
 import {assertUnserved,assertRetained,canonicalComposeHash} from './safety.mjs';
 export const AUTOMATIC_PLAN=[
  'Read secrets and validate the reviewed vigia-run execution source',
@@ -21,6 +21,10 @@ export const AUTOMATIC_PLAN=[
  'Release the lock after verification or rollback; retain five backups',
  'Notify per attempt, always notify rollback failure'
 ];
+// The plan of a bridge mode: server-only (the default) builds, signs and offers no client bridge; it gates the pair on the
+// published agent packs instead.
+export const SERVER_ONLY_STEP='Build no client bridge: the kernel accepts the bridges of the published agent packs, and a hello of that pack (its bridges, runtimes and reconcile-merge) must be compatible on both lanes, else the lane waits (client-bridge-update-required)';
+export const automaticPlan=mode=>mode==='signed-offers'?AUTOMATIC_PLAN:AUTOMATIC_PLAN.map(step=>step.startsWith('Compile pinned client sources')?SERVER_ONLY_STEP:step);
 const atomic=(file,value)=>{const tmp=file+'.next';fs.writeFileSync(tmp,JSON.stringify(value,null,2)+'\n');fs.renameSync(tmp,file);};
 export async function releaseEvent(directory,ops,name,id,message,secrets,attempt='legacy',code=null){
  const file=path.join(directory,'release-events.json');let events={};
@@ -62,7 +66,7 @@ export async function releaseAutomatically(config,ops,release){
   baseline=await ops.liveBaseline(secrets);
   try{assertUnserved(baseline,{odc:built.odc??kernel.odc,o11:built.o11??kernel.o11});}
   catch(e){if(e.code!=='ALREADY_SERVED')throw e;state.status='idle';save();return {status:'idle',id};}
-  proposed=rotateWindow(baseline.manifest,{odc:built.odc??kernel.odc,o11:built.o11??kernel.o11,image:built.image,tag:built.tag},{...baseline.telemetry,maxWindow:config.maxWindow??4}).manifest;
+  proposed=rotateWindow(baseline.manifest,{odc:built.odc??kernel.odc,o11:built.o11??kernel.o11,image:built.image,tag:built.tag},{...baseline.telemetry,maxWindow:windowLimit(config,baseline.manifest)}).manifest;
   if(baseline.hash!==state.baseline?.hash){delete state.steps.pin;delete state.steps.backup;delete state.steps.prepared;}
   }catch(error){state.failure={step:'baseline-refresh',code:/^[A-Z_]+$/.test(error.code??'')?error.code:'BASELINE_UNAVAILABLE'};state.deferrals=(state.deferrals??0)+1;state.firstDeferredAt??=new Date().toISOString();save();await event('failed',`${id}: live baseline refresh deferred.`);return {status:'deferred',id,code:error.code??'BASELINE_UNAVAILABLE'};}
  }

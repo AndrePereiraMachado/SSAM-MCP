@@ -19,18 +19,18 @@ const manifest={window:3,odc:['1.7.30','1.7.29','1.7.28'].map((version,i)=>({ver
 const release=(lane,v,full)=>({lane,version:v,fullVersion:full,studio:lane,tfm:'net10.0',url:'https://official.example/'+lane,provenance:{root:lane}});
 const observed=[release('odc','1.7.30','1.7.30.10980'),release('o11','11.55.94','11.55.94.65328')];
 // Every operation that changes something outside this machine, as a spy. The real Coolify and SSH doors stay in, over a fake server and a fake ssh.
-async function fixture(t){
+async function fixture(t,{config:extra={},vault={}}={}){
  const dir=tmp(t),out=path.join(dir,'out'),http_=[],ssh=[],spied=[],ran=[];fs.mkdirSync(out);
  const server=http.createServer((req,res)=>{http_.push(req.method+' '+req.url);res.setHeader('content-type','application/json');res.end(JSON.stringify({docker_compose_raw:'services: {}'}));});
  await new Promise(r=>server.listen(0,'127.0.0.1',r));t.after(()=>server.close());
  const key=generateKeyPairSync('ed25519').privateKey.export({format:'pem',type:'pkcs8'});
- const real={automatic:true,workspace:path.resolve(here,'../../..'),tempRoot:dir,outDir:out,pauseFile:path.join(dir,'PAUSE'),automaticDeployment:{testOnly:true,coolify:{url:`http://127.0.0.1:${server.address().port}`,resource:'fixture'},ssh:{host:'fixture',knownHosts:path.join(dir,'known')},remote:{directory:'/x'}}};
+ const real={automatic:true,bridgeMode:'signed-offers',workspace:path.resolve(here,'../../..'),tempRoot:dir,outDir:out,pauseFile:path.join(dir,'PAUSE'),automaticDeployment:{testOnly:true,coolify:{url:`http://127.0.0.1:${server.address().port}`,resource:'fixture'},ssh:{host:'fixture',knownHosts:path.join(dir,'known')},remote:{directory:'/x'}},...extra};
  const config=rehearsalConfig(real,new Date('2026-10-31T12:00:00Z'));fs.mkdirSync(config.outDir,{recursive:true});
  const base={log:()=>{},notes:[],executionSource:async()=>{},
   async notify(title){this.notes.push(title);},
   async run(cmd,args,{input}={}){
    ran.push(path.basename(String(cmd)));
-   if(args.some(x=>String(x).endsWith('read-secrets.ps1')))return {stdout:JSON.stringify({coolifyToken:'memory-only',sshPrivateKey:Buffer.from('PRIVATE KEY').toString('base64'),authenticodeThumbprint:'b'.repeat(40),manifestPrivateKey:key,journalKey:Buffer.alloc(32,1).toString('base64'),webhookUrl:real.automaticDeployment.coolify.url+'/webhook'})};
+   if(args.some(x=>String(x).endsWith('read-secrets.ps1')))return {stdout:JSON.stringify({coolifyToken:'memory-only',sshPrivateKey:Buffer.from('PRIVATE KEY').toString('base64'),authenticodeThumbprint:'b'.repeat(40),manifestPrivateKey:key,journalKey:Buffer.alloc(32,1).toString('base64'),webhookUrl:real.automaticDeployment.coolify.url+'/webhook',...vault})};
    if(String(cmd).endsWith('icacls.exe'))return {stdout:''};
    ssh.push(JSON.parse(input).action);return {stdout:'{"ok":true,"availableMiB":9000}'};
   }};
@@ -76,6 +76,36 @@ test('a rehearsal whose image does not offer the bridges fails, and still change
  const f=await fixture(t);f.runtime.smoke=async()=>({ok:true,tools:91,totalBytes:1,coreBytes:1,offersChecked:0});
  const result=await rehearseCurrent(f.config,f.runtime,{manifest});
  assert.equal(result.status,'failed');assert.match(result.error,/did not offer/);assert.deepEqual(f.spied,[]);
+});
+// Server-only (the default bridge mode) on a five-pair window: the vault has no Authenticode thumbprint, no bridge is built or
+// signed, and the built image is asked the hello of the published agent pack (config.example.json, release source of this checkout).
+const agentFiles=()=>{const at=rel=>fs.readFileSync(path.resolve(here,'../../../agent',rel),'utf8');return {program:at('platforms/odc/studio/bridge/client/Program.cs'),kinds:at('agent/lib/kinds.mjs'),native:at('native/Ssam.Agent/StudioKinds.cs')};};
+const example=JSON.parse(fs.readFileSync(path.join(here,'config.example.json'),'utf8'));
+const five={window:5,...Object.fromEntries(['odc','o11'].map(lane=>[lane,[['1.7.32','11.55.95'],['1.7.31','11.55.94'],['1.7.30','11.55.94'],['1.7.29','11.55.93'],['1.7.28','11.55.92']].map(([odc,o11],i)=>({version:lane==='odc'?odc:o11,image:'private/image',tag:'prod-five-'+i,sha256:digest}))]))};
+test('server-only rehearsal of a five-pair window builds and signs no bridge and smokes the published pack hello',async t=>{
+ const f=await fixture(t,{config:{bridgeMode:undefined,agentPack:example.agentPack,agentPackByRuntime:example.agentPackByRuntime,agentReleaseCommit:'c'.repeat(40)},vault:{authenticodeThumbprint:undefined}});
+ f.runtime.agentReleaseFiles=async()=>agentFiles();
+ f.runtime.observe=async()=>{f.order.push('observe');return [release('odc','1.7.32','1.7.32.11000'),release('o11','11.55.95','11.55.95.1')];};
+ f.runtime.buildBridges=async()=>{f.order.push('buildBridges');throw Error('no bridge is built in server-only');};
+ let presented=null,kernel=null;
+ f.runtime.smoke=async()=>{f.order.push('smoke');presented=f.runtime.packHello;kernel=f.runtime.bridgeKernel;return {ok:true,tools:91,totalBytes:259684,coreBytes:33952,publishedPack:true};};
+ const result=await rehearseCurrent(f.config,f.runtime,{manifest:five});
+ assert.equal(result.status,'rehearsed',JSON.stringify(result));assert.equal(result.id,'o11-11.55.95-odc-1.7.32');assert.equal(result.bridgeMode,'server-only');
+ assert.ok(!f.order.includes('buildBridges'));assert.deepEqual(result.offers,[]);
+ assert.ok(!f.ran.some(cmd=>/dotnet|signtool/i.test(cmd)),f.ran.join());
+ assert.equal(kernel.odc,'1.7.32');assert.equal(kernel.odcBridge,'v108');assert.ok(kernel.odcBridgeAccepted.includes('v107'),'the nearest served ODC pair accepts it');
+ assert.equal(presented.pack.odcBridge,'v108');assert.equal(presented.pack.o11BuiltFor,'11.55.94');assert.ok(presented.agent.odcCommands.includes('reconcile-merge'));
+ assert.deepEqual(result.hello,{odcBridge:'v108',o11BuiltFor:'11.55.94'});
+ assert.equal(fs.existsSync(path.join(f.config.rehearsal.dir,'store')),false);
+ assert.deepEqual(f.spied,[]);assert.deepEqual([...new Set(f.ssh)],['capacity']);
+});
+test('server-only rehearsal whose image refuses the published pack hello waits for a client bridge update',async t=>{
+ const f=await fixture(t,{config:{bridgeMode:undefined,agentPack:example.agentPack,agentPackByRuntime:example.agentPackByRuntime,agentReleaseCommit:'c'.repeat(40)},vault:{authenticodeThumbprint:undefined}});
+ f.runtime.agentReleaseFiles=async()=>agentFiles();
+ f.runtime.smoke=async()=>({ok:false,error:'SMOKE_CHECK:The published agent pack was not accepted for both lanes.',refused:[{lane:'odc',code:'AGENT_PACK_MISMATCH'}]});
+ const result=await rehearseCurrent(f.config,f.runtime,{manifest});
+ assert.equal(result.status,'deferred');assert.match(result.error,/client bridge update required: odc 1\.7\.30 runtime net10\.0/);assert.deepEqual(f.spied,[]);
+ assert.ok(f.runtime.notes.includes('SSAM rehearsal: client bridge update required'),f.runtime.notes.join());
 });
 test('PAUSE refuses the rehearsal before anything is detected or built',async t=>{
  const f=await fixture(t);fs.writeFileSync(f.config.pauseFile,'');

@@ -10,6 +10,8 @@ import {verifyBridge} from '../../platforms/odc/facade/bridge-store.mjs';
 import {detectSources,downloadInstaller} from './sources.mjs';
 import {readListingBudget} from './smoke.mjs';
 import {refuseInRehearsal,assertPause,assertTime,canonicalComposeHash,cleanupSsh,cleanupRollback,liveBaseline,composeHash,unchanged,preserveCompose} from './safety.mjs';
+import {bridgeMode,parseAgentRelease} from './server-only.mjs';
+import {windowPairs,pairId} from './window.mjs';
 const here=path.dirname(fileURLToPath(import.meta.url));
 const hash=b=>createHash('sha256').update(b).digest('hex');
 const q=s=>"'"+String(s).replaceAll("'","'\\''")+"'";
@@ -22,15 +24,18 @@ export function createAutoRuntime(config,runtime) {
  if(config.automatic&&!config.dryRun){requireJournalKey(config.outDir);requireJournalKey(featuresRoot);}
  const ps=config.powershell??'C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe';
  const script=(name,args=[],input)=>runtime.run(ps,['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',path.join(here,name),...args],{input,secret:true});
- let cached,activeLease;
+ let cached,cachedRelease,activeLease;
  async function secrets(){
   await runtime.executionSource();
   if(cached)return cached;
   let s;
   try {
    s=JSON.parse((await script('read-secrets.ps1',config.vault?['-Vault',config.vault]:[])).stdout);
-   if(['coolifyToken','sshPrivateKey','authenticodeThumbprint','manifestPrivateKey','journalKey'].some(k=>!s[k]))throw Error();
-   if(!/^[a-f0-9]{40}$/i.test(s.authenticodeThumbprint))throw Error();
+   // server-only signs no client bridge: the Authenticode thumbprint is optional there (empty = none), still well formed when
+   // present; signed-offers keeps requiring it. Ed25519 and the journal HMAC key stay required in both.
+   const signing=bridgeMode(config)==='signed-offers';
+   if(['coolifyToken','sshPrivateKey',...(signing?['authenticodeThumbprint']:[]),'manifestPrivateKey','journalKey'].some(k=>!s[k]))throw Error();
+   if((signing||s.authenticodeThumbprint)&&!/^[a-f0-9]{40}$/i.test(s.authenticodeThumbprint))throw Error();
    if(createPrivateKey(s.manifestPrivateKey).asymmetricKeyType!=='ed25519')throw Error();
    if(!Buffer.from(s.sshPrivateKey,'base64').toString().includes('PRIVATE KEY'))throw Error();
    const c=settings.coolify;
@@ -73,7 +78,7 @@ export function createAutoRuntime(config,runtime) {
  async function protect(value){return (await script('protect-value.ps1',['-Mode','Protect'],value)).stdout.trim();}
  async function unprotect(value){return (await script('protect-value.ps1',['-Mode','Unprotect'],value)).stdout;}
  const load=async baseline=>JSON.parse(await unprotect(fs.readFileSync(baseline.file,'utf8')));
- const checkSource=(budget,offers=[],capture=false)=>'const expected='+JSON.stringify({budget,offers,capture})+';\n'+fs.readFileSync(path.join(here,'check-backend.mjs'),'utf8');
+ const checkSource=(budget,offers=[],capture=false,packHellos=null)=>'const expected='+JSON.stringify({budget,offers,capture,...(packHellos?{packHellos}:{})})+';\n'+fs.readFileSync(path.join(here,'check-backend.mjs'),'utf8');
  return {
   secrets,
   async verifyInput(chain){return verifyInstallerCustody(chain,{privateRoot:priv,verifyPublisher:runtime.verifyPublisher});},
@@ -137,7 +142,24 @@ export function createAutoRuntime(config,runtime) {
    }
    return verified;
   },
+  // Server-only: what the reviewed agent release ships and runs (its client's ODC bridges, its agents' ODC commands), read from
+  // its source at agentReleaseCommit (runtime.agentReleaseFiles: git show of the pinned commit), once per round.
+  async agentRelease(){
+   if(cachedRelease)return cachedRelease;
+   const files=await runtime.agentReleaseFiles();
+   return cachedRelease=parseAgentRelease({commit:config.agentReleaseCommit??null,...files});
+  },
+  // The kernels of the served pairs: the live ones the baseline read (a real round), else the reviewed checkout's
+  // r1-kernels.json restricted to the pairs of the window (all of them when none matches).
+  servedKernels(manifest){
+   const live=config.liveBaseline?.kernels??runtime.liveKernels;
+   if(live)return Object.values(live);
+   const file=JSON.parse(fs.readFileSync(path.join(root,'server/deploy/coolify/r1-kernels.json'),'utf8')),all=Object.values(file);
+   const ids=new Set(manifest?windowPairs(manifest).map(p=>pairId(p)):[]),served=all.filter(k=>ids.has(pairId(k)));
+   return served.length?served:all;
+  },
   async buildBridges(pair,bundles,dir){
+   if(bridgeMode(config)!=='signed-offers')throw Error('Client bridges are built and signed only in the signed-offers bridge mode.');
    await runtime.executionSource();
    for(const b of Object.values(bundles)){verifyBundleCustody(b,config.bundlePins?.[`${b.lane}-${b.version}`]);if(b.provenance)await runtime.verifyInput(b.provenance);}
    const agentSource=await runtime.agentSource();
@@ -229,7 +251,9 @@ export function createAutoRuntime(config,runtime) {
    const budget=readListingBudget(root);
    const before=expected.rollback?(await load(expected.live)).backends:null;
    const checkSources=before?Object.fromEntries(before.map(b=>[b.o11+'|'+b.odc,'const expected='+JSON.stringify({budget:b.budget,offers:[],kernel:b.kernel})+';\n'+fs.readFileSync(path.join(here,'check-backend.mjs'),'utf8')])):null;
-   return ssh(s,{action:'check',...expected,budget,expectedBackends:before,checkSources,checkSource:checkSource(budget,expected.bridges?.offers??[])});
+   // Server-only: the deployed new pair must accept the published pack's hello too (check-backend.mjs, that pair only).
+   const hello=!before&&expected.bridges?.mode==='server-only'&&expected.bridges.hello&&expected.kernel?{[expected.kernel.o11+'|'+expected.kernel.odc]:expected.bridges.hello}:null;
+   return ssh(s,{action:'check',...expected,budget,expectedBackends:before,checkSources,checkSource:checkSource(budget,expected.bridges?.offers??[],false,hello)});
   },
   async event(name,value,s){
    runtime.log(`release ${name}: ${value.id}`);

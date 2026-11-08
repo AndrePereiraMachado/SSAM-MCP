@@ -30,8 +30,15 @@ function transaction(t,failAt){
   writeCompose:async()=>{calls.push('PATCH');return {rawSecret:'never-journal'};},deploy:async()=>{calls.push('deploy');return {rawSecret:'never-journal'};},checks:async()=>({ok:true}),restoreCompose:async()=>calls.push('restore'),event:async(n,v)=>events.push([n,v])};
  return {dir,calls,events,ops,r};
 }
-test('R0 production baseline is the three-pair R1 with its matching newer O11 bridge policy',()=>{
- assert.equal(JSON.parse(file('deploy/coolify/versions.json')).odc.length,3);
+test('R0 production baseline is the R1 window of three or more pairs, each with its kernel, and the newer O11 bridge policy',()=>{
+ // The window grew from three pairs (R1) to four (r43b, ODC 1.7.31 appended) and may hold five: what stays true is that every
+ // served pair is a pair of both lanes and has its kernel.json entry.
+ const versions=JSON.parse(file('deploy/coolify/versions.json'));
+ assert.ok(versions.odc.length>=3&&versions.odc.length===versions.o11.length&&versions.odc.length<=versions.window);
+ if(fs.existsSync(path.join(server,'deploy/coolify/r1-kernels.json'))){
+  const kernels=Object.values(JSON.parse(file('deploy/coolify/r1-kernels.json')));
+  for(const odc of versions.odc){const o11=versions.o11.find(o=>o.tag===odc.tag)?.version;assert.ok(kernels.some(k=>k.odc===odc.version&&k.o11===o11),`no kernel for ${odc.version}/${o11}`);}
+ }
  assert.match(file('platforms/odc/facade/agent-hub.mjs'),/newerLocalBridge/);
 });
 test('R1 live kernels, tags and digests define the baseline and inconsistency fails closed',()=>{

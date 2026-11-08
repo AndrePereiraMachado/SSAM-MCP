@@ -5,10 +5,13 @@ import fs from 'node:fs';
 import {readJournal,writeJournal} from './journal.mjs';
 import {releaseAutomatically,releaseEvent} from './automatic.mjs';
 import path from 'node:path';
-import {LANES,STUDIO_NAME,ownerCommand,missingPack,planWindow,readyCandidates,pairFor,pairId,hasPair,rotateWindow,compareFailures,windowPairs,tfmMajor,proposalText,failureText,composeText,featuresLine} from './window.mjs';
+import {LANES,STUDIO_NAME,ownerCommand,missingPack,planWindow,readyCandidates,pairFor,pairId,hasPair,rotateWindow,windowLimit,compareFailures,windowPairs,tfmMajor,proposalText,failureText,composeText,featuresLine} from './window.mjs';
+import {CLIENT_BRIDGE_CODE,isServerOnly,laneGap,serverOnlyGate,deferredLanes,gapText} from './server-only.mjs';
 import {generateCompose} from '../coolify/gen-compose.mjs';
 // An environment problem (not a test result): the round waits and retries. lanes: the lanes it concerns (empty = the pair).
 export class EnvironmentError extends Error{constructor(message,code='environment',lanes=[]){super(message);this.environmental=true;this.code=code;this.lanes=lanes;}}
+// Server-only bridge mode: a lane no published agent pack can use waits, with its own notice; nothing is deployed for it.
+const clientBridgeError=(gaps,pair)=>{const lanes=deferredLanes(gaps,pair);return Object.assign(new EnvironmentError(gapText(gaps),CLIENT_BRIDGE_CODE,lanes),{laneCodes:Object.fromEntries(lanes.map(l=>[l,CLIENT_BRIDGE_CODE]))});};
 const writeJson=(file,data)=>{fs.mkdirSync(path.dirname(file),{recursive:true});const temp=file+'.'+process.pid+'.tmp';fs.writeFileSync(temp,JSON.stringify(data,null,2)+'\n');fs.renameSync(temp,file);};
 const readJson=file=>{try{return JSON.parse(fs.readFileSync(file,'utf8'));}catch(e){if(e.code==='ENOENT')return null;throw e;}};
 export const localDay=now=>new Date(now).toLocaleDateString('sv-SE');
@@ -137,8 +140,10 @@ export async function runVigia(config,ops){
 }
 // The lane checks that need no bundle, no Docker and no test, all of them at once (one notice names every problem): a
 // Studio folder that is incomplete (an installation half-way), a Studio whose .NET the workspace's build rule does not
-// target (or cannot be asked), a Studio on a .NET no agent pack covers.
-async function laneChecks(config,ops,pair,runtimes,log){
+// target (or cannot be asked), a Studio on a .NET no agent pack covers. In server-only mode (release: the reviewed agent
+// release) a new Studio whose runtime (its verified installer's runtimeconfig.json) no published pack has a bridge for waits
+// with client-bridge-update-required.
+async function laneChecks(config,ops,pair,runtimes,log,release=null){
  const problems=[];
  for(const c of pair.candidates){
   const missing=[...(c.missing??[]),...(!c.tfm&&!(c.missing??[]).some(m=>/runtimeconfig/i.test(m))?['the tfm of its runtimeconfig.json']:[])];
@@ -151,7 +156,15 @@ async function laneChecks(config,ops,pair,runtimes,log){
  }
  for(const p of (config.automatic ? [] : missingPack(config,Object.fromEntries(pair.candidates.filter(c=>!problems.some(x=>x.lane===c.lane)).map(c=>[c.lane,{tfm:c.tfm,version:c.version}])))))
   problems.push({lane:p.lane,code:'agent-pack-missing',text:`no agent pack for ${STUDIO_NAME[p.lane]} ${p.version} (${p.tfm}): the configured pack is built for ${config.agentPack?.runtime??'net8.0'}; add agentPackByRuntime.net${tfmMajor(p.tfm)} (odcBridge, odcBridgeAccepted, o11BuiltFor) once that pack exists`});
- if(problems.length)throw Object.assign(new EnvironmentError(problems.map(p=>p.text).join('; ')+'. The round waits and retries.',problems[0].code,[...new Set(problems.map(p=>p.lane))]),{laneCodes:Object.fromEntries(problems.map(p=>[p.lane,p.code]))});
+ if(release)for(const c of pair.candidates.filter(c=>!problems.some(x=>x.lane===c.lane))){
+  const why=laneGap(config,release,c.lane,{version:c.version,tfm:c.tfm});
+  if(why)problems.push({lane:c.lane,code:CLIENT_BRIDGE_CODE,text:`client bridge update required: ${c.lane} ${c.version} runtime ${c.tfm} (${why})`});
+ }
+ if(problems.length){
+  const bridge=problems.some(p=>p.code===CLIENT_BRIDGE_CODE)?' Production is not touched for that lane. Publish an agent pack whose bridge loads in that Studio, declare it in agentPack/agentPackByRuntime with its reviewed agentReleaseCommit, and the next round retries.':'';
+  const code=problems.find(p=>p.code===CLIENT_BRIDGE_CODE)?.code??problems[0].code;
+  throw Object.assign(new EnvironmentError(problems.map(p=>p.text).join('; ')+'. The round waits and retries.'+bridge,code,[...new Set(problems.map(p=>p.lane))]),{laneCodes:Object.fromEntries(problems.map(p=>[p.lane,p.code]))});
+ }
 }
 // A round stopped at its time limit: its running attempt is recorded as deferred, with its notice. That record is final:
 // a command killed by the cut that returns afterwards (a test with no results, a build cut short) never overwrites it.
@@ -177,10 +190,12 @@ export async function runAttempt(config,ops,decision,now){
   if(config.automatic)await releaseEvent(outDir,ops,'detected',id,`${id}: a new Studio pair was detected.`,await ops.secrets(),attempt.at);
   // Cheap checks first (worktree, disk), then the lane checks (dotnet only); Docker is started only for a round that
   // can build.
-  const estimated=rotateWindow(base,{odc:pair.odc,o11:pair.o11,image:base.odc[0].image,tag:'pending'},{...config.state,maxWindow:config.maxWindow??4});
+  const estimated=rotateWindow(base,{odc:pair.odc,o11:pair.o11,image:base.odc[0].image,tag:'pending'},{...config.state,maxWindow:windowLimit(config,base)});
   if(ops.capacityPreflight)await ops.capacityPreflight(estimated.manifest);
   await ops.preflight({pair,id,dir});
-  await laneChecks(config,ops,pair,runtimes,log);
+  // Server-only: the reviewed agent release decides which client bridges exist; no bridge is built, signed or offered.
+  const serverOnly=!!config.automatic&&isServerOnly(config),agentRelease=serverOnly?await ops.agentRelease():null;
+  await laneChecks(config,ops,pair,runtimes,log,agentRelease);
   await ops.dockerReady();
   const bundles={};
   for(const lane of LANES){
@@ -191,6 +206,17 @@ export async function runAttempt(config,ops,decision,now){
   // Where the pair's ODC features came from goes with the attempt, the release and the texts (no feature values).
   const featuresProvenance=bundles.odc.featuresProvenance??null;
   if(featuresProvenance){attempt.featuresProvenance=featuresProvenance;log(`features odc ${featuresProvenance.version}: ${featuresLine(featuresProvenance)}`);if(featuresProvenance.mode!=='exact')await featuresNotice(config,ops,featuresProvenance);}
+  // Server-only gate, before any test, build or mutation: every lane of the pair (the new Studios with the runtime of their
+  // verified installer, the kept one with its served bundle) has a published bridge, and the published pack's hello is
+  // compatible with the new kernel on both lanes with the window's served versions.
+  let gate=null;
+  const studios=Object.fromEntries(LANES.map(lane=>[lane,{version:bundles[lane].version,fullVersion:bundles[lane].fullVersion??null,tfm:pair.candidates.find(c=>c.lane===lane)?.tfm??bundles[lane].tfm??null}]));
+  if(serverOnly){
+   const served=Object.fromEntries(LANES.map(lane=>[lane,[...new Set(estimated.manifest[lane].map(x=>x.version))]]));
+   gate=serverOnlyGate({config,release:agentRelease,pair,studios,servedKernels:await ops.servedKernels(base),served});
+   if(gate.gaps.length)throw clientBridgeError(gate.gaps,pair);
+   log(`server-only kernel ${JSON.stringify(gate.kernel)}; published pack hello odc ${gate.hello.pack.odcBridge}, o11 built for ${gate.hello.pack.o11BuiltFor}`);
+  }
   const baseline={odc:await ops.companion('odc',base.odc[0].version),o11:await ops.companion('o11',base.o11[0].version)};
   fs.writeFileSync(path.join(dir,'bundles.json'),JSON.stringify({pair:bundles,baseline},null,2));
   const failedLanes=[];
@@ -208,17 +234,21 @@ export async function runAttempt(config,ops,decision,now){
   }
   fs.writeFileSync(path.join(dir,'comparison.json'),JSON.stringify(comparisons,null,2));
   if(failedLanes.length)throw Object.assign(Error('New kernel test failures:\n'+failedLanes.map(l=>`${l}:\n`+comparisons[l].newFailures.map(n=>'  '+n).join('\n')).join('\n')),{lanes:failedLanes});
-  const bridges=config.automatic?await ops.buildBridges(pair,bundles,dir):null;
-  if(bridges)ops.bridgeKernel=bridges.kernel;
+  // signed-offers builds and Authenticode-signs the client bridges; server-only never does (no certificate exists for it).
+  const bridges=!config.automatic?null:serverOnly?{mode:'server-only',offers:[],kernel:gate.kernel,hello:gate.hello,agentRelease:agentRelease.commit}:await ops.buildBridges(pair,bundles,dir);
+  if(bridges){ops.bridgeKernel=bridges.kernel;ops.packHello=serverOnly?bridges.hello:null;}
   const built=await ops.build(pair,bundles,dir);
   fs.writeFileSync(path.join(dir,'image.json'),JSON.stringify(built,null,2));
-  const next=rotateWindow(base,{odc:pair.odc,o11:pair.o11,image:built.image,tag:built.tag},{...config.state,maxWindow:config.maxWindow??4});
+  const next=rotateWindow(base,{odc:pair.odc,o11:pair.o11,image:built.image,tag:built.tag},{...config.state,maxWindow:windowLimit(config,base)});
   if(config.automatic&&next.held?.length)await releaseEvent(outDir,ops,'retained',id,'Active clients require retaining an older pair; the window was extended.',await ops.secrets(),attempt.at);
   const served=Object.fromEntries(LANES.map(lane=>[lane,[...new Set(next.manifest[lane].map(x=>x.version))]]));
   const smoke=await ops.smoke(built,bundles,served,dir);fs.writeFileSync(path.join(dir,'smoke.json'),JSON.stringify(smoke,null,2));
+  // The built image itself refusing the published pack's hello is the same deferral as the gate's, never a deployment.
+  if(serverOnly&&!smoke.ok&&smoke.refused?.length)throw clientBridgeError(smoke.refused.map(r=>({lane:r.lane,version:studios[r.lane].version,tfm:studios[r.lane].tfm,why:`the built image refuses the published pack's hello (${r.code})`})),pair);
   if(!smoke.ok)throw Error('Image smoke failed: '+(smoke.error??'see smoke.json'));
+  if(serverOnly&&smoke.publishedPack!==true)throw Error('Image smoke did not present the published agent pack; nothing is deployed.');
   if(config.automatic){
-   const release={id,dir,attempt:attempt.at,baseline:config.liveBaseline,built,manifest:next.manifest,kernel:bridges.kernel,bridges,features:bundles.odc.features,featuresProvenance,bundles};
+   const release={id,dir,attempt:attempt.at,baseline:config.liveBaseline,built,manifest:next.manifest,kernel:bridges.kernel,bridges,bridgeMode:serverOnly?'server-only':'signed-offers',features:bundles.odc.features,featuresProvenance,bundles};
    // Persist only public identities and local artifact paths. Never keys or tokens.
    writeJournal(path.join(dir,'release.json'),release);
    if(config.rehearsal){
@@ -254,7 +284,7 @@ export async function runAttempt(config,ops,decision,now){
   writeAttempt(outDir,{...attempt,status:environmental?'deferred':'failed',...(environmental?{deferrals:(attempt.deferrals??0)+1,firstDeferredAt:attempt.firstDeferredAt??attempt.at,deferredLanes:lanes,laneSince,laneCodes:error.laneCodes??null,testEnvRuns:error.code==='test-environment'?(attempt.testEnvRuns??0)+1:0}:{failedLanes:lanes}),error:String(error.message),code:error.code??null,runtimes,endedAt:new Date().toISOString()});
   log(`${environmental?'deferred':'failed'}: ${error.message}`);
   const key=(environmental?'deferred:':'failed:')+id+(environmental?':'+(error.code??''):'');
-  await remind(outDir,key,environmental?'SSAM: Studio version round waiting':'SSAM: Studio version checks failed',`${id}: ${error.message.split('\n')[0]}`,ops,{now:noticeNow(config),link:notice});
+  await remind(outDir,key,error.code===CLIENT_BRIDGE_CODE?'SSAM: client bridge update required':environmental?'SSAM: Studio version round waiting':'SSAM: Studio version checks failed',`${id}: ${error.message.split('\n')[0]}`,ops,{now:noticeNow(config),link:notice});
   return {status:environmental?'deferred':'failed',id,dir,error:String(error.message)};
  }
 }

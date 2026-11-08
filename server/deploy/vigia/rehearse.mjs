@@ -1,6 +1,7 @@
 // vigia.ps1 -RehearseCurrent: the real round on the Studio versions already served, stopped before anything changes outside this
-// machine. The real custody, installer verification, tests, bridge build and signature, image build and image smoke run; the
-// offer is asked of the built image; the signed store lands in this rehearsal's own folder. It never takes the VPS lock, publishes,
+// machine. The real custody, installer verification, tests, image build and image smoke run. In signed-offers mode the bridges
+// are built and signed, the offer is asked of the built image and the signed store lands in this rehearsal's own folder; in
+// server-only mode (the default) no bridge is built and the image must accept the published agent pack's hello. It never takes the VPS lock, publishes,
 // pins, backs up, patches or deploys, and it never runs the live snapshot, which issues and revokes a token on the live server.
 // Three fences: these operations are replaced here, the Coolify and SSH doors refuse by themselves (auto-runtime.mjs), and the
 // command runner refuses a push (runtime.mjs). Everything is kept under <outDir>/rehearsals/<stamp>, so no real round reads it.
@@ -38,6 +39,11 @@ async function finish(config,ops,{release,smoke}){
  ops.pause();
  await ops.verifyRelease(release);
  await ops.verifyLocalImage(release.built);
+ // Server-only: no bridge was built or signed, so there is no offer to ask; the image must have accepted the published pack.
+ if(release.bridges?.mode==='server-only'){
+  if(smoke?.publishedPack!==true)throw Error('The built image was not asked the published agent pack hello.');
+  return {status:'rehearsed',id:release.id,bridgeMode:'server-only',tag:release.built.tag,sha256:release.built.sha256,offers:[],kernel:release.kernel,hello:{odcBridge:release.bridges.hello?.pack?.odcBridge??null,o11BuiltFor:release.bridges.hello?.pack?.o11BuiltFor??null},listing:{tools:smoke.tools,totalBytes:smoke.totalBytes,coreBytes:smoke.coreBytes},notRun:NEVER_IN_REHEARSAL};
+ }
  const offers=release.bridges?.offers??[];
  if(!offers.length||smoke?.offersChecked!==offers.length)throw Error('The built image did not offer every signed bridge.');
  const store=path.join(config.rehearsal.dir,'store');

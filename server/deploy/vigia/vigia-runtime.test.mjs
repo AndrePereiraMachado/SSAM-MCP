@@ -24,7 +24,9 @@ function repo(t){
  }
  // Legacy approval fixtures model the pre-R1 two-pair window explicitly.
  const mf=path.join(main,'server/deploy/coolify/versions.json'),m=JSON.parse(fs.readFileSync(mf,'utf8'));
- m.odc=m.odc.filter(x=>x.version!=='1.7.30');m.o11=m.o11.filter(x=>x.version!=='11.55.94');fs.writeFileSync(mf,JSON.stringify(m));
+ // By pair (tag), not by lane version: two served pairs may share a Service Studio (1.7.30 and 1.7.31 both on 11.55.94).
+ const legacy=new Set(m.odc.filter(x=>x.version<'1.7.30').map(x=>x.tag).filter(tag=>m.o11.some(o=>o.tag===tag&&o.version<'11.55.94')));
+ m.odc=m.odc.filter(x=>legacy.has(x.tag));m.o11=m.o11.filter(x=>legacy.has(x.tag));fs.writeFileSync(mf,JSON.stringify(m));
  sh(GIT,['init','-q','-b','main',main]);git(main,'add','.');git(main,'commit','-q','-m','base');
  git(main,'worktree','add','-q','-b','server/vigia-run',ws,'main');
  return {root,main,ws,priv:path.join(root,'priv'),out:path.join(root,'out')};

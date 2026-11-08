@@ -14,7 +14,8 @@ import {runVigia,readAttempts,remind,timedOut} from './pipeline.mjs';
 import {replayApprovals} from './window.mjs';
 import {approve,reject,retry} from './approve.mjs';
 import {acquireLock,lockHeldBy,registerChild,runLogFile,createLog} from './host.mjs';
-import {AUTOMATIC_PLAN,releaseAutomatically,releaseEvent} from './automatic.mjs';
+import {automaticPlan,releaseAutomatically,releaseEvent} from './automatic.mjs';
+import {bridgeMode} from './server-only.mjs';
 import {rehearseCurrent,rehearsalConfig} from './rehearse.mjs';
 export * from './window.mjs';
 export * from './pipeline.mjs';
@@ -43,6 +44,7 @@ export function readConfig(file){
  if(config.automatic)config.updateFrom='main';
  config.outDir=path.resolve(config.outDir??path.dirname(path.resolve(file)));config.configFile=path.resolve(file);
  for(const key of ['workspace','tempRoot','bundleRoot'])if(!config[key])throw Error(`The watcher configuration needs ${key}.`);
+ bridgeMode(config);
  return config;
 }
 // The window the next proposal starts from: main's versions.json plus the approvals main does not carry yet.
@@ -102,7 +104,7 @@ export async function round(config,runtime,{dryRun=false}={}){
  const head=await runtime.head();
  runtime.log?.(`workspace ${head}; observed ${observed.map(o=>`${o.lane} ${o.fullVersion}${o.tfm?' '+o.tfm:''}${o.requiresInstallation?' (installer)':''}`).join(', ')||'nothing'}${replayed.length?`; approved, not in main: ${replayed.join(', ')}`:''}`);
  const result=await runVigia({...config,manifest,liveBaseline:live,replayed,branchBase,state,observed,head,dryRun},runtime);
- return dryRun&&config.automatic?{...result,sources:runtime.sourceStatus,automaticPlan:AUTOMATIC_PLAN}:result;
+ return dryRun&&config.automatic?{...result,sources:runtime.sourceStatus,bridgeMode:bridgeMode(config),automaticPlan:automaticPlan(bridgeMode(config))}:result;
 }
 async function childSupportsRehearsal(file){try{return fs.readFileSync(file,'utf8').includes('REHEARSE_PROTOCOL=1');}catch{return false;}}
 async function childSupportsRounds(file){try{return fs.readFileSync(file,'utf8').includes('ROUND_PROTOCOL=2');}catch{return false;}}

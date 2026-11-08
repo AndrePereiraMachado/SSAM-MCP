@@ -24,18 +24,24 @@
   "featuresSource": "C:/Users/OWNER/AppData/Local/OutSystems/ODC Studio/Features.xml",
   "featuresDefaultsFallback": false,
   "installersDir": "C:/ssam-priv/vigia-installers",
+  "bridgeMode": "server-only",
   "agentPack": {
     "runtime": "net8.0",
-    "odcBridge": "v97",
-    "odcBridgeAccepted": [
-      "v96",
-      "v48",
-      "v45"
-    ],
-    "o11BuiltFor": "11.55.92",
-    "o11Hook": "dev"
+    "odcBridge": "v108",
+    "o11BuiltFor": "11.55.94",
+    "o11Hook": "dev",
+    "o11Builds": [
+      { "version": "11.55.94", "runtime": "net10.0" },
+      { "version": "11.55.93", "runtime": "net8.0" },
+      { "version": "11.55.92", "runtime": "net8.0" }
+    ]
   },
-  "agentPackByRuntime": {},
+  "agentPackByRuntime": {
+    "net10": {
+      "odcBridge": "v108",
+      "o11BuiltFor": "11.55.94"
+    }
+  },
   "node": "C:/ssam-priv/tools/node/node.exe",
   "minFreeGb": 25,
   "retryHours": 12,
@@ -74,7 +80,7 @@
   "vault": "C:/ssam-priv/vigia/secrets.dpapi.json",
   "trustedRemote": "https://GIT_HOST/OWNER/SSAM-MCP.git",
   "ownerSigningPublicKey": null,
-  "maxWindow": 4,
+  "maxWindow": 5,
   "python": "C:/ssam-priv/tools/python/python.exe",
   "dotnet": "C:/Program Files/dotnet/dotnet.exe",
   "git": "C:/Program Files/Git/cmd/git.exe",

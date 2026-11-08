@@ -22,6 +22,9 @@ try {
  const hello={t:'hello',protocol:'ssam-agent/1',instance:'vigia-verification',agent:{version:'1',odcCommands:['merge','reconcile-merge']},pack:{id:'verification',lanes:['odc','o11'],odcBridge:kernel.odcBridge,o11BuiltFor:kernel.o11,o11Hook:kernel.o11Hook??'dev'},studios:{odc:{installed:{version:kernel.odc,dir:'C:/Verification'}},o11:{installed:{version:kernel.o11,dir:'C:/Verification'}}}};
  const accepted=await post('/agent/v1/hello',issued.agentCredential,hello);
  if(!accepted.data.compatible.odc.ok||!accepted.data.compatible.o11.ok)throw Error('Synthetic hello failed.');
+ // Server-only bridge mode: the new pair must accept the hello of the published agent pack (its real bridges and commands).
+ const presented=expected.packHellos?.[kernel.o11+'|'+kernel.odc];
+ if(presented){const r=await post('/agent/v1/hello',issued.agentCredential,presented);if(!r.data.compatible.odc?.ok||!r.data.compatible.o11?.ok)throw Error('Published agent pack hello failed.');}
  for(const offer of (expected.offers??[]).filter(x=>kernel[x.lane]===x.studioVersion)){
   // The agent that may take it: from ODC v106 on only one whose hello lists reconcile-merge (bridge-store.mjs AGENT_NEEDS).
   const old=structuredClone(hello);old.capabilities={bridgeOffer:true};old.agent={version:'1',odcCommands:['merge','reconcile-merge']};
