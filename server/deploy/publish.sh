@@ -68,18 +68,26 @@ fi
 
 out=$(mktemp)
 trap 'rm -f "$out"' EXIT
-# The digest of a push ("<tag>: digest: sha256:... size: ..."), else the repository digest Docker recorded (it drops the
-# docker.io/ prefix of the name).
-digest_of() {
-  d=$(sed -n 's/.*digest: \(sha256:[0-9a-f]\{64\}\).*/\1/p' "$out" | tail -n 1)
-  if [ -z "$d" ]; then
-    short=${IMAGE#docker.io/}; short=${short#index.docker.io/}
-    d=$($DOCKER image inspect --format '{{range .RepoDigests}}{{.}}{{"\n"}}{{end}}' "$1" | sed -n "s#^\($IMAGE\|$short\)@##p" | head -n 1)
-  fi
-  printf '%s' "$d"
-}
 # The digest the registry holds for a reference (its manifest list), or empty.
 registry_digest() { $DOCKER buildx imagetools inspect "$1" 2>/dev/null | sed -n 's/^Digest: *\(sha256:[0-9a-f]\{64\}\).*/\1/p' | head -n 1; }
+# push_checked <ref>: pushes and prints the digest THE REGISTRY holds for <ref>, or stops. Never from local data: with the
+# containerd image store RepoDigests carries the local id before any push, and `docker push … | tee` returns tee's
+# status, so a refused push (not logged in: "push access denied … insufficient_scope") once printed a pin (r44, 08/11).
+push_checked() {
+  rc=0
+  $DOCKER push "$1" > "$out" 2>&1 || rc=$?
+  cat "$out" >&2
+  [ "$rc" = 0 ] || { echo "publish: the push of $1 FAILED (exit $rc): nothing is published (docker login? the private repository?)" >&2; exit 1; }
+  if grep -Eqi 'denied|unauthorized|insufficient_scope|authentication required|^error' "$out"; then
+    echo "publish: the push of $1 reported a refusal (see above): nothing is published" >&2; exit 1
+  fi
+  pushed=$(sed -n 's/.*digest: \(sha256:[0-9a-f]\{64\}\).*/\1/p' "$out" | tail -n 1)
+  [ -n "$pushed" ] || { echo "publish: the push of $1 named no digest: not trusted as published" >&2; exit 1; }
+  held=$(registry_digest "$1")
+  [ -n "$held" ] || { echo "publish: the registry does not show $1 after the push: not published" >&2; exit 1; }
+  [ "$held" = "$pushed" ] || { echo "publish: the registry holds $held for $1, not the pushed $pushed: check the registry" >&2; exit 1; }
+  printf '%s' "$held"
+}
 
 if [ "$LATEST_ONLY" = 1 ]; then
   # `latest` moved to a tag the registry already has: the local image must be that very image.
@@ -96,9 +104,8 @@ else
   fi
   echo "publish: $SOURCE:$TAG (revision $revision) -> $IMAGE:$TAG"
   $DOCKER tag "$SOURCE:$TAG" "$IMAGE:$TAG"
-  $DOCKER push "$IMAGE:$TAG" 2>&1 | tee "$out"
-  digest=$(digest_of "$IMAGE:$TAG")
-  [ -n "$digest" ] || { echo "publish: pushed, but the digest could not be read: docker buildx imagetools inspect $IMAGE:$TAG shows it" >&2; exit 1; }
+  digest=$(push_checked "$IMAGE:$TAG")
+  echo "publish: the registry holds $digest for $IMAGE:$TAG"
   echo "publish: pushed. Pin it:"
   echo "  SSAM_IMAGE=$IMAGE"
   echo "  SSAM_IMAGE_TAG=$TAG                 (Coolify: the tag alone; its parser breaks a reference with a digest)"
@@ -109,9 +116,7 @@ fi
 if [ "$LATEST" = 1 ]; then
   # The moving tag: the same bits as $TAG (checked by digest after the push), so a VPS on `latest` pulls this image next.
   $DOCKER tag "$SOURCE:$TAG" "$IMAGE:latest"
-  : > "$out"
-  $DOCKER push "$IMAGE:latest" 2>&1 | tee "$out"
-  latest_digest=$(digest_of "$IMAGE:latest")
+  latest_digest=$(push_checked "$IMAGE:latest")
   [ "$latest_digest" = "$digest" ] || { echo "publish: latest was pushed but its digest ($latest_digest) is not the tag's ($digest); check the registry" >&2; exit 1; }
   echo "publish: latest -> $TAG ($digest). A VPS with SSAM_IMAGE_TAG=latest takes it at the next Redeploy (COOLIFY.md 7); ssamctl.sh status shows the digest it runs."
 fi
