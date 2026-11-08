@@ -22,3 +22,19 @@ test('r44: the release kernels name the five pairs the rehearsal starts, and reh
   assert.match(source,/rehearsalWindow\(images\)/);
   assert.doesNotMatch(source,/images\?\.length===4|images\.length>4|\['v1','v2','v3','v4'\]\)/);
 });
+test('r44 rodada 2: the rehearsal backends get the served list and plugin mount of gen-compose, and mixed machines expect what that list answers', async () => {
+  const {backendPlan,expectedLane,MODEL_PLUGINS_TARGET}=await import('./rehearsal-window.mjs');
+  const window=[['1.7.30','11.55.94'],['1.7.29','11.55.93'],['1.7.28','11.55.92'],['1.7.31','11.55.94'],['1.7.32','11.55.95']].map(([odc,o11],i)=>({name:'v'+(i+1),odc,o11}));
+  const kept=backendPlan(window,4),shared=backendPlan(window,0);
+  for(const b of kept.slice(0,4))assert.deepEqual(JSON.parse(b.served),{odc:['1.7.30','1.7.29','1.7.28','1.7.31'],o11:['11.55.94','11.55.93','11.55.92']});
+  assert.deepEqual(JSON.parse(kept[4].served).o11,['11.55.94','11.55.93','11.55.92','11.55.95']);
+  for(const b of [...kept,...shared])assert.deepEqual(b.modelPlugins,{target:MODEL_PLUGINS_TARGET,readOnly:true});
+  // the production case of 120 h on v4: ODC 1.7.31 + O11 11.55.95
+  assert.equal(expectedLane('11.55.94',JSON.parse(kept[3].served).o11,'11.55.95'),'newer','layout B keeps it served');
+  assert.equal(expectedLane('11.55.94',JSON.parse(shared[3].served).o11,'11.55.95'),'refused','one shared list refuses it');
+  assert.equal(expectedLane('11.55.95',JSON.parse(kept[4].served).o11,'11.55.94'),'refused','v5 tells an older O11 to update');
+  assert.equal(expectedLane('11.55.95',JSON.parse(kept[4].served).o11,'11.55.95'),'served');
+  assert.equal(expectedLane('11.55.94',['11.55.94'],'11.55.91'),'refused');
+  const source=fs.readFileSync(new URL('./rehearse.mjs',import.meta.url),'utf8');
+  assert.match(source,/backendPlan\(pairs,keepServed\)/);assert.match(source,/plan\[index\]\.served/);assert.doesNotMatch(source,/JSON\.stringify\(images\?served/);
+});

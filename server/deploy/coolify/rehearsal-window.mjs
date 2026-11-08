@@ -15,3 +15,26 @@ export const pairWords = count => (['', 'one', 'two', 'three', 'four', 'five', '
 // Licenses a and b serve the first two pairs; every pair from the third on gets its own, so each backend proves routing,
 // tools/list and its state with a session of its own.
 export const extraLicenses = count => Array.from({ length: Math.max(0, count - 2) }, (_, i) => ({ index: i + 2, customer: 'Rehearsal pair ' + (i + 3) }));
+// r44 rodada 2: the backend definition the rehearsal starts comes from gen-compose itself (the same SSAM_SERVED_VERSIONS and the
+// same read-only model plugin mount the release compose gives each backend), so the rehearsal cannot drift from the compose.
+// keepServed: the versions.json field (the first N backends keep the served list of the window they were deployed with).
+import {generateCompose, MODEL_PLUGINS_VOLUME, MODEL_PLUGINS_TARGET} from './gen-compose.mjs';
+export function backendPlan(pairs, keepServed = 0) {
+  const entry = lane => pairs.map((p, j) => ({ version: p[lane], tag: 'rehearsal-' + j, image: 'rehearsal' }));
+  const compose = generateCompose({ window: pairs.length, keepServed, odc: entry('odc'), o11: entry('o11') });
+  return pairs.map((p, i) => {
+    const s = compose.services['ssam-server-v' + (i + 1)];
+    const plugins = s.volumes.find(v => v.source === MODEL_PLUGINS_VOLUME);
+    return { name: p.name, served: s.environment.SSAM_SERVED_VERSIONS, modelPlugins: plugins ? { target: plugins.target, readOnly: plugins.read_only === true } : null };
+  });
+}
+export { MODEL_PLUGINS_TARGET };
+// What a backend answers for a Studio version of a lane, by its served list (studio-identity relations): its own version is
+// served; one in the served list but not its own is served elsewhere (refused, the agent must move); one newer than every
+// served version is served here with the studioNewerThanServed note.
+const cmp = (a, b) => { const x = a.split('.').map(Number), y = b.split('.').map(Number); for (let i = 0; i < Math.max(x.length, y.length); i++) { const d = (x[i] ?? 0) - (y[i] ?? 0); if (d) return Math.sign(d); } return 0; };
+export function expectedLane(own, served, installed) {
+  if (cmp(installed, own) === 0) return 'served';
+  if (served.includes(installed)) return 'refused';
+  return served.every(v => cmp(installed, v) > 0) ? 'newer' : 'refused';
+}
