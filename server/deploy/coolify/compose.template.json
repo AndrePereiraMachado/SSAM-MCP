@@ -337,6 +337,13 @@
           "read_only": true,
           "type": "volume",
           "volume": {}
+        },
+        {
+          "source": "odc-model-plugins",
+          "target": "/tmp/.local/share/OutSystems/ODC Studio/Plugins",
+          "read_only": true,
+          "type": "volume",
+          "volume": {}
         }
       ]
     }
@@ -350,6 +357,9 @@
     },
     "odc-features": {
       "name": "ssam-multiver-template_odc-features"
+    },
+    "odc-model-plugins": {
+      "name": "ssam-multiver-template_odc-model-plugins"
     },
     "runtime-css": {
       "name": "ssam-multiver-template_runtime-css"

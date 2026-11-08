@@ -302,6 +302,13 @@
           "read_only": true,
           "type": "volume",
           "volume": {}
+        },
+        {
+          "source": "odc-model-plugins",
+          "target": "/tmp/.local/share/OutSystems/ODC Studio/Plugins",
+          "read_only": true,
+          "type": "volume",
+          "volume": {}
         }
       ]
     },
@@ -415,6 +422,13 @@
         {
           "source": "runtime-css",
           "target": "/data/runtime-css",
+          "read_only": true,
+          "type": "volume",
+          "volume": {}
+        },
+        {
+          "source": "odc-model-plugins",
+          "target": "/tmp/.local/share/OutSystems/ODC Studio/Plugins",
           "read_only": true,
           "type": "volume",
           "volume": {}
@@ -534,6 +548,13 @@
           "read_only": true,
           "type": "volume",
           "volume": {}
+        },
+        {
+          "source": "odc-model-plugins",
+          "target": "/tmp/.local/share/OutSystems/ODC Studio/Plugins",
+          "read_only": true,
+          "type": "volume",
+          "volume": {}
         }
       ]
     },
@@ -647,6 +668,13 @@
         {
           "source": "runtime-css",
           "target": "/data/runtime-css",
+          "read_only": true,
+          "type": "volume",
+          "volume": {}
+        },
+        {
+          "source": "odc-model-plugins",
+          "target": "/tmp/.local/share/OutSystems/ODC Studio/Plugins",
           "read_only": true,
           "type": "volume",
           "volume": {}
@@ -782,7 +810,8 @@
     "odc-features-o11-11-55-92-odc-1-7-28": {},
     "cache-o11-11-55-92-odc-1-7-28": {},
     "odc-features-o11-11-55-94-odc-1-7-31": {},
-    "cache-o11-11-55-94-odc-1-7-31": {}
+    "cache-o11-11-55-94-odc-1-7-31": {},
+    "odc-model-plugins": {}
   },
   "x-hardening": {
     "cap_drop": [

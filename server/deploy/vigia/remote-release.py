@@ -62,6 +62,32 @@ def backends(project):
     return json.loads(docker("inspect", *ids)) if ids else []
 
 
+# Shared read-only volumes a backend may mount besides its /data state, each only at its own target. They are never
+# mounted in the staging container (docker would create an empty volume): the plugins volume must already exist and hold
+# exactly the pinned files (coolify/model-plugins.json) before anything is written.
+MODEL_PLUGINS_TARGET = '/tmp/.local/share/OutSystems/ODC Studio/Plugins'
+READ_ONLY_VOLUMES = {'/data/runtime-css': 'runtime-css', MODEL_PLUGINS_TARGET: 'odc-model-plugins'}
+PLUGIN_LIST = ("const fs=require('fs'),c=require('crypto');console.log(JSON.stringify(fs.readdirSync('/plugins').sort()"
+               ".map(n=>({name:n,sha256:c.createHash('sha256').update(fs.readFileSync('/plugins/'+n)).digest('hex')}))))")
+
+
+def pinned_files(pins):
+    files = (pins or {}).get('files')
+    if not isinstance(files, list) or not files:
+        raise RemoteError('MODEL_PLUGINS_UNPINNED')
+    return sorted(({'name': f['name'], 'sha256': f['sha256']} for f in files), key=lambda f: f['name'])
+
+
+def verify_plugins_volume(volume, image, pins):
+    try:
+        docker("volume", "inspect", volume)
+    except RuntimeError:
+        raise RemoteError('MODEL_PLUGINS_MISSING')
+    listing = json.loads(docker("run", "--rm", "--network", "none", "--entrypoint", "node", "-v", volume + ":/plugins:ro", image, "-e", PLUGIN_LIST))
+    if sorted(listing, key=lambda f: f['name']) != pinned_files(pins):
+        raise RemoteError('MODEL_PLUGINS_MISMATCH')
+
+
 def backup_space(base, settings):
     disk = base
     while not disk.exists():
@@ -197,15 +223,26 @@ def dispatch(request):
                 args += ["--label", key + "=" + str(value)]
             args += ["-e", "SSAM_RUNTIME_DIR=" + service["environment"]["SSAM_RUNTIME_DIR"]]
             allowed_targets = {'/data/server', '/data/cache', '/data/odc-features', '/data/friction'}
+            plugins = 0
             for mount in service["volumes"]:
-                if mount.get('target') not in allowed_targets:
+                target = mount.get('target')
+                if target not in allowed_targets and target not in READ_ONLY_VOLUMES:
                     raise RuntimeError('Unexpected backend volume target.')
                 if mount.get("type", "volume") != "volume":
                     raise RuntimeError("Unexpected mount type.")
                 key = mount["source"]
                 spec = compose["volumes"].get(key, {}) or {}
                 volume = spec.get("name") or settings["composeProject"] + "_" + key
+                if target in READ_ONLY_VOLUMES:
+                    if key != READ_ONLY_VOLUMES[target] or mount.get('read_only') is not True:
+                        raise RuntimeError('Unexpected read-only backend volume.')
+                    if target == MODEL_PLUGINS_TARGET:
+                        plugins += 1
+                        verify_plugins_volume(volume, image, request.get("modelPlugins"))
+                    continue
                 args += ["-v", volume + ":" + mount["target"]]
+            if plugins != 1:
+                raise RemoteError('MODEL_PLUGINS_MOUNT')
             docker(*args, image)
             env = dict(os.environ, SSAM_CONTAINER=name)
             ctl = str(directory / "server/deploy/coolify/ssamctl.sh")
@@ -252,6 +289,8 @@ def dispatch(request):
                     if not (warm.get("indexes", {}).get("ok") and warm.get("delivery", {}).get("builder", {}).get("ok") and warm.get("delivery", {}).get("worker", {}).get("ok")):
                         raise RuntimeError("Backend warm failed.")
                 break
+            except RemoteError:
+                raise
             except Exception:
                 if time.monotonic() >= deadline:
                     raise RemoteError('NOT_WARM')
@@ -261,10 +300,29 @@ def dispatch(request):
         check_source = request.get("checkSource")
         if not check_source:
             raise RuntimeError("Missing protocol check source.")
+        # A deployment: every running backend mounts the reviewed plugins volume read-only at its target (the check inside
+        # each backend then reads the pinned files there).
+        if request.get("modelPlugins"):
+            pinned_files(request["modelPlugins"])
+            for server in running:
+                at = [m for m in server.get("Mounts", []) if m.get("Destination") == MODEL_PLUGINS_TARGET]
+                if len(at) != 1 or at[0].get("Type") != "volume" or at[0].get("RW") is not False:
+                    raise RemoteError('MODEL_PLUGINS_MOUNT')
+        presented = 0
         for server in running:
             labels = server["Config"]["Labels"]
             source = (request.get("checkSources") or {}).get(labels.get("ssam.o11", "") + "|" + labels.get("ssam.odc", ""), check_source)
-            docker("exec", "-i", server["Id"], "node", "--input-type=module", data=source.encode())
+            output = docker("exec", "-i", server["Id"], "node", "--input-type=module", data=source.encode()).decode().strip().splitlines()
+            try:
+                receipt = json.loads(output[-1]) if output else {}
+            except ValueError:
+                receipt = {}
+            if receipt.get("ok") is not True:
+                raise RemoteError('CHECK_RECEIPT')
+            presented += 1 if receipt.get("presented") is True else 0
+        # Server-only: exactly one backend (the new pair) presented the published pack's hello.
+        if request.get("requirePresented") and presented != 1:
+            raise RemoteError('PACK_HELLO_NOT_PRESENTED')
         # Check the public aggregate router as well, including TLS validation.
         command(["curl", "--fail", "--silent", "--show-error", "--max-time", "30", settings["healthUrl"]])
         return {"ok": True, "backends": len(running)}

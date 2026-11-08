@@ -45,6 +45,8 @@ export function generateCompose(manifest,{window=manifest.window??3}={}){
  c.services['ssam-router']=router;
  // Administrative containers retain shared state; their optional data mounts use the default pair.
  for(const name of ['ssam-admin','ssam-console'])for(const v of c.services[name]?.volumes??[])if(['cache','odc-features'].includes(v.source))v.source=`${v.source}-${pairs[0].name.replaceAll('.','-')}`;
+ // Every shared read-only named volume a service mounts is declared (odc-model-plugins: the owner stages it).
+ for(const s of Object.values(c.services))for(const v of s.volumes??[])if(v.read_only===true&&(v.type??'volume')==='volume'&&typeof v.source==='string'&&!(v.source in c.volumes))c.volumes[v.source]={};
  return c;
 }
 if(process.argv[1]&&path.resolve(process.argv[1])===fileURLToPath(import.meta.url)){

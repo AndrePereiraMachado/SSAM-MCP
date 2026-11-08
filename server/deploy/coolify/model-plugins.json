@@ -1,0 +1,9 @@
+{
+  "about": "The ODC model plugins every backend mounts read-only (compose.template.json, volume odc-model-plugins). The owner stages the volume; the watcher refuses a prepare and rolls a deployment back unless the mount holds exactly these files. Tenant binaries the ODC Studio caches in LocalApplicationData; never code from a customer.",
+  "volume": "odc-model-plugins",
+  "target": "/tmp/.local/share/OutSystems/ODC Studio/Plugins",
+  "files": [
+    {"name": "MobileUI-1.4.0.0.xif", "sha256": "b49d698a754d1609d30f1cdc0596524497811bb16c6db203ec6960f32188c521"},
+    {"name": "MobileUI-1.5.0.0.xif", "sha256": "fca140514214ce98c56dbe291e9587511b7d9546c4130b7aec356ef1e4bff4a6"}
+  ]
+}

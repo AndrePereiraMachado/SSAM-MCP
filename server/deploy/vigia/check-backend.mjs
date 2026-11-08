@@ -1,6 +1,8 @@
 // Executed inside a backend by the remote verifier. Credentials never leave
 // this process; its only stdout value is a successful check receipt.
 import fs from 'node:fs';
+import path from 'node:path';
+import {createHash} from 'node:crypto';
 import {openTokenStore} from './platforms/odc/facade/server-tokens.mjs';
 import {toolListingBytes} from './platforms/odc/facade/tool-listing.mjs';
 import {readStudioVersions} from './platforms/odc/facade/studio-version-state.mjs';
@@ -23,8 +25,24 @@ try {
  const accepted=await post('/agent/v1/hello',issued.agentCredential,hello);
  if(!accepted.data.compatible.odc.ok||!accepted.data.compatible.o11.ok)throw Error('Synthetic hello failed.');
  // Server-only bridge mode: the new pair must accept the hello of the published agent pack (its real bridges and commands).
+ // Its thin bridge is the pack's build of exactly this Service Studio (or the build the owner proved for it, o11Proven); the
+ // remote verifier requires exactly one backend to present it (requirePresented), so a kernel that matches no key fails.
  const presented=expected.packHellos?.[kernel.o11+'|'+kernel.odc];
- if(presented){const r=await post('/agent/v1/hello',issued.agentCredential,presented);if(!r.data.compatible.odc?.ok||!r.data.compatible.o11?.ok)throw Error('Published agent pack hello failed.');}
+ if(presented){
+  if(presented.pack?.o11BuiltFor!==(expected.o11Proven?.[kernel.o11]??kernel.o11))throw Error('Published agent pack has no thin bridge built for this Service Studio.');
+  const r=await post('/agent/v1/hello',issued.agentCredential,presented);if(!r.data.compatible.odc?.ok||!r.data.compatible.o11?.ok)throw Error('Published agent pack hello failed.');
+ }
+ // The ODC model plugins (coolify/model-plugins.json): mounted read-only at the reviewed target, holding exactly the pinned files.
+ let plugins;
+ if(expected.modelPlugins){
+  const p=expected.modelPlugins,escaped=p.target.replace(/[ \t\n\\]/g,c=>'\\'+c.charCodeAt(0).toString(8).padStart(3,'0'));
+  const mount=fs.readFileSync('/proc/self/mountinfo','utf8').split('\n').map(l=>l.split(' ')).find(f=>f[4]===escaped);
+  if(!mount||!mount[5].split(',').includes('ro'))throw Error('ODC model plugins are not mounted read-only.');
+  const names=fs.readdirSync(p.target).sort(),want=p.files.map(f=>f.name).sort();
+  if(JSON.stringify(names)!==JSON.stringify(want))throw Error('ODC model plugins differ from the pinned list.');
+  for(const f of p.files)if(createHash('sha256').update(fs.readFileSync(path.join(p.target,f.name))).digest('hex')!==f.sha256)throw Error('ODC model plugin content differs from its pin.');
+  plugins=want.length;
+ }
  for(const offer of (expected.offers??[]).filter(x=>kernel[x.lane]===x.studioVersion)){
   // The agent that may take it: from ODC v106 on only one whose hello lists reconcile-merge (bridge-store.mjs AGENT_NEEDS).
   const old=structuredClone(hello);old.capabilities={bridgeOffer:true};old.agent={version:'1',odcCommands:['merge','reconcile-merge']};
@@ -53,7 +71,7 @@ try {
  budget.coreBytes=tools?.filter(t=>budget.core.includes(t.name)).reduce((n,t)=>n+toolListingBytes(t),0);
  if(!tools||(!expected.capture&&(budget.tools!==expected.budget.tools||budget.totalBytes>expected.budget.totalBytes)))throw Error('Listing budget failed.');
  if(!expected.capture&&expected.budget.coreBytes&&budget.coreBytes>expected.budget.coreBytes)throw Error('Core listing budget failed.');
- console.log(JSON.stringify({ok:true,kernel,budget,telemetry:expected.capture?readStudioVersions(process.env.SSAM_SERVER_DIR||'/data/server',await store.list()):undefined}));
+ console.log(JSON.stringify({ok:true,kernel,budget,presented:!!presented,...(plugins!==undefined?{modelPlugins:plugins}:{}),telemetry:expected.capture?readStudioVersions(process.env.SSAM_SERVER_DIR||'/data/server',await store.list()):undefined}));
 } finally {
  if(issued?.id)await store.revoke(issued.id);
  await store.close?.();

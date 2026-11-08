@@ -8,6 +8,20 @@ export const composeHash=text=>createHash('sha256').update(text).digest('hex');
 const sorted=value=>Array.isArray(value)?value.map(sorted):value&&typeof value==='object'?Object.fromEntries(Object.keys(value).sort().map(k=>[k,sorted(value[k])])):value;
 export const canonicalComposeHash=text=>composeHash(JSON.stringify(sorted(parseCompose(text))));
 export const parseCompose=text=>JSON.parse(text.replace(/^\s*#[^\n]*\n/g,''));
+// The ODC model plugins every backend mounts read-only, pinned by name and sha256 (coolify/model-plugins.json): the
+// reviewed volume at the reviewed target, never another mount there, never code from a customer.
+const PLUGINS=JSON.parse(fs.readFileSync(new URL('../coolify/model-plugins.json',import.meta.url),'utf8'));
+export const modelPlugins=()=>structuredClone({volume:PLUGINS.volume,target:PLUGINS.target,files:PLUGINS.files});
+const mountTarget=v=>typeof v==='string'?v.split(':')[1]:v?.target;
+const reviewedPlugins=v=>!!v&&typeof v==='object'&&v.source===PLUGINS.volume&&v.target===PLUGINS.target&&v.read_only===true&&(v.type??'volume')==='volume';
+// Every backend of a compose has exactly one mount at the plugins target, the reviewed read-only volume, and the volume is
+// declared. A bad merge that mounts it twice, or a hand-made bind there, fails before any write.
+export function assertModelPlugins(compose){
+ const backends=Object.entries(compose.services??{}).filter(([,s])=>s.labels?.['ssam.backend']==='true');
+ for(const [name,s] of backends){const at=(s.volumes??[]).filter(v=>mountTarget(v)===PLUGINS.target);if(at.length!==1||!reviewedPlugins(at[0]))fail(`Backend ${name} must mount exactly the reviewed read-only ${PLUGINS.volume} volume at ${PLUGINS.target}.`,'MODEL_PLUGINS_MOUNT');}
+ if(backends.length&&!compose.volumes?.[PLUGINS.volume])fail(`The compose does not declare the ${PLUGINS.volume} volume.`,'MODEL_PLUGINS_MOUNT');
+ return compose;
+}
 export function unchanged(snapshot,current){if(snapshot.hash!==composeHash(current))fail('Live compose changed; no further mutation is permitted.','LIVE_CHANGED');}
 export function liveBaseline(snapshot){
  const compose=parseCompose(snapshot.compose),rows=snapshot.backends;
@@ -38,13 +52,16 @@ export function preserveCompose(snapshot,manifest){
    source.labels={...source.labels,...desired.labels};source.environment={...source.environment};
    for(const key of ['SSAM_BACKEND_NAME','SSAM_RUNTIME_DIR','SSAM_SERVED_VERSIONS'])source.environment[key]=desired.environment[key];
    if(!matched){source.image=desired.image;source.volumes=structuredClone(desired.volumes);}
+   // A retained backend deployed before the plugins mount gets the reviewed one; anything else at that target stops here.
+   else{const at=(source.volumes??[]).filter(v=>mountTarget(v)===PLUGINS.target);if(!at.length)source.volumes=[...(source.volumes??[]),structuredClone(desired.volumes.find(reviewedPlugins))];else if(at.length!==1||!reviewedPlugins(at[0]))fail(`The live backend ${name} mounts something else at ${PLUGINS.target}; owner review is required.`,'MODEL_PLUGINS_CONFLICT');}
    services[name]=source;
   }else if(live.services[name]&&['ssam-router','ssam-console','ssam-admin','ssam-ops'].includes(name)){
    services[name]={...live.services[name],image:desired.image};
    if(name==='ssam-router')services[name].environment={...services[name].environment,SSAM_ROUTER_BACKENDS:desired.environment.SSAM_ROUTER_BACKENDS,SSAM_VERSION_WINDOW:String(manifest.window)};
   }
  }
- return JSON.stringify({...live,services,volumes:{...next.volumes,...live.volumes}},null,2);
+ const out={...live,services,volumes:{...next.volumes,...live.volumes}};assertModelPlugins(out);
+ return JSON.stringify(out,null,2);
 }
 export function assertUnserved(baseline,pair){if(['odc','o11'].every(l=>baseline.manifest[l].some(e=>e.version===pair[l])))fail('The candidate is already served.','ALREADY_SERVED');}
 export function assertRetained(baseline,next){

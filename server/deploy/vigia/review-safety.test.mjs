@@ -175,6 +175,30 @@ test('R3-7 a new backend inherits only allowed configuration and generated volum
  const m={window:3,odc:[entry('1.7.31','new'),...baseline.odc],o11:[entry('11.55.95','new'),...baseline.o11]};const next=JSON.parse(safety.preserveCompose(s,m));
  const added=Object.values(next.services).find(v=>v.labels?.['ssam.odc']==='1.7.31');assert.equal(added.privileged,undefined);assert.ok(!added.volumes.some(v=>v.type==='bind'));assert.equal(added.environment.CUSTOM,'keep');
 });
+// Review round 2, A2 (probe C:\t\r5\rev-vigia-so\probe-plugins.mjs): every backend, new or retained, mounts the reviewed
+// read-only ODC model plugins volume exactly once.
+const PLUG='/tmp/.local/share/OutSystems/ODC Studio/Plugins';
+const pluginMounts=s=>s.volumes.filter(v=>(typeof v==='string'?v.split(':')[1]:v.target)===PLUG);
+const backendsOf=c=>Object.entries(c.services).filter(([,s])=>s.labels?.['ssam.backend']==='true');
+test('R3-7b A2: the new backend gets the reviewed plugins mount; a retained one without it gets it; anything else there stops',()=>{
+ const pins=JSON.parse(file('deploy/coolify/model-plugins.json'));assert.equal(pins.volume,'odc-model-plugins');assert.equal(pins.target,PLUG);
+ assert.deepEqual(pins.files.map(f=>[f.name,f.sha256.slice(0,8)]),[['MobileUI-1.4.0.0.xif','b49d698a'],['MobileUI-1.5.0.0.xif','fca14051']]);
+ const m={window:3,odc:[entry('1.7.31','new'),...baseline.odc],o11:[entry('11.55.95','new'),...baseline.o11]};
+ // A live compose deployed before the mount (the probe's case without its bind): every backend ends with exactly one, read-only.
+ const s=live(),c=JSON.parse(s.compose);for(const [,b] of backendsOf(c))b.volumes=b.volumes.filter(v=>v.target!==PLUG);delete c.volumes['odc-model-plugins'];s.compose=JSON.stringify(c);
+ const next=JSON.parse(safety.preserveCompose(s,m));assert.equal(backendsOf(next).length,2);
+ for(const [name,b] of backendsOf(next)){const at=pluginMounts(b);assert.equal(at.length,1,name);assert.deepEqual(at[0],{source:'odc-model-plugins',target:PLUG,read_only:true,type:'volume',volume:{}},name);}
+ assert.deepEqual(next.volumes['odc-model-plugins'],{});
+ // The probe's hand-added bind on the live backends: never inherited, never silently replaced.
+ const b=live(),bc=JSON.parse(b.compose);for(const [,x] of backendsOf(bc)){x.volumes=x.volumes.filter(v=>v.target!==PLUG);x.volumes.push({type:'bind',source:'/srv/ssam/odc-plugins',target:PLUG,read_only:true});}b.compose=JSON.stringify(bc);
+ assert.throws(()=>safety.preserveCompose(b,m),e=>e.code==='MODEL_PLUGINS_CONFLICT');
+ // A writable mount of the volume, or the mount twice (a bad merge of r44's gen-compose push over this template), stops too.
+ const rw=live(),rc=JSON.parse(rw.compose);pluginMounts(backendsOf(rc)[0][1])[0].read_only=false;rw.compose=JSON.stringify(rc);
+ assert.throws(()=>safety.preserveCompose(rw,m),e=>e.code==='MODEL_PLUGINS_CONFLICT');
+ const twice=generateCompose(m);for(const [,x] of backendsOf(twice))x.volumes.push(structuredClone(pluginMounts(x)[0]));
+ assert.throws(()=>safety.assertModelPlugins(twice),e=>e.code==='MODEL_PLUGINS_MOUNT');
+ assert.doesNotThrow(()=>safety.assertModelPlugins(generateCompose(m)));
+});
 test('R3-8 packaged-process detection uses Windows Package.Current',()=>{assert.match(file('deploy/vigia/vault.ps1'),/Windows.ApplicationModel.Package.*::Current/);assert.doesNotMatch(file('deploy/vigia/vault.ps1'),/APPX_PACKAGE_FAMILY_NAME/);});
 test('R3-9 snapshot cleanup retains live attempts plus five newest snapshots',t=>{
  assert.equal(typeof safety.cleanupRollback,'function');const root=tmp(t),folder=path.join(root,'rollback'),out=path.join(root,'out'),id='o11-11.55.94-odc-1.7.30';fs.mkdirSync(folder);fs.mkdirSync(path.join(out,id),{recursive:true});

@@ -9,9 +9,9 @@ import {fileURLToPath} from 'node:url';
 import {verifyBridge} from '../../platforms/odc/facade/bridge-store.mjs';
 import {detectSources,downloadInstaller} from './sources.mjs';
 import {readListingBudget} from './smoke.mjs';
-import {refuseInRehearsal,assertPause,assertTime,canonicalComposeHash,cleanupSsh,cleanupRollback,liveBaseline,composeHash,unchanged,preserveCompose} from './safety.mjs';
+import {refuseInRehearsal,assertPause,assertTime,canonicalComposeHash,cleanupSsh,cleanupRollback,liveBaseline,composeHash,unchanged,preserveCompose,modelPlugins} from './safety.mjs';
 import {bridgeMode,parseAgentRelease} from './server-only.mjs';
-import {windowPairs,pairId} from './window.mjs';
+import {windowPairs,pairId,version as threeOf} from './window.mjs';
 const here=path.dirname(fileURLToPath(import.meta.url));
 const hash=b=>createHash('sha256').update(b).digest('hex');
 const q=s=>"'"+String(s).replaceAll("'","'\\''")+"'";
@@ -78,7 +78,7 @@ export function createAutoRuntime(config,runtime) {
  async function protect(value){return (await script('protect-value.ps1',['-Mode','Protect'],value)).stdout.trim();}
  async function unprotect(value){return (await script('protect-value.ps1',['-Mode','Unprotect'],value)).stdout;}
  const load=async baseline=>JSON.parse(await unprotect(fs.readFileSync(baseline.file,'utf8')));
- const checkSource=(budget,offers=[],capture=false,packHellos=null)=>'const expected='+JSON.stringify({budget,offers,capture,...(packHellos?{packHellos}:{})})+';\n'+fs.readFileSync(path.join(here,'check-backend.mjs'),'utf8');
+ const checkSource=(budget,offers=[],capture=false,packHellos=null,extra={})=>'const expected='+JSON.stringify({budget,offers,capture,...(packHellos?{packHellos}:{}),...extra})+';\n'+fs.readFileSync(path.join(here,'check-backend.mjs'),'utf8');
  return {
   secrets,
   async verifyInput(chain){return verifyInstallerCustody(chain,{privateRoot:priv,verifyPublisher:runtime.verifyPublisher});},
@@ -242,7 +242,7 @@ export function createAutoRuntime(config,runtime) {
    if(r.featuresSha256&&hash(features)!==r.featuresSha256)throw Object.assign(Error('The ODC features changed after they were recorded; nothing was sent.'),{code:'FEATURES_CHANGED'});
    const archive=path.join(r.dir,'deploy.tar.gz');await runtime.archiveDeploy(await runtime.fullHead(),archive);
    return ssh(s,{action:'prepare',id:r.id,built:r.built,kernel:r.kernel,compose:JSON.parse(r.compose.replace(/^#[^\n]*\n/,'')),
-    archive:fs.readFileSync(archive).toString('base64'),features:features.toString('base64')});
+    archive:fs.readFileSync(archive).toString('base64'),features:features.toString('base64'),modelPlugins:modelPlugins()});
   },
   async writeCompose(s,compose){await api(s,'PATCH',resource(),{docker_compose_raw:Buffer.from(compose).toString('base64'),instant_deploy:false});if(canonicalComposeHash(compose)!==canonicalComposeHash((await api(s,'GET',resource())).docker_compose_raw))throw Error('Written compose read-back differs.');},
   deploy: s=>api(s,'POST',resource()+'/restart'),
@@ -253,7 +253,12 @@ export function createAutoRuntime(config,runtime) {
    const checkSources=before?Object.fromEntries(before.map(b=>[b.o11+'|'+b.odc,'const expected='+JSON.stringify({budget:b.budget,offers:[],kernel:b.kernel})+';\n'+fs.readFileSync(path.join(here,'check-backend.mjs'),'utf8')])):null;
    // Server-only: the deployed new pair must accept the published pack's hello too (check-backend.mjs, that pair only).
    const hello=!before&&expected.bridges?.mode==='server-only'&&expected.bridges.hello&&expected.kernel?{[expected.kernel.o11+'|'+expected.kernel.odc]:expected.bridges.hello}:null;
-   return ssh(s,{action:'check',...expected,budget,expectedBackends:before,checkSources,checkSource:checkSource(budget,expected.bridges?.offers??[],false,hello)});
+   // The thin bridge the owner proved for a Service Studio without its own build (o11BridgeProven), by Studio version.
+   const o11Proven=Object.fromEntries(Object.entries(config.o11BridgeProven??{}).filter(([,p])=>typeof p?.evidence==='string'&&p.evidence.trim()&&threeOf(p.build)).map(([v,p])=>[threeOf(v),threeOf(p.build)]));
+   // A deployment (never a rollback, which restores what was live) also checks the reviewed ODC model plugins in every backend
+   // and that exactly one backend presented the published pack's hello.
+   const extra=before?{}:{modelPlugins:modelPlugins(),...(Object.keys(o11Proven).length?{o11Proven}:{})};
+   return ssh(s,{action:'check',...expected,budget,expectedBackends:before,checkSources,...(before?{}:{modelPlugins:extra.modelPlugins,requirePresented:!!hello}),checkSource:checkSource(budget,expected.bridges?.offers??[],false,hello,extra)});
   },
   async event(name,value,s){
    runtime.log(`release ${name}: ${value.id}`);
