@@ -13,6 +13,11 @@ import {refuseInRehearsal,assertPause,assertTime,canonicalComposeHash,cleanupSsh
 import {bridgeMode,parseAgentRelease} from './server-only.mjs';
 import {windowPairs,pairId,version as threeOf} from './window.mjs';
 import {versionPairs,servedLists} from '../coolify/gen-compose.mjs';
+// The codes remote-release.py returns. The VPS state of the moment (memory, disk, the lease, a backend still warming): the
+// round waits and retries. A defect of the release or of the staged plugins volume, a check receipt, the published hello or a
+// changed served list: the attempt fails with its own code (rolled back after a deployment), never retried unseen.
+export const REMOTE_WAITS=Object.freeze(['MEMORY_LOW','DISK_LOW','LOCK_BUSY','LOCK_LOST','NOT_WARM','REMOTE_UNAVAILABLE']);
+export const REMOTE_DEFECTS=Object.freeze(['REMOTE_FAILED','MODEL_PLUGINS_MISSING','MODEL_PLUGINS_MISMATCH','MODEL_PLUGINS_MOUNT','MODEL_PLUGINS_UNPINNED','CHECK_RECEIPT','PACK_HELLO_NOT_PRESENTED','SERVED_LIST_CHANGED']);
 const here=path.dirname(fileURLToPath(import.meta.url));
 const hash=b=>createHash('sha256').update(b).digest('hex');
 const q=s=>"'"+String(s).replaceAll("'","'\\''")+"'";
@@ -73,7 +78,7 @@ export function createAutoRuntime(config,runtime) {
     'timeout --signal=TERM --kill-after=10s 1700s python3 -c '+q(remote)
    ],{secret:true,input:JSON.stringify({...request,fence:activeLease?.token,settings:settings.remote}),timeoutMs:30*60000,evenWhenStopping:true,allowFailure:true}).catch(()=>{throw Object.assign(Error('Remote transport unavailable.'),{code:'REMOTE_UNAVAILABLE',environmental:true});});
    let result;try{result=JSON.parse(r.stdout);}catch{throw Object.assign(Error('Remote transport unavailable.'),{code:'REMOTE_UNAVAILABLE',environmental:true});}
-   if(!result.ok){const code=['MEMORY_LOW','DISK_LOW','LOCK_BUSY','LOCK_LOST','NOT_WARM','REMOTE_UNAVAILABLE','REMOTE_FAILED'].includes(result.code)?result.code:'REMOTE_FAILED';throw Object.assign(Error('Remote operation failed: '+code),{code,environmental:code!=='REMOTE_FAILED'});}return result;
+   if(!result.ok){const code=typeof result.code==='string'&&(REMOTE_WAITS.includes(result.code)||REMOTE_DEFECTS.includes(result.code))?result.code:'REMOTE_FAILED';throw Object.assign(Error('Remote operation failed: '+code),{code,environmental:REMOTE_WAITS.includes(code)});}return result;
   }finally{fs.rmSync(folder,{recursive:true,force:true});}
  }
  async function protect(value){return (await script('protect-value.ps1',['-Mode','Protect'],value)).stdout.trim();}

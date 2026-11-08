@@ -108,14 +108,14 @@ export async function releaseAutomatically(config,ops,release){
   if(!state.mutationStarted){
    state.status=error.environmental?'deferred':'preparation-failed';
    if(error.environmental){state.deferrals=(state.deferrals??0)+1;state.firstDeferredAt??=new Date().toISOString();}
-   save();await event('failed',`${id}: ${state.failure.step} failed before mutation (${state.failure.code}).`);
+   save();await event('failed',`${id}: ${state.failure.step} failed before mutation (${state.failure.code}).`,state.failure.code);
    return {status:error.environmental?'deferred':'failed',id,code:state.failure.code};
   }
   state.status='rolling-back';save();let restored=false;
   try{if(ops.ensureReleaseLock)unlock=await ops.ensureReleaseLock(secrets,unlock);if(ops.assertRollbackSafe)await ops.assertRollbackSafe(secrets,baseline,state.composeHash);await ops.restoreCompose(secrets,baseline);if(state.deploySent){await ops.deploy(secrets);const r=await ops.checks(secrets,{rollback:true,live:baseline});if(!r?.ok)throw Error('Rollback checks failed.');}restored=true;}catch{}
   state.status=restored?'rolled-back':'rollback-failed';save();
-  await event(restored?'failed':'rollback-failed',`${id}: ${state.failure.step} failed; ${restored?'previous live baseline restored':'rollback requires owner attention'}.`);
-  return {status:state.status,id,code:'automatic-deployment-failed'};
+  await event(restored?'failed':'rollback-failed',`${id}: ${state.failure.step} failed (${state.failure.code}); ${restored?'previous live baseline restored':'rollback requires owner attention'}.`,state.failure.code);
+  return {status:state.status,id,code:'automatic-deployment-failed',cause:state.failure.code};
  }finally{
   try{if(unlock)await unlock();}finally{if(protectedPhase)ops.endDeployment?.();}
  }

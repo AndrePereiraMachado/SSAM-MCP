@@ -322,6 +322,28 @@ test('N2: the waiting event goes to the webhook, the VPS journal (bounded code) 
  assert.equal(posts.length,1);assert.equal(posts[0].event,'waiting');assert.equal(posts[0].code,'CLIENT_BRIDGE_UPDATE_REQUIRED');
  const {OWNER_WAITS}=await import('./pipeline.mjs');for(const code of Object.values(OWNER_WAITS))assert.match(code,/^[A-Z_]{1,40}$/);
 });
+// Review round 3, N3: the remote's own codes reach the attempt, the events and the notice instead of REMOTE_FAILED.
+const requestOf=o=>{try{return JSON.parse(o?.input);}catch{return null;}};
+test('N3: plugins, receipt, hello and served-list codes of the remote keep their code; a post-deployment one rolls back with it',async t=>{
+ const {REMOTE_WAITS,REMOTE_DEFECTS}=await import('./auto-runtime.mjs');
+ const source=fs.readFileSync(fileURLToPath(new URL('./remote-release.py',import.meta.url)),'utf8');
+ const raised=[...new Set([...source.matchAll(/RemoteError\('([A-Z_]+)'\)/g)].map(m=>m[1]))];
+ for(const code of raised)assert.ok(REMOTE_WAITS.includes(code)||REMOTE_DEFECTS.includes(code),`${code} is not surfaced`);
+ const f=await fixture(t),original=f.base.run;let answer=null;
+ f.base.run=async(cmd,args,o)=>{if(answer&&requestOf(o)?.action==='check')return {stdout:JSON.stringify({ok:false,code:answer})};return original(cmd,args,o);};
+ const s=await f.ops.secrets(),unlock=await f.ops.acquireReleaseLock(s);
+ for(const code of [...REMOTE_DEFECTS.filter(c=>c!=='REMOTE_FAILED'),'NOT_WARM','something else']){
+  answer=code;const e=await f.ops.checks(s,{id:'x',pinned:release(f.dir).manifest,kernel:{odc:'1.7.30',o11:'11.55.94'},bridges:{offers:[]}}).then(()=>null,x=>x);
+  assert.equal(e?.code,code==='something else'?'REMOTE_FAILED':code,code);assert.equal(e.environmental,code==='NOT_WARM',code);
+ }
+ await unlock();
+ // A deployment whose check finds a changed served list is rolled back; the event and the deployment journal carry the code.
+ const g=await fixture(t),events=[],real=g.base.run;g.base.run=async(cmd,args,o)=>{if(requestOf(o)?.action==='check'&&!requestOf(o).rollback)return {stdout:JSON.stringify({ok:false,code:'SERVED_LIST_CHANGED'})};return real(cmd,args,o);};
+ const ops={...g.ops,event:async(n,v)=>events.push([n,v.code])};
+ const r=await releaseAutomatically(g.config,ops,release(g.dir));assert.equal(r.status,'rolled-back',JSON.stringify(r));assert.equal(r.cause,'SERVED_LIST_CHANGED');
+ assert.deepEqual(events.find(([n])=>n==='failed'),['failed','SERVED_LIST_CHANGED']);
+ assert.equal(readJournal(path.join(g.dir,'deployment.json')).failure.code,'SERVED_LIST_CHANGED');
+});
 test('server-only round defers a published pack the reviewed release does not attach, before any bundle',async t=>{
  const f=await fixture(t),s=serverOnlyRound(f,{pack:{odcBridge:'v110'}});
  const result=await roundOf(s);assert.equal(result.status,'deferred');
