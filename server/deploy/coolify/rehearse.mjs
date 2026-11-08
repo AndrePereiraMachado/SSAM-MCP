@@ -41,6 +41,9 @@ try{
  const issue=customer=>JSON.parse(run(['run','--rm','--network',prefix,...db,...mounts,'--entrypoint','node',image,'facade/ssam.mjs','server-token','issue','--customer',customer,'--days','1','--lanes','odc,o11']));
  // One license per pair from the third on (rehearsal-window.mjs extraLicenses): routing, tools/list and state of each backend.
  const extras=extraLicenses(images?.length??2).map(({index,customer})=>{const license=issue(customer);fs.writeFileSync(path.join(out,'segredo','pair-'+(index+1)+'.json'),JSON.stringify(license));return {index,license};});
+ // r44: the licenses of the app 0.2.7 cases are issued here, before the router starts: the router reads the tokens from a
+ // snapshot of the table refreshed every second, so a license issued during the checks can still be unknown (401).
+ const app027Licenses=images&&images.length>=5?Array.from({length:6},(_,i)=>issue('Rehearsal app 0.2.7 '+(i+1))):[];
  const every=pairWords(images?.length??2);
  const d=images&&(images[0].odcBridge??'v97')!=='v97'?JSON.parse(run(['run','--rm','--network',prefix,...db,...mounts,'--entrypoint','node',image,'facade/ssam.mjs','server-token','issue','--customer','Rehearsal D','--days','1','--lanes','odc,o11'])):null;if(d)fs.writeFileSync(path.join(out,'segredo','d.json'),JSON.stringify(d));
  const pairs=(images??INITIAL).map((x,i)=>({name:x.name??'v'+(i+1),odc:x.odc??INITIAL[i]?.odc,o11:x.o11??INITIAL[i]?.o11,odcBuild:x.odcBuild??INITIAL[i]?.odcBuild,o11Build:x.o11Build??INITIAL[i]?.o11Build,odcBridge:x.odcBridge??'v97',odcBridgeAccepted:x.odcBridgeAccepted??(x.odcBridge&&x.odcBridge!=='v97'?[]:['v96','v48','v45'])}));
@@ -109,7 +112,7 @@ try{
   ];
   const seen=[];
   for(const [i,x] of cases.entries()){
-   const license=issue('Rehearsal app 0.2.7 '+(i+1));
+   const license=app027Licenses[i];assert.ok(license,'a license for each app 0.2.7 case');
    const h=await post('/agent/v1/hello',license.agentCredential,app027(('a027'+i).padEnd(32,'0'),x.odc,x.o11));assert.equal(h.status,200,x.name);
    const compatible=JSON.parse(h.text).compatible,backend=routeOf(license.id);
    assert.equal(backend,x.backend,x.name+': routed to '+backend);
@@ -155,7 +158,10 @@ try{
  for(const [name,sid]of sessions.map(([,sid],i)=>[backends[i].name,sid]))assert.ok(fs.readFileSync(path.join(out,'segredo/runtime/versions',name,'server.log'),'utf8').includes(sid));checks.push({name:'MCP backend affinity',ok:true});
  const writer=`import {createStore} from './facade/friction-store.mjs';const store=createStore({directory:'/data/friction'});for(let i=0;i<50;i++){store.begin({operation:'ssam_doctor',interface:'mcp'}).finish({ok:false,code:'BUILD_FAILED'});await new Promise(r=>setTimeout(r,5));}store.issues();`;
  await Promise.all(['v1','v2'].map(name=>new Promise((resolve,reject)=>{const p=spawn(docker,['--context','desktop-linux','exec','-i',prefix+'-'+name,'node','--input-type=module'],{stdio:['pipe','ignore','pipe'],windowsHide:true});p.stdin.end(writer);p.on('error',reject);p.on('exit',code=>code===0?resolve():reject(Error('Concurrent writer failed')));})));const operations=fs.readdirSync(path.join(out,'friction/operations')).filter(n=>n.endsWith('.end.json'));assert.ok(operations.length>=100);for(const n of operations)JSON.parse(fs.readFileSync(path.join(out,'friction/operations',n),'utf8'));checks.push({name:'concurrent friction writes',ok:true,operations:operations.length});
- const controller=new AbortController();const started=performance.now();const stream=await fetch(url+'/agent/v1/stream?channel='+JSON.parse(ha.text).channel,{headers:{authorization:'Bearer '+a.agentCredential},signal:controller.signal});assert.equal(stream.status,200);assert.match(stream.headers.get('content-type'),/ndjson/);const chunk=await stream.body.getReader().read();const firstByteMs=performance.now()-started;controller.abort();assert.ok(chunk.value?.length&&firstByteMs<1000);checks.push({name:'first byte through Traefik',ok:true,firstByteMs});
+ // r44: the hub closes a channel no POST touched for deadAfterMs (45 s); with five pairs the checks since the first hello
+ // take longer than that, so the stream opens on a channel of a hello made just before it (same instance, same route).
+ const fresh=await post('/agent/v1/hello',a.agentCredential,hello(pairs[0],pairs[1],'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'));assert.equal(fresh.status,200);
+ const controller=new AbortController();const started=performance.now();const stream=await fetch(url+'/agent/v1/stream?channel='+JSON.parse(fresh.text).channel,{headers:{authorization:'Bearer '+a.agentCredential},signal:controller.signal});assert.equal(stream.status,200);assert.match(stream.headers.get('content-type'),/ndjson/);const chunk=await stream.body.getReader().read();const firstByteMs=performance.now()-started;controller.abort();assert.ok(chunk.value?.length&&firstByteMs<1000);checks.push({name:'first byte through Traefik',ok:true,firstByteMs});
  assert.equal((await post('/agent/v1/hello',b.agentCredential,hello(pairs[0],pairs[0],'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'))).status,200);
  const rerouted=await post('/mcp',b.token,{jsonrpc:'2.0',id:30,method:'tools/list',params:{}},{'mcp-session-id':sb.sid});assert.equal(rerouted.status,409);assert.match(rerouted.text,/SESSION_REROUTED/);assert.equal((await post('/mcp',b.token,init)).status,200);checks.push({name:'reroute and new MCP session',ok:true});
  const changing = hello(pairs[1],pairs[1],'cccccccccccccccccccccccccccccccc');
