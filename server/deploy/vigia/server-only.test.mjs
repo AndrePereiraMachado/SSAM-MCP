@@ -21,7 +21,10 @@ const files={program:read('agent/platforms/odc/studio/bridge/client/Program.cs')
 const release=parseAgentRelease({commit:'c20454cbc78f6165b7e3c58e8348adf81ad656a5',...files});
 const example=JSON.parse(fs.readFileSync(path.join(here,'config.example.json'),'utf8'));
 const config={agentPack:example.agentPack,agentPackByRuntime:example.agentPackByRuntime};
-const kernels=Object.values(JSON.parse(read('server/deploy/coolify/r1-kernels.json')));
+// The kernels and the window served at r43b (r1-kernels.json, versions.json), frozen here so that a later pair added to the
+// checkout (r44: 1.7.32/11.55.95) does not change what these rules are asked.
+const net10=['v98','v101','v102','v107','v106','v108'],net8=['v98','v96','v48','v45','v102','v107','v97'];
+const kernels=[{o11:'11.55.94',odc:'1.7.30',odcBridge:'v109',odcBridgeAccepted:net10},{o11:'11.55.93',odc:'1.7.29',odcBridge:'v108',odcBridgeAccepted:net8},{o11:'11.55.92',odc:'1.7.28',odcBridge:'v108',odcBridgeAccepted:net8},{o11:'11.55.94',odc:'1.7.31',odcBridge:'v109',odcBridgeAccepted:net10}];
 const studios=(odc='1.7.32',o11='11.55.95',tfm={})=>({odc:{version:odc,fullVersion:odc+'.1',tfm:tfm.odc??'net10.0'},o11:{version:o11,fullVersion:o11+'.1',tfm:tfm.o11??'net10.0'}});
 const pair={odc:'1.7.32',o11:'11.55.95',lanes:['odc','o11']};
 const served={odc:['1.7.32','1.7.31','1.7.30','1.7.29','1.7.28'],o11:['11.55.95','11.55.94','11.55.93','11.55.92']};
@@ -119,7 +122,8 @@ test('the post-deploy check posts the published pack hello to the new pair only'
 
 // The five-pair window.
 const image='docker.io/andrepereiramachado/ssam-server',sha='a'.repeat(64);
-const versions=JSON.parse(read('server/deploy/coolify/versions.json'));
+const r43b=(odc,o11)=>({tag:`prod-20261103-r43b-60e13ec-o${o11.replaceAll('.','')}-odc${odc.replaceAll('.','')}`,image,sha256:sha});
+const versions={window:4,odc:[['1.7.30','11.55.94'],['1.7.29','11.55.93'],['1.7.28','11.55.92'],['1.7.31','11.55.94']].map(([odc,o11])=>({version:odc,...r43b(odc,o11)})),o11:[['1.7.30','11.55.94'],['1.7.29','11.55.93'],['1.7.28','11.55.92'],['1.7.31','11.55.94']].map(([odc,o11])=>({version:o11,...r43b(odc,o11)}))};
 const withPair=(manifest,odc,o11,window=manifest.window)=>{const tag=`prod-x-o${o11.replaceAll('.','')}-odc${odc.replaceAll('.','')}`;return {window,odc:[...manifest.odc,{version:odc,tag,image,sha256:sha}],o11:[...manifest.o11,{version:o11,tag,image,sha256:sha}]};};
 const pairsOf=m=>m.odc.map(o=>o.version+'/'+m.o11.find(x=>x.tag===o.tag).version);
 test('maxWindow 5: a five-pair window rotates by version, keeping a pair appended by hand as the newest',()=>{
