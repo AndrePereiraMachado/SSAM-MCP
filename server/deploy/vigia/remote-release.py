@@ -308,6 +308,19 @@ def dispatch(request):
                 at = [m for m in server.get("Mounts", []) if m.get("Destination") == MODEL_PLUGINS_TARGET]
                 if len(at) != 1 or at[0].get("Type") != "volume" or at[0].get("RW") is not False:
                     raise RemoteError('MODEL_PLUGINS_MOUNT')
+        # A deployment: every running backend runs with the served list of the pin (gen-compose servedLists), so a retained
+        # backend keeps the list it was deployed with and the new one has the whole window.
+        if request.get("expectedServed"):
+            for server in running:
+                labels = server["Config"]["Labels"]
+                want = request["expectedServed"].get(labels.get("ssam.o11", "") + "|" + labels.get("ssam.odc", ""))
+                have = [e.split("=", 1)[1] for e in server["Config"].get("Env") or [] if e.startswith("SSAM_SERVED_VERSIONS=")]
+                try:
+                    same = want is not None and len(have) == 1 and json.loads(have[0]) == json.loads(want)
+                except ValueError:
+                    same = False
+                if not same:
+                    raise RemoteError('SERVED_LIST_CHANGED')
         presented = 0
         for server in running:
             labels = server["Config"]["Labels"]

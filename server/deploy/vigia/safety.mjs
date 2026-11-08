@@ -34,7 +34,10 @@ export function liveBaseline(snapshot){
   if(!row||row.reference!==service.image||row.kernel?.odc!==odc||row.kernel?.o11!==o11||!/^sha256:[a-f0-9]{64}$/.test(row.digest))fail('Live compose, kernels and running images disagree.','LIVE_INVALID');
   const ref=service.image.split('@')[0],colon=ref.lastIndexOf(':');
   if(colon<ref.lastIndexOf('/'))fail('Live image has no immutable tag.','LIVE_INVALID');
-  const entry={image:ref.slice(0,colon),tag:ref.slice(colon+1),sha256:row.digest.slice(7)};
+  // The served list the backend runs with is frozen with it (gen-compose servedLists): a rotation never changes it.
+  let served;const text=service.environment?.SSAM_SERVED_VERSIONS;
+  if(text!==undefined){try{served=JSON.parse(text);}catch{fail('A live backend has an unreadable SSAM_SERVED_VERSIONS.','LIVE_INVALID');}}
+  const entry={image:ref.slice(0,colon),tag:ref.slice(colon+1),sha256:row.digest.slice(7),...(served?{served}:{})};
   for(const [lane,v] of [['odc',odc],['o11',o11]])result[lane].push({version:v,...entry});
   kernels[`o11-${o11}-odc-${odc}`]=row.kernel;
  }
@@ -50,7 +53,12 @@ export function preserveCompose(snapshot,manifest){
    const template=old[0][1];
    const source=matched?structuredClone(matched[1]):{...structuredClone(desired),...structuredClone(Object.fromEntries(['environment','networks','deploy','mem_limit','cpus'].filter(k=>template[k]!==undefined).map(k=>[k,template[k]])))};
    source.labels={...source.labels,...desired.labels};source.environment={...source.environment};
-   for(const key of ['SSAM_BACKEND_NAME','SSAM_RUNTIME_DIR','SSAM_SERVED_VERSIONS'])source.environment[key]=desired.environment[key];
+   for(const key of ['SSAM_BACKEND_NAME','SSAM_RUNTIME_DIR'])source.environment[key]=desired.environment[key];
+   // A retained backend keeps the served list it runs with (keepServed, r44): the manifest must carry it unchanged, or nothing
+   // is written. A new backend takes the new window's list.
+   const liveServed=matched?matched[1].environment?.SSAM_SERVED_VERSIONS:undefined;
+   if(liveServed!==undefined&&liveServed!==desired.environment.SSAM_SERVED_VERSIONS)fail(`The retained backend ${desired.labels['ssam.odc']}/${desired.labels['ssam.o11']} would change its served list (${liveServed} -> ${desired.environment.SSAM_SERVED_VERSIONS}); nothing is written.`,'SERVED_LIST_CHANGED');
+   source.environment.SSAM_SERVED_VERSIONS=liveServed??desired.environment.SSAM_SERVED_VERSIONS;
    if(!matched){source.image=desired.image;source.volumes=structuredClone(desired.volumes);}
    // A retained backend deployed before the plugins mount gets the reviewed one; anything else at that target stops here.
    else{const at=(source.volumes??[]).filter(v=>mountTarget(v)===PLUGINS.target);if(!at.length)source.volumes=[...(source.volumes??[]),structuredClone(desired.volumes.find(reviewedPlugins))];else if(at.length!==1||!reviewedPlugins(at[0]))fail(`The live backend ${name} mounts something else at ${PLUGINS.target}; owner review is required.`,'MODEL_PLUGINS_CONFLICT');}

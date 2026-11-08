@@ -59,7 +59,8 @@ for (const [name, pair] of Object.entries(kernels)) test(`R39: ${name} gates pre
 // net10 pair of v1 with ODC Studio 1.7.31: the same v106 metadata, the agent pack's v107 accepted (with reconcile-merge), and
 // the 1.7.31 Studio is served there, while the 1.7.30 kernel does not take it.
 test('R4: the 1.7.31 pair serves ODC Studio 1.7.31 with the v1 net10 bridge metadata; v1-v3 unchanged', () => {
-  assert.deepEqual(Object.keys(kernels), ['v1', 'v2', 'v3', 'v4']);
+  // r44 appends v5 after v4: the first four keep their names and order.
+  assert.deepEqual(Object.keys(kernels).slice(0, 4), ['v1', 'v2', 'v3', 'v4']);
   assert.deepEqual({ ...kernels.v4, odc: kernels.v1.odc }, kernels.v1);
   assert.equal(kernels.v4.odc, '1.7.31');
   const served = { odc: ['1.7.30', '1.7.29', '1.7.28', '1.7.31'], o11: ['11.55.94', '11.55.93', '11.55.92', '11.55.94'] };
@@ -70,4 +71,45 @@ test('R4: the 1.7.31 pair serves ODC Studio 1.7.31 with the v1 net10 bridge meta
   assert.equal(compatibility(h('v107'), v4, ['odc', 'o11']).odc.code, 'AGENT_PACK_MISMATCH', 'v107 without reconcile-merge');
   assert.equal(compatibility(h('v97'), v4, ['odc', 'o11']).odc.code, 'AGENT_PACK_MISMATCH', 'v97');
   assert.notEqual(compatibility(withCommands(h('v107')), { ...kernels.v1, servedVersions: served }, ['odc', 'o11']).odc.ok, true, 'the 1.7.30 kernel does not serve 1.7.31');
+});
+// r44 (ODC Studio 1.7.32.11065 / Service Studio 11.55.95.65352): a fifth pair, appended after v1-v4 so their names, kernels, images
+// and the default stay as they were; the same net10 bridge metadata as v1 and v4. The hello is the one the published app 0.2.7
+// sends (installer pack pack-r43-027-native-bc680e70a2a1: ODC bridge v108, thin O11 bridges built for 11.55.94/.93/.92, the
+// native core's command list): it must not get AGENT_PACK_MISMATCH on either lane of the new pair.
+const ODC_COMMANDS_027 = ['status', 'wait', 'authorize', 'open', 'snapshot', 'latest', 'check-base', 'preview', 'merge', 'reconcile-merge', 'publish',
+  'publish-status', 'publish-log', 'dismiss-dialog', 'close', 'module-info', 'assets', 'consumers', 'create', 'create-app', 'templates',
+  'template-download', 'refresh-references', 'reference-snapshot', 'reference-producers', 'data', 'data-insert', 'data-update', 'data-delete',
+  'portal-call', 'portal-session', 'auth-status', 'stop', 'query-test', 'merge:prefer-foreign'];
+const app027 = (odc, o11) => ({ agent: { version: '0.4.13-native', odcCommands: ODC_COMMANDS_027 },
+  studios: { odc: { installed: { version: odc } }, o11: { installed: { version: o11 } } },
+  pack: { id: 'pack-r43-027-native-bc680e70a2a1', lanes: ['odc', 'o11'], odcBridge: 'v108', o11BuiltFor: '11.55.94', o11Hook: 'dev', o11Builds: ['11.55.94', '11.55.93', '11.55.92'] } });
+const served5 = { odc: ['1.7.30', '1.7.29', '1.7.28', '1.7.31', '1.7.32'], o11: ['11.55.94', '11.55.93', '11.55.92', '11.55.95'] };
+test('r44: the 1.7.32/11.55.95 pair serves the app 0.2.7 hello on both lanes; v1-v4 unchanged', () => {
+  assert.deepEqual(Object.keys(kernels), ['v1', 'v2', 'v3', 'v4', 'v5']);
+  assert.deepEqual({ ...kernels.v5, odc: kernels.v1.odc, o11: kernels.v1.o11 }, kernels.v1);
+  assert.deepEqual({ ...kernels.v4, odc: kernels.v1.odc }, kernels.v1);
+  assert.deepEqual([kernels.v5.o11, kernels.v5.odc], ['11.55.95', '1.7.32']);
+  const v5 = { ...kernels.v5, servedVersions: served5 };
+  const exact = compatibility(app027('1.7.32.11065', '11.55.95.65352'), v5, ['odc', 'o11']);
+  assert.equal(exact.odc.ok, true, JSON.stringify(exact.odc));
+  assert.equal(exact.o11.ok, true, JSON.stringify(exact.o11));
+  for (const pack of ['v106', 'v107', 'v108', 'v109']) assert.equal(compatibility({ ...app027('1.7.32.11065', '11.55.95.65352'), pack: { ...app027('', '').pack, odcBridge: pack } }, v5, ['odc', 'o11']).odc.ok, true, pack);
+  assert.equal(compatibility({ ...app027('1.7.32.11065', '11.55.95.65352'), agent: { version: '0.4.2-native', odcCommands: ['merge'] } }, v5, ['odc', 'o11']).odc.code, 'AGENT_PACK_MISMATCH', 'v108 without reconcile-merge');
+  assert.equal(compatibility({ ...app027('1.7.32.11065', '11.55.95.65352'), pack: { ...app027('', '').pack, odcBridge: 'v97' } }, v5, ['odc', 'o11']).odc.code, 'AGENT_PACK_MISMATCH', 'v97');
+  // The thin bridge of the pack is built for 11.55.94: in the window, so 11.55.95 is served with it (the agent warns, kinds.mjs
+  // O11_BRIDGE_BUILT_FOR_DIFFERS). Without the deployment window the 11.55.95 kernel alone would refuse that pack.
+  assert.equal(compatibility(app027('1.7.32.11065', '11.55.95.65352'), kernels.v5, ['odc', 'o11']).o11.code, 'AGENT_PACK_MISMATCH');
+  // The 1.7.31 and 1.7.30 kernels do not serve ODC 1.7.32 as their own version, and the 11.55.94 kernels do not serve 11.55.95 as theirs.
+  for (const name of ['v1', 'v4']) {
+    const other = compatibility(app027('1.7.32.11065', '11.55.95.65352'), { ...kernels[name], servedVersions: served5 }, ['odc', 'o11']);
+    assert.equal(other.odc.cause, 'STUDIO_VERSION_CHANGED', name);
+    assert.equal(other.o11.cause, 'STUDIO_VERSION_CHANGED', name);
+  }
+  // The other pairs keep serving the app 0.2.7 on their own Studios with the five-pair window.
+  for (const name of ['v1', 'v2', 'v3', 'v4']) {
+    const pair = kernels[name];
+    const own = compatibility(app027(pair.odc + '.1', pair.o11 + '.1'), { ...pair, servedVersions: served5 }, ['odc', 'o11']);
+    assert.equal(own.odc.ok, true, name + ' odc');
+    assert.equal(own.o11.ok, true, name + ' o11');
+  }
 });

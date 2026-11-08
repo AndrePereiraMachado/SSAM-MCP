@@ -18,6 +18,8 @@ const tmp=t=>{const d=fs.mkdtempSync(path.join(os.tmpdir(),'review-'));t.after((
 const sha='a'.repeat(64),entry=(version,tag)=>({version,tag,image:'registry/image',sha256:sha});
 const baseline={window:3,odc:[entry('1.7.30','prod-live')],o11:[entry('11.55.94','prod-live')]};
 const kernel={odc:'1.7.30',o11:'11.55.94',odcBridge:'v100'};
+// The watcher's own next manifest (rotateWindow): the retained pair carries the served list it runs with.
+const grown=()=>rotateWindow(baseline,{odc:'1.7.31',o11:'11.55.95',image:'registry/image',tag:'new',sha256:sha}).manifest;
 const live=()=>({compose:JSON.stringify(generateCompose(baseline)),backends:[{...kernel,reference:'registry/image:prod-live',digest:'sha256:'+sha,image:'running-id',kernel,budget:{tools:90,totalBytes:500,core:[]}}]});
 function transaction(t,failAt){
  const dir=tmp(t),calls=[],events=[];
@@ -42,7 +44,7 @@ test('R0 production baseline is the R1 window of three or more pairs, each with 
  assert.match(file('platforms/odc/facade/agent-hub.mjs'),/newerLocalBridge/);
 });
 test('R1 live kernels, tags and digests define the baseline and inconsistency fails closed',()=>{
- const s=live(),b=safety.liveBaseline(s);assert.deepEqual(b.manifest.odc,baseline.odc);
+ const s=live(),b=safety.liveBaseline(s);assert.deepEqual(b.manifest.odc,baseline.odc.map(e=>({...e,served:{odc:['1.7.30'],o11:['11.55.94']}})));
  s.backends[0].reference='registry/image:older';assert.throws(()=>safety.liveBaseline(s));
 });
 test('R1 already live pair is idle even when the checkout lists an older pair',async t=>{
@@ -172,7 +174,7 @@ test('R3-6 Retry cannot bypass an unacknowledged rollback failure',async t=>{
 });
 test('R3-7 a new backend inherits only allowed configuration and generated volumes',()=>{
  const s=live(),c=JSON.parse(s.compose),old=c.services['ssam-server-v1'];old.volumes.push({type:'bind',source:'/secret',target:'/secret'});old.privileged=true;old.environment.CUSTOM='keep';s.compose=JSON.stringify(c);
- const m={window:3,odc:[entry('1.7.31','new'),...baseline.odc],o11:[entry('11.55.95','new'),...baseline.o11]};const next=JSON.parse(safety.preserveCompose(s,m));
+ const m=grown();const next=JSON.parse(safety.preserveCompose(s,m));
  const added=Object.values(next.services).find(v=>v.labels?.['ssam.odc']==='1.7.31');assert.equal(added.privileged,undefined);assert.ok(!added.volumes.some(v=>v.type==='bind'));assert.equal(added.environment.CUSTOM,'keep');
 });
 // Review round 2, A2 (probe C:\t\r5\rev-vigia-so\probe-plugins.mjs): every backend, new or retained, mounts the reviewed
@@ -183,7 +185,7 @@ const backendsOf=c=>Object.entries(c.services).filter(([,s])=>s.labels?.['ssam.b
 test('R3-7b A2: the new backend gets the reviewed plugins mount; a retained one without it gets it; anything else there stops',()=>{
  const pins=JSON.parse(file('deploy/coolify/model-plugins.json'));assert.equal(pins.volume,'odc-model-plugins');assert.equal(pins.target,PLUG);
  assert.deepEqual(pins.files.map(f=>[f.name,f.sha256.slice(0,8)]),[['MobileUI-1.4.0.0.xif','b49d698a'],['MobileUI-1.5.0.0.xif','fca14051']]);
- const m={window:3,odc:[entry('1.7.31','new'),...baseline.odc],o11:[entry('11.55.95','new'),...baseline.o11]};
+ const m=grown();
  // A live compose deployed before the mount (the probe's case without its bind): every backend ends with exactly one, read-only.
  const s=live(),c=JSON.parse(s.compose);for(const [,b] of backendsOf(c))b.volumes=b.volumes.filter(v=>v.target!==PLUG);delete c.volumes['odc-model-plugins'];s.compose=JSON.stringify(c);
  const next=JSON.parse(safety.preserveCompose(s,m));assert.equal(backendsOf(next).length,2);
@@ -198,6 +200,54 @@ test('R3-7b A2: the new backend gets the reviewed plugins mount; a retained one 
  const twice=generateCompose(m);for(const [,x] of backendsOf(twice))x.volumes.push(structuredClone(pluginMounts(x)[0]));
  assert.throws(()=>safety.assertModelPlugins(twice),e=>e.code==='MODEL_PLUGINS_MOUNT');
  assert.doesNotThrow(()=>safety.assertModelPlugins(generateCompose(m)));
+});
+// Review round 3, N1 (probe C:\t\r5\rev-vigia-so\probe-keepserved.mjs): the r44 window (keepServed 4) recomposed by the
+// watcher for the next pair. Each retained backend keeps the served list it was deployed with; the new one serves the whole
+// new window; nothing reads keepServed after the rotation.
+const servedBy=c=>Object.fromEntries(backendsOf(c).map(([,s])=>[s.labels['ssam.odc']+'/'+s.labels['ssam.o11'],s.environment.SSAM_SERVED_VERSIONS]));
+const snapshotOf=compose=>({compose:JSON.stringify(compose),backends:backendsOf(compose).map(([,s])=>({odc:s.labels['ssam.odc'],o11:s.labels['ssam.o11'],reference:s.image,digest:'sha256:'+(s.labels['ssam.image.digest']?.replace(/^sha256:/,'')??sha),image:'id',kernel:{odc:s.labels['ssam.odc'],o11:s.labels['ssam.o11']}}))});
+const nextPair=v=>({odc:'1.7.33',o11:'11.55.96',image:v.odc[0].image,tag:'prod-next',sha256:'c'.repeat(64)});
+test('N1 the next pair leaves every retained backend\'s served list as deployed, from versions.json or from the live baseline',()=>{
+ const v=JSON.parse(file('deploy/coolify/versions.json').replace(/^\uFEFF/,''));assert.ok(v.keepServed>0,'the pinned window uses keepServed');
+ const live=generateCompose(v),before=servedBy(live);
+ // The r44 meaning, as deployed: the first keepServed backends share the list of the first keepServed pairs; the rest the window.
+ const lists=Object.values(before);assert.equal(new Set(lists.slice(0,v.keepServed)).size,1);assert.notEqual(lists[0],lists.at(-1));
+ for(const source of [v,safety.liveBaseline(snapshotOf(live)).manifest]){
+  const r=rotateWindow(source,nextPair(v),{maxWindow:6});
+  assert.equal(r.manifest.keepServed,undefined);
+  const next=JSON.parse(safety.preserveCompose(snapshotOf(live),r.manifest)),after=servedBy(next);
+  const retained=Object.keys(after).filter(k=>k in before);assert.ok(retained.length>=4,retained.join());
+  for(const k of retained)assert.equal(after[k],before[k],k);
+  const fresh=JSON.parse(after['1.7.33/11.55.96']),pairs=Object.keys(after).map(k=>k.split('/'));
+  assert.deepEqual([...fresh.odc].sort(),[...new Set(pairs.map(p=>p[0]))].sort());assert.deepEqual([...fresh.o11].sort(),[...new Set(pairs.map(p=>p[1]))].sort());
+  // The frozen lists ride the pinned versions.json: regenerating it gives the same lists, and a second rotation keeps them.
+  assert.deepEqual(servedBy(generateCompose(JSON.parse(JSON.stringify(r.manifest)))),after);
+  const again=rotateWindow(r.manifest,{...nextPair(v),odc:'1.7.34',o11:'11.55.97',tag:'prod-after'},{maxWindow:7});
+  const third=servedBy(JSON.parse(safety.preserveCompose({compose:JSON.stringify(next)},again.manifest)));
+  for(const k of Object.keys(third).filter(k=>k in after))assert.equal(third[k],after[k],k);
+ }
+});
+test('N1 a manifest that would change a retained backend\'s served list stops before anything is written',()=>{
+ const v=JSON.parse(file('deploy/coolify/versions.json').replace(/^\uFEFF/,'')),live=generateCompose(v);
+ // keepServed dropped (what the watcher did before this fix): the retained backends would learn the newer O11.
+ const naive={...structuredClone(v),window:6,odc:[{...v.odc[0],...nextPair(v),version:'1.7.33'},...v.odc],o11:[{...v.o11[0],...nextPair(v),version:'11.55.96'},...v.o11]};delete naive.keepServed;
+ for(const lane of ['odc','o11'])naive[lane][0]={version:naive[lane][0].version,image:v.odc[0].image,tag:'prod-next',sha256:'c'.repeat(64)};
+ assert.throws(()=>safety.preserveCompose(snapshotOf(live),naive),e=>e.code==='SERVED_LIST_CHANGED'&&/nothing is written/.test(e.message));
+});
+test('N1 the live baseline carries each backend\'s served list and refuses an unreadable one',()=>{
+ const s=live(),b=safety.liveBaseline(s);assert.deepEqual(b.manifest.o11[0].served,{odc:['1.7.30'],o11:['11.55.94']});
+ const c=JSON.parse(s.compose);c.services['ssam-server-v1'].environment.SSAM_SERVED_VERSIONS='{';s.compose=JSON.stringify(c);
+ assert.throws(()=>safety.liveBaseline(s),e=>e.code==='LIVE_INVALID');
+});
+test('N1 frozen served lists are validated: one list per pair, three-part versions, the pair\'s own versions, keepServed in range',async()=>{
+ const {servedLists}=await mod('deploy/coolify/gen-compose.mjs');
+ const served={odc:['1.7.31','1.7.30'],o11:['11.55.95','11.55.94']};
+ const m=()=>({window:3,odc:[entry('1.7.31','new'),{...entry('1.7.30','prod-live'),served:{odc:['1.7.30'],o11:['11.55.94']}}],o11:[entry('11.55.95','new'),{...entry('11.55.94','prod-live'),served:{odc:['1.7.30'],o11:['11.55.94']}}]});
+ assert.deepEqual(servedLists(m()).map(t=>JSON.parse(t)),[served,{odc:['1.7.30'],o11:['11.55.94']}]);
+ const bad=[x=>{x.o11[1].served={odc:['1.7.30'],o11:['11.55.94','11.55.95']};},x=>{delete x.o11[1].served;},x=>{for(const l of ['odc','o11'])x[l][1].served={odc:['1.7.31'],o11:['11.55.94']};},
+  x=>{for(const l of ['odc','o11'])x[l][1].served={odc:['1.7'],o11:['11.55.94']};},x=>{for(const l of ['odc','o11'])x[l][1].served={odc:['1.7.30','1.7.30'],o11:['11.55.94']};},
+  x=>{for(const l of ['odc','o11'])x[l][1].served={odc:['1.7.30'],o11:['11.55.94'],extra:[]};},x=>{for(const l of ['odc','o11'])x[l][1].served='{"odc":["1.7.30"]}';},x=>{x.keepServed=3;},x=>{x.keepServed=-1;}];
+ for(const change of bad){const x=m();change(x);assert.throws(()=>servedLists(x),/served|keepServed/,change.toString());}
 });
 test('R3-8 packaged-process detection uses Windows Package.Current',()=>{assert.match(file('deploy/vigia/vault.ps1'),/Windows.ApplicationModel.Package.*::Current/);assert.doesNotMatch(file('deploy/vigia/vault.ps1'),/APPX_PACKAGE_FAMILY_NAME/);});
 test('R3-9 snapshot cleanup retains live attempts plus five newest snapshots',t=>{

@@ -2,7 +2,7 @@
 // the owner reads. No process, Docker, Git or network here (runtime.mjs does that), so every rule is testable alone.
 import fs from 'node:fs';
 import path from 'node:path';
-import {versionPairs,generateCompose} from '../coolify/gen-compose.mjs';
+import {versionPairs,generateCompose,servedLists} from '../coolify/gen-compose.mjs';
 export const LANES=['odc','o11'];
 export const STUDIO_NAME={odc:'ODC Studio',o11:'Service Studio'};
 export const version=value=>/^(\d+\.\d+\.\d+)/.exec(String(value??''))?.[1]??null;
@@ -45,10 +45,15 @@ export const windowLimit=(config,manifest)=>config?.maxWindow??Math.max(4,manife
 // Newest first by ODC Studio, then Service Studio: the order in which pairs stay in the window.
 const newerPair=(a,b)=>compareVersion(b.odc,a.odc)||compareVersion(b.o11,a.o11);
 export function rotateWindow(manifest,pair,state={}){
- const old=versionPairs(manifest),window=manifest.window??3;
+ const old=versionPairs(manifest),window=manifest.window??3,lists=servedLists(manifest);
  pair={odc:newestServed(manifest,'odc'),o11:newestServed(manifest,'o11'),...pair};
- let entries=[{...pair},...old.filter(p=>p.odc!==pair.odc||p.o11!==pair.o11).map(p=>{
-  const at=manifest.odc.find(x=>x.version===p.odc&&p.image.startsWith(x.image+':'+x.tag));return {odc:p.odc,o11:p.o11,...at};
+ // Every pair the window keeps freezes the served list it runs with (its own, keepServed's, or the whole window it was
+ // deployed with: servedLists), so it keeps serving a newer Service Studio "with the newer note" instead of refusing it as
+ // served elsewhere (the router reaches the new pair only through its ODC version). The new pair serves the whole new
+ // window. keepServed itself is not carried: once the order changes, only these per-pair lists keep its meaning.
+ const {served:_drop,...fresh}=pair;
+ let entries=[{...fresh},...old.map((p,i)=>({p,i})).filter(({p})=>p.odc!==pair.odc||p.o11!==pair.o11).map(({p,i})=>{
+  const at=manifest.odc.find(x=>x.version===p.odc&&p.image.startsWith(x.image+':'+x.tag));const {served,...rest}=at;return {odc:p.odc,o11:p.o11,...rest,served:JSON.parse(lists[i])};
  })];
  const now=state.now??Date.now(),held=[];
  const recent=p=>Object.entries(state.tokens??{}).some(([token,data])=>{
@@ -64,7 +69,7 @@ export function rotateWindow(manifest,pair,state={}){
  const limit=state.maxWindow??windowLimit(null,manifest);
  if(!Number.isInteger(limit)||limit<3||entries.length>limit)throw Object.assign(Error(limit<window?`maxWindow (${limit}) is below the window the manifest already serves (${window}); raise maxWindow in the watcher configuration.`:'Active clients require a window above the configured limit; owner review is required.'),{code:'WINDOW_LIMIT',environmental:true});
  const next={window:Math.max(window,entries.length),odc:[],o11:[]};
- for(const p of entries)for(const lane of LANES)next[lane].push({version:p[lane],tag:p.tag,image:p.image,...(p.sha256?{sha256:p.sha256}:{})});
+ for(const p of entries)for(const lane of LANES)next[lane].push({version:p[lane],tag:p.tag,image:p.image,...(p.sha256?{sha256:p.sha256}:{}),...(p.served?{served:structuredClone(p.served)}:{})});
  versionPairs(next);
  const leaving={};for(const lane of LANES)leaving[lane]=[...new Set(manifest[lane].map(x=>x.version))].filter(v=>!next[lane].some(x=>x.version===v));
  const affected=[];for(const [token,data]of Object.entries(state.tokens??{}))for(const lane of LANES)if(leaving[lane].includes(version(data[lane]?.installed)))affected.push({token,customer:data.customer??null,lane,version:version(data[lane].installed),lastSeen:data.seen??null});

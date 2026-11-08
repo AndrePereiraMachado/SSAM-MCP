@@ -64,6 +64,52 @@ test('three deployed releases route to the matching kernel for both lanes', () =
   }
 });
 
+// r44 (field, 2026-11-08): with v4 serving ODC 1.7.31, an ODC Studio 1.7.32 on the default backend (kernel 1.7.30) was told
+// "This request uses the newest served version" with served 1.7.30, read as "the server serves up to 1.7.30". The warning
+// names the version that ran and the newest version of the whole window, from the window, never the backend's own kernel.
+test('a Studio newer than the window names the newest served version of the window, not only the backend that ran', () => {
+  const v1 = { odc: '1.7.30', o11: '11.55.94', odcBridge: 'v109', builds: { odc: '1.7.30.10980', o11: '11.55.94.65328' },
+    servedVersions: { odc: ['1.7.30', '1.7.29', '1.7.28', '1.7.31'], o11: ['11.55.94', '11.55.93', '11.55.92'] } };
+  const odc = studioIdentity('odc', '1.7.32.11065', v1);
+  assert.equal(odc.relation, 'newer');
+  assert.equal(odc.newest, '1.7.31');
+  const warning = studioWarningOf(odc);
+  assert.equal(warning.code, 'studioNewerThanServed');
+  assert.equal(warning.served, '1.7.30.10980');
+  assert.equal(warning.newestServed, '1.7.31');
+  assert.match(warning.userMessage, /ODC Studio 1\.7\.32\.11065/);
+  assert.match(warning.userMessage, /newest ODC Studio this server serves is 1\.7\.31/);
+  assert.match(warning.userMessage, /ran with ODC Studio 1\.7\.30\.10980/);
+  assert.doesNotMatch(warning.userMessage, /uses the newest served version/);
+  assert.doesNotMatch(JSON.stringify(warning), /kernel|\.mjs|C:\\|stack|[ãõç]/);
+  // The backend that ran is the newest of its lane: one version, named once.
+  const o11 = studioWarningOf(studioIdentity('o11', '11.55.95.65352', v1));
+  assert.equal(o11.newestServed, '11.55.94');
+  assert.match(o11.userMessage, /ran with Service Studio 11\.55\.94\.65328, the newest Service Studio this server serves/);
+});
+// r44: a fifth pair (O11 11.55.95 / ODC 1.7.32) takes a machine with ODC Studio 1.7.32 and Service Studio 11.55.94 (the router
+// selects by ODC); its O11 lane is served elsewhere in the window, so the one action is to update Service Studio to the
+// backend's version. The text names that version from the identity, for every pair, not only for the 11.55.94 backend.
+test('a mixed machine on any pair gets the exact O11 update step from the backend version', () => {
+  const window = { odc: ['1.7.30', '1.7.29', '1.7.28', '1.7.31', '1.7.32'], o11: ['11.55.94', '11.55.93', '11.55.92', '11.55.95'] };
+  const v5 = { o11: '11.55.95', odc: '1.7.32', odcBridge: 'v109', odcBridgeAccepted: ['v98', 'v101', 'v102', 'v107', 'v106', 'v108'], servedVersions: window };
+  const hello = o11 => ({ agent: { odcCommands: ['merge', 'reconcile-merge'] },
+    studios: { odc: { installed: { version: '1.7.32.11065' } }, o11: { installed: { version: o11 } } },
+    pack: { lanes: ['odc', 'o11'], odcBridge: 'v108', o11BuiltFor: '11.55.94', o11Hook: 'dev' } });
+  const mixed = compatibility(hello('11.55.94.65328'), v5, ['odc', 'o11']);
+  assert.equal(mixed.odc.ok, true);
+  assert.equal(mixed.o11.cause, 'STUDIO_VERSION_CHANGED');
+  assert.match(mixed.o11.message, /Update Service Studio to 11\.55\.95, open it again, and reconnect the SSAM Agent/);
+  assert.match(studioRefusal(mixed.o11.studio).userMessage, /The ODC lane remains available/);
+  assert.match(studioWarningOf(mixed.o11.studio).userMessage, /Update Service Studio to 11\.55\.95/);
+  // The 11.55.94 backends keep their text; a Service Studio newer than the backend is never told to update to an older one.
+  const v1 = { o11: '11.55.94', odc: '1.7.30', odcBridge: 'v109', odcBridgeAccepted: ['v98', 'v101', 'v102', 'v107', 'v106', 'v108'], servedVersions: window };
+  assert.match(compatibility({ ...hello('11.55.93.1'), studios: { ...hello('').studios, odc: { installed: { version: '1.7.30.10980' } }, o11: { installed: { version: '11.55.93.1' } } } }, v1, ['odc', 'o11']).o11.message, /Update Service Studio to 11\.55\.94/);
+  const newer = compatibility({ ...hello('11.55.95.65352'), studios: { odc: { installed: { version: '1.7.30.10980' } }, o11: { installed: { version: '11.55.95.65352' } } } }, v1, ['odc', 'o11']).o11;
+  assert.equal(newer.cause, 'STUDIO_VERSION_CHANGED');
+  assert.doesNotMatch(newer.message, /Update Service Studio to/);
+});
+
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';

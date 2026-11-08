@@ -12,6 +12,7 @@ import {readListingBudget} from './smoke.mjs';
 import {refuseInRehearsal,assertPause,assertTime,canonicalComposeHash,cleanupSsh,cleanupRollback,liveBaseline,composeHash,unchanged,preserveCompose,modelPlugins} from './safety.mjs';
 import {bridgeMode,parseAgentRelease} from './server-only.mjs';
 import {windowPairs,pairId,version as threeOf} from './window.mjs';
+import {versionPairs,servedLists} from '../coolify/gen-compose.mjs';
 const here=path.dirname(fileURLToPath(import.meta.url));
 const hash=b=>createHash('sha256').update(b).digest('hex');
 const q=s=>"'"+String(s).replaceAll("'","'\\''")+"'";
@@ -258,7 +259,10 @@ export function createAutoRuntime(config,runtime) {
    // A deployment (never a rollback, which restores what was live) also checks the reviewed ODC model plugins in every backend
    // and that exactly one backend presented the published pack's hello.
    const extra=before?{}:{modelPlugins:modelPlugins(),...(Object.keys(o11Proven).length?{o11Proven}:{})};
-   return ssh(s,{action:'check',...expected,budget,expectedBackends:before,checkSources,...(before?{}:{modelPlugins:extra.modelPlugins,requirePresented:!!hello}),checkSource:checkSource(budget,expected.bridges?.offers??[],false,hello,extra)});
+   // A deployment: every running backend must run with the pin's served list (a retained one: the list it was deployed with).
+   const pairs=!before&&expected.pinned?versionPairs(expected.pinned):null;
+   const expectedServed=pairs?Object.fromEntries(servedLists(expected.pinned).map((text,i)=>[pairs[i].o11+'|'+pairs[i].odc,text])):null;
+   return ssh(s,{action:'check',...expected,budget,expectedBackends:before,checkSources,...(before?{}:{modelPlugins:extra.modelPlugins,requirePresented:!!hello,...(expectedServed?{expectedServed}:{})}),checkSource:checkSource(budget,expected.bridges?.offers??[],false,hello,extra)});
   },
   async event(name,value,s){
    runtime.log(`release ${name}: ${value.id}`);

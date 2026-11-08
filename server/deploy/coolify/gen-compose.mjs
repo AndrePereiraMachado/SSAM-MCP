@@ -20,18 +20,47 @@ export function versionPairs(manifest,window=manifest.window??3){
   return {name,odc:odc.version,o11:o11.version,image:`${odc.image}:${odc.tag}${odc.sha256?'@sha256:'+odc.sha256.replace(/^sha256:/,''):''}`};
  });
 }
+// The ODC model plugins (MobileUI for every Mobile UI app) are tenant binaries the ODC Studio caches in
+// LocalApplicationData\OutSystems\ODC Studio\Plugins; the kernel children get a closed environment (no HOME,
+// no ANVIL_ODC_PLUGINS_DIR), so .NET falls back to the passwd home of uid 10001 (/tmp): every backend mounts the
+// owner-staged plugin store read-only exactly there (OdcModelPlugins.CacheDirectory).
+export const MODEL_PLUGINS_VOLUME='odc-model-plugins';
+export const MODEL_PLUGINS_TARGET='/tmp/.local/share/OutSystems/ODC Studio/Plugins';
+const servedOf=pairs=>JSON.stringify({odc:[...new Set(pairs.map(p=>p.odc))],o11:[...new Set(pairs.map(p=>p.o11))]});
+const threeParts=list=>Array.isArray(list)&&list.length>0&&list.every(v=>/^\d+\.\d+\.\d+$/.test(v))&&new Set(list).size===list.length;
+// The SSAM_SERVED_VERSIONS of each backend, in pair order. A backend's identity check counts a Studio served by a newer pair
+// as served elsewhere (refused), while the router only reaches that pair through its ODC version, so an older backend that
+// learns of a newer O11 would refuse a client (ODC of its own, newer O11) it serves today with a "newer" note. So:
+// - served on a pair's entries (the same on its ODC and O11 entry): that backend's frozen list. The watcher records it for
+//   every pair it keeps (window.mjs rotateWindow), so a later rotation never changes a running backend's list;
+// - else keepServed N (r44): the first N backends keep the served list of the first N pairs (the window they were deployed with);
+// - else the whole window.
+export function servedLists(manifest,{window=manifest.window??3}={}){
+ const pairs=versionPairs(manifest,window),keep=manifest.keepServed??0;
+ if(!Number.isInteger(keep)||keep<0||keep>pairs.length)throw new Error('Invalid keepServed.');
+ const all=servedOf(pairs),kept=servedOf(pairs.slice(0,keep));
+ return pairs.map((p,i)=>{
+  const odc=manifest.odc[i],o11=manifest.o11.find(o=>o.tag===odc.tag&&o.image===odc.image);
+  if(odc.served===undefined&&o11.served===undefined)return i<keep?kept:all;
+  const f=odc.served;
+  if(JSON.stringify(f)!==JSON.stringify(o11.served))throw new Error('A pair must freeze one served list on both lanes.');
+  if(!f||typeof f!=='object'||Object.keys(f).sort().join()!=='o11,odc'||!threeParts(f.odc)||!threeParts(f.o11)||!f.odc.includes(p.odc)||!f.o11.includes(p.o11))throw new Error('Invalid frozen served list.');
+  return JSON.stringify({odc:f.odc,o11:f.o11});
+ });
+}
 export function generateCompose(manifest,{window=manifest.window??3}={}){
  // Coolify 4.4.6 corrupts image@sha256 references. Immutable tags are checked against the recorded digest.
  const pairs=versionPairs(manifest,window).map(p=>({...p,digest:p.image.split('@')[1]??null,image:p.image.split('@')[0]})),c=structuredClone(template),source=c.services['ssam-server'];
+ // Each backend's served list: its frozen one, keepServed, or the whole window (servedLists).
+ const lists=servedLists(manifest,{window});
  delete c.name;c.networks.default={};c.volumes={'server-state':{},friction:{},'runtime-css':{}};
- const served=JSON.stringify({odc:[...new Set(pairs.map(p=>p.odc))],o11:[...new Set(pairs.map(p=>p.o11))]});
  const routing=pairs.map((p,i)=>({name:p.name,url:`http://ssam-server-v${i+1}:7310`,odc:p.odc,o11:p.o11,default:i===0}));
  delete c.services['ssam-server'];
  for(const service of Object.values(c.services)){delete service.labels;service.image=pairs[0].image;}
  pairs.forEach((p,i)=>{
   const s=structuredClone(source);s.image=p.image;
   s.labels={'ssam.backend':'true','ssam.odc':p.odc,'ssam.o11':p.o11,'ssam.default':String(i===0),...(p.digest?{'ssam.image.digest':p.digest}:{})};
-  Object.assign(s.environment,{SSAM_BACKEND_NAME:p.name,SSAM_RUNTIME_DIR:`/data/server/versions/${p.name}`,SSAM_SERVED_VERSIONS:served});
+  Object.assign(s.environment,{SSAM_BACKEND_NAME:p.name,SSAM_RUNTIME_DIR:`/data/server/versions/${p.name}`,SSAM_SERVED_VERSIONS:lists[i]});
   for(const v of s.volumes)if(['cache','odc-features'].includes(v.source)){v.source=`${v.source}-${p.name.replaceAll('.','-')}`;c.volumes[v.source]={};}
   c.services[`ssam-server-v${i+1}`]=s;
  });

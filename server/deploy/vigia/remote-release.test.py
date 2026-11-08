@@ -45,6 +45,7 @@ class RemoteTests(unittest.TestCase):
         self.extra_mounts = []
         self.listing = [{"name": f["name"], "sha256": f["sha256"]} for f in PINS["files"]]
         self.missing_volume = False
+        self.env = ["SSAM_BACKEND_NAME=o11-11.55.93-odc-1.7.29", "SSAM_SERVED_VERSIONS={\"odc\":[\"1.7.29\"],\"o11\":[\"11.55.93\"]}"]
         self.receipt = {"ok": True, "kernel": {"odc": "1.7.29", "o11": "11.55.93"}, "budget": {"tools": 90}, "telemetry": {"tokens": {}}}
 
     def docker(self, *args, data=None):
@@ -55,7 +56,7 @@ class RemoteTests(unittest.TestCase):
             self.assertIn("label=com.docker.compose.project=fixture", args)
             return b"backend"
         if args[0] == "inspect":
-            return json.dumps([{"Id": "backend", "Image": "sha256:old", "State": {"Running": True}, "Config": {"Image": "image:old", "Labels": {"ssam.o11": "11.55.93", "ssam.odc": "1.7.29"}}, "Mounts": [{"Type": "volume", "Name": "fixture_state"}] + self.extra_mounts}]).encode()
+            return json.dumps([{"Id": "backend", "Image": "sha256:old", "State": {"Running": True}, "Config": {"Image": "image:old", "Env": self.env, "Labels": {"ssam.o11": "11.55.93", "ssam.odc": "1.7.29"}}, "Mounts": [{"Type": "volume", "Name": "fixture_state"}] + self.extra_mounts}]).encode()
         if args[:2] == ("volume", "inspect"):
             if self.missing_volume:
                 raise RuntimeError("Remote command failed: docker")
@@ -219,6 +220,23 @@ class RemoteTests(unittest.TestCase):
         self.receipt = {"ok": False}
         with self.assertRaisesRegex(RuntimeError, "CHECK_RECEIPT"):
             self.request("check", checkSource="new")
+
+    # Review round 3, N1: a deployment fails when a running backend's served list is not the pin's (a retained backend's
+    # list changed, or none, two or an unreadable one); the comparison is by value, not by text.
+    def test_n1_check_fails_when_a_backend_served_list_differs_from_the_pin(self):
+        served = {"11.55.93|1.7.29": json.dumps({"odc": ["1.7.29"], "o11": ["11.55.93"]}, indent=1)}
+        self.assertTrue(self.request("check", checkSource="new", expectedServed=served)["ok"])
+        for env in (["SSAM_SERVED_VERSIONS={\"odc\":[\"1.7.30\",\"1.7.29\"],\"o11\":[\"11.55.93\"]}"], [], ["SSAM_SERVED_VERSIONS=not json"],
+                    ["SSAM_SERVED_VERSIONS={\"odc\":[\"1.7.29\"],\"o11\":[\"11.55.93\"]}"] * 2):
+            self.env = env
+            with self.assertRaisesRegex(RuntimeError, "SERVED_LIST_CHANGED"):
+                self.request("check", checkSource="new", expectedServed=served)
+        self.env = ["SSAM_SERVED_VERSIONS={\"odc\":[\"1.7.29\"],\"o11\":[\"11.55.93\"]}"]
+        with self.assertRaisesRegex(RuntimeError, "SERVED_LIST_CHANGED"):
+            self.request("check", checkSource="new", expectedServed={"11.55.94|1.7.30": served["11.55.93|1.7.29"]})
+        # A rollback restores the live compose verbatim and sends no list.
+        self.env = []
+        self.assertTrue(self.request("check", checkSource="new", checkSources={"11.55.93|1.7.29": "old"}, expectedBackends=[{"o11": "11.55.93", "odc": "1.7.29", "image": "sha256:old"}])["ok"])
 
     def test_generated_friction_volume_is_allowed_and_extra_mount_is_refused(self):
         self.assertTrue(self.prepare([{"type": "volume", "source": "friction", "target": "/data/friction"}])["ok"])
