@@ -44,6 +44,12 @@ export function liveBaseline(snapshot){
  if(rows.length!==ordered.length)fail('Live backend count differs from compose.','LIVE_INVALID');
  versionPairs(result);return {manifest:result,kernels,telemetry:snapshot.telemetry??{},snapshot};
 }
+// Two SSAM_SERVED_VERSIONS texts hold the same lists, by JSON value as the remote check compares them: spacing and key
+// order are no change, list order is. An unreadable text is never the same.
+export function sameServed(a,b){
+ const value=text=>{try{const v=JSON.parse(text);return v&&typeof v==='object'&&!Array.isArray(v)?JSON.stringify(Object.keys(v).sort().map(k=>[k,v[k]])):null;}catch{return null;}};
+ const x=value(a);return x!==null&&x===value(b);
+}
 export function preserveCompose(snapshot,manifest){
  const live=parseCompose(snapshot.compose),next=generateCompose(manifest),old=Object.entries(live.services).filter(([,s])=>s.labels?.['ssam.backend']==='true');
  const services={...live.services};for(const [name]of old)delete services[name];
@@ -57,7 +63,7 @@ export function preserveCompose(snapshot,manifest){
    // A retained backend keeps the served list it runs with (keepServed, r44): the manifest must carry it unchanged, or nothing
    // is written. A new backend takes the new window's list.
    const liveServed=matched?matched[1].environment?.SSAM_SERVED_VERSIONS:undefined;
-   if(liveServed!==undefined&&liveServed!==desired.environment.SSAM_SERVED_VERSIONS)fail(`The retained backend ${desired.labels['ssam.odc']}/${desired.labels['ssam.o11']} would change its served list (${liveServed} -> ${desired.environment.SSAM_SERVED_VERSIONS}); nothing is written.`,'SERVED_LIST_CHANGED');
+   if(liveServed!==undefined&&!sameServed(liveServed,desired.environment.SSAM_SERVED_VERSIONS))fail(`The retained backend ${desired.labels['ssam.odc']}/${desired.labels['ssam.o11']} would change its served list (${liveServed} -> ${desired.environment.SSAM_SERVED_VERSIONS}); nothing is written.`,'SERVED_LIST_CHANGED');
    source.environment.SSAM_SERVED_VERSIONS=liveServed??desired.environment.SSAM_SERVED_VERSIONS;
    if(!matched){source.image=desired.image;source.volumes=structuredClone(desired.volumes);}
    // A retained backend deployed before the plugins mount gets the reviewed one; anything else at that target stops here.

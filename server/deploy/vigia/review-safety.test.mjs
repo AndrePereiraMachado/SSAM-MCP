@@ -15,6 +15,7 @@ const {createBridgeStore}=await mod('platforms/odc/facade/bridge-store.mjs');
 const {officialUrl}=await mod('deploy/vigia/sources.mjs');
 const file=p=>fs.readFileSync(path.join(server,p),'utf8').replace(/\r\n/g,'\n');
 const tmp=t=>{const d=fs.mkdtempSync(path.join(os.tmpdir(),'review-'));t.after(()=>fs.rmSync(d,{recursive:true,force:true}));return d;};
+const SENT=Object.freeze({remote:true,webhook:false});
 const sha='a'.repeat(64),entry=(version,tag)=>({version,tag,image:'registry/image',sha256:sha});
 const baseline={window:3,odc:[entry('1.7.30','prod-live')],o11:[entry('11.55.94','prod-live')]};
 const kernel={odc:'1.7.30',o11:'11.55.94',odcBridge:'v100'};
@@ -29,7 +30,7 @@ function transaction(t,failAt){
   acquireReleaseLock:async()=>{calls.push('lock');return async()=>calls.push('unlock');},beginDeployment:()=>calls.push('protected'),endDeployment:()=>calls.push('unprotected'),
   preflightRemote:async()=>calls.push('memory'),assertLiveUnchanged:async()=>{calls.push('reread');rereads++;if(failAt===`reread${rereads}`)throw Object.assign(Error('changed'),{code:'LIVE_CHANGED',environmental:true});},
   backup:async()=>{calls.push('backup');return {ok:true};},composeFor:async()=> '{}',prepare:async()=>{calls.push('prepare');if(failAt==='prepare')throw Error('prepare');},
-  writeCompose:async()=>{calls.push('PATCH');return {rawSecret:'never-journal'};},deploy:async()=>{calls.push('deploy');return {rawSecret:'never-journal'};},checks:async()=>({ok:true}),restoreCompose:async()=>calls.push('restore'),event:async(n,v)=>events.push([n,v])};
+  writeCompose:async()=>{calls.push('PATCH');return {rawSecret:'never-journal'};},deploy:async()=>{calls.push('deploy');return {rawSecret:'never-journal'};},checks:async()=>({ok:true}),restoreCompose:async()=>calls.push('restore'),event:async(n,v)=>{events.push([n,v]);return SENT;}};
  return {dir,calls,events,ops,r};
 }
 test('R0 production baseline is the R1 window of three or more pairs, each with its kernel, and the newer O11 bridge policy',()=>{
@@ -72,7 +73,7 @@ test('R3 generated O11 policy keeps old dev agents and uses d1 only for download
  assert.equal(compatibility(hello,{...kernel,o11BridgeAccepted:['d1']},['odc','o11']).o11.ok,true);
 });
 test('R4 notifications are per attempt and rollback-failed is never deduplicated',async t=>{
- const d=tmp(t),events=[],ops={event:async n=>events.push(n)};
+ const d=tmp(t),events=[],ops={event:async n=>{events.push(n);return SENT;}};
  for(const at of ['one','one','two'])await releaseEvent(d,ops,'failed','pair','failed',{},at);
  for(let i=0;i<2;i++)await releaseEvent(d,ops,'rollback-failed','pair','failed',{},'two');
  assert.deepEqual(events,['failed','failed','rollback-failed','rollback-failed']);
@@ -248,6 +249,26 @@ test('N1 frozen served lists are validated: one list per pair, three-part versio
   x=>{for(const l of ['odc','o11'])x[l][1].served={odc:['1.7'],o11:['11.55.94']};},x=>{for(const l of ['odc','o11'])x[l][1].served={odc:['1.7.30','1.7.30'],o11:['11.55.94']};},
   x=>{for(const l of ['odc','o11'])x[l][1].served={odc:['1.7.30'],o11:['11.55.94'],extra:[]};},x=>{for(const l of ['odc','o11'])x[l][1].served='{"odc":["1.7.30"]}';},x=>{x.keepServed=3;},x=>{x.keepServed=-1;}];
  for(const change of bad){const x=m();change(x);assert.throws(()=>servedLists(x),/served|keepServed/,change.toString());}
+});
+// Review round 3 lows. R3-B3: the served list of a retained backend is compared by JSON value, as the remote check does.
+test('R3-B3 a retained backend\'s served list is compared by JSON value: spacing and key order are no change, another list is',()=>{
+ const s=live(),c=JSON.parse(s.compose),env=c.services['ssam-server-v1'].environment,kept=next=>Object.values(next.services).find(v=>v.labels?.['ssam.odc']==='1.7.30');
+ env.SSAM_SERVED_VERSIONS='{ "o11": ["11.55.94"], "odc": ["1.7.30"] }';s.compose=JSON.stringify(c);
+ assert.equal(kept(JSON.parse(safety.preserveCompose(s,grown()))).environment.SSAM_SERVED_VERSIONS,'{ "o11": ["11.55.94"], "odc": ["1.7.30"] }','the live text is kept as it is');
+ for(const other of ['{"odc":["1.7.30","1.7.29"],"o11":["11.55.94"]}','{"odc":["1.7.30"],"o11":["11.55.94"],"extra":[]}','{','[]']){
+  env.SSAM_SERVED_VERSIONS=other;s.compose=JSON.stringify(c);assert.throws(()=>safety.preserveCompose(s,grown()),e=>e.code==='SERVED_LIST_CHANGED',other);
+ }
+});
+// R3-B1: an event counts as sent only when the VPS journal or the webhook took it; a failed first notice is sent again.
+test('R3-B1 a release event is recorded only after the remote logger or the webhook took it',async t=>{
+ const d=tmp(t),sent=[];let receipt;const ops={event:async n=>{sent.push(n);if(receipt instanceof Error)throw receipt;return receipt;}};
+ const send=()=>releaseEvent(d,ops,'waiting','pair','client bridge update required',{},'reason-1','CLIENT_BRIDGE_UPDATE_REQUIRED');
+ for(receipt of [undefined,{remote:false,webhook:false},Error('ssh down'),1])await send();
+ assert.equal(sent.length,4,'nothing recorded: every round sends it again');assert.ok(!fs.existsSync(path.join(d,'release-events.json')));
+ receipt={remote:false,webhook:true};await send();receipt={remote:true,webhook:false};await send();await send();
+ assert.equal(sent.length,5,'the webhook took it: recorded, not sent again');
+ assert.ok(JSON.parse(fs.readFileSync(path.join(d,'release-events.json'),'utf8'))['pair:reason-1:waiting']);
+ receipt={remote:true,webhook:false};await releaseEvent(d,ops,'waiting','pair','m',{},'reason-2');await releaseEvent(d,ops,'waiting','pair','m',{},'reason-2');assert.equal(sent.length,6);
 });
 // Review round 2, B1 (R14/R3-10 flakiness): a manifest rewritten with the same size inside one timestamp tick kept the cached
 // verification. Here every metadata the cache sees is frozen; only the signed content changes ('owner' -> 'other', same size).
@@ -455,7 +476,7 @@ test('R5-5 an abandoned attempt has its own event with the cause code and -Retry
 });
 test('R5-6 accepted unsigned main is a notification every round (toast, webhook and VPS journal)',async t=>{
  const dir=tmp(t),events=[],secrets={synthetic:true};
- const runtime={secrets:async()=>secrets,executionSource:async()=>{},cleanupSsh:async()=>{},pause:async()=>{},event:async(n,v,s)=>events.push([n,v,s]),liveBaseline:async()=>({manifest:baseline}),manifest:()=>baseline,detect:async()=>[],observe:async x=>x,head:async()=> 'head'};
+ const runtime={secrets:async()=>secrets,executionSource:async()=>{},cleanupSsh:async()=>{},pause:async()=>{},event:async(n,v,s)=>{events.push([n,v,s]);return SENT;},liveBaseline:async()=>({manifest:baseline}),manifest:()=>baseline,detect:async()=>[],observe:async x=>x,head:async()=> 'head'};
  for(let i=0;i<2;i++)await round({automatic:true,acceptUnsignedMain:true,outDir:dir},runtime);
  assert.equal(events.filter(([n])=>n==='unsigned-main').length,2);assert.equal(events[0][2],secrets);
  events.length=0;await round({automatic:true,ownerSigningPublicKey:'ssh-ed25519 AAAA',outDir:dir},runtime);assert.equal(events.length,0);

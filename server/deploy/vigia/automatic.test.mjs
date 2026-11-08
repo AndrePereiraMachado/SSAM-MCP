@@ -20,6 +20,8 @@ import {composeHash} from './safety.mjs';
 const tmp=t=>{const p=fs.mkdtempSync(path.join(os.tmpdir(),'auto-'));t.after(()=>fs.rmSync(p,{recursive:true,force:true}));return p;};
 async function server(t,handler){const s=http.createServer(handler);await new Promise(r=>s.listen(0,'127.0.0.1',r));t.after(()=>new Promise(r=>s.close(r)));return `http://127.0.0.1:${s.address().port}`;}
 const digest='a'.repeat(64);
+// The receipt of an event the VPS journal took (auto-runtime event): releaseEvent records it as sent only then.
+const SENT=Object.freeze({remote:true,webhook:false});
 function release(dir){return {id:'o11-11.55.94-odc-1.7.30',dir,built:{image:'private/image',tag:'prod-test',sha256:digest},manifest:{window:3,odc:[{version:'1.7.30',tag:'prod-test',image:'private/image'}],o11:[{version:'11.55.94',tag:'prod-test',image:'private/image'}]},kernel:{odc:'1.7.30',o11:'11.55.94'},bridges:{offers:[]},features:'private'};}
 async function fixture(t,fail){
  const dir=tmp(t),calls=[],notices=[];const old={window:3,odc:[{version:'1.7.29',image:'private/image',tag:'prod-old',sha256:digest}],o11:[{version:'11.55.93',image:'private/image',tag:'prod-old',sha256:digest}]};const liveCompose=JSON.stringify(generateCompose(old));let compose=liveCompose,restarts=0;const file=path.join(dir,'snapshot.dpapi');fs.writeFileSync(file,Buffer.from(JSON.stringify({compose:liveCompose,backends:[{odc:'1.7.29',o11:'11.55.93',image:'old',budget:{tools:90,totalBytes:999999,core:[]}}]})).toString('base64'));const baseline={file,hash:composeHash(liveCompose),manifest:old,kernels:{}};
@@ -53,7 +55,7 @@ async function fixture(t,fail){
   publish:async()=>{calls.push('publish');if(fail==='partial')throw Error('partial registry publication');return {digest:'sha256:'+digest};},
   pinExecution:async()=>{calls.push('pin');return 'local-commit';},
   prepare:async()=>calls.push('prepare'),
-  event:async(name)=>notices.push(name)
+  event:async(name)=>{notices.push(name);return SENT;}
  };
  return {dir,calls,notices,config,ops,base,baseline,liveCompose,compose:()=>compose};
 }
@@ -288,7 +290,7 @@ test('server-only round waits for a client bridge update when no published pack 
 // Review round 3, N2: the waits only the owner ends reach him as release events (webhook, VPS journal line, local notice),
 // once for each new reason; a new reason the same day is a new notice, the same reason again is not a new event.
 test('N2: client-bridge and agent-release waits send one release event per new reason, and a new reason is not silenced that day',async t=>{
- const f=await fixture(t),s=serverOnlyRound(f,{tfm:'net11.0'}),waits=[];s.ops.event=async(name,value)=>waits.push({name,...value});
+ const f=await fixture(t),s=serverOnlyRound(f,{tfm:'net11.0'}),waits=[];s.ops.event=async(name,value)=>{waits.push({name,...value});return SENT;};
  const day=Date.parse('2026-11-08T12:00:00Z');s.config.clock=()=>day;
  assert.equal((await roundOf(s)).status,'deferred');
  assert.deepEqual(waits.filter(w=>w.name==='waiting').map(w=>w.code),['CLIENT_BRIDGE_UPDATE_REQUIRED']);
@@ -307,7 +309,7 @@ test('N2: client-bridge and agent-release waits send one release event per new r
  assert.equal(s.notes.filter(n=>n==='SSAM: client bridge update required').length,2,s.notes.join());
  assert.equal(readJournal(path.join(f.dir,id,'attempt.json')).status,'deferred');
  // The reviewed agent release that cannot be read waits with its own code.
- const g=await fixture(t),r=serverOnlyRound(g),other=[];r.ops.event=async(name,value)=>other.push({name,...value});g.base.agentReleaseFiles=async()=>({...agentFiles(),program:null});
+ const g=await fixture(t),r=serverOnlyRound(g),other=[];r.ops.event=async(name,value)=>{other.push({name,...value});return SENT;};g.base.agentReleaseFiles=async()=>({...agentFiles(),program:null});
  assert.equal((await roundOf(r)).status,'deferred');
  assert.deepEqual(other.filter(w=>w.name==='waiting').map(w=>w.code),['AGENT_RELEASE_REQUIRED']);assert.match(other.find(w=>w.name==='waiting').message,/reviewed agent release cannot be read/);
 });
@@ -321,6 +323,19 @@ test('N2: the waiting event goes to the webhook, the VPS journal (bounded code) 
  const line=runs.find(r=>r.action==='event');assert.deepEqual([line.event,line.id,line.code],['waiting','o11-11.55.94-odc-1.7.30','CLIENT_BRIDGE_UPDATE_REQUIRED']);
  assert.equal(posts.length,1);assert.equal(posts[0].event,'waiting');assert.equal(posts[0].code,'CLIENT_BRIDGE_UPDATE_REQUIRED');
  const {OWNER_WAITS}=await import('./pipeline.mjs');for(const code of Object.values(OWNER_WAITS))assert.match(code,/^[A-Z_]{1,40}$/);
+});
+// Review round 3, R3-B1: the adapter's receipt says which remote channel took the event (a local notice alone is none).
+test('R3-B1: the event receipt is the VPS journal answer and a 2xx webhook; a failed notify, ssh or webhook is false, never a throw',async t=>{
+ const f=await fixture(t);let status=200,remote='ok';
+ const hook=await server(t,async(req,res)=>{for await(const _ of req);res.writeHead(status);res.end('{}');});
+ const adapter=createAutoRuntime(f.config,{...f.base,notify:async()=>{throw Error('no toast');},async run(cmd,args,o){let r=null;try{r=JSON.parse(o?.input);}catch{}
+  if(r?.action==='event'){if(remote==='throw')throw Error('ssh down');return {stdout:JSON.stringify(remote==='ok'?{ok:true}:{ok:false,code:'REMOTE_FAILED'})};}return f.base.run(cmd,args,o);}});
+ const base=await adapter.secrets(),value={id:'pair',attempt:'reason-1',message:'m',code:'AGENT_RELEASE_REQUIRED'};
+ const receipt=async(s)=>adapter.event('waiting',value,s);
+ assert.deepEqual(await receipt({...base,webhookUrl:hook}),{remote:true,webhook:true});
+ status=500;remote='failed';assert.deepEqual(await receipt({...base,webhookUrl:hook}),{remote:false,webhook:false});
+ remote='throw';assert.deepEqual(await receipt(base),{remote:false,webhook:false});
+ status=204;assert.deepEqual(await receipt({...base,webhookUrl:hook}),{remote:false,webhook:true});
 });
 // Review round 3, N4: the round verifies the owner's O11 proof against its file, records it in release.json and checks it.
 test('N4: a verified O11 proof serves a Service Studio without its own build, is recorded in release.json and checked; free text waits',async t=>{
@@ -360,7 +375,7 @@ test('N3: plugins, receipt, hello and served-list codes of the remote keep their
  await unlock();
  // A deployment whose check finds a changed served list is rolled back; the event and the deployment journal carry the code.
  const g=await fixture(t),events=[],real=g.base.run;g.base.run=async(cmd,args,o)=>{if(requestOf(o)?.action==='check'&&!requestOf(o).rollback)return {stdout:JSON.stringify({ok:false,code:'SERVED_LIST_CHANGED'})};return real(cmd,args,o);};
- const ops={...g.ops,event:async(n,v)=>events.push([n,v.code])};
+ const ops={...g.ops,event:async(n,v)=>{events.push([n,v.code]);return SENT;}};
  const r=await releaseAutomatically(g.config,ops,release(g.dir));assert.equal(r.status,'rolled-back',JSON.stringify(r));assert.equal(r.cause,'SERVED_LIST_CHANGED');
  assert.deepEqual(events.find(([n])=>n==='failed'),['failed','SERVED_LIST_CHANGED']);
  assert.equal(readJournal(path.join(g.dir,'deployment.json')).failure.code,'SERVED_LIST_CHANGED');

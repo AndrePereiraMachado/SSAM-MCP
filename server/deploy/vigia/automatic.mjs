@@ -31,8 +31,12 @@ export async function releaseEvent(directory,ops,name,id,message,secrets,attempt
  if(fs.existsSync(file))events=JSON.parse(fs.readFileSync(file,'utf8'));
  const key=id+':'+attempt+':'+name;
  if(name!=='rollback-failed'&&events[key])return;
- events[key]=new Date().toISOString();atomic(file,events);
- await ops.event(name,{id,attempt,message,...(code?{code}:{})},secrets).catch(()=>{});
+ // The key is recorded only once the owner was reached beyond this machine: the VPS journal line (remote logger) or the
+ // webhook (ops.event's receipt {remote, webhook}). A local notice alone, a failed send or no receipt leaves it unrecorded,
+ // so the next round sends the event again.
+ const receipt=await ops.event(name,{id,attempt,message,...(code?{code}:{})},secrets).catch(()=>null);
+ if(receipt?.remote!==true&&receipt?.webhook!==true)return false;
+ events[key]=new Date().toISOString();atomic(file,events);return true;
 }
 export async function releaseAutomatically(config,ops,release){
  const {id,dir,built,manifest,kernel,bridges,features}=release;

@@ -272,9 +272,13 @@ export function createAutoRuntime(config,runtime) {
   },
   async event(name,value,s){
    runtime.log(`release ${name}: ${value.id}`);
-   await runtime.notify('SSAM: '+name,value.message);
-   await ssh(s,{action:'event',event:name,id:value.id,...(value.code?{code:value.code}:{})}).catch(()=>{});
-   if(s.webhookUrl)try{await fetch(s.webhookUrl,{method:'POST',redirect:'error',headers:{'content-type':'application/json'},body:JSON.stringify({event:name,...value}),signal:AbortSignal.timeout(15000)});}catch{}
+   try{await runtime.notify('SSAM: '+name,value.message);}catch{}
+   // The receipt says which remote channel took the event (releaseEvent records it only then): the VPS journal line and
+   // the webhook when configured (a 2xx answer).
+   const remote=await ssh(s,{action:'event',event:name,id:value.id,...(value.code?{code:value.code}:{})}).then(r=>r?.ok===true,()=>false);
+   let webhook=false;
+   if(s.webhookUrl)try{webhook=(await fetch(s.webhookUrl,{method:'POST',redirect:'error',headers:{'content-type':'application/json'},body:JSON.stringify({event:name,...value}),signal:AbortSignal.timeout(15000)})).ok;}catch{}
+   return {remote,webhook};
   }
  };
 }
