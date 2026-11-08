@@ -42,6 +42,7 @@
       "o11BuiltFor": "11.55.94"
     }
   },
+  "o11BridgeProven": {},
   "node": "C:/ssam-priv/tools/node/node.exe",
   "minFreeGb": 25,
   "retryHours": 12,

@@ -225,7 +225,7 @@ test('HTTP hello records amended bridge telemetry and suppresses a failed identi
 
 // Server-only bridge mode (the default): the round deploys the server pair only, against the published agent pack.
 const example=JSON.parse(fs.readFileSync(fileURLToPath(new URL('./config.example.json',import.meta.url)),'utf8'));
-const agentFiles=(edit=x=>x)=>{const at=rel=>edit(fs.readFileSync(fileURLToPath(new URL('../../../agent/'+rel,import.meta.url)),'utf8'));return {program:at('platforms/odc/studio/bridge/client/Program.cs'),kinds:at('agent/lib/kinds.mjs'),native:at('native/Ssam.Agent/StudioKinds.cs')};};
+const agentFiles=(edit=x=>x)=>{const at=rel=>edit(fs.readFileSync(fileURLToPath(new URL('../../../agent/'+rel,import.meta.url)),'utf8'));return {program:at('platforms/odc/studio/bridge/client/Program.cs'),kinds:at('agent/lib/kinds.mjs'),native:at('native/Ssam.Agent/StudioKinds.cs'),bridgeProject:at('platforms/odc/studio/bridge/Bridge.csproj')};};
 function serverOnlyRound(f,{tfm='net10.0',pack={},edit}={}){
  const events=f.calls,notes=[],runs=[];f.base.agentReleaseFiles=async()=>agentFiles(edit);f.config.agentReleaseCommit='c'.repeat(40);
  const original=f.base.run;f.base.run=async(cmd,args,options)=>{runs.push({cmd:String(cmd),args:args.map(String),input:options?.input});return original(cmd,args,options);};
@@ -235,6 +235,7 @@ function serverOnlyRound(f,{tfm='net10.0',pack={},edit}={}){
   test:async()=>{events.push('test');return {passed:1,total:1,failures:[]};},buildBridges:async()=>{events.push('bridges');throw Error('no bridge is built in server-only');},
   build:async()=>{events.push('image');return {...release(f.dir).built,odc:'1.7.30',o11:'11.55.94'};},
   smoke:async()=>{events.push('smoke');ops.smoked=ops.packHello;return {ok:true,publishedPack:!!ops.packHello};},
+  odcBinary:async a=>{events.push('odc references');ops.odcReferences=a;return {reference:'1.7.29',gaps:[],compared:[]};},
   propose:async()=>{throw Error('Approval must not be requested.');}};
  return {config,ops,notes,runs};
 }
@@ -249,6 +250,32 @@ test('server-only round deploys the server pair only: no client bridge build, no
  const check=s.runs.map(r=>{try{return JSON.parse(r.input);}catch{return null;}}).find(r=>r?.action==='check'&&!r.rollback);
  assert.match(check.checkSource,/"packHellos":\{"11\.55\.94\|1\.7\.30":\{"t":"hello"/);
  assert.ok(f.calls.indexOf('smoke')<f.calls.indexOf('publish'));
+ // M3: the published bridge's Studio references (Bridge.csproj of the release) are compared before any test, against the served ODC.
+ assert.ok(s.ops.odcReferences.references.includes('OutSystems.Model')&&s.ops.odcReferences.references.includes('Xilium.CefGlue.Common'),JSON.stringify(s.ops.odcReferences.references));
+ assert.deepEqual(s.ops.odcReferences.served,['1.7.29']);assert.equal(s.ops.odcReferences.candidate.version,'1.7.30');
+ assert.ok(f.calls.indexOf('odc references')<f.calls.indexOf('test'));
+ // B4 and A2: exactly one backend must present the published hello, and every backend must hold the pinned model plugins.
+ assert.equal(check.requirePresented,true);assert.deepEqual(check.modelPlugins.files.map(x=>x.name),['MobileUI-1.4.0.0.xif','MobileUI-1.5.0.0.xif']);
+ assert.match(check.checkSource,/"modelPlugins":\{"volume":"odc-model-plugins","target":"\/tmp\/\.local\/share\/OutSystems\/ODC Studio\/Plugins"/);
+ // The prepare request carries the same pins (the remote refuses a prepare whose plugins volume is missing or differs).
+ assert.match(fs.readFileSync(fileURLToPath(new URL('./auto-runtime.mjs',import.meta.url)),'utf8'),/action:'prepare'[^\n]*\n[^\n]*modelPlugins:modelPlugins\(\)\}\);/);
+});
+test('M3: a new ODC Studio whose assemblies no longer match the published bridge references waits, before tests, build and deploy',async t=>{
+ const f=await fixture(t),s=serverOnlyRound(f);
+ s.ops.odcBinary=async a=>{f.calls.push('odc references');return {reference:'1.7.29',gaps:['OutSystems.Model changed major version (13.0.0.0 -> 14.0.0.0)'],compared:[]};};
+ const result=await roundOf(s);assert.equal(result.status,'deferred');
+ assert.match(result.error,/client bridge update required: odc 1\.7\.30 runtime net10\.0 \(the published ODC bridge's Studio references do not resolve as in the served ODC Studio 1\.7\.29: OutSystems\.Model changed major version/);
+ for(const step of ['test','image','smoke','publish','compose','deploy'])assert.ok(!f.calls.includes(step),step);
+ assert.ok(fs.existsSync(path.join(f.dir,result.id,'odc-references.json')));
+});
+test('B3: an agent release the round cannot read waits with what to configure, never a failure',async t=>{
+ for(const files of [async()=>{throw Error('Agent commit is outside the approved release line.');},async()=>({...agentFiles(),program:null})]){
+  const f=await fixture(t),s=serverOnlyRound(f);f.base.agentReleaseFiles=files;
+  const result=await roundOf(s);assert.equal(result.status,'deferred',JSON.stringify(result));
+  assert.match(result.error,/The reviewed agent release cannot be read \(.*\)\. Server-only needs agentReleaseCommit/);
+  const attempt=readJournal(path.join(f.dir,result.id,'attempt.json'));assert.equal(attempt.code,'agent-release-required');
+  for(const step of ['bundle odc','test','image','publish'])assert.ok(!f.calls.includes(step),step);
+ }
 });
 test('server-only round waits for a client bridge update when no published pack covers the new Studio runtime, and touches nothing',async t=>{
  const f=await fixture(t),s=serverOnlyRound(f,{tfm:'net11.0'});

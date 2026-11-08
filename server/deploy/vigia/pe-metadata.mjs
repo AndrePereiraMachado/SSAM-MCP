@@ -6,6 +6,7 @@
 // decoded only when it is kept (at most 1024 bytes, once per index, 32 MiB and 262144 names per file); a result holds at
 // most 65536 entries; a file is at most 256 MiB. Anything that does not close is "unreadable metadata", never a guess.
 import fs from 'node:fs';
+import {createHash} from 'node:crypto';
 export const FEATURES_VALUES={namespace:'ServiceStudio.Common.FeatureManagement',name:'FeaturesValues'};
 const GUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 // The return type of a getter signature (ELEMENT_TYPE_*) the feature provider has a kind for.
@@ -105,7 +106,20 @@ export function readMetadata(input){
  // The user strings (#US: UTF-16 literals of ldstr, each with its trailing flag byte) of exactly chars characters, read
  // one by one: fn(text). The others are skipped without being decoded.
  const eachUserString=(chars,fn)=>{const s=streams['#US'];if(!s)return;for(let o=s.start+1;o<s.end;){if(b[o]===0){o++;continue;}const [length,used]=compressed(o,s.end);if(o+used+length>s.end)throw unreadable('a user string is cut');if(length===chars*2+1)fn(b.toString('utf16le',o+used,o+used+length-1));o+=used+length;}};
- return {rows,name,nameIs,blob,blobLength,fieldAt,methodAt,findTypeDef,ownedRanges,fieldNameIndex,methodIndexes,typeRefIs,eachMemberRef,eachConstant,constantOf,eachUserString,hasFieldPointers:rows[0x03]>0};
+ // The Assembly row (table 0x20): the start of every table up to it (ECMA-335 II.22, coded index widths II.24.2.6), then
+ // its version and public key. null when the file defines no assembly (a netmodule).
+ const assembly=()=>{
+  if(!rows[0x20])return null;
+  const cdx=(tables,bits)=>Math.max(...tables.map(t=>rows[t]??0))<(1<<(16-bits))?2:4;
+  const hasCA=cdx([0x06,0x04,0x01,0x02,0x08,0x09,0x0a,0x00,0x0e,0x17,0x14,0x11,0x1a,0x1b,0x20,0x23,0x26,0x27,0x28,0x2a,0x2c,0x2b],5),caType=cdx([0x06,0x0a],3);
+  const more={0x0c:hasCA+caType+bi,0x0d:cdx([0x04,0x08],1)+bi,0x0e:2+cdx([0x02,0x06,0x20],2)+bi,0x0f:2+4+idx(0x02),0x10:4+idx(0x04),0x11:bi,0x12:idx(0x02)+idx(0x14),0x13:idx(0x14),0x14:2+si+tdor,0x15:idx(0x02)+idx(0x17),0x16:idx(0x17),0x17:2+si+bi,0x18:2+idx(0x06)+cdx([0x14,0x17],1),0x19:idx(0x02)+cdx([0x06,0x0a],1)*2,0x1a:si,0x1b:bi,0x1c:2+cdx([0x04,0x06],1)+si+idx(0x1a),0x1d:4+idx(0x04),0x1e:8,0x1f:4};
+  let o=start[0x0b]+size[0x0b]*rows[0x0b];for(let t=0x0c;t<=0x1f;t++)o+=more[t]*rows[t];
+  const rowSize=4+8+4+bi+si+si;if(o+rowSize>T.end)throw unreadable('the Assembly table is outside its stream');
+  const version=[0,1,2,3].map(k=>u16(o+4+k*2,'the assembly version')).join('.');
+  const key=blob(rd(o+16,bi));
+  return {name:name(rd(o+16+bi,si)),version,publicKey:key.length?Buffer.from(key):null};
+ };
+ return {rows,name,nameIs,blob,blobLength,fieldAt,methodAt,findTypeDef,ownedRanges,fieldNameIndex,methodIndexes,typeRefIs,eachMemberRef,eachConstant,constantOf,eachUserString,assembly,hasFieldPointers:rows[0x03]>0};
 }
 // The return type of a method signature: calling convention, parameter count, custom modifiers, then the type.
 function returnKind(signature){
@@ -158,4 +172,11 @@ export function userStringGuids(dll){
  const out=new Map();
  readMetadata(dll).eachUserString(36,text=>{if(GUID.test(text)){const key=text.toLowerCase();if(!out.has(key))keep(out,key,true,'GUID literals');}});
  return new Set(out.keys());
+}
+// The identity of an assembly file (its AssemblyDef): name, four-part version and public key token (the last 8 bytes of
+// the SHA-1 of the public key, reversed; null when not strong-named). null for a module without an assembly.
+export function assemblyIdentity(file){
+ const a=readMetadata(file).assembly();if(!a)return null;
+ const token=a.publicKey?Buffer.from(createHash('sha1').update(a.publicKey).digest().subarray(-8)).reverse().toString('hex'):null;
+ return {name:a.name,version:a.version,publicKeyToken:token};
 }

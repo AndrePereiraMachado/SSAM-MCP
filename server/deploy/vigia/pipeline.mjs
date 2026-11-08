@@ -7,6 +7,7 @@ import {releaseAutomatically,releaseEvent} from './automatic.mjs';
 import path from 'node:path';
 import {LANES,STUDIO_NAME,ownerCommand,missingPack,planWindow,readyCandidates,pairFor,pairId,hasPair,rotateWindow,windowLimit,compareFailures,windowPairs,tfmMajor,proposalText,failureText,composeText,featuresLine} from './window.mjs';
 import {CLIENT_BRIDGE_CODE,isServerOnly,laneGap,serverOnlyGate,deferredLanes,gapText} from './server-only.mjs';
+import {odcBinaryCheck} from './odc-binary.mjs';
 import {generateCompose} from '../coolify/gen-compose.mjs';
 // An environment problem (not a test result): the round waits and retries. lanes: the lanes it concerns (empty = the pair).
 export class EnvironmentError extends Error{constructor(message,code='environment',lanes=[]){super(message);this.environmental=true;this.code=code;this.lanes=lanes;}}
@@ -166,6 +167,15 @@ async function laneChecks(config,ops,pair,runtimes,log,release=null){
   throw Object.assign(new EnvironmentError(problems.map(p=>p.text).join('; ')+'. The round waits and retries.'+bridge,code,[...new Set(problems.map(p=>p.lane))]),{laneCodes:Object.fromEntries(problems.map(p=>[p.lane,p.code]))});
  }
 }
+// Server-only: the reviewed agent release, or a wait that says what to configure (a missing or unknown pin, a commit not in
+// the clone, a release without its client source). Never a failure: the next round retries once the owner fixes it.
+async function reviewedRelease(ops,pair){
+ try{return await ops.agentRelease();}
+ catch(e){
+  if(e.environmental&&e.code!=='AGENT_RELEASE_REQUIRED')throw e;
+  throw new EnvironmentError(`The reviewed agent release cannot be read (${e.message}). Server-only needs agentReleaseCommit (the 40-hex commit of the agent pack in use, on the agent release line) and agentReleaseRef (agent/release...) in the watcher configuration, with that commit fetched into the vigia-run clone; production is not touched and the round retries.`,'agent-release-required',pair.lanes);
+ }
+}
 // A round stopped at its time limit: its running attempt is recorded as deferred, with its notice. That record is final:
 // a command killed by the cut that returns afterwards (a test with no results, a build cut short) never overwrites it.
 const wasCut=(outDir,attempt)=>{const now=readAttempts(outDir)[attempt.id];return now?.status==='deferred'&&now.code==='round-timeout'&&now.at===attempt.at;};
@@ -194,13 +204,13 @@ export async function runAttempt(config,ops,decision,now){
   if(ops.capacityPreflight)await ops.capacityPreflight(estimated.manifest);
   await ops.preflight({pair,id,dir});
   // Server-only: the reviewed agent release decides which client bridges exist; no bridge is built, signed or offered.
-  const serverOnly=!!config.automatic&&isServerOnly(config),agentRelease=serverOnly?await ops.agentRelease():null;
+  const serverOnly=!!config.automatic&&isServerOnly(config),agentRelease=serverOnly?await reviewedRelease(ops,pair):null;
   await laneChecks(config,ops,pair,runtimes,log,agentRelease);
   await ops.dockerReady();
   const bundles={};
   for(const lane of LANES){
    const candidate=pair.candidates.find(c=>c.lane===lane);
-   bundles[lane]=candidate?await ops.bundle(candidate,dir):await ops.companion(lane,base[lane][0].version);
+   bundles[lane]=candidate?await ops.bundle(candidate,dir):await ops.companion(lane,pair[lane]);
    log(`bundle ${lane} ${bundles[lane].version}: ${bundles[lane].file} sha256 ${bundles[lane].sha256}`);
   }
   // Where the pair's ODC features came from goes with the attempt, the release and the texts (no feature values).
@@ -216,6 +226,14 @@ export async function runAttempt(config,ops,decision,now){
    gate=serverOnlyGate({config,release:agentRelease,pair,studios,servedKernels:await ops.servedKernels(base),served});
    if(gate.gaps.length)throw clientBridgeError(gate.gaps,pair);
    log(`server-only kernel ${JSON.stringify(gate.kernel)}; published pack hello odc ${gate.hello.pack.odcBridge}, o11 built for ${gate.hello.pack.o11BuiltFor}`);
+   // A new ODC Studio: the published bridge's Studio references, by assembly identity, against the served ODC Studio of
+   // the same runtime it already runs in (odc-binary.mjs says what this does not prove).
+   if(pair.lanes.includes('odc')){
+    const check=await (ops.odcBinary??odcBinaryCheck)({references:agentRelease.odc.references,candidate:bundles.odc,installed:pair.candidates.find(c=>c.lane==='odc')?.studio??null,served:base.odc.map(x=>x.version),companion:(lane,v)=>ops.companion(lane,v,dir)});
+    fs.writeFileSync(path.join(dir,'odc-references.json'),JSON.stringify(check,null,2));
+    if(check.gaps.length)throw clientBridgeError([{lane:'odc',version:studios.odc.version,tfm:studios.odc.tfm,why:`the published ODC bridge's Studio references do not resolve as in the served ODC Studio ${check.reference??'(none)'}: ${check.gaps.join('; ')}`}],pair);
+    log(`odc references: ${check.compared.length} assemblies match the served ODC Studio ${check.reference} by name, strong name and major; not compared (not in the frozen copies): ${(check.notCompared??[]).map(n=>n.name).join(', ')||'none'}`);
+   }
   }
   const baseline={odc:await ops.companion('odc',base.odc[0].version),o11:await ops.companion('o11',base.o11[0].version)};
   fs.writeFileSync(path.join(dir,'bundles.json'),JSON.stringify({pair:bundles,baseline},null,2));
@@ -243,8 +261,9 @@ export async function runAttempt(config,ops,decision,now){
   if(config.automatic&&next.held?.length)await releaseEvent(outDir,ops,'retained',id,'Active clients require retaining an older pair; the window was extended.',await ops.secrets(),attempt.at);
   const served=Object.fromEntries(LANES.map(lane=>[lane,[...new Set(next.manifest[lane].map(x=>x.version))]]));
   const smoke=await ops.smoke(built,bundles,served,dir);fs.writeFileSync(path.join(dir,'smoke.json'),JSON.stringify(smoke,null,2));
-  // The built image itself refusing the published pack's hello is the same deferral as the gate's, never a deployment.
-  if(serverOnly&&!smoke.ok&&smoke.refused?.length)throw clientBridgeError(smoke.refused.map(r=>({lane:r.lane,version:studios[r.lane].version,tfm:studios[r.lane].tfm,why:`the built image refuses the published pack's hello (${r.code})`})),pair);
+  // The built image refusing the published pack's hello that the gate accepted: the gate and the image (the same agent-hub.mjs)
+  // disagree. That is a defect to review, not the environment: the attempt fails with its notice and is not rebuilt each round.
+  if(serverOnly&&!smoke.ok&&smoke.refused?.length)throw Object.assign(Error(`The built image refuses the published agent pack's hello that the server-only gate accepted (${smoke.refused.map(r=>`${r.lane} ${r.code}`).join(', ')}): the gate and the image disagree. Nothing is deployed; review smoke.json before a retry.`),{lanes:[...new Set(smoke.refused.map(r=>r.lane))],code:'smoke-refused-pack'});
   if(!smoke.ok)throw Error('Image smoke failed: '+(smoke.error??'see smoke.json'));
   if(serverOnly&&smoke.publishedPack!==true)throw Error('Image smoke did not present the published agent pack; nothing is deployed.');
   if(config.automatic){

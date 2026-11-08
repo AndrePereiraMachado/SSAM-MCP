@@ -500,14 +500,14 @@ export async function createRuntime(config,{log=()=>{}}={}){
    const archive=path.join(target,'source.tar');await git(['archive','-o',archive,commit,'agent']);
    await run(exe.tar,['-xf',archive,'-C',target]);fs.rmSync(archive);return target;
   };
-  // Server-only: the three source files that say what the reviewed agent release ships and runs (its ODC client and both
-  // agents' command lists), read from the pinned commit of the agent release line (git show: nothing is checked out or run).
+  // Server-only: the four source files that say what the reviewed agent release ships and runs (its ODC client and both
+  // agents' command lists, the ODC Studio assemblies its bridge references), read from the pinned commit of the agent release line (git show: nothing is checked out or run).
   runtime.agentReleaseFiles=async()=>{
    await runtime.executionSource();const commit=config.agentReleaseCommit,ref=config.agentReleaseRef;
    agentReleasePin(commit,ref);
    if((await git(['merge-base','--is-ancestor',commit,ref],{allowFailure:true})).code!==0)throw Error('Agent commit is outside the approved release line.');
    const show=async rel=>{const r=await git(['show',`${commit}:${rel}`],{allowFailure:true});return r.code===0?r.stdout:null;};
-   return {program:await show('agent/platforms/odc/studio/bridge/client/Program.cs'),kinds:await show('agent/agent/lib/kinds.mjs'),native:await show('agent/native/Ssam.Agent/StudioKinds.cs')};
+   return {program:await show('agent/platforms/odc/studio/bridge/client/Program.cs'),kinds:await show('agent/agent/lib/kinds.mjs'),native:await show('agent/native/Ssam.Agent/StudioKinds.cs'),bridgeProject:await show('agent/platforms/odc/studio/bridge/Bridge.csproj')};
   };
   runtime.pinExecution=async(manifest,dir,id,kernel,liveKernels)=>{
    await runtime.executionSource();

@@ -25,9 +25,13 @@ export function readyCandidates(plan){
  const pick={};for(const c of plan.candidates)if(!c.requiresInstallation&&(!pick[c.lane]||compareVersion(c.version,pick[c.lane].version)>0))pick[c.lane]=c;
  return LANES.filter(l=>pick[l]).map(l=>pick[l]);
 }
+// The newest version a lane of the window serves, whatever its place in the manifest (a pair added by hand at the end, or
+// the replay of an approval, may hold the newest; position 0 is only the default pair).
+export const newestServed=(manifest,lane)=>[...new Set(manifest[lane].map(x=>x.version))].sort((a,b)=>compareVersion(b,a))[0];
+// The pair one image carries: the new Studio of each lane, and for a lane with nothing new the NEWEST served version.
 export function pairFor(base,ready){
  const pick=Object.fromEntries(ready.map(c=>[c.lane,c]));
- return {odc:pick.odc?.version??base.odc[0].version,o11:pick.o11?.version??base.o11[0].version,lanes:LANES.filter(l=>pick[l]),candidates:LANES.filter(l=>pick[l]).map(l=>pick[l])};
+ return {odc:pick.odc?.version??newestServed(base,'odc'),o11:pick.o11?.version??newestServed(base,'o11'),lanes:LANES.filter(l=>pick[l]),candidates:LANES.filter(l=>pick[l]).map(l=>pick[l])};
 }
 // The pair name of gen-compose.mjs (volumes and backends use it), so one id names the proposal, its branch and its folder.
 export const pairId=p=>`o11-${p.o11}-odc-${p.odc}`;
@@ -42,7 +46,7 @@ export const windowLimit=(config,manifest)=>config?.maxWindow??Math.max(4,manife
 const newerPair=(a,b)=>compareVersion(b.odc,a.odc)||compareVersion(b.o11,a.o11);
 export function rotateWindow(manifest,pair,state={}){
  const old=versionPairs(manifest),window=manifest.window??3;
- pair={odc:old[0].odc,o11:old[0].o11,...pair};
+ pair={odc:newestServed(manifest,'odc'),o11:newestServed(manifest,'o11'),...pair};
  let entries=[{...pair},...old.filter(p=>p.odc!==pair.odc||p.o11!==pair.o11).map(p=>{
   const at=manifest.odc.find(x=>x.version===p.odc&&p.image.startsWith(x.image+':'+x.tag));return {odc:p.odc,o11:p.o11,...at};
  })];

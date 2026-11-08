@@ -79,12 +79,15 @@ test('a rehearsal whose image does not offer the bridges fails, and still change
 });
 // Server-only (the default bridge mode) on a five-pair window: the vault has no Authenticode thumbprint, no bridge is built or
 // signed, and the built image is asked the hello of the published agent pack (config.example.json, release source of this checkout).
-const agentFiles=()=>{const at=rel=>fs.readFileSync(path.resolve(here,'../../../agent',rel),'utf8');return {program:at('platforms/odc/studio/bridge/client/Program.cs'),kinds:at('agent/lib/kinds.mjs'),native:at('native/Ssam.Agent/StudioKinds.cs')};};
+const agentFiles=()=>{const at=rel=>fs.readFileSync(path.resolve(here,'../../../agent',rel),'utf8');return {program:at('platforms/odc/studio/bridge/client/Program.cs'),kinds:at('agent/lib/kinds.mjs'),native:at('native/Ssam.Agent/StudioKinds.cs'),bridgeProject:at('platforms/odc/studio/bridge/Bridge.csproj')};};
 const example=JSON.parse(fs.readFileSync(path.join(here,'config.example.json'),'utf8'));
 const five={window:5,...Object.fromEntries(['odc','o11'].map(lane=>[lane,[['1.7.32','11.55.95'],['1.7.31','11.55.94'],['1.7.30','11.55.94'],['1.7.29','11.55.93'],['1.7.28','11.55.92']].map(([odc,o11],i)=>({version:lane==='odc'?odc:o11,image:'private/image',tag:'prod-five-'+i,sha256:digest}))]))};
+// A published pack with a thin bridge built for Service Studio 11.55.95 (the example pack has .94/.93/.92 only).
+const with95={...example.agentPack,o11Builds:[{version:'11.55.95',runtime:'net10.0'},...example.agentPack.o11Builds]};
+const odcMatches=f=>{f.runtime.odcBinary=async a=>{f.order.push('odc references '+a.candidate.version);return {reference:'1.7.31',gaps:[],compared:[]};};};
 test('server-only rehearsal of a five-pair window builds and signs no bridge and smokes the published pack hello',async t=>{
- const f=await fixture(t,{config:{bridgeMode:undefined,agentPack:example.agentPack,agentPackByRuntime:example.agentPackByRuntime,agentReleaseCommit:'c'.repeat(40)},vault:{authenticodeThumbprint:undefined}});
- f.runtime.agentReleaseFiles=async()=>agentFiles();
+ const f=await fixture(t,{config:{bridgeMode:undefined,agentPack:with95,agentPackByRuntime:example.agentPackByRuntime,agentReleaseCommit:'c'.repeat(40)},vault:{authenticodeThumbprint:undefined}});
+ f.runtime.agentReleaseFiles=async()=>agentFiles();odcMatches(f);
  f.runtime.observe=async()=>{f.order.push('observe');return [release('odc','1.7.32','1.7.32.11000'),release('o11','11.55.95','11.55.95.1')];};
  f.runtime.buildBridges=async()=>{f.order.push('buildBridges');throw Error('no bridge is built in server-only');};
  let presented=null,kernel=null;
@@ -94,18 +97,27 @@ test('server-only rehearsal of a five-pair window builds and signs no bridge and
  assert.ok(!f.order.includes('buildBridges'));assert.deepEqual(result.offers,[]);
  assert.ok(!f.ran.some(cmd=>/dotnet|signtool/i.test(cmd)),f.ran.join());
  assert.equal(kernel.odc,'1.7.32');assert.equal(kernel.odcBridge,'v108');assert.ok(kernel.odcBridgeAccepted.includes('v107'),'the nearest served ODC pair accepts it');
- assert.equal(presented.pack.odcBridge,'v108');assert.equal(presented.pack.o11BuiltFor,'11.55.94');assert.ok(presented.agent.odcCommands.includes('reconcile-merge'));
- assert.deepEqual(result.hello,{odcBridge:'v108',o11BuiltFor:'11.55.94'});
+ assert.equal(presented.pack.odcBridge,'v108');assert.equal(presented.pack.o11BuiltFor,'11.55.95');assert.ok(presented.agent.odcCommands.includes('reconcile-merge'));
+ assert.deepEqual(result.hello,{odcBridge:'v108',o11BuiltFor:'11.55.95'});
+ assert.ok(f.order.indexOf('odc references 1.7.32')>f.order.indexOf('bundle o11')&&f.order.indexOf('odc references 1.7.32')<f.order.indexOf('test odc baseline'),f.order.join());
  assert.equal(fs.existsSync(path.join(f.config.rehearsal.dir,'store')),false);
  assert.deepEqual(f.spied,[]);assert.deepEqual([...new Set(f.ssh)],['capacity']);
 });
-test('server-only rehearsal whose image refuses the published pack hello waits for a client bridge update',async t=>{
+test('A1: the five-pair rehearsal with the example pack (no 11.55.95 build) waits for a client bridge update, before any bundle',async t=>{
  const f=await fixture(t,{config:{bridgeMode:undefined,agentPack:example.agentPack,agentPackByRuntime:example.agentPackByRuntime,agentReleaseCommit:'c'.repeat(40)},vault:{authenticodeThumbprint:undefined}});
- f.runtime.agentReleaseFiles=async()=>agentFiles();
+ f.runtime.agentReleaseFiles=async()=>agentFiles();odcMatches(f);
+ f.runtime.observe=async()=>{f.order.push('observe');return [release('odc','1.7.32','1.7.32.11000'),release('o11','11.55.95','11.55.95.1')];};
+ const result=await rehearseCurrent(f.config,f.runtime,{manifest:five});
+ assert.equal(result.status,'deferred');assert.match(result.error,/client bridge update required: o11 11\.55\.95 runtime net10\.0 \(the published pack has no thin bridge built for Service Studio 11\.55\.95 \(o11Builds: 11\.55\.94, 11\.55\.93, 11\.55\.92\)/);
+ assert.ok(!f.order.some(s=>/^bundle|^test|^build|^smoke/.test(s)),f.order.join());assert.deepEqual(f.spied,[]);
+});
+test('B2: server-only rehearsal whose image refuses the published pack hello the gate accepted fails (a defect), never waits',async t=>{
+ const f=await fixture(t,{config:{bridgeMode:undefined,agentPack:example.agentPack,agentPackByRuntime:example.agentPackByRuntime,agentReleaseCommit:'c'.repeat(40)},vault:{authenticodeThumbprint:undefined}});
+ f.runtime.agentReleaseFiles=async()=>agentFiles();odcMatches(f);
  f.runtime.smoke=async()=>({ok:false,error:'SMOKE_CHECK:The published agent pack was not accepted for both lanes.',refused:[{lane:'odc',code:'AGENT_PACK_MISMATCH'}]});
  const result=await rehearseCurrent(f.config,f.runtime,{manifest});
- assert.equal(result.status,'deferred');assert.match(result.error,/client bridge update required: odc 1\.7\.30 runtime net10\.0/);assert.deepEqual(f.spied,[]);
- assert.ok(f.runtime.notes.includes('SSAM rehearsal: client bridge update required'),f.runtime.notes.join());
+ assert.equal(result.status,'failed');assert.match(result.error,/refuses the published agent pack's hello that the server-only gate accepted \(odc AGENT_PACK_MISMATCH\)/);assert.deepEqual(f.spied,[]);
+ assert.ok(!f.runtime.notes.includes('SSAM rehearsal: client bridge update required'),f.runtime.notes.join());
 });
 test('PAUSE refuses the rehearsal before anything is detected or built',async t=>{
  const f=await fixture(t);fs.writeFileSync(f.config.pauseFile,'');

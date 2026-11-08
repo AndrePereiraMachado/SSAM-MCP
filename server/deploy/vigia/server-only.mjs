@@ -9,6 +9,7 @@
 // Pure: no process, Git, network or file here.
 import {LANES,STUDIO_NAME,tfmMajor,compareVersion,version as threeOf} from './window.mjs';
 import {compatibility} from '../../platforms/odc/facade/agent-hub.mjs';
+import {bridgeReferences} from './odc-binary.mjs';
 export const BRIDGE_MODES=Object.freeze(['server-only','signed-offers']);
 export const CLIENT_BRIDGE_CODE='client-bridge-update-required';
 export function bridgeMode(config){
@@ -27,19 +28,23 @@ function commandList(text,pattern){const m=pattern.exec(text??'');return m?[...m
 // What the reviewed agent release ships and runs, read from its source at agentReleaseCommit: the ODC bridge its client
 // attaches to each Studio runtime (client/Program.cs: Version, and EarlierVersion for net8 Studios) and the ODC commands
 // its agents declare in the hello (the Node and the native agent: a published pack may run either, so only what both run).
-export function parseAgentRelease({commit=null,program,kinds,native}){
+export function parseAgentRelease({commit=null,program,kinds,native,bridgeProject=null}){
  const current=/const string Version = "(v\d+)"/.exec(program??'')?.[1]??null,earlier=/const string EarlierVersion = "(v\d+)"/.exec(program??'')?.[1]??null;
  if(!current)throw Object.assign(Error('The reviewed agent release names no ODC bridge (client/Program.cs Version).'),{code:'AGENT_RELEASE_REQUIRED'});
  const lists=[commandList(kinds,/ODC_COMMANDS\s*=\s*Object\.freeze\(\[([^\]]*)\]/),commandList(native,/OdcCommandList\s*=\s*\[([^\]]*)\]/)].filter(Boolean);
  const commands=lists.length?lists.reduce((a,b)=>a.filter(c=>b.includes(c))):[];
  // From the ODC bridge v108 on both agents add merge:prefer-foreign (odcDeclared): informational, no compatibility rule reads it.
  const preferFrom=Number(/>=\s*(\d+)\s*\??\s*\[\.\.\.ODC_COMMANDS,\s*'merge:prefer-foreign'\]/.exec(kinds??'')?.[1]??NaN);
- return {commit,odc:{current,earlier},commands,preferFrom:Number.isFinite(preferFrom)?preferFrom:null};
+ // The ODC Studio assemblies its bridge is compiled against (Bridge.csproj), for the static reference check (odc-binary.mjs).
+ return {commit,odc:{current,earlier,references:bridgeReferences(bridgeProject)},commands,preferFrom:Number.isFinite(preferFrom)?preferFrom:null};
 }
 // The ODC bridges the release's client attaches to a Studio of this runtime (Program.cs: a net8 Studio takes only
 // EarlierVersion; any other takes Version or EarlierVersion).
 export const loadableOdc=(release,tfm)=>tfmMajor(tfm)===8?[release.odc.earlier??release.odc.current]:unique([release.odc.current,release.odc.earlier]);
 const O11_KEYS=['o11BuiltFor','o11Hook','o11Builds','o11Runtime'],ODC_KEYS=['odcBridge','odcBridges'];
+// The ODC bridges a pack declares (odcBridge and odcBridges), and the newest of them the release attaches to that runtime.
+const declaredOdc=pack=>unique([pack?.odcBridge,...(Array.isArray(pack?.odcBridges)?pack.odcBridges:[])]).filter(odcProtocol);
+const newestLoadable=(release,pack,tfm)=>release?newest(declaredOdc(pack).filter(v=>loadableOdc(release,tfm).includes(v))):null;
 // The pack an agent presents to a Studio of this lane and runtime: agentPack, with agentPackByRuntime["net<N>"] over the
 // lane's fields (window.mjs packFor and missingPack, the same rule). null: no published pack covers that runtime.
 export function packForStudio(config,lane,tfm){
@@ -54,11 +59,16 @@ export function packForStudio(config,lane,tfm){
 // Every published pack: agentPack and each agentPackByRuntime entry over it.
 export const publishedPacks=config=>[config.agentPack??{},...Object.values(config.agentPackByRuntime??{}).map(over=>({...config.agentPack,...over}))];
 const builds=pack=>(Array.isArray(pack?.o11Builds)?pack.o11Builds:[]).map(b=>typeof b==='string'?{version:b}:{version:b?.version,runtime:b?.runtime??null}).filter(b=>/^\d+\.\d+\.\d+$/.test(b.version??''));
-// The thin bridge a pack loads into this Service Studio (agent o11-builds.mjs o11PackFor): its build of that version, else
-// the pack's default one.
-export function o11BuildFor(pack,studioVersion){
- const own=builds(pack).find(b=>b.version===threeOf(studioVersion));
- return own??(pack?.o11BuiltFor?{version:threeOf(pack.o11BuiltFor),runtime:builds(pack).find(b=>b.version===threeOf(pack.o11BuiltFor))?.runtime??pack.o11Runtime??null}:null);
+// The thin bridge the gate accepts for this Service Studio: the pack's build of exactly that version (a thin bridge binds to
+// the exact ServiceStudio.* assembly versions it was compiled against, agent o11-builds.mjs), else only a build the owner
+// declared proven for it in o11BridgeProven {"<a.b.c>": {build, evidence}} (a live proof recorded in evidence). The agent
+// itself falls back to the pack's default build (o11PackFor); the gate never does. null: no build that version can load.
+export function o11BuildFor(pack,studioVersion,proven={}){
+ const v=threeOf(studioVersion),own=builds(pack).find(b=>b.version===v);
+ if(own)return {...own,proven:false};
+ const p=proven?.[v];
+ if(p&&typeof p.evidence==='string'&&p.evidence.trim()){const b=builds(pack).find(x=>x.version===threeOf(p.build));if(b)return {...b,proven:true};}
+ return null;
 }
 // Why the published packs have no bridge for this Studio (null: they have one). studio: {version, tfm} of the verified
 // installer (its runtimeconfig.json) or of the served bundle.
@@ -69,24 +79,29 @@ export function laneGap(config,release,lane,studio){
  if(!pack)return `no published agent pack declares a bridge for ${name}s on net${major} (agentPackByRuntime.net${major} names no ${lane==='odc'?'odcBridge':'o11BuiltFor'})`;
  if(lane==='odc'){
   if(!odcProtocol(pack.odcBridge))return `the published pack declares no ODC bridge (${JSON.stringify(pack.odcBridge??null)})`;
-  const loadable=release?loadableOdc(release,studio.tfm):null;
-  if(loadable&&!loadable.includes(pack.odcBridge))return `the reviewed agent release ${String(release.commit??'').slice(0,7)||'(unknown)'} attaches ${loadable.join(' or ')} to an ODC Studio on ${studio.tfm}, not the declared ${pack.odcBridge}`;
+  if(!release)return 'the reviewed agent release is unknown';
+  // Every ODC bridge the config says the pack ships for this runtime (odcBridge and odcBridges) must be one the reviewed
+  // release's client attaches to that runtime: the config value alone is never trusted.
+  const loadable=loadableOdc(release,studio.tfm),declared=unique([pack.odcBridge,...(Array.isArray(pack.odcBridges)?pack.odcBridges:[])]);
+  const foreign=declared.filter(v=>!loadable.includes(v));
+  if(foreign.length)return `the reviewed agent release ${String(release.commit??'').slice(0,7)||'(unknown)'} attaches ${loadable.join(' or ')} to an ODC Studio on ${studio.tfm}, not the declared ${foreign.join(', ')}`;
   return null;
  }
- const build=o11BuildFor(pack,studio.version);
- if(!build)return 'the published pack carries no Service Studio thin bridge';
- if(build.runtime&&tfmMajor(build.runtime)!==major)return `the pack's thin bridge for Service Studio ${build.version} is built for ${build.runtime}`;
+ const build=o11BuildFor(pack,studio.version,config.o11BridgeProven);
+ if(!build)return `the published pack has no thin bridge built for Service Studio ${threeOf(studio.version)} (o11Builds: ${builds(pack).map(b=>b.version).join(', ')||'none'}); a thin bridge binds to the exact Service Studio it was built for`;
+ if(!build.runtime)return `the pack's thin bridge for Service Studio ${build.version} declares no runtime (o11Builds needs {version, runtime})`;
+ if(tfmMajor(build.runtime)!==major)return `the pack's thin bridge for Service Studio ${build.version} is built for ${build.runtime}`;
  return null;
 }
 // The hello of the published pack for a pair, as the agent of that pack sends it (agent.mjs hello): its ODC bridge for the
 // ODC Studio's runtime, the thin bridge it loads into that Service Studio, the release's ODC commands, and no bridge offer.
 export function packHello(config,release,studios){
  const odc=packForStudio(config,'odc',studios.odc.tfm)??{},o11=packForStudio(config,'o11',studios.o11.tfm)??{};
- const odcBridge=odc.odcBridge??null,commands=[...(release?.commands??[])];
+ const odcBridge=newestLoadable(release,odc,studios.odc.tfm),commands=[...(release?.commands??[])];
  if(release?.preferFrom&&odcProtocol(odcBridge)&&protocolNumber(odcBridge)>=release.preferFrom&&!commands.includes('merge:prefer-foreign'))commands.push('merge:prefer-foreign');
- const o11Build=o11BuildFor(o11,studios.o11.version);
+ const o11Build=o11BuildFor(o11,studios.o11.version,config.o11BridgeProven);
  return {t:'hello',protocol:'ssam-agent/1',instance:'vigia-published-pack',agent:{version:'published',odcCommands:commands},capabilities:{bridgeOffer:false},
-  pack:{id:'published',lanes:['odc','o11'],odcBridge,odcBridges:unique([odcBridge,...(Array.isArray(odc.odcBridges)?odc.odcBridges:[])]).filter(odcProtocol),o11BuiltFor:o11Build?.version??null,o11Hook:o11.o11Hook??'dev',...(builds(o11).length?{o11Builds:builds(o11).map(b=>b.version)}:{})},
+  pack:{id:'published',lanes:['odc','o11'],odcBridge,odcBridges:declaredOdc(odc).filter(v=>release&&loadableOdc(release,studios.odc.tfm).includes(v)),o11BuiltFor:o11Build?.version??null,o11Hook:o11.o11Hook??'dev',...(builds(o11).length?{o11Builds:builds(o11).map(b=>b.version)}:{})},
   studios:Object.fromEntries(LANES.map(lane=>[lane,{installed:{version:studios[lane].fullVersion??studios[lane].version,runtime:studios[lane].tfm??null,dir:'C:/Vigia'}}]))};
 }
 // The served kernel nearest to a version of a lane: the same version, else the newest below it, else the oldest above it.
@@ -97,16 +112,18 @@ export function nearestKernels(kernels,lane,value){
  const pick=below[0]??list.sort((a,b)=>compareVersion(a[lane],b[lane]))[0];
  return pick?list.filter(k=>k[lane]===pick[lane]):[];
 }
-// The kernel.json of a new pair: odcBridge the newest bridge the published pack ships for that ODC Studio's runtime;
-// odcBridgeAccepted the ODC bridges every published pack ships plus what the nearest served ODC pair accepts;
-// o11BridgeAccepted the downloaded-bridge protocols (dN) of the packs plus what the nearest served Service Studio pair accepts.
-export function serverOnlyKernel(config,pair,studios,servedKernels){
+// The kernel.json of a new pair: odcBridge the newest bridge the published pack ships for that ODC Studio's runtime and the
+// reviewed release attaches to it; odcBridgeAccepted the ODC bridges the packs ship that the release builds at all (Version,
+// EarlierVersion), plus what the nearest served ODC pair accepts; o11BridgeAccepted only what the nearest served Service
+// Studio pair accepts (downloaded-bridge protocols dN: a pack's o11Hook is dev or h1, never dN, so packs add none).
+export function serverOnlyKernel(config,pair,studios,servedKernels,release){
  const odc=packForStudio(config,'odc',studios.odc.tfm);
- const odcBridge=newest([odc?.odcBridge,...(Array.isArray(odc?.odcBridges)?odc.odcBridges:[])]);
- if(!odcBridge)throw Object.assign(Error('No published agent pack has an ODC bridge for this pair.'),{code:CLIENT_BRIDGE_CODE});
+ const odcBridge=odc?newestLoadable(release,odc,studios.odc.tfm):null;
+ if(!odcBridge)throw Object.assign(Error('No published agent pack has an ODC bridge the reviewed release attaches to this ODC Studio.'),{code:CLIENT_BRIDGE_CODE});
  const packs=publishedPacks(config),near={odc:nearestKernels(servedKernels,'odc',pair.odc),o11:nearestKernels(servedKernels,'o11',pair.o11)};
- const odcAccepted=unique([...packs.flatMap(p=>[p.odcBridge,...(Array.isArray(p.odcBridges)?p.odcBridges:[])]),...near.odc.flatMap(k=>[k.odcBridge,...(k.odcBridgeAccepted??[])])]).filter(v=>odcProtocol(v)&&v!==odcBridge);
- const o11Accepted=unique([...packs.map(p=>p.o11Hook),...near.o11.flatMap(k=>k.o11BridgeAccepted??[])]).filter(v=>/^d\d+$/.test(v));
+ const shipped=unique([release?.odc?.current,release?.odc?.earlier]);
+ const odcAccepted=unique([...packs.flatMap(declaredOdc).filter(v=>shipped.includes(v)),...near.odc.flatMap(k=>[k.odcBridge,...(k.odcBridgeAccepted??[])])]).filter(v=>odcProtocol(v)&&v!==odcBridge);
+ const o11Accepted=unique(near.o11.flatMap(k=>k.o11BridgeAccepted??[])).filter(v=>/^d\d+$/.test(v));
  return {o11:pair.o11,odc:pair.odc,odcBridge,odcBridgeAccepted:odcAccepted,o11BridgeAccepted:o11Accepted};
 }
 // The lanes whose hello of the published pack the kernel refuses (with the server's code), with the pair's served versions.
@@ -120,7 +137,7 @@ export function serverOnlyGate({config,release,pair,studios,servedKernels,served
  const gaps=[];
  for(const lane of LANES){const why=laneGap(config,release,lane,studios[lane]);if(why)gaps.push({lane,version:studios[lane].version,tfm:studios[lane].tfm??null,why});}
  if(gaps.length)return {gaps};
- const kernel=serverOnlyKernel(config,pair,studios,servedKernels),hello=packHello(config,release,studios);
+ const kernel=serverOnlyKernel(config,pair,studios,servedKernels,release),hello=packHello(config,release,studios);
  for(const r of helloRefusals(hello,kernel,served))gaps.push({lane:r.lane,version:studios[r.lane].version,tfm:studios[r.lane].tfm??null,why:`the published pack's hello is refused (${r.code}: ${r.message})`});
  return {gaps,kernel,hello};
 }
