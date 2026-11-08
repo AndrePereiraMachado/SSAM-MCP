@@ -249,6 +249,14 @@ test('N1 frozen served lists are validated: one list per pair, three-part versio
   x=>{for(const l of ['odc','o11'])x[l][1].served={odc:['1.7.30'],o11:['11.55.94'],extra:[]};},x=>{for(const l of ['odc','o11'])x[l][1].served='{"odc":["1.7.30"]}';},x=>{x.keepServed=3;},x=>{x.keepServed=-1;}];
  for(const change of bad){const x=m();change(x);assert.throws(()=>servedLists(x),/served|keepServed/,change.toString());}
 });
+// Review round 2, B1 (R14/R3-10 flakiness): a manifest rewritten with the same size inside one timestamp tick kept the cached
+// verification. Here every metadata the cache sees is frozen; only the signed content changes ('owner' -> 'other', same size).
+test('B1 a re-signed manifest of the same size and timestamps is verified again, not served from the cache',t=>{
+ const f=signedStore(t),original=fs.lstatSync;
+ fs.lstatSync=function(p,...args){const s=original.call(this,p,...args);if(!String(p).startsWith(f.root))return s;return Object.assign(Object.create(Object.getPrototypeOf(s)),s,{ino:1,mtimeMs:1,ctimeMs:1});};
+ try{assert.ok(f.store.offer('o11','11.55.94',['d1']));f.m.files[0].signer='other';f.write();assert.equal(f.store.offer('o11','11.55.94',['d1']),null);
+  f.m.files[0].signer='owner';f.write();assert.ok(f.store.offer('o11','11.55.94',['d1']));}finally{fs.lstatSync=original;}
+});
 test('R3-8 packaged-process detection uses Windows Package.Current',()=>{assert.match(file('deploy/vigia/vault.ps1'),/Windows.ApplicationModel.Package.*::Current/);assert.doesNotMatch(file('deploy/vigia/vault.ps1'),/APPX_PACKAGE_FAMILY_NAME/);});
 test('R3-9 snapshot cleanup retains live attempts plus five newest snapshots',t=>{
  assert.equal(typeof safety.cleanupRollback,'function');const root=tmp(t),folder=path.join(root,'rollback'),out=path.join(root,'out'),id='o11-11.55.94-odc-1.7.30';fs.mkdirSync(folder);fs.mkdirSync(path.join(out,id),{recursive:true});

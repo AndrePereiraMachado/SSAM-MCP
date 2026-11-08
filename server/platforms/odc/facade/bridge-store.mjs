@@ -67,7 +67,11 @@ export function createBridgeStore({root = process.env.SSAM_BRIDGES_DIR || '/app/
         if(s.isSymbolicLink())throw Error('Bridge link refused.');
         return name+':'+s.ino+':'+s.size+':'+s.mtimeMs+':'+s.ctimeMs+(s.isDirectory()?fingerprint(file):'');
       }).join('|');
-      const stamp=fingerprint(directory),prior=cache.get(directory);
+      // The signed manifest and its signature (at most 256 KiB, read anyway to verify) also enter by content: a rewrite
+      // of the same size inside one timestamp tick (a re-signed sequence or signer) is never served from the cache.
+      // The covered files stay identified by their metadata (re-hashed only when it changes).
+      const signed=['manifest.json','manifest.sig'].map(name=>{try{return sha(fs.readFileSync(path.join(directory,name)));}catch{return '-';}}).join(':');
+      const stamp=signed+'|'+fingerprint(directory),prior=cache.get(directory);
       const value=prior?.stamp===stamp?prior.value:verifyBridge(directory,key);
       cache.set(directory,{stamp,value});
       return value.manifest.lane === lane && value.manifest.studioVersion === studioVersion && value.manifest.protocol === protocol ? value : null;
