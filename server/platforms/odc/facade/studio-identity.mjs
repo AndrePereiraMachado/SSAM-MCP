@@ -93,11 +93,14 @@ export function studioIdentity(lane, installed, kernel) {
   const version = numbers.join('.');
   const byVersion = compare(numbers, three.split('.').map(Number), 3);
   if (byVersion !== 0) {
+    // The window is the deployment's (every backend's versions), sorted; its last entry is the newest version the server
+    // serves in this lane. It is named apart from served (the version of THIS backend), which may be an older pair (r44).
     const window = servedVersions(lane, kernel);
-    if (window.includes(threePart(version))) return { ...out('served-elsewhere', version), window };
-    const newer = compare(numbers, window.at(-1).split('.').map(Number), 3) > 0;
+    const newest = window.at(-1);
+    if (window.includes(threePart(version))) return { ...out('served-elsewhere', version), window, newest };
+    const newer = compare(numbers, newest.split('.').map(Number), 3) > 0;
     return { ...out(newer ? 'newer' : 'older', version,
-      newer ? { direction: 'newer', ok: true, warn: true } : { direction: 'older' }), window };
+      newer ? { direction: 'newer', ok: true, warn: true } : { direction: 'older' }), window, newest };
   }
   if (!build) return out('same', version, { ok: true });
   if (numbers.length < 4) return out('build-unknown', version, policy === 'warn' ? { ok: true, warn: true } : {});
@@ -129,12 +132,14 @@ export function studioVersions(studios) {
 // ---- the texts, one place for the hub, the gate and the warnings. B3 (owner rule of 2026-10-15): every text in English,
 // no bilingual line: `user` is the userMessage (for the person, shown as it is), `en` the error (for the model).
 const listOf = names => names.join(', ');
-// A mixed machine stays on its ODC-selected backend; only its older O11 lane needs an update.
+// A mixed machine stays on its ODC-selected backend; only its older O11 lane needs an update, to THIS backend's Service
+// Studio (the version is the identity's, for every pair of the window; r44: 11.55.94 on the 11.55.95 pair). A Service
+// Studio newer than the backend's is never told to update (to an older version): the generic text stays.
 export function mixedStudioUpgrade(identity) {
-  if (identity?.lane !== 'o11' || identity.relation !== 'served-elsewhere'
-    || threePart(identity.served) !== '11.55.94'
-    || !['11.55.93', '11.55.92'].includes(threePart(identity.installed))) return null;
-  return 'Update Service Studio to 11.55.94, open it again, and reconnect the SSAM Agent; then repeat the O11 request. The ODC lane remains available. Reinstalling the agent does not fix this.';
+  if (identity?.lane !== 'o11' || identity.relation !== 'served-elsewhere') return null;
+  const served = threePart(identity.served), installed = numbersOf(identity.installed);
+  if (!served || !installed || compare(installed, served.split('.').map(Number), 3) >= 0) return null;
+  return `Update Service Studio to ${served}, open it again, and reconnect the SSAM Agent; then repeat the O11 request. The ODC lane remains available. Reinstalling the agent does not fix this.`;
 }
 
 function words(identity) {
@@ -165,10 +170,12 @@ function words(identity) {
       user = en = `Your ${S} ${installed} is older than the versions this server serves (${range}). Update ${S} and reconnect.`;
       break;
     }
-    case 'newer:newer':
-      user = `The ${S} on this computer (${installed}) is newer than the ${S} the SSAM server serves today (${served}). The server does not have this version yet; ${notified.user}. ${wait.user}`;
-      en = `This SSAM server serves ${S} ${served}; the user's machine has ${S} ${installed}, which is newer: the server does not serve this version yet; ${notified.en}. ${wait.en}`;
+    case 'newer:newer': {
+      const newest = identity.newest ?? three;
+      user = `The ${S} on this computer (${installed}) is newer than the newest ${S} the SSAM server serves today (${newest}). The server does not have this version yet; ${notified.user}. ${wait.user}`;
+      en = `The newest ${S} this SSAM server serves is ${newest}; the user's machine has ${S} ${installed}, which is newer: the server does not serve this version yet; ${notified.en}. ${wait.en}`;
       break;
+    }
     case 'build-differs:older':
       user = `The ${S} on this computer is build ${installed}; the SSAM server serves build ${served} (same version ${three}, another build), and the owner set the server to serve no other build. Update ${S} (the server serves build ${served}) and open it again; then repeat the request.`;
       en = `This SSAM server serves ${S} build ${served}; the user's machine has ${S} build ${installed} (same version ${three}, another build), which is older, and kernel.json studioBuildPolicy "refuse" serves no other build: update ${S} to build ${served} and reopen it.`;
@@ -217,8 +224,14 @@ export function studioWarningOf(identity) {
     return { code: 'studioNotServed', lane, cause: 'STUDIO_VERSION_CHANGED', installed, served, relation, policy, userMessage: message, error: message + ' Show this warning to the user.' };
   }
   if (identity.ok && relation === 'newer') {
-    const message = `The server does not serve ${S} ${installed} yet; the owner was notified. This request uses the newest served version. Check the result in ${S} before publishing.`;
-    return { code: 'studioNewerThanServed', lane, installed, served, relation, policy, userMessage: message, error: message + ' Show this warning to the user.' };
+    // r44: served is the version of the backend that ran; the newest of the window is named apart, so "the server serves up to
+    // <served>" is never read from it when a newer pair exists elsewhere in the window.
+    const newest = identity.newest ?? three;
+    const ran = threePart(served) === newest
+      ? `This request ran with ${S} ${served}, the newest ${S} this server serves.`
+      : `This request ran with ${S} ${served}; the newest ${S} this server serves is ${newest}.`;
+    const message = `The server does not serve ${S} ${installed} yet; the owner was notified. ${ran} Check the result in ${S} before publishing.`;
+    return { code: 'studioNewerThanServed', lane, installed, served, newestServed: newest, relation, policy, userMessage: message, error: message + ' Show this warning to the user.' };
   }
   if (identity.warn) {
     const unknown = relation === 'build-unknown';

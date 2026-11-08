@@ -12,12 +12,20 @@ import {createRouter,selectBackend} from '../hosted/router.mjs';
 import {studioIdentity,studioRefusal,studioWarningOf} from '../studio-identity.mjs';
 
 const versions={odc:['1.7.28','1.7.29'],o11:['11.55.92','11.55.93']};
-for(const [lane,local,other] of [['odc','1.7.28','1.7.29'],['o11','11.55.93','11.55.92']]) test(`${lane}: a version served elsewhere never authorizes the local Studio`,()=>{
+// r44: an O11 Studio OLDER than the backend's served one is a mixed machine (its ODC Studio chose this backend) and is told
+// which Service Studio to install (r1-mixed-studio, hosted-studio-window); a NEWER one served elsewhere keeps the redirect text.
+for(const [lane,local,other] of [['odc','1.7.28','1.7.29'],['o11','11.55.92','11.55.93']]) test(`${lane}: a version served elsewhere never authorizes the local Studio`,()=>{
  const identity=studioIdentity(lane,other,{[lane]:local,servedVersions:versions});
  assert.equal(identity.ok,false);assert.equal(identity.relation,'served-elsewhere');
  const refusal=studioRefusal(identity);assert.equal(refusal.cause,'STUDIO_VERSION_CHANGED');
  assert.match(refusal.userMessage,/version changed.*redirected/i);
  const warning=studioWarningOf(identity);assert.match(warning.userMessage,/version changed.*redirected/i);assert.doesNotMatch(JSON.stringify(warning),/kernel|container|review/);
+});
+test('o11: an older Service Studio served elsewhere is told to update to the backend O11, never that it is being redirected',()=>{
+ const identity=studioIdentity('o11','11.55.92',{o11:'11.55.93',servedVersions:versions});
+ assert.equal(identity.ok,false);assert.equal(identity.relation,'served-elsewhere');
+ const refusal=studioRefusal(identity);assert.equal(refusal.cause,'STUDIO_VERSION_CHANGED');
+ for(const text of [refusal.userMessage,studioWarningOf(identity).userMessage]){assert.match(text,/Update Service Studio to 11\.55\.93/);assert.doesNotMatch(text,/being redirected/);}
 });
 test('routing prefers the full installed pair over an earlier priority-lane match',()=>{
  const backends=[{name:'new',odc:'1.7.29',o11:'11.55.93',default:true},{name:'mixed',odc:'1.7.29',o11:'11.55.92'}];

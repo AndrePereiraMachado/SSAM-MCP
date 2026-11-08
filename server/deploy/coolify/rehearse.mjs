@@ -1,6 +1,7 @@
 import {createChannel} from '../../../agent/agent/lib/channel.mjs';
 import {createOutbox} from '../../../agent/agent/lib/outbox.mjs';
 import {toolListingBytes} from '../../platforms/odc/facade/tool-listing.mjs';
+import {rehearsalWindow,pairWords,extraLicenses} from './rehearsal-window.mjs';
 import fs from 'node:fs';import path from 'node:path';import {fileURLToPath} from 'node:url';import {spawnSync,spawn} from 'node:child_process';import assert from 'node:assert/strict';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../..');
 const out=path.resolve(process.env.SSAM_REHEARSAL_DIR??'C:/t/multiver-impl/etapa2/rehearsal');
@@ -9,12 +10,15 @@ const prefix='ssam-multiver-'+Date.now(),containers=[];const checks=[];
 const releaseKernels=JSON.parse(fs.readFileSync(new URL('./r1-kernels.json',import.meta.url),'utf8'));
 const memory=[];
 const images=process.env.SSAM_REHEARSAL_IMAGES?JSON.parse(process.env.SSAM_REHEARSAL_IMAGES):null;
-// SSAM_REHEARSAL_IMAGES: the window, the default first, two to four pairs (R4: ODC 1.7.31 is a fourth pair, appended): [{name?, image, features, odc?, o11?,
+// SSAM_REHEARSAL_IMAGES: the window, the default first, two to MAX_PAIRS pairs (R4: ODC 1.7.31 is a fourth pair, appended; r44:
+// ODC 1.7.32 / Service Studio 11.55.95 a fifth): [{name?, image, features, odc?, o11?,
 // odcBuild?, o11Build?, odcBridge?, odcBridgeAccepted?}]. odc/o11 (three numbers) and their builds (four) default to the two
 // pairs of the initial window (1.7.29/11.55.93, 1.7.28/11.55.92); odcBridge (kernel.json) defaults to v97 with v96, v48, v45
 // accepted. A pair whose odcBridge is not v97 (the .NET 10 Studios: v101, v106 from the R4 release) also proves that a pack of v97
 // is refused there; an agent of this release reports v98 for it (accepted on every pair).
-if(images&&(images.length<2||images.length>4))throw Error('The window takes two to four images.');
+// Every pair from the third on gets its own license (routing to it, tools/list on it, its state); the count is not a list of
+// special cases (rehearsal-window.mjs), so a window grows by one entry in r1-kernels.json and one image, nothing here.
+rehearsalWindow(images);
 const INITIAL=[{odc:'1.7.29',o11:'11.55.93',odcBuild:'1.7.29.10940',o11Build:'11.55.93.65289'},{odc:'1.7.28',o11:'11.55.92',odcBuild:'1.7.28.10850',o11Build:'11.55.92.65269'}];
 const image=images?.[0].image??process.env.SSAM_REHEARSAL_IMAGE??'ssam-server:prod-20261021-ac614ad';
 fs.mkdirSync(out,{recursive:true});fs.mkdirSync(path.join(out,'segredo'),{recursive:true});
@@ -34,9 +38,10 @@ try{
  const admin=run(['run','--rm','--network',prefix,...db,...mounts,'--entrypoint','node',image,'facade/ssam.mjs','server-token','issue','--customer','Rehearsal A','--days','1','--lanes','odc,o11']);
  const a=JSON.parse(admin);assert.ok(a.token&&a.agentCredential);fs.writeFileSync(path.join(out,'segredo','a.json'),JSON.stringify(a));
  const b=JSON.parse(run(['run','--rm','--network',prefix,...db,...mounts,'--entrypoint','node',image,'facade/ssam.mjs','server-token','issue','--customer','Rehearsal B','--days','1','--lanes','odc,o11']));fs.writeFileSync(path.join(out,'segredo','b.json'),JSON.stringify(b));
- const c=images?.length>=3?JSON.parse(run(['run','--rm','--network',prefix,...db,...mounts,'--entrypoint','node',image,'facade/ssam.mjs','server-token','issue','--customer','Rehearsal C','--days','1','--lanes','odc,o11'])):null;if(c)fs.writeFileSync(path.join(out,'segredo','c.json'),JSON.stringify(c));
- const e=images?.length===4?JSON.parse(run(['run','--rm','--network',prefix,...db,...mounts,'--entrypoint','node',image,'facade/ssam.mjs','server-token','issue','--customer','Rehearsal E','--days','1','--lanes','odc,o11'])):null;if(e)fs.writeFileSync(path.join(out,'segredo','e.json'),JSON.stringify(e));
- const every=['','one','two','three','four'][images?.length??2]+' pairs';
+ const issue=customer=>JSON.parse(run(['run','--rm','--network',prefix,...db,...mounts,'--entrypoint','node',image,'facade/ssam.mjs','server-token','issue','--customer',customer,'--days','1','--lanes','odc,o11']));
+ // One license per pair from the third on (rehearsal-window.mjs extraLicenses): routing, tools/list and state of each backend.
+ const extras=extraLicenses(images?.length??2).map(({index,customer})=>{const license=issue(customer);fs.writeFileSync(path.join(out,'segredo','pair-'+(index+1)+'.json'),JSON.stringify(license));return {index,license};});
+ const every=pairWords(images?.length??2);
  const d=images&&(images[0].odcBridge??'v97')!=='v97'?JSON.parse(run(['run','--rm','--network',prefix,...db,...mounts,'--entrypoint','node',image,'facade/ssam.mjs','server-token','issue','--customer','Rehearsal D','--days','1','--lanes','odc,o11'])):null;if(d)fs.writeFileSync(path.join(out,'segredo','d.json'),JSON.stringify(d));
  const pairs=(images??INITIAL).map((x,i)=>({name:x.name??'v'+(i+1),odc:x.odc??INITIAL[i]?.odc,o11:x.o11??INITIAL[i]?.o11,odcBuild:x.odcBuild??INITIAL[i]?.odcBuild,o11Build:x.o11Build??INITIAL[i]?.o11Build,odcBridge:x.odcBridge??'v97',odcBridgeAccepted:x.odcBridgeAccepted??(x.odcBridge&&x.odcBridge!=='v97'?[]:['v96','v48','v45'])}));
  assert.ok(pairs.every(p=>p.odc&&p.o11&&p.odcBuild&&p.o11Build),'Every pair of the window names its Studio versions');
@@ -78,15 +83,47 @@ try{
  const ha=await post('/agent/v1/hello',a.agentCredential,hello(pairs[0],pairs[1],'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'));assert.equal(ha.status,200);assert.equal(JSON.parse(ha.text).compatible.odc.ok,true);assert.equal(JSON.parse(ha.text).compatible.o11.ok,false);assert.match(JSON.stringify(JSON.parse(ha.text).compatible.o11),/Update Service Studio to 11\.55\.94/);checks.push({name:'mixed pair gives the O11 upgrade while ODC works',ok:true});
  const hb=await post('/agent/v1/hello',b.agentCredential,hello(pairs[1],pairs[1],'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'));assert.equal(hb.status,200);assert.equal(JSON.parse(hb.text).compatible.odc.ok,true);assert.equal(JSON.parse(hb.text).compatible.o11.ok,true);
  const routing=JSON.parse(fs.readFileSync(path.join(out,'segredo/runtime/state/routing.json'),'utf8'));assert.equal(routing.routes[a.id].backend,'v1');assert.equal(routing.routes[b.id].backend,'v2');
- if(c){
-  const hc=await post('/agent/v1/hello',c.agentCredential,hello(pairs[2],pairs[2],'dddddddddddddddddddddddddddddddd'));assert.equal(hc.status,200);assert.equal(JSON.parse(hc.text).compatible.odc.ok,true);assert.equal(JSON.parse(hc.text).compatible.o11.ok,true);
-  assert.equal(JSON.parse(fs.readFileSync(path.join(out,'segredo/runtime/state/routing.json'),'utf8')).routes[c.id].backend,'v3');
- }
- if(e){
-  const he=await post('/agent/v1/hello',e.agentCredential,hello(pairs[3],pairs[3],'9999999999999999999999999999999a'));assert.equal(he.status,200);assert.equal(JSON.parse(he.text).compatible.odc.ok,true);assert.equal(JSON.parse(he.text).compatible.o11.ok,true);
-  assert.equal(JSON.parse(fs.readFileSync(path.join(out,'segredo/runtime/state/routing.json'),'utf8')).routes[e.id].backend,'v4');
+ const routeOf=id=>JSON.parse(fs.readFileSync(path.join(out,'segredo/runtime/state/routing.json'),'utf8')).routes[id]?.backend;
+ for(const {index,license} of extras){
+  const h=await post('/agent/v1/hello',license.agentCredential,hello(pairs[index],pairs[index],String(index+1).repeat(32)));assert.equal(h.status,200);assert.equal(JSON.parse(h.text).compatible.odc.ok,true);assert.equal(JSON.parse(h.text).compatible.o11.ok,true);
+  assert.equal(routeOf(license.id),pairs[index].name);
  }
  checks.push({name:'agent routing',ok:true,backends:backends.length});
+ // r44: the hello the published app 0.2.7 sends (installer pack pack-r43-027-native-bc680e70a2a1: ODC bridge v108, thin O11 bridges
+ // built for 11.55.94/.93/.92, the native core's commands), with real Studio builds: each case on a license of its own, so the
+ // routing of the sessions above is never touched. The newest pair (the last) serves its own two Studios with that pack; a mixed
+ // machine routes by its ODC Studio; a Studio newer than the window is served on the default pair with the warning.
+ if(images&&pairs.length>=5){
+  const ODC_COMMANDS_027=['status','wait','authorize','open','snapshot','latest','check-base','preview','merge','reconcile-merge','publish','publish-status','publish-log','dismiss-dialog','close','module-info','assets','consumers','create','create-app','templates','template-download','refresh-references','reference-snapshot','reference-producers','data','data-insert','data-update','data-delete','portal-call','portal-session','auth-status','stop','query-test','merge:prefer-foreign'];
+  const app027=(id,odc,o11)=>({t:'hello',protocol:'ssam-agent/1',instance:id,agent:{version:'0.4.13-native',odcCommands:ODC_COMMANDS_027,machine:{id,name:'Rehearsal',user:'Test'}},
+   pack:{id:'pack-r43-027-native-bc680e70a2a1',lanes:['odc','o11'],odcBridge:'v108',o11BuiltFor:'11.55.94',o11Hook:'dev',o11Builds:['11.55.94','11.55.93','11.55.92']},
+   studios:{...(odc?{odc:{installed:{version:odc,dir:'C:/Synthetic'}}}:{}),...(o11?{o11:{installed:{version:o11,dir:'C:/Synthetic'}}}:{})}});
+  const newest=pairs.at(-1),first=pairs[0];
+  const cases=[
+   {name:'app 0.2.7 on its own Studios',odc:newest.odcBuild,o11:newest.o11Build,backend:newest.name,odcOk:true,o11Ok:true},
+   {name:'ODC Studio only',odc:newest.odcBuild,o11:null,backend:newest.name,odcOk:true,o11Ok:false},
+   {name:'Service Studio only',odc:null,o11:newest.o11Build,backend:newest.name,odcOk:false,o11Ok:true},
+   {name:'mixed: newest ODC with the default O11',odc:newest.odcBuild,o11:first.o11Build,backend:newest.name,odcOk:true,o11Ok:false,o11Cause:'STUDIO_VERSION_CHANGED',o11Text:new RegExp('Update Service Studio to '+newest.o11.replaceAll('.','\\.'))},
+   {name:'mixed: an older ODC with the newest O11',odc:pairs.at(-2).odcBuild,o11:newest.o11Build,backend:pairs.at(-2).name,odcOk:true,o11Ok:false,o11Cause:'STUDIO_VERSION_CHANGED'},
+   {name:'newer than the window',odc:newest.odc+'9.1',o11:newest.o11+'9.1',backend:first.name,odcOk:true,o11Ok:true,odcWarning:'studioNewerThanServed',o11Warning:'studioNewerThanServed'},
+  ];
+  const seen=[];
+  for(const [i,x] of cases.entries()){
+   const license=issue('Rehearsal app 0.2.7 '+(i+1));
+   const h=await post('/agent/v1/hello',license.agentCredential,app027(('a027'+i).padEnd(32,'0'),x.odc,x.o11));assert.equal(h.status,200,x.name);
+   const compatible=JSON.parse(h.text).compatible,backend=routeOf(license.id);
+   assert.equal(backend,x.backend,x.name+': routed to '+backend);
+   assert.equal(compatible.odc.ok,x.odcOk,x.name+' odc '+JSON.stringify(compatible.odc));
+   assert.equal(compatible.o11.ok,x.o11Ok,x.name+' o11 '+JSON.stringify(compatible.o11));
+   for(const lane of ['odc','o11'])assert.doesNotMatch(JSON.stringify(compatible[lane]),/AGENT_PACK_MISMATCH/,x.name+' '+lane+' pack');
+   if(x.o11Cause)assert.equal(compatible.o11.cause,x.o11Cause,x.name);
+   if(x.o11Text)assert.match(compatible.o11.message,x.o11Text,x.name);
+   if(x.odcWarning)assert.equal(compatible.odc.warning?.code,x.odcWarning,x.name);
+   if(x.o11Warning)assert.equal(compatible.o11.warning?.code,x.o11Warning,x.name);
+   seen.push({name:x.name,odc:x.odc,o11:x.o11,backend,odc_:{ok:compatible.odc.ok,code:compatible.odc.code??null,cause:compatible.odc.cause??null,warning:compatible.odc.warning?.userMessage??null,message:compatible.odc.ok?null:compatible.odc.message},o11_:{ok:compatible.o11.ok,code:compatible.o11.code??null,cause:compatible.o11.cause??null,warning:compatible.o11.warning?.userMessage??null,message:compatible.o11.ok?null:compatible.o11.message}});
+  }
+  checks.push({name:'app 0.2.7 hello: routing and bridges on the '+every,ok:true,cases:seen});
+ }
  if(d){
   // The newest pair runs Studios of another runtime: a pack whose ODC bridge is v97 (net8) is refused there, never attached.
   const old=await post('/agent/v1/hello',d.agentCredential,hello(pairs[0],pairs[0],'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',{odcBridge:'v97'}));assert.equal(old.status,200);
@@ -100,8 +137,10 @@ try{
   const v101=await post('/agent/v1/hello',d.agentCredential,hello(pairs[0],pairs[0],'f'.repeat(29)+'101',{odcBridge:'v101'}));assert.equal(JSON.parse(v101.text).compatible.odc.ok,true,'v101 must stay accepted on '+pairs[0].odc);checks.push({name:'v101 still accepted on '+pairs[0].odc,ok:true});
  }
  const init={jsonrpc:'2.0',id:1,method:'initialize',params:{protocolVersion:'2025-03-26',capabilities:{},clientInfo:{name:'rehearsal',version:'1'}}};
- const sa=await post('/mcp',a.token,init),sb=await post('/mcp',b.token,init),sc=c?await post('/mcp',c.token,init):null,se=e?await post('/mcp',e.token,init):null;assert.equal(sa.status,200);assert.equal(sb.status,200);assert.ok(sa.sid&&sb.sid);if(sc){assert.equal(sc.status,200);assert.ok(sc.sid);}if(se){assert.equal(se.status,200);assert.ok(se.sid);}checks.push({name:'admin licenses accepted by every backend',ok:true,backends:backends.length});
- const sessions=[[a.token,sa.sid],[b.token,sb.sid],...(sc?[[c.token,sc.sid]]:[]),...(se?[[e.token,se.sid]]:[])];
+ const sa=await post('/mcp',a.token,init),sb=await post('/mcp',b.token,init);assert.equal(sa.status,200);assert.equal(sb.status,200);assert.ok(sa.sid&&sb.sid);
+ const more=[];for(const {license} of extras){const s=await post('/mcp',license.token,init);assert.equal(s.status,200);assert.ok(s.sid);more.push([license.token,s.sid]);}
+ checks.push({name:'admin licenses accepted by every backend',ok:true,backends:backends.length});
+ const sessions=[[a.token,sa.sid],[b.token,sb.sid],...more];
  for(const [token,sid]of sessions)await post('/mcp',token,{jsonrpc:'2.0',method:'notifications/initialized'},{'mcp-session-id':sid});
  if(images)for(const [index,[token,sid]]of sessions.entries()){
   const listed=await post('/mcp',token,{jsonrpc:'2.0',id:2,method:'tools/list',params:{}},{'mcp-session-id':sid});assert.equal(listed.status,200);
@@ -144,4 +183,4 @@ try{
  for(const backend of backends)memoryOf(backend.name,'after-checks-idle');
  result.ok=true;
 }catch(e){result.error=e.message;process.exitCode=1;}
-finally{for(const backend of ['v1','v2','v3','v4']){try{fs.copyFileSync(path.join(out,'segredo/runtime/versions',backend,'server.log'),path.join(out,backend+'-server.log'));}catch{}}for(const name of containers){if(!name.endsWith('-db')){const logs=run(['logs',name],{allow:true});fs.writeFileSync(path.join(out,name.slice(prefix.length+1)+'.log'),logs);}run(['rm','-f','-v',name],{allow:true});}run(['network','rm',prefix],{allow:true});fs.rmSync(path.join(out,'segredo'),{recursive:true,force:true});fs.writeFileSync(path.join(out,'RESULT.json'),JSON.stringify(result,null,2));console.log(JSON.stringify(result));}
+finally{for(const backend of (images??INITIAL).map((x,i)=>x.name??'v'+(i+1))){try{fs.copyFileSync(path.join(out,'segredo/runtime/versions',backend,'server.log'),path.join(out,backend+'-server.log'));}catch{}}for(const name of containers){if(!name.endsWith('-db')){const logs=run(['logs',name],{allow:true});fs.writeFileSync(path.join(out,name.slice(prefix.length+1)+'.log'),logs);}run(['rm','-f','-v',name],{allow:true});}run(['network','rm',prefix],{allow:true});fs.rmSync(path.join(out,'segredo'),{recursive:true,force:true});fs.writeFileSync(path.join(out,'RESULT.json'),JSON.stringify(result,null,2));console.log(JSON.stringify(result));}
