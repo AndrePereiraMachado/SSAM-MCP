@@ -259,8 +259,9 @@ export function createAutoRuntime(config,runtime) {
    const checkSources=before?Object.fromEntries(before.map(b=>[b.o11+'|'+b.odc,'const expected='+JSON.stringify({budget:b.budget,offers:[],kernel:b.kernel})+';\n'+fs.readFileSync(path.join(here,'check-backend.mjs'),'utf8')])):null;
    // Server-only: the deployed new pair must accept the published pack's hello too (check-backend.mjs, that pair only).
    const hello=!before&&expected.bridges?.mode==='server-only'&&expected.bridges.hello&&expected.kernel?{[expected.kernel.o11+'|'+expected.kernel.odc]:expected.bridges.hello}:null;
-   // The thin bridge the owner proved for a Service Studio without its own build (o11BridgeProven), by Studio version.
-   const o11Proven=Object.fromEntries(Object.entries(config.o11BridgeProven??{}).filter(([,p])=>typeof p?.evidence==='string'&&p.evidence.trim()&&threeOf(p.build)).map(([v,p])=>[threeOf(v),threeOf(p.build)]));
+   // The thin bridge of the proof the round verified for the new pair's Service Studio (server-only o11Proofs, in release.json),
+   // never the configuration as written.
+   const o11Proven=Object.fromEntries(Object.entries(expected.bridges?.o11Proofs??{}).filter(([v,p])=>p?.studioVersion===v&&/^[a-f0-9]{64}$/.test(p.sha256??'')&&threeOf(p.build)).map(([v,p])=>[v,threeOf(p.build)]));
    // A deployment (never a rollback, which restores what was live) also checks the reviewed ODC model plugins in every backend
    // and that exactly one backend presented the published pack's hello.
    const extra=before?{}:{modelPlugins:modelPlugins(),...(Object.keys(o11Proven).length?{o11Proven}:{})};

@@ -322,6 +322,27 @@ test('N2: the waiting event goes to the webhook, the VPS journal (bounded code) 
  assert.equal(posts.length,1);assert.equal(posts[0].event,'waiting');assert.equal(posts[0].code,'CLIENT_BRIDGE_UPDATE_REQUIRED');
  const {OWNER_WAITS}=await import('./pipeline.mjs');for(const code of Object.values(OWNER_WAITS))assert.match(code,/^[A-Z_]{1,40}$/);
 });
+// Review round 3, N4: the round verifies the owner's O11 proof against its file, records it in release.json and checks it.
+test('N4: a verified O11 proof serves a Service Studio without its own build, is recorded in release.json and checked; free text waits',async t=>{
+ const {o11Proofs}=await import('./server-only.mjs');
+ // The proven build must be one a served Service Studio runs (here 11.55.93 of the live pair), built for the Studio's runtime.
+ const pack={o11Builds:[{version:'11.55.94',runtime:'net10.0'},{version:'11.55.93',runtime:'net10.0'}]};
+ const f=await fixture(t),s=serverOnlyRound(f,{pack}),root=path.join(f.dir,'proofs'),file=path.join(root,'attach-11.55.96.txt');fs.mkdirSync(root);fs.writeFileSync(file,'agent attached to Service Studio 11.55.96');
+ s.config.observed=s.config.observed.map(o=>o.lane==='o11'?{...o,version:'11.55.96',fullVersion:'11.55.96.1'}:o);
+ s.config.o11BridgeProven={'11.55.96':{studioVersion:'11.55.96',build:'11.55.93',packCommit:'c'.repeat(40),provenAt:'2026-11-08T10:00:00Z',evidence:file}};
+ s.ops.o11Proofs=c=>o11Proofs(c,{root});s.ops.build=async()=>({...release(f.dir).built,odc:'1.7.30',o11:'11.55.96'});
+ const result=await roundOf(s);assert.equal(result.status,'live',JSON.stringify(result));
+ const id='o11-11.55.96-odc-1.7.30',recorded=readJournal(path.join(f.dir,id,'release.json')).bridges.o11Proofs['11.55.96'];
+ assert.deepEqual({...recorded,sha256:recorded.sha256.length},{studioVersion:'11.55.96',build:'11.55.93',packCommit:'c'.repeat(40),provenAt:'2026-11-08T10:00:00Z',evidence:file,sha256:64,size:41});
+ const check=s.runs.map(r=>{try{return JSON.parse(r.input);}catch{return null;}}).find(r=>r?.action==='check'&&!r.rollback);
+ assert.match(check.checkSource,/"o11Proven":\{"11\.55\.96":"11\.55\.93"\}/);
+ // The round-2 free-text form: no proof, the lane waits for the owner and says why.
+ const g=await fixture(t),w=serverOnlyRound(g,{pack});w.config.observed=s.config.observed;w.ops.o11Proofs=c=>o11Proofs(c,{root});
+ w.config.o11BridgeProven={'11.55.96':{build:'11.55.93',evidence:'live attach of agent 0.2.7 to Service Studio 11.55.96, 2026-11-08'}};
+ const waited=await roundOf(w);assert.equal(waited.status,'deferred');
+ assert.match(waited.error,/no thin bridge built for Service Studio 11\.55\.96 .*its o11BridgeProven entry is refused: /);
+ for(const step of ['image','publish','deploy'])assert.ok(!g.calls.includes(step),step);
+});
 // Review round 3, N3: the remote's own codes reach the attempt, the events and the notice instead of REMOTE_FAILED.
 const requestOf=o=>{try{return JSON.parse(o?.input);}catch{return null;}};
 test('N3: plugins, receipt, hello and served-list codes of the remote keep their code; a post-deployment one rolls back with it',async t=>{

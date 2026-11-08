@@ -7,7 +7,7 @@ import {releaseAutomatically,releaseEvent} from './automatic.mjs';
 import path from 'node:path';
 import {createHash} from 'node:crypto';
 import {LANES,STUDIO_NAME,ownerCommand,missingPack,planWindow,readyCandidates,pairFor,pairId,hasPair,rotateWindow,windowLimit,compareFailures,windowPairs,tfmMajor,proposalText,failureText,composeText,featuresLine} from './window.mjs';
-import {CLIENT_BRIDGE_CODE,isServerOnly,laneGap,serverOnlyGate,deferredLanes,gapText} from './server-only.mjs';
+import {CLIENT_BRIDGE_CODE,isServerOnly,laneGap,serverOnlyGate,deferredLanes,gapText,o11Proofs} from './server-only.mjs';
 import {odcBinaryCheck} from './odc-binary.mjs';
 import {generateCompose} from '../coolify/gen-compose.mjs';
 // An environment problem (not a test result): the round waits and retries. lanes: the lanes it concerns (empty = the pair).
@@ -208,7 +208,12 @@ export async function runAttempt(config,ops,decision,now){
   await ops.preflight({pair,id,dir});
   // Server-only: the reviewed agent release decides which client bridges exist; no bridge is built, signed or offered.
   const serverOnly=!!config.automatic&&isServerOnly(config),agentRelease=serverOnly?await reviewedRelease(ops,pair):null;
-  await laneChecks(config,ops,pair,runtimes,log,agentRelease);
+  // The owner's O11 proofs (o11BridgeProven), each verified against its evidence file now: only these reach the gate, the
+  // release journal and the post-deployment check; a refused entry is no proof, and the lane that needs it says why.
+  const proofs=serverOnly?await (ops.o11Proofs??o11Proofs)(config):{proven:{},refused:[]};
+  for(const r of proofs.refused)log(`o11BridgeProven ${r.version} refused: ${r.why}`);
+  const gateConfig=serverOnly?{...config,o11BridgeProven:proofs.proven,o11ProofRefusals:proofs.refused}:config;
+  await laneChecks(gateConfig,ops,pair,runtimes,log,agentRelease);
   await ops.dockerReady();
   const bundles={};
   for(const lane of LANES){
@@ -226,7 +231,7 @@ export async function runAttempt(config,ops,decision,now){
   const studios=Object.fromEntries(LANES.map(lane=>[lane,{version:bundles[lane].version,fullVersion:bundles[lane].fullVersion??null,tfm:pair.candidates.find(c=>c.lane===lane)?.tfm??bundles[lane].tfm??null}]));
   if(serverOnly){
    const served=Object.fromEntries(LANES.map(lane=>[lane,[...new Set(estimated.manifest[lane].map(x=>x.version))]]));
-   gate=serverOnlyGate({config,release:agentRelease,pair,studios,servedKernels:await ops.servedKernels(base),served});
+   gate=serverOnlyGate({config:gateConfig,release:agentRelease,pair,studios,servedKernels:await ops.servedKernels(base),served});
    if(gate.gaps.length)throw clientBridgeError(gate.gaps,pair);
    log(`server-only kernel ${JSON.stringify(gate.kernel)}; published pack hello odc ${gate.hello.pack.odcBridge}, o11 built for ${gate.hello.pack.o11BuiltFor}`);
    // A new ODC Studio: the published bridge's Studio references, by assembly identity, against the served ODC Studio of
@@ -256,7 +261,10 @@ export async function runAttempt(config,ops,decision,now){
   fs.writeFileSync(path.join(dir,'comparison.json'),JSON.stringify(comparisons,null,2));
   if(failedLanes.length)throw Object.assign(Error('New kernel test failures:\n'+failedLanes.map(l=>`${l}:\n`+comparisons[l].newFailures.map(n=>'  '+n).join('\n')).join('\n')),{lanes:failedLanes});
   // signed-offers builds and Authenticode-signs the client bridges; server-only never does (no certificate exists for it).
-  const bridges=!config.automatic?null:serverOnly?{mode:'server-only',offers:[],kernel:gate.kernel,hello:gate.hello,agentRelease:agentRelease.commit}:await ops.buildBridges(pair,bundles,dir);
+  // The proof the new pair's Service Studio is served by (its own build needs none) goes with the release and its check.
+  const o11Proof=serverOnly&&gate.hello.pack.o11BuiltFor!==pair.o11?proofs.proven[pair.o11]??null:null;
+  if(o11Proof)log(`o11 ${pair.o11} served by the thin bridge built for ${o11Proof.build}: proof ${o11Proof.evidence} sha256 ${o11Proof.sha256} (${o11Proof.provenAt}, pack ${o11Proof.packCommit.slice(0,7)})`);
+  const bridges=!config.automatic?null:serverOnly?{mode:'server-only',offers:[],kernel:gate.kernel,hello:gate.hello,agentRelease:agentRelease.commit,o11Proofs:o11Proof?{[pair.o11]:o11Proof}:{}}:await ops.buildBridges(pair,bundles,dir);
   if(bridges){ops.bridgeKernel=bridges.kernel;ops.packHello=serverOnly?bridges.hello:null;}
   const built=await ops.build(pair,bundles,dir);
   fs.writeFileSync(path.join(dir,'image.json'),JSON.stringify(built,null,2));

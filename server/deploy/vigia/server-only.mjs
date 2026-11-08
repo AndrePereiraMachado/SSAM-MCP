@@ -7,6 +7,9 @@
 // agent release source (agentReleaseCommit): never the server, the environment or a customer's hello.
 // "signed-offers" keeps the round that builds, Authenticode-signs and offers client bridges (auto-runtime.mjs buildBridges).
 // Pure: no process, Git, network or file here.
+import fs from 'node:fs';
+import path from 'node:path';
+import {createHash} from 'node:crypto';
 import {LANES,STUDIO_NAME,tfmMajor,compareVersion,version as threeOf} from './window.mjs';
 import {compatibility} from '../../platforms/odc/facade/agent-hub.mjs';
 import {bridgeReferences} from './odc-binary.mjs';
@@ -59,15 +62,58 @@ export function packForStudio(config,lane,tfm){
 // Every published pack: agentPack and each agentPackByRuntime entry over it.
 export const publishedPacks=config=>[config.agentPack??{},...Object.values(config.agentPackByRuntime??{}).map(over=>({...config.agentPack,...over}))];
 const builds=pack=>(Array.isArray(pack?.o11Builds)?pack.o11Builds:[]).map(b=>typeof b==='string'?{version:b}:{version:b?.version,runtime:b?.runtime??null}).filter(b=>/^\d+\.\d+\.\d+$/.test(b.version??''));
+// A live proof that a thin bridge built for another Service Studio loads into this one (config o11BridgeProven, by Service
+// Studio version a.b.c): {studioVersion (the key), build (the o11Builds entry proven), packCommit (the agent pack proven: the
+// reviewed agentReleaseCommit), provenAt (ISO date-time, not in the future), evidence (the proof file, under the private
+// proofs folder), sha256 (optional: when given, the file's)}. Free text, another pack, a missing or moved file is no proof.
+export const O11_PROOFS_ROOT='C:/ssam-priv/vigia/proofs';
+const PROOF_FIELDS=['build','evidence','packCommit','provenAt','sha256','studioVersion'];
+const under=(root,file)=>{const r=path.win32.relative(path.win32.resolve(root),path.win32.resolve(file));return !!r&&!r.startsWith('..')&&!path.win32.isAbsolute(r);};
+// Why an o11BridgeProven entry is no proof (null: its shape is one). Pure: the file is read by o11Proofs.
+export function o11ProofProblem(version,p,{agentReleaseCommit,root=O11_PROOFS_ROOT,now=Date.now()}={}){
+ if(!/^\d+\.\d+\.\d+$/.test(version))return 'its key is not a Service Studio version a.b.c';
+ if(!p||typeof p!=='object'||Array.isArray(p))return 'it is not {studioVersion, build, packCommit, provenAt, evidence}';
+ const unknown=Object.keys(p).filter(k=>!PROOF_FIELDS.includes(k));if(unknown.length)return `unknown field ${unknown.join(', ')}`;
+ if(p.studioVersion!==version)return `studioVersion ${JSON.stringify(p.studioVersion??null)} is not its key ${version}`;
+ if(typeof p.build!=='string'||!/^\d+\.\d+\.\d+$/.test(p.build)||p.build===version)return `build ${JSON.stringify(p.build??null)} is not another Service Studio version a.b.c`;
+ if(!/^[a-f0-9]{40}$/.test(agentReleaseCommit??''))return 'agentReleaseCommit is not configured';
+ if(p.packCommit!==agentReleaseCommit)return `packCommit ${JSON.stringify(p.packCommit??null)} is not the reviewed agentReleaseCommit ${agentReleaseCommit.slice(0,7)}`;
+ const at=typeof p.provenAt==='string'&&/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/.test(p.provenAt)?Date.parse(p.provenAt):NaN;
+ if(!Number.isFinite(at))return 'provenAt is not an ISO date-time with its zone';
+ if(at>now+5*60000)return 'provenAt is in the future';
+ if(typeof p.evidence!=='string'||!/^[A-Za-z]:[\\/]/.test(p.evidence)||!under(root,p.evidence))return `evidence is not a file under ${root}`;
+ if(p.sha256!==undefined&&!/^[a-f0-9]{64}$/.test(p.sha256))return 'sha256 is not 64 lowercase hex';
+ return null;
+}
+// The usable proofs of a config, each with the sha256 and size of its evidence file as read now (recorded in release.json),
+// and the refused entries with why. The file must be a regular file (no link, no reparse point on the way) whose real path
+// stays under the proofs folder.
+export function o11Proofs(config,{root=O11_PROOFS_ROOT,now=Date.now()}={}){
+ const proven={},refused=[];
+ for(const [version,p] of Object.entries(config?.o11BridgeProven??{})){
+  let why=o11ProofProblem(version,p,{agentReleaseCommit:config.agentReleaseCommit,root,now});
+  if(!why)try{
+   const s=fs.lstatSync(p.evidence);
+   if(s.isSymbolicLink()||!s.isFile())why='evidence is not a regular file';
+   else if(s.size<1||s.size>64*1024*1024)why='evidence is empty or larger than 64 MiB';
+   else if(!under(fs.realpathSync.native(root),fs.realpathSync.native(p.evidence)))why=`evidence resolves outside ${root}`;
+   else{const sha256=createHash('sha256').update(fs.readFileSync(p.evidence)).digest('hex');
+    if(p.sha256&&p.sha256!==sha256)why='evidence changed since its sha256 was recorded';
+    else proven[version]={studioVersion:p.studioVersion,build:p.build,packCommit:p.packCommit,provenAt:p.provenAt,evidence:p.evidence,sha256,size:s.size};}
+  }catch(e){why=`evidence cannot be read (${e.code??e.message})`;}
+  if(why)refused.push({version,why});
+ }
+ return {proven,refused};
+}
 // The thin bridge the gate accepts for this Service Studio: the pack's build of exactly that version (a thin bridge binds to
-// the exact ServiceStudio.* assembly versions it was compiled against, agent o11-builds.mjs), else only a build the owner
-// declared proven for it in o11BridgeProven {"<a.b.c>": {build, evidence}} (a live proof recorded in evidence). The agent
-// itself falls back to the pack's default build (o11PackFor); the gate never does. null: no build that version can load.
+// the exact ServiceStudio.* assembly versions it was compiled against, agent o11-builds.mjs), else only the build of a proof
+// o11Proofs verified (proven: its output, each entry with the evidence sha256 it read). The agent itself falls back to the
+// pack's default build (o11PackFor); the gate never does. null: no build that version can load.
 export function o11BuildFor(pack,studioVersion,proven={}){
  const v=threeOf(studioVersion),own=builds(pack).find(b=>b.version===v);
  if(own)return {...own,proven:false};
  const p=proven?.[v];
- if(p&&typeof p.evidence==='string'&&p.evidence.trim()){const b=builds(pack).find(x=>x.version===threeOf(p.build));if(b)return {...b,proven:true};}
+ if(p&&p.studioVersion===v&&/^[a-f0-9]{64}$/.test(p.sha256??'')&&typeof p.evidence==='string'){const b=builds(pack).find(x=>x.version===threeOf(p.build));if(b)return {...b,proven:true};}
  return null;
 }
 // Why the published packs have no bridge for this Studio (null: they have one). studio: {version, tfm} of the verified
@@ -88,7 +134,8 @@ export function laneGap(config,release,lane,studio){
   return null;
  }
  const build=o11BuildFor(pack,studio.version,config.o11BridgeProven);
- if(!build)return `the published pack has no thin bridge built for Service Studio ${threeOf(studio.version)} (o11Builds: ${builds(pack).map(b=>b.version).join(', ')||'none'}); a thin bridge binds to the exact Service Studio it was built for`;
+ const refusal=(config.o11ProofRefusals??[]).find(r=>r.version===threeOf(studio.version));
+ if(!build)return `the published pack has no thin bridge built for Service Studio ${threeOf(studio.version)} (o11Builds: ${builds(pack).map(b=>b.version).join(', ')||'none'}); a thin bridge binds to the exact Service Studio it was built for${refusal?`; its o11BridgeProven entry is refused: ${refusal.why}`:''}`;
  if(!build.runtime)return `the pack's thin bridge for Service Studio ${build.version} declares no runtime (o11Builds needs {version, runtime})`;
  if(tfmMajor(build.runtime)!==major)return `the pack's thin bridge for Service Studio ${build.version} is built for ${build.runtime}`;
  return null;

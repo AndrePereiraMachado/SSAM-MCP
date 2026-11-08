@@ -6,7 +6,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {BRIDGE_MODES,CLIENT_BRIDGE_CODE,bridgeMode,parseAgentRelease,loadableOdc,packForStudio,laneGap,packHello,nearestKernels,serverOnlyKernel,serverOnlyGate,deferredLanes,gapText} from './server-only.mjs';
+import {createHash} from 'node:crypto';
+import {BRIDGE_MODES,CLIENT_BRIDGE_CODE,bridgeMode,parseAgentRelease,loadableOdc,packForStudio,laneGap,packHello,nearestKernels,serverOnlyKernel,serverOnlyGate,deferredLanes,gapText,o11Proofs,o11ProofProblem,O11_PROOFS_ROOT} from './server-only.mjs';
 import {rotateWindow,windowLimit,replayApprovals,pairFor} from './window.mjs';
 import {automaticPlan,AUTOMATIC_PLAN} from './automatic.mjs';
 import {smokeImage} from './smoke.mjs';
@@ -30,6 +31,11 @@ const kernels=[{o11:'11.55.94',odc:'1.7.30',odcBridge:'v109',odcBridgeAccepted:n
 const studios=(odc='1.7.32',o11='11.55.95',tfm={})=>({odc:{version:odc,fullVersion:odc+'.1',tfm:tfm.odc??'net10.0'},o11:{version:o11,fullVersion:o11+'.1',tfm:tfm.o11??'net10.0'}});
 const pair={odc:'1.7.32',o11:'11.55.95',lanes:['odc','o11']};
 const served={odc:['1.7.32','1.7.31','1.7.30','1.7.29','1.7.28'],o11:['11.55.95','11.55.94','11.55.93','11.55.92']};
+// Review round 3, N4: an owner's O11 proof is structured and verified against its evidence file (o11Proofs); only its output
+// reaches the gate. A proofs folder of the test stands for C:\ssam-priv\vigia\proofs.
+function proofFolder(t){const root=tmp(t),file=path.join(root,'attach-agent-to-11.55.96.json');fs.writeFileSync(file,JSON.stringify({studio:'11.55.96',attached:true}));return {root,file};}
+const proofOf=(file,studioVersion='11.55.96',extra={})=>({studioVersion,build:'11.55.94',packCommit:release.commit,provenAt:'2026-11-08T10:00:00Z',evidence:file,...extra});
+const verified=(root,entries)=>o11Proofs({agentReleaseCommit:release.commit,o11BridgeProven:entries},{root,now:Date.parse('2026-11-08T12:00:00Z')});
 
 test('bridgeMode defaults to server-only, keeps signed-offers, refuses anything else; the plan says no client bridge is built',()=>{
  assert.deepEqual(BRIDGE_MODES,['server-only','signed-offers']);
@@ -79,7 +85,7 @@ test('the gate passes a published pack with a thin bridge built for 11.55.95, an
  assert.ok(g.hello.agent.odcCommands.includes('reconcile-merge')&&g.hello.agent.odcCommands.includes('merge:prefer-foreign'));
  const answer=compatibility(g.hello,{...g.kernel,servedVersions:served},['odc','o11']);assert.equal(answer.odc.ok,true);assert.equal(answer.o11.ok,true);
 });
-test('the gate defers on a runtime without a pack bridge, on a bridge the release does not attach and on a refused hello',()=>{
+test('the gate defers on a runtime without a pack bridge, on a bridge the release does not attach and on a refused hello',t=>{
  const net11=serverOnlyGate({config:config95,release,pair,studios:studios('1.7.32','11.55.95',{odc:'net11.0'}),servedKernels:kernels,served});
  assert.deepEqual(net11.gaps.map(g=>[g.lane,g.version,g.tfm]),[['odc','1.7.32','net11.0']]);assert.match(net11.gaps[0].why,/agentPackByRuntime\.net11/);
  assert.match(gapText(net11.gaps),/^client bridge update required: odc 1\.7\.32 runtime net11\.0 \(.*Production is not touched for this lane\./);
@@ -93,11 +99,11 @@ test('the gate defers on a runtime without a pack bridge, on a bridge the releas
  const old=serverOnlyGate({config:config95,release:{...release,commands:release.commands.filter(c=>c!=='reconcile-merge')},pair,studios:studios(),servedKernels:kernels,served});
  assert.deepEqual(old.gaps.map(g=>g.lane),['odc']);assert.match(old.gaps[0].why,/AGENT_PACK_MISMATCH/);
  // A proven thin bridge no served Service Studio version runs (the window dropped 11.55.94): refused, not deployed.
- const proven={...config,o11BridgeProven:{'11.55.95':{build:'11.55.94',evidence:'live attach 2026-11-08'}}};
+ const pf=proofFolder(t),proven={...config,o11BridgeProven:verified(pf.root,{'11.55.95':proofOf(pf.file,'11.55.95')}).proven};assert.ok(proven.o11BridgeProven['11.55.95']);
  const dropped=serverOnlyGate({config:proven,release,pair,studios:studios(),servedKernels:kernels,served:{...served,o11:['11.55.95']}});assert.deepEqual(dropped.gaps.map(g=>g.lane),['o11']);
 });
 // Review round 2, probes P1-P3 (C:\t\r5\rev-vigia-so\probe.mjs) as tests.
-test('A1 (P1): a Service Studio the published pack has no build for EXACTLY is refused, never served by the default build',()=>{
+test('A1 (P1): a Service Studio the published pack has no build for EXACTLY is refused, never served by the default build',t=>{
  for(const o11 of ['11.55.95','11.55.96']){
   const p={odc:'1.7.32',o11,lanes:['o11']},g=serverOnlyGate({config,release,pair:p,studios:studios('1.7.32',o11),servedKernels:kernels,served:{odc:served.odc,o11:[o11,...served.o11]}});
   assert.deepEqual(g.gaps.map(x=>[x.lane,x.version]),[['o11',o11]]);assert.equal(g.kernel,undefined);
@@ -105,15 +111,56 @@ test('A1 (P1): a Service Studio the published pack has no build for EXACTLY is r
  }
  // The exact build passes and the hello names it; the owner may record a live proof that another build loads (o11BridgeProven).
  assert.equal(laneGap(config,release,'o11',{version:'11.55.94',tfm:'net10.0'}),null);
- const proven=ev=>({...config,o11BridgeProven:{'11.55.96':{build:'11.55.94',evidence:ev}}});
+ const pf=proofFolder(t),proven=entries=>{const v=verified(pf.root,entries);return {...config,o11BridgeProven:v.proven,o11ProofRefusals:v.refused};};
  const p={odc:'1.7.32',o11:'11.55.96',lanes:['o11']},sv={odc:served.odc,o11:['11.55.96',...served.o11]};
- const ok=serverOnlyGate({config:proven('live attach of agent 0.2.7 to Service Studio 11.55.96, 2026-11-08'),release,pair:p,studios:studios('1.7.32','11.55.96'),servedKernels:kernels,served:sv});
+ const ok=serverOnlyGate({config:proven({'11.55.96':proofOf(pf.file)}),release,pair:p,studios:studios('1.7.32','11.55.96'),servedKernels:kernels,served:sv});
  assert.deepEqual(ok.gaps,[]);assert.equal(ok.hello.pack.o11BuiltFor,'11.55.94');
- for(const ev of ['','  ',undefined])assert.equal(serverOnlyGate({config:proven(ev),release,pair:p,studios:studios('1.7.32','11.55.96'),servedKernels:kernels,served:sv}).gaps[0]?.lane,'o11',String(ev));
- assert.match(laneGap({...config,o11BridgeProven:{'11.55.96':{build:'11.55.90',evidence:'x'}}},release,'o11',{version:'11.55.96',tfm:'net10.0'}),/no thin bridge built for Service Studio 11\.55\.96/);
+ // N4: the round-2 free-text form, an empty one and a raw entry that never went through o11Proofs are no proof.
+ for(const entry of [{build:'11.55.94',evidence:'live attach of agent 0.2.7 to Service Studio 11.55.96, 2026-11-08'},{build:'11.55.94',evidence:''},{build:'11.55.94'}]){
+  const g=serverOnlyGate({config:proven({'11.55.96':entry}),release,pair:p,studios:studios('1.7.32','11.55.96'),servedKernels:kernels,served:sv});
+  assert.equal(g.gaps[0]?.lane,'o11',JSON.stringify(entry));assert.match(g.gaps[0].why,/its o11BridgeProven entry is refused: /);
+  assert.equal(serverOnlyGate({config:{...config,o11BridgeProven:{'11.55.96':entry}},release,pair:p,studios:studios('1.7.32','11.55.96'),servedKernels:kernels,served:sv}).gaps[0]?.lane,'o11');
+ }
+ assert.equal(serverOnlyGate({config:{...config,o11BridgeProven:{'11.55.96':proofOf(pf.file)}},release,pair:p,studios:studios('1.7.32','11.55.96'),servedKernels:kernels,served:sv}).gaps[0]?.lane,'o11','an unverified entry (no sha256 read) is no proof');
+ assert.match(laneGap(proven({'11.55.96':proofOf(pf.file,'11.55.96',{build:'11.55.90'})}),release,'o11',{version:'11.55.96',tfm:'net10.0'}),/no thin bridge built for Service Studio 11\.55\.96/);
  // The post-deploy check refuses a presented hello whose thin bridge is not that build.
  const source=fs.readFileSync(path.join(here,'check-backend.mjs'),'utf8');
  assert.match(source,/presented\.pack\?\.o11BuiltFor!==\(expected\.o11Proven\?\.\[kernel\.o11\]\?\?kernel\.o11\)/);
+});
+test('N4: an O11 proof needs its Studio, the reviewed pack commit, a past ISO time and an existing evidence file under the proofs folder; its sha256 is read',t=>{
+ assert.equal(O11_PROOFS_ROOT,'C:/ssam-priv/vigia/proofs');
+ const pf=proofFolder(t),now=Date.parse('2026-11-08T12:00:00Z'),bytes=fs.readFileSync(pf.file),sha=createHash('sha256').update(bytes).digest('hex');
+ const ok=verified(pf.root,{'11.55.96':proofOf(pf.file)});assert.deepEqual(ok.refused,[]);
+ assert.deepEqual(ok.proven['11.55.96'],{studioVersion:'11.55.96',build:'11.55.94',packCommit:release.commit,provenAt:'2026-11-08T10:00:00Z',evidence:pf.file,sha256:sha,size:bytes.length});
+ assert.deepEqual(verified(pf.root,{'11.55.96':proofOf(pf.file,'11.55.96',{sha256:sha})}).refused,[]);
+ const outside=path.join(path.dirname(pf.root),path.basename(pf.root)+'-outside.json');fs.writeFileSync(outside,'x');t.after(()=>fs.rmSync(outside,{force:true}));
+ const cases=[
+  [{build:'11.55.94',evidence:'live attach 2026-11-08'},/studioVersion|unknown field/],
+  ['live attach of agent 0.2.7',/it is not/],
+  [proofOf(pf.file,'11.55.95'),/studioVersion "11\.55\.95" is not its key 11\.55\.96/],
+  [proofOf(pf.file,'11.55.96',{build:'11.55.96'}),/build "11\.55\.96" is not another/],
+  [proofOf(pf.file,'11.55.96',{packCommit:'d'.repeat(40)}),/packCommit "d{40}" is not the reviewed agentReleaseCommit c20454c/],
+  [proofOf(pf.file,'11.55.96',{provenAt:'yesterday'}),/provenAt is not an ISO date-time/],
+  [proofOf(pf.file,'11.55.96',{provenAt:'2026-11-08'}),/provenAt is not an ISO date-time/],
+  [proofOf(pf.file,'11.55.96',{provenAt:'2026-11-09T10:00:00Z'}),/provenAt is in the future/],
+  [proofOf(outside),/evidence is not a file under/],
+  [proofOf(path.join(pf.root,'..',path.basename(pf.root),'..','escape.json')),/evidence is not a file under/],
+  [proofOf('proofs/attach.json'),/evidence is not a file under/],
+  [proofOf(path.join(pf.root,'missing.json')),/evidence cannot be read \(ENOENT\)/],
+  [proofOf(pf.root),/evidence is not a file under/],
+  [proofOf((fs.mkdirSync(path.join(pf.root,'folder')),path.join(pf.root,'folder'))),/evidence is not a regular file/],
+  [proofOf('\\\\?\\'+pf.file),/evidence is not a file under/],
+  [proofOf(pf.file,'11.55.96',{sha256:'0'.repeat(64)}),/evidence changed since its sha256 was recorded/],
+  [proofOf(pf.file,'11.55.96',{sha256:'ABC'}),/sha256 is not 64 lowercase hex/],
+  [proofOf(pf.file,'11.55.96',{note:'free text'}),/unknown field note/]];
+ for(const [entry,why] of cases){const r=verified(pf.root,{'11.55.96':entry});assert.deepEqual(Object.keys(r.proven),[],JSON.stringify(entry));assert.match(r.refused[0]?.why??'',why,JSON.stringify(entry));}
+ assert.match(o11ProofProblem('11.55.96',proofOf(pf.file),{agentReleaseCommit:undefined,root:pf.root,now}),/agentReleaseCommit is not configured/);
+ assert.match(verified(pf.root,{'11.55':proofOf(pf.file)}).refused[0].why,/its key is not a Service Studio version/);
+ // A link under the folder to a file outside it is refused (when this account may create one).
+ const link=path.join(pf.root,'link.json');let linked=true;try{fs.symlinkSync(outside,link,'file');}catch{linked=false;}
+ if(linked)assert.match(verified(pf.root,{'11.55.96':proofOf(link)}).refused[0].why,/evidence is not a regular file/);
+ // The example configuration declares the structured form, no free text.
+ assert.deepEqual(example.o11BridgeProven,{});
 });
 test('M2 (P2): an O11 build that declares no runtime never passes the gate',()=>{
  const strings={agentPack:{...config.agentPack,o11Builds:['11.55.94','11.55.93']},agentPackByRuntime:{net10:{odcBridge:'v108',o11BuiltFor:'11.55.93'}}};
