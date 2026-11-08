@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import {readJournal,writeJournal} from './journal.mjs';
 import {releaseAutomatically,releaseEvent} from './automatic.mjs';
 import path from 'node:path';
+import {createHash} from 'node:crypto';
 import {LANES,STUDIO_NAME,ownerCommand,missingPack,planWindow,readyCandidates,pairFor,pairId,hasPair,rotateWindow,windowLimit,compareFailures,windowPairs,tfmMajor,proposalText,failureText,composeText,featuresLine} from './window.mjs';
 import {CLIENT_BRIDGE_CODE,isServerOnly,laneGap,serverOnlyGate,deferredLanes,gapText} from './server-only.mjs';
 import {odcBinaryCheck} from './odc-binary.mjs';
@@ -184,6 +185,8 @@ export function timedOut(config,attempt){
  fs.writeFileSync(path.join(dir,'AGUARDANDO.md'),failureText({id:attempt.id,error:`The round reached its ${config.roundHours??7} h limit and was stopped.`,environmental:true,dir,retry:config.retryHours??12,config}));
  writeAttempt(config.outDir,{...attempt,status:'deferred',code:'round-timeout',error:'round time limit',deferrals:(attempt.deferrals??0)+1,firstDeferredAt:attempt.firstDeferredAt??attempt.at,endedAt:new Date().toISOString()});
 }
+// The deferrals that wait for the owner, with the bounded code of their release event (remote logger: [A-Z_]{1,40}).
+export const OWNER_WAITS=Object.freeze({[CLIENT_BRIDGE_CODE]:'CLIENT_BRIDGE_UPDATE_REQUIRED','agent-release-required':'AGENT_RELEASE_REQUIRED'});
 export async function runAttempt(config,ops,decision,now){
  const {pair,id}=decision,outDir=config.outDir,dir=path.join(outDir,id),log=ops.log??(()=>{}),base=config.manifest;
  // A deferred attempt left no evidence beyond its notice: it is overwritten (and counted), not archived.
@@ -302,7 +305,12 @@ export async function runAttempt(config,ops,decision,now){
   const laneSince=environmental?Object.fromEntries(lanes.map(l=>[l,attempt.laneSince?.[l]??attempt.at])):undefined;
   writeAttempt(outDir,{...attempt,status:environmental?'deferred':'failed',...(environmental?{deferrals:(attempt.deferrals??0)+1,firstDeferredAt:attempt.firstDeferredAt??attempt.at,deferredLanes:lanes,laneSince,laneCodes:error.laneCodes??null,testEnvRuns:error.code==='test-environment'?(attempt.testEnvRuns??0)+1:0}:{failedLanes:lanes}),error:String(error.message),code:error.code??null,runtimes,endedAt:new Date().toISOString()});
   log(`${environmental?'deferred':'failed'}: ${error.message}`);
-  const key=(environmental?'deferred:':'failed:')+id+(environmental?':'+(error.code??''):'');
+  // The waits only the owner ends (a client bridge to publish, the reviewed agent release to configure) reach him like a
+  // release event: the webhook when configured, a line in the VPS journal (remote logger, bounded code) and the local
+  // notice, once for each new reason (its text), never silenced by an earlier reason of the same pair or day.
+  const waitCode=OWNER_WAITS[error.code],reason=waitCode?createHash('sha256').update(error.code+'\n'+String(error.message)).digest('hex').slice(0,12):null;
+  if(config.automatic&&reason){try{await releaseEvent(outDir,ops,'waiting',id,`${id}: ${error.message.split('\n')[0]}`,await ops.secrets(),'reason-'+reason,waitCode);}catch(e){log(`the owner was not reached for ${error.code}: ${e.message}`);}}
+  const key=(environmental?'deferred:':'failed:')+id+(environmental?':'+(error.code??''):'')+(reason?':'+reason:'');
   await remind(outDir,key,error.code===CLIENT_BRIDGE_CODE?'SSAM: client bridge update required':environmental?'SSAM: Studio version round waiting':'SSAM: Studio version checks failed',`${id}: ${error.message.split('\n')[0]}`,ops,{now:noticeNow(config),link:notice});
   return {status:environmental?'deferred':'failed',id,dir,error:String(error.message)};
  }

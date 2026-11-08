@@ -285,6 +285,43 @@ test('server-only round waits for a client bridge update when no published pack 
  for(const step of ['bundle odc','test','image','publish','lock','compose','deploy'])assert.ok(!f.calls.includes(step),step);
  const attempt=readJournal(path.join(f.dir,result.id,'attempt.json'));assert.deepEqual(attempt.deferredLanes,['odc']);assert.equal(attempt.code,'client-bridge-update-required');
 });
+// Review round 3, N2: the waits only the owner ends reach him as release events (webhook, VPS journal line, local notice),
+// once for each new reason; a new reason the same day is a new notice, the same reason again is not a new event.
+test('N2: client-bridge and agent-release waits send one release event per new reason, and a new reason is not silenced that day',async t=>{
+ const f=await fixture(t),s=serverOnlyRound(f,{tfm:'net11.0'}),waits=[];s.ops.event=async(name,value)=>waits.push({name,...value});
+ const day=Date.parse('2026-11-08T12:00:00Z');s.config.clock=()=>day;
+ assert.equal((await roundOf(s)).status,'deferred');
+ assert.deepEqual(waits.filter(w=>w.name==='waiting').map(w=>w.code),['CLIENT_BRIDGE_UPDATE_REQUIRED']);
+ const first=waits.find(w=>w.name==='waiting');assert.match(first.message,/client bridge update required: odc 1\.7\.30 runtime net11\.0/);assert.match(first.attempt,/^reason-[a-f0-9]{12}$/);
+ // The same reason again: no second event, and the day's notice was given.
+ const id='o11-11.55.94-odc-1.7.30';
+ const notes=s.notes.filter(n=>n==='SSAM: client bridge update required').length;assert.equal(notes,1);
+ s.config.observed=s.config.observed.map(o=>o.lane==='odc'?{...o,fullVersion:'1.7.30.10981'}:o);
+ assert.equal((await roundOf(s)).status,'deferred');
+ assert.equal(waits.filter(w=>w.name==='waiting').length,1,'the same reason is sent once');
+ // Another reason of the same code the same day (the ODC Studio now on net12): a new event and a new notice.
+ s.config.observed=s.config.observed.map(o=>o.lane==='odc'?{...o,fullVersion:'1.7.30.10982',tfm:'net12.0'}:o);
+ assert.equal((await roundOf(s)).status,'deferred');
+ const sent=waits.filter(w=>w.name==='waiting');assert.deepEqual(sent.map(w=>w.code),['CLIENT_BRIDGE_UPDATE_REQUIRED','CLIENT_BRIDGE_UPDATE_REQUIRED']);
+ assert.match(sent[1].message,/runtime net12\.0/);assert.notEqual(sent[1].attempt,sent[0].attempt);
+ assert.equal(s.notes.filter(n=>n==='SSAM: client bridge update required').length,2,s.notes.join());
+ assert.equal(readJournal(path.join(f.dir,id,'attempt.json')).status,'deferred');
+ // The reviewed agent release that cannot be read waits with its own code.
+ const g=await fixture(t),r=serverOnlyRound(g),other=[];r.ops.event=async(name,value)=>other.push({name,...value});g.base.agentReleaseFiles=async()=>({...agentFiles(),program:null});
+ assert.equal((await roundOf(r)).status,'deferred');
+ assert.deepEqual(other.filter(w=>w.name==='waiting').map(w=>w.code),['AGENT_RELEASE_REQUIRED']);assert.match(other.find(w=>w.name==='waiting').message,/reviewed agent release cannot be read/);
+});
+test('N2: the waiting event goes to the webhook, the VPS journal (bounded code) and the local notice',async t=>{
+ const f=await fixture(t),posts=[],notes=[];
+ const hook=await server(t,async(req,res)=>{let d='';for await(const b of req)d+=b;posts.push(JSON.parse(d));res.end('{}');});
+ const runs=[],adapter=createAutoRuntime(f.config,{...f.base,notify:async(title,message)=>notes.push([title,message]),async run(cmd,args,o){if(!args.some(x=>String(x).endsWith('read-secrets.ps1'))&&o?.input)runs.push(JSON.parse(o.input));return f.base.run(cmd,args,o);}});
+ const secrets={...(await adapter.secrets()),webhookUrl:hook};
+ await adapter.event('waiting',{id:'o11-11.55.94-odc-1.7.30',attempt:'reason-0123456789ab',message:'o11-11.55.94-odc-1.7.30: client bridge update required: odc 1.7.30',code:'CLIENT_BRIDGE_UPDATE_REQUIRED'},secrets);
+ assert.deepEqual(notes,[['SSAM: waiting','o11-11.55.94-odc-1.7.30: client bridge update required: odc 1.7.30']]);
+ const line=runs.find(r=>r.action==='event');assert.deepEqual([line.event,line.id,line.code],['waiting','o11-11.55.94-odc-1.7.30','CLIENT_BRIDGE_UPDATE_REQUIRED']);
+ assert.equal(posts.length,1);assert.equal(posts[0].event,'waiting');assert.equal(posts[0].code,'CLIENT_BRIDGE_UPDATE_REQUIRED');
+ const {OWNER_WAITS}=await import('./pipeline.mjs');for(const code of Object.values(OWNER_WAITS))assert.match(code,/^[A-Z_]{1,40}$/);
+});
 test('server-only round defers a published pack the reviewed release does not attach, before any bundle',async t=>{
  const f=await fixture(t),s=serverOnlyRound(f,{pack:{odcBridge:'v110'}});
  const result=await roundOf(s);assert.equal(result.status,'deferred');
