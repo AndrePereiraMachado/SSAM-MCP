@@ -51,13 +51,15 @@ test('app-update.yml of a release: generic provider, the dist.ssam.pro feed, cha
   assert.deepEqual(publisherNames(UNSIGNED_YML), []);
 });
 
+// App 0.2.8: the trust of a Windows update is the pinned Ed25519 key (update-signature.test.mjs), not the publisherName.
+const UPDATE_KEY = 'MCowBQYDK2VwAyEA' + 'A'.repeat(43) + '=';
 test('a packaged Windows app installs only updates it can verify; otherwise updates are off and the panel says why', () => {
-  assert.equal(updateTrustProblem({ platform: 'win32', isPackaged: true, appUpdateYml: SIGNED_YML }), null);
-  assert.match(updateTrustProblem({ platform: 'win32', isPackaged: true, appUpdateYml: UNSIGNED_YML }), /cannot verify the signature/);
-  assert.match(updateTrustProblem({ platform: 'win32', isPackaged: true, appUpdateYml: null }), /cannot verify the signature/, 'a server set by hand on a build without app-update.yml');
+  assert.equal(updateTrustProblem({ platform: 'win32', isPackaged: true, updatePublicKey: UPDATE_KEY }), null);
+  assert.match(updateTrustProblem({ platform: 'win32', isPackaged: true, updatePublicKey: '' }), /cannot verify the signature/);
+  assert.match(updateTrustProblem({ platform: 'win32', isPackaged: true, appUpdateYml: SIGNED_YML }), /cannot verify the signature/, 'an Authenticode publisher alone is no longer enough');
   assert.equal(updateTrustProblem({ platform: 'darwin', isPackaged: true, appUpdateYml: null }), null);
   assert.equal(updateTrustProblem({ platform: 'win32', isPackaged: false, appUpdateYml: null }), null);
-  const off = reduce(INITIAL, { type: 'off', reason: updateTrustProblem({ platform: 'win32', isPackaged: true, appUpdateYml: UNSIGNED_YML }) });
+  const off = reduce(INITIAL, { type: 'off', reason: updateTrustProblem({ platform: 'win32', isPackaged: true, updatePublicKey: '' }) });
   assert.equal(off.status, 'off');
   assert.match(updateText(off, '0.2.0'), /^Version 0\.2\.0\. Updates are off: this build cannot verify/);
   assert.match(updateText(reduce(INITIAL, { type: 'off' }), '0.2.0'), /no update server is configured/);
@@ -91,10 +93,12 @@ test('the test app pack says bridgeOffer false, the rest of pack.json unchanged'
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
-test('build.mjs: a Windows release without the signing identity refuses before any pack; the test app takes no certificate', () => {
+test('build.mjs: a Windows release without the trust key refuses before any pack; a half signing identity too; the test app takes no certificate', () => {
   const run = args => spawnSync(process.execPath, [path.join(app, 'scripts/build.mjs'), '--platform', 'win', '--native', 'x.exe', ...args], { encoding: 'utf8', windowsHide: true, env: { ...process.env, SSAM_WIN_CERT_SHA1: '', SSAM_WIN_PUBLISHER_NAME: '' } });
   const unsigned = run([]);
-  assert.equal(unsigned.status, 1); assert.match(unsigned.stderr, /A signed Windows release needs --cert-sha1/);
+  assert.equal(unsigned.status, 1); assert.match(unsigned.stderr, /A Windows release needs --trust-public-key/);
+  const half = run(['--trust-public-key', 'owner.pem', '--cert-sha1', THUMB]);
+  assert.equal(half.status, 1); assert.match(half.stderr, /A signed Windows release needs .*--publisher-name/);
   const mixed = run(['--test-unsigned', '--cert-sha1', THUMB]);
   assert.equal(mixed.status, 1); assert.match(mixed.stderr, /--test-unsigned takes no signing certificate/);
   // The macOS test app (build/mac-022-native) is unsigned too: never notarized, and no certificate.

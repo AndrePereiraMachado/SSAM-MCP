@@ -22,4 +22,21 @@
     <EmbeddedResource Include="..\..\agent\lib\credential-vault.ps1" LogicalName="credential-vault.ps1" />
     <EmbeddedResource Include="..\..\agent\lib\credential-auth.ps1" LogicalName="credential-auth.ps1" />
   </ItemGroup>
+  <!-- The owner's Ed25519 public key, the only bridge trust anchor (0.4.14-native): an explicit build input, the base64 of its
+       SPKI DER, given as -p:SsamTrustPublicKey=... (scripts/build-native.mjs -trust-public-key <pem>). Empty: no anchor, remote
+       bridge installation off and the hello says bridgeOffer false. An environment variable of that name is refused, so an
+       ambient value can never become the anchor; the release gate then compares the core's anchor with the build input. -->
+  <Target Name="SsamTrustAnchor" BeforeTargets="CoreCompile">
+    <Error Condition="'$([System.Environment]::GetEnvironmentVariable(`SsamTrustPublicKey`))' != ''" Text="SsamTrustPublicKey is a build input (-p:SsamTrustPublicKey=...), never an environment variable; clear the variable." />
+    <Error Condition="'$(SsamTrustPublicKey)' != '' And !$([System.Text.RegularExpressions.Regex]::IsMatch('$(SsamTrustPublicKey)', '^MCowBQYDK2VwAyEA[A-Za-z0-9+/]{43}=$'))" Text="SsamTrustPublicKey must be the base64 SPKI DER of one Ed25519 public key." />
+    <PropertyGroup>
+      <SsamTrustAnchorFile>$(IntermediateOutputPath)BridgeTrust.Anchor.g.cs</SsamTrustAnchorFile>
+    </PropertyGroup>
+    <WriteLinesToFile File="$(SsamTrustAnchorFile)" Overwrite="true" WriteOnlyWhenDifferent="true"
+      Lines="namespace Ssam.Agent { internal static partial class BridgeTrust { internal const string ManifestPublicKey = &quot;$(SsamTrustPublicKey)&quot;%3B } }" />
+    <ItemGroup>
+      <Compile Include="$(SsamTrustAnchorFile)" />
+      <FileWrites Include="$(SsamTrustAnchorFile)" />
+    </ItemGroup>
+  </Target>
 </Project>

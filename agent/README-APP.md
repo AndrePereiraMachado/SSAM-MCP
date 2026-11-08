@@ -69,7 +69,7 @@ de `electron-builder.yml`); `--update-url` ou `SSAM_UPDATE_URL` trocam, por exem
   ambiente vale como `--update-url`.
 - Saída em `dist/`: Windows `ssam-agent-app-<versão>-setup.exe`, `.blockmap` e `latest.yml`; macOS `.dmg`, `.zip`,
   `.blockmap` e `latest-mac.yml` (arm64 e x64).
-- Um instalador Windows sem assinatura instala (SmartScreen avisa) e atualiza. **No macOS a atualização automática só
+- Windows (0.2.8, escolha do dono: a app nunca terá assinatura Authenticode): o build de release exige `--trust-public-key <arquivo PEM da chave pública Ed25519>` (o que `server/deploy/vigia/set-secrets.ps1` imprimiu uma vez). Essa chave é fixada no núcleo nativo (âncora das bridges) e no processo principal da app (âncora dos updates); nada é lido do servidor nem do ambiente em tempo de execução. Sem a chave a app não liga bridges remotas (`bridgeOffer: false`) e recusa todo update (`UPDATE_KEY_MISSING`). O instalador sem assinatura instala com aviso do SmartScreen; o update só instala com a declaração Ed25519 (abaixo). **No macOS a atualização automática só
   funciona com a app assinada (Developer ID) e notarizada**: `CSC_LINK`/`CSC_KEY_PASSWORD` e as variáveis de notarização
   do electron-builder no build. Sem isso o DMG serve para instalar à mão e a app diz "Updates are off" ou falha na
   instalação do update.
@@ -96,6 +96,26 @@ estáticos, `latest.yml`, `latest-mac.yml`, os instaladores e os `.blockmap` del
 4. A app instalada pergunta ao servidor 20 s depois de abrir e a cada 6 h (`updateCheckHours` em `settings.json` da
    app), baixa em segundo plano e instala quando a pessoa escolhe "Restart to update" (o agente para limpo antes) ou ao
    sair da app.
+
+**Update do Windows sem Authenticode (0.2.8).** Além do sha512 do `latest.yml`, a app baixa
+`<instalador>.ed25519.json` ao lado do instalador e só instala se a assinatura Ed25519 dessa declaração confere com a
+chave fixada no build e se ela amarra exatamente a versão, o nome do arquivo, o tamanho e o sha512 do instalador baixado
+(e a versão é maior que a instalada). Senão recusa com um código no log (`update-refused`): `UPDATE_KEY_MISSING`,
+`UPDATE_SIGNATURE_MISSING`, `UPDATE_SIGNATURE_INVALID`, `UPDATE_STATEMENT_MISMATCH`, `UPDATE_DOWNGRADE`,
+`UPDATE_INSTALLER_MISMATCH`. O que o publicador produz, depois do build e antes de copiar `dist/`:
+
+```powershell
+# na conta do vigia (o cofre DPAPI dela tem a manifestPrivateKey; a chave nunca sai do processo)
+.\scripts\sign-windows-update.ps1 -Dist .\dist -ExpectPublicKey <arquivo PEM da chave pública>
+```
+
+O script confere `latest.yml` (um instalador, versão igual à de `package.json`, sha512 e tamanho do arquivo), escreve
+`ssam-agent-app-<v>-setup.exe.ed25519.json` e o confere com a chave pública esperada. Publique os quatro arquivos:
+`latest.yml`, o `.exe`, o `.exe.blockmap` e o `.exe.ed25519.json`. A declaração é
+`{schema:1, payload, signature}`; o payload (base64 de JSON) diz `schema: 1`, `kind: ssam-agent-app-update`, `appId`, `productName`,
+`platform: win32`, `arch: x64`, `channel: latest`, `version`, `file`, `size`, `sha512` e `createdAt`; a assinatura é
+sobre `SSAM-AGENT-UPDATE-STATEMENT/1\n` + payload, o que impede reaproveitar uma assinatura de manifesto de bridge
+(mesma chave) como update e vice-versa.
 
 Um jeito de hospedar `dist.ssam.pro` no Coolify (Traefik): um serviço de arquivos estáticos (a imagem `nginx:alpine`
 ou `caddy` com um volume montado na pasta que tem `u/ssam-agent/`) com o domínio `dist.ssam.pro`; o Traefik do Coolify

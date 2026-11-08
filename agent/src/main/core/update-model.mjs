@@ -33,11 +33,13 @@ export function updateText(state, appVersion) {
   }
 }
 
-// Whether this build may install updates by itself (agent app 0.2.0): on Windows a packaged app installs only an update
-// signed by its own publisher. electron-updater checks the Authenticode signature of the downloaded installer against the
-// publisherName list of resources/app-update.yml, and skips the check when the list is missing, so a build without it
-// (an unsigned build) never updates itself: the update would be accepted unverified. The sha512 of latest.yml only proves
-// the download matches the feed, not who made it. macOS: Squirrel.Mac checks the code signature itself.
+// Whether this build may install updates by itself. App 0.2.0 required an Authenticode publisher (publisherName in
+// resources/app-update.yml, checked by electron-updater). App 0.2.8: the Windows app is never Authenticode-signed, so a
+// Windows build updates itself only with a pinned Ed25519 update key (update-trust.mjs, from the build input): every
+// downloaded installer must then carry the owner's signed statement (update-signature.mjs), checked before it is installed.
+// A build without the key never updates itself (the sha512 of latest.yml only proves the download matches the feed, not who
+// made it). A publisherName, when a build still has one, is checked by electron-updater on top of the statement.
+// macOS: Squirrel.Mac checks the code signature itself.
 export function publisherNames(appUpdateYml) {
   const lines = String(appUpdateYml ?? '').split(/\r?\n/);
   const at = lines.findIndex(line => /^publisherName:/.test(line));
@@ -71,10 +73,10 @@ export function publisherNames(appUpdateYml) {
   }
   return names;
 }
-export function updateTrustProblem({ platform, isPackaged, appUpdateYml }) {
+export function updateTrustProblem({ platform, isPackaged, updatePublicKey }) {
   if (platform !== 'win32' || !isPackaged) return null;
-  if (publisherNames(appUpdateYml).length === 0)
-    return 'this build cannot verify the signature of an update (no publisherName in app-update.yml); install the signed SSAM Agent by hand';
+  if (!String(updatePublicKey ?? '').trim())
+    return 'this build cannot verify the signature of an update (UPDATE_KEY_MISSING: no pinned update key); install the next SSAM Agent by hand';
   return null;
 }
 
@@ -86,6 +88,7 @@ export function installerVersionProblem({ productVersion, productName, label, cu
   const parts = value => /^(\d+)\.(\d+)\.(\d+)/.exec(String(value ?? ''))?.slice(1).map(Number) ?? null;
   const cmp = (a, b) => { for (let i = 0; i < 3; i++) if (a[i] !== b[i]) return a[i] - b[i]; return 0; };
   const got = parts(productVersion), want = parts(label), now = parts(current);
+  // UPDATE_INSTALLER_MISMATCH (app 0.2.8): the code the log keeps for every refusal of this check.
   if (!got) return 'the downloaded installer has no readable version; it is not installed';
   if (productName !== undefined && productName !== appName) return `the downloaded installer is "${productName}", not ${appName}; it is not installed`;
   if (!want || cmp(got, want) !== 0) return `the downloaded installer is version ${productVersion}, but the update server announced ${label}; it is not installed`;

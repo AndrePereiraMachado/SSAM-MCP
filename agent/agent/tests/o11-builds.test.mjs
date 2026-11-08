@@ -174,7 +174,9 @@ test('hello: pack.o11BuiltFor is the build of the installed Service Studio, and 
 test('hello: a pack built without the trust anchors (bridgeOffer false) never asks for bridge offers, on any platform', async () => {
   assert.deepEqual(helloCapabilities('win32', { bridgeOffer: false }), { bridgeOffer: false, bridgeOfferReason: NO_ANCHORS_REASON });
   assert.deepEqual(helloCapabilities('darwin', { bridgeOffer: false }), { bridgeOffer: false, bridgeOfferReason: NO_ANCHORS_REASON });
-  assert.deepEqual(helloCapabilities('win32', {}), { bridgeOffer: true });
+  // 0.3.17: an agent with an empty Ed25519 anchor (the source default) never asks either; with the key it does.
+  assert.deepEqual(helloCapabilities('win32', {}), { bridgeOffer: false, bridgeOfferReason: NO_ANCHORS_REASON });
+  assert.deepEqual(helloCapabilities('win32', {}, 'MCowBQYDK2VwAyEA' + 'A'.repeat(43) + '='), { bridgeOffer: true });
   const hello = await helloOn('11.55.93.65289', { bridgeOffer: false });
   assert.equal(hello.capabilities.bridgeOffer, false);
   assert.match(hello.capabilities.bridgeOfferReason, /without the bridge trust anchors/);

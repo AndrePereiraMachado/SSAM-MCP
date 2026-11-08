@@ -133,8 +133,10 @@ internal sealed class AgentChannel : IDisposable
     // 0.4.8-native (r40a, app 0.2.3): credential.session (CredentialKinds.cs). 0.4.9-native (agent/r40, app 0.2.4): document.fetch (DocumentFetch.cs), one integration document downloaded on this
     // machine for a hosted server, always in the hello (the Node agent's 0.3.12).
     // 0.4.13-native: expire private Portal sessions with their access tokens.
-    internal const string AgentVersion = "0.4.13-native";
-    // pack.json bridgeOffer false: a pack built without the bridge trust anchors (the owner's unsigned test app) never asks for offers.
+    // 0.4.14-native: bridges trusted by the Ed25519 manifest alone (no Authenticode anchor); an empty anchor says bridgeOffer false.
+    internal const string AgentVersion = "0.4.14-native";
+    // pack.json bridgeOffer false: a pack built without the bridge trust anchors (the owner's unsigned test app) never asks for offers;
+    // 0.4.14-native: nor a core built with an empty Ed25519 anchor (BridgeTrust.ManifestPublicKey), which could verify no offer.
     internal const string NoAnchorsReason = "This agent package was built without the bridge trust anchors (a test build); it uses only its bundled bridges.";
     internal static bool NoAnchors(JsonObject? pack) => pack?["bridgeOffer"] is JsonValue v && v.TryGetValue<bool>(out var offer) && !offer;
     private async Task<JsonObject> Hello(CancellationToken token) {
@@ -159,7 +161,7 @@ internal sealed class AgentChannel : IDisposable
             ["kinds"] = new JsonArray((studios == null ? new[] { "qualification.bridge", "file.put", "file.get", "file.list", "file.sync", UploadKinds.Name, UsersKinds.Name, DocumentFetch.Name } : StudioKinds.Names.Concat(FileKinds.Names).Append("net.probe").Append(UploadKinds.Name).Append(UsersKinds.Name).Append(DocumentFetch.Name).ToArray()).Append(CredentialKinds.Name).Concat(renders.Available ? new[] { RenderRequest.Kind } : Array.Empty<string>()).Concat(xif.Available ? new[] { XifKinds.Name } : Array.Empty<string>()).Select(n => (JsonNode?)JsonValue.Create(n)).ToArray())
         },
         ["pack"] = pack == null ? new JsonObject { ["id"] = "native-qualification", ["lanes"] = new JsonArray() } : new JsonObject { ["id"] = pack["id"]?.DeepClone(), ["lanes"] = pack["lanes"]?.DeepClone(), ["odcBridge"] = pack["odcBridge"]?.DeepClone(), ["odcBridges"] = StudioKinds.BundledOdcProtocols(pack), ["o11BuiltFor"] = O11Builds.PackFor(pack, StudioKinds.Text(versions["o11Connection"]?["studioVersion"]) ?? StudioKinds.Text(installed?["o11"]?["installed"]?["version"]))["o11BuiltFor"]?.DeepClone(), ["o11Hook"] = pack["o11Hook"]?.DeepClone(), ["o11Builds"] = O11Builds.All(pack).Count > 0 ? O11Builds.Versions(pack) : null },
-        ["capabilities"] = NoAnchors(pack) ? new JsonObject { ["bridgeOffer"] = false, ["bridgeOfferReason"] = NoAnchorsReason } : new JsonObject { ["bridgeOffer"] = !OperatingSystem.IsMacOS(), ["bridgeOfferReason"] = OperatingSystem.IsMacOS() ? BridgeUpdates.MacReason : null },
+        ["capabilities"] = NoAnchors(pack) || !OperatingSystem.IsMacOS() && !bridges.HasAnchor ? new JsonObject { ["bridgeOffer"] = false, ["bridgeOfferReason"] = NoAnchorsReason } : new JsonObject { ["bridgeOffer"] = !OperatingSystem.IsMacOS(), ["bridgeOfferReason"] = OperatingSystem.IsMacOS() ? BridgeUpdates.MacReason : null },
         ["bridges"] = bridges.Reports(), ["bridgeUpdate"] = bridges.WireStatus(), ["studios"] = installed?.DeepClone(), ["o11Connection"] = versions["o11Connection"]?.DeepClone()
     }; }
 
