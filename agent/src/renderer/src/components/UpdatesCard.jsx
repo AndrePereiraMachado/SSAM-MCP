@@ -9,6 +9,7 @@ function updateLine(update, version, autoInstall) {
     case 'checking': return `Version ${version}. Checking for updates...`;
     case 'available': return `Version ${version}. Update ${update.version ?? ''} found; downloading.`;
     case 'downloading': return `Version ${version}. Downloading update ${update.version ?? ''}: ${update.percent ?? 0}%.`;
+    case 'verifying': return `Version ${version}. Verifying the signature of update ${update.version ?? ''}...`;
     case 'ready': return autoInstall ? `Update ${update.version ?? ''} is ready: the app restarts by itself in a few seconds to install it (the agent is stopped cleanly first).`
       : `Update ${update.version ?? ''} is ready. Restart to install it (the agent is stopped cleanly first).`;
     case 'up-to-date': return `Version ${version} is up to date${update.checkedAt ? ` (checked ${new Date(update.checkedAt).toLocaleString()})` : ''}.`;
@@ -35,7 +36,7 @@ export function UpdatesCard({ update, app, settings }) {
       <p className="muted">{updateLine(update, app.version, autoInstall)}</p>
       <p className="muted">{autoInstall ? 'Updates install by themselves: no click needed.' : 'Updates wait for you: use "Restart to update" or quit the app.'}</p>
       <div className="row">
-        <button onClick={() => ssam.checkUpdates()} disabled={['off', 'checking', 'downloading'].includes(update.status)}>Check for updates</button>
+        <button onClick={() => ssam.checkUpdates()} disabled={['off', 'checking', 'downloading', 'verifying'].includes(update.status)}>Check for updates</button>
         {update.status === 'ready' && <button className="primary" onClick={() => ssam.installUpdate()}>Restart to update now</button>}
       </div>
       <details>

@@ -11,7 +11,7 @@ import { statementFor, signStatement, readStatement, updateStatementProblem, sta
 import { verifyWindowsUpdate, fetchStatementText } from '../../src/main/core/update-verify.mjs';
 import { updateTrustProblem } from '../../src/main/core/update-model.mjs';
 import { UPDATE_PUBLIC_KEY } from '../../src/main/core/update-trust.mjs';
-import { signDist, parseArgs } from '../../scripts/sign-windows-update.mjs';
+import { signDist, parseArgs, parseLatestYml } from '../../scripts/sign-windows-update.mjs';
 import { mainBundleKeyProblem, updateSpkiFor, parse, checkWindowsOutput, DEFAULT_UPDATE_URL } from '../../scripts/build.mjs';
 import { spkiBase64 } from '../../scripts/bridge-trust-gate.mjs';
 
@@ -121,8 +121,9 @@ test('sign-windows-update: signs the dist of this version, verifies it, never pr
   const pinned = path.join(dist, 'pinned.pem'); fs.writeFileSync(pinned, pem);
   const privatePem = owner.privateKey.export({ type: 'pkcs8', format: 'pem' });
   assert.throws(() => signDist(dist, other.privateKey.export({ type: 'pkcs8', format: 'pem' }), { appVersion: '0.2.9', expectPublicKey: pinned }), /not the pinned public key/);
-  assert.throws(() => signDist(dist, privatePem, { appVersion: '0.2.8' }), /this app is 0\.2\.8/);
-  assert.throws(() => signDist(dist, generateKeyPairSync('ec', { namedCurve: 'P-256' }).privateKey.export({ type: 'pkcs8', format: 'pem' }), { appVersion: '0.2.9' }), /Ed25519/);
+  assert.throws(() => signDist(dist, privatePem, { appVersion: '0.2.8', expectPublicKey: pinned }), /this app is 0\.2\.8/);
+  assert.throws(() => signDist(dist, generateKeyPairSync('ec', { namedCurve: 'P-256' }).privateKey.export({ type: 'pkcs8', format: 'pem' }), { appVersion: '0.2.9', expectPublicKey: pinned }), /Ed25519/);
+  assert.throws(() => signDist(dist, privatePem, { appVersion: '0.2.9' }), /required/, 'review B3: the pinned key is required');
   const result = signDist(dist, privatePem, { appVersion: '0.2.9', expectPublicKey: pinned });
   assert.equal(result.statement, file + '.ed25519.json');
   assert.doesNotMatch(JSON.stringify(result), /PRIVATE KEY|BEGIN/);
@@ -130,8 +131,10 @@ test('sign-windows-update: signs the dist of this version, verifies it, never pr
   assert.doesNotMatch(text, /PRIVATE/);
   assert.equal(updateStatementProblem({ text, publicKey: spki, info: info(), downloaded, current: '0.2.8' }), null, 'what the publisher writes is what the app accepts');
   fs.writeFileSync(path.join(dist, file), Buffer.concat([installer, Buffer.from('!')]));
-  assert.throws(() => signDist(dist, privatePem, { appVersion: '0.2.9' }), /not the one latest\.yml announces/);
+  assert.throws(() => signDist(dist, privatePem, { appVersion: '0.2.9', expectPublicKey: pinned }), /not the one latest\.yml announces/);
   assert.throws(() => parseArgs([]), /--dist/);
+  assert.throws(() => parseArgs(['--dist', 'd']), /--expect-public-key/);
+  assert.deepEqual(parseArgs(['--dist', 'd', '--expect-public-key', 'p.pem']), { dist: 'd', expectPublicKey: 'p.pem' });
   assert.throws(() => parseArgs(['--dist', 'd', '--private-key', 'k']), /unknown option/, 'the key is never an argument');
 });
 
@@ -158,4 +161,14 @@ test('build: a Windows release takes the trust key as its input, pins it in the 
   assert.doesNotThrow(() => checkWindowsOutput(dist, options, { pack: () => [] }));
   fs.writeFileSync(path.join(resources, 'app-update.yml'), `provider: generic\nurl: ${DEFAULT_UPDATE_URL}\nchannel: latest\npublisherName:\n  - Someone\n`);
   assert.throws(() => checkWindowsOutput(dist, options, { pack: () => [] }), /not Authenticode-signed/);
+});
+
+test('sign-windows-update reads latest.yml without a third-party module, and refuses any other shape (review B1)', () => {
+  const text = "version: 0.2.9\nfiles:\n  - url: a.exe\n    sha512: ab+/c==\n    size: 12\npath: a.exe\nsha512: ab+/c==\nreleaseDate: '2026-11-08T00:00:00.000Z'\n";
+  assert.deepEqual(parseLatestYml(text), { version: '0.2.9', files: [{ url: 'a.exe', sha512: 'ab+/c==', size: 12 }], path: 'a.exe', sha512: 'ab+/c==', releaseDate: '2026-11-08T00:00:00.000Z' });
+  assert.deepEqual(parseLatestYml(text.replace(/\n/g, '\r\n')), parseLatestYml(text));
+  assert.throws(() => parseLatestYml(text + 'packages:\n  x64:\n    path: b.7z\n'), /does not read/);
+  assert.throws(() => parseLatestYml(text + 'x: !!js/function f\n'), /does not read/);
+  assert.throws(() => parseLatestYml(text + 'y: &anchor 1\n'), /does not read/);
+  assert.doesNotMatch(fs.readFileSync(new URL('../../scripts/sign-windows-update.mjs', import.meta.url), 'utf8'), /js-yaml|createRequire/);
 });

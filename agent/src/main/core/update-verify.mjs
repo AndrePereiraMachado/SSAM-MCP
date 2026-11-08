@@ -33,15 +33,24 @@ export async function fetchStatementText(url, { fetchImpl = globalThis.fetch, ti
   return size ? Buffer.concat(chunks).toString('utf8') : null;
 }
 
-// Whether a downloaded Windows update may be installed (null) or why not ({code, message}): the signed statement of its
-// installer, fetched from the feed, checked against the pinned key and the bytes on disk; then the installer's own version.
-export async function verifyWindowsUpdate({ info, feed, currentVersion, publicKey = UPDATE_PUBLIC_KEY, fetchText = fetchStatementText, measure = measureFile, readInstaller = () => ({}) }) {
+// Whether a downloaded Windows update may be installed: {approved: {file, sha512, size}} (the file and the bytes that matched
+// the owner's signed statement, which electron/updates.mjs hashes again right before the installer runs) or {problem: {code,
+// message}}: the signed statement of its installer, fetched from the feed, checked against the pinned key and the bytes on
+// disk; then the installer's own version.
+export async function checkWindowsUpdate({ info, feed, currentVersion, publicKey = UPDATE_PUBLIC_KEY, fetchText = fetchStatementText, measure = measureFile, readInstaller = () => ({}) }) {
   const installer = (info?.files ?? []).map(f => installerName(f?.url)).find(Boolean);
   const text = installer && String(publicKey ?? '').trim() ? await fetchText(statementUrl(feed, installer)) : null;
   let downloaded = null;
   try { downloaded = info?.downloadedFile ? await measure(info.downloadedFile) : null; } catch { downloaded = null; }
   const signed = updateStatementProblem({ text, publicKey, info, downloaded, current: currentVersion });
-  if (signed) return signed;
+  if (signed) return { problem: signed };
   const problem = installerVersionProblem({ ...readInstaller(info?.downloadedFile), label: info?.version, current: currentVersion });
-  return problem ? { code: UPDATE_CODES.INSTALLER_MISMATCH, message: UPDATE_CODES.INSTALLER_MISMATCH + ': ' + problem } : null;
+  if (problem) return { problem: { code: UPDATE_CODES.INSTALLER_MISMATCH, message: UPDATE_CODES.INSTALLER_MISMATCH + ': ' + problem } };
+  return { approved: { file: info.downloadedFile, sha512: downloaded.sha512, size: downloaded.size } };
+}
+
+// The same answer as null (it may be installed) or {code, message}.
+export async function verifyWindowsUpdate(options) {
+  const answer = await checkWindowsUpdate(options);
+  return answer.problem ?? null;
 }

@@ -1,7 +1,9 @@
 // The state of the app's own update, as a small reducer over the events of electron-updater (checking-for-update,
 // update-available, update-not-available, download-progress, update-downloaded, error) plus the app's own (off,
-// scheduled). Pure, so the tray and the panel are tested without Electron.
-//   status: off | idle | checking | available | downloading | ready | up-to-date | error
+// scheduled, verifying, update-refused). Pure, so the tray and the panel are tested without Electron.
+//   status: off | idle | checking | available | downloading | verifying | ready | up-to-date | error
+// verifying (app 0.2.8, Windows): a download whose signed statement is being checked; no check starts meanwhile (canCheck).
+// update-refused: the downloaded update failed its verification, so nothing is ready any more, even after a ready (review B5).
 export const INITIAL = Object.freeze({ status: 'idle', url: null, version: null, percent: null, checkedAt: null, error: null, nextCheckAt: null });
 
 export function reduce(state, event) {
@@ -13,8 +15,10 @@ export function reduce(state, event) {
     case 'update-available': return { ...state, status: 'available', version: event.version ?? null, percent: 0, error: null };
     case 'update-not-available': return { ...state, status: 'up-to-date', version: null, percent: null, checkedAt: event.at, error: null };
     case 'download-progress': return { ...state, status: 'downloading', percent: Math.max(0, Math.min(100, Math.round(event.percent ?? 0))) };
+    case 'verifying': return { ...state, status: 'verifying', version: event.version ?? state.version, percent: 100, error: null };
     case 'update-downloaded': return { ...state, status: 'ready', version: event.version ?? state.version, percent: 100, error: null };
-    case 'error': return { ...state, status: state.status === 'ready' ? 'ready' : 'error', error: String(event.message ?? 'unknown error').slice(0, 300) };
+    case 'update-refused': return { ...state, status: 'error', percent: null, error: String(event.message ?? 'the update was refused').slice(0, 300) };
+    case 'error': return { ...state, status: ['ready', 'verifying'].includes(state.status) ? state.status : 'error', error: String(event.message ?? 'unknown error').slice(0, 300) };
     default: return state;
   }
 }
@@ -26,6 +30,7 @@ export function updateText(state, appVersion) {
     case 'checking': return `Version ${appVersion}. Checking for updates...`;
     case 'available': return `Version ${appVersion}. Update ${state.version ?? ''} found; downloading.`;
     case 'downloading': return `Version ${appVersion}. Downloading update ${state.version ?? ''}: ${state.percent ?? 0}%.`;
+    case 'verifying': return `Version ${appVersion}. Verifying the signature of update ${state.version ?? ''}...`;
     case 'ready': return `Update ${state.version ?? ''} is ready: restart the app to install it.`;
     case 'up-to-date': return `Version ${appVersion} is up to date${state.checkedAt ? ` (checked ${state.checkedAt})` : ''}.`;
     case 'error': return `Version ${appVersion}. The last update check failed: ${state.error}`;
