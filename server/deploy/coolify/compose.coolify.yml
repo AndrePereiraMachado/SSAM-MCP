@@ -224,7 +224,7 @@
         "SSAM_WORKSPACE_SCRATCH_DAYS": "${SSAM_WORKSPACE_SCRATCH_DAYS:-3}",
         "SSAM_BACKEND_NAME": "o11-11.55.94-odc-1.7.30",
         "SSAM_RUNTIME_DIR": "/data/server/versions/o11-11.55.94-odc-1.7.30",
-        "SSAM_SERVED_VERSIONS": "{\"odc\":[\"1.7.30\",\"1.7.29\",\"1.7.28\",\"1.7.31\",\"1.7.32\"],\"o11\":[\"11.55.94\",\"11.55.93\",\"11.55.92\",\"11.55.95\"]}"
+        "SSAM_SERVED_VERSIONS": "{\"odc\":[\"1.7.30\",\"1.7.29\",\"1.7.28\",\"1.7.31\"],\"o11\":[\"11.55.94\",\"11.55.93\",\"11.55.92\"]}"
       },
       "expose": [
         "7310"
@@ -302,6 +302,13 @@
           "read_only": true,
           "type": "volume",
           "volume": {}
+        },
+        {
+          "source": "odc-model-plugins",
+          "target": "/tmp/.local/share/OutSystems/ODC Studio/Plugins",
+          "read_only": true,
+          "type": "volume",
+          "volume": {}
         }
       ]
     },
@@ -340,7 +347,7 @@
         "SSAM_WORKSPACE_SCRATCH_DAYS": "${SSAM_WORKSPACE_SCRATCH_DAYS:-3}",
         "SSAM_BACKEND_NAME": "o11-11.55.93-odc-1.7.29",
         "SSAM_RUNTIME_DIR": "/data/server/versions/o11-11.55.93-odc-1.7.29",
-        "SSAM_SERVED_VERSIONS": "{\"odc\":[\"1.7.30\",\"1.7.29\",\"1.7.28\",\"1.7.31\",\"1.7.32\"],\"o11\":[\"11.55.94\",\"11.55.93\",\"11.55.92\",\"11.55.95\"]}"
+        "SSAM_SERVED_VERSIONS": "{\"odc\":[\"1.7.30\",\"1.7.29\",\"1.7.28\",\"1.7.31\"],\"o11\":[\"11.55.94\",\"11.55.93\",\"11.55.92\"]}"
       },
       "expose": [
         "7310"
@@ -418,6 +425,13 @@
           "read_only": true,
           "type": "volume",
           "volume": {}
+        },
+        {
+          "source": "odc-model-plugins",
+          "target": "/tmp/.local/share/OutSystems/ODC Studio/Plugins",
+          "read_only": true,
+          "type": "volume",
+          "volume": {}
         }
       ]
     },
@@ -456,7 +470,7 @@
         "SSAM_WORKSPACE_SCRATCH_DAYS": "${SSAM_WORKSPACE_SCRATCH_DAYS:-3}",
         "SSAM_BACKEND_NAME": "o11-11.55.92-odc-1.7.28",
         "SSAM_RUNTIME_DIR": "/data/server/versions/o11-11.55.92-odc-1.7.28",
-        "SSAM_SERVED_VERSIONS": "{\"odc\":[\"1.7.30\",\"1.7.29\",\"1.7.28\",\"1.7.31\",\"1.7.32\"],\"o11\":[\"11.55.94\",\"11.55.93\",\"11.55.92\",\"11.55.95\"]}"
+        "SSAM_SERVED_VERSIONS": "{\"odc\":[\"1.7.30\",\"1.7.29\",\"1.7.28\",\"1.7.31\"],\"o11\":[\"11.55.94\",\"11.55.93\",\"11.55.92\"]}"
       },
       "expose": [
         "7310"
@@ -534,6 +548,13 @@
           "read_only": true,
           "type": "volume",
           "volume": {}
+        },
+        {
+          "source": "odc-model-plugins",
+          "target": "/tmp/.local/share/OutSystems/ODC Studio/Plugins",
+          "read_only": true,
+          "type": "volume",
+          "volume": {}
         }
       ]
     },
@@ -572,7 +593,7 @@
         "SSAM_WORKSPACE_SCRATCH_DAYS": "${SSAM_WORKSPACE_SCRATCH_DAYS:-3}",
         "SSAM_BACKEND_NAME": "o11-11.55.94-odc-1.7.31",
         "SSAM_RUNTIME_DIR": "/data/server/versions/o11-11.55.94-odc-1.7.31",
-        "SSAM_SERVED_VERSIONS": "{\"odc\":[\"1.7.30\",\"1.7.29\",\"1.7.28\",\"1.7.31\",\"1.7.32\"],\"o11\":[\"11.55.94\",\"11.55.93\",\"11.55.92\",\"11.55.95\"]}"
+        "SSAM_SERVED_VERSIONS": "{\"odc\":[\"1.7.30\",\"1.7.29\",\"1.7.28\",\"1.7.31\"],\"o11\":[\"11.55.94\",\"11.55.93\",\"11.55.92\"]}"
       },
       "expose": [
         "7310"
@@ -647,6 +668,13 @@
         {
           "source": "runtime-css",
           "target": "/data/runtime-css",
+          "read_only": true,
+          "type": "volume",
+          "volume": {}
+        },
+        {
+          "source": "odc-model-plugins",
+          "target": "/tmp/.local/share/OutSystems/ODC Studio/Plugins",
           "read_only": true,
           "type": "volume",
           "volume": {}
@@ -763,6 +791,13 @@
         {
           "source": "runtime-css",
           "target": "/data/runtime-css",
+          "read_only": true,
+          "type": "volume",
+          "volume": {}
+        },
+        {
+          "source": "odc-model-plugins",
+          "target": "/tmp/.local/share/OutSystems/ODC Studio/Plugins",
           "read_only": true,
           "type": "volume",
           "volume": {}
@@ -893,6 +928,7 @@
     "runtime-css": {},
     "odc-features-o11-11-55-94-odc-1-7-30": {},
     "cache-o11-11-55-94-odc-1-7-30": {},
+    "odc-model-plugins": {},
     "odc-features-o11-11-55-93-odc-1-7-29": {},
     "cache-o11-11-55-93-odc-1-7-29": {},
     "odc-features-o11-11-55-92-odc-1-7-28": {},

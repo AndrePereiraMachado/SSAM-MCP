@@ -1,5 +1,6 @@
 {
   "window": 5,
+  "keepServed": 4,
   "odc": [
     {
       "version": "1.7.30",
