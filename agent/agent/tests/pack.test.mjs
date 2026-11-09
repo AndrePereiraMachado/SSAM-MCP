@@ -451,3 +451,24 @@ test('agent-pack.ps1 -NoBridgeOffer writes pack.json bridgeOffer false (the unsi
     assert.equal(manifest.bridgeOffer, false);
   } finally { fs.rmSync(work, { recursive: true, force: true }); }
 });
+
+// Review B2 of agent/mac-028: Test-Forbidden of agent-pack.ps1, run as written over every file of agent/lib the script copies
+// (*.mjs, *.json and the Windows helpers *.ps1). A file the agent ships must never be refused as credential storage: a name list
+// missed credential-session-lifetime.mjs and refused every pack from c20454c to ca7fa64. Storage names are still refused.
+test('Test-Forbidden lets every shipped agent/lib source through and still refuses credential storage', () => {
+  const text = fs.readFileSync(script, 'utf8');
+  const fn = /function Test-Forbidden\(\[string\]\$relative\) \{[\s\S]*?\n\}/.exec(text)?.[0];
+  assert.ok(fn, 'Test-Forbidden is in agent-pack.ps1');
+  const lib = path.join(repo, 'agent', 'lib');
+  // Paths with '/': Test-Forbidden turns them into the Windows separator first.
+  const shipped = fs.readdirSync(lib).filter(n => /\.(mjs|json|ps1)$/.test(n)).map(n => 'agent/lib/' + n);
+  assert.ok(shipped.some(n => /credential-session-lifetime\.mjs$/.test(n)));
+  const storage = ['agent/lib/credential', 'agent/lib/credentials.json', 'private/credential', 'agent/lib/credential-x.mjs.bak', 'x/tokens.json', 'agent/lib/config.json', 'lib/credential-session.mjs/credential', 'agent/lib/Credential-Session.MJS'];
+  const names = [...shipped, ...storage];
+  const command = fn + "\n$names = [Console]::In.ReadToEnd() -split \"`n\" | Where-Object { $_ }\nforeach ($n in $names) { '{0}={1}' -f $n, (Test-Forbidden $n) }";
+  const run = spawnSync('powershell', ['-NoProfile', '-NonInteractive', '-Command', command], { input: names.join('\n'), encoding: 'utf8', windowsHide: true, timeout: 60000 });
+  assert.equal(run.status, 0, run.stderr);
+  const answer = new Map(run.stdout.trim().split(/\r?\n/).map(line => { const at = line.lastIndexOf('='); return [line.slice(0, at), line.slice(at + 1)]; }));
+  for (const name of shipped) assert.equal(answer.get(name), 'False', name + ' is shipped by agent-pack.ps1');
+  for (const name of storage) assert.equal(answer.get(name), 'True', name + ' is credential storage');
+});

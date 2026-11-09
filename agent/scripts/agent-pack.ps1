@@ -127,9 +127,10 @@ $tree = Join-Path $work 'tree'
 # What never goes into a pack, whatever a source folder holds.
 function Test-Forbidden([string]$relative) {
   $r = $relative -replace '/', '\'
-  # These are versioned program sources, not runtime credential storage.
-  # credential-session-lifetime.mjs (c20454c, agent 0.2.7) is one of them: without it here every pack since 0.2.7 was refused.
-  if ($r -in @('agent\lib\credential-session.mjs','agent\lib\credential-session-lifetime.mjs','agent\lib\credential-vault.ps1','agent\lib\credential-auth.ps1')) { return $false }
+  # The agent's own program sources (agent\lib\credential-*.mjs|ps1, copied from the checkout) are not credential storage.
+  # A list of names missed credential-session-lifetime.mjs (c20454c, agent 0.2.7) and refused every pack since (review B2 of
+  # agent/mac-028); the rule covers the next one, and pack.test.mjs runs this function over every file of agent\lib.
+  if ($r -cmatch '^agent\\lib\\credential-[a-z0-9-]+\.(mjs|ps1)$') { return $false }
   if ($r -match '\.(cs|csproj|sln|pdb|key|pfx|snk)$') { return $true }
   if ($r -match '(^|\\)\.local(\\|$)') { return $true }
   if ($r -match '(^|\\)(credential[^\\]*|tokens\.json|[^\\]*\.credentials\.json|config\.json)$') { return $true }
