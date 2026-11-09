@@ -565,8 +565,8 @@ every Service Studio of the window and one O11 kernel compiled against each:
   reader that serves, or read within `SSAM_O11_READER_MIN_IDLE_MS`, default 60 s, is never stopped), drops the copies
   of retired versions, and is admitted by the memory gate with `SSAM_MEMORY_RESERVE_READER_MB` (default 800, NOT
   measured: the first-deploy kit measures one reader's RSS and sets `sizing.<tier>.o11ReaderMb`). The ceiling only
-  limits (`gen-compose`: every O11 version of the window, or `sizing.<tier>.o11Readers`); while a reader waits for
-  room it asks one more idle reader to leave at each 2 s turn, so the gate decides how many fit. Its startup deadline
+  limits (`gen-compose`: every O11 version of the window, or `sizing.<tier>.o11Readers`); the gate decides how many
+  fit (relief below). Its startup deadline
   runs from the spawn, after the admission, and a reader that misses it is killed (no reader without its reserve). A
   switch between two versions on a full backend costs one cold reader start (seconds), at most once a minute.
 - Resident ODC lane worker (S1 R2/R3): `anvil-odc serve` (`anvil-worker.mjs`), measured on v5 (other) 2026-11-09 at
@@ -574,13 +574,29 @@ every Service Studio of the window and one O11 kernel compiled against each:
   = 10814 against 10240m, at the worst case of section 13 with no reader. Production r45 (oom-check 2026-11-09): v5
   peaked at 3772 of 4240 MiB with no OOM, v2 1556, the others ~400; the worst case did not coincide. In the S1 images:
   - its start is admitted by the memory gate with `SSAM_MEMORY_RESERVE_ODC_WORKER_MB` (default 2150, the measured peak),
-    as a STANDING hold on its pid while it lives: every later admission (builds, O11 workers, readers, a lone build too)
-    counts its growth still to come (reserve minus RSS, ~650 MiB at 1498). A worker already up is adopted the same way.
-    A start without room within `SSAM_MEMORY_WORKER_WAIT_MS` (15 s) launches nothing and the command runs cold,
-    admitted with the ODC cold reserve (600) or inside the build slot that reserved it; a wait that runs out there
-    refuses with `BUILD_QUEUE_TIMEOUT` (outcome not-sent). Never an unadmitted kernel process.
+    as a STANDING hold on its pid while it lives: every later admission (builds, O11 workers, readers) counts its growth
+    still to come (reserve minus RSS, 652 MiB at 1498). A worker already up is adopted the same way. A start without room
+    within `SSAM_MEMORY_WORKER_WAIT_MS` (15 s) launches nothing and the command runs cold, admitted with the ODC cold
+    reserve (600) or inside the build slot that reserved it; a wait that runs out there refuses with
+    `BUILD_QUEUE_TIMEOUT` (outcome not-sent). After a start found no room, that port goes cold at once for 60 s
+    unless the gate fits the worker right then (review R3 B-R3-1).
+  - Relief and progress (S1 R4, review R3 M6): every wait of the gate (a build slot, a cold run, an ODC or O11 worker
+    start, a reader start) first asks the idle caches to leave, one per 2 s turn (`SSAM_MEMORY_EVICT_TURN_MS`): idle O11
+    readers first (a waiting reader spares those read within 60 s; any other waiter evicts a reader idle for 5 s), then
+    idle ODC and O11 workers of this backend with no call in flight (the ODC worker's standing hold is released with it).
+    A worker or reader serving a call is never asked. When nothing more is evictable and no other consumer is admitted
+    (a standing hold is no consumer), the waiter enters: a lone delivery is never refused for an idle cache or for a
+    resident worker's growth still to come. Measured by the review's probe (other: server 400, ODC worker RSS 1498, an
+    idle reader of 300/600/800 MiB): the O11 delivery (1400) is admitted in every case.
+  - Hot: each build slot past the first has its own ODC worker (`base + index*step`, `build-pool.mjs`), so up to 4 W
+    on the hot tier (4 builds), each started through the gate with its own standing hold and each an evictable cache
+    when idle. A build that runs on its slot's worker reserves once: the slot's hold is marked covered while the worker's
+    standing hold counts that worker's growth (review R3 B-R3-2).
   - `gen-compose` writes `ANVIL_WORKER_IDLE_MINUTES` per tier (`sizing.<tier>.workerIdleMinutes`; default hot 120,
     other 30; the kernel's own default is 240): the idle ODC worker leaves memory sooner. The hosted O11 workers set
     their own; the readers keep their 15 min.
-  - The owner's 4240m for other stays: the gate turns the excess into waits and refusals, never an OOM. The gate only
-    exists in images built from e04cfb7 on, which every S1 image is; the live r45 images have none.
+  - The owner's 4240m for other stays. No kernel process STARTS without admission (the ODC worker included) and the ODC
+    worker's growth is reserved; that is not "never an OOM": a call on a resident worker (O11 or ODC) has no reservation of
+    its own beyond the first 15 s (`growMs`), the progress rule admits a lone consumer when nothing more can be evicted,
+    and `debug-run.mjs`'s cold apply outside a slot runs unadmitted. The gate only exists in images built from e04cfb7
+    on, which every S1 image is; the live r45 images have none.
