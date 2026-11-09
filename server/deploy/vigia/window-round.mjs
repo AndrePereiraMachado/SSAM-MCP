@@ -14,7 +14,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {createHash} from 'node:crypto';
 import {releaseAutomatically,releaseEvent} from './automatic.mjs';
-import {LANES,STUDIO_NAME,planWindow,readyCandidates,servedOf,newestServed,windowPolicy,dueRetirement,retireDue,rotateLane,laneRounds,retireRoundId,defaultO11,backendId,compareFailures,featuresLine,failureText,affectedText,composeText,compareVersion} from './window.mjs';
+import {LANES,STUDIO_NAME,planWindow,readyCandidates,servedOf,newestServed,windowPolicy,dueRetirement,retireDue,rotateLane,rebuildLane,laneRounds,retireRoundId,defaultO11,backendId,compareFailures,featuresLine,failureText,affectedText,composeText,compareVersion} from './window.mjs';
 import {CLIENT_BRIDGE_CODE,bridgeMode,serverOnlyGate,o11Proofs} from './server-only.mjs';
 import {EnvironmentError,readAttempts,writeAttempt,remind,noticeNow,laneChecks,reviewedRelease,clientBridgeError,archive,featuresNotice,wasCut,timedOut,noteWaiting,OWNER_WAITS} from './pipeline.mjs';
 import {odcBinaryCheck} from './odc-binary.mjs';
@@ -74,8 +74,9 @@ export function decideWindow({manifest,observed,state,attempts,inputs,now=Date.n
 // round waits (fails closed). A rehearsal records the gate's state and never deploys anyway.
 export const REFERENCE_APPS=Object.freeze(['FolhaPonto','VisitaCerta']);
 export async function referenceGate(config,ops,{lane,version,manifest,builts,dir}){
- if(!config.referenceGate||typeof ops.referenceGate!=='function'){
-  const state={ran:false,configured:!!config.referenceGate,runner:typeof ops.referenceGate==='function',lane,version};
+ // A rehearsal never runs it (the gate publishes apps through a server): it records whether the gate is ready.
+ if(config.rehearsal||!config.referenceGate||typeof ops.referenceGate!=='function'){
+  const state={ran:false,configured:!!config.referenceGate,runner:typeof ops.referenceGate==='function',lane,version,...(config.rehearsal?{rehearsal:true}:{})};
   writeJson(path.join(dir,'reference-gate.json'),state);
   if(config.rehearsal)return state;
   throw new EnvironmentError(`The reference-app gate (${REFERENCE_APPS.join(' + ')} from zero must publish) is required before ${STUDIO_NAME[lane]} ${version} is deployed, and ${!config.referenceGate?'referenceGate is not configured in the watcher configuration':'this runtime has no reference-gate runner'}. Production is not touched; the round retries.`,'reference-gate-unconfigured',[lane]);
@@ -145,7 +146,10 @@ export async function runWindowAttempt(config,ops,decision,now){
   await releaseEvent(outDir,ops,'detected',id,`${id}: a new ${STUDIO_NAME[lane]} was detected.`,secrets,attempt.at);
   const c=decision.candidate,liveDefault=liveDefaultO11(config.liveBaseline),dflt=defaultO11(base,{lane,liveDefault});
   // The window this round would make, before any build (pending images): capacity, the kernel set and the backends to build.
-  const pending={image:'pending',tag:'pending'},preview=rotateLane(base,lane,v,{now,graceDays:policy.graceDays,keep:policy.keep,tokens,images:lane==='odc'?pending:Object.fromEntries(base.backends.map(b=>[b.odc,pending]))});
+  // A rehearsal of a version the window already serves (-RehearseCurrent, decision.rehearse) rebuilds what the lane's round
+  // would build (window.mjs rebuildLane) and rotates nothing.
+  const rotate=images=>decision.rehearse?{manifest:rebuildLane(base,lane,lane==='odc'?{...images,odc:v}:images),retiring:[],retired:[],affected:[]}:rotateLane(base,lane,v,{now,graceDays:policy.graceDays,keep:policy.keep,tokens,images});
+  const pending={image:'pending',tag:'pending'},preview=rotate(lane==='odc'?pending:Object.fromEntries(base.backends.map(b=>[b.odc,pending])));
   if(ops.capacityPreflight)await ops.capacityPreflight(preview.manifest);
   const pair={odc:lane==='odc'?v:newestServed(base,'odc'),o11:lane==='o11'?v:dflt,lanes:[lane],candidates:[c]};
   await ops.preflight({pair,id,dir});
@@ -160,7 +164,7 @@ export async function runWindowAttempt(config,ops,decision,now){
   // The bundles: the candidate, every O11 Studio the images carry (the next served list: in an ODC round the live one) and the
   // ODC Studio of each backend this round builds.
   const candidate=await ops.bundle(c,dir);log(`bundle ${lane} ${candidate.version}: ${candidate.file} sha256 ${candidate.sha256}`);
-  const kernels=lane==='odc'?[...base.o11.served].sort(compareVersion):[...preview.manifest.o11.served].sort(compareVersion);
+  const kernels=[...(lane==='odc'?base:preview.manifest).o11.served].sort(compareVersion);
   const targets=lane==='odc'?[v]:preview.manifest.backends.map(b=>b.odc);
   const o11Bundles=[];for(const k of kernels)o11Bundles.push(lane==='o11'&&k===v?candidate:await ops.companion('o11',k,dir));
   const odcBundles={};for(const odc of targets)odcBundles[odc]=lane==='odc'&&odc===v?candidate:await ops.companion('odc',odc,dir);
@@ -199,7 +203,7 @@ export async function runWindowAttempt(config,ops,decision,now){
   }
   writeJson(path.join(dir,'image.json'),builts);
   const images=lane==='odc'?{image:builts[0].image,tag:builts[0].tag}:Object.fromEntries(builts.map(b=>[b.odc,{image:b.image,tag:b.tag}]));
-  const next=rotateLane(base,lane,v,{now,graceDays:policy.graceDays,keep:policy.keep,tokens,images});
+  const next=rotate(images);
   writeJson(path.join(dir,'affected.json'),{retiring:next.retiring,retired:next.retired,affected:affectedRecord(next.affected)});
   const nextServed=Object.fromEntries(LANES.map(l=>[l,servedOf(next.manifest,l)]));
   const smokes={};
@@ -219,7 +223,8 @@ export async function runWindowAttempt(config,ops,decision,now){
   const window={kind,lane,version:v,builts,kernels:kernelJson,defaultO11:dflt,liveDefaultO11:liveDefault,o11Kernels:kernels,retiring:next.retiring,retired:next.retired,affected:affectedRecord(next.affected),notifyAffected:policy.notifyAffected,referenceGate:reference,prepare:targets.map(backendId),...(next.hotPinDropped?{hotPinDropped:next.hotPinDropped}:{})};
   const release={id,dir,attempt:attempt.at,baseline:config.liveBaseline,built:builts.find(b=>backendId(b.odc)===own)??builts[0],manifest:next.manifest,kernel:kernelJson[own]??{...gate.kernel,o11:dflt},
    bridges:{mode:'server-only',offers:[],kernel:gate.kernel,hello:gate.hello,agentRelease:agentRelease.commit,o11Proofs:{}},bridgeMode:mode,features:lane==='odc'?candidate.features:null,featuresProvenance,bundles:{candidate,o11:o11Bundles,odc:odcBundles},window};
-  return await finishRelease(config,ops,{release,attempt,dir,id,smoke:smokes});
+  const all=Object.values(smokes);
+  return await finishRelease(config,ops,{release,attempt,dir,id,smoke:{...all[0],publishedPack:all.every(x=>x.publishedPack===true),backends:smokes}});
  }catch(error){
   if(wasCut(outDir,attempt)||error.code==='round-timeout'){
    if(!wasCut(outDir,attempt))timedOut(config,attempt);
