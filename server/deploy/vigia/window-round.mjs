@@ -13,9 +13,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {createHash} from 'node:crypto';
-import {releaseAutomatically,releaseEvent,windowAgain,windowStillNeeded} from './automatic.mjs';
+import {releaseAutomatically,releaseEvent,windowAgain,windowStillNeeded,keepNotice,KEPT_NOTICES} from './automatic.mjs';
 import {readJournal,writeJournal} from './journal.mjs';
-import {LANES,STUDIO_NAME,planWindow,readyCandidates,servedOf,newestServed,windowPolicy,dueRetirement,retireDue,rotateLane,rebuildLane,laneRounds,retireRoundId,defaultO11,backendId,compareFailures,featuresLine,failureText,affectedText,composeText,compareVersion,ownerCommand} from './window.mjs';
+import {LANES,STUDIO_NAME,planWindow,readyCandidates,servedOf,newestServed,windowPolicy,dueRetirement,retireDue,rotateLane,rebuildLane,laneRounds,retireRoundId,defaultO11,backendId,compareFailures,featuresLine,failureText,affectedText,composeText,compareVersion,ownerCommand,affectedRecord} from './window.mjs';
 import {CLIENT_BRIDGE_CODE,bridgeMode,serverOnlyGate,o11Proofs} from './server-only.mjs';
 import {EnvironmentError,readAttempts,writeAttempt,remind,noticeNow,laneChecks,reviewedRelease,clientBridgeError,archive,featuresNotice,wasCut,timedOut,noteWaiting,OWNER_WAITS} from './pipeline.mjs';
 import {odcBinaryCheck} from './odc-binary.mjs';
@@ -24,15 +24,23 @@ import {generateCompose} from '../coolify/gen-compose.mjs';
 const hours=(now,at)=>(now-Date.parse(at))/3600000;
 const same=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
 const writeJson=(file,data)=>{fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file,JSON.stringify(data,null,2)+'\n');};
-// The customers of a window change as the files keep them: never a token id, only a short hash of it (one customer seen on
-// two versions reads as one), the customer label and the Studio.
-export const affectedRecord=affected=>(affected??[]).map(({token,...a})=>({...a,client:createHash('sha256').update(String(token)).digest('hex').slice(0,12)}));
+// The customers of a window change as the files keep them (window.mjs affectedRecord).
+export {affectedRecord};
 // The default O11 kernel the live window runs (kernel.json o11 of its backends), or null.
 export const liveDefaultO11=live=>{const all=[...new Set(Object.values(live?.kernels??{}).map(k=>k?.o11).filter(Boolean))];return all.length===1?all[0]:null;};
 
 // What a round of a backend window would do, without side effects. inputs(round) -> the inputs that make a failed round worth
-// retrying (main's head and the Studio build).
-export function decideWindow({manifest,observed,state,attempts,inputs,now=Date.now(),retryHours=12,laneWaitHours=24,testEnvLimit=3}){
+// retrying (main's head and the Studio build). superseded: the proposals waiting for the owner whose version a newer one of
+// its lane replaced (a newer ready version, or the live window serves it or a newer one); runWindowVigia closes them and tells
+// the owner (review B6).
+export function decideWindow(input){
+ const decision=decideLanes(input),{manifest,attempts}=input,rounds=laneRounds(readyCandidates(decision.plan));
+ const newer=a=>rounds.filter(r=>r.lane===a.round.lane&&compareVersion(r.version,a.round.version)>0).map(r=>r.version).sort(compareVersion).at(-1);
+ const superseded=Object.values(attempts).filter(a=>a.status==='proposed'&&a.round?.kind==='add'&&(newer(a)||servedOf(manifest,a.round.lane).some(v=>compareVersion(v,a.round.version)>=0)))
+  .map(a=>({id:a.id,lane:a.round.lane,version:a.round.version,by:newer(a)??newestServed(manifest,a.round.lane)}));
+ return superseded.length?{...decision,superseded}:decision;
+}
+function decideLanes({manifest,observed,state,attempts,inputs,now=Date.now(),retryHours=12,laneWaitHours=24,testEnvLimit=3}){
  const plan=planWindow(manifest,observed,state);
  const waiting={installers:plan.candidates.filter(c=>c.requiresInstallation),requested:plan.requested.filter(r=>!plan.candidates.some(c=>c.lane===r.lane&&c.version===r.version&&!c.requiresInstallation))};
  const skipped=[];
@@ -43,6 +51,8 @@ export function decideWindow({manifest,observed,state,attempts,inputs,now=Date.n
   if(!a||a.retry||['deferred','running'].includes(a.status))return run;
   if(a.rollbackLatch)skipped.push({id,lanes:[due.lane],why:'failed'});
   else if(a.status==='failed'&&hours(now,a.at)>=retryHours)return run;
+  // A retirement whose deploy was abandoned (deferred too long) is due all the same: it runs again after retryHours (review B2).
+  else if(a.status==='closed'&&a.code==='abandoned'&&hours(now,a.endedAt??a.at)>=retryHours)return run;
   else if(['approved','closed'].includes(a.status)&&!same(a.inputs,want))return run;
   else if(a.status!=='approved'&&a.status!=='closed')skipped.push({id,lanes:[due.lane],why:a.status});
  }
@@ -110,8 +120,9 @@ export async function runWindowVigia(config,ops){
  const head=config.head??null;
  const inputs=r=>({head,studios:{[r.lane]:r.candidate.fullVersion??r.candidate.version}});
  const decideNow=()=>decideWindow({manifest:config.manifest,observed:config.observed,state:config.state,attempts:readAttempts(outDir),inputs,now,retryHours:config.retryHours??12,laneWaitHours:config.laneWaitHours??24,testEnvLimit:config.testEnvLimit??3});
- const decision=decideNow(),plan=decision.plan;
- if(config.dryRun)return {status:'dry-run',decision:{action:decision.action,round:decision.id??null,kind:decision.kind??null,skipped:decision.skipped??[]},plan,retiring:config.manifest.retiring??null};
+ let decision=decideNow();const plan=decision.plan;
+ if(config.dryRun)return {status:'dry-run',decision:{action:decision.action,round:decision.id??null,kind:decision.kind??null,skipped:decision.skipped??[],...(decision.superseded?{superseded:decision.superseded}:{})},plan,retiring:config.manifest.retiring??null};
+ if(decision.superseded?.length){for(const s of decision.superseded)await expireProposal(config,ops,s);decision=decideNow();}
  log(`decision: ${decision.action}${decision.id?' '+decision.id:''}`);
  await noteWaiting(config,ops,decision.waiting,now);
  if(decision.action==='idle'||decision.action==='waiting-for-studio')return {status:decision.action,plan};
@@ -139,7 +150,10 @@ export async function runWindowAttempt(config,ops,decision,now){
  const {id,kind,lane,version:v}=decision,outDir=config.outDir,dir=path.join(outDir,id),log=ops.log??(()=>{}),base=config.manifest;
  const policy=windowPolicy(config),tokens=config.state?.tokens;
  const waited=decision.previous?.status==='deferred'?decision.previous:null;
+ // Owner notices not delivered yet stay with the round when its folder is archived (automatic.mjs keepNotice).
+ const keptFile=path.join(dir,KEPT_NOTICES),kept=!waited&&fs.existsSync(keptFile)?fs.readFileSync(keptFile):null;
  if(!waited)archive(dir,decision.previous);fs.mkdirSync(dir,{recursive:true});
+ if(kept&&!fs.existsSync(keptFile))fs.writeFileSync(keptFile,kept,{mode:0o600});
  if(waited)for(const name of ['AGUARDANDO.md','FALHAS.md'])fs.rmSync(path.join(dir,name),{force:true});
  for(const s of decision.skipped??[])log(`${s.id} ${s.why==='deferred'?'waits':s.why}; trying ${id}`);
  const attempt={id,round:{kind,lane,version:v},pair:{lanes:[lane]},inputs:decision.inputs,status:'running',at:new Date(now).toISOString(),baseManifest:base,replayed:[],
@@ -147,8 +161,9 @@ export async function runWindowAttempt(config,ops,decision,now){
  writeAttempt(outDir,attempt);
  const runtimes={},comparisons={};
  try{
-  // A backend window is deployed by the automatic release only: the pair window's proposal and -Approve do not apply to it.
-  if(!config.automatic)throw new EnvironmentError('A backend window (window 4x4) runs with automatic: true only (the proposal and -Approve flow is the pair window\'s).','window-needs-automatic',[lane]);
+  // A backend window is deployed by the automatic release only: the pair window's proposal branch and its manual owner steps do
+  // not apply to it. Its reference-app gate (mode owner, the default) still waits for the owner's -Approve / -Reject.
+  if(!config.automatic)throw new EnvironmentError('A backend window (window 4x4) runs with automatic: true only (the proposal branch and manual steps are the pair window\'s; its reference-app gate uses -Approve / -Reject).','window-needs-automatic',[lane]);
   const secrets=await ops.secrets();
   if(kind==='retire'){
    const next=retireDue(base,{now,keep:policy.keep,tokens});
@@ -218,7 +233,8 @@ export async function runWindowAttempt(config,ops,decision,now){
    log(`image ${backendId(odc)}: ${built.tag} sha256 ${built.sha256}`);builts.push(built);
   }
   writeJson(path.join(dir,'image.json'),builts);
-  const images=lane==='odc'?{image:builts[0].image,tag:builts[0].tag}:Object.fromEntries(builts.map(b=>[b.odc,{image:b.image,tag:b.tag}]));
+  // Each backend records the O11 kernels its image really carries (the build read them back from the image label).
+  const images=lane==='odc'?{image:builts[0].image,tag:builts[0].tag,kernels:builts[0].kernels}:Object.fromEntries(builts.map(b=>[b.odc,{image:b.image,tag:b.tag,kernels:b.kernels}]));
   const next=rotate(images);
   writeJson(path.join(dir,'affected.json'),{retiring:next.retiring,retired:next.retired,affected:affectedRecord(next.affected)});
   const nextServed=Object.fromEntries(LANES.map(l=>[l,servedOf(next.manifest,l)]));
@@ -287,16 +303,40 @@ async function proposeToOwner(config,ops,{release,attempt,dir,id}){
 }
 // The owner approved his reference-app test: the next round releases exactly the images he was shown, on the window live now
 // (rotated again on it; a window that no longer needs the round closes it).
+// Nothing of the release may escape the round (review M2): a release that does not fit the live window any more (rebuild
+// needed), or whose files are not the ones approved, drops the proposal (dropProposal) and the next round proposes again.
 async function releaseApproved(config,ops,decision){
- const a=decision.previous,dir=path.join(config.outDir,a.id),release=readJournal(path.join(dir,'release.json')),w=release.window,live=config.liveBaseline;
- if((release.window.builts??[]).map(b=>b.sha256).join()!==(a.ownerGate?.images??[]).map(i=>i.sha256).join())throw Error(`The release of ${a.id} is not the one the owner approved; nothing is deployed. -Retry ${a.id} builds it again.`);
- let manifest=release.manifest;
- if(live){
-  manifest=windowStillNeeded(live,w)?windowAgain(config,w,live,config.now??Date.now()):null;
-  if(!manifest){writeAttempt(config.outDir,{...a,status:'closed',code:'idle',endedAt:new Date().toISOString()});return {status:'idle',id:a.id,dir};}
- }
+ const a=decision.previous,dir=path.join(config.outDir,a.id),live=config.liveBaseline;
+ let release,w,manifest;
+ try{
+  release=readJournal(path.join(dir,'release.json'));w=release.window;manifest=release.manifest;
+  if((w.builts??[]).map(b=>b.sha256).join()!==(a.ownerGate?.images??[]).map(i=>i.sha256).join())throw Object.assign(Error(`The release of ${a.id} is not the one the owner approved.`),{code:'APPROVED_RELEASE_CHANGED'});
+  if(live){
+   const again=windowStillNeeded(live,w)?windowAgain(config,w,live,config.now??Date.now()):null;
+   if(!again){writeAttempt(config.outDir,{...a,status:'closed',code:'idle',endedAt:new Date().toISOString()});return {status:'idle',id:a.id,dir};}
+   manifest=again.manifest;w=again.window;
+  }
+ }catch(error){return dropProposal(config,ops,a,error);}
  ops.log?.(`release ${a.id}: the owner approved the reference-app test at ${a.gateApproved.at}`);
  return finishRelease(config,ops,{release:{...release,baseline:live??release.baseline,manifest,window:{...w,referenceGate:{...w.referenceGate,waitOwner:false,approved:a.gateApproved}}},attempt:a,dir,id:a.id,smoke:null});
+}
+// A proposal a newer version of its lane replaced (decideWindow superseded): closed, never deployed, its local images left to the
+// artifact retention; the owner is told on the resent channel (review B6).
+async function expireProposal(config,ops,s){
+ const a=readAttempts(config.outDir)[s.id];if(a?.status!=='proposed')return;
+ writeAttempt(config.outDir,{...a,status:'closed',code:'superseded',superseded:{at:new Date().toISOString(),by:s.by??null},endedAt:new Date().toISOString()});
+ await keepNotice(ops,{outDir:config.outDir,id:a.id,attempt:a.at},'superseded',`${a.id}: the proposal of ${STUDIO_NAME[s.lane]} ${s.version} expired without deploying: ${s.by?STUDIO_NAME[s.lane]+' '+s.by+' replaces it':'a newer version replaces it'}. Nothing to approve for ${a.id}.`,'PROPOSAL_SUPERSEDED').catch(e=>ops.log?.(`the owner notice of ${a.id} is kept: ${e.message}`));
+ ops.log?.(`${a.id} superseded by ${s.by??'a newer version'}`);
+}
+// A proposal that cannot be deployed as approved (S2 R4): dropped as by -Reject, but the next round builds the lane's version
+// again and proposes it anew (retry); the owner is told on the resent channel (owner-notices.json, automatic.mjs keepNotice).
+// It never stops a retirement or the other lane's round.
+async function dropProposal(config,ops,a,error,{endedAt=new Date().toISOString()}={}){
+ const code=/^[A-Z_]+$/.test(error.code??'')?error.code:'RELEASE_FAILED',message=String(error.message).split('\n')[0];
+ ops.log?.(`release ${a.id} dropped (${code}): ${message}`);
+ writeAttempt(config.outDir,{...a,status:'failed',retry:true,code,error:message,dropped:{at:endedAt,code},failedLanes:[a.round?.lane??a.pair?.lanes?.[0]].filter(Boolean),endedAt});
+ await keepNotice(ops,{outDir:config.outDir,id:a.id,attempt:a.at},'failed',`${a.id}: the approved images were not deployed (${code}): ${message} The next round builds ${STUDIO_NAME[a.round?.lane]??''} ${a.round?.version??''} again and proposes it anew.`,code).catch(e=>ops.log?.(`the owner notice of ${a.id} is kept: ${e.message}`));
+ return {status:'failed',id:a.id,dir:path.join(config.outDir,a.id),code,dropped:true};
 }
 
 // release.json, then the rehearsal's end or the automatic release (automatic.mjs releaseAutomatically, which knows
@@ -312,7 +352,11 @@ async function finishRelease(config,ops,{release,attempt,dir,id,smoke}){
  const result=await releaseAutomatically(config,ops,release);
  const digest=release.built?'sha256:'+release.built.sha256:null;
  if(result.status==='live')writeAttempt(config.outDir,{...attempt,status:'approved',built:release.built,builts:release.window.builts,pinCommit:result.commit,approved:{at:new Date().toISOString(),digest,commit:result.commit}});
- else if(['idle','abandoned'].includes(result.status))writeAttempt(config.outDir,{...attempt,status:'closed',code:result.status});
+ else if(['idle','abandoned'].includes(result.status))writeAttempt(config.outDir,{...attempt,status:'closed',code:result.status,endedAt:new Date().toISOString()});
+ // The images no longer fit the live window (automatic.mjs told the owner): built and proposed again by the next round.
+ else if(result.status==='stale')writeAttempt(config.outDir,{...attempt,status:'failed',retry:true,code:result.code,dropped:{at:new Date().toISOString(),code:result.code},failedLanes:[release.window.lane],endedAt:new Date().toISOString()});
+ // An owner-approved proposal that failed before any mutation is dropped like a -Reject, and proposed again (review M2).
+ else if(result.status==='failed'&&attempt.ownerGate)writeAttempt(config.outDir,{...attempt,status:'failed',retry:true,code:result.code,dropped:{at:new Date().toISOString(),code:result.code},built:release.built,failedLanes:[release.window.lane],endedAt:new Date().toISOString()});
  else writeAttempt(config.outDir,{...attempt,status:result.status==='deferred'?'deferred':'failed',built:release.built,rollbackLatch:['rolled-back','rollback-failed'].includes(result.status),code:result.code,failedLanes:[release.window.lane]});
  return {...result,dir};
 }
