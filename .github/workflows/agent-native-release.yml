@@ -16,6 +16,14 @@ on:
         description: Sign with Developer ID and notarize (false for an unsigned test installer)
         type: boolean
         default: false
+      app_version:
+        description: App version (x.y.z); the default is agent/package.json's
+        type: string
+        default: '0.2.8'
+      enable_updates:
+        description: The app updates itself from https://dist.ssam.pro/u/ssam-agent (requires sign_and_notarize)
+        type: boolean
+        default: false
 
   workflow_call:
     inputs:
@@ -31,10 +39,17 @@ on:
       sign_and_notarize:
         type: boolean
         default: false
+      app_version:
+        type: string
+        default: '0.2.8'
+      enable_updates:
+        type: boolean
+        default: false
 
 permissions:
   # GitHub requires write-level release access to read unpublished drafts.
-  # This workflow downloads the input and never publishes a release.
+  # This workflow downloads the input and never publishes a release or anything on dist.ssam.pro: the signed dmg, zip,
+  # blockmap, latest-mac.yml and release-manifest.json are CI artifacts only; the owner (or the vigia) publishes them.
   contents: write
 
 env:
@@ -42,6 +57,8 @@ env:
   PACK_RELEASE: ${{ inputs.pack_release }}
   PACK_ASSET: ${{ inputs.pack_asset }}
   PACK_SHA256: ${{ inputs.pack_sha256 }}
+  APP_VERSION: ${{ inputs.app_version }}
+  ENABLE_UPDATES: ${{ inputs.enable_updates && 'true' || 'false' }}
 
 jobs:
   mac:
@@ -52,6 +69,17 @@ jobs:
         working-directory: agent
     steps:
       - uses: actions/checkout@v4
+      - name: Check the app version and the update mode
+        run: |
+          node --input-type=module -e '
+            import fs from "node:fs";
+            const version = process.env.APP_VERSION, own = JSON.parse(fs.readFileSync("package.json", "utf8")).version;
+            if (!/^\d+\.\d+\.\d+$/.test(version)) throw Error("app_version must be x.y.z: " + version);
+            if (version !== own) console.log("::warning::app_version " + version + " overrides package.json " + own);
+            if (process.env.ENABLE_UPDATES === "true" && process.env.SIGNED !== "true") throw Error("enable_updates needs sign_and_notarize: Squirrel.Mac installs only a Developer ID update");
+            console.log(JSON.stringify({ appVersion: version, packageJson: own, enableUpdates: process.env.ENABLE_UPDATES === "true" }));'
+        env:
+          SIGNED: ${{ inputs.sign_and_notarize && 'true' || 'false' }}
       - name: Check release prerequisites
         if: inputs.sign_and_notarize
         env:
@@ -151,7 +179,10 @@ jobs:
           native="native/Ssam.Agent/bin/Release/net10.0/osx-arm64/publish/ssam-agent"
           codesign --force --timestamp --options runtime --keychain "$keychain" --sign "$identity" "$native"
           codesign --verify --strict "$native"
-          node scripts/build.mjs --platform mac --pack "$RUNNER_TEMP/ssam-pack/$PACK_ASSET" --native "$native" --no-updates --notarize --bundled-bridges-only
+          # enable_updates: resources/app-update.yml names https://dist.ssam.pro/u/ssam-agent and dist/latest-mac.yml lists the ZIP
+          # (build.mjs checks both after electron-builder); otherwise --no-updates, the offline build of r43.
+          updates=--no-updates; if [ "$ENABLE_UPDATES" = true ]; then updates=; fi
+          node scripts/build.mjs --platform mac --pack "$RUNNER_TEMP/ssam-pack/$PACK_ASSET" --native "$native" --app-version "$APP_VERSION" $updates --notarize --bundled-bridges-only
           mkdir -p ci-results
           xcrun notarytool submit dist/*-mac-arm64.dmg --apple-id "$APPLE_ID" --password "$APPLE_APP_SPECIFIC_PASSWORD" --team-id "$APPLE_TEAM_ID" --no-s3-acceleration --wait --output-format json > ci-results/notary-dmg.json
           node --input-type=module -e 'import fs from "node:fs"; const r=JSON.parse(fs.readFileSync("ci-results/notary-dmg.json","utf8")); if(r.status!=="Accepted") throw Error("DMG notarization was not accepted"); console.log("DMG notarization accepted: "+r.id);'
@@ -163,12 +194,19 @@ jobs:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
         run: |
           test "$(uname -m)" = arm64
-          node scripts/build.mjs --platform mac --pack "$RUNNER_TEMP/ssam-pack/$PACK_ASSET" --native native/Ssam.Agent/bin/Release/net10.0/osx-arm64/publish/ssam-agent --no-updates --test-unsigned
+          node scripts/build.mjs --platform mac --pack "$RUNNER_TEMP/ssam-pack/$PACK_ASSET" --native native/Ssam.Agent/bin/Release/net10.0/osx-arm64/publish/ssam-agent --app-version "$APP_VERSION" --no-updates --test-unsigned
       - name: Verify the installed app
         run: |
           set -o pipefail
           node scripts/verify-native-distribution.mjs 'dist/mac-arm64/SSAM Agent.app' | tee dist/verify-native.json
           codesign --verify --deep --strict 'dist/mac-arm64/SSAM Agent.app'
+          # The updater files exist exactly when the build updates itself (build.mjs checkMacOutput checked their content).
+          if [ "$ENABLE_UPDATES" = true ]; then
+            test -f 'dist/mac-arm64/SSAM Agent.app/Contents/Resources/app-update.yml' && test -f dist/latest-mac.yml
+            cat 'dist/mac-arm64/SSAM Agent.app/Contents/Resources/app-update.yml' dist/latest-mac.yml
+          else
+            test ! -e 'dist/mac-arm64/SSAM Agent.app/Contents/Resources/app-update.yml' && test ! -e dist/latest-mac.yml
+          fi
           shasum -a 256 dist/*.dmg dist/*.zip > dist/SHA256SUMS
       - name: Record the hello and the pack of the installed app
         run: |
@@ -201,12 +239,41 @@ jobs:
             console.log(JSON.stringify(summary, null, 2));
             if (hello.agent.version !== '0.4.14-native' || hello.agent.runtime !== 'native-aot' || hello.agent.platform !== 'darwin') throw new Error('unexpected agent');
             if (JSON.stringify(hello.pack.odcBridges) !== '["v108","v109"]' || hello.pack.odcBridge !== 'v108') throw new Error('unexpected ODC bridges');
+            // Mac app 0.2.8: one O11 thin bridge per served Service Studio build, the newest as the default (no Studio on the
+            // runner, so the hello reports the default); each build pinned by the installed pack's integrity list.
+            if (JSON.stringify(hello.pack.o11Builds) !== '["11.55.95","11.55.94","11.55.93","11.55.92"]' || hello.pack.o11BuiltFor !== '11.55.95') throw new Error('unexpected O11 builds');
+            if (JSON.stringify((manifest.o11Builds ?? []).map(b => [b.version, b.runtime])) !== '[["11.55.95","net10.0"],["11.55.94","net10.0"],["11.55.93","net8.0"],["11.55.92","net8.0"]]') throw new Error('unexpected O11 build runtimes');
             if (manifest.bridgeOffer !== false) throw new Error('Remote bridge offers must remain disabled');
             if (!hello.agent.kinds.includes('credential.session') || !hello.agent.kinds.includes('document.fetch')) throw new Error('Required r40 kinds missing');
             if (summary.credentialStored) throw new Error('the throwaway credential was stored');
           } catch (error) { throw error; }
           finally { fs.writeFileSync(path.join(data, 'private/agent.stop'), 'stop'); await hub.close(); await new Promise(r => { child.on('exit', r); setTimeout(() => { child.kill(); r(); }, 5000).unref(); }); fs.rmSync(data, { recursive: true, force: true }); }
           EOF
+      - name: Write the release manifest
+        run: |
+          # What the vigia (or the owner) checks before publishing on dist.ssam.pro: every artifact with its size, sha512
+          # (base64, as latest-mac.yml states it) and sha256, the commit, the notarization and the hello of the installed app.
+          node --input-type=module - <<'EOF'
+          import fs from 'node:fs'; import path from 'node:path'; import { createHash } from 'node:crypto';
+          const dist = 'dist', read = f => fs.existsSync(f) ? fs.readFileSync(f, 'utf8') : null;
+          const names = fs.readdirSync(dist).filter(n => /-mac-arm64\.(dmg|zip)(\.blockmap)?$|^latest-mac\.yml$/.test(n)).sort();
+          const artifacts = names.map(name => { const bytes = fs.readFileSync(path.join(dist, name));
+            return { name, size: bytes.length, sha512: createHash('sha512').update(bytes).digest('base64'), sha256: createHash('sha256').update(bytes).digest('hex'),
+              kind: /\.zip$/.test(name) ? 'update' : /\.dmg$/.test(name) ? 'installer' : /\.blockmap$/.test(name) ? 'blockmap' : 'feed', arch: 'arm64', platform: 'macos' }; });
+          const notary = read('ci-results/notary-dmg.json'); const hello = read('ci-results/hello-028.json');
+          const appUpdate = read('dist/mac-arm64/SSAM Agent.app/Contents/Resources/app-update.yml');
+          const manifest = { schema: 'ssam-agent-mac-release/1', version: process.env.APP_VERSION, headSha: process.env.GITHUB_SHA, ref: process.env.GITHUB_REF,
+            runId: process.env.GITHUB_RUN_ID, signed: process.env.SIGNED === 'true', updates: process.env.ENABLE_UPDATES === 'true',
+            feed: appUpdate ? (/^url:\s*(\S+)/m.exec(appUpdate)?.[1] ?? null) : null, pack: { asset: process.env.PACK_ASSET, sha256: process.env.PACK_SHA256.toLowerCase() },
+            notarytool: notary ? { dmg: { id: JSON.parse(notary).id, status: JSON.parse(notary).status } } : null,
+            hello: hello ? { agent: JSON.parse(hello).agent.version, pack: JSON.parse(hello).pack } : null, artifacts };
+          if (manifest.updates && (!artifacts.some(a => a.name === 'latest-mac.yml') || manifest.feed !== 'https://dist.ssam.pro/u/ssam-agent')) throw new Error('an updating build without its feed files');
+          if (!artifacts.some(a => a.kind === 'update') || !artifacts.some(a => a.kind === 'installer')) throw new Error('the dmg or the zip is missing');
+          fs.writeFileSync('dist/release-manifest.json', JSON.stringify(manifest, null, 2) + '\n');
+          console.log(JSON.stringify(manifest, null, 2));
+          EOF
+        env:
+          SIGNED: ${{ inputs.sign_and_notarize && 'true' || 'false' }}
       - name: Exercise the Mac desktop interface and native agent
         run: |
           npm install --prefix "$RUNNER_TEMP/ssam-ui-test" --no-save --package-lock=false playwright@1.62.1
@@ -246,9 +313,12 @@ jobs:
           path: |
             agent/dist/*-mac-arm64.dmg
             agent/dist/*-mac-arm64.zip
+            agent/dist/*-mac-arm64.zip.blockmap
+            agent/dist/latest-mac.yml
             agent/dist/SHA256SUMS
             agent/dist/installed-pack.json
             agent/dist/verify-native.json
+            agent/dist/release-manifest.json
 
 
 

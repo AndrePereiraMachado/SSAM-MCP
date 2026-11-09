@@ -5,6 +5,13 @@
 //   node scripts/build.mjs --platform win|mac --pack <ssam-agent.zip | ssam-agent-mac.tar.gz | folder>
 //                          [--update-url https://...] [--no-updates] [--pack-only]
 //   Without --update-url the build publishes to https://dist.ssam.pro/u/ssam-agent (the owner's update server).
+//   --app-version x.y.z: the app version of the build (electron-builder extraMetadata.version), default package.json's.
+//   macOS release (app 0.2.8): --notarize --bundled-bridges-only WITH updates: resources/app-update.yml names the feed (the
+//   same generic provider, url and channel as Windows) and dist/latest-mac.yml lists the ZIP; the bridges stay the bundled
+//   ones. electron-updater checks the ZIP's sha512 from latest-mac.yml, then Squirrel.Mac installs it only if its code
+//   signature satisfies the installed app's designated requirement (Developer ID, same Team ID). The Ed25519 statement of
+//   the Windows updates is Windows-only (update-model.mjs updateTrustProblem, updates.mjs acceptSigned). A Mac build that
+//   updates itself must be notarized; --no-updates keeps the offline build (tests).
 //   Windows release (app 0.2.8): --trust-public-key <the owner Ed25519 public key PEM> (the vigia vault's manifest key, printed
 //   once by server/deploy/vigia/set-secrets.ps1): the build input of the only trust anchor. The native core must have been
 //   built with the same key (scripts/build-native.mjs --trust-public-key; the gate compares them), and the app's main bundle
@@ -49,7 +56,7 @@ export function parse(argv) {
     if (name === '--dry-run') { options.dryRun = true; continue; }
     // macOS only: notarize with APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD and APPLE_TEAM_ID (electron-builder reads them).
     if (name === '--notarize') { options.notarize = true; continue; }
-    if (!['--platform', '--pack', '--update-url', '--native', '--trust-public-key', '--bridge-public-key', '--cert-sha1', '--publisher-name', '--timestamp-url'].includes(name)) throw new Error('unknown option: ' + name);
+    if (!['--platform', '--pack', '--update-url', '--native', '--trust-public-key', '--bridge-public-key', '--cert-sha1', '--publisher-name', '--timestamp-url', '--app-version'].includes(name)) throw new Error('unknown option: ' + name);
     if (i + 1 >= argv.length) throw new Error('missing the value of ' + name);
     const value = argv[++i];
     if (name === '--platform') options.platform = value;
@@ -61,16 +68,24 @@ export function parse(argv) {
     if (name === '--cert-sha1') options.certSha1 = value;
     if (name === '--publisher-name') options.publisherName = value;
     if (name === '--timestamp-url') options.timestampUrl = value;
+    // The version of the app (electron-builder extraMetadata.version: the bundle, the artifact names and latest-mac.yml).
+    if (name === '--app-version') options.appVersion = value;
   }
   if (!['win', 'mac'].includes(options.platform)) throw new Error('use --platform win or --platform mac');
   if (options.platform === 'win' && !options.native) throw new Error('Windows app builds require --native <qualified ssam-agent.exe>.');
+  if (options.appVersion !== undefined && !/^\d+\.\d+\.\d+$/.test(options.appVersion)) throw new Error('--app-version must be x.y.z: ' + options.appVersion);
   if (options.bundledBridgesOnly) {
     if (options.platform !== 'mac' || !options.notarize || !options.native || options.testUnsigned || options.packOnly)
       throw new Error('--bundled-bridges-only requires a notarized native Mac release');
     if (options.certSha1 || options.publisherName || options.bridgePublicKey)
       throw new Error('--bundled-bridges-only takes no Windows or remote bridge identity');
-    options.noUpdates = true;
+    // Mac app 0.2.8: the bridges stay the bundled ones (no remote bridge offer: the core has no trust anchor and macOS takes
+    // none), but the APP may update itself from the feed (--no-updates still turns that off). Squirrel.Mac only installs an
+    // update whose code signature satisfies the installed app's designated requirement (Developer ID, same Team ID).
   }
+  // A Mac app that updates itself must be Developer ID-signed and notarized: Squirrel.Mac refuses an update of an ad-hoc app.
+  if (options.platform === 'mac' && !options.packOnly && !options.noUpdates && !options.testUnsigned && !options.notarize)
+    throw new Error('a Mac app that updates itself must be signed and notarized (--notarize); for a build that never updates itself pass --no-updates');
   if (options.testUnsigned) {
     if (options.certSha1 || options.publisherName) throw new Error('--test-unsigned takes no signing certificate');
     if (options.notarize) throw new Error('--test-unsigned is never notarized');
@@ -193,6 +208,65 @@ export function checkWindowsOutput(dist, options, { thumbprint = signerThumbprin
       + '; every update needs the signed statement next to its installer (scripts/sign-windows-update.ps1 before publishing)');
 }
 
+// The electron-builder arguments after its cli.js: the targets, never its own publishing, the feed of a build that updates
+// itself (resources/app-update.yml and latest*.yml), the app version (--app-version) and notarization.
+export function builderArgs(options, { nativeMac = false, arch = process.arch, config = 'electron-builder.yml' } = {}) {
+  const args = [...(nativeMac ? ['--mac', 'dmg', 'zip', '--' + arch] : [options.platform === 'win' ? '--win' : '--mac']), '--publish', 'never', '--config', config];
+  if (!options.noUpdates) args.push('-c.publish.provider=generic', `-c.publish.url=${options.updateUrl.replace(/\/+$/, '')}`, '-c.publish.channel=latest');
+  if (options.appVersion) args.push(`-c.extraMetadata.version=${options.appVersion}`);
+  if (options.notarize) args.push('-c.mac.notarize=true');
+  return args;
+}
+
+// The update feed entries electron-builder wrote (latest-mac.yml / latest.yml): {version, files: [{url, sha512, size}]}.
+export function feedEntries(text) {
+  const version = /^version:\s*['"]?([^'"\s]+)/m.exec(text ?? '')?.[1] ?? null;
+  const files = [];
+  for (const block of String(text ?? '').split(/^\s*-\s+url:/m).slice(1)) {
+    const url = /^\s*['"]?([^'"\s]+)/.exec(block)?.[1];
+    const sha512 = /^\s+sha512:\s*['"]?([^'"\s]+)/m.exec(block)?.[1] ?? null;
+    const size = Number(/^\s+size:\s*(\d+)/m.exec(block)?.[1] ?? NaN);
+    if (url) files.push({ url, sha512, size });
+  }
+  return { version, files };
+}
+
+// After electron-builder on a Mac (app 0.2.8): the installed pack is whole with every pin, and the updater configuration is the
+// one of the build: with updates, resources/app-update.yml names the feed (generic, latest) and dist/latest-mac.yml announces
+// this version with the ZIP(s) of dist, whose sha512 and size it states (what electron-updater checks before Squirrel.Mac
+// checks the code signature); without updates, neither file exists. arch: the native core's (mac-arm64 or mac).
+export function checkMacOutput(dist, options, { arch = process.arch, version = options.appVersion ?? appPackageVersion(), pack = packProblems } = {}) {
+  const resources = path.join(dist, arch === 'arm64' ? 'mac-arm64' : 'mac', 'SSAM Agent.app', 'Contents', 'Resources');
+  const problems = pack(path.join(resources, 'pack')).map(problem => 'Resources/pack: ' + problem);
+  const yml = path.join(resources, 'app-update.yml');
+  const text = fs.existsSync(yml) ? fs.readFileSync(yml, 'utf8') : null;
+  const latest = path.join(dist, 'latest-mac.yml');
+  if (options.testUnsigned || options.noUpdates) {
+    if (text !== null) problems.push('a build without updates must not carry Resources/app-update.yml');
+    if (fs.existsSync(latest)) problems.push('a build without updates must not write dist/latest-mac.yml');
+  } else {
+    problems.push(...updaterConfigProblems(text, { url: options.updateUrl.replace(/\/+$/, '') }));
+    if (text !== null && publisherNames(text).length) problems.push('app-update.yml names a publisherName: on macOS Squirrel.Mac checks the code signature, the name would only confuse');
+    if (!fs.existsSync(latest)) problems.push('dist/latest-mac.yml is missing: the feed would have nothing to announce');
+    else {
+      const feed = feedEntries(fs.readFileSync(latest, 'utf8'));
+      if (feed.version !== version) problems.push(`latest-mac.yml announces ${feed.version ?? 'no version'}, not ${version}`);
+      if (!feed.files.length) problems.push('latest-mac.yml lists no file');
+      for (const file of feed.files) {
+        const local = path.join(dist, file.url);
+        if (!/\.zip$/.test(file.url) || !fs.existsSync(local)) { problems.push('latest-mac.yml names ' + file.url + ', which is not a ZIP of dist'); continue; }
+        const bytes = fs.readFileSync(local);
+        if (createHash('sha512').update(bytes).digest('base64') !== file.sha512 || bytes.length !== file.size) problems.push('latest-mac.yml states another sha512 or size for ' + file.url);
+      }
+    }
+  }
+  if (problems.length) throw new Error('the Mac build is not releasable: ' + problems.join('; '));
+  console.log('pack: Resources/pack is whole and every pin matches its file');
+  console.log(options.noUpdates || options.testUnsigned ? 'updater: off (no app-update.yml, no latest-mac.yml)'
+    : 'updater: app-update.yml names ' + options.updateUrl + '; latest-mac.yml announces ' + version + ' (Squirrel.Mac installs only a Developer ID update of the same team)');
+}
+export function appPackageVersion(appDir = app) { return JSON.parse(fs.readFileSync(path.join(appDir, 'package.json'), 'utf8')).version; }
+
 // The update key the main bundle pins (update-trust.mjs): the build input on a Windows build that updates itself, else none.
 export function updateSpkiFor(options, readKey = readTrustPublicKey) {
   return options.platform === 'win' && !options.noUpdates && !options.testUnsigned && options.bridgePublicKey ? spkiBase64(readKey(options.bridgePublicKey)) : '';
@@ -278,12 +352,9 @@ async function main() {
   }
   // Explicit CLI target names bypass merged YAML target arrays. Otherwise the
   // parent config can add an Intel installer containing an ARM-only core.
-  const args = [cli, ...(nativeMac ? ['--mac', 'dmg', 'zip', '--' + process.arch] : [options.platform === 'win' ? '--win' : '--mac']), '--publish', 'never', '--config', config];
-  if (!options.noUpdates) args.push('-c.publish.provider=generic', `-c.publish.url=${options.updateUrl.replace(/\/+$/, '')}`, '-c.publish.channel=latest');
-  if (options.notarize) {
+  if (options.notarize)
     for (const name of ['APPLE_ID', 'APPLE_APP_SPECIFIC_PASSWORD', 'APPLE_TEAM_ID']) if (!process.env[name]) throw new Error(`--notarize needs ${name} in the environment`);
-    args.push('-c.mac.notarize=true');
-  }
+  const args = [cli, ...builderArgs(options, { nativeMac: Boolean(nativeMac), arch: process.arch, config })];
   console.log('electron-builder ' + args.slice(1).join(' '));
   if (options.dryRun) { console.log('dry-run config ' + fs.readFileSync(config, 'utf8')); return; }
   const result = spawnSync(process.execPath, args, { cwd: app, stdio: 'inherit', env: { ...process.env, CSC_IDENTITY_AUTO_DISCOVERY: process.env.CSC_IDENTITY_AUTO_DISCOVERY ?? 'false' } });
@@ -292,6 +363,7 @@ async function main() {
   const files = fs.readdirSync(dist).filter(name => /\.(exe|dmg|zip|yml|blockmap)$/.test(name));
   console.log('dist: ' + files.join(', '));
   if (options.platform === 'win') checkWindowsOutput(dist, options);
+  if (options.platform === 'mac') checkMacOutput(dist, options, { arch: pack.nativeCore?.arch ?? process.arch });
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href)

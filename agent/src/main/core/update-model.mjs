@@ -78,6 +78,14 @@ export function publisherNames(appUpdateYml) {
   }
   return names;
 }
+// Whether a packaged app keeps only the feed its build wrote into app-update.yml (settings.mjs resolveUpdateUrl pinned): a
+// legacy Authenticode build (publisherName), a Windows build with the pinned Ed25519 key, and every packaged macOS build (app
+// 0.2.8: the notarized Mac app updates itself; Squirrel.Mac checks the signature, the pin keeps the environment and the
+// settings from moving it to another feed, which could serve an older signed release).
+export function feedPinned({ platform, isPackaged, appUpdateYml, updatePublicKey }) {
+  return Boolean(isPackaged) && (publisherNames(appUpdateYml).length > 0 || Boolean(updatePublicKey) || platform === 'darwin');
+}
+
 export function updateTrustProblem({ platform, isPackaged, updatePublicKey }) {
   if (platform !== 'win32' || !isPackaged) return null;
   if (!String(updatePublicKey ?? '').trim())

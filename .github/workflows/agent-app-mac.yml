@@ -20,6 +20,14 @@ on:
         description: Sign and notarize the test artifacts
         type: boolean
         default: false
+      app_version:
+        description: App version (x.y.z); the default is agent/package.json's
+        type: string
+        default: '0.2.8'
+      enable_updates:
+        description: The app updates itself from https://dist.ssam.pro/u/ssam-agent (requires sign_and_notarize)
+        type: boolean
+        default: false
 permissions:
   contents: write # Required only to read the existing private draft asset.
 jobs:
@@ -30,4 +38,6 @@ jobs:
       pack_asset: ${{ inputs.pack_asset }}
       pack_sha256: ${{ inputs.pack_sha256 }}
       sign_and_notarize: ${{ inputs.sign_and_notarize }}
+      app_version: ${{ inputs.app_version }}
+      enable_updates: ${{ inputs.enable_updates }}
     secrets: inherit
