@@ -8,7 +8,7 @@ import path from 'node:path';
 import {spawn,spawnSync} from 'node:child_process';
 import crypto,{createHash} from 'node:crypto';
 import {fileURLToPath} from 'node:url';
-import {readTrx,pairTag,pairId,packFor,version as threeOf,backendTag,backendId} from './window.mjs';
+import {readTrx,pairTag,pairId,packFor,version as threeOf,backendTag,backendId,labelKernels} from './window.mjs';
 import {generateDockerfile} from '../gen-dockerfile.mjs';
 import {isBackendManifest,versionBackends} from '../coolify/gen-compose.mjs';
 import {smokeImage,readListingBudget} from './smoke.mjs';
@@ -433,7 +433,12 @@ export async function createRuntime(config,{log=()=>{}}={}){
      throw Error(`build.sh failed for ${name} (exit ${r.code})${cause.why?': '+cause.why:''}. See ${path.join(dir,'commands.jsonl')}.`);
     }
     const sha256=JSON.parse(fs.readFileSync(metadata,'utf8'))['containerimage.digest'].replace(/^sha256:/,'');
-    return {odc:spec.odc,kernels:spec.kernels,defaultO11:spec.defaultO11,o11:spec.defaultO11,image,tag:imageTag,sha256,revision:commitShort,commit:revision,provenance:JSON.parse(custody)};
+    // The O11 kernels the image really carries (S2 R4, review M1): its label ssam.kernels.o11, read back from the built image;
+    // they must be the kernel set it was built for, and they are what its backend records (o11Kernels).
+    const labels=await docker(['image','inspect','--format','{{json .Config.Labels}}',`${image}:${imageTag}`],{allowFailure:true,timeoutMs:60000});
+    let kernels=null;try{kernels=labels.code===0?labelKernels(JSON.parse(labels.stdout)):null;}catch{kernels=null;}
+    if(!kernels||kernels.join()!==[...spec.kernels].join())throw Error(`The image ${imageTag} of ${name} carries the O11 kernels ${kernels?.join(', ')??'(no ssam.kernels.o11 label)'}, not the set it was built for (${spec.kernels.join(', ')}).`);
+    return {odc:spec.odc,kernels,kernelsFrom:'image-label',defaultO11:spec.defaultO11,o11:spec.defaultO11,image,tag:imageTag,sha256,revision:commitShort,commit:revision,provenance:JSON.parse(custody)};
    }finally{fs.rmSync(installers,{recursive:true,force:true});}
   },
   // The smoke of one backend image: it runs the release kernel of that backend (its ODC, the default O11) with the window's
@@ -505,6 +510,8 @@ export async function createRuntime(config,{log=()=>{}}={}){
    if(r.code!==0)throw Error(`The tested image ${built.image}:${built.tag} is not in the local Docker any more.`);
    const info=JSON.parse(r.stdout),want='sha256:'+built.sha256;
    if(info.Id!==want&&info.Descriptor?.digest!==want)throw Error(`The local image ${built.tag} is ${info.Descriptor?.digest??info.Id}, not the tested ${want}.`);
+   // A backend image (window 4x4): its label still names the O11 kernels its backend declares.
+   if(Array.isArray(built.kernels)){const real=labelKernels(info.Config?.Labels);if(real?.join()!==[...built.kernels].join())throw Error(`The local image ${built.tag} carries the O11 kernels ${real?.join(', ')??'(no label)'}, not the recorded ${built.kernels.join(', ')}.`);}
   },
   async publish(built){
    if(config.automatic)await runtime.executionSource();

@@ -185,8 +185,19 @@ const finish=(next,keep)=>{
  versionBackends(next);retiringOf(next,versionBackends(next));
  return next;
 };
-// A new version of one lane enters a backend window. images: {image, tag} of the new backend (ODC), or {"<odc>": {image,
-// tag}} of EVERY backend of the next window (O11: each image is rebuilt with the new kernel set). -> {manifest, retiring:
+// The O11 kernels a built image really carries (S2 R4, review M1): the build's own list (runtime.mjs buildBackend reads it
+// back from the image label ssam.kernels.o11), recorded as o11Kernels on its backend so versionBackends refuses an image that
+// lacks a served version. Not a three-part list: null (an image of the preview, not built yet).
+export const builtKernels=at=>Array.isArray(at?.kernels)&&at.kernels.length&&at.kernels.every(v=>/^\d+\.\d+\.\d+$/.test(v))?[...new Set(at.kernels)].sort(compareVersion):null;
+// The O11 kernels of an image's label ssam.kernels.o11 (deploy/gen-dockerfile.mjs: SSAM_IMAGE_O11, comma separated), sorted;
+// null without the label or with a word that is not a three-part version.
+export const labelKernels=labels=>{const text=labels?.['ssam.kernels.o11'];if(typeof text!=='string'||!text.trim())return null;const list=text.split(',').map(v=>v.trim());return builtKernels({kernels:list})&&list.length===new Set(list).size?builtKernels({kernels:list}):null;};
+// The customers of a window change as the files keep them: never a token id, only a short hash of it (one customer seen on
+// two versions reads as one), the customer label and the Studio.
+export const affectedRecord=affected=>(affected??[]).map(({token,...a})=>({...a,client:createHash('sha256').update(String(token)).digest('hex').slice(0,12)}));
+// A new version of one lane enters a backend window. images: {image, tag, kernels?} of the new backend (ODC), or {"<odc>":
+// {image, tag, kernels?}} of EVERY backend of the next window (O11: each image is rebuilt with the new kernel set); kernels,
+// the image's real O11 set, becomes the backend's o11Kernels. -> {manifest, retiring:
 // [the version that enters its grace], retired: [a retiring version that left at once], affected, hotPinDropped?}. The new
 // images carry no digest yet (pinDigests after publication).
 export function rotateLane(manifest,lane,v,{now=Date.now(),graceDays=DEFAULT_GRACE_DAYS,keep=DEFAULT_KEEP,images,tokens}={}){
@@ -201,8 +212,8 @@ export function rotateLane(manifest,lane,v,{now=Date.now(),graceDays=DEFAULT_GRA
   if(!images?.image||!images?.tag)throw Error('A new ODC backend needs its image and tag.');
   // The new image is built with the served kernels; a kernel the older images still carry after an O11 retirement
   // (o11.kernels) is not in it.
-  const kernels=kernelsOf(manifest),servedO11=[...manifest.o11.served].sort(compareVersion);
-  next.backends.push({odc:v,image:images.image,tag:images.tag,...(kernels.join()!==servedO11.join()?{o11Kernels:servedO11}:{})});
+  const kernels=kernelsOf(manifest),servedO11=[...manifest.o11.served].sort(compareVersion),real=builtKernels(images);
+  next.backends.push({odc:v,image:images.image,tag:images.tag,...(real?{o11Kernels:real}:kernels.join()!==servedO11.join()?{o11Kernels:servedO11}:{})});
  }else{
   next.o11={served:[...next.o11.served,v]};
  }
@@ -223,7 +234,7 @@ export function rotateLane(manifest,lane,v,{now=Date.now(),graceDays=DEFAULT_GRA
   // Every image is rebuilt with exactly the served kernels (the retiring one included); a missing image is a defect.
   for(const b of next.backends){
    const at=images?.[b.odc];if(!at?.image||!at?.tag)throw Error(`The O11 round needs the rebuilt image of backend ${backendId(b.odc)}.`);
-   b.image=at.image;b.tag=at.tag;delete b.sha256;delete b.o11Kernels;
+   b.image=at.image;b.tag=at.tag;delete b.sha256;const real=builtKernels(at);if(real)b.o11Kernels=real;else delete b.o11Kernels;
   }
  }
  finish(next,keep);
@@ -289,7 +300,7 @@ export function fromPairs(pairs,{now=Date.now(),graceDays=DEFAULT_GRACE_DAYS,kee
   if(all.length>keep[lane]){next.retiring[lane]={version:all[keep[lane]],retireAt:isoAt(now+graceDays*DAY)};retiring.push({lane,...next.retiring[lane]});}
   for(const x of all.slice(keep[lane]+1))retired.push({lane,version:x});
   if(lane==='o11')next.o11.served=stay.sort(compareVersion);
-  else for(const odc of stay){const at=images?.[odc];if(!at?.image||!at?.tag)throw Error(`The first backend window needs the image of backend ${backendId(odc)}.`);next.backends.push({odc,image:at.image,tag:at.tag,...(at.sha256?{sha256:at.sha256}:{})});}
+  else for(const odc of stay){const at=images?.[odc];if(!at?.image||!at?.tag)throw Error(`The first backend window needs the image of backend ${backendId(odc)}.`);const real=builtKernels(at);next.backends.push({odc,image:at.image,tag:at.tag,...(at.sha256?{sha256:at.sha256}:{}),...(real?{o11Kernels:real}:{})});}
  }
  finish(next,keep);
  const hotPinDropped=carrySizing(next);

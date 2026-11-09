@@ -180,19 +180,29 @@ export function assertLaneUnserved(baseline,lane,version){
  const m=baseline.manifest,served=isBackendManifest(m)?(lane==='odc'?m.backends.map(b=>b.odc):m.o11.served):m[lane].map(e=>e.version);
  if(served.includes(version))fail('The candidate is already served.','ALREADY_SERVED');
 }
-// round (S2, a backend window): {lane, built: {"<tag>": "<64 hex>"}} of the round. A live backend that stays keeps its image,
-// tag and digest, except in an O11 round, where its new image must be one this round built and published (its digest pinned),
-// carrying exactly the rotation's O11 kernels (the next window's served list, the retiring version included). The build comes
-// from the execution checkout the watcher verified (signed main, executionSource). Anything else is LIVE_DOWNGRADE.
+// round (S2, a backend window): {lane, built: {"<tag>": "<64 hex>"}, images: {"<tag>": {odc, kernels}}} of the round, images
+// being what each built image really is (its ODC backend and the O11 kernels of its label ssam.kernels.o11, runtime.mjs
+// buildBackend). Every backend of the next window that runs an image this round built must be the backend it was built for and
+// declare exactly that image's O11 kernels (IMAGE_KERNELS_DIFFER; review M1: never the manifest's own metadata). A live backend
+// that stays keeps its image, tag and digest, except in an O11 round, where its new image must be one this round built and
+// published (its digest pinned), carrying every O11 version the next window serves. The build comes from the execution
+// checkout the watcher verified (signed main, executionSource). Anything else is LIVE_DOWNGRADE.
 export function assertRetained(baseline,next,round={}){
  if(isBackendManifest(next)||isBackendManifest(baseline.manifest)){
   if(isBackendManifest(next)!==isBackendManifest(baseline.manifest))fail('The live window and the next one are not the same kind.','LIVE_DOWNGRADE');
-  const want=[...next.o11.served].sort().join(),backends=versionBackends(next);
+  const served=next.o11.served,backends=versionBackends(next),built=round.built??{},images=round.images??{};
+  const setOf=list=>[...new Set(list??[])].sort().join(',');
+  for(const n of next.backends){
+   if(!Object.hasOwn(built,n.tag))continue;
+   const image=images[n.tag],declared=backends.find(x=>x.odc===n.odc).kernels;
+   if(!image||image.odc!==n.odc)fail(`The image ${n.tag} was not built for the backend odc-${n.odc}.`,'IMAGE_KERNELS_DIFFER');
+   if(setOf(image.kernels)!==setOf(declared))fail(`The backend odc-${n.odc} declares the O11 kernels ${declared.join(', ')}, but its image ${n.tag} carries ${(image.kernels??[]).join(', ')||'none recorded'}.`,'IMAGE_KERNELS_DIFFER');
+  }
   for(const b of baseline.manifest.backends){
    const n=next.backends.find(x=>x.odc===b.odc);if(!n)continue;
    if(['image','tag','sha256'].every(k=>n[k]===b[k]))continue;
-   const pinned=String(n.sha256??'').replace(/^sha256:/,''),kernels=backends.find(x=>x.odc===n.odc).kernels;
-   if(round.lane!=='o11'||!/^[a-f0-9]{64}$/.test(pinned)||round.built?.[n.tag]!==pinned||kernels.slice().sort().join()!==want)fail('A retained live image was changed.','LIVE_DOWNGRADE');
+   const pinned=String(n.sha256??'').replace(/^sha256:/,''),carried=images[n.tag]?.kernels??[];
+   if(round.lane!=='o11'||!/^[a-f0-9]{64}$/.test(pinned)||built[n.tag]!==pinned||served.some(v=>!carried.includes(v)))fail('A retained live image was changed.','LIVE_DOWNGRADE');
   }
   return;
  }
