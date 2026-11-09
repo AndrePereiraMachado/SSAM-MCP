@@ -242,7 +242,7 @@ export async function runAttempt(config,ops,decision,now){
     const store=createBridgeStore({root:compiled.stage,publicKey:fs.readFileSync(path.join(compiled.stage,'public-key.pem'))});
     gate=offersGate({config:gateConfig,release:agentRelease,pair,studios,servedKernels:await ops.servedKernels(base),served,offers:compiled.offers,bridges:store});
     if(gate.gaps.length)throw clientBridgeError(gate.gaps,pair);
-    log(`ed25519-offers kernel ${JSON.stringify(gate.kernel)}; signed offers ${compiled.offers.map(o=>o.lane+' '+o.studioVersion+' '+o.protocol+'#'+o.sequence).join(', ')}; the published pack hello (bridgeOffer) received ${gate.offerLanes.join(', ')||'none'}; agent 0.2.7 on this pair: odc ${gate.legacy.odc.ok?'ok':gate.legacy.odc.code}, o11 ${gate.legacy.o11.ok?'ok':gate.legacy.o11.code}`);
+    log(`ed25519-offers kernel ${JSON.stringify(gate.kernel)}; signed offers ${compiled.offers.map(o=>o.lane+' '+o.studioVersion+' '+o.protocol+'#'+o.sequence).join(', ')}; the published pack hello (bridgeOffer) received ${gate.offerLanes.join(', ')||'none'}; agent 0.2.7 on this pair: odc ${gate.legacy.odc.ok?'ok':gate.legacy.odc.code}, o11 ${gate.legacy.o11.ok?'ok':gate.legacy.o11.code+(gate.legacy.o11.cause?' '+gate.legacy.o11.cause:'')}`);
    }else{
    gate=serverOnlyGate({config:gateConfig,release:agentRelease,pair,studios,servedKernels:await ops.servedKernels(base),served});
    if(gate.gaps.length)throw clientBridgeError(gate.gaps,pair);

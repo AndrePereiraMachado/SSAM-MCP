@@ -114,9 +114,12 @@ export async function verifySignedAgentRelease(config,{git,ownerSigned}){
  agentReleasePin(commit,ref);
  const refuse=message=>{throw Object.assign(Error(message),{code:'AGENT_RELEASE_UNSIGNED'});};
  if(!/^ssh-(ed25519|rsa) [A-Za-z0-9+/=]+(?: [^\r\n]*)?$/.test(config.ownerSigningPublicKey??''))refuse('The agent release must be owner-signed: configure ownerSigningPublicKey (acceptUnsignedMain does not cover agent code).');
- if((await git(['merge-base','--is-ancestor',commit,ref],{allowFailure:true})).code!==0)throw Error('Agent commit is outside the approved release line.');
- const tip=(await git(['rev-parse','--verify','--quiet',ref+'^{commit}'],{allowFailure:true})).stdout?.trim();
- if(!/^[a-f0-9]{40}$/.test(tip??''))throw Error('The agent release line cannot be read.');
+ // The release line is the BRANCH of that name (F1 review B5): a tag of the same name never stands in for it, so the tip whose
+ // signature is checked is the branch tip, not an object a token holder pointed a tag at.
+ const branch='refs/heads/'+ref;
+ const tip=(await git(['rev-parse','--verify','--quiet',branch+'^{commit}'],{allowFailure:true})).stdout?.trim();
+ if(!/^[a-f0-9]{40}$/.test(tip??''))throw Error(`The agent release line cannot be read (the branch ${branch} of the vigia-run clone).`);
+ if((await git(['merge-base','--is-ancestor',commit,branch],{allowFailure:true})).code!==0)throw Error('Agent commit is outside the approved release line.');
  if(!await ownerSigned(commit))refuse(`agentReleaseCommit ${commit.slice(0,7)} has no valid owner signature; sign the reviewed agent release commit.`);
  if(tip!==commit&&!await ownerSigned(tip))refuse(`The tip of ${ref} (${tip.slice(0,7)}) has no valid owner signature; the agent release line must end in an owner-signed commit.`);
  return {commit,tip};

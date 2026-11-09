@@ -445,16 +445,16 @@ test('ed25519-offers round: a Service Studio without a published thin bridge is 
  assert.equal(check.requirePresented,true);
  const expected=JSON.parse(/^const expected=(.*);\n/.exec(check.checkSource)[1]),key='11.55.95|1.7.32';
  assert.deepEqual(expected.offerLanes,{[key]:['o11']});assert.equal(expected.offerHellos[key].capabilities.bridgeOffer,true);assert.equal(expected.legacyHellos[key].capabilities.bridgeOffer,false);
- assert.deepEqual(expected.packHellos[key].bridges.map(b=>b.protocol),['d1']);assert.deepEqual(expected.offers.map(o=>o.protocol),['v109','d1']);
+ assert.deepEqual(expected.packHellos[key].bridges.map(b=>b.protocol),['d1']);assert.deepEqual(expected.offers[key].map(o=>o.protocol),['v109','d1'],'the offers are the new pair\'s only (A1)');assert.equal(check.requireOffers,2);
  const saved=readJournal(path.join(f.dir,result.id,'release.json'));
  assert.equal(saved.bridgeMode,'ed25519-offers');assert.equal(saved.bridges.mode,'ed25519-offers');
  // This window serves 11.55.93 and 11.55.95 only: a 0.2.7 agent on 11.55.95 (its default 11.55.94 thin bridge) is refused there.
- assert.deepEqual(saved.bridges.legacy,{odc:{ok:true},o11:{ok:false,code:'AGENT_PACK_MISMATCH'}});assert.equal(saved.bridges.agentRelease,'c'.repeat(40));
+ assert.deepEqual(saved.bridges.legacy,{odc:{ok:true},o11:{ok:false,code:'AGENT_PACK_MISMATCH',cause:'AGENT_UPDATE_REQUIRED'}});assert.equal(saved.bridges.agentRelease,'c'.repeat(40));
 });
 test('ed25519-offers round: without a signed O11 offer the lane waits (client-bridge-update-required) and nothing is tested or deployed',async t=>{
  const f=await fixture(t),s=offersRound(f,{lanes:['odc']});t.after(()=>cleanStage(s));
  const result=await roundOf(s);assert.equal(result.status,'deferred',JSON.stringify(result));
- assert.match(result.error,/client bridge update required: o11 11\.55\.95 runtime net10\.0 \(the published pack's hello is refused \(AGENT_PACK_MISMATCH: The O11 bridge of the agent package was built for Service Studio 11\.55\.94.*\) and no signed offer reaches it\)/);
+ assert.match(result.error,/client bridge update required: o11 11\.55\.95 runtime net10\.0 \(the published pack's hello is refused \(AGENT_PACK_MISMATCH: The agent package's Service Studio bridge was built for 11\.55\.94, not for Service Studio 11\.55\.95.*\) and no signed offer reaches it\)/);
  assert.ok(s.notes.includes('SSAM: client bridge update required'),s.notes.join());
  for(const step of ['test','image','smoke','publish','compose','deploy'])assert.ok(!f.calls.includes(step),step);
  assert.equal(readJournal(path.join(f.dir,result.id,'attempt.json')).code,'client-bridge-update-required');

@@ -6,7 +6,7 @@ import path from 'node:path';
 import http from 'node:http';
 import {fileURLToPath} from 'node:url';
 import {generateKeyPairSync,createHash,sign} from 'node:crypto';
-import {createAutoRuntime,releasesToVerify} from './auto-runtime.mjs';
+import {createAutoRuntime,releasesToVerify,spkiSha256} from './auto-runtime.mjs';
 import {createRuntime} from './runtime.mjs';
 import {NEVER_IN_REHEARSAL,fenceRuntime,forcedPair,rehearsalConfig,rehearseCurrent} from './rehearse.mjs';
 import {rehearsalRefuses} from './safety.mjs';
@@ -24,7 +24,7 @@ async function fixture(t,{config:extra={},vault={}}={}){
  const server=http.createServer((req,res)=>{http_.push(req.method+' '+req.url);res.setHeader('content-type','application/json');res.end(JSON.stringify({docker_compose_raw:'services: {}'}));});
  await new Promise(r=>server.listen(0,'127.0.0.1',r));t.after(()=>server.close());
  const key=generateKeyPairSync('ed25519').privateKey.export({format:'pem',type:'pkcs8'});
- const real={automatic:true,bridgeMode:'signed-offers',workspace:path.resolve(here,'../../..'),tempRoot:dir,outDir:out,pauseFile:path.join(dir,'PAUSE'),automaticDeployment:{testOnly:true,coolify:{url:`http://127.0.0.1:${server.address().port}`,resource:'fixture'},ssh:{host:'fixture',knownHosts:path.join(dir,'known')},remote:{directory:'/x'}},...extra};
+ const real={automatic:true,bridgeMode:'signed-offers',workspace:path.resolve(here,'../../..'),tempRoot:dir,outDir:out,pauseFile:path.join(dir,'PAUSE'),automaticDeployment:{testOnly:true,coolify:{url:`http://127.0.0.1:${server.address().port}`,resource:'fixture'},ssh:{host:'fixture',knownHosts:path.join(dir,'known')},remote:{directory:'/x'}},bridgeTrustKeySpkiSha256:spkiSha256(key),...extra};
  const config=rehearsalConfig(real,new Date('2026-10-31T12:00:00Z'));fs.mkdirSync(config.outDir,{recursive:true});
  const base={log:()=>{},notes:[],executionSource:async()=>{},
   async notify(title){this.notes.push(title);},
@@ -177,18 +177,21 @@ test('only a rehearsal verifies a release the window already serves',()=>{
 });
 test('the smoke of a rehearsal asks the image for its offers, and a refusal fails it',async t=>{
  const dir=tmp(t),features=path.join(dir,'f.xml');fs.writeFileSync(features,'x');
- const run=async asked=>{
+ const run=async(asked,receipt={ok:true,offersChecked:2})=>{
   const inputs=[];
   const docker=async(args,{input}={})=>{
    if(args[0]==='logs')return {code:0,stdout:JSON.stringify({event:'warm',indexes:{ok:true},delivery:{builder:{ok:true},worker:{ok:true}}})+'\n',stderr:''};
    if(args.includes('server-token'))return {code:0,stdout:JSON.stringify({token:'t',agentCredential:'c'}),stderr:''};
-   if(input){inputs.push(input);if(input.startsWith('OFFER'))return {code:asked,stdout:'',stderr:''};return {code:0,stdout:'{"ok":true,"tools":91}',stderr:''};}
+   if(input){inputs.push(input);if(input.startsWith('OFFER'))return {code:asked,stdout:asked?'':'noise\n'+JSON.stringify(receipt)+'\n',stderr:''};return {code:0,stdout:'{"ok":true,"tools":91}',stderr:''};}
    return {code:0,stdout:'',stderr:''};
   };
   const result=await smokeImage({pair:{o11:'11.55.94',odc:'1.7.30',image:'i',tag:'t'},bundle:{features},dir:path.join(dir,'ev'),root:dir,docker,served:{odc:['1.7.30'],o11:['11.55.94']},budget:{tools:91,totalBytes:1},privateDir:path.join(dir,'p'),offers:[{},{}],offerCheck:'OFFER'});
   return {result,inputs};
  };
  const good=await run(0);assert.equal(good.result.offersChecked,2);assert.equal(good.inputs.at(-1),'OFFER');
+ // B1 of the F1 review: offersChecked is the count check-backend.mjs reported inside the image, never the length of the list.
+ assert.equal((await run(0,{ok:true,offersChecked:1})).result.offersChecked,1);
+ for(const receipt of [null,{ok:true},{ok:false,offersChecked:2}])assert.match((await run(0,receipt)).result.error,/returned no receipt/);
  const bad=await run(1);assert.equal(bad.result.ok,false);assert.match(bad.result.error,/did not offer/);
 });
 test('-RehearseCurrent runs alone, and vigia.ps1 hands it over',()=>{
@@ -233,7 +236,9 @@ test('ed25519-offers rehearsal of the five-pair window offers the signed d1 brid
  assert.ok(f.order.indexOf('buildBridges')<f.order.indexOf('test o11 baseline'),f.order.join());
  assert.deepEqual(result.offers.map(o=>[o.lane,o.studioVersion,o.protocol,o.signers]),[['odc','1.7.32','v109',{owner:2,microsoft:1}],['o11','11.55.95','d1',{owner:2,microsoft:0}]]);
  assert.deepEqual(result.hello,{odcBridge:'v108',o11BuiltFor:'11.55.94',installed:['o11 d1#1']});assert.deepEqual(result.offerLanes,['o11']);
- assert.deepEqual(result.legacy,{odc:{ok:true},o11:{ok:true}},'11.55.94 is served in this window: a 0.2.7 agent keeps its default thin bridge on 11.55.95');
+ // F1 review M2: 11.55.94 is still served in this window, yet a 0.2.7 agent on 11.55.95 is never served its 11.55.94 thin bridge:
+ // it is told to install app 0.2.8 (the kernel names the pack builds it accepts for 11.55.95: only its own).
+ assert.deepEqual(result.legacy,{odc:{ok:true},o11:{ok:false,code:'AGENT_PACK_MISMATCH',cause:'AGENT_UPDATE_REQUIRED'}});assert.deepEqual(seen.kernel.o11PackBuiltFor,['11.55.95']);
  assert.deepEqual(seen.kernel.o11BridgeAccepted,['d1']);assert.equal(seen.expect.offerHello.capabilities.bridgeOffer,true);
  assert.ok(fs.existsSync(path.join(f.config.rehearsal.dir,'store','o11','11.55.95','d1','manifest.sig')));
  assert.ok(!f.ran.some(cmd=>/dotnet|signtool/i.test(cmd)),f.ran.join());assert.deepEqual(f.spied,[]);assert.deepEqual([...new Set(f.ssh)],['capacity']);
@@ -246,4 +251,16 @@ test('ed25519-offers rehearsal refuses a store whose manifest still names an Aut
  f.runtime.smoke=async()=>({ok:true,tools:91,totalBytes:1,coreBytes:1,publishedPack:true,offersChecked:2});
  const result=await rehearseCurrent(f.config,f.runtime,{manifest:five});
  assert.equal(result.status,'failed');assert.match(result.error,/names an Authenticode thumbprint/);assert.deepEqual(f.spied,[]);
+});
+// F1 review M1: the vault's manifest key must be the key the published agent pins (bridgeTrustKeySpkiSha256 of the private
+// configuration); another key, or no pin, refuses the round before anything is built or signed.
+test('ed25519-offers rehearsal refuses a vault key that is not the pinned agent trust key, and a missing pin',async t=>{
+ for(const [pin,code] of [['0'.repeat(64),'BRIDGE_TRUST_KEY_MISMATCH'],[null,'BRIDGE_TRUST_KEY_UNPINNED'],['2CE611D0','BRIDGE_TRUST_KEY_UNPINNED']]){
+  const f=await fixture(t,{config:{bridgeMode:'ed25519-offers',agentPack:example.agentPack,agentPackByRuntime:example.agentPackByRuntime,agentReleaseCommit:'c'.repeat(40),bridgeTrustKeySpkiSha256:pin},vault:{authenticodeThumbprint:undefined}});
+  f.runtime.agentReleaseFiles=async()=>agentFiles();odcMatches(f);
+  f.runtime.observe=async()=>{f.order.push('observe');return [release('odc','1.7.32','1.7.32.11065'),release('o11','11.55.95','11.55.95.65352')];};
+  f.runtime.buildBridges=ed25519Bridges(f);
+  await assert.rejects(rehearseCurrent(f.config,f.runtime,{manifest:five}),e=>e.code===code&&!/PRIVATE KEY/.test(e.message),String(pin));
+  assert.ok(!f.order.includes('buildBridges'),f.order.join());assert.deepEqual(f.spied,[]);
+ }
 });

@@ -26,6 +26,9 @@ export function verifyBridge(directory, publicKey) {
         !/^[a-f0-9]{64}$/.test(f.sha256) || !Number.isSafeInteger(f.size) || f.size < 1 || f.size > 64 * 1024 * 1024)
       throw Error('Bridge file entry is invalid.');
     if (/\.(dll|exe)$/i.test(f.path) && !['owner','microsoft'].includes(f.signer)) throw Error('Bridge executable signer is invalid.');
+    // The agents' owner-only paths (bridge-updates.mjs and BridgeUpdates.cs, SIGNER_REFUSED): an ODC3.* or Anvil.* entry point and
+    // anything under hook/ is the owner's, never a Microsoft dependency.
+    if (/\.(dll|exe)$/i.test(f.path) && /(^|\/)(odc3\.|anvil\.)|^hook\//i.test(f.path) && f.signer !== 'owner') throw Error('Bridge executable signer is invalid.');
     names.add(f.path);
     const file = path.join(directory, f.path), stat = fs.lstatSync(file);
     if (stat.isSymbolicLink() || !stat.isFile() || stat.size !== f.size || sha(fs.readFileSync(file)) !== f.sha256)

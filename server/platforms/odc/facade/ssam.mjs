@@ -2124,6 +2124,7 @@ export async function detectKernel({ dir, fileVersion, env = process.env, exe = 
   return { ...Object.fromEntries(Object.keys(detected).map(k => [k, typeof pinned[k] === 'string' && pinned[k] ? pinned[k] : detected[k]])),
     ...(Array.isArray(pinned.odcBridgeAccepted) ? { odcBridgeAccepted: pinned.odcBridgeAccepted } : {}),
     ...(Array.isArray(pinned.o11BridgeAccepted) ? { o11BridgeAccepted: pinned.o11BridgeAccepted } : {}),
+    ...(Array.isArray(pinned.o11PackBuiltFor) ? { o11PackBuiltFor: pinned.o11PackBuiltFor } : {}),
     ...(pinned.studioBuildPolicy !== undefined && pinned.studioBuildPolicy !== null ? { studioBuildPolicy: pinned.studioBuildPolicy } : {}) };
 }
 // The ProductVersion (four numbers) of the Service Studio of the O11 lane and of the ODC Studio of this machine, or null.

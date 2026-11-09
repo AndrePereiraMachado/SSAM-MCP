@@ -11,13 +11,13 @@ import os from 'node:os';
 import path from 'node:path';
 import {spawnSync} from 'node:child_process';
 import {fileURLToPath,pathToFileURL} from 'node:url';
-import {generateKeyPairSync,createHash,sign} from 'node:crypto';
+import {generateKeyPairSync,createHash,createPublicKey,sign} from 'node:crypto';
 import {createBridgeStore,verifyBridge} from '../../platforms/odc/facade/bridge-store.mjs';
 import {compatibility} from '../../platforms/odc/facade/agent-hub.mjs';
 import {toolListingBytes} from '../../platforms/odc/facade/tool-listing.mjs';
 import {parseAgentRelease,offersGate,offersKernel,agentHello,installedHello,laneGap,isEd25519Offers} from './server-only.mjs';
 import {verifySignedAgentRelease} from './safety.mjs';
-import {createAutoRuntime} from './auto-runtime.mjs';
+import {createAutoRuntime,spkiSha256,assertTrustKey,reuseSigned} from './auto-runtime.mjs';
 import {automaticPlan,ED25519_OFFERS_STEP,AUTOMATIC_PLAN} from './automatic.mjs';
 
 const here=path.dirname(fileURLToPath(import.meta.url));
@@ -94,9 +94,13 @@ test('agent-hub: on the new pair a 0.2.8 hello is offered the Ed25519-only d1 br
  assert.equal(after.o11.ok,true);assert.equal(after.o11.bridgeOffer,undefined);assert.equal(after.odc.ok,true);
  const old=compatibility(hello027(),kernel,['odc','o11'],{bridges:s.store});
  assert.equal(old.o11.bridgeOffer,undefined);assert.equal(old.odc.bridgeOffer,undefined);
- // What a 0.2.7 agent gets on the new pair: its default 11.55.94 thin bridge while 11.55.94 is served, refused once it is not.
- assert.equal(old.o11.ok,true);
- assert.equal(compatibility(hello027(),{...kernel,servedVersions:{...served,o11:['11.55.95']}},['odc','o11'],{bridges:s.store}).o11.code,'AGENT_PACK_MISMATCH');
+ // F1 review M2: a 0.2.7 agent on the new pair is never served its default 11.55.94 thin bridge (built for another Service Studio),
+ // while 11.55.94 is served as well as after it leaves the window: it is told to install app 0.2.8, never a dead end.
+ assert.deepEqual(kernel.o11PackBuiltFor,['11.55.95']);
+ for(const window of [served,{...served,o11:['11.55.95']}]){
+  const r=compatibility(hello027(),{...kernel,servedVersions:window},['odc','o11'],{bridges:s.store}).o11;
+  assert.equal(r.ok,false);assert.equal(r.code,'AGENT_PACK_MISMATCH');assert.equal(r.cause,'AGENT_UPDATE_REQUIRED');assert.match(r.message,/Install the current SSAM Agent \(app 0\.2\.8 or later\)/);assert.equal(r.bridgeOffer,undefined);
+ }
  // An offer of another runtime is never made, and a hello refusing the sequence (failed report) is not offered it again.
  const net8=stage(t,[{lane:'o11',studioVersion:'11.55.95',protocol:'d1',runtime:'net8.0'}]);
  assert.equal(compatibility(h,kernel,['odc','o11'],{bridges:net8.store}).o11.bridgeOffer,undefined);
@@ -110,13 +114,13 @@ test('offersGate: a Service Studio the published packs have no thin bridge for i
  assert.deepEqual(g.gaps,[]);assert.deepEqual(g.offerLanes,['o11']);
  assert.deepEqual(g.kernel.o11BridgeAccepted,['d1']);assert.equal(g.kernel.o11,'11.55.95');assert.equal(g.kernel.odc,'1.7.32');
  assert.equal(g.offerHello.capabilities.bridgeOffer,true);assert.deepEqual(g.hello.bridges,[{lane:'o11',studioVersion:'11.55.95',protocol:'d1',sequence:1,status:'installed',reason:'INSTALLED'}]);
- assert.equal(g.legacyHello.capabilities.bridgeOffer,false);assert.deepEqual(g.legacy,{odc:{ok:true},o11:{ok:true}});
- // Once 11.55.94 leaves the window, the 0.2.7 agents on 11.55.95 are refused (they need the manual 0.2.8 install); the pair still deploys.
- const later=gate(s,{served:{...served,o11:['11.55.95','11.55.93']}});assert.deepEqual(later.gaps,[]);assert.deepEqual(later.legacy.o11,{ok:false,code:'AGENT_PACK_MISMATCH'});
+ assert.equal(g.legacyHello.capabilities.bridgeOffer,false);assert.deepEqual(g.legacy,{odc:{ok:true},o11:{ok:false,code:'AGENT_PACK_MISMATCH',cause:'AGENT_UPDATE_REQUIRED'}});
+ // Once 11.55.94 leaves the window the 0.2.7 agents on 11.55.95 get the same answer (install 0.2.8); the pair still deploys.
+ const later=gate(s,{served:{...served,o11:['11.55.95','11.55.93']}});assert.deepEqual(later.gaps,[]);assert.deepEqual(later.legacy.o11,{ok:false,code:'AGENT_PACK_MISMATCH',cause:'AGENT_UPDATE_REQUIRED'});
 });
 test('offersGate: no signed O11 offer (missing, another key, another sequence, another runtime) leaves the lane waiting; an ODC gap is never closed by an offer',t=>{
  const odcOnly=stage(t,[both[0]]);
- const a=gate(odcOnly);assert.equal(a.gaps.length,1);assert.equal(a.gaps[0].lane,'o11');assert.match(a.gaps[0].why,/no thin bridge built for Service Studio 11\.55\.95.*received no signed offer/);
+ const a=gate(odcOnly);assert.equal(a.gaps.length,1);assert.equal(a.gaps[0].lane,'o11');assert.match(a.gaps[0].why,/refused \(AGENT_PACK_MISMATCH: The agent package's Service Studio bridge was built for 11\.55\.94, not for Service Studio 11\.55\.95.*no signed offer reaches it/);
  const forged=stage(t,both,{signWith:generateKeyPairSync('ed25519')});
  assert.equal(gate(forged).gaps[0]?.lane,'o11');
  const s=stage(t,[both[0],{...both[1],sequence:3}]);
@@ -164,7 +168,7 @@ test('buildBridges in ed25519-offers: no Authenticode signing, signer classes by
  }};
  const fakeRoot=path.join(dir,'source');for(const rel of ['server/platforms/odc/studio/bridge/client/Program.cs','server/deploy/coolify/r1-kernels.json']){const dest=path.join(fakeRoot,rel);fs.mkdirSync(path.dirname(dest),{recursive:true});fs.copyFileSync(path.resolve(here,'../../..',rel),dest);}
  const settings={automaticDeployment:{testOnly:true,coolify:{url:'http://127.0.0.1:1',resource:'fixture'},ssh:{host:'fixture',knownHosts:'fixture'},remote:{}}};
- const make=()=>createAutoRuntime({workspace:fakeRoot,tempRoot:dir,outDir:dir,configFile:path.join(dir,'config.json'),bridgeMode:'ed25519-offers',bundlePins:{'odc-1.7.32':pin,'o11-11.55.95':pin},...settings},runtime);
+ const make=()=>createAutoRuntime({workspace:fakeRoot,tempRoot:dir,outDir:dir,configFile:path.join(dir,'config.json'),bridgeMode:'ed25519-offers',bridgeTrustKeySpkiSha256:spkiSha256(privateKey),bundlePins:{'odc-1.7.32':pin,'o11-11.55.95':pin},...settings},runtime);
  const bundles={odc:{lane:'odc',file:bundle,sha256:pin,version:'1.7.32',tfm:'net10.0',snapshot:'odc'},o11:{lane:'o11',file:bundle,sha256:pin,version:'11.55.95',tfm:'net10.0',snapshot:'o11'}};
  const attempt=path.join(dir,'attempt');fs.mkdirSync(attempt);
  const result=await make().buildBridges(pair,bundles,attempt);
@@ -264,13 +268,13 @@ test('the automatic plan of ed25519-offers compiles and offers, never Authentico
 
 // The post-deployment check (check-backend.mjs) run as the backend runs it, with its imports and the backend's HTTP answered by
 // this checkout's agent-hub.mjs compatibility over a signed store (fetch, the token store and the kernel file are fakes).
-async function runCheck(expected,{kernel,bridges,served:list}){
+async function runCheck(expected,{kernel,bridges,served:list,answer=compatibility}){
  const src=fs.readFileSync(path.join(here,'check-backend.mjs'),'utf8').split('\n').filter(l=>!/^import /.test(l)&&!/^const store=await openTokenStore/.test(l)).join('\n');
  const posted=[],out=[];
  const fetch=async(url,init={})=>{
   const route=new URL(url).pathname,body=init.body?JSON.parse(init.body):null;
   if(route==='/health')return new Response('{}');
-  if(route==='/agent/v1/hello'){posted.push(body);return new Response(JSON.stringify({ok:true,compatible:compatibility(body,{...kernel,servedVersions:list},['odc','o11'],{bridges})}));}
+  if(route==='/agent/v1/hello'){posted.push(body);return new Response(JSON.stringify({ok:true,compatible:answer(body,{...kernel,servedVersions:list},['odc','o11'],{bridges})}));}
   if(route.startsWith('/agent/bridges/')){const [,,,lane,v,p,digest]=route.split('/');const file=bridges.file(lane,v,p,digest);return file?new Response(fs.readFileSync(file)):new Response('',{status:404});}
   if(route==='/mcp'){if(body.method==='initialize')return new Response(JSON.stringify({result:{}}),{headers:{'mcp-session-id':'s'}});if(body.method==='tools/list')return new Response(JSON.stringify({result:{tools:[{name:'a',description:'b',inputSchema:{}}]}}));return new Response('');}
   return new Response('',{status:404});
@@ -296,4 +300,228 @@ test('check-backend (post-deployment): the 0.2.8 hello of the published pack mus
  await assert.rejects(runCheck({...expected,legacyHellos:{[key]:{...g.legacyHello,capabilities:{bridgeOffer:true}}}},{kernel,bridges:leaky,served}),/offered to an agent without bridgeOffer/);
  // server-only receipts keep their rule: without the offer hellos, a pack hello without its own 11.55.95 build fails as before.
  await assert.rejects(runCheck({packHellos:{[key]:g.hello}},{kernel,bridges:s.store,served}),/no thin bridge built for this Service Studio/);
+});
+
+// ---- F1 review round 2 (C:\t\r5\f1-offers\REVISAO-F1.md): M1, M2, M3, B1-B6.
+
+// A compiled-bridge fixture for buildBridges: fake dotnet builds (owner outputs, one restored Microsoft NuGet dll beside the ODC
+// client), a fake classification (owner for the recorded outputs, microsoft for the NuGet dll), a fake vault with one Ed25519 key,
+// a fake signed main HEAD (the ODC source) and a reviewed agentReleaseCommit (the O11 source).
+function bridgeFixture(t,{agentReleaseCommit='a'.repeat(40),head='f'.repeat(40)}={}){
+ const dir=tmp(t),agent=path.join(dir,'agent-source'),runs=[],builds=[];
+ const bundle=path.join(dir,'bundle');fs.writeFileSync(bundle,'fixture');
+ const privateKey=generateKeyPairSync('ed25519').privateKey.export({type:'pkcs8',format:'pem'});
+ const CLIENT=/const string Version = "(v\d+)"/.exec(read('server/platforms/odc/studio/bridge/client/Program.cs'))[1];
+ const f={dir,runs,privateKey,CLIENT,head,afterBuild:null,afterClassify:null,
+  classify:target=>{const out=[];for(const sub of fs.readdirSync(target))for(const name of fs.readdirSync(path.join(target,sub)))if(/\.(dll|exe)$/.test(name))out.push({path:sub+'/'+name,signer:name.startsWith('Microsoft.')?'microsoft':'owner'});return {code:0,stdout:JSON.stringify(out)};}};
+ f.runtime={executionSource:async()=>{},agentSource:async()=>agent,waitForDotnet:async()=>{},fullHead:async()=>f.head,log:()=>{},async run(cmd,args,options){
+  runs.push({cmd:String(cmd),args:args.map(String),options});
+  if(args.some(x=>String(x).endsWith('read-secrets.ps1')))return {stdout:JSON.stringify({coolifyToken:'memory',sshPrivateKey:Buffer.from('PRIVATE KEY').toString('base64'),manifestPrivateKey:privateKey,journalKey:Buffer.alloc(32,1).toString('base64')})};
+  if(args.includes('-getProperty:TargetFramework'))return {stdout:args[1].includes('Anvil.RuntimeHook')?'net8.0':'net10.0'};
+  if(args.includes('-getProperty:TargetPath'))return {stdout:builds.at(-1).output};
+  if(args[0]==='build'){
+   const out=args[args.indexOf('-o')+1];fs.mkdirSync(out,{recursive:true});
+   const name=args[1].endsWith('Client.csproj')?'ODC3.Bridge.Client.dll':args[1].includes('Anvil.RuntimeHook')?'Anvil.RuntimeHook.Agent.dll':args[1].includes('Anvil.Bridge.Thin')?'Anvil.Bridge.dll':`ODC3.Bridge.${CLIENT}.dll`;
+   // Every build gives other bytes (as the real non-reproducible builds do).
+   fs.writeFileSync(path.join(out,name),'unsigned owner build '+name+' '+runs.length);builds.push({output:path.join(out,name)});
+   const assets=path.join(path.dirname(args[1]),'obj/project.assets.json');fs.mkdirSync(path.dirname(assets),{recursive:true});
+   if(name==='ODC3.Bridge.Client.dll'){
+    const pkg=path.join(dir,'nuget','microsoft.diagnostics.netcore.client','0.2.731102','lib');fs.mkdirSync(pkg,{recursive:true});fs.writeFileSync(path.join(pkg,'Microsoft.Diagnostics.NETCore.Client.dll'),'microsoft signed bytes');
+    fs.copyFileSync(path.join(pkg,'Microsoft.Diagnostics.NETCore.Client.dll'),path.join(out,'Microsoft.Diagnostics.NETCore.Client.dll'));
+    fs.writeFileSync(assets,JSON.stringify({packageFolders:{[path.join(dir,'nuget')]:{}},libraries:{'Microsoft.Diagnostics.NETCore.Client/0.2.731102':{type:'package',path:'microsoft.diagnostics.netcore.client/0.2.731102'}}}));
+    fs.writeFileSync(path.join(out,'ODC3.Bridge.Client.runtimeconfig.json'),JSON.stringify({runtimeOptions:{tfm:'net10.0'}}));
+   }else fs.writeFileSync(assets,JSON.stringify({packageFolders:{},libraries:{}}));
+   f.afterBuild?.(out,name);
+   return {stdout:''};
+  }
+  if(args.some(a=>String(a).endsWith('classify-signers.ps1'))){const target=args[args.indexOf('-ArtifactDirectory')+1],r=f.classify(target);f.afterClassify?.(target);return r;}
+  throw Error('unexpected command '+cmd+' '+args.join(' '));
+ }};
+ const fakeRoot=path.join(dir,'source');for(const rel of ['server/platforms/odc/studio/bridge/client/Program.cs','server/deploy/coolify/r1-kernels.json']){const dest=path.join(fakeRoot,rel);fs.mkdirSync(path.dirname(dest),{recursive:true});fs.copyFileSync(path.resolve(here,'../../..',rel),dest);}
+ f.root=fakeRoot;f.settings={automaticDeployment:{testOnly:true,coolify:{url:'http://127.0.0.1:1',resource:'fixture'},ssh:{host:'fixture',knownHosts:'fixture'},remote:{}}};
+ f.bundles=(odcContent='fixture')=>{const odcFile=path.join(dir,'bundle-odc-'+sha(odcContent).slice(0,8));fs.writeFileSync(odcFile,odcContent);
+  return {odc:{lane:'odc',file:odcFile,sha256:sha(odcContent),version:'1.7.32',tfm:'net10.0',snapshot:'odc'},o11:{lane:'o11',file:bundle,sha256:sha('fixture'),version:'11.55.95',tfm:'net10.0',snapshot:'o11'}};};
+ f.make=(bundles,extra={})=>createAutoRuntime({workspace:fakeRoot,tempRoot:dir,outDir:dir,configFile:path.join(dir,'config.json'),bridgeMode:'ed25519-offers',bridgeTrustKeySpkiSha256:spkiSha256(privateKey),agentReleaseCommit,
+  bundlePins:Object.fromEntries(Object.values(bundles).map(b=>[`${b.lane}-${b.version}`,b.sha256])),...f.settings,...extra},f.runtime);
+ f.attempt=()=>{const a=path.join(dir,'attempt-'+Math.random().toString(16).slice(2));fs.mkdirSync(a);return a;};
+ f.builds=()=>runs.filter(r=>r.args[0]==='build').length;
+ return f;
+}
+
+test('M1: the vault manifest key must be the key app 0.2.8 pins (bridgeTrustKeySpkiSha256); another key or no pin signs nothing',async t=>{
+ assert.equal(example.bridgeTrustKeySpkiSha256,'2ce611d0de3b195c60a680df1e6c3af432b3c6aaa2a54f04b06f438366ead7f0','the pin of the key 0.2.8 was built with');
+ const k=generateKeyPairSync('ed25519').privateKey.export({type:'pkcs8',format:'pem'});
+ assert.equal(spkiSha256(k),sha(createPublicKey(k).export({type:'spki',format:'der'})),'the SHA-256 of the public SPKI DER');
+ assert.equal(assertTrustKey({bridgeTrustKeySpkiSha256:spkiSha256(k)},k),spkiSha256(k));
+ assert.throws(()=>assertTrustKey({bridgeTrustKeySpkiSha256:example.bridgeTrustKeySpkiSha256},k),e=>e.code==='BRIDGE_TRUST_KEY_MISMATCH'&&!e.message.includes('PRIVATE KEY')&&!e.message.includes(spkiSha256(k)));
+ for(const pin of [undefined,null,'',spkiSha256(k).toUpperCase(),spkiSha256(k).slice(1),42])assert.throws(()=>assertTrustKey({bridgeTrustKeySpkiSha256:pin},k),e=>e.code==='BRIDGE_TRUST_KEY_UNPINNED',String(pin));
+ // buildBridges with a vault key that is not the pinned one: refused before any compiler, classification or signature.
+ const f=bridgeFixture(t),bundles=f.bundles();
+ await assert.rejects(f.make(bundles,{bridgeTrustKeySpkiSha256:example.bridgeTrustKeySpkiSha256}).buildBridges(pair,bundles,f.attempt()),e=>e.code==='BRIDGE_TRUST_KEY_MISMATCH');
+ await assert.rejects(f.make(bundles,{bridgeTrustKeySpkiSha256:undefined}).buildBridges(pair,bundles,f.attempt()),e=>e.code==='BRIDGE_TRUST_KEY_UNPINNED');
+ assert.equal(f.builds(),0);assert.ok(!f.runs.some(r=>r.args.some(a=>a.endsWith('classify-signers.ps1'))));
+ // server-only signs nothing: no pin needed to read the vault.
+ const so=createAutoRuntime({workspace:f.root,tempRoot:f.dir,outDir:f.dir,...f.settings},f.runtime);
+ assert.ok((await so.secrets()).manifestPrivateKey);
+});
+
+test('M2: an agent that takes no offer is served on 11.55.95 only by its own or a proven build; 0.2.8 gets the offer, never ok on a foreign thin bridge',t=>{
+ const s=stage(t,both),kernel={...offersKernel(config,pair,studios(),kernels,release,s.offers),servedVersions:served};
+ const ask=(h,k=kernel,bridges=s.store)=>compatibility(h,k,['odc','o11'],{bridges}).o11;
+ // 0.2.8 whose pack has no 11.55.95 build: BRIDGE_UPDATE_REQUIRED with the offer (it installs it and reconnects), never ok:true.
+ const first=ask(hello028());assert.equal(first.ok,false);assert.equal(first.code,'BRIDGE_UPDATE_REQUIRED');assert.equal(first.bridgeOffer.protocol,'d1');
+ // 0.2.8 whose install failed or was refused (the store no longer offers that sequence): refused with what happened, no offer.
+ for(const status of ['failed','refused']){
+  const r=ask({...hello028(),bridges:[{lane:'o11',studioVersion:'11.55.95',protocol:'d1',sequence:1,status,reason:'LOAD_FAILED'}]});
+  assert.equal(r.ok,false,status);assert.equal(r.cause,'BRIDGE_NOT_INSTALLED',status);assert.equal(r.bridgeOffer,undefined,status);assert.match(r.message,/Restart Service Studio to retry/);
+ }
+ // 0.2.8 with no store offer at all (none published for this Studio): the same refusal.
+ assert.equal(ask(hello028(),kernel,stage(t,[both[0]]).store).cause,'BRIDGE_NOT_INSTALLED');
+ // A macOS agent (bridgeOffer false): refused with the pack it needs; 0.2.7: install app 0.2.8.
+ const h27=hello027(),mac={...h27,agent:{...h27.agent,platform:'darwin'}};
+ const m=ask(mac);assert.equal(m.ok,false);assert.equal(m.cause,'BRIDGE_PACK_REQUIRED');assert.match(m.message,/macOS/);assert.equal(m.bridgeOffer,undefined);
+ assert.equal(ask(hello027()).cause,'AGENT_UPDATE_REQUIRED');
+ // A pack with its own 11.55.95 build (any agent) is served; so is a build the owner proved for 11.55.95 (o11BridgeProven).
+ assert.equal(ask({...h27,pack:{...h27.pack,o11BuiltFor:'11.55.95'}}).ok,true);
+ const proof={studioVersion:'11.55.95',build:'11.55.94',packCommit:'c'.repeat(40),provenAt:'2026-11-01T10:00:00Z',evidence:'C:/ssam-priv/vigia/proofs/p.json',sha256:'e'.repeat(64),size:10};
+ const provenKernel={...offersKernel({...config,o11BridgeProven:{'11.55.95':proof}},pair,studios(),kernels,release,s.offers),servedVersions:served};
+ assert.deepEqual(provenKernel.o11PackBuiltFor,['11.55.95','11.55.94']);
+ assert.equal(ask(hello027(),provenKernel).ok,true,'the proven 11.55.94 build serves 11.55.95 to the agents that take no offer');
+ assert.equal(ask(mac,provenKernel).ok,true,'and to macOS');
+ // A proof without verified evidence (no sha256) or for another Studio is no proof.
+ assert.deepEqual(offersKernel({...config,o11BridgeProven:{'11.55.95':{...proof,sha256:undefined}}},pair,studios(),kernels,release,s.offers).o11PackBuiltFor,['11.55.95']);
+ assert.deepEqual(offersKernel({...config,o11BridgeProven:{'11.55.95':{...proof,studioVersion:'11.55.96'}}},pair,studios(),kernels,release,s.offers).o11PackBuiltFor,['11.55.95']);
+ // A kernel without o11PackBuiltFor (server-only, the live r44 pairs) answers as before.
+ const {o11PackBuiltFor,...plain}=kernel;assert.ok(o11PackBuiltFor);assert.equal(ask(hello027(),plain).ok,true);
+ // Another Service Studio of the window is not judged by this kernel's list.
+ const other={...h27,studios:{...h27.studios,o11:{...h27.studios.o11,installed:{...h27.studios.o11.installed,version:'11.55.94.65328'}}}};
+ assert.notEqual(ask(other).cause,'AGENT_UPDATE_REQUIRED');
+});
+
+test('M2 check-backend: after the deployment, a hello without bridgeOffer served on a foreign thin bridge fails the check',async t=>{
+ const s=stage(t,both),g=gate(s),key='11.55.95|1.7.32';
+ const expected={offers:{[key]:s.offers},packHellos:{[key]:g.hello},offerHellos:{[key]:g.offerHello},offerLanes:{[key]:g.offerLanes},legacyHellos:{[key]:g.legacyHello}};
+ assert.equal((await runCheck(expected,{kernel:g.kernel,bridges:s.store,served})).receipt.ok,true);
+ // An image whose hub ignores o11PackBuiltFor (the F1 hub) answers ok to 0.2.7 on 11.55.94's thin bridge: the check fails.
+ const lax=(body,k,lanes,o)=>compatibility(body,{...k,o11PackBuiltFor:undefined},lanes,o);
+ await assert.rejects(runCheck(expected,{kernel:g.kernel,bridges:s.store,served,answer:lax}),/An agent without bridgeOffer was served a thin bridge not built for this Service Studio/);
+});
+
+test('M3 hub: an agent holding a later sequence is not re-offered an older pair\'s; an older installed one is upgraded; a fallback still serves',t=>{
+ const s=stage(t,both),kernel={...offersKernel(config,pair,studios(),kernels,release,s.offers),servedVersions:served};
+ const ask=(reports,store=s.store)=>compatibility({...hello028(),bridges:reports},kernel,['odc','o11'],{bridges:store}).o11;
+ const report=(sequence,status='active')=>({lane:'o11',studioVersion:'11.55.95',protocol:'d1',sequence,status,reason:status.toUpperCase()});
+ // The store (an older pair) offers d1#1; the agent installed d1#2 from a newer pair: served, nothing offered (no replay loop).
+ for(const status of ['active','installed']){const r=ask([report(2,status)]);assert.equal(r.ok,true,status);assert.equal(r.bridgeOffer,undefined,status);}
+ assert.equal(ask([report(1)]).ok,true);assert.equal(ask([report(1)]).bridgeOffer,undefined);
+ // A newer pair's store offers d1#3 to an agent holding d1#2: it keeps working (ok) and is offered the newer sequence.
+ const newer=stage(t,[both[0],{...both[1],sequence:3}]);
+ const up=ask([report(2)],newer.store);assert.equal(up.ok,true);assert.equal(JSON.parse(up.bridgeOffer.manifest).sequence,3);
+ // d1#3 failed to load and the agent fell back to d1#2 (installed): #3 is not offered again and the lane is still served.
+ const fell=ask([report(3,'failed'),report(2,'installed')],newer.store);assert.equal(fell.ok,true);assert.equal(fell.bridgeOffer,undefined);
+ // A report of another Studio, or from an agent that takes no offer, counts for nothing.
+ assert.equal(ask([{...report(2),studioVersion:'11.55.94'}]).code,'BRIDGE_UPDATE_REQUIRED');
+ assert.equal(compatibility({...hello027(),bridges:[report(2)]},kernel,['odc','o11'],{bridges:s.store}).o11.cause,'AGENT_UPDATE_REQUIRED');
+});
+
+test('M3 vigia: a lane whose inputs did not change is staged with the same signed manifest and sequence, never re-signed n+1',async t=>{
+ const f=bridgeFixture(t),bundles=f.bundles();
+ const manifests=r=>Object.fromEntries(r.offers.map(o=>[o.lane,fs.readFileSync(path.join(r.stage,o.lane,o.studioVersion,o.protocol,'manifest.json'),'utf8')]));
+ const first=await f.make(bundles).buildBridges(pair,bundles,f.attempt());
+ assert.deepEqual(first.reused,[]);assert.deepEqual(first.offers.map(o=>o.sequence),[1,1]);const built=f.builds();assert.equal(built,4);
+ // The next round (a new process, the same private folder): nothing compiled, the same manifests and sequences staged.
+ const second=await f.make(bundles).buildBridges(pair,bundles,f.attempt());
+ assert.deepEqual(second.reused,['odc','o11']);assert.equal(f.builds(),built,'no dotnet build');assert.deepEqual(second.offers,first.offers);assert.deepEqual(manifests(second),manifests(first));
+ const key=fs.readFileSync(path.join(second.stage,'public-key.pem'));for(const o of second.offers)verifyBridge(path.join(second.stage,o.lane,o.studioVersion,o.protocol),key);
+ // A pair that keeps 11.55.95 with another ODC bundle: the O11 lane is reused (the same d1#1 as the older pair), ODC is signed #2.
+ const odc2=f.bundles('other odc');
+ const third=await f.make(odc2).buildBridges(pair,odc2,f.attempt());
+ assert.deepEqual(third.reused,['o11']);assert.deepEqual(third.offers.map(o=>[o.lane,o.sequence]),[['odc',2],['o11',1]]);
+ // Another reviewed agent release (the O11 source): a new O11 sequence (the hub treats it as later than the older pair's).
+ const fourth=await f.make(odc2,{agentReleaseCommit:'b'.repeat(40)}).buildBridges(pair,odc2,f.attempt());
+ assert.deepEqual(fourth.reused,['odc']);assert.deepEqual(fourth.offers.map(o=>[o.lane,o.sequence]),[['odc',2],['o11',2]]);
+ // Another signed main (the ODC source): ODC built and signed again.
+ f.head='e'.repeat(40);
+ const fifth=await f.make(odc2,{agentReleaseCommit:'b'.repeat(40)}).buildBridges(pair,odc2,f.attempt());
+ assert.deepEqual(fifth.reused,['o11']);assert.deepEqual(fifth.offers.map(o=>[o.lane,o.sequence]),[['odc',3],['o11',2]]);
+ // A kept copy that was changed is never served: built and signed again.
+ const kept=path.join(f.dir,'bridges-signed','o11','11.55.95','d1');
+ fs.appendFileSync(path.join(kept,'signed','bridge','Anvil.Bridge.dll'),'x');
+ const sixth=await f.make(odc2,{agentReleaseCommit:'b'.repeat(40)}).buildBridges(pair,odc2,f.attempt());
+ assert.deepEqual(sixth.reused,['odc']);assert.equal(sixth.offers.find(o=>o.lane==='o11').sequence,3);
+ // reuseSigned itself: an unlisted file, a sequence that is no longer the newest, other inputs, another key.
+ const inputs=JSON.parse(fs.readFileSync(path.join(kept,'inputs.json'),'utf8'));
+ assert.ok(reuseSigned(kept,inputs,key,3));
+ fs.writeFileSync(path.join(kept,'signed','bridge','extra.json'),'{}');assert.equal(reuseSigned(kept,inputs,key,3),null,'an unlisted file');fs.rmSync(path.join(kept,'signed','bridge','extra.json'));
+ assert.equal(reuseSigned(kept,inputs,key,4),null,'not the newest sequence');
+ assert.equal(reuseSigned(kept,{...inputs,key:'0'.repeat(64)},key,3),null,'other inputs');
+ assert.equal(reuseSigned(kept,inputs,generateKeyPairSync('ed25519').publicKey.export({type:'spki',format:'pem'}),3),null,'another key');
+ // Without a reviewed source (no agentReleaseCommit, no readable main) nothing is reused: every round signs n+1, as before.
+ const g=bridgeFixture(t,{agentReleaseCommit:null}),gb=g.bundles();g.runtime.fullHead=undefined;
+ await g.make(gb).buildBridges(pair,gb,g.attempt());const again=await g.make(gb).buildBridges(pair,gb,g.attempt());
+ assert.deepEqual(again.reused,[]);assert.deepEqual(again.offers.map(o=>o.sequence),[2,2]);
+});
+
+test('B4 and B6: bytes changed after the classification, or a subfolder in the build output, stop the build with their cause',async t=>{
+ const f=bridgeFixture(t),bundles=f.bundles();
+ f.afterClassify=target=>{const folder=path.join(target,'bridge'),dll=fs.readdirSync(folder).find(n=>n.endsWith('.dll'));fs.writeFileSync(path.join(folder,dll),'swapped after classification');};
+ await assert.rejects(f.make(bundles).buildBridges(pair,bundles,f.attempt()),/A bridge executable changed after its signer was classified: bridge\/ODC3\.Bridge\./);
+ f.afterClassify=target=>{if(fs.existsSync(path.join(target,'client')))fs.writeFileSync(path.join(target,'client','Microsoft.Diagnostics.NETCore.Client.dll'),'other microsoft bytes');};
+ await assert.rejects(f.make(bundles).buildBridges(pair,bundles,f.attempt()),/changed after its signer was classified: client\/Microsoft\.Diagnostics\.NETCore\.Client\.dll/);
+ f.afterClassify=null;f.afterBuild=(out,name)=>{if(name==='ODC3.Bridge.Client.dll'){fs.mkdirSync(path.join(out,'runtimes'),{recursive:true});fs.writeFileSync(path.join(out,'runtimes','x.txt'),'x');}};
+ await assert.rejects(f.make(bundles).buildBridges(pair,bundles,f.attempt()),/has a subfolder client\/runtimes; only flat bridge folders are offered/);
+});
+
+test('B1 and B6: check-backend counts what it received (offersChecked) and compares every delivered file by sha256, not only its size',async t=>{
+ const s=stage(t,both),g=gate(s),key='11.55.95|1.7.32';
+ const expected={offers:{[key]:s.offers},packHellos:{[key]:g.hello},offerHellos:{[key]:g.offerHello},offerLanes:{[key]:g.offerLanes},legacyHellos:{[key]:g.legacyHello}};
+ assert.equal((await runCheck(expected,{kernel:g.kernel,bridges:s.store,served})).receipt.offersChecked,2);
+ // Another pair's offers in the same request are not this backend's: not asked, not counted.
+ const elsewhere=Object.fromEntries(Object.entries(expected).map(([name,v])=>[name,{'11.55.96|1.7.33':v[key]}]));
+ const r0=(await runCheck(elsewhere,{kernel:g.kernel,bridges:s.store,served})).receipt;assert.equal(r0.offersChecked,0);assert.equal(r0.presented,false);
+ // A delivery of the right size with other bytes.
+ const forged=path.join(tmp(t),'forged');
+ const swapped={offer:(...a)=>s.store.offer(...a),file:(...a)=>{const real=s.store.file(...a);if(!real)return null;fs.writeFileSync(forged,Buffer.alloc(fs.statSync(real).size,120));return forged;}};
+ await assert.rejects(runCheck(expected,{kernel:g.kernel,bridges:swapped,served}),/Authenticated bridge delivery failed/);
+});
+
+test('B3: the store refuses a Microsoft label on an owner-only path (ODC3.*, Anvil.*, hook/), as the agents do',t=>{
+ for(const files of [
+  [['bridge/ODC3.Bridge.v109.dll','microsoft'],['client/ODC3.Bridge.Client.dll','owner']],
+  [['bridge/ODC3.Bridge.v109.dll','owner'],['client/ODC3.Bridge.Client.dll','owner'],['client/Anvil.Extra.dll','microsoft']],
+  [['bridge/ODC3.Bridge.v109.dll','owner'],['client/ODC3.Bridge.Client.dll','owner'],['client/odc3.lowercase.dll','microsoft']]]){
+  const s=stage(t,[{lane:'odc',studioVersion:'1.7.32',protocol:'v109',files}]);
+  assert.throws(()=>verifyBridge(s.dir('odc','1.7.32','v109'),s.keys.publicKey),/signer is invalid/,JSON.stringify(files));assert.equal(s.store.offer('odc','1.7.32',['v109']),null);
+ }
+ const hook=stage(t,[{lane:'o11',studioVersion:'11.55.95',protocol:'d1',files:[['bridge/Anvil.Bridge.dll','owner'],['hook/Helper.dll','microsoft']]}]);
+ assert.throws(()=>verifyBridge(hook.dir('o11','11.55.95','d1'),hook.keys.publicKey),/signer is invalid/);
+ // A Microsoft dependency elsewhere stays accepted.
+ const ok=stage(t,[both[0]]);assert.equal(verifyBridge(ok.dir('odc','1.7.32','v109'),ok.keys.publicKey).manifest.files.find(x=>x.signer==='microsoft').path,'client/Microsoft.Diagnostics.NETCore.Client.dll');
+});
+
+test('B2: classify-signers takes the signer organization as the agent does: exactly one O=, exactly Microsoft Corporation',{skip:process.platform!=='win32'&&'PowerShell'},()=>{
+ assert.match(fs.readFileSync(path.join(here,'classify-signers.ps1'),'utf8'),/\[string\]::Equals\(\(Get-SingleOrganization \$signature\.SignerCertificate\), 'Microsoft Corporation', \[StringComparison\]::Ordinal\)/);
+ const subjects=['CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, C=US','CN=x, O=Microsoft Corporation, O=Other Org','CN=x, O=Microsoft Corporation Evil','CN=x, OU=Microsoft Corporation','CN=x, O=microsoft corporation'];
+ const script=". '"+path.join(here,'authenticode-chain.ps1').replaceAll("'","''")+"'\n"
+  +"$out=@()\n"
+  +"foreach($subject in @("+subjects.map(x=>"'"+x+"'").join(',')+")){\n"
+  +" $rsa=[Security.Cryptography.RSA]::Create(2048)\n"
+  +" $request=New-Object Security.Cryptography.X509Certificates.CertificateRequest($subject,$rsa,[Security.Cryptography.HashAlgorithmName]::SHA256,[Security.Cryptography.RSASignaturePadding]::Pkcs1)\n"
+  +" $cert=$request.CreateSelfSigned([DateTimeOffset]::UtcNow.AddDays(-1),[DateTimeOffset]::UtcNow.AddDays(1))\n"
+  +" $value=Get-SingleOrganization $cert\n"
+  +" $out+=[string]::Equals($value,'Microsoft Corporation',[StringComparison]::Ordinal)\n"
+  +"}\n"
+  +"ConvertTo-Json -InputObject @($out) -Compress";
+ const r=spawnSync('C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe',['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-Command',script],{encoding:'utf8',windowsHide:true,timeout:120000});
+ assert.equal(r.status,0,r.stderr);
+ assert.deepEqual(JSON.parse(r.stdout.trim().split(/\r?\n/).pop()),[true,false,false,false,false]);
+});
+
+test('B5: R7 reads the release line as the branch refs/heads/<agentReleaseRef>, never a tag of the same name',async()=>{
+ const commit='a'.repeat(40),tip='b'.repeat(40),calls=[];
+ const git=async args=>{calls.push(args);if(args[0]==='merge-base')return {code:0,stdout:''};if(args[0]==='rev-parse')return {code:0,stdout:tip+'\n'};throw Error(args.join(' '));};
+ await verifySignedAgentRelease({agentReleaseCommit:commit,agentReleaseRef:'agent/release-0.2.8',ownerSigningPublicKey:'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOwner owner'},{git,ownerSigned:async()=>true});
+ assert.ok(calls.length>=2);
+ for(const args of calls)assert.ok(args.includes('refs/heads/agent/release-0.2.8')||args.some(a=>a.startsWith('refs/heads/agent/release-0.2.8^')),JSON.stringify(args));
+ assert.ok(calls.some(a=>a[0]==='merge-base'&&a.includes(commit)));
 });

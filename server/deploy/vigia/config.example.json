@@ -25,6 +25,7 @@
   "featuresDefaultsFallback": false,
   "installersDir": "C:/ssam-priv/vigia-installers",
   "bridgeMode": "server-only",
+  "bridgeTrustKeySpkiSha256": "2ce611d0de3b195c60a680df1e6c3af432b3c6aaa2a54f04b06f438366ead7f0",
   "agentPack": {
     "runtime": "net8.0",
     "odcBridge": "v108",

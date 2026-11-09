@@ -212,10 +212,17 @@ export function agentHello(config,release,studios,{bridgeOffer}){
 export const installedHello=(hello,received)=>({...hello,bridges:received.map(({lane,studioVersion,protocol,sequence})=>({lane,studioVersion,protocol,sequence,status:'installed',reason:'INSTALLED'}))});
 // The kernel.json of a new pair in ed25519-offers: the server-only kernel (the published packs keep working as they do), plus the
 // offered protocols of this pair (the ODC one among odcBridgeAccepted, d1 among o11BridgeAccepted).
+// o11PackBuiltFor (F1 review M2): the pack thin-bridge builds the new pair's hub accepts for its Service Studio when the agent has
+// no signed bridge installed for it: the exact build, and the build of a verified o11BridgeProven proof for it. An agent that
+// does not take the offer (app 0.2.7, the macOS agent, an install that failed) therefore keeps the server-only rule: a new
+// Service Studio is served to it only by a build of its own or a proven one, never by its default build of another Studio;
+// otherwise the hub refuses it with what to install (agent-hub.mjs packBuildRefusal), whatever the window still serves.
 export function offersKernel(config,pair,studios,servedKernels,release,offers){
  const kernel=serverOnlyKernel(config,pair,studios,servedKernels,release);
  const of=lane=>offers.filter(o=>o.lane===lane&&o.studioVersion===pair[lane]).map(o=>o.protocol);
- return {...kernel,odcBridgeAccepted:unique([...kernel.odcBridgeAccepted,...of('odc').filter(odcProtocol)]).filter(v=>v!==kernel.odcBridge),o11BridgeAccepted:unique([...kernel.o11BridgeAccepted,...of('o11').filter(v=>/^d\d+$/.test(v))])};
+ const proven=config.o11BridgeProven?.[pair.o11],provenBuild=proven?.studioVersion===pair.o11&&/^[a-f0-9]{64}$/.test(proven.sha256??'')?threeOf(proven.build):null;
+ return {...kernel,odcBridgeAccepted:unique([...kernel.odcBridgeAccepted,...of('odc').filter(odcProtocol)]).filter(v=>v!==kernel.odcBridge),o11BridgeAccepted:unique([...kernel.o11BridgeAccepted,...of('o11').filter(v=>/^d\d+$/.test(v))]),
+  o11PackBuiltFor:unique([pair.o11,provenBuild])};
 }
 const answerOf=(hello,kernel,served,bridges)=>compatibility(hello,{...kernel,servedVersions:served},['odc','o11'],{bridges});
 // The ed25519-offers gate for a pair, with the signed store the round built (bridges: bridge-store.mjs createBridgeStore over its
@@ -247,7 +254,10 @@ export function offersGate({config,release,pair,studios,servedKernels,served,off
  else if(after[lane].bridgeOffer)gap(lane,"the published pack's hello with the offered bridges installed is offered a bridge again");
  if(gaps.length)return {gaps};
  const legacyHello=agentHello(config,release,studios,{bridgeOffer:false}),old=answerOf(legacyHello,kernel,served,bridges);
- const legacy=Object.fromEntries(LANES.map(lane=>[lane,old[lane]?.ok?{ok:true}:{ok:false,code:old[lane]?.code??'UNKNOWN'}]));
+ const legacy=Object.fromEntries(LANES.map(lane=>[lane,old[lane]?.ok?{ok:true}:{ok:false,code:old[lane]?.code??'UNKNOWN',...(old[lane]?.cause?{cause:old[lane].cause}:{})}]));
+ // The 0.2.7 hello is never served on a thin bridge built for another Service Studio (o11PackBuiltFor): the hub refuses it with
+ // AGENT_UPDATE_REQUIRED (install app 0.2.8), while 11.55.94 is still in the window as well as after it leaves.
+ if(old.o11?.ok&&!kernel.o11PackBuiltFor.includes(threeOf(legacyHello.pack.o11BuiltFor)))gap('o11','a hello without bridgeOffer (agent 0.2.7) was served a thin bridge built for another Service Studio');
  for(const lane of LANES)if(old[lane]?.bridgeOffer)gap(lane,'a hello without bridgeOffer (agent 0.2.7) was offered a bridge');
  return {gaps,kernel,hello:installed,offerHello:hello,offerLanes:received.map(o=>o.lane),legacyHello,legacy};
 }

@@ -221,6 +221,34 @@ class RemoteTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "CHECK_RECEIPT"):
             self.request("check", checkSource="new")
 
+    # F1 review A1: the signed offers are keyed to the new pair; with several running backends exactly one (the new pair's)
+    # must have offered and delivered all of them (offersChecked == requireOffers) and every retained one none.
+    def test_f1_a1_check_requires_all_offers_from_exactly_one_backend(self):
+        def backend(name, o11, odc):
+            return {"Id": name, "Image": "sha256:" + name, "State": {"Running": True}, "Config": {"Image": "image:" + name, "Env": self.env, "Labels": {"ssam.o11": o11, "ssam.odc": odc}}, "Mounts": [{"Type": "volume", "Name": "fixture_state"}]}
+        running = [backend("new", "11.55.95", "1.7.33"), backend("v5", "11.55.95", "1.7.32"), backend("v2", "11.55.93", "1.7.29")]
+        receipts = {}
+        base = self.docker
+        def docker(*args, data=None):
+            if args[0] == "exec" and args[1] == "-i":
+                self.calls.append(args)
+                return json.dumps({"ok": True, "presented": args[2] == "new", "offersChecked": receipts[args[2]]}).encode()
+            return base(*args, data=data)
+        def check(**kwargs):
+            with patch.object(remote, "docker", docker), patch.object(remote, "command", self.command), patch.object(remote, "backends", lambda project: running):
+                return remote.dispatch({"fence": 'synthetic-token', "settings": self.settings, "action": "check", "checkSource": "new", **kwargs})
+        receipts.update({"new": 2, "v5": 0, "v2": 0})
+        self.assertEqual(check(requirePresented=True, requireOffers=2), {"ok": True, "backends": 3})
+        # A retained backend asked the new pair's offers (the F1 defect), the new one checked fewer, none checked, or a count
+        # that is not an integer: the deployment fails (and is rolled back by the vigia).
+        for bad in ({"new": 2, "v5": 2, "v2": 0}, {"new": 1, "v5": 0, "v2": 0}, {"new": 0, "v5": 0, "v2": 0}, {"new": True, "v5": 0, "v2": 0}, {"new": "2", "v5": 0, "v2": 0}, {"new": 1, "v5": 1, "v2": 0}):
+            receipts.update(bad)
+            with self.assertRaisesRegex(RuntimeError, "OFFERS_NOT_CHECKED"):
+                check(requirePresented=True, requireOffers=2)
+        # server-only (no requireOffers) and a receipt without the count (an older image) keep their rule.
+        receipts.update({"new": 0, "v5": 0, "v2": 0})
+        self.assertTrue(check(requirePresented=True)["ok"])
+
     # Review round 3, N1: a deployment fails when a running backend's served list is not the pin's (a retained backend's
     # list changed, or none, two or an unreadable one); the comparison is by value, not by text.
     def test_n1_check_fails_when_a_backend_served_list_differs_from_the_pin(self):

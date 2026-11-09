@@ -40,7 +40,9 @@ foreach ($file in @(Get-ChildItem -LiteralPath $root -Recurse -File | Where-Obje
     }
     $signature = Get-AuthenticodeSignature -LiteralPath $file.FullName
     if ($null -eq $signature.SignerCertificate -or [string]$signature.Status -eq 'NotSigned') { throw "Dependency is not signed: $relative" }
-    if ($signature.SignerCertificate.Subject -notmatch '(?:^|,\s*)O=Microsoft Corporation(?:,|$)') { throw "Unsupported dependency signer; report it to the integrator: $relative" }
+    # Exactly one O= and exactly Microsoft Corporation, as the agent requires (AuthenticodeTrust.cs): a subject with two O= values
+    # is refused here too, never signed into a manifest the agent then refuses.
+    if (-not [string]::Equals((Get-SingleOrganization $signature.SignerCertificate), 'Microsoft Corporation', [StringComparison]::Ordinal)) { throw "Unsupported dependency signer; report it to the integrator: $relative" }
     $usages = @($signature.SignerCertificate.Extensions | Where-Object { $_ -is [Security.Cryptography.X509Certificates.X509EnhancedKeyUsageExtension] } |
         ForEach-Object { $_.EnhancedKeyUsages } | Where-Object { $_.Value -eq $codeSigning })
     if ($usages.Count -eq 0) { throw "Dependency signer has no code-signing usage: $relative" }
