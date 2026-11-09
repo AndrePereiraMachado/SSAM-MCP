@@ -194,6 +194,18 @@ mais os volumes `<recurso>_*` que ninguém monta; volumes anônimos ficam de for
 `.sha256`; o `.info` é gravado por último (sem ele o conjunto está incompleto). A pasta de trabalho fica na pasta do
 backup, nunca em /tmp (tmpfs na VPS). Recusa com menos de `SSAM_BACKUP_MIN_FREE_GB` (20) GiB livres ou de 3x o último
 arquivo; `--keep-days` só apaga conjuntos antigos da raiz da pasta, depois de um backup bom, nunca as pastas `pre-*`.
+Pisos de conteúdo (revisão de 09/11): pelo menos 1 linha em `server_tokens`, `releases` e `servers`
+(`BACKUP_DUMP_NO_ROWS`); `kernel.json` e `customers/` no server-state; arquivos e bytes do server-state em pelo menos 50%
+do conjunto anterior (`BACKUP_SHRANK`; `SSAM_BACKUP_ALLOW_SHRINK=1` para uma limpeza intencional). Tudo é gravado em
+`.set-<stamp>/` e só vai para a pasta no fim, com o `.info` por último: uma falha não deixa dump órfão. A retenção é por
+conjunto: os 7 conjuntos completos mais novos (`SSAM_BACKUP_KEEP_SETS`) ficam sempre, qualquer que seja a idade; só os
+outros saem por idade. O conjunto leva também `coolify-source.env` (o APP_KEY do Coolify) dentro do `ssam-service`, só
+root. Nenhuma senha vai para linha de comando: as licenças saem por `docker exec` no socket local do container do banco
+(depois de conferir que a URL aponta para o `POSTGRES_DB` dele), e uma base remota recebe a URL pelo ambiente
+(`-e SSAM_DATABASE_URL`, sem `=`). Os dumps e os volumes não são do mesmo instante (minutos de diferença), e uma cópia
+online pode cortar a última linha de um log que cresce. As travas ficam na linha do cron, não no ssamctl (o
+`backup-before-redeploy.sh` roda dentro da janela de release): `flock -n /var/lock/ssam-backup.lock timeout 3h flock -w
+5400 /var/lock/ssam-release.lock sh ssamctl.sh backup ...`.
 Para uma cópia fora da VPS e um heartbeat, acrescente ao cron (os arquivos têm dados de clientes e hashes de tokens:
 cifre antes de copiar para fora).
 
