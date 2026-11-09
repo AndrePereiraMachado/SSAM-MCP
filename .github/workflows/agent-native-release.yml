@@ -127,8 +127,9 @@ jobs:
           dotnet-version: 10.0.403
       - name: Check the .NET SDK (GHSA-p3jp-9v83-76w9)
         # Review B-R2-5: the step passes only on the check's own "ok":true (an entry point that exits 0 without checking fails).
+        # Review B-R3-5: a failing check still prints its JSON report before the step stops.
         run: |
-          out=$(node scripts/check-native-toolchain.mjs --sdk "$(dotnet --version)"); echo "$out"
+          out=$(node scripts/check-native-toolchain.mjs --sdk "$(dotnet --version)") || { echo "$out"; exit 1; }; echo "$out"
           case "$out" in *'"ok":true'*) ;; *) echo '::error::the SDK check did not report ok'; exit 1;; esac
       - name: Download the approved bridge binaries
         env:
@@ -170,7 +171,7 @@ jobs:
       - name: Check the Native AOT toolchain the core was built with (GHSA-p3jp-9v83-76w9)
         # The ILCompiler and runtime packs the restore resolved: 10.0.14 or newer, or the build stops before any signing.
         run: |
-          out=$(node scripts/check-native-toolchain.mjs --assets native/Ssam.Agent/obj/project.assets.json --rid osx-arm64); echo "$out"
+          out=$(node scripts/check-native-toolchain.mjs --assets native/Ssam.Agent/obj/project.assets.json --rid osx-arm64) || { echo "$out"; exit 1; }; echo "$out"
           case "$out" in *'"ok":true'*) ;; *) echo '::error::the Native AOT toolchain check did not report ok'; exit 1;; esac
       - name: Qualify the Native AOT executable
         env:

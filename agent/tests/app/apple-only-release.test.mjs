@@ -91,8 +91,8 @@ test('Mac workflow: pinned .NET SDK, toolchain checks around the Native AOT publ
  const sdk=/actions\/setup-dotnet@v4\n\s+with:\n\s+dotnet-version: (\S+)/.exec(native)?.[1];
  assert.equal(sdk,'10.0.403');
  assert.match(native,/node scripts\/check-native-toolchain\.mjs --sdk "\$\(dotnet --version\)"/);
- // Review B-R2-5: both checks pass only on their own "ok":true, never on an exit code alone.
- assert.equal([...native.matchAll(/out=\$\(node scripts\/check-native-toolchain\.mjs [^\n]+\); echo "\$out"\n\s+case "\$out" in \*'"ok":true'\*\) ;; \*\) echo '::error::[^']+'; exit 1;; esac/g)].length,2);
+ // Review B-R2-5: both checks pass only on their own "ok":true, never on an exit code alone; B-R3-5: a failure still prints the report.
+ assert.equal([...native.matchAll(/out=\$\(node scripts\/check-native-toolchain\.mjs [^\n]+\) \|\| \{ echo "\$out"; exit 1; \}; echo "\$out"\n\s+case "\$out" in \*'"ok":true'\*\) ;; \*\) echo '::error::[^']+'; exit 1;; esac/g)].length,2);
  const publish=native.indexOf('dotnet publish native/Ssam.Agent/Ssam.Agent.csproj'),check=native.indexOf('node scripts/check-native-toolchain.mjs --assets native/Ssam.Agent/obj/project.assets.json --rid osx-arm64'),sign=native.indexOf('codesign --force');
  assert.ok(publish>0&&check>publish&&check<sign,'the toolchain check runs after the publish and before any signing');
  assert.doesNotMatch(native,/NuGetAudit\s*=\s*false|NuGetAudit=false|WarningsNotAsErrors[^\n]*NU1903|NoWarn[^\n]*NU1903/i);
