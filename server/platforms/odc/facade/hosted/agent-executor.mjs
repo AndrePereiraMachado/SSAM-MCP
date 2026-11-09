@@ -129,7 +129,10 @@ export class AgentExecutor {
     this.link = link;
     this.workspace = path.resolve(workspace);
     this.relayAuthorityDir = relayAuthorityDir ?? path.join(this.workspace, 'state', 'relay-authority');
-    this.o11 = { studioDir: o11.studioDir ?? null, lane: o11.lane ?? null };
+    // Window 4x4: the hosted context's o11 carries getters (o11-kernels.mjs hostedO11) that follow the customer's Studio
+    // across a switch in the session; a copy taken here would keep the first Studio for every later o11Connection().
+    const source = o11 ?? {};
+    this.o11 = { get studioDir() { return source.studioDir ?? null; }, get lane() { return source.lane ?? null; } };
     this.log = log;
     // r41: over the quota, the retention cleanup of this workspace runs once before a refusal (hosted/workspace-retention.mjs).
     this.quota = createQuota(this.workspace, { limitBytes: quotaBytes, cleanup: (ws, options) => cleanWorkspace(ws, { ...options, log }) });

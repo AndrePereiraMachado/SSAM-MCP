@@ -16,6 +16,7 @@ import { fileURLToPath } from 'node:url';
 import { anvilRoot, odcRoot, o11Lane } from './workspace.mjs';
 import { readConnection } from './studio-session.mjs';
 import { registryInstallLocation } from './studio-locate.mjs';
+import { hostedO11Kernel } from './executor.mjs';
 import { composeCatalog, applySupersedes, rewriteAliases, keywordProblems, synonymProblems, FRAGMENTS_DIR, STOP, normalize, derived, stem, words, tokens, fold, folded } from './catalog.mjs';
 import { isScreenIntent, appTypesFromKinds, appTypesFromIntent, osuiSection, osuiExpansion, osuiCatalogAvailable, namedPatterns, APP_TYPES } from './osui-catalog.mjs';
 import { textRouteSection, sectionLevels, classifyTextRoute, sectionOf } from './text-routes.mjs';
@@ -100,10 +101,17 @@ export function laneSources(lane, { kernel = anvilRoot, odc = odcRoot, env = pro
     const laneName = o11Lane.lane;
     const local = path.join(kernel, laneName === 'ss5' ? path.join('.local', 'lane-ss5') : '.local');
     // studio (tests): the options of o11StudioDir (exists, registry, connection).
-    const resolved = o11StudioDir({ kernel, laneName, env, ...(studio ?? {}) });
+    // Window 4x4: inside a hosted call on a multi-O11 image the CLI and the Studio are the customer's kernel
+    // (hostedO11Kernel), never the image default behind .local/cli or ANVIL_STUDIO_DIR, nor a Studio folder a connection
+    // recorded earlier (code-check passes connection: () => null, still the customer's kernel); the module index under this
+    // call already follows the same kernel (module-map laneIndexRoot).
+    const hostedKernel = hostedO11Kernel();
+    const located = o11StudioDir({ kernel, laneName, env, ...(studio ?? {}) });
+    const resolved = hostedKernel ? { ...located, dir: hostedKernel.studioDir, source: 'hosted-kernel' } : located;
+    const cli = hostedKernel ? hostedKernel.cli : path.join(local, 'cli', 'anvil.dll');
     return {
       lane, kernel, odc, shared: SHARED_FILE, fragments: FRAGMENTS_DIR, o11Lane: { name: laneName, source: o11Lane.source },
-      cli: path.join(local, 'cli', 'anvil.dll'), kernelDll: path.join(local, 'cli', 'Anvil.Core.dll'),
+      cli, kernelDll: path.join(path.dirname(cli), 'Anvil.Core.dll'),
       studioDir: resolved.dir, studioSource: resolved.source,
       // The environment of every CLI process of the discover: the same lane and Studio (and the connection's authority).
       env: { ...env, ANVIL_LANE: laneName, ANVIL_STUDIO_DIR: resolved.dir, ...(resolved.authorityDir ? { ANVIL_AUTHORITY_DIR: resolved.authorityDir } : {}) },
@@ -1119,10 +1127,10 @@ export function nativeOf(index, c) {
     runtime: r ? (r.provenance === 'kernel' ? { provenance: 'kernel', note: r.note } : r.found ? { provenance: 'A-runtime', ideVersion: r.ideVersion, assembly: r.assembly, writable: r.writable, bases: r.bases } : { provenance: 'A-runtime', found: false, ideVersion: r.ideVersion ?? null, error: r.error ?? null, candidates: r.candidates ?? [] }) : null }; });
 }
 // The O11 capture reader for --app / element:, through the lane's resident reader (kernel-reading.mjs), with the same
-// request/answer shape the ODC reader has (both present the SnapshotReading envelope).
-export function o11Inspect(sources = laneSources('o11')) {
+// request/answer shape the ODC reader has (both present the SnapshotReading envelope). deps.reading (tests): kernelReading.
+export function o11Inspect(sources = laneSources('o11'), deps = {}) {
   return async request => {
-    const { kernelReading } = await import('./kernel-reading.mjs'); const { LANES } = await import('./lanes.mjs');
+    const kernelReading = deps.reading ?? (await import('./kernel-reading.mjs')).kernelReading; const { LANES } = await import('./lanes.mjs');
     const argv = ['--oml', request.target, '--ss-dir', sources.studioDir];
     const opt = (flag, v) => { if (v != null && v !== '') argv.push(flag, String(v)); };
     opt('--path', request.path ?? '/'); opt('--kind', request.kind); opt('--name', request.name); opt('--text', request.text); opt('--properties', request.properties);
@@ -1135,23 +1143,23 @@ export function o11Inspect(sources = laneSources('o11')) {
 }
 export function laneInspect(lane, odcInspect) { return lane === 'odc' ? odcInspect : lane === 'o11' ? o11Inspect() : null; }
 // The kind reads of --app come from the module index of the capture (module-map.mjs); its miss builds the index in the
-// same lane reader o11Inspect/odc inspect use. Text and select reads stay on the reader.
-export function laneMap(lane, sources = laneSources(lane)) {
+// same lane reader o11Inspect/odc inspect use. Text and select reads stay on the reader. deps (tests): module-map's deps (read).
+export function laneMap(lane, sources = laneSources(lane), deps = {}) {
   if (!['odc', 'o11'].includes(lane)) return null;
   const reader = lane === 'o11' ? { entry: { cli: sources.cli, root: sources.kernel, lane: sources.o11Lane.name }, ssDir: sources.studioDir } : {};
-  return async request => (await import('./module-map.mjs')).moduleMap({ ...request, lane }, { reader });
+  return async request => (await import('./module-map.mjs')).moduleMap({ ...request, lane }, { ...deps, reader });
 }
 // The module digest of `app` for the work packet (module-map.mjs moduleDigest): the same lane reader and Studio as laneMap.
-export function laneDigest(lane, sources = laneSources(lane)) {
+export function laneDigest(lane, sources = laneSources(lane), deps = {}) {
   if (!['odc', 'o11'].includes(lane)) return null;
   const reader = lane === 'o11' ? { entry: { cli: sources.cli, root: sources.kernel, lane: sources.o11Lane.name }, ssDir: sources.studioDir } : {};
-  return async target => (await import('./module-map.mjs')).moduleDigest({ lane, target }, { reader });
+  return async target => (await import('./module-map.mjs')).moduleDigest({ lane, target }, { ...deps, reader });
 }
 // The readings of the elements a change edits, for the packet's scope (module-map.mjs ownerReadings): the same lane reader.
-export function laneOwner(lane, sources = laneSources(lane)) {
+export function laneOwner(lane, sources = laneSources(lane), deps = {}) {
   if (!['odc', 'o11'].includes(lane)) return null;
   const reader = lane === 'o11' ? { entry: { cli: sources.cli, root: sources.kernel, lane: sources.o11Lane.name }, ssDir: sources.studioDir } : {};
-  return async request => (await import('./module-map.mjs')).ownerReadings({ ...request, lane }, { reader });
+  return async request => (await import('./module-map.mjs')).ownerReadings({ ...request, lane }, { ...deps, reader });
 }
 
 // ---- matching
