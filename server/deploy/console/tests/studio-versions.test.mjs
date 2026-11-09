@@ -52,3 +52,20 @@ test('replacing one backend access log preserves alerts read from another backen
  assert.equal(c.app.parts.sources.accessCount('tok_111111111111'),0);
  assert.equal(c.app.parts.sources.accessCount('tok_333333333333'),1);
 });
+// Window 4x4 (design B): a backend per ODC version, each with the O11 kernels of the window; the O11 rows are per kernel and
+// count the customers routed to that backend whose Service Studio is that version.
+test('window 4x4: one O11 row per kernel of each backend; a served O11 version is never unserved',()=>{
+ const env=makeEnv(),root=env.serverDir,O11=['11.55.92','11.55.93','11.55.94','11.55.95'];
+ write(root,'state/backend-versions.json',{window:4,backends:[{name:'odc-1.7.32',odc:'1.7.32',o11:O11,default:true},{name:'odc-1.7.31',odc:'1.7.31',o11:O11,default:false}]});
+ write(root,'state/routing.json',{schema:1,routes:{tok_111111111111:{backend:'odc-1.7.31'},tok_222222222222:{backend:'odc-1.7.31'},tok_333333333333:{backend:'odc-1.7.32'}}});
+ write(root,'versions/odc-1.7.31/state/studio-versions.json',{tokens:{tok_111111111111:{seen,odc:{installed:'1.7.31.1'},o11:{installed:'11.55.92.65269'}},tok_222222222222:{seen,odc:{installed:'1.7.31.1'},o11:{installed:'11.55.95.65352'}}}});
+ write(root,'versions/odc-1.7.32/state/studio-versions.json',{tokens:{tok_333333333333:{seen,odc:{installed:'1.7.32.1'},o11:{installed:'11.55.92.65269'}}}});
+ const v=createSources({serverDir:root}).studioVersions();
+ assert.equal(v.window,4);
+ const o11=v.rows.filter(r=>r.lane==='o11');
+ assert.equal(o11.length,8);assert.equal(o11.filter(r=>r.status==='unserved').length,0);
+ const row=(backend,version)=>o11.find(r=>r.backend===backend&&r.version===version);
+ assert.equal(row('odc-1.7.31','11.55.92').customers,1);assert.equal(row('odc-1.7.31','11.55.95').customers,1);assert.equal(row('odc-1.7.31','11.55.93').customers,0);
+ assert.equal(row('odc-1.7.32','11.55.92').customers,1);assert.equal(row('odc-1.7.32','11.55.92').status,'default');
+ assert.deepEqual(v.rows.filter(r=>r.lane==='odc').map(r=>[r.backend,r.customers]),[['odc-1.7.32',1],['odc-1.7.31',2]]);
+});
