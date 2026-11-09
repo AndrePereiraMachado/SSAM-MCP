@@ -68,8 +68,9 @@ test('the Mac version rule is the Windows one (installerVersionProblem) on every
 });
 
 // Review M1-R2: a fake /usr/bin/unzip and /usr/bin/plutil over a list of ZIP entries ([type, name]: 'd' directory, '-' file,
-// 'l' symlink). The `unzip -Z` rows are in the format of a real ditto ZIP of the app (0.2.5 test build, 130 entries:
-// `drwxr-xr-x  3.0 unx        0 bx stor 26-Nov-03 15:16 SSAM Agent.app/`).
+// 'l' symlink). The `unzip -Z` rows are in the format of a real ZIP of the app made by electron-builder (7za) in the Mac CI
+// (0.2.5 test build, 130 entries, 14 symlinks: `drwxr-xr-x  3.0 unx        0 bx stor 26-Nov-03 15:16 SSAM Agent.app/`);
+// macZipProblem accepts that whole ZIP as listed by Info-ZIP UnZip 6.00 (evidence of the R3 round: mac-028/logs/m1r2-real-zip-gate.log).
 const ROOT = 'SSAM Agent.app';
 const realTree = () => [
   ['d', ROOT + '/'], ['d', ROOT + '/Contents/'], ['-', ROOT + '/Contents/Info.plist'], ['d', ROOT + '/Contents/MacOS/'], ['-', ROOT + '/Contents/MacOS/SSAM Agent'],
