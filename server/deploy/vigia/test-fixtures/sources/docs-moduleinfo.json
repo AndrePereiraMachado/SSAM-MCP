@@ -1,0 +1,12 @@
+{
+ "manifest": {
+  "versionToken": "WeCr+CkUYDqiFbd5AVWPCA",
+  "versionSequence": 93873,
+  "cdnUrlVersioning": true,
+  "urlVersions": {
+   "/Documentation_UI/scripts/Documentation_UI.Documentation.ContentDoc.mvc__vOwZ2dCBVMPadDpky0rwkg.js": "?vOwZ2dCBVMPadDpky0rwkg",
+   "/Documentation_UI/scripts/Documentation_UI.Documentation.Support.mvc__wTVLBdXyZtVRROapgFNqhA.js": "?wTVLBdXyZtVRROapgFNqhA",
+   "/Documentation_UI/scripts/OutSystems__bLKTnViyjIAVLXSE6wUw.js": "?bLKT+nViyjIAV+LXSE6wUw"
+  }
+ }
+}

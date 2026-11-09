@@ -7,6 +7,9 @@ param(
  [string]$Retry,
  [string]$AcknowledgeRollback,
  [string]$SeedFeatures,
+ [string]$Pin,
+ [string]$Redecide,
+ [string]$Skip,
  [switch]$NoUpdate,
  [switch]$RehearseCurrent
 )
@@ -32,6 +35,9 @@ if($Reject){$argsList+=@('--reject',$Reject);if($Reason){$argsList+=@('--reason'
 if($AcknowledgeRollback){$argsList+=@('--acknowledge-rollback',$AcknowledgeRollback)}
 if($Retry){$argsList+=@('--retry',$Retry)}
 if($SeedFeatures){$argsList+=@('--seed-features',$SeedFeatures)}
+if($Pin){$argsList+=@('--pin',$Pin)}
+if($Redecide){$argsList+=@('--redecide',$Redecide)}
+if($Skip){$argsList+=@('--skip',$Skip)}
 if($NoUpdate){$argsList+='--no-update'}
 if($RehearseCurrent){$argsList+='--rehearse-current'}
 & $node @argsList

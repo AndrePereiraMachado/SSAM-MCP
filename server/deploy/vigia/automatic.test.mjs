@@ -11,6 +11,7 @@ import {configureJournals,readJournal,writeJournal} from './journal.mjs';
 import {releaseAutomatically,AUTOMATIC_PLAN} from './automatic.mjs';
 import {createAutoRuntime} from './auto-runtime.mjs';
 import {detectSources,downloadInstaller,officialUrl} from './sources.mjs';
+import {fakeSites} from './test-fixtures/sources/fake.mjs';
 import {createBridgeStore,verifyBridge} from '../../platforms/odc/facade/bridge-store.mjs';
 import {compatibility,createAgentHub} from '../../platforms/odc/facade/agent-hub.mjs';
 import {runVigia} from './pipeline.mjs';
@@ -98,15 +99,12 @@ test('missing secrets stops before any journal or external write',async t=>{
  assert.deepEqual(fs.readdirSync(dir),[]);
 });
 test('source detection, local fallback and installer hash never execute an installer',async t=>{
- const dir=tmp(t);const endpoint=await server(t,(req,res)=>{
-  const url=new URL(req.url,'http://x');res.setHeader('content-type','application/json');
-  if(url.pathname==='/installer'){res.end(Buffer.from('MZ-synthetic-installer'));return;}
-  const lane=url.searchParams.get('component');res.end(JSON.stringify({version:lane==='ODCStudio'?'1.7.30.10980':'11.55.94.65328',link:base+'/installer'}));
- });const base=endpoint;
- const seen=await detectSources([],{endpoint,allowTestHttp:true});assert.equal(seen.observed.length,2);
- const downloaded=await downloadInstaller(seen.observed[0],dir,{allowTestHttp:true});assert.equal(fs.readFileSync(downloaded.file+'.sha256','utf8').trim(),downloaded.sha256);
+ // The public pages answered from recorded responses (test-fixtures/sources); sources.test.mjs covers discovery itself.
+ const dir=tmp(t);const {fetcher,state}=fakeSites();
+ const seen=await detectSources([],{fetcher,retryDelayMs:0,now:Date.parse('2026-11-10T00:00:00Z')});assert.deepEqual(seen.observed.map(o=>o.fullVersion),['1.7.32.11065','11.55.95.65352']);
+ const downloaded=await downloadInstaller({...seen.observed[0],size:state.installer.length},dir,{fetcher});assert.equal(fs.readFileSync(downloaded.file+'.sha256','utf8').trim(),downloaded.sha256);
  const local=[{lane:'odc',version:'1.7.29',fullVersion:'1.7.29.1'}];
- assert.deepEqual((await detectSources(local,{fetcher:async()=>{throw Error('login');}})).observed,local);
+ assert.deepEqual((await detectSources(local,{fetcher:async()=>{throw Error('login');},retryDelayMs:0})).observed,local);
  assert.throws(()=>officialUrl('https://evil.example/a.exe'));
  assert.ok(AUTOMATIC_PLAN.some(x=>x.includes('MSBuild')));
 });
