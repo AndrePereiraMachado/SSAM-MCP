@@ -141,6 +141,25 @@ async function launch(args,config,log){
   return await round(config,runtime);
  }finally{lock.release();}
 }
+// The launcher's gate before any release write (the vault and the deployment configuration are read, nothing is written).
+// {startup} when ready; else {startup, code, message} for the console and the Windows notice. A refusal of the bridge trust-key
+// pin (F1 review round 3, M-3) keeps its code and its message (they carry fingerprint prefixes only, never a secret), so the
+// owner fixes the pin instead of auditing a vault that is right; any other failure stays the generic message.
+export const STARTUP_CODES=Object.freeze(['BRIDGE_TRUST_KEY_UNPINNED','BRIDGE_TRUST_KEY_MISMATCH']);
+export async function startupGate(config,createRuntime){
+ let startup;
+ try{startup=await createRuntime(config);await startup.secrets();return {startup};}
+ catch(error){
+  const code=STARTUP_CODES.includes(error?.code)?error.code:null;
+  return {startup,code,message:code?`${code}: ${String(error.message).split('\n')[0].slice(0,600)} No release writes were started.`:'Required secrets or deployment configuration are missing. No release writes were started.'};
+ }
+}
+// --dry-run in ed25519-offers: the pin's format (64 hex, either case), without the vault. null when fine or another mode.
+export async function dryRunPinProblem(config){
+ if(!config.automatic||bridgeMode(config)!=='ed25519-offers')return null;
+ const {trustPin}=await import('./auto-runtime.mjs');
+ try{trustPin(config);return null;}catch(error){return `${error.code}: ${error.message}`;}
+}
 async function owner(args,config,log){
  const lock=acquireLock(path.join(config.outDir,'vigia.lock'));
  if(lock.busy)throw Error(`A watcher round is running (pid ${lock.busy.pid??'?'} since ${lock.busy.at??'?'}). Try again when it ends.`);
@@ -158,10 +177,8 @@ if(process.argv[1]&&path.resolve(process.argv[1])===self){
  const config=readConfig(args.config);config.acknowledgeRollback=args['acknowledge-rollback'];
  if(config.automatic&&!args.flags.has('dry-run')){
   const {createRuntime}=await import('./runtime.mjs');
-  let startup;
-  try{startup=await createRuntime(config);await startup.secrets();}
-  catch{
-   const message='Required secrets or deployment configuration are missing. No release writes were started.';
+  const {startup,message}=await startupGate(config,createRuntime);
+  if(message){
    console.error('SSAM watcher deferred: '+message);
    // No journal/directory is written before this gate; the only side effect is
    // a generic Windows notification so a scheduled, hidden task is observable.
@@ -172,6 +189,9 @@ if(process.argv[1]&&path.resolve(process.argv[1])===self){
   }
  }
  if(args.flags.has('dry-run')){
+  // Round 3 M-3: the dry-run of the activation checks the trust-key pin's format too (no vault is read).
+  const problem=await dryRunPinProblem(config);
+  if(problem){console.error('SSAM watcher dry-run stopped: '+problem);process.exit(2);}
   const {createRuntime}=await import('./runtime.mjs');
   console.log(JSON.stringify(await round(config,await createRuntime({...config,dryRun:true}),{dryRun:true}),null,2));
  }else if(args.flags.has('round')){

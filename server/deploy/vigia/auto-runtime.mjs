@@ -26,9 +26,17 @@ const q=s=>"'"+String(s).replaceAll("'","'\\''")+"'";
 export const spkiSha256=key=>hash(createPublicKey(key).export({type:'spki',format:'der'}));
 // M1 of the F1 review: the manifest key of the vault against the pin of the private configuration. Never reads the vault: the
 // private key given is the one secrets() already read; only the fingerprints are compared, and only they appear in the error.
+// The pin as the owner may paste it (round 3, M-3): key-verification.json and `ssam-agent trust-anchors` print it in upper case.
+// Exactly 64 hex digits, either case, normalized to lower case; anything else (spaces, a prefix, colons, another length) is no pin.
+// Checks the format only (no vault): the --dry-run and the launcher use it before any secret is read.
+export function trustPin(config){
+ const pin=config?.bridgeTrustKeySpkiSha256;
+ if(typeof pin!=='string'||!/^[0-9a-fA-F]{64}$/.test(pin))throw Object.assign(Error('ed25519-offers needs bridgeTrustKeySpkiSha256 in the private configuration: the SHA-256 (64 hex digits, upper or lower case) of the SPKI DER of the Ed25519 key the published agent pins (SsamTrustPublicKey, spkiSha256 in key-verification.json). Nothing is signed without it.'),{code:'BRIDGE_TRUST_KEY_UNPINNED'});
+ return pin.toLowerCase();
+}
+export const TRUST_KEY_CODES=Object.freeze(['BRIDGE_TRUST_KEY_UNPINNED','BRIDGE_TRUST_KEY_MISMATCH']);
 export function assertTrustKey(config,manifestPrivateKey){
- const pin=config.bridgeTrustKeySpkiSha256;
- if(!/^[a-f0-9]{64}$/.test(pin??''))throw Object.assign(Error('ed25519-offers needs bridgeTrustKeySpkiSha256 in the private configuration: the SHA-256 (64 lowercase hex) of the SPKI DER of the Ed25519 key the published agent pins (SsamTrustPublicKey). Nothing is signed without it.'),{code:'BRIDGE_TRUST_KEY_UNPINNED'});
+ const pin=trustPin(config);
  const actual=spkiSha256(manifestPrivateKey);
  if(actual!==pin)throw Object.assign(Error(`The vault's manifest key (SPKI sha256 ${actual.slice(0,8)}...) is not the key the published agent pins (bridgeTrustKeySpkiSha256 ${pin.slice(0,8)}...): every agent would refuse its offers. Nothing is signed; put the pinned key in the vault (set-secrets.ps1) or correct the pin.`),{code:'BRIDGE_TRUST_KEY_MISMATCH'});
  return actual;
@@ -36,6 +44,11 @@ export function assertTrustKey(config,manifestPrivateKey){
 // The version of the bridge build recipe (buildBridges: projects, properties, file filter, manifest shape). Bump it when the recipe
 // changes so that no kept signed bridge built by an older recipe is served again.
 export const BRIDGE_RECIPE='ed25519-offers/1';
+// F1 review round 3 B-4: the recipe is also the code that runs it: the SHA-256 of this file and of the classification scripts
+// (as the round runs them, from the signed main). A change there invalidates every kept bridge without a manual BRIDGE_RECIPE bump.
+// The other lane's Studio bundle is not an input: the O11 thin projects never read OdcInstall/AnvilOdcStudioTfm, nor the ODC
+// projects SSDir/AnvilO11StudioTfm (agent/kernel and server/platforms/odc/studio build files).
+export const RECIPE_TOOLS=()=>hash(Buffer.concat(['auto-runtime.mjs','classify-signers.ps1','authenticode-chain.ps1'].map(name=>fs.readFileSync(path.join(here,name)))));
 // The kept signed bridge of a lane when it was built from exactly these inputs, still verifies with this key and is still the
 // newest sequence signed for that lane and Studio (latest); else null (build again).
 export function reuseSigned(kept,inputs,key,latest){
@@ -58,6 +71,16 @@ export function keepSigned(kept,target,inputs){
   fs.mkdirSync(next,{recursive:true});fs.cpSync(target,path.join(next,'signed'),{recursive:true});fs.writeFileSync(path.join(next,'inputs.json'),JSON.stringify(inputs));
   fs.rmSync(kept,{recursive:true,force:true});fs.renameSync(next,kept);
  }catch{fs.rmSync(next,{recursive:true,force:true});}
+}
+// The highest sequence of lane:studioVersion the release.json journals of outDir record (bridges.offers); 0 when none. A journal
+// that does not verify counts for nothing (it is no evidence).
+export function releasedSequence(outDir,identity){
+ let max=0;
+ try{for(const e of fs.readdirSync(path.resolve(outDir),{withFileTypes:true})){
+  if(!e.isDirectory())continue;const file=path.join(path.resolve(outDir),e.name,'release.json');if(!fs.existsSync(file))continue;
+  try{for(const o of readJournal(file)?.bridges?.offers??[])if(o&&o.lane+':'+o.studioVersion===identity&&Number.isSafeInteger(o.sequence)&&o.sequence>max)max=o.sequence;}catch{}
+ }}catch{}
+ return max;
 }
 export const releasesToVerify=(observed,manifest,rehearsal=false)=>observed.filter(x=>x.url&&(rehearsal||!manifest[x.lane].some(v=>v.version===x.version)));
 export function createAutoRuntime(config,runtime) {
@@ -237,10 +260,10 @@ export function createAutoRuntime(config,runtime) {
     const b=bundles[lane],p=lane==='odc'?protocol:'d1',target=path.join(stage,lane,b.version,p);
     if(fs.existsSync(path.join(target,'manifest.json'))){offers.push(verifyBridge(target,key).manifest);continue;}
     const source=lane==='o11'?config.agentReleaseCommit:odcSource;
-    const inputs={recipe:BRIDGE_RECIPE,lane,studioVersion:b.version,bundle:b.sha256??null,runtime:b.tfm??null,protocol:p,source:source??null,key:keyId};
+    const inputs={recipe:BRIDGE_RECIPE,tools:RECIPE_TOOLS(),lane,studioVersion:b.version,bundle:b.sha256??null,runtime:b.tfm??null,protocol:p,source:source??null,key:keyId};
     const reusable=ed25519&&/^[a-f0-9]{40}$/.test(source??'')&&/^[a-f0-9]{64}$/.test(b.sha256??''),kept=path.join(signedRoot,lane,b.version,p);
     if(reusable){
-     const hit=reuseSigned(kept,inputs,key,readSequences()[lane+':'+b.version]);
+     const hit=reuseSigned(kept,inputs,key,Math.max(readSequences()[lane+':'+b.version]??0,releasedSequence(config.outDir,lane+':'+b.version)));
      if(hit){fs.cpSync(path.join(kept,'signed'),target,{recursive:true,errorOnExist:true,force:false});const m=verifyBridge(target,key).manifest;offers.push(m);reused.push(lane);runtime.log?.(`bridge ${lane} ${b.version} ${p}#${m.sequence}: inputs unchanged, the signed manifest of ${m.createdAt} is served again (no new sequence)`);continue;}
     }
     const projects=lane==='odc'?[
@@ -262,6 +285,9 @@ export function createAutoRuntime(config,runtime) {
     const evidenceFile=ed25519?path.join(dir,'bridge-evidence',`${lane}-${b.version}-${p}.json`):path.join(target,'build-evidence.json');
     fs.mkdirSync(path.dirname(evidenceFile),{recursive:true});
     const evidence=artifactEvidence(target,outputs,assets);
+    // F1 review round 3 B-5: the configuration files (runtimeconfig, deps) as they were when the outputs were recorded: the bytes
+    // signed into the manifest must still be these (a runtimeconfig.json can add probing paths).
+    const recordedJson=Object.fromEntries(fs.readdirSync(target,{withFileTypes:true}).filter(d=>d.isDirectory()).flatMap(d=>fs.readdirSync(path.join(target,d.name),{withFileTypes:true}).filter(e=>e.isFile()&&/\.json$/.test(e.name)).map(e=>[d.name+'/'+e.name,hash(fs.readFileSync(path.join(target,d.name,e.name)))])));
     fs.writeFileSync(evidenceFile,JSON.stringify(evidence));
     const required=lane==='odc'?[`bridge/ODC3.Bridge.${protocol}.dll`,'client/ODC3.Bridge.Client.dll','client/ODC3.Bridge.Client.runtimeconfig.json']:['bridge/Anvil.Bridge.dll','hook/Anvil.RuntimeHook.Agent.dll'];
     if(required.some(name=>!fs.existsSync(path.join(target,name))))throw Error('The compiled client bridge entrypoints are incomplete.');
@@ -299,11 +325,14 @@ export function createAutoRuntime(config,runtime) {
        const rel=sub+'/'+name,want=record.signer==='owner'?evidence.owned?.[rel]:evidence.dependencies?.[rel]?.sha256;
        if(!want||hash(bytes)!==want)throw Error('A bridge executable changed after its signer was classified: '+rel);
       }
+      if(ed25519&&/\.json$/i.test(name)&&recordedJson[sub+'/'+name]!==hash(bytes))throw Error('A bridge configuration file changed after the build was recorded: '+sub+'/'+name);
       files.push({path:sub+'/'+name,sha256:hash(bytes),size:bytes.length,...(/\.(dll|exe)$/i.test(name)?{signer:record?.signer}:{})});
      }
     }
     const sequences=readSequences();
-    const identity=lane+':'+b.version;const sequence=(sequences[identity]??0)+1;sequences[identity]=sequence;
+    // F1 review round 3 B-1: never below a sequence already released (the journaled release.json of every attempt in outDir),
+    // so a lost bridge-sequences.json (tempRoot rebuilt) never signs #1 again for agents that hold #7.
+    const identity=lane+':'+b.version;const sequence=Math.max(sequences[identity]??0,releasedSequence(config.outDir,identity))+1;sequences[identity]=sequence;
     fs.writeFileSync(sequenceFile+'.next',JSON.stringify(sequences));fs.renameSync(sequenceFile+'.next',sequenceFile);
     const manifest={schema:1,lane,studioVersion:b.version,runtime:b.tfm,protocol:p,sequence,createdAt:new Date().toISOString(),files,...(ed25519?{}:{authenticodeThumbprint:s.authenticodeThumbprint})};
     const bytes=Buffer.from(JSON.stringify(manifest));

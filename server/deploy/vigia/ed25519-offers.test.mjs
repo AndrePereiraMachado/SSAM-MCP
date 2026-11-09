@@ -15,9 +15,11 @@ import {generateKeyPairSync,createHash,createPublicKey,sign} from 'node:crypto';
 import {createBridgeStore,verifyBridge} from '../../platforms/odc/facade/bridge-store.mjs';
 import {compatibility} from '../../platforms/odc/facade/agent-hub.mjs';
 import {toolListingBytes} from '../../platforms/odc/facade/tool-listing.mjs';
-import {parseAgentRelease,offersGate,offersKernel,agentHello,installedHello,laneGap,isEd25519Offers} from './server-only.mjs';
-import {verifySignedAgentRelease} from './safety.mjs';
-import {createAutoRuntime,spkiSha256,assertTrustKey,reuseSigned} from './auto-runtime.mjs';
+import {parseAgentRelease,offersGate,offersKernel,serverOnlyKernel,agentHello,installedHello,laneGap,isEd25519Offers,nextPatch} from './server-only.mjs';
+import {verifySignedAgentRelease,refreshAgentReleaseLine} from './safety.mjs';
+import {startupGate,dryRunPinProblem} from './vigia.mjs';
+import {writeJournal} from './journal.mjs';
+import {createAutoRuntime,spkiSha256,assertTrustKey,reuseSigned,trustPin,releasedSequence,RECIPE_TOOLS} from './auto-runtime.mjs';
 import {automaticPlan,ED25519_OFFERS_STEP,AUTOMATIC_PLAN} from './automatic.mjs';
 
 const here=path.dirname(fileURLToPath(import.meta.url));
@@ -291,7 +293,7 @@ test('check-backend (post-deployment): the 0.2.8 hello of the published pack mus
  const expected={offers:s.offers,packHellos:{[key]:g.hello},offerHellos:{[key]:g.offerHello},offerLanes:{[key]:g.offerLanes},legacyHellos:{[key]:g.legacyHello}};
  const ok=await runCheck(expected,{kernel,bridges:s.store,served});
  assert.equal(ok.receipt.ok,true);assert.equal(ok.receipt.presented,true);
- assert.deepEqual(ok.posted.map(h=>h.instance).slice(0,4),['vigia-verification','vigia-published-pack-offers','vigia-published-pack-legacy','vigia-published-pack-offers']);
+ assert.deepEqual(ok.posted.map(h=>h.instance).slice(0,5),['vigia-verification','vigia-published-pack-offers','vigia-published-pack-legacy','vigia-published-pack-legacy','vigia-published-pack-offers'],'the legacy hello, then the same from a newer Service Studio (round 3 M-1)');
  // The same check against a pair whose store has no d1 (the offer was lost) or a kernel without d1 fails.
  await assert.rejects(runCheck(expected,{kernel,bridges:stage(t,[both[0]]).store,served}),/received no signed bridge offer/);
  await assert.rejects(runCheck(expected,{kernel:{...kernel,o11BridgeAccepted:[]},bridges:s.store,served}),/received no signed bridge offer/);
@@ -354,7 +356,9 @@ test('M1: the vault manifest key must be the key app 0.2.8 pins (bridgeTrustKeyS
  assert.equal(spkiSha256(k),sha(createPublicKey(k).export({type:'spki',format:'der'})),'the SHA-256 of the public SPKI DER');
  assert.equal(assertTrustKey({bridgeTrustKeySpkiSha256:spkiSha256(k)},k),spkiSha256(k));
  assert.throws(()=>assertTrustKey({bridgeTrustKeySpkiSha256:example.bridgeTrustKeySpkiSha256},k),e=>e.code==='BRIDGE_TRUST_KEY_MISMATCH'&&!e.message.includes('PRIVATE KEY')&&!e.message.includes(spkiSha256(k)));
- for(const pin of [undefined,null,'',spkiSha256(k).toUpperCase(),spkiSha256(k).slice(1),42])assert.throws(()=>assertTrustKey({bridgeTrustKeySpkiSha256:pin},k),e=>e.code==='BRIDGE_TRUST_KEY_UNPINNED',String(pin));
+ // Round 3 M-3: the pin as key-verification.json prints it (upper case) is the same pin.
+ assert.equal(assertTrustKey({bridgeTrustKeySpkiSha256:spkiSha256(k).toUpperCase()},k),spkiSha256(k));
+ for(const pin of [undefined,null,'',spkiSha256(k).slice(1),spkiSha256(k)+'0',' '+spkiSha256(k).slice(1),'sha256:'+spkiSha256(k),spkiSha256(k).match(/../g).join(':'),'g'.repeat(64),42,[spkiSha256(k)]])assert.throws(()=>assertTrustKey({bridgeTrustKeySpkiSha256:pin},k),e=>e.code==='BRIDGE_TRUST_KEY_UNPINNED',String(pin));
  // buildBridges with a vault key that is not the pinned one: refused before any compiler, classification or signature.
  const f=bridgeFixture(t),bundles=f.bundles();
  await assert.rejects(f.make(bundles,{bridgeTrustKeySpkiSha256:example.bridgeTrustKeySpkiSha256}).buildBridges(pair,bundles,f.attempt()),e=>e.code==='BRIDGE_TRUST_KEY_MISMATCH');
@@ -524,4 +528,146 @@ test('B5: R7 reads the release line as the branch refs/heads/<agentReleaseRef>, 
  assert.ok(calls.length>=2);
  for(const args of calls)assert.ok(args.includes('refs/heads/agent/release-0.2.8')||args.some(a=>a.startsWith('refs/heads/agent/release-0.2.8^')),JSON.stringify(args));
  assert.ok(calls.some(a=>a[0]==='merge-base'&&a.includes(commit)));
+});
+
+// ---- F1 review round 3 (C:\t\r5\f1-offers\REVISAO-F1-R2.md): M-1, M-3, B-1, B-2, B-4, B-5.
+
+// A hello of another installed Service Studio (four-part), or with another pack build.
+const onO11=(h,v)=>({...h,studios:{...h.studios,o11:{...h.studios.o11,installed:{...h.studios.o11.installed,version:v+'.1'}}}});
+const builtFor=(h,b)=>({...h,pack:{...h.pack,o11BuiltFor:b}});
+const macOf=h=>({...h,agent:{...h.agent,platform:'darwin'}});
+test('M-1 hub, family rule: a newer, an older and the exact Service Studio are served only by a thin bridge built for exactly that build',t=>{
+ const s=stage(t,both),kernel={...offersKernel(config,pair,studios(),kernels,release,s.offers),servedVersions:served};
+ const ask=(h,k=kernel,bridges=s.store)=>compatibility(h,k,['odc','o11'],{bridges}).o11;
+ // Newer (11.55.96, no pair of its own yet, routed here by its ODC Studio): no agent is served on the .94 thin bridge.
+ const newer='11.55.96';
+ assert.equal(ask(onO11(hello027(),newer)).cause,'AGENT_UPDATE_REQUIRED');
+ assert.equal(ask(macOf(onO11(hello027(),newer))).cause,'BRIDGE_PACK_REQUIRED');
+ const n28=ask(onO11(hello028(),newer));assert.equal(n28.ok,false);assert.equal(n28.cause,'BRIDGE_NOT_INSTALLED');assert.equal(n28.bridgeOffer,undefined);
+ // The same Studio with the pack's own build of it (the agent's newer local bridge) is served, as before.
+ assert.equal(ask(builtFor(onO11(hello027(),newer),newer)).ok,true);
+ // A verified offer for exactly that build: 0.2.8 is offered it, then served once it is installed.
+ const own=stage(t,[both[0],both[1],{lane:'o11',studioVersion:newer,protocol:'d1'}]);
+ const offered=ask(onO11(hello028(),newer),kernel,own.store);assert.equal(offered.code,'BRIDGE_UPDATE_REQUIRED');assert.equal(JSON.parse(offered.bridgeOffer.manifest).studioVersion,newer);
+ assert.equal(ask({...onO11(hello028(),newer),bridges:[{lane:'o11',studioVersion:newer,protocol:'d1',sequence:1,status:'installed',reason:'INSTALLED'}]},kernel,own.store).ok,true);
+ // A verified o11BridgeProven proof that covers exactly that build (11.55.94 for 11.55.96): served to every agent.
+ const proof=v=>({studioVersion:v,build:'11.55.94',packCommit:'c'.repeat(40),provenAt:'2026-11-01T10:00:00Z',evidence:'C:/ssam-priv/vigia/proofs/p.json',sha256:'e'.repeat(64),size:10});
+ const proven={...offersKernel({...config,o11BridgeProven:{[newer]:proof(newer)}},pair,studios(),kernels,release,s.offers),servedVersions:served};
+ assert.deepEqual(proven.o11ProvenBuilds,{[newer]:['11.55.94']});assert.deepEqual(proven.o11PackBuiltFor,['11.55.95'],'a proof for another Studio does not widen the pair\'s own');
+ assert.equal(ask(onO11(hello027(),newer),proven).ok,true);assert.equal(ask(macOf(onO11(hello027(),newer)),proven).ok,true);
+ assert.equal(ask(hello027(),proven).cause,'AGENT_UPDATE_REQUIRED','the .96 proof is no proof for .95');
+ // An unverified proof (no sha256) or one keyed under another Studio covers nothing.
+ for(const bad of [{[newer]:{...proof(newer),sha256:undefined}},{[newer]:proof('11.55.97')}])
+  assert.deepEqual(offersKernel({...config,o11BridgeProven:bad},pair,studios(),kernels,release,s.offers).o11ProvenBuilds,{});
+ // Older (11.55.94, served by its own pair): this backend never serves it (STUDIO_VERSION_MISMATCH, the router's pair does), with
+ // the exact build or another; the rule never turns that refusal into ok or into "install 0.2.8".
+ for(const h of [builtFor(onO11(hello027(),'11.55.94'),'11.55.94'),builtFor(onO11(hello027(),'11.55.94'),'11.55.93'),onO11(hello028(),'11.55.94')]){
+  const r=ask(h);assert.equal(r.ok,false);assert.equal(r.code,'STUDIO_VERSION_MISMATCH');
+ }
+ // Exact (the pair's 11.55.95): as round 2.
+ assert.equal(ask(builtFor(hello027(),'11.55.95')).ok,true);assert.equal(ask(hello027()).cause,'AGENT_UPDATE_REQUIRED');
+ // A Studio the window does not serve keeps its own refusal (not turned into "install 0.2.8").
+ assert.notEqual(ask(onO11(hello027(),'11.55.80')).cause,'AGENT_UPDATE_REQUIRED');
+});
+
+test('M-1 server-only stays as it is: a kernel without o11PackBuiltFor (proofs or not) answers a newer or older Studio as before',t=>{
+ const s=stage(t,both),ask=(h,k)=>compatibility(h,{...k,servedVersions:served},['odc','o11'],{bridges:s.store}).o11;
+ const proof={studioVersion:'11.55.95',build:'11.55.94',packCommit:'c'.repeat(40),provenAt:'2026-11-01T10:00:00Z',evidence:'C:/ssam-priv/vigia/proofs/p.json',sha256:'e'.repeat(64),size:10};
+ for(const cfg of [config,{...config,o11BridgeProven:{'11.55.95':proof}}]){
+  const k=serverOnlyKernel({...cfg,bridgeMode:'server-only'},pair,studios(),kernels,release);
+  assert.equal(k.o11PackBuiltFor,undefined);assert.equal(k.o11ProvenBuilds,undefined);
+  for(const h of [hello027(),onO11(hello027(),'11.55.96'),macOf(onO11(hello027(),'11.55.96'))])assert.equal(ask(h,k).ok,true,JSON.stringify(h.studios.o11.installed));
+  assert.equal(ask(builtFor(onO11(hello027(),'11.55.94'),'11.55.93'),k).code,'STUDIO_VERSION_MISMATCH');
+ }
+ // The hub ignores o11ProvenBuilds on a kernel without o11PackBuiltFor (a stray field changes nothing).
+ const k=serverOnlyKernel({...config,bridgeMode:'server-only'},pair,studios(),kernels,release);
+ assert.equal(ask(onO11(hello027(),'11.55.96'),{...k,o11ProvenBuilds:{'11.55.96':[]}}).ok,true);
+});
+
+test('M-1 gate and check-backend: the new pair passes, and an image whose hub serves a newer Studio on a foreign thin bridge fails the check',async t=>{
+ const s=stage(t,both),g=gate(s),key='11.55.95|1.7.32';
+ assert.deepEqual(g.gaps,[]);assert.deepEqual(g.kernel.o11ProvenBuilds,{});
+ assert.equal(nextPatch('11.55.95'),'11.55.96');assert.equal(nextPatch('x'),null);
+ const expected={offers:{[key]:s.offers},packHellos:{[key]:g.hello},offerHellos:{[key]:g.offerHello},offerLanes:{[key]:g.offerLanes},legacyHellos:{[key]:g.legacyHello}};
+ assert.equal((await runCheck(expected,{kernel:g.kernel,bridges:s.store,served})).receipt.ok,true);
+ // A hub with round 2's rule (the pair's own Studio only): the pair's Studio passes, the newer one is caught.
+ const round2=(body,k,lanes,o)=>{const v=String(body?.studios?.o11?.installed?.version??'').split('.').slice(0,3).join('.');return compatibility(body,v===k.o11?k:{...k,o11PackBuiltFor:undefined},lanes,o);};
+ await assert.rejects(runCheck(expected,{kernel:g.kernel,bridges:s.store,served,answer:round2}),/A Service Studio newer than this pair's was served a thin bridge built for another Service Studio/);
+ // With a verified proof for the newer Studio, the same hub answer is legitimate.
+ await runCheck(expected,{kernel:{...g.kernel,o11ProvenBuilds:{'11.55.96':['11.55.94']}},bridges:s.store,served,answer:(b,k,l,o)=>round2(b,{...k,o11ProvenBuilds:undefined},l,o)});
+});
+
+test('M-3: the pin in either case, exactly 64 hex; the launcher keeps the pin codes; --dry-run checks the pin',async t=>{
+ const k=generateKeyPairSync('ed25519').privateKey.export({type:'pkcs8',format:'pem'}),pin=spkiSha256(k);
+ assert.equal(trustPin({bridgeTrustKeySpkiSha256:pin.toUpperCase()}),pin);assert.equal(trustPin({bridgeTrustKeySpkiSha256:pin}),pin);
+ assert.equal(trustPin({bridgeTrustKeySpkiSha256:example.bridgeTrustKeySpkiSha256.toUpperCase()}),example.bridgeTrustKeySpkiSha256);
+ for(const bad of [undefined,'',pin.slice(2),pin+'ab',`${pin}\n`,'0x'+pin.slice(2),pin.slice(0,63)+'z'])assert.throws(()=>trustPin({bridgeTrustKeySpkiSha256:bad}),e=>e.code==='BRIDGE_TRUST_KEY_UNPINNED');
+ // The launcher's startup gate: a pin refusal keeps its code and message; anything else stays generic (no detail leaks).
+ const gateWith=error=>startupGate({},async()=>({secrets:async()=>{if(error)throw error;return {};}}));
+ assert.equal((await gateWith(null)).message,undefined);
+ let mismatch;try{assertTrustKey({bridgeTrustKeySpkiSha256:example.bridgeTrustKeySpkiSha256},k);}catch(e){mismatch=e;}
+ const m=await gateWith(mismatch);assert.equal(m.code,'BRIDGE_TRUST_KEY_MISMATCH');assert.match(m.message,/^BRIDGE_TRUST_KEY_MISMATCH: The vault's manifest key \(SPKI sha256 [0-9a-f]{8}\.\.\.\) is not the key the published agent pins \(bridgeTrustKeySpkiSha256 2ce611d0\.\.\.\).*No release writes were started\.$/);
+ assert.ok(!m.message.includes(pin)&&!m.message.includes('PRIVATE'));
+ let unpinned;try{trustPin({});}catch(e){unpinned=e;}
+ assert.match((await gateWith(unpinned)).message,/^BRIDGE_TRUST_KEY_UNPINNED: ed25519-offers needs bridgeTrustKeySpkiSha256/);
+ for(const other of [Error('vault C:/ssam-priv/x: token abc'),Object.assign(Error('secret detail'),{code:'EACCES'})]){const r=await gateWith(other);assert.equal(r.code,null);assert.equal(r.message,'Required secrets or deployment configuration are missing. No release writes were started.');}
+ const broken=await startupGate({},async()=>{throw Error('no runtime');});assert.equal(broken.startup,undefined);assert.match(broken.message,/Required secrets/);
+ // --dry-run: the format only (no vault), in ed25519-offers; the other modes are not asked.
+ assert.equal(await dryRunPinProblem({automatic:true,bridgeMode:'ed25519-offers',bridgeTrustKeySpkiSha256:example.bridgeTrustKeySpkiSha256.toUpperCase()}),null);
+ assert.match(await dryRunPinProblem({automatic:true,bridgeMode:'ed25519-offers'}),/^BRIDGE_TRUST_KEY_UNPINNED: /);
+ assert.equal(await dryRunPinProblem({automatic:true,bridgeMode:'server-only'}),null);
+ // The real CLI: --dry-run stops with the code and exit 2 before any runtime (no vault, no git, no Docker).
+ const dir=tmp(t),file=path.join(dir,'config.json');
+ fs.writeFileSync(file,JSON.stringify({workspace:path.join(dir,'w'),tempRoot:path.join(dir,'p'),bundleRoot:path.join(dir,'b'),outDir:path.join(dir,'o'),bridgeMode:'ed25519-offers',bridgeTrustKeySpkiSha256:'2ce611d0'}));
+ const r=spawnSync(process.execPath,[path.join(here,'vigia.mjs'),'--config',file,'--dry-run'],{encoding:'utf8',windowsHide:true,timeout:60000});
+ assert.equal(r.status,2,r.stderr);assert.match(r.stderr,/SSAM watcher dry-run stopped: BRIDGE_TRUST_KEY_UNPINNED: /);
+ assert.ok(!fs.existsSync(path.join(dir,'o'))&&!fs.existsSync(path.join(dir,'p')),'nothing was written');
+});
+
+test('B-2: the agent release line is fetched from trustedRemote and moved only to an owner-signed fast-forward',async()=>{
+ const local='1'.repeat(40),tip='2'.repeat(40),config={agentReleaseRef:'agent/release-0.2.8',trustedRemote:'https://example.test/o/SSAM-MCP.git'};
+ const fake=({fetch=0,remote=tip,head=local,signed=true,ff=0}={})=>{const calls=[];return {calls,git:async(args)=>{calls.push(args);
+  if(args[0]==='fetch')return {code:fetch,stdout:''};
+  if(args[0]==='rev-parse')return args[3].startsWith('refs/remotes/')?{code:remote?0:1,stdout:remote?remote+'\n':''}:{code:head?0:1,stdout:head?head+'\n':''};
+  if(args[0]==='merge-base')return {code:ff,stdout:''};
+  if(args[0]==='update-ref')return {code:0,stdout:''};
+  throw Error(args.join(' '));},ownerSigned:async c=>signed&&c===tip};};
+ const run=f=>refreshAgentReleaseLine(config,{git:f.git,ownerSigned:f.ownerSigned});
+ let f=fake();assert.deepEqual(await run(f),{status:'updated',ref:config.agentReleaseRef,tip,from:local});
+ assert.deepEqual(f.calls[0],['fetch','--no-tags','--no-recurse-submodules',config.trustedRemote,'+refs/heads/agent/release-0.2.8:refs/remotes/vigia/agent/release-0.2.8']);
+ assert.deepEqual(f.calls.at(-1),['update-ref','refs/heads/agent/release-0.2.8',tip,local],'compare-and-swap on the old tip');
+ f=fake({head:null});assert.equal((await run(f)).status,'updated');assert.deepEqual(f.calls.at(-1),['update-ref','refs/heads/agent/release-0.2.8',tip]);
+ for(const [opts,status] of [[{head:tip},'current'],[{signed:false},'unsigned'],[{ff:1},'diverged'],[{fetch:128},'unreachable'],[{remote:null},'unreachable']]){
+  f=fake(opts);assert.equal((await run(f)).status,status,status);assert.ok(!f.calls.some(c=>c[0]==='update-ref'),status+': the local branch did not move');
+ }
+ for(const bad of [{...config,agentReleaseRef:'main'},{...config,trustedRemote:'https://user:x@example.test/r.git'},{...config,agentReleaseRef:'--upload-pack=x'}]){
+  f=fake();assert.equal((await refreshAgentReleaseLine(bad,{git:f.git,ownerSigned:f.ownerSigned})).status,'unreachable');assert.deepEqual(f.calls,[]);
+ }
+ // updateWorkspace calls it after main, in ed25519-offers only, and only logs (never stops the watcher).
+ assert.match(fs.readFileSync(path.join(here,'runtime.mjs'),'utf8'),/await git\(\['update-ref','refs\/heads\/main',fetched\]\);\n.*\n\s*if\(isEd25519Offers\(config\)\)\{const line=await refreshAgentReleaseLine\(config,\{git,ownerSigned\}\);log\?\.\(/);
+});
+
+test('B-1, B-4, B-5: a sequence floor from the released journals, the recipe code in the reuse inputs, configuration files tied to the build',async t=>{
+ // B-1: bridge-sequences.json is gone (a new tempRoot) but release.json of an earlier attempt released d1#7: the next is #8.
+ const f=bridgeFixture(t),bundles=f.bundles();
+ fs.mkdirSync(path.join(f.dir,'attempt-old'));fs.writeFileSync(path.join(f.dir,'attempt-old','release.json'),JSON.stringify({bridges:{offers:[{lane:'o11',studioVersion:'11.55.95',protocol:'d1',sequence:7},{lane:'odc',studioVersion:'1.7.31',protocol:'v108',sequence:9}]}}));
+ fs.mkdirSync(path.join(f.dir,'attempt-bad'));fs.writeFileSync(path.join(f.dir,'attempt-bad','release.json'),'not json');
+ assert.equal(releasedSequence(f.dir,'o11:11.55.95'),7);assert.equal(releasedSequence(f.dir,'odc:1.7.32'),0);assert.equal(releasedSequence(path.join(f.dir,'none'),'o11:11.55.95'),0);
+ // Once the round's journal key is configured (secrets()), an unsigned release.json is no evidence; a journaled one is.
+ const rt=f.make(bundles);await rt.secrets();
+ assert.equal(releasedSequence(f.dir,'o11:11.55.95'),0,'unsigned: refused');
+ writeJournal(path.join(f.dir,'attempt-old','release.json'),{bridges:{offers:[{lane:'o11',studioVersion:'11.55.95',protocol:'d1',sequence:7}]}});
+ assert.equal(releasedSequence(f.dir,'o11:11.55.95'),7);
+ const first=await rt.buildBridges(pair,bundles,f.attempt());
+ assert.deepEqual(first.offers.map(o=>[o.lane,o.sequence]),[['odc',1],['o11',8]]);
+ const second=await f.make(bundles).buildBridges(pair,bundles,f.attempt());assert.deepEqual(second.reused,['odc','o11']);assert.deepEqual(second.offers,first.offers);
+ // B-4: the kept inputs name the code of the recipe; other code (another auto-runtime.mjs or classification) is not reused.
+ const kept=path.join(f.dir,'bridges-signed','o11','11.55.95','d1'),inputs=JSON.parse(fs.readFileSync(path.join(kept,'inputs.json'),'utf8'));
+ assert.equal(inputs.tools,RECIPE_TOOLS());assert.match(inputs.tools,/^[a-f0-9]{64}$/);
+ const key=fs.readFileSync(path.join(second.stage,'public-key.pem'));
+ assert.ok(reuseSigned(kept,inputs,key,8));assert.equal(reuseSigned(kept,{...inputs,tools:'0'.repeat(64)},key,8),null);
+ // B-5: a runtimeconfig.json changed after the build was recorded (probing paths added) is never signed.
+ const g=bridgeFixture(t),gb=g.bundles();
+ g.afterClassify=target=>{const file=path.join(target,'client','ODC3.Bridge.Client.runtimeconfig.json');if(fs.existsSync(file))fs.writeFileSync(file,JSON.stringify({runtimeOptions:{tfm:'net10.0',additionalProbingPaths:['C:/x']}}));};
+ await assert.rejects(g.make(gb).buildBridges(pair,gb,g.attempt()),/A bridge configuration file changed after the build was recorded: client\/ODC3\.Bridge\.Client\.runtimeconfig\.json/);
 });

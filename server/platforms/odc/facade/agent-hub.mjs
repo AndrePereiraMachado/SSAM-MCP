@@ -134,6 +134,11 @@ export const normalizeKernel = (kernel = {}) => {
     // accepts for its OWN Service Studio when no signed bridge is installed for it (the exact build, and a build the owner proved
     // loads in it). Absent: as before (any build of the served window).
     ...(Array.isArray(kernel?.o11PackBuiltFor) ? {o11PackBuiltFor: [...new Set(kernel.o11PackBuiltFor.map(v => threePart(v)).filter(Boolean))]} : {}),
+    // kernel.json o11ProvenBuilds (F1 review round 3, M-1): for other Service Studios, the builds a verified o11BridgeProven proof
+    // covers ({"11.55.96": ["11.55.94"]}). Read only with o11PackBuiltFor.
+    ...(Array.isArray(kernel?.o11PackBuiltFor) && kernel?.o11ProvenBuilds && typeof kernel.o11ProvenBuilds === 'object' && !Array.isArray(kernel.o11ProvenBuilds)
+      ? {o11ProvenBuilds: Object.fromEntries(Object.entries(kernel.o11ProvenBuilds).filter(([v, b]) => threePart(v) === v && Array.isArray(b))
+        .map(([v, b]) => [v, [...new Set(b.map(x => threePart(x)).filter(Boolean))]]))} : {}),
     // kernel.json odcBridgeAccepted (owner, 2026-10-08): older ODC bridges the server still serves, so a bridge bump does
     // not cut the customers that have not installed the new agent package yet.
     ...(Array.isArray(kernel?.odcBridgeAccepted) ? { odcBridgeAccepted: kernel.odcBridgeAccepted.filter(v => typeof v === 'string' && v) } : {}) };
@@ -185,14 +190,17 @@ export function compatibility(hello, kernel, lanes, { refused = null, bridges = 
       :downloaded?{...hello,pack:{...hello.pack,o11BuiltFor:version,o11Hook:downloaded}}:hello;
     let result = laneCompatibility(lane, effective, k, lanes ?? [], refused?.[lane] ?? null);
     const needsO11=lane==='o11'&&threePart(hello?.pack?.o11BuiltFor)!==version;
-    // F1 review M2: on a kernel that names its accepted pack builds (o11PackBuiltFor), this server's own Service Studio is served
-    // only through one of them or through a signed bridge installed for it, never through a thin bridge built for another
-    // Service Studio of the window (it binds to the exact Studio assemblies it was compiled against). An agent that can take the
-    // offer gets it below (BRIDGE_UPDATE_REQUIRED); one that cannot is told what to install.
-    // The same answer when the build is not even in the window any more (11.55.94 left it): the generic "ask the server owner"
-    // refusal becomes the one that says what to install.
+    // F1 review M2 and round 3 M-1, a family rule: on a kernel that names its accepted pack builds (o11PackBuiltFor, vigia
+    // ed25519-offers), EVERY installed Service Studio (this pair's own, a newer one the window answers "newer" for, an older one
+    // still served) is served only through a thin bridge built for exactly that build: the pack's own build of it, a build a
+    // verified o11BridgeProven proof covers for it (o11PackBuiltFor for the pair's own Studio, o11ProvenBuilds for the others),
+    // or a signed bridge installed for it. Never through a thin bridge built for another Service Studio (it binds to the exact
+    // Studio assemblies it was compiled against). An agent that can take a verified offer for that Studio gets it below
+    // (BRIDGE_UPDATE_REQUIRED); one that cannot is told what to install (packBuildRefusal). The same answer when the build is
+    // not even in the window any more (11.55.94 left it). A kernel without o11PackBuiltFor (server-only) answers as before.
     const built = threePart(hello?.pack?.o11BuiltFor);
-    if (lane === 'o11' && k.o11PackBuiltFor && version === k.o11 && !active && !downloaded && !k.o11PackBuiltFor.includes(built)
+    const builtFor = v => [v, ...(v === k.o11 ? k.o11PackBuiltFor ?? [] : []), ...(k.o11ProvenBuilds?.[v] ?? [])];
+    if (lane === 'o11' && k.o11PackBuiltFor && version && !active && !downloaded && !builtFor(version).includes(built)
         && (result.ok || (result.code === 'AGENT_PACK_MISMATCH' && !result.needs && Array.isArray(hello?.pack?.lanes) && hello.pack.lanes.includes('o11')
           && !servedVersions('o11', k).includes(built)))) result = packBuildRefusal(hello, version, capable);
     // A refusal for a command the agent lacks (needs) is never turned into an offer: no bridge fixes it, only the agent package.

@@ -52,6 +52,13 @@ try {
    const r=await post('/agent/v1/hello',issued.agentCredential,legacy);if(['odc','o11'].some(l=>r.data.compatible[l]?.bridgeOffer))throw Error('A bridge was offered to an agent without bridgeOffer.');
    const built=String(legacy.pack?.o11BuiltFor??'').split('.').slice(0,3).join('.');
    if(Array.isArray(kernel.o11PackBuiltFor)&&r.data.compatible.o11?.ok&&!kernel.o11PackBuiltFor.includes(built))throw Error('An agent without bridgeOffer was served a thin bridge not built for this Service Studio.');
+   // Round 3 M-1: the same hello from a Service Studio newer than this pair's (routed here by its ODC Studio, answered "newer").
+   if(Array.isArray(kernel.o11PackBuiltFor)){
+    const p=String(kernel.o11).split('.').map(Number),next=`${p[0]}.${p[1]}.${p[2]+1}`;
+    const newer={...legacy,studios:{...legacy.studios,o11:{...legacy.studios?.o11,installed:{...legacy.studios?.o11?.installed,version:next+'.0'}}}};
+    const n=await post('/agent/v1/hello',issued.agentCredential,newer);
+    if(n.data.compatible.o11?.ok&&built!==next&&!(kernel.o11ProvenBuilds?.[next]??[]).includes(built))throw Error('A Service Studio newer than this pair\'s was served a thin bridge built for another Service Studio.');
+   }
   }
   const viaOffer=!!before&&(presented.bridges??[]).some(b=>b?.lane==='o11'&&b.studioVersion===kernel.o11&&b.status==='installed');
   if(!viaOffer&&presented.pack?.o11BuiltFor!==(expected.o11Proven?.[kernel.o11]??kernel.o11))throw Error('Published agent pack has no thin bridge built for this Service Studio.');

@@ -124,6 +124,26 @@ export async function verifySignedAgentRelease(config,{git,ownerSigned}){
  if(tip!==commit&&!await ownerSigned(tip))refuse(`The tip of ${ref} (${tip.slice(0,7)}) has no valid owner signature; the agent release line must end in an owner-signed commit.`);
  return {commit,tip};
 }
+// F1 review round 3 B-2: the release line is fetched from trustedRemote before each automatic round in ed25519-offers, the way
+// main is (runtime.mjs updateWorkspace), into refs/remotes/vigia/<ref>. The local branch refs/heads/<ref> (what R7 reads) moves
+// to the fetched tip only when that tip carries the owner's signature AND the move is a fast-forward (or the branch is new);
+// otherwise it stays where it was and the round's R7 judges it as before. Never stops the watcher: a release line that cannot
+// be fetched, is unsigned or was rewritten only makes the rounds that need it wait (agent-release-required) with this status.
+// -> {status: 'updated'|'current'|'unsigned'|'diverged'|'unreachable', ref, tip?, from?}
+export async function refreshAgentReleaseLine(config,{git,ownerSigned}){
+ const ref=config.agentReleaseRef;
+ if(!/^agent\/release(?:[/-][\w.-]+)*$/.test(ref??'')||!/^https:\/\/[^@?#]+$/.test(config.trustedRemote??''))return {status:'unreachable',ref:ref??null};
+ const remote='refs/remotes/vigia/'+ref,branch='refs/heads/'+ref;
+ if((await git(['fetch','--no-tags','--no-recurse-submodules',config.trustedRemote,`+${branch}:${remote}`],{allowFailure:true})).code!==0)return {status:'unreachable',ref};
+ const tip=(await git(['rev-parse','--verify','--quiet',remote+'^{commit}'],{allowFailure:true})).stdout?.trim();
+ if(!/^[a-f0-9]{40}$/.test(tip??''))return {status:'unreachable',ref};
+ const local=(await git(['rev-parse','--verify','--quiet',branch+'^{commit}'],{allowFailure:true})).stdout?.trim();
+ if(local===tip)return {status:'current',ref,tip};
+ if(!await ownerSigned(tip))return {status:'unsigned',ref,tip};
+ if(/^[a-f0-9]{40}$/.test(local??'')&&(await git(['merge-base','--is-ancestor',local,tip],{allowFailure:true})).code!==0)return {status:'diverged',ref,tip,from:local};
+ await git(['update-ref',branch,tip,...(/^[a-f0-9]{40}$/.test(local??'')?[local]:[])]);
+ return {status:'updated',ref,tip,...(local?{from:local}:{})};
+}
 export function cleanupSsh(root){
  const absolute=path.resolve(root);if(!fs.existsSync(absolute))return;
  for(const entry of fs.readdirSync(absolute,{withFileTypes:true}))if(/^ssh-[0-9a-f-]{36}$/.test(entry.name)){

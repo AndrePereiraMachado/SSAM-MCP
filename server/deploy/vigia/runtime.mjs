@@ -15,7 +15,7 @@ import {busyDotnet} from './host.mjs';
 import {peFileVersion} from '../kernel-pair-check.mjs';
 import {createAutoRuntime} from './auto-runtime.mjs';
 import {createFeaturesStore,featuresSummary,verifyFeaturesUse} from './features-carry.mjs';
-import {executionSource,agentReleasePin,signingPolicy,refuseInRehearsal,rehearsalRefuses,verifySignedAgentRelease} from './safety.mjs';
+import {executionSource,agentReleasePin,signingPolicy,refuseInRehearsal,rehearsalRefuses,verifySignedAgentRelease,refreshAgentReleaseLine} from './safety.mjs';
 import {isEd25519Offers} from './server-only.mjs';
 const here=path.dirname(fileURLToPath(import.meta.url));
 const slash=p=>p.replaceAll('\\','/');
@@ -290,6 +290,8 @@ export async function createRuntime(config,{log=()=>{}}={}){
     const fetched=(await git(['rev-parse','refs/remotes/vigia/main'])).stdout.trim();
     await verifyCommit(fetched);
     await git(['update-ref','refs/heads/main',fetched]);
+    // ed25519-offers (F1 review round 3, B-2): the agent release line R7 reads, fetched and moved only to an owner-signed fast-forward.
+    if(isEd25519Offers(config)){const line=await refreshAgentReleaseLine(config,{git,ownerSigned});log?.(`agent release line ${line.ref}: ${line.status}${line.tip?' '+line.tip.slice(0,7):''}${line.from?' (local '+line.from.slice(0,7)+')':''}`);}
    }
    const before=(await git(['rev-parse','HEAD'])).stdout.trim(),target=(await git(['rev-parse','--verify',from+'^{commit}'])).stdout.trim();
    if(before===target)return {updated:false,branch,head:before};
