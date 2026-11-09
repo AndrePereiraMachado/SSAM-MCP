@@ -151,3 +151,29 @@ test('hosted presenter: the O11 roots of a multi-O11 image are server roots', as
   for (const file of ['/studio/o11/11.55.92/ServiceStudio.Framework.dll', '/app/kernel/.local/o11/11.55.93/cli/anvil.dll'])
     assert.equal(present.string('could not read ' + file), 'could not read <server>', file);
 });
+
+// Review S1 B1 and B2: the O11 texts of a multi-O11 backend.
+test('identity texts: another served Service Studio is a reconnect, not a redirect; a window version whose kernel is off is not an update', async () => {
+  const { studioIdentity, studioRefusal, studioWarningOf, causeOf } = await import('../studio-identity.mjs');
+  const kernel = { odc: '1.7.31', o11: '11.55.95', builds: { o11: BUILDS['11.55.95'] }, o11Builds: BUILDS, servedVersions: { o11: Object.keys(BUILDS) } };
+  // The agent reported .94 (its kernel view), the process the call went to is a .95 also installed.
+  const view = clientKernel(kernel, { version: BUILDS['11.55.94'] });
+  const other = studioIdentity('o11', { version: BUILDS['11.55.95'] }, view);
+  assert.equal(other.relation, 'served-elsewhere'); assert.equal(other.kernelHere, true);
+  const refusal = studioRefusal(other);
+  assert.match(refusal.error, /is not the one your SSAM Agent reported \(11\.55\.94\)/);
+  assert.doesNotMatch(JSON.stringify(refusal), /redirected|Update Service Studio/);
+  assert.match(studioWarningOf(other).userMessage, /reconnect the SSAM Agent/);
+  // The inverse (process .92, Hello .94): the same text, never "update to 11.55.94".
+  assert.doesNotMatch(studioRefusal(studioIdentity('o11', { version: BUILDS['11.55.92'] }, view)).error, /Update Service Studio/);
+  // A pair backend keeps its texts (no o11Builds).
+  assert.equal(studioIdentity('o11', { version: '11.55.94.1' }, { o11: '11.55.95', servedVersions: { o11: ['11.55.94', '11.55.95'] } }).kernelHere, undefined);
+  // B2: kernel .93 off at start (o11Builds without it): a .93 customer is not told to update into the window.
+  const { '11.55.93': _off, ...on } = BUILDS;
+  const gap = studioIdentity('o11', { version: BUILDS['11.55.93'] }, { ...kernel, o11Builds: on, servedVersions: { o11: Object.keys(on) } });
+  assert.equal(gap.relation, 'older'); assert.equal(gap.gap, true);
+  assert.equal(causeOf(gap), 'STUDIO_VERSION_NOT_SERVED_YET');
+  assert.doesNotMatch(studioRefusal(gap).error, /older than|Update/);
+  const old = studioIdentity('o11', { version: '11.55.91.1' }, { ...kernel, o11Builds: on, servedVersions: { o11: Object.keys(on) } });
+  assert.equal(old.gap, undefined); assert.equal(causeOf(old), 'STUDIO_UPDATE_REQUIRED', 'older than the whole window: update, as before');
+});

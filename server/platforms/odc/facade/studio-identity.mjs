@@ -106,10 +106,16 @@ export function studioIdentity(lane, installed, kernel) {
     // serves in this lane. It is named apart from served (the version of THIS backend), which may be an older pair (r44).
     const window = servedVersions(lane, kernel);
     const newest = window.at(-1);
-    if (window.includes(threePart(version))) return { ...out('served-elsewhere', version), window, newest };
+    // Window 4x4 (review S1 B1): on a multi-O11 backend a served Service Studio has a kernel HERE (kernel.o11Builds): the
+    // process is another Studio than the one the agent reported, and the router never moves a customer for its O11.
+    const here = lane === 'o11' && kernel?.o11Builds && typeof kernel.o11Builds === 'object' && Object.hasOwn(kernel.o11Builds, threePart(version));
+    if (window.includes(threePart(version))) return { ...out('served-elsewhere', version), window, newest, ...(here ? { kernelHere: true } : {}) };
     const newer = compare(numbers, newest.split('.').map(Number), 3) > 0;
+    // Review S1 B2: a version inside the window that is not served (a multi-O11 kernel turned off at start) is no update to
+    // ask for: the server lacks it, as for a newer one.
+    const gap = !newer && window.length > 1 && compare(numbers, window[0].split('.').map(Number), 3) > 0;
     return { ...out(newer ? 'newer' : 'older', version,
-      newer ? { direction: 'newer', ok: true, warn: true } : { direction: 'older' }), window, newest };
+      newer ? { direction: 'newer', ok: true, warn: true } : { direction: 'older' }), window, newest, ...(gap ? { gap: true } : {}) };
   }
   if (!build) return out('same', version, { ok: true });
   if (numbers.length < 4) return out('build-unknown', version, policy === 'warn' ? { ok: true, warn: true } : {});
@@ -125,6 +131,7 @@ export function causeOf(identity) {
   if (identity.relation === 'served-elsewhere') return 'STUDIO_VERSION_CHANGED';
   if (identity.relation === 'unknown') return 'STUDIO_VERSION_UNKNOWN';
   if (identity.relation === 'build-unknown') return 'STUDIO_BUILD_UNKNOWN';
+  if (identity.gap) return 'STUDIO_VERSION_NOT_SERVED_YET';
   return identity.direction === 'older' ? 'STUDIO_UPDATE_REQUIRED' : 'STUDIO_VERSION_NOT_SERVED_YET';
 }
 
@@ -146,6 +153,8 @@ const listOf = names => names.join(', ');
 // Studio newer than the backend's is never told to update (to an older version): the generic text stays.
 export function mixedStudioUpgrade(identity) {
   if (identity?.lane !== 'o11' || identity.relation !== 'served-elsewhere') return null;
+  // Window 4x4 (B1): both Service Studios are served by this backend; the agent serves the one it reported in its Hello.
+  if (identity.kernelHere) return `The Service Studio this request went to (${threePart(identity.installed)}) is not the one your SSAM Agent reported (${threePart(identity.served)}). This server serves both: keep open only the Service Studio you want to use, reconnect the SSAM Agent, and repeat the O11 request. The ODC lane remains available. Nothing needs to be updated or reinstalled.`;
   const served = threePart(identity.served), installed = numbersOf(identity.installed);
   if (!served || !installed || compare(installed, served.split('.').map(Number), 3) >= 0) return null;
   return `Update Service Studio to ${served}, open it again, and reconnect the SSAM Agent; then repeat the O11 request. The ODC lane remains available. Reinstalling the agent does not fix this.`;
@@ -175,6 +184,11 @@ function words(identity) {
       user = en = mixedStudioUpgrade(identity) ?? 'Your Studio version changed and your agent is being redirected. Reconnect the agent and repeat the request. If this persists, ask the SSAM owner to serve both installed Studio versions together.';
       break;
     case 'older:older': {
+      if (identity.gap) {
+        user = `This server serves ${S} ${identity.window[0]}–${identity.window.at(-1)}, but its kernel for ${S} ${installed} is not available right now; ${notified.user}. ${wait.user}`;
+        en = `This SSAM server serves ${S} ${identity.window.join(', ')}; the kernel for the user's ${S} ${installed} is off on this server (kernel-version-missing at start); ${notified.en}. ${wait.en}`;
+        break;
+      }
       const range = identity.window?.length > 1 ? identity.window[0] + '–' + identity.window.at(-1) : identity.window?.[0] ?? served;
       user = en = `Your ${S} ${installed} is older than the versions this server serves (${range}). Update ${S} and reconnect.`;
       break;
@@ -201,9 +215,9 @@ function words(identity) {
       user = `The agent could not read the version of the ${S} on this computer, and the SSAM server serves only ${S} ${served}. Check that ${S} is installed and repeat in a few minutes; if it persists, talk to the SSAM owner.`;
       en = `This SSAM server serves ${S} ${served}; the agent could not read the version of the user's ${S}. Ask the user to check the ${S} installation and repeat in a few minutes; if it persists, ask the server owner.`;
   }
-  const why = identity.direction === 'older'
+  const why = identity.direction === 'older' && !identity.gap
     ? `Show the user the userMessage as it is: they update ${S} to ${served} and reopen it, then repeat this call. ssam_doctor shows both builds. Server-only tools still work.`
-    : identity.direction === 'newer'
+    : identity.direction === 'newer' || identity.gap
       ? 'Show the user the userMessage as it is: nothing to do on their machine until the server owner updates the server; never ask the user to roll the Studio back or to reinstall the agent. ssam_doctor shows both builds. Server-only tools still work.'
       : 'Show the user the userMessage as it is. ssam_doctor shows the versions the agent reports. Server-only tools still work.';
   return { user: `${user} ${nothing.user} ${still.user}`, en: `${en} ${nothing.en} ${still.en}`, why };
