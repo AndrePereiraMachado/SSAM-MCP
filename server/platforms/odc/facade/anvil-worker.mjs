@@ -299,7 +299,14 @@ function launch(target, spawnFn) {
 //     once: the calls in between run cold at once instead of waiting workerWaitMs each.
 //   - B-R3-2: inside a build-pool slot whose build runs on an ODC worker with a standing hold, the slot's own hold is marked
 //     covered (memory-room.mjs): the worker's growth is reserved once, by its standing hold.
+// S1 R5 (review R4): the start never takes the gate's progress rule (M7: fits/admit with standing); an evicted worker keeps
+//   its standing hold until its process is gone, marked leaving (B-R4-2: a call queued before the shutdown still runs with
+//   its growth reserved); a worker used within ODC_WORKER_MIN_IDLE_MS (60 s, as the readers) is never asked to leave
+//   (B-R4-3: no ping-pong between the ODC worker and the O11 readers on a full backend).
 export const NO_ROOM_MS = 60000;
+export const ODC_WORKER_MIN_IDLE_MS = 60000;
+const workerUsedAt = new Map(); // port -> when this process last handed that worker a call (ensure or request)
+export const markWorkerUsed = (port, at = Date.now()) => { workerUsedAt.set(port, at); };
 const standingWorkers = new Map(); // port -> standing hold of this process
 const standingTargets = new Map(); // port -> the target of that worker (its ping and key, for the evictor)
 const noRoomUntil = new Map(); // port -> until when a start found no room
@@ -310,14 +317,15 @@ function ensureOdcEvictor(gate) {
   gate.addEvictor({ rank: 1, name: 'odc-workers', evict: async () => {
     for (const [port, hold] of [...standingWorkers]) {
       const target = standingTargets.get(port);
-      if (hold.released || !target) continue;
+      if (hold.released || hold.leaving || !target) continue;
+      if (Date.now() - (workerUsedAt.get(port) ?? -Infinity) < ODC_WORKER_MIN_IDLE_MS) continue;
       let status = null;
       try { status = await ping(target, 1000); } catch { status = null; }
       if (!status || Number(status.pid) !== hold.pid || status.busy || Number(status.queued) > 0 || status.recycling) continue;
       let r = null;
       try { r = await workerRequest({ port, authorization: target.key() ?? null, timeoutMs: 5000 }, ['shutdown']); } catch { r = null; }
       if (r?.reply?.ok !== true) continue;
-      hold.release(); standingWorkers.delete(port);
+      hold.leaving = true; // released when its process is gone (child exit, or no resident set any more)
       return { what: 'odc-worker', port };
     }
     return null;
@@ -332,7 +340,7 @@ export function standWorker(gate, port, pid, mb, target = null) {
   if (!gate || !Number.isInteger(pid) || pid <= 0) return null;
   if (target) standingTargets.set(port, target);
   const held = standingWorkers.get(port);
-  if (held && held.pid === pid && !held.released) return held;
+  if (held && held.pid === pid && !held.released && !held.leaving) return held;
   held?.release();
   const hold = gate.hold(mb, { standing: true }); hold.attach(pid); standingWorkers.set(port, hold);
   return hold;
@@ -348,6 +356,7 @@ export async function ensureWorker(target, deps = {}) {
   const gate = workerGate(target, deps);
   const state = await ensureWorkerOnce(target, deps, gate);
   if (gate && state?.status) {
+    markWorkerUsed(target.port);
     if (!state.started) standWorker(gate, target.port, Number(state.status.pid), gate.settings.odcWorkerReserveMb, target);
     else standingTargets.set(target.port, target);
     // B-R3-2: the build of this slot runs on a worker whose growth its standing hold reserves already.
@@ -389,7 +398,7 @@ async function ensureWorkerOnce(target, deps, gate) {
     let admitted = null;
     if (gate) {
       const reserve = gate.settings.odcWorkerReserveMb;
-      if ((noRoomUntil.get(port) ?? 0) > now() && !gate.fits(reserve))
+      if ((noRoomUntil.get(port) ?? 0) > now() && !gate.fits(reserve, { standing: true }))
         return { status: null, memory: { cached: true, reserveMb: reserve },
           note: `the ${target.lane} worker found no room for its ${reserve} MB less than ${Math.round(NO_ROOM_MS / 1000)} s ago and there is none now; nothing was started; ran cold` };
       admitted = await gate.admit(reserve, { waitMs: gate.settings.workerWaitMs, standing: true, kind: 'odc-worker' });
@@ -448,6 +457,7 @@ export async function runOnWorker(argv, target, deps = {}) {
     } else if (r.reply.retryable === true && r.reply.executed === false) {
       if (attempt >= 3) return { used: false, note: 'the worker kept recycling before executing the request' };
     } else {
+      if (target.lane === 'odc') markWorkerUsed(target.port);
       return { used: true, envelope: r.reply, ...(state.warning ? { warning: state.warning } : {}) };
     }
     state = await ensure();

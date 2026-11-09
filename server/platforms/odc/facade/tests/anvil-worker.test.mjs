@@ -349,7 +349,8 @@ test('ODC worker under the memory gate: admitted start with a standing hold, no 
 // B-R3-2: the build slot whose build runs on a standing ODC worker counts its reservation once (the slot hold is covered).
 test('ODC worker relief (M6), no-room cache (B-R3-1) and covered slot (B-R3-2)', async t => {
   const { createMemoryGate } = await import('../memory-room.mjs');
-  const { standingWorkerHold, NO_ROOM_MS } = await import('../anvil-worker.mjs');
+  const { standingWorkerHold, NO_ROOM_MS, ODC_WORKER_MIN_IDLE_MS, markWorkerUsed } = await import('../anvil-worker.mjs');
+  assert.equal(ODC_WORKER_MIN_IDLE_MS, 60000);
   assert.equal(NO_ROOM_MS, 60000);
   const s = sandbox(t);
   const settings = { reserveMb: 1400, odcReserveMb: 600, waitMs: 1000, growMs: 15000, odcWorkerReserveMb: 2150, workerWaitMs: 150, evictTurnMs: 0 };
@@ -363,6 +364,9 @@ test('ODC worker relief (M6), no-room cache (B-R3-1) and covered slot (B-R3-2)',
   assert.equal((await ensureWorker(target, { gate })).status.instanceId, 'idle');
   const held = standingWorkerHold(port);
   assert.equal(held.pid, 991);
+  // R5 B-R4-3: used within 60 s (the ensure just now): never asked, as a reader read within 60 s.
+  assert.equal(await gate.relieve({ kind: 'reader', force: true }), null, 'a worker used within 60 s stays');
+  markWorkerUsed(port, Date.now() - 61000);
   fake.state.busy = true;
   assert.equal(await gate.relieve({ kind: 'build', force: true }), null, 'a worker in a call is never asked');
   assert.equal(fake.requests('shutdown').length, 0);
@@ -371,7 +375,12 @@ test('ODC worker relief (M6), no-room cache (B-R3-1) and covered slot (B-R3-2)',
   assert.deepEqual(out, { by: 'odc-workers', what: 'odc-worker', port });
   assert.equal(fake.requests('shutdown').length, 1, 'its own queued shutdown, with the key');
   assert.equal(fake.requests('shutdown')[0].authorization, 'KEY');
-  assert.equal(held.released, true, 'its standing hold released at once');
+  // R5 B-R4-2: the hold stays until the process is gone (a call queued before the shutdown still has its reservation).
+  assert.equal(held.released, undefined); assert.equal(held.leaving, true);
+  assert.equal(await gate.relieve({ kind: 'build', force: true }), null, 'a leaving worker is not asked twice');
+  assert.equal(gate.pendingMb(), 650, 'still reserved while it drains');
+  rss.delete(991); // its process exited
+  assert.equal(gate.pendingMb(), 0); assert.equal(held.released, true, 'released once its process is gone');
   await fake.close(); fake = null;
   // B-R3-1: no room (another consumer holds the container): the first start waits workerWaitMs, the next goes cold at once.
   const port2 = await freePort();
