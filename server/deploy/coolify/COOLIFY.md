@@ -170,8 +170,9 @@ O painel do dono (`ssam-console`, seção 11) usa o **mesmo banco**: as licença
 
 ```bash
 sudo install -d -o root -m 0700 /var/backups/ssam-server
-sh ssamctl.sh backup                     # tar.gz da janela inteira: server-state, friction, Features e cache de cada backend (+ .sha256 e .info) E o dump do banco
-                                         # (ssam-tokens-<data>.sql.gz + .sha256), com o servidor no ar
+sh ssamctl.sh backup                     # o conjunto completo, com o servidor no ar: ssam-tokens (licenças), ssam-db-update_server,
+                                         # ssam-db-coolify, ssam-service (compose + .env do recurso) e ssam-state (todo volume do recurso)
+sh ssamctl.sh backup --keep-days 14 /var/backups/ssam-server   # o cron diário (SUBIDA: /etc/cron.d/ssam-backup)
 sh ssamctl.sh backup /outra/pasta
 sh ssamctl.sh restore /var/backups/ssam-server/ssam-state-<data>.tar.gz [/var/backups/ssam-server/ssam-tokens-<data>.sql.gz]
                                          # só com o ssam-server PARADO no Coolify (Stop; o banco fica no ar); depois Start
@@ -179,13 +180,38 @@ sh ssamctl.sh logs 100                   # as últimas linhas do server.log
 sh ssamctl.sh ops sh -c 'du -sh /data/*' # qualquer comando na imagem sobre os volumes, sem rede, como uid 10001
 ```
 
-O `backup.sh` e o `restore.sh` da pasta de cima dependem do `compose.prod.yml` e não servem aqui. Para uma cópia fora da
-VPS e um heartbeat, use o cron da VPS sobre o `ssamctl.sh backup` (o arquivo tem dados de clientes e hashes de tokens:
+O `backup.sh` e o `restore.sh` da pasta de cima dependem do `compose.prod.yml` e não servem aqui: de 21/10 a 09/11 o
+cron da VPS rodou `backup.sh --online` sobre o projeto ssam-prod parado e gravou toda noite o mesmo arquivo (mesmo
+sha256) com o estado de 20/10, sem banco nenhum. Agora `backup.sh --online` sem ssam-server rodando recusa
+(`BACKUP_SERVER_NOT_RUNNING`), e o cron diário deste host é `ssamctl.sh backup --keep-days 14`.
+
+O que o `ssamctl.sh backup` grava, com um carimbo: as licenças (abaixo); o banco do Update Server (o container postgres
+com `POSTGRES_DB=update_server`) e o do Coolify (`coolify-db`), cada um pelo `pg_dump` de dentro do próprio container
+(mesmo major), recusados se o major do `pg_dump` e o do servidor diferem ou se faltam as tabelas esperadas; o compose e o
+`.env` do recurso (`/data/coolify/services/<recurso>`); e o tar.gz de todo volume nomeado montado por qualquer container
+do projeto do backend padrão (v1..vN, router, console: server-state, friction, caches, Features, runtime-css, plugins)
+mais os volumes `<recurso>_*` que ninguém monta; volumes anônimos ficam de fora e listados no `.info`. Cada arquivo tem
+`.sha256`; o `.info` é gravado por último (sem ele o conjunto está incompleto). A pasta de trabalho fica na pasta do
+backup, nunca em /tmp (tmpfs na VPS). Recusa com menos de `SSAM_BACKUP_MIN_FREE_GB` (20) GiB livres ou de 3x o último
+arquivo; `--keep-days` só apaga conjuntos antigos da raiz da pasta, depois de um backup bom, nunca as pastas `pre-*`.
+Pisos de conteúdo (revisão de 09/11): pelo menos 1 linha em `server_tokens`, `releases` e `servers`
+(`BACKUP_DUMP_NO_ROWS`); `kernel.json` e `customers/` no server-state; arquivos e bytes do server-state em pelo menos 50%
+do conjunto anterior (`BACKUP_SHRANK`; `SSAM_BACKUP_ALLOW_SHRINK=1` para uma limpeza intencional). Tudo é gravado em
+`.set-<stamp>/` e só vai para a pasta no fim, com o `.info` por último: uma falha não deixa dump órfão. A retenção é por
+conjunto: os 7 conjuntos completos mais novos (`SSAM_BACKUP_KEEP_SETS`) ficam sempre, qualquer que seja a idade; só os
+outros saem por idade. O conjunto leva também `coolify-source.env` (o APP_KEY do Coolify) dentro do `ssam-service`, só
+root. Nenhuma senha vai para linha de comando: as licenças saem por `docker exec` no socket local do container do banco
+(depois de conferir que a URL aponta para o `POSTGRES_DB` dele), e uma base remota recebe a URL pelo ambiente
+(`-e SSAM_DATABASE_URL`, sem `=`). Os dumps e os volumes não são do mesmo instante (minutos de diferença), e uma cópia
+online pode cortar a última linha de um log que cresce. As travas ficam na linha do cron, não no ssamctl (o
+`backup-before-redeploy.sh` roda dentro da janela de release): `flock -n /var/lock/ssam-backup.lock timeout 3h flock -w
+5400 /var/lock/ssam-release.lock sh ssamctl.sh backup ...`.
+Para uma cópia fora da VPS e um heartbeat, acrescente ao cron (os arquivos têm dados de clientes e hashes de tokens:
 cifre antes de copiar para fora).
 
 O dump é SQL puro (`pg_dump --no-owner`, num container avulso da imagem do próprio container do banco, o host da
 `SSAM_DATABASE_URL`, para o `pg_dump` ter sempre a versão do servidor; `PG_IMAGE` força outra), carregado de volta com `psql` contra
-a mesma URL. O backup recusa alto (código `BACKUP_*`, nada fica com o nome final) um dump vazio, um dump sem as tabelas
+a mesma URL (os outros dois bancos voltam à mão: `gzip -dc <dump> | docker exec -i <container> psql`). O backup recusa alto (código `BACKUP_*`, nada fica com o nome final) um dump vazio, um dump sem as tabelas
 de licença (`server_tokens`, `schema_migrations`) e um `pg_dump` mais velho que o servidor (01/11: o 17 contra o 18.6
 gerava arquivo vazio). Antes de todo Stop/Redeploy, rode desta pasta, na sua máquina, `sh backup-before-redeploy.sh <sha>`:
 ele leva este `ssamctl.sh` por SSH e grava em `/var/backups/ssam-server/pre-<sha>`; o restore do dump apaga a tabela e a recria do arquivo. Os dois arquivos têm dados de clientes e hashes de tokens: cifre antes de

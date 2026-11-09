@@ -1363,7 +1363,9 @@ def build_backups(ctx, errors):
     h = ctx.host
     directory = ctx.conf['BACKUP_DIR']
     entries = h.list_backups()
-    cron = {'backup': optional(errors, 'backups.cron', lambda: cron_mentions(h, '/etc/cron.d/ssam-backup', 'backup.sh')),
+    # The compose deploy runs backup.sh; a Coolify host runs coolify/ssamctl.sh backup (COOLIFY.md 8).
+    cron = {'backup': optional(errors, 'backups.cron', lambda: cron_mentions(h, '/etc/cron.d/ssam-backup', 'backup.sh')
+                      or cron_mentions(h, '/etc/cron.d/ssam-backup', 'ssamctl.sh backup')),
             'rotate': optional(errors, 'backups.cron',
                                lambda: cron_mentions(h, '/etc/cron.d/ssam-rotate', 'rotate-logs.sh'))}
     if entries is None:
