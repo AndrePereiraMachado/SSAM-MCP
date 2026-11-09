@@ -23,11 +23,13 @@ const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 const installed = { version: '1.7.30', runtime: 'net10.0' };
 const processIdentity = { pid: 1234, startedUtc: '2026-10-28T00:00:00Z' };
 function artifact(sequence = 1, lane = 'odc', protocol = lane === 'odc' ? 'v100' : 'd1') {
-  const files = lane === 'odc' ? { [`bridge/ODC3.Bridge.${protocol}.dll`]: Buffer.from('bridge ' + sequence), 'client/ODC3.Bridge.Client.dll': Buffer.from('client ' + sequence) }
+  // 0.3.17: only a Microsoft dependency is checked for Authenticode (the owner files by the signed manifest), so the ODC
+  // artifact carries one, as the real client does, for the checks the cache tests count.
+  const files = lane === 'odc' ? { [`bridge/ODC3.Bridge.${protocol}.dll`]: Buffer.from('bridge ' + sequence), 'client/ODC3.Bridge.Client.dll': Buffer.from('client ' + sequence), 'client/Microsoft.Diagnostics.NETCore.Client.dll': Buffer.from('microsoft ' + sequence) }
     : { 'bridge/Anvil.Bridge.dll': Buffer.from('bridge ' + sequence), 'hook/Anvil.RuntimeHook.Agent.dll': Buffer.from('hook ' + sequence) };
   const manifest = JSON.stringify({ schema: 1, lane, studioVersion: lane === 'odc' ? '1.7.30' : '11.55.94', runtime: 'net10.0', protocol, sequence,
     createdAt: '2026-10-28T00:00:00Z', authenticodeThumbprint: anchors.thumbprint,
-    files: Object.entries(files).map(([name, bytes]) => ({ path: name, size: bytes.length, signer: 'owner', sha256: hash(bytes) })) });
+    files: Object.entries(files).map(([name, bytes]) => ({ path: name, size: bytes.length, signer: /\/Microsoft\./.test(name) ? 'microsoft' : 'owner', sha256: hash(bytes) })) });
   return { files, offer: { lane, studioVersion: lane === 'odc' ? '1.7.30' : '11.55.94', protocol, manifest, signature: sign(null, Buffer.from(manifest), keys.privateKey).toString('base64') } };
 }
 function fixture(t, options = {}) {
@@ -85,11 +87,11 @@ test('R2.6 Authenticode ignores poisoned SystemRoot and PSModulePath', async () 
   process.env.SystemRoot = 'Z:\\poison'; process.env.PSModulePath = 'Z:\\modules';
   const calls = [];
   try {
-    await verifyAuthenticode('C:\\bridge.dll', anchors.thumbprint, { platform: 'win32', runtimeRoot: 'C:\\runtime', run: async (exe, args, options) => {
-      calls.push({ exe, args, options }); return { stdout: JSON.stringify({ ok: true, signatureValid: true, hresult: 0, thumbprint: anchors.thumbprint }) };
+    await verifyAuthenticode('C:\\bridge.dll', { platform: 'win32', runtimeRoot: 'C:\\runtime', run: async (exe, args, options) => {
+      calls.push({ exe, args, options }); return { stdout: JSON.stringify({ ok: true, signatureValid: true, hresult: 0 }) };
     } });
     const check = calls.at(-1); assert.equal(path.win32.normalize(check.exe), 'C:\\runtime\\native\\ssam-agent.exe');
-    assert.deepEqual(check.args, ['authenticode', '--file', 'C:\\bridge.dll', '--signer', 'owner']);
+    assert.deepEqual(check.args, ['authenticode', '--file', 'C:\\bridge.dll', '--signer', 'microsoft']);
     assert.ok(!check.exe.includes('poison')); assert.equal(calls.length, 1);
   } finally { for (const [name, value] of Object.entries(before)) if (value === undefined) delete process.env[name]; else process.env[name] = value; }
 });
@@ -122,9 +124,10 @@ test('R2.9 Mac disables unsupported offers with a reason in hello', async t => {
 });
 test('R2.10 application release gate rejects empty or differing trust anchors', async () => {
   const { assertBridgeTrust } = await load('scripts/bridge-trust-gate.mjs');
-  assert.throws(() => assertBridgeTrust({ publicKey: '', thumbprint: '', nativeKey: '', nativeThumbprint: '' }), /anchors/);
-  assert.throws(() => assertBridgeTrust({ publicKey: anchors.publicKey, thumbprint: anchors.thumbprint, nativeKey: anchors.publicKey, nativeThumbprint: 'B'.repeat(40) }), /differ/);
-  assert.doesNotThrow(() => assertBridgeTrust({ publicKey: anchors.publicKey, thumbprint: anchors.thumbprint, nativeKey: anchors.publicKey, nativeThumbprint: anchors.thumbprint }));
+  // 0.3.17: one anchor, the Ed25519 key of the build input; no Authenticode pin.
+  assert.throws(() => assertBridgeTrust({ publicKey: '' }), /anchors/);
+  assert.throws(() => assertBridgeTrust({ publicKey: anchors.publicKey, jsKey: generateKeyPairSync('ed25519').publicKey.export({ type: 'spki', format: 'pem' }) }), /differ/);
+  assert.doesNotThrow(() => assertBridgeTrust({ publicKey: anchors.publicKey, jsKey: anchors.publicKey }));
 });
 test('R2.11 installed and failed reports survive an agent restart', async t => {
   const f = fixture(t); await f.install(); const selected = await f.store.select('odc', installed.version, installed.runtime, processIdentity);

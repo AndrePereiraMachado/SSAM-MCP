@@ -86,6 +86,13 @@ fi
 
 mode=stopped
 if [ -n "$(compose ps -q --status running ssam-server)" ]; then mode=online; fi
+# --online (the daily cron) with no running ssam-server in this compose project copies volumes nobody writes: from
+# 2026-10-21 to 2026-11-09 the VPS cron archived the retired ssam-prod volumes every night (same sha256 each day) while
+# production ran on Coolify. On a Coolify host the daily backup is coolify/ssamctl.sh backup (COOLIFY.md 8).
+if [ "$ONLINE" = 1 ] && [ "$mode" = stopped ]; then
+  echo "backup: BACKUP_SERVER_NOT_RUNNING: --online but the compose project ${COMPOSE_PROJECT_NAME:-$(envval COMPOSE_PROJECT_NAME)} has no running ssam-server: this would archive stale volumes. On a Coolify host use coolify/ssamctl.sh backup (COOLIFY.md 8)" >&2
+  exit 2
+fi
 # tar runs in the ssam-ops container (the server image, uid 10001, no network, read-only) and writes to stdout only. GNU
 # tar exits 1 when a file changed while it was read (server.log grows all the time in an online copy): that copy is kept,
 # with the warning; any other failure stops the backup.

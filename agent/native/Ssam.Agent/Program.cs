@@ -16,11 +16,11 @@ internal static class Program
             {
                 var result = AuthenticodeTrust.Check(signatureFile, signatureClass); Console.WriteLine(result.ToJsonString()); return result["ok"]!.GetValue<bool>() ? 0 : 1;
             }
+            // trust-anchors: the anchors compiled into this core, for the build gate (scripts/bridge-trust-gate.mjs). 0.4.14-native: the
+            // SHA-256 of the pinned Ed25519 SPKI and the Microsoft roots; there is no Authenticode thumbprint any more.
             if (args is ["trust-anchors"])
             {
-                var digest = "";
-                if (BridgeTrust.ManifestPublicKey.Length > 0) { using var key = System.Security.Cryptography.ECDsa.Create(); var pem = System.Security.Cryptography.PemEncoding.Find(BridgeTrust.ManifestPublicKey); digest = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(Convert.FromBase64String(BridgeTrust.ManifestPublicKey[pem.Base64Data]))); }
-                Console.WriteLine(new JsonObject { ["spkiSha256"] = digest, ["thumbprint"] = BridgeTrust.AuthenticodeThumbprint, ["microsoftRoots"] = new JsonArray(BridgeTrust.MicrosoftRoots.Select(x => (JsonNode?)JsonValue.Create(x)).ToArray()) }.ToJsonString()); return 0;
+                Console.WriteLine(new JsonObject { ["spkiSha256"] = BridgeTrust.SpkiSha256(BridgeTrust.ManifestPublicKey), ["microsoftRoots"] = new JsonArray(BridgeTrust.MicrosoftRoots.Select(x => (JsonNode?)JsonValue.Create(x)).ToArray()) }.ToJsonString()); return 0;
             }
             if (args is ["windows-directory"]) { Console.WriteLine(Environment.GetFolderPath(Environment.SpecialFolder.Windows)); return 0; }
             if (args is ["bridge-lock", "--root", var lockRoot, "--directory", var lockDirectory])

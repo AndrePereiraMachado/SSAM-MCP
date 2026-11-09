@@ -9,9 +9,9 @@ JsonObject Assess(JsonNode row) {
     object?[] args = [row["valid"]?.GetValue<bool>() ?? false, row["thumbprint"]?.GetValue<string>() ?? "owner", row["organization"]?.GetValue<string>() ?? "Microsoft Corporation", row["eku"]?.GetValue<bool>() ?? true, row["root"]?.GetValue<string>() ?? "root", unchecked((int)(row["hresult"]?.GetValue<long>() ?? 0)), row["policyFailure"]?.GetValue<bool>() ?? false, null];
     var evidence = (AuthenticodeTrust.Evidence)constructor.Invoke(args.Take(constructor.GetParameters().Length).ToArray());
     var method = typeof(AuthenticodeTrust).GetMethod("Assess", BindingFlags.Static | BindingFlags.NonPublic);
-    if (method != null) return (JsonObject)method.Invoke(null, [evidence, row["signer"]?.GetValue<string>() ?? "owner", "owner", new[] { "root" }])!;
-    // The baseline's production Check treated every failed trust result as a definitive refusal.
-    var ok = AuthenticodeTrust.Accept(evidence, row["signer"]?.GetValue<string>() ?? "owner", "owner", ["root"]);
+    // 0.4.14-native: Assess(evidence, signer, roots); the signer class is "microsoft" unless the row names another.
+    if (method != null) return (JsonObject)method.Invoke(null, [evidence, row["signer"]?.GetValue<string>() ?? "microsoft", new[] { "root" }])!;
+    var ok = AuthenticodeTrust.Accept(evidence, row["signer"]?.GetValue<string>() ?? "microsoft", ["root"]);
     return new() { ["ok"] = ok, ["signatureValid"] = evidence.Valid, ["definitive"] = !ok };
 }
 void Require(JsonObject evidence, JsonObject manifest) {
@@ -26,14 +26,14 @@ if (input["file"] != null) {
     Console.WriteLine(AuthenticodeTrust.Check(input["file"]!.GetValue<string>(), "microsoft").ToJsonString()); return;
 }
 var root = input["root"]!.GetValue<string>(); JsonObject current = new(); JsonObject decision = new();
-using var store = new BridgeUpdates(root, root, input["publicKey"]!.GetValue<string>(), input["thumbprint"]!.GetValue<string>(), (_, _) => { Require(decision, current); return Task.CompletedTask; });
+using var store = new BridgeUpdates(root, root, input["publicKey"]!.GetValue<string>(), (_, _) => { Require(decision, current); return Task.CompletedTask; });
 using var http = new HttpClient { BaseAddress = new Uri(input["server"]!.GetValue<string>()) };
 http.DefaultRequestHeaders.Authorization = new("Bearer", "bridge-test-token");
 var results = new JsonArray();
 foreach (var request in input["requests"]!.AsArray()) {
     if (request?["select"]?.GetValue<bool>() == true) {
         decision = Assess(request["evidence"]!);
-        using var reopened = new BridgeUpdates(root, root, input["publicKey"]!.GetValue<string>(), input["thumbprint"]!.GetValue<string>(), (_, _) => { Require(decision, current); return Task.CompletedTask; });
+        using var reopened = new BridgeUpdates(root, root, input["publicKey"]!.GetValue<string>(), (_, _) => { Require(decision, current); return Task.CompletedTask; });
         var selected = await reopened.Select("odc", "1.7.30", "net10.0", CancellationToken.None);
         results.Add(new JsonObject { ["selected"] = selected?.Protocol, ["reports"] = reopened.Reports(), ["status"] = reopened.Status?.DeepClone(), ["wire"] = reopened.WireStatus() });
         continue;

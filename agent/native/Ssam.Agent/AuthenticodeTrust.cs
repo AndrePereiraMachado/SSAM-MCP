@@ -8,19 +8,17 @@ namespace Ssam.Agent;
 internal static class AuthenticodeTrust
 {
     internal sealed record Evidence(bool Valid, string Thumbprint, string Organization, bool CodeSigning, string Root, int HResult = 0, bool PolicyFailure = false, DateTime? NotAfterUtc = null);
-    internal static bool Accept(Evidence e, string signer, string owner, IEnumerable<string> roots) => e.Valid && (signer switch
+    // 0.4.14-native: only the Microsoft-signed dependencies of a bridge are checked here. The owner's own files carry no
+    // Authenticode signature (the Windows build is never Authenticode-signed): the Ed25519 manifest and sha256 prove them.
+    internal static bool Accept(Evidence e, string signer, IEnumerable<string> roots) => e.Valid && signer == "microsoft"
+        && e.Organization == "Microsoft Corporation" && e.CodeSigning && roots.Contains(e.Root, StringComparer.OrdinalIgnoreCase);
+    internal static JsonObject Check(string file, string signer)
     {
-        "owner" => string.Equals(e.Thumbprint, owner, StringComparison.OrdinalIgnoreCase),
-        "microsoft" => e.Organization == "Microsoft Corporation" && e.CodeSigning && roots.Contains(e.Root, StringComparer.OrdinalIgnoreCase),
-        _ => false
-    });
-    internal static JsonObject Check(string file, string signer, string owner = BridgeTrust.AuthenticodeThumbprint)
-    {
-        return Assess(Inspect(file), signer, owner, BridgeTrust.MicrosoftRoots);
+        return Assess(Inspect(file), signer, BridgeTrust.MicrosoftRoots);
     }
-    internal static JsonObject Assess(Evidence e, string signer, string owner, IEnumerable<string> roots)
+    internal static JsonObject Assess(Evidence e, string signer, IEnumerable<string> roots)
     {
-        var accepted = e.HResult == 0 && Accept(e, signer, owner, roots);
+        var accepted = e.HResult == 0 && Accept(e, signer, roots);
         var status = unchecked((uint)e.HResult);
         var definitive = !accepted && (e.HResult == 0 && e.Valid || status is 0x800B0100 or 0x80096010 || status == 0x800B0004 && e.PolicyFailure);
         return new() { ["ok"] = accepted, ["signatureValid"] = e.Valid, ["hresult"] = (long)status, ["policyFailure"] = e.PolicyFailure, ["definitive"] = definitive,

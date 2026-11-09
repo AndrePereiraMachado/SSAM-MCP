@@ -3,13 +3,21 @@ using System.Security.Cryptography;
 
 namespace Ssam.Agent;
 
-internal static class BridgeTrust
+// ManifestPublicKey, the only owner anchor, is generated at build time from the explicit build input SsamTrustPublicKey
+// (Ssam.Agent.csproj, scripts/build-native.mjs --trust-public-key): the base64 SPKI DER of the owner's Ed25519 key (the vigia
+// vault's manifest key). Empty = remote bridge installation off. Never read from the server or the environment at runtime.
+// 0.4.14-native: no Authenticode anchor; the owner's bridge files are trusted by the signed manifest and their sha256.
+internal static partial class BridgeTrust
 {
-    // Build-time constants only. The owner's watcher script supplies the real anchors.
-    internal const string ManifestPublicKey = "";
-    internal const string AuthenticodeThumbprint = "";
     internal static readonly string[] MicrosoftRoots = ["847DF6A78497943F27FC72EB93F9A637320A02B561D0A91B09E87A7807ED7C61"];
     internal const string MacVerifier = "tools/osslsigncode";
+    internal static bool Configured(string? publicKey) => !string.IsNullOrWhiteSpace(publicKey);
+    // SHA-256 of the SPKI DER of a pinned key (PEM or bare base64), "" when it is empty or unreadable.
+    internal static string SpkiSha256(string? publicKey)
+    {
+        try { return Configured(publicKey) ? Convert.ToHexString(SHA256.HashData(Convert.FromBase64String(publicKey!.Replace("-----BEGIN PUBLIC KEY-----", "").Replace("-----END PUBLIC KEY-----", "")))) : ""; }
+        catch (FormatException) { return ""; }
+    }
 
     // Strict RFC 8032 verification over public data. No signing or secret scalar operations.
     // Reject non-canonical encodings, small-order points and non-prime-order public keys.

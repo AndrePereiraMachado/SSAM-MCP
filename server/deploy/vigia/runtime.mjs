@@ -15,7 +15,8 @@ import {busyDotnet} from './host.mjs';
 import {peFileVersion} from '../kernel-pair-check.mjs';
 import {createAutoRuntime} from './auto-runtime.mjs';
 import {createFeaturesStore,featuresSummary,verifyFeaturesUse} from './features-carry.mjs';
-import {executionSource,agentReleasePin,signingPolicy,refuseInRehearsal,rehearsalRefuses} from './safety.mjs';
+import {executionSource,agentReleasePin,signingPolicy,refuseInRehearsal,rehearsalRefuses,verifySignedAgentRelease,refreshAgentReleaseLine} from './safety.mjs';
+import {isEd25519Offers} from './server-only.mjs';
 const here=path.dirname(fileURLToPath(import.meta.url));
 const slash=p=>p.replaceAll('\\','/');
 const bashPath=p=>slash(p).replace(/^([A-Za-z]):/,(_,drive)=>'/'+drive.toLowerCase());
@@ -251,6 +252,12 @@ export async function createRuntime(config,{log=()=>{}}={}){
   const allowed=path.join(temp,'allowed-signers');fs.writeFileSync(allowed,'owner '+config.ownerSigningPublicKey+'\n',{mode:0o600});
   await git(['-c','gpg.format=ssh','-c','gpg.ssh.program='+config.sshKeygen,'-c','gpg.ssh.allowedSignersFile='+allowed,'verify-commit',commit]);
  }
+ // R7: the owner's signature on an agent commit, never waived (safety.mjs verifySignedAgentRelease).
+ async function ownerSigned(commit){
+  if(!/^[a-f0-9]{40}$/.test(commit??'')||!/^ssh-(ed25519|rsa) [A-Za-z0-9+/=]+(?: [^\r\n]*)?$/.test(config.ownerSigningPublicKey??''))return false;
+  const allowed=path.join(temp,'allowed-signers');fs.writeFileSync(allowed,'owner '+config.ownerSigningPublicKey+'\n',{mode:0o600});
+  return (await git(['-c','gpg.format=ssh','-c','gpg.ssh.program='+config.sshKeygen,'-c','gpg.ssh.allowedSignersFile='+allowed,'verify-commit',commit],{allowFailure:true})).code===0;
+ }
  const runtime={
   run,docker,log,checkWorkspace,ensureDocker,waitForDotnet,
   deploymentActive:false,
@@ -283,6 +290,8 @@ export async function createRuntime(config,{log=()=>{}}={}){
     const fetched=(await git(['rev-parse','refs/remotes/vigia/main'])).stdout.trim();
     await verifyCommit(fetched);
     await git(['update-ref','refs/heads/main',fetched]);
+    // ed25519-offers (F1 review round 3, B-2): the agent release line R7 reads, fetched and moved only to an owner-signed fast-forward.
+    if(isEd25519Offers(config)){const line=await refreshAgentReleaseLine(config,{git,ownerSigned});log?.(`agent release line ${line.ref}: ${line.status}${line.tip?' '+line.tip.slice(0,7):''}${line.from?' (local '+line.from.slice(0,7)+')':''}`);}
    }
    const before=(await git(['rev-parse','HEAD'])).stdout.trim(),target=(await git(['rev-parse','--verify',from+'^{commit}'])).stdout.trim();
    if(before===target)return {updated:false,branch,head:before};
@@ -397,7 +406,11 @@ export async function createRuntime(config,{log=()=>{}}={}){
   async smoke(built,bundles,served,dir){
    verifyFeaturesUse(bundles.odc.features,bundles.odc.featuresProvenance);
    // Server-only: the image runs the release kernel and is asked the hello of the published agent pack, nothing synthetic.
-   if(runtime.packHello)return smokeImage({pair:built,bundle:{features:bundles.odc.features},dir,root,docker,served,kernel:runtime.bridgeKernel,presented:runtime.packHello,budget:readListingBudget(root),privateDir:path.join(temp,'smoke')});
+   // ed25519-offers (runtime.offerExpect): the image must also offer and deliver its signed bridges to the published pack's
+   // hello of an agent that accepts Ed25519 offers, and offer nothing to one without bridgeOffer (check-backend.mjs inside it).
+   const key=built.o11+'|'+built.odc,e=runtime.offerExpect;
+   const offered=e&&runtime.bridgeOffers?{offers:runtime.bridgeOffers,offerCheck:'const expected='+JSON.stringify({budget:readListingBudget(root),offers:runtime.bridgeOffers,packHellos:{[key]:runtime.packHello},offerHellos:{[key]:e.offerHello},offerLanes:{[key]:e.offerLanes},legacyHellos:{[key]:e.legacyHello}})+';\n'+fs.readFileSync(path.join(here,'check-backend.mjs'),'utf8')}:{};
+   if(runtime.packHello)return smokeImage({pair:built,bundle:{features:bundles.odc.features},dir,root,docker,served,kernel:runtime.bridgeKernel,presented:runtime.packHello,budget:readListingBudget(root),privateDir:path.join(temp,'smoke'),...offered});
    const pack=runtime.bridgeKernel?{...runtime.bridgeKernel,o11BuiltFor:built.o11}:packFor(config,bundles);
    return smokeImage({pair:built,bundle:{features:bundles.odc.features},dir,root,docker,served,pack,budget:readListingBudget(root),privateDir:path.join(temp,'smoke'),...(config.rehearsal&&runtime.bridgeOffers?{offers:runtime.bridgeOffers,offerCheck:'const expected='+JSON.stringify({budget:readListingBudget(root),offers:runtime.bridgeOffers})+';\n'+fs.readFileSync(path.join(here,'check-backend.mjs'),'utf8')}:{})});
   },
@@ -492,20 +505,25 @@ export async function createRuntime(config,{log=()=>{}}={}){
    await verifyCommit(await runtime.fullHead());
   };
   runtime.verifyPublisher=async file=>{const result=await ps(path.join(here,'verify-publisher.ps1'),['-File',file],{secret:true,allowFailure:true});if(result.stdout.includes('REVOCATION_UNAVAILABLE'))throw new EnvironmentError('Certificate revocation service is unavailable.','REVOCATION_UNAVAILABLE');if(result.code!==0)throw Error('Installer publisher verification failed.');return JSON.parse(result.stdout);};
+  // Agent code that is compiled (the client bridges of signed-offers and ed25519-offers) comes only from an owner-signed
+  // agentReleaseCommit on an owner-signed agentReleaseRef (R7).
   runtime.agentSource=async()=>{
-   await runtime.executionSource();const commit=config.agentReleaseCommit,ref=config.agentReleaseRef;
-   agentReleasePin(commit,ref);
-   if((await git(['merge-base','--is-ancestor',commit,ref],{allowFailure:true})).code!==0)throw Error('Agent commit is outside the approved release line.');
+   await runtime.executionSource();const commit=config.agentReleaseCommit;
+   await verifySignedAgentRelease(config,{git,ownerSigned});
    const target=path.join(temp,'agent-source-'+Date.now());fs.mkdirSync(target,{recursive:true});
    const archive=path.join(target,'source.tar');await git(['archive','-o',archive,commit,'agent']);
    await run(exe.tar,['-xf',archive,'-C',target]);fs.rmSync(archive);return target;
   };
   // Server-only: the four source files that say what the reviewed agent release ships and runs (its ODC client and both
   // agents' command lists, the ODC Studio assemblies its bridge references), read from the pinned commit of the agent release line (git show: nothing is checked out or run).
+  // ed25519-offers reads them only from an owner-signed release (R7); server-only keeps reading the pinned commit as before.
   runtime.agentReleaseFiles=async()=>{
    await runtime.executionSource();const commit=config.agentReleaseCommit,ref=config.agentReleaseRef;
+   if(isEd25519Offers(config))await verifySignedAgentRelease(config,{git,ownerSigned});
+   else{
    agentReleasePin(commit,ref);
    if((await git(['merge-base','--is-ancestor',commit,ref],{allowFailure:true})).code!==0)throw Error('Agent commit is outside the approved release line.');
+   }
    const show=async rel=>{const r=await git(['show',`${commit}:${rel}`],{allowFailure:true});return r.code===0?r.stdout:null;};
    return {program:await show('agent/platforms/odc/studio/bridge/client/Program.cs'),kinds:await show('agent/agent/lib/kinds.mjs'),native:await show('agent/native/Ssam.Agent/StudioKinds.cs'),bridgeProject:await show('agent/platforms/odc/studio/bridge/Bridge.csproj')};
   };

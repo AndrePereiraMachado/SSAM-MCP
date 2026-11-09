@@ -24,6 +24,7 @@ import { createMacAttach } from './attach-unix.mjs';
 import { createUnixPipe } from './odc-pipe-unix.mjs';
 import { AgentError } from './errors.mjs';
 import { createBridgeUpdates, MAC_BRIDGE_REASON } from './bridge-updates.mjs';
+import * as trust from './bridge-trust.mjs';
 import { o11Builds, o11PackFor, o11BuildVersions, O11_BUILDS_CHECKED } from './o11-builds.mjs';
 import { studioRuntime } from './studio-runtime.mjs';
 import { createStudioSnapshot } from './studio-snapshot.mjs';
@@ -66,7 +67,8 @@ import { completeInstances } from './studio-instance.mjs';
 // machine. 0.3.12 (agent/r40, the app 0.2.4): document.fetch (document-fetch.mjs), one integration document downloaded on this
 // machine for a hosted server; the hello always lists it. The native core is 0.4.9-native.
 // 0.3.16: expire private Portal sessions with their access tokens.
-export const AGENT_VERSION = '0.3.16';
+// 0.3.17: bridges trusted by the Ed25519 manifest alone (no Authenticode anchor); an empty anchor says bridgeOffer false.
+export const AGENT_VERSION = '0.3.17';
 const INLINE_MAX_BYTES = 524288;
 const MAX_VALUE_BYTES = 16 * 1024 * 1024;
 const PARAMS_MEMORY_BYTES = 64 * 1024 * 1024;
@@ -121,11 +123,14 @@ export function readPack(root) {
 }
 
 // The capabilities of the hello: bridge offers on Windows, never on macOS, and never from a pack built without the trust
-// anchors (pack.json bridgeOffer false: the owner's unsigned test app), whatever the platform.
+// anchors (pack.json bridgeOffer false: the owner's unsigned test app), whatever the platform. 0.3.17: nor from an agent whose
+// pinned Ed25519 key is empty (bridge-trust.mjs; empty anchor = feature off), since it could verify no offer.
 export const NO_ANCHORS_REASON = 'This agent package was built without the bridge trust anchors (a test build); it uses only its bundled bridges.';
-export function helloCapabilities(platform, pack) {
+export function helloCapabilities(platform, pack, publicKey = trust.BRIDGE_MANIFEST_PUBLIC_KEY) {
   if (pack?.bridgeOffer === false) return { bridgeOffer: false, bridgeOfferReason: NO_ANCHORS_REASON };
-  return { bridgeOffer: platform !== 'darwin', ...(platform === 'darwin' ? { bridgeOfferReason: MAC_BRIDGE_REASON } : {}) };
+  if (platform === 'darwin') return { bridgeOffer: false, bridgeOfferReason: MAC_BRIDGE_REASON };
+  if (!publicKey) return { bridgeOffer: false, bridgeOfferReason: NO_ANCHORS_REASON };
+  return { bridgeOffer: true };
 }
 
 // deps.platform (tests): 'darwin' wires the macOS side (macos.mjs, attach-unix.mjs, odc-pipe-unix.mjs; deps.mac goes to
@@ -225,7 +230,7 @@ export function createAgent({ root, runtimeRoot = root, config = {}, deps = {}, 
       // of F5: a machine may have more than one), else of the one installed here, when the pack has one per version (o11Builds).
       pack: { id: pack.id, lanes: pack.lanes, odcBridge: pack.odcBridge, o11BuiltFor: o11PackFor(pack, connection?.studioVersion ?? studios.o11?.installed?.version).o11BuiltFor, o11Hook: pack.o11Hook,
         ...(pack.o11Builds?.length ? { o11Builds: o11BuildVersions(pack) } : {}), odcBridges: pack.odcBridges ?? [] },
-      capabilities: helloCapabilities(platform, pack),
+      capabilities: helloCapabilities(platform, pack, deps.bridgeTrust?.anchors ? deps.bridgeTrust.anchors.publicKey : trust.BRIDGE_MANIFEST_PUBLIC_KEY),
       bridges: updates.reports(), bridgeUpdate: updates.wireStatus(), studios, o11Connection: connection };
   }
 

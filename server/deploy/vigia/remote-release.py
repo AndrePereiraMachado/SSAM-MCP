@@ -352,6 +352,7 @@ def dispatch(request):
                 if not same:
                     raise RemoteError('SERVED_LIST_CHANGED')
         presented = 0
+        offered = []
         for server in running:
             labels = server["Config"]["Labels"]
             source = (request.get("checkSources") or {}).get(labels.get("ssam.o11", "") + "|" + labels.get("ssam.odc", ""), check_source)
@@ -363,9 +364,16 @@ def dispatch(request):
             if receipt.get("ok") is not True:
                 raise RemoteError('CHECK_RECEIPT')
             presented += 1 if receipt.get("presented") is True else 0
+            checked = receipt.get("offersChecked")
+            offered.append(checked if isinstance(checked, int) and not isinstance(checked, bool) else 0)
         # Server-only: exactly one backend (the new pair) presented the published pack's hello.
         if request.get("requirePresented") and presented != 1:
             raise RemoteError('PACK_HELLO_NOT_PRESENTED')
+        # The signed offers of the new pair are keyed to it (check-backend.mjs): exactly one backend offered and delivered all
+        # of them and every other one (a retained pair, even one sharing a Studio version) was asked none.
+        required = request.get("requireOffers")
+        if isinstance(required, int) and not isinstance(required, bool) and required > 0 and sorted(c for c in offered if c) != [required]:
+            raise RemoteError('OFFERS_NOT_CHECKED')
         # Check the public aggregate router as well, including TLS validation.
         command(["curl", "--fail", "--silent", "--show-error", "--max-time", "30", settings["healthUrl"]])
         return {"ok": True, "backends": len(running)}

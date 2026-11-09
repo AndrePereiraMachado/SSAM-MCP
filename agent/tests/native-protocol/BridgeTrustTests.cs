@@ -35,6 +35,38 @@ public sealed class BridgeTrustTests
         Assert.False(BridgeTrust.Verify([], new byte[64], pem));
     }
 
+    // 0.4.14-native: the Ed25519 key is the only anchor, generated from the build input; the source build carries none.
+    [Fact]
+    public void EmptyAnchorIsFeatureOffAndTheKeyDigestIsOfItsSpki()
+    {
+        Assert.Equal("", BridgeTrust.ManifestPublicKey);
+        Assert.False(BridgeTrust.Configured(BridgeTrust.ManifestPublicKey));
+        Assert.Equal("", BridgeTrust.SpkiSha256(""));
+        var key = Convert.FromHexString("d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a");
+        var der = Convert.FromHexString("302a300506032b6570032100").Concat(key).ToArray();
+        var expected = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(der));
+        Assert.Equal(expected, BridgeTrust.SpkiSha256(Convert.ToBase64String(der)));
+        Assert.Equal(expected, BridgeTrust.SpkiSha256("-----BEGIN PUBLIC KEY-----\n" + Convert.ToBase64String(der) + "\n-----END PUBLIC KEY-----"));
+        var root = Path.Combine(Path.GetTempPath(), "bridge-anchor-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(root);
+        try
+        {
+            using (var none = new BridgeUpdates(root, root)) Assert.False(none.HasAnchor);
+            using (var some = new BridgeUpdates(root, root, Convert.ToBase64String(der))) Assert.True(some.HasAnchor);
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
+    [Fact]
+    public void BareBase64SpkiVerifiesLikeThePem()
+    {
+        var key = Convert.FromHexString("d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a");
+        var der = Convert.FromHexString("302a300506032b6570032100").Concat(key).ToArray();
+        var signature = Convert.FromHexString("e5564300c360ac729086e2cc806e828a" + "84877f1eb8e5d974d873e06522490155" +
+            "5fb8821590a33bacc61e39701cf9b46bd" + "25bf5f0595bbe24655141438e7a100b");
+        Assert.True(BridgeTrust.Verify([], signature, Convert.ToBase64String(der)));
+        Assert.False(BridgeTrust.Verify([], signature, ""));
+    }
+
     [Theory]
     [InlineData("net8.0")]
     [InlineData("net10.0")]
