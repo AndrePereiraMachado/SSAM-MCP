@@ -21,6 +21,8 @@
 # SERVICE_STUDIO_TFM (only for a studio bundle frozen before 2026-10-27, without runtimeconfig.json: the Dockerfile's
 # ARG comment). Default tag: prod-<yyyymmdd>-<short commit>, with
 # "-dirty" when the work tree has uncommitted changes. Needs docker with buildx, and git for the default tag.
+# SSAM_DOCKERFILE (window 4x4): another Dockerfile to build, relative to server/ or absolute, e.g. the multi-O11 one that
+# deploy/gen-dockerfile.mjs generates (deploy/.generated/Dockerfile.o11k, pinned bundles inside it); default Dockerfile.
 # LICENSE: the image carries OutSystems Studio binaries: load it locally or push it to a PRIVATE registry only.
 set -eu
 here=$(cd "$(dirname "$0")" && pwd)
@@ -72,8 +74,12 @@ case "$installers" in /*) ;; *) installers=$(cd "$here" && cd "$installers" 2>/d
 # 1. The client-name guard. The bind mount needs the host's own path form (Windows: C:/...).
 host_server=$server
 if command -v cygpath >/dev/null 2>&1; then host_server=$(cygpath -m "$server"); fi
-node_image=$(sed -n 's/^ARG NODE_IMAGE=//p' "$server/Dockerfile" | head -n 1)
-[ -n "$node_image" ] || { echo "build: no ARG NODE_IMAGE in $server/Dockerfile" >&2; exit 2; }
+dockerfile=$(setting SSAM_DOCKERFILE)
+dockerfile=${dockerfile:-Dockerfile}
+case "$dockerfile" in /*|[A-Za-z]:/*) ;; *) dockerfile=$server/$dockerfile ;; esac
+[ -f "$dockerfile" ] || { echo "build: no Dockerfile $dockerfile" >&2; exit 2; }
+node_image=$(sed -n 's/^ARG NODE_IMAGE=//p' "$dockerfile" | head -n 1)
+[ -n "$node_image" ] || { echo "build: no ARG NODE_IMAGE in $dockerfile" >&2; exit 2; }
 echo "build: client-name guard (hosted-image-denylist.test.mjs, $node_image, no network, read-only)"
 # MSYS_NO_PATHCONV: Git Bash on Windows would rewrite the container paths (-w /src/...) into Windows paths; only for this
 # command, since git and the build need the usual conversion of host paths. The tmpfs /tmp: since marco-a7 the facade
@@ -103,7 +109,9 @@ if [ "$PUSH" = 1 ]; then output=--push; else output=--load; fi
 echo "build: $IMAGE:$TAG (revision $ref)"
 started=$(date +%s)
 cd "$server"
-$DOCKER buildx build -f Dockerfile --platform linux/amd64 --build-context "installers=$host_installers" \
+host_dockerfile=$dockerfile
+if command -v cygpath >/dev/null 2>&1; then host_dockerfile=$(cygpath -m "$dockerfile"); fi
+$DOCKER buildx build -f "$host_dockerfile" --platform linux/amd64 --build-context "installers=$host_installers" \
   "$@" --build-arg "SSAM_VERSION=$TAG" --build-arg "VCS_REF=$ref" --build-arg "BUILD_DATE=$created" \
   --metadata-file "$meta" $NOCACHE $output -t "$IMAGE:$TAG" .
 
