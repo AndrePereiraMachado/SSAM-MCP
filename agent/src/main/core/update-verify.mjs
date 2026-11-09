@@ -94,7 +94,7 @@ const gatedPaths = root => [root, root + '/Contents', root + '/Contents/Info.pli
 // A symlink's target (review B-R3-1): relative, inside the bundle, no "..". Null, or the reason it is refused.
 function linkTargetProblem(name, target, root) {
   if (typeof target !== 'string' || !target) return `the symlink "${name.slice(0, 120)}" has no readable target`;
-  if (target.length > 1024 || /[\\\r\n\0]/.test(target) || target.startsWith('/')) return `the symlink "${name.slice(0, 120)}" points to an absolute or unusual path`;
+  if (target.length > 1024 || /[\\\r\n\0]/.test(target) || /[^\x20-\x7e]/.test(target) || target.startsWith('/')) return `the symlink "${name.slice(0, 120)}" points to an absolute or unusual path`;
   const parts = target.split('/');
   if (parts.some(p => p === '..')) return `the symlink "${name.slice(0, 120)}" points out of its folder ("..")`;
   const resolved = [...name.split('/').slice(0, -1), ...parts.filter(p => p && p !== '.')].join('/');
@@ -105,13 +105,17 @@ function linkTargetProblem(name, target, root) {
 // `unzip -Z1`, listing from zipListingRows(`unzip -Z`), structure from zip-structure.mjs zipStructure (the file's own local
 // headers, every byte accounted for: review M-R3-1); all three must name the same entries in the same order, as many as the
 // header counts, with the same types. Review B-R3-1: no entry below a symlink, and every symlink relative and inside the bundle.
+// Review B-R4-3: the Mac volume ignores case and normalization, so the symlink checks compare folded paths: a symlink
+// `Contents/Frameworks/x` covers an entry `Contents/Frameworks/X/evil.plist`, and a symlink `contents` covers `Contents/Info.plist`
+// even when no `Contents/` folder entry is listed.
+const foldPath = path => path.normalize('NFD').toLowerCase();
 export function macZipProblem({ names, listing, structure, appName = APP_IDENTITY.productName }) {
   const root = appName + '.app';
   if (!Array.isArray(names) || names.length === 0) return 'the ZIP lists no entries';
   if (!listing || listing.entries !== names.length || listing.rows.length !== names.length) return `the ZIP listing does not add up (${names.length} names, ${listing?.rows?.length ?? 0} rows, header ${listing?.entries})`;
   if (!structure || structure.problem || !Array.isArray(structure.entries)) return `the ZIP structure is not sound: ${structure?.problem ?? 'not read'}`;
   if (structure.entries.length !== names.length) return `the ZIP's own headers hold ${structure.entries.length} entries, unzip lists ${names.length}`;
-  const seen = new Set(), folded = new Set(), modes = new Map();
+  const seen = new Set(), modes = new Map(), foldedModes = new Map();
   for (let i = 0; i < names.length; i++) {
     const name = names[i];
     if (listing.rows[i].name !== name) return `the ZIP listings disagree at entry ${i + 1}`;
@@ -122,14 +126,15 @@ export function macZipProblem({ names, listing, structure, appName = APP_IDENTIT
     if (parts.some(p => p === '' || p === '.' || p === '..')) return `the ZIP entry "${name.slice(0, 120)}" has an empty, "." or ".." part`;
     const key = name.replace(/\/$/, '');
     if (seen.has(key)) return `the ZIP has "${key.slice(0, 120)}" twice`;
-    const fold = key.normalize('NFD').toLowerCase();
-    if (folded.has(fold)) return `the ZIP has two entries that differ only in case or normalization ("${key.slice(0, 120)}")`;
-    seen.add(key); folded.add(fold); modes.set(key, listing.rows[i].mode);
+    const fold = foldPath(key);
+    if (foldedModes.has(fold)) return `the ZIP has two entries that differ only in case or normalization ("${key.slice(0, 120)}")`;
+    seen.add(key); modes.set(key, listing.rows[i].mode); foldedModes.set(fold, { mode: listing.rows[i].mode, key });
   }
-  for (const gated of gatedPaths(root)) if (modes.get(gated)?.startsWith('l')) return `the ZIP entry "${gated}" is a symlink`;
+  const linkAt = path => { const found = foldedModes.get(foldPath(path)); return found?.mode.startsWith('l') ? found.key : null; };
+  for (const gated of gatedPaths(root)) { const link = linkAt(gated); if (link) return `the ZIP entry "${link.slice(0, 120)}" is a symlink where the gate reads ${gated} (case and normalization ignored)`; }
   for (const key of modes.keys()) {
     const parts = key.split('/');
-    for (let n = 1; n < parts.length; n++) if (modes.get(parts.slice(0, n).join('/'))?.startsWith('l')) return `the ZIP entry "${key.slice(0, 120)}" is below the symlink "${parts.slice(0, n).join('/').slice(0, 120)}"`;
+    for (let n = 1; n < parts.length; n++) { const link = linkAt(parts.slice(0, n).join('/')); if (link) return `the ZIP entry "${key.slice(0, 120)}" is below the symlink "${link.slice(0, 120)}" (case and normalization ignored)`; }
   }
   for (const entry of structure.entries) if (entry.type === 'l') { const problem = linkTargetProblem(entry.name, entry.link, root); if (problem) return `the ZIP has a bad symlink: ${problem}`; }
   if (!modes.get(root + '/Contents/Info.plist')?.startsWith('-')) return `the ZIP has no regular file ${root}/Contents/Info.plist`;

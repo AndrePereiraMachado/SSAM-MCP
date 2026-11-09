@@ -352,6 +352,41 @@ test('macZipProblem refuses an entry below a symlink and a symlink that points o
   assert.equal(check(realTree()), null, 'the framework symlinks of the real ZIP stay allowed');
 });
 
+// Review B-R4-3: the Mac volume ignores case (and normalization), so `Frameworks/X/evil.plist` lands below the symlink
+// `Frameworks/x`, and a symlink `contents` is the folder `Contents` even when no `Contents/` entry is listed. The review's
+// probes (C:\t\r5\mac-028\review\r4-probes\src\case-symlink.mjs) as they are, then over the real tree.
+test('macZipProblem compares symlink paths without case or normalization (review B-R4-3)', () => {
+  const direct = list => macZipProblem({
+    names: list.map(e => e[0]),
+    listing: { entries: list.length, rows: list.map(([name, type]) => ({ name, mode: type === 'd' ? 'drwxr-xr-x' : type === 'l' ? 'lrwxr-xr-x' : '-rw-r--r--' })) },
+    structure: { entries: list.map(([name, type, link]) => ({ name, type, link: link ?? null })) },
+  });
+  const base = [[ROOT + '/', 'd'], [ROOT + '/Contents/', 'd'], [ROOT + '/Contents/Info.plist', '-']];
+  assert.match(direct([...base, [ROOT + '/Contents/Frameworks/x', 'l', 'y'], [ROOT + '/Contents/Frameworks/x/evil.plist', '-']]), /is below the symlink "SSAM Agent\.app\/Contents\/Frameworks\/x"/);
+  assert.match(direct([...base, [ROOT + '/Contents/Frameworks/x', 'l', 'y'], [ROOT + '/Contents/Frameworks/X/evil.plist', '-']]),
+    /"SSAM Agent\.app\/Contents\/Frameworks\/X\/evil\.plist" is below the symlink "SSAM Agent\.app\/Contents\/Frameworks\/x" \(case and normalization ignored\)/);
+  assert.match(direct([[ROOT + '/', 'd'], [ROOT + '/contents', 'l', 'Real'], [ROOT + '/Contents/Info.plist', '-'], [ROOT + '/Real/Info.plist', '-']]),
+    /"SSAM Agent\.app\/contents" is a symlink where the gate reads SSAM Agent\.app\/Contents/);
+  const check = (entries, options = {}) => {
+    const z = zipTool(entries, options);
+    return macZipProblem({ names: zipNames(z.exec('/usr/bin/unzip', ['-Z1', 'u.zip'])), listing: zipListingRows(z.exec('/usr/bin/unzip', ['-Z', 'u.zip'])), structure: z.structure });
+  };
+  const link = ROOT + '/Contents/Frameworks/x';
+  assert.match(check([...realTree(), ['l', link], ['-', ROOT + '/Contents/Frameworks/X/evil.plist']], { links: { [link]: 'A' } }), /is below the symlink "SSAM Agent\.app\/Contents\/Frameworks\/x"/);
+  assert.match(check([...realTree(), ['l', link], ['-', ROOT + '/Contents/FRAMEWORKS/X/deeper/evil.plist']], { links: { [link]: 'A' } }), /below the symlink "SSAM Agent\.app\/Contents\/Frameworks\/x"/);
+  // A folder entry in the other case is the symlink itself, listed twice.
+  assert.match(check([...realTree(), ['l', link], ['d', ROOT + '/Contents/FRAMEWORKS/X/']], { links: { [link]: 'A' } }), /differ only in case/);
+  // The gated paths in another case: a symlink `resources` or `info.plist` next to the real ones is a case duplicate; without
+  // the real folder entry it is the gated path itself.
+  const noResources = realTree().filter(e => !e[1].startsWith(ROOT + '/Contents/Resources/'));
+  assert.match(check([...noResources, ['l', ROOT + '/Contents/resources'], ['-', ROOT + '/Contents/Resources/app-update.yml']], { links: { [ROOT + '/Contents/resources']: 'MacOS' } }),
+    /"SSAM Agent\.app\/Contents\/resources" is a symlink where the gate reads SSAM Agent\.app\/Contents\/Resources/);
+  assert.match(check([...realTree(), ['l', ROOT + '/Contents/info.plist']], { links: { [ROOT + '/Contents/info.plist']: 'MacOS/SSAM Agent' } }), /differ only in case/);
+  // A symlink target outside printable ASCII.
+  assert.match(String(check([...realTree(), ['l', link]], { links: { [link]: 'Electron Framework.framework/Versions/\u00c5' } })), /unusual/);
+  assert.equal(check(realTree()), null, 'the real tree stays allowed');
+});
+
 // Review B-R3-2: plutil -convert json fails on <data> and <date>; electron-builder writes extendInfo into Info.plist, so a value
 // of those kinds there would make every Mac refuse every update (closed, but silent). The plist values must stay JSON-able.
 test('the Info.plist values the build adds (electron-builder.yml mac.extendInfo) can all be read by plutil -convert json', async () => {
