@@ -125,10 +125,14 @@ export function sameServed(a,b){
 }
 // The sizing keys of a backend (gen-compose applySizing): its limits, its cpu weight, its pool sizes and its tier label.
 export const SIZED_ENVIRONMENT=['SSAM_BUILD_WORKERS','SSAM_O11_WORKERS_MAX','SSAM_BUILD_QUEUE_MS'];
+export const SIZED_OPTIONAL=['SSAM_O11_READERS_MAX','SSAM_MEMORY_RESERVE_READER_MB','ANVIL_WORKER_IDLE_MINUTES'];
 const labelMap=value=>Array.isArray(value)?Object.fromEntries(value.map(v=>{const i=v.indexOf('=');return [v.slice(0,i),v.slice(i+1)];})):{...(value??{})};
 function resize(source,desired){
  source.deploy={...source.deploy,resources:{...source.deploy?.resources,limits:{...source.deploy?.resources?.limits,cpus:desired.deploy.resources.limits.cpus,memory:desired.deploy.resources.limits.memory}}};
  for(const key of SIZED_ENVIRONMENT)source.environment[key]=desired.environment[key];
+ // S1 R3 reader and worker residency (gen-compose readersEnv): the tier's values, or none when the tier sets none. The reader
+ // ceiling follows the window's O11 list (a retirement lowers it, an O11 round raises it), so it is never the live one.
+ for(const key of SIZED_OPTIONAL){if(desired.environment[key]!==undefined)source.environment[key]=desired.environment[key];else delete source.environment[key];}
  if(desired.cpu_shares!==undefined)source.cpu_shares=desired.cpu_shares;
  source.labels['ssam.sizing']=desired.labels['ssam.sizing'];
 }
