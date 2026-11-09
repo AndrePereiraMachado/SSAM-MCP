@@ -376,6 +376,10 @@ test('window 4x4: startupKernel on a multi-O11 image logs the kernels and their 
   assert.deepEqual(started.kernel.o11Builds, { '11.55.92': '11.55.92.65269', '11.55.95': '11.55.95.65352' });
   assert.deepEqual(started.kernel.builds, { o11: '11.55.95.65352', odc: '1.7.32.11065' });
   assert.deepEqual(events.find(e => e.event === 'o11-kernels'), { event: 'o11-kernels', default: '11.55.95', served: started.kernel.o11Builds, off: [] });
+  // S2 (review S1 R3 B-S2-1): the reader folders follow the hub's served kernels, the default included, over the env's list.
+  const readers = await import('../reader-client.mjs');
+  assert.deepEqual(readers.readerO11Versions({ ...env, SSAM_SERVED_VERSIONS: '{"odc":["1.7.32"],"o11":["11.55.92"]}' }), ['11.55.92', '11.55.95']);
+  readers.setServedO11Versions(null);
   assert.deepEqual(events.find(e => e.event === 'kernel-cache-retired'), { event: 'kernel-cache-retired', lane: 'o11', versions: ['11.55.91'] });
   assert.equal(fs.existsSync(path.join(cache, 'module-index', 'o11-kernel', '11.55.91')), false);
   assert.equal(fs.existsSync(path.join(cache, 'module-index', 'o11-kernel', '11.55.92', 'x.json')), true, 'a served version keeps its store');

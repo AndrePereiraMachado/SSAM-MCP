@@ -2171,6 +2171,8 @@ export async function startupKernel({ dir, fileVersion, env = process.env, log =
   if (o11Builds) { shape.o11Builds = o11Builds; log({ event: 'o11-kernels', default: shape.o11, served: o11Builds, off: refusedKernels.map(r => r.version) }); }
   // Review R4 B-R4-1: the O11 readers left by a previous process of this backend are evictable from the start.
   if (o11Builds) {
+    // Window 4x4 S2 (review S1 R3 B-S2-1): the reader folders follow the kernels the hub serves, the default included.
+    try { (await import('./reader-client.mjs')).setServedO11Versions(Object.keys(o11Builds)); } catch { /* readers fall back to the env */ }
     try {
       const { readerConfig } = await import('./module-map.mjs');
       const reading = readerConfig('o11', { env });
