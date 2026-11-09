@@ -45,7 +45,14 @@ export function liveBaseline(snapshot){
  // The capacity sizing the live compose was generated with (its router label): the rotation carries it to the next window.
  let sizing;try{sizing=sizingOfCompose(compose);}catch(error){fail(error.message,'LIVE_INVALID');}
  if(sizing)result.sizing=sizing;
- versionPairs(result);return {manifest:result,kernels,telemetry:snapshot.telemetry??{},snapshot};
+ // routing: the licenses the router routes to each pair (remote snapshot, counts only), null when the snapshot has none.
+ const routing=routingCounts(snapshot.routing);
+ versionPairs(result);return {manifest:result,kernels,telemetry:snapshot.telemetry??{},routing,snapshot};
+}
+export function routingCounts(value){
+ if(value===undefined||value===null)return null;
+ if(typeof value!=='object'||Array.isArray(value)||Object.entries(value).some(([k,v])=>!/^o11-\d+\.\d+\.\d+-odc-\d+\.\d+\.\d+$/.test(k)||!Number.isInteger(v)||v<0))fail('The live routing counts are invalid.','LIVE_INVALID');
+ return {...value};
 }
 // Two SSAM_SERVED_VERSIONS texts hold the same lists, by JSON value as the remote check compares them: spacing and key
 // order are no change, list order is. An unreadable text is never the same.
@@ -53,12 +60,13 @@ export function sameServed(a,b){
  const value=text=>{try{const v=JSON.parse(text);return v&&typeof v==='object'&&!Array.isArray(v)?JSON.stringify(Object.keys(v).sort().map(k=>[k,v[k]])):null;}catch{return null;}};
  const x=value(a);return x!==null&&x===value(b);
 }
-// The sizing keys of a backend (gen-compose applySizing): its limits, its pool sizes and its tier label.
+// The sizing keys of a backend (gen-compose applySizing): its limits, its cpu weight, its pool sizes and its tier label.
 export const SIZED_ENVIRONMENT=['SSAM_BUILD_WORKERS','SSAM_O11_WORKERS_MAX','SSAM_BUILD_QUEUE_MS'];
 const labelMap=value=>Array.isArray(value)?Object.fromEntries(value.map(v=>{const i=v.indexOf('=');return [v.slice(0,i),v.slice(i+1)];})):{...(value??{})};
 function resize(source,desired){
  source.deploy={...source.deploy,resources:{...source.deploy?.resources,limits:{...source.deploy?.resources?.limits,cpus:desired.deploy.resources.limits.cpus,memory:desired.deploy.resources.limits.memory}}};
  for(const key of SIZED_ENVIRONMENT)source.environment[key]=desired.environment[key];
+ if(desired.cpu_shares!==undefined)source.cpu_shares=desired.cpu_shares;
  source.labels['ssam.sizing']=desired.labels['ssam.sizing'];
 }
 export function preserveCompose(snapshot,manifest){
@@ -77,11 +85,11 @@ export function preserveCompose(snapshot,manifest){
    if(liveServed!==undefined&&!sameServed(liveServed,desired.environment.SSAM_SERVED_VERSIONS))fail(`The retained backend ${desired.labels['ssam.odc']}/${desired.labels['ssam.o11']} would change its served list (${liveServed} -> ${desired.environment.SSAM_SERVED_VERSIONS}); nothing is written.`,'SERVED_LIST_CHANGED');
    source.environment.SSAM_SERVED_VERSIONS=liveServed??desired.environment.SSAM_SERVED_VERSIONS;
    if(!matched){source.image=desired.image;source.volumes=structuredClone(desired.volumes);}
-   // A sized window (gen-compose sizing): every backend takes the limits and pool sizes of its tier in the next window, so
-   // the hot tier moves to the newest pair and the previous hot backend steps down.
-   if(manifest.sizing)resize(source,desired);
    // A retained backend deployed before the plugins mount gets the reviewed one; anything else at that target stops here.
    else{const at=(source.volumes??[]).filter(v=>mountTarget(v)===PLUGINS.target);if(!at.length)source.volumes=[...(source.volumes??[]),structuredClone(desired.volumes.find(reviewedPlugins))];else if(at.length!==1||!reviewedPlugins(at[0]))fail(`The live backend ${name} mounts something else at ${PLUGINS.target}; owner review is required.`,'MODEL_PLUGINS_CONFLICT');}
+   // A sized window (gen-compose sizing): every backend takes the limits, cpu weight and pool sizes of its tier in the next
+   // window, so the hot tier moves to the most used pair and the previous hot backend steps down.
+   if(manifest.sizing)resize(source,desired);
    services[name]=source;
   }else if(live.services[name]&&['ssam-router','ssam-console','ssam-admin','ssam-ops'].includes(name)){
    services[name]={...live.services[name],image:desired.image};

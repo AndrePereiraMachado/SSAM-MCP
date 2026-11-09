@@ -435,28 +435,32 @@ O vigia Windows está em ../vigia/README.md. Roda a cada 6 h pela tarefa agendad
 
 O seletor --version aceita odc=1.7.29 e o11=11.55.93; a forma sem faixa também é aceita quando identifica um único container. Uma seleção ambígua lista os candidatos. Sem SSAM_CONTAINER, --version prevalece sobre SSAM_VERSION; sem ambos, usa-se o padrão. Atualizar só uma faixa mantém a outra na versão do par vigente, sem repetir combinações na janela.
 
+
 ## 13. Capacity sizing (hot pair)
 
-Measured on the KVM 8 (8 vCPU EPYC 9354P, 32 GB) on 2026-11-09: `C:\t\r5\capacity\RESULTADO.md`. One cold kernel build uses
-about 1.25 vCPU and 0.4 to 1.3 GB; builds share the CPU cap (processor sharing), so the vCPUs of a backend set its build
-throughput and the slots only decide who waits. Most customers land on the newest pair (77% of the heavy calls in the quality logs of
-21/10-09/11 went to the then-newest pair), so `versions.json` `sizing` gives that pair the "hot" tier and every other pair the
-"other" tier:
+Measured on the KVM 8 (8 vCPU EPYC 9354P, MemTotal 31.3 GiB) on 2026-11-09: `C:\t\r5\capacity\RESULTADO.md`. One cold kernel
+build uses about 1.25 vCPU and 0.4 to 1.3 GB; builds share the CPU cap, so a backend's vCPUs set its build throughput.
+`versions.json` `sizing` gives ONE backend the "hot" tier and the rest the "other" tier:
 
-| Tier | cpus | memory | SSAM_BUILD_WORKERS | SSAM_O11_WORKERS_MAX | SSAM_BUILD_QUEUE_MS |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| hot (newest pair) | 5 | 12g | 6 | 3 | 240000 |
-| other | 1.5 | 3584m | 2 | 1 | 240000 |
-| router | 1 | 512m | | | |
+| Tier | cpus | memory | cpu_shares | SSAM_BUILD_WORKERS | SSAM_O11_WORKERS_MAX | SSAM_BUILD_QUEUE_MS |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| hot (most used pair) | 5 | 10g | 4096 | 6 | 2 | 240000 |
+| other | 2 | 4g | 1024 | 2 | 1 | 240000 |
+| router | 1 | 512m | | | | |
 
-- Hot = the newest served pair (ODC Studio version, then Service Studio), wherever it sits in the manifest; `sizing.hotPair`
-  pins another pair of the window. The watcher's rotation carries `sizing` and drops a pin, so the new pair becomes hot and
-  the previous hot backend steps down to "other" in the same deploy (`safety.mjs preserveCompose`); the live router's
-  `ssam.sizing` label is how the watcher reads the sizing back from Coolify.
-- Each value is a tier variable with the measured default (`${SSAM_HOT_CPUS:-5}`, `${SSAM_OTHER_MEMORY:-3584m}`,
-  `${SSAM_ROUTER_CPUS:-1}`...): set one in Coolify only to override a tier. A sized backend no longer reads `SSAM_CPUS`,
-  `SSAM_MEMORY`, `SSAM_BUILD_WORKERS` or `SSAM_O11_WORKERS_MAX`.
-- `sizing.host` (32g, reserve 4g): the memory limits at their defaults must leave the reserve for Coolify, its Postgres,
-  the proxy and the OS (today 1 hot + 4 other + router + console = 26.75 GB). A window grown past five pairs shrinks the
-  other tier to fit, never below 2 GiB (else the generator refuses). CPU limits are caps, not reservations: their sum
-  (12.5) may pass 8 because the other pairs are idle most of the time.
+- Hot = the owner's pin `sizing.hotPair` if set, else the pair with the most licenses in the router's
+  `state/routing.json` (`sizing.routed`), ties and no counts going to the router's default pair (the first of the
+  window). The newest pair is "other" until it is the most used.
+- The watcher reads the counts (only counts, never a license id) through its remote snapshot at each deploy it makes anyway,
+  writes them into `sizing.routed` of the pinned manifest, and sends the owner a `hot-pair` event (`HOT_PAIR_CHANGED`) once
+  the deploy is live when the hot pair changed. A shift of use never triggers a deploy. Its rotation keeps the counts of the
+  pairs that stay, keeps a pin while its pair stays and drops it when the pair leaves. An unreadable routing.json defers
+  the round (`ROUTING_UNREADABLE`). The live router's `ssam.sizing` label is how the sizing is read back from Coolify.
+- The hot tier wins CPU contention through `cpu_shares` (4x); the other caps stay at 2 vCPU so no pair regresses.
+- Memory and `cpu_shares` are literal in the compose. `cpus` and the pool sizes are tier variables with these defaults
+  (`${SSAM_HOT_CPUS:-5}`, `${SSAM_OTHER_BUILD_WORKERS:-2}`...): set one in Coolify only to override a tier. A sized backend
+  no longer reads `SSAM_CPUS`, `SSAM_MEMORY`, `SSAM_BUILD_WORKERS` or `SSAM_O11_WORKERS_MAX`.
+- `sizing.host` (`32089m`, the MemTotal; reserve `4g`): hot + (pairs - 1) x other + router + console must fit
+  MemTotal - reserve. Five pairs use 27392 of 27993 MiB. A sixth pair does not fit: the generator and the watcher's
+  rotation refuse it with `CAPACITY_WINDOW` (environmental: the round waits and the owner is told) instead of shrinking any
+  backend; a pair has to leave, or the owner changes `sizing`.

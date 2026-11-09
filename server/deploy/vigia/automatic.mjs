@@ -5,6 +5,7 @@ import {readJournal,writeJournal} from './journal.mjs';
 import path from 'node:path';
 import {rotateWindow,windowLimit,pinDigest} from './window.mjs';
 import {assertUnserved,assertRetained,canonicalComposeHash} from './safety.mjs';
+import {withRouted,hotPairName} from '../coolify/gen-compose.mjs';
 export const AUTOMATIC_PLAN=[
  'Read secrets and validate the reviewed vigia-run execution source',
  'Read the live pairs, immutable digests, kernels and telemetry (dry-run: public source reads only)',
@@ -72,12 +73,15 @@ export async function releaseAutomatically(config,ops,release){
   catch(e){if(e.code!=='ALREADY_SERVED')throw e;state.status='idle';save();return {status:'idle',id};}
   proposed=rotateWindow(baseline.manifest,{odc:built.odc??kernel.odc,o11:built.o11??kernel.o11,image:built.image,tag:built.tag},{...baseline.telemetry,maxWindow:windowLimit(config,baseline.manifest)}).manifest;
   if(baseline.hash!==state.baseline?.hash){delete state.steps.pin;delete state.steps.backup;delete state.steps.prepared;}
-  }catch(error){state.failure={step:'baseline-refresh',code:/^[A-Z_]+$/.test(error.code??'')?error.code:'BASELINE_UNAVAILABLE'};state.deferrals=(state.deferrals??0)+1;state.firstDeferredAt??=new Date().toISOString();save();await event('failed',`${id}: live baseline refresh deferred.`);return {status:'deferred',id,code:error.code??'BASELINE_UNAVAILABLE'};}
+  }catch(error){state.failure={step:'baseline-refresh',code:/^[A-Z_]+$/.test(error.code??'')?error.code:'BASELINE_UNAVAILABLE'};state.deferrals=(state.deferrals??0)+1;state.firstDeferredAt??=new Date().toISOString();save();await event('failed',`${id}: live baseline refresh deferred (${state.failure.code}).`,state.failure.code);return {status:'deferred',id,code:error.code??'BASELINE_UNAVAILABLE'};}
  }
  state.baseline=baseline;state.proposed=proposed;if(state.status!=='rolling-back')state.status='preparing';save();
  try{if(!state.mutationStarted)assertUnserved(baseline,{odc:built.odc??kernel.odc,o11:built.o11??kernel.o11});}
  catch(e){if(e.code==='ALREADY_SERVED'){state.status='idle';save();return {status:'idle',id};}throw e;}
- const pinned=pinDigest(proposed,built.tag,'sha256:'+built.sha256);assertRetained(baseline,pinned);
+ // Capacity (gen-compose sizing): the hot tier goes to the pair the router routes most licenses to, read from the live
+ // routing.json with this deploy's baseline; a deploy that happens anyway is the only moment usage moves it.
+ const pinned=withRouted(pinDigest(proposed,built.tag,'sha256:'+built.sha256),baseline.routing);assertRetained(baseline,pinned);
+ const hot={from:baseline.manifest?.sizing?hotPairName(baseline.manifest):null,to:hotPairName(pinned)};
  await event('detected',`${id}: verified candidate detected.`);
  let unlock,protectedPhase=false;
  try{
@@ -104,6 +108,7 @@ export async function releaseAutomatically(config,ops,release){
    await once('deploy',()=>{state.deploySent=true;save();return ops.deploy(secrets);},()=>({ok:true}));
    await once('checks',async()=>{const r=await ops.checks(secrets,{id,pinned,kernel,bridges,built});if(!r?.ok)throw Error('Post-deployment checks failed.');return r;},r=>({ok:true,backends:r.backends}));
    state.status='live';save();await event('live',`${id}: deployed and verified.`);
+   if(hot.to&&hot.to!==hot.from)await event('hot-pair',`${id}: the capacity hot tier moved from ${hot.from??'no hot pair'} to ${hot.to} (routed licenses: ${JSON.stringify(pinned.sizing.routed??{})}${pinned.sizing.hotPair?', owner pin':''}).`,'HOT_PAIR_CHANGED');
    return {status:'live',id,commit:state.pin};
   }
   throw Error('Resume interrupted rollback.');

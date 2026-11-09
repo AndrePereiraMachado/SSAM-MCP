@@ -2,7 +2,7 @@
 // the owner reads. No process, Docker, Git or network here (runtime.mjs does that), so every rule is testable alone.
 import fs from 'node:fs';
 import path from 'node:path';
-import {versionPairs,generateCompose,servedLists} from '../coolify/gen-compose.mjs';
+import {versionPairs,generateCompose,servedLists,hostBudget} from '../coolify/gen-compose.mjs';
 export const LANES=['odc','o11'];
 export const STUDIO_NAME={odc:'ODC Studio',o11:'Service Studio'};
 export const version=value=>/^(\d+\.\d+\.\d+)/.exec(String(value??''))?.[1]??null;
@@ -68,16 +68,24 @@ export function rotateWindow(manifest,pair,state={}){
  // Without a configured maxWindow (the replay of approvals), the same default as the round: never below the served window.
  const limit=state.maxWindow??windowLimit(null,manifest);
  if(!Number.isInteger(limit)||limit<3||entries.length>limit)throw Object.assign(Error(limit<window?`maxWindow (${limit}) is below the window the manifest already serves (${window}); raise maxWindow in the watcher configuration.`:'Active clients require a window above the configured limit; owner review is required.'),{code:'WINDOW_LIMIT',environmental:true});
- // The capacity sizing (gen-compose.mjs) rides along, so the hot tier follows the newest pair: the new pair. A hotPair pin
- // is the owner's choice for the window he deployed; it is dropped here (hotPinDropped says so), never carried to a pair
- // that is no longer the newest.
- const {hotPair:pinned,...sizing}=manifest.sizing??{};
- const next={window:Math.max(window,entries.length),odc:[],o11:[],...(manifest.sizing?{sizing:structuredClone(sizing)}:{})};
+ // The capacity sizing (gen-compose.mjs) rides along. The hot tier goes by use (routed, refreshed from the live routing.json
+ // by the automatic deploy: withRouted), so the counts of the pairs that stay are kept and the new pair starts with none.
+ // The owner's hotPair pin stays while its pair stays; a pin on a leaving pair is dropped (hotPinDropped, and the deploy
+ // tells the owner when the hot pair changes).
+ const sizing=manifest.sizing?structuredClone(manifest.sizing):null;
+ const next={window:Math.max(window,entries.length),odc:[],o11:[],...(sizing?{sizing}:{})};
  for(const p of entries)for(const lane of LANES)next[lane].push({version:p[lane],tag:p.tag,image:p.image,...(p.sha256?{sha256:p.sha256}:{}),...(p.served?{served:structuredClone(p.served)}:{})});
  versionPairs(next);
+ let hotPinDropped=null;
+ if(sizing){
+  const names=new Set(windowPairs(next).map(pairId));
+  if(sizing.hotPair!=null&&!names.has(sizing.hotPair)){hotPinDropped=sizing.hotPair;delete sizing.hotPair;}
+  if(sizing.routed)sizing.routed=Object.fromEntries(Object.entries(sizing.routed).filter(([k])=>names.has(k)));
+  hostBudget(next);
+ }
  const leaving={};for(const lane of LANES)leaving[lane]=[...new Set(manifest[lane].map(x=>x.version))].filter(v=>!next[lane].some(x=>x.version===v));
  const affected=[];for(const [token,data]of Object.entries(state.tokens??{}))for(const lane of LANES)if(leaving[lane].includes(version(data[lane]?.installed)))affected.push({token,customer:data.customer??null,lane,version:version(data[lane].installed),lastSeen:data.seen??null});
- return {manifest:next,leaving,affected,held,...(pinned!=null?{hotPinDropped:pinned}:{})};
+ return {manifest:next,leaving,affected,held,...(hotPinDropped?{hotPinDropped}:{})};
 }
 // Approved proposals that main does not carry yet are replayed on top of it, in approval order: the next proposal starts
 // from the window the owner deployed, whether or not its branch was merged. A pair main already has is skipped.

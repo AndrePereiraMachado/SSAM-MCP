@@ -233,6 +233,9 @@ test('N1 a manifest that would change a retained backend\'s served list stops be
  // keepServed dropped (what the watcher did before this fix): the retained backends would learn the newer O11.
  const naive={...structuredClone(v),window:6,odc:[{...v.odc[0],...nextPair(v),version:'1.7.33'},...v.odc],o11:[{...v.o11[0],...nextPair(v),version:'11.55.96'},...v.o11]};delete naive.keepServed;
  for(const lane of ['odc','o11'])naive[lane][0]={version:naive[lane][0].version,image:v.odc[0].image,tag:'prod-next',sha256:'c'.repeat(64)};
+ // A sized window of 6 is refused for capacity before this (CAPACITY_WINDOW, capacity-sizing.test.mjs): unsized here, so
+ // the served-list guard itself is what stops it.
+ delete naive.sizing;
  assert.throws(()=>safety.preserveCompose(snapshotOf(live),naive),e=>e.code==='SERVED_LIST_CHANGED'&&/nothing is written/.test(e.message));
 });
 test('N1 the live baseline carries each backend\'s served list and refuses an unreadable one',()=>{

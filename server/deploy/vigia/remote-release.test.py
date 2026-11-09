@@ -46,6 +46,7 @@ class RemoteTests(unittest.TestCase):
         self.listing = [{"name": f["name"], "sha256": f["sha256"]} for f in PINS["files"]]
         self.missing_volume = False
         self.env = ["SSAM_BACKEND_NAME=o11-11.55.93-odc-1.7.29", "SSAM_SERVED_VERSIONS={\"odc\":[\"1.7.29\"],\"o11\":[\"11.55.93\"]}"]
+        self.routing = {"o11-11.55.93-odc-1.7.29": 2}
         self.receipt = {"ok": True, "kernel": {"odc": "1.7.29", "o11": "11.55.93"}, "budget": {"tools": 90}, "telemetry": {"tokens": {}}}
 
     def docker(self, *args, data=None):
@@ -69,6 +70,10 @@ class RemoteTests(unittest.TestCase):
             return json.dumps(["image@sha256:" + "a" * 64]).encode()
         if args[0] == "exec" and args[1] == "postgres-fixture":
             return getattr(self, "dump", b"CREATE TABLE public.schema_migrations (\n);\nCREATE TABLE public.server_tokens (\n);\n")
+        if args[0] == "exec" and args[1] == "-i" and data and b"routing.json" in data:
+            if isinstance(self.routing, Exception):
+                raise self.routing
+            return json.dumps(self.routing).encode()
         if args[0] == "exec" and args[1] == "-i":
             return json.dumps(self.receipt).encode()
         if args[0] == "run":
@@ -266,6 +271,17 @@ class RemoteTests(unittest.TestCase):
         self.assertEqual(value["backends"][0]["budget"]["tools"], 90)
         self.assertEqual(value["backends"][0]["kernel"]["odc"], "1.7.29")
         self.assertEqual(value["backends"][0]["reference"], "image:old")
+
+    def test_snapshot_returns_routing_counts_only_and_refuses_unreadable_ones(self):
+        value = self.request("snapshot", checkSource="capture-live")
+        self.assertEqual(value["routing"], {"o11-11.55.93-odc-1.7.29": 2})
+        script = next(i for i in self.inputs if "routing.json" in i)
+        self.assertIn("console.log(JSON.stringify(c))", script)
+        self.assertNotIn("writeFileSync", script)
+        for bad in ({"not-a-pair": 1}, {"o11-11.55.93-odc-1.7.29": -1}, [1], RuntimeError("Remote command failed: docker")):
+            self.routing = bad
+            with self.assertRaisesRegex(RuntimeError, "ROUTING_UNREADABLE"):
+                self.request("snapshot", checkSource="capture-live")
 
     def test_rollback_uses_old_ninety_tool_check_not_new_budget(self):
         self.request("check", checkSource="new-92", checkSources={"11.55.93|1.7.29": "old-90"})

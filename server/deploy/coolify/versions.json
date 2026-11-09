@@ -4,14 +4,16 @@
   "sizing": {
     "hot": {
       "cpus": "5",
-      "memory": "12g",
+      "memory": "10g",
+      "cpuShares": 4096,
       "buildWorkers": 6,
-      "o11WorkersMax": 3,
+      "o11WorkersMax": 2,
       "queueMs": 240000
     },
     "other": {
-      "cpus": "1.5",
-      "memory": "3584m",
+      "cpus": "2",
+      "memory": "4g",
+      "cpuShares": 1024,
       "buildWorkers": 2,
       "o11WorkersMax": 1,
       "queueMs": 240000
@@ -21,8 +23,14 @@
       "memory": "512m"
     },
     "host": {
-      "memory": "32g",
+      "memory": "32089m",
       "reserve": "4g"
+    },
+    "routed": {
+      "o11-11.55.93-odc-1.7.29": 2,
+      "o11-11.55.94-odc-1.7.30": 3,
+      "o11-11.55.94-odc-1.7.31": 1,
+      "o11-11.55.95-odc-1.7.32": 1
     }
   },
   "odc": [
