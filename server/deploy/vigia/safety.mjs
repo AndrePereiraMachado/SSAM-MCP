@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {createHash} from 'node:crypto';
 import {readJournal} from './journal.mjs';
-import {generateCompose,versionPairs,sizingOfCompose} from '../coolify/gen-compose.mjs';
+import {generateCompose,versionPairs,sizingOfCompose,versionBackends,isBackendManifest,retiringOf,BACKEND_NAME} from '../coolify/gen-compose.mjs';
 const fail=(message,code)=>{throw Object.assign(Error(message),{code,environmental:true});};
 export const composeHash=text=>createHash('sha256').update(text).digest('hex');
 const sorted=value=>Array.isArray(value)?value.map(sorted):value&&typeof value==='object'?Object.fromEntries(Object.keys(value).sort().map(k=>[k,sorted(value[k])])):value;
@@ -27,6 +27,9 @@ export function liveBaseline(snapshot){
  const compose=parseCompose(snapshot.compose),rows=snapshot.backends;
  if(!rows?.length)fail('No live backend baseline.','LIVE_INVALID');
  const ordered=Object.values(compose.services).filter(s=>s.labels?.['ssam.backend']==='true');
+ // S2: a live backend window (gen-compose.mjs: one backend per ODC Studio, named odc-<v>) reads back as a backend manifest.
+ const named=ordered.map(s=>BACKEND_NAME.test(String(s.environment?.SSAM_BACKEND_NAME??'')));
+ if(named.some(Boolean)){if(!named.every(Boolean))fail('The live compose mixes pairs and backends of the 4x4 window.','LIVE_INVALID');return liveBackendBaseline(snapshot,compose,rows,ordered);}
  const result={window:Math.max(3,ordered.length),odc:[],o11:[]},kernels={};
  for(const service of ordered){
   const odc=service.labels['ssam.odc'],o11=service.labels['ssam.o11'];
@@ -54,7 +57,52 @@ export function liveBaseline(snapshot){
  const {usage,warning}=usageCounts(snapshot.usage,snapshot.warnings);
  versionPairs(result);return {manifest:result,kernels,telemetry:snapshot.telemetry??{},usage,...(warning?{usageWarning:warning}:{}),snapshot};
 }
-const PAIR=/^o11-\d+\.\d+\.\d+-odc-\d+\.\d+\.\d+$/;
+// A pair (o11-<v>-odc-<v>) or, in the 4x4 window (S2), a backend (odc-<v>): usage-count.cjs counts per ODC Studio there.
+const PAIR=/^(?:o11-\d+\.\d+\.\d+-)?odc-\d+\.\d+\.\d+$/;
+// S2: the live backend window. Every backend runs the same SSAM_SERVED_VERSIONS (servedLists: {odc, o11, retiring?}); its label
+// ssam.o11 is the served O11 list; the remote snapshot row of a backend is found by its two labels as they are. The kernel.json
+// of a backend names its ODC and its default O11 kernel (one of the served). The images' extra kernels (an O11 version retired
+// by a compose-only round) are not in the compose: the read-back window has o11.kernels = o11.served.
+function liveBackendBaseline(snapshot,compose,rows,ordered){
+ const texts=[...new Set(ordered.map(s=>s.environment?.SSAM_SERVED_VERSIONS))];
+ if(texts.length!==1||texts[0]===undefined)fail('The live backends do not run one served list.','LIVE_INVALID');
+ let served;try{served=JSON.parse(texts[0]);}catch{fail('A live backend has an unreadable SSAM_SERVED_VERSIONS.','LIVE_INVALID');}
+ if(!Array.isArray(served?.odc)||!Array.isArray(served?.o11))fail('The live served list has no odc and o11 lists.','LIVE_INVALID');
+ const result={window:Math.max(4,ordered.length),o11:{served:[...served.o11]},backends:[]},kernels={};
+ if(served.retiring!==undefined)result.retiring=served.retiring;
+ for(const service of ordered){
+  const odc=service.labels['ssam.odc'],o11=service.labels['ssam.o11'];
+  const row=rows.find(b=>b.odc===odc&&b.o11===o11);
+  if(!row||row.reference!==service.image||row.kernel?.odc!==odc||!served.o11.includes(row.kernel?.o11)||!/^sha256:[a-f0-9]{64}$/.test(row.digest))fail('Live compose, kernels and running images disagree.','LIVE_INVALID');
+  if(String(o11).split(',').sort().join()!==[...served.o11].sort().join())fail('A live backend label ssam.o11 is not the served O11 list.','LIVE_INVALID');
+  const ref=service.image.split('@')[0],colon=ref.lastIndexOf(':');
+  if(colon<ref.lastIndexOf('/'))fail('Live image has no immutable tag.','LIVE_INVALID');
+  result.backends.push({odc,image:ref.slice(0,colon),tag:ref.slice(colon+1),sha256:row.digest.slice(7)});
+  kernels['odc-'+odc]=row.kernel;
+ }
+ if(rows.length!==ordered.length)fail('Live backend count differs from compose.','LIVE_INVALID');
+ let sizing;try{sizing=sizingOfCompose(compose);}catch(error){fail(error.message,'LIVE_INVALID');}
+ if(sizing)result.sizing=sizing;
+ else if(ordered.some(s=>s.labels?.['ssam.sizing']!==undefined))fail('Live backends carry capacity tiers but the router carries no ssam.sizing; owner review is required.','LIVE_INVALID');
+ try{versionBackends(result);}catch(error){fail('The live backend window does not read back: '+error.message,'LIVE_INVALID');}
+ const {usage,warning}=usageCounts(snapshot.usage,snapshot.warnings);
+ return {manifest:result,kernels,telemetry:snapshot.telemetry??{},usage,...(warning?{usageWarning:warning}:{}),snapshot};
+}
+// S2: the served list of a retained backend may change only by the round's own versions: the version it adds and the ones it
+// retires (a backend window shares one list, so an ODC round changes the ODC list of every backend). Anything else (a version
+// that appears or disappears unannounced) is SERVED_LIST_CHANGED and nothing is written. change: {added:[{lane,version}],
+// retired:[{lane,version}]}; the retiring key follows the manifest (gen-compose checks it).
+export function servedTransition(liveText,desiredText,change={}){
+ let live,desired;try{live=JSON.parse(liveText);desired=JSON.parse(desiredText);}catch{return false;}
+ for(const lane of ['odc','o11']){
+  if(!Array.isArray(live?.[lane])||!Array.isArray(desired?.[lane]))return false;
+  const want=new Set(live[lane]);
+  for(const r of change.retired??[])if(r.lane===lane)want.delete(r.version);
+  for(const a of change.added??[])if(a.lane===lane)want.add(a.version);
+  if(want.size!==desired[lane].length||desired[lane].some(v=>!want.has(v)))return false;
+ }
+ return true;
+}
 // The usage counts of a snapshot: {usage: {pair: {heavy, active}} | null, warning: code | null}. Entries that are not
 // counts of a pair are dropped (USAGE_PARTIAL); a value that is not an object is USAGE_UNREADABLE with usage null; a
 // warning of the remote snapshot (USAGE_*) is kept. Never throws.
@@ -84,12 +132,17 @@ function resize(source,desired){
  if(desired.cpu_shares!==undefined)source.cpu_shares=desired.cpu_shares;
  source.labels['ssam.sizing']=desired.labels['ssam.sizing'];
 }
-export function preserveCompose(snapshot,manifest){
+// change (S2, a backend window): the round's own versions ({added, retired}, servedTransition). A backend window matches a live
+// backend by its ODC Studio alone (its O11 label is the served list, which an O11 round changes on every backend) and gives a
+// retained backend the new image an O11 round built for it (assertRetained has checked it) and the window's one served list.
+export function preserveCompose(snapshot,manifest,change){
  const live=parseCompose(snapshot.compose),next=generateCompose(manifest),old=Object.entries(live.services).filter(([,s])=>s.labels?.['ssam.backend']==='true');
+ const multi=isBackendManifest(manifest);
+ if(old.some(([,s])=>BACKEND_NAME.test(String(s.environment?.SSAM_BACKEND_NAME??'')))!==multi)fail(multi?'The live compose is a window of pairs; a backend window is deployed first by the S1 kit, never by the watcher.':'The live compose is a backend window; the watcher never writes pairs over it.','WINDOW_KIND_CHANGED');
  const services={...live.services};for(const [name]of old)delete services[name];
  for(const [name,desired] of Object.entries(next.services)){
   if(desired.labels?.['ssam.backend']==='true'){
-   const matched=old.find(([,s])=>s.labels['ssam.odc']===desired.labels['ssam.odc']&&s.labels['ssam.o11']===desired.labels['ssam.o11']);
+   const matched=old.find(([,s])=>s.labels['ssam.odc']===desired.labels['ssam.odc']&&(multi||s.labels['ssam.o11']===desired.labels['ssam.o11']));
    const template=old[0][1];
    const source=matched?structuredClone(matched[1]):{...structuredClone(desired),...structuredClone(Object.fromEntries(['environment','networks','deploy','mem_limit','cpus'].filter(k=>template[k]!==undefined).map(k=>[k,template[k]])))};
    source.labels={...source.labels,...desired.labels};source.environment={...source.environment};
@@ -97,9 +150,11 @@ export function preserveCompose(snapshot,manifest){
    // A retained backend keeps the served list it runs with (keepServed, r44): the manifest must carry it unchanged, or nothing
    // is written. A new backend takes the new window's list.
    const liveServed=matched?matched[1].environment?.SSAM_SERVED_VERSIONS:undefined;
-   if(liveServed!==undefined&&!sameServed(liveServed,desired.environment.SSAM_SERVED_VERSIONS))fail(`The retained backend ${desired.labels['ssam.odc']}/${desired.labels['ssam.o11']} would change its served list (${liveServed} -> ${desired.environment.SSAM_SERVED_VERSIONS}); nothing is written.`,'SERVED_LIST_CHANGED');
-   source.environment.SSAM_SERVED_VERSIONS=liveServed??desired.environment.SSAM_SERVED_VERSIONS;
+   if(multi&&liveServed!==undefined&&!servedTransition(liveServed,desired.environment.SSAM_SERVED_VERSIONS,change??{}))fail(`The backend ${desired.labels['ssam.odc']} would change its served list beyond this round's versions (${liveServed} -> ${desired.environment.SSAM_SERVED_VERSIONS}); nothing is written.`,'SERVED_LIST_CHANGED');
+   if(!multi&&liveServed!==undefined&&!sameServed(liveServed,desired.environment.SSAM_SERVED_VERSIONS))fail(`The retained backend ${desired.labels['ssam.odc']}/${desired.labels['ssam.o11']} would change its served list (${liveServed} -> ${desired.environment.SSAM_SERVED_VERSIONS}); nothing is written.`,'SERVED_LIST_CHANGED');
+   source.environment.SSAM_SERVED_VERSIONS=multi?desired.environment.SSAM_SERVED_VERSIONS:liveServed??desired.environment.SSAM_SERVED_VERSIONS;
    if(!matched){source.image=desired.image;source.volumes=structuredClone(desired.volumes);}
+   else if(multi)source.image=desired.image;
    // A retained backend deployed before the plugins mount gets the reviewed one; anything else at that target stops here.
    else{const at=(source.volumes??[]).filter(v=>mountTarget(v)===PLUGINS.target);if(!at.length)source.volumes=[...(source.volumes??[]),structuredClone(desired.volumes.find(reviewedPlugins))];else if(at.length!==1||!reviewedPlugins(at[0]))fail(`The live backend ${name} mounts something else at ${PLUGINS.target}; owner review is required.`,'MODEL_PLUGINS_CONFLICT');}
    // A sized window (gen-compose sizing): every backend takes the limits, cpu weight and pool sizes of its tier in the next
@@ -116,7 +171,27 @@ export function preserveCompose(snapshot,manifest){
  return JSON.stringify(out,null,2);
 }
 export function assertUnserved(baseline,pair){if(['odc','o11'].every(l=>baseline.manifest[l].some(e=>e.version===pair[l])))fail('The candidate is already served.','ALREADY_SERVED');}
-export function assertRetained(baseline,next){
+// S2: the new version of a lane round is not served yet by the live backend window.
+export function assertLaneUnserved(baseline,lane,version){
+ const m=baseline.manifest,served=isBackendManifest(m)?(lane==='odc'?m.backends.map(b=>b.odc):m.o11.served):m[lane].map(e=>e.version);
+ if(served.includes(version))fail('The candidate is already served.','ALREADY_SERVED');
+}
+// round (S2, a backend window): {lane, built: {"<tag>": "<64 hex>"}} of the round. A live backend that stays keeps its image,
+// tag and digest, except in an O11 round, where its new image must be one this round built and published (its digest pinned),
+// carrying exactly the rotation's O11 kernels (the next window's served list, the retiring version included). The build comes
+// from the execution checkout the watcher verified (signed main, executionSource). Anything else is LIVE_DOWNGRADE.
+export function assertRetained(baseline,next,round={}){
+ if(isBackendManifest(next)||isBackendManifest(baseline.manifest)){
+  if(isBackendManifest(next)!==isBackendManifest(baseline.manifest))fail('The live window and the next one are not the same kind.','LIVE_DOWNGRADE');
+  const want=[...next.o11.served].sort().join(),backends=versionBackends(next);
+  for(const b of baseline.manifest.backends){
+   const n=next.backends.find(x=>x.odc===b.odc);if(!n)continue;
+   if(['image','tag','sha256'].every(k=>n[k]===b[k]))continue;
+   const pinned=String(n.sha256??'').replace(/^sha256:/,''),kernels=backends.find(x=>x.odc===n.odc).kernels;
+   if(round.lane!=='o11'||!/^[a-f0-9]{64}$/.test(pinned)||round.built?.[n.tag]!==pinned||kernels.slice().sort().join()!==want)fail('A retained live image was changed.','LIVE_DOWNGRADE');
+  }
+  return;
+ }
  for(let i=0;i<baseline.manifest.odc.length;i++){
   const at=next.odc.findIndex((entry,j)=>entry.version===baseline.manifest.odc[i].version&&next.o11[j].version===baseline.manifest.o11[i].version);
   if(at<0)continue;
@@ -193,7 +268,7 @@ export function cleanupRollback(root,outDir){
  const folder=path.join(root,'rollback');if(!fs.existsSync(folder))return;
  const live=new Set();
  if(fs.existsSync(outDir))for(const entry of fs.readdirSync(outDir,{withFileTypes:true})){
-  if(!entry.isDirectory()||!/^o11-\d+\.\d+\.\d+-odc-\d+\.\d+\.\d+$/.test(entry.name))continue;
+  if(!entry.isDirectory()||!/^(?:o11-\d+\.\d+\.\d+-odc-\d+\.\d+\.\d+|(?:odc|o11)-\d+\.\d+\.\d+|retire-(?:odc|o11)-\d+\.\d+\.\d+)$/.test(entry.name))continue;
   const dir=path.join(outDir,entry.name),release=path.join(dir,'release.json'),state=path.join(dir,'deployment.json');
   if(!fs.existsSync(release))continue;
   if(!fs.existsSync(state)||!['live','idle','abandoned','rolled-back','preparation-failed'].includes(readJournal(state).status)){

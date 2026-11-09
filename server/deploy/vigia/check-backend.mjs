@@ -10,7 +10,11 @@ const store=await openTokenStore({dir:process.env.SSAM_SERVER_DIR||'/data/server
 let issued;
 try {
  const kernel=JSON.parse(fs.readFileSync((process.env.SSAM_RUNTIME_DIR||'/data/server')+'/kernel.json','utf8'));
- if(expected.kernel&&JSON.stringify(kernel)!==JSON.stringify(expected.kernel))throw Error('Rollback kernel differs from the snapshot.');
+ // Window 4x4 (S2): an O11 round moves the default O11 kernel of every backend (kernel.json o11) to a version the live images
+ // carry too (window.mjs defaultO11); its rollback restores the images and compose, so the snapshot kernel with that one moved
+ // default (kernelO11Also) is the restored state too.
+ const sameKernel=k=>JSON.stringify(kernel)===JSON.stringify(k);
+ if(expected.kernel&&!sameKernel(expected.kernel)&&!(expected.kernelO11Also&&sameKernel({...expected.kernel,o11:expected.kernelO11Also})))throw Error('Rollback kernel differs from the snapshot.');
  const health=await fetch('http://127.0.0.1:7310/health',{signal:AbortSignal.timeout(30000)});if(!health.ok)throw Error('Backend health failed.');
  issued=await store.issue({customer:'Version verification',days:1,lanes:'odc,o11',verification:true});
  await new Promise(r=>setTimeout(r,1200));

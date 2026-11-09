@@ -3,7 +3,10 @@ import path from 'node:path';
 import {createHash} from 'node:crypto';
 import {readJournal,writeJournal} from './journal.mjs';
 const terminal=new Set(['live','idle','abandoned','rolled-back','preparation-failed']);
-const PAIR=/^o11-\d+\.\d+\.\d+-odc-\d+\.\d+\.\d+$/;
+// A live pair, or (window 4x4, S2) a live backend odc-<v> of a backend window.
+const PAIR=/^(?:o11-\d+\.\d+\.\d+-)?odc-\d+\.\d+\.\d+$/;
+// The attempt folders: a pair, or a round of a backend window (odc-<v>, o11-<v>, retire-<lane>-<v>).
+const ROUND=/^(?:o11-\d+\.\d+\.\d+-odc-\d+\.\d+\.\d+|(?:odc|o11)-\d+\.\d+\.\d+|retire-(?:odc|o11)-\d+\.\d+\.\d+)$/;
 const key=p=>process.platform==='win32'?path.resolve(p).toLowerCase():path.resolve(p);
 // The pairs the live baseline served when it was last read; null before the first read (then every 'live' journal counts).
 export const livePairsFile=outDir=>path.join(outDir,'live-pairs.json');
@@ -25,9 +28,10 @@ export function cleanupArtifacts({tempRoot,bundleRoot,outDir,installersDir,keepA
  const visit=value=>{if(typeof value==='string'&&path.isAbsolute(value))referenced.add(key(value));else if(value&&typeof value==='object')Object.values(value).forEach(visit);};
  const isReferenced=item=>{const k=key(item);return [...referenced].some(ref=>ref===k||ref.startsWith(k+path.sep));};
  if(outDir&&fs.existsSync(outDir))for(const name of fs.readdirSync(outDir)){
-  if(!PAIR.test(name))continue;
+  if(!ROUND.test(name))continue;
   const dir=path.join(outDir,name),r=path.join(dir,'release.json'),j=path.join(dir,'deployment.json');
-  const state=fs.existsSync(j)?readJournal(j):null,live=served?served.has(name):state?.status==='live';
+  // A round that names no backend (an O11 round, a retirement) is kept while its journal says live.
+  const state=fs.existsSync(j)?readJournal(j):null,live=served&&PAIR.test(name)?served.has(name):state?.status==='live';
   if(state&&!terminal.has(state.status)||live){if(state)visit(state);if(fs.existsSync(r))visit(readJournal(r));}
   else if(!state&&fs.existsSync(r))visit(readJournal(r));
  }
