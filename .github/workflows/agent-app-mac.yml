@@ -28,6 +28,11 @@ on:
         description: The app updates itself from https://dist.ssam.pro/u/ssam-agent (requires sign_and_notarize)
         type: boolean
         default: false
+      update_feed:
+        description: production = dist.ssam.pro/u/ssam-agent (every Mac); staging = dist.ssam.pro/u/ssam-agent-staging (the owner's test Mac only)
+        type: choice
+        options: [production, staging]
+        default: production
 permissions:
   contents: write # Required only to read the existing private draft asset.
 jobs:
@@ -40,4 +45,5 @@ jobs:
       sign_and_notarize: ${{ inputs.sign_and_notarize }}
       app_version: ${{ inputs.app_version }}
       enable_updates: ${{ inputs.enable_updates }}
+      update_feed: ${{ inputs.update_feed }}
     secrets: inherit

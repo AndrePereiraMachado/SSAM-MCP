@@ -24,6 +24,11 @@ on:
         description: The app updates itself from https://dist.ssam.pro/u/ssam-agent (requires sign_and_notarize)
         type: boolean
         default: false
+      update_feed:
+        description: production = dist.ssam.pro/u/ssam-agent (every Mac); staging = dist.ssam.pro/u/ssam-agent-staging (the owner's test Mac only)
+        type: choice
+        options: [production, staging]
+        default: production
 
   workflow_call:
     inputs:
@@ -45,6 +50,9 @@ on:
       enable_updates:
         type: boolean
         default: false
+      update_feed:
+        type: string
+        default: production
 
 permissions:
   # GitHub requires write-level release access to read unpublished drafts.
@@ -59,6 +67,9 @@ env:
   PACK_SHA256: ${{ inputs.pack_sha256 }}
   APP_VERSION: ${{ inputs.app_version }}
   ENABLE_UPDATES: ${{ inputs.enable_updates && 'true' || 'false' }}
+  # Review M4 of agent/mac-028: the first live test of the Mac self-update runs on a staging feed (its own app on the Update
+  # Server, which no production Mac reads: the feed of a Mac build is pinned), never on the production feed.
+  UPDATE_FEED: ${{ inputs.update_feed || 'production' }}
 
 jobs:
   mac:
@@ -81,9 +92,13 @@ jobs:
             if (process.env.ENABLE_UPDATES === "true" && process.env.SIGNED !== "true") throw Error("enable_updates needs sign_and_notarize: Squirrel.Mac installs only a Developer ID update");
             // Review B4 of agent/mac-028: an updating build carries exactly the version of package.json (a mistyped higher
             // version would burn the version line of every Mac, which never goes back down).
-            if (version !== own && process.env.ENABLE_UPDATES === "true") throw Error("enable_updates needs app_version = package.json version " + own + ", not " + version);
+            // A staging build may carry another version: the test of an update needs a higher one on the staging feed.
+            const feed = process.env.UPDATE_FEED;
+            if (feed !== "production" && feed !== "staging") throw Error("update_feed must be production or staging: " + feed);
+            if (version !== own && process.env.ENABLE_UPDATES === "true" && feed === "production") throw Error("enable_updates needs app_version = package.json version " + own + ", not " + version);
+            if (feed === "staging" && process.env.ENABLE_UPDATES !== "true") throw Error("update_feed staging needs enable_updates");
             if (version !== own) console.log("::warning::app_version " + version + " overrides package.json " + own);
-            console.log(JSON.stringify({ appVersion: version, packageJson: own, enableUpdates: process.env.ENABLE_UPDATES === "true" }));'
+            console.log(JSON.stringify({ appVersion: version, packageJson: own, enableUpdates: process.env.ENABLE_UPDATES === "true", updateFeed: feed }));'
         env:
           SIGNED: ${{ inputs.sign_and_notarize && 'true' || 'false' }}
       - name: Check release prerequisites
@@ -196,7 +211,8 @@ jobs:
           # enable_updates: resources/app-update.yml names https://dist.ssam.pro/u/ssam-agent and dist/latest-mac.yml lists the ZIP
           # (build.mjs checks both after electron-builder); otherwise --no-updates, the offline build of r43.
           updates=--no-updates; if [ "$ENABLE_UPDATES" = true ]; then updates=; fi
-          node scripts/build.mjs --platform mac --pack "$RUNNER_TEMP/ssam-pack/$PACK_ASSET" --native "$native" --app-version "$APP_VERSION" $updates --notarize --bundled-bridges-only
+          feed=https://dist.ssam.pro/u/ssam-agent; if [ "$UPDATE_FEED" = staging ]; then feed=https://dist.ssam.pro/u/ssam-agent-staging; fi
+          node scripts/build.mjs --platform mac --pack "$RUNNER_TEMP/ssam-pack/$PACK_ASSET" --native "$native" --app-version "$APP_VERSION" --update-url "$feed" $updates --notarize --bundled-bridges-only
           mkdir -p ci-results
           xcrun notarytool submit dist/*-mac-arm64.dmg --apple-id "$APPLE_ID" --password "$APPLE_APP_SPECIFIC_PASSWORD" --team-id "$APPLE_TEAM_ID" --no-s3-acceleration --wait --output-format json > ci-results/notary-dmg.json
           node --input-type=module -e 'import fs from "node:fs"; const r=JSON.parse(fs.readFileSync("ci-results/notary-dmg.json","utf8")); if(r.status!=="Accepted") throw Error("DMG notarization was not accepted"); console.log("DMG notarization accepted: "+r.id);'
@@ -280,11 +296,12 @@ jobs:
           const notary = read('ci-results/notary-dmg.json'); const hello = read('ci-results/hello-028.json');
           const appUpdate = read('dist/mac-arm64/SSAM Agent.app/Contents/Resources/app-update.yml');
           const manifest = { schema: 'ssam-agent-mac-release/1', version: process.env.APP_VERSION, headSha: process.env.GITHUB_SHA, ref: process.env.GITHUB_REF,
-            runId: process.env.GITHUB_RUN_ID, signed: process.env.SIGNED === 'true', updates: process.env.ENABLE_UPDATES === 'true',
+            runId: process.env.GITHUB_RUN_ID, signed: process.env.SIGNED === 'true', updates: process.env.ENABLE_UPDATES === 'true', updateFeed: process.env.UPDATE_FEED,
             feed: appUpdate ? (/^url:\s*(\S+)/m.exec(appUpdate)?.[1] ?? null) : null, pack: { asset: process.env.PACK_ASSET, sha256: process.env.PACK_SHA256.toLowerCase() },
             notarytool: notary ? { dmg: { id: JSON.parse(notary).id, status: JSON.parse(notary).status } } : null,
             hello: hello ? { agent: JSON.parse(hello).agent.version, pack: JSON.parse(hello).pack } : null, artifacts };
-          if (manifest.updates && (!artifacts.some(a => a.name === 'latest-mac.yml') || manifest.feed !== 'https://dist.ssam.pro/u/ssam-agent')) throw new Error('an updating build without its feed files');
+          const expectedFeed = process.env.UPDATE_FEED === 'staging' ? 'https://dist.ssam.pro/u/ssam-agent-staging' : 'https://dist.ssam.pro/u/ssam-agent';
+          if (manifest.updates && (!artifacts.some(a => a.name === 'latest-mac.yml') || manifest.feed !== expectedFeed)) throw new Error('an updating build without its feed files, or another feed than ' + expectedFeed);
           if (!artifacts.some(a => a.kind === 'update') || !artifacts.some(a => a.kind === 'installer')) throw new Error('the dmg or the zip is missing');
           fs.writeFileSync('dist/release-manifest.json', JSON.stringify(manifest, null, 2) + '\n');
           fs.appendFileSync('dist/SHA256SUMS', createHash('sha256').update(fs.readFileSync('dist/release-manifest.json')).digest('hex') + '  dist/release-manifest.json\n');

@@ -63,14 +63,21 @@ test('Mac workflows: app_version = package.json, enable_updates wired into build
   assert.doesNotMatch(text,/gh release (create|upload|edit)|--publish always|softprops\/action-gh-release|dist\.ssam\.pro\/api/);
  }
  assert.match(entry,/app_version: \$\{\{ inputs\.app_version \}\}/);assert.match(entry,/enable_updates: \$\{\{ inputs\.enable_updates \}\}/);
- assert.match(native,/--app-version "\$APP_VERSION" \$updates --notarize --bundled-bridges-only/);
+ assert.match(native,/--app-version "\$APP_VERSION" --update-url "\$feed" \$updates --notarize --bundled-bridges-only/);
+ // Review M4: the staging feed (its own app on the Update Server) for the first live test of the self-update; production stays
+ // the default, and only a staging build may carry a version other than package.json's.
+ for(const text of [entry,native]) assert.match(text,/update_feed:\n(?:\s+(?:description|type|options):.*\n)*\s+default: production/);
+ assert.match(entry,/update_feed: \$\{\{ inputs\.update_feed \}\}/);
+ assert.match(native,/feed=https:\/\/dist\.ssam\.pro\/u\/ssam-agent; if \[ "\$UPDATE_FEED" = staging \]; then feed=https:\/\/dist\.ssam\.pro\/u\/ssam-agent-staging; fi/);
+ assert.match(native,/version !== own && process\.env\.ENABLE_UPDATES === "true" && feed === "production"\) throw Error/);
+ assert.match(native,/manifest\.feed !== expectedFeed/);
  // Review M2: the three thins of the published Windows 0.2.8, 11.55.94 the default; no 11.55.95 thin.
  assert.match(native,/'\["11\.55\.94","11\.55\.93","11\.55\.92"\]' \|\| hello\.pack\.o11BuiltFor !== '11\.55\.94'/);
  assert.doesNotMatch(native,/"11\.55\.95"/);
  assert.match(native,/'\["v108","v109"\]'/);
  assert.match(native,/release-manifest\.json/);assert.match(native,/agent\/dist\/latest-mac\.yml/);
  // Review B4 and B5: an updating build carries package.json's version; the checkout keeps no token.
- assert.match(native,/if \(version !== own && process\.env\.ENABLE_UPDATES === "true"\) throw Error/);
+ assert.match(native,/if \(version !== own && process\.env\.ENABLE_UPDATES === "true"(?: && feed === "production")?\) throw Error/);
  assert.match(native,/- uses: actions\/checkout@v4\n\s+with:\n(?:\s+#.*\n)*\s+persist-credentials: false/);
 });
 // Review M3 of agent/mac-028: the CI SDK is pinned to 10.0.403 or newer, the resolved ILCompiler/runtime packs are checked to be
