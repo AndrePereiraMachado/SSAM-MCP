@@ -136,6 +136,50 @@ class RemoteTests(unittest.TestCase):
         self.assertTrue(any(c[0] == "rm" and "-v" not in c for c in self.calls))
         self.assertFalse(list(pathlib.Path(self.temp.name).rglob("Features.plain.xml")))
 
+    # Window 4x4 (S2): a backend window prepares one backend at a time (id odc-<v>, its compose service under the v1 name); an O11
+    # round rewrites only the kernel.json of a backend that runs (kernelOnly, no features).
+    def backend_compose(self, name):
+        return {"services": {"ssam-server-v1": {"labels": {"ssam.odc": name[4:]}, "environment": {"SSAM_RUNTIME_DIR": "/data/server/versions/" + name}, "volumes": [{"source": "state", "target": "/data/server"}, PLUGINS_MOUNT]}}, "volumes": {"state": {}, "odc-model-plugins": {}}}
+
+    def prepare_backend(self, id, **kwargs):
+        return self.request("prepare", id=id, archive=self.archive(), built={"image": "private/image", "tag": "prod-fixed", "sha256": "a" * 64}, modelPlugins=PINS, compose=self.backend_compose(id), **kwargs)
+
+    def test_s2_prepare_accepts_a_backend_id_with_its_features(self):
+        result = self.prepare_backend("odc-1.7.33", kernel={"odc": "1.7.33", "o11": "11.55.95"}, features=base64.b64encode(b"<Features/>").decode())
+        self.assertTrue(result["ok"])
+        self.assertTrue(any("kernel" in c and "write" in c for c in self.calls))
+        self.assertTrue(any("features" in c and "put" in c for c in self.calls))
+        self.assertFalse(list(pathlib.Path(self.temp.name).rglob("Features.plain.xml")))
+        self.assertTrue((pathlib.Path(self.temp.name) / "releases" / "odc-1.7.33" / "kernel.json").exists())
+
+    def test_s2_prepare_kernel_only_rewrites_the_kernel_of_a_running_backend_without_features(self):
+        # The running fixture backend is labelled o11 11.55.93 / odc 1.7.29: a kernel naming it is refused unless kernelOnly.
+        kernel = {"odc": "1.7.29", "o11": "11.55.93"}
+        with self.assertRaisesRegex(RuntimeError, "already running pair"):
+            self.prepare_backend("odc-1.7.29", kernel=kernel, features=base64.b64encode(b"<Features/>").decode())
+        self.calls.clear()
+        result = self.prepare_backend("odc-1.7.29", kernel=kernel, kernelOnly=True)
+        self.assertTrue(result["ok"])
+        self.assertTrue(any("kernel" in c and "write" in c for c in self.calls))
+        self.assertFalse(any("features" in c for c in self.calls))
+        self.assertTrue(any(c[0] == "rm" and "-v" not in c for c in self.calls))
+        written = json.loads((pathlib.Path(self.temp.name) / "releases" / "odc-1.7.29" / "kernel.json").read_text())
+        self.assertEqual(written, kernel)
+        # kernelOnly with features is not kernel-only: the running-pair refusal stands.
+        with self.assertRaisesRegex(RuntimeError, "already running pair"):
+            self.prepare_backend("odc-1.7.29", kernel=kernel, kernelOnly=True, features=base64.b64encode(b"<Features/>").decode())
+
+    def test_s2_prepare_refuses_other_ids(self):
+        for bad in ("retire-odc-1.7.28", "o11-11.55.96", "odc-1.7", "odc-1.7.33/../x", "x-odc-1.7.33"):
+            with self.assertRaisesRegex(ValueError, "Invalid pair"):
+                self.prepare_backend(bad, kernel={}, kernelOnly=True)
+
+    def test_s2_usage_counts_take_backend_names(self):
+        self.usage = {"pairs": {"odc-1.7.32": {"heavy": 4, "active": 2}, "o11-11.55.93-odc-1.7.29": {"heavy": 1, "active": 0}, "retire-odc-1.7.28": {"heavy": 1, "active": 1}}, "skipped": 0}
+        value = self.request("snapshot", checkSource="capture-live", usageSource="// usage-count fixture")
+        self.assertEqual(value["usage"], {"odc-1.7.32": {"heavy": 4, "active": 2}, "o11-11.55.93-odc-1.7.29": {"heavy": 1, "active": 0}})
+        self.assertEqual(value["warnings"], ["USAGE_PARTIAL"])
+
     def test_rollback_checks_actual_previous_image_identity(self):
         expected = [{"o11": "11.55.93", "odc": "1.7.29", "image": "sha256:old"}]
         self.assertTrue(self.request("check", expectedBackends=expected, checkSource="synthetic")['ok'])

@@ -222,7 +222,7 @@ def dispatch(request):
         os.umask(0o077)
         # Window 4x4 (S2): a backend window prepares one backend at a time (id odc-<v>, its own compose service under the v1
         # name); kernelOnly (an O11 round) rewrites the kernel.json of a backend that runs, and sends no features.
-        if not re.fullmatch(r"(?:o11-[0-9.]+-)?odc-[0-9.]+", request["id"]):
+        if not re.fullmatch(r"(?:o11-\d+\.\d+\.\d+-)?odc-\d+\.\d+\.\d+", request["id"]):
             raise ValueError("Invalid pair.")
         kernel_only = request.get("kernelOnly") is True and not request.get("features")
         directory = base / "releases" / request["id"]
