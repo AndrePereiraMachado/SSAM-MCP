@@ -15,3 +15,4 @@
 # The official Studio installers dropped for the image build (docker/installers/README.md); never committed.
 /docker/installers/*
 !/docker/installers/README.md
+/deploy/.generated/

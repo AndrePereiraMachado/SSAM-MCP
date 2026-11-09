@@ -1,4 +1,8 @@
 // One Studio pair per backend. Authentication maps both credentials to the same license id.
+// Window 4x4 (design B, o11-kernels.mjs): a backend whose o11 is a LIST carries every Service Studio kernel of the window,
+// so the router selects it by the ODC Studio alone: the backend of the customer's ODC version; an ODC Studio newer than
+// every backend goes to the newest; anything else (older, between, none installed: an O11-only customer) to the default,
+// which gen-compose makes the newest ODC. A window of pairs (o11 a string) is routed as before.
 import fs from 'node:fs';
 import path from 'node:path';
 import http from 'node:http';
@@ -13,14 +17,32 @@ export function validateBackends(value, window = 3) {
   for (const backend of value) {
     const url = new URL(backend.url);
     if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(backend.name) || names.has(backend.name) || !['http:','https:'].includes(url.protocol)
-      || url.username || url.password || url.pathname !== '/' || url.search || url.hash || !threePart(backend.odc) || !threePart(backend.o11)) throw new Error('Invalid backend');
+      || url.username || url.password || url.pathname !== '/' || url.search || url.hash || !threePart(backend.odc) || !o11Of(backend)) throw new Error('Invalid backend');
     names.add(backend.name);
   }
   if (value.filter(b=>b.default===true).length!==1) throw new Error('Exactly one default backend is required');
+  // A window is all pairs or all multi-O11 backends, and a multi-O11 window has one backend per ODC version.
+  const multi=value.filter(b=>Array.isArray(b.o11)).length;
+  if (multi && multi!==value.length) throw new Error('Invalid backend');
+  if (multi && new Set(value.map(b=>threePart(b.odc))).size!==value.length) throw new Error('Invalid backend');
   return value;
 }
+// A backend's O11: one version (a pair) or the list of its kernels (window 4x4), three numbers each; null when malformed.
+export function o11Of(backend) {
+  if (Array.isArray(backend?.o11)) { const list=backend.o11.map(v=>threePart(v)); return list.length&&list.every(Boolean)&&list.every((v,i)=>v===backend.o11[i])&&new Set(list).size===list.length?list:null; }
+  return threePart(backend?.o11);
+}
+const newer=(a,b)=>{const x=a.split('.').map(Number),y=b.split('.').map(Number);for(let i=0;i<3;i++)if(x[i]!==y[i])return x[i]>y[i];return false;};
 export function selectBackend(backends, hello) {
   const studios=hello?.studios;
+  if (backends.some(b=>Array.isArray(b.o11))) {
+    const odc=studios?.odc?.installed?threePart(studios.odc.installed.version):null;
+    const exact=odc?backends.find(b=>threePart(b.odc)===odc):null;
+    if (exact) return exact;
+    const newest=backends.reduce((n,b)=>!n||newer(threePart(b.odc),threePart(n.odc))?b:n,null);
+    if (odc&&backends.every(b=>newer(odc,threePart(b.odc)))) return newest;
+    return backends.find(b=>b.default);
+  }
   const lane=studios?.odc?.installed?'odc':studios?.o11?.installed?'o11':null;
   const version=lane?threePart(studios[lane].installed.version):null;
   const installed=['odc','o11'].filter(l=>studios?.[l]?.installed);

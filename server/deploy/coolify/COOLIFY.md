@@ -532,3 +532,76 @@ for its worst case without admission (server 0.4 GB + a worker in a call 1.7 GB 
   (`r45-window.sh apply`) leaves one copy of the stored compose, `/root/ssam-r45/coolify-before.json` (0600), for the
   rollback; `cleanup`, after the owner confirms, deletes it and logs it in `/root/ssam-r45/cleanup.log`. Roll back with
   `SSAM_LOCK_WAIT=900` (a backup cron may hold the lock).
+
+## 14. Window 4x4 (one backend per ODC version; phase S1, not deployed)
+
+Design B (`C:\t\r5\janela-4x4\DESENHO.md`): the window serves the newest ODC Studio and the three before it, and the
+newest Service Studio and the three before it, in every combination. One backend per ODC version; each image carries
+every Service Studio of the window and one O11 kernel compiled against each:
+
+- Image: `node server/deploy/gen-dockerfile.mjs <o11-kernels.json>` writes `deploy/.generated/Dockerfile.o11k` from
+  `server/Dockerfile` (every bundle pinned by its SHA256 in the generated file); `SSAM_DOCKERFILE=deploy/.generated/Dockerfile.o11k
+  sh deploy/build.sh ...` builds it, one image per ODC Studio. Layout `/studio/o11/<x.y.z>`, `/app/kernel/.local/o11/<x.y.z>/cli`,
+  ENV `SSAM_IMAGE_O11` (the list), `SSAM_O11_STUDIO_ROOT`, `SSAM_O11_CLI_ROOT`; `ANVIL_STUDIO_DIR` and `/app/kernel/.local/cli`
+  are the default kernel's (the one kernel.json pins). The single-O11 `server/Dockerfile` is unchanged.
+- Server: the hub hands each customer the kernel of its own Service Studio (`welcome.kernel.o11`, `builds.o11`;
+  `platforms/odc/facade/o11-kernels.mjs`), its hosted calls run that kernel's CLI and Studio folder, and its O11 module index
+  is `<SSAM_MODULE_INDEX_ROOT>/o11-kernel/<x.y.z>`. A Service Studio outside the window is judged by the default kernel, as
+  on the pairs (older: update required; newer: served with the notice).
+- Compose: a `versions.json` with `backends` instead of the `odc`/`o11` lists:
+  `{"window":4,"o11":{"served":["11.55.92","11.55.93","11.55.94","11.55.95"]},"sizing":{...},"backends":[{"odc":"1.7.32","image":"...","tag":"...","sha256":"..."},...]}`.
+  `gen-compose.mjs` names each backend `odc-<x.y.z>` (volumes `cache-odc-<v>`, `odc-features-odc-<v>`, runtime
+  `/data/server/versions/odc-<v>`), puts the newest ODC first (`ssam-server-v1`, the router's default), gives EVERY backend
+  the same `SSAM_SERVED_VERSIONS` (all ODC versions of the window, `o11.served`), label `ssam.o11` = the served list, and
+  mounts the shared signed-bridge store `ssam-bridges` read-only at `/data/bridges` (`SSAM_BRIDGES_DIR`; the public key stays
+  in the image). The router selects by the ODC Studio only. Sizing (section 13) is unchanged and keyed by backend name
+  (`usage`, `hotPair`: `odc-<v>`); `withUsage` folds the counts of a pair into the backend of its ODC version.
+- Not yet: the watcher (S2) still rotates and checks a window of pairs and must stay paused while a backend window is live;
+  `ssamctl --version o11=<v>` no longer identifies a backend (use `odc=<v>`). The first deploy kit is planned in
+  `C:\t\r5\janela-4x4\S1-KIT-PLANO.md` (rename of the odc-features volumes, kernel.json per new runtime dir, Coolify PATCH, rollback).
+- Resident O11 readers (review S1 M2, R3): each Service Studio version a customer brings has its own resident
+  `read-serve` (`reader-client.mjs`, idle exit 15 min), which section 13's model never counted. On a multi-O11 image a
+  new reader generation first stops the idle readers past the ceiling `SSAM_O11_READERS_MAX` (least recently used; a
+  reader that serves, or read within `SSAM_O11_READER_MIN_IDLE_MS`, default 60 s, is never stopped), drops the copies
+  of retired versions, and is admitted by the memory gate with `SSAM_MEMORY_RESERVE_READER_MB` (default 800, NOT
+  measured: the first-deploy kit measures one reader's RSS and sets `sizing.<tier>.o11ReaderMb`). The ceiling only
+  limits (`gen-compose`: every O11 version of the window, or `sizing.<tier>.o11Readers`); the gate decides how many
+  fit (relief below). Its startup deadline
+  runs from the spawn, after the admission, and a reader that misses it is killed (no reader without its reserve). A
+  switch between two versions on a full backend costs one cold reader start (seconds), at most once a minute.
+- Resident ODC lane worker (S1 R2/R3): `anvil-odc serve` (`anvil-worker.mjs`), measured on v5 (other) 2026-11-09 at
+  VmRSS 1498 MiB, VmHWM 2116 MiB, was in no model either: other 3271 + 2116 = 5387 MiB against 4240m, hot 8698 + 2116
+  = 10814 against 10240m, at the worst case of section 13 with no reader. Production r45 (oom-check 2026-11-09): v5
+  peaked at 3772 of 4240 MiB with no OOM, v2 1556, the others ~400; the worst case did not coincide. In the S1 images:
+  - its start is admitted by the memory gate with `SSAM_MEMORY_RESERVE_ODC_WORKER_MB` (default 2150, the measured peak),
+    as a STANDING hold on its pid while it lives: every later admission (builds, O11 workers, readers) counts its growth
+    still to come (reserve minus RSS, 652 MiB at 1498). A worker already up is adopted the same way. A start without room
+    within `SSAM_MEMORY_WORKER_WAIT_MS` (15 s) launches nothing and the command runs cold, admitted with the ODC cold
+    reserve (600) or inside the build slot that reserved it; a wait that runs out there refuses with
+    `BUILD_QUEUE_TIMEOUT` (outcome not-sent). After a start found no room, that port goes cold at once for 60 s
+    unless the gate fits the worker right then (review R3 B-R3-1).
+  - Relief and progress (S1 R4, review R3 M6): every wait of the gate (a build slot, a cold run, an ODC or O11 worker
+    start, a reader start) first asks the idle caches to leave, one per 2 s turn (`SSAM_MEMORY_EVICT_TURN_MS`): idle O11
+    readers first (a waiting reader spares those read within 60 s; any other waiter evicts a reader idle for 5 s), then
+    idle ODC and O11 workers of this backend with no call in flight. An evicted ODC worker keeps its standing hold,
+    marked leaving, until its process is gone (review R4 B-R4-2); an ODC worker used within 60 s is never asked, as the
+    readers (B-R4-3). A worker or reader serving a call is never asked. The server registers the evictor of its O11
+    reader folder at start, so readers left by a previous server process are evictable too (B-R4-1). When nothing more
+    is evictable and no other consumer is admitted (a standing hold is no consumer), the waiter enters: a lone delivery
+    is never refused for an idle cache or for a resident worker's growth still to come. That rule never admits a
+    STANDING request (S1 R5, review R4 M7): the ODC worker's start has the cold run as its alternative and starts only
+    with real room (the 60 s no-room cache asks the same), so a consumer entering by the rule never stacks on a worker
+    that started without room. Measured by the review's probe (other: server 400, ODC worker RSS 1498, an
+    idle reader of 300/600/800 MiB): the O11 delivery (1400) is admitted in every case.
+  - Hot: each build slot past the first has its own ODC worker (`base + index*step`, `build-pool.mjs`), so up to 4 W
+    on the hot tier (4 builds), each started through the gate with its own standing hold and each an evictable cache
+    when idle. A build that runs on its slot's worker reserves once: the slot's hold is marked covered while the worker's
+    standing hold counts that worker's growth (review R3 B-R3-2).
+  - `gen-compose` writes `ANVIL_WORKER_IDLE_MINUTES` per tier (`sizing.<tier>.workerIdleMinutes`; default hot 120,
+    other 30; the kernel's own default is 240): the idle ODC worker leaves memory sooner. The hosted O11 workers set
+    their own; the readers keep their 15 min.
+  - The owner's 4240m for other stays. No kernel process STARTS without admission (the ODC worker included) and the ODC
+    worker's growth is reserved; that is not "never an OOM": a call on a resident worker (O11 or ODC) has no reservation of
+    its own beyond the first 15 s (`growMs`), the progress rule admits a lone consumer when nothing more can be evicted,
+    and `debug-run.mjs`'s cold apply outside a slot runs unadmitted. The gate only exists in images built from e04cfb7
+    on, which every S1 image is; the live r45 images have none.

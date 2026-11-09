@@ -20,11 +20,63 @@ export function versionPairs(manifest,window=manifest.window??3){
   return {name,odc:odc.version,o11:o11.version,image:`${odc.image}:${odc.tag}${odc.sha256?'@sha256:'+odc.sha256.replace(/^sha256:/,''):''}`};
  });
 }
+// Window 4x4 (design B: C:/t/r5/janela-4x4/DESENHO.md 1.4 item 8). A manifest with "backends" is a window of ONE backend
+// per ODC Studio version, each image carrying every O11 kernel of the window (server/deploy/gen-dockerfile.mjs):
+//   {"window": 4, "o11": {"served": ["11.55.92", ...], "kernels": [...]?}, "backends": [{"odc": "1.7.32", "image": "...",
+//    "tag": "prod-...", "sha256": "<64 hex>"?, "o11Kernels": [...]?}, ...], "sizing": {...}?}
+//   - o11.served: the O11 versions every backend serves (SSAM_SERVED_VERSIONS o11, the same on every backend; the router never
+//     reaches a backend by its O11 version, hosted/router.mjs); o11.kernels (default served): what the images are built with,
+//     every served version among them;
+//   - backends[].o11Kernels (default o11.kernels): the kernels that image carries, which must hold every served version (its
+//     label ssam.kernels.o11, checked by the deploy kit); the backend is named odc-<version>;
+//   - the default backend (the router's fallback: no ODC Studio, an older one) is the NEWEST ODC.
+// A manifest with "odc"/"o11" lists is the window of pairs (versionPairs), generated exactly as before: the watcher keeps
+// using it until its own per-lane window (phase S2).
+export const BACKEND_NAME=/^odc-\d+\.\d+\.\d+$/;
+const versionKey=v=>v.split('.').map(Number);
+const newerVersion=(a,b)=>{const x=versionKey(a),y=versionKey(b);for(let i=0;i<3;i++)if(x[i]!==y[i])return x[i]>y[i];return false;};
+const sortVersions=list=>[...list].sort((a,b)=>newerVersion(a,b)?1:newerVersion(b,a)?-1:0);
+export const isBackendManifest=manifest=>Array.isArray(manifest?.backends);
+export function versionBackends(manifest,window=manifest.window??4){
+ if(!Number.isInteger(window)||window<1||window>20)throw new Error('Invalid version window.');
+ if(manifest.odc!==undefined)throw new Error('A backend window has no "odc" list (one backend per ODC version).');
+ const list=manifest.backends;
+ if(!Array.isArray(list)||!list.length||list.length>window)throw new Error('The backends must fit the window.');
+ const o11=manifest.o11;
+ if(!o11||typeof o11!=='object'||Array.isArray(o11)||Object.keys(o11).some(k=>!['served','kernels'].includes(k)))throw new Error('A backend window needs o11 {served, kernels?}.');
+ if(!threeParts(o11.served))throw new Error('Invalid o11.served.');
+ const kernels=o11.kernels??o11.served;
+ if(!threeParts(kernels)||o11.served.some(v=>!kernels.includes(v)))throw new Error('Invalid o11.kernels: every served O11 version needs its kernel.');
+ const seen=new Set();
+ const out=list.map(b=>{
+  if(!b||typeof b!=='object'||Object.keys(b).some(k=>!['odc','image','tag','sha256','o11Kernels'].includes(k)))throw new Error('Invalid backend entry.');
+  if(!/^\d+\.\d+\.\d+$/.test(b.odc??'')||!b.image||!b.tag||b.tag==='latest'||!/^[\w.-]+$/.test(b.tag))throw new Error('Invalid pinned image version.');
+  if(b.sha256&&!/^(sha256:)?[a-f0-9]{64}$/.test(b.sha256))throw new Error('Invalid image digest.');
+  const carried=b.o11Kernels??kernels;
+  if(!threeParts(carried))throw new Error('Invalid o11Kernels of backend '+b.odc+'.');
+  const missing=o11.served.filter(v=>!carried.includes(v));
+  if(missing.length)throw new Error('The image of backend odc-'+b.odc+' lacks the O11 kernels '+missing.join(', ')+' the window serves.');
+  const name='odc-'+b.odc;
+  if(seen.has(name))throw new Error('Duplicate backend.');seen.add(name);
+  return {name,odc:b.odc,o11:sortVersions(o11.served),kernels:sortVersions(carried),image:`${b.image}:${b.tag}${b.sha256?'@sha256:'+b.sha256.replace(/^sha256:/,''):''}`};
+ });
+ // Newest ODC first, as the watcher orders the pairs: ssam-server-v1 is the default backend in both windows.
+ return out.sort((a,b)=>newerVersion(a.odc,b.odc)?-1:newerVersion(b.odc,a.odc)?1:0);
+}
+// The window of a manifest when the caller names none: a backend window is 4 (the 4x4 window), a pair window 3 (as before).
+export const windowOf=manifest=>manifest.window??(isBackendManifest(manifest)?4:3);
+// The backends of either window, in service order (ssam-server-v1 first, the router's default): {name, odc, o11, image}
+// with o11 one version (a pair) or the served list (a backend window, plus kernels).
+export function backendsOf(manifest,{window=windowOf(manifest)}={}){
+ return isBackendManifest(manifest)?versionBackends(manifest,window):versionPairs(manifest,window);
+}
 // The ODC model plugins (MobileUI for every Mobile UI app) are tenant binaries the ODC Studio caches in
 // LocalApplicationData\OutSystems\ODC Studio\Plugins; the kernel children get a closed environment (no HOME,
 // no ANVIL_ODC_PLUGINS_DIR), so .NET falls back to the passwd home of uid 10001 (/tmp): every backend mounts the
 // owner-staged plugin store read-only exactly there (OdcModelPlugins.CacheDirectory).
 export const MODEL_PLUGINS_VOLUME='odc-model-plugins';
+export const BRIDGES_VOLUME='ssam-bridges';
+export const BRIDGES_TARGET='/data/bridges';
 export const MODEL_PLUGINS_TARGET='/tmp/.local/share/OutSystems/ODC Studio/Plugins';
 const servedOf=pairs=>JSON.stringify({odc:[...new Set(pairs.map(p=>p.odc))],o11:[...new Set(pairs.map(p=>p.o11))]});
 const threeParts=list=>Array.isArray(list)&&list.length>0&&list.every(v=>/^\d+\.\d+\.\d+$/.test(v))&&new Set(list).size===list.length;
@@ -35,7 +87,17 @@ const threeParts=list=>Array.isArray(list)&&list.length>0&&list.every(v=>/^\d+\.
 //   every pair it keeps (window.mjs rotateWindow), so a later rotation never changes a running backend's list;
 // - else keepServed N (r44): the first N backends keep the served list of the first N pairs (the window they were deployed with);
 // - else the whole window.
-export function servedLists(manifest,{window=manifest.window??3}={}){
+// A backend window: one list for every backend, {odc: every backend's ODC version, o11: o11.served}. The ODC list is the whole
+// window, not the backend's own version (design 1.4 item 8 corrected, S1-RESULTADO): an ODC Studio upgraded under a live
+// session to a version another backend serves must read "served elsewhere" (the hub redirects), never "newer". No frozen
+// lists nor keepServed there: the router never reaches a backend by its O11 version, so no backend can refuse a client the
+// window serves.
+export function servedLists(manifest,{window=windowOf(manifest)}={}){
+ if(isBackendManifest(manifest)){
+  if(manifest.keepServed!==undefined)throw new Error('keepServed belongs to a pair window.');
+  const backends=versionBackends(manifest,window),one=JSON.stringify({odc:backends.map(b=>b.odc),o11:backends[0].o11});
+  return backends.map(()=>one);
+ }
  const pairs=versionPairs(manifest,window),keep=manifest.keepServed??0;
  if(!Number.isInteger(keep)||keep<0||keep>pairs.length)throw new Error('Invalid keepServed.');
  const all=servedOf(pairs),kept=servedOf(pairs.slice(0,keep));
@@ -72,8 +134,25 @@ export function servedLists(manifest,{window=manifest.window??3}={}){
 // Without "sizing" the compose is exactly as before.
 export const SIZING_TIERS=['hot','other'];
 export const CAPACITY_WINDOW='CAPACITY_WINDOW';
-const TIER_FIELDS=['cpus','memory','cpuShares','buildWorkers','o11WorkersMax','queueMs'];
-const PAIR_NAME=/^o11-\d+\.\d+\.\d+-odc-\d+\.\d+\.\d+$/;
+const TIER_FIELDS=['cpus','memory','cpuShares','buildWorkers','o11WorkersMax','queueMs','o11Readers','o11ReaderMb','workerIdleMinutes'];
+// Window 4x4 (review S1 M2): the resident O11 readers a backend of the window keeps (SSAM_O11_READERS_MAX, reader-residency.mjs),
+// optional per tier. It is a CEILING (S1 R3, review R2 B-R2-2): a backend window without it gets every O11 version of the
+// window, and the memory gate decides how many readers fit, asking idle ones (not read for 60 s) to leave when a new one
+// waits for room. The capacity model counts one resident reader per backend: the r45 worst case (other 3271, hot 8698 MiB)
+// plus the resident ODC lane worker (anvil-odc serve: VmRSS 1498, VmHWM 2116 MiB measured on v5 2026-11-09), whose start
+// and growth the gate now holds (S1 R3, COOLIFY 14). A pair window only carries it when the tier names it. o11ReaderMb
+// (optional, the measured RSS of one O11 reader) is the gate's reserve for a new reader (SSAM_MEMORY_RESERVE_READER_MB;
+// code default 800). workerIdleMinutes (S1 R3): ANVIL_WORKER_IDLE_MINUTES of the backend, the minutes after which an idle
+// resident worker (the ODC lane worker; the hosted O11 workers set their own) exits by itself (WorkerServer.cs, unset 240):
+// a backend window gets hot 120 and other 30 unless the tier names it; 0 never exits.
+const readersOf=(manifest,tier)=>manifest.sizing?.[tier]?.o11Readers??(isBackendManifest(manifest)?manifest.o11.served.length:undefined);
+export const DEFAULT_WORKER_IDLE_MINUTES=Object.freeze({hot:120,other:30});
+const idleOf=(manifest,tier)=>manifest.sizing?.[tier]?.workerIdleMinutes??(isBackendManifest(manifest)?DEFAULT_WORKER_IDLE_MINUTES[tier]:undefined);
+const readersEnv=(manifest,tier)=>{const r=readersOf(manifest,tier),mb=manifest.sizing?.[tier]?.o11ReaderMb,idle=idleOf(manifest,tier);
+ return {...(r===undefined?{}:{SSAM_O11_READERS_MAX:String(r)}),...(mb===undefined?{}:{SSAM_MEMORY_RESERVE_READER_MB:String(mb)}),
+  ...(idle===undefined?{}:{ANVIL_WORKER_IDLE_MINUTES:String(idle)})};};
+// A backend id: a pair (o11-<v>-odc-<v>) or a backend of the 4x4 window (odc-<v>); usage and hotPair are keyed by it.
+const PAIR_NAME=/^(?:o11-\d+\.\d+\.\d+-)?odc-\d+\.\d+\.\d+$/;
 const mib=value=>{const m=/^(\d+)([mg])$/i.exec(String(value));return m?Number(m[1])*(m[2].toLowerCase()==='g'?1024:1):null;};
 const isCpus=value=>/^\d+(?:\.\d+)?$/.test(String(value))&&Number(value)>0&&Number(value)<=64;
 const count=v=>Number.isInteger(v)&&v>=0;
@@ -83,12 +162,12 @@ export const cpuWeight=shares=>{if(!shares)return 100;if(shares<=2)return 1;if(s
 const useOf=(usage,name)=>[usage?.[name]?.heavy??0,usage?.[name]?.active??0];
 const more=(a,b)=>a[0]!==b[0]?a[0]>b[0]:a[1]>b[1];
 // The index of the hot pair in the window: the pinned one, else the most used (ties: the earlier pair, the default first).
-export function hotPairIndex(manifest,{window=manifest.window??3}={}){
- const pairs=versionPairs(manifest,window),pin=manifest.sizing?.hotPair,usage=manifest.sizing?.usage;
+export function hotPairIndex(manifest,{window=windowOf(manifest)}={}){
+ const pairs=backendsOf(manifest,{window}),pin=manifest.sizing?.hotPair,usage=manifest.sizing?.usage;
  if(pin!==undefined&&pin!==null){const at=pairs.findIndex(p=>p.name===pin);if(at<0)throw new Error('sizing.hotPair names no pair of the window.');return at;}
  return pairs.reduce((best,p,i)=>more(useOf(usage,p.name),useOf(usage,pairs[best].name))?i:best,0);
 }
-export const hotPairName=manifest=>manifest.sizing===undefined?null:versionPairs(manifest)[hotPairIndex(manifest)].name;
+export const hotPairName=manifest=>manifest.sizing===undefined?null:backendsOf(manifest)[hotPairIndex(manifest)].name;
 export function checkSizing(sizing){
  if(!sizing||typeof sizing!=='object'||Array.isArray(sizing))throw new Error('Invalid sizing.');
  const known=new Set([...SIZING_TIERS,'router','host','usage','hotPair']);
@@ -102,6 +181,9 @@ export function checkSizing(sizing){
   if(!Number.isInteger(t.cpuShares)||t.cpuShares<2||t.cpuShares>262144)throw new Error('Invalid sizing.'+tier+'.cpuShares.');
   for(const k of ['buildWorkers','o11WorkersMax'])if(!Number.isInteger(t[k])||t[k]<1||t[k]>16)throw new Error('Invalid sizing.'+tier+'.'+k+'.');
   if(!Number.isInteger(t.queueMs)||t.queueMs<0||t.queueMs>3600000)throw new Error('Invalid sizing.'+tier+'.queueMs.');
+  if(t.o11Readers!==undefined&&(!Number.isInteger(t.o11Readers)||t.o11Readers<1||t.o11Readers>8))throw new Error('Invalid sizing.'+tier+'.o11Readers.');
+  if(t.o11ReaderMb!==undefined&&(!Number.isInteger(t.o11ReaderMb)||t.o11ReaderMb<100||t.o11ReaderMb>8192))throw new Error('Invalid sizing.'+tier+'.o11ReaderMb.');
+  if(t.workerIdleMinutes!==undefined&&(!Number.isInteger(t.workerIdleMinutes)||t.workerIdleMinutes<0||t.workerIdleMinutes>1440))throw new Error('Invalid sizing.'+tier+'.workerIdleMinutes.');
  }
  if(sizing.router!==undefined&&(!isCpus(sizing.router?.cpus)||!mib(sizing.router?.memory)||mib(sizing.router.memory)<256||Object.keys(sizing.router).some(k=>!['cpus','memory'].includes(k))))throw new Error('Invalid sizing.router.');
  if(sizing.host!==undefined&&(!mib(sizing.host?.memory)||!mib(sizing.host?.reserve)||Object.keys(sizing.host).some(k=>!['memory','reserve'].includes(k))))throw new Error('Invalid sizing.host.');
@@ -114,10 +196,12 @@ export function checkSizing(sizing){
 // (routeOf -> fallback) until their next hello; an entry that is not counts is ignored. null usage keeps the recorded counts.
 export function withUsage(manifest,usage){
  if(manifest.sizing===undefined||!usage||typeof usage!=='object'||Array.isArray(usage))return manifest;
- const pairs=versionPairs(manifest),names=new Set(pairs.map(p=>p.name)),next=structuredClone(manifest),out={};
+ const pairs=backendsOf(manifest),names=new Set(pairs.map(p=>p.name)),next=structuredClone(manifest),out={};
+ // A pair counted before the 4x4 window (o11-<v>-odc-<v>) folds into the backend of its ODC version when there is one.
+ const odcBackend=name=>{const m=/^o11-[\d.]+-(odc-\d+\.\d+\.\d+)$/.exec(name);return m&&names.has(m[1])?m[1]:null;};
  for(const [name,v] of Object.entries(usage)){
   if(!PAIR_NAME.test(name)||!v||typeof v!=='object'||!count(v.heavy)||!count(v.active))continue;
-  const into=names.has(name)?name:pairs[0].name,at=out[into]??={heavy:0,active:0};
+  const into=names.has(name)?name:odcBackend(name)??pairs[0].name,at=out[into]??={heavy:0,active:0};
   at.heavy+=v.heavy;at.active+=v.active;
  }
  next.sizing.usage=Object.fromEntries(Object.entries(out).filter(([,v])=>v.heavy||v.active).sort(([a],[b])=>a.localeCompare(b)));
@@ -125,8 +209,8 @@ export function withUsage(manifest,usage){
 }
 // The memory limits of a sized window in MiB (backends, router, console) against host.memory - host.reserve. A window that
 // does not fit throws CAPACITY_WINDOW (environmental), whoever asks: the generator and the watcher's rotation.
-export function hostBudget(manifest,{window=manifest.window??3}={}){
- const sizing=checkSizing(manifest.sizing),n=versionPairs(manifest,window).length;
+export function hostBudget(manifest,{window=windowOf(manifest)}={}){
+ const sizing=checkSizing(manifest.sizing),n=backendsOf(manifest,{window}).length;
  const consoleMb=mib(template.services['ssam-console']?.deploy?.resources?.limits?.memory)??0;
  const router=sizing.router?mib(sizing.router.memory):6144;
  const used=mib(sizing.hot.memory)+(n-1)*mib(sizing.other.memory)+router+consoleMb;
@@ -135,20 +219,20 @@ export function hostBudget(manifest,{window=manifest.window??3}={}){
  return {used,available,pairs:n};
 }
 // The tier of each backend, in pair order ('hot' | 'other'), or null without sizing.
-export function backendTiers(manifest,{window=manifest.window??3}={}){
+export function backendTiers(manifest,{window=windowOf(manifest)}={}){
  if(manifest.sizing===undefined)return null;
  checkSizing(manifest.sizing);
  const hot=hotPairIndex(manifest,{window});
- return versionPairs(manifest,window).map((_,i)=>i===hot?'hot':'other');
+ return backendsOf(manifest,{window}).map((_,i)=>i===hot?'hot':'other');
 }
 // What docker inspect must show on each sized service after a deploy (the deploy kit's check, every backend): NanoCpus,
 // Memory bytes, CpuShares and the pool environment. null without sizing.
-export function sizedExpectations(manifest,{window=manifest.window??3}={}){
+export function sizedExpectations(manifest,{window=windowOf(manifest)}={}){
  const tiers=backendTiers(manifest,{window});if(!tiers)return null;
  const s=manifest.sizing,bytes=v=>mib(v)*1024*1024,nano=v=>Math.round(Number(v)*1e9);
  const out={};
- tiers.forEach((tier,i)=>{const t=s[tier];out[`ssam-server-v${i+1}`]={tier,pair:versionPairs(manifest,window)[i].name,NanoCpus:nano(t.cpus),Memory:bytes(t.memory),CpuShares:t.cpuShares,
-  env:{SSAM_BUILD_WORKERS:String(t.buildWorkers),SSAM_O11_WORKERS_MAX:String(t.o11WorkersMax),SSAM_BUILD_QUEUE_MS:String(t.queueMs)}};});
+ tiers.forEach((tier,i)=>{const t=s[tier];out[`ssam-server-v${i+1}`]={tier,pair:backendsOf(manifest,{window})[i].name,NanoCpus:nano(t.cpus),Memory:bytes(t.memory),CpuShares:t.cpuShares,
+  env:{SSAM_BUILD_WORKERS:String(t.buildWorkers),SSAM_O11_WORKERS_MAX:String(t.o11WorkersMax),SSAM_BUILD_QUEUE_MS:String(t.queueMs),...readersEnv(manifest,tier)}};});
  if(s.router)out['ssam-router']={NanoCpus:nano(s.router.cpus),Memory:bytes(s.router.memory)};
  return out;
 }
@@ -162,7 +246,7 @@ function applySizing(c,manifest,tiers,window){
   const s=c.services[`ssam-server-v${i+1}`],t=sizing[tier];
   s.deploy.resources.limits={...s.deploy.resources.limits,cpus:t.cpus,memory:t.memory};
   s.cpu_shares=t.cpuShares;
-  Object.assign(s.environment,{SSAM_BUILD_WORKERS:String(t.buildWorkers),SSAM_O11_WORKERS_MAX:String(t.o11WorkersMax),SSAM_BUILD_QUEUE_MS:String(t.queueMs)});
+  Object.assign(s.environment,{SSAM_BUILD_WORKERS:String(t.buildWorkers),SSAM_O11_WORKERS_MAX:String(t.o11WorkersMax),SSAM_BUILD_QUEUE_MS:String(t.queueMs),...readersEnv(manifest,tier)});
   s.labels['ssam.sizing']=tier;
  });
 }
@@ -172,9 +256,9 @@ export function sizingOfCompose(compose){
  let sizing;try{sizing=JSON.parse(text);}catch{throw new Error('The live router carries an unreadable ssam.sizing.');}
  return checkSizing(sizing);
 }
-export function generateCompose(manifest,{window=manifest.window??3}={}){
+export function generateCompose(manifest,{window=windowOf(manifest)}={}){
  // Coolify 4.4.6 corrupts image@sha256 references. Immutable tags are checked against the recorded digest.
- const pairs=versionPairs(manifest,window).map(p=>({...p,digest:p.image.split('@')[1]??null,image:p.image.split('@')[0]})),c=structuredClone(template),source=c.services['ssam-server'];
+ const multi=isBackendManifest(manifest),pairs=backendsOf(manifest,{window}).map(p=>({...p,digest:p.image.split('@')[1]??null,image:p.image.split('@')[0]})),c=structuredClone(template),source=c.services['ssam-server'];
  // Each backend's served list: its frozen one, keepServed, or the whole window (servedLists).
  const lists=servedLists(manifest,{window});
  delete c.name;c.networks.default={};c.volumes={'server-state':{},friction:{},'runtime-css':{}};
@@ -183,9 +267,13 @@ export function generateCompose(manifest,{window=manifest.window??3}={}){
  for(const service of Object.values(c.services)){delete service.labels;service.image=pairs[0].image;}
  pairs.forEach((p,i)=>{
   const s=structuredClone(source);s.image=p.image;
-  s.labels={'ssam.backend':'true','ssam.odc':p.odc,'ssam.o11':p.o11,'ssam.default':String(i===0),...(p.digest?{'ssam.image.digest':p.digest}:{})};
+  // ssam.o11: the pair's O11 version, or the served O11 list of a 4x4 backend (comma separated).
+  s.labels={'ssam.backend':'true','ssam.odc':p.odc,'ssam.o11':multi?p.o11.join(','):p.o11,'ssam.default':String(i===0),...(p.digest?{'ssam.image.digest':p.digest}:{})};
   Object.assign(s.environment,{SSAM_BACKEND_NAME:p.name,SSAM_RUNTIME_DIR:`/data/server/versions/${p.name}`,SSAM_SERVED_VERSIONS:lists[i]});
   for(const v of s.volumes)if(['cache','odc-features'].includes(v.source)){v.source=`${v.source}-${p.name.replaceAll('.','-')}`;c.volumes[v.source]={};}
+  // A 4x4 backend reads the signed thin bridges from the shared store the owner stages (read-only; the trust anchor stays
+  // in the image, SSAM_BRIDGES_PUBLIC_KEY, bridge-store.mjs).
+  if(multi){s.volumes.push({type:'volume',source:BRIDGES_VOLUME,target:BRIDGES_TARGET,read_only:true});s.environment.SSAM_BRIDGES_DIR=BRIDGES_TARGET;}
   c.services[`ssam-server-v${i+1}`]=s;
  });
  const router=structuredClone(source);router.image=pairs[0].image;router.entrypoint=['node'];router.command=['facade/router.mjs'];router.expose=['7300'];
@@ -207,6 +295,6 @@ export function generateCompose(manifest,{window=manifest.window??3}={}){
 if(process.argv[1]&&path.resolve(process.argv[1])===fileURLToPath(import.meta.url)){
  const input=process.argv[2]??path.join(here,'versions.json'),output=process.argv[3]??path.join(here,'compose.coolify.yml');
  const manifest=JSON.parse(fs.readFileSync(input,'utf8').replace(/^\uFEFF/,''));
- const window=Number(process.env.SSAM_VERSION_WINDOW??manifest.window??3);
+ const window=Number(process.env.SSAM_VERSION_WINDOW??windowOf(manifest));
  fs.writeFileSync(output,'# Generated by gen-compose.mjs. Edit versions.json and regenerate.\n'+JSON.stringify(generateCompose(manifest,{window}),null,2)+'\n');
 }

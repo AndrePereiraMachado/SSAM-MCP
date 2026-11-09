@@ -90,3 +90,20 @@ test('an active MCP session is notified only once when multiple streams are open
  await f.call('/agent/v1/hello','agent-a',hello('1.7.29'));
  assert.equal((await Promise.all(reads)).join('').split('SESSION_REROUTED').length-1,1);
 });
+// Window 4x4 (design B): a backend whose o11 is a list carries every Service Studio kernel; the router selects by ODC alone.
+const w4=['1.7.32','1.7.31','1.7.30','1.7.29'].map((odc,i)=>({name:'odc-'+odc,url:'http://127.0.0.1:'+(i+1),odc,o11:['11.55.92','11.55.93','11.55.94','11.55.95'],default:i===0}));
+test('window 4x4: backends with O11 lists are selected by the ODC Studio; newer goes to the newest, the rest to the default',()=>{
+ assert.equal(validateBackends(w4,4),w4);
+ for(const odc of ['1.7.29','1.7.30','1.7.31','1.7.32'])for(const o11 of ['11.55.92.1','11.55.95.1',null])assert.equal(selectBackend(w4,hello(odc+'.1',o11)).name,'odc-'+odc,odc+' '+o11);
+ assert.equal(selectBackend(w4,hello('1.7.40.1','11.55.92.1')).name,'odc-1.7.32');
+ assert.equal(selectBackend(w4,hello('1.7.20.1','11.55.92.1')).name,'odc-1.7.32');
+ assert.equal(selectBackend(w4,hello(null,'11.55.93.1')).name,'odc-1.7.32','an O11-only customer: the default, whose kernels serve its Studio');
+ const notNewest=w4.map(b=>({...b,default:b.odc==='1.7.30'}));
+ assert.equal(selectBackend(notNewest,hello('1.7.40.1',null)).name,'odc-1.7.32','newer than all: the newest, not the default');
+ assert.equal(selectBackend(notNewest,hello(null,null)).name,'odc-1.7.30');
+ assert.throws(()=>validateBackends([...w4.slice(0,3),{...specs[1],url:'http://127.0.0.1:9'}],4),/Invalid backend/,'pairs and lists never mix');
+ assert.throws(()=>validateBackends([w4[0],{...w4[1],odc:'1.7.32',name:'twin'}],4),/Invalid backend/,'one backend per ODC version');
+ assert.throws(()=>validateBackends([{...w4[0],o11:['11.55.92','11.55.92']}],4),/Invalid backend/);
+ assert.throws(()=>validateBackends([{...w4[0],o11:['11.55.92.1']}],4),/Invalid backend/);
+ assert.throws(()=>validateBackends([{...w4[0],o11:[]}],4),/Invalid backend/);
+});

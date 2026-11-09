@@ -33,6 +33,7 @@ import { buildPolicyOf, servedBuildOf, studioIdentity, studioRefusal, studioVers
 import { recordStudioVersions } from './studio-version-state.mjs';
 import { UNKNOWN_EXIT } from './hosted/network-check.mjs';
 import { createBridgeStore, agentRuns } from './bridge-store.mjs';
+import { clientKernel, o11BuildsOf } from './o11-kernels.mjs';
 import { recordEvent } from '../../../facade/friction-store.mjs';
 
 // A Windows balloon on the server machine (owner test, 2026-10-08); off with SSAM_ACCESS_NOTIFY=0, never fails a call.
@@ -142,13 +143,18 @@ export const normalizeKernel = (kernel = {}) => {
     // kernel.json odcBridgeAccepted (owner, 2026-10-08): older ODC bridges the server still serves, so a bridge bump does
     // not cut the customers that have not installed the new agent package yet.
     ...(Array.isArray(kernel?.odcBridgeAccepted) ? { odcBridgeAccepted: kernel.odcBridgeAccepted.filter(v => typeof v === 'string' && v) } : {}) };
+  // Window 4x4 (o11-kernels.mjs): the O11 kernels a multi-O11 backend serves, {"<x.y.z>": "<build>" | null}; out.o11 stays the
+  // default kernel. Absent on a single-O11 kernel (the pairs), so nothing else changes there.
+  const o11Builds = o11BuildsOf(kernel);
+  if (o11Builds) out.o11Builds = o11Builds;
   const builds = Object.fromEntries(LANES.map(lane => [lane, servedBuildOf({ ...out, builds: kernel?.builds }, lane)]));
   if (Object.values(builds).some(Boolean)) out.builds = builds;
   if (kernel?.studioBuildPolicy !== undefined && kernel?.studioBuildPolicy !== null) {
     const { odc, o11 } = buildPolicyOf(kernel.studioBuildPolicy);
     out.studioBuildPolicy = { odc, o11 };
   }
-  if (kernel?.servedVersions || process.env.SSAM_SERVED_VERSIONS) out.servedVersions = Object.fromEntries(LANES.map(lane => [lane, servedVersions(lane, kernel)]));
+  // A multi-O11 kernel always names its window: the agent's CheckO11Build reads servedVersions.o11 (StudioKinds.cs).
+  if (kernel?.servedVersions || process.env.SSAM_SERVED_VERSIONS || o11Builds) out.servedVersions = Object.fromEntries(LANES.map(lane => [lane, servedVersions(lane, kernel)]));
   return out;
 };
 // The O11 hooks an agent package may declare (pack.json o11Hook, docs/O11-BRIDGE-FINA.md 13): the development hook and
@@ -166,8 +172,10 @@ export const O11_HOOKS = Object.freeze(['dev', 'h1']);
 //     identity in studio, served [build] and installed, before any package check: no package changes it (a bridge built
 //     for 11.55.92 does not bind on 11.55.91), so "ask for the current package" would mislead. Another build under "warn"
 //     (the default) is served: {ok: true, studio, warning} (studioBuildDiffers), and the gate puts it in every answer.
+// Window 4x4: the kernel judged is the customer's own (o11-kernels.mjs clientKernel: on a multi-O11 backend, the kernel of the
+// customer's Service Studio when it is served here); a single-O11 kernel is judged as it is.
 export function compatibility(hello, kernel, lanes, { refused = null, bridges = null } = {}) {
-  const k = normalizeKernel(kernel);
+  const k = clientKernel(normalizeKernel(kernel), hello?.studios?.o11?.installed ?? null);
   return Object.fromEntries(LANES.map(lane => {
     const capable = hello?.capabilities?.bridgeOffer === true || hello?.capabilities?.includes?.('bridgeOffer');
     const reports=Array.isArray(hello?.bridges)?hello.bridges:[];
@@ -337,6 +345,11 @@ export function createAgentHub({ dir, store, kernel, kernelRefused = null, log =
   const limits = { ...LIMITS, ...overrides };
   const runtime = ensureRuntime(dir);
   const serverKernel = normalizeKernel(kernel);
+  // Window 4x4 (o11-kernels.mjs): the kernel ONE customer sees, from its Hello (welcome.kernel, info().kernel, the identity
+  // of noteUnserved). On a multi-O11 backend kernel.o11 is the customer's own Service Studio when this backend serves it, so
+  // the agent's CheckPid (kernel[lane] equals the Studio's version) passes for every served Service Studio. A single-O11
+  // kernel is the same for everyone.
+  const kernelFor = hello => clientKernel(serverKernel, hello?.studios?.o11?.installed ?? null);
   const nowMs = () => +now();
   const iso = () => new Date(nowMs()).toISOString();
   const links = new Map();    // tokenId -> state
@@ -543,6 +556,9 @@ export function createAgentHub({ dir, store, kernel, kernelRefused = null, log =
       tokenId: state.tokenId,
       get customer() { return state.customer; },
       connected: () => !!state.channel,
+      // Window 4x4: the kernel this customer sees now (its O11 kernel follows its current Service Studio), read by the hosted
+      // context for the Studio folder and CLI of every O11 process of the customer (o11-kernels.mjs, executor.mjs).
+      kernel: () => kernelFor(state.hello),
       info() {
         const rec = record(state.tokenId);
         if (rec) state.lanes = rec.lanes;
@@ -553,7 +569,7 @@ export function createAgentHub({ dir, store, kernel, kernelRefused = null, log =
           agentO11Methods: Array.isArray(hello?.agent?.o11Methods) ? hello.agent.o11Methods.filter(m => typeof m === 'string') : null, agentPlatform: hello?.agent?.platform ?? null,
           agentOdcCommands: Array.isArray(hello?.agent?.odcCommands) ? hello.agent.odcCommands.filter(c => typeof c === 'string') : null,
           connectedAt: state.connectedAt, lastSeenAt: state.lastSeenAt, lanes: [...state.lanes], pack: hello?.pack ?? null,
-          studios: hello?.studios ?? null, o11Connection: hello?.o11Connection ?? null, kernel: { ...serverKernel },
+          studios: hello?.studios ?? null, o11Connection: hello?.o11Connection ?? null, kernel: { ...kernelFor(hello) },
           compatible: compatibility(hello, serverKernel, state.lanes, { refused: kernelRefused, bridges }) };
       },
       // A1 (round 2): a Studio process the executor or the gate refused (studio-identity.mjs), named once like the hub's.
@@ -634,7 +650,7 @@ export function createAgentHub({ dir, store, kernel, kernelRefused = null, log =
   // codes only: never a credential, a folder or an argument. A lane served again forgets its entry.
   function noteUnserved(state, compatible) {
     const observed = Object.fromEntries(LANES.filter(lane => state.lanes.includes(lane)).map(lane => {
-      const studio = studioIdentity(lane, state.hello?.studios?.[lane]?.installed, serverKernel);
+      const studio = studioIdentity(lane, state.hello?.studios?.[lane]?.installed, kernelFor(state.hello));
       return [lane, {studio, ok: studio?.ok, cause: causeOf(studio)}];
     }));
     try { state.verification=record(state.tokenId)?.verification===true;if(!state.verification) recordStudioVersions(dir, state, observed, iso()); }
@@ -718,7 +734,7 @@ export function createAgentHub({ dir, store, kernel, kernelRefused = null, log =
     const welcome = { t: 'welcome', channel: state.channel.id, customer: auth.customer, resumed,
       heartbeatMs: limits.heartbeatMs, deadAfterMs: limits.deadAfterMs, maxMessageBytes: limits.maxMessageBytes,
       inlineMaxBytes: limits.inlineMaxBytes, partBytes: limits.partBytes, maxFileBytes: limits.maxFileBytes, maxValueBytes: limits.maxValueBytes,
-      kernel: { ...serverKernel }, compatible };
+      kernel: { ...kernelFor(state.hello) }, compatible };
     res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
     res.end(JSON.stringify(welcome));
     return true;

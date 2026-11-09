@@ -20,7 +20,7 @@ import { anvilRoot, o11Lane } from './workspace.mjs';
 import { isModelReading, kernelReading } from './kernel-reading.mjs';
 import { o11LaneOf } from './o11-lane.mjs';
 import { runJob } from './job-runner.mjs';
-import { currentExecutor, hostedContext, hostedSpawnEnv, o11NotConnected, seamFields, usesWorkspace, workspacePath } from './executor.mjs';
+import { currentExecutor, hostedContext, hostedO11Kernel, hostedSpawnEnv, o11NotConnected, seamFields, usesWorkspace, workspacePath } from './executor.mjs';
 
 const exec = promisify(execFile);
 const odcRoot = process.env.SSAM_HYBRID_ODC_ROOT ?? path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -35,7 +35,10 @@ const CODEX_PYTHON = path.join(process.env.USERPROFILE ?? 'C:\\Users\\andre', '.
   'dependencies', 'python', 'python.exe');
 export const python = () => process.env.SSAM_PYTHON ?? (fs.existsSync(CODEX_PYTHON) ? CODEX_PYTHON : 'python');
 // The lane's CLI assembly, in the order scripts/lanes.py uses: the lane build, the ss4 build, the source build.
+// Window 4x4 (o11-kernels.mjs): inside a hosted call on a multi-O11 image, the CLI of the customer's own kernel.
 export function anvilCli(root = anvilRoot, laneName = anvilLane) {
+  const hosted = root === anvilRoot ? hostedO11Kernel() : null;
+  if (hosted) return hosted.cli;
   const local = path.join(root, laneName === 'ss5' ? path.join('.local', 'lane-ss5') : '.local');
   // The source build lands in the folder of its Studio's runtime (kernel/StudioRuntime.props): net10.0 from Service Studio
   // 11.55.94 on, net8.0 before.
@@ -45,6 +48,10 @@ export function anvilCli(root = anvilRoot, laneName = anvilLane) {
 }
 // Cold data commands can be rebuilt independently of a loaded model-reading worker.
 export function anvilDataCli(root = anvilRoot, laneName = anvilLane) {
+  // Window 4x4 (review S1 B11): a hosted call on a multi-O11 image runs its customer's own kernel CLI, never a data-cli
+  // built for the image default.
+  const hosted = root === anvilRoot ? hostedO11Kernel() : null;
+  if (hosted) return hosted.cli;
   const local = path.join(root, laneName === 'ss5' ? path.join('.local', 'lane-ss5') : '.local');
   const regular = anvilCli(root, laneName);
   return [path.join(local, 'data-cli', 'anvil.dll'), regular].filter(p => fs.existsSync(p))
@@ -54,7 +61,8 @@ export function anvilDataCli(root = anvilRoot, laneName = anvilLane) {
 // The catalogs are data: hosted they are the customer's (<ws>/o11/inventory.json, <ws>/odc/snapshots/modules.json).
 export const LANES = {
   o11: { name: 'o11', platform: 'OutSystems 11 (Service Studio)', root: anvilRoot, lane: anvilLane, laneSource: o11Lane.source,
-    exe: 'dotnet', cli: anvilCli(),
+    // A getter (window 4x4): read at each use, so a hosted call gets its customer's own O11 kernel (anvilCli).
+    exe: 'dotnet', get cli() { return anvilCli(); },
     get catalog() { return usesWorkspace(anvilRoot, anvilRoot) ? workspacePath('o11', 'inventory.json') : path.join(anvilRoot, anvilLane === 'ss5' ? path.join('.local', 'lane-ss5') : '.local', 'inventory.json'); },
     catalogHint: 'dotnet <cli> inventory --out <.local dir> writes inventory.json with the modules of the connected environment',
     studioProcess: 'ServiceStudio.exe', studioDir: null },

@@ -35,7 +35,8 @@ import { workspaceRoot, anvilRoot, o11Lane } from './workspace.mjs';
 import { readSnapshot } from './reader-client.mjs';
 import { hotModuleRead } from './anvil-worker.mjs';
 import { root as odcRoot, paths, odcStudioDir, ensureBuilder, builderNeedsBuild, studio } from './lib.mjs';
-import { hostedContext, servedWithoutContext } from './executor.mjs';
+import { hostedContext, hostedO11Kernel, servedWithoutContext } from './executor.mjs';
+import { o11IndexRoot } from './o11-kernels.mjs';
 import { LANES } from './lanes.mjs';
 import { o11LaneOf } from './o11-lane.mjs';
 import { resolveOpenModule, systemModuleName } from './studio-module.mjs';
@@ -87,18 +88,25 @@ export const sha256Of = file => createHash('sha256').update(fs.readFileSync(file
 // The C# store takes only an absolute SSAM_MODULE_INDEX_ROOT and otherwise looks for the workspace above the reader's
 // own folder (ModuleIndexStore.Default); readerConfig hands every reader this resolved root, so both sides use one folder.
 export const indexRoot = (env = process.env) => env.SSAM_MODULE_INDEX_ROOT ? path.resolve(env.SSAM_MODULE_INDEX_ROOT) : path.join(workspaceRoot, '.local', 'module-index');
-export const indexFile = (lane, sha256, env = process.env) => path.join(indexRoot(env), STORE_GENERATION, lane, sha256.toLowerCase() + '.' + adapterOf(lane) + '.json');
+// Window 4x4 (o11-kernels.mjs): the root of one lane's store. Inside a hosted call on a multi-O11 image with an absolute
+// SSAM_MODULE_INDEX_ROOT (the server's), the O11 store of the customer's own Service Studio version, the root its kernel
+// processes get too (executor.mjs hostedSpawnEnv); else the shared root, as before.
+export const laneIndexRoot = (lane, env = process.env) => {
+  const kernel = lane === 'o11' && env.SSAM_MODULE_INDEX_ROOT && path.isAbsolute(env.SSAM_MODULE_INDEX_ROOT) ? hostedO11Kernel() : null;
+  return kernel ? o11IndexRoot(indexRoot(env), kernel.version) : indexRoot(env);
+};
+export const indexFile = (lane, sha256, env = process.env) => path.join(laneIndexRoot(lane, env), STORE_GENERATION, lane, sha256.toLowerCase() + '.' + adapterOf(lane) + '.json');
 // The module digest beside the index (ModuleIndexStore.DigestPathOf), written in both lanes by the kernel's own reader.
 // T12: the extractor is in the name (ModuleIndexStore.DigestSuffix), so two releases never overwrite each other's digest.
-export const digestFile = (lane, sha256, env = process.env) => path.join(indexRoot(env), STORE_GENERATION, lane, sha256.toLowerCase() + '.' + DIGEST_ADAPTER + '.digest.e' + DIGEST_EXTRACTOR + '.json');
+export const digestFile = (lane, sha256, env = process.env) => path.join(laneIndexRoot(lane, env), STORE_GENERATION, lane, sha256.toLowerCase() + '.' + DIGEST_ADAPTER + '.digest.e' + DIGEST_EXTRACTOR + '.json');
 // The data text beside them (ModuleIndexStore.DdlPathOf), written in both lanes by the same kernel reader as the digest.
-export const ddlFile = (lane, sha256, env = process.env) => path.join(indexRoot(env), STORE_GENERATION, lane, sha256.toLowerCase() + '.' + DDL_ADAPTER + '.ddl.json');
+export const ddlFile = (lane, sha256, env = process.env) => path.join(laneIndexRoot(lane, env), STORE_GENERATION, lane, sha256.toLowerCase() + '.' + DDL_ADAPTER + '.ddl.json');
 // The rich index beside them (ModuleIndexStore.RichPathOf), written by the same kernel reader as the digest, only on request.
 // The flow reading beside them (ModuleIndexStore.FlowPathOf), written by the same kernel reader as the digest.
-export const flowFile = (lane, sha256, env = process.env) => path.join(indexRoot(env), STORE_GENERATION, lane, sha256.toLowerCase() + '.' + FLOW_ADAPTER + '.flow.json');
+export const flowFile = (lane, sha256, env = process.env) => path.join(laneIndexRoot(lane, env), STORE_GENERATION, lane, sha256.toLowerCase() + '.' + FLOW_ADAPTER + '.flow.json');
 // The read of one action an answer served, beside the flow reading (ModuleIndexStore.FlowReadingPathOf): the base of the
 // three-way merge of an edit written on it (kernel FlowMerge).
-export const flowReadingFile = (lane, sha256, sha, env = process.env) => path.join(indexRoot(env), STORE_GENERATION, lane, sha256.toLowerCase() + '.' + FLOW_ADAPTER + '.flow-' + sha + '.json');
+export const flowReadingFile = (lane, sha256, sha, env = process.env) => path.join(laneIndexRoot(lane, env), STORE_GENERATION, lane, sha256.toLowerCase() + '.' + FLOW_ADAPTER + '.flow-' + sha + '.json');
 // Every served action that is a fixed point keeps its read (written once: the file is named by its content); a store that
 // cannot be written only loses the merge (the edit is then refused with the current text, as before).
 function keepReadings(lane, sha256, served, actions) {
@@ -117,7 +125,7 @@ function keepReadings(lane, sha256, served, actions) {
     } catch { /* the merge is lost for this read, nothing else */ }
   }
 }
-export const richFile = (lane, sha256, env = process.env) => path.join(indexRoot(env), STORE_GENERATION, lane, sha256.toLowerCase() + '.' + RICH_ADAPTER + '.rich.json');
+export const richFile = (lane, sha256, env = process.env) => path.join(laneIndexRoot(lane, env), STORE_GENERATION, lane, sha256.toLowerCase() + '.' + RICH_ADAPTER + '.rich.json');
 // C15: the registry of canonical captures by content (oml-content-sha.mjs canonicalCapture), beside the index store.
 // servidor/fase4-26 a8: hosted, the registry is the customer's (<ws>/state/content-registry/<lane>): the module index is
 // shared by every customer and addressed by hashes, but this registry names FILES, so a shared one answered a customer's
@@ -125,7 +133,7 @@ export const richFile = (lane, sha256, env = process.env) => path.join(indexRoot
 // module). Each customer's first capture of a content is its own canonical one.
 export const contentRegistry = (lane, env = process.env) => {
   const context = hostedContext();
-  return context ? path.join(context.workspace, 'state', 'content-registry', lane) : path.join(indexRoot(env), STORE_GENERATION, lane, 'content');
+  return context ? path.join(context.workspace, 'state', 'content-registry', lane) : path.join(laneIndexRoot(lane, env), STORE_GENERATION, lane, 'content');
 };
 // The capture that answers a read of `file`: the first intact capture of the same content (its index and its sha), or the
 // file itself. A registry that cannot be read or written only loses the reuse.
@@ -139,9 +147,9 @@ export function readerConfig(lane, { entry = LANES.o11, ssDir, env = process.env
   if (lane === 'odc') return { dll: paths.builder, platform: 'odc', runtimeDir: odcStudioDir(env),
     cacheRoot: env.SSAM_READER_CACHE_ROOT ?? path.join(odcRoot, '.local', 'readers'), indexRoot: indexRoot(env) };
   if (lane === 'o11') return { dll: entry.cli, platform: entry.lane,
-    runtimeDir: ssDir ?? env.ANVIL_STUDIO_DIR ?? path.join(env.USERPROFILE, 'OutSystems',
+    runtimeDir: ssDir ?? hostedO11Kernel()?.studioDir ?? env.ANVIL_STUDIO_DIR ?? path.join(env.USERPROFILE, 'OutSystems',
       entry.lane === 'ss5' ? 'Service Studio 11 - Anvil 4536' : 'Service Studio 11 - Anvil 4516', 'Service Studio'),
-    cacheRoot: env.SSAM_READER_CACHE_ROOT ?? path.join(entry.root, '.local', 'readers'), indexRoot: indexRoot(env) };
+    cacheRoot: env.SSAM_READER_CACHE_ROOT ?? path.join(entry.root, '.local', 'readers'), indexRoot: laneIndexRoot('o11', env) };
   throw new Error('Unknown lane ' + lane + '; lanes: odc, o11');
 }
 // The reader that writes the module digest: on O11 the lane reader itself; on ODC the kernel's reader (anvil-odc
@@ -532,7 +540,7 @@ export function mapRefusal(error, q, input = {}) {
 // stored. ssam_app_url reads it to write the .aspx of an O11 Traditional Web screen without digesting the module.
 export function storedModuleKind(lane, name, env = process.env) {
   if (typeof name !== 'string' || !name) return null;
-  const dir = path.join(indexRoot(env), STORE_GENERATION, lane);
+  const dir = path.join(laneIndexRoot(lane, env), STORE_GENERATION, lane);
   let files;
   try { files = fs.readdirSync(dir).filter(f => f.endsWith('.' + DIGEST_ADAPTER + '.digest.e' + DIGEST_EXTRACTOR + '.json')).map(f => { const file = path.join(dir, f); return { file, time: fs.statSync(file).mtimeMs }; }); }
   catch { return null; }

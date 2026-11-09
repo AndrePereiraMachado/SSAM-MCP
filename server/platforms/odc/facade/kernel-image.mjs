@@ -19,10 +19,19 @@
 //     with (stamp <module-index root>/kernel-studio.json), so nothing built for 11.55.91 is served to 11.55.92. A lane
 //     that is off (refused at start) counts as an invalid stamp: its roots are emptied and its stamp dropped. The base
 //     model cache of the O11 workers is in memory and keyed by IdeVersion (BaseModelCache.cs): nothing to do.
+// Window 4x4 (design B, o11-kernels.mjs): a multi-O11 image declares SSAM_IMAGE_O11 as a list and carries one Studio folder
+// and one CLI per version (SSAM_O11_STUDIO_ROOT/<v>, SSAM_O11_CLI_ROOT/<v>/cli). imageKernel reads every folder;
+// kernelPair keeps kernel.json's o11 as the DEFAULT kernel (it must be one of the image's, as the pair rule asked) and lists
+// the kernels that are on (o11Kernels: folder of the version and CLI present); a version whose folder or CLI is wrong is
+// off alone (refusedKernels, logged kernel-version-missing with its version). o11ServedBuilds gives kernel.o11Builds. The
+// O11 caches are per version (o11-kernel/<v> under the index root), so the stamp no longer resets them on a version change;
+// the folder of a version this backend no longer serves is emptied at start.
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { fourPart } from './studio-identity.mjs';
+import { STORE_GENERATION } from './store-generation.mjs';
+import { imageO11Versions, isMultiO11Image, o11KernelPaths, O11_INDEX_FOLDER } from './o11-kernels.mjs';
 
 export const IMAGE_ENV = Object.freeze({ o11: 'SSAM_IMAGE_O11', odc: 'SSAM_IMAGE_ODC' });
 export const STUDIO_FILE = 'ServiceStudio.Framework.dll';
@@ -81,8 +90,14 @@ export function studioFolderVersion(dir, { read = fs.readFileSync } = {}) {
 
 // Per lane: declared (the image's ENV, three numbers), studio (the FileVersion of the lane's Studio folder) and the
 // version the image serves (declared), or null when the image declares nothing for the lane.
-export function imageKernel({ env = process.env, studioDirs = {}, read } = {}) {
+export function imageKernel({ env = process.env, studioDirs = {}, read, exists = fs.existsSync } = {}) {
   return Object.fromEntries(LANES.map(lane => {
+    if (lane === 'o11' && isMultiO11Image(env)) {
+      // multi-O11: every declared version, its Studio folder's FileVersion and whether its CLI is there.
+      const versions = imageO11Versions(env), studios = {}, clis = {};
+      for (const v of versions) { const at = o11KernelPaths(v, env); studios[v] = studioFolderVersion(at.studioDir, { read }); clis[v] = exists(at.cli); }
+      return [lane, { multi: true, versions, studios, clis }];
+    }
     const declared = threePart(env[IMAGE_ENV[lane]]);
     const studio = declared ? studioFolderVersion(studioDirs[lane], { read }) : null;
     return [lane, declared ? { declared, studio, studioThree: threePart(studio) } : null];
@@ -94,7 +109,20 @@ export function imageKernel({ env = process.env, studioDirs = {}, read } = {}) {
 export function kernelPair(kernel, image) {
   const effective = { ...kernel };
   const refused = {};
+  const refusedKernels = [];
   for (const lane of LANES) {
+    if (image?.[lane]?.multi) {
+      const im = image[lane], pinned = threePart(kernel?.[lane]), on = [];
+      for (const v of im.versions) {
+        const studio = im.studios?.[v] ?? null, three = threePart(studio);
+        const why = three !== v ? (three ? 'image-inconsistent' : 'studio-missing') : im.clis?.[v] === false ? 'cli-missing' : null;
+        if (why) refusedKernels.push({ lane, version: v, ...(studio ? { studio } : {}), reason: why }); else on.push(v);
+      }
+      const reason = !pinned ? 'not-pinned' : !im.versions.includes(pinned) ? 'other-version' : !on.includes(pinned) ? 'image-inconsistent' : null;
+      if (reason) { refused[lane] = { kernel: pinned, image: im.versions.join(','), reason }; effective[lane] = null; effective.o11Kernels = []; }
+      else effective.o11Kernels = on;
+      continue;
+    }
     const want = image?.[lane]?.declared;
     if (!want) continue;
     const pinned = threePart(kernel?.[lane]);
@@ -104,7 +132,7 @@ export function kernelPair(kernel, image) {
     refused[lane] = { kernel: pinned, image: want, ...(image[lane].studio ? { studio: image[lane].studio } : {}), reason };
     effective[lane] = null;
   }
-  return { kernel: effective, refused };
+  return { kernel: effective, refused, ...(refusedKernels.length ? { refusedKernels } : {}) };
 }
 
 // A-M1 (C:\t\multiver\minimo\PROPOSTA.md): the four-part build each lane serves, which the hub compares with the build of
@@ -117,9 +145,23 @@ export function servedBuilds({ kernel, image, exe = {} }) {
   return Object.fromEntries(LANES.map(lane => {
     const three = threePart(kernel?.[lane]);
     if (!three) return [lane, null];
-    const candidates = image?.[lane]?.declared ? [image[lane].studio] : [exe?.[lane], kernel?.[lane]];
+    const candidates = image?.[lane]?.multi ? [image[lane].studios?.[three]] : image?.[lane]?.declared ? [image[lane].studio] : [exe?.[lane], kernel?.[lane]];
     return [lane, candidates.map(fourPart).find(build => build && threePart(build) === three) ?? null];
   }));
+}
+
+// Window 4x4: the O11 kernels a multi-O11 backend serves, {"<x.y.z>": "<four-part build>" | null}, or null on a single-O11
+// image. The kernels that are on (kernelPair o11Kernels) and, when the deployment names its O11 window (SSAM_SERVED_VERSIONS
+// o11: the retirement of a version drops it there while its kernel stays in the image), only those it lists. The default
+// kernel (kernel.json o11) is always served: it is the owner's pin, never retired without a new kernel.json.
+export function o11ServedBuilds({ kernel, image, env = process.env }) {
+  const im = image?.o11;
+  if (!im?.multi || !threePart(kernel?.o11)) return null;
+  let deployed = null;
+  try { const listed = JSON.parse(env.SSAM_SERVED_VERSIONS ?? 'null')?.o11; if (Array.isArray(listed)) deployed = listed.map(v => threePart(v)).filter(Boolean); } catch { deployed = null; }
+  const on = Array.isArray(kernel.o11Kernels) ? kernel.o11Kernels : [];
+  const served = on.filter(v => v === threePart(kernel.o11) || !deployed || deployed.includes(v));
+  return Object.fromEntries(served.map(v => { const b = fourPart(im.studios?.[v]); return [v, b && threePart(b) === v ? b : null]; }));
 }
 
 // kernel.json v1 only. A v2 file beside it and the v2 markers inside it are named (event names only).
@@ -139,8 +181,11 @@ export function kernelFileNotes(dir, { exists = fs.existsSync, read = fs.readFil
 // readers-prefetch/<platform>, plus readers/<platform>-prefetch as the design names it).
 export function legacyCacheRoots({ indexRoot, readerRoot, prefetchRoot, o11Platform = 'ss4' }) {
   return {
-    o11: [path.join(indexRoot, 'v1', 'o11'), path.join(readerRoot, o11Platform), path.join(prefetchRoot, o11Platform), path.join(readerRoot, o11Platform + '-prefetch')],
-    odc: [path.join(indexRoot, 'v1', 'odc')],
+    // S1 (window 4x4) finding: the store's real folder is <root>/<generation>/<lane> (ModuleIndexStore.PathOf, STORE_GENERATION
+    // v1-i<n>f<m>), not <root>/v1/<lane>: the reset emptied a folder no release writes and left the index of the previous
+    // Studio version in place. Both are emptied now.
+    o11: [path.join(indexRoot, 'v1', 'o11'), path.join(indexRoot, STORE_GENERATION, 'o11'), path.join(readerRoot, o11Platform), path.join(prefetchRoot, o11Platform), path.join(readerRoot, o11Platform + '-prefetch')],
+    odc: [path.join(indexRoot, 'v1', 'odc'), path.join(indexRoot, STORE_GENERATION, 'odc')],
   };
 }
 // off: the lanes the image refused at start (kernelPair refused). An off lane is an invalid stamp: its roots are emptied
@@ -160,8 +205,19 @@ export function resetStaleCaches({ kernel, indexRoot, roots, off = [], log = () 
     reset.push(lane);
   };
   const exists = root => { try { return fsx.existsSync(root); } catch { return true; } };
+  // Window 4x4: a multi-O11 kernel stamps "multi" (its O11 stores are per version: o11-kernel/<v>); the switch from a single
+  // version empties the shared O11 roots once, and the store of a version this backend no longer serves is removed.
+  const multi = kernel?.o11Builds && typeof kernel.o11Builds === 'object' ? Object.keys(kernel.o11Builds) : null;
+  if (multi) {
+    const folder = path.join(indexRoot, O11_INDEX_FOLDER);
+    let names = [];
+    try { names = fsx.readdirSync(folder); } catch { names = []; }
+    const gone = names.filter(name => !multi.includes(name));
+    for (const name of gone) { try { fsx.rmSync(path.join(folder, name), { recursive: true, force: true }); } catch (error) { failed.push({ lane: 'o11', root: name, error: error.code ?? 'EIO' }); } }
+    if (gone.length) log({ event: 'kernel-cache-retired', lane: 'o11', versions: gone });
+  }
   for (const lane of LANES) {
-    const current = threePart(kernel?.[lane]);
+    const current = lane === 'o11' && multi ? 'multi' : threePart(kernel?.[lane]);
     if (off.includes(lane)) {
       if (Object.hasOwn(stamp, lane) || (roots[lane] ?? []).some(exists)) empty(lane);
       delete next[lane];

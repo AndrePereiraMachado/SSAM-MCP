@@ -14,35 +14,16 @@ import { peFileVersion, studioFolderVersion, imageKernel, kernelPair, kernelFile
   from '../kernel-image.mjs';
 import { compatibility } from '../agent-hub.mjs';
 import { incompatible } from '../hosted/policy.mjs';
+import { STORE_GENERATION } from '../store-generation.mjs';
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ssam-kernel-image-'));
 test.after(() => fs.rmSync(tmp, { recursive: true, force: true }));
 let n = 0;
 const fresh = () => { const d = path.join(tmp, 'd' + (++n)); fs.mkdirSync(d, { recursive: true }); return d; };
 
-// A minimal PE32+ image with one .rsrc section holding RT_VERSION / 1 / 0x409 -> VS_VERSIONINFO (VS_FIXEDFILEINFO).
-export function makePe(file, product = file) {
-  const rsrc = Buffer.alloc(0x58 + 40 + 52);
-  const dir = (at, id, to) => { rsrc.writeUInt16LE(1, at + 14); rsrc.writeUInt32LE(id, at + 16); rsrc.writeUInt32LE(to >>> 0, at + 20); };
-  dir(0x00, 16, 0x80000000 | 0x18);
-  dir(0x18, 1, 0x80000000 | 0x30);
-  dir(0x30, 0x409, 0x48);
-  rsrc.writeUInt32LE(0x1000 + 0x58, 0x48); rsrc.writeUInt32LE(40 + 52, 0x4c);
-  rsrc.writeUInt16LE(40 + 52, 0x58); rsrc.writeUInt16LE(52, 0x5a);
-  Buffer.from('VS_VERSION_INFO\0', 'utf16le').copy(rsrc, 0x58 + 6);
-  const fixed = 0x58 + 40;
-  rsrc.writeUInt32LE(0xfeef04bd, fixed); rsrc.writeUInt32LE(0x10000, fixed + 4);
-  rsrc.writeUInt32LE(((file[0] << 16) | file[1]) >>> 0, fixed + 8); rsrc.writeUInt32LE(((file[2] << 16) | file[3]) >>> 0, fixed + 12);
-  rsrc.writeUInt32LE(((product[0] << 16) | product[1]) >>> 0, fixed + 16); rsrc.writeUInt32LE(((product[2] << 16) | product[3]) >>> 0, fixed + 20);
-  const head = Buffer.alloc(0x200);
-  head.write('MZ', 0, 'latin1'); head.writeUInt32LE(0x40, 0x3c); head.write('PE\0\0', 0x40, 'latin1');
-  head.writeUInt16LE(0x8664, 0x44); head.writeUInt16LE(1, 0x46); head.writeUInt16LE(240, 0x54);
-  const opt = 0x58;
-  head.writeUInt16LE(0x20b, opt); head.writeUInt32LE(16, opt + 108); head.writeUInt32LE(0x1000, opt + 112 + 16); head.writeUInt32LE(rsrc.length, opt + 112 + 20);
-  const sec = opt + 240;
-  head.write('.rsrc', sec, 'latin1'); head.writeUInt32LE(rsrc.length, sec + 8); head.writeUInt32LE(0x1000, sec + 12); head.writeUInt32LE(rsrc.length, sec + 16); head.writeUInt32LE(0x200, sec + 20);
-  return Buffer.concat([head, rsrc]);
-}
+// A minimal PE32+ image with one .rsrc section (fixtures/pe-image.mjs).
+import { makePe } from './fixtures/pe-image.mjs';
+export { makePe };
 const studioFolder = (version, extra = []) => {
   const d = fresh();
   fs.writeFileSync(path.join(d, STUDIO_FILE), makePe(version.split('.').map(Number)));
@@ -99,8 +80,10 @@ test('resetStaleCaches: the roots of a lane whose Studio version changed are emp
   const cache = fresh();
   const indexRoot = path.join(cache, 'module-index'), readerRoot = path.join(cache, 'readers'), prefetchRoot = readerRoot + '-prefetch';
   const roots = legacyCacheRoots({ indexRoot, readerRoot, prefetchRoot, o11Platform: 'ss4' });
-  assert.deepEqual(roots.o11.map(r => path.relative(cache, r).split(path.sep).join('/')), ['module-index/v1/o11', 'readers/ss4', 'readers-prefetch/ss4', 'readers/ss4-prefetch']);
-  assert.deepEqual(roots.odc.map(r => path.relative(cache, r).split(path.sep).join('/')), ['module-index/v1/odc']);
+  // The index store's real folder is <root>/<STORE_GENERATION>/<lane> (window 4x4 S1 finding); v1/<lane> stays for old caches.
+  assert.deepEqual(roots.o11.map(r => path.relative(cache, r).split(path.sep).join('/')),
+    ['module-index/v1/o11', `module-index/${STORE_GENERATION}/o11`, 'readers/ss4', 'readers-prefetch/ss4', 'readers/ss4-prefetch']);
+  assert.deepEqual(roots.odc.map(r => path.relative(cache, r).split(path.sep).join('/')), ['module-index/v1/odc', `module-index/${STORE_GENERATION}/odc`]);
   const seed = () => { for (const r of [...roots.o11, ...roots.odc]) { fs.mkdirSync(r, { recursive: true }); fs.writeFileSync(path.join(r, 'built-before.json'), '{}'); } };
   const odcReader = path.join(readerRoot, 'odc-manifest', 'gen1'); fs.mkdirSync(odcReader, { recursive: true });
   seed();
@@ -335,4 +318,66 @@ test('telemetry adds event names only: warm keeps {event, indexes, delivery, ms}
   const events = [];
   await warmServer({ lanes: ['odc', 'o11'], log: e => events.push(e), indexes: async () => ({ ok: true }), processes: async () => ({ builder: { ok: true }, worker: { ok: true } }) });
   assert.deepEqual(events.map(e => Object.keys(e)), [['event', 'indexes', 'delivery', 'ms']]);
+});
+
+// Window 4x4 (design B, o11-kernels.mjs): a multi-O11 image (SSAM_IMAGE_O11 a list, SSAM_O11_STUDIO_ROOT/SSAM_O11_CLI_ROOT)
+// judges each declared kernel by its own Studio folder and CLI; the default (kernel.json o11) must be one of them and on.
+const multiImage = (kernels, { cliMissing = [] } = {}) => {
+  const studios = fresh(), clis = fresh();
+  for (const [v, build] of Object.entries(kernels)) {
+    fs.mkdirSync(path.join(studios, v), { recursive: true });
+    if (build) fs.writeFileSync(path.join(studios, v, STUDIO_FILE), makePe(build.split('.').map(Number)));
+    if (!cliMissing.includes(v)) { fs.mkdirSync(path.join(clis, v, 'cli'), { recursive: true }); fs.writeFileSync(path.join(clis, v, 'cli', 'anvil.dll'), 'x'); }
+  }
+  return { SSAM_IMAGE_O11: Object.keys(kernels).join(','), SSAM_O11_STUDIO_ROOT: studios, SSAM_O11_CLI_ROOT: clis };
+};
+test('window 4x4: a multi-O11 image names each kernel; kernelPair turns off the broken ones and keeps the default on', () => {
+  const env = multiImage({ '11.55.92': '11.55.92.65269', '11.55.93': '11.55.94.65328', '11.55.94': null, '11.55.95': '11.55.95.65352' }, { cliMissing: ['11.55.95'] });
+  const image = imageKernel({ env });
+  assert.deepEqual(image.o11, { multi: true, versions: ['11.55.92', '11.55.93', '11.55.94', '11.55.95'],
+    studios: { '11.55.92': '11.55.92.65269', '11.55.93': '11.55.94.65328', '11.55.94': null, '11.55.95': '11.55.95.65352' },
+    clis: { '11.55.92': true, '11.55.93': true, '11.55.94': true, '11.55.95': false } });
+  let pair = kernelPair({ o11: '11.55.92', odc: null }, image);
+  assert.deepEqual(pair.kernel.o11Kernels, ['11.55.92']); assert.equal(pair.kernel.o11, '11.55.92'); assert.deepEqual(pair.refused, {});
+  assert.deepEqual(pair.refusedKernels, [
+    { lane: 'o11', version: '11.55.93', studio: '11.55.94.65328', reason: 'image-inconsistent' },
+    { lane: 'o11', version: '11.55.94', reason: 'studio-missing' },
+    { lane: 'o11', version: '11.55.95', studio: '11.55.95.65352', reason: 'cli-missing' }]);
+  for (const [pinned, reason] of [['11.55.95', 'image-inconsistent'], ['11.55.91', 'other-version'], [null, 'not-pinned']]) {
+    pair = kernelPair({ o11: pinned, odc: null }, image);
+    assert.equal(pair.kernel.o11, null, String(pinned)); assert.deepEqual(pair.kernel.o11Kernels, []);
+    assert.equal(pair.refused.o11.reason, reason, String(pinned)); assert.equal(pair.refused.o11.image, '11.55.92,11.55.93,11.55.94,11.55.95');
+  }
+});
+test('window 4x4: the served O11 kernels are those on, filtered by the deployed O11 window; the default is always served', async () => {
+  const { servedBuilds, o11ServedBuilds } = await import('../kernel-image.mjs');
+  const image = { o11: { multi: true, versions: ['11.55.92', '11.55.93', '11.55.94', '11.55.95'],
+    studios: { '11.55.92': '11.55.92.65269', '11.55.93': '11.55.93.65289', '11.55.94': '11.55.94.65328', '11.55.95': '11.55.95.65352' } }, odc: null };
+  const kernel = { o11: '11.55.95', odc: '1.7.32', o11Kernels: ['11.55.92', '11.55.93', '11.55.94', '11.55.95'] };
+  assert.deepEqual(o11ServedBuilds({ kernel, image, env: {} }), image.o11.studios);
+  assert.deepEqual(o11ServedBuilds({ kernel, image, env: { SSAM_SERVED_VERSIONS: '{"odc":["1.7.32"],"o11":["11.55.93","11.55.94"]}' } }),
+    { '11.55.93': '11.55.93.65289', '11.55.94': '11.55.94.65328', '11.55.95': '11.55.95.65352' }, 'a retired version leaves; the default stays');
+  assert.deepEqual(o11ServedBuilds({ kernel: { ...kernel, o11Kernels: ['11.55.95'] }, image, env: {} }), { '11.55.95': '11.55.95.65352' });
+  assert.equal(o11ServedBuilds({ kernel: { o11: '11.55.94' }, image: { o11: { declared: '11.55.94' } }, env: {} }), null, 'a pair image');
+  assert.equal(servedBuilds({ kernel, image }).o11, '11.55.95.65352', 'builds.o11: the default kernel');
+});
+test('window 4x4: startupKernel on a multi-O11 image logs the kernels and their builds; the stores of retired versions go', async () => {
+  const { startupKernel } = await import('../ssam.mjs');
+  const dir = fresh(), cache = fresh();
+  const odc = studioFolder('1.7.32.11065', ['OutSystems.ModelAPILoader.dll', 'OutSystems.Model.dll']);
+  const env = { ...process.env, ...multiImage({ '11.55.92': '11.55.92.65269', '11.55.95': '11.55.95.65352' }), SSAM_IMAGE_ODC: '1.7.32', ANVIL_ODC_STUDIO_DIR: odc,
+    SSAM_MODULE_INDEX_ROOT: path.join(cache, 'module-index'), SSAM_READER_CACHE_ROOT: path.join(cache, 'readers'), SSAM_SERVED_VERSIONS: '{"odc":["1.7.32"],"o11":["11.55.92","11.55.95"]}' };
+  env.ANVIL_STUDIO_DIR = path.join(env.SSAM_O11_STUDIO_ROOT, '11.55.95');
+  fs.writeFileSync(path.join(dir, 'kernel.json'), JSON.stringify({ o11: '11.55.95', odc: '1.7.32', odcBridge: 'v109' }));
+  for (const v of ['11.55.91', '11.55.92']) { fs.mkdirSync(path.join(cache, 'module-index', 'o11-kernel', v), { recursive: true }); fs.writeFileSync(path.join(cache, 'module-index', 'o11-kernel', v, 'x.json'), '{}'); }
+  const events = [];
+  const started = await startupKernel({ dir, env, fileVersion: async () => null, log: e => events.push(e) });
+  assert.equal(started.kernel.o11, '11.55.95');
+  assert.deepEqual(started.kernel.o11Builds, { '11.55.92': '11.55.92.65269', '11.55.95': '11.55.95.65352' });
+  assert.deepEqual(started.kernel.builds, { o11: '11.55.95.65352', odc: '1.7.32.11065' });
+  assert.deepEqual(events.find(e => e.event === 'o11-kernels'), { event: 'o11-kernels', default: '11.55.95', served: started.kernel.o11Builds, off: [] });
+  assert.deepEqual(events.find(e => e.event === 'kernel-cache-retired'), { event: 'kernel-cache-retired', lane: 'o11', versions: ['11.55.91'] });
+  assert.equal(fs.existsSync(path.join(cache, 'module-index', 'o11-kernel', '11.55.91')), false);
+  assert.equal(fs.existsSync(path.join(cache, 'module-index', 'o11-kernel', '11.55.92', 'x.json')), true, 'a served version keeps its store');
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(cache, 'module-index', STAMP_FILE), 'utf8')), { o11: 'multi', odc: '1.7.32' });
 });

@@ -7,6 +7,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { workspaceRoot, anvilRoot, o11Lane } from './workspace.mjs';
 import { anvilCli, LANES } from './lanes.mjs';
 import { connectionEnvironment } from './studio-session.mjs';
+import { hostedO11Kernel } from './executor.mjs';
 import { kernelReading } from './kernel-reading.mjs';
 import { selectedO11Publisher } from './debug-o11-publisher.mjs';
 import { selectedO11Compiler } from './debug-o11-compiler.mjs';
@@ -124,6 +125,9 @@ export function o11CliArguments(verb, args, cliPath, studioDirectory) {
 
 export async function operationalO11Cli(verb, args, { timeoutMs = 360000 } = {}) {
   const env = { ...process.env, ...connectionEnvironment(anvilRoot, o11Lane.lane) };
+  // Window 4x4: inside a hosted call on a multi-O11 image anvilCli() is the customer's kernel; its Studio goes with it.
+  const kernel = hostedO11Kernel();
+  if (kernel) env.ANVIL_STUDIO_DIR = kernel.studioDir;
   let cliPath;
   try { cliPath = verb === 'publish-oml' ? await selectedO11Publisher(env.ANVIL_STUDIO_DIR) : anvilCli(); }
   catch (error) {

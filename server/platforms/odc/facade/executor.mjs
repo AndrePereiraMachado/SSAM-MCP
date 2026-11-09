@@ -25,6 +25,7 @@ import { runtimeDir } from './hosted/storage.mjs';
 // The closed list of 4.4 (call-kinds.mjs, the one the hub sends; R2-H review H4): the six kinds that touch a machine, and
 // the kinds that exist only between the server and the agent (the local executor refuses them).
 import { CALL_KINDS, MACHINE_KINDS } from './call-kinds.mjs';
+import { o11IndexRoot } from './o11-kernels.mjs';
 export { CALL_KINDS, MACHINE_KINDS };
 
 // Codes that only the seam, the hub, the AgentExecutor or the agent produce. Tool answers that flatten an error to its
@@ -204,6 +205,14 @@ export const currentExecutor = () => storage.getStore()?.executor ?? processDefa
 // context or DenyExecutor can exist, so the launcher keeps reading the connection files as before.
 globalThis[Symbol.for('ssam.facade.currentExecutor')] = currentExecutor;
 export function hostedContext() { const store = storage.getStore(); return store?.hosted === true ? store : null; }
+// Window 4x4 (o11-kernels.mjs): the O11 kernel of the hosted call in progress on a multi-O11 image, {version, studioDir, cli},
+// or null (no hosted call, a single-O11 image, or a customer whose kernel the hub does not name). Every O11 CLI and Studio
+// folder of a hosted call is read from here (o11-lane.mjs, lanes.mjs, module-map.mjs readerConfig, hostedSpawnEnv).
+export function hostedO11Kernel() {
+  const o11 = hostedContext()?.o11;
+  const version = o11?.version, studioDir = o11?.studioDir, cli = o11?.cli;
+  return typeof version === 'string' && typeof studioDir === 'string' && typeof cli === 'string' ? { version, studioDir, cli } : null;
+}
 export const servedWithoutContext = () => !hostedContext() && currentExecutor() instanceof DenyExecutor;
 export function workspacePath(...segments) {
   const context = hostedContext();
@@ -282,6 +291,11 @@ export function hostedSpawnEnv(lane) {
     const studioDir = context.o11?.studioDir ?? record?.studioDir, anvilLane = context.o11?.lane ?? record?.anvilLane;
     if (studioDir) env.ANVIL_STUDIO_DIR = studioDir;
     if (anvilLane) env.ANVIL_LANE = anvilLane;
+    // Window 4x4: the O11 module index of a multi-O11 image is one store per Service Studio version (module-map.mjs
+    // laneIndexRoot), so an index one kernel built is never served to a customer of another Service Studio.
+    const kernel = hostedO11Kernel();
+    if (kernel && typeof process.env.SSAM_MODULE_INDEX_ROOT === 'string' && path.isAbsolute(process.env.SSAM_MODULE_INDEX_ROOT))
+      env.SSAM_MODULE_INDEX_ROOT = o11IndexRoot(process.env.SSAM_MODULE_INDEX_ROOT, kernel.version);
     // The customer's Studio runs the thin bridge (docs/O11-BRIDGE-FINA.md 4): the kernel's BridgeClient computes the
     // producer signature plan and find_element here, and waits at least 600 s because the relay's file mirror counts
     // inside its timeout.
@@ -303,7 +317,7 @@ export function hostedSpawnEnv(lane) {
   // (SSAM_MODULE_INDEX_ROOT, absolute). Without it the kernel's store took the folder above the CLI, the code folder (/app in
   // the image), and every customer's kernel wrote its readings there.
   const indexRoot = process.env.SSAM_MODULE_INDEX_ROOT;
-  if (typeof indexRoot === 'string' && path.isAbsolute(indexRoot)) env.SSAM_MODULE_INDEX_ROOT = indexRoot;
+  if (typeof indexRoot === 'string' && path.isAbsolute(indexRoot) && !env.SSAM_MODULE_INDEX_ROOT) env.SSAM_MODULE_INDEX_ROOT = indexRoot;
   // servidor/fase4-26 (a7, SD): the Studio's defaults of the screen reading (kernel StudioDefaults, marco-a5 e8f4073f) are
   // measured on a disposable copy of the customer's module and kept per user profile (<profile>/.ssam-hybrid/studio-defaults,
   // whose file names the module and flow measured). Hosted, the customer's own folder (state/: internal, never read back by
@@ -360,8 +374,10 @@ export async function createHostedContext({ tokenId, customer, lanes = [], agent
   const root = path.resolve(workspace);
   const relayAuthorityDir = prepareWorkspace(root);
   // The Studio of the server's O11 kernel, computed outside any context (it is a code location of this machine).
-  const [{ kernelStudioDir }, { o11Lane }] = await Promise.all([import('./o11-lane.mjs'), import('./workspace.mjs')]);
-  const o11 = { studioDir: kernelStudioDir(o11Lane.lane), lane: o11Lane.lane };
+  const [{ kernelStudioDir }, { o11Lane }, { hostedO11 }] = await Promise.all([import('./o11-lane.mjs'), import('./workspace.mjs'), import('./o11-kernels.mjs')]);
+  // Window 4x4: on a multi-O11 image the Studio folder and the CLI follow the kernel the hub names for this customer now
+  // (agent.kernel(): its own Service Studio when served), read at each use; on a single-O11 image, the server's one Studio.
+  const o11 = hostedO11({ agent, fallback: { studioDir: kernelStudioDir(o11Lane.lane), lane: o11Lane.lane } });
   const { AgentExecutor } = loadExecutor ? await loadExecutor() : await import('./hosted/agent-executor.mjs');
   const executor = new AgentExecutor({ link: agent, workspace: root, relayAuthorityDir, o11, ...(quotaBytes !== undefined ? { quotaBytes } : {}) });
   await executor.start();

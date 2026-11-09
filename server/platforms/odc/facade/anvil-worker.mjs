@@ -282,12 +282,91 @@ function launch(target, spawnFn) {
   } finally { fs.closeSync(log); }
 }
 
+// S1 R3 (C:\t\r5\janela-4x4\S1-KIT-PLANO.md 0): the ODC lane worker of a hosted backend is a resident process the r45
+// capacity model never counted (VmRSS 1498, VmHWM 2116 MiB on v5 2026-11-09). Hosted (or with deps.gate), its start is
+// admitted by the memory gate of this server with the worker reserve (memory-room.mjs odcWorkerReserveMb, the measured peak)
+// as a STANDING hold attached to its pid: while it lives, every later admission counts its growth still to come (reserve
+// minus RSS). A worker already up that this process holds nothing for (started before, by a warm-up or another call) is
+// adopted the same way, without a wait: it is in the container's memory already. A start that finds no room within
+// workerWaitMs (default 15 s) launches nothing: {status:null, note, memory} and the caller runs the command cold, in a
+// process admitted with the ODC cold reserve (anvil-cli.mjs) or inside the build-pool slot that reserved it, whose own
+// wait refuses with BUILD_QUEUE_TIMEOUT (outcome not-sent) when even that does not fit. No ODC worker starts unadmitted.
+// S1 R4:
+//   - review R3 M6: an idle ODC worker (no call in flight: its ping is not busy, nothing queued) is a cache the gate may ask
+//     to leave for a waiter (rank 1, after the idle O11 readers): its queued `shutdown` (WorkerServer.cs) and its standing
+//     hold released at once. A worker that serves a call is never asked.
+//   - B-R3-1: a start that found no room is not tried again for NO_ROOM_MS (60 s) on that port unless the gate fits it at
+//     once: the calls in between run cold at once instead of waiting workerWaitMs each.
+//   - B-R3-2: inside a build-pool slot whose build runs on an ODC worker with a standing hold, the slot's own hold is marked
+//     covered (memory-room.mjs): the worker's growth is reserved once, by its standing hold.
+// S1 R5 (review R4): the start never takes the gate's progress rule (M7: fits/admit with standing); an evicted worker keeps
+//   its standing hold until its process is gone, marked leaving (B-R4-2: a call queued before the shutdown still runs with
+//   its growth reserved); a worker used within ODC_WORKER_MIN_IDLE_MS (60 s, as the readers) is never asked to leave
+//   (B-R4-3: no ping-pong between the ODC worker and the O11 readers on a full backend).
+export const NO_ROOM_MS = 60000;
+export const ODC_WORKER_MIN_IDLE_MS = 60000;
+const workerUsedAt = new Map(); // port -> when this process last handed that worker a call (ensure or request)
+export const markWorkerUsed = (port, at = Date.now()) => { workerUsedAt.set(port, at); };
+const standingWorkers = new Map(); // port -> standing hold of this process
+const standingTargets = new Map(); // port -> the target of that worker (its ping and key, for the evictor)
+const noRoomUntil = new Map(); // port -> until when a start found no room
+const evictorGates = new WeakSet();
+function ensureOdcEvictor(gate) {
+  if (!gate?.addEvictor || evictorGates.has(gate)) return;
+  evictorGates.add(gate);
+  gate.addEvictor({ rank: 1, name: 'odc-workers', evict: async () => {
+    for (const [port, hold] of [...standingWorkers]) {
+      const target = standingTargets.get(port);
+      if (hold.released || hold.leaving || !target) continue;
+      if (Date.now() - (workerUsedAt.get(port) ?? -Infinity) < ODC_WORKER_MIN_IDLE_MS) continue;
+      let status = null;
+      try { status = await ping(target, 1000); } catch { status = null; }
+      if (!status || Number(status.pid) !== hold.pid || status.busy || Number(status.queued) > 0 || status.recycling) continue;
+      let r = null;
+      try { r = await workerRequest({ port, authorization: target.key() ?? null, timeoutMs: 5000 }, ['shutdown']); } catch { r = null; }
+      if (r?.reply?.ok !== true) continue;
+      hold.leaving = true; // released when its process is gone (child exit, or no resident set any more)
+      return { what: 'odc-worker', port };
+    }
+    return null;
+  } });
+}
+const workerGate = (target, deps) => {
+  const gate = deps.gate !== undefined ? deps.gate : (target.lane === 'odc' && hostedContext() ? memoryGate() : null);
+  ensureOdcEvictor(gate);
+  return gate;
+};
+export function standWorker(gate, port, pid, mb, target = null) {
+  if (!gate || !Number.isInteger(pid) || pid <= 0) return null;
+  if (target) standingTargets.set(port, target);
+  const held = standingWorkers.get(port);
+  if (held && held.pid === pid && !held.released && !held.leaving) return held;
+  held?.release();
+  const hold = gate.hold(mb, { standing: true }); hold.attach(pid); standingWorkers.set(port, hold);
+  return hold;
+}
+export const standingWorkerHold = port => standingWorkers.get(port) ?? null;
+
 // The worker on the target port is up and serves the selected Studio: {status}; else {status:null, note} and the
 // caller runs cold. warning: it serves an older kernel because it is busy. A worker of another installation (C35) or of
 // an older kernel is stopped when idle (stopWorker) and a new one started for the selected installation; when busy, the
 // other installation's worker serves nobody here (cold) and the older kernel serves with the warning.
 // deps: spawnFn, now, and stopWorker's identity/alive/kill/waitMs/exitMs (tests: never a real process).
 export async function ensureWorker(target, deps = {}) {
+  const gate = workerGate(target, deps);
+  const state = await ensureWorkerOnce(target, deps, gate);
+  if (gate && state?.status) {
+    markWorkerUsed(target.port);
+    if (!state.started) standWorker(gate, target.port, Number(state.status.pid), gate.settings.odcWorkerReserveMb, target);
+    else standingTargets.set(target.port, target);
+    // B-R3-2: the build of this slot runs on a worker whose growth its standing hold reserves already.
+    const inside = gate.current?.();
+    const held = standingWorkers.get(target.port);
+    if (inside && !inside.standing && held && !held.released) inside.covered = true;
+  }
+  return state;
+}
+async function ensureWorkerOnce(target, deps, gate) {
   const { spawnFn = spawn, now = Date.now } = deps;
   const port = target.port;
   const otherStudio = (s, why = 'ran cold') => ({ status: null, note: `the worker on port ${port} serves ${s.studio ?? 'an unknown installation'}, not ${target.selectedStudio}; ${why}` });
@@ -316,13 +395,36 @@ export async function ensureWorker(target, deps = {}) {
       if (s && !s.recycling) return studioMatches(s, target.selectedStudio) ? { status: s } : otherStudio(s);
       if (s) return { status: null, note: `the worker on port ${port} did not finish recycling` };
     } else if (await listening(port)) return { status: null, note: `port ${port} accepts connections but does not answer the worker ping; nothing was stopped; ran cold` };
+    let admitted = null;
+    if (gate) {
+      const reserve = gate.settings.odcWorkerReserveMb;
+      if ((noRoomUntil.get(port) ?? 0) > now() && !gate.fits(reserve, { standing: true }))
+        return { status: null, memory: { cached: true, reserveMb: reserve },
+          note: `the ${target.lane} worker found no room for its ${reserve} MB less than ${Math.round(NO_ROOM_MS / 1000)} s ago and there is none now; nothing was started; ran cold` };
+      admitted = await gate.admit(reserve, { waitMs: gate.settings.workerWaitMs, standing: true, kind: 'odc-worker' });
+      if (admitted.timedOut) {
+        noRoomUntil.set(port, now() + NO_ROOM_MS);
+        return { status: null, memory: { waitedMs: admitted.waitedMs, reserveMb: reserve, shortMb: admitted.shortMb },
+          note: `the ${target.lane} worker needs ${reserve} MB of room under this server's memory limit and found ${Math.max(0, Math.round(admitted.shortMb ?? 0))} MB within ${Math.round(admitted.waitedMs / 1000)} s; nothing was started; ran cold` };
+      }
+      noRoomUntil.delete(port);
+    }
     const launchedMs = now();
-    const child = launch(target, spawnFn);
+    let child;
+    try { child = launch(target, spawnFn); } catch (error) { admitted?.hold?.release(); throw error; }
+    const own = admitted?.hold ?? null;
+    if (own) { own.attach(child.pid); child.once?.('exit', () => own.release()); child.once?.('error', () => own.release()); }
     let exited = null;
     const wake = new Promise(resolve => { child.once?.('exit', code => { exited = code ?? 'signal'; resolve(); }); child.once?.('error', error => { exited = error.message; resolve(); }); });
     await until(async () => { s = await ping(target, 500); return Boolean(s) || exited !== null; }, target.waitMs, { now, wake });
     if (!s && exited !== null) s = await ping(target); // another starter may have won the port
-    if (s) { remember(target, s, launchedMs); return studioMatches(s, target.selectedStudio) ? { status: s, started: true } : otherStudio(s); }
+    if (s) {
+      remember(target, s, launchedMs);
+      // The standing hold follows the worker that answers (another starter may have won the port: its pid, not ours).
+      if (own) { if (Number(s.pid) === child.pid || !Number.isInteger(Number(s.pid))) { standingWorkers.get(port)?.release(); standingWorkers.set(port, own); standingTargets.set(port, target); } else { own.release(); standWorker(gate, port, Number(s.pid), own.mb, target); } }
+      return studioMatches(s, target.selectedStudio) ? { status: s, started: true } : otherStudio(s);
+    }
+    own?.release();
     return { status: null, note: exited !== null
       ? `worker startup failed (exit ${exited}); see ${path.join(target.local, `worker-${port}-startup.log`)}`
       : `worker did not start within ${Math.round(target.waitMs / 1000)} s` };
@@ -355,6 +457,7 @@ export async function runOnWorker(argv, target, deps = {}) {
     } else if (r.reply.retryable === true && r.reply.executed === false) {
       if (attempt >= 3) return { used: false, note: 'the worker kept recycling before executing the request' };
     } else {
+      if (target.lane === 'odc') markWorkerUsed(target.port);
       return { used: true, envelope: r.reply, ...(state.warning ? { warning: state.warning } : {}) };
     }
     state = await ensure();
@@ -768,9 +871,9 @@ export class HostedO11Workers {
     rssMb = HOSTED_O11_WORKER_RSS_MB, profile = hostedWorkerProfile(), waitMs = 25000, pingMs = 3000, stopMs = 10000,
     perToken = 1, minAvailableMb = 0, startMb = HOSTED_O11_WORKER_START_MB, totalRssMb = 0,
     spawnFn = spawn, now = Date.now, freePort = loopbackPort, rssOf = pid => residentMb(pid), availableOf = () => availableMb(),
-    roomReserveMb = 0, roomOf = () => containerRoomMb(), gatePending = () => 0 } = {}) {
+    roomReserveMb = 0, roomOf = () => containerRoomMb(), gatePending = () => 0, relieve = null } = {}) {
     Object.assign(this, { max, idleMs, minIdleMs, rssMb, profile: Object.freeze({ ...profile }), waitMs, pingMs, stopMs, spawnFn, now, freePort, rssOf,
-      perToken: Math.max(1, perToken), minAvailableMb, startMb, totalRssMb, availableOf, roomReserveMb, roomOf, gatePending });
+      perToken: Math.max(1, perToken), minAvailableMb, startMb, totalRssMb, availableOf, roomReserveMb, roomOf, gatePending, relieve });
     // slot -> a customer's worker, starting or ready: its first worker under its tokenId, the extra ones under tokenId#n.
     this.entries = new Map();
     this.stopping = new Set(); // retired, process not gone yet
@@ -785,6 +888,14 @@ export class HostedO11Workers {
   workerOf(slot) { return this.entries.get(slot) ?? null; }
   // Every worker of a customer, its first one first.
   workersOf(tokenId) { return [...this.entries.values()].filter(e => e.tokenId === tokenId).sort((a, b) => a.index - b.index); }
+  // S1 R4 (review R3 M6): one idle worker (ready, no call in flight), least recently used, retired for a call that waits for
+  // memory (memory-room.mjs relief, rank 1); null when none is idle. A worker that serves a call is never retired here.
+  evictIdle() {
+    const idle = [...this.entries.values()].filter(e => e.state === 'ready' && !e.busy).sort((a, b) => a.lastUsed - b.lastUsed)[0];
+    if (!idle) return null;
+    this.retire(idle, 'another call of this server waits for memory');
+    return { what: 'o11-worker' };
+  }
   // What the memory guards say of one more worker now: null when it may start, else why not. Unreadable values decide nothing.
   memoryRefusal() {
     const ledger = this.ledger();
@@ -949,7 +1060,8 @@ export class HostedO11Workers {
       waits.push(this.retire(idle, isExtra ? 'an extra worker gives its place' : 'least recently used'));
     } else {
       const memory = this.memoryRefusal();
-      if (memory) return extra ? null : `${THE_WORKER} did not start: ${memory}; ran cold`;
+      // S1 R4: a start refused for memory asks for one relief turn, so an idle cache leaves before the next call.
+      if (memory) { try { this.relieve?.(); } catch { /* relief is best effort */ } return extra ? null : `${THE_WORKER} did not start: ${memory}; ran cold`; }
     }
     const slot = index > 0 ? `${spec.tokenId}#${index}` : spec.tokenId;
     const entry = { tokenId: spec.tokenId, slot, index, contextId: spec.contextId ?? null, fingerprint: spec.fingerprint, env: spec.env, cwd: spec.cwd, cli: spec.cli,
@@ -1160,8 +1272,10 @@ export function hostedO11Workers() {
     const gate = memoryGate();
     processWorkers = new HostedO11Workers({ max: settings.max, idleMs: settings.idleMs, minIdleMs: settings.minIdleMs, rssMb: settings.rssMb,
       profile: hostedWorkerProfile(settings), perToken: settings.perToken, minAvailableMb: settings.minAvailableMb, startMb: settings.startMb,
-      totalRssMb: settings.totalRssMb, roomReserveMb: gate.settings.reserveMb, gatePending: () => gate.pendingMb({ others: false }) });
+      totalRssMb: settings.totalRssMb, roomReserveMb: gate.settings.reserveMb, gatePending: () => gate.pendingMb({ others: false }),
+      relieve: () => gate.relieve({ kind: 'o11-worker' }).catch(() => null) });
     gate.addPending(() => processWorkers?.ledger().pending ?? 0);
+    gate.addEvictor({ rank: 1, name: 'o11-workers', evict: async () => processWorkers?.evictIdle() ?? null });
     onHostedContextClose(context => processWorkers.contextClosed(context.tokenId, context.id));
   }
   return processWorkers;

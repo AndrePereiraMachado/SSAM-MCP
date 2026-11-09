@@ -6,6 +6,9 @@ import { createHash, randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { setTimeout as delay } from 'node:timers/promises';
 import { RELEASE, authorityDir, childEnv, dotnetPath, layoutPath, root } from './release-layout.mjs';
+import { memoryGate, memoryWaitRefusal } from './memory-room.mjs';
+import { imageO11Versions, isMultiO11Image, o11KernelPaths } from './o11-kernels.mjs';
+import { readerResidency, makeRoom, writeReaderMeta, touchLastRead, DEFAULT_READER_MIN_IDLE_MS } from './reader-residency.mjs';
 
 const readJson = file => JSON.parse(fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, ''));
 // A long-lived MCP client keeps the generation of the module it actually loaded. The release bundle has no source of
@@ -73,10 +76,63 @@ async function liveState(file, generation) {
   } catch { return null; }
 }
 
-async function ensureReader({dll, runtimeDir, platform, directory, generation, authority, indexRoot}) {
+// Window 4x4 (reader-residency.mjs): on a multi-O11 image an O11 reader generation that has to start first makes room
+// (idle readers past the SSAM_O11_READERS_MAX ceiling, folders of retired versions) and is admitted by the memory gate;
+// admission (an object) receives {hold, residency}: the caller releases the hold once the first read answered.
+//   - S1 R4 (review R3 M6, after R2 B-R2-1/B-R2-2): the readers of a platform folder are a cache EVERY waiter of the memory
+//     gate may ask to leave (registerReaderEvictor, rank 0 of the gate's relief turns, memory-room.mjs): one idle reader
+//     (LRU) per turn. A waiting reader spares the readers read within minIdleMs (60 s); any other waiter (a build, a cold
+//     run, a worker start) evicts a reader idle for READER_EVICT_IDLE_MS (5 s). The ceiling only limits; the gate decides
+//     how many fit.
+//   - B-R2-3: a reader outlives any call: it always reserves on its own, also inside an admitted build-pool slot (no path
+//     reads through this client inside a slot today: o11-build-phase and odc-build-phase run only the apply there).
+export const READER_EVICT_IDLE_MS = 5000;
+const residentO11 = platform => platform !== 'odc' && isMultiO11Image(process.env);
+export function registerReaderEvictor(gate, platformDir, {rpc = readerRpc, authorization = null, minIdleMs = DEFAULT_READER_MIN_IDLE_MS, now = Date.now} = {}) {
+  const name = 'o11-readers:' + path.resolve(platformDir);
+  if (!gate?.addEvictor || gate.hasEvictor?.(name)) return;
+  gate.addEvictor({rank: 0, name, evict: async ({kind} = {}) => {
+    let key = null; try { key = typeof authorization === 'function' ? authorization() : authorization; } catch { key = null; }
+    const room = await makeRoom(platformDir, {keep: null, max: 1, limit: 1, rpc, authorization: key, minIdleMs: kind === 'reader' ? minIdleMs : READER_EVICT_IDLE_MS, now});
+    return room.evicted.length ? {what: 'o11-reader', generation: room.evicted[0].generation} : null;
+  }});
+}
+// Review R4 B-R4-1: the readers outlive the server process that started them (detached, 15 min idle): a multi-O11 server
+// registers the evictor of its O11 reader folder at start (ssam.mjs startupKernel), so a build can make a reader left by the
+// previous process leave before this one started any. The key is read at each eviction (it may appear later).
+export function registerStartupReaderEvictor(platformDir, {gate = memoryGate(), env = process.env, rpc = readerRpc} = {}) {
+  const settings = readerResidency({env, versions: imageO11Versions(env).length});
+  registerReaderEvictor(gate, platformDir, {rpc, minIdleMs: settings.minIdleMs,
+    authorization: () => fs.readFileSync(path.join(readerAuthority(), 'bridge.key'), 'utf8').trim()});
+  return gate.hasEvictor?.('o11-readers:' + path.resolve(platformDir)) ?? false;
+}
+// deps (tests): {env, gate, rpc, now}.
+export async function admitReader({dll, runtimeDir, directory, authorization}, admission, deps = {}) {
+  const env = deps.env ?? process.env, versions = imageO11Versions(env), now = deps.now ?? Date.now, rpc = deps.rpc ?? readerRpc;
+  const settings = readerResidency({env, versions: versions.length});
+  const platformDir = path.dirname(directory);
+  admission.residency = await makeRoom(platformDir, {keep: directory, max: settings.max, rpc, authorization, minIdleMs: settings.minIdleMs, now,
+    servedDirs: versions.map(v => o11KernelPaths(v, env)?.studioDir).filter(Boolean)});
+  writeReaderMeta(directory, {dll, runtimeDir});
+  const gate = deps.gate ?? memoryGate();
+  registerReaderEvictor(gate, platformDir, {rpc, authorization, minIdleMs: settings.minIdleMs, now});
+  const admitted = await gate.admit(settings.reserveMb, {kind: 'reader'});
+  if (admitted.timedOut) {
+    const refusal = memoryWaitRefusal({waitedMs: admitted.waitedMs, lane: 'o11', queueMs: gate.settings.waitMs, what: 'read'});
+    throw Object.assign(new Error(refusal.error), {code: refusal.code, refusal});
+  }
+  admission.hold = admitted.hold;
+}
+// M4 (review R2): the startup deadline runs from the spawn, after the gate admitted the reader; a reader that does not
+// answer in time is killed, so no reader stays resident without the reserve it was admitted with.
+export const READER_START_MS = 120_000;
+const killTree = pid => { try { process.kill(process.platform === 'win32' ? pid : -pid); } catch { try { process.kill(pid); } catch { /* gone */ } } };
+// deps (tests): {resident, admit, spawnFn, startMs, kill, live}.
+export async function ensureReader({dll, runtimeDir, platform, directory, generation, authority, indexRoot, authorization}, admission = {}, deps = {}) {
+  const live = deps.live ?? liveState;
   fs.mkdirSync(directory, {recursive:true});
   const stateFile = path.join(directory, 'worker.json');
-  let state = await liveState(stateFile, generation);
+  let state = await live(stateFile, generation);
   if (state) return state;
   const lock = path.join(directory, 'start.lock');
   const deadline = Date.now() + 120_000;
@@ -94,13 +150,15 @@ async function ensureReader({dll, runtimeDir, platform, directory, generation, a
         // concurrent writer its full startup window before recovering that lock.
         try { if (Date.now() - fs.statSync(lock).mtimeMs > 120_000) { fs.unlinkSync(lock); continue; } } catch { }
       }
-      state = await liveState(stateFile, generation); if (state) return state;
+      state = await live(stateFile, generation); if (state) return state;
       if (Date.now() > deadline) throw new Error('Another read process is still starting; inspect ' + directory);
       await delay(75);
     }
   }
+  let child = null;
   try {
-    state = await liveState(stateFile, generation); if (state) return state;
+    state = await live(stateFile, generation); if (state) return state;
+    if (deps.resident ?? residentO11(platform)) await (deps.admit ?? admitReader)({dll, runtimeDir, directory, authorization}, admission);
     const deployment = path.join(directory, 'bin');
     if (!fs.existsSync(deployment)) {
       const temporary = path.join(directory, 'bin-' + randomUUID());
@@ -118,21 +176,27 @@ async function ensureReader({dll, runtimeDir, platform, directory, generation, a
     // there even when its copy lives outside the workspace (SSAM_READER_CACHE_ROOT elsewhere).
     // dotnetPath and childEnv answer 'dotnet' and a copy of the environment in the checkout; in a release, the packaged
     // runtime and the contract's variables (DOTNET_ROOT among them, the runtime the generation hashed).
-    const child = spawn(dotnetPath(), [path.join(deployment,path.basename(dll)), 'read-serve', '--state', stateFile,
+    child = (deps.spawnFn ?? spawn)(dotnetPath(), [path.join(deployment,path.basename(dll)), 'read-serve', '--state', stateFile,
       '--generation', generation, '--work', path.join(directory, 'work')], {
       cwd:directory, detached:true, windowsHide:true, stdio:['ignore',log,log],
       env:{...childEnv(process.env), ANVIL_AUTHORITY_DIR:authority, ANVIL_STUDIO_DIR:runtimeDir,
         ...(platform === 'odc' ? {ANVIL_ODC_STUDIO_DIR:runtimeDir} : {}), ...(indexRoot ? {SSAM_MODULE_INDEX_ROOT:indexRoot} : {})}
     });
     child.on('error', error => { startError = error; }); child.unref(); fs.closeSync(log);
-    while (Date.now() <= deadline) {
+    admission.hold?.attach(child.pid);
+    const startDeadline = Date.now() + (deps.startMs ?? READER_START_MS);
+    while (Date.now() <= startDeadline) {
       if (startError) throw startError;
-      state = await liveState(stateFile, generation); if (state) return state;
+      state = await live(stateFile, generation); if (state) return state;
       if (child.exitCode != null) throw new Error('Read process failed to start; see ' + path.join(directory, 'reader.log'));
       await delay(75);
     }
     throw new Error('Read process startup timed out; see ' + path.join(directory, 'reader.log'));
-  } finally { fs.unlinkSync(lock); }
+  } catch (error) {
+    if (child?.pid && child.exitCode == null) (deps.kill ?? killTree)(child.pid);
+    admission.hold?.release(); admission.hold = null; throw error;
+  }
+  finally { fs.unlinkSync(lock); }
 }
 
 // The authority whose bridge.key the reader trusts. Release: release-layout authorityDir (config.json authorityDir, else
@@ -156,14 +220,18 @@ export async function readSnapshot({dll, runtimeDir, cacheRoot, platform, reques
   const authorization = fs.readFileSync(path.join(authority,'bridge.key'), 'utf8').trim();
   const directory = path.join(cacheRoot, platform, generation);
   for (let attempt=0; attempt<2; attempt++) {
-    const state = await ensureReader({dll,runtimeDir,platform,directory,generation,authority,indexRoot});
+    const admission = {};
+    const state = await ensureReader({dll,runtimeDir,platform,directory,generation,authority,indexRoot,authorization}, admission);
+    if (residentO11(platform)) touchLastRead(directory);
     const phase = performance.now();
     let response;
     try { response = await readerRpc(state, ['read', JSON.stringify(request)], authorization); }
     catch (error) { if (attempt === 0) continue; throw error; }
+    finally { admission.hold?.release(); }
     if (response.retryable && response.executed === false && attempt === 0) { await delay(100); continue; }
     if (!response.ok) throw new Error(response.error ?? 'Snapshot reading failed');
-    return {...response, cache:{...response.cache,generation,instanceId:state.instanceId,pid:state.pid,runtime:state.runtime},
+    const room = admission.residency, made = room && (room.evicted.length || room.pruned.length) ? {readers:{evicted:room.evicted, pruned:room.pruned, resident:room.kept + 1}} : {};
+    return {...response, cache:{...response.cache,generation,instanceId:state.instanceId,pid:state.pid,runtime:state.runtime,...made},
       timings:{...response.timings,generationMs,transportMs:performance.now()-phase,clientMs:performance.now()-started}};
   }
   throw new Error('Read process recycled twice; retry this read-only request');

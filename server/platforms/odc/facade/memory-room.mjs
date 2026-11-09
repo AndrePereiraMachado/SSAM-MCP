@@ -23,6 +23,26 @@
 //   The gate is code of the server image: it holds only in images built from e04cfb7 or later (review R3 A2).
 //   - run(hold, fn): fn and everything it awaits run as admitted (AsyncLocalStorage): a cold process started inside a
 //     build-pool slot attaches its pid to the slot's hold instead of waiting a second time.
+//   - Standing holds (S1 R3, C:\t\r5\janela-4x4\S1-KIT-PLANO.md 0): a resident process that outlives the call that started it
+//     (the ODC lane worker, anvil-worker.mjs) keeps its hold while it lives: admit(mb, {standing: true}) and attach(pid). What
+//     it has not shown yet is its reserve (the measured peak, SSAM_MEMORY_RESERVE_ODC_WORKER_MB, default 2150: VmHWM 2116 MiB
+//     on v5 2026-11-09) minus its resident set, i.e. its growth still to come (652 MiB from a 1498 MiB RSS), counted in every
+//     later decision. The hold goes when its process does: release() on exit, or the first decision that finds no resident
+//     set for it (its process is gone). SSAM_MEMORY_WORKER_WAIT_MS (default 15 s): how long a resident worker's start waits
+//     for room before its caller runs the command cold instead (a cold process, admitted with its own smaller reserve).
+//   - Relief and progress (S1 R4, review R3 M6): a waiter short of room first asks the idle caches of this server to leave,
+//     one per turn (SSAM_MEMORY_EVICT_TURN_MS, default 2 s), through the evictors registered with addEvictor, lowest rank
+//     first: idle O11 readers (rank 0, reader-client.mjs: a waiting reader spares the ones read within its 60 s, any other
+//     waiter evicts a reader idle for 5 s), then idle resident workers with no call in flight (rank 1: the ODC lane and slot
+//     workers, anvil-worker.mjs, whose standing hold is released with them; the customers' idle O11 workers). A worker that
+//     serves a call is never asked. When a turn found nothing more to evict and no other CONSUMER is admitted (standing holds
+//     are not consumers), the waiter is admitted: the "only admitted process always enters" rule, so an idle cache or a
+//     resident worker's growth still to come never starves a lone delivery. relieve() is the same turn for waits outside
+//     admit (the build pool's own line). Review R4 M7: the rule never admits a STANDING request (a resident worker's start):
+//     that worker has the cold run as its alternative, so it starts only with real room, and a lone consumer entering
+//     after it by the rule can never stack two heavy processes over the limit.
+//   - A hold marked covered (B-R3-2: the build-pool slot whose build runs on its slot's ODC worker, already reserved by that
+//     worker's standing hold) counts nothing until a process of its own attaches (a cold run in the slot).
 import fs from 'node:fs';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { EventEmitter } from 'node:events';
@@ -32,6 +52,9 @@ export const DEFAULT_MEMORY_RESERVE_MB = 1400;
 export const DEFAULT_MEMORY_RESERVE_ODC_MB = 600;
 export const DEFAULT_MEMORY_WAIT_MS = 120000;
 export const DEFAULT_MEMORY_GROW_MS = 15000;
+export const DEFAULT_MEMORY_RESERVE_ODC_WORKER_MB = 2150;
+export const DEFAULT_MEMORY_WORKER_WAIT_MS = 15000;
+export const DEFAULT_MEMORY_EVICT_TURN_MS = 2000;
 export const MEMORY_WAIT_CODE = 'BUILD_QUEUE_TIMEOUT';
 export const MEMORY_WAIT_WHY = 'this server stayed short of the memory a kernel process needs past the limit; none of this call ran: the doctor shows the lane, and the same call may be repeated';
 
@@ -86,48 +109,86 @@ export function memorySettings(env = process.env) {
     odcReserveMb: setting(env.SSAM_MEMORY_RESERVE_ODC_MB, DEFAULT_MEMORY_RESERVE_ODC_MB),
     waitMs: setting(env.SSAM_MEMORY_WAIT_MS, DEFAULT_MEMORY_WAIT_MS),
     growMs: setting(env.SSAM_MEMORY_GROW_MS, DEFAULT_MEMORY_GROW_MS),
+    odcWorkerReserveMb: setting(env.SSAM_MEMORY_RESERVE_ODC_WORKER_MB, DEFAULT_MEMORY_RESERVE_ODC_WORKER_MB),
+    workerWaitMs: setting(env.SSAM_MEMORY_WORKER_WAIT_MS, DEFAULT_MEMORY_WORKER_WAIT_MS),
+    evictTurnMs: setting(env.SSAM_MEMORY_EVICT_TURN_MS, DEFAULT_MEMORY_EVICT_TURN_MS),
   };
 }
 
 export function createMemoryGate({ room = () => roomMb(), rssOf = pid => processRssMb(pid), now = Date.now, settings = memorySettings({}) } = {}) {
   const holds = new Set();
   const extra = new Set(); // other pending providers (the hosted workers' growth still to come)
+  const evictors = []; // {rank, name, evict({kind}) -> Promise<null | {what, ...}>}
+  const turnMs = Number.isFinite(settings.evictTurnMs) ? settings.evictTurnMs : DEFAULT_MEMORY_EVICT_TURN_MS;
+  let lastRelief = -Infinity, exhaustedAt = null, relieving = null, evictions = 0;
   const bus = new EventEmitter(); bus.setMaxListeners(0);
   const store = new AsyncLocalStorage();
   const shownLater = h => {
-    if (h.pid) { let rss = null; try { rss = rssOf(h.pid); } catch { rss = null; } return Math.max(0, h.mb - (Number.isFinite(rss) ? rss : 0)); }
+    if (h.pid) {
+      let rss = null; try { rss = rssOf(h.pid); } catch { rss = null; }
+      // A standing hold whose process shows no resident set any more: the process is gone, and so is its hold.
+      if (h.standing && !Number.isFinite(rss)) { h.release(); return 0; }
+      return Math.max(0, h.mb - (Number.isFinite(rss) ? rss : 0));
+    }
+    if (h.covered) return 0;
     return now() - h.at < settings.growMs ? h.mb : 0;
   };
+  const consumers = () => { let n = 0; for (const h of holds) if (!h.standing) n++; return n; };
+  // A relief turn found nothing more to evict, recently enough to decide on it (no evictor: always).
+  const exhausted = () => evictors.length === 0 || (exhaustedAt !== null && now() - exhaustedAt <= turnMs);
   // What the admitted processes (and the registered providers) have not shown in memory yet, in MB.
   const pendingMb = ({ others = true } = {}) => {
     let total = 0;
-    for (const h of holds) total += shownLater(h);
+    for (const h of [...holds]) total += shownLater(h);
     if (others) for (const f of extra) { try { const v = f(); if (Number.isFinite(v) && v > 0) total += v; } catch { /* a provider decides nothing */ } }
     return total;
   };
   // null when mb may start now, else the room it would find.
-  const shortOf = mb => {
-    if (!(mb > 0) || holds.size === 0) return null;
+  const shortOf = (mb, { standing = false } = {}) => {
+    // The first process of the server always starts, but never a standing one by that rule (M7): it needs real room.
+    if (!(mb > 0) || (holds.size === 0 && !standing)) return null;
     let r = null; try { r = room(); } catch { r = null; }
     if (!Number.isFinite(r)) return null;
     const left = r - pendingMb();
-    return left >= mb ? null : left;
+    if (left >= mb) return null;
+    // Progress: nothing evictable is left and no other consumer is admitted: the waiter enters.
+    return !standing && consumers() === 0 && exhausted() ? null : left;
   };
-  function hold(mb) {
-    const h = { mb: Math.max(0, mb | 0), at: now(), pid: null,
+  // One relief turn (at most one per turnMs, shared by every waiter): the first evictor, lowest rank first, that makes one
+  // idle cache leave; null when none did (the turn is then "exhausted" for the progress rule).
+  function relieve({ kind = 'process', force = false } = {}) {
+    if (relieving) return relieving;
+    if (!force && now() - lastRelief < turnMs) return Promise.resolve(null);
+    lastRelief = now();
+    relieving = (async () => {
+      for (const e of [...evictors].sort((a, b) => a.rank - b.rank)) {
+        let out = null;
+        try { out = await e.evict({ kind }); } catch { out = null; }
+        if (out) { exhaustedAt = null; evictions++; return { by: e.name, ...out }; }
+      }
+      exhaustedAt = now();
+      return null;
+    })().finally(() => { relieving = null; bus.emit('change'); });
+    return relieving;
+  }
+  function hold(mb, { standing = false } = {}) {
+    const h = { mb: Math.max(0, mb | 0), at: now(), pid: null, standing: standing === true,
       attach(pid) { if (Number.isInteger(pid) && pid > 0) h.pid = pid; },
       // The process attached ended: its memory is gone, nothing is pending for it until the next one attaches.
       detach() { h.pid = null; h.at = -Infinity; },
-      release() { if (holds.delete(h)) bus.emit('change'); } };
+      release() { h.released = true; if (holds.delete(h)) bus.emit('change'); } };
     holds.add(h);
     return h;
   }
   // Waits for the room mb needs (at most waitMs), then holds it: {hold, waitedMs, timedOut: false}; a wait that runs out
   // holds nothing: {hold: null, waitedMs, timedOut: true, shortMb} and the caller refuses (memoryWaitRefusal).
-  async function admit(mb, { waitMs = settings.waitMs } = {}) {
+  async function admit(mb, { waitMs = settings.waitMs, standing = false, kind = 'process' } = {}) {
     const started = now();
-    let step = 50, short = shortOf(mb), timedOut = false;
+    let step = 50, short = shortOf(mb, { standing }), timedOut = false;
     while (short !== null) {
+      await relieve({ kind });
+      short = shortOf(mb, { standing });
+      if (short === null) break;
       const left = started + waitMs - now();
       if (left <= 0) { timedOut = true; break; }
       await new Promise(resolve => {
@@ -136,17 +197,20 @@ export function createMemoryGate({ room = () => roomMb(), rssOf = pid => process
         timer = setTimeout(done, Math.min(step, left)); bus.on('change', done);
       });
       step = Math.min(step * 2, 500);
-      short = shortOf(mb);
+      short = shortOf(mb, { standing });
     }
     if (timedOut) return { hold: null, waitedMs: now() - started, timedOut, shortMb: short };
-    return { hold: hold(mb), waitedMs: now() - started, timedOut };
+    return { hold: hold(mb, { standing }), waitedMs: now() - started, timedOut };
   }
   return {
-    settings, pendingMb, fits: mb => shortOf(mb) === null, hold, admit,
+    settings, pendingMb, fits: (mb, { standing = false } = {}) => shortOf(mb, { standing }) === null, hold, admit, relieve,
+    // evict({kind}) -> Promise<null | {what, ...}>: makes ONE idle cache leave (kind: the waiter's, 'reader' or another).
+    addEvictor({ rank = 1, name = 'evictor', evict }) { const e = { rank, name, evict }; evictors.push(e); return () => { const i = evictors.indexOf(e); if (i >= 0) evictors.splice(i, 1); }; },
+    hasEvictor: name => evictors.some(e => e.name === name),
     run: (h, fn) => store.run(h, fn), current: () => store.getStore() ?? null,
     addPending(fn) { extra.add(fn); return () => extra.delete(fn); },
     onChange(fn) { bus.on('change', fn); return () => bus.off('change', fn); },
-    stats: () => ({ admitted: holds.size, pendingMb: pendingMb() }),
+    stats: () => { const pending = pendingMb(), standing = [...holds].filter(h => h.standing).length; return { admitted: holds.size, ...(standing ? { standing } : {}), pendingMb: pending, ...(evictions ? { evictions } : {}) }; },
   };
 }
 

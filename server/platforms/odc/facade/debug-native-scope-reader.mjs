@@ -33,8 +33,9 @@ function sources(directory, hash) {
   }
 }
 async function build(lane) {
+  // Window 4x4: inside a hosted call on a multi-O11 image, the customer's own Service Studio (executor.mjs hostedO11Kernel).
   const studioDir = lane === 'odc' ? (await import('./lib.mjs')).odcStudioDir()
-    : connectionEnvironment(anvilRoot, o11Lane.lane).ANVIL_STUDIO_DIR ?? process.env.ANVIL_STUDIO_DIR
+    : (await import('./executor.mjs')).hostedO11Kernel()?.studioDir ?? connectionEnvironment(anvilRoot, o11Lane.lane).ANVIL_STUDIO_DIR ?? process.env.ANVIL_STUDIO_DIR
       ?? (await (await import('./lanes.mjs')).anvilLaneFacts()).studioDir;
   if (!studioDir || !fs.existsSync(path.join(studioDir, 'OutSystems.Model.Implementation.dll'))) fail('installation_unavailable');
   const hash = createHash('sha256').update(lane).update(studioDir);
