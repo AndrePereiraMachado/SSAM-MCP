@@ -214,6 +214,34 @@ class RemoteTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "kernel-only prepare"):
             self.prepare_backend("odc-1.7.29", kernel=kernel, kernelOnly=True, round="odc-1.7.33")
 
+    # Pre-merge (S2 R8): the old pair flow against pair-mode production is unchanged. Pair services also carry SSAM_BACKEND_NAME
+    # (the pair name): a new O11 pair of an ODC Studio that already runs is prepared, only the same pair is refused.
+    def pair_compose(self, name):
+        o11, odc = name[4:].split("-odc-")
+        return {"services": {"ssam-server-v1": {"labels": {"ssam.odc": odc, "ssam.o11": o11}, "environment": {"SSAM_BACKEND_NAME": name, "SSAM_RUNTIME_DIR": "/data/server/versions/" + name}, "volumes": [{"source": "state", "target": "/data/server"}, PLUGINS_MOUNT]}}, "volumes": {"state": {}, "odc-model-plugins": {}}}
+
+    def test_premerge_the_pair_flow_prepares_a_new_o11_pair_of_a_running_odc_and_refuses_only_the_same_pair(self):
+        features = base64.b64encode(b"<Features/>").decode()
+        # Running: o11-11.55.93-odc-1.7.29 (fixture). New: o11-11.55.96-odc-1.7.29, same ODC Studio.
+        result = self.request("prepare", id="o11-11.55.96-odc-1.7.29", archive=self.archive(), built={"image": "private/image", "tag": "prod-fixed", "sha256": "a" * 64}, modelPlugins=PINS, compose=self.pair_compose("o11-11.55.96-odc-1.7.29"), kernel={"odc": "1.7.29", "o11": "11.55.96"}, features=features)
+        self.assertEqual(result, {"ok": True})
+        self.assertTrue(any("kernel" in c and "write" in c for c in self.calls))
+        self.assertTrue(any("features" in c and "put" in c for c in self.calls))
+        with self.assertRaisesRegex(RuntimeError, "already running pair"):
+            self.request("prepare", id="o11-11.55.93-odc-1.7.29", archive=self.archive(), built={"image": "private/image", "tag": "prod-fixed", "sha256": "a" * 64}, modelPlugins=PINS, compose=self.pair_compose("o11-11.55.93-odc-1.7.29"), kernel={"odc": "1.7.29", "o11": "11.55.93"}, features=features)
+
+    def test_premerge_a_pair_snapshot_never_fails_on_the_image_labels(self):
+        original = self.docker
+        def docker(*args, data=None, timeout=900):
+            if args[:2] == ("image", "inspect") and "{{json .Config.Labels}}" in args:
+                raise RuntimeError("Remote command failed: docker")
+            return original(*args, data=data, timeout=timeout)
+        self.docker = docker
+        value = self.request("snapshot", checkSource="capture-live")
+        self.assertTrue(value["ok"])
+        self.assertIsNone(value["backends"][0]["kernels"])
+        self.assertEqual(value["backends"][0]["kernel"], {"odc": "1.7.29", "o11": "11.55.93"})
+
     def test_s2_a_new_backend_is_refused_when_one_with_its_odc_or_its_name_runs(self):
         # The running fixture backend is labelled odc 1.7.29 and its ssam.o11 is the served list of a backend window.
         features = base64.b64encode(b"<Features/>").decode()

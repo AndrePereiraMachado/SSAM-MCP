@@ -174,7 +174,11 @@ def dispatch(request):
                 raise RuntimeError("No registry digest for a live backend.")
             # The O11 kernels the running image really carries (its label ssam.kernels.o11, read from the image): after a
             # compose-only O11 retirement they are more than the served list (S2 R6, review M5). None without the label.
-            image_labels = json.loads(docker("image", "inspect", "--format", "{{json .Config.Labels}}", server["Image"]) or b"null")
+            # Read-only and advisory for a window of pairs (its baseline ignores it): a failure is no label, never a failed snapshot.
+            try:
+                image_labels = json.loads(docker("image", "inspect", "--format", "{{json .Config.Labels}}", server["Image"]) or b"null")
+            except (RuntimeError, ValueError):
+                image_labels = None
             carried = image_labels.get("ssam.kernels.o11") if isinstance(image_labels, dict) else None
             kernels = [v.strip() for v in carried.split(",")] if isinstance(carried, str) and carried.strip() else None
             rows.append({"o11": server["Config"]["Labels"].get("ssam.o11"), "odc": server["Config"]["Labels"].get("ssam.odc"), "image": server["Image"], "reference": server["Config"]["Image"], "digest": refs[0].split("@")[1], "kernel": measured["kernel"], "budget": measured["budget"], "warm": warm, "kernels": kernels})
@@ -259,7 +263,9 @@ def dispatch(request):
             if kernel_only or not live["State"]["Running"]:
                 continue
             names = [e.split("=", 1)[1] for e in live["Config"].get("Env") or [] if e.startswith("SSAM_BACKEND_NAME=")]
-            if target:
+            # The backend rule is a backend window's only (target odc-<v>); a pair (o11-<o>-odc-<v>, whose services also carry
+            # SSAM_BACKEND_NAME) keeps the pair rule: a new O11 pair of an ODC Studio that already runs is not refused.
+            if target and re.fullmatch(r"odc-\d+\.\d+\.\d+", target):
                 if labels.get("ssam.odc") == request["kernel"].get("odc") or target in names:
                     raise RuntimeError("Refusing to prepare an already running backend.")
             elif labels.get("ssam.odc") == request["kernel"].get("odc") and labels.get("ssam.o11") == request["kernel"].get("o11"):

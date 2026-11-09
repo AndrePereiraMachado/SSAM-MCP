@@ -19,7 +19,7 @@ import {LANES,STUDIO_NAME,planWindow,readyCandidates,servedOf,newestServed,windo
 import {CLIENT_BRIDGE_CODE,bridgeMode,serverOnlyGate,o11Proofs} from './server-only.mjs';
 import {EnvironmentError,readAttempts,writeAttempt,remind,noticeNow,laneChecks,reviewedRelease,clientBridgeError,archive,featuresNotice,wasCut,timedOut,noteWaiting,OWNER_WAITS} from './pipeline.mjs';
 import {odcBinaryCheck} from './odc-binary.mjs';
-import {generateCompose} from '../coolify/gen-compose.mjs';
+import {generateCompose,isBackendManifest} from '../coolify/gen-compose.mjs';
 
 const hours=(now,at)=>(now-Date.parse(at))/3600000;
 const same=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
@@ -117,6 +117,15 @@ const state={mode,ran:true,lane,version,ok:!!r?.ok&&!missing.length,apps:REFEREN
 
 export async function runWindowVigia(config,ops){
  const now=config.now??Date.now(),outDir=config.outDir,log=ops.log??(()=>{});
+ // Pre-merge guard (S2 R8): a backend-window round only ever runs against a live backend window. An automatic round plans from
+ // the live baseline (vigia.mjs round: manifest = live.manifest), so pair-mode production runs the pair flow; should a backend
+ // window reach here while production still runs pairs (main's versions.json ahead of the S1 kit), nothing is built,
+ // retired, prepared or written: the round waits (WINDOW_MIGRATION_PENDING) and the owner is told.
+ if(config.automatic&&!config.dryRun&&config.liveBaseline&&!isBackendManifest(config.liveBaseline.manifest)){
+  log('backend window planned while production runs pairs: waiting for the S1 migration');
+  await remind(outDir,'window-migration-pending','SSAM: backend window waits for the S1 migration','The backend window (window 4x4) does not run while production still runs the pair window: nothing was built, retired or deployed. Run the S1 migration kit, then the watcher continues with the backend window.',ops,{now:noticeNow(config)});
+  return {status:'waiting',code:'WINDOW_MIGRATION_PENDING'};
+ }
  const head=config.head??null;
  const inputs=r=>({head,studios:{[r.lane]:r.candidate.fullVersion??r.candidate.version}});
  const decideNow=()=>decideWindow({manifest:config.manifest,observed:config.observed,state:config.state,attempts:readAttempts(outDir),inputs,now,retryHours:config.retryHours??12,laneWaitHours:config.laneWaitHours??24,testEnvLimit:config.testEnvLimit??3});
