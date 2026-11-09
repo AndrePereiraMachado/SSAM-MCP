@@ -91,7 +91,7 @@ export function phasedDeliveryDeps({ root, studio, prepareManifest, env = proces
   // server builds in this one pool), SSAM_CUSTOMER, else the lane root.
   const who = customer ?? hostedContext()?.tokenId ?? env.SSAM_CUSTOMER ?? root;
   const pooled = fn => async args => {
-    try { return await pooledBuild({ pool: buildPool, customer: who }, slot => fn(args, slot)); }
+    try { return await pooledBuild({ pool: buildPool, customer: who, lane: 'odc' }, slot => fn(args, slot)); }
     catch (error) { if (error instanceof BuildQueueRefused) return error.refusal; throw error; }
   };
   return {
