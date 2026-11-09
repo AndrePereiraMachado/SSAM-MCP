@@ -5,6 +5,11 @@
 //   --publisher-name <CN | DN>  (SSAM_WIN_PUBLISHER_NAME)  the CN of its subject, or better its full DN (CN=..., O=..., C=...):
 //                               the only publisher the updater accepts; checked against the real signer at the end of the build;
 //   --timestamp-url <https://>  (SSAM_WIN_TIMESTAMP_URL)   RFC 3161 timestamp server (default http://timestamp.digicert.com).
+// App 0.2.8 (owner decision, November 2026): the Windows release is never Authenticode-signed. Without these three
+// options scripts/build.mjs makes an Ed25519 release instead: --trust-public-key <public-key.pem> is required, it is pinned
+// in the native core (bridge manifests) and in the main process (update statements, src/main/core/update-signature.mjs),
+// no publisherName goes to app-update.yml, and every update needs <installer>.ed25519.json from
+// scripts/sign-windows-update.ps1. The options below stay for a future certificate; they are not used today.
 // --test-unsigned builds the owner's own test app instead: no signature, no trust anchors, no updates (no app-update.yml),
 // pack.json bridgeOffer false (the agent never asks for a bridge offer). It is never published.
 import fs from 'node:fs';

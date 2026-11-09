@@ -37,8 +37,8 @@ function proofFolder(t){const root=tmp(t),file=path.join(root,'attach-agent-to-1
 const proofOf=(file,studioVersion='11.55.96',extra={})=>({studioVersion,build:'11.55.94',packCommit:release.commit,provenAt:'2026-11-08T10:00:00Z',evidence:file,...extra});
 const verified=(root,entries)=>o11Proofs({agentReleaseCommit:release.commit,o11BridgeProven:entries},{root,now:Date.parse('2026-11-08T12:00:00Z')});
 
-test('bridgeMode defaults to server-only, keeps signed-offers, refuses anything else; the plan says no client bridge is built',()=>{
- assert.deepEqual(BRIDGE_MODES,['server-only','signed-offers']);
+test('bridgeMode defaults to server-only, keeps signed-offers, adds ed25519-offers, refuses anything else; the plan says no client bridge is built',()=>{
+ assert.deepEqual(BRIDGE_MODES,['server-only','signed-offers','ed25519-offers']);assert.equal(bridgeMode({bridgeMode:'ed25519-offers'}),'ed25519-offers');
  assert.equal(bridgeMode({}),'server-only');assert.equal(bridgeMode({bridgeMode:'signed-offers'}),'signed-offers');
  assert.throws(()=>bridgeMode({bridgeMode:'unsigned'}),e=>e.code==='BRIDGE_MODE_INVALID');
  assert.equal(example.bridgeMode,'server-only');
@@ -215,7 +215,7 @@ test('the image smoke presents the published pack hello with the release kernel,
 });
 test('the post-deploy check posts the published pack hello to the new pair only',()=>{
  const source=fs.readFileSync(path.join(here,'check-backend.mjs'),'utf8');
- assert.match(source,/const presented=expected\.packHellos\?\.\[kernel\.o11\+'\|'\+kernel\.odc\]/);assert.match(source,/Published agent pack hello failed/);
+ assert.match(source,/const key=kernel\.o11\+'\|'\+kernel\.odc,presented=expected\.packHellos\?\.\[key\]/);assert.match(source,/Published agent pack hello failed/);
 });
 
 // The five-pair window.

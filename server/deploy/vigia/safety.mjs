@@ -104,6 +104,46 @@ export function executionSource({workspace,branch,head,main,gitDirectory}){
  if(gitDirectory!==true||path.basename(workspace)!=='vigia-run'||branch!=='server/vigia-run'||head!==main)fail('Signing requires the clean vigia-run execution clone at reviewed main.','UNTRUSTED_SOURCE');
 }
 export function agentReleasePin(commit,ref){if(!/^[a-f0-9]{40}$/.test(commit??'')||!/^agent\/release(?:[/-][\w.-]+)*$/.test(ref??''))fail('Pin a reviewed commit from the agent release line.','AGENT_RELEASE_REQUIRED');}
+// R7 of C:\t\r5\PLANO-AGENTE-AUTO.md (owner decision 6.3.6): agent code is built (client bridges, auto-runtime.mjs agentSource) and,
+// in ed25519-offers, the agent release is read only when agentReleaseCommit AND the tip of agentReleaseRef carry the owner's SSH
+// signature, checked with the same ownerSigningPublicKey as main (git verify-commit). acceptUnsignedMain never waives it. The
+// refusal is not environmental: the round reports what to sign (pipeline.mjs reviewedRelease: agent-release-required).
+// git(args,{allowFailure}) -> {code, stdout}; ownerSigned(commit) -> true only for a valid owner signature.
+export async function verifySignedAgentRelease(config,{git,ownerSigned}){
+ const commit=config.agentReleaseCommit,ref=config.agentReleaseRef;
+ agentReleasePin(commit,ref);
+ const refuse=message=>{throw Object.assign(Error(message),{code:'AGENT_RELEASE_UNSIGNED'});};
+ if(!/^ssh-(ed25519|rsa) [A-Za-z0-9+/=]+(?: [^\r\n]*)?$/.test(config.ownerSigningPublicKey??''))refuse('The agent release must be owner-signed: configure ownerSigningPublicKey (acceptUnsignedMain does not cover agent code).');
+ // The release line is the BRANCH of that name (F1 review B5): a tag of the same name never stands in for it, so the tip whose
+ // signature is checked is the branch tip, not an object a token holder pointed a tag at.
+ const branch='refs/heads/'+ref;
+ const tip=(await git(['rev-parse','--verify','--quiet',branch+'^{commit}'],{allowFailure:true})).stdout?.trim();
+ if(!/^[a-f0-9]{40}$/.test(tip??''))throw Error(`The agent release line cannot be read (the branch ${branch} of the vigia-run clone).`);
+ if((await git(['merge-base','--is-ancestor',commit,branch],{allowFailure:true})).code!==0)throw Error('Agent commit is outside the approved release line.');
+ if(!await ownerSigned(commit))refuse(`agentReleaseCommit ${commit.slice(0,7)} has no valid owner signature; sign the reviewed agent release commit.`);
+ if(tip!==commit&&!await ownerSigned(tip))refuse(`The tip of ${ref} (${tip.slice(0,7)}) has no valid owner signature; the agent release line must end in an owner-signed commit.`);
+ return {commit,tip};
+}
+// F1 review round 3 B-2: the release line is fetched from trustedRemote before each automatic round in ed25519-offers, the way
+// main is (runtime.mjs updateWorkspace), into refs/remotes/vigia/<ref>. The local branch refs/heads/<ref> (what R7 reads) moves
+// to the fetched tip only when that tip carries the owner's signature AND the move is a fast-forward (or the branch is new);
+// otherwise it stays where it was and the round's R7 judges it as before. Never stops the watcher: a release line that cannot
+// be fetched, is unsigned or was rewritten only makes the rounds that need it wait (agent-release-required) with this status.
+// -> {status: 'updated'|'current'|'unsigned'|'diverged'|'unreachable', ref, tip?, from?}
+export async function refreshAgentReleaseLine(config,{git,ownerSigned}){
+ const ref=config.agentReleaseRef;
+ if(!/^agent\/release(?:[/-][\w.-]+)*$/.test(ref??'')||!/^https:\/\/[^@?#]+$/.test(config.trustedRemote??''))return {status:'unreachable',ref:ref??null};
+ const remote='refs/remotes/vigia/'+ref,branch='refs/heads/'+ref;
+ if((await git(['fetch','--no-tags','--no-recurse-submodules',config.trustedRemote,`+${branch}:${remote}`],{allowFailure:true})).code!==0)return {status:'unreachable',ref};
+ const tip=(await git(['rev-parse','--verify','--quiet',remote+'^{commit}'],{allowFailure:true})).stdout?.trim();
+ if(!/^[a-f0-9]{40}$/.test(tip??''))return {status:'unreachable',ref};
+ const local=(await git(['rev-parse','--verify','--quiet',branch+'^{commit}'],{allowFailure:true})).stdout?.trim();
+ if(local===tip)return {status:'current',ref,tip};
+ if(!await ownerSigned(tip))return {status:'unsigned',ref,tip};
+ if(/^[a-f0-9]{40}$/.test(local??'')&&(await git(['merge-base','--is-ancestor',local,tip],{allowFailure:true})).code!==0)return {status:'diverged',ref,tip,from:local};
+ await git(['update-ref',branch,tip,...(/^[a-f0-9]{40}$/.test(local??'')?[local]:[])]);
+ return {status:'updated',ref,tip,...(local?{from:local}:{})};
+}
 export function cleanupSsh(root){
  const absolute=path.resolve(root);if(!fs.existsSync(absolute))return;
  for(const entry of fs.readdirSync(absolute,{withFileTypes:true}))if(/^ssh-[0-9a-f-]{36}$/.test(entry.name)){

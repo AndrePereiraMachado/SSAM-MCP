@@ -12,8 +12,10 @@
 # schema_migrations), or pg_dump is older than the server. The earlier copy of this script in C:\t\r3\img dumped the
 # update_server's PostgreSQL (postgres-88dw...) instead, and `ssamctl.sh backup` with pg_dump 17 against 18.6 wrote an
 # empty file: neither held the licenses (2026-11-01).
-# Files in the folder: ssam-tokens-<stamp>.sql.gz (licenses) and ssam-state-<stamp>.tar.gz (window, for ssamctl.sh
-# restore), each with .sha256, and state-<stamp>.tar.gz (server-state and friction of the default backend, the format
+# Files in the folder: ssam-tokens-<stamp>.sql.gz (licenses), ssam-db-update_server-<stamp>.sql.gz and
+# ssam-db-coolify-<stamp>.sql.gz (each dumped by the pg_dump inside its own container), ssam-service-<stamp>.tar.gz
+# (Coolify compose + .env of the resource), ssam-state-<stamp>.tar.gz (every volume of the resource, for ssamctl.sh
+# restore) and its .info, each with .sha256, and state-<stamp>.tar.gz (server-state and friction of the default backend, the format
 # rollback-kernels.sh reads the kernels of the way back from).
 # The SSH command is SSAM_SSH (default below); the base folder on the VPS is SSAM_BACKUP_BASE. No value of the
 # environment of any container is printed: the URL stays inside the VPS.
@@ -42,6 +44,13 @@ tokens=$(ls -1t "$dir"/ssam-tokens-*.sql.gz 2>/dev/null | head -n 1)
 window=$(ls -1t "$dir"/ssam-state-*.tar.gz 2>/dev/null | head -n 1)
 [ -n "$tokens" ] && [ -s "$tokens" ] || say "BACKUP_DUMP_EMPTY: no licenses dump in $dir"
 [ -n "$window" ] && [ -s "$window" ] || say "BACKUP_STATE_EMPTY: no window archive in $dir"
+[ -s "$window.info" ] || say "BACKUP_INCOMPLETE: $window has no .info (the set did not finish)"
+dbs=
+for kind in update_server coolify; do
+  f=$(ls -1t "$dir"/ssam-db-$kind-*.sql.gz 2>/dev/null | head -n 1)
+  [ -n "$f" ] && [ -s "$f" ] || say "BACKUP_DUMP_EMPTY: no $kind dump in $dir"
+  dbs="$dbs, $kind $f ($(wc -c < "$f" | tr -d " ") bytes)"
+done
 for table in server_tokens schema_migrations; do
   gzip -dc "$tokens" | grep -q "^CREATE TABLE \(public\.\)\{0,1\}$table (" || say "BACKUP_DUMP_NO_LICENSE_TABLES: $tokens has no $table"
 done
@@ -53,12 +62,17 @@ vol() { $D inspect --format "{{range .Mounts}}{{if eq .Destination \"$2\"}}{{.Na
 state_volume=$(vol "$c" /data/server); friction_volume=$(vol "$c" /data/friction)
 [ -n "$state_volume" ] && [ -n "$friction_volume" ] || say "the default backend $c has no /data/server or /data/friction volume"
 stamp=$(date -u +%Y%m%dT%H%M%SZ)
+# An online copy: GNU tar exit 1 (a file changed while it was read, e.g. a server.log that grows) keeps the archive, as
+# window-backup.sh does; any other failure stops with a code, and the archive gets its final name only once it reads back.
+part=$dir/state-$stamp.tar.gz.partial
 $D run --rm --network none --security-opt no-new-privileges:true --cap-drop ALL --user 10001:10001 \
-  -v "$state_volume:/source/state:ro" -v "$friction_volume:/source/friction:ro" --entrypoint tar \
-  "$($D inspect --format '{{.Image}}' "$c")" -czf - -C /source state friction > "$dir/state-$stamp.tar.gz"
-[ -s "$dir/state-$stamp.tar.gz" ] || say "BACKUP_STATE_EMPTY: state-$stamp.tar.gz is empty"
+  -v "$state_volume:/source/state:ro" -v "$friction_volume:/source/friction:ro" --entrypoint sh \
+  "$($D inspect --format '{{.Image}}' "$c")" -c 'tar -czf - -C /source state friction; s=$?; if [ "$s" -eq 1 ]; then echo "backup-before-redeploy: a file changed while it was read (online copy, tar exit 1); kept" >&2; s=0; fi; exit "$s"' \
+  < /dev/null > "$part" || { rm -f "$part"; say "BACKUP_STATE_FAILED: the kernels state copy of $c failed"; }
+[ -s "$part" ] && gzip -t "$part" || { rm -f "$part"; say "BACKUP_STATE_EMPTY: state-$stamp.tar.gz is empty or does not read back"; }
+mv "$part" "$dir/state-$stamp.tar.gz"
 (cd "$dir" && sha256sum "state-$stamp.tar.gz" > "state-$stamp.tar.gz.sha256")
-echo "OK: licenses $tokens ($(wc -c < "$tokens") bytes, PostgreSQL ${version:-?}), window $window ($(du -h "$window" | cut -f1)), kernels state $dir/state-$stamp.tar.gz ($(du -h "$dir/state-$stamp.tar.gz" | cut -f1))"
+echo "OK: licenses $tokens ($(wc -c < "$tokens") bytes, PostgreSQL ${version:-?}), window $window ($(du -h "$window" | cut -f1)), kernels state $dir/state-$stamp.tar.gz ($(du -h "$dir/state-$stamp.tar.gz" | cut -f1))$dbs"
 REMOTE
 )
 

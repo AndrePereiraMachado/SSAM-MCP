@@ -60,11 +60,17 @@ console.log(JSON.stringify({ok:true,healthy:true,agentAccepted:true,tools:tools.
    let refused=null;try{const line=checked.stderr.split('\n').find(x=>x.startsWith('SMOKE_REFUSED:'));if(line)refused=JSON.parse(line.slice(14)).filter(r=>['odc','o11'].includes(r?.lane)).map(r=>({lane:r.lane,code:/^[A-Z_]+$/.test(r.code)?r.code:'UNKNOWN'}));}catch{refused=null;}
    return {ok:false,error:checked.stderr.split('\n').find(x=>x.startsWith('SMOKE_CHECK:'))??'Image smoke script failed.',...(refused?.length?{refused}:{})};
   }
+  // offersChecked is what check-backend.mjs counted inside the image (each offer received and every file delivered with its
+  // size and sha256), never the length of the list it was asked: the caller compares it with the offers it built.
+  let offersChecked;
   if(offers){
    const asked=await docker(['exec','-i',name,'node','--input-type=module'],{input:offerCheck,dir,secret:true,allowFailure:true});
    if(asked.code!==0)throw Error('The image did not offer or deliver its signed bridges.');
+   let receipt=null;try{receipt=JSON.parse(String(asked.stdout??'').trim().split(/\r?\n/).pop());}catch{receipt=null;}
+   if(receipt?.ok!==true||!Number.isSafeInteger(receipt.offersChecked))throw Error('The image offer check returned no receipt.');
+   offersChecked=receipt.offersChecked;
   }
-  return {...JSON.parse(checked.stdout),warm,...(offers?{offersChecked:offers.length}:{}),...(presented?{publishedPack:true}:{})};
+  return {...JSON.parse(checked.stdout),warm,...(offers?{offersChecked}:{}),...(presented?{publishedPack:true}:{})};
  }catch(error){return {ok:false,error:error.message};}
  finally{
   if(created){const logs=await docker(['logs',name],{allowFailure:true});const text=logs.stdout+logs.stderr;

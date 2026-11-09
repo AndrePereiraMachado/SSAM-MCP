@@ -20,29 +20,37 @@ const pair = m => m.lane + '/' + m.studioVersion;
 const identity = m => pair(m) + '/' + m.protocol + '/' + m.sequence;
 export const MAC_BRIDGE_REASON = 'Automatic bridge downloads are disabled on macOS in this build; use the bundled bridge.';
 
-export function authenticodeDisposition(result, thumbprint, signer = 'owner') {
+// The pinned Ed25519 key, as a PEM or as the base64 of its SPKI DER (what the build input writes into the native core).
+export function trustKey(text) {
+  const value = String(text ?? '').trim();
+  return value.includes('-----BEGIN') ? createPublicKey(value) : createPublicKey({ key: Buffer.from(value, 'base64'), format: 'der', type: 'spki' });
+}
+
+// Authenticode is checked only on the Microsoft-signed dependencies of a bridge (agent 0.3.17): the owner's own files are
+// trusted by the Ed25519-signed manifest and their sha256, so a signer other than 'microsoft' is never accepted here.
+export function authenticodeDisposition(result, signer = 'microsoft') {
   if (!Number.isInteger(result?.hresult) || result.hresult < -2147483648 || result.hresult > 0xffffffff) return 'retry';
   const status = result.hresult >>> 0;
-  if (status === 0 && result.signatureValid === true) {
-    return result.ok === true && (signer !== 'owner' || result.thumbprint?.toUpperCase() === thumbprint.toUpperCase()) ? 'accepted' : 'refused';
-  }
+  if (status === 0 && result.signatureValid === true) return result.ok === true && signer === 'microsoft' ? 'accepted' : 'refused';
   return status === 0x800B0100 || status === 0x80096010 || (status === 0x800B0004 && result.policyFailure === true) ? 'refused' : 'retry';
 }
 
-export async function verifyAuthenticode(file, thumbprint, { platform = process.platform, runtimeRoot, run = exec, signer = 'owner' } = {}) {
+export async function verifyAuthenticode(file, { platform = process.platform, runtimeRoot, run = exec, signer = 'microsoft' } = {}) {
   if (platform === 'win32') {
+    if (signer !== 'microsoft') throw Object.assign(new Error('Authenticode signer does not match the pinned policy'), { signerRefused: true });
     let stdout;
     try { ({ stdout } = await run(path.join(runtimeRoot, 'native/ssam-agent.exe'), ['authenticode', '--file', file, '--signer', signer], { windowsHide: true, timeout: 30000 })); }
     catch (error) { if (!error.stdout) throw error; stdout = error.stdout; }
     const result = JSON.parse(stdout);
-    const disposition = authenticodeDisposition(result, thumbprint, signer);
+    const disposition = authenticodeDisposition(result, signer);
     if (disposition !== 'accepted') throw Object.assign(new Error(disposition === 'refused' ? 'Authenticode signer does not match the pinned policy' : 'VERIFY_FAILED: local Authenticode trust could not be established; retry after repairing the certificate chain'), { signerRefused: disposition === 'refused', trustUnavailable: disposition === 'retry', hresult: result.hresult });
   } else fail(platform === 'darwin' ? MAC_BRIDGE_REASON : 'Authenticode verification is unavailable on this platform');
 }
 
+// anchors.publicKey is the only anchor; a legacy anchors.thumbprint is ignored (agent 0.3.17).
 export function createBridgeUpdates({ root, runtimeRoot = root, platform = process.platform, pack = {}, request, notify = () => {},
-  anchors = { publicKey: trust.BRIDGE_MANIFEST_PUBLIC_KEY, thumbprint: trust.BRIDGE_AUTHENTICODE_THUMBPRINT },
-  authenticode = (file, thumb, signer) => verifyAuthenticode(file, thumb, { platform, runtimeRoot, signer }),
+  anchors = { publicKey: trust.BRIDGE_MANIFEST_PUBLIC_KEY },
+  authenticode = (file, signer) => verifyAuthenticode(file, { platform, runtimeRoot, signer }),
   seal = dir => lockBridgeSnapshot(root, dir, runtimeRoot), running } = {}) {
   const home = path.join(root, 'bridges'), stateFile = path.join(root, 'private/bridge-state.json');
   const cache = new Map(), leases = new Set(), preparations = new Map();
@@ -91,15 +99,14 @@ export function createBridgeUpdates({ root, runtimeRoot = root, platform = proce
     const text = textOf(offer.manifest);
     if (!anchors.publicKey) fail('Bridge trust anchors are not configured in this build');
     if (typeof text !== 'string' || Buffer.byteLength(text) > 1024 * 1024) fail('Invalid bridge manifest size');
-    const signature = Buffer.from(offer.signature ?? '', 'base64'), key = createPublicKey(anchors.publicKey);
+    const signature = Buffer.from(offer.signature ?? '', 'base64'), key = trustKey(anchors.publicKey);
     if (key.asymmetricKeyType !== 'ed25519' || signature.length !== 64 || !verify(null, Buffer.from(text), key, signature)) fail('Invalid bridge manifest signature');
     const m = JSON.parse(text);
     if (m.schema !== 1 || !['odc', 'o11'].includes(m.lane) || studioVersion(m.studioVersion) !== m.studioVersion || number(m.protocol) === undefined
       || !Number.isSafeInteger(m.sequence) || m.sequence < 1 || !/^net\d+\.\d+$/.test(m.runtime ?? '')
       || !Number.isFinite(Date.parse(m.createdAt))) fail('Invalid bridge manifest identity or sequence');
     for (const key of ['lane', 'studioVersion', 'protocol']) if (offer[key] !== m[key]) fail('Bridge offer does not match its signed manifest');
-    if (!/^[A-Fa-f0-9]{40}$/.test(anchors.thumbprint)) throw definitive(m, 'TRUST_ANCHOR_MISSING', 'Bridge trust anchors are not configured in this build');
-    if (m.authenticodeThumbprint?.toUpperCase() !== anchors.thumbprint.toUpperCase()) throw definitive(m, 'SIGNER_REFUSED', 'Bridge manifest certificate does not match the pinned signer');
+    // A manifest may still name an authenticodeThumbprint (vigia manifests before agent 0.3.17); it grants nothing and is ignored.
     if (!Array.isArray(m.files) || !m.files.length || m.files.length > 512) fail('Invalid bridge file list');
     const seen = new Set(['manifest.json', 'manifest.sig']); let total = 0;
     for (const f of m.files) {
@@ -132,8 +139,10 @@ export function createBridgeUpdates({ root, runtimeRoot = root, platform = proce
     if (listing.some(([name]) => !expected.has(name.split(path.sep).join('/'))) || listing.length !== expected.size) fail('Unlisted or missing file in bridge installation');
     for (const f of m.files) { const bytes = fs.readFileSync(path.join(dir, f.path)); if (bytes.length !== f.size || hash(bytes) !== f.sha256) fail('Bridge file size or SHA-256 mismatch: ' + f.path); }
     for (const [name, digest] of Object.entries(generated)) if (hash(fs.readFileSync(path.join(dir, name))) !== digest) fail('The generated hook configuration changed');
-    for (const f of m.files) if (/\.(dll|exe)$/i.test(f.path)) {
-      try { await authenticode(path.join(dir, f.path), anchors.thumbprint.toUpperCase(), f.signer); }
+    // The owner's files are proven by the signed manifest and the sha256/size checked above; only a Microsoft dependency is
+    // checked for its Authenticode signature, against the pinned Microsoft roots.
+    for (const f of m.files) if (/\.(dll|exe)$/i.test(f.path) && f.signer === 'microsoft') {
+      try { await authenticode(path.join(dir, f.path), f.signer); }
       catch (error) { if (error.signerRefused) throw definitive(m, 'SIGNER_REFUSED', 'Authenticode verification failed'); if (error.trustUnavailable) throw error; throw new Error('Authenticode verification unavailable'); }
     }
   }

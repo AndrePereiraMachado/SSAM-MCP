@@ -24,7 +24,9 @@ export const AUTOMATIC_PLAN=[
 // The plan of a bridge mode: server-only (the default) builds, signs and offers no client bridge; it gates the pair on the
 // published agent packs instead.
 export const SERVER_ONLY_STEP='Build no client bridge: the kernel accepts the bridges of the published agent packs, and a hello of that pack (its bridges, runtimes and reconcile-merge) must be compatible on both lanes, else the lane waits (client-bridge-update-required)';
-export const automaticPlan=mode=>mode==='signed-offers'?AUTOMATIC_PLAN:AUTOMATIC_PLAN.map(step=>step.startsWith('Compile pinned client sources')?SERVER_ONLY_STEP:step);
+// ed25519-offers: the server-only gate, plus client bridges compiled from the verified bundles and offered with an Ed25519 manifest only.
+export const ED25519_OFFERS_STEP='Compile the client bridges from the verified Studio bundles at the owner-signed agent release, classify signers by verification only (never Authenticode-sign), write the Ed25519-signed manifest; a hello of the published pack with bridgeOffer must receive the offer and, with it installed, be compatible on both lanes, else the lane waits (client-bridge-update-required)';
+export const automaticPlan=mode=>mode==='signed-offers'?AUTOMATIC_PLAN:AUTOMATIC_PLAN.map(step=>step.startsWith('Compile pinned client sources')?(mode==='ed25519-offers'?ED25519_OFFERS_STEP:SERVER_ONLY_STEP):step);
 const atomic=(file,value)=>{const tmp=file+'.next';fs.writeFileSync(tmp,JSON.stringify(value,null,2)+'\n');fs.renameSync(tmp,file);};
 export async function releaseEvent(directory,ops,name,id,message,secrets,attempt='legacy',code=null){
  const file=path.join(directory,'release-events.json');let events={};

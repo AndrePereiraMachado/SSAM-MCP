@@ -7,7 +7,8 @@ import {releaseAutomatically,releaseEvent} from './automatic.mjs';
 import path from 'node:path';
 import {createHash} from 'node:crypto';
 import {LANES,STUDIO_NAME,ownerCommand,missingPack,planWindow,readyCandidates,pairFor,pairId,hasPair,rotateWindow,windowLimit,compareFailures,windowPairs,tfmMajor,proposalText,failureText,composeText,featuresLine} from './window.mjs';
-import {CLIENT_BRIDGE_CODE,isServerOnly,laneGap,serverOnlyGate,deferredLanes,gapText,o11Proofs} from './server-only.mjs';
+import {CLIENT_BRIDGE_CODE,bridgeMode,laneGap,serverOnlyGate,offersGate,deferredLanes,gapText,o11Proofs} from './server-only.mjs';
+import {createBridgeStore} from '../../platforms/odc/facade/bridge-store.mjs';
 import {odcBinaryCheck} from './odc-binary.mjs';
 import {generateCompose} from '../coolify/gen-compose.mjs';
 // An environment problem (not a test result): the round waits and retries. lanes: the lanes it concerns (empty = the pair).
@@ -145,7 +146,8 @@ export async function runVigia(config,ops){
 // target (or cannot be asked), a Studio on a .NET no agent pack covers. In server-only mode (release: the reviewed agent
 // release) a new Studio whose runtime (its verified installer's runtimeconfig.json) no published pack has a bridge for waits
 // with client-bridge-update-required.
-async function laneChecks(config,ops,pair,runtimes,log,release=null){
+// offerLanes (ed25519-offers): the lanes whose published-pack gap a signed offer may close (O11); offersGate decides them.
+async function laneChecks(config,ops,pair,runtimes,log,release=null,offerLanes=[]){
  const problems=[];
  for(const c of pair.candidates){
   const missing=[...(c.missing??[]),...(!c.tfm&&!(c.missing??[]).some(m=>/runtimeconfig/i.test(m))?['the tfm of its runtimeconfig.json']:[])];
@@ -158,7 +160,7 @@ async function laneChecks(config,ops,pair,runtimes,log,release=null){
  }
  for(const p of (config.automatic ? [] : missingPack(config,Object.fromEntries(pair.candidates.filter(c=>!problems.some(x=>x.lane===c.lane)).map(c=>[c.lane,{tfm:c.tfm,version:c.version}])))))
   problems.push({lane:p.lane,code:'agent-pack-missing',text:`no agent pack for ${STUDIO_NAME[p.lane]} ${p.version} (${p.tfm}): the configured pack is built for ${config.agentPack?.runtime??'net8.0'}; add agentPackByRuntime.net${tfmMajor(p.tfm)} (odcBridge, odcBridgeAccepted, o11BuiltFor) once that pack exists`});
- if(release)for(const c of pair.candidates.filter(c=>!problems.some(x=>x.lane===c.lane))){
+ if(release)for(const c of pair.candidates.filter(c=>!problems.some(x=>x.lane===c.lane)&&!offerLanes.includes(c.lane))){
   const why=laneGap(config,release,c.lane,{version:c.version,tfm:c.tfm});
   if(why)problems.push({lane:c.lane,code:CLIENT_BRIDGE_CODE,text:`client bridge update required: ${c.lane} ${c.version} runtime ${c.tfm} (${why})`});
  }
@@ -207,13 +209,15 @@ export async function runAttempt(config,ops,decision,now){
   if(ops.capacityPreflight)await ops.capacityPreflight(estimated.manifest);
   await ops.preflight({pair,id,dir});
   // Server-only: the reviewed agent release decides which client bridges exist; no bridge is built, signed or offered.
-  const serverOnly=!!config.automatic&&isServerOnly(config),agentRelease=serverOnly?await reviewedRelease(ops,pair):null;
+  // ed25519-offers: the same reviewed release and gate, plus the client bridges this round builds and offers (Ed25519 only).
+  const mode=config.automatic?bridgeMode(config):null,serverOnly=mode==='server-only',offering=mode==='ed25519-offers',published=serverOnly||offering;
+  const agentRelease=published?await reviewedRelease(ops,pair):null;
   // The owner's O11 proofs (o11BridgeProven), each verified against its evidence file now: only these reach the gate, the
   // release journal and the post-deployment check; a refused entry is no proof, and the lane that needs it says why.
-  const proofs=serverOnly?await (ops.o11Proofs??o11Proofs)(config):{proven:{},refused:[]};
+  const proofs=published?await (ops.o11Proofs??o11Proofs)(config):{proven:{},refused:[]};
   for(const r of proofs.refused)log(`o11BridgeProven ${r.version} refused: ${r.why}`);
-  const gateConfig=serverOnly?{...config,o11BridgeProven:proofs.proven,o11ProofRefusals:proofs.refused}:config;
-  await laneChecks(gateConfig,ops,pair,runtimes,log,agentRelease);
+  const gateConfig=published?{...config,o11BridgeProven:proofs.proven,o11ProofRefusals:proofs.refused}:config;
+  await laneChecks(gateConfig,ops,pair,runtimes,log,agentRelease,offering?['o11']:[]);
   await ops.dockerReady();
   const bundles={};
   for(const lane of LANES){
@@ -227,13 +231,23 @@ export async function runAttempt(config,ops,decision,now){
   // Server-only gate, before any test, build or mutation: every lane of the pair (the new Studios with the runtime of their
   // verified installer, the kept one with its served bundle) has a published bridge, and the published pack's hello is
   // compatible with the new kernel on both lanes with the window's served versions.
-  let gate=null;
+  let gate=null,compiled=null;
   const studios=Object.fromEntries(LANES.map(lane=>[lane,{version:bundles[lane].version,fullVersion:bundles[lane].fullVersion??null,tfm:pair.candidates.find(c=>c.lane===lane)?.tfm??bundles[lane].tfm??null}]));
-  if(serverOnly){
+  if(published){
    const served=Object.fromEntries(LANES.map(lane=>[lane,[...new Set(estimated.manifest[lane].map(x=>x.version))]]));
+   if(offering){
+    // ed25519-offers: the client bridges are compiled from the verified bundles and Ed25519-signed (never Authenticode) before
+    // any test, so the gate asks the hub the published pack's hello against the signed store it would serve.
+    compiled=await ops.buildBridges(pair,bundles,dir);
+    const store=createBridgeStore({root:compiled.stage,publicKey:fs.readFileSync(path.join(compiled.stage,'public-key.pem'))});
+    gate=offersGate({config:gateConfig,release:agentRelease,pair,studios,servedKernels:await ops.servedKernels(base),served,offers:compiled.offers,bridges:store});
+    if(gate.gaps.length)throw clientBridgeError(gate.gaps,pair);
+    log(`ed25519-offers kernel ${JSON.stringify(gate.kernel)}; signed offers ${compiled.offers.map(o=>o.lane+' '+o.studioVersion+' '+o.protocol+'#'+o.sequence).join(', ')}; the published pack hello (bridgeOffer) received ${gate.offerLanes.join(', ')||'none'}; agent 0.2.7 on this pair: odc ${gate.legacy.odc.ok?'ok':gate.legacy.odc.code}, o11 ${gate.legacy.o11.ok?'ok':gate.legacy.o11.code+(gate.legacy.o11.cause?' '+gate.legacy.o11.cause:'')}`);
+   }else{
    gate=serverOnlyGate({config:gateConfig,release:agentRelease,pair,studios,servedKernels:await ops.servedKernels(base),served});
    if(gate.gaps.length)throw clientBridgeError(gate.gaps,pair);
    log(`server-only kernel ${JSON.stringify(gate.kernel)}; published pack hello odc ${gate.hello.pack.odcBridge}, o11 built for ${gate.hello.pack.o11BuiltFor}`);
+   }
    // A new ODC Studio: the published bridge's Studio references, by assembly identity, against the served ODC Studio of
    // the same runtime it already runs in (odc-binary.mjs says what this does not prove).
    if(pair.lanes.includes('odc')){
@@ -260,12 +274,15 @@ export async function runAttempt(config,ops,decision,now){
   }
   fs.writeFileSync(path.join(dir,'comparison.json'),JSON.stringify(comparisons,null,2));
   if(failedLanes.length)throw Object.assign(Error('New kernel test failures:\n'+failedLanes.map(l=>`${l}:\n`+comparisons[l].newFailures.map(n=>'  '+n).join('\n')).join('\n')),{lanes:failedLanes});
-  // signed-offers builds and Authenticode-signs the client bridges; server-only never does (no certificate exists for it).
+  // signed-offers builds and Authenticode-signs the client bridges; server-only never does (no certificate exists for it);
+  // ed25519-offers built them before the gate, with an Ed25519 manifest only.
   // The proof the new pair's Service Studio is served by (its own build needs none) goes with the release and its check.
   const o11Proof=serverOnly&&gate.hello.pack.o11BuiltFor!==pair.o11?proofs.proven[pair.o11]??null:null;
   if(o11Proof)log(`o11 ${pair.o11} served by the thin bridge built for ${o11Proof.build}: proof ${o11Proof.evidence} sha256 ${o11Proof.sha256} (${o11Proof.provenAt}, pack ${o11Proof.packCommit.slice(0,7)})`);
-  const bridges=!config.automatic?null:serverOnly?{mode:'server-only',offers:[],kernel:gate.kernel,hello:gate.hello,agentRelease:agentRelease.commit,o11Proofs:o11Proof?{[pair.o11]:o11Proof}:{}}:await ops.buildBridges(pair,bundles,dir);
-  if(bridges){ops.bridgeKernel=bridges.kernel;ops.packHello=serverOnly?bridges.hello:null;}
+  const bridges=!config.automatic?null:serverOnly?{mode:'server-only',offers:[],kernel:gate.kernel,hello:gate.hello,agentRelease:agentRelease.commit,o11Proofs:o11Proof?{[pair.o11]:o11Proof}:{}}
+   :offering?{mode:'ed25519-offers',stage:compiled.stage,offers:compiled.offers,kernel:gate.kernel,hello:gate.hello,offerHello:gate.offerHello,offerLanes:gate.offerLanes,legacyHello:gate.legacyHello,legacy:gate.legacy,agentRelease:agentRelease.commit,o11Proofs:{}}
+   :await ops.buildBridges(pair,bundles,dir);
+  if(bridges){ops.bridgeKernel=bridges.kernel;ops.packHello=published?bridges.hello:null;ops.offerExpect=offering?{offerHello:bridges.offerHello,offerLanes:bridges.offerLanes,legacyHello:bridges.legacyHello}:null;}
   const built=await ops.build(pair,bundles,dir);
   fs.writeFileSync(path.join(dir,'image.json'),JSON.stringify(built,null,2));
   const next=rotateWindow(base,{odc:pair.odc,o11:pair.o11,image:built.image,tag:built.tag},{...config.state,maxWindow:windowLimit(config,base)});
@@ -274,11 +291,12 @@ export async function runAttempt(config,ops,decision,now){
   const smoke=await ops.smoke(built,bundles,served,dir);fs.writeFileSync(path.join(dir,'smoke.json'),JSON.stringify(smoke,null,2));
   // The built image refusing the published pack's hello that the gate accepted: the gate and the image (the same agent-hub.mjs)
   // disagree. That is a defect to review, not the environment: the attempt fails with its notice and is not rebuilt each round.
-  if(serverOnly&&!smoke.ok&&smoke.refused?.length)throw Object.assign(Error(`The built image refuses the published agent pack's hello that the server-only gate accepted (${smoke.refused.map(r=>`${r.lane} ${r.code}`).join(', ')}): the gate and the image disagree. Nothing is deployed; review smoke.json before a retry.`),{lanes:[...new Set(smoke.refused.map(r=>r.lane))],code:'smoke-refused-pack'});
+  if(published&&!smoke.ok&&smoke.refused?.length)throw Object.assign(Error(`The built image refuses the published agent pack's hello that the server-only gate accepted (${smoke.refused.map(r=>`${r.lane} ${r.code}`).join(', ')}): the gate and the image disagree. Nothing is deployed; review smoke.json before a retry.`),{lanes:[...new Set(smoke.refused.map(r=>r.lane))],code:'smoke-refused-pack'});
   if(!smoke.ok)throw Error('Image smoke failed: '+(smoke.error??'see smoke.json'));
-  if(serverOnly&&smoke.publishedPack!==true)throw Error('Image smoke did not present the published agent pack; nothing is deployed.');
+  if(published&&smoke.publishedPack!==true)throw Error('Image smoke did not present the published agent pack; nothing is deployed.');
+  if(offering&&smoke.offersChecked!==bridges.offers.length)throw Error('Image smoke did not offer and deliver every signed bridge; nothing is deployed.');
   if(config.automatic){
-   const release={id,dir,attempt:attempt.at,baseline:config.liveBaseline,built,manifest:next.manifest,kernel:bridges.kernel,bridges,bridgeMode:serverOnly?'server-only':'signed-offers',features:bundles.odc.features,featuresProvenance,bundles};
+   const release={id,dir,attempt:attempt.at,baseline:config.liveBaseline,built,manifest:next.manifest,kernel:bridges.kernel,bridges,bridgeMode:mode,features:bundles.odc.features,featuresProvenance,bundles};
    // Persist only public identities and local artifact paths. Never keys or tokens.
    writeJournal(path.join(dir,'release.json'),release);
    if(config.rehearsal){

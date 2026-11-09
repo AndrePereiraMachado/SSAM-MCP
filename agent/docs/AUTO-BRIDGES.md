@@ -17,14 +17,25 @@ can replace a broken build with the same protocol.
 
 Artifacts use immutable sequence directories under
 `bridges/<lane>/<studioVersion>/<protocol>/<sequence>/`. Installation verifies
-Ed25519, all sizes/SHA-256 values, then Authenticode for every DLL/EXE, before an
-atomic directory rename. Previous sequences stay available for fallback.
+Ed25519, all sizes/SHA-256 values, then Authenticode for the DLL/EXE entries whose
+signer class is `microsoft`, before an atomic directory rename. Previous sequences
+stay available for fallback.
 
-The build pins the SPKI PEM public key and certificate SHA-1 thumbprint in both
-`agent/lib/bridge-trust.mjs` and `native/Ssam.Agent/BridgeTrust.cs`. The application
-build refuses empty, invalid or differing anchors. No server value, setting or
-environment variable can replace these constants. Tests inject ephemeral keys
-only through test constructors.
+Since agent 0.3.17 / native 0.4.14 (app 0.2.8) the owner's files carry no
+Authenticode signature: the Windows app is never Authenticode-signed (owner
+decision, November 2026). An owner file is trusted because the manifest that names
+its size and SHA-256 verifies against the pinned Ed25519 key. The manifest field
+`authenticodeThumbprint` is ignored (it grants nothing and blocks nothing). The
+only anchor is the Ed25519 SPKI key. The native core gets it from the build input
+`-p:SsamTrustPublicKey=<base64 SPKI>` (generated `BridgeTrust.Anchor.g.cs`; an
+environment variable of that name is refused); `scripts/build-native.mjs
+--trust-public-key <public-key.pem>` and `scripts/build.mjs --trust-public-key
+<public-key.pem>` pass it and verify the compiled executable. A source build has an
+empty anchor: the feature is off, the hello says `bridgeOffer: false` and every
+offer is refused. No server value, setting or runtime environment variable can
+replace the anchor. Tests inject ephemeral keys only through test constructors.
+The Node agent's `agent/lib/bridge-trust.mjs` keeps an empty key (the app runs the
+native core).
 
 ## Selection and attachment
 
@@ -60,16 +71,17 @@ The native core holds read handles without write/delete sharing. Node uses the
 bundled native core's `bridge-lock` helper, with readiness acknowledged only
 after every file is open. A missing helper fails closed for downloaded attachment.
 Authenticode now uses WinVerifyTrust and its provider signer chain in process.
-Node calls the native `authenticode --file <file> --signer owner|microsoft`
-command. No PowerShell or environment-derived verifier path is involved.
+Node calls the native `authenticode --file <file> --signer microsoft`
+command; the owner class is refused before any check. No PowerShell or environment-derived verifier path is involved.
 Every executable manifest entry requires a signer class. Owner entrypoints
 cannot be labeled Microsoft. Microsoft dependencies require the exact subject
 organization, the code-signing EKU and a pinned SHA-256 root fingerprint, in
 addition to successful Authenticode verification. Both build sources and the
 compiled native executable must report matching anchors at release time.
-`build.mjs --native <executable> --bridge-public-key <public-key.pem>` also
-compares the optional watcher key file. The native `trust-anchors` command
-reports only the public SPKI digest, owner thumbprint and Microsoft root pins.
+`build.mjs --native <executable> --trust-public-key <public-key.pem>`
+(`--bridge-public-key` is an alias) compares the key digest with the compiled
+executable. The native `trust-anchors` command reports only the public SPKI digest
+and the Microsoft root pins.
 
 The Microsoft root pin was obtained offline from the provider chains of the
 three Microsoft DLLs beside the real v100 client used in qualification. These
@@ -145,6 +157,8 @@ LoadFromAssemblyPath. A two-distinct-instance quarantine is only a proposal;
 current behavior still retries the newest failed identity after Studio restart.
 
 ## Authenticode trust on target machines
+
+Since 0.4.14-native this applies only to the Microsoft-signed dependencies; the owner files are verified by the Ed25519 manifest. The text below describes the former owner-certificate model and still holds for the Microsoft chain.
 
 The owner's Authenticode certificate must chain to a CA root already trusted on every target machine. Verification is offline and uses the local certificate cache; it does not download missing roots or intermediate certificates. Missing roots, incomplete chains, expiration without a valid timestamp, and unavailable revocation evidence produce a local `VERIFY_FAILED` warning and are retried on the next hello. They do not suppress the offered identity on the server.
 

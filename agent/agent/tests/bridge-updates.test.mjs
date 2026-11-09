@@ -18,12 +18,14 @@ const keys = generateKeyPairSync('ed25519');
 const anchors = { publicKey: keys.publicKey.export({ type: 'spki', format: 'pem' }), thumbprint: 'A'.repeat(40) };
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 const installed = { version: '1.7.30.1234', runtime: 'net10.0' };
-function offer(protocol = 'v101', options = {}) {
+// microsoft: a Microsoft dependency in the offer, the only kind of file still checked for Authenticode (0.3.17).
+function offer(protocol = 'v101', options = {}, { microsoft = false } = {}) {
   const bytes = Buffer.from('signed test binary ' + protocol);
   const manifest = JSON.stringify({ schema: 1, lane: 'odc', studioVersion: '1.7.30', runtime: 'net10.0', protocol,
     sequence: Number(protocol.slice(1)),
     createdAt: '2026-10-28T00:00:00Z', authenticodeThumbprint: anchors.thumbprint,
-    files: [{ path: `bridge/ODC3.Bridge.${protocol}.dll`, signer: 'owner', sha256: digest(bytes), size: bytes.length }, { path: 'client/ODC3.Bridge.Client.dll', signer: 'owner', sha256: digest(bytes), size: bytes.length }], ...options });
+    files: [{ path: `bridge/ODC3.Bridge.${protocol}.dll`, signer: 'owner', sha256: digest(bytes), size: bytes.length }, { path: 'client/ODC3.Bridge.Client.dll', signer: 'owner', sha256: digest(bytes), size: bytes.length },
+      ...(microsoft ? [{ path: 'client/Microsoft.Diagnostics.NETCore.Client.dll', signer: 'microsoft', sha256: digest(bytes), size: bytes.length }] : [])], ...options });
   return { value: { lane: 'odc', studioVersion: '1.7.30', protocol, manifest, signature: sign(null, Buffer.from(manifest), keys.privateKey).toString('base64') }, bytes };
 }
 function fixture(t, extra = {}) {
@@ -57,7 +59,7 @@ for (const scenario of ['signature', 'sha256', 'missing Authenticode', 'wrong Au
   test('offer refuses ' + scenario + ' without installing or executing files', async t => {
     let checks = 0;
     const f = fixture(t, { authenticode: async () => { checks++; if (scenario.includes('Authenticode')) throw new Error(scenario); } });
-    let item = offer();
+    let item = offer('v101', {}, { microsoft: scenario.includes('Authenticode') });
     if (scenario === 'signature') item.value.signature = Buffer.alloc(64).toString('base64');
     if (scenario === 'sha256') item.bytes = Buffer.alloc(item.bytes.length);
     if (scenario === 'path') item = offer('v101', { files: [{ path: '../escape.dll', signer: 'owner', sha256: digest(item.bytes), size: item.bytes.length }] });
@@ -84,15 +86,14 @@ test('an interrupted download can recover on the next hello without restarting',
   f.set(item); assert.equal(await f.install(), true);
   assert.equal((await f.store.select('odc', installed.version, installed.runtime)).protocol, 'v101');
 });
-test('Windows Authenticode demands Valid, embedded Authenticode and pinned signer; Mac updates fail closed', async () => {
+test('Windows Authenticode (Microsoft dependencies only) demands Valid and the native policy; the owner class is refused; Mac updates fail closed', async () => {
   let args;
-  await verifyAuthenticode('C:\\safe\\bridge.dll', anchors.thumbprint, { platform: 'win32', runtimeRoot: 'C:\\app', run: async (exe, a) => { args = a; return { stdout: JSON.stringify({ ok: true, signatureValid: true, hresult: 0, thumbprint: anchors.thumbprint }) }; } });
-  assert.deepEqual(args, ['authenticode', '--file', 'C:\\safe\\bridge.dll', '--signer', 'owner']);
-  await assert.rejects(verifyAuthenticode('C:\\safe\\bridge.dll', anchors.thumbprint, { platform: 'win32', runtimeRoot: 'C:\\app', run: async () => ({ stdout: JSON.stringify({ ok: false, signatureValid: true, hresult: 0, thumbprint: anchors.thumbprint }) }) }), /pinned policy/);
-  await assert.rejects(verifyAuthenticode('C:\\safe\\bridge.dll', anchors.thumbprint, { platform: 'win32', runtimeRoot: 'C:\\app', run: async () => ({ stdout: JSON.stringify({ ok: true, signatureValid: true, hresult: 0, thumbprint: 'B'.repeat(40) }) }) }), /pinned policy/);
+  await verifyAuthenticode('C:\\safe\\dep.dll', { platform: 'win32', runtimeRoot: 'C:\\app', run: async (exe, a) => { args = a; return { stdout: JSON.stringify({ ok: true, signatureValid: true, hresult: 0 }) }; } });
+  assert.deepEqual(args, ['authenticode', '--file', 'C:\\safe\\dep.dll', '--signer', 'microsoft']);
+  await assert.rejects(verifyAuthenticode('C:\\safe\\dep.dll', { platform: 'win32', runtimeRoot: 'C:\\app', run: async () => ({ stdout: JSON.stringify({ ok: false, signatureValid: true, hresult: 0 }) }) }), /pinned policy/);
+  await assert.rejects(verifyAuthenticode('C:\\safe\\bridge.dll', { platform: 'win32', runtimeRoot: 'C:\\app', signer: 'owner', run: async () => ({ stdout: JSON.stringify({ ok: true, signatureValid: true, hresult: 0 }) }) }), /pinned policy/);
   assert.ok(!args.some(arg => /powershell/i.test(arg)));
-  await assert.rejects(verifyAuthenticode('test.dll', anchors.thumbprint, { platform: 'win32', runtimeRoot: 'C:\\app', run: async () => ({ stdout: JSON.stringify({ ok: false, signatureValid: true, hresult: 0, thumbprint: 'B'.repeat(40) }) }) }), /pinned/);
-  await assert.rejects(verifyAuthenticode('/test.dll', anchors.thumbprint, { platform: 'darwin', runtimeRoot: '/app' }), /disabled/);
+  await assert.rejects(verifyAuthenticode('/test.dll', { platform: 'darwin', runtimeRoot: '/app' }), /disabled/);
 });
 test('runtimeconfig selects the Studio runtime and fails closed for unreadable config', async t => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'studio-runtime-')); t.after(() => fs.rmSync(dir, { recursive: true, force: true }));

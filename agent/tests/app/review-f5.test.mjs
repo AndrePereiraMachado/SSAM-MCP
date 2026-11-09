@@ -136,6 +136,11 @@ test('M2: the updater never installs on quit before the downloaded installer was
   const text = fs.readFileSync(path.resolve(import.meta.dirname, '../../src/main/electron/updates.mjs'), 'utf8');
   assert.match(text, /autoUpdater\.autoInstallOnAppQuit = false;/);
   assert.doesNotMatch(text, /autoUpdater\.autoInstallOnAppQuit = true;\s*\n\s*autoUpdater\.allowPrerelease/);
-  assert.match(text, /installerVersionProblem\(\{ \.\.\.readInstaller\(info\?\.downloadedFile\)/);
+  // App 0.2.8: the check moved to core/update-verify.mjs (after the signed statement), called before an update is ready.
+  const verify = fs.readFileSync(path.resolve(import.meta.dirname, '../../src/main/core/update-verify.mjs'), 'utf8');
+  assert.match(verify, /^  const problem = installerVersionProblem\(\{ \.\.\.readInstaller\(info\?\.downloadedFile\)/m);
+  // Review M1/M2 of 0.2.8: the order, the re-hash and the install on quit are tested by behaviour in updates-flow.test.mjs.
+  assert.match(text, /answer = await verifyUpdate\(/);
   assert.match(text, /if \(state\.status !== 'ready' \|\| !verified\) return false;/);
+  assert.match(text, /if \(windows\) \{ autoUpdater\.autoInstallOnAppQuit = false; verifyDownload\(info\); \}/);
 });

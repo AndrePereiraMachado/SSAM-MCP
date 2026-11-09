@@ -44,6 +44,14 @@ function Get-AuthenticodeSigningTime([string]$File,$Signature) {
     }
     throw 'Timestamp certificate exists without a verifiable signing time.'
 }
+# The signer organization as the agent reads it (native AuthenticodeTrust.cs): the O= values of the subject decoded one per line;
+# exactly one of them, else none (''). The caller compares it ordinally.
+function Get-SingleOrganization([Security.Cryptography.X509Certificates.X509Certificate2]$Certificate) {
+    $names=@($Certificate.SubjectName.Decode([Security.Cryptography.X509Certificates.X500DistinguishedNameFlags]::UseNewLines) -split "`n" |
+        ForEach-Object { $_.Trim() } | Where-Object { $_.StartsWith('O=',[StringComparison]::Ordinal) } | ForEach-Object { $_.Substring(2) })
+    if($names.Count -eq 1){return [string]$names[0]}
+    return ''
+}
 function Get-VerifiedAuthenticodeChain([string]$File,$Signature,$Chain=$null) {
     if($Signature.Status -ne 'Valid'){
         if($Signature.StatusMessage -match '0x80092013|0x800B010E|revocation.*offline|revoga.*offline'){Write-Output '{"ok":false,"code":"REVOCATION_UNAVAILABLE","environmental":true}';throw 'Certificate revocation service is unavailable.'}

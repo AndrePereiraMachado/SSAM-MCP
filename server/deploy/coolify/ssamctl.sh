@@ -17,8 +17,8 @@
 #   sh ssamctl.sh features put <Features.plain.xml>        writes /data/odc-features/Features.plain.xml
 #   sh ssamctl.sh put <file> <path under /data>            any file into the state volumes (as uid 10001)
 #   sh ssamctl.sh ops <command...>                         a shell command in the image over the volumes, no network
-#   sh ssamctl.sh backup [<folder>]                        tar.gz of server, friction and odc-features (+ .sha256, .info)
-#   sh ssamctl.sh restore <archive.tar.gz>                 the three folders back, with the server STOPPED (Coolify: Stop)
+#   sh ssamctl.sh backup [--keep-days <n>] [<folder>]      3 databases + every volume of the resource (+ .sha256, .info)
+#   sh ssamctl.sh restore <archive.tar.gz> [<tokens.sql.gz>]   volumes (and licenses) back, all STOPPED (Coolify: Stop)
 #   sh ssamctl.sh logs [<n>]                               the last n lines of the server's log (default 50)
 #   sh ssamctl.sh console status | logs [<n>] | audit [<n>]   the owner console (COOLIFY.md 11): state, its log, its audit
 #
@@ -30,6 +30,17 @@
 # restore (psql) run a one-off container of the database's own postgres image (pg_image) on that network, against that
 # URL; backup refuses an empty dump, a dump without the license tables and a pg_dump older than the server. A
 # server without SSAM_DATABASE_URL keeps tokens.json, and the same commands work on it (without dump, psql and db).
+# backup (also the daily cron, COOLIFY.md 8) writes, with one stamp: ssam-tokens-<stamp>.sql.gz (licenses, above),
+# ssam-db-update_server-<stamp>.sql.gz and ssam-db-coolify-<stamp>.sql.gz (pg_dump run INSIDE each database container,
+# so always its own major, refused unless server and pg_dump majors match and the expected tables are in the dump),
+# ssam-service-<stamp>.tar.gz (Coolify's docker-compose.yml and .env of the resource), and ssam-state-<stamp>.tar.gz with
+# every named volume of the resource: the volumes mounted by every container of the default backend's compose project
+# (backends, router, console) plus every <project>_* volume nothing mounts now; anonymous volumes are listed in the .info
+# and skipped (a Redeploy recreates them). Each file has a .sha256; the .info is written last, so a set without it is
+# incomplete. SSAM_BACKUP_DATABASES (default "licenses update_server coolify") chooses the databases; every one listed
+# must dump, or the backup fails (exit 2, BACKUP_* code). --keep-days (else BACKUP_KEEP_DAYS) removes this folder's sets
+# older than that after a good run; the run is refused when the disk has less than SSAM_BACKUP_MIN_FREE_GB (default 20)
+# GiB free or less than 3 times the newest archive. The work folder is inside the backup folder, never /tmp (tmpfs).
 set -eu
 here=$(cd "$(dirname "$0")" && pwd)
 # Git Bash on Windows (the local rehearsal, COOLIFY.md 10): MSYS would rewrite the container paths of -v and of the
@@ -110,36 +121,127 @@ pg_image() {
   if [ -n "$db_found" ]; then $DOCKER inspect --format '{{.Image}}' "$db_found"; else printf '%s' "$PG_IMAGE_FALLBACK"; fi
 }
 # pg_tool <container> <tool> [args...]: the client tool (pg_image) on the server's network, with stdin and stdout as given.
-pg_tool() { c=$1; shift; $DOCKER run --rm -i --network "$(network_of "$c")" --security-opt no-new-privileges:true --cap-drop ALL --user 70:70 -e HOME=/tmp "$(pg_image "$c")" "$@"; }
+# Never given the URL: for that, pg_url.
+pg_tool() { pt_c=$1; shift; $DOCKER run --rm -i --network "$(network_of "$pt_c")" --security-opt no-new-privileges:true --cap-drop ALL --user 70:70 -e HOME=/tmp "$(pg_image "$pt_c")" "$@"; }
+# pg_url <container> <script> [args...]: a shell script in the client image on the server's network, with the server's
+# SSAM_DATABASE_URL as $SSAM_DATABASE_URL. The URL (with its password) travels in the docker CLI's environment
+# (`-e NAME` without a value), never on a command line: ps, /proc/<pid>/cmdline, docker ps and docker inspect (Cmd) of
+# the one-off container show only the name (2026-11-09 review M1).
+pg_url() {
+  pu_c=$1; pu_script=$2; shift 2
+  SSAM_DATABASE_URL=$(db_url "$pu_c") $DOCKER run --rm -i --network "$(network_of "$pu_c")" --security-opt no-new-privileges:true --cap-drop ALL --user 70:70 -e HOME=/tmp -e SSAM_DATABASE_URL "$(pg_image "$pu_c")" sh -c "$pu_script" sh "$@"
+}
+# The database name of a postgres URL (its path, without the query), never printed.
+db_name_of() { printf '%s' "$1" | sed -n 's#^[A-Za-z][A-Za-z0-9+.-]*://[^/]*/\([^?]*\).*#\1#p'; }
 # The license tables a dump of the tokens' database must hold (migrations/0001-server-tokens.sql and db.mjs).
 LICENSE_TABLES=${SSAM_LICENSE_TABLES:-server_tokens schema_migrations}
-# dump_tokens <container> <url> <file.sql.gz>: the tokens' database as plain SQL, refused loudly (exit 2, nothing left
-# with the final name) when the client is older than the server, when pg_dump fails, when the dump is empty, or when a
-# license table is missing from it. A dump that is not a backup must never look like one.
+# dump_tokens <container> <url> <file.sql.gz>: the licenses database as plain SQL. When the host of the URL is a
+# container on this host (Coolify: ro0d3...), its own pg_dump dumps it through the local socket (docker exec, the
+# container's POSTGRES_USER and POSTGRES_DB; no password anywhere), after checking that the URL names that same database
+# (compared, never printed). A database that is not a container here (or PG_IMAGE set) is dumped by a one-off client
+# container with the URL in its environment (pg_url). Either way refused loudly (exit 2, nothing with the final name) by
+# verify_dump: client older than the server, failed or empty dump, a license table missing, no server_tokens row.
 dump_tokens() {
   dt_c=$1; dt_url=$2; dt_out=$3; dt_raw=$dt_out.partial
   rm -f "$dt_out" "$dt_raw"
-  dt_server=$(pg_tool "$dt_c" psql "$dt_url" -XtAc 'show server_version_num' < /dev/null | tr -d '[:space:]') || true
+  dt_local=
+  [ -n "$PG_IMAGE_SET" ] || dt_local=$(db_container "$dt_c")
+  if [ -n "$dt_local" ]; then
+    dt_db=$(db_name_of "$dt_url")
+    dt_cdb=$(env_of "$dt_local" POSTGRES_DB)
+    [ -n "$dt_db" ] && [ "$dt_db" = "${dt_cdb:-postgres}" ] || die "BACKUP_DB_MISMATCH: the database named in SSAM_DATABASE_URL of $dt_c is not the POSTGRES_DB of its container $dt_local; no dump was made"
+    dump_local_db licenses "$dt_local" "$LICENSE_TABLES" "$dt_out"
+    return
+  fi
+  dt_server=$(pg_url "$dt_c" 'exec psql "$SSAM_DATABASE_URL" -XtAc "show server_version_num"' < /dev/null | tr -d '[:space:]') || true
   case "$dt_server" in ''|*[!0-9]*) die "BACKUP_DB_UNREACHABLE: could not read the version of the tokens' database (SSAM_DATABASE_URL of $dt_c); no dump was made";; esac
   dt_client=$(pg_tool "$dt_c" pg_dump --version < /dev/null | sed -n 's/^pg_dump (PostgreSQL) \([0-9][0-9]*\).*/\1/p' | head -n 1) || true
   case "$dt_client" in ''|*[!0-9]*) die "BACKUP_PG_DUMP_MISSING: the client image $(pg_image "$dt_c") has no pg_dump; no dump was made";; esac
   dt_major=$((dt_server / 10000))
   [ "$dt_client" -ge "$dt_major" ] || die "BACKUP_PG_DUMP_TOO_OLD: pg_dump $dt_client cannot dump a PostgreSQL $dt_major server; run where the database container is visible, or set PG_IMAGE to a postgres:$dt_major image. No dump was made"
-  if ! pg_tool "$dt_c" pg_dump "$dt_url" --no-owner --no-privileges < /dev/null > "$dt_raw"; then rm -f "$dt_raw"; die "BACKUP_DUMP_FAILED: pg_dump $dt_client against PostgreSQL $dt_major failed; no dump was kept"; fi
-  [ -s "$dt_raw" ] || { rm -f "$dt_raw"; die "BACKUP_DUMP_EMPTY: pg_dump wrote nothing; no dump was kept"; }
-  for dt_table in $LICENSE_TABLES; do
-    grep -q "^CREATE TABLE \(public\.\)\{0,1\}$dt_table (" "$dt_raw" || { rm -f "$dt_raw"; die "BACKUP_DUMP_NO_LICENSE_TABLES: the dump has no table $dt_table: SSAM_DATABASE_URL does not point at the licenses database; no dump was kept"; }
-  done
-  dt_rows=$(awk '/^COPY (public\.)?server_tokens /{on=1;next} on&&/^\\\.$/{on=0} on{n++} END{print n+0}' "$dt_raw")
+  if ! pg_url "$dt_c" 'exec pg_dump --no-owner --no-privileges "$SSAM_DATABASE_URL"' < /dev/null > "$dt_raw"; then rm -f "$dt_raw"; die "BACKUP_DUMP_FAILED: pg_dump $dt_client against PostgreSQL $dt_major failed; no dump was kept"; fi
+  verify_dump licenses "SSAM_DATABASE_URL of $dt_c" "$dt_raw" "$LICENSE_TABLES" "$dt_major" ''
   gzip -c "$dt_raw" > "$dt_raw.gz" && gzip -t "$dt_raw.gz" || { rm -f "$dt_raw" "$dt_raw.gz"; die "BACKUP_DUMP_FAILED: could not compress the dump"; }
+  dt_bytes=$(wc -c < "$dt_raw" | tr -d ' ')
   rm -f "$dt_raw"; mv "$dt_raw.gz" "$dt_out"
-  echo "tokens database: PostgreSQL $dt_major dumped by pg_dump $dt_client, tables: $LICENSE_TABLES, server_tokens rows: $dt_rows"
+  echo "backup: licenses database: remote, PostgreSQL $dt_major dumped by pg_dump $dt_client, $dt_bytes bytes, tables: $LICENSE_TABLES, $vd_floor rows: $vd_rows"
 }
-# The docker run options that give a one-off container the tokens' store of the server: the network and the URL when the
-# server has a database, nothing (tokens.json in the volume) otherwise.
+# The other PostgreSQL databases of the host, dumped by the pg_dump INSIDE their own container (its own major, the same
+# binaries as the server; the credentials stay in that container's environment). The tables each dump must hold:
+UPDATE_SERVER_TABLES=${SSAM_UPDATE_SERVER_TABLES:-releases artifacts apps _prisma_migrations}
+COOLIFY_TABLES=${SSAM_COOLIFY_TABLES:-migrations servers instance_settings applications services}
+# local_db_container <kind>: the update_server's database is the running postgres container whose POSTGRES_DB is
+# update_server (dist.ssam.pro; exactly one); Coolify's own is coolify-db. SSAM_UPDATE_DB_CONTAINER and
+# SSAM_COOLIFY_DB_CONTAINER name them explicitly.
+local_db_container() {
+  case "$1" in
+    update_server)
+      if [ -n "${SSAM_UPDATE_DB_CONTAINER:-}" ]; then printf '%s' "$SSAM_UPDATE_DB_CONTAINER"; return; fi
+      ldc_found=
+      for ldc in $($DOCKER ps --format '{{.Names}}'); do
+        case "$($DOCKER inspect --format '{{.Config.Image}}' "$ldc")" in *postgres*) ;; *) continue;; esac
+        [ "$(env_of "$ldc" POSTGRES_DB)" = update_server ] && ldc_found="$ldc_found $ldc"
+      done
+      set -- $ldc_found
+      [ $# -eq 1 ] || die "BACKUP_DB_NOT_FOUND: expected one running postgres container with POSTGRES_DB=update_server, found ${*:-none}; set SSAM_UPDATE_DB_CONTAINER"
+      printf '%s' "$1";;
+    coolify) printf '%s' "${SSAM_COOLIFY_DB_CONTAINER:-coolify-db}";;
+    *) die "unknown database kind $1";;
+  esac
+}
+# The table whose rows prove a dump is not of an empty or reset database (2026-11-09 review M3): a license, a release, a
+# server. SSAM_BACKUP_MIN_ROWS (default 1) is the floor.
+floor_table() { case "$1" in licenses) echo server_tokens;; update_server) echo releases;; coolify) echo servers;; esac; }
+# verify_dump <kind> <source> <raw.sql> <tables> <server major> <client major or empty>: the dump is not empty, holds
+# every expected table, its header says the server's major (and the client's, when given), and the floor table has at
+# least SSAM_BACKUP_MIN_ROWS rows. Removes the raw file and dies otherwise. Sets vd_floor and vd_rows.
+verify_dump() {
+  vd_kind=$1; vd_src=$2; vd_raw=$3; vd_tables=$4; vd_server=$5; vd_client=$6
+  [ -s "$vd_raw" ] || { rm -f "$vd_raw"; die "BACKUP_DUMP_EMPTY: pg_dump of the $vd_kind database wrote nothing; no dump was kept"; }
+  vd_code=BACKUP_DUMP_NO_EXPECTED_TABLES; [ "$vd_kind" != licenses ] || vd_code=BACKUP_DUMP_NO_LICENSE_TABLES
+  for vd_table in $vd_tables; do
+    grep -q "^CREATE TABLE \(public\.\)\{0,1\}\"\{0,1\}$vd_table\"\{0,1\} (" "$vd_raw" || { rm -f "$vd_raw"; die "$vd_code: the $vd_kind dump ($vd_src) has no table $vd_table: wrong database; no dump was kept"; }
+  done
+  vd_from=$(sed -n 's/^-- Dumped from database version \([0-9][0-9]*\).*/\1/p' "$vd_raw" | head -n 1)
+  vd_by=$(sed -n 's/^-- Dumped by pg_dump version \([0-9][0-9]*\).*/\1/p' "$vd_raw" | head -n 1)
+  [ "$vd_from" = "$vd_server" ] && { [ -z "$vd_client" ] || [ "$vd_by" = "$vd_client" ]; } || { rm -f "$vd_raw"; die "BACKUP_PG_DUMP_MAJOR: the $vd_kind dump says server ${vd_from:-?}, pg_dump ${vd_by:-?} (expected $vd_server); no dump was kept"; }
+  vd_floor=$(floor_table "$vd_kind")
+  vd_rows=$(awk -v t="$vd_floor" '$1=="COPY" && ($2==t || $2=="public."t || $2=="\"public\".\""t"\""){on=1;next} on&&/^\\\.$/{on=0} on{n++} END{print n+0}' "$vd_raw")
+  [ "$vd_rows" -ge "${SSAM_BACKUP_MIN_ROWS:-1}" ] || { rm -f "$vd_raw"; die "BACKUP_DUMP_NO_ROWS: the $vd_kind dump ($vd_src) has $vd_rows rows in $vd_floor (at least ${SSAM_BACKUP_MIN_ROWS:-1} expected): an empty or reset database; no dump was kept"; }
+}
+# dump_local_db <kind> <container> <tables> <file.sql.gz>: plain SQL by the pg_dump INSIDE the container, through its
+# local socket as its POSTGRES_USER (no password, no URL), refused loudly (exit 2, nothing with the final name) when the
+# container is not running, when its pg_dump and server majors differ, when pg_dump fails, or by verify_dump.
+dump_local_db() {
+  dl_kind=$1; dl_c=$2; dl_tables=$3; dl_out=$4; dl_raw=$4.partial
+  rm -f "$dl_out" "$dl_raw"
+  [ "$($DOCKER inspect --format '{{.State.Running}}' "$dl_c" 2>/dev/null || true)" = true ] || die "BACKUP_DB_NOT_FOUND: the $dl_kind database container $dl_c is not running on this host; no dump was made"
+  dl_versions=$($DOCKER exec "$dl_c" sh -c 'postgres --version; pg_dump --version' < /dev/null 2>/dev/null) || true
+  dl_server=$(printf '%s\n' "$dl_versions" | sed -n 's/^postgres (PostgreSQL) \([0-9][0-9]*\).*/\1/p' | head -n 1)
+  dl_client=$(printf '%s\n' "$dl_versions" | sed -n 's/^pg_dump (PostgreSQL) \([0-9][0-9]*\).*/\1/p' | head -n 1)
+  [ -n "$dl_server" ] && [ "$dl_server" = "$dl_client" ] || die "BACKUP_PG_DUMP_MAJOR: the $dl_kind container $dl_c has PostgreSQL ${dl_server:-?} and pg_dump ${dl_client:-?}; a dump needs the same major. No dump was made"
+  if ! $DOCKER exec "$dl_c" sh -c 'exec pg_dump -U "${POSTGRES_USER:-postgres}" --no-owner --no-privileges "${POSTGRES_DB:-postgres}"' < /dev/null > "$dl_raw"; then
+    rm -f "$dl_raw"; die "BACKUP_DUMP_FAILED: pg_dump of the $dl_kind database ($dl_c) failed; no dump was kept"
+  fi
+  verify_dump "$dl_kind" "$dl_c" "$dl_raw" "$dl_tables" "$dl_server" "$dl_client"
+  gzip -c "$dl_raw" > "$dl_raw.gz" && gzip -t "$dl_raw.gz" || { rm -f "$dl_raw" "$dl_raw.gz"; die "BACKUP_DUMP_FAILED: could not compress the $dl_kind dump"; }
+  dl_bytes=$(wc -c < "$dl_raw" | tr -d ' ')
+  rm -f "$dl_raw"; mv "$dl_raw.gz" "$dl_out"
+  echo "backup: $dl_kind database: container $dl_c, PostgreSQL $dl_server dumped by pg_dump $dl_client, $dl_bytes bytes, tables: $dl_tables, $vd_floor rows: $vd_rows"
+}
+# The docker run options that give a one-off container the tokens' store of the server: the network and the name of the
+# URL variable when the server has a database (export_store_url puts its value in this shell's environment, so it never
+# appears on the command line), nothing (tokens.json in the volume) otherwise.
 store_opts() {
-  url=$(env_of "$1" SSAM_DATABASE_URL)
-  if [ -n "$url" ]; then printf -- '--network %s -e SSAM_DATABASE_URL=%s' "$(network_of "$1")" "$url"; else printf -- '--network none'; fi
+  if [ -n "$(env_of "$1" SSAM_DATABASE_URL)" ]; then printf -- '--network %s -e SSAM_DATABASE_URL' "$(network_of "$1")"; else printf -- '--network none'; fi
+}
+export_store_url() { su=$(env_of "$1" SSAM_DATABASE_URL); [ -z "$su" ] || { SSAM_DATABASE_URL=$su; export SSAM_DATABASE_URL; }; }
+# backup_on_exit <status>: on a failed backup, removes this run's staging folder (.set-<stamp>: partial dumps, work
+# folder, partial archive) and writes the FAILED line cron.log keeps.
+backup_on_exit() {
+  [ "$1" != 0 ] || return 0
+  [ -z "${stage:-}" ] || rm -rf "$stage"
+  echo "backup: FAILED (exit $1) at $(date -u +%Y-%m-%dT%H:%M:%SZ)" >&2
 }
 hardened="--rm --init --security-opt no-new-privileges:true --cap-drop ALL --user 10001:10001"
 # A terminal for the interactive commands only when there is one (a script or a pipe gets -i).
@@ -159,7 +261,7 @@ case "$cmd" in
     for m in /data/server /data/friction /data/odc-features /data/cache; do echo "volume:    $m = $(volume_of "$c" $m)"; done
     url=$(db_url "$c")
     if [ -n "$url" ]; then
-      reach=$(pg_tool "$c" psql "$url" -tAc 'select count(*) from server_tokens' 2>&1 | tail -n 1)
+      reach=$(pg_url "$c" 'exec psql "$SSAM_DATABASE_URL" -tAc "select count(*) from server_tokens"' < /dev/null 2>&1 | tail -n 1)
       echo "tokens:    postgres ($(printf '%s' "$url" | sed 's#//[^:]*:[^@]*@#//***:***@#')), $(case "$reach" in [0-9]*) echo "$reach records, reachable";; *) echo "NOT reachable: $reach";; esac)"
     else echo "tokens:    /data/server/tokens.json (no SSAM_DATABASE_URL)"; fi
     done
@@ -173,7 +275,7 @@ case "$cmd" in
     echo "then Redeploy (or Restart) the resource in Coolify so the containers are recreated from it"
     ;;
   token)
-    c=$(container)
+    c=$(container); export_store_url "$c"
     # No log driver: the plaintext token and credential are printed once to this terminal and kept nowhere else.
     # shellcheck disable=SC2086
     $DOCKER run $hardened $(store_opts "$c") --log-driver none $tty -v "$(volume_of "$c" /data/server):/data/server" --entrypoint node "$(image_of "$c")" facade/ssam.mjs server-token "$@"
@@ -213,11 +315,12 @@ case "$cmd" in
   db)
     c=$(container); [ -n "$(env_of "$c" SSAM_DATABASE_URL)" ] || die "the server has no SSAM_DATABASE_URL: tokens are in /data/server/tokens.json"
     # shellcheck disable=SC2086
+    export_store_url "$c"
     $DOCKER run $hardened $(store_opts "$c") --entrypoint node "$(image_of "$c")" facade/ssam.mjs db "$@"
     ;;
   psql)
     c=$(container); url=$(db_url "$c"); [ -n "$url" ] || die "the server has no SSAM_DATABASE_URL"
-    if [ $# -gt 0 ]; then pg_tool "$c" psql "$url" -c "$*"; else $DOCKER run --rm $tty --network "$(network_of "$c")" --security-opt no-new-privileges:true --cap-drop ALL --user 70:70 -e HOME=/tmp "$(pg_image "$c")" psql "$url"; fi
+    if [ $# -gt 0 ]; then pg_url "$c" 'exec psql "$SSAM_DATABASE_URL" -c "$1"' "$*"; else SSAM_DATABASE_URL=$url $DOCKER run --rm $tty --network "$(network_of "$c")" --security-opt no-new-privileges:true --cap-drop ALL --user 70:70 -e HOME=/tmp -e SSAM_DATABASE_URL "$(pg_image "$c")" sh -c 'exec psql "$SSAM_DATABASE_URL"'; fi
     ;;
   features)
     [ "${1:-}" = put ] || die "features put [--version x.y.z] <Features.plain.xml>"
@@ -240,26 +343,131 @@ case "$cmd" in
     $DOCKER run $hardened --network none $tty $(mounts "$c") "$(image_of "$c")" "$@"
     ;;
   backup)
+    keep=${BACKUP_KEEP_DAYS:-0}
+    if [ "${1:-}" = --keep-days ]; then keep=${2:?--keep-days <n>}; shift 2; fi
+    case "$keep" in ''|*[!0-9]*) die "--keep-days must be a number of days";; esac
+    keep_sets=${SSAM_BACKUP_KEEP_SETS:-7}
+    case "$keep_sets" in ''|*[!0-9]*) die "SSAM_BACKUP_KEEP_SETS must be a number of sets";; esac
     c=$(container); dir=${1:-/var/backups/ssam-server}
     umask 077
     [ -d "$dir" ] && [ -w "$dir" ] || die "the folder $dir must exist and be writable (sudo install -d -o \$USER -m 0700 $dir)"
-    stamp=$(date -u +%Y%m%dT%H%M%SZ); archive=$dir/ssam-state-$stamp.tar.gz
-    url=$(db_url "$c")
-    # The tokens' database first, as plain SQL (loads back with psql): a refused dump stops the backup before the long
-    # volume copy. SSAM_BACKUP_REQUIRE_DATABASE=1 (backup-before-redeploy.sh) refuses a server without SSAM_DATABASE_URL.
-    if [ -n "$url" ]; then
-      dump_tokens "$c" "$url" "$dir/ssam-tokens-$stamp.sql.gz"
-      (cd "$dir" && sha256sum "ssam-tokens-$stamp.sql.gz" > "ssam-tokens-$stamp.sql.gz.sha256")
-    elif [ "${SSAM_BACKUP_REQUIRE_DATABASE:-0}" = 1 ]; then
-      die "BACKUP_NO_DATABASE_URL: $c has no SSAM_DATABASE_URL, so this backup would hold no licenses"
+    dir=$(cd "$dir" && pwd)
+    stage=
+    # A failure removes this run's staging folder and leaves a "backup:" line in cron.log (the console collector tails
+    # those) next to the ssamctl: code.
+    trap 'backup_on_exit $?' EXIT
+    trap 'exit 130' HUP INT TERM
+    echo "backup: start $(date -u +%Y-%m-%dT%H:%M:%SZ) in $dir"
+    # Room first: the work folder holds the volumes uncompressed until the archive is written.
+    newest=$(ls -1t "$dir"/ssam-state-*.tar.gz 2>/dev/null | head -n 1 || true)
+    need_kb=$(( ${SSAM_BACKUP_MIN_FREE_GB:-20} * 1048576 ))
+    if [ -n "$newest" ]; then last_kb=$(( $(wc -c < "$newest") / 1024 * 3 )); [ "$last_kb" -le "$need_kb" ] || need_kb=$last_kb; fi
+    free_kb=$(df -Pk "$dir" | awk 'END{print $4}')
+    [ "${free_kb:-0}" -ge "$need_kb" ] || die "BACKUP_DISK_LOW: $dir has $((${free_kb:-0} / 1048576)) GiB free, the backup needs $((need_kb / 1048576)) GiB; nothing was written"
+    find "$dir" -maxdepth 1 -type d \( -name '.ssam-window-*' -o -name '.set-*' \) -mmin +1440 -exec rm -rf {} + 2>/dev/null || true
+    # The complete sets of this format, newest first: the .info (written last) has a databases line. The newest one is
+    # the reference for the shrink check.
+    complete_sets() {
+      for cs_info in "$dir"/ssam-state-*.tar.gz.info; do
+        [ -f "$cs_info" ] && grep -q '^databases' "$cs_info" || continue
+        basename "$cs_info" | sed -n 's/^ssam-state-\([0-9]\{8\}T[0-9]\{6\}Z\)\.tar\.gz\.info$/\1/p'
+      done | sort -r
+    }
+    previous=$(complete_sets | head -n 1)
+    prev_state_files=; prev_state_bytes=
+    if [ -n "$previous" ]; then
+      prev_state_files=$(sed -n 's/^state-files //p' "$dir/ssam-state-$previous.tar.gz.info")
+      prev_state_bytes=$(sed -n 's/^state-bytes //p' "$dir/ssam-state-$previous.tar.gz.info")
     fi
-    # shellcheck disable=SC2086
+    stamp=$(date -u +%Y%m%dT%H%M%SZ)
+    # Every file of the set is written in .set-<stamp> and moved into the folder only when the whole set is good, the
+    # .info last: a failed run leaves no orphan dump that a later restore could pair with the wrong archive.
+    stage=$dir/.set-$stamp; mkdir "$stage"
+    archive=$stage/ssam-state-$stamp.tar.gz
+    project=${SSAM_PROJECT:-$($DOCKER inspect --format '{{index .Config.Labels "com.docker.compose.project"}}' "$c")}
+    databases=${SSAM_BACKUP_DATABASES-licenses update_server coolify}
+    url=$(db_url "$c"); dumps=
+    # The databases first, as plain SQL (each loads back with psql): a refused dump stops the backup before the long
+    # volume copy. A server without SSAM_DATABASE_URL (tokens.json) needs SSAM_BACKUP_REQUIRE_DATABASE=0.
+    for kind in $databases; do
+      case "$kind" in
+        licenses)
+          if [ -n "$url" ]; then
+            dump_tokens "$c" "$url" "$stage/ssam-tokens-$stamp.sql.gz"
+            (cd "$stage" && sha256sum "ssam-tokens-$stamp.sql.gz" > "ssam-tokens-$stamp.sql.gz.sha256")
+            dumps="$dumps licenses=ssam-tokens-$stamp.sql.gz"
+          elif [ "${SSAM_BACKUP_REQUIRE_DATABASE:-1}" = 1 ]; then
+            die "BACKUP_NO_DATABASE_URL: $c has no SSAM_DATABASE_URL, so this backup would hold no licenses (SSAM_BACKUP_REQUIRE_DATABASE=0 for a tokens.json server)"
+          fi;;
+        update_server|coolify)
+          db_c=$(local_db_container "$kind")
+          case "$kind" in update_server) tables=$UPDATE_SERVER_TABLES;; *) tables=$COOLIFY_TABLES;; esac
+          dump_local_db "$kind" "$db_c" "$tables" "$stage/ssam-db-$kind-$stamp.sql.gz"
+          (cd "$stage" && sha256sum "ssam-db-$kind-$stamp.sql.gz" > "ssam-db-$kind-$stamp.sql.gz.sha256")
+          dumps="$dumps $kind=ssam-db-$kind-$stamp.sql.gz";;
+        *) die "SSAM_BACKUP_DATABASES: unknown database $kind (licenses, update_server, coolify)";;
+      esac
+    done
+    # Coolify's definition of the resource (the compose it deploys and its .env, which holds secrets) and Coolify's own
+    # .env (APP_KEY: without it the env values in the Coolify dump cannot be read), as coolify-source.env: the restore
+    # path. Root-only like every file here (umask 077); its content is never printed.
+    services=${SSAM_COOLIFY_SERVICES_DIR:-/data/coolify/services}
+    source_env=${SSAM_COOLIFY_SOURCE_ENV:-/data/coolify/source/.env}
+    service_file=
+    if [ -n "$project" ] && [ -f "$services/$project/docker-compose.yml" ]; then
+      [ -f "$source_env" ] || die "BACKUP_SERVICE_FAILED: no $source_env (Coolify's APP_KEY); a Coolify dump without it cannot be restored"
+      mkdir "$stage/service"
+      cp "$source_env" "$stage/service/coolify-source.env" && chmod 0600 "$stage/service/coolify-source.env" || die "BACKUP_SERVICE_FAILED: could not copy $source_env"
+      set -- "$project/docker-compose.yml"; [ ! -f "$services/$project/.env" ] || set -- "$@" "$project/.env"
+      tar -C "$services" -cf "$stage/service/service.tar" "$@" || die "BACKUP_SERVICE_FAILED: could not read the Coolify service folder $services/$project"
+      tar -C "$stage/service" -rf "$stage/service/service.tar" coolify-source.env || die "BACKUP_SERVICE_FAILED: could not add the Coolify .env"
+      gzip -c "$stage/service/service.tar" > "$stage/ssam-service-$stamp.tar.gz" && gzip -t "$stage/ssam-service-$stamp.tar.gz" || die "BACKUP_SERVICE_FAILED: could not compress the service definition"
+      rm -rf "$stage/service"
+      (cd "$stage" && sha256sum "ssam-service-$stamp.tar.gz" > "ssam-service-$stamp.tar.gz.sha256")
+      service_file=ssam-service-$stamp.tar.gz
+      echo "backup: Coolify service definition $service_file ($* coolify-source.env)"
+    else
+      echo "backup: no Coolify service folder $services/${project:-?} on this host; the service definition is not in this set" >&2
+    fi
     window_backup
-    (cd "$dir" && sha256sum "$(basename "$archive")" > "$archive.sha256")
-    printf 'image=%s\nimageId=%s\nrevision=%s\ncontainer=%s\nmode=%s\n' "$($DOCKER inspect --format '{{.Config.Image}}' "$c")" "$(image_of "$c")" \
-      "$($DOCKER inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$c")" "$c" \
-      "$([ "$($DOCKER inspect --format '{{.State.Running}}' "$c")" = true ] && echo online || echo stopped)" > "$archive.info"
-    echo "backup: $archive ($(du -h "$archive" | cut -f1))$( [ -n "$url" ] && printf ' and the tokens database in %s' "$dir/ssam-tokens-$stamp.sql.gz"); the files hold customer data and token hashes: keep them private"
+    (cd "$stage" && sha256sum "$(basename "$archive")" > "$(basename "$archive").sha256")
+    # The .info last: its presence marks a complete set. "key value" lines, as backup.sh (the console collector reads them).
+    {
+      echo "created $stamp"
+      echo "project ${project:-unknown}"
+      echo "image $($DOCKER inspect --format '{{.Config.Image}}' "$c")"
+      echo "image-id $(image_of "$c")"
+      echo "revision $($DOCKER inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$c")"
+      echo "container $c"
+      echo "mode $([ "$($DOCKER inspect --format '{{.State.Running}}' "$c")" = true ] && echo online || echo stopped)"
+      echo "containers $window_containers"
+      echo "volumes $window_volumes"
+      echo "skipped-anonymous-volumes ${window_skipped:-none}"
+      echo "state-files $window_state_files"
+      echo "state-bytes $window_state_bytes"
+      echo "databases${dumps:- none}"
+      echo "service ${service_file:-none}"
+    } > "$stage/ssam-state-$stamp.tar.gz.info"
+    for f in "$stage"/*; do case "$f" in *.info) ;; *) mv "$f" "$dir/";; esac; done
+    mv "$stage/ssam-state-$stamp.tar.gz.info" "$dir/"
+    rmdir "$stage"; stage=
+    archive=$dir/ssam-state-$stamp.tar.gz
+    echo "backup: $archive ($(du -h "$archive" | cut -f1), $(printf '%s\n' $window_volumes | grep -c .) volumes, server-state $window_state_files files), databases:${dumps:- none}; the files hold customer data and token hashes: keep them private"
+    # Retention, by set: the newest SSAM_BACKUP_KEEP_SETS complete sets (default 7) are always kept, whatever their age
+    # (a cron that failed for weeks must not lose its last good sets on the first good run); every other set whose files
+    # are older than --keep-days goes, all its files together. Only the root of the folder: never pre-*/post-* folders.
+    if [ "$keep" -gt 0 ]; then
+      protected=" $(complete_sets | head -n "$keep_sets" | tr '\n' ' ')"
+      find "$dir" -maxdepth 1 -type f \( -name 'ssam-state-*' -o -name 'ssam-tokens-*' -o -name 'ssam-db-*' -o -name 'ssam-service-*' \) -mtime +"$keep" \
+        | sed -n 's/.*-\([0-9]\{8\}T[0-9]\{6\}Z\)\..*/\1/p' | sort -u | while IFS= read -r old; do
+          case "$protected " in *" $old "*) continue;; esac
+          for f in "$dir"/ssam-state-"$old".* "$dir"/ssam-tokens-"$old".* "$dir"/ssam-db-*-"$old".* "$dir"/ssam-service-"$old".*; do
+            [ -f "$f" ] || continue
+            rm -f "$f" && echo "backup: removed $f (set $old, older than $keep days, not among the $keep_sets newest complete sets)"
+          done
+        done
+    fi
+    echo "backup: OK $(date -u +%Y-%m-%dT%H:%M:%SZ)"
     ;;
   restore)
     # restore <archive.tar.gz> [<ssam-tokens-....sql.gz>]: the volumes, and the tokens' database when a dump is given (the
@@ -274,8 +482,8 @@ case "$cmd" in
       url=$(db_url "$c"); [ -n "$url" ] || die "the server has no SSAM_DATABASE_URL: nothing to load the dump into"
       [ -f "$dump" ] || die "no $dump"
       (cd "$(dirname "$dump")" && { [ ! -f "$(basename "$dump").sha256" ] || sha256sum -c "$(basename "$dump").sha256"; }) || die "the dump does not match its .sha256"
-      pg_tool "$c" psql "$url" -v ON_ERROR_STOP=1 -c 'DROP TABLE IF EXISTS server_tokens; DROP TABLE IF EXISTS schema_migrations;' < /dev/null >/dev/null
-      gzip -dc "$dump" | pg_tool "$c" psql "$url" -v ON_ERROR_STOP=1 -f - >/dev/null
+      pg_url "$c" 'exec psql "$SSAM_DATABASE_URL" -v ON_ERROR_STOP=1 -c "DROP TABLE IF EXISTS server_tokens; DROP TABLE IF EXISTS schema_migrations;"' < /dev/null >/dev/null
+      gzip -dc "$dump" | pg_url "$c" 'exec psql "$SSAM_DATABASE_URL" -v ON_ERROR_STOP=1 -f -' >/dev/null
       echo "tokens database restored from $dump"
     fi
     (cd "$(dirname "$archive")" && { [ ! -f "$(basename "$archive").sha256" ] || sha256sum -c "$(basename "$archive").sha256"; }) || die "the archive does not match its .sha256"

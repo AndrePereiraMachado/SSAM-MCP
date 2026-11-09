@@ -6,16 +6,24 @@ import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { validateNativeImage } from './native-pack.mjs';
+import { readTrustPublicKey, spkiBase64, spkiSha256 } from './bridge-trust-gate.mjs';
 
 const app = fileURLToPath(new URL('../', import.meta.url));
-const rid = process.argv[2] ?? ({ win32: 'win', darwin: 'osx' }[process.platform] + '-' + process.arch);
+// node scripts/build-native.mjs [rid] [--trust-public-key <the owner Ed25519 public key PEM>]: the key is the build input of the
+// only trust anchor (BridgeTrust.ManifestPublicKey, 0.4.14-native); without it the core has an empty anchor (bridgeOffer false).
+const argv = process.argv.slice(2);
+const keyAt = argv.indexOf('--trust-public-key');
+const trustPem = keyAt >= 0 ? readTrustPublicKey(argv[keyAt + 1] ?? (() => { throw new Error('missing the value of --trust-public-key'); })()) : '';
+const positional = argv.filter((_, i) => keyAt < 0 || (i !== keyAt && i !== keyAt + 1));
+const rid = positional[0] ?? ({ win32: 'win', darwin: 'osx' }[process.platform] + '-' + process.arch);
 const expected = ({ win32: 'win', darwin: 'osx' }[process.platform] + '-' + process.arch);
 if (!['win-x64', 'osx-x64', 'osx-arm64'].includes(rid) || rid !== expected)
   throw new Error('Build and qualify on the native target host: win-x64, osx-x64 or osx-arm64');
 const project = path.join(app, 'native/Ssam.Agent/Ssam.Agent.csproj');
 // Resolve the linker explicitly. This also works from hosts with a reduced PATH,
 // where vcvarsall.bat cannot find even the system `where` command.
-const publishArgs = ['publish', project, '-c', 'Release', '-r', rid, '--nologo'];
+// Always explicit, so an older value can never stay compiled in (an empty value builds a core without the anchor).
+const publishArgs = ['publish', project, '-c', 'Release', '-r', rid, '--nologo', '-p:SsamTrustPublicKey=' + (trustPem ? spkiBase64(trustPem) : '')];
 let buildEnv = process.env;
 if (process.platform === 'win32') {
   const programFiles = process.env['ProgramFiles(x86)'];
@@ -54,6 +62,9 @@ if (process.platform === 'win32') {
   if (bytes.readUInt16LE(optional) !== 0x20b) throw new Error('Not a 64-bit PE');
   if (bytes.readUInt32LE(optional + 112 + 14 * 8) !== 0) throw new Error('The executable has a CLR header; not Native AOT');
 }
+// The compiled anchor is the build input, nothing else.
+const anchors = JSON.parse(spawnSync(executable, ['trust-anchors'], { encoding: 'utf8', windowsHide: true }).stdout || '{}');
+if (String(anchors.spkiSha256 ?? '') !== (trustPem ? spkiSha256(trustPem) : '')) throw new Error('The native core does not carry the trust anchor of the build input');
 const tests = ['tests/native/channel.test.mjs', 'tests/native/workspace.test.mjs', 'tests/native/studio-policy.test.mjs', 'tests/native/app-integration.test.mjs', 'tests/native/studio-build-plan.test.mjs', 'tests/native/mac-bridge-build.test.mjs'];
 run(process.execPath, ['--test', ...tests], { ...process.env, SSAM_NATIVE_EXE: executable });
 run('dotnet', ['test', path.join(app, 'tests/native-protocol/NativeProtocol.Tests.csproj'), '-c', 'Release', '--nologo']);
@@ -66,7 +77,7 @@ fs.copyFileSync(executable, path.join(staging, filename));
 if (process.platform !== 'win32') fs.chmodSync(path.join(staging, filename), 0o755);
 const receipt = {
   schema: 'ssam-native-qualification/1', rid, runtime: 'native-aot', productionReady: false,
-  testedAt: new Date().toISOString(), tests,
+  testedAt: new Date().toISOString(), tests, trustAnchorSpkiSha256: trustPem ? spkiSha256(trustPem) : null,
   files: [{ path: filename, size: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex') }]
 };
 fs.writeFileSync(path.join(staging, 'qualification.json'), JSON.stringify(receipt, null, 2) + '\n');

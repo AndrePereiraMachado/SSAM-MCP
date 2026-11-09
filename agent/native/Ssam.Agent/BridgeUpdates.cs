@@ -30,9 +30,12 @@ internal sealed record InstalledBridge(JsonObject Manifest, string Root, string 
     }
 }
 
+// publicKey: the pinned Ed25519 key, the only owner anchor (0.4.14-native). authenticode: the check of a Microsoft dependency.
 internal sealed class BridgeUpdates(string root, string runtime, string publicKey = BridgeTrust.ManifestPublicKey,
-    string thumbprint = BridgeTrust.AuthenticodeThumbprint, Func<string, CancellationToken, Task>? authenticode = null, JsonObject? pack = null) : IDisposable
+    Func<string, CancellationToken, Task>? authenticode = null, JsonObject? pack = null) : IDisposable
 {
+    // Whether this core can verify any offer at all; the hello says bridgeOffer false without it (empty anchor = feature off).
+    internal bool HasAnchor => BridgeTrust.Configured(publicKey);
     internal const string MacReason = "Automatic bridge downloads are disabled on macOS in this build; use the bundled bridge.";
     private string Home => Path.Combine(root, "bridges");
     private readonly SemaphoreSlim gate = new(1, 1);
@@ -153,8 +156,7 @@ internal sealed class BridgeUpdates(string root, string runtime, string publicKe
             || !Regex.IsMatch(version ?? "", @"^\d+\.\d+\.\d+$") || ProtocolNumber(protocol) < 0 || !Regex.IsMatch(Text(m["runtime"]) ?? "", @"^net\d+\.\d+$")
             || !DateTimeOffset.TryParse(Text(m["createdAt"]), CultureInfo.InvariantCulture, DateTimeStyles.None, out _)) throw new IOException("Invalid bridge identity");
         foreach (var key in new[] { "lane", "studioVersion", "protocol" }) if (Text(offer[key]) != Text(m[key])) throw new IOException("Bridge offer differs from its signed manifest");
-        if (!Regex.IsMatch(thumbprint, "^[a-fA-F0-9]{40}$")) throw new SignedManifestRefusal(m, "TRUST_ANCHOR_MISSING");
-        if (!string.Equals(Text(m["authenticodeThumbprint"]), thumbprint, StringComparison.OrdinalIgnoreCase)) throw new SignedManifestRefusal(m);
+        // A manifest may still name an authenticodeThumbprint (vigia manifests before 0.4.14-native); it grants nothing and is ignored.
         if (m["files"] is not JsonArray entries || entries.Count is < 1 or > 512) throw new IOException("Invalid bridge file list");
         var paths = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "manifest.json", "manifest.sig" }; long total = 0;
         foreach (var entry in entries)
@@ -194,15 +196,15 @@ internal sealed class BridgeUpdates(string root, string runtime, string publicKe
             if (new FileInfo(file).Length != entry["size"]!.GetValue<long>() || Hash(await File.ReadAllBytesAsync(file, token)) != Text(entry["sha256"])) throw new IOException("Bridge file size or SHA-256 mismatch");
         }
         if (generated != null) foreach (var (name, digest) in generated) if (Hash(await File.ReadAllBytesAsync(Path.Combine(directory, name), token)) != digest) throw new IOException("The generated hook configuration changed");
+        // The owner's files are proven by the signed manifest and the size/SHA-256 checked above; only a Microsoft dependency is
+        // checked for its Authenticode signature, against the pinned Microsoft roots.
         foreach (var entry in entries)
         {
             var file = Path.Combine(directory, Text(entry["path"])!);
-            if (Path.GetExtension(file).Equals(".dll", StringComparison.OrdinalIgnoreCase) || Path.GetExtension(file).Equals(".exe", StringComparison.OrdinalIgnoreCase))
+            if ((Path.GetExtension(file).Equals(".dll", StringComparison.OrdinalIgnoreCase) || Path.GetExtension(file).Equals(".exe", StringComparison.OrdinalIgnoreCase))
+                && Text(entry["signer"]) == "microsoft")
                 if (authenticode != null) await authenticode(file, token);
-                else {
-                    var evidence = AuthenticodeTrust.Check(file, Text(entry["signer"])!, thumbprint);
-                    RequireAuthenticode(evidence, m);
-                }
+                else RequireAuthenticode(AuthenticodeTrust.Check(file, "microsoft"), m);
         }
     }
     internal static void RequireAuthenticode(JsonObject evidence, JsonObject manifest)
