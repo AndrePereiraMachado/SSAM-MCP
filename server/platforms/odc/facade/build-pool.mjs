@@ -35,7 +35,7 @@ import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import { phaseOfCall, notePhase, processAlive, CANCELLED_CODE } from './studio-write-lock.mjs';
-import { memoryGate, memorySettings } from './memory-room.mjs';
+import { memoryGate, memorySettings, memoryWaitRefusal } from './memory-room.mjs';
 
 export const BUILD_QUEUE_TIMEOUT_CODE = 'BUILD_QUEUE_TIMEOUT';
 export const SLOT_SCHEMA = 'ssam-build-slot/1';
@@ -66,10 +66,10 @@ export class BuildQueueRefused extends Error {
   constructor(refusal) { super(refusal.error); this.name = 'BuildQueueRefused'; this.code = refusal.code; this.refusal = refusal; }
 }
 export function buildQueueRefusal({ position = 1, waitedMs = 0, queueMs = DEFAULT_BUILD_QUEUE_MS, size = 1, lane = 'o11', memory = false } = {}) {
-  return { ok: false, code: BUILD_QUEUE_TIMEOUT_CODE, outcome: 'not-sent', waitedFor: memory ? 'memory' : 'pool',
-    error: memory
-      ? 'This delivery waited ' + Math.round(waitedMs / 1000) + ' s for the memory its build needs on this server (the builds already running hold it) and its turn did not come; nothing of it ran.'
-      : 'This delivery waited ' + Math.round(waitedMs / 1000) + ' s for one of the ' + size + ' build workers and its turn did not come; nothing of it ran.',
+  // Memory: the gate's own refusal (memory-room.mjs), the same one the cold runner gives outside the pool.
+  if (memory) return memoryWaitRefusal({ waitedMs, lane, position, queueMs, workers: size });
+  return { ok: false, code: BUILD_QUEUE_TIMEOUT_CODE, outcome: 'not-sent', waitedFor: 'pool',
+    error: 'This delivery waited ' + Math.round(waitedMs / 1000) + ' s for one of the ' + size + ' build workers and its turn did not come; nothing of it ran.',
     position, waitedMs, queueMs, workers: size, continuation: { tool: 'ssam_doctor', arguments: { lane: lane === 'odc' ? 'odc' : 'o11' }, why: BUILD_WHY } };
 }
 

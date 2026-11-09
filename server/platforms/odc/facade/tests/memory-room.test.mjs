@@ -11,6 +11,7 @@ import { containerRoomMb, hostAvailableMb, roomMb, createMemoryGate, memorySetti
 import { createBuildPool, BuildQueueRefused } from '../build-pool.mjs';
 import { createAnvilRunner } from '../anvil-cli.mjs';
 import { HostedO11Workers } from '../anvil-worker.mjs';
+import { slotExec } from '../odc-build-phase.mjs';
 
 const MB = 1024 * 1024;
 const files = map => (file => { if (!(file in map)) { const e = new Error('ENOENT'); e.code = 'ENOENT'; throw e; } return map[file]; });
@@ -50,11 +51,13 @@ test('the gate: the only process always starts; the next waits for its reserve; 
   const waiting = gate.admit(1400); await settle();
   room = 3000; a.release();
   const b = await waiting; assert.equal(b.timedOut, false); b.hold.release();
-  // A wait that runs out runs anyway (the gate delays, never refuses) and says so.
+  // A wait that runs out holds nothing (R3 M2: the caller refuses, nothing is sent).
   const c = gate.hold(1400); room = 500;
   const late = await createMemoryGate({ room: () => 500, settings: { reserveMb: 1400, waitMs: 120, growMs: 15000 } });
   const h = late.hold(1400); const out = await late.admit(1400);
-  assert.equal(out.timedOut, true); assert.ok(out.shortMb < 1400); h.release(); out.hold.release(); c.release();
+  assert.equal(out.timedOut, true); assert.equal(out.hold, null); assert.ok(out.shortMb < 1400);
+  assert.deepEqual(late.stats(), { admitted: 1, pendingMb: 1400 }, 'only the first hold: the refused one took nothing');
+  h.release(); c.release();
   assert.deepEqual(gate.stats(), { admitted: 0, pendingMb: 0 });
 });
 
@@ -106,11 +109,24 @@ test('a cold process takes the gate\'s room: alone it starts, inside a slot it a
   await gate.run(slot, () => slotted(['apply'], { cli: 'anvil.dll' }));
   assert.equal(seen, 9001); assert.equal(slot.pid, null); assert.deepEqual(admitted, [1400, 600]);
   slot.release();
-  // A second process while one runs waits for room (here: the wait runs out and it still runs, with memoryWaitMs).
+  // A second process while one runs waits for room; when the wait runs out it is REFUSED, nothing started (R3 M2): the
+  // pool's own refusal (BUILD_QUEUE_TIMEOUT, not-sent, waitedFor memory), never timedOut (an uncertain outcome).
   const quick = createMemoryGate({ room: () => 500, rssOf: () => 0, settings: { reserveMb: 1400, odcReserveMb: 600, waitMs: 1100, growMs: 15000 } });
-  const held = quick.hold(1400);
-  const waited = await createAnvilRunner({ root: os.tmpdir(), execFileFn, environment: () => ({}), memory: quick })(['apply'], { cli: 'anvil.dll' });
-  assert.equal(waited.ok, true); assert.ok(waited.memoryWaitMs >= 1000); held.release();
+  const held = quick.hold(1400); let started = 0;
+  const counting = (cmd, argv, opts, cb) => { started++; return execFileFn(cmd, argv, opts, cb); };
+  const waited = await createAnvilRunner({ root: os.tmpdir(), execFileFn: counting, environment: () => ({}), memory: quick })(['apply'], { cli: 'anvil.dll' });
+  assert.equal(started, 0, 'no process was started');
+  assert.equal(waited.ok, false); assert.equal(waited.refused, true); assert.equal(waited.notSent, true); assert.equal(waited.timedOut, undefined);
+  assert.ok(waited.memoryWaitMs >= 1000);
+  assert.equal(waited.envelope.code, 'BUILD_QUEUE_TIMEOUT'); assert.equal(waited.envelope.outcome, 'not-sent'); assert.equal(waited.envelope.waitedFor, 'memory');
+  assert.match(waited.envelope.error, /memory its kernel process needs.*nothing of it ran/);
+  assert.deepEqual(quick.stats(), { admitted: 1, pendingMb: 1400 }, 'the refused call holds nothing');
+  held.release();
+  // Room comes before the limit: it runs, with memoryWaitMs.
+  let roomNow = 500; const late = createMemoryGate({ room: () => roomNow, rssOf: () => 0, settings: { reserveMb: 1400, odcReserveMb: 600, waitMs: 5000, growMs: 15000 } });
+  const busy = late.hold(1400); setTimeout(() => { roomNow = 5000; busy.release(); }, 1100);
+  const ran = await createAnvilRunner({ root: os.tmpdir(), execFileFn, environment: () => ({}), memory: late })(['apply'], { cli: 'anvil.dll' });
+  assert.equal(ran.ok, true); assert.ok(ran.memoryWaitMs >= 1000);
   room = 0;
 });
 
@@ -124,4 +140,20 @@ test('a customer\'s worker does not start into a container that could not then h
   assert.match(workers.memoryRefusal(), /1700 MB free under its container memory limit; one more worker/);
   room = null; assert.equal(workers.memoryRefusal(), null, 'no limit read: decides nothing');
   assert.equal(new HostedO11Workers({ roomOf: () => 10, availableOf: () => null }).memoryRefusal(), null, 'off by default (roomReserveMb 0)');
+});
+
+test('an ODC build in a pool slot puts its pid on the slot\'s hold while it runs and takes it off when it ends (R3 B1)', async () => {
+  const gate = createMemoryGate({ room: () => 5000, rssOf: () => 100, settings: { reserveMb: 1400, odcReserveMb: 600, waitMs: 1000, growMs: 15000 } });
+  const slot = { index: 0, env: { TEMP: os.tmpdir(), TMP: os.tmpdir() } };
+  let finish; const runner = () => { const p = new Promise(r => { finish = r; }); p.child = { pid: 4321 }; return p; };
+  const hold = gate.hold(600);
+  const exec = slotExec(slot, runner, gate);
+  const running = gate.run(hold, () => exec('dotnet', ['anvil-odc.dll', 'apply'], { env: { TEMP: os.tmpdir() } }));
+  assert.equal(hold.pid, 4321, 'attached while it runs');
+  assert.equal(gate.pendingMb(), 500, 'the reserve minus what the process shows');
+  finish({ stdout: '{}' }); await running; await settle();
+  assert.equal(hold.pid, null, 'detached when it ended'); assert.equal(gate.pendingMb(), 0);
+  // Outside a slot (no hold): nothing attached.
+  const bare = slotExec(slot, runner, gate)('dotnet', [], {}); finish({}); await bare;
+  hold.release();
 });

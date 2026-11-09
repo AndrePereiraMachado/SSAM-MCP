@@ -12,7 +12,7 @@ import { connectionEnvironment, readConnection } from './studio-session.mjs';
 import { hostedSpawnEnv, usesWorkspace } from './executor.mjs';
 import { kernelStart } from './quality-meter.mjs';
 import { withTraceArgs } from './correlation.mjs';
-import { memoryGate } from './memory-room.mjs';
+import { memoryGate, memoryWaitRefusal } from './memory-room.mjs';
 
 const tail = (text, lines = 10) => String(text ?? '').trim().split(/\r?\n/).filter(Boolean).slice(-lines);
 
@@ -28,8 +28,10 @@ export function laneEnvironment({ lane = o11Lane.lane, root = anvilRoot, env = p
 // run(args, {input, timeoutMs, cwd, cli}) -> {ok, exitCode, envelope|null, stderr[], wallMs, line}
 // Hosted, every cold process is admitted by the memory gate of this server (memory-room.mjs, capacity review R2 M2: the
 // cgroup limit of the container, not the host's MemAvailable), the O11 reserve or the ODC one: a cold apply when the
-// customer's worker is busy waits for the room a build-pool slot would; inside a slot it attaches to the slot's hold. The
-// gate delays, never refuses; a run that waited says so (memoryWaitMs). memory (tests): a gate of that shape.
+// customer's worker is busy waits for the room a build-pool slot would; inside a slot it attaches to the slot's hold. A run
+// that waited says so (memoryWaitMs); a wait that runs out (SSAM_MEMORY_WAIT_MS) starts nothing and answers the pool's
+// refusal (BUILD_QUEUE_TIMEOUT, outcome not-sent, waitedFor memory; review R3 M2): {ok:false, exitCode:null, envelope:
+// <refusal>, refused:true, notSent:true}, never timedOut (that would read as an uncertain outcome). memory (tests): a gate.
 export function createAnvilRunner({ lane = o11Lane.lane, root = anvilRoot, env = process.env, environment = laneEnvironment, execFileFn = execFile, dotnet = 'dotnet', memory = null } = {}) {
   return async function runAnvil(args, { input, timeoutMs = 900000, cwd = root, cli } = {}) {
     const assembly = cli ?? o11LaneOf(lane, { root, env }).cli;
@@ -44,7 +46,13 @@ export function createAnvilRunner({ lane = o11Lane.lane, root = anvilRoot, env =
     let own = null, memoryWaitMs = 0;
     if (gate && !inside) {
       const admitted = await gate.admit(odcCli ? gate.settings.odcReserveMb : gate.settings.reserveMb);
-      own = admitted.hold; memoryWaitMs = admitted.waitedMs;
+      memoryWaitMs = admitted.waitedMs;
+      if (admitted.timedOut) {
+        const refusal = memoryWaitRefusal({ waitedMs: admitted.waitedMs, lane: odcCli ? 'odc' : 'o11', queueMs: gate.settings.waitMs, what: 'call' });
+        return { ok: false, exitCode: null, envelope: refusal, refused: true, notSent: true, stderr: [], wallMs: 0, memoryWaitMs,
+          line: ['dotnet', path.basename(assembly), ...args.map(a => (/s/.test(a) ? JSON.stringify(a) : a))].join(' ') };
+      }
+      own = admitted.hold;
     }
     const hold = inside ?? own;
     const started = Date.now();

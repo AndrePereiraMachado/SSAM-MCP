@@ -15,9 +15,12 @@
 // decision), or its whole reserve for its first SSAM_MEMORY_GROW_MS (default 15 s) when no pid is attached (a call on a
 // resident worker). Every other process, the resident workers included, is in memory.current already.
 //   - The only admitted process of the server is always admitted (nothing it waits for would free memory: progress).
-//   - A waiting call naps (50 ms doubling to 500 ms, woken by every release) at most SSAM_MEMORY_WAIT_MS (default 120 s) and
-//     then runs anyway, with timedOut: the gate delays a burst, it never refuses a call (a refusal would be a new failure of
-//     calls that work today; the build pool keeps its own BUILD_QUEUE_TIMEOUT).
+//   - A waiting call naps (50 ms doubling to 500 ms, woken by every release) at most SSAM_MEMORY_WAIT_MS (default 120 s);
+//     when the wait runs out it is REFUSED, nothing sent (memoryWaitRefusal: BUILD_QUEUE_TIMEOUT, outcome not-sent,
+//     waitedFor memory, the build pool's own refusal). Running it anyway would hand the OOM the cgroup measured for two
+//     minutes to the largest process, most often another customer's worker in a call: one customer's delay would become
+//     another's uncertain outcome (review R3 M2). No deadlock: the only admitted process always starts.
+//   The gate is code of the server image: it holds only in images built from e04cfb7 or later (review R3 A2).
 //   - run(hold, fn): fn and everything it awaits run as admitted (AsyncLocalStorage): a cold process started inside a
 //     build-pool slot attaches its pid to the slot's hold instead of waiting a second time.
 import fs from 'node:fs';
@@ -29,6 +32,16 @@ export const DEFAULT_MEMORY_RESERVE_MB = 1400;
 export const DEFAULT_MEMORY_RESERVE_ODC_MB = 600;
 export const DEFAULT_MEMORY_WAIT_MS = 120000;
 export const DEFAULT_MEMORY_GROW_MS = 15000;
+export const MEMORY_WAIT_CODE = 'BUILD_QUEUE_TIMEOUT';
+export const MEMORY_WAIT_WHY = 'this server stayed short of the memory a kernel process needs past the limit; none of this call ran: the doctor shows the lane, and the same call may be repeated';
+
+// The refusal of a call whose wait for memory ran out (the build pool's BUILD_QUEUE_TIMEOUT, waitedFor memory): nothing ran.
+export function memoryWaitRefusal({ waitedMs = 0, lane = 'o11', position = 1, queueMs = DEFAULT_MEMORY_WAIT_MS, workers = undefined, what = 'delivery' } = {}) {
+  return { ok: false, code: MEMORY_WAIT_CODE, outcome: 'not-sent', waitedFor: 'memory',
+    error: 'This ' + what + ' waited ' + Math.round(waitedMs / 1000) + ' s for the memory its ' + (what === 'delivery' ? 'build' : 'kernel process') + ' needs on this server (the processes already running hold it) and its turn did not come; nothing of it ran.',
+    position, waitedMs, queueMs, ...(workers !== undefined ? { workers } : {}),
+    continuation: { tool: 'ssam_doctor', arguments: { lane: lane === 'odc' ? 'odc' : 'o11' }, why: MEMORY_WAIT_WHY } };
+}
 
 // The host's MemAvailable in MB, or null (not Linux, unreadable).
 export function hostAvailableMb({ platform = process.platform, readFile = fs.readFileSync } = {}) {
@@ -109,7 +122,8 @@ export function createMemoryGate({ room = () => roomMb(), rssOf = pid => process
     holds.add(h);
     return h;
   }
-  // Waits for the room mb needs (or waitMs), then holds it: {hold, waitedMs, timedOut, shortMb}.
+  // Waits for the room mb needs (at most waitMs), then holds it: {hold, waitedMs, timedOut: false}; a wait that runs out
+  // holds nothing: {hold: null, waitedMs, timedOut: true, shortMb} and the caller refuses (memoryWaitRefusal).
   async function admit(mb, { waitMs = settings.waitMs } = {}) {
     const started = now();
     let step = 50, short = shortOf(mb), timedOut = false;
@@ -124,7 +138,8 @@ export function createMemoryGate({ room = () => roomMb(), rssOf = pid => process
       step = Math.min(step * 2, 500);
       short = shortOf(mb);
     }
-    return { hold: hold(mb), waitedMs: now() - started, timedOut, ...(short !== null ? { shortMb: short } : {}) };
+    if (timedOut) return { hold: null, waitedMs: now() - started, timedOut, shortMb: short };
+    return { hold: hold(mb), waitedMs: now() - started, timedOut };
   }
   return {
     settings, pendingMb, fits: mb => shortOf(mb) === null, hold, admit,
