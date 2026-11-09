@@ -68,12 +68,16 @@ export function rotateWindow(manifest,pair,state={}){
  // Without a configured maxWindow (the replay of approvals), the same default as the round: never below the served window.
  const limit=state.maxWindow??windowLimit(null,manifest);
  if(!Number.isInteger(limit)||limit<3||entries.length>limit)throw Object.assign(Error(limit<window?`maxWindow (${limit}) is below the window the manifest already serves (${window}); raise maxWindow in the watcher configuration.`:'Active clients require a window above the configured limit; owner review is required.'),{code:'WINDOW_LIMIT',environmental:true});
- const next={window:Math.max(window,entries.length),odc:[],o11:[]};
+ // The capacity sizing (gen-compose.mjs) rides along, so the hot tier follows the newest pair: the new pair. A hotPair pin
+ // is the owner's choice for the window he deployed; it is dropped here (hotPinDropped says so), never carried to a pair
+ // that is no longer the newest.
+ const {hotPair:pinned,...sizing}=manifest.sizing??{};
+ const next={window:Math.max(window,entries.length),odc:[],o11:[],...(manifest.sizing?{sizing:structuredClone(sizing)}:{})};
  for(const p of entries)for(const lane of LANES)next[lane].push({version:p[lane],tag:p.tag,image:p.image,...(p.sha256?{sha256:p.sha256}:{}),...(p.served?{served:structuredClone(p.served)}:{})});
  versionPairs(next);
  const leaving={};for(const lane of LANES)leaving[lane]=[...new Set(manifest[lane].map(x=>x.version))].filter(v=>!next[lane].some(x=>x.version===v));
  const affected=[];for(const [token,data]of Object.entries(state.tokens??{}))for(const lane of LANES)if(leaving[lane].includes(version(data[lane]?.installed)))affected.push({token,customer:data.customer??null,lane,version:version(data[lane].installed),lastSeen:data.seen??null});
- return {manifest:next,leaving,affected,held};
+ return {manifest:next,leaving,affected,held,...(pinned!=null?{hotPinDropped:pinned}:{})};
 }
 // Approved proposals that main does not carry yet are replayed on top of it, in approval order: the next proposal starts
 // from the window the owner deployed, whether or not its branch was merged. A pair main already has is skipped.

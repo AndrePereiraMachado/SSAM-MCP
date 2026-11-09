@@ -105,3 +105,66 @@ test('A2: every backend, and only a backend, mounts the pinned ODC model plugins
   assert.deepEqual(c.volumes[pins.volume],{});assertModelPlugins(c);
  }
 });
+
+// Capacity sizing (KVM 8, 2026-11-09): the hot tier on the newest served pair, the other tier elsewhere.
+const sizing={hot:{cpus:'4',memory:'12g',buildWorkers:6,o11WorkersMax:4,queueMs:240000},other:{cpus:'1',memory:'2g',buildWorkers:1,o11WorkersMax:1,queueMs:240000},
+ router:{cpus:'1',memory:'1g'},host:{memory:'32g',reserve:'4g'}};
+const r44=()=>({window:5,odc:['1.7.30','1.7.29','1.7.28','1.7.31','1.7.32'].map((version,i)=>({version,tag:'t'+i,image})),o11:['11.55.94','11.55.93','11.55.92','11.55.94','11.55.95'].map((version,i)=>({version,tag:'t'+i,image}))});
+const backendsOf=c=>Object.entries(c.services).filter(([n])=>/^ssam-server-v\d+$/.test(n));
+test('capacity: the hot tier goes to the newest served pair (here the fifth entry), the other tier to the rest, as tier variables',async()=>{
+ const {hotPairIndex,backendTiers}=await import('./gen-compose.mjs');
+ const m={...r44(),sizing};
+ assert.equal(hotPairIndex(m),4);assert.deepEqual(backendTiers(m),['other','other','other','other','hot']);
+ const c=generateCompose(m),hot=c.services['ssam-server-v5'];
+ assert.deepEqual(hot.deploy.resources.limits,{cpus:'${SSAM_HOT_CPUS:-4}',memory:'${SSAM_HOT_MEMORY:-12g}',pids:'${SSAM_PIDS:-4096}'});
+ assert.equal(hot.environment.SSAM_BUILD_WORKERS,'${SSAM_HOT_BUILD_WORKERS:-6}');assert.equal(hot.environment.SSAM_O11_WORKERS_MAX,'${SSAM_HOT_O11_WORKERS_MAX:-4}');
+ assert.equal(hot.environment.SSAM_BUILD_QUEUE_MS,'${SSAM_HOT_BUILD_QUEUE_MS:-240000}');assert.equal(hot.labels['ssam.sizing'],'hot');
+ for(const [name,s] of backendsOf(c).filter(([n])=>n!=='ssam-server-v5')){
+  assert.equal(s.labels['ssam.sizing'],'other',name);assert.equal(s.deploy.resources.limits.cpus,'${SSAM_OTHER_CPUS:-1}');assert.equal(s.deploy.resources.limits.memory,'${SSAM_OTHER_MEMORY:-2g}');
+  assert.equal(s.environment.SSAM_BUILD_WORKERS,'${SSAM_OTHER_BUILD_WORKERS:-1}');assert.equal(s.environment.SSAM_O11_WORKERS_MAX,'${SSAM_OTHER_O11_WORKERS_MAX:-1}');
+ }
+ // No sized backend reads the shared variables any more; the router gets its own small limits and carries the sizing.
+ for(const [,s] of backendsOf(c))assert.ok(!JSON.stringify([s.deploy,s.environment]).match(/\$\{SSAM_(CPUS|MEMORY|BUILD_WORKERS|O11_WORKERS_MAX):/));
+ assert.deepEqual(c.services['ssam-router'].deploy.resources.limits,{cpus:'${SSAM_ROUTER_CPUS:-1}',memory:'${SSAM_ROUTER_MEMORY:-1g}',pids:'${SSAM_PIDS:-4096}'});
+ assert.deepEqual(JSON.parse(c.services['ssam-router'].labels['ssam.sizing']),sizing);
+ // Sizing changes nothing else: same services, served lists, routing and volumes as the unsized compose.
+ const plain=generateCompose(r44());
+ assert.deepEqual(Object.keys(c.services),Object.keys(plain.services));assert.deepEqual(c.volumes,plain.volumes);
+ assert.equal(c.services['ssam-router'].environment.SSAM_ROUTER_BACKENDS,plain.services['ssam-router'].environment.SSAM_ROUTER_BACKENDS);
+ for(const [name,s] of backendsOf(c))assert.equal(s.environment.SSAM_SERVED_VERSIONS,plain.services[name].environment.SSAM_SERVED_VERSIONS);
+ for(const [,s] of backendsOf(plain)){assert.equal(s.labels['ssam.sizing'],undefined);assert.equal(s.deploy.resources.limits.cpus,'${SSAM_CPUS:-2}');}
+});
+test('capacity: hotPair pins another pair of the window; ties on ODC go to the newer O11; bad sizing is refused',async()=>{
+ const {hotPairIndex,sizingOfCompose}=await import('./gen-compose.mjs');
+ const m={...r44(),sizing:{...sizing,hotPair:'o11-11.55.94-odc-1.7.31'}};
+ assert.equal(hotPairIndex(m),3);assert.equal(generateCompose(m).services['ssam-server-v4'].labels['ssam.sizing'],'hot');
+ assert.throws(()=>generateCompose({...r44(),sizing:{...sizing,hotPair:'o11-11.55.91-odc-1.7.27'}}),/hotPair/);
+ const tie={window:3,odc:[{version:'1.7.32',tag:'a',image},{version:'1.7.32',tag:'b',image}],o11:[{version:'11.55.94',tag:'a',image},{version:'11.55.95',tag:'b',image}]};
+ assert.equal(hotPairIndex({...tie,sizing}),1);
+ for(const bad of [{...sizing,hot:undefined},{...sizing,hot:{...sizing.hot,cpus:'0'}},{...sizing,other:{...sizing.other,memory:'512m'}},{...sizing,hot:{...sizing.hot,buildWorkers:0}},
+  {...sizing,other:{...sizing.other,queueMs:-1}},{...sizing,extra:1},{...sizing,hot:{...sizing.hot,heap:1}},{...sizing,router:{cpus:'1'}}])assert.throws(()=>generateCompose({...r44(),sizing:bad}),/sizing/i);
+ // The limits leave the host reserve: 4 other backends asking 7g get what 32g - 4g - 12g hot - 1g router - 256m console leaves
+ // (3712m each), a 24g hot leaves less than the 2048m floor and is refused.
+ const fit=generateCompose({...r44(),sizing:{...sizing,other:{...sizing.other,memory:'7g'}}});
+ assert.equal(fit.services['ssam-server-v1'].deploy.resources.limits.memory,'${SSAM_OTHER_MEMORY:-3712m}');assert.equal(fit.services['ssam-server-v5'].deploy.resources.limits.memory,'${SSAM_HOT_MEMORY:-12g}');
+ assert.throws(()=>generateCompose({...r44(),sizing:{...sizing,hot:{...sizing.hot,memory:'24g'}}}),/reserve/);
+ // The live compose gives its sizing back (the watcher reads it from the router label).
+ assert.deepEqual(sizingOfCompose(generateCompose(m)),m.sizing);assert.equal(sizingOfCompose(generateCompose(r44())),undefined);
+});
+test('capacity: the committed versions.json sizing fits the KVM 8 with its reserve and puts the hot tier on the newest pair',async()=>{
+ const {readFileSync}=await import('node:fs');const {hotPairIndex,versionPairs}=await import('./gen-compose.mjs');
+ const m=JSON.parse(readFileSync(new URL('./versions.json',import.meta.url),'utf8').replace(/^﻿/,''));
+ assert.ok(m.sizing,'versions.json carries the capacity sizing');assert.equal(m.sizing.hotPair,undefined,'no pin: the hot tier follows the newest pair');
+ const pairs=versionPairs(m),hot=pairs[hotPairIndex(m)];
+ const num=v=>v.split('.').reduce((n,x)=>n*1000+Number(x),0);
+ for(const p of pairs)assert.ok(p===hot||num(p.odc)<num(hot.odc)||(p.odc===hot.odc&&num(p.o11)<=num(hot.o11)),p.name);
+ const c=generateCompose(m);assert.equal(backendsOf(c).filter(([,s])=>s.labels['ssam.sizing']==='hot').length,1);
+ // The sum of the memory limits at their defaults leaves at least the reserve (4 GiB) for Coolify, Postgres, proxy and OS.
+ const mib=v=>{const x=/(\d+(?:\.\d+)?)([mg])\}?$/.exec(v);return Number(x[1])*(x[2]==='g'?1024:1);};
+ const total=Object.values(c.services).filter(s=>!s.profiles&&s.deploy?.resources?.limits?.memory).reduce((n,s)=>n+mib(s.deploy.resources.limits.memory),0);
+ assert.ok(total<=32*1024-4*1024,total+' MiB');
+ // A window grown to six pairs (a retained client) still fits: the other tier shrinks, never below 2 GiB.
+ const six={...m,window:6,odc:[{...m.odc[0],version:'1.7.33',tag:'next'},...m.odc],o11:[{...m.o11[0],version:'11.55.96',tag:'next'},...m.o11]};
+ const grown=generateCompose(six),other=mib(grown.services['ssam-server-v2'].deploy.resources.limits.memory);
+ assert.ok(other>=2048&&other<=mib(m.sizing.other.memory));assert.equal(grown.services['ssam-server-v1'].labels['ssam.sizing'],'hot');
+});

@@ -1,6 +1,30 @@
 {
   "window": 5,
   "keepServed": 4,
+  "sizing": {
+    "hot": {
+      "cpus": "5",
+      "memory": "12g",
+      "buildWorkers": 6,
+      "o11WorkersMax": 3,
+      "queueMs": 240000
+    },
+    "other": {
+      "cpus": "1.5",
+      "memory": "3584m",
+      "buildWorkers": 2,
+      "o11WorkersMax": 1,
+      "queueMs": 240000
+    },
+    "router": {
+      "cpus": "1",
+      "memory": "512m"
+    },
+    "host": {
+      "memory": "32g",
+      "reserve": "4g"
+    }
+  },
   "odc": [
     {
       "version": "1.7.30",

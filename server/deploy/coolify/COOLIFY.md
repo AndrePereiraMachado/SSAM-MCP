@@ -434,3 +434,29 @@ Para sinalizar uma saída antes do deploy, o dono pode fornecer state/proposed-v
 O vigia Windows está em ../vigia/README.md. Roda a cada 6 h pela tarefa agendada (install-task.ps1) numa worktree própria que se atualiza de main, detecta versões locais ou instaladores O11 baixados, faz bundle, testes filtrados sequenciais, imagem e smoke local, e deixa branch e PROPOSTA.md para o dono; ODC e O11 novos juntos viram um só par. Só publica com o comando do dono (vigia.ps1 -Approve <par>), que confere o digest, publica a tag sem latest, fixa o digest em versions.json e no compose (commit na branch da proposta) e imprime os passos que faltam (backup, kernel e features do par novo, colar o compose literal no Coolify, Redeploy) e a volta. Nunca acessa a VPS nem o Coolify. O pacote do agente de cada par vem de agentPack/agentPackByRuntime da configuração; as provas ao vivo de bridge continuam do dono.
 
 O seletor --version aceita odc=1.7.29 e o11=11.55.93; a forma sem faixa também é aceita quando identifica um único container. Uma seleção ambígua lista os candidatos. Sem SSAM_CONTAINER, --version prevalece sobre SSAM_VERSION; sem ambos, usa-se o padrão. Atualizar só uma faixa mantém a outra na versão do par vigente, sem repetir combinações na janela.
+
+## 13. Capacity sizing (hot pair)
+
+Measured on the KVM 8 (8 vCPU EPYC 9354P, 32 GB) on 2026-11-09: `C:\t\r5\capacity\RESULTADO.md`. One cold kernel build uses
+about 1.25 vCPU and 0.4 to 1.3 GB; builds share the CPU cap (processor sharing), so the vCPUs of a backend set its build
+throughput and the slots only decide who waits. Most customers land on the newest pair (77% of the heavy calls in the quality logs of
+21/10-09/11 went to the then-newest pair), so `versions.json` `sizing` gives that pair the "hot" tier and every other pair the
+"other" tier:
+
+| Tier | cpus | memory | SSAM_BUILD_WORKERS | SSAM_O11_WORKERS_MAX | SSAM_BUILD_QUEUE_MS |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| hot (newest pair) | 5 | 12g | 6 | 3 | 240000 |
+| other | 1.5 | 3584m | 2 | 1 | 240000 |
+| router | 1 | 512m | | | |
+
+- Hot = the newest served pair (ODC Studio version, then Service Studio), wherever it sits in the manifest; `sizing.hotPair`
+  pins another pair of the window. The watcher's rotation carries `sizing` and drops a pin, so the new pair becomes hot and
+  the previous hot backend steps down to "other" in the same deploy (`safety.mjs preserveCompose`); the live router's
+  `ssam.sizing` label is how the watcher reads the sizing back from Coolify.
+- Each value is a tier variable with the measured default (`${SSAM_HOT_CPUS:-5}`, `${SSAM_OTHER_MEMORY:-3584m}`,
+  `${SSAM_ROUTER_CPUS:-1}`...): set one in Coolify only to override a tier. A sized backend no longer reads `SSAM_CPUS`,
+  `SSAM_MEMORY`, `SSAM_BUILD_WORKERS` or `SSAM_O11_WORKERS_MAX`.
+- `sizing.host` (32g, reserve 4g): the memory limits at their defaults must leave the reserve for Coolify, its Postgres,
+  the proxy and the OS (today 1 hot + 4 other + router + console = 26.75 GB). A window grown past five pairs shrinks the
+  other tier to fit, never below 2 GiB (else the generator refuses). CPU limits are caps, not reservations: their sum
+  (12.5) may pass 8 because the other pairs are idle most of the time.
