@@ -46,6 +46,12 @@ export async function approve(config,ops,selector){
  const log=ops.log??(()=>{});
  let a=findAttempt(config.outDir,selector,['proposed']);const dir=path.join(config.outDir,a.id);
  log(`approve ${a.id}`);
+ // A backend window round (window 4x4, S2) waiting for the owner's reference-app test: -Approve records that FolhaPonto and
+ // VisitaCerta passed; the next watcher round publishes, pins and deploys exactly the images he was shown (window-round.mjs).
+ if(a.round&&a.ownerGate){
+  if(!a.gateApproved)a=writeAttempt(config.outDir,{...a,gateApproved:{at:new Date().toISOString(),by:'owner',apps:['FolhaPonto','VisitaCerta'],images:a.ownerGate.images}});
+  return {status:'gate-approved',id:a.id,note:`The reference-app test of ${a.id} is approved (${a.gateApproved.at}). The next watcher round publishes, pins and deploys these images: ${a.ownerGate.images.map(i=>'odc-'+i.odc+' '+i.tag).join(', ')}. -Reject ${a.id} -Reason "<why>" still stops it before that round.`};
+ }
  checkFeatures(a);
  // Everything that can be checked before publishing is checked first; each step is recorded, so an approval stopped
  // half-way resumes where it stopped (a published tag is never pushed again, a pin is never repeated).

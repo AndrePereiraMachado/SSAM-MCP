@@ -449,7 +449,7 @@ export async function createRuntime(config,{log=()=>{}}={}){
   // The reference-app gate (owner decision 7 of the window design): config.referenceGate {command, args, timeoutMinutes} runs
   // with the lane, the version and the built images in its environment and writes its result (JSON {ok, apps: [{name,
   // published, seconds}]}) to SSAM_REFERENCE_RESULT. No result file is an environment problem (the round waits).
-  ...(config.referenceGate?{async referenceGate({lane,version,builts,dir}){
+  ...(config.referenceGate?.command?{async referenceGate({lane,version,builts,dir}){
    const g=config.referenceGate,out=path.join(dir,'reference-gate-result.json');fs.rmSync(out,{force:true});
    if(!g.command||!Array.isArray(g.args??[]))throw Error('Invalid referenceGate: {command, args, timeoutMinutes}.');
    const r=await run(g.command,g.args??[],{dir,env:{SSAM_REFERENCE_LANE:lane,SSAM_REFERENCE_VERSION:version,SSAM_REFERENCE_IMAGES:JSON.stringify(builts.map(b=>({odc:b.odc,image:b.image,tag:b.tag,sha256:b.sha256}))),SSAM_REFERENCE_RESULT:out},allowFailure:true,timeoutMs:(g.timeoutMinutes??90)*60000});

@@ -163,11 +163,15 @@ test('lane rounds: a due retirement first, then ODC before O11; a lane waiting f
  assert.equal(decideWindow({manifest:m,observed:observed.slice(0,1),state:{},attempts:failed,inputs,now:NOW+3600000}).action,'failed');
 });
 
-test('the reference-app gate fails closed when it is not configured, records its state in a rehearsal, and needs both apps',async t=>{
+test('the reference-app gate: owner by default, command fails closed without its runner, rehearsal records only, both apps needed',async t=>{
  const dir=tmp(t),args={lane:'odc',version:'1.7.33',manifest:{},builts:[],dir};
- await assert.rejects(referenceGate({},{},args),e=>e.environmental&&e.code==='reference-gate-unconfigured');
- assert.equal((await referenceGate({rehearsal:{}},{},args)).ran,false);
- const cfg={referenceGate:{command:'x'}};
+ assert.deepEqual(await referenceGate({},{},args),{mode:'owner',ran:false,waitOwner:true,lane:'odc',version:'1.7.33',apps:['FolhaPonto','VisitaCerta']});
+ assert.equal((await referenceGate({referenceGate:{mode:'owner'}},{},args)).waitOwner,true);
+ await assert.rejects(referenceGate({referenceGate:{mode:'command'}},{referenceGate:async()=>({})},args),e=>e.environmental&&e.code==='reference-gate-unconfigured');
+ await assert.rejects(referenceGate({referenceGate:{mode:'command',command:'x'}},{},args),e=>e.environmental&&e.code==='reference-gate-unconfigured');
+ await assert.rejects(referenceGate({referenceGate:{mode:'manual'}},{},args),e=>e.code==='REFERENCE_GATE_INVALID');
+ const rehearsed=await referenceGate({rehearsal:{}},{},args);assert.equal(rehearsed.ran,false);assert.equal(rehearsed.waitOwner,undefined);
+ const cfg={referenceGate:{mode:'command',command:'x'}};
  await assert.rejects(referenceGate(cfg,{referenceGate:async()=>({ok:true,apps:[{name:'FolhaPonto',published:true}]})},args),e=>e.code==='reference-gate-failed');
  await assert.rejects(referenceGate(cfg,{referenceGate:async()=>({ok:false,environmental:true,error:'no result'})},args),e=>e.environmental);
  const ok=await referenceGate(cfg,{referenceGate:async()=>({ok:true,apps:[{name:'FolhaPonto',published:true,seconds:300},{name:'VisitaCerta',published:true,seconds:410}]})},args);
@@ -322,13 +326,58 @@ test('an O11 lane round rebuilds every backend with the new kernel set and smoke
  assert.deepEqual(r.release.manifest.retiring.o11.version,'11.55.92');
 });
 
-test('outside a rehearsal, a lane round without a configured reference-app gate waits for the owner and deploys nothing',async t=>{
+test('mode command without its command: the lane round waits (REFERENCE_GATE_UNCONFIGURED) and deploys nothing',async t=>{
  const dir=tmp(t),m=first().manifest,{ops}=roundOps(dir,{lane:'odc'}),events=[];ops.event=async(n,v)=>{events.push([n,v.code]);return {remote:true};};
- const cfg=roundConfig(dir,m);delete cfg.rehearsal;
+ const cfg=roundConfig(dir,m,{referenceGate:{mode:'command'}});delete cfg.rehearsal;
  const r=await runWindowAttempt(cfg,ops,{id:'odc-1.7.33',kind:'add',lane:'odc',version:'1.7.33',candidate:{lane:'odc',version:'1.7.33',fullVersion:'1.7.33.1',tfm:'net10.0'},inputs:{},previous:null,skipped:[]},NOW);
  assert.equal(r.status,'deferred');assert.equal(r.code,'reference-gate-unconfigured');
  assert.deepEqual(events.at(-1),['waiting','REFERENCE_GATE_UNCONFIGURED']);
  assert.equal(fs.existsSync(path.join(dir,'odc-1.7.33','release.json')),false);
+});
+
+test('mode owner (the default): the round stops in "proposed", the owner is told what to test, -Approve lets the next round deploy exactly those images',async t=>{
+ const dir=tmp(t),m=first().manifest,{ops}=roundOps(dir,{lane:'odc'}),events=[],notes=[];
+ ops.event=async(n,v)=>{events.push([n,v.code,v.message]);return {remote:true};};ops.notify=async(title,message)=>notes.push(title+' '+message);
+ const cfg=roundConfig(dir,m,{workspace:'C:/w',configFile:'C:/c.json'});delete cfg.rehearsal;
+ const candidate={lane:'odc',version:'1.7.33',fullVersion:'1.7.33.1',tfm:'net10.0'};
+ const r=await runWindowAttempt(cfg,ops,{id:'odc-1.7.33',kind:'add',lane:'odc',version:'1.7.33',candidate,inputs:{head:'h',studios:{odc:'1.7.33.1'}},previous:null,skipped:[]},NOW);
+ assert.equal(r.status,'proposed',JSON.stringify(r));
+ const proposal=fs.readFileSync(path.join(dir,'odc-1.7.33','PROPOSTA.md'),'utf8');
+ assert.match(proposal,/FolhaPonto and VisitaCerta from zero/);assert.match(proposal,/img:t1733 \(local image, sha256:2{64}/);
+ assert.match(proposal,/-Approve odc-1\.7\.33/);assert.match(proposal,/-Reject odc-1\.7\.33 -Reason/);
+ const told=events.find(e=>e[1]==='REFERENCE_GATE_OWNER');assert.ok(told);assert.match(told[2],/ODC Studio 1\.7\.33.*t1733 sha256:2{64}.*-Approve odc-1\.7\.33.*-Reject/);
+ assert.ok(notes.some(n=>/reference-app test before deploying odc-1\.7\.33/.test(n)));
+ // Nothing left the machine: no publish, no deployment journal.
+ assert.equal(fs.existsSync(path.join(dir,'odc-1.7.33','deployment.json')),false);
+ const {readAttempts}=await import('./pipeline.mjs');
+ const inputs=x=>({head:'h',studios:{[x.lane]:x.candidate.fullVersion}}),observed=[candidate];
+ const waiting=decideWindow({manifest:m,observed,state:{},attempts:readAttempts(dir),inputs,now:NOW+3600000});
+ assert.equal(waiting.action,'pending-approval');assert.equal(waiting.id,'odc-1.7.33');
+ // The owner's -Approve (the same command as a pair proposal) records the gate; the next decision releases.
+ const {approve,reject}=await import('./approve.mjs');
+ const ok=await approve({outDir:dir},{log:()=>{}},'odc-1.7.33');
+ assert.equal(ok.status,'gate-approved');assert.match(ok.note,/odc-1\.7\.33 t1733/);
+ const go=decideWindow({manifest:m,observed,state:{},attempts:readAttempts(dir),inputs,now:NOW+7200000});
+ assert.equal(go.action,'release');
+ // The release on fake operations: published and deployed are the images he was shown.
+ const f=fakeOps(liveOf(m));Object.assign(f.ops,{log:()=>{},notify:async()=>{}});
+ const {runWindowVigia}=await import('./window-round.mjs');
+ const live=await runWindowVigia({...cfg,observed,head:'h',now:NOW+7200000},f.ops);
+ assert.equal(live.status,'live',JSON.stringify(live));
+ assert.deepEqual(f.calls.filter(c=>c.startsWith('publish')),['publish t1733']);
+ assert.equal(readAttempts(dir)['odc-1.7.33'].status,'approved');
+ // -Reject instead stops it: the lane is not rebuilt with the same inputs.
+ const dir2=tmp(t),{ops:ops2}=roundOps(dir2,{lane:'odc'});ops2.event=async()=>({remote:true});
+ await runWindowAttempt({...cfg,outDir:dir2},ops2,{id:'odc-1.7.33',kind:'add',lane:'odc',version:'1.7.33',candidate,inputs:{head:'h',studios:{odc:'1.7.33.1'}},previous:null,skipped:[]},NOW);
+ reject({outDir:dir2},'odc-1.7.33','FolhaPonto failed');
+ assert.equal(decideWindow({manifest:m,observed,state:{},attempts:readAttempts(dir2),inputs,now:NOW+3600000}).action,'idle');
+});
+
+test('a retirement round never waits for the owner, whatever the reference gate',async t=>{
+ const dir=tmp(t),m=first().manifest,live=liveOf(m),f=fakeOps(live);Object.assign(f.ops,{log:()=>{},notify:async()=>{}});
+ const r=await runWindowAttempt({outDir:dir,manifest:m,automatic:true,state:{tokens},liveBaseline:live,referenceGate:{mode:'owner'}},f.ops,{id:'retire-odc-1.7.28',kind:'retire',lane:'odc',version:'1.7.28',inputs:{},previous:null,skipped:[]},NOW+7*DAY);
+ assert.equal(r.status,'live',JSON.stringify(r));
+ assert.equal(fs.existsSync(path.join(dir,'retire-odc-1.7.28','PROPOSTA.md')),false);
 });
 
 test('-RehearseCurrent on a backend window rebuilds the served version\'s round without rotating, and never runs the reference gate',async t=>{

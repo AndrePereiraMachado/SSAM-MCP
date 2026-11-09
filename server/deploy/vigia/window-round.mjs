@@ -13,8 +13,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {createHash} from 'node:crypto';
-import {releaseAutomatically,releaseEvent} from './automatic.mjs';
-import {LANES,STUDIO_NAME,planWindow,readyCandidates,servedOf,newestServed,windowPolicy,dueRetirement,retireDue,rotateLane,rebuildLane,laneRounds,retireRoundId,defaultO11,backendId,compareFailures,featuresLine,failureText,affectedText,composeText,compareVersion} from './window.mjs';
+import {releaseAutomatically,releaseEvent,windowAgain,windowStillNeeded} from './automatic.mjs';
+import {readJournal,writeJournal} from './journal.mjs';
+import {LANES,STUDIO_NAME,planWindow,readyCandidates,servedOf,newestServed,windowPolicy,dueRetirement,retireDue,rotateLane,rebuildLane,laneRounds,retireRoundId,defaultO11,backendId,compareFailures,featuresLine,failureText,affectedText,composeText,compareVersion,ownerCommand} from './window.mjs';
 import {CLIENT_BRIDGE_CODE,bridgeMode,serverOnlyGate,o11Proofs} from './server-only.mjs';
 import {EnvironmentError,readAttempts,writeAttempt,remind,noticeNow,laneChecks,reviewedRelease,clientBridgeError,archive,featuresNotice,wasCut,timedOut,noteWaiting,OWNER_WAITS} from './pipeline.mjs';
 import {odcBinaryCheck} from './odc-binary.mjs';
@@ -61,30 +62,43 @@ export function decideWindow({manifest,observed,state,attempts,inputs,now=Date.n
    return run;
   }
   if(a.status==='running')return run;
+  // Waiting for the owner's reference-app test (referenceGate mode owner): his -Approve releases what was built, -Reject drops it.
+  if(a.status==='proposed'){if(a.gateApproved)return {...run,action:'release'};skipped.push({id:r.id,lanes:[r.lane],why:'proposed'});continue;}
   if(a.status==='failed'){if(!same(a.inputs,want)&&hours(now,a.at)>=retryHours)return run;skipped.push({id:r.id,lanes:[r.lane],why:'failed'});continue;}
   if(a.status==='closed'&&!same(a.inputs,want))return run;
   skipped.push({id:r.id,lanes:[r.lane],why:a.status});
  }
- const failed=skipped.find(s=>s.why==='failed'),held=skipped.find(s=>s.why==='held');
- return {action:failed?'failed':held?'held':'idle',plan,waiting,skipped,id:(failed??held)?.id,attempt:(failed??held)?attempts[(failed??held).id]:undefined};
+ const failed=skipped.find(s=>s.why==='failed'),held=skipped.find(s=>s.why==='held'),proposed=skipped.find(s=>s.why==='proposed');
+ const which=failed??held??proposed;
+ return {action:failed?'failed':held?'held':proposed?'pending-approval':'idle',plan,waiting,skipped,id:which?.id,attempt:which?attempts[which.id]:undefined};
 }
 
-// The reference-app gate of a lane round (owner decision 7): config.referenceGate {command, args, timeoutMinutes} run by the
-// runtime (ops.referenceGate), which must report both reference apps published from zero. Not configured, or no runner: the
-// round waits (fails closed). A rehearsal records the gate's state and never deploys anyway.
+// The reference-app gate of a lane round (owner decision 7), config.referenceGate:
+//   {mode: "owner"} (the default, until an automated runner exists): the round stops in the owner-approval state ("proposed",
+//     the same -Approve/-Reject of the pair proposals) and tells him the lane, the images and what to test (FolhaPonto and
+//     VisitaCerta from zero on that lane's new version); his -Approve lets the next round deploy what was built;
+//   {mode: "command", command, args, timeoutMinutes}: the runtime's runner (ops.referenceGate) must report both reference apps
+//     published from zero; no command or no runner: the round waits (fails closed).
+// A retirement round never has the gate; a rehearsal records its state and never runs it or waits.
+export const referenceGateMode=config=>{
+ const g=config.referenceGate??{mode:'owner'},mode=g.mode??(g.command?'command':null);
+ if(!['owner','command'].includes(mode))throw Object.assign(Error('Invalid referenceGate: {mode: "owner"} or {mode: "command", command, args, timeoutMinutes}.'),{code:'REFERENCE_GATE_INVALID'});
+ return mode;
+};
 export const REFERENCE_APPS=Object.freeze(['FolhaPonto','VisitaCerta']);
 export async function referenceGate(config,ops,{lane,version,manifest,builts,dir}){
- // A rehearsal never runs it (the gate publishes apps through a server): it records whether the gate is ready.
- if(config.rehearsal||!config.referenceGate||typeof ops.referenceGate!=='function'){
-  const state={ran:false,configured:!!config.referenceGate,runner:typeof ops.referenceGate==='function',lane,version,...(config.rehearsal?{rehearsal:true}:{})};
-  writeJson(path.join(dir,'reference-gate.json'),state);
-  if(config.rehearsal)return state;
-  throw new EnvironmentError(`The reference-app gate (${REFERENCE_APPS.join(' + ')} from zero must publish) is required before ${STUDIO_NAME[lane]} ${version} is deployed, and ${!config.referenceGate?'referenceGate is not configured in the watcher configuration':'this runtime has no reference-gate runner'}. Production is not touched; the round retries.`,'reference-gate-unconfigured',[lane]);
+ const mode=referenceGateMode(config);
+ // A rehearsal never runs it (the gate publishes apps through a server) nor waits: it records whether the gate is ready.
+ if(config.rehearsal){const state={mode,ran:false,rehearsal:true,lane,version,...(mode==='command'?{configured:!!config.referenceGate?.command,runner:typeof ops.referenceGate==='function'}:{})};writeJson(path.join(dir,'reference-gate.json'),state);return state;}
+ if(mode==='owner'){const state={mode,ran:false,waitOwner:true,lane,version,apps:[...REFERENCE_APPS]};writeJson(path.join(dir,'reference-gate.json'),state);return state;}
+ if(!config.referenceGate?.command||typeof ops.referenceGate!=='function'){
+  writeJson(path.join(dir,'reference-gate.json'),{mode,ran:false,configured:!!config.referenceGate?.command,runner:typeof ops.referenceGate==='function',lane,version});
+  throw new EnvironmentError(`The reference-app gate (${REFERENCE_APPS.join(' + ')} from zero must publish) is required before ${STUDIO_NAME[lane]} ${version} is deployed, and ${!config.referenceGate?.command?'referenceGate mode "command" has no command in the watcher configuration':'this runtime has no reference-gate runner'}. Production is not touched; the round retries.`,'reference-gate-unconfigured',[lane]);
  }
  const r=await ops.referenceGate({lane,version,manifest,builts,dir});
  const apps=Object.fromEntries((r?.apps??[]).map(a=>[a.name,a]));
  const missing=REFERENCE_APPS.filter(n=>apps[n]?.published!==true);
- const state={ran:true,lane,version,ok:!!r?.ok&&!missing.length,apps:REFERENCE_APPS.map(n=>({name:n,published:apps[n]?.published===true,seconds:apps[n]?.seconds??null,error:apps[n]?.error??null}))};
+const state={mode,ran:true,lane,version,ok:!!r?.ok&&!missing.length,apps:REFERENCE_APPS.map(n=>({name:n,published:apps[n]?.published===true,seconds:apps[n]?.seconds??null,error:apps[n]?.error??null}))};
  writeJson(path.join(dir,'reference-gate.json'),state);
  if(r?.environmental)throw new EnvironmentError(`The reference-app gate did not run (${r.error??'environment'}); the round retries.`,'reference-gate-environment',[lane]);
  if(!state.ok)throw Object.assign(Error(`The reference-app gate failed for ${STUDIO_NAME[lane]} ${version}: ${missing.length?missing.join(' and ')+' did not publish':'the gate reported a failure'}. Nothing is deployed; see ${path.join(dir,'reference-gate.json')}.`),{lanes:[lane],code:'reference-gate-failed'});
@@ -105,6 +119,8 @@ export async function runWindowVigia(config,ops){
   if(decision.id)await remind(outDir,'failed:'+decision.id,'SSAM: Studio version checks failed',`${decision.id}: ${path.join(outDir,decision.id,'FALHAS.md')}`,ops,{now:noticeNow(config),link:path.join(outDir,decision.id,'FALHAS.md')});
   return {status:'failed',id:decision.id??null,dir:decision.id?path.join(outDir,decision.id):null,plan};
  }
+ if(decision.action==='pending-approval'){await ownerGateNotice(config,ops,decision.attempt);return {status:'pending-approval',id:decision.id,dir:path.join(outDir,decision.id),plan};}
+ if(decision.action==='release')return releaseApproved(config,ops,decision);
  if(decision.action==='held'){
   await remind(outDir,'held:'+decision.id,'SSAM: Studio version tests do not run',`${decision.id}: the candidate tests timed out or ran nothing ${decision.attempt?.testEnvRuns} times in a row; the watcher stops retrying them until main or the Studio changes.`,ops,{now:noticeNow(config),link:path.join(outDir,decision.id,'AGUARDANDO.md')});
   return {status:'held',id:decision.id,plan};
@@ -224,6 +240,7 @@ export async function runWindowAttempt(config,ops,decision,now){
   const release={id,dir,attempt:attempt.at,baseline:config.liveBaseline,built:builts.find(b=>backendId(b.odc)===own)??builts[0],manifest:next.manifest,kernel:kernelJson[own]??{...gate.kernel,o11:dflt},
    bridges:{mode:'server-only',offers:[],kernel:gate.kernel,hello:gate.hello,agentRelease:agentRelease.commit,o11Proofs:{}},bridgeMode:mode,features:lane==='odc'?candidate.features:null,featuresProvenance,bundles:{candidate,o11:o11Bundles,odc:odcBundles},window};
   const all=Object.values(smokes);
+  if(reference.waitOwner)return await proposeToOwner(config,ops,{release,attempt,dir,id});
   return await finishRelease(config,ops,{release,attempt,dir,id,smoke:{...all[0],publishedPack:all.every(x=>x.publishedPack===true),backends:smokes}});
  }catch(error){
   if(wasCut(outDir,attempt)||error.code==='round-timeout'){
@@ -244,10 +261,47 @@ export async function runWindowAttempt(config,ops,decision,now){
  }
 }
 
+// The owner's reference-app test (referenceGate mode owner): release.json and the evidence are written, the attempt waits in
+// "proposed" (the pair proposals' owner-approval state, -Approve / -Reject), and the owner is told what to test and how to answer.
+export function ownerGateText(config,release){
+ const w=release.window,id=release.id,images=w.builts.map(b=>`- backend odc-${b.odc}: ${b.image}:${b.tag} (local image, sha256:${b.sha256}; O11 kernels ${(b.kernels??[]).join(', ')}, default ${b.defaultO11??w.defaultO11})`).join('\n');
+ return `# Reference-app test: ${STUDIO_NAME[w.lane]} ${w.version} (${id})\n\nThe watcher built and checked this round (candidate tests, image smoke of every backend). Nothing is published or deployed until you approve.\n\nImages:\n${images}\n\nWhat to test: create FolhaPonto and VisitaCerta from zero through SSAM with ${STUDIO_NAME[w.lane]} ${w.version} (the new version of the ${w.lane.toUpperCase()} lane, served by ${w.lane==='odc'?'the new backend odc-'+w.version:'every backend, O11 kernels '+(w.builts[0]?.kernels??[]).join(', ')}); both must publish without error. Time them.\n\nThis window change also: ${(w.retiring??[]).map(r=>`${STUDIO_NAME[r.lane]} ${r.version} enters its grace until ${String(r.retireAt).slice(0,10)}`).concat((w.retired??[]).map(r=>`${STUDIO_NAME[r.lane]} ${r.version} leaves`)).join('; ')||'nothing else'}.\n\nApprove (the next watcher round publishes, pins and deploys exactly these images):\n\n    ${ownerCommand(config,'-Approve '+id)}\n\nRefuse:\n\n    ${ownerCommand(config,'-Reject '+id+' -Reason "<why>"')}\n`;
+}
+export const ownerGateMessage=(config,release)=>`${release.id}: test FolhaPonto and VisitaCerta from zero on ${STUDIO_NAME[release.window.lane]} ${release.window.version} (images ${release.window.builts.map(b=>'odc-'+b.odc+' '+b.tag+' sha256:'+b.sha256).join(', ')}), then approve: ${ownerCommand(config,'-Approve '+release.id)} or refuse: ${ownerCommand(config,'-Reject '+release.id+' -Reason "<why>"')}`;
+async function ownerGateNotice(config,ops,attempt){
+ const dir=path.join(config.outDir,attempt.id),file=path.join(dir,'release.json');
+ const release=fs.existsSync(file)?readJournal(file):null;if(!release?.window)return;
+ const message=ownerGateMessage(config,release);
+ // The webhook and the VPS journal (recorded once delivered, resent every round until then) and the daily local notice.
+ try{await releaseEvent(config.outDir,ops,'waiting',attempt.id,message,await ops.secrets(),'owner-gate-'+attempt.at,'REFERENCE_GATE_OWNER');}catch(e){ops.log?.(`the owner was not reached for the reference-app test: ${e.message}`);}
+ await remind(config.outDir,'proposal:'+attempt.id,'SSAM: reference-app test before deploying '+attempt.id,message,ops,{now:noticeNow(config),link:path.join(dir,'PROPOSTA.md')});
+}
+async function proposeToOwner(config,ops,{release,attempt,dir,id}){
+ fs.writeFileSync(path.join(dir,'compose.coolify.yml'),composeText(generateCompose(release.manifest)));
+ writeJournal(path.join(dir,'release.json'),release);
+ fs.writeFileSync(path.join(dir,'PROPOSTA.md'),ownerGateText(config,release));
+ if(wasCut(config.outDir,attempt))return {status:'deferred',id,dir,code:'round-timeout'};
+ const a=writeAttempt(config.outDir,{...attempt,status:'proposed',ownerGate:{since:new Date().toISOString(),images:release.window.builts.map(b=>({odc:b.odc,tag:b.tag,sha256:b.sha256}))},built:release.built,builts:release.window.builts,proposedAt:new Date().toISOString()});
+ await ownerGateNotice(config,ops,a);
+ return {status:'proposed',id,dir,builts:release.window.builts};
+}
+// The owner approved his reference-app test: the next round releases exactly the images he was shown, on the window live now
+// (rotated again on it; a window that no longer needs the round closes it).
+async function releaseApproved(config,ops,decision){
+ const a=decision.previous,dir=path.join(config.outDir,a.id),release=readJournal(path.join(dir,'release.json')),w=release.window,live=config.liveBaseline;
+ if((release.window.builts??[]).map(b=>b.sha256).join()!==(a.ownerGate?.images??[]).map(i=>i.sha256).join())throw Error(`The release of ${a.id} is not the one the owner approved; nothing is deployed. -Retry ${a.id} builds it again.`);
+ let manifest=release.manifest;
+ if(live){
+  manifest=windowStillNeeded(live,w)?windowAgain(config,w,live,config.now??Date.now()):null;
+  if(!manifest){writeAttempt(config.outDir,{...a,status:'closed',code:'idle',endedAt:new Date().toISOString()});return {status:'idle',id:a.id,dir};}
+ }
+ ops.log?.(`release ${a.id}: the owner approved the reference-app test at ${a.gateApproved.at}`);
+ return finishRelease(config,ops,{release:{...release,baseline:live??release.baseline,manifest,window:{...w,referenceGate:{...w.referenceGate,waitOwner:false,approved:a.gateApproved}}},attempt:a,dir,id:a.id,smoke:null});
+}
+
 // release.json, then the rehearsal's end or the automatic release (automatic.mjs releaseAutomatically, which knows
 // release.window). The compose of the next window goes with the evidence.
 async function finishRelease(config,ops,{release,attempt,dir,id,smoke}){
- const {writeJournal}=await import('./journal.mjs');
  fs.writeFileSync(path.join(dir,'compose.coolify.yml'),composeText(generateCompose(release.manifest)));
  writeJournal(path.join(dir,'release.json'),release);
  if(config.rehearsal){
