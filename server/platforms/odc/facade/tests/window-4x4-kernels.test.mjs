@@ -15,7 +15,7 @@ import { imageO11Versions, o11KernelRoots, o11KernelPaths, isMultiO11Image, o11B
 import { servedVersions } from '../studio-identity.mjs';
 import { normalizeKernel, compatibility } from '../agent-hub.mjs';
 import { runWithExecutor, hostedO11Kernel, hostedSpawnEnv } from '../executor.mjs';
-import { anvilCli, LANES } from '../lanes.mjs';
+import { anvilCli, anvilDataCli, LANES } from '../lanes.mjs';
 import { o11LaneOf } from '../o11-lane.mjs';
 import { laneIndexRoot, indexRoot, indexFile, readerConfig } from '../module-map.mjs';
 import { STORE_GENERATION } from '../store-generation.mjs';
@@ -115,7 +115,7 @@ test('hosted call: the customer kernel reaches the spawn environment, the O11 la
       assert.equal(posix(path.relative(ROOTS.SSAM_O11_STUDIO_ROOT, env.ANVIL_STUDIO_DIR)), '11.55.93');
       assert.equal(env.SSAM_MODULE_INDEX_ROOT, o11IndexRoot(serverIndex, '11.55.93'), 'its own O11 index store');
       assert.equal(hostedSpawnEnv('odc').env.SSAM_MODULE_INDEX_ROOT, serverIndex, 'the ODC store stays shared');
-      assert.equal(anvilCli(), kernel.cli); assert.equal(LANES.o11.cli, kernel.cli);
+      assert.equal(anvilCli(), kernel.cli); assert.equal(LANES.o11.cli, kernel.cli); assert.equal(anvilDataCli(), kernel.cli, 'B11');
       const lane = o11LaneOf('ss4');
       assert.equal(lane.studioDir, kernel.studioDir); assert.equal(lane.cli, kernel.cli);
       assert.equal(laneIndexRoot('o11'), o11IndexRoot(serverIndex, '11.55.93')); assert.equal(laneIndexRoot('odc'), indexRoot());
@@ -138,4 +138,16 @@ test('hosted call: the customer kernel reaches the spawn environment, the O11 la
     Object.assign(process.env, saved);
     fs.rmSync(serverIndex, { recursive: true, force: true });
   }
+});
+
+// Review S1 B4: the presenter withholds every Service Studio and kernel CLI folder of a multi-O11 image by its own roots,
+// not only through the generic path rule (ANVIL_STUDIO_DIR names the default's folder alone).
+test('hosted presenter: the O11 roots of a multi-O11 image are server roots', async () => {
+  const policy = await import('../hosted/policy.mjs');
+  const env = { SSAM_SERVER_DIR: '/data/server', ANVIL_STUDIO_DIR: '/studio/o11/11.55.95', SSAM_O11_STUDIO_ROOT: '/studio/o11', SSAM_O11_CLI_ROOT: '/app/kernel/.local/o11' };
+  const roots = policy.serverRoots({ env, code: '/srv/code', home: '/tmp', tmp: '/tmp' });
+  for (const root of ['/studio/o11', '/app/kernel/.local/o11']) assert.ok(roots.includes(root), root);
+  const present = policy.presenter({ workspace: '/data/server/customers/tok_aaaaaaaaaaaa', serverRoots: roots, pathApi: path.posix });
+  for (const file of ['/studio/o11/11.55.92/ServiceStudio.Framework.dll', '/app/kernel/.local/o11/11.55.93/cli/anvil.dll'])
+    assert.equal(present.string('could not read ' + file), 'could not read <server>', file);
 });

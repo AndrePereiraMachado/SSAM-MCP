@@ -48,6 +48,10 @@ export function anvilCli(root = anvilRoot, laneName = anvilLane) {
 }
 // Cold data commands can be rebuilt independently of a loaded model-reading worker.
 export function anvilDataCli(root = anvilRoot, laneName = anvilLane) {
+  // Window 4x4 (review S1 B11): a hosted call on a multi-O11 image runs its customer's own kernel CLI, never a data-cli
+  // built for the image default.
+  const hosted = root === anvilRoot ? hostedO11Kernel() : null;
+  if (hosted) return hosted.cli;
   const local = path.join(root, laneName === 'ss5' ? path.join('.local', 'lane-ss5') : '.local');
   const regular = anvilCli(root, laneName);
   return [path.join(local, 'data-cli', 'anvil.dll'), regular].filter(p => fs.existsSync(p))
