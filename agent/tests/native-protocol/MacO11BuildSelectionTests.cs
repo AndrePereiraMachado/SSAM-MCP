@@ -2,8 +2,10 @@ using System.Text.Json.Nodes;
 using Ssam.Agent;
 using Xunit;
 
-// Mac app 0.2.8: the macOS pack carries one O11 thin bridge per served Service Studio build (pack.json o11Builds, the same
-// DLLs as Windows), and the native core picks the one of the Service Studio installed on the Mac. The version comes from the
+// Mac app 0.2.8: the macOS pack carries the O11 thin bridges of the published Windows 0.2.8 (pack.json o11Builds, the same
+// DLLs: 11.55.94 the default, 11.55.93, 11.55.92), and the native core picks the one of the Service Studio installed on the Mac.
+// Review M2 of agent/mac-028: no 11.55.95 thin until one is proven, so a Mac on 11.55.95 gets the 11.55.94 default with the
+// O11_BRIDGE_BUILT_FOR_DIFFERS warning, exactly as Windows 0.2.8 does for the owner's 11.55.95. The version comes from the
 // Studio's bundle (MacPlatform.Inspect: the managed ServiceStudio.dll, else Info.plist), the same value the hello
 // (MacPlatform.Installed) and o11.connect (MacPlatform.Processes -> O11Connection) give O11Builds.PackFor. An unknown build
 // falls back exactly as on Windows: the pack's default bridge, a warning when the server serves the default and the Studio
@@ -11,21 +13,20 @@ using Xunit;
 // (agent-native-release.yml, FullyQualifiedName~Mac) runs it on the Apple Silicon runner too.
 public sealed class MacO11BuildSelectionTests
 {
-    private static readonly string D95 = new('5', 64), D94 = new('4', 64), D93 = new('3', 64), D92 = new('2', 64);
+    private static readonly string D94 = new('4', 64), D93 = new('3', 64), D92 = new('2', 64);
 
-    // The Mac pack of agent-pack.ps1 -Platform mac with -O11Studios (or <prebuilt>\o11\builds): the newest build is the default.
+    // The Mac pack of agent-pack.ps1 -Platform mac with <prebuilt>\o11\builds (R2: the three Windows 0.2.8 thins): the newest
+    // build is the default.
     private static JsonObject MacPack() => new()
     {
-        ["platform"] = "darwin", ["lanes"] = new JsonArray("odc", "o11"), ["o11BuiltFor"] = "11.55.95", ["o11Hook"] = "dev",
-        ["o11Bridge"] = new JsonObject { ["path"] = "bin/o11/bridge/Anvil.Bridge.dll", ["sha256"] = D95 },
+        ["platform"] = "darwin", ["lanes"] = new JsonArray("odc", "o11"), ["o11BuiltFor"] = "11.55.94", ["o11Hook"] = "dev",
+        ["o11Bridge"] = new JsonObject { ["path"] = "bin/o11/bridge/Anvil.Bridge.dll", ["sha256"] = D94 },
         ["o11Builds"] = new JsonArray(
-            new JsonObject { ["version"] = "11.55.95", ["runtime"] = "net10.0", ["path"] = "bin/o11/bridge/Anvil.Bridge.dll", ["sha256"] = D95 },
-            new JsonObject { ["version"] = "11.55.94", ["runtime"] = "net10.0", ["path"] = "bin/o11/bridges/11.55.94/Anvil.Bridge.dll", ["sha256"] = D94 },
+            new JsonObject { ["version"] = "11.55.94", ["runtime"] = "net10.0", ["path"] = "bin/o11/bridge/Anvil.Bridge.dll", ["sha256"] = D94 },
             new JsonObject { ["version"] = "11.55.93", ["runtime"] = "net8.0", ["path"] = "bin/o11/bridges/11.55.93/Anvil.Bridge.dll", ["sha256"] = D93 },
             new JsonObject { ["version"] = "11.55.92", ["runtime"] = "net8.0", ["path"] = "bin/o11/bridges/11.55.92/Anvil.Bridge.dll", ["sha256"] = D92 }),
         ["files"] = new JsonArray(
-            new JsonObject { ["path"] = "bin/o11/bridge/Anvil.Bridge.dll", ["sha256"] = D95 },
-            new JsonObject { ["path"] = "bin/o11/bridges/11.55.94/Anvil.Bridge.dll", ["sha256"] = D94 },
+            new JsonObject { ["path"] = "bin/o11/bridge/Anvil.Bridge.dll", ["sha256"] = D94 },
             new JsonObject { ["path"] = "bin/o11/bridges/11.55.93/Anvil.Bridge.dll", ["sha256"] = D93 },
             new JsonObject { ["path"] = "bin/o11/bridges/11.55.92/Anvil.Bridge.dll", ["sha256"] = D92 })
     };
@@ -53,8 +54,7 @@ public sealed class MacO11BuildSelectionTests
     }
 
     [Theory]
-    [InlineData("11.55.95.65352", "net10.0", "11.55.95", "bin/o11/bridge/Anvil.Bridge.dll", '5')]
-    [InlineData("11.55.94.65328", "net10.0", "11.55.94", "bin/o11/bridges/11.55.94/Anvil.Bridge.dll", '4')]
+    [InlineData("11.55.94.65328", "net10.0", "11.55.94", "bin/o11/bridge/Anvil.Bridge.dll", '4')]
     [InlineData("11.55.93.65289", "net8.0", "11.55.93", "bin/o11/bridges/11.55.93/Anvil.Bridge.dll", '3')]
     [InlineData("11.55.92.65269", "net8.0", "11.55.92", "bin/o11/bridges/11.55.92/Anvil.Bridge.dll", '2')]
     public void TheInstalledMacServiceStudioGetsTheThinBridgeOfItsBuild(string studio, string tfm, string builtFor, string bridge, char sha)
@@ -85,10 +85,12 @@ public sealed class MacO11BuildSelectionTests
         finally { Directory.Delete(folder, true); }
     }
 
-    // An unknown build: the default bridge (the newest, 11.55.95) as on Windows. Newer than every served build: allowed with the
-    // O11_BRIDGE_BUILT_FOR_DIFFERS warning (Windows would also ask for a bridge offer; macOS takes none). Older and not served:
-    // refused with STUDIO_VERSION_MISMATCH before anything is attached.
+    // A build without its own thin: the default bridge (the newest, 11.55.94) as on Windows. Served by the server (11.55.95, the
+    // owner's Studio) or newer than every served build: allowed with the O11_BRIDGE_BUILT_FOR_DIFFERS warning (Windows would also
+    // ask for a bridge offer; macOS takes none). Older and not served: refused with STUDIO_VERSION_MISMATCH before anything is
+    // attached.
     [Theory]
+    [InlineData("11.55.95.65352", true)]
     [InlineData("11.55.96.65400", true)]
     [InlineData("11.55.91.65200", false)]
     public void AnUnknownMacServiceStudioFallsBackToTheDefaultOrIsRefusedAsOnWindows(string studio, bool allowed)
@@ -103,7 +105,7 @@ public sealed class MacO11BuildSelectionTests
             Assert.Null(O11Builds.For(pack, version));
             var view = O11Builds.PackFor(pack, version);
             Assert.Same(pack, view);
-            Assert.Equal("11.55.95", StudioKinds.Text(view["o11BuiltFor"]));
+            Assert.Equal("11.55.94", StudioKinds.Text(view["o11BuiltFor"]));
             Assert.Equal(Path.Combine("R", O11Builds.DefaultBridge), O11Builds.BridgeFile("R", view));
             Assert.False(BridgeUpdates.BundledSupports(pack, "R", "o11", version, "net10.0"));
             var kinds = new StudioKinds("R", "R", pack, () => Served);
@@ -111,7 +113,8 @@ public sealed class MacO11BuildSelectionTests
             {
                 var warning = kinds.CheckO11Build(version, view);
                 Assert.Equal("O11_BRIDGE_BUILT_FOR_DIFFERS", StudioKinds.Text(warning?["code"]));
-                Assert.Equal("11.55.95", StudioKinds.Text(warning?["builtFor"]));
+                Assert.Equal("11.55.94", StudioKinds.Text(warning?["builtFor"]));
+                Assert.Equal(studio, StudioKinds.Text(warning?["studio"]));
             }
             else Assert.Equal("STUDIO_VERSION_MISMATCH", Assert.Throws<AgentFault>(() => kinds.CheckO11Build(version, view)).Code);
         }
@@ -123,9 +126,9 @@ public sealed class MacO11BuildSelectionTests
     public void AMacBuildTheIntegrityListDoesNotConfirmIsIgnored()
     {
         var pack = MacPack();
-        ((JsonObject)((JsonArray)pack["files"]!)[2]!)["sha256"] = D92;
+        ((JsonObject)((JsonArray)pack["files"]!)[1]!)["sha256"] = D92;
         Assert.Null(O11Builds.For(pack, "11.55.93.65289"));
         Assert.Same(pack, O11Builds.PackFor(pack, "11.55.93.65289"));
-        Assert.Equal(new[] { "11.55.95", "11.55.94", "11.55.92" }, O11Builds.Versions(pack).Select(n => StudioKinds.Text(n)).ToArray());
+        Assert.Equal(new[] { "11.55.94", "11.55.92" }, O11Builds.Versions(pack).Select(n => StudioKinds.Text(n)).ToArray());
     }
 }

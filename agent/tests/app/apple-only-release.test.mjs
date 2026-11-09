@@ -64,7 +64,9 @@ test('Mac workflows: app_version = package.json, enable_updates wired into build
  }
  assert.match(entry,/app_version: \$\{\{ inputs\.app_version \}\}/);assert.match(entry,/enable_updates: \$\{\{ inputs\.enable_updates \}\}/);
  assert.match(native,/--app-version "\$APP_VERSION" \$updates --notarize --bundled-bridges-only/);
- assert.match(native,/"\["11\.55\.95","11\.55\.94","11\.55\.93","11\.55\.92"\]"|'\["11\.55\.95","11\.55\.94","11\.55\.93","11\.55\.92"\]'/);
+ // Review M2: the three thins of the published Windows 0.2.8, 11.55.94 the default; no 11.55.95 thin.
+ assert.match(native,/'\["11\.55\.94","11\.55\.93","11\.55\.92"\]' \|\| hello\.pack\.o11BuiltFor !== '11\.55\.94'/);
+ assert.doesNotMatch(native,/"11\.55\.95"/);
  assert.match(native,/'\["v108","v109"\]'/);
  assert.match(native,/release-manifest\.json/);assert.match(native,/agent\/dist\/latest-mac\.yml/);
 });

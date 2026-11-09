@@ -239,10 +239,11 @@ jobs:
             console.log(JSON.stringify(summary, null, 2));
             if (hello.agent.version !== '0.4.14-native' || hello.agent.runtime !== 'native-aot' || hello.agent.platform !== 'darwin') throw new Error('unexpected agent');
             if (JSON.stringify(hello.pack.odcBridges) !== '["v108","v109"]' || hello.pack.odcBridge !== 'v108') throw new Error('unexpected ODC bridges');
-            // Mac app 0.2.8: one O11 thin bridge per served Service Studio build, the newest as the default (no Studio on the
-            // runner, so the hello reports the default); each build pinned by the installed pack's integrity list.
-            if (JSON.stringify(hello.pack.o11Builds) !== '["11.55.95","11.55.94","11.55.93","11.55.92"]' || hello.pack.o11BuiltFor !== '11.55.95') throw new Error('unexpected O11 builds');
-            if (JSON.stringify((manifest.o11Builds ?? []).map(b => [b.version, b.runtime])) !== '[["11.55.95","net10.0"],["11.55.94","net10.0"],["11.55.93","net8.0"],["11.55.92","net8.0"]]') throw new Error('unexpected O11 build runtimes');
+            // Mac app 0.2.8: the O11 thin bridges of the published Windows 0.2.8, the newest (11.55.94) as the default (no Studio
+            // on the runner, so the hello reports the default); each build pinned by the installed pack's integrity list. Review
+            // M2 of agent/mac-028: no 11.55.95 thin until it is proven; a Mac on 11.55.95 gets 11.55.94 with a warning.
+            if (JSON.stringify(hello.pack.o11Builds) !== '["11.55.94","11.55.93","11.55.92"]' || hello.pack.o11BuiltFor !== '11.55.94') throw new Error('unexpected O11 builds');
+            if (JSON.stringify((manifest.o11Builds ?? []).map(b => [b.version, b.runtime])) !== '[["11.55.94","net10.0"],["11.55.93","net8.0"],["11.55.92","net8.0"]]') throw new Error('unexpected O11 build runtimes');
             if (manifest.bridgeOffer !== false) throw new Error('Remote bridge offers must remain disabled');
             if (!hello.agent.kinds.includes('credential.session') || !hello.agent.kinds.includes('document.fetch')) throw new Error('Required r40 kinds missing');
             if (summary.credentialStored) throw new Error('the throwaway credential was stored');
