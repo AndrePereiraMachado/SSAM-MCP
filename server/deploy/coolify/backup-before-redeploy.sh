@@ -12,8 +12,10 @@
 # schema_migrations), or pg_dump is older than the server. The earlier copy of this script in C:\t\r3\img dumped the
 # update_server's PostgreSQL (postgres-88dw...) instead, and `ssamctl.sh backup` with pg_dump 17 against 18.6 wrote an
 # empty file: neither held the licenses (2026-11-01).
-# Files in the folder: ssam-tokens-<stamp>.sql.gz (licenses) and ssam-state-<stamp>.tar.gz (window, for ssamctl.sh
-# restore), each with .sha256, and state-<stamp>.tar.gz (server-state and friction of the default backend, the format
+# Files in the folder: ssam-tokens-<stamp>.sql.gz (licenses), ssam-db-update_server-<stamp>.sql.gz and
+# ssam-db-coolify-<stamp>.sql.gz (each dumped by the pg_dump inside its own container), ssam-service-<stamp>.tar.gz
+# (Coolify compose + .env of the resource), ssam-state-<stamp>.tar.gz (every volume of the resource, for ssamctl.sh
+# restore) and its .info, each with .sha256, and state-<stamp>.tar.gz (server-state and friction of the default backend, the format
 # rollback-kernels.sh reads the kernels of the way back from).
 # The SSH command is SSAM_SSH (default below); the base folder on the VPS is SSAM_BACKUP_BASE. No value of the
 # environment of any container is printed: the URL stays inside the VPS.
@@ -42,6 +44,13 @@ tokens=$(ls -1t "$dir"/ssam-tokens-*.sql.gz 2>/dev/null | head -n 1)
 window=$(ls -1t "$dir"/ssam-state-*.tar.gz 2>/dev/null | head -n 1)
 [ -n "$tokens" ] && [ -s "$tokens" ] || say "BACKUP_DUMP_EMPTY: no licenses dump in $dir"
 [ -n "$window" ] && [ -s "$window" ] || say "BACKUP_STATE_EMPTY: no window archive in $dir"
+[ -s "$window.info" ] || say "BACKUP_INCOMPLETE: $window has no .info (the set did not finish)"
+dbs=
+for kind in update_server coolify; do
+  f=$(ls -1t "$dir"/ssam-db-$kind-*.sql.gz 2>/dev/null | head -n 1)
+  [ -n "$f" ] && [ -s "$f" ] || say "BACKUP_DUMP_EMPTY: no $kind dump in $dir"
+  dbs="$dbs, $kind $f ($(wc -c < "$f" | tr -d " ") bytes)"
+done
 for table in server_tokens schema_migrations; do
   gzip -dc "$tokens" | grep -q "^CREATE TABLE \(public\.\)\{0,1\}$table (" || say "BACKUP_DUMP_NO_LICENSE_TABLES: $tokens has no $table"
 done
@@ -58,7 +67,7 @@ $D run --rm --network none --security-opt no-new-privileges:true --cap-drop ALL 
   "$($D inspect --format '{{.Image}}' "$c")" -czf - -C /source state friction > "$dir/state-$stamp.tar.gz"
 [ -s "$dir/state-$stamp.tar.gz" ] || say "BACKUP_STATE_EMPTY: state-$stamp.tar.gz is empty"
 (cd "$dir" && sha256sum "state-$stamp.tar.gz" > "state-$stamp.tar.gz.sha256")
-echo "OK: licenses $tokens ($(wc -c < "$tokens") bytes, PostgreSQL ${version:-?}), window $window ($(du -h "$window" | cut -f1)), kernels state $dir/state-$stamp.tar.gz ($(du -h "$dir/state-$stamp.tar.gz" | cut -f1))"
+echo "OK: licenses $tokens ($(wc -c < "$tokens") bytes, PostgreSQL ${version:-?}), window $window ($(du -h "$window" | cut -f1)), kernels state $dir/state-$stamp.tar.gz ($(du -h "$dir/state-$stamp.tar.gz" | cut -f1))$dbs"
 REMOTE
 )
 
