@@ -9,11 +9,11 @@
 # The work folder is next to the archive (the backup disk), never /tmp: on the VPS /tmp is a tmpfs in RAM and the
 # volumes are gigabytes. GNU tar exit 1 (a file changed while it was read: an online copy) is accepted with a note; any
 # other failure, an empty payload, or an empty server-state stops the backup before the archive gets its final name.
-# Sets window_containers, window_volumes and window_skipped for the .info.
+# Sets window_containers, window_volumes, window_skipped, window_state_files and window_state_bytes for the .info.
 window_backup() {
   wb_tab=$(printf '\t')
   work=$(mktemp -d "$(dirname "$archive")/.ssam-window-XXXXXX")
-  trap 'st=$?; rm -rf "$work" "$archive.partial"; backup_exit_note "$st"' EXIT
+  trap 'st=$?; rm -rf "$work" "$archive.partial"; backup_on_exit "$st"' EXIT
   trap 'exit 130' HUP INT TERM
   printf 'container\todc\to11\tdestination\tvolume\tpayload\n' > "$work/manifest.tsv"
   wb_project=${project:-}
@@ -40,10 +40,24 @@ window_backup() {
     done < "$work/project-volumes"
   fi
   [ "$count" -gt 0 ] || die "BACKUP_NO_VOLUMES: no named volume found for ${wb_project:-the backends}"
-  # The shared state must not be empty: it holds kernel.json, the customers' workspaces and the audit.
+  # The shared state must hold what a live server has (kernel.json, the customers' workspaces; SSAM_BACKUP_STATE_REQUIRED)
+  # and must not have shrunk below SSAM_BACKUP_MIN_RATIO percent (default 50) of the previous complete set, in files or
+  # bytes (a reset or recreated volume): BACKUP_SHRANK, nothing written, nothing pruned. SSAM_BACKUP_ALLOW_SHRINK=1
+  # accepts an intended clean-up once.
   wb_state=$(volume_of "$c" /data/server)
   wb_payload=$(awk -F '\t' -v v="$wb_state" 'NR>1 && $5==v {print $6; exit}' "$work/manifest.tsv")
-  [ "$(tar -tf "$work/$wb_payload" | grep -cv '^\./$')" -gt 0 ] || die "BACKUP_STATE_EMPTY: the server-state volume $wb_state is empty; no archive was made"
+  tar -tf "$work/$wb_payload" | sed 's#^\./##' > "$work/state-list" || die "BACKUP_STATE_EMPTY: the server-state copy does not read back"
+  window_state_files=$(grep -c '[^/]$' "$work/state-list" || true)
+  window_state_bytes=$(wc -c < "$work/$wb_payload" | tr -d ' ')
+  [ "$window_state_files" -gt 0 ] || die "BACKUP_STATE_EMPTY: the server-state volume $wb_state is empty; no archive was made"
+  for wb_need in ${SSAM_BACKUP_STATE_REQUIRED-kernel.json customers/}; do
+    grep -qx -- "$wb_need" "$work/state-list" || die "BACKUP_STATE_EMPTY: the server-state volume $wb_state has no $wb_need; no archive was made"
+  done
+  wb_ratio=${SSAM_BACKUP_MIN_RATIO:-50}
+  if [ "${SSAM_BACKUP_ALLOW_SHRINK:-0}" != 1 ] && [ -n "${prev_state_files:-}" ] && [ -n "${prev_state_bytes:-}" ]; then
+    [ $((window_state_files * 100)) -ge $((prev_state_files * wb_ratio)) ] && [ $((window_state_bytes * 100)) -ge $((prev_state_bytes * wb_ratio)) ] ||
+      die "BACKUP_SHRANK: server-state has $window_state_files files / $window_state_bytes bytes, the previous set $prev_state_files / $prev_state_bytes (below $wb_ratio%); nothing was written or pruned (SSAM_BACKUP_ALLOW_SHRINK=1 if intended)"
+  fi
   (
     cd "$work" && tar --force-local -czf "$archive.partial" manifest.tsv volume-*.tar
   )
@@ -52,7 +66,7 @@ window_backup() {
   wb_got=$(tar --force-local -tzf "$archive.partial" | sort)
   [ "$wb_got" = "$wb_expect" ] || die "BACKUP_ARCHIVE_INVALID: the window archive does not read back with its manifest and payloads"
   mv "$archive.partial" "$archive"
-  rm -rf "$work"; trap 'backup_exit_note $?' EXIT
+  rm -rf "$work"; trap 'backup_on_exit $?' EXIT
 }
 # window_add <container> <odc> <o11> <destination> <volume>: one manifest row; the payload once per volume.
 window_add() {
@@ -100,7 +114,6 @@ window_restore() {
     case "$destination" in *..*) die "invalid volume destination";; esac
     [ "$(volume_of "$backend" "$destination")" = "$volume" ] || die "volume mapping changed for $backend; restore the recorded mapping first"
     [ "$($DOCKER inspect --format '{{.State.Running}}' "$backend")" = false ] || die "stop all archived containers (backends, router, console) before restore"
-    [ "$odc" != - ] || odc=; [ "$o11" != - ] || o11=
     [ "$odc" != - ] || odc=; [ "$o11" != - ] || o11=
     [ "$($DOCKER inspect --format '{{index .Config.Labels "ssam.odc"}}' "$backend")" = "$odc" ] || die "ODC version mapping changed"
     [ "$($DOCKER inspect --format '{{index .Config.Labels "ssam.o11"}}' "$backend")" = "$o11" ] || die "O11 version mapping changed"

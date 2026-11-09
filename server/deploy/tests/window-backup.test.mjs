@@ -12,7 +12,7 @@ test('whole-window backup restores both Features and cache volumes and shared st
  const d=(args)=>{const r=spawnSync(docker,['--context','desktop-linux',...args],{encoding:'utf8',windowsHide:true});assert.equal(r.status,0,r.stderr);return r.stdout;};
  const script=fileURLToPath(new URL('../coolify/ssamctl.sh',import.meta.url));
  const shell=process.platform==='win32'?'C:/Program Files/Git/bin/bash.exe':'sh';
- const run=(args)=>{const r=spawnSync(shell,[script,...args],{encoding:'utf8',windowsHide:true,env:{...process.env,SSAM_CONTAINER:containers[0],SSAM_BACKUP_REQUIRE_DATABASE:'0',SSAM_BACKUP_DATABASES:'',SSAM_BACKUP_MIN_FREE_GB:'0',DOCKER:'docker --context desktop-linux',MSYS_NO_PATHCONV:'1'}});assert.equal(r.status,0,r.stdout+r.stderr);};
+ const run=(args)=>{const r=spawnSync(shell,[script,...args],{encoding:'utf8',windowsHide:true,env:{...process.env,SSAM_CONTAINER:containers[0],SSAM_BACKUP_REQUIRE_DATABASE:'0',SSAM_BACKUP_DATABASES:'',SSAM_BACKUP_MIN_FREE_GB:'0',SSAM_BACKUP_STATE_REQUIRED:'marker',DOCKER:'docker --context desktop-linux',MSYS_NO_PATHCONV:'1'}});assert.equal(r.status,0,r.stdout+r.stderr);};
  try{
   for(const v of volumes)d(['volume','create',v]);
   for(const [n,features,cache,odc,o11] of [['new',volumes[2],volumes[4],'1.7.29','11.55.93'],['old',volumes[3],volumes[5],'1.7.28','11.55.92']]){

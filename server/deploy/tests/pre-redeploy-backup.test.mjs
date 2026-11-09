@@ -1,6 +1,8 @@
-// The licenses backup before a Redeploy (2026-11-01: the pre-deploy backup dumped the update_server's database, and
-// `ssamctl.sh backup` with pg_dump 17 against PostgreSQL 18.6 wrote an empty file). Headless: a fake docker and a fake
-// ssh; no container, no VPS.
+// The production backup of the Coolify resource (ssamctl.sh backup: the daily cron and backup-before-redeploy.sh).
+// 2026-11-01: the pre-deploy backup dumped the update_server's database, and `ssamctl.sh backup` with pg_dump 17 against
+// PostgreSQL 18.6 wrote an empty file. 2026-11-09: the daily cron archived the retired ssam-prod volumes every night; the
+// review of the fix asked for no secret on any command line, content floors, set-based retention, tar exit 1 tolerance.
+// Headless: a fake docker (which runs the in-container tar scripts with a fake tar) and a fake ssh; no container, no VPS.
 // Run: node --test server/deploy/tests/pre-redeploy-backup.test.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -17,13 +19,14 @@ const wrapper = path.join(coolify, 'backup-before-redeploy.sh');
 const bash = process.platform === 'win32' ? 'C:/Program Files/Git/bin/bash.exe' : 'bash';
 const slash = (p) => p.replaceAll('\\', '/');
 const posix = (p) => process.platform === 'win32' ? slash(p).replace(/^([A-Za-z]):/, (m, d) => '/' + d.toLowerCase()) : p;
-const SECRET ='pw-never-printed-91';
+const SECRET = 'pw-never-printed-91';
+const APP_KEY = 'base64:app-key-never-printed-77';
 
 const LICENSES = `--
 -- PostgreSQL database dump
 --
 -- Dumped from database version 18.6
--- Dumped by pg_dump version 18.1
+-- Dumped by pg_dump version 18.6
 CREATE TABLE public.schema_migrations (
     version text NOT NULL
 );
@@ -38,32 +41,28 @@ tok_a
 tok_b
 \\.
 `;
+// The licenses schema with no license: a recreated or reset database.
+const LICENSES_EMPTY = LICENSES.replace(/COPY public\.server_tokens[\s\S]*$/, '');
 // The update_server's database: what the old pre-deploy backup dumped.
 const WRONG = `-- Dumped from database version 17.5
 CREATE TABLE public.releases (
     id text NOT NULL
 );
 `;
-
-// The other two databases of the VPS: what their dumps must hold (the update_server's Prisma tables; Coolify's own).
+// The other two databases of the VPS: their expected tables, and rows in the floor table (releases, servers).
 const UPDATE_SERVER = `-- Dumped from database version 17.11
 -- Dumped by pg_dump version 17.11
-CREATE TABLE public._prisma_migrations (
-    id text NOT NULL
-);
-CREATE TABLE public.apps (
-    id text NOT NULL
-);
-CREATE TABLE public.artifacts (
-    id text NOT NULL
-);
-CREATE TABLE public.releases (
-    id text NOT NULL
-);
+${['_prisma_migrations', 'apps', 'artifacts', 'releases'].map((t) => `CREATE TABLE public.${t} (\n    id text NOT NULL\n);`).join('\n')}
+COPY public.releases (id) FROM stdin;
+rel_1
+\\.
 `;
 const COOLIFY = `-- Dumped from database version 15.19
 -- Dumped by pg_dump version 15.19
 ${['applications', 'instance_settings', 'migrations', 'servers', 'services'].map((t) => `CREATE TABLE public.${t} (\n    id bigint NOT NULL\n);`).join('\n')}
+COPY public.servers (id) FROM stdin;
+0
+\\.
 `;
 const ANON = 'a'.repeat(64);
 // The live resource as the VPS has it (2026-11-09, docker inspect): the backends share server-state and friction, each
@@ -81,16 +80,26 @@ const MOUNTS = [
 ];
 const NAMED = [...new Set(MOUNTS.map((m) => m[2]).filter((v) => v !== ANON)), 'proj_cache'];
 
-// A fake docker. DB_CONTAINER=0 means the licenses database is not a container on this host (only the pinned 17
-// fallback); SERVER_NUM is its server_version_num; DUMP is the file its pg_dump writes. UPD_* and COOL_DUMP drive the
-// update_server (container upd) and Coolify (coolify-db) databases, dumped with docker exec. VOLDIR is what every volume
-// holds (EMPTY_STATE=1: server-state is empty); RUNNING is the state of the SSAM containers.
+// A fake docker. Licenses: the container dbhost (DB_CONTAINER=0: not a container here, so the remote path with the
+// pinned 17 client; SERVER_NUM is its server_version_num), dumped from DUMP (exit DUMP_EXIT); DB_URL_DB is the database
+// the URL names. update_server (container upd) and Coolify (coolify-db) dump UPD_DUMP and COOL_DUMP. Every in-container
+// tar script (`--entrypoint sh ... -c <script>`) really runs, with a fake tar that archives VOLDIR (EMPTYDIR for an empty
+// server-state) and exits TAR_EXIT1_VOLUME -> 1, TAR_FAIL_VOLUME -> 2, TAR_STATE_RC for the kernels state copy.
 function fakeDocker(dir) {
   const mock = path.join(dir, 'docker.sh');
+  const bin = path.join(dir, 'bin'); fs.mkdirSync(bin);
+  fs.writeFileSync(path.join(bin, 'tar'), `#!/bin/sh
+case "$*" in *z*) "$REALTAR" -czf - -C "$SRC" .;; *) "$REALTAR" -cf - -C "$SRC" .;; esac
+exit "\${TAR_RC:-0}"
+`);
   fs.writeFileSync(path.join(dir, 'mounts.tsv'), MOUNTS.map((m) => m.join('\t')).join('\n') + '\n');
   fs.writeFileSync(mock, `#!/bin/sh
 printf '%s\\n' "$*" >> "$CALLS"
 for last in "$@"; do :; done
+script=; prev=; vol=
+for a in "$@"; do [ "$prev" = -c ] && [ -z "$script" ] && script=$a; case "$a" in *:/source:ro) vol=\${a%%:*};; esac; prev=$a; done
+REALTAR=$(command -v tar); export REALTAR
+runtar() { SRC=$1 TAR_RC=$2 PATH="$FAKEBIN:$PATH" sh -c "$script"; }
 case "$*" in
 *'ps -a'*'name=dbhost'*) [ "$DB_CONTAINER" = 1 ] && echo dbhost; exit 0;;
 *'ps -a'*'ssam.default=true'*) echo backend-new;;
@@ -104,7 +113,7 @@ case "$*" in
   upd|upd2) if [ "$UPD_MISSING" = 1 ]; then echo POSTGRES_DB=other; else echo POSTGRES_DB=update_server; fi; echo "POSTGRES_PASSWORD=${SECRET}";;
   dbhost) echo POSTGRES_DB=postgres; echo "POSTGRES_PASSWORD=${SECRET}";;
   coolify-db) echo POSTGRES_DB=coolify; echo "POSTGRES_PASSWORD=${SECRET}";;
-  *) echo "SSAM_DATABASE_URL=postgres://ssam:${SECRET}@dbhost:5432/postgres";; esac;;
+  *) echo "SSAM_DATABASE_URL=postgres://ssam:${SECRET}@dbhost:5432/\${DB_URL_DB:-postgres}";; esac;;
 *'inspect'*'.NetworkSettings.Networks'*) echo coolify;;
 *'inspect --format {{.Image}} dbhost'*) echo sha256:pg18image;;
 *'inspect'*'eq .Type'*) awk -F '\\t' -v c="$last" '$1==c {printf "%s\\t%s\\n", $2, $3}' "$MOUNTS";;
@@ -116,17 +125,19 @@ case "$*" in
 *'inspect'*'.State.Running'*) case "$last" in upd|upd2|coolify-db|dbhost) echo true;; router) echo "\${ROUTER_RUNNING:-\${RUNNING:-true}}";; *) echo "\${RUNNING:-true}";; esac;;
 *'inspect'*'.Config.Image'*) case "$last" in upd|upd2) echo postgres:17-alpine;; coolify-db) echo postgres:15-alpine;; dbhost) echo postgres:18-alpine;; *) echo ssam-server:test;; esac;;
 *'inspect'*'.Image'*) echo sha256:serverimage;;
+'exec dbhost'*'--version'*) printf 'postgres (PostgreSQL) 18.6\\npg_dump (PostgreSQL) 18.6\\n';;
 'exec upd'*'--version'*) printf '%s\\n' "\${UPD_VERSIONS:-postgres (PostgreSQL) 17.11}" "\${UPD_PG_DUMP:-pg_dump (PostgreSQL) 17.11}";;
 'exec coolify-db'*'--version'*) printf 'postgres (PostgreSQL) 15.19\\npg_dump (PostgreSQL) 15.19\\n';;
+'exec dbhost'*'pg_dump -U'*) [ -n "$DUMP" ] && cat "$DUMP"; exit "\${DUMP_EXIT:-0}";;
 'exec upd'*'pg_dump -U'*) [ -n "$UPD_DUMP" ] && cat "$UPD_DUMP"; exit 0;;
 'exec coolify-db'*'pg_dump -U'*) [ -n "$COOL_DUMP" ] && cat "$COOL_DUMP"; exit 0;;
-*'run'*'show server_version_num'*) echo "$SERVER_NUM";;
+*'run'*'show server_version_num'*) [ -n "$SSAM_DATABASE_URL" ] || exit 9; echo "$SERVER_NUM";;
 *'run'*'postgres:17'*'pg_dump --version'*) echo 'pg_dump (PostgreSQL) 17.11';;
 *'run'*'pg_dump --version'*) echo 'pg_dump (PostgreSQL) 18.1';;
-*'run'*'pg_dump postgres:'*) [ -n "$DUMP" ] && cat "$DUMP"; exit "\${DUMP_EXIT:-0}";;
-*'run'*'--entrypoint tar'*) echo volume-bytes;;
-*'run'*'proj_server-state:/source:ro'*) if [ "$EMPTY_STATE" = 1 ]; then tar -cf - -C "$EMPTYDIR" .; else tar -cf - -C "$VOLDIR" .; fi;;
-*'run'*':/source:ro'*) tar -cf - -C "$VOLDIR" .;;
+*'run'*'exec pg_dump --no-owner'*) [ -n "$SSAM_DATABASE_URL" ] || exit 9; [ -n "$DUMP" ] && cat "$DUMP"; exit "\${DUMP_EXIT:-0}";;
+*'run'*'/source/state:ro'*) runtar "$VOLDIR" "\${TAR_STATE_RC:-0}";;
+*'run'*':/source:ro'*) src=$VOLDIR; [ "$vol" = proj_server-state ] && [ "$EMPTY_STATE" = 1 ] && src=$EMPTYDIR
+  rc=0; [ "$vol" = "$TAR_EXIT1_VOLUME" ] && rc=1; [ "$vol" = "$TAR_FAIL_VOLUME" ] && rc=2; runtar "$src" "$rc";;
 *'run'*':/restore'*) cat > /dev/null;;
 *) :;;
 esac
@@ -144,37 +155,52 @@ function setup(dump, {db = '1', server = '180006', exit = '0', upd = UPDATE_SERV
   const out = path.join(dir, 'out'); fs.mkdirSync(out);
   const write = (name, text) => { const f = path.join(dir, name); fs.writeFileSync(f, text); return slash(f); };
   const dumpFile = write('dump.sql', dump ?? '');
-  const vol = path.join(dir, 'vol'); fs.mkdirSync(vol); fs.writeFileSync(path.join(vol, 'kernel.json'), '{}');
+  const vol = path.join(dir, 'vol'); fs.mkdirSync(path.join(vol, 'customers', 'tok_a'), {recursive: true});
+  fs.writeFileSync(path.join(vol, 'kernel.json'), '{}'); fs.writeFileSync(path.join(vol, 'customers', 'tok_a', 'w.json'), '{}');
   const empty = path.join(dir, 'empty'); fs.mkdirSync(empty);
   const services = path.join(dir, 'services', 'proj'); fs.mkdirSync(services, {recursive: true});
   fs.writeFileSync(path.join(services, 'docker-compose.yml'), 'services: {}\n'); fs.writeFileSync(path.join(services, '.env'), `X=${SECRET}\n`);
-  const env = {...process.env, DOCKER: `sh ${slash(fakeDocker(dir))}`, CALLS: slash(path.join(dir, 'calls')), DB_CONTAINER: db,
+  const sourceEnv = write('coolify-source.env', `APP_KEY=${APP_KEY}\n`);
+  fakeDocker(dir);
+  const env = {...process.env, DOCKER: `sh ${slash(path.join(dir, 'docker.sh'))}`, CALLS: slash(path.join(dir, 'calls')), DB_CONTAINER: db,
     SERVER_NUM: server, DUMP: dump === null ? '' : dumpFile, DUMP_EXIT: exit, MSYS_NO_PATHCONV: '1',
     UPD_DUMP: upd === null ? '' : write('upd.sql', upd), COOL_DUMP: cool === null ? '' : write('cool.sql', cool),
-    MOUNTS: slash(path.join(dir, 'mounts.tsv')), VOLDIR: posix(vol), EMPTYDIR: posix(empty),
-    SSAM_COOLIFY_SERVICES_DIR: posix(path.join(dir, 'services')), SSAM_BACKUP_MIN_FREE_GB: '0'};
-  for (const k of ['PG_IMAGE', 'SSAM_BACKUP_DATABASES', 'SSAM_BACKUP_REQUIRE_DATABASE', 'BACKUP_KEEP_DAYS', 'SSAM_CONTAINER', 'SSAM_PROJECT', 'UPD2', 'UPD_MISSING', 'EMPTY_STATE', 'RUNNING', 'ROUTER_RUNNING', 'UPD_VERSIONS', 'UPD_PG_DUMP']) delete env[k];
+    MOUNTS: slash(path.join(dir, 'mounts.tsv')), VOLDIR: posix(vol), EMPTYDIR: posix(empty), FAKEBIN: posix(path.join(dir, 'bin')),
+    SSAM_COOLIFY_SERVICES_DIR: posix(path.join(dir, 'services')), SSAM_COOLIFY_SOURCE_ENV: posix(sourceEnv), SSAM_BACKUP_MIN_FREE_GB: '0'};
+  for (const k of ['PG_IMAGE', 'SSAM_BACKUP_DATABASES', 'SSAM_BACKUP_REQUIRE_DATABASE', 'BACKUP_KEEP_DAYS', 'SSAM_CONTAINER', 'SSAM_PROJECT',
+    'SSAM_DATABASE_URL', 'SSAM_BACKUP_KEEP_SETS', 'SSAM_BACKUP_ALLOW_SHRINK', 'SSAM_BACKUP_STATE_REQUIRED', 'SSAM_BACKUP_MIN_RATIO']) delete env[k];
   Object.assign(env, extra);
   return {dir, out, env, calls: () => fs.readFileSync(path.join(dir, 'calls'), 'utf8')};
 }
-const backup = (s) => spawnSync(bash, [slash(ssamctl), 'backup', slash(s.out)], {encoding: 'utf8', env: s.env});
+const backup = (s, ...args) => spawnSync(bash, [slash(ssamctl), 'backup', ...args, slash(s.out)], {encoding: 'utf8', env: s.env});
 const files = (s, re) => fs.readdirSync(s.out).filter((f) => re.test(f));
+const gunzip = (f) => zlib.gunzipSync(fs.readFileSync(f)).toString();
+const run = (s, command) => spawnSync(bash, ['-c', command], {encoding: 'utf8', env: s.env});
+function manifestOf(s, archive) {
+  const r = run(s, `tar --force-local -xzf "${posix(archive)}" -O manifest.tsv`);
+  assert.equal(r.status, 0, r.stderr);
+  return r.stdout.trim().split('\n').slice(1).map((l) => l.split('\t'));
+}
+const noSecret = (s, ...texts) => {
+  for (const t of [...texts, s.calls()]) { assert.ok(!t.includes(SECRET), 'the database password was printed or put on a command line'); assert.ok(!t.includes(APP_KEY), 'the APP_KEY was printed'); }
+};
+// A failed run leaves nothing in the folder: no orphan dump, no staging or work folder, no partial file.
+const nothingLeft = (s) => assert.deepEqual(fs.readdirSync(s.out), []);
 
-test('backup dumps the licenses with the database container own image and checks the license tables', () => {
+test('backup dumps the licenses with the pg_dump inside their own container, over the local socket', () => {
   const s = setup(LICENSES);
   try {
     const r = backup(s);
     assert.equal(r.status, 0, r.stdout + r.stderr);
     const [dump] = files(s, /^ssam-tokens-.*\.sql\.gz$/);
     assert.ok(dump, 'no ssam-tokens dump');
-    assert.match(zlib.gunzipSync(fs.readFileSync(path.join(s.out, dump))).toString(), /CREATE TABLE public\.server_tokens/);
-    assert.equal(files(s, /\.partial/).length, 0);
-    const dumps = s.calls().split('\n').filter((l) => / pg_dump postgres:/.test(l));
+    assert.match(gunzip(path.join(s.out, dump)), /CREATE TABLE public\.server_tokens/);
+    assert.equal(files(s, /\.partial|^\.set-/).length, 0);
+    const dumps = s.calls().split('\n').filter((l) => /^exec dbhost sh -c exec pg_dump -U/.test(l));
     assert.equal(dumps.length, 1);
-    assert.match(dumps[0], /sha256:pg18image/);
-    assert.doesNotMatch(dumps[0], /postgres:17/);
-    assert.match(r.stdout, /PostgreSQL 18 dumped by pg_dump 18, .*server_tokens rows: 2/);
-    assert.ok(!(r.stdout + r.stderr).includes(SECRET), 'the database password was printed');
+    assert.doesNotMatch(s.calls(), /postgres:17|exec pg_dump --no-owner/);
+    assert.match(r.stdout, /licenses database: container dbhost, PostgreSQL 18 dumped by pg_dump 18, .*server_tokens rows: 2/);
+    noSecret(s, r.stdout, r.stderr);
   } finally { fs.rmSync(s.dir, {recursive: true, force: true}); }
 });
 
@@ -183,42 +209,50 @@ test('backup refuses loudly a dump of another database, before the volumes are c
   try {
     const r = backup(s);
     assert.equal(r.status, 2, r.stdout + r.stderr);
-    assert.match(r.stderr, /BACKUP_DUMP_NO_LICENSE_TABLES: the dump has no table server_tokens/);
-    assert.deepEqual(files(s, /^ssam-(tokens|state)-/), []);
-    assert.doesNotMatch(s.calls(), /--entrypoint tar|\/source:ro|exec upd|exec coolify-db/);
-    assert.ok(!(r.stdout + r.stderr).includes(SECRET));
+    assert.match(r.stderr, /BACKUP_DUMP_NO_LICENSE_TABLES: the licenses dump \(dbhost\) has no table server_tokens/);
+    nothingLeft(s);
+    assert.doesNotMatch(s.calls(), /\/source:ro|exec upd|exec coolify-db/);
+    noSecret(s, r.stdout, r.stderr);
   } finally { fs.rmSync(s.dir, {recursive: true, force: true}); }
 });
 
-test('backup refuses an empty dump and a failed pg_dump', () => {
-  for (const [dump, exit, code] of [['', '0', /BACKUP_DUMP_EMPTY/], [LICENSES, '1', /BACKUP_DUMP_FAILED/]]) {
-    const s = setup(dump, {exit});
+test('backup refuses an empty dump, a failed pg_dump, a licenses database with no license, and a URL naming another database', () => {
+  for (const [dump, opts, code] of [['', {}, /BACKUP_DUMP_EMPTY/], [LICENSES, {exit: '1'}, /BACKUP_DUMP_FAILED/],
+    [LICENSES_EMPTY, {}, /BACKUP_DUMP_NO_ROWS: the licenses dump \(dbhost\) has 0 rows in server_tokens/],
+    [LICENSES, {extra: {DB_URL_DB: 'other'}}, /BACKUP_DB_MISMATCH: the database named in SSAM_DATABASE_URL of backend-new is not the POSTGRES_DB of its container dbhost/]]) {
+    const s = setup(dump, opts);
     try {
       const r = backup(s);
       assert.equal(r.status, 2, r.stdout + r.stderr);
       assert.match(r.stderr, code);
-      assert.deepEqual(files(s, /^ssam-(tokens|state)-|\.partial/), []);
+      assert.match(r.stderr, /backup: FAILED \(exit 2\)/);
+      nothingLeft(s);
+      noSecret(s, r.stdout, r.stderr);
     } finally { fs.rmSync(s.dir, {recursive: true, force: true}); }
   }
 });
 
-test('backup refuses a pg_dump older than the server instead of writing an empty file', () => {
+test('a remote licenses database: the URL only in the environment, and a pg_dump older than the server is refused', () => {
   const s = setup(LICENSES, {db: '0'});
   try {
     const r = backup(s);
     assert.equal(r.status, 2, r.stdout + r.stderr);
     assert.match(r.stderr, /BACKUP_PG_DUMP_TOO_OLD: pg_dump 17 cannot dump a PostgreSQL 18 server/);
-    assert.doesNotMatch(s.calls(), / pg_dump postgres:/);
-    assert.deepEqual(files(s, /^ssam-(tokens|state)-/), []);
+    assert.doesNotMatch(s.calls(), /exec pg_dump --no-owner/);
+    assert.match(s.calls(), /run --rm -i --network coolify .* -e SSAM_DATABASE_URL postgres:17\.11-alpine\S* sh -c exec psql "\$SSAM_DATABASE_URL"/);
+    nothingLeft(s);
+    noSecret(s, r.stdout, r.stderr);
   } finally { fs.rmSync(s.dir, {recursive: true, force: true}); }
 });
 
-test('the same fallback client still dumps a server of its own major version', () => {
-  const s = setup(LICENSES, {db: '0', server: '170005'});
+test('the same fallback client still dumps a remote server of its own major version, with the URL in its environment', () => {
+  const s = setup(LICENSES.replace(/version 18\.6/g, 'version 17.5'), {db: '0', server: '170005'});
   try {
     const r = backup(s);
     assert.equal(r.status, 0, r.stdout + r.stderr);
-    assert.match(s.calls(), /postgres:17\.11-alpine.* pg_dump postgres:/);
+    assert.match(s.calls(), /-e SSAM_DATABASE_URL postgres:17\.11-alpine\S* sh -c exec pg_dump --no-owner --no-privileges "\$SSAM_DATABASE_URL"/);
+    assert.match(r.stdout, /licenses database: remote, PostgreSQL 17 dumped by pg_dump 17, .*server_tokens rows: 2/);
+    noSecret(s, r.stdout, r.stderr);
   } finally { fs.rmSync(s.dir, {recursive: true, force: true}); }
 });
 
@@ -235,12 +269,33 @@ test('backup-before-redeploy runs ssamctl backup of its own folder over ssh and 
         assert.equal(fs.readdirSync(dir).filter((f) => /^ssam-tokens-.*\.sql\.gz$/.test(f)).length, 1);
         // The layout rollback-kernels.sh reads: server-state and friction of the default backend.
         assert.equal(fs.readdirSync(dir).filter((f) => /^state-.*\.tar\.gz$/.test(f)).length, 1);
-        assert.match(s.calls(), /run .*proj_server-state:\/source\/state:ro .*--entrypoint tar sha256:serverimage -czf - -C \/source state friction/);
+        assert.match(s.calls(), /run .*proj_server-state:\/source\/state:ro .*--entrypoint sh sha256:serverimage -c tar -czf - -C \/source state friction/);
       } else {
         assert.match(r.stderr, /BACKUP_DUMP_NO_LICENSE_TABLES/);
         assert.deepEqual(fs.readdirSync(dir).filter((f) => /^ssam-(tokens|state)-/.test(f)), []);
       }
-      assert.ok(!(r.stdout + r.stderr).includes(SECRET));
+      noSecret(s, r.stdout, r.stderr);
+    } finally { fs.rmSync(s.dir, {recursive: true, force: true}); }
+  }
+});
+
+test('backup-before-redeploy keeps the kernels state copy on tar exit 1 and stops with a code on any other failure', () => {
+  for (const [rc, status] of [['1', 0], ['2', 2]]) {
+    const s = setup(LICENSES, {extra: {TAR_STATE_RC: rc}});
+    try {
+      const env = {...s.env, SSAM_SSH: `sh ${slash(fakeSsh(s.dir))} root@vps`, SSAM_BACKUP_BASE: posix(s.out)};
+      const r = spawnSync(bash, [slash(wrapper), 'online'], {encoding: 'utf8', env});
+      assert.equal(r.status, status, r.stdout + r.stderr);
+      const dir = path.join(s.out, 'pre-online');
+      const state = fs.readdirSync(dir).filter((f) => /^state-/.test(f));
+      if (status === 0) {
+        assert.match(r.stderr, /a file changed while it was read \(online copy, tar exit 1\); kept/);
+        assert.equal(state.filter((f) => /^state-.*\.tar\.gz$/.test(f)).length, 1);
+        assert.equal(state.filter((f) => /\.sha256$/.test(f)).length, 1);
+      } else {
+        assert.match(r.stderr, /BACKUP_STATE_FAILED: the kernels state copy of backend-new failed/);
+        assert.deepEqual(state, []);
+      }
     } finally { fs.rmSync(s.dir, {recursive: true, force: true}); }
   }
 });
@@ -260,20 +315,12 @@ test('backup-before-redeploy refuses a server without SSAM_DATABASE_URL and a ba
   } finally { fs.rmSync(s.dir, {recursive: true, force: true}); }
 });
 
-// --- The complete backup (daily cron and pre-redeploy, 2026-11-09): three databases, every volume of the resource. ---
-const backupArgs = (s, ...args) => spawnSync(bash, [slash(ssamctl), 'backup', ...args, slash(s.out)], {encoding: 'utf8', env: s.env});
-const gunzip = (f) => zlib.gunzipSync(fs.readFileSync(f)).toString();
-function manifestOf(s, archive) {
-  const x = path.join(s.dir, 'x'); fs.mkdirSync(x, {recursive: true});
-  const r = spawnSync(bash, ['-c', `tar --force-local -xzf "${posix(archive)}" -C "${posix(x)}" manifest.tsv && cat "${posix(x)}/manifest.tsv"`], {encoding: 'utf8'});
-  assert.equal(r.status, 0, r.stderr);
-  return r.stdout.trim().split('\n').slice(1).map((l) => l.split('\t'));
-}
+// --- The complete set: three databases, the Coolify definition with its APP_KEY, every volume of the resource. ---
 
 test('backup writes the licenses, update_server and Coolify dumps, each with its own major, and every volume of the resource', () => {
   const s = setup(LICENSES);
   try {
-    const r = backupArgs(s);
+    const r = backup(s);
     assert.equal(r.status, 0, r.stdout + r.stderr);
     const out = fs.readdirSync(s.out);
     const stamp = out.find((f) => /^ssam-state-.*\.tar\.gz$/.test(f)).slice('ssam-state-'.length, -'.tar.gz'.length);
@@ -282,18 +329,19 @@ test('backup writes the licenses, update_server and Coolify dumps, each with its
       assert.ok(out.includes(f), `missing ${f}`);
       assert.ok(out.includes(f + '.sha256'), `missing ${f}.sha256`);
     }
-    assert.deepEqual(out.filter((f) => /\.partial|^\.ssam-window-/.test(f)), [], 'work files left behind');
-    // Licenses: the image of the licenses container (18), never the pinned 17; the other two: pg_dump INSIDE their container.
-    assert.match(gunzip(path.join(s.out, `ssam-tokens-${stamp}.sql.gz`)), /CREATE TABLE public\.server_tokens/);
+    assert.deepEqual(out.filter((f) => /\.partial|^\.ssam-window-|^\.set-/.test(f)), [], 'work files left behind');
     assert.match(gunzip(path.join(s.out, `ssam-db-update_server-${stamp}.sql.gz`)), /CREATE TABLE public\.releases/);
     assert.match(gunzip(path.join(s.out, `ssam-db-coolify-${stamp}.sql.gz`)), /CREATE TABLE public\.instance_settings/);
     const calls = s.calls();
-    assert.match(calls, /run .*sha256:pg18image pg_dump postgres:/);
-    assert.doesNotMatch(calls, /postgres:17\.11-alpine/);
+    assert.match(calls, /^exec dbhost sh -c exec pg_dump -U/m);
     assert.match(calls, /^exec upd sh -c exec pg_dump -U/m);
     assert.match(calls, /^exec coolify-db sh -c exec pg_dump -U/m);
-    assert.match(r.stdout, /update_server database: container upd, PostgreSQL 17 dumped by pg_dump 17/);
-    assert.match(r.stdout, /coolify database: container coolify-db, PostgreSQL 15 dumped by pg_dump 15/);
+    assert.doesNotMatch(calls, /postgres:17\.11-alpine/);
+    assert.match(r.stdout, /update_server database: container upd, PostgreSQL 17 dumped by pg_dump 17, .*releases rows: 1/);
+    assert.match(r.stdout, /coolify database: container coolify-db, PostgreSQL 15 dumped by pg_dump 15, .*servers rows: 1/);
+    // The Coolify definition: the resource's compose and .env, and Coolify's own .env (APP_KEY), never printed.
+    const service = run(s, `tar -tzf "${posix(path.join(s.out, `ssam-service-${stamp}.tar.gz`))}"`).stdout.split('\n').filter(Boolean).sort();
+    assert.deepEqual(service, ['coolify-source.env', 'proj/.env', 'proj/docker-compose.yml']);
     // Every named volume once (shared server-state and plugins included), the unmounted project volume, no anonymous one.
     const copies = calls.split('\n').filter((l) => /:\/source:ro /.test(l)).map((l) => l.match(/-v (\S+):\/source:ro/)[1]);
     assert.deepEqual([...copies].sort(), [...NAMED].sort());
@@ -306,22 +354,22 @@ test('backup writes the licenses, update_server and Coolify dumps, each with its
     assert.ok(rows.some(([c, , , d, v]) => c === '-' && d === '-' && v === 'proj_cache'));
     assert.ok(!rows.some((row) => row[4] === ANON || row[4] === 'proj-other_x'));
     assert.equal(new Set(rows.map((row) => row[5])).size, NAMED.length);
-    // The .info: key value lines (the console collector), complete set, anonymous volumes named, no secret anywhere.
     const info = fs.readFileSync(archive + '.info', 'utf8');
     for (const re of [/^created \d{8}T\d{6}Z$/m, /^project proj$/m, /^mode online$/m, /^containers +backend-new backend-old router console$/m,
-      new RegExp(`^skipped-anonymous-volumes +${ANON}$`, 'm'),
+      new RegExp(`^skipped-anonymous-volumes +${ANON}$`, 'm'), /^state-files 2$/m, /^state-bytes \d+$/m,
       /^databases licenses=ssam-tokens-\S+ update_server=ssam-db-update_server-\S+ coolify=ssam-db-coolify-\S+$/m,
       /^service ssam-service-/m]) assert.match(info, re);
     assert.match(r.stdout, /backup: OK /);
-    assert.ok(!(r.stdout + r.stderr + info).includes(SECRET), 'a secret was printed');
+    noSecret(s, r.stdout, r.stderr, info);
   } finally { fs.rmSync(s.dir, {recursive: true, force: true}); }
 });
 
-test('backup refuses an update_server or Coolify dump of another major, of another database, or empty', () => {
+test('backup refuses an update_server or Coolify dump of another major, of another database, empty, without rows or ambiguous, leaving no orphan', () => {
   const cases = [
     [{extra: {UPD_PG_DUMP: 'pg_dump (PostgreSQL) 18.1'}}, /BACKUP_PG_DUMP_MAJOR: the update_server container upd has PostgreSQL 17 and pg_dump 18/],
     [{upd: UPDATE_SERVER.replace('-- Dumped by pg_dump version 17.11', '-- Dumped by pg_dump version 16.4')}, /BACKUP_PG_DUMP_MAJOR: the update_server dump says server 17, pg_dump 16/],
-    [{upd: LICENSES.replace(/18\.[16]/g, '17.11')}, /BACKUP_DUMP_NO_EXPECTED_TABLES: the update_server dump \(upd\) has no table releases/],
+    [{upd: LICENSES.replace(/18\.6/g, '17.11')}, /BACKUP_DUMP_NO_EXPECTED_TABLES: the update_server dump \(upd\) has no table releases/],
+    [{upd: UPDATE_SERVER.replace(/COPY public\.releases[\s\S]*$/, '')}, /BACKUP_DUMP_NO_ROWS: the update_server dump \(upd\) has 0 rows in releases/],
     [{cool: ''}, /BACKUP_DUMP_EMPTY: pg_dump of the coolify database wrote nothing/],
     [{extra: {UPD2: '1'}}, /BACKUP_DB_NOT_FOUND: expected one running postgres container with POSTGRES_DB=update_server, found upd upd2/],
     [{extra: {UPD_MISSING: '1'}}, /BACKUP_DB_NOT_FOUND: .*found none/],
@@ -329,28 +377,63 @@ test('backup refuses an update_server or Coolify dump of another major, of anoth
   for (const [opts, code] of cases) {
     const s = setup(LICENSES, opts);
     try {
-      const r = backupArgs(s);
+      const r = backup(s);
       assert.equal(r.status, 2, r.stdout + r.stderr);
       assert.match(r.stderr, code);
-      // Nothing that looks like a complete set: no window archive, no .info, no partial file, no volume copied.
-      assert.deepEqual(fs.readdirSync(s.out).filter((f) => /^ssam-state-|\.partial/.test(f)), []);
+      // The licenses dump made before the failure went with the staging folder: no orphan for a later restore to pick.
+      nothingLeft(s);
       assert.doesNotMatch(s.calls(), /:\/source:ro/);
-      assert.ok(!(r.stdout + r.stderr).includes(SECRET));
+      noSecret(s, r.stdout, r.stderr);
     } finally { fs.rmSync(s.dir, {recursive: true, force: true}); }
   }
 });
 
-test('backup refuses an empty server-state and a disk without room, and leaves no archive', () => {
-  for (const [extra, code] of [[{EMPTY_STATE: '1'}, /BACKUP_STATE_EMPTY: the server-state volume proj_server-state is empty/],
-    [{SSAM_BACKUP_MIN_FREE_GB: '99999999'}, /BACKUP_DISK_LOW: .* GiB free, the backup needs 99999999 GiB; nothing was written/]]) {
+test('a volume copy with tar exit 1 is kept; tar exit 2 stops the backup and cleans the staging and work folders', () => {
+  for (const [extra, status] of [[{TAR_EXIT1_VOLUME: 'proj_cache-new'}, 0], [{TAR_FAIL_VOLUME: 'proj_cache-old'}, 2]]) {
     const s = setup(LICENSES, {extra});
     try {
-      const r = backupArgs(s);
-      assert.equal(r.status, 2, r.stdout + r.stderr);
-      assert.match(r.stderr, code);
-      assert.deepEqual(fs.readdirSync(s.out).filter((f) => /^ssam-state-|\.partial|^\.ssam-window-/.test(f)), []);
+      const r = backup(s);
+      assert.equal(r.status, status, r.stdout + r.stderr);
+      if (status === 0) {
+        assert.match(r.stderr, /backup: a file changed while it was read \(online copy, tar exit 1\); kept/);
+        assert.equal(files(s, /^ssam-state-.*\.tar\.gz\.info$/).length, 1);
+        assert.deepEqual(files(s, /^\.set-|^\.ssam-window-|\.partial/), []);
+      } else {
+        assert.match(r.stderr, /BACKUP_VOLUME_FAILED: the copy of volume proj_cache-old failed/);
+        assert.match(r.stderr, /backup: FAILED \(exit 2\)/);
+        nothingLeft(s);
+      }
     } finally { fs.rmSync(s.dir, {recursive: true, force: true}); }
   }
+});
+
+test('backup refuses an empty or reset server-state, a shrunk one, a disk without room, and a missing Coolify APP_KEY', () => {
+  const previous = (s, files, bytes) => {
+    fs.writeFileSync(path.join(s.out, 'ssam-state-20261101T033000Z.tar.gz.info'), `created 20261101T033000Z\nstate-files ${files}\nstate-bytes ${bytes}\ndatabases licenses=x\n`);
+  };
+  const cases = [
+    [{EMPTY_STATE: '1'}, null, /BACKUP_STATE_EMPTY: the server-state volume proj_server-state is empty/],
+    [{SSAM_BACKUP_STATE_REQUIRED: 'kernel.json customers/ machine-pins.json'}, null, /BACKUP_STATE_EMPTY: the server-state volume proj_server-state has no machine-pins.json/],
+    [{}, [1000, 1], /BACKUP_SHRANK: server-state has 2 files \/ \d+ bytes, the previous set 1000 \/ 1 \(below 50%\)/],
+    [{}, [1, 99999999], /BACKUP_SHRANK: .*the previous set 1 \/ 99999999/],
+    [{SSAM_BACKUP_MIN_FREE_GB: '99999999'}, null, /BACKUP_DISK_LOW: .* GiB free, the backup needs 99999999 GiB; nothing was written/],
+    [{SSAM_COOLIFY_SOURCE_ENV: '/nonexistent/.env'}, null, /BACKUP_SERVICE_FAILED: no \/nonexistent\/\.env \(Coolify's APP_KEY\)/],
+  ];
+  for (const [extra, prev, code] of cases) {
+    const s = setup(LICENSES, {extra});
+    try {
+      if (prev) previous(s, ...prev);
+      const r = backup(s, '--keep-days', '1');
+      assert.equal(r.status, 2, r.stdout + r.stderr);
+      assert.match(r.stderr, code);
+      assert.deepEqual(fs.readdirSync(s.out).filter((f) => !/^ssam-state-20261101T033000Z/.test(f)), []);
+      if (prev) assert.ok(fs.existsSync(path.join(s.out, 'ssam-state-20261101T033000Z.tar.gz.info')), 'a refused run pruned');
+      noSecret(s, r.stdout, r.stderr);
+    } finally { fs.rmSync(s.dir, {recursive: true, force: true}); }
+  }
+  // An intended clean-up is accepted once with SSAM_BACKUP_ALLOW_SHRINK=1.
+  const s = setup(LICENSES, {extra: {SSAM_BACKUP_ALLOW_SHRINK: '1'}});
+  try { previous(s, 1000, 1); assert.equal(backup(s).status, 0); } finally { fs.rmSync(s.dir, {recursive: true, force: true}); }
 });
 
 test('backup without SSAM_DATABASE_URL is refused unless the server is a tokens.json one', () => {
@@ -358,46 +441,62 @@ test('backup without SSAM_DATABASE_URL is refused unless the server is a tokens.
   try {
     const mock = path.join(s.dir, 'docker.sh');
     fs.writeFileSync(mock, fs.readFileSync(mock, 'utf8').replace(/echo "SSAM_DATABASE_URL=[^"]*"/, 'echo SSAM_RUNTIME_DIR=/data/server'));
-    const refused = backupArgs(s);
+    const refused = backup(s);
     assert.equal(refused.status, 2, refused.stdout + refused.stderr);
     assert.match(refused.stderr, /BACKUP_NO_DATABASE_URL/);
     s.env.SSAM_BACKUP_REQUIRE_DATABASE = '0'; s.env.SSAM_BACKUP_DATABASES = '';
-    const r = backupArgs(s);
+    const r = backup(s);
     assert.equal(r.status, 0, r.stdout + r.stderr);
-    assert.match(fs.readFileSync(path.join(s.out, fs.readdirSync(s.out).find((f) => f.endsWith('.tar.gz.info'))), 'utf8'), /^databases none$/m);
+    assert.match(fs.readFileSync(path.join(s.out, files(s, /\.tar\.gz\.info$/)[0]), 'utf8'), /^databases none$/m);
   } finally { fs.rmSync(s.dir, {recursive: true, force: true}); }
 });
 
-test('retention removes only this folder\'s sets older than --keep-days, after a good run', () => {
+// Old sets on disk: complete ones (an .info with a databases line), a legacy backup.sh one, an orphan dump.
+function oldSet(s, stamp, {complete = true, days = 30} = {}) {
+  const when = Date.now() / 1000 - days * 86400;
+  const names = [`ssam-state-${stamp}.tar.gz`, `ssam-state-${stamp}.tar.gz.sha256`, `ssam-tokens-${stamp}.sql.gz`, `ssam-db-coolify-${stamp}.sql.gz`, `ssam-service-${stamp}.tar.gz`];
+  for (const f of names) fs.writeFileSync(path.join(s.out, f), 'x');
+  fs.writeFileSync(path.join(s.out, `ssam-state-${stamp}.tar.gz.info`), complete ? `created ${stamp}\nstate-files 2\nstate-bytes 1\ndatabases licenses=ssam-tokens-${stamp}.sql.gz\n` : `created ${stamp}\nproject ssam-prod\nmode stopped\n`);
+  for (const f of [...names, `ssam-state-${stamp}.tar.gz.info`]) fs.utimesSync(path.join(s.out, f), when, when);
+  return [...names, `ssam-state-${stamp}.tar.gz.info`];
+}
+
+test('retention keeps the 7 newest complete sets whatever their age, removes older sets whole, orphans and legacy sets by age', () => {
   const s = setup(LICENSES);
   try {
-    const old = Date.now() / 1000 - 30 * 86400;
-    const oldFiles = ['ssam-state-20261001T033001Z.tar.gz', 'ssam-state-20261001T033001Z.tar.gz.sha256', 'ssam-state-20261001T033001Z.tar.gz.info',
-      'ssam-tokens-20261001T033001Z.sql.gz', 'ssam-db-coolify-20261001T033001Z.sql.gz', 'ssam-service-20261001T033001Z.tar.gz'];
+    // A cron that failed for weeks: eight complete sets, all 30+ days old; a legacy set; an orphan dump; other files.
+    const complete = Array.from({length: 8}, (_, i) => `202609${String(10 + i).padStart(2, '0')}T033001Z`);
+    const sets = Object.fromEntries(complete.map((st, i) => [st, oldSet(s, st, {days: 40 - i})]));
+    const legacy = oldSet(s, '20261020T033001Z', {complete: false, days: 20});
+    const orphan = 'ssam-tokens-20261021T033001Z.sql.gz'; fs.writeFileSync(path.join(s.out, orphan), 'x');
+    const old = Date.now() / 1000 - 30 * 86400; fs.utimesSync(path.join(s.out, orphan), old, old);
     const kept = ['cron.log', 'coolify-tokens-20261001T014201Z.sql.gz'];
-    for (const f of [...oldFiles, ...kept]) { fs.writeFileSync(path.join(s.out, f), 'x'); fs.utimesSync(path.join(s.out, f), old, old); }
+    for (const f of kept) { fs.writeFileSync(path.join(s.out, f), 'x'); fs.utimesSync(path.join(s.out, f), old, old); }
     fs.mkdirSync(path.join(s.out, 'pre-r44')); fs.writeFileSync(path.join(s.out, 'pre-r44', 'licenses.sql.gz'), 'x');
     fs.utimesSync(path.join(s.out, 'pre-r44', 'licenses.sql.gz'), old, old);
     // A failed run removes nothing.
     s.env.UPD2 = '1';
-    assert.equal(backupArgs(s, '--keep-days', '14').status, 2);
-    for (const f of oldFiles) assert.ok(fs.existsSync(path.join(s.out, f)), `a failed run removed ${f}`);
+    assert.equal(backup(s, '--keep-days', '14').status, 2);
+    for (const f of Object.values(sets).flat()) assert.ok(fs.existsSync(path.join(s.out, f)), `a failed run removed ${f}`);
     delete s.env.UPD2;
-    const r = backupArgs(s, '--keep-days', '14');
+    const r = backup(s, '--keep-days', '14');
     assert.equal(r.status, 0, r.stdout + r.stderr);
-    for (const f of oldFiles) assert.ok(!fs.existsSync(path.join(s.out, f)), `kept ${f}`);
+    // The new set + the 6 newest old complete sets stay; the 2 oldest go whole, with the legacy set and the orphan.
+    for (const st of complete.slice(2)) for (const f of sets[st]) assert.ok(fs.existsSync(path.join(s.out, f)), `removed ${f} of a protected set`);
+    for (const st of complete.slice(0, 2)) for (const f of sets[st]) assert.ok(!fs.existsSync(path.join(s.out, f)), `kept ${f}`);
+    for (const f of [...legacy, orphan]) assert.ok(!fs.existsSync(path.join(s.out, f)), `kept ${f}`);
     for (const f of kept) assert.ok(fs.existsSync(path.join(s.out, f)), `removed ${f}`);
     assert.ok(fs.existsSync(path.join(s.out, 'pre-r44', 'licenses.sql.gz')), 'removed a pre-redeploy backup');
-    assert.equal(fs.readdirSync(s.out).filter((f) => /^ssam-state-.*\.tar\.gz$/.test(f)).length, 1);
-    assert.match(r.stdout, /removed .*ssam-state-20261001T033001Z\.tar\.gz \(older than 14 days\)/);
+    assert.equal(files(s, /^ssam-state-.*\.tar\.gz\.info$/).length, 7);
+    assert.match(r.stdout, /removed .*ssam-state-20260910T033001Z\.tar\.gz \(set 20260910T033001Z, older than 14 days, not among the 7 newest complete sets\)/);
   } finally { fs.rmSync(s.dir, {recursive: true, force: true}); }
 });
 
 test('restore puts every archived volume back, router, console and unmounted ones included, only with all stopped', () => {
   const s = setup(LICENSES);
   try {
-    assert.equal(backupArgs(s).status, 0);
-    const archive = path.join(s.out, fs.readdirSync(s.out).find((f) => /^ssam-state-.*\.tar\.gz$/.test(f)));
+    assert.equal(backup(s).status, 0);
+    const archive = path.join(s.out, files(s, /^ssam-state-.*\.tar\.gz$/)[0]);
     const restore = () => spawnSync(bash, [slash(ssamctl), 'restore', slash(archive)], {encoding: 'utf8', env: s.env});
     s.env.RUNNING = 'false'; s.env.ROUTER_RUNNING = 'true';
     const refused = restore();

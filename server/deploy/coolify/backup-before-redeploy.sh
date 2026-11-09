@@ -62,10 +62,15 @@ vol() { $D inspect --format "{{range .Mounts}}{{if eq .Destination \"$2\"}}{{.Na
 state_volume=$(vol "$c" /data/server); friction_volume=$(vol "$c" /data/friction)
 [ -n "$state_volume" ] && [ -n "$friction_volume" ] || say "the default backend $c has no /data/server or /data/friction volume"
 stamp=$(date -u +%Y%m%dT%H%M%SZ)
+# An online copy: GNU tar exit 1 (a file changed while it was read, e.g. a server.log that grows) keeps the archive, as
+# window-backup.sh does; any other failure stops with a code, and the archive gets its final name only once it reads back.
+part=$dir/state-$stamp.tar.gz.partial
 $D run --rm --network none --security-opt no-new-privileges:true --cap-drop ALL --user 10001:10001 \
-  -v "$state_volume:/source/state:ro" -v "$friction_volume:/source/friction:ro" --entrypoint tar \
-  "$($D inspect --format '{{.Image}}' "$c")" -czf - -C /source state friction > "$dir/state-$stamp.tar.gz"
-[ -s "$dir/state-$stamp.tar.gz" ] || say "BACKUP_STATE_EMPTY: state-$stamp.tar.gz is empty"
+  -v "$state_volume:/source/state:ro" -v "$friction_volume:/source/friction:ro" --entrypoint sh \
+  "$($D inspect --format '{{.Image}}' "$c")" -c 'tar -czf - -C /source state friction; s=$?; if [ "$s" -eq 1 ]; then echo "backup-before-redeploy: a file changed while it was read (online copy, tar exit 1); kept" >&2; s=0; fi; exit "$s"' \
+  < /dev/null > "$part" || { rm -f "$part"; say "BACKUP_STATE_FAILED: the kernels state copy of $c failed"; }
+[ -s "$part" ] && gzip -t "$part" || { rm -f "$part"; say "BACKUP_STATE_EMPTY: state-$stamp.tar.gz is empty or does not read back"; }
+mv "$part" "$dir/state-$stamp.tar.gz"
 (cd "$dir" && sha256sum "state-$stamp.tar.gz" > "state-$stamp.tar.gz.sha256")
 echo "OK: licenses $tokens ($(wc -c < "$tokens") bytes, PostgreSQL ${version:-?}), window $window ($(du -h "$window" | cut -f1)), kernels state $dir/state-$stamp.tar.gz ($(du -h "$dir/state-$stamp.tar.gz" | cut -f1))$dbs"
 REMOTE
