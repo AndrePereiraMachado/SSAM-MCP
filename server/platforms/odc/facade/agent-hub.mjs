@@ -130,6 +130,15 @@ export const normalizeKernel = (kernel = {}) => {
     odcBridge: typeof kernel?.odcBridge === 'string' && kernel.odcBridge ? kernel.odcBridge : null,
     ...(kernel?.o11Hook === 'h1' ? { o11Hook: 'h1' } : {}),
     ...(Array.isArray(kernel?.o11BridgeAccepted) ? {o11BridgeAccepted: kernel.o11BridgeAccepted.filter(p => /^d\d+$/.test(p))} : {}),
+    // kernel.json o11PackBuiltFor (vigia bridgeMode ed25519-offers, F1 review M2): the agent-pack thin-bridge builds this server
+    // accepts for its OWN Service Studio when no signed bridge is installed for it (the exact build, and a build the owner proved
+    // loads in it). Absent: as before (any build of the served window).
+    ...(Array.isArray(kernel?.o11PackBuiltFor) ? {o11PackBuiltFor: [...new Set(kernel.o11PackBuiltFor.map(v => threePart(v)).filter(Boolean))]} : {}),
+    // kernel.json o11ProvenBuilds (F1 review round 3, M-1): for other Service Studios, the builds a verified o11BridgeProven proof
+    // covers ({"11.55.96": ["11.55.94"]}). Read only with o11PackBuiltFor.
+    ...(Array.isArray(kernel?.o11PackBuiltFor) && kernel?.o11ProvenBuilds && typeof kernel.o11ProvenBuilds === 'object' && !Array.isArray(kernel.o11ProvenBuilds)
+      ? {o11ProvenBuilds: Object.fromEntries(Object.entries(kernel.o11ProvenBuilds).filter(([v, b]) => threePart(v) === v && Array.isArray(b))
+        .map(([v, b]) => [v, [...new Set(b.map(x => threePart(x)).filter(Boolean))]]))} : {}),
     // kernel.json odcBridgeAccepted (owner, 2026-10-08): older ODC bridges the server still serves, so a bridge bump does
     // not cut the customers that have not installed the new agent package yet.
     ...(Array.isArray(kernel?.odcBridgeAccepted) ? { odcBridgeAccepted: kernel.odcBridgeAccepted.filter(v => typeof v === 'string' && v) } : {}) };
@@ -168,16 +177,55 @@ export function compatibility(hello, kernel, lanes, { refused = null, bridges = 
     // (reconcile-merge from ODC v106 on, bridge-store.mjs AGENT_NEEDS), is never offered to it.
     const offer=capable&&version&&bridges?.offer(lane,version,accepted,reports,hello??null);
     const m=offer?(typeof offer.manifest==='string'?JSON.parse(offer.manifest):offer.manifest):null;
-    const active=m&&reports.some(r=>r.lane===lane&&r.studioVersion===version&&r.protocol===m.protocol&&r.sequence===m.sequence&&['active','installed'].includes(r.status));
-    const effective=active?{...hello,pack:{...hello.pack,...(lane==='odc'?{odcBridge:m.protocol}:{o11BuiltFor:version,o11Hook:m.protocol})}}:hello;
-    const result = laneCompatibility(lane, effective, k, lanes ?? [], refused?.[lane] ?? null);
+    // A downloaded bridge of this Studio that the agent reports installed or active (it verified the signed manifest itself).
+    const reported=(protocol,from=1)=>reports.some(r=>r.lane===lane&&r.studioVersion===version&&r.protocol===protocol&&Number.isSafeInteger(r.sequence)&&r.sequence>=from&&['active','installed'].includes(r.status));
+    // The offer is active when the agent holds it or a LATER sequence of it (F1 review M3): an older pair that still offers
+    // sequence n never re-offers it to an agent that installed n+1 from a newer pair (the agent refuses a replay, and the lane
+    // would stay BRIDGE_UPDATE_REQUIRED with no way out).
+    const active=m&&reported(m.protocol,m.sequence);
+    // Not the offered sequence (an older one while a newer is offered, or a fallback after the newer failed to load), but still a
+    // signed O11 bridge built for exactly this Service Studio, of a protocol this server accepts.
+    const downloaded=!active&&capable&&lane==='o11'&&version?accepted.find(p=>reported(p))??null:null;
+    const effective=active?{...hello,pack:{...hello.pack,...(lane==='odc'?{odcBridge:m.protocol}:{o11BuiltFor:version,o11Hook:m.protocol})}}
+      :downloaded?{...hello,pack:{...hello.pack,o11BuiltFor:version,o11Hook:downloaded}}:hello;
+    let result = laneCompatibility(lane, effective, k, lanes ?? [], refused?.[lane] ?? null);
     const needsO11=lane==='o11'&&threePart(hello?.pack?.o11BuiltFor)!==version;
+    // F1 review M2 and round 3 M-1, a family rule: on a kernel that names its accepted pack builds (o11PackBuiltFor, vigia
+    // ed25519-offers), EVERY installed Service Studio (this pair's own, a newer one the window answers "newer" for, an older one
+    // still served) is served only through a thin bridge built for exactly that build: the pack's own build of it, a build a
+    // verified o11BridgeProven proof covers for it (o11PackBuiltFor for the pair's own Studio, o11ProvenBuilds for the others),
+    // or a signed bridge installed for it. Never through a thin bridge built for another Service Studio (it binds to the exact
+    // Studio assemblies it was compiled against). An agent that can take a verified offer for that Studio gets it below
+    // (BRIDGE_UPDATE_REQUIRED); one that cannot is told what to install (packBuildRefusal). The same answer when the build is
+    // not even in the window any more (11.55.94 left it). A kernel without o11PackBuiltFor (server-only) answers as before.
+    const built = threePart(hello?.pack?.o11BuiltFor);
+    const builtFor = v => [v, ...(v === k.o11 ? k.o11PackBuiltFor ?? [] : []), ...(k.o11ProvenBuilds?.[v] ?? [])];
+    if (lane === 'o11' && k.o11PackBuiltFor && version && !active && !downloaded && !builtFor(version).includes(built)
+        && (result.ok || (result.code === 'AGENT_PACK_MISMATCH' && !result.needs && Array.isArray(hello?.pack?.lanes) && hello.pack.lanes.includes('o11')
+          && !servedVersions('o11', k).includes(built)))) result = packBuildRefusal(hello, version, capable);
     // A refusal for a command the agent lacks (needs) is never turned into an offer: no bridge fixes it, only the agent package.
     if (capable && offer && !active && ((result.code === 'AGENT_PACK_MISMATCH' && !result.needs)||(result.ok&&needsO11))) {
       if (offer) return [lane, result.ok ? {...result, bridgeOffer:offer} : {...result, ok:false, code:'BRIDGE_UPDATE_REQUIRED', message:'Install the signed bridge and reconnect.', bridgeOffer:offer}];
     }
     return [lane,result];
   }));
+}
+// The refusal of a pack thin bridge built for another Service Studio on a kernel with o11PackBuiltFor: code AGENT_PACK_MISMATCH
+// (the family the agents already handle), a cause that says what the person does, and no `needs` (an agent that can take the
+// signed bridge is offered it, compatibility above).
+//   AGENT_UPDATE_REQUIRED: the agent cannot install signed bridges (app 0.2.7, empty trust anchor): install the current app.
+//   BRIDGE_PACK_REQUIRED: a macOS agent (no automatic bridge downloads there): an agent package with that build is needed.
+//   BRIDGE_NOT_INSTALLED: an agent that takes offers, but no signed bridge can be installed here now (none published for that
+//                         Studio, or it failed or was refused on this machine); with an offer it is BRIDGE_UPDATE_REQUIRED instead.
+export function packBuildRefusal(hello, version, capable) {
+  const built = threePart(hello?.pack?.o11BuiltFor) ?? 'none';
+  const head = 'The agent package\'s Service Studio bridge was built for ' + built + ', not for Service Studio ' + version + ', and a thin bridge loads only in the Service Studio it was built for. ';
+  if (capable) return { ok: false, code: 'AGENT_PACK_MISMATCH', cause: 'BRIDGE_NOT_INSTALLED', message: head
+    + 'This server has no signed bridge for Service Studio ' + version + ' that this machine can install now: none is published for it, or the published one failed to install or load here. Restart Service Studio to retry; if it persists, send the SSAM Agent bridge status to the server owner.' };
+  if (hello?.agent?.platform === 'darwin') return { ok: false, code: 'AGENT_PACK_MISMATCH', cause: 'BRIDGE_PACK_REQUIRED', message: head
+    + 'This macOS SSAM Agent does not install signed bridges by itself. Ask the server owner for an SSAM Agent package with a bridge built for Service Studio ' + version + '.' };
+  return { ok: false, code: 'AGENT_PACK_MISMATCH', cause: 'AGENT_UPDATE_REQUIRED', message: head
+    + 'This SSAM Agent cannot install the signed bridge this server offers for it. Install the current SSAM Agent (app 0.2.8 or later): it installs that bridge by itself on its next connection.' };
 }
 function laneCompatibility(lane, hello, kernel, lanes, refused) {
   const no = (code, message, extra = {}) => ({ ok: false, code, message, ...extra });

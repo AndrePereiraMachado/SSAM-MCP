@@ -405,5 +405,70 @@ test('a vault without an Authenticode thumbprint is accepted only in server-only
 });
 test('server-only never builds or signs a client bridge, even when asked',async t=>{
  const f=await fixture(t),runs=[];const adapter=createAutoRuntime(f.config,{...f.base,run:async(...a)=>{runs.push(a);return f.base.run(...a);}});
- await assert.rejects(adapter.buildBridges({odc:'1.7.30',o11:'11.55.94'},{},f.dir),/only in the signed-offers bridge mode/);assert.deepEqual(runs,[]);
+ await assert.rejects(adapter.buildBridges({odc:'1.7.30',o11:'11.55.94'},{},f.dir),/only in the signed-offers and ed25519-offers bridge modes/);assert.deepEqual(runs,[]);
+});
+// F1 (C:\t\r5\PLANO-AGENTE-AUTO.md 3.A): bridgeMode ed25519-offers. The round compiles the client bridges (here: a fake that
+// writes a signed store like the real stage), gates the pair on the published pack's hello offered then installed, and checks
+// after the deployment that the 0.2.8 hello receives the offer and the 0.2.7 one does not. Nothing is Authenticode-signed.
+function offeredStore(lanes){
+ return async()=>{
+  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'ed25519-stage-')),keys=generateKeyPairSync('ed25519'),offers=[];
+  fs.writeFileSync(path.join(dir,'public-key.pem'),keys.publicKey.export({type:'spki',format:'pem'}));
+  for(const [lane,v,p,names] of [['odc','1.7.32','v109',['bridge/ODC3.Bridge.v109.dll','client/ODC3.Bridge.Client.dll']],['o11','11.55.95','d1',['bridge/Anvil.Bridge.dll','hook/Anvil.RuntimeHook.Agent.dll']]].filter(x=>lanes.includes(x[0]))){
+   const sub=path.join(dir,lane,v,p),files=[];
+   for(const name of names){const bytes=Buffer.from('fixture '+name);fs.mkdirSync(path.dirname(path.join(sub,name)),{recursive:true});fs.writeFileSync(path.join(sub,name),bytes);files.push({path:name,sha256:createHash('sha256').update(bytes).digest('hex'),size:bytes.length,signer:'owner'});}
+   const raw=Buffer.from(JSON.stringify({schema:1,lane,studioVersion:v,runtime:'net10.0',protocol:p,sequence:1,createdAt:new Date().toISOString(),files}));
+   fs.writeFileSync(path.join(sub,'manifest.json'),raw);fs.writeFileSync(path.join(sub,'manifest.sig'),sign(null,raw,keys.privateKey));offers.push({lane,studioVersion:v,protocol:p,sequence:1});
+  }
+  return {stage:dir,mode:'ed25519-offers',offers,kernel:{ignored:true}};
+ };
+}
+function offersRound(f,{lanes=['odc','o11']}={}){
+ const s=serverOnlyRound(f);let offered=0;
+ s.config={...s.config,bridgeMode:'ed25519-offers',observed:[{lane:'odc',version:'1.7.32',fullVersion:'1.7.32.11065',studio:'odc',tfm:'net10.0'},{lane:'o11',version:'11.55.95',fullVersion:'11.55.95.65352',studio:'o11',tfm:'net10.0'}]};
+ const build=offeredStore(lanes);
+ Object.assign(s.ops,{buildBridges:async(...a)=>{f.calls.push('bridges');const r=await build(...a);offered=r.offers.length;s.ops.stage=r.stage;return r;},
+  build:async()=>{f.calls.push('image');return {...release(f.dir).built,odc:'1.7.32',o11:'11.55.95'};},
+  smoke:async()=>{f.calls.push('smoke');s.ops.smoked={hello:s.ops.packHello,expect:s.ops.offerExpect};return {ok:true,publishedPack:!!s.ops.packHello,offersChecked:offered};}});
+ return s;
+}
+const cleanStage=s=>{if(s.ops.stage)fs.rmSync(s.ops.stage,{recursive:true,force:true});};
+test('ed25519-offers round: a Service Studio without a published thin bridge is offered the signed d1 bridge, gated before any test, checked after the deployment',async t=>{
+ const f=await fixture(t),s=offersRound(f);t.after(()=>cleanStage(s));
+ const result=await roundOf(s);assert.equal(result.status,'live',JSON.stringify(result));
+ assert.ok(f.calls.indexOf('bridges')<f.calls.indexOf('test'),'the offers gate runs before any test');assert.ok(f.calls.indexOf('smoke')<f.calls.indexOf('publish'));
+ assert.deepEqual(signingCalls(s.runs),[],'no Authenticode signing anywhere');
+ assert.deepEqual(s.ops.bridgeKernel.o11BridgeAccepted,['d1']);assert.equal(s.ops.bridgeKernel.o11,'11.55.95');assert.ok(s.ops.bridgeKernel.odcBridgeAccepted.includes('v109')||s.ops.bridgeKernel.odcBridge==='v109');
+ assert.deepEqual(s.ops.smoked.hello.bridges.map(b=>[b.lane,b.protocol,b.status]),[['o11','d1','installed']]);
+ assert.equal(s.ops.smoked.expect.offerHello.capabilities.bridgeOffer,true);assert.equal(s.ops.smoked.expect.legacyHello.capabilities.bridgeOffer,false);assert.deepEqual(s.ops.smoked.expect.offerLanes,['o11']);
+ const check=s.runs.map(r=>{try{return JSON.parse(r.input);}catch{return null;}}).find(r=>r?.action==='check'&&!r.rollback);
+ assert.equal(check.requirePresented,true);
+ const expected=JSON.parse(/^const expected=(.*);\n/.exec(check.checkSource)[1]),key='11.55.95|1.7.32';
+ assert.deepEqual(expected.offerLanes,{[key]:['o11']});assert.equal(expected.offerHellos[key].capabilities.bridgeOffer,true);assert.equal(expected.legacyHellos[key].capabilities.bridgeOffer,false);
+ assert.deepEqual(expected.packHellos[key].bridges.map(b=>b.protocol),['d1']);assert.deepEqual(expected.offers[key].map(o=>o.protocol),['v109','d1'],'the offers are the new pair\'s only (A1)');assert.equal(check.requireOffers,2);
+ const saved=readJournal(path.join(f.dir,result.id,'release.json'));
+ assert.equal(saved.bridgeMode,'ed25519-offers');assert.equal(saved.bridges.mode,'ed25519-offers');
+ // This window serves 11.55.93 and 11.55.95 only: a 0.2.7 agent on 11.55.95 (its default 11.55.94 thin bridge) is refused there.
+ assert.deepEqual(saved.bridges.legacy,{odc:{ok:true},o11:{ok:false,code:'AGENT_PACK_MISMATCH',cause:'AGENT_UPDATE_REQUIRED'}});assert.equal(saved.bridges.agentRelease,'c'.repeat(40));
+});
+test('ed25519-offers round: without a signed O11 offer the lane waits (client-bridge-update-required) and nothing is tested or deployed',async t=>{
+ const f=await fixture(t),s=offersRound(f,{lanes:['odc']});t.after(()=>cleanStage(s));
+ const result=await roundOf(s);assert.equal(result.status,'deferred',JSON.stringify(result));
+ assert.match(result.error,/client bridge update required: o11 11\.55\.95 runtime net10\.0 \(the published pack's hello is refused \(AGENT_PACK_MISMATCH: The agent package's Service Studio bridge was built for 11\.55\.94, not for Service Studio 11\.55\.95.*\) and no signed offer reaches it\)/);
+ assert.ok(s.notes.includes('SSAM: client bridge update required'),s.notes.join());
+ for(const step of ['test','image','smoke','publish','compose','deploy'])assert.ok(!f.calls.includes(step),step);
+ assert.equal(readJournal(path.join(f.dir,result.id,'attempt.json')).code,'client-bridge-update-required');
+});
+test('ed25519-offers round (R7): an agent release without the owner signature waits before any bridge is built',async t=>{
+ const f=await fixture(t),s=offersRound(f);
+ f.base.agentReleaseFiles=async()=>{throw Object.assign(Error('agentReleaseCommit ccccccc has no valid owner signature; sign the reviewed agent release commit.'),{code:'AGENT_RELEASE_UNSIGNED'});};
+ const result=await roundOf(s);assert.equal(result.status,'deferred',JSON.stringify(result));
+ assert.match(result.error,/The reviewed agent release cannot be read \(agentReleaseCommit ccccccc has no valid owner signature/);
+ assert.equal(readJournal(path.join(f.dir,result.id,'attempt.json')).code,'agent-release-required');
+ for(const step of ['bridges','bundle odc','test','image','publish'])assert.ok(!f.calls.includes(step),step);
+});
+test('ed25519-offers round: an image smoke that did not offer every signed bridge deploys nothing',async t=>{
+ const f=await fixture(t),s=offersRound(f),smoke=s.ops.smoke;t.after(()=>cleanStage(s));s.ops.smoke=async(...a)=>({...(await smoke(...a)),offersChecked:1});
+ const result=await roundOf(s);assert.equal(result.status,'failed',JSON.stringify(result));assert.match(result.error,/did not offer and deliver every signed bridge/);
+ for(const step of ['publish','compose','deploy'])assert.ok(!f.calls.includes(step),step);
 });

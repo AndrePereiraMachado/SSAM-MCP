@@ -1,7 +1,9 @@
 // vigia.ps1 -RehearseCurrent: the real round on the Studio versions already served, stopped before anything changes outside this
 // machine. The real custody, installer verification, tests, image build and image smoke run. In signed-offers mode the bridges
 // are built and signed, the offer is asked of the built image and the signed store lands in this rehearsal's own folder; in
-// server-only mode (the default) no bridge is built and the image must accept the published agent pack's hello. It never takes the VPS lock, publishes,
+// server-only mode (the default) no bridge is built and the image must accept the published agent pack's hello; in ed25519-offers
+// mode the bridges are built with an Ed25519 manifest only (no Authenticode), the image must offer them to the published pack's
+// hello and accept it with them installed, and the signed store lands in this rehearsal's folder. It never takes the VPS lock, publishes,
 // pins, backs up, patches or deploys, and it never runs the live snapshot, which issues and revokes a token on the live server.
 // Three fences: these operations are replaced here, the Coolify and SSH doors refuse by themselves (auto-runtime.mjs), and the
 // command runner refuses a push (runtime.mjs). Everything is kept under <outDir>/rehearsals/<stamp>, so no real round reads it.
@@ -44,13 +46,19 @@ async function finish(config,ops,{release,smoke}){
   if(smoke?.publishedPack!==true)throw Error('The built image was not asked the published agent pack hello.');
   return {status:'rehearsed',id:release.id,bridgeMode:'server-only',tag:release.built.tag,sha256:release.built.sha256,offers:[],kernel:release.kernel,hello:{odcBridge:release.bridges.hello?.pack?.odcBridge??null,o11BuiltFor:release.bridges.hello?.pack?.o11BuiltFor??null},listing:{tools:smoke.tools,totalBytes:smoke.totalBytes,coreBytes:smoke.coreBytes},notRun:NEVER_IN_REHEARSAL};
  }
- const offers=release.bridges?.offers??[];
+ const offers=release.bridges?.offers??[],ed25519=release.bridges?.mode==='ed25519-offers';
  if(!offers.length||smoke?.offersChecked!==offers.length)throw Error('The built image did not offer every signed bridge.');
+ // ed25519-offers: the image also accepted the published pack's hello with the offers installed (and offered them to it first).
+ if(ed25519&&smoke?.publishedPack!==true)throw Error('The built image was not asked the published agent pack hello.');
  const store=path.join(config.rehearsal.dir,'store');
  fs.cpSync(release.bridges.stage,store,{recursive:true});fs.rmSync(release.bridges.stage,{recursive:true,force:true});
  const key=fs.readFileSync(path.join(store,'public-key.pem'));
- const published=offers.map(o=>{const m=verifyBridge(path.join(store,o.lane,o.studioVersion,o.protocol),key).manifest;return {lane:m.lane,studioVersion:m.studioVersion,protocol:m.protocol,runtime:m.runtime,sequence:m.sequence,files:m.files.length};});
- return {status:'rehearsed',id:release.id,store,tag:release.built.tag,sha256:release.built.sha256,offers:published,kernel:release.kernel,listing:{tools:smoke.tools,totalBytes:smoke.totalBytes,coreBytes:smoke.coreBytes},notRun:NEVER_IN_REHEARSAL};
+ const published=offers.map(o=>{const m=verifyBridge(path.join(store,o.lane,o.studioVersion,o.protocol),key).manifest;
+  if(ed25519&&m.authenticodeThumbprint!=null)throw Error('An ed25519-offers manifest names an Authenticode thumbprint.');
+  return {lane:m.lane,studioVersion:m.studioVersion,protocol:m.protocol,runtime:m.runtime,sequence:m.sequence,files:m.files.length,...(ed25519?{signers:Object.fromEntries(['owner','microsoft'].map(c=>[c,m.files.filter(f=>f.signer===c).length]))}:{})};});
+ return {status:'rehearsed',id:release.id,...(ed25519?{bridgeMode:'ed25519-offers'}:{}),store,tag:release.built.tag,sha256:release.built.sha256,offers:published,kernel:release.kernel,
+  ...(ed25519?{hello:{odcBridge:release.bridges.hello?.pack?.odcBridge??null,o11BuiltFor:release.bridges.hello?.pack?.o11BuiltFor??null,installed:(release.bridges.hello?.bridges??[]).map(b=>b.lane+' '+b.protocol+'#'+b.sequence)},offerLanes:release.bridges.offerLanes??[],legacy:release.bridges.legacy??null}:{}),
+  listing:{tools:smoke.tools,totalBytes:smoke.totalBytes,coreBytes:smoke.coreBytes},notRun:NEVER_IN_REHEARSAL};
 }
 export async function rehearseCurrent(config,runtime,{manifest,now=Date.now()}){
  if(!config.rehearsal?.dir)throw Error('A rehearsal runs only with its own folder.');

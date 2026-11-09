@@ -5,6 +5,10 @@ import path from 'node:path';
 import {createHash, verify} from 'node:crypto';
 const sha = b => createHash('sha256').update(b).digest('hex');
 const version = /^\d+\.\d+\.\d+$/;
+// The manifest's authenticodeThumbprint: 40 hex in the signed-offers manifests (an agent before 0.2.8 checks the owner's
+// Authenticode with it); absent or null in the ed25519-offers ones (vigia bridgeMode ed25519-offers), which only an agent that
+// trusts the Ed25519 manifest alone takes (app 0.2.8: agent 0.3.17 / native 0.4.14 ignore the field). Any other value is
+// malformed and refused. Every dll/exe entry still needs its signer class, and the Ed25519 signature always verifies first.
 export function verifyBridge(directory, publicKey) {
   const bytes = fs.readFileSync(path.join(directory, 'manifest.json'));
   if (bytes.length > 256 * 1024) throw Error('Bridge manifest too large.');
@@ -13,7 +17,8 @@ export function verifyBridge(directory, publicKey) {
   const m = JSON.parse(bytes);
   if (m.schema !== 1 || !['odc','o11'].includes(m.lane) || !version.test(m.studioVersion) ||
       !/^(v\d+|d\d+)$/.test(m.protocol) || !Number.isSafeInteger(m.sequence) || m.sequence<1 || !/^net\d+\.\d+$/.test(m.runtime) ||
-      !/^[a-fA-F0-9]{40}$/.test(m.authenticodeThumbprint) || !Array.isArray(m.files) || !m.files.length || m.files.length > 128)
+      !(m.authenticodeThumbprint == null || /^[a-fA-F0-9]{40}$/.test(m.authenticodeThumbprint)) ||
+      !Array.isArray(m.files) || !m.files.length || m.files.length > 128)
     throw Error('Bridge manifest identity is invalid.');
   const files = new Map(), names = new Set();
   for (const f of m.files) {
@@ -21,6 +26,9 @@ export function verifyBridge(directory, publicKey) {
         !/^[a-f0-9]{64}$/.test(f.sha256) || !Number.isSafeInteger(f.size) || f.size < 1 || f.size > 64 * 1024 * 1024)
       throw Error('Bridge file entry is invalid.');
     if (/\.(dll|exe)$/i.test(f.path) && !['owner','microsoft'].includes(f.signer)) throw Error('Bridge executable signer is invalid.');
+    // The agents' owner-only paths (bridge-updates.mjs and BridgeUpdates.cs, SIGNER_REFUSED): an ODC3.* or Anvil.* entry point and
+    // anything under hook/ is the owner's, never a Microsoft dependency.
+    if (/\.(dll|exe)$/i.test(f.path) && /(^|\/)(odc3\.|anvil\.)|^hook\//i.test(f.path) && f.signer !== 'owner') throw Error('Bridge executable signer is invalid.');
     names.add(f.path);
     const file = path.join(directory, f.path), stat = fs.lstatSync(file);
     if (stat.isSymbolicLink() || !stat.isFile() || stat.size !== f.size || sha(fs.readFileSync(file)) !== f.sha256)
