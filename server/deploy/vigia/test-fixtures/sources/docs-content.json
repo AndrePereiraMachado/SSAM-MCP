@@ -1,0 +1,26 @@
+{
+ "versionInfo": {
+  "hasModuleVersionChanged": true,
+  "hasApiVersionChanged": false
+ },
+ "data": {
+  "Html": "<h2 id=\"odc_studio_1.7.32\" >ODC Studio 1.7.32</h2>\r\n<div class=\"info\"><p>Released on Nov 08, 2026</p></div>\r\n<ul>\r\n<li>(trimmed)</li>\r\n</ul>\r\n\r\n<h2 id=\"odc_studio_1.7.31\" >ODC Studio 1.7.31</h2>\r\n<div class=\"info\"><p>Released on Nov 02, 2026</p></div>\r\n<ul>\r\n<li>(trimmed)</li>\r\n</ul>\r\n\r\n<h2 id=\"odc_studio_1.7.30\" >ODC Studio 1.7.30</h2>\r\n<div class=\"info\"><p>Released on Oct 26, 2026</p></div>\r\n<ul>\r\n<li>(trimmed)</li>\r\n</ul>\r\n\r\n<h2 id=\"odc_studio_1.7.29\" >ODC Studio 1.7.29</h2>\r\n<div class=\"info\"><p>Released on Oct 19, 2026</p></div>\r\n<ul>\r\n<li>(trimmed)</li>\r\n</ul>\r\n",
+  "ContentLocale": "",
+  "LastUpdated": "2026-11-08T09:40:19Z",
+  "HasAccess": true,
+  "PagePrivacy": "",
+  "RepoName": "Support",
+  "Repo_PublicName": "docs-support",
+  "Content_Href": "src/release-notes/odc/odc-studio/odc-studio.md",
+  "HasGithubPublic": false,
+  "Repo_PublicBranch": "master",
+  "Platform_VersionId": "0",
+  "RepoURL": {
+   "O11RepoURL": "",
+   "ODCRepoURL": ""
+  },
+  "IsToLoadRapiDocJSScript": false,
+  "BestPractices_O11RepoURL": ""
+ },
+ "rolesInfo": ","
+}

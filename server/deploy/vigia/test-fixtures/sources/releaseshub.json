@@ -1,0 +1,62 @@
+{
+ "ODCStudio/1.7.30.10945/windows": {
+  "location": "https://dxejw4oyledi.cloudfront.net/repository/odcstudio/1.7.30.10945/ODCStudio-1.7.30.10945.exe",
+  "lastModified": "Mon, 19 Oct 2026 17:17:37 GMT",
+  "size": 287626472
+ },
+ "ODCStudio/1.7.30.10954/windows": {
+  "location": "https://dxejw4oyledi.cloudfront.net/repository/odcstudio/1.7.30.10954/ODCStudio-1.7.30.10954.exe",
+  "lastModified": "Mon, 26 Oct 2026 15:17:44 GMT",
+  "size": 287565056
+ },
+ "ODCStudio/1.7.30.10980/windows": {
+  "location": "https://dxejw4oyledi.cloudfront.net/repository/odcstudio/1.7.30.10980/ODCStudio-1.7.30.10980.exe",
+  "lastModified": "Mon, 26 Oct 2026 16:44:33 GMT",
+  "size": 287510472
+ },
+ "ODCStudio/1.7.31.10988/windows": {
+  "location": "https://dxejw4oyledi.cloudfront.net/repository/odcstudio/1.7.31.10988/ODCStudio-1.7.31.10988.exe",
+  "lastModified": "Mon, 02 Nov 2026 09:06:43 GMT",
+  "size": 287519080
+ },
+ "ODCStudio/1.7.32.11035/windows": {
+  "location": "https://dxejw4oyledi.cloudfront.net/repository/odcstudio/1.7.32.11035/ODCStudio-1.7.32.11035.exe",
+  "lastModified": "Mon, 02 Nov 2026 23:39:10 GMT",
+  "size": 287827376
+ },
+ "ODCStudio/1.7.32.11059/windows": {
+  "location": "https://dxejw4oyledi.cloudfront.net/repository/odcstudio/1.7.32.11059/ODCStudio-1.7.32.11059.exe",
+  "lastModified": "Thu, 05 Nov 2026 18:49:57 GMT",
+  "size": 287841000
+ },
+ "ODCStudio/1.7.32.11065/windows": {
+  "location": "https://dxejw4oyledi.cloudfront.net/repository/odcstudio/1.7.32.11065/ODCStudio-1.7.32.11065.exe",
+  "lastModified": "Sun, 08 Nov 2026 09:40:04 GMT",
+  "size": 287852448
+ },
+ "ODCStudio/1.7.32.11065/macosx": {
+  "location": "https://dxejw4oyledi.cloudfront.net/repository/odcstudio/1.7.32.11065/ODCStudio-1.7.32.11065.dmg",
+  "lastModified": "Sun, 08 Nov 2026 09:40:09 GMT",
+  "size": 402761175
+ },
+ "ODCStudio/1.7.32.11065/macosx_arm64": {
+  "location": "https://dxejw4oyledi.cloudfront.net/repository/odcstudio/1.7.32.11065/ODCStudio-1.7.32.11065_arm64.dmg",
+  "lastModified": "Sun, 08 Nov 2026 09:40:15 GMT",
+  "size": 389704390
+ },
+ "ServiceStudio/11.55.95.65352/windows": {
+  "location": "https://dxejw4oyledi.cloudfront.net/repository/servicestudio/11.55.95.65352/ServiceStudio-11.55.95.65352.exe",
+  "lastModified": "Mon, 02 Nov 2026 09:35:13 GMT",
+  "size": 351668800
+ },
+ "ServiceStudio/11.55.95.65352/macosx": {
+  "location": "https://dxejw4oyledi.cloudfront.net/repository/servicestudio/11.55.95.65352/ServiceStudio-11.55.95.65352.dmg",
+  "lastModified": "Mon, 02 Nov 2026 09:35:21 GMT",
+  "size": 457849738
+ },
+ "ServiceStudio/11.55.95.65352/macosx_arm64": {
+  "location": "https://dxejw4oyledi.cloudfront.net/repository/servicestudio/11.55.95.65352/ServiceStudio-11.55.95.65352_arm64.dmg",
+  "lastModified": "Mon, 02 Nov 2026 09:35:31 GMT",
+  "size": 443612066
+ }
+}
