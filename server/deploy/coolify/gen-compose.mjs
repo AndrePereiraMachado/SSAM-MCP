@@ -60,8 +60,30 @@ export function versionBackends(manifest,window=manifest.window??4){
   if(seen.has(name))throw new Error('Duplicate backend.');seen.add(name);
   return {name,odc:b.odc,o11:sortVersions(o11.served),kernels:sortVersions(carried),image:`${b.image}:${b.tag}${b.sha256?'@sha256:'+b.sha256.replace(/^sha256:/,''):''}`};
  });
+ retiringOf(manifest,out);
  // Newest ODC first, as the watcher orders the pairs: ssam-server-v1 is the default backend in both windows.
  return out.sort((a,b)=>newerVersion(a.odc,b.odc)?-1:newerVersion(b.odc,a.odc)?1:0);
+}
+// Window 4x4, phase S2 (C:/t/r5/janela-4x4/DESENHO.md 2.2, owner decision 7b): "retiring" names, per lane, the version that
+// left the window's keep and is still served until retireAt (the grace period), {"odc"?: {version, retireAt}, "o11"?: {...}}:
+// its users get studioRetiring on every answer (studio-identity.mjs), and the watcher's compose-only round removes it after
+// retireAt (vigia/window.mjs retireDue). A retiring ODC is one of the backends; a retiring O11 is one of o11.served (its
+// kernel stays in the images until the next O11 rebuild). It is checked here and rides in SSAM_SERVED_VERSIONS (servedLists).
+const ISO_DAY=/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/;
+export function retiringOf(manifest,backends=null){
+ const r=manifest?.retiring;
+ if(r===undefined)return null;
+ if(!r||typeof r!=='object'||Array.isArray(r)||Object.keys(r).some(k=>!['odc','o11'].includes(k)))throw new Error('Invalid retiring: {odc?, o11?}.');
+ const out={};
+ for(const [lane,v] of Object.entries(r)){
+  if(!v||typeof v!=='object'||Object.keys(v).sort().join()!=='retireAt,version'||!/^\d+\.\d+\.\d+$/.test(v.version??'')||!ISO_DAY.test(v.retireAt??'')||Number.isNaN(Date.parse(v.retireAt)))throw new Error('Invalid retiring.'+lane+': {version, retireAt (ISO UTC)}.');
+  const served=lane==='odc'?(backends??[]).map(b=>b.odc):manifest.o11?.served??[];
+  if(!served.includes(v.version))throw new Error('The retiring '+lane+' '+v.version+' is not served by the window.');
+  const newer=served.filter(x=>x!==v.version);
+  if(!newer.length||newer.some(x=>!newerVersion(x,v.version)))throw new Error('The retiring '+lane+' '+v.version+' must be the oldest of its lane, with a newer one served.');
+  out[lane]={version:v.version,retireAt:v.retireAt};
+ }
+ return Object.keys(out).length?out:null;
 }
 // The window of a manifest when the caller names none: a backend window is 4 (the 4x4 window), a pair window 3 (as before).
 export const windowOf=manifest=>manifest.window??(isBackendManifest(manifest)?4:3);
@@ -95,7 +117,8 @@ const threeParts=list=>Array.isArray(list)&&list.length>0&&list.every(v=>/^\d+\.
 export function servedLists(manifest,{window=windowOf(manifest)}={}){
  if(isBackendManifest(manifest)){
   if(manifest.keepServed!==undefined)throw new Error('keepServed belongs to a pair window.');
-  const backends=versionBackends(manifest,window),one=JSON.stringify({odc:backends.map(b=>b.odc),o11:backends[0].o11});
+  // S2: the retiring versions (retiringOf) ride in the same list, so every backend tells their users when they leave.
+  const backends=versionBackends(manifest,window),retiring=retiringOf(manifest,backends),one=JSON.stringify({odc:backends.map(b=>b.odc),o11:backends[0].o11,...(retiring?{retiring}:{})});
   return backends.map(()=>one);
  }
  const pairs=versionPairs(manifest,window),keep=manifest.keepServed??0;
@@ -215,8 +238,10 @@ export function hostBudget(manifest,{window=windowOf(manifest)}={}){
  const router=sizing.router?mib(sizing.router.memory):6144;
  const used=mib(sizing.hot.memory)+(n-1)*mib(sizing.other.memory)+router+consoleMb;
  const available=sizing.host?mib(sizing.host.memory)-mib(sizing.host.reserve):Infinity;
- if(used>available)throw Object.assign(new Error(`A window of ${n} pairs needs ${used} MiB of memory limits (hot ${sizing.hot.memory}, ${n-1} x ${sizing.other.memory}, router, console) and the host leaves ${available} MiB after its reserve; it is not deployed until a pair leaves or the owner changes sizing.`),{code:CAPACITY_WINDOW,environmental:true});
- return {used,available,pairs:n};
+ // S2: a backend window counts its kept backends AND the retiring one (it runs until retireAt): keep + 1 must fit.
+ const retiring=isBackendManifest(manifest)&&retiringOf(manifest,backendsOf(manifest,{window}))?.odc?1:0;
+ if(used>available)throw Object.assign(new Error(`A window of ${n} ${isBackendManifest(manifest)?`backends (${n-retiring} kept${retiring?', 1 retiring':''})`:'pairs'} needs ${used} MiB of memory limits (hot ${sizing.hot.memory}, ${n-1} x ${sizing.other.memory}, router, console) and the host leaves ${available} MiB after its reserve; it is not deployed until a pair leaves or the owner changes sizing.`),{code:CAPACITY_WINDOW,environmental:true});
+ return {used,available,pairs:n,...(isBackendManifest(manifest)?{retiring}:{})};
 }
 // The tier of each backend, in pair order ('hot' | 'other'), or null without sizing.
 export function backendTiers(manifest,{window=windowOf(manifest)}={}){

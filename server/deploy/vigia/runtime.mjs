@@ -8,7 +8,9 @@ import path from 'node:path';
 import {spawn,spawnSync} from 'node:child_process';
 import crypto,{createHash} from 'node:crypto';
 import {fileURLToPath} from 'node:url';
-import {readTrx,pairTag,pairId,packFor,version as threeOf} from './window.mjs';
+import {readTrx,pairTag,pairId,packFor,version as threeOf,backendTag,backendId,labelKernels} from './window.mjs';
+import {generateDockerfile} from '../gen-dockerfile.mjs';
+import {isBackendManifest,versionBackends} from '../coolify/gen-compose.mjs';
 import {smokeImage,readListingBudget} from './smoke.mjs';
 import {EnvironmentError} from './pipeline.mjs';
 import {busyDotnet} from './host.mjs';
@@ -403,6 +405,62 @@ export async function createRuntime(config,{log=()=>{}}={}){
     return {odc:bundles.odc.version,o11:bundles.o11.version,image,tag:imageTag,sha256,revision:commitShort,commit:revision,provenance:JSON.parse(custody)};
    }finally{fs.rmSync(installers,{recursive:true,force:true});}
   },
+  // Window 4x4 (S2): the image of one backend of a backend window: its ODC Studio and EVERY O11 Studio of the kernel set
+  // (deploy/gen-dockerfile.mjs, each bundle pinned by its SHA256 in the generated Dockerfile), the default O11 for the
+  // server's own processes. spec {odc, kernels: [O11 versions], defaultO11}; bundles {odc, o11: [bundle per kernel]}.
+  async buildBackend(spec,bundles,dir){
+   const all=[bundles.odc,...bundles.o11];
+   if(bundles.o11.map(b=>b.version).join()!==spec.kernels.join())throw Error('The O11 bundles differ from the kernel set of the image.');
+   if(config.automatic)for(const b of all){verifyBundleCustody(b,config.bundlePins?.[`${b.lane}-${b.version}`]);if(b.provenance)await runtime.verifyInput(b.provenance);}
+   if(config.automatic)await runtime.executionSource();
+   await checkWorkspace();
+   const commitShort=(await git(['rev-parse','--short=7','HEAD'])).stdout.trim(),revision=(await git(['rev-parse','HEAD'])).stdout.trim();
+   const tag=backendTag({odc:spec.odc,kernels:spec.kernels},commitShort,new Date().toISOString().slice(0,10).replaceAll('-',''))+(config.automatic?'-a'+crypto.randomUUID().replaceAll('-','').slice(0,12):'');
+   const imageTag=config.rehearsal?tag.replace(/^prod-/,'rehearsal-'):tag;
+   const name=backendId(spec.odc),installers=path.join(temp,'installers',name),dockerfile=path.join(temp,'dockerfiles',name+'.Dockerfile');
+   fs.rmSync(installers,{recursive:true,force:true});fs.mkdirSync(installers,{recursive:true});fs.mkdirSync(path.dirname(dockerfile),{recursive:true});
+   try{
+    for(const b of all){const to=path.join(installers,path.basename(b.file));try{fs.linkSync(b.file,to);}catch{fs.copyFileSync(b.file,to);}}
+    fs.writeFileSync(dockerfile,generateDockerfile(fs.readFileSync(path.join(root,'server/Dockerfile'),'utf8'),{default:spec.defaultO11,o11:bundles.o11.map(b=>({version:b.version,bundle:path.basename(b.file),sha256:b.sha256,...(b.tfm?{tfm:b.tfm}:{})}))}));
+    const metadata=path.join(dir,'image-metadata-'+name+'.json'),image=config.image??'docker.io/andrepereiramachado/ssam-server';
+    const env={TEMP:temp,TMP:temp,PATH:path.dirname(exe.docker)+path.delimiter+path.dirname(exe.git)+path.delimiter+process.env.PATH,DOCKER:'docker --context '+context,BUILDX_BUILDER:config.builder??'ssam-multiver-impl',SSAM_AUTOMATIC:config.automatic?'1':'0',VCS_REF:revision,STUDIO_INSTALLERS_DIR:bashPath(installers),SSAM_BUILD_METADATA_FILE:slash(metadata),SSAM_DOCKERFILE:slash(dockerfile),ODC_STUDIO_BUNDLE:path.basename(bundles.odc.file),ODC_STUDIO_BUNDLE_SHA256:bundles.odc.sha256,SSAM_IMAGE_O11:spec.kernels.join(','),SSAM_IMAGE_ODC:bundles.odc.version,ODC_STUDIO_TFM:bundles.odc.tfm};
+    const custody=JSON.stringify({odc:bundles.odc.provenance??{bundlePin:bundles.odc.sha256},o11:Object.fromEntries(bundles.o11.map(b=>[b.version,b.provenance??{bundlePin:b.sha256}]))});
+    const custodyFile=path.join(installers,'provenance.json');fs.writeFileSync(custodyFile,custody);
+    const r=await run(exe.bash,[slash(path.join(root,'server/deploy/build.sh')),'--image',image,'--tag',imageTag,'--','--progress','plain','--label','pro.ssam.studio-provenance-sha256='+hash(custodyFile),'--build-context','studio-provenance='+slash(installers)],{dir,env,allowFailure:true,timeoutMs:(config.buildTimeoutMinutes??120)*60000});
+    if(r.code!==0){
+     const cause=buildCause(r);
+     if(cause.environmental)throw new EnvironmentError(`build.sh could not finish for an environment reason (${cause.why}; exit ${r.code}); the round retries. See ${path.join(dir,'commands.jsonl')}.`,'build-environment');
+     throw Error(`build.sh failed for ${name} (exit ${r.code})${cause.why?': '+cause.why:''}. See ${path.join(dir,'commands.jsonl')}.`);
+    }
+    const sha256=JSON.parse(fs.readFileSync(metadata,'utf8'))['containerimage.digest'].replace(/^sha256:/,'');
+    // The O11 kernels the image really carries (S2 R4, review M1): its label ssam.kernels.o11, read back from the built image;
+    // they must be the kernel set it was built for, and they are what its backend records (o11Kernels).
+    const labels=await docker(['image','inspect','--format','{{json .Config.Labels}}',`${image}:${imageTag}`],{allowFailure:true,timeoutMs:60000});
+    let kernels=null;try{kernels=labels.code===0?labelKernels(JSON.parse(labels.stdout)):null;}catch{kernels=null;}
+    if(!kernels||kernels.join()!==[...spec.kernels].join())throw Error(`The image ${imageTag} of ${name} carries the O11 kernels ${kernels?.join(', ')??'(no ssam.kernels.o11 label)'}, not the set it was built for (${spec.kernels.join(', ')}).`);
+    return {odc:spec.odc,kernels,kernelsFrom:'image-label',defaultO11:spec.defaultO11,o11:spec.defaultO11,image,tag:imageTag,sha256,revision:commitShort,commit:revision,provenance:JSON.parse(custody)};
+   }finally{fs.rmSync(installers,{recursive:true,force:true});}
+  },
+  // The smoke of one backend image: it runs the release kernel of that backend (its ODC, the default O11) with the window's
+  // served lists and is asked the published pack's hello with that backend's ODC Studio.
+  async smokeBackend(built,bundles,served,dir){
+   verifyFeaturesUse(bundles.odc.features,bundles.odc.featuresProvenance);
+   if(!runtime.packHello||!runtime.bridgeKernel)throw Error('A backend window smoke needs the server-only gate (its kernel and the published pack hello).');
+   const pair={odc:built.odc,o11:built.defaultO11,image:built.image,tag:built.tag};
+   const presented={...runtime.packHello,studios:{...runtime.packHello.studios,odc:{installed:{...runtime.packHello.studios.odc.installed,version:bundles.odc.fullVersion??bundles.odc.version}}}};
+   fs.mkdirSync(dir,{recursive:true});
+   return smokeImage({pair,bundle:{features:bundles.odc.features},dir,root,docker,served,kernel:{...runtime.bridgeKernel,odc:built.odc,o11:built.defaultO11},presented,budget:readListingBudget(root),privateDir:path.join(temp,'smoke')});
+  },
+  // The reference-app gate (owner decision 7 of the window design): config.referenceGate {command, args, timeoutMinutes} runs
+  // with the lane, the version and the built images in its environment and writes its result (JSON {ok, apps: [{name,
+  // published, seconds}]}) to SSAM_REFERENCE_RESULT. No result file is an environment problem (the round waits).
+  ...(config.referenceGate?.command?{async referenceGate({lane,version,builts,dir}){
+   const g=config.referenceGate,out=path.join(dir,'reference-gate-result.json');fs.rmSync(out,{force:true});
+   if(!g.command||!Array.isArray(g.args??[]))throw Error('Invalid referenceGate: {command, args, timeoutMinutes}.');
+   const r=await run(g.command,g.args??[],{dir,env:{SSAM_REFERENCE_LANE:lane,SSAM_REFERENCE_VERSION:version,SSAM_REFERENCE_IMAGES:JSON.stringify(builts.map(b=>({odc:b.odc,image:b.image,tag:b.tag,sha256:b.sha256}))),SSAM_REFERENCE_RESULT:out},allowFailure:true,timeoutMs:(g.timeoutMinutes??90)*60000});
+   if(!fs.existsSync(out))return {ok:false,environmental:true,error:`no result file (exit ${r.code})`};
+   return JSON.parse(fs.readFileSync(out,'utf8'));
+  }}:{}),
   async smoke(built,bundles,served,dir){
    verifyFeaturesUse(bundles.odc.features,bundles.odc.featuresProvenance);
    // Server-only: the image runs the release kernel and is asked the hello of the published agent pack, nothing synthetic.
@@ -452,6 +510,8 @@ export async function createRuntime(config,{log=()=>{}}={}){
    if(r.code!==0)throw Error(`The tested image ${built.image}:${built.tag} is not in the local Docker any more.`);
    const info=JSON.parse(r.stdout),want='sha256:'+built.sha256;
    if(info.Id!==want&&info.Descriptor?.digest!==want)throw Error(`The local image ${built.tag} is ${info.Descriptor?.digest??info.Id}, not the tested ${want}.`);
+   // A backend image (window 4x4): its label still names the O11 kernels its backend declares.
+   if(Array.isArray(built.kernels)){const real=labelKernels(info.Config?.Labels);if(real?.join()!==[...built.kernels].join())throw Error(`The local image ${built.tag} carries the O11 kernels ${real?.join(', ')??'(no label)'}, not the recorded ${built.kernels.join(', ')}.`);}
   },
   async publish(built){
    if(config.automatic)await runtime.executionSource();
@@ -531,7 +591,13 @@ export async function createRuntime(config,{log=()=>{}}={}){
    await runtime.executionSource();
    const kernelsFile=path.join(root,'server/deploy/coolify/r1-kernels.json');
    const previous=Object.values(liveKernels??runtime.liveKernels??JSON.parse(fs.readFileSync(kernelsFile,'utf8')));
-   const kernels=Object.fromEntries(manifest.odc.map((entry,i)=>{
+   // A backend window (S2): kernel is {"odc-<v>": kernel.json} of the backends the round prepared (null: a retirement); the
+   // others keep their live kernel.
+   const kernels=isBackendManifest(manifest)?Object.fromEntries(versionBackends(manifest).map((b,i)=>{
+    const value=kernel?.[b.name]??previous.find(k=>k.odc===b.odc);
+    if(!value)throw Error('The proposed window has no kernel metadata for a retained backend.');
+    return ['v'+(i+1),value];
+   })):Object.fromEntries(manifest.odc.map((entry,i)=>{
     const pair={odc:entry.version,o11:manifest.o11[i].version};
     const value=kernel?.odc===pair.odc&&kernel?.o11===pair.o11?kernel:previous.find(k=>k.odc===pair.odc&&k.o11===pair.o11);
     if(!value)throw Error('The proposed window has no kernel metadata for a retained pair.');

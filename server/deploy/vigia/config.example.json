@@ -83,6 +83,8 @@
   "trustedRemote": "https://GIT_HOST/OWNER/SSAM-MCP.git",
   "ownerSigningPublicKey": null,
   "maxWindow": 5,
+  "window": {"keep": {"odc": 4, "o11": 4}, "graceDays": 7, "notifyAffected": true},
+  "referenceGate": {"mode": "owner"},
   "python": "C:/ssam-priv/tools/python/python.exe",
   "dotnet": "C:/Program Files/dotnet/dotnet.exe",
   "git": "C:/Program Files/Git/cmd/git.exe",

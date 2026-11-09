@@ -9,15 +9,15 @@
 //                 unless --force;
 //   --rehearse-current: the real round on the served versions, stopped before anything changes outside this machine (rehearse.mjs).
 import fs from 'node:fs';
-import {readJournal} from './journal.mjs';
+import {readJournal,writeJournal} from './journal.mjs';
 import path from 'node:path';
 import {spawn} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {runVigia,readAttempts,remind,timedOut} from './pipeline.mjs';
-import {replayApprovals} from './window.mjs';
+import {replayApprovals,isBackendWindow} from './window.mjs';
 import {approve,reject,retry} from './approve.mjs';
 import {acquireLock,lockHeldBy,registerChild,runLogFile,createLog} from './host.mjs';
-import {automaticPlan,releaseAutomatically,releaseEvent} from './automatic.mjs';
+import {automaticPlan,releaseAutomatically,releaseEvent,resendKept,keepNotice,REBUILD_NEEDED} from './automatic.mjs';
 import {bridgeMode} from './server-only.mjs';
 import {rehearseCurrent,rehearsalConfig} from './rehearse.mjs';
 export * from './window.mjs';
@@ -59,6 +59,9 @@ export function readConfig(file){
 }
 // The window the next proposal starts from: main's versions.json plus the approvals main does not carry yet.
 export function baseWindow(mainManifest,outDir){
+ // A backend window (S2) is deployed by the automatic release only, which plans from the live window: main's versions.json is
+ // the reviewed one, with no approval to replay.
+ if(isBackendWindow(mainManifest))return {manifest:mainManifest,replayed:[],branchBase:null};
  const attempts=Object.values(readAttempts(outDir));
  // An automatic pin precedes deployment. If deployment failed, that local pin
  // is evidence, not the served baseline; plan from its recorded previous window.
@@ -79,6 +82,8 @@ export async function round(config,runtime,{dryRun=false}={}){
  // A process interrupted after publication resumes its journal before any new build.
  if(config.automatic&&!dryRun)for(const a of Object.values(readAttempts(config.outDir))){
   const file=path.join(config.outDir,a.id,'release.json'),journal=path.join(config.outDir,a.id,'deployment.json');
+  // Owner notices of a dropped, stale or superseded window round that did not reach him yet (automatic.mjs keepNotice).
+  try{await resendKept(runtime,{outDir:config.outDir,id:a.id});}catch(e){runtime.log?.(`owner notices of ${a.id} not resent: ${e.message}`);}
   if(!fs.existsSync(file)||!fs.existsSync(journal))continue;
   const state=readJournal(journal);
   const release=readJournal(file);
@@ -90,17 +95,35 @@ export async function round(config,runtime,{dryRun=false}={}){
   }
   if(state.status==='live'&&a.status!=='approved'){
    const {writeAttempt}=await import('./pipeline.mjs');
-   writeAttempt(config.outDir,{...a,status:'approved',built:release.built,pinCommit:state.pin,approved:{at:new Date().toISOString(),digest:'sha256:'+release.built.sha256,commit:state.pin}});
+   writeAttempt(config.outDir,{...a,status:'approved',built:release.built,pinCommit:state.pin,approved:{at:new Date().toISOString(),digest:release.built?'sha256:'+release.built.sha256:null,commit:state.pin}});
   }
+  // A live release whose notices did not reach the owner (state.unsent: live, window-retiring, window-retired...) sends them
+  // again every round until they are delivered (automatic.mjs notify).
+  if(state.status==='live'&&state.unsent?.length){await releaseAutomatically(config,runtime,release);continue;}
   if(['rolled-back','preparation-failed'].includes(state.status)&&a.status==='running'){
    const {writeAttempt}=await import('./pipeline.mjs');writeAttempt(config.outDir,{...a,status:'failed',built:release.built,rollbackLatch:state.status==='rolled-back',failedLanes:a.pair.lanes,code:state.status});
   }
-  if(['idle','abandoned'].includes(state.status)){const {writeAttempt}=await import('./pipeline.mjs');writeAttempt(config.outDir,{...a,status:'closed',code:state.status,cause:state.abandoned?.code??null});continue;}
-  if(!['live','idle','abandoned','rolled-back','rollback-failed','preparation-failed'].includes(state.status)){
-   const result=await releaseAutomatically(config,runtime,release);
+  if(['idle','abandoned'].includes(state.status)){const {writeAttempt}=await import('./pipeline.mjs');if(a.status!=='closed')writeAttempt(config.outDir,{...a,status:'closed',code:state.status,cause:state.abandoned?.code??null,endedAt:a.endedAt??new Date().toISOString()});continue;}
+  // A window release whose images no longer fit the live window (automatic.mjs REBUILD_NEEDED): dropped, built again next.
+  if(state.status==='stale'){const {writeAttempt}=await import('./pipeline.mjs');if(!a.retry)writeAttempt(config.outDir,{...a,status:'failed',retry:true,code:REBUILD_NEEDED,dropped:{at:new Date().toISOString(),code:REBUILD_NEEDED},endedAt:new Date().toISOString()});continue;}
+  if(!['live','idle','abandoned','rolled-back','rollback-failed','preparation-failed','stale'].includes(state.status)){
+   let result;
+   try{result=await releaseAutomatically(config,runtime,release);}
+   catch(error){
+    // A window release never stops the watcher before production changed (review M2): it ends as preparation-failed, the
+    // owner is told on the resent channel, and the retirement and the other lane's rounds go on.
+    if(!release.window||error.code==='PAUSED')throw error;
+    const now=readJournal(journal);if(now.mutationStarted)throw error;
+    const code=/^[A-Z_]+$/.test(error.code??'')?error.code:'RELEASE_FAILED',endedAt=new Date().toISOString();
+    now.status='preparation-failed';now.failure={step:now.activeStep??'resume',code};writeJournal(journal,now);
+    const {writeAttempt}=await import('./pipeline.mjs');
+    writeAttempt(config.outDir,{...a,status:'failed',...(a.ownerGate?{retry:true,dropped:{at:endedAt,code}}:{}),code,failedLanes:[release.window.lane],endedAt});
+    await keepNotice(runtime,{outDir:config.outDir,id:a.id,attempt:a.at},'resume-failed',`${a.id}: the release stopped before any change to production (${code}): ${String(error.message).split('\n')[0]}`,code).catch(()=>{});
+    continue;
+   }
    if(result.status==='live'){
     const {writeAttempt}=await import('./pipeline.mjs');
-    writeAttempt(config.outDir,{...a,status:'approved',built:release.built,pinCommit:result.commit,approved:{at:new Date().toISOString(),digest:'sha256:'+release.built.sha256,commit:result.commit}});
+    writeAttempt(config.outDir,{...a,status:'approved',built:release.built,pinCommit:result.commit,approved:{at:new Date().toISOString(),digest:release.built?'sha256:'+release.built.sha256:null,commit:result.commit}});
    }
    if(['idle','abandoned'].includes(result.status)){const {writeAttempt}=await import('./pipeline.mjs');writeAttempt(config.outDir,{...a,status:'closed',code:result.status,cause:result.status==='abandoned'?result.code??null:null});continue;}
    return result;

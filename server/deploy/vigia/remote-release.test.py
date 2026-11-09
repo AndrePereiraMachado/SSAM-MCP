@@ -48,6 +48,7 @@ class RemoteTests(unittest.TestCase):
         self.extra_mounts = []
         self.listing = [{"name": f["name"], "sha256": f["sha256"]} for f in PINS["files"]]
         self.missing_volume = False
+        self.labels = {"ssam.o11": "11.55.93", "ssam.odc": "1.7.29"}
         self.env = ["SSAM_BACKEND_NAME=o11-11.55.93-odc-1.7.29", "SSAM_SERVED_VERSIONS={\"odc\":[\"1.7.29\"],\"o11\":[\"11.55.93\"]}"]
         self.usage = {"pairs": {"o11-11.55.93-odc-1.7.29": {"heavy": 2, "active": 1}}, "skipped": 0}
         self.receipt = {"ok": True, "kernel": {"odc": "1.7.29", "o11": "11.55.93"}, "budget": {"tools": 90}, "telemetry": {"tokens": {}}}
@@ -60,7 +61,7 @@ class RemoteTests(unittest.TestCase):
             self.assertIn("label=com.docker.compose.project=fixture", args)
             return b"backend"
         if args[0] == "inspect":
-            return json.dumps([{"Id": "backend", "Image": "sha256:old", "State": {"Running": True}, "Config": {"Image": "image:old", "Env": self.env, "Labels": {"ssam.o11": "11.55.93", "ssam.odc": "1.7.29"}}, "Mounts": [{"Type": "volume", "Name": "fixture_state"}] + self.extra_mounts}]).encode()
+            return json.dumps([{"Id": "backend", "Image": "sha256:old", "State": {"Running": True}, "Config": {"Image": "image:old", "Env": self.env, "Labels": self.labels}, "Mounts": [{"Type": "volume", "Name": "fixture_state"}] + self.extra_mounts}]).encode()
         if args[:2] == ("volume", "inspect"):
             if self.missing_volume:
                 raise RuntimeError("Remote command failed: docker")
@@ -135,6 +136,154 @@ class RemoteTests(unittest.TestCase):
         self.assertTrue(any("features" in c and "put" in c for c in self.calls))
         self.assertTrue(any(c[0] == "rm" and "-v" not in c for c in self.calls))
         self.assertFalse(list(pathlib.Path(self.temp.name).rglob("Features.plain.xml")))
+
+    # Window 4x4 (S2): a backend window prepares one backend at a time (id odc-<v>, its compose service under the v1 name); an O11
+    # round rewrites only the kernel.json of a backend that runs (kernelOnly, no features).
+    def backend_compose(self, name):
+        return {"services": {"ssam-server-v1": {"labels": {"ssam.odc": name[4:]}, "environment": {"SSAM_BACKEND_NAME": name, "SSAM_RUNTIME_DIR": "/data/server/versions/" + name}, "volumes": [{"source": "state", "target": "/data/server"}, PLUGINS_MOUNT]}}, "volumes": {"state": {}, "odc-model-plugins": {}}}
+
+    def prepare_backend(self, id, **kwargs):
+        return self.request("prepare", id=id, archive=self.archive(), built={"image": "private/image", "tag": "prod-fixed", "sha256": "a" * 64}, modelPlugins=PINS, compose=self.backend_compose(id), **kwargs)
+
+    def test_s2_prepare_accepts_a_backend_id_with_its_features(self):
+        result = self.prepare_backend("odc-1.7.33", kernel={"odc": "1.7.33", "o11": "11.55.95"}, features=base64.b64encode(b"<Features/>").decode())
+        self.assertTrue(result["ok"])
+        self.assertTrue(any("kernel" in c and "write" in c for c in self.calls))
+        self.assertTrue(any("features" in c and "put" in c for c in self.calls))
+        self.assertFalse(list(pathlib.Path(self.temp.name).rglob("Features.plain.xml")))
+        self.assertTrue((pathlib.Path(self.temp.name) / "releases" / "odc-1.7.33" / "kernel.json").exists())
+
+    # S2 R4 (review M4): a kernel-only prepare belongs to an O11 round, writes the kernel.json of that backend's runtime folder only,
+    # after the pair check inside the new image, through a hardened container that mounts the server-state volume and nothing
+    # else; no staging container, no ssamctl kernel write (which empties the running backend's reader copies, caches and stamp).
+    def stage_runs(self):
+        original, runs = self.docker, []
+        def docker(*args, data=None, timeout=900):
+            if args[0] == "run" and not any(str(x).endswith(":/backup") or str(x).endswith(":/plugins:ro") for x in args):
+                runs.append((args, data))
+                return b""
+            return original(*args, data=data, timeout=timeout)
+        self.docker = docker
+        return runs
+
+    def test_s2_prepare_kernel_only_writes_the_kernel_json_only_and_touches_no_cache_of_a_running_backend(self):
+        kernel = {"odc": "1.7.29", "o11": "11.55.96"}
+        runs = self.stage_runs()
+        result = self.prepare_backend("odc-1.7.29", kernel=kernel, kernelOnly=True, round="o11-11.55.96")
+        self.assertEqual(result, {"ok": True, "kernelOnly": True})
+        self.assertFalse(any(c[0] in ("create", "start", "stop", "rm") for c in self.calls))
+        self.assertFalse(any("ssamctl" in " ".join(map(str, c)) for c in self.calls))
+        self.assertFalse(any("features" in c for c in self.calls))
+        check, write = runs
+        self.assertIn("/c.mjs", check[0])
+        self.assertIn("check", check[0])
+        # R6 B11: the pair check runs hardened too (unprivileged user, no capabilities, no network, nothing but its two files).
+        for flag in ("--cap-drop", "--user", "--network", "--rm"):
+            self.assertIn(flag, check[0])
+        self.assertEqual([check[0][i + 1].rsplit(":", 2)[-2:] for i, x in enumerate(check[0]) if x == "-v"], [["/c.mjs", "ro"], ["/k.json", "ro"]])
+        mounts = [write[0][i + 1] for i, x in enumerate(write[0]) if x == "-v"]
+        self.assertEqual(mounts, ["fixture_state:/data/server"])
+        for flag in ("--cap-drop", "--user", "--network"):
+            self.assertIn(flag, write[0])
+        script = write[0][-1]
+        self.assertNotIn("rm ", script)
+        self.assertNotIn("/data/cache", script)
+        self.assertIn("SSAM_RUNTIME_DIR=/data/server/versions/odc-1.7.29", write[0])
+        self.assertEqual(json.loads(write[1]), kernel)
+
+    def test_s2_kernel_only_is_an_o11_round_without_features_and_any_other_prepare_needs_the_features(self):
+        kernel = {"odc": "1.7.29", "o11": "11.55.96"}
+        for bad in ({}, {"round": "odc-1.7.33"}, {"round": "o11-11.55"}, {"round": "o11-11.55.96", "features": base64.b64encode(b"<Features/>").decode()}):
+            with self.assertRaisesRegex(ValueError, "kernel-only prepare"):
+                self.prepare_backend("odc-1.7.29", kernel=kernel, kernelOnly=True, **bad)
+        with self.assertRaisesRegex(ValueError, "needs its features"):
+            self.prepare_backend("odc-1.7.33", kernel={"odc": "1.7.33", "o11": "11.55.95"})
+        self.assertFalse(any(c[0] in ("pull", "create") for c in self.calls))
+
+    # R6 B11: a repair writes the kernel.json of a retained backend in any window round (restore after an O11 round stopped, or
+    # the alignment of one default); without repair, kernel-only stays an O11 round's.
+    def test_s2_a_repair_is_a_kernel_only_write_in_any_window_round(self):
+        kernel = {"odc": "1.7.29", "o11": "11.55.95"}
+        for round in ("odc-1.7.33", "retire-odc-1.7.28", "retire-o11-11.55.92", "o11-11.55.96"):
+            runs = self.stage_runs()
+            self.assertEqual(self.prepare_backend("odc-1.7.29", kernel=kernel, kernelOnly=True, repair=True, round=round), {"ok": True, "kernelOnly": True})
+            self.assertEqual(json.loads(runs[-1][1]), kernel)
+        for bad in ("odc-1.7", "x-odc-1.7.33", ""):
+            with self.assertRaisesRegex(ValueError, "kernel-only prepare"):
+                self.prepare_backend("odc-1.7.29", kernel=kernel, kernelOnly=True, repair=True, round=bad)
+        with self.assertRaisesRegex(ValueError, "kernel-only prepare"):
+            self.prepare_backend("odc-1.7.29", kernel=kernel, kernelOnly=True, round="odc-1.7.33")
+
+    # Pre-merge (S2 R8): the old pair flow against pair-mode production is unchanged. Pair services also carry SSAM_BACKEND_NAME
+    # (the pair name): a new O11 pair of an ODC Studio that already runs is prepared, only the same pair is refused.
+    def pair_compose(self, name):
+        o11, odc = name[4:].split("-odc-")
+        return {"services": {"ssam-server-v1": {"labels": {"ssam.odc": odc, "ssam.o11": o11}, "environment": {"SSAM_BACKEND_NAME": name, "SSAM_RUNTIME_DIR": "/data/server/versions/" + name}, "volumes": [{"source": "state", "target": "/data/server"}, PLUGINS_MOUNT]}}, "volumes": {"state": {}, "odc-model-plugins": {}}}
+
+    def test_premerge_the_pair_flow_prepares_a_new_o11_pair_of_a_running_odc_and_refuses_only_the_same_pair(self):
+        features = base64.b64encode(b"<Features/>").decode()
+        # Running: o11-11.55.93-odc-1.7.29 (fixture). New: o11-11.55.96-odc-1.7.29, same ODC Studio.
+        result = self.request("prepare", id="o11-11.55.96-odc-1.7.29", archive=self.archive(), built={"image": "private/image", "tag": "prod-fixed", "sha256": "a" * 64}, modelPlugins=PINS, compose=self.pair_compose("o11-11.55.96-odc-1.7.29"), kernel={"odc": "1.7.29", "o11": "11.55.96"}, features=features)
+        self.assertEqual(result, {"ok": True})
+        self.assertTrue(any("kernel" in c and "write" in c for c in self.calls))
+        self.assertTrue(any("features" in c and "put" in c for c in self.calls))
+        with self.assertRaisesRegex(RuntimeError, "already running pair"):
+            self.request("prepare", id="o11-11.55.93-odc-1.7.29", archive=self.archive(), built={"image": "private/image", "tag": "prod-fixed", "sha256": "a" * 64}, modelPlugins=PINS, compose=self.pair_compose("o11-11.55.93-odc-1.7.29"), kernel={"odc": "1.7.29", "o11": "11.55.93"}, features=features)
+
+    def test_premerge_a_pair_snapshot_never_fails_on_the_image_labels(self):
+        original = self.docker
+        def docker(*args, data=None, timeout=900):
+            if args[:2] == ("image", "inspect") and "{{json .Config.Labels}}" in args:
+                raise RuntimeError("Remote command failed: docker")
+            return original(*args, data=data, timeout=timeout)
+        self.docker = docker
+        value = self.request("snapshot", checkSource="capture-live")
+        self.assertTrue(value["ok"])
+        self.assertIsNone(value["backends"][0]["kernels"])
+        self.assertEqual(value["backends"][0]["kernel"], {"odc": "1.7.29", "o11": "11.55.93"})
+
+    def test_s2_a_new_backend_is_refused_when_one_with_its_odc_or_its_name_runs(self):
+        # The running fixture backend is labelled odc 1.7.29 and its ssam.o11 is the served list of a backend window.
+        features = base64.b64encode(b"<Features/>").decode()
+        self.env = ["SSAM_BACKEND_NAME=odc-1.7.29"]
+        self.labels = {"ssam.o11": "11.55.92,11.55.93,11.55.94,11.55.95", "ssam.odc": "1.7.29"}
+        with self.assertRaisesRegex(RuntimeError, "already running backend"):
+            self.prepare_backend("odc-1.7.29", kernel={"odc": "1.7.29", "o11": "11.55.95"}, features=features)
+        self.labels = {"ssam.o11": "11.55.92,11.55.93,11.55.94,11.55.95", "ssam.odc": "1.7.30"}
+        with self.assertRaisesRegex(RuntimeError, "already running backend"):
+            self.prepare_backend("odc-1.7.29", kernel={"odc": "1.7.29", "o11": "11.55.95"}, features=features)
+        self.env = ["SSAM_BACKEND_NAME=odc-1.7.30"]
+        self.assertTrue(self.prepare_backend("odc-1.7.29", kernel={"odc": "1.7.29", "o11": "11.55.95"}, features=features)["ok"])
+
+    # S2 R4 (review M1): after a deployment, the image each running backend runs carries exactly the O11 kernels the pin
+    # declares for it (the image's label, read from the image), or the deployment rolls back with IMAGE_KERNELS_DIFFER.
+    def test_s2_check_fails_when_a_running_image_carries_other_o11_kernels_than_declared(self):
+        original, image_labels = self.docker, {"ssam.kernels.o11": "11.55.92,11.55.93,11.55.94,11.55.95"}
+        def docker(*args, data=None, timeout=900):
+            if args[:2] == ("image", "inspect") and "{{json .Config.Labels}}" in args:
+                return json.dumps(image_labels).encode()
+            return original(*args, data=data, timeout=timeout)
+        self.docker = docker
+        want = {"1.7.29": ["11.55.95", "11.55.94", "11.55.93", "11.55.92"]}
+        self.assertTrue(self.request("check", checkSource="new", expectedKernels=want)["ok"])
+        for labels in ({"ssam.kernels.o11": "11.55.92,11.55.93,11.55.94"}, {}, {"ssam.kernels.o11": "11.55.92,11.55.93,11.55.94,11.55.95,11.55.96"}):
+            image_labels = labels
+            with self.assertRaisesRegex(RuntimeError, "IMAGE_KERNELS_DIFFER"):
+                self.request("check", checkSource="new", expectedKernels=want)
+        image_labels = {"ssam.kernels.o11": "11.55.92,11.55.93,11.55.94,11.55.95"}
+        with self.assertRaisesRegex(RuntimeError, "IMAGE_KERNELS_DIFFER"):
+            self.request("check", checkSource="new", expectedKernels={"1.7.30": want["1.7.29"]})
+
+    def test_s2_prepare_refuses_other_ids(self):
+        for bad in ("retire-odc-1.7.28", "o11-11.55.96", "odc-1.7", "odc-1.7.33/../x", "x-odc-1.7.33"):
+            with self.assertRaisesRegex(ValueError, "Invalid pair"):
+                self.prepare_backend(bad, kernel={}, kernelOnly=True)
+
+    def test_s2_usage_counts_take_backend_names(self):
+        self.usage = {"pairs": {"odc-1.7.32": {"heavy": 4, "active": 2}, "o11-11.55.93-odc-1.7.29": {"heavy": 1, "active": 0}, "retire-odc-1.7.28": {"heavy": 1, "active": 1}}, "skipped": 0}
+        value = self.request("snapshot", checkSource="capture-live", usageSource="// usage-count fixture")
+        self.assertEqual(value["usage"], {"odc-1.7.32": {"heavy": 4, "active": 2}, "o11-11.55.93-odc-1.7.29": {"heavy": 1, "active": 0}})
+        self.assertEqual(value["warnings"], ["USAGE_PARTIAL"])
 
     def test_rollback_checks_actual_previous_image_identity(self):
         expected = [{"o11": "11.55.93", "odc": "1.7.29", "image": "sha256:old"}]
@@ -305,6 +454,33 @@ class RemoteTests(unittest.TestCase):
         self.assertEqual(value["backends"][0]["budget"]["tools"], 90)
         self.assertEqual(value["backends"][0]["kernel"]["odc"], "1.7.29")
         self.assertEqual(value["backends"][0]["reference"], "image:old")
+        self.assertIsNone(value["backends"][0]["kernels"], "an image without the label names no kernels")
+
+    # S2 R6 (review M5): the snapshot reads the O11 kernels each running image carries from the image itself, so the live
+    # baseline declares them after a compose-only O11 retirement (more kernels than the served list).
+    def test_s2_snapshot_reads_each_running_image_kernels_label(self):
+        original = self.docker
+        def docker(*args, data=None, timeout=900):
+            if args[:2] == ("image", "inspect") and "{{json .Config.Labels}}" in args:
+                return json.dumps({"ssam.kernels.o11": "11.55.92,11.55.93,11.55.94,11.55.95,11.55.96"}).encode()
+            return original(*args, data=data, timeout=timeout)
+        self.docker = docker
+        value = self.request("snapshot", checkSource="capture-live")
+        self.assertEqual(value["backends"][0]["kernels"], ["11.55.92", "11.55.93", "11.55.94", "11.55.95", "11.55.96"])
+
+    def test_s2_check_fails_when_a_served_o11_version_has_no_kernel_in_the_image(self):
+        original = self.docker
+        def docker(*args, data=None, timeout=900):
+            if args[:2] == ("image", "inspect") and "{{json .Config.Labels}}" in args:
+                return json.dumps({"ssam.kernels.o11": "11.55.93,11.55.94"}).encode()
+            return original(*args, data=data, timeout=timeout)
+        self.docker = docker
+        want = {"1.7.29": ["11.55.93", "11.55.94"]}
+        self.env = ["SSAM_BACKEND_NAME=odc-1.7.29", "SSAM_SERVED_VERSIONS={\"odc\":[\"1.7.29\"],\"o11\":[\"11.55.93\",\"11.55.94\"]}"]
+        self.assertTrue(self.request("check", checkSource="new", expectedKernels=want)["ok"])
+        self.env = ["SSAM_BACKEND_NAME=odc-1.7.29", "SSAM_SERVED_VERSIONS={\"odc\":[\"1.7.29\"],\"o11\":[\"11.55.93\",\"11.55.95\"]}"]
+        with self.assertRaisesRegex(RuntimeError, "IMAGE_KERNELS_DIFFER"):
+            self.request("check", checkSource="new", expectedKernels=want)
 
     def test_snapshot_returns_usage_counts_only_and_never_fails_on_them(self):
         # R2 M1': usage is advisory. Good counts come back; anything else is usage None (or the good part) plus a warning, and

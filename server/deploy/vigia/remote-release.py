@@ -72,13 +72,16 @@ def backends(project):
 # exactly the pinned files (coolify/model-plugins.json) before anything is written.
 MODEL_PLUGINS_TARGET = '/tmp/.local/share/OutSystems/ODC Studio/Plugins'
 READ_ONLY_VOLUMES = {'/data/runtime-css': 'runtime-css', MODEL_PLUGINS_TARGET: 'odc-model-plugins'}
+# The flags of ssamctl.sh's hardened one-off containers (coolify/ssamctl.sh "hardened").
+HARDENED = ("--rm", "--init", "--security-opt", "no-new-privileges:true", "--cap-drop", "ALL", "--user", "10001:10001")
 PLUGIN_LIST = ("const fs=require('fs'),c=require('crypto');console.log(JSON.stringify(fs.readdirSync('/plugins').sort()"
                ".map(n=>({name:n,sha256:c.createHash('sha256').update(fs.readFileSync('/plugins/'+n)).digest('hex')}))))")
 # The capacity hot tier goes by real use (gen-compose sizing.usage): the request's usageSource (vigia/usage-count.cjs) runs
 # inside a live backend over the shared server state and prints counts only ({"pairs": {pair: {heavy, active}},
 # "skipped": n}), never a token id. Usage is advisory: whatever fails here (no source, docker, a timeout, bad output) is
 # usage None plus a warning code, never an error of the snapshot, so it can never stop a watcher round (review R2 M1').
-PAIR_NAME = re.compile(r"o11-\d+\.\d+\.\d+-odc-\d+\.\d+\.\d+")
+# Window 4x4 (S2): a backend of a backend window counts as odc-<v> (usage-count.cjs keys it so).
+PAIR_NAME = re.compile(r"(?:o11-\d+\.\d+\.\d+-)?odc-\d+\.\d+\.\d+")
 
 
 def usage_counts(container, source):
@@ -169,7 +172,16 @@ def dispatch(request):
             refs = json.loads(docker("image", "inspect", "--format", "{{json .RepoDigests}}", server["Image"]))
             if not refs:
                 raise RuntimeError("No registry digest for a live backend.")
-            rows.append({"o11": server["Config"]["Labels"].get("ssam.o11"), "odc": server["Config"]["Labels"].get("ssam.odc"), "image": server["Image"], "reference": server["Config"]["Image"], "digest": refs[0].split("@")[1], "kernel": measured["kernel"], "budget": measured["budget"], "warm": warm})
+            # The O11 kernels the running image really carries (its label ssam.kernels.o11, read from the image): after a
+            # compose-only O11 retirement they are more than the served list (S2 R6, review M5). None without the label.
+            # Read-only and advisory for a window of pairs (its baseline ignores it): a failure is no label, never a failed snapshot.
+            try:
+                image_labels = json.loads(docker("image", "inspect", "--format", "{{json .Config.Labels}}", server["Image"]) or b"null")
+            except (RuntimeError, ValueError):
+                image_labels = None
+            carried = image_labels.get("ssam.kernels.o11") if isinstance(image_labels, dict) else None
+            kernels = [v.strip() for v in carried.split(",")] if isinstance(carried, str) and carried.strip() else None
+            rows.append({"o11": server["Config"]["Labels"].get("ssam.o11"), "odc": server["Config"]["Labels"].get("ssam.odc"), "image": server["Image"], "reference": server["Config"]["Image"], "digest": refs[0].split("@")[1], "kernel": measured["kernel"], "budget": measured["budget"], "warm": warm, "kernels": kernels})
             for key, value in measured.get("telemetry", {}).get("tokens", {}).items():
                 if key not in telemetry["tokens"] or telemetry["tokens"][key]["seen"] < value["seen"]:
                     telemetry["tokens"][key] = value
@@ -219,8 +231,21 @@ def dispatch(request):
         return {"ok": True, "directory": str(directory), "volumes": len(volumes)}
     if action == "prepare":
         os.umask(0o077)
-        if not re.fullmatch(r"o11-[0-9.]+-odc-[0-9.]+", request["id"]):
+        # Window 4x4 (S2): a backend window prepares one backend at a time (id odc-<v>, its own compose service under the v1
+        # name). kernelOnly belongs to an O11 round only (round o11-<v>, no features): it stages the kernel.json of a backend
+        # that runs and touches nothing else of it, no reader copy, cache or stamp (review M4; the new image's start resets
+        # what its kernel changed, kernel-image.mjs resetStaleCaches). Any other prepare needs the features.
+        if not re.fullmatch(r"(?:o11-\d+\.\d+\.\d+-)?odc-\d+\.\d+\.\d+", request["id"]):
             raise ValueError("Invalid pair.")
+        # S2 R6 (review B11): a repair (repair true) is the kernel-only write of a retained backend in any window round, so every
+        # backend runs one default O11 kernel: the restore after an O11 round stopped before any change, or the alignment of a
+        # backend an interrupted O11 prepare left on another default.
+        kernel_only = request.get("kernelOnly") is True
+        rounds = r"(?:odc|o11)-\d+\.\d+\.\d+|retire-(?:odc|o11)-\d+\.\d+\.\d+" if request.get("repair") is True else r"o11-\d+\.\d+\.\d+"
+        if kernel_only and (request.get("features") or not re.fullmatch(rounds, str(request.get("round", ""))) or not re.fullmatch(r"odc-\d+\.\d+\.\d+", request["id"])):
+            raise ValueError("A kernel-only prepare is one backend of an O11 round.")
+        if not kernel_only and not request.get("features"):
+            raise ValueError("The new backend needs its features.")
         directory = base / "releases" / request["id"]
         directory.mkdir(parents=True, exist_ok=True)
         with tarfile.open(fileobj=io.BytesIO(base64.b64decode(request["archive"])), mode="r:gz") as archive:
@@ -230,14 +255,26 @@ def dispatch(request):
                 if not (ancestor or name.startswith("server/deploy/")) or ".." in pathlib.PurePosixPath(name).parts or member.issym() or member.islnk():
                     raise ValueError("Unsafe deploy archive.")
             archive.extractall(directory, filter="data")
+        # A new pair or backend is never one that already runs: a pair by its two labels, a backend of a backend window by its
+        # ODC label or its SSAM_BACKEND_NAME (its ssam.o11 label is the served list, never one version).
+        target = (request["compose"]["services"]["ssam-server-v1"].get("environment") or {}).get("SSAM_BACKEND_NAME")
         for live in backends(settings["composeProject"]):
             labels = live["Config"]["Labels"]
-            if live["State"]["Running"] and labels.get("ssam.odc") == request["kernel"].get("odc") and labels.get("ssam.o11") == request["kernel"].get("o11"):
+            if kernel_only or not live["State"]["Running"]:
+                continue
+            names = [e.split("=", 1)[1] for e in live["Config"].get("Env") or [] if e.startswith("SSAM_BACKEND_NAME=")]
+            # The backend rule is a backend window's only (target odc-<v>); a pair (o11-<o>-odc-<v>, whose services also carry
+            # SSAM_BACKEND_NAME) keeps the pair rule: a new O11 pair of an ODC Studio that already runs is not refused.
+            if target and re.fullmatch(r"odc-\d+\.\d+\.\d+", target):
+                if labels.get("ssam.odc") == request["kernel"].get("odc") or target in names:
+                    raise RuntimeError("Refusing to prepare an already running backend.")
+            elif labels.get("ssam.odc") == request["kernel"].get("odc") and labels.get("ssam.o11") == request["kernel"].get("o11"):
                 raise RuntimeError("Refusing to prepare an already running pair.")
         kernel = directory / "kernel.json"
         features = directory / "Features.plain.xml"
         kernel.write_text(json.dumps(request["kernel"]))
-        features.write_bytes(base64.b64decode(request["features"]))
+        if not kernel_only:
+            features.write_bytes(base64.b64decode(request["features"]))
         try:
             compose = request["compose"]
             service = compose["services"]["ssam-server-v1"]
@@ -246,6 +283,31 @@ def dispatch(request):
             digests = json.loads(docker("image", "inspect", "--format", "{{json .RepoDigests}}", image))
             if not any(d.endswith("@sha256:" + request["built"]["sha256"]) for d in digests):
                 raise RuntimeError("Pulled image digest differs from the tested digest.")
+            if kernel_only:
+                # The kernel.json of this backend's runtime folder only (the server-state volume, nothing else mounted): the pair
+                # check runs inside the new image, then a hardened container of the new image writes the file atomically. The
+                # running backend keeps its caches, reader copies and stamp; the new image's start resets what the kernel
+                # changed (review M4). No ssamctl kernel write: it empties the version caches of the running backend.
+                runtime = service.get("environment", {}).get("SSAM_RUNTIME_DIR", "")
+                if runtime != "/data/server/versions/" + request["id"]:
+                    raise ValueError("Invalid runtime directory.")
+                state = [m for m in service["volumes"] if m.get("target") == "/data/server"]
+                if len(state) != 1 or state[0].get("type", "volume") != "volume":
+                    raise RuntimeError("Unexpected backend volume target.")
+                spec = compose["volumes"].get(state[0]["source"], {}) or {}
+                volume = spec.get("name") or settings["composeProject"] + "_" + state[0]["source"]
+                check = directory / "server/deploy/kernel-pair-check.mjs"
+                if not check.is_file():
+                    raise RuntimeError("No pair checker in the deploy archive.")
+                # The pair check runs in the same hardened container as the write (review B11): unprivileged user, no
+                # capabilities, no network, only the two files mounted read-only (readable by that user).
+                os.chmod(check, 0o644)
+                os.chmod(kernel, 0o644)
+                docker("run", *HARDENED, "--network", "none", "--entrypoint", "node", "-v", str(check) + ":/c.mjs:ro", "-v", str(kernel) + ":/k.json:ro", image, "/c.mjs", "check", "/k.json")
+                docker("run", *HARDENED, "--network", "none", "-i", "-v", volume + ":/data/server", "-e", "SSAM_RUNTIME_DIR=" + runtime, image, "sh", "-c",
+                       'mkdir -p "$SSAM_RUNTIME_DIR" && cat > "$SSAM_RUNTIME_DIR/kernel.json.next" && mv "$SSAM_RUNTIME_DIR/kernel.json.next" "$SSAM_RUNTIME_DIR/kernel.json"',
+                       data=kernel.read_bytes())
+                return {"ok": True, "kernelOnly": True}
             name = "ssam-vigia-prepare-" + request["id"]
             # Explicit stopped staging container lets ssamctl initialize the exact
             # future Coolify volumes without starting the new router or backend.
@@ -283,7 +345,8 @@ def dispatch(request):
             ctl = str(directory / "server/deploy/coolify/ssamctl.sh")
             try:
                 command(["sh", ctl, "kernel", "write", str(kernel)], env=env)
-                command(["sh", ctl, "features", "put", str(features)], env=env)
+                if not kernel_only:
+                    command(["sh", ctl, "features", "put", str(features)], env=env)
             finally:
                 docker("rm", name)  # Deliberately no -v: never delete a pair volume.
             return {"ok": True}
@@ -356,6 +419,23 @@ def dispatch(request):
                     same = False
                 if not same:
                     raise RemoteError('SERVED_LIST_CHANGED')
+        # A backend window (S2 R4, review M1): the image every running backend runs carries exactly the O11 kernels the pin
+        # declares for that backend (its label ssam.kernels.o11, read from the image itself, never from the manifest).
+        if request.get("expectedKernels"):
+            for server in running:
+                want = request["expectedKernels"].get(server["Config"]["Labels"].get("ssam.odc", ""))
+                labels = json.loads(docker("image", "inspect", "--format", "{{json .Config.Labels}}", server["Image"])) or {}
+                have = [v.strip() for v in str(labels.get("ssam.kernels.o11", "")).split(",") if v.strip()]
+                if want is None or sorted(set(have)) != sorted(set(want)) or len(have) != len(set(have)):
+                    raise RemoteError('IMAGE_KERNELS_DIFFER')
+                # Every O11 version the backend serves has its kernel in that image (S2 R6, review M5: served ⊆ kernels).
+                served_text = next((e.split("=", 1)[1] for e in server["Config"].get("Env") or [] if e.startswith("SSAM_SERVED_VERSIONS=")), None)
+                try:
+                    served_o11 = (json.loads(served_text) or {}).get("o11") if served_text else []
+                except ValueError:
+                    served_o11 = None
+                if not isinstance(served_o11, list) or any(v not in have for v in served_o11):
+                    raise RemoteError('IMAGE_KERNELS_DIFFER')
         presented = 0
         offered = []
         for server in running:

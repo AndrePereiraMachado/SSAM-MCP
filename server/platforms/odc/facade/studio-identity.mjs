@@ -94,11 +94,36 @@ export const servedBuildOf = (kernel, lane) => {
   return build && threePart(build) === threePart(kernel?.[lane]) ? build : null;
 };
 
+// Window 4x4, phase S2 (C:\t\r5\janela-4x4\DESENHO.md 2.2 item 4, owner decision 7b): the version of each lane that left the
+// window's keep and is still served until its retireAt (the grace period). The watcher writes it in the deployment's served
+// list (gen-compose.mjs servedLists: SSAM_SERVED_VERSIONS {odc, o11, retiring: {<lane>: {version, retireAt}}}), the same on
+// every backend. -> {odc?: {version, retireAt}, o11?: {...}}; {} when none or unreadable (a notice, never a refusal).
+export function retiringVersions(env = process.env) {
+  let value;
+  try { value = JSON.parse(env.SSAM_SERVED_VERSIONS ?? 'null')?.retiring; } catch { return {}; }
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  const out = {};
+  for (const lane of LANES) {
+    const v = value[lane], three = threePart(v?.version);
+    if (three && three === v.version && typeof v.retireAt === 'string' && !Number.isNaN(Date.parse(v.retireAt))) out[lane] = { version: three, retireAt: new Date(Date.parse(v.retireAt)).toISOString() };
+  }
+  return out;
+}
+
 // installed: the Hello's studios.<lane>.installed ({dir, version}), its version alone, or null (no Studio installed).
-// -> {lane, installed, served, relation, direction, policy, ok, warn} or null when the server has no kernel for the lane.
+// -> {lane, installed, served, relation, direction, policy, ok, warn, retiring?} or null when the server has no kernel for the
+// lane.
 //   relation: same | build-differs | build-unknown | older | newer | unknown (unreadable) | not-installed
 //   ok: the server serves this Studio (warn: served with studioBuildDiffers).
+//   retiring (S2): {version, retireAt, successor} when the served Studio is the lane's retiring version (studioRetiring).
 export function studioIdentity(lane, installed, kernel, env = process.env) {
+  const identity = judgeStudio(lane, installed, kernel, env);
+  const retiring = identity?.ok && identity.installed ? retiringVersions(env)[lane] : null;
+  if (!retiring || threePart(identity.installed) !== retiring.version) return identity;
+  const successor = servedVersions(lane, kernel, env).filter(v => v !== retiring.version).at(-1) ?? null;
+  return { ...identity, retiring: { ...retiring, successor } };
+}
+function judgeStudio(lane, installed, kernel, env) {
   const three = threePart(kernel?.[lane]);
   if (!three) return null;
   const build = servedBuildOf(kernel, lane);
@@ -249,6 +274,21 @@ export function studioRefusal(identity, { stillWorks = null } = {}) {
     error: w.en, userMessage: w.user, continuation: { tool: 'ssam_doctor', arguments: {}, why: w.why } };
 }
 
+// S2: "Your Service Studio 11.55.92 leaves SSAM on 2026-11-16; update Service Studio to 11.55.96." (DESENHO.md 2.2 item 4).
+function retiringSentence(identity) {
+  const S = STUDIO[identity.lane], r = identity.retiring, day = String(r.retireAt).slice(0, 10);
+  return `Your ${S} ${threePart(identity.installed)} leaves SSAM on ${day}; update ${S}${r.successor ? ' to ' + r.successor : ''}.`;
+}
+export function studioRetiringOf(identity) {
+  if (!identity?.ok || !identity.retiring) return null;
+  const S = STUDIO[identity.lane], r = identity.retiring, day = String(r.retireAt).slice(0, 10);
+  const { lane, installed, served, relation, policy } = identity;
+  const after = `After that day the tools that touch ${S} are refused until it is updated (the server-only tools keep working).`;
+  return { code: 'studioRetiring', lane, installed, served, relation, policy, retireAt: r.retireAt, successor: r.successor ?? null,
+    userMessage: `${retiringSentence(identity)} ${after} This request ran normally.`,
+    error: `The user's ${S} ${threePart(installed)} is served until ${day} (${r.retireAt}) and then leaves this SSAM server; the user updates ${S}${r.successor ? ' to ' + r.successor : ''} and reconnects. ${after} This call ran normally. Show this warning to the user.` };
+}
+
 // The warning an answer carries for the lane's Studio: studioBuildDiffers when another build is served (policy "warn");
 // studioNotServed when a tool ran (a server-only tool, a state report) while the Studio is not served; null otherwise.
 export function studioWarningOf(identity) {
@@ -271,8 +311,17 @@ export function studioWarningOf(identity) {
     const message = `The server does not serve ${S} ${installed} yet; the owner was notified. ${ran} Check the result in ${S} before publishing.`;
     return { code: 'studioNewerThanServed', lane, installed, served, newestServed: newest, relation, policy, userMessage: message, error: message + ' Show this warning to the user.' };
   }
+  // S2: the user's Studio is the lane's retiring version: served as it is until retireAt, then refused (STUDIO_UPDATE_REQUIRED).
+  // The same shape as studioNotServed; hosted/policy.mjs puts it in EVERY answer during the grace period.
+  if (identity.ok && identity.retiring && relation === 'same') return studioRetiringOf(identity);
   if (identity.warn) {
     const unknown = relation === 'build-unknown';
+    if (identity.retiring) {
+      // Another build of a retiring version: the build warning stands, and it says when the version leaves.
+      const base = studioWarningOf({ ...identity, retiring: undefined });
+      const leaves = ' ' + retiringSentence(identity);
+      return { ...base, retiring: identity.retiring, userMessage: base.userMessage + leaves, error: base.error + leaves };
+    }
     return { code: 'studioBuildDiffers', lane, installed, served, relation, policy,
       userMessage: unknown
         ? `Warning: the agent reported the ${S} on this computer as ${installed}, without its build, and the SSAM server uses the kernel of build ${served}. There is no way to confirm it is the same build; the SSAM owner decided to serve it this way for now. Check the result in ${S} before publishing.`

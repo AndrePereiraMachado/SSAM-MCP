@@ -2,7 +2,8 @@
 // the owner reads. No process, Docker, Git or network here (runtime.mjs does that), so every rule is testable alone.
 import fs from 'node:fs';
 import path from 'node:path';
-import {versionPairs,generateCompose,servedLists,hostBudget,withUsage} from '../coolify/gen-compose.mjs';
+import {createHash} from 'node:crypto';
+import {versionPairs,generateCompose,servedLists,hostBudget,withUsage,versionBackends,isBackendManifest,backendsOf,retiringOf} from '../coolify/gen-compose.mjs';
 export const LANES=['odc','o11'];
 export const STUDIO_NAME={odc:'ODC Studio',o11:'Service Studio'};
 export const version=value=>/^(\d+\.\d+\.\d+)/.exec(String(value??''))?.[1]??null;
@@ -12,13 +13,20 @@ export const tfmMajor=value=>{const m=/^net(\d+)\.\d+/i.exec(String(value??''));
 export function detectVersionFolders(folders){
  return Object.entries(folders).flatMap(([lane,studio])=>{try{const fullVersion=fs.readFileSync(path.join(studio,'Version.txt'),'utf8').trim().split(/\s/)[0];return version(fullVersion)?[{lane,studio,fullVersion,version:version(fullVersion)}]:[];}catch{return [];}});
 }
+// The versions a lane of the window serves, either window: a pair window's entries, or a backend window's (S2) backends
+// (ODC) and o11.served (O11), the retiring one included (it is served until retireAt).
+export function servedOf(manifest,lane){
+ if(isBackendManifest(manifest))return lane==='odc'?manifest.backends.map(b=>b.odc):[...(manifest.o11?.served??[])];
+ return [...new Set(manifest[lane].map(x=>x.version))];
+}
 export function planWindow(manifest,observed=[],state={}){
- versionPairs(manifest);
- const candidates=observed.filter(o=>LANES.includes(o.lane)&&version(o.version)).map(o=>({...o,version:version(o.version)})).filter(o=>!manifest[o.lane].some(v=>v.version===o.version)&&manifest[o.lane].every(v=>compareVersion(o.version,v.version)>0));
+ backendsOf(manifest);
+ const served=Object.fromEntries(LANES.map(l=>[l,servedOf(manifest,l)]));
+ const candidates=observed.filter(o=>LANES.includes(o.lane)&&version(o.version)).map(o=>({...o,version:version(o.version)})).filter(o=>!served[o.lane].includes(o.version)&&served[o.lane].every(v=>compareVersion(o.version,v)>0));
  candidates.sort((a,b)=>LANES.indexOf(a.lane)-LANES.indexOf(b.lane)||compareVersion(b.version,a.version));
  const requested=[];
- for(const lane of LANES)for(const [v,data]of Object.entries(state.unserved?.[lane]??{}))if(version(v)&&manifest[lane].every(x=>compareVersion(version(v),x.version)>0))requested.push({lane,version:version(v),customers:data.tokens?.length??0});
- return {window:manifest.window??3,observed:observed.map(({lane,version,fullVersion,requiresInstallation,tfm,missing})=>({lane,version,fullVersion,tfm:tfm??null,requiresInstallation:!!requiresInstallation,...(missing?.length?{missing}:{})})),candidates,requested};
+ for(const lane of LANES)for(const [v,data]of Object.entries(state.unserved?.[lane]??{}))if(version(v)&&served[lane].every(x=>compareVersion(version(v),x)>0))requested.push({lane,version:version(v),customers:data.tokens?.length??0});
+ return {window:manifest.window??(isBackendManifest(manifest)?4:3),observed:observed.map(({lane,version,fullVersion,requiresInstallation,tfm,missing})=>({lane,version,fullVersion,tfm:tfm??null,requiresInstallation:!!requiresInstallation,...(missing?.length?{missing}:{})})),candidates,requested};
 }
 // The newest installed candidate of each lane. Both lanes new at once go into ONE image (one build, one approval).
 export function readyCandidates(plan){
@@ -27,7 +35,7 @@ export function readyCandidates(plan){
 }
 // The newest version a lane of the window serves, whatever its place in the manifest (a pair added by hand at the end, or
 // the replay of an approval, may hold the newest; position 0 is only the default pair).
-export const newestServed=(manifest,lane)=>[...new Set(manifest[lane].map(x=>x.version))].sort((a,b)=>compareVersion(b,a))[0];
+export const newestServed=(manifest,lane)=>[...servedOf(manifest,lane)].sort((a,b)=>compareVersion(b,a))[0];
 // The pair one image carries: the new Studio of each lane, and for a lane with nothing new the NEWEST served version.
 export function pairFor(base,ready){
  const pick=Object.fromEntries(ready.map(c=>[c.lane,c]));
@@ -106,6 +114,205 @@ export function pinDigest(manifest,tag,digest){
  for(const lane of LANES)for(const entry of next[lane])if(entry.tag===tag){entry.sha256=digest.slice(7);found++;}
  if(found!==2)throw Error('The proposed window does not carry the tag once per lane.');
  versionPairs(next);return next;
+}
+// ---- Window 4x4, phase S2: the per-lane window of a backend window (C:/t/r5/janela-4x4/DESENHO.md 2.2-2.3, owner decisions
+// 7a-7d). A backend window ({window, o11: {served, kernels?}, backends: [...], retiring?, sizing?}, gen-compose.mjs) keeps,
+// per lane, the newest keep[lane] versions plus at most ONE retiring version with its retireAt (now + graceDays):
+//   - a new ODC Studio is ONE new backend (one image: that ODC with the window's O11 kernels); the oldest kept ODC backend
+//     becomes retiring and keeps serving until retireAt;
+//   - a new Service Studio rebuilds EVERY backend (each image carries every served O11 kernel, the retiring one included); the
+//     oldest kept O11 version becomes retiring;
+//   - at retireAt a compose-only round (no image) removes it: the ODC backend leaves; the O11 version leaves o11.served (its
+//     kernel stays in the images, unserved, until the next O11 rebuild);
+//   - a new version of a lane while that lane already has a retiring one retires the older one at once (never more than
+//     keep + 1 versions per lane);
+//   - an active customer never holds the window any more (the pair window's 14-day retention is gone): the customers on a
+//     version that enters or leaves retirement are named to the owner (affected) and told on every answer (studioRetiring).
+export const DEFAULT_KEEP=Object.freeze({odc:4,o11:4});
+export const DEFAULT_GRACE_DAYS=7;
+const DAY=86400000;
+// config.window = {keep: {odc, o11}, graceDays, notifyAffected} (the old maxWindow belongs to the pair window).
+export function windowPolicy(config){
+ const w=config?.window??{};
+ if(typeof w!=='object'||Array.isArray(w)||Object.keys(w).some(k=>!['keep','graceDays','notifyAffected'].includes(k)))throw Error('Invalid window configuration: {keep: {odc, o11}, graceDays, notifyAffected}.');
+ const keep={...DEFAULT_KEEP,...(w.keep??{})};
+ for(const lane of LANES)if(!Number.isInteger(keep[lane])||keep[lane]<1||keep[lane]>8)throw Error(`Invalid window.keep.${lane}: an integer from 1 to 8.`);
+ if(Object.keys(keep).some(k=>!LANES.includes(k)))throw Error('Invalid window.keep: {odc, o11}.');
+ const graceDays=w.graceDays??DEFAULT_GRACE_DAYS;
+ if(typeof graceDays!=='number'||!Number.isFinite(graceDays)||graceDays<0||graceDays>60)throw Error('Invalid window.graceDays: 0 to 60.');
+ return {keep,graceDays,notifyAffected:w.notifyAffected!==false};
+}
+export const isBackendWindow=manifest=>isBackendManifest(manifest);
+// The backend of an ODC Studio version (gen-compose.mjs names it so: volumes, runtime folder, usage, hotPair).
+export const backendId=odc=>`odc-${odc}`;
+// A short hash of an O11 kernel set, for the image tag: the same set always gives the same 8 hex.
+export const kernelSetHash=kernels=>createHash('sha256').update([...kernels].sort(compareVersion).join(',')).digest('hex').slice(0,8);
+export const backendTag=({odc,kernels},commit,date)=>`prod-${date}-${commit}-odc${odc.replaceAll('.','')}-o11k${kernelSetHash(kernels)}`;
+// The round of a lane (its new version) and the compose-only round of a retirement; the attempt folder has the same name.
+export const laneRoundId=(lane,v)=>`${lane}-${v}`;
+export const retireRoundId=(lane,v)=>`retire-${lane}-${v}`;
+export const ROUND_ID=/^(?:o11-\d+\.\d+\.\d+-odc-\d+\.\d+\.\d+|(?:odc|o11)-\d+\.\d+\.\d+|retire-(?:odc|o11)-\d+\.\d+\.\d+)$/;
+// The O11 kernels the images of a backend window carry (o11.kernels, default o11.served).
+export const kernelsOf=manifest=>[...(manifest.o11?.kernels??manifest.o11?.served??[])].sort(compareVersion);
+const kept=(manifest,lane)=>servedOf(manifest,lane).filter(v=>v!==manifest.retiring?.[lane]?.version).sort((a,b)=>compareVersion(b,a));
+const isoAt=ms=>new Date(ms).toISOString();
+// The customers whose Studio of a lane is one of versions (the studio-versions telemetry of the live backends: state.tokens),
+// real clients only; token ids are kept for the private evidence, the owner's notice names the customer.
+export function affectedBy(tokens,changes){
+ const out=[];
+ for(const [token,data]of Object.entries(tokens??{})){
+  if(!isRealClient(data))continue;
+  for(const c of changes)if(version(data[c.lane]?.installed)===c.version)out.push({token,customer:data.customer??null,lane:c.lane,version:c.version,lastSeen:data.seen??null,...(c.retireAt?{retireAt:c.retireAt}:{})});
+ }
+ return out;
+}
+// The sizing that rides along a backend rotation: the use of a leaving backend folds into the default (withUsage), an owner
+// pin on a leaving backend is dropped (hotPinDropped), and keep + retiring must fit the host (hostBudget, CAPACITY_WINDOW).
+function carrySizing(next){
+ let hotPinDropped=null;
+ if(next.sizing){
+  const names=new Set(backendsOf(next).map(b=>b.name));
+  if(next.sizing.hotPair!=null&&!names.has(next.sizing.hotPair)){hotPinDropped=next.sizing.hotPair;delete next.sizing.hotPair;}
+  if(next.sizing.usage)next.sizing.usage=withUsage(next,next.sizing.usage).sizing.usage;
+  hostBudget(next);
+ }
+ return hotPinDropped;
+}
+const finish=(next,keep)=>{
+ next.backends.sort((a,b)=>compareVersion(b.odc,a.odc));
+ if(next.retiring&&!Object.keys(next.retiring).length)delete next.retiring;
+ next.window=Math.min(20,Math.max(keep.odc,next.backends.length));
+ versionBackends(next);retiringOf(next,versionBackends(next));
+ return next;
+};
+// The O11 kernels a built image really carries (S2 R4, review M1): the build's own list (runtime.mjs buildBackend reads it
+// back from the image label ssam.kernels.o11), recorded as o11Kernels on its backend so versionBackends refuses an image that
+// lacks a served version. Not a three-part list: null (an image of the preview, not built yet).
+export const builtKernels=at=>Array.isArray(at?.kernels)&&at.kernels.length&&at.kernels.every(v=>/^\d+\.\d+\.\d+$/.test(v))?[...new Set(at.kernels)].sort(compareVersion):null;
+// The O11 kernels of an image's label ssam.kernels.o11 (deploy/gen-dockerfile.mjs: SSAM_IMAGE_O11, comma separated), sorted;
+// null without the label or with a word that is not a three-part version.
+export const labelKernels=labels=>{const text=labels?.['ssam.kernels.o11'];if(typeof text!=='string'||!text.trim())return null;const list=text.split(',').map(v=>v.trim());return builtKernels({kernels:list})&&list.length===new Set(list).size?builtKernels({kernels:list}):null;};
+// The customers of a window change as the files keep them: never a token id, only a short hash of it (one customer seen on
+// two versions reads as one), the customer label and the Studio.
+export const affectedRecord=affected=>(affected??[]).map(({token,...a})=>({...a,client:createHash('sha256').update(String(token)).digest('hex').slice(0,12)}));
+// A new version of one lane enters a backend window. images: {image, tag, kernels?} of the new backend (ODC), or {"<odc>":
+// {image, tag, kernels?}} of EVERY backend of the next window (O11: each image is rebuilt with the new kernel set); kernels,
+// the image's real O11 set, becomes the backend's o11Kernels. -> {manifest, retiring:
+// [the version that enters its grace], retired: [a retiring version that left at once], affected, hotPinDropped?}. The new
+// images carry no digest yet (pinDigests after publication).
+export function rotateLane(manifest,lane,v,{now=Date.now(),graceDays=DEFAULT_GRACE_DAYS,keep=DEFAULT_KEEP,images,tokens}={}){
+ if(!isBackendManifest(manifest))throw Error('rotateLane needs a backend window.');
+ if(!LANES.includes(lane)||!/^\d+\.\d+\.\d+$/.test(v??''))throw Error('rotateLane needs a lane and a three-part version.');
+ versionBackends(manifest);
+ const served=servedOf(manifest,lane);
+ if(served.includes(v))throw Object.assign(Error(`${STUDIO_NAME[lane]} ${v} is already served.`),{code:'ALREADY_SERVED',environmental:true});
+ if(served.some(x=>compareVersion(v,x)<0))throw Error(`${STUDIO_NAME[lane]} ${v} is older than a served version; a lane only moves forward.`);
+ const next=structuredClone(manifest),retiring=[],retired=[];next.retiring={...(next.retiring??{})};
+ if(lane==='odc'){
+  if(!images?.image||!images?.tag)throw Error('A new ODC backend needs its image and tag.');
+  // The new image is built with the served kernels; a kernel the older images still carry after an O11 retirement
+  // (o11.kernels) is not in it.
+  const kernels=kernelsOf(manifest),servedO11=[...manifest.o11.served].sort(compareVersion),real=builtKernels(images);
+  next.backends.push({odc:v,image:images.image,tag:images.tag,...(real?{o11Kernels:real}:kernels.join()!==servedO11.join()?{o11Kernels:servedO11}:{})});
+ }else{
+  next.o11={served:[...next.o11.served,v]};
+ }
+ // The lane's earlier retiring version leaves now: a second new version never keeps two of them.
+ const before=manifest.retiring?.[lane];
+ if(before){retired.push({lane,version:before.version,retireAt:before.retireAt,early:true});delete next.retiring[lane];}
+ const active=kept({...next,retiring:{}},lane).filter(x=>x!==before?.version);
+ const excess=active.slice(keep[lane]);
+ if(excess.length){
+  next.retiring[lane]={version:excess[0],retireAt:isoAt(now+graceDays*DAY)};retiring.push({lane,...next.retiring[lane]});
+  // A keep the owner lowered by more than one: the older ones leave at once.
+  for(const x of excess.slice(1))retired.push({lane,version:x,early:true});
+ }
+ const leave=new Set(retired.map(r=>r.version));
+ if(lane==='odc')next.backends=next.backends.filter(b=>!leave.has(b.odc));
+ else{
+  next.o11.served=next.o11.served.filter(x=>!leave.has(x)).sort(compareVersion);
+  // Every image is rebuilt with exactly the served kernels (the retiring one included); a missing image is a defect.
+  for(const b of next.backends){
+   const at=images?.[b.odc];if(!at?.image||!at?.tag)throw Error(`The O11 round needs the rebuilt image of backend ${backendId(b.odc)}.`);
+   b.image=at.image;b.tag=at.tag;delete b.sha256;const real=builtKernels(at);if(real)b.o11Kernels=real;else delete b.o11Kernels;
+  }
+ }
+ finish(next,keep);
+ const hotPinDropped=carrySizing(next);
+ return {manifest:next,retiring,retired,affected:affectedBy(tokens,[...retiring,...retired]),...(hotPinDropped?{hotPinDropped}:{})};
+}
+// The retirement that is due (retireAt reached), ODC first, or null. One lane per round: the next round takes the other.
+export function dueRetirement(manifest,now=Date.now()){
+ if(!isBackendManifest(manifest))return null;
+ const r=retiringOf(manifest,versionBackends(manifest));
+ for(const lane of LANES)if(r?.[lane]&&Date.parse(r[lane].retireAt)<=now)return {lane,...r[lane]};
+ return null;
+}
+// The compose-only round of a due retirement: the ODC backend leaves, or the O11 version leaves o11.served (o11.kernels keeps
+// it: the images still carry its kernel until the next O11 rebuild). -> {manifest, retired, affected, hotPinDropped?} or null.
+export function retireDue(manifest,{now=Date.now(),keep=DEFAULT_KEEP,tokens}={}){
+ const due=dueRetirement(manifest,now);
+ if(!due)return null;
+ const next=structuredClone(manifest);delete next.retiring[due.lane];
+ if(due.lane==='odc')next.backends=next.backends.filter(b=>b.odc!==due.version);
+ else next.o11={served:next.o11.served.filter(v=>v!==due.version),kernels:kernelsOf(manifest)};
+ finish(next,keep);
+ const hotPinDropped=carrySizing(next);
+ const retired=[{lane:due.lane,version:due.version,retireAt:due.retireAt}];
+ return {manifest:next,retired,affected:affectedBy(tokens,retired),...(hotPinDropped?{hotPinDropped}:{})};
+}
+// A rehearsal (-RehearseCurrent) rebuilds what a lane's round would build for a version the window already serves: the
+// newest ODC backend, or every backend (O11). Nothing rotates.
+export function rebuildLane(manifest,lane,images){
+ const next=structuredClone(manifest);
+ for(const b of next.backends){const at=lane==='odc'?(b.odc===images.odc?images:null):images[b.odc];if(at){b.image=at.image;b.tag=at.tag;delete b.sha256;}}
+ versionBackends(next);return next;
+}
+// The published digest of every image a round built ({tag: 'sha256:<64 hex>'}), written into the backends of that tag. Every
+// backend ends pinned: a deploy never carries an image without its digest.
+export function pinDigests(manifest,digests){
+ const next=structuredClone(manifest),found=new Set();
+ for(const [tag,digest]of Object.entries(digests))if(!/^sha256:[a-f0-9]{64}$/.test(digest))throw Error('Invalid published digest.');
+ for(const b of next.backends)if(digests[b.tag]){b.sha256=digests[b.tag].slice(7);found.add(b.tag);}
+ if(found.size!==Object.keys(digests).length)throw Error('The proposed window does not carry every built tag.');
+ if(next.backends.some(b=>!/^[a-f0-9]{64}$/.test(String(b.sha256??'').replace(/^sha256:/,''))))throw Error('A backend of the proposed window has no pinned digest.');
+ versionBackends(next);return next;
+}
+// The default O11 kernel of a backend window (kernel.json o11, the kernel of the server's own processes; o11-kernels.mjs): it is
+// always served, so it must never be the retiring version, and an O11 round moves it to the newest version the LIVE window
+// served, which both the live images and the rebuilt ones carry (a rollback restarts the old images with the new kernel.json).
+// An ODC round keeps the live default.
+export function defaultO11(base,{lane,liveDefault=null}={}){
+ const keptO11=kept(base,'o11');
+ if(lane==='o11')return keptO11[0];
+ return liveDefault&&keptO11.includes(liveDefault)?liveDefault:keptO11[0];
+}
+// The first S1 deploy (S1-KIT-PLANO.md) as a rotation: the pair window becomes a backend window; the ODC (and O11) versions
+// beyond keep enter "retiring" with graceDays instead of leaving at the switch (ODC 1.7.28 on 2026-11-09). images: {"<odc>":
+// {image, tag, sha256?}} for every ODC backend kept or retiring. -> {manifest, retiring, retired, affected}.
+export function fromPairs(pairs,{now=Date.now(),graceDays=DEFAULT_GRACE_DAYS,keep=DEFAULT_KEEP,images,tokens}={}){
+ versionPairs(pairs);
+ const next={window:keep.odc,o11:{served:[]},backends:[],retiring:{},...(pairs.sizing?{sizing:structuredClone(pairs.sizing)}:{})};
+ const retiring=[],retired=[];
+ for(const lane of LANES){
+  const all=[...new Set(pairs[lane].map(x=>x.version))].sort((a,b)=>compareVersion(b,a));
+  const stay=all.slice(0,keep[lane]+1);
+  if(all.length>keep[lane]){next.retiring[lane]={version:all[keep[lane]],retireAt:isoAt(now+graceDays*DAY)};retiring.push({lane,...next.retiring[lane]});}
+  for(const x of all.slice(keep[lane]+1))retired.push({lane,version:x});
+  if(lane==='o11')next.o11.served=stay.sort(compareVersion);
+  else for(const odc of stay){const at=images?.[odc];if(!at?.image||!at?.tag)throw Error(`The first backend window needs the image of backend ${backendId(odc)}.`);const real=builtKernels(at);next.backends.push({odc,image:at.image,tag:at.tag,...(at.sha256?{sha256:at.sha256}:{}),...(real?{o11Kernels:real}:{})});}
+ }
+ finish(next,keep);
+ const hotPinDropped=carrySizing(next);
+ return {manifest:next,retiring,retired,affected:affectedBy(tokens,[...retiring,...retired]),...(hotPinDropped?{hotPinDropped}:{})};
+}
+// The rounds a backend window would run for the ready candidates (readyCandidates), ODC first: one lane per round.
+export const laneRounds=ready=>LANES.flatMap(lane=>ready.filter(c=>c.lane===lane).map(c=>({lane,version:c.version,candidate:c,id:laneRoundId(lane,c.version)})));
+// The owner's lines of a window change: who is affected, without token ids (the evidence file keeps them).
+export function affectedText(affected,{notifyAffected=true}={}){
+ if(!affected?.length)return 'no customer was seen on it';
+ if(!notifyAffected)return `${affected.length} customer${affected.length>1?'s':''} seen on it`;
+ return affected.map(a=>`${a.customer??'customer '+String(a.token).slice(0,6)} (${STUDIO_NAME[a.lane]} ${a.version}, last seen ${a.lastSeen??'unknown'})`).join('; ');
 }
 export function compareFailures(before,after){const a=new Set(before.failures),b=new Set(after.failures);return {before:before.failures,after:after.failures,newFailures:[...b].filter(n=>!a.has(n)),resolved:[...a].filter(n=>!b.has(n))};}
 const xml=s=>s.replace(/&quot;/g,'"').replace(/&apos;/g,"'").replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&amp;/g,'&');

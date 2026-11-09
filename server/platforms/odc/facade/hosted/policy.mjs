@@ -1044,7 +1044,8 @@ export function wrapHostedTool(name, config, handler, { context, link = context?
     const answer = await execute(...params);
     let info;
     try { info = link?.info?.(); } catch { return answer; }
-    const newer = ['odc', 'o11'].map(lane => studioNotice(lane, info)).filter(w => w?.code === 'studioNewerThanServed');
+    // S2: studioRetiring too goes into EVERY answer during the grace period (DESENHO.md 2.2 item 4), like studioNewerThanServed.
+    const newer = ['odc', 'o11'].map(lane => studioNotice(lane, info)).filter(w => ['studioNewerThanServed', 'studioRetiring'].includes(w?.code) || w?.retiring);
     if (!newer.length) return answer;
     const existing = answer?.structuredContent;
     const warnings = new Map([...(existing?.studioWarnings ?? (existing?.studioWarning ? [existing.studioWarning] : [])), ...newer].map(w => [w.lane, w]));

@@ -285,7 +285,8 @@ function laneCompatibility(lane, hello, kernel, lanes, refused) {
   if (!installed) return no('STUDIO_NOT_INSTALLED', 'The agent found no ' + name + ' installed on the user\'s machine; this server has the kernel for ' + name + ' ' + server + '.');
   // a version the agent could not read: after the package checks, as before (STUDIO_VERSION_UNKNOWN)
   if (notServed) return notServed;
-  return studio?.warn ? { ok: true, studio, warning: studioWarningOf(studio) } : { ok: true };
+  // S2: a retiring Studio is served with its studioRetiring notice (the identity rides along for the gate's every answer).
+  return studio?.warn || studio?.retiring ? { ok: true, studio, warning: studioWarningOf(studio) } : { ok: true };
 }
 // The hub's answer for a Studio the server does not serve: the gate's refusal (studio-identity.mjs studioRefusal) in the
 // shape of a compatibility entry, with the identity for the gate and the event.
