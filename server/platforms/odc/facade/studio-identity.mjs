@@ -63,6 +63,16 @@ export function servedVersions(lane, kernel = {}, env = process.env) {
     .sort((a,b) => compare(a.split('.').map(Number), b.split('.').map(Number), 3));
 }
 
+// The O11 window the deployment configured (S1 R3, review R2 B-R2-4), whether or not each kernel came up: the O11 list of
+// SSAM_SERVED_VERSIONS when it names one, else the image's SSAM_IMAGE_O11 list; three numbers each, oldest first.
+export function configuredO11Window(env = process.env) {
+  let deployed = null;
+  try { const value = JSON.parse(env.SSAM_SERVED_VERSIONS ?? 'null'); if (Array.isArray(value?.o11)) deployed = value.o11; } catch { deployed = null; }
+  const list = deployed ?? String(env.SSAM_IMAGE_O11 ?? '').split(',');
+  return [...new Set(list.map(v => threePart(typeof v === 'string' ? v.trim() : v)).filter(Boolean))]
+    .sort((a,b) => compare(a.split('.').map(Number), b.split('.').map(Number), 3));
+}
+
 // kernel.json studioBuildPolicy: "warn" | "refuse" for both lanes, or {odc, o11} per lane (a missing lane is "warn").
 export function buildPolicyOf(value) {
   let invalid = false;
@@ -88,7 +98,7 @@ export const servedBuildOf = (kernel, lane) => {
 // -> {lane, installed, served, relation, direction, policy, ok, warn} or null when the server has no kernel for the lane.
 //   relation: same | build-differs | build-unknown | older | newer | unknown (unreadable) | not-installed
 //   ok: the server serves this Studio (warn: served with studioBuildDiffers).
-export function studioIdentity(lane, installed, kernel) {
+export function studioIdentity(lane, installed, kernel, env = process.env) {
   const three = threePart(kernel?.[lane]);
   if (!three) return null;
   const build = servedBuildOf(kernel, lane);
@@ -104,7 +114,7 @@ export function studioIdentity(lane, installed, kernel) {
   if (byVersion !== 0) {
     // The window is the deployment's (every backend's versions), sorted; its last entry is the newest version the server
     // serves in this lane. It is named apart from served (the version of THIS backend), which may be an older pair (r44).
-    const window = servedVersions(lane, kernel);
+    const window = servedVersions(lane, kernel, env);
     const newest = window.at(-1);
     // Window 4x4 (review S1 B1): on a multi-O11 backend a served Service Studio has a kernel HERE (kernel.o11Builds): the
     // process is another Studio than the one the agent reported, and the router never moves a customer for its O11.
@@ -112,8 +122,13 @@ export function studioIdentity(lane, installed, kernel) {
     if (window.includes(threePart(version))) return { ...out('served-elsewhere', version), window, newest, ...(here ? { kernelHere: true } : {}) };
     const newer = compare(numbers, newest.split('.').map(Number), 3) > 0;
     // Review S1 B2: a version inside the window that is not served (a multi-O11 kernel turned off at start) is no update to
-    // ask for: the server lacks it, as for a newer one.
-    const gap = !newer && window.length > 1 && compare(numbers, window[0].split('.').map(Number), 3) > 0;
+    // ask for: the server lacks it, as for a newer one. Review R2 B-R2-4: the window there is the CONFIGURED one (its oldest
+    // kernel off at start is a gap too, not "older than the versions this server serves"); a version older than every
+    // configured one is still an update to ask for.
+    const configured = lane === 'o11' && kernel?.o11Builds && typeof kernel.o11Builds === 'object' ? configuredO11Window(env) : [];
+    const oldest = [window[0], ...configured].filter(Boolean).sort((a,b) => compare(a.split('.').map(Number), b.split('.').map(Number), 3))[0];
+    const gap = !newer && (window.length > 1 || configured.length > 1)
+      && compare(numbers, oldest.split('.').map(Number), 3) >= 0;
     return { ...out(newer ? 'newer' : 'older', version,
       newer ? { direction: 'newer', ok: true, warn: true } : { direction: 'older' }), window, newest, ...(gap ? { gap: true } : {}) };
   }

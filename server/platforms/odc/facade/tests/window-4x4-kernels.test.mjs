@@ -176,4 +176,15 @@ test('identity texts: another served Service Studio is a reconnect, not a redire
   assert.doesNotMatch(studioRefusal(gap).error, /older than|Update/);
   const old = studioIdentity('o11', { version: '11.55.91.1' }, { ...kernel, o11Builds: on, servedVersions: { o11: Object.keys(on) } });
   assert.equal(old.gap, undefined); assert.equal(causeOf(old), 'STUDIO_UPDATE_REQUIRED', 'older than the whole window: update, as before');
+  // Review R2 B-R2-4: the OLDEST kernel off at start (.92) is a gap of the configured window too, never "Update".
+  const { '11.55.92': _first, ...upper } = BUILDS;
+  const upperKernel = { ...kernel, o11Builds: upper, servedVersions: { o11: Object.keys(upper) } };
+  const configured = { SSAM_IMAGE_O11: Object.keys(BUILDS).join(',') };
+  const first = studioIdentity('o11', { version: BUILDS['11.55.92'] }, upperKernel, configured);
+  assert.equal(first.gap, true); assert.equal(causeOf(first), 'STUDIO_VERSION_NOT_SERVED_YET');
+  assert.doesNotMatch(studioRefusal(first).error, /older than|Update/);
+  // The deployment's own O11 list wins over the image's: a version it retired is an update again.
+  const retired = studioIdentity('o11', { version: BUILDS['11.55.92'] }, upperKernel, { ...configured, SSAM_SERVED_VERSIONS: JSON.stringify({ o11: Object.keys(upper) }) });
+  assert.equal(retired.gap, undefined); assert.equal(causeOf(retired), 'STUDIO_UPDATE_REQUIRED');
+  assert.equal(causeOf(studioIdentity('o11', { version: '11.55.91.1' }, upperKernel, configured)), 'STUDIO_UPDATE_REQUIRED', 'older than the configured window');
 });
