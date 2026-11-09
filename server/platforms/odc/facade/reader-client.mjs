@@ -92,9 +92,19 @@ export function registerReaderEvictor(gate, platformDir, {rpc = readerRpc, autho
   const name = 'o11-readers:' + path.resolve(platformDir);
   if (!gate?.addEvictor || gate.hasEvictor?.(name)) return;
   gate.addEvictor({rank: 0, name, evict: async ({kind} = {}) => {
-    const room = await makeRoom(platformDir, {keep: null, max: 1, limit: 1, rpc, authorization, minIdleMs: kind === 'reader' ? minIdleMs : READER_EVICT_IDLE_MS, now});
+    let key = null; try { key = typeof authorization === 'function' ? authorization() : authorization; } catch { key = null; }
+    const room = await makeRoom(platformDir, {keep: null, max: 1, limit: 1, rpc, authorization: key, minIdleMs: kind === 'reader' ? minIdleMs : READER_EVICT_IDLE_MS, now});
     return room.evicted.length ? {what: 'o11-reader', generation: room.evicted[0].generation} : null;
   }});
+}
+// Review R4 B-R4-1: the readers outlive the server process that started them (detached, 15 min idle): a multi-O11 server
+// registers the evictor of its O11 reader folder at start (ssam.mjs startupKernel), so a build can make a reader left by the
+// previous process leave before this one started any. The key is read at each eviction (it may appear later).
+export function registerStartupReaderEvictor(platformDir, {gate = memoryGate(), env = process.env, rpc = readerRpc} = {}) {
+  const settings = readerResidency({env, versions: imageO11Versions(env).length});
+  registerReaderEvictor(gate, platformDir, {rpc, minIdleMs: settings.minIdleMs,
+    authorization: () => fs.readFileSync(path.join(readerAuthority(), 'bridge.key'), 'utf8').trim()});
+  return gate.hasEvictor?.('o11-readers:' + path.resolve(platformDir)) ?? false;
 }
 // deps (tests): {env, gate, rpc, now}.
 export async function admitReader({dll, runtimeDir, directory, authorization}, admission, deps = {}) {

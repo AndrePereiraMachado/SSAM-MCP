@@ -2169,6 +2169,14 @@ export async function startupKernel({ dir, fileVersion, env = process.env, log =
   // Window 4x4: the O11 kernels this backend serves (o11-kernels.mjs), {version: build}; the default stays kernel.o11.
   const o11Builds = ki.o11ServedBuilds({ kernel: shape, image: declared, env });
   if (o11Builds) { shape.o11Builds = o11Builds; log({ event: 'o11-kernels', default: shape.o11, served: o11Builds, off: refusedKernels.map(r => r.version) }); }
+  // Review R4 B-R4-1: the O11 readers left by a previous process of this backend are evictable from the start.
+  if (o11Builds) {
+    try {
+      const { readerConfig } = await import('./module-map.mjs');
+      const reading = readerConfig('o11', { env });
+      (await import('./reader-client.mjs')).registerStartupReaderEvictor(path.join(reading.cacheRoot, reading.platform), { env });
+    } catch { /* relief is best effort: a reader start registers it too */ }
+  }
   const policy = buildPolicyOf(studioBuildPolicy);
   log({ event: 'studio-builds', builds, studioBuildPolicy: { o11: policy.o11, odc: policy.odc }, ...(policy.invalid ? { policyInvalid: true } : {}) });
   const kernel = { ...shape, builds, ...(studioBuildPolicy !== undefined ? { studioBuildPolicy } : {}) };

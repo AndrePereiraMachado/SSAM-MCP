@@ -181,3 +181,15 @@ test('ensureReader (M4): the startup deadline runs from the spawn, after a late 
   assert.equal(attached, 424242); assert.deepEqual(killed, [424242], 'the late reader is killed'); assert.equal(released, true, 'and its reservation released');
   assert.equal(fs.existsSync(path.join(directory, 'start.lock')), false);
 });
+
+// Review R4 B-R4-1: the server registers the reader evictor of its O11 folder at start; the key is read at each eviction.
+test('registerStartupReaderEvictor (B-R4-1): readers left by a previous process are evictable before any reader start', async () => {
+  const { registerStartupReaderEvictor } = await import('../reader-client.mjs');
+  const now = Date.now();
+  const { dir, rpc, calls } = readers({ left: { port: 61, lastRead: new Date(now - 600000).toISOString() } });
+  const gate = createMemoryGate({ room: () => 5000, settings: { reserveMb: 1400, odcReserveMb: 600, waitMs: 100, growMs: 15000, evictTurnMs: 0 } });
+  assert.equal(registerStartupReaderEvictor(dir, { gate, env: {}, rpc }), true);
+  const r = await gate.relieve({ kind: 'build', force: true });
+  assert.equal(r.generation, 'left');
+  assert.equal(calls.find(c => c.command === 'shutdown').port, 61);
+});
