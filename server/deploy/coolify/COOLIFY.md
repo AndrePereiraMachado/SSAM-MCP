@@ -532,3 +532,30 @@ for its worst case without admission (server 0.4 GB + a worker in a call 1.7 GB 
   (`r45-window.sh apply`) leaves one copy of the stored compose, `/root/ssam-r45/coolify-before.json` (0600), for the
   rollback; `cleanup`, after the owner confirms, deletes it and logs it in `/root/ssam-r45/cleanup.log`. Roll back with
   `SSAM_LOCK_WAIT=900` (a backup cron may hold the lock).
+
+## 14. Window 4x4 (one backend per ODC version; phase S1, not deployed)
+
+Design B (`C:\t\r5\janela-4x4\DESENHO.md`): the window serves the newest ODC Studio and the three before it, and the
+newest Service Studio and the three before it, in every combination. One backend per ODC version; each image carries
+every Service Studio of the window and one O11 kernel compiled against each:
+
+- Image: `node server/deploy/gen-dockerfile.mjs <o11-kernels.json>` writes `deploy/.generated/Dockerfile.o11k` from
+  `server/Dockerfile` (every bundle pinned by its SHA256 in the generated file); `SSAM_DOCKERFILE=deploy/.generated/Dockerfile.o11k
+  sh deploy/build.sh ...` builds it, one image per ODC Studio. Layout `/studio/o11/<x.y.z>`, `/app/kernel/.local/o11/<x.y.z>/cli`,
+  ENV `SSAM_IMAGE_O11` (the list), `SSAM_O11_STUDIO_ROOT`, `SSAM_O11_CLI_ROOT`; `ANVIL_STUDIO_DIR` and `/app/kernel/.local/cli`
+  are the default kernel's (the one kernel.json pins). The single-O11 `server/Dockerfile` is unchanged.
+- Server: the hub hands each customer the kernel of its own Service Studio (`welcome.kernel.o11`, `builds.o11`;
+  `platforms/odc/facade/o11-kernels.mjs`), its hosted calls run that kernel's CLI and Studio folder, and its O11 module index
+  is `<SSAM_MODULE_INDEX_ROOT>/o11-kernel/<x.y.z>`. A Service Studio outside the window is judged by the default kernel, as
+  on the pairs (older: update required; newer: served with the notice).
+- Compose: a `versions.json` with `backends` instead of the `odc`/`o11` lists:
+  `{"window":4,"o11":{"served":["11.55.92","11.55.93","11.55.94","11.55.95"]},"sizing":{...},"backends":[{"odc":"1.7.32","image":"...","tag":"...","sha256":"..."},...]}`.
+  `gen-compose.mjs` names each backend `odc-<x.y.z>` (volumes `cache-odc-<v>`, `odc-features-odc-<v>`, runtime
+  `/data/server/versions/odc-<v>`), puts the newest ODC first (`ssam-server-v1`, the router's default), gives EVERY backend
+  the same `SSAM_SERVED_VERSIONS` (all ODC versions of the window, `o11.served`), label `ssam.o11` = the served list, and
+  mounts the shared signed-bridge store `ssam-bridges` read-only at `/data/bridges` (`SSAM_BRIDGES_DIR`; the public key stays
+  in the image). The router selects by the ODC Studio only. Sizing (section 13) is unchanged and keyed by backend name
+  (`usage`, `hotPair`: `odc-<v>`); `withUsage` folds the counts of a pair into the backend of its ODC version.
+- Not yet: the watcher (S2) still rotates and checks a window of pairs and must stay paused while a backend window is live;
+  `ssamctl --version o11=<v>` no longer identifies a backend (use `odc=<v>`). The first deploy kit is planned in
+  `C:\t\r5\janela-4x4\S1-KIT-PLANO.md` (rename of the odc-features volumes, kernel.json per new runtime dir, Coolify PATCH, rollback).
