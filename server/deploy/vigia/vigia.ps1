@@ -10,6 +10,7 @@ param(
  [string]$Pin,
  [string]$Redecide,
  [string]$Skip,
+ [switch]$Force,
  [switch]$NoUpdate,
  [switch]$RehearseCurrent
 )
@@ -38,6 +39,7 @@ if($SeedFeatures){$argsList+=@('--seed-features',$SeedFeatures)}
 if($Pin){$argsList+=@('--pin',$Pin)}
 if($Redecide){$argsList+=@('--redecide',$Redecide)}
 if($Skip){$argsList+=@('--skip',$Skip)}
+if($Force){$argsList+='--force'}
 if($NoUpdate){$argsList+='--no-update'}
 if($RehearseCurrent){$argsList+='--rehearse-current'}
 & $node @argsList

@@ -351,7 +351,12 @@ async function decideOdc(o,lane,noted){
 //    watcher that was stopped, or a -Pin of the newer one, always gives the owner the whole hold. Past it, the newer one
 //    is offered with r.skips and the older is recorded in lane.skipped.
 // A skipped version (by a hold, or by the owner's -Skip) is no longer read, so the versions behind it are read in turn;
-// -Pin or -Redecide of it undoes the skip. lane.served records the window this round judged against (for -Pin, -Skip).
+// -Pin or -Redecide of it undoes the skip. When the highest version of the notes is skipped and the highest one left is
+// not above the newest served, the lane has nothing to read: that version is served already, and reading it would judge
+// a served version (one without a record has no floor below ODC_KNOWN: "older than the last known release" every round),
+// so the round reports only the skip.
+// lane.served records the window this round judged against (for -Pin, -Skip); lane.noted the versions of the notes at the
+// last read that changed them (-Skip refuses a version no round has read).
 export const HOLD_LIMITED=Object.freeze(['STUDIO_BUILD_AMBIGUOUS','STUDIO_BUILD_NOT_FOUND']);
 export async function latestOdcAll(o,{state={},served=[]}={}){
  const notes=await readOdcNotes(o);
@@ -359,10 +364,13 @@ export async function latestOdcAll(o,{state={},served=[]}={}){
  const window=[...new Set(served)].sort(compareVersions),newest=window.at(-1);
  if(window.length&&JSON.stringify(lane.served?.versions)!==JSON.stringify(window))lane.served={versions:window,at:iso(o.now)};
  const byVersion=new Map(notes.map(n=>[n.version,n]));
+ const noted=[...byVersion.keys()].sort(compareVersions);
+ if(JSON.stringify(lane.noted?.versions)!==JSON.stringify(noted))lane.noted={versions:noted,at:iso(o.now)};
  const skippedNow=[...byVersion.keys()].filter(v=>lane.skipped?.[v]&&!(newest&&compareVersions(v,newest)<=0)).sort(compareVersions);
  const ordered=[...byVersion.values()].filter(n=>!lane.skipped?.[n.version]).sort((a,b)=>compareVersions(b.version,a.version));
  const above=ordered.slice(1).filter(n=>newest&&compareVersions(n.version,newest)>0).reverse();
- const picked=ordered.length?[ordered[0],...above.slice(0,o.maxVersions-1)]:[];
+ const nothingToRead=!!newest&&!!lane.skipped?.[noted.at(-1)]&&ordered.length>0&&compareVersions(ordered[0].version,newest)<=0;
+ const picked=ordered.length&&!nothingToRead?[ordered[0],...above.slice(0,o.maxVersions-1)]:[];
  const results=[];
  for(const noted of picked){
   try{results.push({version:noted.version,r:await decideOdc(o,lane,noted)});}
@@ -460,17 +468,21 @@ export function redecideOdc(state,version){
 }
 // The owner's "go on without this version" (vigia.ps1 -Skip X.Y.Z): recorded in lane.skipped, so it is no longer read,
 // holds nothing and is never offered; the queue moves to the next version at once. -Pin or -Redecide of it undoes it. A
-// version not above the newest served is not recorded (noEffect): nothing would serve it anyway.
-export function skipOdc(state,version,{now=Date.now(),served=[]}={}){
+// version not above the newest served is not recorded (noEffect): nothing would serve it anyway. A version no round has
+// read (neither in lane.noted, the versions of the last notes read, nor with a record) is refused, so a typo is never
+// recorded for good; force records it anyway (a version the notes do not announce yet) and the answer says unread:true.
+export function skipOdc(state,version,{now=Date.now(),served=[],force=false}={}){
  if(!/^\d+\.\d+\.\d+$/.test(String(version)))throw Error('Skip takes an ODC Studio version: X.Y.Z.');
  const newest=[...served].sort(compareVersions).at(-1);
  if(newest&&compareVersions(version,newest)<=0)return {version,noEffect:{served:newest}};
  const lane=state.odc??={versions:{}};
  const previous=lane.skipped?.[version]??null,v=lane.versions?.[version];
+ const read=!!v||!!lane.noted?.versions?.includes(version);
+ if(!read&&!previous&&!force)throw Error(`ODC Studio ${version} is not in the release notes ${lane.noted?`the last read recorded (${lane.noted.versions.join(', ')}; ${lane.noted.at})`:'of any round yet (no round has recorded the versions of the notes)'}: check the version. Nothing is recorded. To skip a version the notes do not announce yet, add -Force.`);
  (lane.skipped??={})[version]={by:'owner',at:iso(now),code:'OWNER'};
  for(const key of Object.keys(lane.holds??{}))if(key.endsWith('<'+version))delete lane.holds[key];
  if(lane.holds&&!Object.keys(lane.holds).length)delete lane.holds;
- return {version,previous,decided:v?.decided?.build??null,known:!!v};
+ return {version,previous,decided:v?.decided?.build??null,known:!!v,...(read?{}:{unread:true})};
 }
 const highest=(installed,lane)=>installed.filter(x=>x.lane===lane&&/^\d+\.\d+\.\d+\.\d+$/.test(x.fullVersion??'')).map(x=>x.fullVersion).sort(compareVersions).at(-1);
 const stateError=(lane,e)=>Object.assign(new SourceError(`${lane==='odc'?'ODC Studio decisions (studio-sources.json)':'Service Studio cache'} cannot be used: ${cleanText(e.message,120)}.`,'STUDIO_SOURCE_STATE'),

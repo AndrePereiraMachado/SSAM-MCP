@@ -5,7 +5,8 @@
 //   --approve <id|lane-version>, --reject <id> --reason <text>, --retry <id>: the owner's commands;
 //   --seed-features <Features.plain.xml>: the owner's one-time seed of an exact ODC features export (features-carry.mjs);
 //   --pin <X.Y.Z.B>, --redecide <X.Y.Z>, --skip <X.Y.Z>: the owner's choice of an ODC Studio build, a new decision, or going
-//                 on without a version (sources.mjs);
+//                 on without a version (sources.mjs); --skip refuses a version no round has read from the release notes
+//                 unless --force;
 //   --rehearse-current: the real round on the served versions, stopped before anything changes outside this machine (rehearse.mjs).
 import fs from 'node:fs';
 import {readJournal} from './journal.mjs';
@@ -33,16 +34,18 @@ export function parseArgs(argv){
  for(let i=0;i<argv.length;i++){
   const a=argv[i];
   if(['--config','--approve','--reject','--reason','--retry','--log','--acknowledge-rollback','--seed-features','--pin','--redecide','--skip'].includes(a)){if(argv[i+1]===undefined)throw Error(`${a} needs a value.`);if(args[a.slice(2)]!==undefined)throw Error(`${a} is given twice.`);args[a.slice(2)]=argv[++i];}
-  else if(['--dry-run','--round','--no-update','--rehearse-current'].includes(a))args.flags.add(a.slice(2));
-  else throw Error(`Unknown argument ${a}. Usage: vigia.mjs --config <file> [--dry-run | --approve <id> | --reject <id> --reason <text> | --retry <id> | --seed-features <Features.plain.xml> | --pin <X.Y.Z.B> | --redecide <X.Y.Z> | --skip <X.Y.Z>] [--no-update]`);
+  else if(['--dry-run','--round','--no-update','--rehearse-current','--force'].includes(a))args.flags.add(a.slice(2));
+  else throw Error(`Unknown argument ${a}. Usage: vigia.mjs --config <file> [--dry-run | --approve <id> | --reject <id> --reason <text> | --retry <id> | --seed-features <Features.plain.xml> | --pin <X.Y.Z.B> | --redecide <X.Y.Z> | --skip <X.Y.Z> [--force]] [--no-update]`);
  }
+ // --force only lets -Skip record a version no round has read from the release notes.
+ if(args.flags.has('force')&&args.skip===undefined)throw Error('--force goes only with --skip.');
  // One owner command per run: a second one would be dropped unseen (owner() runs only the first it finds).
  const commands=['approve','reject','retry','seed-features','pin','redecide','skip'].filter(k=>args[k]!==undefined);
  if(commands.length>1)throw Error(`--${commands.join(' and --')} cannot be combined: run one owner command at a time.`);
  for(const round of ['dry-run','round'])if(commands.length&&args.flags.has(round))throw Error(`--${commands[0]} cannot be combined with --${round}: an owner command is not a round.`);
  if(commands.length&&args['acknowledge-rollback']!==undefined)throw Error(`--${commands[0]} cannot be combined with --acknowledge-rollback: that one belongs to a round.`);
  if(args.flags.has('rehearse-current')&&(args.flags.has('dry-run')||args.approve||args.reject||args.retry||args['acknowledge-rollback']||args['seed-features']||args.pin||args.redecide||args.skip))throw Error('--rehearse-current runs alone.');
- if(!args.config)throw Error('Usage: vigia.mjs --config <file> [--dry-run | --approve <id> | --reject <id> --reason <text> | --retry <id> | --seed-features <Features.plain.xml> | --pin <X.Y.Z.B> | --redecide <X.Y.Z> | --skip <X.Y.Z>]');
+ if(!args.config)throw Error('Usage: vigia.mjs --config <file> [--dry-run | --approve <id> | --reject <id> --reason <text> | --retry <id> | --seed-features <Features.plain.xml> | --pin <X.Y.Z.B> | --redecide <X.Y.Z> | --skip <X.Y.Z> [--force]]');
  return args;
 }
 export function readConfig(file){
@@ -174,7 +177,7 @@ async function owner(args,config,log){
   if(args.reject)return reject(config,args.reject,args.reason);
   if(args.retry)return retry(config,args.retry);
   // The ODC build decisions (studio-sources.json), written back as the same signed journal; -Pin reads releaseshub once.
-  if(args.pin||args.redecide||args.skip){const {pinStudioBuild,redecideStudio,skipStudio}=await import('./auto-runtime.mjs');return args.pin?await pinStudioBuild(config,args.pin):args.skip?skipStudio(config,args.skip):redecideStudio(config,args.redecide);}
+  if(args.pin||args.redecide||args.skip){const {pinStudioBuild,redecideStudio,skipStudio}=await import('./auto-runtime.mjs');return args.pin?await pinStudioBuild(config,args.pin):args.skip?skipStudio(config,args.skip,{force:args.flags.has('force')}):redecideStudio(config,args.redecide);}
   const {createRuntime}=await import('./runtime.mjs');
   // Only the version, the feature count and the sha256 are printed or logged, never a feature.
   if(args['seed-features']){const r=(await createRuntime(config,{log})).seedFeatures(args['seed-features']);return {status:'seeded',version:r.version,count:r.count,sha256:r.sha256,note:`ODC features ${r.version} ${r.already?"already stored":"seeded"}: ${r.count} features, sha256 ${r.sha256}.`};}

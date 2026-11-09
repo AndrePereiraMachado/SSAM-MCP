@@ -830,3 +830,72 @@ test('R5: the owner hears of a hold with no limit, of a hold after an outage wit
   assert.throws(()=>parseArgs(['--config','c',...extra]),/cannot be combined|given twice/,extra.join(' '));
  assert.match(fs.readFileSync(path.join(path.dirname(new URL(import.meta.url).pathname.slice(1)),'vigia.ps1'),'utf8'),/\[string\]\$Skip,[\s\S]*--skip/);
 });
+
+// Main follow-ups (REVISAO-R5 B1, B2): -Skip of a version no round has read, and -Skip of the highest version of the notes.
+test('follow-up B1: -Skip refuses a version no round has read from the release notes (a typo), unless forced; nothing is recorded',async()=>{
+ const {skipOdc}=await import('./sources.mjs');
+ // Before any round recorded the notes: refused.
+ const empty={odc:{versions:{}}};
+ assert.throws(()=>skipOdc(empty,'1.7.99',{served:['1.7.31']}),/^Error: ODC Studio 1\.7\.99 is not in the release notes of any round yet \(no round has recorded the versions of the notes\): check the version\. Nothing is recorded\. To skip a version the notes do not announce yet, add -Force\.$/);
+ assert.equal(empty.odc.skipped,undefined);
+ // A round records the versions the notes announce (only when they change).
+ const f=fakeSites(),state={},round=now=>detectSources([],{fetcher:f.fetcher,retryDelayMs:0,now,state,served:{odc:['1.7.29'],o11:['11.55.95']}});
+ await round(NOW);
+ assert.deepEqual(state.odc.noted,{versions:['1.7.29','1.7.30','1.7.31','1.7.32'],at:'2026-11-10T00:00:00.000Z'});
+ await round(NOW+DAY);assert.equal(state.odc.noted.at,'2026-11-10T00:00:00.000Z','unchanged notes keep their first read');
+ assert.throws(()=>skipOdc(state,'1.7.99',{served:['1.7.29'],now:NOW}),/1\.7\.99 is not in the release notes the last read recorded \(1\.7\.29, 1\.7\.30, 1\.7\.31, 1\.7\.32; 2026-11-10T00:00:00\.000Z\): check the version\. Nothing is recorded/);
+ assert.equal(state.odc.skipped,undefined,'a refused skip records nothing');
+ // A version of the notes is accepted, also one without a record of its own (not read for the limit, for example).
+ delete state.odc.versions['1.7.30'];
+ const ok=skipOdc(state,'1.7.30',{served:['1.7.29'],now:NOW});
+ assert.deepEqual([ok.known,ok.unread],[false,undefined]);assert.equal(state.odc.skipped['1.7.30'].by,'owner');
+ // force records an unread version, and says so; skipping it again needs no force.
+ const forced=skipOdc(state,'1.7.99',{served:['1.7.29'],now:NOW,force:true});
+ assert.deepEqual([forced.version,forced.unread,state.odc.skipped['1.7.99'].code],['1.7.99',true,'OWNER']);
+ assert.equal(skipOdc(state,'1.7.99',{served:['1.7.29'],now:NOW}).previous.by,'owner');
+ // A served version still answers no effect first (nothing recorded, no refusal).
+ assert.deepEqual(skipOdc(state,'1.7.28',{served:['1.7.29']}),{version:'1.7.28',noEffect:{served:'1.7.29'}});
+});
+
+test('follow-up B2: -Skip of the highest version of the notes leaves nothing to read, so no false STUDIO_SOURCE_CHANGED and no notice; -Redecide undoes it',async t=>{
+ const {configureJournals}=await import('./journal.mjs');
+ const {createAutoRuntime,skipStudio,redecideStudio}=await import('./auto-runtime.mjs');
+ const {parseArgs}=await import('./vigia.mjs');
+ const dir=tmp(t);configureJournals(dir,Buffer.alloc(32,9).toString('base64'));
+ t.mock.method(globalThis,'fetch',async()=>{throw Error('no network in tests');});
+ const notes=[],f=fakeSites();let clock=NOW;
+ const runtime={log:()=>{},notify:async(title,message)=>{notes.push([title,message]);},sourceFetcher:f.fetcher};
+ const config={workspace:dir,tempRoot:dir,outDir:dir,installersDir:path.join(dir,'inst'),automatic:true,clock:()=>clock,configFile:'C:/t/vigia/config.json'};
+ Object.assign(runtime,createAutoRuntime(config,runtime));runtime.diskPreflight=()=>{};
+ const manifest={odc:[{version:'1.7.31'}],o11:[{version:'11.55.95'}]};
+ const round=async when=>{clock=when;f.state.calls.length=0;
+  try{await runtime.observe([],{manifest});}catch(e){assert.match(e.message,/no network|download/i);}
+  return runtime.sourceStatus.filter(s=>s.lane==='odc').map(s=>`${s.version}:${s.status}${s.code?'/'+s.code:''}`).join(' ');};
+ assert.equal(await round(NOW),'1.7.32.11065:public');
+ // B1 through the owner command: the typo is refused with the versions read; -Force records it with a warning.
+ assert.throws(()=>skipStudio(config,'1.7.99',{now:NOW}),/ODC Studio 1\.7\.99 is not in the release notes the last read recorded \(1\.7\.29, 1\.7\.30, 1\.7\.31, 1\.7\.32; 2026-11-10T00:00:00\.000Z\): check the version/);
+ const forced=skipStudio(config,'1.7.99',{now:NOW,force:true});
+ assert.equal(forced.status,'skipped');assert.match(forced.note,/WARNING: 1\.7\.99 is not in the release notes any round has read; it is recorded only because of -Force/);
+ const skip=skipStudio(config,'1.7.32',{now:NOW});
+ assert.equal(skip.status,'skipped');assert.doesNotMatch(skip.note,/WARNING/);
+ // The highest version is skipped and 1.7.31, the highest one left, is served: nothing to read, the skip is reported, and
+ // no round gives STUDIO_SOURCE_CHANGED or a daily notice (it did every round before: "older than the last known release").
+ const before=notes.length;
+ for(const day of [1,2,3]){
+  assert.equal(await round(NOW+day*DAY),'1.7.32:skipped/OWNER',`day ${day}`);
+  assert.equal(probes(f).length,0,'no releaseshub probe');
+ }
+ assert.deepEqual(notes.slice(before),[],'no notice');
+ // A newer version announced later is read and offered as usual (the skip does not hide it).
+ f.state.content.data.Html=notesFor('1.7.33','2026-11-12')+f.state.content.data.Html;
+ f.state.hub['ODCStudio/1.7.33.11100/windows']={location:`${CF}1.7.33.11100/ODCStudio-1.7.33.11100.exe`,lastModified:new Date('2026-11-12T09:00Z').toUTCString(),size:287011100};
+ assert.equal(await round(at('2026-11-14T00:00Z')),'1.7.32:skipped/OWNER 1.7.33.11100:public');
+ delete f.state.hub['ODCStudio/1.7.33.11100/windows'];f.state.content.data.Html=f.state.content.data.Html.slice(f.state.content.data.Html.indexOf('<h2',5));
+ // -Redecide undoes the skip: 1.7.32 is read and offered again.
+ assert.equal(redecideStudio(config,'1.7.32').unskipped,true);
+ assert.equal(await round(at('2026-11-15T00:00Z')),'1.7.32.11065:public');
+ // --force goes only with --skip; vigia.ps1 passes -Force as --force.
+ assert.equal(parseArgs(['--config','c','--skip','1.7.99','--force']).flags.has('force'),true);
+ for(const extra of [['--force'],['--pin','1.7.32.11065','--force'],['--force','--dry-run']])assert.throws(()=>parseArgs(['--config','c',...extra]),/--force goes only with --skip/,extra.join(' '));
+ assert.match(fs.readFileSync(path.join(path.dirname(new URL(import.meta.url).pathname.slice(1)),'vigia.ps1'),'utf8'),/\[switch\]\$Force,[\s\S]*if\(\$Force\)\{\$argsList\+='--force'\}/);
+});
