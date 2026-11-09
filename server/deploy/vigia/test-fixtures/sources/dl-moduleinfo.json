@@ -1,0 +1,13 @@
+{
+ "manifest": {
+  "versionToken": "El22U2Z6AmJNaCfuqAub1Q",
+  "versionSequence": 93927,
+  "cdnUrlVersioning": true,
+  "urlVersions": {
+   "/Downloads/_error.html": "?oUi19OYm4IDSD+Omdt1G6Q",
+   "/Downloads/scripts/Downloads.MainFlow.HomeScreen.mvc__DrxzRIQFnN0jmJr2DIdbQ.js": "?Drx_zRIQFnN0jmJr2DIdbQ",
+   "/Downloads/scripts/Downloads.MainFlow.ReleaseCard.mvc__JwSqQH6VtAVqrS2Qk8BPcg.js": "?JwSqQH6VtAVqrS2Qk8BPcg",
+   "/Downloads/scripts/OutSystems__bLKTnViyjIAVLXSE6wUw.js": "?bLKT+nViyjIAV+LXSE6wUw"
+  }
+ }
+}
