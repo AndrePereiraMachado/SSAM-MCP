@@ -48,6 +48,7 @@ import { hostedContext, hostedSpawnEnv, onHostedContextClose, usesWorkspace } fr
 import { kernelStart } from './quality-meter.mjs';
 import { withTraceArgs } from './correlation.mjs';
 import { logTailSince, sizeOf } from './process-stop.mjs';
+import { memoryGate, containerRoomMb } from './memory-room.mjs';
 
 export const WORKER_PROTOCOL = 'anvil-worker-1';
 const MAX_REPLY_BYTES = 256 * 1024 * 1024;
@@ -766,9 +767,10 @@ export class HostedO11Workers {
   constructor({ max = HOSTED_O11_WORKERS_MAX, idleMs = HOSTED_O11_WORKER_IDLE_MS, minIdleMs = HOSTED_O11_WORKER_MIN_IDLE_MS,
     rssMb = HOSTED_O11_WORKER_RSS_MB, profile = hostedWorkerProfile(), waitMs = 25000, pingMs = 3000, stopMs = 10000,
     perToken = 1, minAvailableMb = 0, startMb = HOSTED_O11_WORKER_START_MB, totalRssMb = 0,
-    spawnFn = spawn, now = Date.now, freePort = loopbackPort, rssOf = pid => residentMb(pid), availableOf = () => availableMb() } = {}) {
+    spawnFn = spawn, now = Date.now, freePort = loopbackPort, rssOf = pid => residentMb(pid), availableOf = () => availableMb(),
+    roomReserveMb = 0, roomOf = () => containerRoomMb(), gatePending = () => 0 } = {}) {
     Object.assign(this, { max, idleMs, minIdleMs, rssMb, profile: Object.freeze({ ...profile }), waitMs, pingMs, stopMs, spawnFn, now, freePort, rssOf,
-      perToken: Math.max(1, perToken), minAvailableMb, startMb, totalRssMb, availableOf });
+      perToken: Math.max(1, perToken), minAvailableMb, startMb, totalRssMb, availableOf, roomReserveMb, roomOf, gatePending });
     // slot -> a customer's worker, starting or ready: its first worker under its tokenId, the extra ones under tokenId#n.
     this.entries = new Map();
     this.stopping = new Set(); // retired, process not gone yet
@@ -794,6 +796,17 @@ export class HostedO11Workers {
     }
     if (this.totalRssMb > 0 && ledger.total + this.startMb > this.totalRssMb)
       return `this server's workers use or have reserved ${ledger.total} MB; one more (${this.startMb} MB) would pass their ${this.totalRssMb} MB total`;
+    // Capacity review R2 M2: the container's own room under its cgroup memory limit (memory-room.mjs), which the host's
+    // MemAvailable does not show. One more worker must leave the reserve of one kernel process (SSAM_MEMORY_RESERVE_MB)
+    // after its start size, the growth still to come of the workers starting, and what the memory gate's admitted processes
+    // have not shown yet. Unreadable (no limit, Windows): decides nothing.
+    if (this.roomReserveMb > 0) {
+      let room = null, admitted = 0;
+      try { room = this.roomOf(); } catch { room = null; }
+      try { admitted = Number(this.gatePending()) || 0; } catch { admitted = 0; }
+      if (Number.isFinite(room) && room - ledger.pending - admitted - this.startMb < this.roomReserveMb)
+        return `this server has ${room} MB free under its container memory limit${ledger.pending || admitted ? ` (${ledger.pending + admitted} MB of it already reserved by processes still starting)` : ''}; one more worker (${this.startMb} MB) would leave less than the ${this.roomReserveMb} MB one kernel process needs`;
+    }
     return null;
   }
   // The admission ledger of this pool, computed synchronously from its entries (a start enters them before any spawn): every
@@ -1142,9 +1155,13 @@ let processWorkers = null;
 export function hostedO11Workers() {
   if (!processWorkers) {
     const settings = hostedWorkerSettings(process.env);
+    // The memory gate of this process (memory-room.mjs) sees the growth still to come of the workers starting, and the
+    // workers see what the gate admitted: one budget for every kernel process of the container (capacity review R2 M2).
+    const gate = memoryGate();
     processWorkers = new HostedO11Workers({ max: settings.max, idleMs: settings.idleMs, minIdleMs: settings.minIdleMs, rssMb: settings.rssMb,
       profile: hostedWorkerProfile(settings), perToken: settings.perToken, minAvailableMb: settings.minAvailableMb, startMb: settings.startMb,
-      totalRssMb: settings.totalRssMb });
+      totalRssMb: settings.totalRssMb, roomReserveMb: gate.settings.reserveMb, gatePending: () => gate.pendingMb({ others: false }) });
+    gate.addPending(() => processWorkers?.ledger().pending ?? 0);
     onHostedContextClose(context => processWorkers.contextClosed(context.tokenId, context.id));
   }
   return processWorkers;

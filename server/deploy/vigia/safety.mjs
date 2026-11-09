@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {createHash} from 'node:crypto';
 import {readJournal} from './journal.mjs';
-import {generateCompose,versionPairs} from '../coolify/gen-compose.mjs';
+import {generateCompose,versionPairs,sizingOfCompose} from '../coolify/gen-compose.mjs';
 const fail=(message,code)=>{throw Object.assign(Error(message),{code,environmental:true});};
 export const composeHash=text=>createHash('sha256').update(text).digest('hex');
 const sorted=value=>Array.isArray(value)?value.map(sorted):value&&typeof value==='object'?Object.fromEntries(Object.keys(value).sort().map(k=>[k,sorted(value[k])])):value;
@@ -42,13 +42,47 @@ export function liveBaseline(snapshot){
   kernels[`o11-${o11}-odc-${odc}`]=row.kernel;
  }
  if(rows.length!==ordered.length)fail('Live backend count differs from compose.','LIVE_INVALID');
- versionPairs(result);return {manifest:result,kernels,telemetry:snapshot.telemetry??{},snapshot};
+ // The capacity sizing the live compose was generated with (its router label): the rotation carries it to the next window.
+ let sizing;try{sizing=sizingOfCompose(compose);}catch(error){fail(error.message,'LIVE_INVALID');}
+ if(sizing)result.sizing=sizing;
+ // Backends carrying a tier label without the router's sizing: the label was lost (a hand edit, a Coolify rewrite). An
+ // unsized rotation would clone the first backend's limits (maybe the hot tier) into the new pair with no host check, so
+ // nothing is decided from such a compose (review R2 M4.4).
+ else if(ordered.some(s=>s.labels?.['ssam.sizing']!==undefined))fail('Live backends carry capacity tiers but the router carries no ssam.sizing; owner review is required.','LIVE_INVALID');
+ // usage: the real use of each pair (remote snapshot, vigia/usage-count.cjs, counts only). Advisory: an absent, unreadable
+ // or odd value is null plus a warning, never a stop of the round (review R2 M1').
+ const {usage,warning}=usageCounts(snapshot.usage,snapshot.warnings);
+ versionPairs(result);return {manifest:result,kernels,telemetry:snapshot.telemetry??{},usage,...(warning?{usageWarning:warning}:{}),snapshot};
+}
+const PAIR=/^o11-\d+\.\d+\.\d+-odc-\d+\.\d+\.\d+$/;
+// The usage counts of a snapshot: {usage: {pair: {heavy, active}} | null, warning: code | null}. Entries that are not
+// counts of a pair are dropped (USAGE_PARTIAL); a value that is not an object is USAGE_UNREADABLE with usage null; a
+// warning of the remote snapshot (USAGE_*) is kept. Never throws.
+export function usageCounts(value,warnings=[]){
+ const remote=(Array.isArray(warnings)?warnings:[]).find(w=>typeof w==='string'&&/^USAGE_[A-Z_]{1,30}$/.test(w))??null;
+ if(value===undefined||value===null)return {usage:null,warning:remote};
+ if(typeof value!=='object'||Array.isArray(value))return {usage:null,warning:'USAGE_UNREADABLE'};
+ const usage={};let dropped=false;
+ for(const [k,v] of Object.entries(value)){
+  if(PAIR.test(k)&&v&&typeof v==='object'&&Number.isInteger(v.heavy)&&v.heavy>=0&&Number.isInteger(v.active)&&v.active>=0)usage[k]={heavy:v.heavy,active:v.active};
+  else dropped=true;
+ }
+ return {usage,warning:remote??(dropped?'USAGE_PARTIAL':null)};
 }
 // Two SSAM_SERVED_VERSIONS texts hold the same lists, by JSON value as the remote check compares them: spacing and key
 // order are no change, list order is. An unreadable text is never the same.
 export function sameServed(a,b){
  const value=text=>{try{const v=JSON.parse(text);return v&&typeof v==='object'&&!Array.isArray(v)?JSON.stringify(Object.keys(v).sort().map(k=>[k,v[k]])):null;}catch{return null;}};
  const x=value(a);return x!==null&&x===value(b);
+}
+// The sizing keys of a backend (gen-compose applySizing): its limits, its cpu weight, its pool sizes and its tier label.
+export const SIZED_ENVIRONMENT=['SSAM_BUILD_WORKERS','SSAM_O11_WORKERS_MAX','SSAM_BUILD_QUEUE_MS'];
+const labelMap=value=>Array.isArray(value)?Object.fromEntries(value.map(v=>{const i=v.indexOf('=');return [v.slice(0,i),v.slice(i+1)];})):{...(value??{})};
+function resize(source,desired){
+ source.deploy={...source.deploy,resources:{...source.deploy?.resources,limits:{...source.deploy?.resources?.limits,cpus:desired.deploy.resources.limits.cpus,memory:desired.deploy.resources.limits.memory}}};
+ for(const key of SIZED_ENVIRONMENT)source.environment[key]=desired.environment[key];
+ if(desired.cpu_shares!==undefined)source.cpu_shares=desired.cpu_shares;
+ source.labels['ssam.sizing']=desired.labels['ssam.sizing'];
 }
 export function preserveCompose(snapshot,manifest){
  const live=parseCompose(snapshot.compose),next=generateCompose(manifest),old=Object.entries(live.services).filter(([,s])=>s.labels?.['ssam.backend']==='true');
@@ -68,10 +102,14 @@ export function preserveCompose(snapshot,manifest){
    if(!matched){source.image=desired.image;source.volumes=structuredClone(desired.volumes);}
    // A retained backend deployed before the plugins mount gets the reviewed one; anything else at that target stops here.
    else{const at=(source.volumes??[]).filter(v=>mountTarget(v)===PLUGINS.target);if(!at.length)source.volumes=[...(source.volumes??[]),structuredClone(desired.volumes.find(reviewedPlugins))];else if(at.length!==1||!reviewedPlugins(at[0]))fail(`The live backend ${name} mounts something else at ${PLUGINS.target}; owner review is required.`,'MODEL_PLUGINS_CONFLICT');}
+   // A sized window (gen-compose sizing): every backend takes the limits, cpu weight and pool sizes of its tier in the next
+   // window, so the hot tier moves to the most used pair and the previous hot backend steps down.
+   if(manifest.sizing)resize(source,desired);
    services[name]=source;
   }else if(live.services[name]&&['ssam-router','ssam-console','ssam-admin','ssam-ops'].includes(name)){
    services[name]={...live.services[name],image:desired.image};
    if(name==='ssam-router')services[name].environment={...services[name].environment,SSAM_ROUTER_BACKENDS:desired.environment.SSAM_ROUTER_BACKENDS,SSAM_VERSION_WINDOW:String(manifest.window)};
+   if(name==='ssam-router'&&manifest.sizing){services[name].labels=labelMap(services[name].labels);services[name].labels['ssam.sizing']=desired.labels['ssam.sizing'];if(manifest.sizing.router)services[name].deploy=structuredClone(desired.deploy);}
   }
  }
  const out={...live,services,volumes:{...next.volumes,...live.volumes}};assertModelPlugins(out);

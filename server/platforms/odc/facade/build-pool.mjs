@@ -23,12 +23,19 @@
 //   hash). This process remembers which worker port last built or checked each model (rememberSlotModel); a build of that
 //   model tries the slot of that port first (run {prefer}). Only a free slot is preferred: affinity never makes a build
 //   wait, and fairness decides the turn as before.
+// - Memory (capacity review R2 M2, memory-room.mjs). With a memory gate (sharedBuildPool: the process's), the next build
+//   also needs the room of its reserve (O11 SSAM_MEMORY_RESERVE_MB, ODC SSAM_MEMORY_RESERVE_ODC_MB) under the container's
+//   cgroup limit, not the host's MemAvailable: a free slot without that room keeps the build in the queue, in its turn,
+//   until a build ends or the processes it admitted show their memory. The pool's only running build never waits for
+//   memory. A wait that runs out is the same BUILD_QUEUE_TIMEOUT (waitedFor "memory"), nothing of the build ran. The build
+//   runs inside its hold (gate.run): its cold kernel process attaches its pid to it and never waits a second time.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import { phaseOfCall, notePhase, processAlive, CANCELLED_CODE } from './studio-write-lock.mjs';
+import { memoryGate, memorySettings, memoryWaitRefusal } from './memory-room.mjs';
 
 export const BUILD_QUEUE_TIMEOUT_CODE = 'BUILD_QUEUE_TIMEOUT';
 export const SLOT_SCHEMA = 'ssam-build-slot/1';
@@ -58,7 +65,9 @@ export const BUILD_WHY = 'the build pool of this machine stayed busy past the li
 export class BuildQueueRefused extends Error {
   constructor(refusal) { super(refusal.error); this.name = 'BuildQueueRefused'; this.code = refusal.code; this.refusal = refusal; }
 }
-export function buildQueueRefusal({ position = 1, waitedMs = 0, queueMs = DEFAULT_BUILD_QUEUE_MS, size = 1, lane = 'o11' } = {}) {
+export function buildQueueRefusal({ position = 1, waitedMs = 0, queueMs = DEFAULT_BUILD_QUEUE_MS, size = 1, lane = 'o11', memory = false } = {}) {
+  // Memory: the gate's own refusal (memory-room.mjs), the same one the cold runner gives outside the pool.
+  if (memory) return memoryWaitRefusal({ waitedMs, lane, position, queueMs, workers: size });
   return { ok: false, code: BUILD_QUEUE_TIMEOUT_CODE, outcome: 'not-sent', waitedFor: 'pool',
     error: 'This delivery waited ' + Math.round(waitedMs / 1000) + ' s for one of the ' + size + ' build workers and its turn did not come; nothing of it ran.',
     position, waitedMs, queueMs, workers: size, continuation: { tool: 'ssam_doctor', arguments: { lane: lane === 'odc' ? 'odc' : 'o11' }, why: BUILD_WHY } };
@@ -74,12 +83,17 @@ function readSlot(file) {
   } catch (error) { if (error?.code === 'ENOENT') return null; throw error; }
 }
 
-// createBuildPool({dir, size, queueMs, now, alive, staleMs}) -> {size, dir, run(meta, fn), stats()}.
-// run({customer, signal, onQueued, label}, fn(slot)) resolves to fn's value; slot = {index, tmp, env:{TEMP, TMP}}.
+// createBuildPool({dir, size, queueMs, now, alive, staleMs, memory}) -> {size, dir, run(meta, fn), stats()}.
+// memory: {gate (memory-room.mjs createMemoryGate), reserveMb, odcReserveMb} or null (no memory admission).
+// run({customer, signal, onQueued, label, lane}, fn(slot)) resolves to fn's value; slot = {index, tmp, env:{TEMP, TMP}}.
 // Throws BuildQueueRefused when the wait runs out or the signal aborts it.
-export function createBuildPool({ dir, size = buildWorkers(), queueMs = buildQueueMs(), now = Date.now, alive = processAlive, staleMs = STALE_MS } = {}) {
+export function createBuildPool({ dir, size = buildWorkers(), queueMs = buildQueueMs(), now = Date.now, alive = processAlive, staleMs = STALE_MS, memory = null } = {}) {
   if (!dir) throw new Error('createBuildPool needs dir');
   const bus = new EventEmitter(); bus.setMaxListeners(0);
+  // A build that ends anywhere in the process (a cold check, another pool) may give the room a waiter needs.
+  memory?.gate?.onChange?.(() => bus.emit('change'));
+  const reserveOf = lane => (lane === 'odc' ? memory?.odcReserveMb : memory?.reserveMb) ?? 0;
+  const roomFor = lane => !memory?.gate || memory.gate.fits(reserveOf(lane));
   const held = new Map();     // slot index -> {token, customer}
   const waiting = [];         // {customer, arrived, wake}
   const served = new Map();   // customer -> last start (ms)
@@ -133,12 +147,12 @@ export function createBuildPool({ dir, size = buildWorkers(), queueMs = buildQue
   // The waiter whose turn it is: fewest running, then least recently served, then arrival.
   const nextWaiter = () => waiting.slice().sort((a, b) => running(a.customer) - running(b.customer)
     || (served.get(a.customer) ?? -Infinity) - (served.get(b.customer) ?? -Infinity) || a.arrived - b.arrived)[0] ?? null;
-  async function run({ customer = 'local', signal, onQueued, prefer = [] } = {}, fn) {
+  async function run({ customer = 'local', signal, onQueued, prefer = [], lane = 'o11' } = {}, fn) {
     const key = String(customer);
     const me = { customer: key, arrived: ++arrivals };
     const started = Date.now();
-    let index = waiting.length ? -1 : takeSlot(key, prefer);
-    let queue = null;
+    let index = waiting.length || !roomFor(lane) ? -1 : takeSlot(key, prefer);
+    let queue = null, forMemory = false;
     if (index < 0) {
       waiting.push(me);
       const position = waiting.length; // this build's place in the line (1 = next), as the write queue counts it
@@ -147,9 +161,12 @@ export function createBuildPool({ dir, size = buildWorkers(), queueMs = buildQue
         for (;;) {
           if (signal?.aborted) throw new BuildQueueRefused({ ok: false, code: CANCELLED_CODE, outcome: 'not-sent', error: 'The call was cancelled while it waited for a build worker; nothing ran.',
             position, waitedMs: Date.now() - started });
-          if (nextWaiter() === me) { index = takeSlot(key, prefer); if (index >= 0) break; }
+          if (nextWaiter() === me) {
+            forMemory = held.size < size && !roomFor(lane);
+            if (!forMemory) { index = takeSlot(key, prefer); if (index >= 0) break; }
+          }
           const left = started + queueMs - Date.now();
-          if (left <= 0) throw new BuildQueueRefused(buildQueueRefusal({ position, waitedMs: Date.now() - started, queueMs, size }));
+          if (left <= 0) throw new BuildQueueRefused(buildQueueRefusal({ position, waitedMs: Date.now() - started, queueMs, size, lane, memory: forMemory }));
           await new Promise(resolve => {
             let timer = null;
             const done = () => { clearTimeout(timer); bus.off('change', done); signal?.removeEventListener?.('abort', done); resolve(); };
@@ -162,9 +179,12 @@ export function createBuildPool({ dir, size = buildWorkers(), queueMs = buildQue
       try { onQueued?.(queue); } catch { /* a notification never changes the build */ }
     }
     served.set(key, now());
-    try { return await fn(slotOf(index), queue); } finally { freeSlot(index); }
+    const hold = memory?.gate ? memory.gate.hold(reserveOf(lane)) : null;
+    try { return await (hold ? memory.gate.run(hold, () => fn(slotOf(index), queue)) : fn(slotOf(index), queue)); }
+    finally { hold?.release(); freeSlot(index); }
   }
-  return { size, dir, queueMs, run, stats: () => ({ size, running: [...held.entries()].map(([slot, h]) => ({ slot, customer: tagOf(h.customer) })), waiting: waiting.length }) };
+  return { size, dir, queueMs, run, stats: () => ({ size, running: [...held.entries()].map(([slot, h]) => ({ slot, customer: tagOf(h.customer) })), waiting: waiting.length,
+    ...(memory?.gate ? { memory: memory.gate.stats() } : {}) }) };
 }
 
 // The resident worker of a slot (the convention of kernel/scripts/worker_pool.py): slot 0 is the lane's own worker, slot i
@@ -200,13 +220,14 @@ export function sharedBuildPool({ root, env = process.env, dir } = {}) {
   const folder = path.resolve(dir ?? env.SSAM_BUILD_POOL_DIR ?? path.join(root ?? os.tmpdir(), '.local', 'build-pool'));
   const size = buildWorkers(env);
   const key = folder.toLowerCase() + '|' + size;
-  if (!pools.has(key)) pools.set(key, createBuildPool({ dir: folder, size, queueMs: buildQueueMs(env) }));
+  const { reserveMb, odcReserveMb } = memorySettings(env);
+  if (!pools.has(key)) pools.set(key, createBuildPool({ dir: folder, size, queueMs: buildQueueMs(env), memory: { gate: memoryGate(), reserveMb, odcReserveMb } }));
   return pools.get(key);
 }
 
 // A build of the current call: in the pool during the build phase (the wait goes to the call's phases), at once in a
 // private folder when the call already holds its Studio (a rebase inside the apply). fn(slot) -> value.
-export async function pooledBuild({ pool, customer, signal, privateDir, prefer = [] } = {}, fn) {
+export async function pooledBuild({ pool, customer, signal, privateDir, prefer = [], lane = 'o11' } = {}, fn) {
   const phase = phaseOfCall();
   if (!pool || phase?.promoted) {
     const tmp = path.join(privateDir ?? pool?.dir ?? os.tmpdir(), 'apply-' + process.pid + '-' + randomUUID().slice(0, 8));
@@ -215,7 +236,7 @@ export async function pooledBuild({ pool, customer, signal, privateDir, prefer =
     finally { try { fs.rmSync(tmp, { recursive: true, force: true }); } catch { /* best effort */ } }
   }
   const started = Date.now();
-  return pool.run({ customer, signal, prefer, onQueued: queue => notePhase({ buildQueue: queue }) }, async slot => {
+  return pool.run({ customer, signal, prefer, lane, onQueued: queue => notePhase({ buildQueue: queue }) }, async slot => {
     notePhase({ poolWaitMs: Date.now() - started });
     return fn(slot);
   });

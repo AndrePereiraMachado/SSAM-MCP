@@ -112,7 +112,7 @@ The window keeps the new pair and the newest served pairs by version (ODC Studio
 
 Tags include a random attempt suffix. Transient pre-mutation failures persist `deferred` and reuse publication/pin checkpoints on resume. PAUSE, time reserve, available memory and backup disk checks precede mutation.
 
-All actors must take `/var/lock/ssam-release.lock` (manual wrapper: `with-release-lock.sh`). A held lease writes a random `/var/lock/ssam-release.owner` token. Mutations check the token and occupied lock; SSH uses keepalives. Compose is compared before backup/PATCH, then read back and compared with the sent hash before restart. Lost leases are reacquired before rollback; failure to obtain a lease produces `rollback-failed` and an alert.
+All actors must take `/var/lock/ssam-release.lock` (manual wrapper: `with-release-lock.sh`, which waits at most `SSAM_LOCK_WAIT` seconds, default 30, then stops with exit 75 and names the holder; it removes the owner file on exit and on HUP/INT/TERM). A held lease writes a random `/var/lock/ssam-release.owner` token. Mutations check the token and occupied lock; SSH uses keepalives. Compose is compared before backup/PATCH, then read back and compared with the sent hash before restart. Lost leases are reacquired before rollback; failure to obtain a lease produces `rollback-failed` and an alert.
 
 Rollback uses the original encrypted compose, images, kernels and per-backend budgets. After manually checking/restoring production, the owner can use `-Retry <id> -AcknowledgeRollback <id>`; Retry alone cannot bypass rollback failure. Keep snapshots referenced by live attempts plus the five newest files, and five complete remote backups.
 

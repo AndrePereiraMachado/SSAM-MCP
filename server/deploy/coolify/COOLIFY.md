@@ -460,3 +460,75 @@ Para sinalizar uma saída antes do deploy, o dono pode fornecer state/proposed-v
 O vigia Windows está em ../vigia/README.md. Roda a cada 6 h pela tarefa agendada (install-task.ps1) numa worktree própria que se atualiza de main, detecta versões locais ou instaladores O11 baixados, faz bundle, testes filtrados sequenciais, imagem e smoke local, e deixa branch e PROPOSTA.md para o dono; ODC e O11 novos juntos viram um só par. Só publica com o comando do dono (vigia.ps1 -Approve <par>), que confere o digest, publica a tag sem latest, fixa o digest em versions.json e no compose (commit na branch da proposta) e imprime os passos que faltam (backup, kernel e features do par novo, colar o compose literal no Coolify, Redeploy) e a volta. Nunca acessa a VPS nem o Coolify. O pacote do agente de cada par vem de agentPack/agentPackByRuntime da configuração; as provas ao vivo de bridge continuam do dono.
 
 O seletor --version aceita odc=1.7.29 e o11=11.55.93; a forma sem faixa também é aceita quando identifica um único container. Uma seleção ambígua lista os candidatos. Sem SSAM_CONTAINER, --version prevalece sobre SSAM_VERSION; sem ambos, usa-se o padrão. Atualizar só uma faixa mantém a outra na versão do par vigente, sem repetir combinações na janela.
+
+
+## 13. Capacity sizing (hot pair)
+
+Measured on the KVM 8 (8 vCPU EPYC 9354P, MemTotal 31.3 GiB) on 2026-11-09: `C:\t\r5\capacity\RESULTADO.md` and
+`RESULTADO-R2.md`, `RESULTADO-R3.md`. One cold kernel build uses about 1.25 vCPU and 0.4 to 1.3 GB; builds share the CPU cap, so a backend's
+vCPUs set its build throughput. `versions.json` `sizing` gives ONE backend the "hot" tier and the rest the "other" tier:
+
+| Tier | cpus | memory | cpu_shares (cgroup v2 weight) | SSAM_BUILD_WORKERS | SSAM_O11_WORKERS_MAX | SSAM_BUILD_QUEUE_MS |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| hot (most used pair) | 5 | 10g | 5776 (400) | 4 | 2 | 240000 |
+| other | 2 | 4240m | 1024 (100, the default) | 1 | 1 | 240000 |
+
+Option (c) of RESULTADO-R3.md (no image rebuild): the backends run images without the memory gate, so each tier is sized
+for its worst case without admission (server 0.4 GB + a worker in a call 1.7 GB each + an O11 build 1.33 GB each): hot
+8698 MiB of 10240, other 3271 MiB of 4240. Budget 10240 + 4 x 4240 + 512 + 256 = 27968 of 27993 MiB.
+| router | 1 | 512m | (100) | | | |
+
+- Hot = the pair of most REAL USE (`sizing.usage`): the most heavy calls of
+  the last 7 days (`studio_deliver`, `o11_deliver`, `ssam_code` in that pair's quality log), then the most clients active in
+  the last 14 days (real clients only: no verification, no revoked license); ties and no counts go to the router's default
+  pair (the first of the window). The newest pair is "other" until it is the most used. Licenses ever routed
+  (`state/routing.json`) are not use: routes never expire. The hot pair therefore MOVES WITH USE: each deploy the watcher
+  makes recounts it and the tier follows the heaviest pair. The owner's pin `sizing.hotPair` exists for an emergency only and
+  is not set in `versions.json`: a pin stays while its pair stays in the window, even after the use there has gone (review
+  R3 M1), so a pin must be removed by hand as soon as it is no longer needed.
+- The watcher counts use (counts only, never a token id or a customer) with `vigia/usage-count.cjs`, run read-only inside a
+  live backend by its remote snapshot at each deploy it makes anyway, writes them into `sizing.usage` of the pinned
+  manifest, and sends the owner a `hot-pair` event (`HOT_PAIR_CHANGED`) once the deploy is live when the hot pair changed; a
+  notice that reached nobody is sent again by the next round. A shift of use never triggers a deploy. Usage is advisory:
+  unreadable or odd counts keep the recorded ones and send a `usage-warning` (`USAGE_UNREADABLE`, `USAGE_PARTIAL`); they
+  never stop or defer a round. Its rotation keeps the counts of the pairs that stay, folds the counts of a leaving pair into
+  the new default pair (where the router sends its clients), keeps a pin while its pair stays and drops it when it leaves.
+- The live router's `ssam.sizing` label is how the watcher reads the sizing back from Coolify; live backends with a tier
+  label and a router without it stop the round (`LIVE_INVALID`), so a lost label never clones the hot limits into a new pair.
+- A change of `sizing` in `versions.json` (a tier, the pin) does NOT reach production through the watcher: its automatic
+  deploy keeps the sizing of the live router label. It goes live only with a manual compose apply (the owner's `-Approve`
+  path or the deploy kit of the integrator, as in `RESULTADO-R2.md`).
+- The hot tier wins CPU contention through its weight (4x the default 100); the other tiers, the router, the console,
+  Coolify and Postgres keep the default weight, and the other caps stay at 2 vCPU, so no pair regresses. The VPS runs runc
+  1.5.1 (cgroup v2, systemd driver), which converts shares with the quadratic of opencontainers/cgroups
+  (`gen-compose.mjs` `cpuWeight`): 1024 -> 100 (measured there), 5768..5784 -> 400, 2598 -> 210, 10463 -> 650. The linear
+  `1 + (shares - 2) x 9999 / 262142` of runc before 1.3 is not this host's (review R3 A1). A runc or Docker upgrade can
+  change the mapping again: the deploy check (`env-check.sh`) reads `cpu.weight` back and a mismatch stops the release.
+- Every tier value is literal in the compose (no `${...}`): Coolify 4.4.6 stored the defaults of `${VAR:-default}` of the
+  environment sections as resource variables (the rows of 2026-10-20 equal the defaults), so a tier variable could freeze
+  or override a tier without any check. A sized backend no longer reads `SSAM_CPUS`, `SSAM_MEMORY`, `SSAM_BUILD_WORKERS` or
+  `SSAM_O11_WORKERS_MAX`; those Coolify variables stay only for an unsized (rolled back) compose.
+- `sizing.host` (`32089m`, the MemTotal; reserve `4g`): hot + (pairs - 1) x other + router + console must fit
+  MemTotal - reserve. Five pairs use 27968 of 27993 MiB. A sixth pair does not fit: the generator and the watcher's
+  rotation refuse it with `CAPACITY_WINDOW` (environmental: the round waits and the owner is told) instead of shrinking any
+  backend; a pair has to leave, or the owner changes `sizing`.
+- The memory gate (`platforms/odc/facade/memory-room.mjs`) admits every kernel process (build-pool slot, cold O11/ODC
+  process, a customer's worker start) by the room under the container's cgroup limit, not by the host's MemAvailable:
+  `SSAM_MEMORY_RESERVE_MB` (1400) per O11 process, `SSAM_MEMORY_RESERVE_ODC_MB` (600) per ODC one (measured only for the
+  ODC `apply`, ~0.45 GB; not for the other cold ODC paths). A build without that room waits in the pool queue; a cold
+  process waits at most `SSAM_MEMORY_WAIT_MS` (120 s) and is then refused, nothing sent (`BUILD_QUEUE_TIMEOUT`,
+  `waitedFor: memory`). **The gate is server code: it holds only in backends whose image was built from e04cfb7 or later.**
+  A compose-only release keeps the images, and the watcher never rebuilds a retained pair, so a pair whose image predates
+  the gate runs its tier's memory limit WITHOUT admission (review R3 A2): see `RESULTADO-R3.md` for the owner's options.
+- Option (c) (`server/capacity-hot-pair-c`, review R4): the tiers fit the measured worst case WITHOUT the gate (other
+  4240m with 1 build and 1 worker, hot 10g with 4 builds). The model counts the server, the workers and the pool builds;
+  the cold processes (`coldKernel`/`runCold`, one `dotnet` per call with no limit in the r43b/r44 images) are OUTSIDE it:
+  one cold process of the 100-action size (~1268 MiB) next to a full other already passes 4240m, as it passes 6g today
+  (review R4 M2). The read-only `r45/oom-check.sh` runs daily during the first week; any `oom_kill` > 0 is the rollback
+  trigger.
+- The deploy kit is committed in `r45/` and made from ONE commit (`node r45/kit.mjs --option c --pin <main> --out <dir>
+  --reviewed <reviewed kit>`): its generators, `r45-window.sh`, `rollback-check.sh`, `oom-check.sh`, `../vigia/with-release-lock.sh`
+  and the backup scripts are that commit's bytes, and `--reviewed` proves that only PIN, MARK and LABEL moved. The window
+  (`r45-window.sh apply`) leaves one copy of the stored compose, `/root/ssam-r45/coolify-before.json` (0600), for the
+  rollback; `cleanup`, after the owner confirms, deletes it and logs it in `/root/ssam-r45/cleanup.log`. Roll back with
+  `SSAM_LOCK_WAIT=900` (a backup cron may hold the lock).

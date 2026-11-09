@@ -12,6 +12,7 @@ import { connectionEnvironment, readConnection } from './studio-session.mjs';
 import { hostedSpawnEnv, usesWorkspace } from './executor.mjs';
 import { kernelStart } from './quality-meter.mjs';
 import { withTraceArgs } from './correlation.mjs';
+import { memoryGate, memoryWaitRefusal } from './memory-room.mjs';
 
 const tail = (text, lines = 10) => String(text ?? '').trim().split(/\r?\n/).filter(Boolean).slice(-lines);
 
@@ -25,8 +26,14 @@ export function laneEnvironment({ lane = o11Lane.lane, root = anvilRoot, env = p
 }
 
 // run(args, {input, timeoutMs, cwd, cli}) -> {ok, exitCode, envelope|null, stderr[], wallMs, line}
-export function createAnvilRunner({ lane = o11Lane.lane, root = anvilRoot, env = process.env, environment = laneEnvironment, execFileFn = execFile, dotnet = 'dotnet' } = {}) {
-  return function runAnvil(args, { input, timeoutMs = 900000, cwd = root, cli } = {}) {
+// Hosted, every cold process is admitted by the memory gate of this server (memory-room.mjs, capacity review R2 M2: the
+// cgroup limit of the container, not the host's MemAvailable), the O11 reserve or the ODC one: a cold apply when the
+// customer's worker is busy waits for the room a build-pool slot would; inside a slot it attaches to the slot's hold. A run
+// that waited says so (memoryWaitMs); a wait that runs out (SSAM_MEMORY_WAIT_MS) starts nothing and answers the pool's
+// refusal (BUILD_QUEUE_TIMEOUT, outcome not-sent, waitedFor memory; review R3 M2): {ok:false, exitCode:null, envelope:
+// <refusal>, refused:true, notSent:true}, never timedOut (that would read as an uncertain outcome). memory (tests): a gate.
+export function createAnvilRunner({ lane = o11Lane.lane, root = anvilRoot, env = process.env, environment = laneEnvironment, execFileFn = execFile, dotnet = 'dotnet', memory = null } = {}) {
+  return async function runAnvil(args, { input, timeoutMs = 900000, cwd = root, cli } = {}) {
     const assembly = cli ?? o11LaneOf(lane, { root, env }).cli;
     // F7: a kernel delivery records the session and the call it runs for (task.json trace).
     args = withTraceArgs(args);
@@ -34,25 +41,45 @@ export function createAnvilRunner({ lane = o11Lane.lane, root = anvilRoot, env =
     // Hosted: the closed environment, with the customer's relay as the bridge port (executor.mjs hostedSpawnEnv).
     const odcCli = /anvil-odc\.dll$/i.test(assembly);
     const hosted = usesWorkspace(root, anvilRoot) ? hostedSpawnEnv(odcCli ? 'odc' : 'o11') : null;
+    const gate = memory ?? (hosted ? memoryGate() : null);
+    const inside = gate?.current() ?? null;
+    let own = null, memoryWaitMs = 0;
+    if (gate && !inside) {
+      const admitted = await gate.admit(odcCli ? gate.settings.odcReserveMb : gate.settings.reserveMb);
+      memoryWaitMs = admitted.waitedMs;
+      if (admitted.timedOut) {
+        const refusal = memoryWaitRefusal({ waitedMs: admitted.waitedMs, lane: odcCli ? 'odc' : 'o11', queueMs: gate.settings.waitMs, what: 'call' });
+        return { ok: false, exitCode: null, envelope: refusal, refused: true, notSent: true, stderr: [], wallMs: 0, memoryWaitMs,
+          line: ['dotnet', path.basename(assembly), ...args.map(a => (/s/.test(a) ? JSON.stringify(a) : a))].join(' ') };
+      }
+      own = admitted.hold;
+    }
+    const hold = inside ?? own;
     const started = Date.now();
     // Quality (docs/QUALIDADE.md): this cold process is a kernel leaf; a no-op outside a hosted call.
     const end = kernelStart({ lane: odcCli ? 'odc' : 'o11', via: 'cold' });
-    return new Promise(resolve => {
-      let child;
-      try {
-        child = execFileFn(dotnet, argv, { cwd: hosted ? hosted.cwd : cwd, env: hosted ? hosted.env : environment({ lane, root, env }), windowsHide: true,
-          maxBuffer: 256 * 1024 * 1024, timeout: timeoutMs, encoding: 'utf8' }, (error, stdout, stderr) => {
-          const text = String(stdout ?? '').trim();
-          let envelope = null;
-          try { envelope = text ? JSON.parse(text) : null; } catch { envelope = null; }
-          const exitCode = error ? (typeof error.code === 'number' ? error.code : 1) : 0;
-          end({ ok: exitCode === 0 });
-          resolve({ ok: exitCode === 0 && envelope?.ok === true, exitCode, envelope,
-            ...(envelope ? {} : { stdout: tail(text, 40) }), stderr: tail(stderr), wallMs: Date.now() - started,
-            ...(error?.killed ? { timedOut: true } : {}), line: ['dotnet', path.basename(assembly), ...args.map(a => (/\s/.test(a) ? JSON.stringify(a) : a))].join(' ') });
-        });
-      } catch (error) { end({ ok: false }); throw error; }
-      if (input !== undefined) { child.stdin?.end(typeof input === 'string' ? input : JSON.stringify(input)); }
-    });
+    try {
+      return await new Promise(resolve => {
+        let child;
+        try {
+          child = execFileFn(dotnet, argv, { cwd: hosted ? hosted.cwd : cwd, env: hosted ? hosted.env : environment({ lane, root, env }), windowsHide: true,
+            maxBuffer: 256 * 1024 * 1024, timeout: timeoutMs, encoding: 'utf8' }, (error, stdout, stderr) => {
+            const text = String(stdout ?? '').trim();
+            let envelope = null;
+            try { envelope = text ? JSON.parse(text) : null; } catch { envelope = null; }
+            const exitCode = error ? (typeof error.code === 'number' ? error.code : 1) : 0;
+            end({ ok: exitCode === 0 });
+            resolve({ ok: exitCode === 0 && envelope?.ok === true, exitCode, envelope,
+              ...(envelope ? {} : { stdout: tail(text, 40) }), stderr: tail(stderr), wallMs: Date.now() - started,
+              ...(error?.killed ? { timedOut: true } : {}), ...(memoryWaitMs >= 1000 ? { memoryWaitMs } : {}),
+              line: ['dotnet', path.basename(assembly), ...args.map(a => (/\s/.test(a) ? JSON.stringify(a) : a))].join(' ') });
+          });
+        } catch (error) { end({ ok: false }); throw error; }
+        hold?.attach(child?.pid);
+        if (input !== undefined) { child.stdin?.end(typeof input === 'string' ? input : JSON.stringify(input)); }
+      });
+    } finally {
+      if (own) own.release(); else inside?.detach();
+    }
   };
 }

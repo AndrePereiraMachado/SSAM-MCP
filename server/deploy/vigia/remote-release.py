@@ -43,18 +43,23 @@ def assert_fence(token):
         raise RemoteError('LOCK_LOST')
 
 
-def command(args, data=None, env=None):
+def command(args, data=None, env=None, timeout=900):
     if active_fence:
         assert_fence(active_fence)
     result = subprocess.run(args, input=data, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                            env=env, timeout=900)
+                            env=env, timeout=timeout)
     if result.returncode:
         raise RuntimeError("Remote command failed: " + args[0])
     return result.stdout
 
 
-def docker(*args, data=None):
-    return command(["docker", *args], data=data)
+def docker(*args, data=None, timeout=900):
+    return command(["docker", *args], data=data, timeout=timeout)
+
+
+# The usage count is advisory: a node stuck in the container must not hold a watcher round for the 900 s of command()
+# (review R3 B2). The container's own timeout stops node at 25 s; the client gives up at 30 s; either is USAGE_UNREADABLE.
+USAGE_TIMEOUT_S = 30
 
 
 def backends(project):
@@ -69,6 +74,33 @@ MODEL_PLUGINS_TARGET = '/tmp/.local/share/OutSystems/ODC Studio/Plugins'
 READ_ONLY_VOLUMES = {'/data/runtime-css': 'runtime-css', MODEL_PLUGINS_TARGET: 'odc-model-plugins'}
 PLUGIN_LIST = ("const fs=require('fs'),c=require('crypto');console.log(JSON.stringify(fs.readdirSync('/plugins').sort()"
                ".map(n=>({name:n,sha256:c.createHash('sha256').update(fs.readFileSync('/plugins/'+n)).digest('hex')}))))")
+# The capacity hot tier goes by real use (gen-compose sizing.usage): the request's usageSource (vigia/usage-count.cjs) runs
+# inside a live backend over the shared server state and prints counts only ({"pairs": {pair: {heavy, active}},
+# "skipped": n}), never a token id. Usage is advisory: whatever fails here (no source, docker, a timeout, bad output) is
+# usage None plus a warning code, never an error of the snapshot, so it can never stop a watcher round (review R2 M1').
+PAIR_NAME = re.compile(r"o11-\d+\.\d+\.\d+-odc-\d+\.\d+\.\d+")
+
+
+def usage_counts(container, source):
+    if not container or not isinstance(source, str) or not source:
+        return None, 'USAGE_UNREADABLE'
+    try:
+        value = json.loads(docker("exec", "-i", container, "timeout", str(USAGE_TIMEOUT_S - 5), "node", data=source.encode(), timeout=USAGE_TIMEOUT_S))
+        pairs = value["pairs"]
+        if not isinstance(pairs, dict):
+            raise ValueError()
+    except Exception:
+        return None, 'USAGE_UNREADABLE'
+    usage, dropped = {}, False
+    for name, counts in pairs.items():
+        good = PAIR_NAME.fullmatch(str(name)) and isinstance(counts, dict) and all(
+            isinstance(counts.get(k), int) and not isinstance(counts.get(k), bool) and counts.get(k) >= 0 for k in ('heavy', 'active'))
+        if good:
+            usage[name] = {'heavy': counts['heavy'], 'active': counts['active']}
+        else:
+            dropped = True
+    skipped = value.get('skipped') if isinstance(value, dict) else None
+    return usage, ('USAGE_PARTIAL' if dropped or (isinstance(skipped, int) and skipped > 0) else None)
 
 
 def pinned_files(pins):
@@ -119,9 +151,11 @@ def dispatch(request):
     if action == "snapshot":
         rows = []
         telemetry = {"tokens": {}}
+        live = []
         for server in backends(settings["composeProject"]):
             if not server["State"]["Running"]:
                 continue
+            live.append(server["Id"])
             measured = json.loads(docker("exec", "-i", server["Id"], "node", "--input-type=module", data=request["checkSource"].encode()))
             events = []
             for line in docker("logs", server["Id"]).decode().splitlines():
@@ -139,7 +173,8 @@ def dispatch(request):
             for key, value in measured.get("telemetry", {}).get("tokens", {}).items():
                 if key not in telemetry["tokens"] or telemetry["tokens"][key]["seen"] < value["seen"]:
                     telemetry["tokens"][key] = value
-        return {"ok": True, "backends": rows, "telemetry": telemetry}
+        usage, warning = usage_counts(live[0] if live else None, request.get("usageSource"))
+        return {"ok": True, "backends": rows, "telemetry": telemetry, "usage": usage, "warnings": [warning] if warning else []}
     if action == "event":
         # The system journal is available even without a console ingestion API.
         code = request.get("code")

@@ -48,6 +48,130 @@ export function servedLists(manifest,{window=manifest.window??3}={}){
   return JSON.stringify({odc:f.odc,o11:f.o11});
  });
 }
+// Capacity sizing (KVM 8, measured 2026-11-09: C:/t/r5/capacity/RESULTADO.md, RESULTADO-R2.md). Optional "sizing" in
+// versions.json:
+//   {hot:{cpus,memory,cpuShares,buildWorkers,o11WorkersMax,queueMs}, other:{...same}, router:{cpus,memory},
+//    host:{memory,reserve}, usage:{"<pair>":{heavy,active}}, hotPair:"o11-<v>-odc-<v>" (optional owner pin)}.
+// The hot backend is chosen by REAL USE, not by recency nor by licenses ever routed: the pinned hotPair, else the pair with
+// the most heavy calls of the last 7 days (usage.heavy: studio_deliver, o11_deliver, ssam_code in its quality log), then the
+// most clients active in the last 14 days (usage.active), ties and no counts going to the router's default pair (the first
+// of the window). The counts are read inside a live backend at each deploy (vigia/usage-count.cjs, counts only) and
+// recorded here; usage is only read when a compose is generated (a deploy that happens anyway): a shift of use never
+// redeploys by itself. Every other backend, the newest pair included when it is not the most used, gets "other".
+// Every value is literal in the compose (review M3/M3'): Coolify 4.4.6 persisted the defaults of ${VAR:-default} in the
+// environment sections as resource variables (2026-10-20 rows equal to the defaults), so a tier variable could freeze or
+// override a tier silently; versions.json is the only source, checked here. The shared SSAM_CPUS/SSAM_MEMORY/
+// SSAM_BUILD_WORKERS/SSAM_O11_WORKERS_MAX no longer reach a sized backend. host: the memory limits of the backends, the
+// router and the console must leave host.reserve of host.memory (the VPS MemTotal); a window that does not fit is refused
+// (CAPACITY_WINDOW, environmental: the watcher waits and tells the owner), never shrunk.
+// cpuShares on cgroup v2 (the VPS, runc 1.5.1, systemd driver): runc 1.3 and later convert shares to cpu.weight with the
+// quadratic of opencontainers/cgroups (ConvertCPUSharesToCgroupV2Value, cpuWeight below), not the linear 1+(s-2)*9999/262142
+// of older runc: 1024 -> 100 (measured on the VPS 2026-11-09: a container with CpuShares 1024 has cpu.weight 100), 5768..5784
+// -> 400. So the other tier is 1024 (the default 100 of the router, the console, Coolify and Postgres) and the hot one 5776
+// (400, the middle of the range: half a unit of float margin each side of the ceil): hot/other = 4 (review R3 A1).
+// Without "sizing" the compose is exactly as before.
+export const SIZING_TIERS=['hot','other'];
+export const CAPACITY_WINDOW='CAPACITY_WINDOW';
+const TIER_FIELDS=['cpus','memory','cpuShares','buildWorkers','o11WorkersMax','queueMs'];
+const PAIR_NAME=/^o11-\d+\.\d+\.\d+-odc-\d+\.\d+\.\d+$/;
+const mib=value=>{const m=/^(\d+)([mg])$/i.exec(String(value));return m?Number(m[1])*(m[2].toLowerCase()==='g'?1024:1):null;};
+const isCpus=value=>/^\d+(?:\.\d+)?$/.test(String(value))&&Number(value)>0&&Number(value)<=64;
+const count=v=>Number.isInteger(v)&&v>=0;
+// cpu.weight runc (1.3+) writes for cpu_shares (opencontainers/cgroups ConvertCPUSharesToCgroupV2Value); 0 is unset (100).
+export const cpuWeight=shares=>{if(!shares)return 100;if(shares<=2)return 1;if(shares>=262144)return 10000;const l=Math.log2(shares);return Math.ceil(10**((l*l+125*l)/612-7/34));};
+// The use of a pair as a sort key: heavy calls of 7 days first, then active clients of 14 days.
+const useOf=(usage,name)=>[usage?.[name]?.heavy??0,usage?.[name]?.active??0];
+const more=(a,b)=>a[0]!==b[0]?a[0]>b[0]:a[1]>b[1];
+// The index of the hot pair in the window: the pinned one, else the most used (ties: the earlier pair, the default first).
+export function hotPairIndex(manifest,{window=manifest.window??3}={}){
+ const pairs=versionPairs(manifest,window),pin=manifest.sizing?.hotPair,usage=manifest.sizing?.usage;
+ if(pin!==undefined&&pin!==null){const at=pairs.findIndex(p=>p.name===pin);if(at<0)throw new Error('sizing.hotPair names no pair of the window.');return at;}
+ return pairs.reduce((best,p,i)=>more(useOf(usage,p.name),useOf(usage,pairs[best].name))?i:best,0);
+}
+export const hotPairName=manifest=>manifest.sizing===undefined?null:versionPairs(manifest)[hotPairIndex(manifest)].name;
+export function checkSizing(sizing){
+ if(!sizing||typeof sizing!=='object'||Array.isArray(sizing))throw new Error('Invalid sizing.');
+ const known=new Set([...SIZING_TIERS,'router','host','usage','hotPair']);
+ for(const k of Object.keys(sizing))if(!known.has(k))throw new Error('Unknown sizing key '+k+'.');
+ for(const tier of SIZING_TIERS){
+  const t=sizing[tier];
+  if(!t||typeof t!=='object')throw new Error('sizing.'+tier+' is required.');
+  for(const k of Object.keys(t))if(!TIER_FIELDS.includes(k))throw new Error('Unknown sizing.'+tier+' key '+k+'.');
+  if(!isCpus(t.cpus))throw new Error('Invalid sizing.'+tier+'.cpus.');
+  if(!mib(t.memory)||mib(t.memory)<1024)throw new Error('Invalid sizing.'+tier+'.memory.');
+  if(!Number.isInteger(t.cpuShares)||t.cpuShares<2||t.cpuShares>262144)throw new Error('Invalid sizing.'+tier+'.cpuShares.');
+  for(const k of ['buildWorkers','o11WorkersMax'])if(!Number.isInteger(t[k])||t[k]<1||t[k]>16)throw new Error('Invalid sizing.'+tier+'.'+k+'.');
+  if(!Number.isInteger(t.queueMs)||t.queueMs<0||t.queueMs>3600000)throw new Error('Invalid sizing.'+tier+'.queueMs.');
+ }
+ if(sizing.router!==undefined&&(!isCpus(sizing.router?.cpus)||!mib(sizing.router?.memory)||mib(sizing.router.memory)<256||Object.keys(sizing.router).some(k=>!['cpus','memory'].includes(k))))throw new Error('Invalid sizing.router.');
+ if(sizing.host!==undefined&&(!mib(sizing.host?.memory)||!mib(sizing.host?.reserve)||Object.keys(sizing.host).some(k=>!['memory','reserve'].includes(k))))throw new Error('Invalid sizing.host.');
+ if(sizing.usage!==undefined&&(!sizing.usage||typeof sizing.usage!=='object'||Array.isArray(sizing.usage)||Object.entries(sizing.usage).some(([k,v])=>!PAIR_NAME.test(k)||!v||typeof v!=='object'||Object.keys(v).sort().join()!=='active,heavy'||!count(v.heavy)||!count(v.active))))throw new Error('Invalid sizing.usage.');
+ if(sizing.hotPair!==undefined&&sizing.hotPair!==null&&!PAIR_NAME.test(sizing.hotPair))throw new Error('Invalid sizing.hotPair.');
+ return sizing;
+}
+// The live usage counts (vigia/usage-count.cjs: pair name -> {heavy, active}) recorded in the manifest. A pair that left the
+// window has its counts folded into the router's default pair (the first), where the router sends its clients
+// (routeOf -> fallback) until their next hello; an entry that is not counts is ignored. null usage keeps the recorded counts.
+export function withUsage(manifest,usage){
+ if(manifest.sizing===undefined||!usage||typeof usage!=='object'||Array.isArray(usage))return manifest;
+ const pairs=versionPairs(manifest),names=new Set(pairs.map(p=>p.name)),next=structuredClone(manifest),out={};
+ for(const [name,v] of Object.entries(usage)){
+  if(!PAIR_NAME.test(name)||!v||typeof v!=='object'||!count(v.heavy)||!count(v.active))continue;
+  const into=names.has(name)?name:pairs[0].name,at=out[into]??={heavy:0,active:0};
+  at.heavy+=v.heavy;at.active+=v.active;
+ }
+ next.sizing.usage=Object.fromEntries(Object.entries(out).filter(([,v])=>v.heavy||v.active).sort(([a],[b])=>a.localeCompare(b)));
+ checkSizing(next.sizing);return next;
+}
+// The memory limits of a sized window in MiB (backends, router, console) against host.memory - host.reserve. A window that
+// does not fit throws CAPACITY_WINDOW (environmental), whoever asks: the generator and the watcher's rotation.
+export function hostBudget(manifest,{window=manifest.window??3}={}){
+ const sizing=checkSizing(manifest.sizing),n=versionPairs(manifest,window).length;
+ const consoleMb=mib(template.services['ssam-console']?.deploy?.resources?.limits?.memory)??0;
+ const router=sizing.router?mib(sizing.router.memory):6144;
+ const used=mib(sizing.hot.memory)+(n-1)*mib(sizing.other.memory)+router+consoleMb;
+ const available=sizing.host?mib(sizing.host.memory)-mib(sizing.host.reserve):Infinity;
+ if(used>available)throw Object.assign(new Error(`A window of ${n} pairs needs ${used} MiB of memory limits (hot ${sizing.hot.memory}, ${n-1} x ${sizing.other.memory}, router, console) and the host leaves ${available} MiB after its reserve; it is not deployed until a pair leaves or the owner changes sizing.`),{code:CAPACITY_WINDOW,environmental:true});
+ return {used,available,pairs:n};
+}
+// The tier of each backend, in pair order ('hot' | 'other'), or null without sizing.
+export function backendTiers(manifest,{window=manifest.window??3}={}){
+ if(manifest.sizing===undefined)return null;
+ checkSizing(manifest.sizing);
+ const hot=hotPairIndex(manifest,{window});
+ return versionPairs(manifest,window).map((_,i)=>i===hot?'hot':'other');
+}
+// What docker inspect must show on each sized service after a deploy (the deploy kit's check, every backend): NanoCpus,
+// Memory bytes, CpuShares and the pool environment. null without sizing.
+export function sizedExpectations(manifest,{window=manifest.window??3}={}){
+ const tiers=backendTiers(manifest,{window});if(!tiers)return null;
+ const s=manifest.sizing,bytes=v=>mib(v)*1024*1024,nano=v=>Math.round(Number(v)*1e9);
+ const out={};
+ tiers.forEach((tier,i)=>{const t=s[tier];out[`ssam-server-v${i+1}`]={tier,pair:versionPairs(manifest,window)[i].name,NanoCpus:nano(t.cpus),Memory:bytes(t.memory),CpuShares:t.cpuShares,
+  env:{SSAM_BUILD_WORKERS:String(t.buildWorkers),SSAM_O11_WORKERS_MAX:String(t.o11WorkersMax),SSAM_BUILD_QUEUE_MS:String(t.queueMs)}};});
+ if(s.router)out['ssam-router']={NanoCpus:nano(s.router.cpus),Memory:bytes(s.router.memory)};
+ return out;
+}
+function applySizing(c,manifest,tiers,window){
+ const sizing=manifest.sizing,router=c.services['ssam-router'];
+ hostBudget(manifest,{window});
+ // The whole sizing rides on the router, so the watcher reads it back from the live compose (sizingOfCompose).
+ router.labels['ssam.sizing']=JSON.stringify(sizing);
+ if(sizing.router)router.deploy={resources:{limits:{...router.deploy.resources.limits,cpus:sizing.router.cpus,memory:sizing.router.memory}}};
+ tiers.forEach((tier,i)=>{
+  const s=c.services[`ssam-server-v${i+1}`],t=sizing[tier];
+  s.deploy.resources.limits={...s.deploy.resources.limits,cpus:t.cpus,memory:t.memory};
+  s.cpu_shares=t.cpuShares;
+  Object.assign(s.environment,{SSAM_BUILD_WORKERS:String(t.buildWorkers),SSAM_O11_WORKERS_MAX:String(t.o11WorkersMax),SSAM_BUILD_QUEUE_MS:String(t.queueMs)});
+  s.labels['ssam.sizing']=tier;
+ });
+}
+export function sizingOfCompose(compose){
+ const text=compose?.services?.['ssam-router']?.labels?.['ssam.sizing'];
+ if(text===undefined)return undefined;
+ let sizing;try{sizing=JSON.parse(text);}catch{throw new Error('The live router carries an unreadable ssam.sizing.');}
+ return checkSizing(sizing);
+}
 export function generateCompose(manifest,{window=manifest.window??3}={}){
  // Coolify 4.4.6 corrupts image@sha256 references. Immutable tags are checked against the recorded digest.
  const pairs=versionPairs(manifest,window).map(p=>({...p,digest:p.image.split('@')[1]??null,image:p.image.split('@')[0]})),c=structuredClone(template),source=c.services['ssam-server'];
@@ -76,6 +200,8 @@ export function generateCompose(manifest,{window=manifest.window??3}={}){
  for(const name of ['ssam-admin','ssam-console'])for(const v of c.services[name]?.volumes??[])if(['cache','odc-features'].includes(v.source))v.source=`${v.source}-${pairs[0].name.replaceAll('.','-')}`;
  // Every shared read-only named volume a service mounts is declared (odc-model-plugins: the owner stages it).
  for(const s of Object.values(c.services))for(const v of s.volumes??[])if(v.read_only===true&&(v.type??'volume')==='volume'&&typeof v.source==='string'&&!(v.source in c.volumes))c.volumes[v.source]={};
+ const tiers=backendTiers(manifest,{window});
+ if(tiers)applySizing(c,manifest,tiers,window);
  return c;
 }
 if(process.argv[1]&&path.resolve(process.argv[1])===fileURLToPath(import.meta.url)){

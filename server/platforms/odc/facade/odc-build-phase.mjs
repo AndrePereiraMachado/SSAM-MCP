@@ -21,6 +21,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import * as kernelDelivery from './kernel-delivery.mjs';
 import { phaseOfCall, phaseGuard, studioMoment, notePhase, StudioTurnRefused, queueWaitMs } from './studio-write-lock.mjs';
 import { pooledBuild, sharedBuildPool, BuildQueueRefused, slotWorkerPort } from './build-pool.mjs';
+import { memoryGate } from './memory-room.mjs';
 import { workspaceRoot } from './workspace.mjs';
 import { hostedContext } from './executor.mjs';
 import { withNormalizationsOf } from './normalizations.mjs';
@@ -68,10 +69,19 @@ const run = promisify(execFile);
 // The kernel delivery's exec with the slot's TEMP and TMP. Hosted (servidor/fase4) the temporary folder stays the customer's:
 // <ws>/odc/tmp/slot-<i> under the closed environment's TEMP, so two customers never share one, nor two builds of a customer.
 export const slotTemp = (slot, env) => (hostedContext() && env?.TEMP ? path.join(env.TEMP, 'slot-' + (slot.index ?? 'apply')) : slot.env.TEMP);
-export const slotExec = (slot, runner = run) => (file, args, options = {}) => {
+// Inside a pool slot the process's pid goes on the slot's memory hold while it runs (memory-room.mjs: the reserve then counts
+// what the process has not shown in VmRSS, not only its first 15 s; review R3 B1) and comes off when it ends.
+export const slotExec = (slot, runner = run, gate = memoryGate()) => (file, args, options = {}) => {
   const temp = slotTemp(slot, options.env);
   try { fs.mkdirSync(temp, { recursive: true }); } catch { /* the build creates it or fails visibly */ }
-  return runner(file, args, { ...options, env: { ...(options.env ?? process.env), TEMP: temp, TMP: temp } });
+  const running = runner(file, args, { ...options, env: { ...(options.env ?? process.env), TEMP: temp, TMP: temp } });
+  const hold = gate?.current?.() ?? null, pid = running?.child?.pid;
+  if (hold && Number.isInteger(pid)) {
+    hold.attach(pid);
+    const off = () => { if (hold.pid === pid) hold.detach(); };
+    Promise.resolve(running).then(off, off);
+  }
+  return running;
 };
 async function slotWorker(slot, env) {
   if (slot.index == null) return undefined; // the lane's own worker (the kernel delivery's default)
@@ -91,7 +101,7 @@ export function phasedDeliveryDeps({ root, studio, prepareManifest, env = proces
   // server builds in this one pool), SSAM_CUSTOMER, else the lane root.
   const who = customer ?? hostedContext()?.tokenId ?? env.SSAM_CUSTOMER ?? root;
   const pooled = fn => async args => {
-    try { return await pooledBuild({ pool: buildPool, customer: who }, slot => fn(args, slot)); }
+    try { return await pooledBuild({ pool: buildPool, customer: who, lane: 'odc' }, slot => fn(args, slot)); }
     catch (error) { if (error instanceof BuildQueueRefused) return error.refusal; throw error; }
   };
   return {

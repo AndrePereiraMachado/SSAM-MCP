@@ -105,3 +105,96 @@ test('A2: every backend, and only a backend, mounts the pinned ODC model plugins
   assert.deepEqual(c.volumes[pins.volume],{});assertModelPlugins(c);
  }
 });
+
+// Capacity sizing (KVM 8, 2026-11-09, reviews A1-A2/M3 and R2 A1'/M3'/B1'): the hot tier on the pair of most real use
+// (heavy calls of 7 days, then active clients of 14 days), the other tier elsewhere, every value literal.
+const sizing={hot:{cpus:'5',memory:'10g',cpuShares:5776,buildWorkers:6,o11WorkersMax:2,queueMs:240000},other:{cpus:'2',memory:'4g',cpuShares:1024,buildWorkers:2,o11WorkersMax:1,queueMs:240000},
+ router:{cpus:'1',memory:'512m'},host:{memory:'32089m',reserve:'4g'}};
+const r44=()=>({window:5,odc:['1.7.30','1.7.29','1.7.28','1.7.31','1.7.32'].map((version,i)=>({version,tag:'t'+i,image})),o11:['11.55.94','11.55.93','11.55.92','11.55.94','11.55.95'].map((version,i)=>({version,tag:'t'+i,image}))});
+const backendsOf=c=>Object.entries(c.services).filter(([n])=>/^ssam-server-v\d+$/.test(n));
+const tiersOf=c=>backendsOf(c).map(([,s])=>s.labels['ssam.sizing']);
+const V30='o11-11.55.94-odc-1.7.30',V29='o11-11.55.93-odc-1.7.29',V28='o11-11.55.92-odc-1.7.28',V31='o11-11.55.94-odc-1.7.31',V32='o11-11.55.95-odc-1.7.32';
+const u=(heavy,active)=>({heavy,active});
+test('capacity: the hot tier goes to the pair of most heavy calls, then most active clients; ties and no counts to the default pair',async()=>{
+ const {hotPairIndex,backendTiers}=await import('./gen-compose.mjs');
+ // The VPS of 2026-11-09 (read-only, counts only): 1.7.31 took 1044 heavy calls of 7 days with 1 active client; 1.7.30 has
+ // the most active clients (3) and 6 heavy calls. Licenses ever routed (routing.json) would have picked 1.7.30 (R2 A1').
+ const usage={[V29]:u(0,1),[V30]:u(6,3),[V31]:u(1044,1),[V32]:u(0,1)};
+ const m={...r44(),sizing:{...sizing,usage}};
+ assert.equal(hotPairIndex(m),3);assert.deepEqual(backendTiers(m),['other','other','other','hot','other']);
+ assert.equal(hotPairIndex({...r44(),sizing:{...sizing,usage:{[V29]:u(5,1),[V31]:u(5,4)}}}),3,'equal heavy calls: the most active clients');
+ assert.equal(hotPairIndex({...r44(),sizing:{...sizing,usage:{[V29]:u(5,2),[V31]:u(5,2)}}}),1,'a full tie goes to the earlier pair');
+ assert.equal(hotPairIndex({...r44(),sizing:{...sizing,usage:{[V30]:u(0,0),[V31]:u(0,0)}}}),0,'no use: the default pair');
+ assert.equal(hotPairIndex({...r44(),sizing}),0,'no counts: the default pair');
+ const c=generateCompose(m),hot=c.services['ssam-server-v4'];
+ // R2 M3': every value literal (no ${...} a Coolify variable could freeze or override).
+ assert.deepEqual(hot.deploy.resources.limits,{cpus:'5',memory:'10g',pids:'${SSAM_PIDS:-4096}'});assert.equal(hot.cpu_shares,5776);
+ assert.equal(hot.environment.SSAM_BUILD_WORKERS,'6');assert.equal(hot.environment.SSAM_O11_WORKERS_MAX,'2');assert.equal(hot.environment.SSAM_BUILD_QUEUE_MS,'240000');
+ assert.equal(hot.labels['ssam.sizing'],'hot');
+ for(const [name,s] of backendsOf(c).filter(([n])=>n!=='ssam-server-v4')){
+  assert.equal(s.labels['ssam.sizing'],'other',name);assert.deepEqual(s.deploy.resources.limits,{cpus:'2',memory:'4g',pids:'${SSAM_PIDS:-4096}'});assert.equal(s.cpu_shares,1024);
+  assert.equal(s.environment.SSAM_BUILD_WORKERS,'2');assert.equal(s.environment.SSAM_O11_WORKERS_MAX,'1');
+ }
+ for(const [,s] of [...backendsOf(c),['router',c.services['ssam-router']]])assert.ok(!/\$/.test(JSON.stringify([s.deploy.resources.limits.cpus,s.deploy.resources.limits.memory,s.cpu_shares??null,s.environment.SSAM_BUILD_WORKERS??null,s.environment.SSAM_O11_WORKERS_MAX??null,s.environment.SSAM_BUILD_QUEUE_MS??null])));
+ assert.ok(!/\$\{SSAM_(HOT|OTHER|ROUTER)_/.test(JSON.stringify(c)),'no tier variable at all');assert.ok(/\$\{SSAM_PIDS:/.test(JSON.stringify(c)),'the probe sees variables');
+ assert.deepEqual(c.services['ssam-router'].deploy.resources.limits,{cpus:'1',memory:'512m',pids:'${SSAM_PIDS:-4096}'});
+ assert.deepEqual(JSON.parse(c.services['ssam-router'].labels['ssam.sizing']),m.sizing);
+ // R3 A1: cgroup v2 weights as runc 1.5.1 writes them (quadratic; 1024 -> 100 measured on the VPS): other keeps the default
+ // 100, hot is 400. The linear formula of old runc (2598 -> 100, 10463 -> 400) is not this host's.
+ const {cpuWeight}=await import('./gen-compose.mjs');
+ for(const [s,w] of [[0,100],[2,1],[1024,100],[2048,174],[2598,210],[4096,303],[5767,399],[5768,400],[5776,400],[5784,400],[5785,401],[10463,650],[262144,10000]])assert.equal(cpuWeight(s),w,String(s));
+ // Sizing changes nothing else: same services, served lists, routing and volumes as the unsized compose.
+ const plain=generateCompose(r44());
+ assert.deepEqual(Object.keys(c.services),Object.keys(plain.services));assert.deepEqual(c.volumes,plain.volumes);
+ assert.equal(c.services['ssam-router'].environment.SSAM_ROUTER_BACKENDS,plain.services['ssam-router'].environment.SSAM_ROUTER_BACKENDS);
+ for(const [name,s] of backendsOf(c))assert.equal(s.environment.SSAM_SERVED_VERSIONS,plain.services[name].environment.SSAM_SERVED_VERSIONS);
+ for(const [,s] of backendsOf(plain)){assert.equal(s.labels['ssam.sizing'],undefined);assert.equal(s.cpu_shares,undefined);assert.equal(s.deploy.resources.limits.cpus,'${SSAM_CPUS:-2}');}
+});
+test('capacity: the owner pin wins over use; withUsage folds pairs that left into the default pair; bad sizing is refused',async()=>{
+ const {hotPairIndex,sizingOfCompose,withUsage,sizedExpectations}=await import('./gen-compose.mjs');
+ const m={...r44(),sizing:{...sizing,usage:{[V31]:u(1044,1)},hotPair:V30}};
+ assert.equal(hotPairIndex(m),0);assert.deepEqual(tiersOf(generateCompose(m)),['hot','other','other','other','other']);
+ assert.throws(()=>generateCompose({...r44(),sizing:{...sizing,hotPair:'o11-11.55.91-odc-1.7.27'}}),/hotPair/);
+ // A pair that left the window (1.7.20) is routed to the default pair (router routeOf -> fallback): its use counts there.
+ // Entries that are not counts are dropped; zero counts are not recorded.
+ const folded=withUsage({...r44(),sizing},{[V32]:u(5,1),'o11-11.55.90-odc-1.7.20':u(9,2),[V29]:u(0,0),[V28]:{heavy:-1,active:0},'v1':u(3,3),[V31]:null});
+ assert.deepEqual(folded.sizing.usage,{[V30]:u(9,2),[V32]:u(5,1)});
+ assert.deepEqual(withUsage({...r44(),sizing:{...sizing,usage:{[V30]:u(1,1)}}},{[V30]:u(2,2),'o11-11.55.90-odc-1.7.20':u(1,0)}).sizing.usage,{[V30]:u(3,2)});
+ assert.equal(withUsage(r44(),{[V32]:u(5,1)}).sizing,undefined,'an unsized manifest stays unsized');
+ assert.deepEqual(withUsage({...r44(),sizing:{...sizing,usage:{[V31]:u(1,1)}}},null).sizing.usage,{[V31]:u(1,1)},'no counts read: the recorded ones stay');
+ for(const bad of [{...sizing,hot:undefined},{...sizing,hot:{...sizing.hot,cpus:'0'}},{...sizing,other:{...sizing.other,memory:'512m'}},{...sizing,other:{...sizing.other,memory:'3.5g'}},{...sizing,hot:{...sizing.hot,buildWorkers:0}},
+  {...sizing,hot:{...sizing.hot,buildWorkers:17}},{...sizing,other:{...sizing.other,queueMs:-1}},{...sizing,hot:{...sizing.hot,cpuShares:1}},{...sizing,extra:1},{...sizing,hot:{...sizing.hot,heap:1}},{...sizing,router:{cpus:'1'}},
+  {...sizing,router:{cpus:'1',memory:'128m'}},{...sizing,hot:{...sizing.hot,cpus:'${X:-5}'}},{...sizing,usage:{'v1':u(1,1)}},{...sizing,usage:{[V30]:u(-1,0)}},{...sizing,usage:{[V30]:{heavy:1}}},{...sizing,routed:{[V30]:1}}])
+  assert.throws(()=>generateCompose({...r44(),sizing:bad}),/sizing/i);
+ assert.deepEqual(sizingOfCompose(generateCompose(m)),m.sizing);assert.equal(sizingOfCompose(generateCompose(r44())),undefined);
+ // What the deploy kit checks on every backend with docker inspect.
+ const e=sizedExpectations({...r44(),sizing:{...sizing,hotPair:V31}});
+ assert.deepEqual(e['ssam-server-v4'],{tier:'hot',pair:V31,NanoCpus:5e9,Memory:10737418240,CpuShares:5776,env:{SSAM_BUILD_WORKERS:'6',SSAM_O11_WORKERS_MAX:'2',SSAM_BUILD_QUEUE_MS:'240000'}});
+ assert.deepEqual(e['ssam-server-v1'],{tier:'other',pair:V30,NanoCpus:2e9,Memory:4294967296,CpuShares:1024,env:{SSAM_BUILD_WORKERS:'2',SSAM_O11_WORKERS_MAX:'1',SSAM_BUILD_QUEUE_MS:'240000'}});
+ assert.deepEqual(e['ssam-router'],{NanoCpus:1e9,Memory:536870912});assert.equal(sizedExpectations(r44()),null);
+});
+test('capacity: a window the host cannot hold is refused with CAPACITY_WINDOW, never shrunk below the other tier',async()=>{
+ const {hostBudget,CAPACITY_WINDOW}=await import('./gen-compose.mjs');
+ // window 5: 10g + 4 x 4g + 512m router + 256m console = 27392 MiB <= 32089 - 4096
+ assert.deepEqual(hostBudget({...r44(),sizing}),{used:27392,available:27993,pairs:5});
+ const six={...r44(),window:6,odc:[{version:'1.7.33',tag:'t5',image},...r44().odc],o11:[{version:'11.55.96',tag:'t5',image},...r44().o11]};
+ for(const m of [{...six,sizing},{...r44(),sizing:{...sizing,hot:{...sizing.hot,memory:'14g'}}}]){
+  assert.throws(()=>generateCompose(m),e=>e.code===CAPACITY_WINDOW&&e.environmental===true&&/not deployed/.test(e.message));
+ }
+ assert.ok(generateCompose(six),'unsized: no budget, as before');
+});
+test('capacity: the committed versions.json fits the 31.3 GiB host with a 4 GiB reserve; no pin: the use picks the pair of most heavy calls',async()=>{
+ const {readFileSync}=await import('node:fs');const {hotPairIndex,versionPairs,hostBudget,cpuWeight}=await import('./gen-compose.mjs');
+ const m=JSON.parse(readFileSync(new URL('./versions.json',import.meta.url),'utf8').replace(/^﻿/,''));
+ assert.ok(m.sizing,'versions.json carries the capacity sizing');
+ assert.equal(m.sizing.host.memory,'32089m','the VPS MemTotal (31.3 GiB), not 32g');assert.equal(m.sizing.host.reserve,'4g');
+ // R3 M1: no owner pin (a pin stays while its pair stays, even after its use is gone); the recorded use of the read-only
+ // check of 2026-11-09 (1.7.31 the heaviest) decides, and the next deploy decides again from the live counts.
+ assert.equal(m.sizing.hotPair,undefined);
+ const pairs=versionPairs(m),usage=m.sizing.usage??{},heavy=n=>usage[n]?.heavy??0;
+ for(const p of pairs)assert.ok(heavy(p.name)<=heavy(V31),p.name);
+ assert.equal(pairs[hotPairIndex(m)].name,V31,'the use picks the pair of most heavy calls');
+ assert.equal(cpuWeight(m.sizing.other.cpuShares),100);assert.equal(cpuWeight(m.sizing.hot.cpuShares),400);
+ const b=hostBudget(m);assert.ok(b.used<=b.available);
+ const c=generateCompose(m);assert.equal(backendsOf(c).filter(([,s])=>s.labels['ssam.sizing']==='hot').length,1);
+});

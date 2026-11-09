@@ -5,6 +5,7 @@ import {readJournal,writeJournal} from './journal.mjs';
 import path from 'node:path';
 import {rotateWindow,windowLimit,pinDigest} from './window.mjs';
 import {assertUnserved,assertRetained,canonicalComposeHash} from './safety.mjs';
+import {withUsage,hotPairName} from '../coolify/gen-compose.mjs';
 export const AUTOMATIC_PLAN=[
  'Read secrets and validate the reviewed vigia-run execution source',
  'Read the live pairs, immutable digests, kernels and telemetry (dry-run: public source reads only)',
@@ -54,8 +55,11 @@ export async function releaseAutomatically(config,ops,release){
  state.deploySent??=!!state.steps.deploy||['deploy','checks'].includes(state.activeStep);
  const save=()=>writeJournal(file,state);
  const event=(name,message,code)=>releaseEvent(config.outDir??dir,ops,name,id,message,secrets,state.attempt,code);
+ // A notice of a live release that did not reach the owner (releaseEvent false: no remote line, no webhook) is kept in
+ // state.unsent and sent again by every later round of the same attempt until it is delivered (review R2 B4).
+ const notify=async(name,message,code)=>{const sent=await event(name,message,code);state.unsent=(state.unsent??[]).filter(u=>u.name!==name);if(sent===false)state.unsent.push({name,message,...(code?{code}:{})});if(!state.unsent.length)delete state.unsent;save();return sent;};
  if(['idle','abandoned'].includes(state.status))return {status:state.status,id};
- if(state.status==='live')return {status:'live',id,commit:state.pin};
+ if(state.status==='live'){for(const u of [...(state.unsent??[])])await notify(u.name,u.message,u.code);return {status:'live',id,commit:state.pin};}
  if(state.status==='rollback-failed'){await event('rollback-failed',`${id}: rollback still requires owner attention.`);return {status:'rollback-failed',id};}
  if(state.status==='rolled-back')throw Error('Owner Retry or a new Studio build is required.');
  // Never retain arbitrary service/API response objects in this journal.
@@ -74,12 +78,17 @@ export async function releaseAutomatically(config,ops,release){
   catch(e){if(e.code!=='ALREADY_SERVED')throw e;state.status='idle';save();return {status:'idle',id};}
   proposed=rotateWindow(baseline.manifest,{odc:built.odc??kernel.odc,o11:built.o11??kernel.o11,image:built.image,tag:built.tag},{...baseline.telemetry,maxWindow:windowLimit(config,baseline.manifest)}).manifest;
   if(baseline.hash!==state.baseline?.hash){delete state.steps.pin;delete state.steps.backup;delete state.steps.prepared;}
-  }catch(error){state.failure={step:'baseline-refresh',code:/^[A-Z_]+$/.test(error.code??'')?error.code:'BASELINE_UNAVAILABLE'};state.deferrals=(state.deferrals??0)+1;state.firstDeferredAt??=new Date().toISOString();save();await event('failed',`${id}: live baseline refresh deferred.`);return {status:'deferred',id,code:error.code??'BASELINE_UNAVAILABLE'};}
+  }catch(error){state.failure={step:'baseline-refresh',code:/^[A-Z_]+$/.test(error.code??'')?error.code:'BASELINE_UNAVAILABLE'};state.deferrals=(state.deferrals??0)+1;state.firstDeferredAt??=new Date().toISOString();save();await event('failed',`${id}: live baseline refresh deferred (${state.failure.code}).`,state.failure.code);return {status:'deferred',id,code:error.code??'BASELINE_UNAVAILABLE'};}
  }
  state.baseline=baseline;state.proposed=proposed;if(state.status!=='rolling-back')state.status='preparing';save();
  try{if(!state.mutationStarted)assertUnserved(baseline,{odc:built.odc??kernel.odc,o11:built.o11??kernel.o11});}
  catch(e){if(e.code==='ALREADY_SERVED'){state.status='idle';save();return {status:'idle',id};}throw e;}
- const pinned=pinDigest(proposed,built.tag,'sha256:'+built.sha256);assertRetained(baseline,pinned);
+ // Capacity (gen-compose sizing): the hot tier goes to the most used pair (heavy calls of 7 days, then active clients of 14
+ // days), counted in a live backend with this deploy's baseline; a deploy that happens anyway is the only moment usage moves
+ // it. Unreadable counts keep the recorded ones and the owner is told; they never stop the round (review R2 M1').
+ const pinned=withUsage(pinDigest(proposed,built.tag,'sha256:'+built.sha256),baseline.usage);assertRetained(baseline,pinned);
+ const hot={from:baseline.manifest?.sizing?hotPairName(baseline.manifest):null,to:hotPairName(pinned)};
+ if(pinned.sizing&&baseline.usageWarning)await event('usage-warning',`${id}: the usage counts of the capacity hot tier were not fully read (${baseline.usageWarning}); the recorded counts were kept where missing.`,baseline.usageWarning);
  await event('detected',`${id}: verified candidate detected.`);
  let unlock,protectedPhase=false;
  try{
@@ -105,7 +114,8 @@ export async function releaseAutomatically(config,ops,release){
    }
    await once('deploy',()=>{state.deploySent=true;save();return ops.deploy(secrets);},()=>({ok:true}));
    await once('checks',async()=>{const r=await ops.checks(secrets,{id,pinned,kernel,bridges,built});if(!r?.ok)throw Error('Post-deployment checks failed.');return r;},r=>({ok:true,backends:r.backends}));
-   state.status='live';save();await event('live',`${id}: deployed and verified.`);
+   state.status='live';save();await notify('live',`${id}: deployed and verified.`);
+   if(hot.to&&hot.to!==hot.from)await notify('hot-pair',`${id}: the capacity hot tier moved from ${hot.from??'no hot pair'} to ${hot.to} (use per pair, heavy calls 7 d / active clients 14 d: ${JSON.stringify(pinned.sizing.usage??{})}${pinned.sizing.hotPair?', owner pin':''}).`,'HOT_PAIR_CHANGED');
    return {status:'live',id,commit:state.pin};
   }
   throw Error('Resume interrupted rollback.');
