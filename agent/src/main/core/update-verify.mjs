@@ -66,25 +66,69 @@ const bundleParts = value => { const m = BUNDLE_VERSION.exec(String(value ?? '')
 const compareParts = (a, b) => { for (let i = 0; i < 3; i++) if (a[i] !== b[i]) return a[i] - b[i]; return 0; };
 const macRefusal = (code, message) => ({ code, message: code + ': ' + message });
 
-// The string values of an XML property list's top-level dict (what electron-builder writes and codesign keeps), or null when the
-// text is not one. Binary plists are converted by the caller (plutil) first.
-export function plistStrings(text) {
-  const body = /<plist[^>]*>\s*<dict>([\s\S]*)<\/dict>\s*<\/plist>\s*$/.exec(String(text ?? ''));
-  if (!body) return null;
-  const decode = value => value.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, '&');
-  const out = {}; let depth = 0;
-  // Only the keys of the top-level dict: nested dicts and arrays are skipped by depth.
-  for (const m of body[1].matchAll(/<(\/?)(dict|array)\s*>|<(dict|array)\s*\/>|<key>([^<]*)<\/key>\s*(?:<string>([^<]*)<\/string>|<string\s*\/>)?/g)) {
-    if (m[2]) { depth += m[1] ? -1 : 1; continue; }
-    if (m[3]) continue;
-    if (depth === 0 && m[4] !== undefined && m[5] !== undefined) out[decode(m[4])] = decode(m[5]);
+// Review M1-R2 of agent/mac-028: what the gate reads must be what Squirrel.Mac installs. Squirrel.Mac unpacks the whole ZIP and
+// looks for the bundle of this app's identifier (as CoreFoundation reads it); a decoy next to it (a second `Old.APP`, a nested
+// `x/SSAM Agent.app`) or a plist that a regex reads differently from CoreFoundation (keys in an XML comment) let a signed 0.2.7
+// through. So the ZIP may hold exactly one tree, `SSAM Agent.app/` with this exact case, and nothing else; the plist is read only
+// by plutil (CoreFoundation, the same reader as Squirrel's), and anything unreadable fails closed.
+
+// The rows of `unzip -Z` (zipinfo short format): {entries: the header's "number of entries", rows: [{mode, name}]}. A row is the
+// 10-character mode, 7 fields (version, os, size, flags, method, date, time) and the name after one space.
+export function zipListingRows(text) {
+  const lines = String(text ?? '').split('\n').map(line => line.replace(/\r$/, ''));
+  const entries = Number(/^Zip file size: \d+ bytes, number of entries: (\d+)$/m.exec(lines.join('\n'))?.[1] ?? NaN);
+  const rows = [];
+  for (const line of lines) {
+    const m = /^([-a-zA-Z?]{10})\s+\S+\s+\S+\s+\d+\s+\S+\s+\S+\s+\S+\s+\S+ (.*)$/.exec(line);
+    if (m) rows.push({ mode: m[1], name: m[2] });
   }
-  return out;
+  return { entries, rows };
 }
 
-// The bundle of a downloaded Mac update, as read from its Info.plist ({identifier, name, shortVersion, bundleVersion} or
-// {error}), checked against this app: null when it may be handed to Squirrel.Mac, or {code, message}.
-export function macBundleProblem({ bundle, label, current, appId = APP_IDENTITY.appId, appName = APP_IDENTITY.productName }) {
+// The names of `unzip -Z1`, one per line (the last newline ends the list).
+export const zipNames = text => { const lines = String(text ?? '').split('\n'); if (lines.at(-1) === '') lines.pop(); return lines; };
+
+// The paths whose type the gate depends on: none may be a symlink (Squirrel and plutil would follow it elsewhere).
+const gatedPaths = root => [root, root + '/Contents', root + '/Contents/Info.plist', root + '/Contents/Resources', root + '/Contents/Resources/app-update.yml'];
+
+// Whether the ZIP's entries are one `<appName>.app/` tree and nothing else: null, or the reason it is refused. names from
+// `unzip -Z1`, listing from zipListingRows(`unzip -Z`); both must name the same entries, as many as the header counts.
+export function macZipProblem({ names, listing, appName = APP_IDENTITY.productName }) {
+  const root = appName + '.app';
+  if (!Array.isArray(names) || names.length === 0) return 'the ZIP lists no entries';
+  if (!listing || listing.entries !== names.length || listing.rows.length !== names.length) return `the ZIP listing does not add up (${names.length} names, ${listing?.rows?.length ?? 0} rows, header ${listing?.entries})`;
+  const seen = new Set(), folded = new Set(), modes = new Map();
+  for (let i = 0; i < names.length; i++) {
+    const name = names[i];
+    if (listing.rows[i].name !== name) return `the ZIP listings disagree at entry ${i + 1}`;
+    if (/[\\\r\n\0]/.test(name) || name.startsWith('/')) return `the ZIP entry "${name.slice(0, 120)}" is not a plain relative path`;
+    if (!name.startsWith(root + '/')) return `the ZIP entry "${name.slice(0, 120)}" is outside ${root}/ (one ${root} and nothing else)`;
+    const parts = name.replace(/\/$/, '').split('/');
+    if (parts.some(p => p === '' || p === '.' || p === '..')) return `the ZIP entry "${name.slice(0, 120)}" has an empty, "." or ".." part`;
+    const key = name.replace(/\/$/, '');
+    if (seen.has(key)) return `the ZIP has "${key.slice(0, 120)}" twice`;
+    const fold = key.normalize('NFD').toLowerCase();
+    if (folded.has(fold)) return `the ZIP has two entries that differ only in case or normalization ("${key.slice(0, 120)}")`;
+    seen.add(key); folded.add(fold); modes.set(key, listing.rows[i].mode);
+  }
+  for (const gated of gatedPaths(root)) if (modes.get(gated)?.startsWith('l')) return `the ZIP entry "${gated}" is a symlink`;
+  if (!modes.get(root + '/Contents/Info.plist')?.startsWith('-')) return `the ZIP has no regular file ${root}/Contents/Info.plist`;
+  const yml = modes.get(root + '/Contents/Resources/app-update.yml');
+  if (yml !== undefined && !yml.startsWith('-')) return `the ZIP entry ${root}/Contents/Resources/app-update.yml is not a regular file`;
+  return null;
+}
+
+// The feed of an app-update.yml (its url), or null.
+export function appUpdateFeed(text) {
+  const match = /^url:\s*['"]?([^'"\s]+)['"]?\s*$/m.exec(String(text ?? ''));
+  return match ? match[1].replace(/\/+$/, '') : null;
+}
+
+// The bundle of a downloaded Mac update, as read from its Info.plist ({identifier, name, shortVersion, bundleVersion, feed} or
+// {error}), checked against this app: null when it may be handed to Squirrel.Mac, or {code, message}. feed: this app's own feed;
+// the update must name the same one (review M4-R2: a staging build uploaded to the production feed would pin every Mac that
+// installs it to staging), so a Mac only ever installs an update built for the feed it reads.
+export function macBundleProblem({ bundle, label, current, feed = null, appId = APP_IDENTITY.appId, appName = APP_IDENTITY.productName }) {
   const { INSTALLER_MISMATCH, DOWNGRADE } = UPDATE_CODES;
   if (!bundle || bundle.error) return macRefusal(INSTALLER_MISMATCH, `the downloaded update has no readable ${appName}.app Info.plist${bundle?.error ? ' (' + String(bundle.error).slice(0, 200) + ')' : ''}; it is not installed`);
   if (bundle.identifier !== appId) return macRefusal(INSTALLER_MISMATCH, `the downloaded app is "${bundle.identifier ?? 'no CFBundleIdentifier'}", not ${appId}; it is not installed`);
@@ -98,13 +142,17 @@ export function macBundleProblem({ bundle, label, current, appId = APP_IDENTITY.
   const now = parseVersion(current);
   if (!now) return macRefusal(DOWNGRADE, 'this app has no readable version, so no update is known to be newer');
   if (compareVersions(got, now) <= 0) return macRefusal(DOWNGRADE, `the downloaded app is version ${bundle.shortVersion}, not newer than this app (${current}); it is not installed`);
+  const own = feed ? String(feed).replace(/\/+$/, '') : null;
+  if (own && bundle.feed !== own) return macRefusal(INSTALLER_MISMATCH, `the downloaded app updates from ${bundle.feed ?? 'no feed'}, not from this app's feed ${own}; it is not installed`);
   return null;
 }
 
 // Whether a downloaded Mac update may be handed to Squirrel.Mac: {approved: {file, sha512, size}} or {problem: {code, message}}.
 // The ZIP on disk must be one latest-mac.yml lists (electron-updater checked that while downloading; the bytes measured here are
 // the ones electron/updates.mjs hashes again right before the hand-off), and its app bundle must pass macBundleProblem.
-export async function checkMacUpdate({ info, currentVersion, readBundle, measure = measureFile }) {
+// feed: this app's feed (macBundleProblem). The bytes are measured before the gate and again after it: the gate's verdict is
+// kept only for the bytes it read (electron/updates.mjs hashes them a third time right before Squirrel.Mac fetches the file).
+export async function checkMacUpdate({ info, currentVersion, readBundle, feed = null, measure = measureFile }) {
   const file = info?.downloadedFile;
   let downloaded = null;
   try { downloaded = file ? await measure(file) : null; } catch { downloaded = null; }
@@ -114,7 +162,11 @@ export async function checkMacUpdate({ info, currentVersion, readBundle, measure
     return { problem: macRefusal(UPDATE_CODES.STATEMENT_MISMATCH, 'the downloaded ZIP is not the one the update server listed (sha512/size); it is not installed') };
   let bundle;
   try { bundle = typeof readBundle === 'function' ? await readBundle(file) : { error: 'no reader' }; } catch (error) { bundle = { error: String(error?.message ?? error) }; }
-  const problem = macBundleProblem({ bundle, label: info?.version, current: currentVersion });
+  const problem = macBundleProblem({ bundle, label: info?.version, current: currentVersion, feed });
   if (problem) return { problem };
+  let after = null;
+  try { after = await measure(file); } catch { after = null; }
+  if (!after || after.sha512 !== downloaded.sha512 || after.size !== downloaded.size)
+    return { problem: macRefusal(UPDATE_CODES.STATEMENT_MISMATCH, 'the downloaded ZIP changed while it was checked; it is not installed') };
   return { approved: { file, sha512: downloaded.sha512, size: downloaded.size, bundleVersion: bundle.shortVersion } };
 }

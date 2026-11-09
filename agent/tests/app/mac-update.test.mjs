@@ -13,12 +13,13 @@ import path from 'node:path';
 import { EventEmitter } from 'node:events';
 import { createHash } from 'node:crypto';
 import { createUpdates, readMacBundle } from '../../src/main/electron/updates.mjs';
-import { checkMacUpdate, macBundleProblem, plistStrings } from '../../src/main/core/update-verify.mjs';
+import { checkMacUpdate, macBundleProblem, macZipProblem, zipListingRows, zipNames, appUpdateFeed } from '../../src/main/core/update-verify.mjs';
 import { installerVersionProblem } from '../../src/main/core/update-model.mjs';
 import { UPDATE_CODES } from '../../src/main/core/update-signature.mjs';
 
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
-const bundle = (version, extra = {}) => ({ name: 'SSAM Agent', identifier: 'com.ssam.agent', shortVersion: version, bundleVersion: version, ...extra });
+const FEED = 'https://dist.example/u';
+const bundle = (version, extra = {}) => ({ name: 'SSAM Agent', identifier: 'com.ssam.agent', shortVersion: version, bundleVersion: version, feed: FEED, ...extra });
 
 // What electron-builder writes (macPackager.js:397-398, electronMac.js:93), nested dicts and arrays included.
 const infoPlist = version => `<?xml version="1.0" encoding="UTF-8"?>
@@ -45,15 +46,6 @@ const infoPlist = version => `<?xml version="1.0" encoding="UTF-8"?>
 </plist>
 `;
 
-test('plistStrings reads the top-level strings of the Info.plist electron-builder writes, never a nested one', () => {
-  const values = plistStrings(infoPlist('0.2.9'));
-  assert.equal(values.CFBundleIdentifier, 'com.ssam.agent');
-  assert.equal(values.CFBundleShortVersionString, '0.2.9');
-  assert.equal(values.CFBundleVersion, '0.2.9', 'not the 9.9.9 of the nested dict');
-  assert.equal(values.CFBundleURLName, undefined);
-  assert.equal(plistStrings('bplist00 binary'), null);
-});
-
 test('macBundleProblem: a downgrade relabelled as a higher version, an equal version and the wrong app are refused; an upgrade passes', () => {
   // 0.2.7 (genuinely signed) announced by the feed as 0.2.9: the bundle is not the announced version.
   const relabelled = macBundleProblem({ bundle: bundle('0.2.7'), label: '0.2.9', current: '0.2.8' });
@@ -75,22 +67,148 @@ test('the Mac version rule is the Windows one (installerVersionProblem) on every
     assert.equal(macBundleProblem({ bundle: bundle(version), label, current }) === null, installerVersionProblem({ productVersion: version, productName: 'SSAM Agent', label, current }) === null, `${version} as ${label} over ${current}`);
 });
 
-test('readMacBundle reads exactly one top-level app bundle from the ZIP (unzip), and plutil only for a binary plist', () => {
-  const calls = [];
+// Review M1-R2: a fake /usr/bin/unzip and /usr/bin/plutil over a list of ZIP entries ([type, name]: 'd' directory, '-' file,
+// 'l' symlink). The `unzip -Z` rows are in the format of a real ditto ZIP of the app (0.2.5 test build, 130 entries:
+// `drwxr-xr-x  3.0 unx        0 bx stor 26-Nov-03 15:16 SSAM Agent.app/`).
+const ROOT = 'SSAM Agent.app';
+const realTree = () => [
+  ['d', ROOT + '/'], ['d', ROOT + '/Contents/'], ['-', ROOT + '/Contents/Info.plist'], ['d', ROOT + '/Contents/MacOS/'], ['-', ROOT + '/Contents/MacOS/SSAM Agent'],
+  ['d', ROOT + '/Contents/Resources/'], ['-', ROOT + '/Contents/Resources/app-update.yml'], ['-', ROOT + '/Contents/Resources/app.asar'],
+  ['d', ROOT + '/Contents/Frameworks/'], ['d', ROOT + '/Contents/Frameworks/Electron Framework.framework/'],
+  ['l', ROOT + '/Contents/Frameworks/Electron Framework.framework/Electron Framework'], ['l', ROOT + '/Contents/Frameworks/Electron Framework.framework/Resources'],
+  ['-', ROOT + '/Contents/Frameworks/Electron Framework.framework/Versions/A/Resources/Info.plist'],
+];
+const MODES = { d: 'drwxr-xr-x', '-': '-rw-r--r--', l: 'lrwxr-xr-x' };
+const plistJson = (version, extra = {}) => JSON.stringify({ CFBundleIdentifier: 'com.ssam.agent', CFBundleName: 'SSAM Agent', CFBundleShortVersionString: version, CFBundleVersion: version, LSUIElement: true, CFBundleURLTypes: [{ CFBundleURLName: 'nested' }], ...extra });
+function zipTool(entries, { plistText = infoPlist('0.2.9'), plutil = () => plistJson('0.2.9'), yml = `owner: ssam\nurl: ${FEED}\nchannel: latest\nupdaterCacheDirName: ssam-agent-updater\n`, header = null, names = null } = {}) {
+  const calls = []; const plutilInputs = [];
   const exec = (cmd, args) => {
     calls.push([cmd, ...args]);
-    if (args[0] === '-Z1') return '__MACOSX/\n__MACOSX/SSAM Agent.app/Contents/._Info.plist\nSSAM Agent.app/\nSSAM Agent.app/Contents/Info.plist\nSSAM Agent.app/Contents/Frameworks/X.framework/Resources/Info.plist\n';
-    if (args[0] === '-p') return Buffer.from(infoPlist('0.2.9'));
-    throw new Error('unexpected ' + cmd);
+    if (cmd === '/usr/bin/unzip' && args[0] === '-Z1') return (names ?? entries.map(e => e[1])).join('\n') + '\n';
+    if (cmd === '/usr/bin/unzip' && args[0] === '-Z') return `Archive:  ${args[1]}\nZip file size: 129468071 bytes, number of entries: ${header ?? entries.length}\n`
+      + entries.map(([type, name]) => `${MODES[type]}  3.0 unx     3848 bX defN 26-Nov-03 15:16 ${name}`).join('\n') + `\n${entries.length} files, 341023911 bytes uncompressed, 129445883 bytes compressed:  62.0%\n`;
+    if (cmd === '/usr/bin/unzip' && args[0] === '-p' && args[2] === ROOT + '/Contents/Info.plist') return Buffer.from(plistText);
+    if (cmd === '/usr/bin/unzip' && args[0] === '-p' && args[2] === ROOT + '/Contents/Resources/app-update.yml') { if (yml === null) throw new Error('caution: filename not matched'); return yml; }
+    if (cmd === '/usr/bin/plutil') {
+      assert.deepEqual(args.slice(0, 4), ['-convert', 'json', '-o', '-'], 'plutil converts to JSON, never to XML for a regex');
+      plutilInputs.push({ file: args[4], text: fs.readFileSync(args[4], 'utf8') });
+      return plutil(args[4]);
+    }
+    throw new Error('unexpected ' + cmd + ' ' + args.join(' '));
   };
-  assert.deepEqual(readMacBundle('/tmp/update.zip', { exec }), bundle('0.2.9'));
-  assert.deepEqual(calls.map(c => c[0]), ['/usr/bin/unzip', '/usr/bin/unzip']);
-  assert.deepEqual(calls[1], ['/usr/bin/unzip', '-p', '/tmp/update.zip', 'SSAM Agent.app/Contents/Info.plist']);
-  const two = readMacBundle('/tmp/u.zip', { exec: () => 'A.app/Contents/Info.plist\nB.app/Contents/Info.plist\n' });
-  assert.match(two.error, /2 app bundles/);
-  const binary = readMacBundle('/tmp/u.zip', { exec: (cmd, args) => cmd.endsWith('plutil') ? infoPlist('0.2.9') : args[0] === '-Z1' ? 'SSAM Agent.app/Contents/Info.plist\n' : Buffer.from('bplist00') });
-  assert.equal(binary.shortVersion, '0.2.9');
+  return { exec, calls, plutilInputs };
+}
+
+test('readMacBundle: the real tree is read by plutil (JSON), with its feed; the temp copy is removed', () => {
+  const z = zipTool(realTree());
+  assert.deepEqual(readMacBundle('/tmp/update.zip', { exec: z.exec }), bundle('0.2.9'));
+  assert.deepEqual(z.calls.map(c => c.slice(0, 2)), [['/usr/bin/unzip', '-Z1'], ['/usr/bin/unzip', '-Z'], ['/usr/bin/unzip', '-p'], ['/usr/bin/plutil', '-convert'], ['/usr/bin/unzip', '-p']]);
+  assert.deepEqual(z.calls[2], ['/usr/bin/unzip', '-p', '/tmp/update.zip', 'SSAM Agent.app/Contents/Info.plist']);
+  assert.equal(z.plutilInputs[0].text, infoPlist('0.2.9'), 'plutil reads the exact bytes of the entry');
+  assert.equal(fs.existsSync(z.plutilInputs[0].file), false, 'the temp copy is removed');
+  const noYml = zipTool(realTree().filter(e => !e[1].endsWith('app-update.yml')), { yml: null });
+  assert.equal(readMacBundle('/tmp/u.zip', { exec: noYml.exec }).feed, null);
+});
+
+test('readMacBundle refuses the review probes: a second Old.APP, a nested x/SSAM Agent.app, a wrong-case or __MACOSX entry', () => {
+  for (const [extra, pattern] of [
+    [[['d', 'Old.APP/'], ['-', 'Old.APP/Contents/Info.plist']], /"Old\.APP\/" is outside SSAM Agent\.app\//],
+    [[['d', 'x/'], ['d', 'x/SSAM Agent.app/'], ['-', 'x/SSAM Agent.app/Contents/Info.plist']], /"x\/" is outside/],
+    [[['-', 'ssam agent.app/Contents/Info.plist']], /"ssam agent\.app\/Contents\/Info\.plist" is outside/],
+    [[['d', '__MACOSX/'], ['-', '__MACOSX/SSAM Agent.app/Contents/._Info.plist']], /"__MACOSX\/" is outside/],
+  ]) {
+    const z = zipTool([...realTree(), ...extra]);
+    const answer = readMacBundle('/tmp/u.zip', { exec: z.exec });
+    assert.match(answer.error, pattern);
+    assert.equal(z.calls.length, 2, 'nothing is extracted from a refused ZIP');
+    assert.match(macBundleProblem({ bundle: answer, label: '0.2.9', current: '0.2.8' }).message, /UPDATE_INSTALLER_MISMATCH: the downloaded update has no readable SSAM Agent\.app Info\.plist/);
+  }
+});
+
+test('readMacBundle: a plist with the version hidden in an XML comment reads what plutil (CoreFoundation) reads, so 0.2.7 stays 0.2.7', () => {
+  const hidden = infoPlist('0.2.7').replace('<dict>', '<dict>\n  <!-- <key>CFBundleShortVersionString</key><string>0.2.9</string><key>CFBundleVersion</key><string>0.2.9</string> -->');
+  const z = zipTool(realTree(), { plistText: hidden, plutil: () => plistJson('0.2.7') });
+  const answer = readMacBundle('/tmp/u.zip', { exec: z.exec });
+  assert.equal(z.plutilInputs[0].text, hidden, 'the whole plist, comment included, goes to plutil');
+  assert.equal(answer.shortVersion, '0.2.7');
+  assert.equal(macBundleProblem({ bundle: answer, label: '0.2.9', current: '0.2.8', feed: FEED }).code, UPDATE_CODES.INSTALLER_MISMATCH);
+});
+
+test('readMacBundle fails closed when plutil is missing, refuses the plist, prints no JSON dictionary or a value that is not a string', () => {
+  const missing = Object.assign(new Error('spawnSync /usr/bin/plutil ENOENT'), { code: 'ENOENT' });
+  for (const [plutil, pattern] of [
+    [() => { throw missing; }, /ENOENT/],
+    [() => { throw new Error('Command failed: /usr/bin/plutil -convert json\nInfo.plist: Property List error: Unexpected character'); }, /Command failed/],
+    [() => 'not json', /JSON/],
+    [() => '["an array"]', /not a dictionary/],
+    [() => plistJson('0.2.9', { CFBundleVersion: 29 }), /CFBundleVersion is not a string/],
+  ]) {
+    const answer = readMacBundle('/tmp/u.zip', { exec: zipTool(realTree(), { plutil }).exec });
+    assert.match(answer.error, pattern);
+    assert.equal(macBundleProblem({ bundle: answer, label: '0.2.9', current: '0.2.8' }).code, UPDATE_CODES.INSTALLER_MISMATCH);
+  }
   assert.match(readMacBundle('/tmp/u.zip', { exec: () => { throw new Error('unzip: cannot find zipfile'); } }).error, /cannot find zipfile/);
+});
+
+test('macZipProblem refuses duplicates, case and normalization duplicates, "..", absolute paths, backslashes and symlinks on the plist path', () => {
+  const check = (entries, options = {}) => {
+    const z = zipTool(entries, options);
+    return macZipProblem({ names: zipNames(z.exec('/usr/bin/unzip', ['-Z1', 'u.zip'])), listing: zipListingRows(z.exec('/usr/bin/unzip', ['-Z', 'u.zip'])) });
+  };
+  assert.equal(check(realTree()), null);
+  const cases = [
+    [[...realTree(), ['-', ROOT + '/Contents/Info.plist']], /twice/],
+    [[...realTree(), ['d', ROOT + '/Contents']], /twice/],
+    [[...realTree(), ['-', ROOT + '/Contents/info.plist']], /differ only in case/],
+    [[...realTree(), ['-', ROOT + '/contents/Info.plist']], /differ only in case/],
+    [[...realTree(), ['-', ROOT + '/Contents/Resources/café'], ['-', ROOT + '/Contents/Resources/café']], /normalization/],
+    [[...realTree(), ['-', ROOT + '/../Info.plist']], /"\.\." part/],
+    [[...realTree(), ['-', ROOT + '/Contents/./Info.plist']], /"\.\." part|"\." /],
+    [[...realTree(), ['-', ROOT + '//Contents/Info.plist']], /empty/],
+    [[...realTree(), ['-', '/' + ROOT + '/Contents/Info.plist']], /not a plain relative path/],
+    [[...realTree(), ['-', ROOT + '/Contents\\..\\..\\Info.plist']], /not a plain relative path/],
+    [realTree().map(e => e[1] === ROOT + '/Contents/' ? ['l', ROOT + '/Contents'] : e), /"SSAM Agent\.app\/Contents" is a symlink/],
+    [realTree().map(e => e[1] === ROOT + '/Contents/Info.plist' ? ['l', e[1]] : e), /Info\.plist" is a symlink/],
+    [realTree().map(e => e[1] === ROOT + '/Contents/Resources/' ? ['l', ROOT + '/Contents/Resources'] : e), /Resources" is a symlink/],
+    [realTree().map(e => e[1] === ROOT + '/Contents/Resources/app-update.yml' ? ['l', e[1]] : e), /app-update\.yml" is a symlink/],
+    [realTree().map(e => e[1] === ROOT + '/' ? ['l', ROOT] : e), /"SSAM Agent\.app" is outside SSAM Agent\.app\//],
+    [realTree().filter(e => !e[1].endsWith('/Contents/Info.plist')), /no regular file SSAM Agent\.app\/Contents\/Info\.plist/],
+    [realTree().map(e => e[1] === ROOT + '/Contents/Info.plist' ? ['d', e[1] + '/'] : e), /no regular file/],
+  ];
+  for (const [entries, pattern] of cases) assert.match(String(check(entries)), pattern, JSON.stringify(entries.at(-1)));
+  // The two listings and the header must name the same entries: a name hidden in a row (a newline in a name) does not add up.
+  assert.match(check(realTree(), { header: realTree().length + 1 }), /does not add up/);
+  assert.match(check(realTree(), { names: realTree().map(e => e[1]).reverse() }), /disagree/);
+  assert.match(check(realTree(), { names: [...realTree().map(e => e[1]), 'SSAM Agent.app/x'] }), /does not add up/);
+  assert.match(macZipProblem({ names: [], listing: zipListingRows('') }), /no entries/);
+  // The symlinks of the frameworks stay allowed: they are not on the way to the plist or the feed.
+  assert.equal(realTree().filter(e => e[0] === 'l').length, 2);
+});
+
+test('the update must name this app\'s own feed (review M4-R2): staging into production, or no feed, is refused', () => {
+  assert.equal(appUpdateFeed(`url: ${FEED}/\n`), FEED);
+  assert.equal(appUpdateFeed(`provider: generic\nurl: '${FEED}'\n`), FEED);
+  assert.equal(appUpdateFeed('provider: generic\n'), null);
+  assert.equal(macBundleProblem({ bundle: bundle('0.2.9'), label: '0.2.9', current: '0.2.8', feed: FEED + '/' }), null);
+  const staging = macBundleProblem({ bundle: bundle('0.2.9', { feed: 'https://dist.ssam.pro/u/ssam-agent-staging' }), label: '0.2.9', current: '0.2.8', feed: 'https://dist.ssam.pro/u/ssam-agent' });
+  assert.equal(staging.code, UPDATE_CODES.INSTALLER_MISMATCH);
+  assert.match(staging.message, /updates from https:\/\/dist\.ssam\.pro\/u\/ssam-agent-staging, not from this app's feed https:\/\/dist\.ssam\.pro\/u\/ssam-agent;/);
+  assert.match(macBundleProblem({ bundle: bundle('0.2.9', { feed: null }), label: '0.2.9', current: '0.2.8', feed: FEED }).message, /updates from no feed/);
+});
+
+test('checkMacUpdate measures the ZIP again after the gate: bytes that changed during it are refused', async () => {
+  const sha512 = 'B'.repeat(86) + '==';
+  const info = { version: '0.2.9', downloadedFile: '/tmp/u.zip', files: [{ url: 'u.zip', sha512, size: 10 }] };
+  let calls = 0;
+  const measure = async () => (++calls === 1 ? { sha512, size: 10 } : { sha512: 'C'.repeat(86) + '==', size: 10 });
+  const changed = await checkMacUpdate({ info, currentVersion: '0.2.8', feed: FEED, readBundle: () => bundle('0.2.9'), measure });
+  assert.equal(calls, 2);
+  assert.equal(changed.problem.code, UPDATE_CODES.STATEMENT_MISMATCH);
+  assert.match(changed.problem.message, /changed while it was checked/);
+  const same = await checkMacUpdate({ info, currentVersion: '0.2.8', feed: FEED, readBundle: () => bundle('0.2.9'), measure: async () => ({ sha512, size: 10 }) });
+  assert.deepEqual(same.approved, { file: '/tmp/u.zip', sha512, size: 10, bundleVersion: '0.2.9' });
+  const wrongFeed = await checkMacUpdate({ info, currentVersion: '0.2.8', feed: 'https://dist.ssam.pro/u/ssam-agent', readBundle: () => bundle('0.2.9'), measure: async () => ({ sha512, size: 10 }) });
+  assert.equal(wrongFeed.problem.code, UPDATE_CODES.INSTALLER_MISMATCH);
 });
 
 function macFixture(t, { zipVersion = '0.2.9', label = '0.2.9', current = '0.2.8', autoInstall = false, readBundle = null } = {}) {
@@ -168,6 +286,15 @@ test('Mac flow: Squirrel.Mac refusing the signature, or never answering, leaves 
   silent.fake.downloaded(silent.info); await wait(300);
   assert.equal(silent.updates.state.status, 'error');
   assert.match(silent.updates.state.error, /did not take the update in time/);
+  assert.match(silent.entries.find(e => e.event === 'update-handoff-timeout')?.note, /may still stage this checked ZIP/, 'B-R2-2: the timeout says Squirrel may still stage it');
+});
+
+test('Mac flow: an update built for another feed (staging into production) never reaches Squirrel.Mac', async t => {
+  const f = macFixture(t, { readBundle: () => bundle('0.2.9', { feed: 'https://dist.example/u-staging' }) });
+  f.fake.downloaded(f.info); await wait(30);
+  assert.equal(f.native.checks, 0);
+  assert.equal(f.updates.state.status, 'error');
+  assert.match(f.entries.find(e => e.event === 'update-refused')?.reason, /updates from https:\/\/dist\.example\/u-staging, not from this app's feed https:\/\/dist\.example\/u;/);
 });
 
 test('Mac flow: a ZIP changed after the check is not handed to Squirrel.Mac; one not listed by the feed is refused', async t => {

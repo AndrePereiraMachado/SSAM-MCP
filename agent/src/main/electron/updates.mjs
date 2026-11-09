@@ -17,8 +17,10 @@
 // macOS (app 0.2.8, review M1 of agent/mac-028): electron-updater's install-on-quit stays off on macOS too, so MacUpdater never
 // hands the downloaded ZIP to Squirrel.Mac by itself. The ZIP is checked first (core/update-verify.mjs checkMacUpdate: listed by
 // latest-mac.yml, and the Info.plist of the app inside it is com.ssam.agent "SSAM Agent", exactly the announced version, newer
-// than this app), hashed again, and only then handed to Squirrel.Mac (its own checkForUpdates on MacUpdater's local proxy), which
-// checks the code signature and installs it on quit or at quitAndInstall. A refusal leaves nothing with Squirrel.
+// than this app, updating from this app's own feed), hashed again, and only then handed to Squirrel.Mac (its own checkForUpdates on
+// MacUpdater's local proxy), which checks the code signature and installs it on quit or at quitAndInstall. A refusal leaves nothing
+// with Squirrel. Review M1-R2: the ZIP must be the single tree `SSAM Agent.app/` (readMacBundle), the plist is read only by plutil,
+// and the bytes are hashed three times: before the gate, right after it (checkMacUpdate) and right before Squirrel (handToSquirrel).
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
@@ -26,8 +28,8 @@ import electronUpdater from 'electron-updater';
 import os from 'node:os';
 import { execFileSync } from 'node:child_process';
 import { INITIAL, reduce, canCheck, describeUpdateError, updateTrustProblem } from '../core/update-model.mjs';
-import { UPDATE_CODES } from '../core/update-signature.mjs';
-import { checkWindowsUpdate, checkMacUpdate, plistStrings } from '../core/update-verify.mjs';
+import { UPDATE_CODES, APP_IDENTITY } from '../core/update-signature.mjs';
+import { checkWindowsUpdate, checkMacUpdate, macZipProblem, zipListingRows, zipNames, appUpdateFeed } from '../core/update-verify.mjs';
 import { UPDATE_PUBLIC_KEY } from '../core/update-trust.mjs';
 
 const FIRST_CHECK_MS = 20000;
@@ -61,25 +63,34 @@ export function readInstallerVersion(file) {
   } catch { return {}; }
 }
 
-// The app bundle inside a downloaded Mac update ZIP (macOS only: /usr/bin/unzip and /usr/bin/plutil): {identifier, name,
-// shortVersion, bundleVersion} from its Info.plist, or {error}. Exactly one <name>.app/Contents/Info.plist at the top of the ZIP.
-export function readMacBundle(file, { exec = execFileSync } = {}) {
+// The app bundle inside a downloaded Mac update ZIP (macOS only: /usr/bin/unzip and /usr/bin/plutil): {name, identifier,
+// shortVersion, bundleVersion, feed} or {error}. Review M1-R2 of agent/mac-028: the ZIP must be the one tree `SSAM Agent.app/`
+// and nothing else (core/update-verify.mjs macZipProblem: exact case, no other entry, no duplicate or case/normalization
+// duplicate, no "..", no absolute path, no symlink on the way to Contents/Info.plist, both listings and the header agreeing),
+// so the bundle read here is the only one Squirrel.Mac can find in it. Its Info.plist is read only by plutil (CoreFoundation,
+// the reader Squirrel's own NSBundle uses), never by a regex: a key hidden in an XML comment or a binary plist reads the same.
+// Anything unreadable fails closed ({error}): no plutil, plutil refusing the file, a value that is not a string.
+// feed: the url of the update's own Contents/Resources/app-update.yml (the feed the new app will read; null when it has none).
+export function readMacBundle(file, { exec = execFileSync, appName = APP_IDENTITY.productName } = {}) {
   if (!file) return { error: 'no file' };
+  const root = appName + '.app';
   let temp = null;
   try {
-    const entries = String(exec('/usr/bin/unzip', ['-Z1', file], { encoding: 'utf8', timeout: 60000, maxBuffer: 64 << 20 })).split(/\r?\n/);
-    const plists = entries.map(e => /^([^/]+)\.app\/Contents\/Info\.plist$/.exec(e)).filter(Boolean);
-    if (plists.length !== 1) return { error: `the ZIP has ${plists.length} app bundles at its top` };
-    const raw = Buffer.from(exec('/usr/bin/unzip', ['-p', file, plists[0][0]], { timeout: 60000, maxBuffer: 4 << 20 }));
-    let values = plistStrings(raw.toString('utf8'));
-    if (!values) {
-      // A binary plist: plutil converts a copy to XML.
-      temp = fs.mkdtempSync(path.join(os.tmpdir(), 'ssam-update-plist-'));
-      const copy = path.join(temp, 'Info.plist'); fs.writeFileSync(copy, raw);
-      values = plistStrings(String(exec('/usr/bin/plutil', ['-convert', 'xml1', '-o', '-', copy], { encoding: 'utf8', timeout: 30000, maxBuffer: 4 << 20 })));
-    }
-    if (!values) return { error: 'Info.plist is not a property list' };
-    return { name: plists[0][1], identifier: values.CFBundleIdentifier ?? null, shortVersion: values.CFBundleShortVersionString ?? null, bundleVersion: values.CFBundleVersion ?? null };
+    const text = args => String(exec('/usr/bin/unzip', args, { encoding: 'utf8', timeout: 60000, maxBuffer: 64 << 20 }));
+    const problem = macZipProblem({ names: zipNames(text(['-Z1', file])), listing: zipListingRows(text(['-Z', file])), appName });
+    if (problem) return { error: problem };
+    temp = fs.mkdtempSync(path.join(os.tmpdir(), 'ssam-update-plist-'));
+    const copy = path.join(temp, 'Info.plist');
+    // The names are literal (no wildcard character in root) and unique in the ZIP (macZipProblem), so -p extracts exactly this entry.
+    fs.writeFileSync(copy, Buffer.from(exec('/usr/bin/unzip', ['-p', file, root + '/Contents/Info.plist'], { timeout: 60000, maxBuffer: 4 << 20 })), { mode: 0o600 });
+    const values = JSON.parse(String(exec('/usr/bin/plutil', ['-convert', 'json', '-o', '-', copy], { encoding: 'utf8', timeout: 30000, maxBuffer: 4 << 20 })));
+    if (!values || typeof values !== 'object' || Array.isArray(values)) return { error: 'Info.plist is not a dictionary' };
+    const read = key => { const value = values[key]; if (value === undefined) return null; if (typeof value !== 'string') throw new Error(`Info.plist ${key} is not a string`); return value; };
+    const bundle = { name: appName, identifier: read('CFBundleIdentifier'), shortVersion: read('CFBundleShortVersionString'), bundleVersion: read('CFBundleVersion'), feed: null };
+    let yml = null;
+    try { yml = String(exec('/usr/bin/unzip', ['-p', file, root + '/Contents/Resources/app-update.yml'], { encoding: 'utf8', timeout: 60000, maxBuffer: 1 << 20 })); } catch { yml = null; }
+    bundle.feed = appUpdateFeed(yml);
+    return bundle;
   } catch (error) { return { error: String(error?.message ?? error).split('\n')[0].slice(0, 200) }; }
   finally { if (temp) fs.rmSync(temp, { recursive: true, force: true }); }
 }
@@ -169,7 +180,11 @@ export function createUpdates({ url: wanted, hours = 6, autoInstall = true, log,
       const done = answer => { native.removeListener('update-downloaded', ok); native.removeListener('error', bad); if (timer) clearTimeout(timer); if (handoff?.mine === mine) handoff = null; resolve(answer); };
       const ok = () => done({ ok: true });
       const bad = error => done({ code: UPDATE_CODES.SIGNATURE_INVALID, message: UPDATE_CODES.SIGNATURE_INVALID + ': Squirrel.Mac refused the update: ' + String(error?.message ?? error).slice(0, 250) });
-      timer = setTimeout(() => done({ code: UPDATE_CODES.SIGNATURE_INVALID, message: UPDATE_CODES.SIGNATURE_INVALID + ': Squirrel.Mac did not take the update in time; it is not installed' }), handoffMs);
+      // B-R2-2: Squirrel.Mac has no cancel; after the timeout it may still stage the (checked) ZIP later and install it on quit.
+      timer = setTimeout(() => {
+        log.write('update-handoff-timeout', { version: approved?.version ?? null, afterMs: handoffMs, note: 'Squirrel.Mac cannot be cancelled: it may still stage this checked ZIP and install it on quit' });
+        done({ code: UPDATE_CODES.SIGNATURE_INVALID, message: UPDATE_CODES.SIGNATURE_INVALID + ': Squirrel.Mac did not take the update in time; it is not installed now' });
+      }, handoffMs);
       if (timer.unref) timer.unref();
       handoff = { mine, cancel: () => done({ superseded: true }) };
       native.once('update-downloaded', ok); native.once('error', bad);
