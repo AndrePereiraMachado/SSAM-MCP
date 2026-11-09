@@ -559,3 +559,14 @@ every Service Studio of the window and one O11 kernel compiled against each:
 - Not yet: the watcher (S2) still rotates and checks a window of pairs and must stay paused while a backend window is live;
   `ssamctl --version o11=<v>` no longer identifies a backend (use `odc=<v>`). The first deploy kit is planned in
   `C:\t\r5\janela-4x4\S1-KIT-PLANO.md` (rename of the odc-features volumes, kernel.json per new runtime dir, Coolify PATCH, rollback).
+- Resident O11 readers (review S1 M2): each Service Studio version a customer brings has its own resident `read-serve`
+  (`reader-client.mjs`, idle exit 15 min), which section 13's model never counted (the one O11 reader of a pair was
+  outside it too). On a multi-O11 image a new reader generation first stops the idle readers past `SSAM_O11_READERS_MAX`
+  (least recently used; a reader that serves is never stopped), drops the copies of retired versions, and is admitted by
+  the memory gate with `SSAM_MEMORY_RESERVE_READER_MB` (default 800, NOT measured: the first-deploy kit measures one O11
+  reader's RSS in a candidate container before the window and sets the value). `gen-compose` writes
+  `SSAM_O11_READERS_MAX` per tier: other 1 (the pair's one reader, inside its 969 MiB margin of option (c), if the reader
+  is under ~900 MiB), hot 2 (inside 1542 MiB), or `sizing.<tier>.o11Readers`. Account per backend: other worst case
+  3271 MiB + 1 reader ≤ 4240m, hot 8698 MiB + 2 readers ≤ 10240m; if the measured reader RSS breaks either line, lower the
+  tier's `o11Readers` (minimum 1) or raise the reserve so the gate holds the rest. The gate only exists in images built
+  from e04cfb7 on, which every S1 image is.

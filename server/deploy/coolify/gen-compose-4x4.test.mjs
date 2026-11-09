@@ -113,3 +113,17 @@ test('4x4: a backend window that does not hold together is refused',()=>{
  const {window:_,...noWindow}=manifest;
  assert.equal(generateCompose(noWindow).services['ssam-router'].environment.SSAM_VERSION_WINDOW,'4');
 });
+
+// Review S1 M2: the resident O11 readers of each backend (reader-residency.mjs SSAM_O11_READERS_MAX) come from the tier.
+test('4x4: each backend names its resident O11 readers by tier (other 1, hot 2, or the tier value); a pair window does not',()=>{
+ const c=generateCompose(manifest);
+ for(const [name,s] of Object.entries(c.services).filter(([n])=>n.startsWith('ssam-server-v')))
+  assert.equal(s.environment.SSAM_O11_READERS_MAX,s.labels['ssam.sizing']==='hot'?'2':'1',name);
+ const expected=sizedExpectations(manifest);
+ for(const e of Object.values(expected).filter(e=>e.tier))assert.equal(e.env.SSAM_O11_READERS_MAX,e.tier==='hot'?'2':'1');
+ const tuned=generateCompose({...manifest,sizing:{...sizing,hot:{...sizing.hot,o11Readers:3}}});
+ assert.equal(Object.values(tuned.services).find(s=>s.labels?.['ssam.sizing']==='hot').environment.SSAM_O11_READERS_MAX,'3');
+ assert.throws(()=>generateCompose({...manifest,sizing:{...sizing,other:{...sizing.other,o11Readers:0}}}),/o11Readers/);
+ const pairs=generateCompose(live);
+ for(const s of Object.values(pairs.services))assert.equal(s.environment?.SSAM_O11_READERS_MAX,undefined,'a pair window is unchanged');
+});

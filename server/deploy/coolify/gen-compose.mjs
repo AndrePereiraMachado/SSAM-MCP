@@ -134,7 +134,13 @@ export function servedLists(manifest,{window=windowOf(manifest)}={}){
 // Without "sizing" the compose is exactly as before.
 export const SIZING_TIERS=['hot','other'];
 export const CAPACITY_WINDOW='CAPACITY_WINDOW';
-const TIER_FIELDS=['cpus','memory','cpuShares','buildWorkers','o11WorkersMax','queueMs'];
+const TIER_FIELDS=['cpus','memory','cpuShares','buildWorkers','o11WorkersMax','queueMs','o11Readers'];
+// Window 4x4 (review S1 M2): the resident O11 readers a backend of the window keeps (SSAM_O11_READERS_MAX, reader-residency.mjs),
+// optional per tier; a backend window without it gets other 1 (the one reader of a pair, inside the r45 margin of 969 MiB)
+// and hot 2 (one more inside its 1542 MiB). A pair window only carries it when the tier names it.
+export const DEFAULT_O11_READERS=Object.freeze({hot:2,other:1});
+const readersOf=(manifest,tier)=>manifest.sizing?.[tier]?.o11Readers??(isBackendManifest(manifest)?DEFAULT_O11_READERS[tier]:undefined);
+const readersEnv=(manifest,tier)=>{const r=readersOf(manifest,tier);return r===undefined?{}:{SSAM_O11_READERS_MAX:String(r)};};
 // A backend id: a pair (o11-<v>-odc-<v>) or a backend of the 4x4 window (odc-<v>); usage and hotPair are keyed by it.
 const PAIR_NAME=/^(?:o11-\d+\.\d+\.\d+-)?odc-\d+\.\d+\.\d+$/;
 const mib=value=>{const m=/^(\d+)([mg])$/i.exec(String(value));return m?Number(m[1])*(m[2].toLowerCase()==='g'?1024:1):null;};
@@ -165,6 +171,7 @@ export function checkSizing(sizing){
   if(!Number.isInteger(t.cpuShares)||t.cpuShares<2||t.cpuShares>262144)throw new Error('Invalid sizing.'+tier+'.cpuShares.');
   for(const k of ['buildWorkers','o11WorkersMax'])if(!Number.isInteger(t[k])||t[k]<1||t[k]>16)throw new Error('Invalid sizing.'+tier+'.'+k+'.');
   if(!Number.isInteger(t.queueMs)||t.queueMs<0||t.queueMs>3600000)throw new Error('Invalid sizing.'+tier+'.queueMs.');
+  if(t.o11Readers!==undefined&&(!Number.isInteger(t.o11Readers)||t.o11Readers<1||t.o11Readers>8))throw new Error('Invalid sizing.'+tier+'.o11Readers.');
  }
  if(sizing.router!==undefined&&(!isCpus(sizing.router?.cpus)||!mib(sizing.router?.memory)||mib(sizing.router.memory)<256||Object.keys(sizing.router).some(k=>!['cpus','memory'].includes(k))))throw new Error('Invalid sizing.router.');
  if(sizing.host!==undefined&&(!mib(sizing.host?.memory)||!mib(sizing.host?.reserve)||Object.keys(sizing.host).some(k=>!['memory','reserve'].includes(k))))throw new Error('Invalid sizing.host.');
@@ -213,7 +220,7 @@ export function sizedExpectations(manifest,{window=windowOf(manifest)}={}){
  const s=manifest.sizing,bytes=v=>mib(v)*1024*1024,nano=v=>Math.round(Number(v)*1e9);
  const out={};
  tiers.forEach((tier,i)=>{const t=s[tier];out[`ssam-server-v${i+1}`]={tier,pair:backendsOf(manifest,{window})[i].name,NanoCpus:nano(t.cpus),Memory:bytes(t.memory),CpuShares:t.cpuShares,
-  env:{SSAM_BUILD_WORKERS:String(t.buildWorkers),SSAM_O11_WORKERS_MAX:String(t.o11WorkersMax),SSAM_BUILD_QUEUE_MS:String(t.queueMs)}};});
+  env:{SSAM_BUILD_WORKERS:String(t.buildWorkers),SSAM_O11_WORKERS_MAX:String(t.o11WorkersMax),SSAM_BUILD_QUEUE_MS:String(t.queueMs),...readersEnv(manifest,tier)}};});
  if(s.router)out['ssam-router']={NanoCpus:nano(s.router.cpus),Memory:bytes(s.router.memory)};
  return out;
 }
@@ -227,7 +234,7 @@ function applySizing(c,manifest,tiers,window){
   const s=c.services[`ssam-server-v${i+1}`],t=sizing[tier];
   s.deploy.resources.limits={...s.deploy.resources.limits,cpus:t.cpus,memory:t.memory};
   s.cpu_shares=t.cpuShares;
-  Object.assign(s.environment,{SSAM_BUILD_WORKERS:String(t.buildWorkers),SSAM_O11_WORKERS_MAX:String(t.o11WorkersMax),SSAM_BUILD_QUEUE_MS:String(t.queueMs)});
+  Object.assign(s.environment,{SSAM_BUILD_WORKERS:String(t.buildWorkers),SSAM_O11_WORKERS_MAX:String(t.o11WorkersMax),SSAM_BUILD_QUEUE_MS:String(t.queueMs),...readersEnv(manifest,tier)});
   s.labels['ssam.sizing']=tier;
  });
 }

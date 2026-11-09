@@ -6,6 +6,9 @@ import { createHash, randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { setTimeout as delay } from 'node:timers/promises';
 import { RELEASE, authorityDir, childEnv, dotnetPath, layoutPath, root } from './release-layout.mjs';
+import { memoryGate, memoryWaitRefusal } from './memory-room.mjs';
+import { imageO11Versions, isMultiO11Image, o11KernelPaths } from './o11-kernels.mjs';
+import { readerResidency, makeRoom, writeReaderMeta, touchLastRead } from './reader-residency.mjs';
 
 const readJson = file => JSON.parse(fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, ''));
 // A long-lived MCP client keeps the generation of the module it actually loaded. The release bundle has no source of
@@ -73,7 +76,27 @@ async function liveState(file, generation) {
   } catch { return null; }
 }
 
-async function ensureReader({dll, runtimeDir, platform, directory, generation, authority, indexRoot}) {
+// Window 4x4 (reader-residency.mjs): on a multi-O11 image an O11 reader generation that has to start first makes room
+// (idle readers past SSAM_O11_READERS_MAX, folders of retired versions) and is admitted by the memory gate; admission
+// (an object) receives {hold, residency}: the caller releases the hold once the first read answered.
+const residentO11 = platform => platform !== 'odc' && isMultiO11Image(process.env);
+// deps (tests): {env, gate, rpc, limitBytes}.
+export async function admitReader({dll, runtimeDir, directory, authorization}, admission, deps = {}) {
+  const env = deps.env ?? process.env, versions = imageO11Versions(env);
+  const settings = readerResidency({env, versions: versions.length, ...(deps.limitBytes !== undefined ? {limitBytes: deps.limitBytes} : {})});
+  admission.residency = await makeRoom(path.dirname(directory), {keep: directory, max: settings.max, rpc: deps.rpc ?? readerRpc, authorization,
+    servedDirs: versions.map(v => o11KernelPaths(v, env)?.studioDir).filter(Boolean)});
+  writeReaderMeta(directory, {dll, runtimeDir});
+  const gate = deps.gate ?? memoryGate();
+  if (gate.current()) return;
+  const admitted = await gate.admit(settings.reserveMb);
+  if (admitted.timedOut) {
+    const refusal = memoryWaitRefusal({waitedMs: admitted.waitedMs, lane: 'o11', queueMs: gate.settings.waitMs, what: 'read'});
+    throw Object.assign(new Error(refusal.error), {code: refusal.code, refusal});
+  }
+  admission.hold = admitted.hold;
+}
+async function ensureReader({dll, runtimeDir, platform, directory, generation, authority, indexRoot, authorization}, admission = {}) {
   fs.mkdirSync(directory, {recursive:true});
   const stateFile = path.join(directory, 'worker.json');
   let state = await liveState(stateFile, generation);
@@ -101,6 +124,7 @@ async function ensureReader({dll, runtimeDir, platform, directory, generation, a
   }
   try {
     state = await liveState(stateFile, generation); if (state) return state;
+    if (residentO11(platform)) await admitReader({dll, runtimeDir, directory, authorization}, admission);
     const deployment = path.join(directory, 'bin');
     if (!fs.existsSync(deployment)) {
       const temporary = path.join(directory, 'bin-' + randomUUID());
@@ -125,6 +149,7 @@ async function ensureReader({dll, runtimeDir, platform, directory, generation, a
         ...(platform === 'odc' ? {ANVIL_ODC_STUDIO_DIR:runtimeDir} : {}), ...(indexRoot ? {SSAM_MODULE_INDEX_ROOT:indexRoot} : {})}
     });
     child.on('error', error => { startError = error; }); child.unref(); fs.closeSync(log);
+    admission.hold?.attach(child.pid);
     while (Date.now() <= deadline) {
       if (startError) throw startError;
       state = await liveState(stateFile, generation); if (state) return state;
@@ -132,7 +157,8 @@ async function ensureReader({dll, runtimeDir, platform, directory, generation, a
       await delay(75);
     }
     throw new Error('Read process startup timed out; see ' + path.join(directory, 'reader.log'));
-  } finally { fs.unlinkSync(lock); }
+  } catch (error) { admission.hold?.release(); admission.hold = null; throw error; }
+  finally { fs.unlinkSync(lock); }
 }
 
 // The authority whose bridge.key the reader trusts. Release: release-layout authorityDir (config.json authorityDir, else
@@ -156,14 +182,18 @@ export async function readSnapshot({dll, runtimeDir, cacheRoot, platform, reques
   const authorization = fs.readFileSync(path.join(authority,'bridge.key'), 'utf8').trim();
   const directory = path.join(cacheRoot, platform, generation);
   for (let attempt=0; attempt<2; attempt++) {
-    const state = await ensureReader({dll,runtimeDir,platform,directory,generation,authority,indexRoot});
+    const admission = {};
+    const state = await ensureReader({dll,runtimeDir,platform,directory,generation,authority,indexRoot,authorization}, admission);
+    if (residentO11(platform)) touchLastRead(directory);
     const phase = performance.now();
     let response;
     try { response = await readerRpc(state, ['read', JSON.stringify(request)], authorization); }
     catch (error) { if (attempt === 0) continue; throw error; }
+    finally { admission.hold?.release(); }
     if (response.retryable && response.executed === false && attempt === 0) { await delay(100); continue; }
     if (!response.ok) throw new Error(response.error ?? 'Snapshot reading failed');
-    return {...response, cache:{...response.cache,generation,instanceId:state.instanceId,pid:state.pid,runtime:state.runtime},
+    const room = admission.residency, made = room && (room.evicted.length || room.pruned.length) ? {readers:{evicted:room.evicted, pruned:room.pruned, resident:room.kept + 1}} : {};
+    return {...response, cache:{...response.cache,generation,instanceId:state.instanceId,pid:state.pid,runtime:state.runtime,...made},
       timings:{...response.timings,generationMs,transportMs:performance.now()-phase,clientMs:performance.now()-started}};
   }
   throw new Error('Read process recycled twice; retry this read-only request');
