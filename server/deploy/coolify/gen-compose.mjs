@@ -136,10 +136,12 @@ export const SIZING_TIERS=['hot','other'];
 export const CAPACITY_WINDOW='CAPACITY_WINDOW';
 const TIER_FIELDS=['cpus','memory','cpuShares','buildWorkers','o11WorkersMax','queueMs','o11Readers','o11ReaderMb'];
 // Window 4x4 (review S1 M2): the resident O11 readers a backend of the window keeps (SSAM_O11_READERS_MAX, reader-residency.mjs),
-// optional per tier; a backend window without it gets other 1 (the one reader of a pair, inside the r45 margin of 969 MiB)
-// and hot 2 (one more inside its 1542 MiB). A pair window only carries it when the tier names it. o11ReaderMb (optional,
+// optional per tier; a backend window without it gets 1 on both tiers. The r45 worst case (other 3271, hot 8698 MiB) has no
+// term for the resident ODC lane worker (anvil-odc serve: VmRSS 1498, VmHWM 2116 MiB measured on v5 2026-11-09), which
+// at its peak takes both tiers past their limits; no reader fits in a margin, so a second resident reader is only ever an
+// explicit sizing.<tier>.o11Readers (S1 R2, COOLIFY 14). A pair window only carries it when the tier names it. o11ReaderMb (optional,
 // the measured RSS of one O11 reader) is the gate's reserve for a new reader (SSAM_MEMORY_RESERVE_READER_MB; code default 800).
-export const DEFAULT_O11_READERS=Object.freeze({hot:2,other:1});
+export const DEFAULT_O11_READERS=Object.freeze({hot:1,other:1});
 const readersOf=(manifest,tier)=>manifest.sizing?.[tier]?.o11Readers??(isBackendManifest(manifest)?DEFAULT_O11_READERS[tier]:undefined);
 const readersEnv=(manifest,tier)=>{const r=readersOf(manifest,tier),mb=manifest.sizing?.[tier]?.o11ReaderMb;
  return {...(r===undefined?{}:{SSAM_O11_READERS_MAX:String(r)}),...(mb===undefined?{}:{SSAM_MEMORY_RESERVE_READER_MB:String(mb)})};};

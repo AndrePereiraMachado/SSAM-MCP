@@ -565,8 +565,15 @@ every Service Studio of the window and one O11 kernel compiled against each:
   (least recently used; a reader that serves is never stopped), drops the copies of retired versions, and is admitted by
   the memory gate with `SSAM_MEMORY_RESERVE_READER_MB` (default 800, NOT measured: the first-deploy kit measures one O11
   reader's RSS in a candidate container before the window and sets the value). `gen-compose` writes
-  `SSAM_O11_READERS_MAX` per tier: other 1 (the pair's one reader, inside its 969 MiB margin of option (c), if the reader
-  is under ~900 MiB), hot 2 (inside 1542 MiB), or `sizing.<tier>.o11Readers`. Account per backend: other worst case
-  3271 MiB + 1 reader ≤ 4240m, hot 8698 MiB + 2 readers ≤ 10240m; if the measured reader RSS breaks either line, lower the
-  tier's `o11Readers` (minimum 1) or raise the reserve so the gate holds the rest. The gate only exists in images built
+  `SSAM_O11_READERS_MAX` per tier: 1 on both tiers, or `sizing.<tier>.o11Readers`. Section 13's worst case has no term
+  for the resident ODC lane worker either (`anvil-odc serve --port 18547`, started by `anvil-worker.mjs` without the
+  gate, idle exit `ANVIL_WORKER_IDLE_MINUTES`, unset = 240 min): measured on v5 (other) 2026-11-09, VmRSS 1498 MiB,
+  VmHWM 2116 MiB. Account per backend with W = that worker and R = one reader: other 3271 + W + R vs 4240m is
+  5387 + R at W's peak (4769 + R at its RSS), over the limit with no reader at all; hot 8698 + W + R vs 10240m is
+  10814 + R (10196 + R). No reader fits in a margin: the memory gate (it reads the cgroup, so W is in `memory.current`)
+  admits builds, O11 workers and readers only while there is room, so the excess becomes waits and
+  `BUILD_QUEUE_TIMEOUT` refusals instead of the OOM; W's own growth (RSS to peak, ~600 MiB) is never admitted. The live
+  r45 images have no gate, so they carry this gap today. Raising `o11Readers` above 1 needs a measured R and a larger
+  limit; the owner's levers are the other limit (a 4-backend window frees one 4240m: 3 x 5632m + 10240 + 768 = 27904
+  of 27993 MiB), a shorter idle exit for the ODC worker, or gating its start. The gate only exists in images built
   from e04cfb7 on, which every S1 image is.

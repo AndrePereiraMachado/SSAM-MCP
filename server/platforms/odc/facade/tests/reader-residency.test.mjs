@@ -39,10 +39,10 @@ function readers(spec) {
   return { dir, rpc, calls };
 }
 
-test('readerResidency: the compose value, else the container limit (1 under 8 GiB, 2 from 8 GiB), else every kernel', () => {
+test('readerResidency: the compose value, else 1 under any container limit, else every kernel', () => {
   assert.deepEqual(readerResidency({ env: { SSAM_O11_READERS_MAX: '3' }, versions: 4, limitBytes: 4240 * 1024 * 1024 }), { max: 3, reserveMb: DEFAULT_READER_RESERVE_MB, source: 'env' });
   assert.equal(readerResidency({ env: {}, versions: 4, limitBytes: 4240 * 1024 * 1024 }).max, 1, 'the other tier (4240m)');
-  assert.equal(readerResidency({ env: {}, versions: 4, limitBytes: 10 * GIB }).max, 2, 'the hot tier (10g)');
+  assert.equal(readerResidency({ env: {}, versions: 4, limitBytes: 10 * GIB }).max, 1, 'the hot tier (10g): no margin once the ODC lane worker is counted');
   assert.equal(readerResidency({ env: {}, versions: 4, limitBytes: null }).max, 4, 'no readable limit (a developer machine)');
   assert.equal(readerResidency({ env: { SSAM_O11_READERS_MAX: '0' }, versions: 4, limitBytes: null }).max, 4, 'an invalid value is ignored');
   assert.equal(readerResidency({ env: { SSAM_MEMORY_RESERVE_READER_MB: '650' }, limitBytes: null }).reserveMb, 650);

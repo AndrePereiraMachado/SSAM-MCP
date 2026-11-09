@@ -14,15 +14,15 @@
 //   3. is admitted by the memory gate of the process with SSAM_MEMORY_RESERVE_READER_MB (default 800, not measured yet:
 //      the first-deploy kit measures it, S1-KIT-PLANO.md), its pid attached until its first read answered; a wait that
 //      runs out refuses the read, nothing started (memoryWaitRefusal, waitedFor memory).
-// SSAM_O11_READERS_MAX (>= 1): the compose sets it per tier (gen-compose sizing o11Readers: other 1, hot 2). Unset, it
-// follows the container's limit: 1 under 8 GiB, 2 from 8 GiB on, every kernel of the image without a readable limit.
+// SSAM_O11_READERS_MAX (>= 1): the compose sets it per tier (gen-compose sizing o11Readers, default 1). Unset: 1 under any
+// readable container limit (the r45 tiers have no margin left once the resident ODC lane worker is counted), every kernel
+// of the image without one (a developer machine).
 import fs from 'node:fs';
 import path from 'node:path';
 
 export const DEFAULT_READER_RESERVE_MB = 800;
 export const READER_META = 'reader.json';
 export const LAST_READ = 'last-read';
-const GIB = 1024 * 1024 * 1024;
 
 const integer = (value, min) => {
   if (value === undefined || value === null || String(value).trim() === '') return null;
@@ -37,7 +37,7 @@ export function containerLimitBytes({ platform = process.platform, readFile = fs
 // {max, reserveMb}: how many O11 readers may stay resident on this backend and what a new one reserves in the gate.
 export function readerResidency({ env = process.env, versions = 1, limitBytes = containerLimitBytes() } = {}) {
   const explicit = integer(env.SSAM_O11_READERS_MAX, 1);
-  const max = explicit ?? (Number.isFinite(limitBytes) ? (limitBytes >= 8 * GIB ? 2 : 1) : Math.max(1, versions));
+  const max = explicit ?? (Number.isFinite(limitBytes) ? 1 : Math.max(1, versions));
   return { max, reserveMb: integer(env.SSAM_MEMORY_RESERVE_READER_MB, 0) ?? DEFAULT_READER_RESERVE_MB, source: explicit ? 'env' : Number.isFinite(limitBytes) ? 'limit' : 'image' };
 }
 
