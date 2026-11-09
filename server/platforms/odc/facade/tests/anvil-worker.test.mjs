@@ -343,3 +343,59 @@ test('ODC worker under the memory gate: admitted start with a standing hold, no 
   assert.equal(gate.pendingMb(), 250); assert.equal(spawnOk.calls.length, 1);
   rss.delete(778); assert.equal(gate.pendingMb(), 0, 'gone with its process');
 });
+
+// S1 R4: an idle ODC worker is a cache the gate may ask to leave (its standing hold released with it); a busy one never.
+// B-R3-1: a start that found no room is not retried for 60 s unless the gate fits it at once (the calls run cold at once).
+// B-R3-2: the build slot whose build runs on a standing ODC worker counts its reservation once (the slot hold is covered).
+test('ODC worker relief (M6), no-room cache (B-R3-1) and covered slot (B-R3-2)', async t => {
+  const { createMemoryGate } = await import('../memory-room.mjs');
+  const { standingWorkerHold, NO_ROOM_MS } = await import('../anvil-worker.mjs');
+  assert.equal(NO_ROOM_MS, 60000);
+  const s = sandbox(t);
+  const settings = { reserveMb: 1400, odcReserveMb: 600, waitMs: 1000, growMs: 15000, odcWorkerReserveMb: 2150, workerWaitMs: 150, evictTurnMs: 0 };
+  // An idle worker up on a port, adopted with a standing hold: the gate's relief shuts it down and releases its hold.
+  const port = await freePort();
+  const target = s.odc(port); s.cli(target);
+  let fake = await fakeWorker({ port, key: 'KEY', status: { instanceId: 'idle', pid: 991 } });
+  t.after(() => fake?.close());
+  const rss = new Map([[991, 1500]]);
+  const gate = createMemoryGate({ room: () => 3000, rssOf: pid => rss.get(pid) ?? null, settings });
+  assert.equal((await ensureWorker(target, { gate })).status.instanceId, 'idle');
+  const held = standingWorkerHold(port);
+  assert.equal(held.pid, 991);
+  fake.state.busy = true;
+  assert.equal(await gate.relieve({ kind: 'build', force: true }), null, 'a worker in a call is never asked');
+  assert.equal(fake.requests('shutdown').length, 0);
+  fake.state.busy = false;
+  const out = await gate.relieve({ kind: 'build', force: true });
+  assert.deepEqual(out, { by: 'odc-workers', what: 'odc-worker', port });
+  assert.equal(fake.requests('shutdown').length, 1, 'its own queued shutdown, with the key');
+  assert.equal(fake.requests('shutdown')[0].authorization, 'KEY');
+  assert.equal(held.released, true, 'its standing hold released at once');
+  await fake.close(); fake = null;
+  // B-R3-1: no room (another consumer holds the container): the first start waits workerWaitMs, the next goes cold at once.
+  const port2 = await freePort();
+  const target2 = s.odc(port2); s.cli(target2);
+  let room = 1000;
+  const short = createMemoryGate({ room: () => room, rssOf: () => 100, settings });
+  const other = short.hold(500);
+  const spawnFn = fakeSpawn();
+  const first = await ensureWorker(target2, { spawnFn, gate: short });
+  assert.match(first.note, /needs 2150 MB/); assert.ok(first.memory.waitedMs >= 100);
+  const at = Date.now();
+  const second = await ensureWorker(target2, { spawnFn, gate: short });
+  assert.equal(second.memory.cached, true); assert.ok(Date.now() - at < 100, 'no second wait');
+  assert.match(second.note, /found no room .* less than 60 s ago/);
+  room = 6000; // room again: the cache never keeps a worker from starting when it fits now
+  let fake2 = null; t.after(() => fake2?.close());
+  const spawnOk = fakeSpawn({ delayMs: 100, then: async () => { fake2 = await fakeWorker({ port: port2, key: 'KEY', status: { instanceId: 'w', pid: 992 } }); } });
+  assert.equal((await ensureWorker(target2, { spawnFn: spawnOk, gate: short })).status.instanceId, 'w');
+  assert.equal(spawnFn.calls.length, 0); assert.equal(spawnOk.calls.length, 1);
+  other.release();
+  // B-R3-2: inside a slot (gate.run with the slot's hold), using the slot's standing worker covers the slot hold.
+  const slot = short.hold(600);
+  assert.equal(slot.covered, undefined);
+  await short.run(slot, () => ensureWorker(target2, { gate: short }));
+  assert.equal(slot.covered, true, 'the build on the slot worker: reserved once, by the worker');
+  slot.release();
+});

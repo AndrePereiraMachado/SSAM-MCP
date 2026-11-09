@@ -164,6 +164,9 @@ export function createBuildPool({ dir, size = buildWorkers(), queueMs = buildQue
           if (nextWaiter() === me) {
             forMemory = held.size < size && !roomFor(lane);
             if (!forMemory) { index = takeSlot(key, prefer); if (index >= 0) break; }
+            // S1 R4 (review R3 M6): short of memory, the build first asks the idle caches of this server to leave (one relief
+            // turn of the memory gate: idle O11 readers, then idle resident workers), and looks again (the progress rule may admit it once nothing is left to evict).
+            else if (memory?.gate?.relieve) { await memory.gate.relieve({ kind: 'build' }); if (roomFor(lane)) { index = takeSlot(key, prefer); if (index >= 0) break; } }
           }
           const left = started + queueMs - Date.now();
           if (left <= 0) throw new BuildQueueRefused(buildQueueRefusal({ position, waitedMs: Date.now() - started, queueMs, size, lane, memory: forMemory }));
