@@ -1,20 +1,30 @@
 // scripts/build.mjs checkPackagedClosure: the packaged app.asar must hold package-lock.json's production closure where Node looks
 // for it. Windows 0.2.8 shipped electron-updater without its dependencies ("Cannot find module 'fs-extra'" at start).
+// Review R4: each package found must also hold the file Node loads for it (packageEntries), not only its package.json.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createRequire } from 'node:module';
-import { resolvePackage, packagedClosureProblems, asarTree, checkPackagedClosure } from '../../scripts/build.mjs';
+import { resolvePackage, packagedClosureProblems, packageEntries, asarTree, checkPackagedClosure } from '../../scripts/build.mjs';
 
 const appDir = path.resolve(import.meta.dirname, '..', '..');
 const lock = JSON.parse(fs.readFileSync(path.join(appDir, 'package-lock.json'), 'utf8'));
 const required = () => Object.entries(lock.packages).filter(([key, v]) => key.startsWith('node_modules/') && !v.dev && !v.optional);
 
 // A packaged tree laid out like the lock, or hoisted the way electron-builder hoisted the Mac build A (electron-updater's semver
-// at node_modules/semver).
-function tree(layout) { return { has: key => key in layout, versionOf: key => layout[key] ?? null }; }
+// at node_modules/semver). layout: key -> version (a package.json with no main, so its entry is index.js, present) or the whole
+// package.json (then only the files listed are there); files: the entry files present besides <key>/index.js of each package
+// given by version (missing: those taken away).
+function tree(layout, { files = [], missing = [] } = {}) {
+  const manifest = key => typeof layout[key] === 'string' ? { version: layout[key] } : layout[key] ?? null;
+  return {
+    has: key => key in layout,
+    manifestOf: manifest,
+    hasFile: file => !missing.includes(file) && (files.includes(file) || Object.entries(layout).some(([key, value]) => typeof value === 'string' && file === key + '/index.js')),
+  };
+}
 const asLock = () => Object.fromEntries(required().map(([key, v]) => [key, v.version]));
 const hoisted = () => Object.fromEntries(required().map(([key, v]) => [key.replace(/^node_modules\/[^/]+\/node_modules\//, 'node_modules/'), v.version]));
 
@@ -47,13 +57,49 @@ test('optional dependencies may be absent; devDependencies never count', () => {
   assert.deepEqual(packagedClosureProblems(small, tree({ 'node_modules/a': '1.0.0' })), ['node_modules/a needs b 2.0.0, which the app.asar does not have where Node looks']);
 });
 
+test('packageEntries gives the files Node loads for a package: exports for "." (require and import), else main, else index', () => {
+  const index = ['index.js', 'index.json', 'index.node'];
+  assert.deepEqual(packageEntries({ version: '1.0.0' }), [index]);
+  assert.deepEqual(packageEntries(null), [index]);
+  assert.deepEqual(packageEntries({ main: './lib/index.js' }), [['lib/index.js', 'lib/index.js.js', 'lib/index.js.json', 'lib/index.js.node', 'lib/index.js/index.js', 'lib/index.js/index.json', 'lib/index.js/index.node', ...index]]);
+  assert.deepEqual(packageEntries({ main: './index' })[0].slice(0, 2), ['index', 'index.js'], 'ms: "./index"');
+  assert.deepEqual(packageEntries({ main: 'lib/' })[0].slice(0, 5), ['lib', 'lib.js', 'lib.json', 'lib.node', 'lib/index.js']);
+  // js-yaml 4.3.2: import and require differ, both must be there.
+  assert.deepEqual(packageEntries({ main: 'ignored.js', exports: { '.': { import: './dist/js-yaml.mjs', require: './index.js' }, './package.json': './package.json' } }), [['index.js'], ['dist/js-yaml.mjs']]);
+  assert.deepEqual(packageEntries({ exports: './x.js' }), [['x.js']]);
+  assert.deepEqual(packageEntries({ exports: { node: { require: './n.cjs', default: './n.mjs' }, default: './d.js' } }), [['n.cjs'], ['n.mjs']]);
+  assert.deepEqual(packageEntries({ exports: { '.': [{ worker: './w.js' }, './a.js'] } }), [['a.js']]);
+  assert.deepEqual(packageEntries({ exports: { browser: './b.js', default: './d.js' } }), [['d.js']]);
+  assert.deepEqual(packageEntries({ exports: { './sub': './sub.js' } }), [[]], 'no "." export: nothing can satisfy it');
+  assert.deepEqual(packageEntries({ exports: { browser: './b.js' } }), [[]]);
+});
+
+test('a package found without the file Node loads for it is refused', () => {
+  const fsExtra = 'node_modules/fs-extra';
+  const real = { ...asLock(), [fsExtra]: { version: lock.packages[fsExtra].version, main: './lib/index.js' } };
+  assert.deepEqual(packagedClosureProblems(lock, tree(real, { files: [fsExtra + '/lib/index.js'] })), []);
+  assert.deepEqual(packagedClosureProblems(lock, tree(real)), [`${fsExtra} in the app.asar has no lib/index.js, the file Node loads for fs-extra`]);
+  assert.deepEqual(packagedClosureProblems(lock, tree(asLock(), { missing: ['node_modules/electron-updater/index.js'] })), ['node_modules/electron-updater in the app.asar has no index.js, the file Node loads for electron-updater']);
+  const yaml = Object.keys(asLock()).find(key => key.endsWith('/js-yaml'));
+  const both = { ...asLock(), [yaml]: { version: asLock()[yaml], exports: { '.': { import: './dist/js-yaml.mjs', require: './index.js' } } } };
+  assert.deepEqual(packagedClosureProblems(lock, tree(both, { files: [yaml + '/index.js', yaml + '/dist/js-yaml.mjs'] })), []);
+  assert.deepEqual(packagedClosureProblems(lock, tree(both, { files: [yaml + '/index.js'] })), [`${yaml} in the app.asar has no dist/js-yaml.mjs, the file Node loads for js-yaml`]);
+  assert.deepEqual(packagedClosureProblems(lock, tree(both, { files: [yaml + '/dist/js-yaml.mjs'] })), [`${yaml} in the app.asar has no index.js, the file Node loads for js-yaml`]);
+  assert.deepEqual(packagedClosureProblems(lock, tree({ ...asLock(), [yaml]: { version: asLock()[yaml], exports: { './sub': './sub.js' } } })), [`${yaml} in the app.asar has no file its "exports" gives for ".", the file Node loads for js-yaml`]);
+});
+
 test('checkPackagedClosure reads real app.asar files under dist and stops the build on a missing dependency', t => {
   const asar = createRequire(import.meta.url)('@electron/asar');
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ssam-closure-')); t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
-  const make = async (layout, out) => {
+  // Each package: its package.json (main ./lib/main.js) and, unless noEntry names it, lib/main.js.
+  const make = async (layout, out, noEntry = []) => {
     const src = fs.mkdtempSync(path.join(dir, 'src-'));
     fs.writeFileSync(path.join(src, 'package.json'), JSON.stringify({ name: 'ssam-agent-app', version: '0.2.8' }));
-    for (const [key, version] of Object.entries(layout)) { fs.mkdirSync(path.join(src, ...key.split('/')), { recursive: true }); fs.writeFileSync(path.join(src, ...key.split('/'), 'package.json'), JSON.stringify({ name: key.split('node_modules/').pop(), version })); }
+    for (const [key, version] of Object.entries(layout)) {
+      fs.mkdirSync(path.join(src, ...key.split('/'), 'lib'), { recursive: true });
+      fs.writeFileSync(path.join(src, ...key.split('/'), 'package.json'), JSON.stringify({ name: key.split('node_modules/').pop(), version, main: './lib/main.js' }));
+      if (!noEntry.includes(key)) fs.writeFileSync(path.join(src, ...key.split('/'), 'lib', 'main.js'), 'module.exports = {};\n');
+    }
     fs.mkdirSync(path.dirname(out), { recursive: true });
     await asar.createPackage(src, out);
   };
@@ -65,6 +111,10 @@ test('checkPackagedClosure reads real app.asar files under dist and stops the bu
     const broken = asLock(); delete broken['node_modules/fs-extra'];
     await make(broken, path.join(bad, 'win-unpacked', 'resources', 'app.asar'));
     assert.throws(() => checkPackagedClosure(bad, appDir), /win-unpacked[\\/]resources[\\/]app\.asar: node_modules\/electron-updater needs fs-extra/);
+    // fs-extra's package.json is there, its lib/main.js is not (a lib folder with nothing in it is no entry file).
+    const noEntry = path.join(dir, 'dist-noentry');
+    await make(asLock(), path.join(noEntry, 'win-unpacked', 'resources', 'app.asar'), ['node_modules/fs-extra']);
+    assert.throws(() => checkPackagedClosure(noEntry, appDir), /app\.asar: node_modules\/fs-extra in the app\.asar has no lib\/main\.js, the file Node loads for fs-extra/);
     fs.mkdirSync(path.join(dir, 'dist-empty'));
     assert.throws(() => checkPackagedClosure(path.join(dir, 'dist-empty'), appDir), /no app\.asar under/);
   })();
