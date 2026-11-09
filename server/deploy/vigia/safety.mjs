@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {createHash} from 'node:crypto';
 import {readJournal} from './journal.mjs';
+import {labelKernels} from './window.mjs';
 import {generateCompose,versionPairs,sizingOfCompose,versionBackends,isBackendManifest,retiringOf,BACKEND_NAME} from '../coolify/gen-compose.mjs';
 const fail=(message,code)=>{throw Object.assign(Error(message),{code,environmental:true});};
 export const composeHash=text=>createHash('sha256').update(text).digest('hex');
@@ -61,8 +62,11 @@ export function liveBaseline(snapshot){
 const PAIR=/^(?:o11-\d+\.\d+\.\d+-)?odc-\d+\.\d+\.\d+$/;
 // S2: the live backend window. Every backend runs the same SSAM_SERVED_VERSIONS (servedLists: {odc, o11, retiring?}); its label
 // ssam.o11 is the served O11 list; the remote snapshot row of a backend is found by its two labels as they are. The kernel.json
-// of a backend names its ODC and its default O11 kernel (one of the served). The images' extra kernels (an O11 version retired
-// by a compose-only round) are not in the compose: the read-back window has o11.kernels = o11.served.
+// of a backend names its ODC and its default O11 kernel (one of the served). The O11 kernels each image really carries are
+// read from the image itself (remote snapshot row.kernels: its label ssam.kernels.o11) and recorded as the backend's o11Kernels:
+// after a compose-only O11 retirement the images still carry the retired kernel, which the compose does not name (S2 R6, review
+// M5: the next deploy's check compares each image's label with its declared o11Kernels). o11.served stays the served list,
+// and every served version must be among the kernels of every image.
 function liveBackendBaseline(snapshot,compose,rows,ordered){
  const texts=[...new Set(ordered.map(s=>s.environment?.SSAM_SERVED_VERSIONS))];
  if(texts.length!==1||texts[0]===undefined)fail('The live backends do not run one served list.','LIVE_INVALID');
@@ -77,7 +81,10 @@ function liveBackendBaseline(snapshot,compose,rows,ordered){
   if(String(o11).split(',').sort().join()!==[...served.o11].sort().join())fail('A live backend label ssam.o11 is not the served O11 list.','LIVE_INVALID');
   const ref=service.image.split('@')[0],colon=ref.lastIndexOf(':');
   if(colon<ref.lastIndexOf('/'))fail('Live image has no immutable tag.','LIVE_INVALID');
-  result.backends.push({odc,image:ref.slice(0,colon),tag:ref.slice(colon+1),sha256:row.digest.slice(7)});
+  const carried=Array.isArray(row.kernels)?labelKernels({'ssam.kernels.o11':row.kernels.join(',')}):null;
+  if(!carried)fail('A live backend image does not name its O11 kernels (label ssam.kernels.o11).','LIVE_INVALID');
+  if(served.o11.some(v=>!carried.includes(v)))fail('A live backend image lacks the kernel of a served O11 version.','LIVE_INVALID');
+  result.backends.push({odc,image:ref.slice(0,colon),tag:ref.slice(colon+1),sha256:row.digest.slice(7),o11Kernels:carried});
   kernels['odc-'+odc]=row.kernel;
  }
  if(rows.length!==ordered.length)fail('Live backend count differs from compose.','LIVE_INVALID');
@@ -200,7 +207,13 @@ export function assertRetained(baseline,next,round={}){
   }
   for(const b of baseline.manifest.backends){
    const n=next.backends.find(x=>x.odc===b.odc);if(!n)continue;
-   if(['image','tag','sha256'].every(k=>n[k]===b[k]))continue;
+   // A retained image declares the kernels the live image really carries (baseline o11Kernels: its label, read from the air),
+   // so the post-deploy check that compares them can never fail on a backend this round did not touch (S2 R6, review M5).
+   if(['image','tag','sha256'].every(k=>n[k]===b[k])){
+    const declared=backends.find(x=>x.odc===n.odc).kernels;
+    if(b.o11Kernels&&setOf(declared)!==setOf(b.o11Kernels))fail(`The retained backend odc-${n.odc} declares the O11 kernels ${declared.join(', ')}, but its live image carries ${b.o11Kernels.join(', ')}.`,'IMAGE_KERNELS_DIFFER');
+    continue;
+   }
    const pinned=String(n.sha256??'').replace(/^sha256:/,''),carried=images[n.tag]?.kernels??[];
    if(round.lane!=='o11'||!/^[a-f0-9]{64}$/.test(pinned)||built[n.tag]!==pinned||served.some(v=>!carried.includes(v)))fail('A retained live image was changed.','LIVE_DOWNGRADE');
   }

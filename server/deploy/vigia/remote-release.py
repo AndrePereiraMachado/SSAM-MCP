@@ -172,7 +172,12 @@ def dispatch(request):
             refs = json.loads(docker("image", "inspect", "--format", "{{json .RepoDigests}}", server["Image"]))
             if not refs:
                 raise RuntimeError("No registry digest for a live backend.")
-            rows.append({"o11": server["Config"]["Labels"].get("ssam.o11"), "odc": server["Config"]["Labels"].get("ssam.odc"), "image": server["Image"], "reference": server["Config"]["Image"], "digest": refs[0].split("@")[1], "kernel": measured["kernel"], "budget": measured["budget"], "warm": warm})
+            # The O11 kernels the running image really carries (its label ssam.kernels.o11, read from the image): after a
+            # compose-only O11 retirement they are more than the served list (S2 R6, review M5). None without the label.
+            image_labels = json.loads(docker("image", "inspect", "--format", "{{json .Config.Labels}}", server["Image"]) or b"null")
+            carried = image_labels.get("ssam.kernels.o11") if isinstance(image_labels, dict) else None
+            kernels = [v.strip() for v in carried.split(",")] if isinstance(carried, str) and carried.strip() else None
+            rows.append({"o11": server["Config"]["Labels"].get("ssam.o11"), "odc": server["Config"]["Labels"].get("ssam.odc"), "image": server["Image"], "reference": server["Config"]["Image"], "digest": refs[0].split("@")[1], "kernel": measured["kernel"], "budget": measured["budget"], "warm": warm, "kernels": kernels})
             for key, value in measured.get("telemetry", {}).get("tokens", {}).items():
                 if key not in telemetry["tokens"] or telemetry["tokens"][key]["seen"] < value["seen"]:
                     telemetry["tokens"][key] = value
@@ -408,6 +413,14 @@ def dispatch(request):
                 labels = json.loads(docker("image", "inspect", "--format", "{{json .Config.Labels}}", server["Image"])) or {}
                 have = [v.strip() for v in str(labels.get("ssam.kernels.o11", "")).split(",") if v.strip()]
                 if want is None or sorted(set(have)) != sorted(set(want)) or len(have) != len(set(have)):
+                    raise RemoteError('IMAGE_KERNELS_DIFFER')
+                # Every O11 version the backend serves has its kernel in that image (S2 R6, review M5: served ⊆ kernels).
+                served_text = next((e.split("=", 1)[1] for e in server["Config"].get("Env") or [] if e.startswith("SSAM_SERVED_VERSIONS=")), None)
+                try:
+                    served_o11 = (json.loads(served_text) or {}).get("o11") if served_text else []
+                except ValueError:
+                    served_o11 = None
+                if not isinstance(served_o11, list) or any(v not in have for v in served_o11):
                     raise RemoteError('IMAGE_KERNELS_DIFFER')
         presented = 0
         offered = []

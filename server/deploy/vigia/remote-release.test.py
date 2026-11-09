@@ -408,6 +408,33 @@ class RemoteTests(unittest.TestCase):
         self.assertEqual(value["backends"][0]["budget"]["tools"], 90)
         self.assertEqual(value["backends"][0]["kernel"]["odc"], "1.7.29")
         self.assertEqual(value["backends"][0]["reference"], "image:old")
+        self.assertIsNone(value["backends"][0]["kernels"], "an image without the label names no kernels")
+
+    # S2 R6 (review M5): the snapshot reads the O11 kernels each running image carries from the image itself, so the live
+    # baseline declares them after a compose-only O11 retirement (more kernels than the served list).
+    def test_s2_snapshot_reads_each_running_image_kernels_label(self):
+        original = self.docker
+        def docker(*args, data=None, timeout=900):
+            if args[:2] == ("image", "inspect") and "{{json .Config.Labels}}" in args:
+                return json.dumps({"ssam.kernels.o11": "11.55.92,11.55.93,11.55.94,11.55.95,11.55.96"}).encode()
+            return original(*args, data=data, timeout=timeout)
+        self.docker = docker
+        value = self.request("snapshot", checkSource="capture-live")
+        self.assertEqual(value["backends"][0]["kernels"], ["11.55.92", "11.55.93", "11.55.94", "11.55.95", "11.55.96"])
+
+    def test_s2_check_fails_when_a_served_o11_version_has_no_kernel_in_the_image(self):
+        original = self.docker
+        def docker(*args, data=None, timeout=900):
+            if args[:2] == ("image", "inspect") and "{{json .Config.Labels}}" in args:
+                return json.dumps({"ssam.kernels.o11": "11.55.93,11.55.94"}).encode()
+            return original(*args, data=data, timeout=timeout)
+        self.docker = docker
+        want = {"1.7.29": ["11.55.93", "11.55.94"]}
+        self.env = ["SSAM_BACKEND_NAME=odc-1.7.29", "SSAM_SERVED_VERSIONS={\"odc\":[\"1.7.29\"],\"o11\":[\"11.55.93\",\"11.55.94\"]}"]
+        self.assertTrue(self.request("check", checkSource="new", expectedKernels=want)["ok"])
+        self.env = ["SSAM_BACKEND_NAME=odc-1.7.29", "SSAM_SERVED_VERSIONS={\"odc\":[\"1.7.29\"],\"o11\":[\"11.55.93\",\"11.55.95\"]}"]
+        with self.assertRaisesRegex(RuntimeError, "IMAGE_KERNELS_DIFFER"):
+            self.request("check", checkSource="new", expectedKernels=want)
 
     def test_snapshot_returns_usage_counts_only_and_never_fails_on_them(self):
         # R2 M1': usage is advisory. Good counts come back; anything else is usage None (or the good part) plus a warning, and
