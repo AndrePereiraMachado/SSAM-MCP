@@ -559,21 +559,28 @@ every Service Studio of the window and one O11 kernel compiled against each:
 - Not yet: the watcher (S2) still rotates and checks a window of pairs and must stay paused while a backend window is live;
   `ssamctl --version o11=<v>` no longer identifies a backend (use `odc=<v>`). The first deploy kit is planned in
   `C:\t\r5\janela-4x4\S1-KIT-PLANO.md` (rename of the odc-features volumes, kernel.json per new runtime dir, Coolify PATCH, rollback).
-- Resident O11 readers (review S1 M2): each Service Studio version a customer brings has its own resident `read-serve`
-  (`reader-client.mjs`, idle exit 15 min), which section 13's model never counted (the one O11 reader of a pair was
-  outside it too). On a multi-O11 image a new reader generation first stops the idle readers past `SSAM_O11_READERS_MAX`
-  (least recently used; a reader that serves is never stopped), drops the copies of retired versions, and is admitted by
-  the memory gate with `SSAM_MEMORY_RESERVE_READER_MB` (default 800, NOT measured: the first-deploy kit measures one O11
-  reader's RSS in a candidate container before the window and sets the value). `gen-compose` writes
-  `SSAM_O11_READERS_MAX` per tier: 1 on both tiers, or `sizing.<tier>.o11Readers`. Section 13's worst case has no term
-  for the resident ODC lane worker either (`anvil-odc serve --port 18547`, started by `anvil-worker.mjs` without the
-  gate, idle exit `ANVIL_WORKER_IDLE_MINUTES`, unset = 240 min): measured on v5 (other) 2026-11-09, VmRSS 1498 MiB,
-  VmHWM 2116 MiB. Account per backend with W = that worker and R = one reader: other 3271 + W + R vs 4240m is
-  5387 + R at W's peak (4769 + R at its RSS), over the limit with no reader at all; hot 8698 + W + R vs 10240m is
-  10814 + R (10196 + R). No reader fits in a margin: the memory gate (it reads the cgroup, so W is in `memory.current`)
-  admits builds, O11 workers and readers only while there is room, so the excess becomes waits and
-  `BUILD_QUEUE_TIMEOUT` refusals instead of the OOM; W's own growth (RSS to peak, ~600 MiB) is never admitted. The live
-  r45 images have no gate, so they carry this gap today. Raising `o11Readers` above 1 needs a measured R and a larger
-  limit; the owner's levers are the other limit (a 4-backend window frees one 4240m: 3 x 5632m + 10240 + 768 = 27904
-  of 27993 MiB), a shorter idle exit for the ODC worker, or gating its start. The gate only exists in images built
-  from e04cfb7 on, which every S1 image is.
+- Resident O11 readers (review S1 M2, R3): each Service Studio version a customer brings has its own resident
+  `read-serve` (`reader-client.mjs`, idle exit 15 min), which section 13's model never counted. On a multi-O11 image a
+  new reader generation first stops the idle readers past the ceiling `SSAM_O11_READERS_MAX` (least recently used; a
+  reader that serves, or read within `SSAM_O11_READER_MIN_IDLE_MS`, default 60 s, is never stopped), drops the copies
+  of retired versions, and is admitted by the memory gate with `SSAM_MEMORY_RESERVE_READER_MB` (default 800, NOT
+  measured: the first-deploy kit measures one reader's RSS and sets `sizing.<tier>.o11ReaderMb`). The ceiling only
+  limits (`gen-compose`: every O11 version of the window, or `sizing.<tier>.o11Readers`); while a reader waits for
+  room it asks one more idle reader to leave at each 2 s turn, so the gate decides how many fit. Its startup deadline
+  runs from the spawn, after the admission, and a reader that misses it is killed (no reader without its reserve). A
+  switch between two versions on a full backend costs one cold reader start (seconds), at most once a minute.
+- Resident ODC lane worker (S1 R2/R3): `anvil-odc serve` (`anvil-worker.mjs`), measured on v5 (other) 2026-11-09 at
+  VmRSS 1498 MiB, VmHWM 2116 MiB, was in no model either: other 3271 + 2116 = 5387 MiB against 4240m, hot 8698 + 2116
+  = 10814 against 10240m, at the worst case of section 13 with no reader. Production r45 (oom-check 2026-11-09): v5
+  peaked at 3772 of 4240 MiB with no OOM, v2 1556, the others ~400; the worst case did not coincide. In the S1 images:
+  - its start is admitted by the memory gate with `SSAM_MEMORY_RESERVE_ODC_WORKER_MB` (default 2150, the measured peak),
+    as a STANDING hold on its pid while it lives: every later admission (builds, O11 workers, readers, a lone build too)
+    counts its growth still to come (reserve minus RSS, ~650 MiB at 1498). A worker already up is adopted the same way.
+    A start without room within `SSAM_MEMORY_WORKER_WAIT_MS` (15 s) launches nothing and the command runs cold,
+    admitted with the ODC cold reserve (600) or inside the build slot that reserved it; a wait that runs out there
+    refuses with `BUILD_QUEUE_TIMEOUT` (outcome not-sent). Never an unadmitted kernel process.
+  - `gen-compose` writes `ANVIL_WORKER_IDLE_MINUTES` per tier (`sizing.<tier>.workerIdleMinutes`; default hot 120,
+    other 30; the kernel's own default is 240): the idle ODC worker leaves memory sooner. The hosted O11 workers set
+    their own; the readers keep their 15 min.
+  - The owner's 4240m for other stays: the gate turns the excess into waits and refusals, never an OOM. The gate only
+    exists in images built from e04cfb7 on, which every S1 image is; the live r45 images have none.

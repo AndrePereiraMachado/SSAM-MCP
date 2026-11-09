@@ -134,17 +134,23 @@ export function servedLists(manifest,{window=windowOf(manifest)}={}){
 // Without "sizing" the compose is exactly as before.
 export const SIZING_TIERS=['hot','other'];
 export const CAPACITY_WINDOW='CAPACITY_WINDOW';
-const TIER_FIELDS=['cpus','memory','cpuShares','buildWorkers','o11WorkersMax','queueMs','o11Readers','o11ReaderMb'];
+const TIER_FIELDS=['cpus','memory','cpuShares','buildWorkers','o11WorkersMax','queueMs','o11Readers','o11ReaderMb','workerIdleMinutes'];
 // Window 4x4 (review S1 M2): the resident O11 readers a backend of the window keeps (SSAM_O11_READERS_MAX, reader-residency.mjs),
-// optional per tier; a backend window without it gets 1 on both tiers. The r45 worst case (other 3271, hot 8698 MiB) has no
-// term for the resident ODC lane worker (anvil-odc serve: VmRSS 1498, VmHWM 2116 MiB measured on v5 2026-11-09), which
-// at its peak takes both tiers past their limits; no reader fits in a margin, so a second resident reader is only ever an
-// explicit sizing.<tier>.o11Readers (S1 R2, COOLIFY 14). A pair window only carries it when the tier names it. o11ReaderMb (optional,
-// the measured RSS of one O11 reader) is the gate's reserve for a new reader (SSAM_MEMORY_RESERVE_READER_MB; code default 800).
-export const DEFAULT_O11_READERS=Object.freeze({hot:1,other:1});
-const readersOf=(manifest,tier)=>manifest.sizing?.[tier]?.o11Readers??(isBackendManifest(manifest)?DEFAULT_O11_READERS[tier]:undefined);
-const readersEnv=(manifest,tier)=>{const r=readersOf(manifest,tier),mb=manifest.sizing?.[tier]?.o11ReaderMb;
- return {...(r===undefined?{}:{SSAM_O11_READERS_MAX:String(r)}),...(mb===undefined?{}:{SSAM_MEMORY_RESERVE_READER_MB:String(mb)})};};
+// optional per tier. It is a CEILING (S1 R3, review R2 B-R2-2): a backend window without it gets every O11 version of the
+// window, and the memory gate decides how many readers fit, asking idle ones (not read for 60 s) to leave when a new one
+// waits for room. The capacity model counts one resident reader per backend: the r45 worst case (other 3271, hot 8698 MiB)
+// plus the resident ODC lane worker (anvil-odc serve: VmRSS 1498, VmHWM 2116 MiB measured on v5 2026-11-09), whose start
+// and growth the gate now holds (S1 R3, COOLIFY 14). A pair window only carries it when the tier names it. o11ReaderMb
+// (optional, the measured RSS of one O11 reader) is the gate's reserve for a new reader (SSAM_MEMORY_RESERVE_READER_MB;
+// code default 800). workerIdleMinutes (S1 R3): ANVIL_WORKER_IDLE_MINUTES of the backend, the minutes after which an idle
+// resident worker (the ODC lane worker; the hosted O11 workers set their own) exits by itself (WorkerServer.cs, unset 240):
+// a backend window gets hot 120 and other 30 unless the tier names it; 0 never exits.
+const readersOf=(manifest,tier)=>manifest.sizing?.[tier]?.o11Readers??(isBackendManifest(manifest)?manifest.o11.served.length:undefined);
+export const DEFAULT_WORKER_IDLE_MINUTES=Object.freeze({hot:120,other:30});
+const idleOf=(manifest,tier)=>manifest.sizing?.[tier]?.workerIdleMinutes??(isBackendManifest(manifest)?DEFAULT_WORKER_IDLE_MINUTES[tier]:undefined);
+const readersEnv=(manifest,tier)=>{const r=readersOf(manifest,tier),mb=manifest.sizing?.[tier]?.o11ReaderMb,idle=idleOf(manifest,tier);
+ return {...(r===undefined?{}:{SSAM_O11_READERS_MAX:String(r)}),...(mb===undefined?{}:{SSAM_MEMORY_RESERVE_READER_MB:String(mb)}),
+  ...(idle===undefined?{}:{ANVIL_WORKER_IDLE_MINUTES:String(idle)})};};
 // A backend id: a pair (o11-<v>-odc-<v>) or a backend of the 4x4 window (odc-<v>); usage and hotPair are keyed by it.
 const PAIR_NAME=/^(?:o11-\d+\.\d+\.\d+-)?odc-\d+\.\d+\.\d+$/;
 const mib=value=>{const m=/^(\d+)([mg])$/i.exec(String(value));return m?Number(m[1])*(m[2].toLowerCase()==='g'?1024:1):null;};
@@ -177,6 +183,7 @@ export function checkSizing(sizing){
   if(!Number.isInteger(t.queueMs)||t.queueMs<0||t.queueMs>3600000)throw new Error('Invalid sizing.'+tier+'.queueMs.');
   if(t.o11Readers!==undefined&&(!Number.isInteger(t.o11Readers)||t.o11Readers<1||t.o11Readers>8))throw new Error('Invalid sizing.'+tier+'.o11Readers.');
   if(t.o11ReaderMb!==undefined&&(!Number.isInteger(t.o11ReaderMb)||t.o11ReaderMb<100||t.o11ReaderMb>8192))throw new Error('Invalid sizing.'+tier+'.o11ReaderMb.');
+  if(t.workerIdleMinutes!==undefined&&(!Number.isInteger(t.workerIdleMinutes)||t.workerIdleMinutes<0||t.workerIdleMinutes>1440))throw new Error('Invalid sizing.'+tier+'.workerIdleMinutes.');
  }
  if(sizing.router!==undefined&&(!isCpus(sizing.router?.cpus)||!mib(sizing.router?.memory)||mib(sizing.router.memory)<256||Object.keys(sizing.router).some(k=>!['cpus','memory'].includes(k))))throw new Error('Invalid sizing.router.');
  if(sizing.host!==undefined&&(!mib(sizing.host?.memory)||!mib(sizing.host?.reserve)||Object.keys(sizing.host).some(k=>!['memory','reserve'].includes(k))))throw new Error('Invalid sizing.host.');

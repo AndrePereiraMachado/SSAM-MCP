@@ -114,13 +114,14 @@ test('4x4: a backend window that does not hold together is refused',()=>{
  assert.equal(generateCompose(noWindow).services['ssam-router'].environment.SSAM_VERSION_WINDOW,'4');
 });
 
-// Review S1 M2: the resident O11 readers of each backend (reader-residency.mjs SSAM_O11_READERS_MAX) come from the tier.
-test('4x4: each backend names its resident O11 readers by tier (1 by default, or the tier value); a pair window does not',()=>{
+// Review S1 M2, R3 (B-R2-2): the ceiling of resident O11 readers of each backend (reader-residency.mjs SSAM_O11_READERS_MAX)
+// comes from the tier, else every O11 version of the window (the gate decides how many fit).
+test('4x4: each backend names its O11 reader ceiling by tier (every O11 version by default, or the tier value); a pair window does not',()=>{
  const c=generateCompose(manifest);
  for(const [name,s] of Object.entries(c.services).filter(([n])=>n.startsWith('ssam-server-v')))
-  assert.equal(s.environment.SSAM_O11_READERS_MAX,'1',name);
+  assert.equal(s.environment.SSAM_O11_READERS_MAX,String(O11.length),name);
  const expected=sizedExpectations(manifest);
- for(const e of Object.values(expected).filter(e=>e.tier))assert.equal(e.env.SSAM_O11_READERS_MAX,'1');
+ for(const e of Object.values(expected).filter(e=>e.tier))assert.equal(e.env.SSAM_O11_READERS_MAX,String(O11.length));
  const tuned=generateCompose({...manifest,sizing:{...sizing,hot:{...sizing.hot,o11Readers:3}}});
  assert.equal(Object.values(tuned.services).find(s=>s.labels?.['ssam.sizing']==='hot').environment.SSAM_O11_READERS_MAX,'3');
  assert.throws(()=>generateCompose({...manifest,sizing:{...sizing,other:{...sizing.other,o11Readers:0}}}),/o11Readers/);
@@ -130,4 +131,20 @@ test('4x4: each backend names its resident O11 readers by tier (1 by default, or
  assert.throws(()=>generateCompose({...manifest,sizing:{...sizing,hot:{...sizing.hot,o11ReaderMb:10}}}),/o11ReaderMb/);
  const pairs=generateCompose(live);
  for(const s of Object.values(pairs.services))assert.equal(s.environment?.SSAM_O11_READERS_MAX,undefined,'a pair window is unchanged');
+});
+
+// S1 R3 (option 2): idle resident workers leave memory sooner: ANVIL_WORKER_IDLE_MINUTES per tier (hot 120, other 30), the
+// tier's workerIdleMinutes when it names one (0 never exits); a pair window keeps the kernel's default (unset, 240).
+test('4x4: each backend sets the idle exit of its resident workers by tier (hot 120, other 30, or the tier value); a pair window does not',()=>{
+ const c=generateCompose(manifest);
+ const servers=Object.entries(c.services).filter(([n])=>n.startsWith('ssam-server-v'));
+ assert.ok(servers.some(([,s])=>s.labels['ssam.sizing']==='hot')&&servers.some(([,s])=>s.labels['ssam.sizing']==='other'));
+ for(const [name,s] of servers)assert.equal(s.environment.ANVIL_WORKER_IDLE_MINUTES,s.labels['ssam.sizing']==='hot'?'120':'30',name);
+ for(const e of Object.values(sizedExpectations(manifest)).filter(e=>e.tier))assert.equal(e.env.ANVIL_WORKER_IDLE_MINUTES,e.tier==='hot'?'120':'30');
+ const tuned=generateCompose({...manifest,sizing:{...sizing,other:{...sizing.other,workerIdleMinutes:0}}});
+ for(const [name,s] of Object.entries(tuned.services).filter(([n])=>n.startsWith('ssam-server-v')))
+  assert.equal(s.environment.ANVIL_WORKER_IDLE_MINUTES,s.labels['ssam.sizing']==='hot'?'120':'0',name);
+ assert.throws(()=>generateCompose({...manifest,sizing:{...sizing,hot:{...sizing.hot,workerIdleMinutes:-1}}}),/workerIdleMinutes/);
+ assert.throws(()=>generateCompose({...manifest,sizing:{...sizing,hot:{...sizing.hot,workerIdleMinutes:1.5}}}),/workerIdleMinutes/);
+ for(const s of Object.values(generateCompose(live).services))assert.equal(s.environment?.ANVIL_WORKER_IDLE_MINUTES,undefined,'a pair window is unchanged');
 });
