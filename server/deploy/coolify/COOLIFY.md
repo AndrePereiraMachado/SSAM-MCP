@@ -438,29 +438,45 @@ O seletor --version aceita odc=1.7.29 e o11=11.55.93; a forma sem faixa também 
 
 ## 13. Capacity sizing (hot pair)
 
-Measured on the KVM 8 (8 vCPU EPYC 9354P, MemTotal 31.3 GiB) on 2026-11-09: `C:\t\r5\capacity\RESULTADO.md`. One cold kernel
-build uses about 1.25 vCPU and 0.4 to 1.3 GB; builds share the CPU cap, so a backend's vCPUs set its build throughput.
-`versions.json` `sizing` gives ONE backend the "hot" tier and the rest the "other" tier:
+Measured on the KVM 8 (8 vCPU EPYC 9354P, MemTotal 31.3 GiB) on 2026-11-09: `C:\t\r5\capacity\RESULTADO.md` and
+`RESULTADO-R2.md`. One cold kernel build uses about 1.25 vCPU and 0.4 to 1.3 GB; builds share the CPU cap, so a backend's
+vCPUs set its build throughput. `versions.json` `sizing` gives ONE backend the "hot" tier and the rest the "other" tier:
 
-| Tier | cpus | memory | cpu_shares | SSAM_BUILD_WORKERS | SSAM_O11_WORKERS_MAX | SSAM_BUILD_QUEUE_MS |
+| Tier | cpus | memory | cpu_shares (cgroup v2 weight) | SSAM_BUILD_WORKERS | SSAM_O11_WORKERS_MAX | SSAM_BUILD_QUEUE_MS |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| hot (most used pair) | 5 | 10g | 4096 | 6 | 2 | 240000 |
-| other | 2 | 4g | 1024 | 2 | 1 | 240000 |
-| router | 1 | 512m | | | | |
+| hot (most used pair) | 5 | 10g | 10463 (400) | 6 | 2 | 240000 |
+| other | 2 | 4g | 2598 (100, the default) | 2 | 1 | 240000 |
+| router | 1 | 512m | (100) | | | |
 
-- Hot = the owner's pin `sizing.hotPair` if set, else the pair with the most licenses in the router's
-  `state/routing.json` (`sizing.routed`), ties and no counts going to the router's default pair (the first of the
-  window). The newest pair is "other" until it is the most used.
-- The watcher reads the counts (only counts, never a license id) through its remote snapshot at each deploy it makes anyway,
-  writes them into `sizing.routed` of the pinned manifest, and sends the owner a `hot-pair` event (`HOT_PAIR_CHANGED`) once
-  the deploy is live when the hot pair changed. A shift of use never triggers a deploy. Its rotation keeps the counts of the
-  pairs that stay, keeps a pin while its pair stays and drops it when the pair leaves. An unreadable routing.json defers
-  the round (`ROUTING_UNREADABLE`). The live router's `ssam.sizing` label is how the sizing is read back from Coolify.
-- The hot tier wins CPU contention through `cpu_shares` (4x); the other caps stay at 2 vCPU so no pair regresses.
-- Memory and `cpu_shares` are literal in the compose. `cpus` and the pool sizes are tier variables with these defaults
-  (`${SSAM_HOT_CPUS:-5}`, `${SSAM_OTHER_BUILD_WORKERS:-2}`...): set one in Coolify only to override a tier. A sized backend
-  no longer reads `SSAM_CPUS`, `SSAM_MEMORY`, `SSAM_BUILD_WORKERS` or `SSAM_O11_WORKERS_MAX`.
+- Hot = the owner's pin `sizing.hotPair` if set, else the pair of most REAL USE (`sizing.usage`): the most heavy calls of
+  the last 7 days (`studio_deliver`, `o11_deliver`, `ssam_code` in that pair's quality log), then the most clients active in
+  the last 14 days (real clients only: no verification, no revoked license); ties and no counts go to the router's default
+  pair (the first of the window). The newest pair is "other" until it is the most used. Licenses ever routed
+  (`state/routing.json`) are not use: routes never expire.
+- The watcher counts use (counts only, never a token id or a customer) with `vigia/usage-count.cjs`, run read-only inside a
+  live backend by its remote snapshot at each deploy it makes anyway, writes them into `sizing.usage` of the pinned
+  manifest, and sends the owner a `hot-pair` event (`HOT_PAIR_CHANGED`) once the deploy is live when the hot pair changed; a
+  notice that reached nobody is sent again by the next round. A shift of use never triggers a deploy. Usage is advisory:
+  unreadable or odd counts keep the recorded ones and send a `usage-warning` (`USAGE_UNREADABLE`, `USAGE_PARTIAL`); they
+  never stop or defer a round. Its rotation keeps the counts of the pairs that stay, folds the counts of a leaving pair into
+  the new default pair (where the router sends its clients), keeps a pin while its pair stays and drops it when it leaves.
+- The live router's `ssam.sizing` label is how the watcher reads the sizing back from Coolify; live backends with a tier
+  label and a router without it stop the round (`LIVE_INVALID`), so a lost label never clones the hot limits into a new pair.
+- A change of `sizing` in `versions.json` (a tier, the pin) does NOT reach production through the watcher: its automatic
+  deploy keeps the sizing of the live router label. It goes live only with a manual compose apply (the owner's `-Approve`
+  path or the deploy kit of the integrator, as in `RESULTADO-R2.md`).
+- The hot tier wins CPU contention through its weight (4x the default 100); the other tiers, the router, the console,
+  Coolify and Postgres keep the default weight, and the other caps stay at 2 vCPU, so no pair regresses. Docker on cgroup v2
+  writes `cpu.weight = 1 + (shares - 2) x 9999 / 262142`: 1024 would have been weight 39.
+- Every tier value is literal in the compose (no `${...}`): Coolify 4.4.6 stored the defaults of `${VAR:-default}` of the
+  environment sections as resource variables (the rows of 2026-10-20 equal the defaults), so a tier variable could freeze
+  or override a tier without any check. A sized backend no longer reads `SSAM_CPUS`, `SSAM_MEMORY`, `SSAM_BUILD_WORKERS` or
+  `SSAM_O11_WORKERS_MAX`; those Coolify variables stay only for an unsized (rolled back) compose.
 - `sizing.host` (`32089m`, the MemTotal; reserve `4g`): hot + (pairs - 1) x other + router + console must fit
   MemTotal - reserve. Five pairs use 27392 of 27993 MiB. A sixth pair does not fit: the generator and the watcher's
   rotation refuse it with `CAPACITY_WINDOW` (environmental: the round waits and the owner is told) instead of shrinking any
   backend; a pair has to leave, or the owner changes `sizing`.
+- Inside each backend, the memory gate (`platforms/odc/facade/memory-room.mjs`) admits every kernel process (build-pool
+  slot, cold O11/ODC process, a customer's worker start) by the room under the container's cgroup limit, not by the host's
+  MemAvailable: `SSAM_MEMORY_RESERVE_MB` (1400) per O11 process, `SSAM_MEMORY_RESERVE_ODC_MB` (600) per ODC one. A build
+  without that room waits in the pool queue; a cold process waits at most `SSAM_MEMORY_WAIT_MS` (120 s) and then runs.

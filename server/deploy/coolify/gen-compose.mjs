@@ -48,37 +48,46 @@ export function servedLists(manifest,{window=manifest.window??3}={}){
   return JSON.stringify({odc:f.odc,o11:f.o11});
  });
 }
-// Capacity sizing (KVM 8, measured 2026-11-09: C:/t/r5/capacity/RESULTADO.md). Optional "sizing" in versions.json:
+// Capacity sizing (KVM 8, measured 2026-11-09: C:/t/r5/capacity/RESULTADO.md, RESULTADO-R2.md). Optional "sizing" in
+// versions.json:
 //   {hot:{cpus,memory,cpuShares,buildWorkers,o11WorkersMax,queueMs}, other:{...same}, router:{cpus,memory},
-//    host:{memory,reserve}, routed:{"<pair>":<licenses>}, hotPair:"o11-<v>-odc-<v>" (optional owner pin)}.
-// The hot backend is chosen by USE, not by recency: the pinned hotPair, else the pair with the most licenses the router
-// routes to it (routed: the counts of state/routing.json, recorded by the watcher at each deploy, or by hand), ties and no
-// counts going to the router's default pair (the first of the window). Every other backend, the newest pair included when
-// it is not the most used, gets "other". Usage is only read when a compose is generated (a deploy that happens anyway):
-// a shift of use never redeploys by itself.
-// Memory and cpu_shares are literal (a Coolify variable could pass the host check); cpus and the pool sizes are tier
-// variables with the manifest's value as default (${SSAM_HOT_CPUS:-5}), so Coolify can still tune one tier. The shared
-// SSAM_CPUS/SSAM_MEMORY/SSAM_BUILD_WORKERS/SSAM_O11_WORKERS_MAX no longer reach a sized backend. host: the memory limits
-// of the backends, the router and the console must leave host.reserve of host.memory (the VPS MemTotal); a window that
-// does not fit is refused (CAPACITY_WINDOW, environmental: the watcher waits and tells the owner), never shrunk.
+//    host:{memory,reserve}, usage:{"<pair>":{heavy,active}}, hotPair:"o11-<v>-odc-<v>" (optional owner pin)}.
+// The hot backend is chosen by REAL USE, not by recency nor by licenses ever routed: the pinned hotPair, else the pair with
+// the most heavy calls of the last 7 days (usage.heavy: studio_deliver, o11_deliver, ssam_code in its quality log), then the
+// most clients active in the last 14 days (usage.active), ties and no counts going to the router's default pair (the first
+// of the window). The counts are read inside a live backend at each deploy (vigia/usage-count.cjs, counts only) and
+// recorded here; usage is only read when a compose is generated (a deploy that happens anyway): a shift of use never
+// redeploys by itself. Every other backend, the newest pair included when it is not the most used, gets "other".
+// Every value is literal in the compose (review M3/M3'): Coolify 4.4.6 persisted the defaults of ${VAR:-default} in the
+// environment sections as resource variables (2026-10-20 rows equal to the defaults), so a tier variable could freeze or
+// override a tier silently; versions.json is the only source, checked here. The shared SSAM_CPUS/SSAM_MEMORY/
+// SSAM_BUILD_WORKERS/SSAM_O11_WORKERS_MAX no longer reach a sized backend. host: the memory limits of the backends, the
+// router and the console must leave host.reserve of host.memory (the VPS MemTotal); a window that does not fit is refused
+// (CAPACITY_WINDOW, environmental: the watcher waits and tells the owner), never shrunk.
+// cpuShares on cgroup v2 (the VPS): docker writes cpu.weight = 1 + (shares-2)*9999/262142, so 2598 is the default weight
+// 100 (the router, the console, Coolify and Postgres keep 100) and 10463 is 400; 1024 would be 39 (review B1').
 // Without "sizing" the compose is exactly as before.
 export const SIZING_TIERS=['hot','other'];
 export const CAPACITY_WINDOW='CAPACITY_WINDOW';
-const TIER_KEYS={cpus:'CPUS',buildWorkers:'BUILD_WORKERS',o11WorkersMax:'O11_WORKERS_MAX',queueMs:'BUILD_QUEUE_MS'};
-const TIER_FIELDS=['cpus','memory','cpuShares',...Object.keys(TIER_KEYS).filter(k=>k!=='cpus')];
+const TIER_FIELDS=['cpus','memory','cpuShares','buildWorkers','o11WorkersMax','queueMs'];
 const PAIR_NAME=/^o11-\d+\.\d+\.\d+-odc-\d+\.\d+\.\d+$/;
 const mib=value=>{const m=/^(\d+)([mg])$/i.exec(String(value));return m?Number(m[1])*(m[2].toLowerCase()==='g'?1024:1):null;};
-const isCpus=value=>/^\d+(?:\.\d+)?$/.test(String(value))&&Number(value)>0;
-// The index of the hot pair in the window: the pinned one, else the most routed (ties: the earlier pair, the default first).
+const isCpus=value=>/^\d+(?:\.\d+)?$/.test(String(value))&&Number(value)>0&&Number(value)<=64;
+const count=v=>Number.isInteger(v)&&v>=0;
+export const cpuWeight=shares=>1+Math.floor((shares-2)*9999/262142);
+// The use of a pair as a sort key: heavy calls of 7 days first, then active clients of 14 days.
+const useOf=(usage,name)=>[usage?.[name]?.heavy??0,usage?.[name]?.active??0];
+const more=(a,b)=>a[0]!==b[0]?a[0]>b[0]:a[1]>b[1];
+// The index of the hot pair in the window: the pinned one, else the most used (ties: the earlier pair, the default first).
 export function hotPairIndex(manifest,{window=manifest.window??3}={}){
- const pairs=versionPairs(manifest,window),pin=manifest.sizing?.hotPair,routed=manifest.sizing?.routed??{};
+ const pairs=versionPairs(manifest,window),pin=manifest.sizing?.hotPair,usage=manifest.sizing?.usage;
  if(pin!==undefined&&pin!==null){const at=pairs.findIndex(p=>p.name===pin);if(at<0)throw new Error('sizing.hotPair names no pair of the window.');return at;}
- return pairs.reduce((best,p,i)=>(routed[p.name]??0)>(routed[pairs[best].name]??0)?i:best,0);
+ return pairs.reduce((best,p,i)=>more(useOf(usage,p.name),useOf(usage,pairs[best].name))?i:best,0);
 }
 export const hotPairName=manifest=>manifest.sizing===undefined?null:versionPairs(manifest)[hotPairIndex(manifest)].name;
 export function checkSizing(sizing){
  if(!sizing||typeof sizing!=='object'||Array.isArray(sizing))throw new Error('Invalid sizing.');
- const known=new Set([...SIZING_TIERS,'router','host','routed','hotPair']);
+ const known=new Set([...SIZING_TIERS,'router','host','usage','hotPair']);
  for(const k of Object.keys(sizing))if(!known.has(k))throw new Error('Unknown sizing key '+k+'.');
  for(const tier of SIZING_TIERS){
   const t=sizing[tier];
@@ -87,20 +96,27 @@ export function checkSizing(sizing){
   if(!isCpus(t.cpus))throw new Error('Invalid sizing.'+tier+'.cpus.');
   if(!mib(t.memory)||mib(t.memory)<1024)throw new Error('Invalid sizing.'+tier+'.memory.');
   if(!Number.isInteger(t.cpuShares)||t.cpuShares<2||t.cpuShares>262144)throw new Error('Invalid sizing.'+tier+'.cpuShares.');
-  for(const k of ['buildWorkers','o11WorkersMax'])if(!Number.isInteger(t[k])||t[k]<1||t[k]>64)throw new Error('Invalid sizing.'+tier+'.'+k+'.');
-  if(!Number.isInteger(t.queueMs)||t.queueMs<0)throw new Error('Invalid sizing.'+tier+'.queueMs.');
+  for(const k of ['buildWorkers','o11WorkersMax'])if(!Number.isInteger(t[k])||t[k]<1||t[k]>16)throw new Error('Invalid sizing.'+tier+'.'+k+'.');
+  if(!Number.isInteger(t.queueMs)||t.queueMs<0||t.queueMs>3600000)throw new Error('Invalid sizing.'+tier+'.queueMs.');
  }
- if(sizing.router!==undefined&&(!isCpus(sizing.router?.cpus)||!mib(sizing.router?.memory)||Object.keys(sizing.router).some(k=>!['cpus','memory'].includes(k))))throw new Error('Invalid sizing.router.');
+ if(sizing.router!==undefined&&(!isCpus(sizing.router?.cpus)||!mib(sizing.router?.memory)||mib(sizing.router.memory)<256||Object.keys(sizing.router).some(k=>!['cpus','memory'].includes(k))))throw new Error('Invalid sizing.router.');
  if(sizing.host!==undefined&&(!mib(sizing.host?.memory)||!mib(sizing.host?.reserve)||Object.keys(sizing.host).some(k=>!['memory','reserve'].includes(k))))throw new Error('Invalid sizing.host.');
- if(sizing.routed!==undefined&&(!sizing.routed||typeof sizing.routed!=='object'||Array.isArray(sizing.routed)||Object.entries(sizing.routed).some(([k,v])=>!PAIR_NAME.test(k)||!Number.isInteger(v)||v<0)))throw new Error('Invalid sizing.routed.');
+ if(sizing.usage!==undefined&&(!sizing.usage||typeof sizing.usage!=='object'||Array.isArray(sizing.usage)||Object.entries(sizing.usage).some(([k,v])=>!PAIR_NAME.test(k)||!v||typeof v!=='object'||Object.keys(v).sort().join()!=='active,heavy'||!count(v.heavy)||!count(v.active))))throw new Error('Invalid sizing.usage.');
  if(sizing.hotPair!==undefined&&sizing.hotPair!==null&&!PAIR_NAME.test(sizing.hotPair))throw new Error('Invalid sizing.hotPair.');
  return sizing;
 }
-// The router counts of the live routing.json (pair name -> licenses), kept for the pairs of the window only.
-export function withRouted(manifest,routed){
- if(manifest.sizing===undefined||!routed)return manifest;
- const names=new Set(versionPairs(manifest).map(p=>p.name)),next=structuredClone(manifest);
- next.sizing.routed=Object.fromEntries(Object.entries(routed).filter(([k,v])=>names.has(k)&&Number.isInteger(v)&&v>0).sort(([a],[b])=>a.localeCompare(b)));
+// The live usage counts (vigia/usage-count.cjs: pair name -> {heavy, active}) recorded in the manifest. A pair that left the
+// window has its counts folded into the router's default pair (the first), where the router sends its clients
+// (routeOf -> fallback) until their next hello; an entry that is not counts is ignored. null usage keeps the recorded counts.
+export function withUsage(manifest,usage){
+ if(manifest.sizing===undefined||!usage||typeof usage!=='object'||Array.isArray(usage))return manifest;
+ const pairs=versionPairs(manifest),names=new Set(pairs.map(p=>p.name)),next=structuredClone(manifest),out={};
+ for(const [name,v] of Object.entries(usage)){
+  if(!PAIR_NAME.test(name)||!v||typeof v!=='object'||!count(v.heavy)||!count(v.active))continue;
+  const into=names.has(name)?name:pairs[0].name,at=out[into]??={heavy:0,active:0};
+  at.heavy+=v.heavy;at.active+=v.active;
+ }
+ next.sizing.usage=Object.fromEntries(Object.entries(out).filter(([,v])=>v.heavy||v.active).sort(([a],[b])=>a.localeCompare(b)));
  checkSizing(next.sizing);return next;
 }
 // The memory limits of a sized window in MiB (backends, router, console) against host.memory - host.reserve. A window that
@@ -114,7 +130,6 @@ export function hostBudget(manifest,{window=manifest.window??3}={}){
  if(used>available)throw Object.assign(new Error(`A window of ${n} pairs needs ${used} MiB of memory limits (hot ${sizing.hot.memory}, ${n-1} x ${sizing.other.memory}, router, console) and the host leaves ${available} MiB after its reserve; it is not deployed until a pair leaves or the owner changes sizing.`),{code:CAPACITY_WINDOW,environmental:true});
  return {used,available,pairs:n};
 }
-const tierVar=(tier,key,value)=>'${SSAM_'+tier.toUpperCase()+'_'+TIER_KEYS[key]+':-'+value+'}';
 // The tier of each backend, in pair order ('hot' | 'other'), or null without sizing.
 export function backendTiers(manifest,{window=manifest.window??3}={}){
  if(manifest.sizing===undefined)return null;
@@ -122,21 +137,31 @@ export function backendTiers(manifest,{window=manifest.window??3}={}){
  const hot=hotPairIndex(manifest,{window});
  return versionPairs(manifest,window).map((_,i)=>i===hot?'hot':'other');
 }
+// What docker inspect must show on each sized service after a deploy (the deploy kit's check, every backend): NanoCpus,
+// Memory bytes, CpuShares and the pool environment. null without sizing.
+export function sizedExpectations(manifest,{window=manifest.window??3}={}){
+ const tiers=backendTiers(manifest,{window});if(!tiers)return null;
+ const s=manifest.sizing,bytes=v=>mib(v)*1024*1024,nano=v=>Math.round(Number(v)*1e9);
+ const out={};
+ tiers.forEach((tier,i)=>{const t=s[tier];out[`ssam-server-v${i+1}`]={tier,pair:versionPairs(manifest,window)[i].name,NanoCpus:nano(t.cpus),Memory:bytes(t.memory),CpuShares:t.cpuShares,
+  env:{SSAM_BUILD_WORKERS:String(t.buildWorkers),SSAM_O11_WORKERS_MAX:String(t.o11WorkersMax),SSAM_BUILD_QUEUE_MS:String(t.queueMs)}};});
+ if(s.router)out['ssam-router']={NanoCpus:nano(s.router.cpus),Memory:bytes(s.router.memory)};
+ return out;
+}
 function applySizing(c,manifest,tiers,window){
  const sizing=manifest.sizing,router=c.services['ssam-router'];
  hostBudget(manifest,{window});
  // The whole sizing rides on the router, so the watcher reads it back from the live compose (sizingOfCompose).
  router.labels['ssam.sizing']=JSON.stringify(sizing);
- if(sizing.router)router.deploy={resources:{limits:{...router.deploy.resources.limits,cpus:'${SSAM_ROUTER_CPUS:-'+sizing.router.cpus+'}',memory:sizing.router.memory}}};
+ if(sizing.router)router.deploy={resources:{limits:{...router.deploy.resources.limits,cpus:sizing.router.cpus,memory:sizing.router.memory}}};
  tiers.forEach((tier,i)=>{
   const s=c.services[`ssam-server-v${i+1}`],t=sizing[tier];
-  s.deploy.resources.limits={...s.deploy.resources.limits,cpus:tierVar(tier,'cpus',t.cpus),memory:t.memory};
+  s.deploy.resources.limits={...s.deploy.resources.limits,cpus:t.cpus,memory:t.memory};
   s.cpu_shares=t.cpuShares;
-  Object.assign(s.environment,{SSAM_BUILD_WORKERS:tierVar(tier,'buildWorkers',t.buildWorkers),SSAM_O11_WORKERS_MAX:tierVar(tier,'o11WorkersMax',t.o11WorkersMax),SSAM_BUILD_QUEUE_MS:tierVar(tier,'queueMs',t.queueMs)});
+  Object.assign(s.environment,{SSAM_BUILD_WORKERS:String(t.buildWorkers),SSAM_O11_WORKERS_MAX:String(t.o11WorkersMax),SSAM_BUILD_QUEUE_MS:String(t.queueMs)});
   s.labels['ssam.sizing']=tier;
  });
 }
-// The sizing a deployed compose was generated with (the router's ssam.sizing label), or undefined for an unsized one.
 export function sizingOfCompose(compose){
  const text=compose?.services?.['ssam-router']?.labels?.['ssam.sizing'];
  if(text===undefined)return undefined;

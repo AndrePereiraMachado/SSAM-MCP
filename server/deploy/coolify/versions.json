@@ -5,7 +5,7 @@
     "hot": {
       "cpus": "5",
       "memory": "10g",
-      "cpuShares": 4096,
+      "cpuShares": 10463,
       "buildWorkers": 6,
       "o11WorkersMax": 2,
       "queueMs": 240000
@@ -13,7 +13,7 @@
     "other": {
       "cpus": "2",
       "memory": "4g",
-      "cpuShares": 1024,
+      "cpuShares": 2598,
       "buildWorkers": 2,
       "o11WorkersMax": 1,
       "queueMs": 240000
@@ -26,12 +26,25 @@
       "memory": "32089m",
       "reserve": "4g"
     },
-    "routed": {
-      "o11-11.55.93-odc-1.7.29": 2,
-      "o11-11.55.94-odc-1.7.30": 3,
-      "o11-11.55.94-odc-1.7.31": 1,
-      "o11-11.55.95-odc-1.7.32": 1
-    }
+    "usage": {
+      "o11-11.55.93-odc-1.7.29": {
+        "heavy": 0,
+        "active": 1
+      },
+      "o11-11.55.94-odc-1.7.30": {
+        "heavy": 6,
+        "active": 3
+      },
+      "o11-11.55.94-odc-1.7.31": {
+        "heavy": 1044,
+        "active": 1
+      },
+      "o11-11.55.95-odc-1.7.32": {
+        "heavy": 0,
+        "active": 1
+      }
+    },
+    "hotPair": "o11-11.55.94-odc-1.7.31"
   },
   "odc": [
     {

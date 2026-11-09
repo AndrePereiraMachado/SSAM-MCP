@@ -196,17 +196,17 @@
       "deploy": {
         "resources": {
           "limits": {
-            "cpus": "${SSAM_HOT_CPUS:-5}",
-            "memory": "10g",
+            "cpus": "2",
+            "memory": "4g",
             "pids": "${SSAM_PIDS:-4096}"
           }
         }
       },
       "environment": {
-        "SSAM_BUILD_WORKERS": "${SSAM_HOT_BUILD_WORKERS:-6}",
+        "SSAM_BUILD_WORKERS": "2",
         "SSAM_DATABASE_URL": "${SSAM_DATABASE_URL:?set SSAM_DATABASE_URL (postgres://user:password@host:5432/database, the internal URL of the Postgres resource)}",
         "SSAM_HOSTED_SSAM_CODE": "${SSAM_HOSTED_SSAM_CODE:-}",
-        "SSAM_O11_WORKERS_MAX": "${SSAM_HOT_O11_WORKERS_MAX:-2}",
+        "SSAM_O11_WORKERS_MAX": "1",
         "SSAM_O11_WORKER_BASE_CACHE": "${SSAM_O11_WORKER_BASE_CACHE:-off}",
         "SSAM_LOCAL_UPLOAD": "${SSAM_LOCAL_UPLOAD:-0}",
         "SSAM_SCREEN_RENDER": "${SSAM_SCREEN_RENDER:-0}",
@@ -225,7 +225,7 @@
         "SSAM_BACKEND_NAME": "o11-11.55.94-odc-1.7.30",
         "SSAM_RUNTIME_DIR": "/data/server/versions/o11-11.55.94-odc-1.7.30",
         "SSAM_SERVED_VERSIONS": "{\"odc\":[\"1.7.30\",\"1.7.29\",\"1.7.28\",\"1.7.31\"],\"o11\":[\"11.55.94\",\"11.55.93\",\"11.55.92\"]}",
-        "SSAM_BUILD_QUEUE_MS": "${SSAM_HOT_BUILD_QUEUE_MS:-240000}"
+        "SSAM_BUILD_QUEUE_MS": "240000"
       },
       "expose": [
         "7310"
@@ -250,7 +250,7 @@
         "ssam.o11": "11.55.94",
         "ssam.default": "true",
         "ssam.image.digest": "sha256:3401cc15f08332dcfd35c3e17487e058775e5b727e65afb3155278ec0e577bbf",
-        "ssam.sizing": "hot"
+        "ssam.sizing": "other"
       },
       "logging": {
         "driver": "json-file",
@@ -313,7 +313,7 @@
           "volume": {}
         }
       ],
-      "cpu_shares": 4096
+      "cpu_shares": 2598
     },
     "ssam-server-v2": {
       "cap_drop": [
@@ -322,17 +322,17 @@
       "deploy": {
         "resources": {
           "limits": {
-            "cpus": "${SSAM_OTHER_CPUS:-2}",
+            "cpus": "2",
             "memory": "4g",
             "pids": "${SSAM_PIDS:-4096}"
           }
         }
       },
       "environment": {
-        "SSAM_BUILD_WORKERS": "${SSAM_OTHER_BUILD_WORKERS:-2}",
+        "SSAM_BUILD_WORKERS": "2",
         "SSAM_DATABASE_URL": "${SSAM_DATABASE_URL:?set SSAM_DATABASE_URL (postgres://user:password@host:5432/database, the internal URL of the Postgres resource)}",
         "SSAM_HOSTED_SSAM_CODE": "${SSAM_HOSTED_SSAM_CODE:-}",
-        "SSAM_O11_WORKERS_MAX": "${SSAM_OTHER_O11_WORKERS_MAX:-1}",
+        "SSAM_O11_WORKERS_MAX": "1",
         "SSAM_O11_WORKER_BASE_CACHE": "${SSAM_O11_WORKER_BASE_CACHE:-off}",
         "SSAM_LOCAL_UPLOAD": "${SSAM_LOCAL_UPLOAD:-0}",
         "SSAM_SCREEN_RENDER": "${SSAM_SCREEN_RENDER:-0}",
@@ -351,7 +351,7 @@
         "SSAM_BACKEND_NAME": "o11-11.55.93-odc-1.7.29",
         "SSAM_RUNTIME_DIR": "/data/server/versions/o11-11.55.93-odc-1.7.29",
         "SSAM_SERVED_VERSIONS": "{\"odc\":[\"1.7.30\",\"1.7.29\",\"1.7.28\",\"1.7.31\"],\"o11\":[\"11.55.94\",\"11.55.93\",\"11.55.92\"]}",
-        "SSAM_BUILD_QUEUE_MS": "${SSAM_OTHER_BUILD_QUEUE_MS:-240000}"
+        "SSAM_BUILD_QUEUE_MS": "240000"
       },
       "expose": [
         "7310"
@@ -439,7 +439,7 @@
           "volume": {}
         }
       ],
-      "cpu_shares": 1024
+      "cpu_shares": 2598
     },
     "ssam-server-v3": {
       "cap_drop": [
@@ -448,17 +448,17 @@
       "deploy": {
         "resources": {
           "limits": {
-            "cpus": "${SSAM_OTHER_CPUS:-2}",
+            "cpus": "2",
             "memory": "4g",
             "pids": "${SSAM_PIDS:-4096}"
           }
         }
       },
       "environment": {
-        "SSAM_BUILD_WORKERS": "${SSAM_OTHER_BUILD_WORKERS:-2}",
+        "SSAM_BUILD_WORKERS": "2",
         "SSAM_DATABASE_URL": "${SSAM_DATABASE_URL:?set SSAM_DATABASE_URL (postgres://user:password@host:5432/database, the internal URL of the Postgres resource)}",
         "SSAM_HOSTED_SSAM_CODE": "${SSAM_HOSTED_SSAM_CODE:-}",
-        "SSAM_O11_WORKERS_MAX": "${SSAM_OTHER_O11_WORKERS_MAX:-1}",
+        "SSAM_O11_WORKERS_MAX": "1",
         "SSAM_O11_WORKER_BASE_CACHE": "${SSAM_O11_WORKER_BASE_CACHE:-off}",
         "SSAM_LOCAL_UPLOAD": "${SSAM_LOCAL_UPLOAD:-0}",
         "SSAM_SCREEN_RENDER": "${SSAM_SCREEN_RENDER:-0}",
@@ -477,7 +477,7 @@
         "SSAM_BACKEND_NAME": "o11-11.55.92-odc-1.7.28",
         "SSAM_RUNTIME_DIR": "/data/server/versions/o11-11.55.92-odc-1.7.28",
         "SSAM_SERVED_VERSIONS": "{\"odc\":[\"1.7.30\",\"1.7.29\",\"1.7.28\",\"1.7.31\"],\"o11\":[\"11.55.94\",\"11.55.93\",\"11.55.92\"]}",
-        "SSAM_BUILD_QUEUE_MS": "${SSAM_OTHER_BUILD_QUEUE_MS:-240000}"
+        "SSAM_BUILD_QUEUE_MS": "240000"
       },
       "expose": [
         "7310"
@@ -565,7 +565,7 @@
           "volume": {}
         }
       ],
-      "cpu_shares": 1024
+      "cpu_shares": 2598
     },
     "ssam-server-v4": {
       "cap_drop": [
@@ -574,17 +574,17 @@
       "deploy": {
         "resources": {
           "limits": {
-            "cpus": "${SSAM_OTHER_CPUS:-2}",
-            "memory": "4g",
+            "cpus": "5",
+            "memory": "10g",
             "pids": "${SSAM_PIDS:-4096}"
           }
         }
       },
       "environment": {
-        "SSAM_BUILD_WORKERS": "${SSAM_OTHER_BUILD_WORKERS:-2}",
+        "SSAM_BUILD_WORKERS": "6",
         "SSAM_DATABASE_URL": "${SSAM_DATABASE_URL:?set SSAM_DATABASE_URL (postgres://user:password@host:5432/database, the internal URL of the Postgres resource)}",
         "SSAM_HOSTED_SSAM_CODE": "${SSAM_HOSTED_SSAM_CODE:-}",
-        "SSAM_O11_WORKERS_MAX": "${SSAM_OTHER_O11_WORKERS_MAX:-1}",
+        "SSAM_O11_WORKERS_MAX": "2",
         "SSAM_O11_WORKER_BASE_CACHE": "${SSAM_O11_WORKER_BASE_CACHE:-off}",
         "SSAM_LOCAL_UPLOAD": "${SSAM_LOCAL_UPLOAD:-0}",
         "SSAM_SCREEN_RENDER": "${SSAM_SCREEN_RENDER:-0}",
@@ -603,7 +603,7 @@
         "SSAM_BACKEND_NAME": "o11-11.55.94-odc-1.7.31",
         "SSAM_RUNTIME_DIR": "/data/server/versions/o11-11.55.94-odc-1.7.31",
         "SSAM_SERVED_VERSIONS": "{\"odc\":[\"1.7.30\",\"1.7.29\",\"1.7.28\",\"1.7.31\"],\"o11\":[\"11.55.94\",\"11.55.93\",\"11.55.92\"]}",
-        "SSAM_BUILD_QUEUE_MS": "${SSAM_OTHER_BUILD_QUEUE_MS:-240000}"
+        "SSAM_BUILD_QUEUE_MS": "240000"
       },
       "expose": [
         "7310"
@@ -628,7 +628,7 @@
         "ssam.o11": "11.55.94",
         "ssam.default": "false",
         "ssam.image.digest": "sha256:1fdf39da2d32cf142a9e95d44061392c601ccc4f9ae07c8821f311a8bf5f2013",
-        "ssam.sizing": "other"
+        "ssam.sizing": "hot"
       },
       "logging": {
         "driver": "json-file",
@@ -691,7 +691,7 @@
           "volume": {}
         }
       ],
-      "cpu_shares": 1024
+      "cpu_shares": 10463
     },
     "ssam-server-v5": {
       "cap_drop": [
@@ -700,17 +700,17 @@
       "deploy": {
         "resources": {
           "limits": {
-            "cpus": "${SSAM_OTHER_CPUS:-2}",
+            "cpus": "2",
             "memory": "4g",
             "pids": "${SSAM_PIDS:-4096}"
           }
         }
       },
       "environment": {
-        "SSAM_BUILD_WORKERS": "${SSAM_OTHER_BUILD_WORKERS:-2}",
+        "SSAM_BUILD_WORKERS": "2",
         "SSAM_DATABASE_URL": "${SSAM_DATABASE_URL:?set SSAM_DATABASE_URL (postgres://user:password@host:5432/database, the internal URL of the Postgres resource)}",
         "SSAM_HOSTED_SSAM_CODE": "${SSAM_HOSTED_SSAM_CODE:-}",
-        "SSAM_O11_WORKERS_MAX": "${SSAM_OTHER_O11_WORKERS_MAX:-1}",
+        "SSAM_O11_WORKERS_MAX": "1",
         "SSAM_O11_WORKER_BASE_CACHE": "${SSAM_O11_WORKER_BASE_CACHE:-off}",
         "SSAM_LOCAL_UPLOAD": "${SSAM_LOCAL_UPLOAD:-0}",
         "SSAM_SCREEN_RENDER": "${SSAM_SCREEN_RENDER:-0}",
@@ -729,7 +729,7 @@
         "SSAM_BACKEND_NAME": "o11-11.55.95-odc-1.7.32",
         "SSAM_RUNTIME_DIR": "/data/server/versions/o11-11.55.95-odc-1.7.32",
         "SSAM_SERVED_VERSIONS": "{\"odc\":[\"1.7.30\",\"1.7.29\",\"1.7.28\",\"1.7.31\",\"1.7.32\"],\"o11\":[\"11.55.94\",\"11.55.93\",\"11.55.92\",\"11.55.95\"]}",
-        "SSAM_BUILD_QUEUE_MS": "${SSAM_OTHER_BUILD_QUEUE_MS:-240000}"
+        "SSAM_BUILD_QUEUE_MS": "240000"
       },
       "expose": [
         "7310"
@@ -817,7 +817,7 @@
           "volume": {}
         }
       ],
-      "cpu_shares": 1024
+      "cpu_shares": 2598
     },
     "ssam-router": {
       "cap_drop": [
@@ -826,7 +826,7 @@
       "deploy": {
         "resources": {
           "limits": {
-            "cpus": "${SSAM_ROUTER_CPUS:-1}",
+            "cpus": "1",
             "memory": "512m",
             "pids": "${SSAM_PIDS:-4096}"
           }
@@ -899,7 +899,7 @@
         "traefik.http.middlewares.ssam-console-headers.headers.framedeny": "true",
         "traefik.http.middlewares.ssam-console-headers.headers.referrerpolicy": "no-referrer",
         "traefik.http.middlewares.ssam-console-headers.headers.customresponseheaders.Server": "",
-        "ssam.sizing": "{\"hot\":{\"cpus\":\"5\",\"memory\":\"10g\",\"cpuShares\":4096,\"buildWorkers\":6,\"o11WorkersMax\":2,\"queueMs\":240000},\"other\":{\"cpus\":\"2\",\"memory\":\"4g\",\"cpuShares\":1024,\"buildWorkers\":2,\"o11WorkersMax\":1,\"queueMs\":240000},\"router\":{\"cpus\":\"1\",\"memory\":\"512m\"},\"host\":{\"memory\":\"32089m\",\"reserve\":\"4g\"},\"routed\":{\"o11-11.55.93-odc-1.7.29\":2,\"o11-11.55.94-odc-1.7.30\":3,\"o11-11.55.94-odc-1.7.31\":1,\"o11-11.55.95-odc-1.7.32\":1}}"
+        "ssam.sizing": "{\"hot\":{\"cpus\":\"5\",\"memory\":\"10g\",\"cpuShares\":10463,\"buildWorkers\":6,\"o11WorkersMax\":2,\"queueMs\":240000},\"other\":{\"cpus\":\"2\",\"memory\":\"4g\",\"cpuShares\":2598,\"buildWorkers\":2,\"o11WorkersMax\":1,\"queueMs\":240000},\"router\":{\"cpus\":\"1\",\"memory\":\"512m\"},\"host\":{\"memory\":\"32089m\",\"reserve\":\"4g\"},\"usage\":{\"o11-11.55.93-odc-1.7.29\":{\"heavy\":0,\"active\":1},\"o11-11.55.94-odc-1.7.30\":{\"heavy\":6,\"active\":3},\"o11-11.55.94-odc-1.7.31\":{\"heavy\":1044,\"active\":1},\"o11-11.55.95-odc-1.7.32\":{\"heavy\":0,\"active\":1}},\"hotPair\":\"o11-11.55.94-odc-1.7.31\"}"
       },
       "logging": {
         "driver": "json-file",
