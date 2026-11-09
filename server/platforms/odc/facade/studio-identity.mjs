@@ -40,7 +40,14 @@ export const fourPart = value => { const n = numbersOf(value); return n?.length 
 const compare = (a, b, count) => { for (let i = 0; i < count; i++) if (a[i] !== b[i]) return a[i] < b[i] ? -1 : 1; return 0; };
 
 // The deployment window supplements the image; it never replaces its local kernel.
+// Window 4x4 (design B, o11-kernels.mjs): on a multi-O11 kernel the O11 window is exactly the kernels this backend serves
+// (kernel.o11Builds: the image's kernels the deployment still lists), the same on every backend, and the router never
+// selects a backend by its O11 version: a Service Studio outside it is older (STUDIO_UPDATE_REQUIRED) or newer, never
+// "served elsewhere". A retired version (dropped from SSAM_SERVED_VERSIONS, its kernel still in the image) is outside it.
 export function servedVersions(lane, kernel = {}, env = process.env) {
+  const multi = lane === 'o11' && kernel?.o11Builds && typeof kernel.o11Builds === 'object' && !Array.isArray(kernel.o11Builds)
+    ? Object.keys(kernel.o11Builds).map(v => threePart(v)).filter(Boolean) : [];
+  if (multi.length) return [...new Set(multi)].sort((a,b) => compare(a.split('.').map(Number), b.split('.').map(Number), 3));
   let injected = {};
   if (env.SSAM_SERVED_VERSIONS) {
     injected = JSON.parse(env.SSAM_SERVED_VERSIONS);
@@ -49,7 +56,9 @@ export function servedVersions(lane, kernel = {}, env = process.env) {
   const configured = kernel?.servedVersions?.[lane] ?? [];
   const deployed = injected[lane] ?? [];
   if (!Array.isArray(configured) || !Array.isArray(deployed)) throw new Error('Invalid served versions configuration');
-  const values = [kernel?.[lane], env[lane === 'odc' ? 'SSAM_IMAGE_ODC' : 'SSAM_IMAGE_O11'], ...configured, ...deployed];
+  // The image's declared versions: one, or a list (a multi-O11 image's SSAM_IMAGE_O11, "11.55.92,11.55.93,...").
+  const image = String(env[lane === 'odc' ? 'SSAM_IMAGE_ODC' : 'SSAM_IMAGE_O11'] ?? '').split(',');
+  const values = [kernel?.[lane], ...image, ...configured, ...deployed];
   return [...new Set(values.map(v => threePart(typeof v === 'object' ? v?.version : v)).filter(Boolean))]
     .sort((a,b) => compare(a.split('.').map(Number), b.split('.').map(Number), 3));
 }

@@ -2159,11 +2159,16 @@ export async function startupKernel({ dir, fileVersion, env = process.env, log =
   const lib = await import('./lib.mjs');
   const folder = of => { try { return of(); } catch { return null; } };
   const declared = image ?? ki.imageKernel({ env, studioDirs: { o11: folder(() => o11LaneOf(LANES.o11.lane, { env }).studioDir), odc: folder(() => lib.odcStudioDir(env)) } });
-  const { kernel: paired, refused } = ki.kernelPair(detected, declared);
+  const { kernel: paired, refused, refusedKernels = [] } = ki.kernelPair(detected, declared);
   const { studioBuildPolicy, ...shape } = paired;
   log({ event: 'kernel', kernel: shape });
   for (const [lane, why] of Object.entries(refused)) log({ event: 'kernel-version-missing', lane, ...why });
+  // Window 4x4: one line per O11 kernel of a multi-O11 image that is off (its Studio folder or CLI is not the declared one).
+  for (const why of refusedKernels) log({ event: 'kernel-version-missing', ...why });
   const builds = ki.servedBuilds({ kernel: shape, image: declared, exe });
+  // Window 4x4: the O11 kernels this backend serves (o11-kernels.mjs), {version: build}; the default stays kernel.o11.
+  const o11Builds = ki.o11ServedBuilds({ kernel: shape, image: declared, env });
+  if (o11Builds) { shape.o11Builds = o11Builds; log({ event: 'o11-kernels', default: shape.o11, served: o11Builds, off: refusedKernels.map(r => r.version) }); }
   const policy = buildPolicyOf(studioBuildPolicy);
   log({ event: 'studio-builds', builds, studioBuildPolicy: { o11: policy.o11, odc: policy.odc }, ...(policy.invalid ? { policyInvalid: true } : {}) });
   const kernel = { ...shape, builds, ...(studioBuildPolicy !== undefined ? { studioBuildPolicy } : {}) };
