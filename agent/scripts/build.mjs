@@ -298,7 +298,9 @@ export function readAsarPackage(asarFile) {
 // node_modules/<name> going up from where the requirer is), must reach in the app.asar a package of the version the lock
 // pins. electron-builder may place packages elsewhere than the lock (it hoisted electron-updater's semver to
 // node_modules/semver in the Mac build A); only what Node would load counts. A missing optional dependency is allowed.
-// has(key) and versionOf(key) read the packaged tree; keys are like node_modules/a/node_modules/@s/b ('' is the app).
+// Review R4: each package found must also hold the file Node loads for it (packageEntries), not only its package.json.
+// has(key), manifestOf(key) (the parsed package.json or null) and hasFile(file) read the packaged tree; keys are like
+// node_modules/a/node_modules/@s/b ('' is the app), files like node_modules/a/lib/index.js.
 export function resolvePackage(has, from, name) {
   for (let at = from; ; at = at.includes('/node_modules/') ? at.slice(0, at.lastIndexOf('/node_modules/')) : '') {
     const key = (at ? at + '/' : '') + 'node_modules/' + name;
@@ -306,10 +308,37 @@ export function resolvePackage(has, from, name) {
     if (!at) return null;
   }
 }
-export function packagedClosureProblems(lock, { has, versionOf }) {
+// The files Node may load for a package from its package.json, as lists of alternatives (one file of each list must exist):
+// "exports" for "." under the require conditions and under the import conditions (node and default after each; a target is an
+// exact file), else "main" with Node's extension and index search (falling back to index like Node does), else index.js.
+// A package whose "exports" gives "." no file under either set answers [[]] (nothing can satisfy it).
+const ENTRY_CONDITIONS = [['require', 'node', 'node-addons', 'default'], ['import', 'node', 'node-addons', 'default']];
+const entryPath = file => path.posix.normalize(String(file).replace(/^\.\//, ''));
+function exportTarget(value, conditions) {
+  if (typeof value === 'string') return value.startsWith('./') ? value : null;
+  if (Array.isArray(value)) { for (const item of value) { const found = exportTarget(item, conditions); if (found) return found; } return null; }
+  if (value && typeof value === 'object') {
+    for (const [key, next] of Object.entries(value)) if (conditions.includes(key)) { const found = exportTarget(next, conditions); if (found) return found; }
+  }
+  return null;
+}
+export function packageEntries(manifest) {
+  const exports = manifest?.exports;
+  if (exports !== undefined && exports !== null) {
+    const keys = typeof exports === 'object' && !Array.isArray(exports) ? Object.keys(exports) : [];
+    const dot = keys.some(key => key.startsWith('.')) ? exports['.'] : exports;
+    const targets = [...new Set(ENTRY_CONDITIONS.map(conditions => exportTarget(dot, conditions)).filter(Boolean).map(entryPath))];
+    return targets.length ? targets.map(file => [file]) : [[]];
+  }
+  const index = ['index.js', 'index.json', 'index.node'];
+  if (typeof manifest?.main !== 'string' || !manifest.main.trim()) return [index];
+  const main = entryPath(manifest.main).replace(/\/$/, '');
+  return [[...new Set([main, main + '.js', main + '.json', main + '.node', main + '/index.js', main + '/index.json', main + '/index.node', ...index])]];
+}
+export function packagedClosureProblems(lock, { has, manifestOf, hasFile }) {
   const packages = lock?.packages;
   if (!packages || !packages['']) return ['package-lock.json has no "packages" (lockfile v2 or v3 needed)'];
-  const problems = []; const seen = new Set();
+  const problems = []; const seen = new Set(); const checked = new Set();
   const queue = [{ lockKey: '', placed: '' }];
   while (queue.length) {
     const { lockKey, placed } = queue.shift();
@@ -323,19 +352,29 @@ export function packagedClosureProblems(lock, { has, versionOf }) {
       if (!target || packages[target].dev) { if (!optional) problems.push(`package-lock.json gives ${requirer} no ${name}`); continue; }
       const found = resolvePackage(has, placed, name);
       if (!found) { if (!optional && !packages[target].optional) problems.push(`${requirer} needs ${name} ${packages[target].version}, which the app.asar does not have where Node looks`); continue; }
-      const version = versionOf(found);
+      const manifest = manifestOf(found);
+      const version = manifest?.version ?? null;
       if (version !== packages[target].version) { problems.push(`${requirer} gets ${name} ${version ?? '(unreadable)'} at ${found} in the app.asar, not ${packages[target].version}`); continue; }
+      if (!checked.has(found)) {
+        checked.add(found);
+        for (const files of packageEntries(manifest))
+          if (!files.some(file => hasFile(found + '/' + file))) problems.push(`${found} in the app.asar has no ${files.length ? files[0] : 'file its "exports" gives for "."'}, the file Node loads for ${name}`);
+      }
       queue.push({ lockKey: target, placed: found });
     }
   }
   return problems;
 }
-// The packaged tree of an app.asar (@electron/asar): has/versionOf over its node_modules/**/package.json.
+// The packaged tree of an app.asar (@electron/asar): has/manifestOf over its node_modules/**/package.json, hasFile over its
+// files (listPackage lists folders too; a folder is no entry file, so only paths with no listed child count).
 export function asarTree(asarFile, asar = createRequire(import.meta.url)('@electron/asar')) {
-  const files = new Set(asar.listPackage(asarFile).map(file => file.replace(/\\/g, '/').replace(/^\//, '')));
+  const listed = asar.listPackage(asarFile).map(file => file.replace(/\\/g, '/').replace(/^\//, ''));
+  const folders = new Set(listed.map(file => file.slice(0, Math.max(0, file.lastIndexOf('/')))));
+  const files = new Set(listed.filter(file => !folders.has(file)));
   return {
     has: key => files.has(key + '/package.json'),
-    versionOf: key => { try { return JSON.parse(String(asar.extractFile(asarFile, (key + '/package.json').split('/').join(path.sep)))).version ?? null; } catch { return null; } },
+    manifestOf: key => { try { return JSON.parse(String(asar.extractFile(asarFile, (key + '/package.json').split('/').join(path.sep)))); } catch { return null; } },
+    hasFile: file => files.has(file),
   };
 }
 // Every app.asar under dist (the Windows win-unpacked and the macOS .app), each with the whole closure; none found is a problem.
