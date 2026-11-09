@@ -19,7 +19,7 @@ import {versionPairs,servedLists,backendsOf,isBackendManifest,versionBackends} f
 // changed served list: the attempt fails with its own code (rolled back after a deployment), never retried unseen. Usage
 // (the capacity hot tier) is never a code here: an unreadable count is a warning of the snapshot (USAGE_*), not a wait.
 export const REMOTE_WAITS=Object.freeze(['MEMORY_LOW','DISK_LOW','LOCK_BUSY','LOCK_LOST','NOT_WARM','REMOTE_UNAVAILABLE']);
-export const REMOTE_DEFECTS=Object.freeze(['REMOTE_FAILED','MODEL_PLUGINS_MISSING','MODEL_PLUGINS_MISMATCH','MODEL_PLUGINS_MOUNT','MODEL_PLUGINS_UNPINNED','CHECK_RECEIPT','PACK_HELLO_NOT_PRESENTED','SERVED_LIST_CHANGED','OFFERS_NOT_CHECKED']);
+export const REMOTE_DEFECTS=Object.freeze(['REMOTE_FAILED','MODEL_PLUGINS_MISSING','MODEL_PLUGINS_MISMATCH','MODEL_PLUGINS_MOUNT','MODEL_PLUGINS_UNPINNED','CHECK_RECEIPT','PACK_HELLO_NOT_PRESENTED','SERVED_LIST_CHANGED','OFFERS_NOT_CHECKED','IMAGE_KERNELS_DIFFER']);
 const here=path.dirname(fileURLToPath(import.meta.url));
 const hash=b=>createHash('sha256').update(b).digest('hex');
 const q=s=>"'"+String(s).replaceAll("'","'\\''")+"'";
@@ -113,6 +113,10 @@ export function backendCompose(compose,service){
  if(!svc)throw Error('The compose has no backend '+service+'.');
  return {services:{'ssam-server-v1':svc},volumes:value.volumes??{}};
 }
+// The O11 kernels each backend of a backend window declares (versionBackends: o11Kernels, else o11.kernels), keyed by its ODC
+// label: after a deployment the image every running backend runs must carry exactly those (its label ssam.kernels.o11;
+// remote-release.py check, review M1). A window of pairs has none.
+export const expectedKernelsOf=pinned=>isBackendManifest(pinned)?Object.fromEntries(versionBackends(pinned).map(b=>[b.odc,b.kernels])):null;
 // Text that reaches the owner's notice: printable, no markup or control characters, bounded.
 export const noticeText=value=>String(value??'').replace(/[^\w .,:;()/'=+#?-]/g,'').slice(0,300);
 // The text of a source notice, which carries owner command lines: the same, plus the quotes and backslashes of a command
@@ -528,13 +532,18 @@ export function createAutoRuntime(config,runtime) {
   async composeFor(s,baseline,pinned,change){return preserveCompose(await load(baseline),pinned,change);},
   backup:(s,id)=>ssh(s,{action:'backup',id}),
   async prepare(s,r){
-   // A window round (r.service): one backend, its own compose service; an O11 round writes its kernel.json only (no features).
+   // A window round (r.service): one backend, its own compose service. An O11 round (r.lane o11, round o11-<v>) writes the
+   // kernel.json of each rebuilt backend only: no features and nothing else of a running backend (remote-release.py kernelOnly,
+   // review M4); an ODC round always sends the new backend's features.
    if(r.service){
-    const features=r.features?fs.readFileSync(r.features):null;
+    const kernelOnly=r.lane==='o11';
+    if(kernelOnly&&!/^o11-\d+\.\d+\.\d+$/.test(String(r.round??'')))throw Error('A kernel-only prepare belongs to an O11 round.');
+    if(!kernelOnly&&!r.features)throw Object.assign(Error('The new ODC backend '+r.service+' has no ODC features; nothing was sent.'),{code:'FEATURES_MISSING'});
+    const features=kernelOnly?null:fs.readFileSync(r.features);
     if(features&&r.featuresSha256&&hash(features)!==r.featuresSha256)throw Object.assign(Error('The ODC features changed after they were recorded; nothing was sent.'),{code:'FEATURES_CHANGED'});
     const archive=path.join(r.dir,'deploy.tar.gz');if(!fs.existsSync(archive))await runtime.archiveDeploy(await runtime.fullHead(),archive);
     return ssh(s,{action:'prepare',id:r.service,built:r.built,kernel:r.kernel,compose:backendCompose(r.compose,r.service),
-     archive:fs.readFileSync(archive).toString('base64'),...(features?{features:features.toString('base64')}:{kernelOnly:true}),modelPlugins:modelPlugins()});
+     archive:fs.readFileSync(archive).toString('base64'),...(kernelOnly?{kernelOnly:true,round:r.round}:{features:features.toString('base64')}),modelPlugins:modelPlugins()});
    }
    const features=fs.readFileSync(r.features);
    if(r.featuresSha256&&hash(features)!==r.featuresSha256)throw Object.assign(Error('The ODC features changed after they were recorded; nothing was sent.'),{code:'FEATURES_CHANGED'});
@@ -563,12 +572,13 @@ export function createAutoRuntime(config,runtime) {
    const extra=before?{}:{modelPlugins:modelPlugins(),...(Object.keys(o11Proven).length?{o11Proven}:{}),...offered};
    // A deployment: every running backend must run with the pin's served list (a retained one: the list it was deployed with).
    const expectedServed=!before&&expected.pinned?expectedServedOf(expected.pinned):null;
+   const expectedKernels=!before&&expected.pinned?expectedKernelsOf(expected.pinned):null;
    // The signed offers belong to the new pair only (A1 of the F1 review): keyed like packHellos, so a retained backend (even one
    // that shares a Service Studio or an ODC Studio with the new pair) is asked none, and the remote verifier requires exactly one
    // backend to have offered and delivered all of them (requireOffers). A rollback checks no offer.
    const own=!before&&pairKey?(expected.bridges?.offers??[]):[];
    const offers=own.length?{[pairKey]:own}:[];
-   return ssh(s,{action:'check',...expected,...(expected.pinned?{pinned:pinnedProjection(expected.pinned)}:{}),budget,expectedBackends:before,checkSources,...(before?{}:{modelPlugins:extra.modelPlugins,requirePresented:!!hello,...(own.length?{requireOffers:own.length}:{}),...(expectedServed?{expectedServed}:{})}),checkSource:checkSource(budget,offers,false,hello,extra)});
+   return ssh(s,{action:'check',...expected,...(expected.pinned?{pinned:pinnedProjection(expected.pinned)}:{}),budget,expectedBackends:before,checkSources,...(before?{}:{modelPlugins:extra.modelPlugins,requirePresented:!!hello,...(own.length?{requireOffers:own.length}:{}),...(expectedServed?{expectedServed}:{}),...(expectedKernels?{expectedKernels}:{})}),checkSource:checkSource(budget,offers,false,hello,extra)});
   },
   async event(name,value,s){
    runtime.log(`release ${name}: ${value.id}`);
