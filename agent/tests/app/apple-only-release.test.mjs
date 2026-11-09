@@ -70,6 +70,17 @@ test('Mac workflows: app_version = package.json, enable_updates wired into build
  assert.match(native,/'\["v108","v109"\]'/);
  assert.match(native,/release-manifest\.json/);assert.match(native,/agent\/dist\/latest-mac\.yml/);
 });
+// Review M3 of agent/mac-028: the CI SDK is pinned to 10.0.403 or newer, the resolved ILCompiler/runtime packs are checked to be
+// 10.0.14 or newer after the Native AOT publish, and the NuGet audit is never turned off in the workflow.
+test('Mac workflow: pinned .NET SDK, toolchain checks around the Native AOT publish, NU1903 never demoted',()=>{
+ const repo=path.resolve(import.meta.dirname,'..','..','..');const native=fs.readFileSync(path.join(repo,'.github','workflows','agent-native-release.yml'),'utf8').replace(/\r\n/g,'\n');
+ const sdk=/actions\/setup-dotnet@v4\n\s+with:\n\s+dotnet-version: (\S+)/.exec(native)?.[1];
+ assert.equal(sdk,'10.0.403');
+ assert.match(native,/node scripts\/check-native-toolchain\.mjs --sdk "\$\(dotnet --version\)"/);
+ const publish=native.indexOf('dotnet publish native/Ssam.Agent/Ssam.Agent.csproj'),check=native.indexOf('node scripts/check-native-toolchain.mjs --assets native/Ssam.Agent/obj/project.assets.json --rid osx-arm64'),sign=native.indexOf('codesign --force');
+ assert.ok(publish>0&&check>publish&&check<sign,'the toolchain check runs after the publish and before any signing');
+ assert.doesNotMatch(native,/NuGetAudit\s*=\s*false|NuGetAudit=false|WarningsNotAsErrors[^\n]*NU1903|NoWarn[^\n]*NU1903/i);
+});
 // The output check of a Mac build (after electron-builder): app-update.yml and latest-mac.yml as the options say, the ZIP's
 // sha512/size as latest-mac.yml states them (what electron-updater compares), the installed pack whole.
 test('checkMacOutput: the updater files of a Mac release, and none in an offline build',()=>{

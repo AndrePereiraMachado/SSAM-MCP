@@ -98,9 +98,14 @@ jobs:
           node-version: 24
           cache: npm
           cache-dependency-path: agent/package-lock.json
+      # Review M3 of agent/mac-028: the SDK is pinned, never "10.0.x" of the day. 10.0.403 carries the 10.0.14 runtime and
+      # ILCompiler that fix GHSA-p3jp-9v83-76w9 (NU1903, the Brotli decoder Native AOT links into ssam-agent). The NuGet audit
+      # stays on in this workflow: it is never disabled and that advisory is never demoted from an error.
       - uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: 10.0.x
+          dotnet-version: 10.0.403
+      - name: Check the .NET SDK (GHSA-p3jp-9v83-76w9)
+        run: node scripts/check-native-toolchain.mjs --sdk "$(dotnet --version)"
       - name: Download the approved bridge binaries
         env:
           GH_TOKEN: ${{ github.token }}
@@ -138,6 +143,9 @@ jobs:
         run: |
           test "$(uname -m)" = arm64
           dotnet publish native/Ssam.Agent/Ssam.Agent.csproj -c Release -r osx-arm64 --nologo -p:UseSharedCompilation=false
+      - name: Check the Native AOT toolchain the core was built with (GHSA-p3jp-9v83-76w9)
+        # The ILCompiler and runtime packs the restore resolved: 10.0.14 or newer, or the build stops before any signing.
+        run: node scripts/check-native-toolchain.mjs --assets native/Ssam.Agent/obj/project.assets.json --rid osx-arm64
       - name: Qualify the Native AOT executable
         env:
           SSAM_NATIVE_EXE: ${{ github.workspace }}/agent/native/Ssam.Agent/bin/Release/net10.0/osx-arm64/publish/ssam-agent
