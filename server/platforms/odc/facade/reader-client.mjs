@@ -8,6 +8,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { RELEASE, authorityDir, childEnv, dotnetPath, layoutPath, root } from './release-layout.mjs';
 import { memoryGate, memoryWaitRefusal } from './memory-room.mjs';
 import { imageO11Versions, isMultiO11Image, o11KernelPaths } from './o11-kernels.mjs';
+import { configuredO11Window } from './studio-identity.mjs';
 import { readerResidency, makeRoom, writeReaderMeta, touchLastRead, DEFAULT_READER_MIN_IDLE_MS } from './reader-residency.mjs';
 
 const readJson = file => JSON.parse(fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, ''));
@@ -101,14 +102,23 @@ export function registerReaderEvictor(gate, platformDir, {rpc = readerRpc, autho
 // registers the evictor of its O11 reader folder at start (ssam.mjs startupKernel), so a build can make a reader left by the
 // previous process leave before this one started any. The key is read at each eviction (it may appear later).
 export function registerStartupReaderEvictor(platformDir, {gate = memoryGate(), env = process.env, rpc = readerRpc} = {}) {
-  const settings = readerResidency({env, versions: imageO11Versions(env).length});
+  const settings = readerResidency({env, versions: readerO11Versions(env).length});
   registerReaderEvictor(gate, platformDir, {rpc, minIdleMs: settings.minIdleMs,
     authorization: () => fs.readFileSync(path.join(readerAuthority(), 'bridge.key'), 'utf8').trim()});
   return gate.hasEvictor?.('o11-readers:' + path.resolve(platformDir)) ?? false;
 }
+// Window 4x4 S2 (B10): the O11 versions whose reader folders this backend keeps, and whose count is the default ceiling, are
+// the image's kernels the deployment still names (SSAM_SERVED_VERSIONS o11, the retiring one included until its retireAt):
+// after a compose-only O11 retirement the image still carries the retired kernel, but its folders go like those of a version
+// the image no longer has. Needs S1 review (reader residency).
+export function readerO11Versions(env = process.env) {
+  const named = new Set(configuredO11Window(env));
+  return imageO11Versions(env).filter(v => named.has(v));
+}
 // deps (tests): {env, gate, rpc, now}.
 export async function admitReader({dll, runtimeDir, directory, authorization}, admission, deps = {}) {
-  const env = deps.env ?? process.env, versions = imageO11Versions(env), now = deps.now ?? Date.now, rpc = deps.rpc ?? readerRpc;
+  const env = deps.env ?? process.env, now = deps.now ?? Date.now, rpc = deps.rpc ?? readerRpc;
+  const versions = readerO11Versions(env);
   const settings = readerResidency({env, versions: versions.length});
   const platformDir = path.dirname(directory);
   admission.residency = await makeRoom(platformDir, {keep: directory, max: settings.max, rpc, authorization, minIdleMs: settings.minIdleMs, now,
