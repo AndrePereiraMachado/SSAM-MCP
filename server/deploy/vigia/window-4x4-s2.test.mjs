@@ -125,14 +125,21 @@ test('safety: the served list moves only by the round\'s own versions; retained 
  const m=first().manifest,baseline={manifest:m};
  assertLaneUnserved(baseline,'odc','1.7.33');
  assert.throws(()=>assertLaneUnserved(baseline,'o11','11.55.95'),e=>e.code==='ALREADY_SERVED');
- const odc=rotateLane(m,'odc','1.7.33',{now:NOW,images:{image:'img',tag:'t33'}}).manifest;
- assertRetained(baseline,pinDigests(odc,{t33:'sha256:'+sha('c')}),{lane:'odc',built:{t33:sha('c')}});
+ const K=[...m.o11.served],odc=rotateLane(m,'odc','1.7.33',{now:NOW,images:{image:'img',tag:'t33',kernels:K}}).manifest;
+ assertRetained(baseline,pinDigests(odc,{t33:'sha256:'+sha('c')}),{lane:'odc',built:{t33:sha('c')},images:{t33:{odc:'1.7.33',kernels:K}}});
+ // S2 R4 (review M1): the declared kernels must be the image's real ones, and the image the one built for that backend.
+ assert.throws(()=>assertRetained(baseline,pinDigests(odc,{t33:'sha256:'+sha('c')}),{lane:'odc',built:{t33:sha('c')},images:{t33:{odc:'1.7.33',kernels:K.slice(1)}}}),e=>e.code==='IMAGE_KERNELS_DIFFER');
+ assert.throws(()=>assertRetained(baseline,pinDigests(odc,{t33:'sha256:'+sha('c')}),{lane:'odc',built:{t33:sha('c')},images:{t33:{odc:'1.7.32',kernels:K}}}),e=>e.code==='IMAGE_KERNELS_DIFFER');
+ assert.throws(()=>assertRetained(baseline,pinDigests(odc,{t33:'sha256:'+sha('c')}),{lane:'odc',built:{t33:sha('c')}}),e=>e.code==='IMAGE_KERNELS_DIFFER');
  const swapped=structuredClone(odc);swapped.backends[1].tag='other';
- assert.throws(()=>assertRetained(baseline,pinDigests(swapped,{t33:'sha256:'+sha('c'),other:'sha256:'+sha('d')}),{lane:'odc',built:{t33:sha('c')}}),e=>e.code==='LIVE_DOWNGRADE');
- const built=Object.fromEntries(m.backends.map(b=>[b.odc,{image:'img',tag:'k'+b.odc.replaceAll('.','')}]));
+ assert.throws(()=>assertRetained(baseline,pinDigests(swapped,{t33:'sha256:'+sha('c'),other:'sha256:'+sha('d')}),{lane:'odc',built:{t33:sha('c')},images:{t33:{odc:'1.7.33',kernels:K}}}),e=>e.code==='LIVE_DOWNGRADE');
+ const K96=[...K,'11.55.96'],built=Object.fromEntries(m.backends.map(b=>[b.odc,{image:'img',tag:'k'+b.odc.replaceAll('.',''),kernels:K96}]));
  const o11=rotateLane(m,'o11','11.55.96',{now:NOW,images:built}).manifest,digests=Object.fromEntries(o11.backends.map(b=>[b.tag,'sha256:'+sha('e')]));
- assertRetained(baseline,pinDigests(o11,digests),{lane:'o11',built:Object.fromEntries(o11.backends.map(b=>[b.tag,sha('e')]))});
+ const real=Object.fromEntries(o11.backends.map(b=>[b.tag,{odc:b.odc,kernels:K96}]));
+ assertRetained(baseline,pinDigests(o11,digests),{lane:'o11',built:Object.fromEntries(o11.backends.map(b=>[b.tag,sha('e')])),images:real});
  assert.throws(()=>assertRetained(baseline,pinDigests(o11,digests),{lane:'o11',built:{}}),e=>e.code==='LIVE_DOWNGRADE');
+ // An O11 round's rebuilt image is checked against its real kernels, never the manifest's own (the old check was always true).
+ assert.throws(()=>assertRetained(baseline,pinDigests(o11,digests),{lane:'o11',built:Object.fromEntries(o11.backends.map(b=>[b.tag,sha('e')])),images:{...real,[o11.backends[2].tag]:{odc:o11.backends[2].odc,kernels:K}}}),e=>e.code==='IMAGE_KERNELS_DIFFER');
 });
 
 test('usage-count keys the counts by ODC backend inside a backend window',t=>{
@@ -266,8 +273,8 @@ test('automatic retirement: compose only (nothing published or prepared), and th
 });
 
 test('a window round pins only what it built and refuses a pin that changes a retained image',()=>{
- const m=first().manifest,built={odc:'1.7.33',image:'img',tag:'t33',sha256:sha('9')};
- const next=rotateLane(m,'odc','1.7.33',{now:NOW,images:{image:'img',tag:'t33'}}).manifest;
+ const m=first().manifest,built={odc:'1.7.33',image:'img',tag:'t33',sha256:sha('9'),kernels:[...m.o11.served]};
+ const next=rotateLane(m,'odc','1.7.33',{now:NOW,images:{image:'img',tag:'t33',kernels:built.kernels}}).manifest;
  const pinned=windowPinned(next,{kind:'add',lane:'odc',builts:[built]},{manifest:m,usage:null});
  assert.equal(pinned.backends[0].sha256,sha('9'));
  const bad=structuredClone(next);bad.backends[2].image='elsewhere';
@@ -389,4 +396,189 @@ test('-RehearseCurrent on a backend window rebuilds the served version\'s round 
  assert.deepEqual(r.release.manifest.backends.map(b=>b.odc),m.backends.map(b=>b.odc));
  assert.deepEqual(r.release.manifest.retiring,m.retiring);
  assert.equal(r.release.manifest.backends[0].tag,'t1732');
+});
+
+// ---- S2 R4 (independent review C:\t\r5\janela-4x4\S2-REVISAO.md): the owner's approval is applied to the window live at that
+// moment, which may have moved since the build.
+import {resendKept,KEPT_NOTICES,REBUILD_NEEDED} from './automatic.mjs';
+import {readAttempts} from './pipeline.mjs';
+import {readJournal} from './journal.mjs';
+const K=['11.55.92','11.55.93','11.55.94','11.55.95'],K96=[...K,'11.55.96'];
+const pinTags=m=>pinDigests(m,Object.fromEntries(m.backends.filter(b=>!b.sha256).map(b=>[b.tag,'sha256:'+sha('7')])));
+const ownerCfg=(dir,m)=>{const c=roundConfig(dir,m,{workspace:'C:/w',configFile:'C:/c.json'});delete c.rehearsal;return c;};
+const cand=(lane,version)=>({lane,version,fullVersion:version+'.1',tfm:'net10.0'});
+// The owner-gated proposal of a lane round, built on m at NOW, then approved by the owner.
+async function proposeAndApprove(dir,m,lane,version){
+ const {ops}=roundOps(dir,{lane});ops.event=async()=>({remote:true});
+ const r=await runWindowAttempt(ownerCfg(dir,m),ops,{id:`${lane}-${version}`,kind:'add',lane,version,candidate:cand(lane,version),inputs:{head:'h',studios:{[lane]:version+'.1'}},previous:null,skipped:[]},NOW);
+ assert.equal(r.status,'proposed',JSON.stringify(r));
+ const {approve}=await import('./approve.mjs');assert.equal((await approve({outDir:dir},{log:()=>{}},`${lane}-${version}`)).status,'gate-approved');
+ return r;
+}
+// The next watcher round on the live window `live` (fake deploy operations).
+async function nextRound(dir,live,observed,now){
+ const f=fakeOps(liveOf(live));Object.assign(f.ops,{log:()=>{},notify:async()=>{}});
+ const {runWindowVigia}=await import('./window-round.mjs');
+ const r=await runWindowVigia({...ownerCfg(dir,live),manifest:live,liveBaseline:liveOf(live),observed,head:'h',now},f.ops);
+ return {r,f};
+}
+const inputsOf=x=>({head:'h',studios:{[x.lane]:x.candidate.fullVersion}});
+
+test('R4 M1: an ODC proposal approved after an O11 round went live is never deployed without the new kernel: rebuilt and proposed again',async t=>{
+ const dir=tmp(t),W0=first().manifest;
+ // 1-2. The ODC 1.7.33 round builds with the O11 kernels served then (.92-.95) and waits for the owner.
+ const proposed=await proposeAndApprove(dir,W0,'odc','1.7.33');
+ assert.deepEqual(proposed.builts[0].kernels,K);
+ // 3. Meanwhile the O11 11.55.96 round went live: every backend serves .92-.96.
+ const W1=pinTags(rotateLane(W0,'o11','11.55.96',{now:NOW,images:Object.fromEntries(W0.backends.map(b=>[b.odc,{image:'img',tag:'k'+b.odc.replaceAll('.',''),kernels:K96}]))}).manifest);
+ assert.deepEqual(W1.o11.served,K96);
+ // The rotation with the image's real kernels is refused by versionBackends (the old code recorded none, so it passed).
+ assert.throws(()=>rotateLane(W1,'odc','1.7.33',{now:NOW,images:{image:'img',tag:'t1733',kernels:K}}),/lacks the O11 kernels 11\.55\.96/);
+ assert.throws(()=>windowAgain({},readJournal(path.join(dir,'odc-1.7.33','release.json')).window,{manifest:W1,telemetry:{}},NOW),e=>e.code===REBUILD_NEEDED);
+ // 4. The owner's approval is applied on that window: nothing is published or deployed, the proposal is dropped.
+ const {r,f}=await nextRound(dir,W1,[cand('odc','1.7.33')],NOW+3600000);
+ assert.equal(r.status,'failed',JSON.stringify(r));assert.equal(r.code,REBUILD_NEEDED);assert.equal(r.dropped,true);
+ assert.deepEqual(f.calls,[]);
+ const a=readAttempts(dir)['odc-1.7.33'];assert.equal(a.status,'failed');assert.equal(a.retry,true);assert.equal(a.dropped.code,REBUILD_NEEDED);
+ const told=f.events.find(e=>e[0]==='failed'&&e[1]===REBUILD_NEEDED);assert.ok(told);assert.match(told[2],/11\.55\.96/);
+ // The next round builds 1.7.33 again (with .96) and proposes it anew.
+ const again=decideWindow({manifest:W1,observed:[cand('odc','1.7.33')],state:{},attempts:readAttempts(dir),inputs:inputsOf,now:NOW+7200000});
+ assert.equal(again.action,'run');assert.equal(again.id,'odc-1.7.33');
+});
+
+test('R4 M2(a): an O11 proposal approved after a retirement removed a backend deploys the remaining images, with today\'s dates',async t=>{
+ const dir=tmp(t),W0=first().manifest;
+ await proposeAndApprove(dir,W0,'o11','11.55.96');
+ // Day 7: the compose-only retirement of ODC 1.7.28 went live; day 8 the owner's approval reaches the round.
+ const W1=retireDue(W0,{now:NOW+7*DAY}).manifest;assert.equal(W1.backends.length,4);
+ const {r,f}=await nextRound(dir,W1,[cand('o11','11.55.96')],NOW+8*DAY);
+ assert.equal(r.status,'live',JSON.stringify(r));
+ assert.deepEqual(f.calls.filter(c=>c.startsWith('publish')).sort(),['publish t1729','publish t1730','publish t1731','publish t1732']);
+ assert.deepEqual(f.prepared.map(p=>p[0]).sort(),['odc-1.7.29','odc-1.7.30','odc-1.7.31','odc-1.7.32']);
+ assert.ok(f.prepared.every(p=>p[1]===false));
+ assert.deepEqual(f.ops.pinned.backends.map(b=>b.o11Kernels),[K96,K96,K96,K96]);
+ // Review B1: the grace of 11.55.92 starts at the deploy (day 8), not at the build (day 0).
+ const day15=new Date(NOW+15*DAY).toISOString();
+ assert.ok(f.events.find(e=>e[0]==='window-retiring')[2].includes('11.55.92 leaves SSAM on '+day15.slice(0,10)));
+ assert.equal(f.ops.pinned.retiring.o11.retireAt,day15);
+ assert.equal(readAttempts(dir)['o11-11.55.96'].status,'approved');
+});
+
+test('R4 M2(b): an O11 proposal approved after a new ODC backend went live is dropped, and blocks neither the retirement nor the next round',async t=>{
+ const dir=tmp(t),W0=first().manifest;
+ await proposeAndApprove(dir,W0,'o11','11.55.96');
+ const W1=pinTags(rotateLane(W0,'odc','1.7.33',{now:NOW+DAY,images:{image:'img',tag:'t33',kernels:K}}).manifest);
+ const {r,f}=await nextRound(dir,W1,[cand('o11','11.55.96')],NOW+2*DAY);
+ assert.equal(r.status,'failed',JSON.stringify(r));assert.equal(r.code,REBUILD_NEEDED);assert.deepEqual(f.calls,[]);
+ const attempts=readAttempts(dir);assert.equal(attempts['o11-11.55.96'].retry,true);
+ // Not due yet: the O11 round runs again (rebuilt on the new window). Once 1.7.29's grace ends, its retirement comes first.
+ assert.equal(decideWindow({manifest:W1,observed:[cand('o11','11.55.96')],state:{},attempts,inputs:inputsOf,now:NOW+2*DAY+60000}).id,'o11-11.55.96');
+ const due=decideWindow({manifest:W1,observed:[cand('o11','11.55.96')],state:{},attempts,inputs:inputsOf,now:NOW+9*DAY});
+ assert.equal(due.action,'run');assert.equal(due.kind,'retire');assert.equal(due.version,'1.7.29');
+});
+
+test('R4 M2: a pin that does not fit ends the attempt before any mutation (preparation-failed), never an exception',async t=>{
+ const dir=tmp(t),m=first().manifest,live=liveOf(m);
+ const built={odc:'1.7.33',kernels:K,defaultO11:'11.55.95',o11:'11.55.95',image:'img',tag:'t33',sha256:sha('f')},stray={...built,odc:'1.7.28',tag:'t28',sha256:sha('e')};
+ const next=rotateLane(m,'odc','1.7.33',{now:NOW,images:{image:'img',tag:'t33',kernels:K},tokens});
+ const w={kind:'add',lane:'odc',version:'1.7.33',builts:[built,stray],kernels:{'odc-1.7.33':{odc:'1.7.33',o11:'11.55.95'}},defaultO11:'11.55.95',retiring:next.retiring,retired:next.retired,affected:[],prepare:['odc-1.7.33']};
+ const f=fakeOps(live);
+ const r=await releaseAutomatically({outDir:dir},f.ops,{id:'odc-1.7.33',dir,attempt:'a1',baseline:live,built,manifest:next.manifest,kernel:w.kernels['odc-1.7.33'],bridges:{mode:'server-only'},features:path.join(dir,'f.xml'),bundles:{},window:w});
+ assert.equal(r.status,'failed');assert.deepEqual(f.calls,[]);
+ const state=readJournal(path.join(dir,'deployment.json'));assert.equal(state.status,'preparation-failed');assert.equal(state.mutationStarted,undefined);
+ assert.ok(f.events.some(e=>e[0]==='failed'));
+});
+
+test('R4 M2: a deferred window deploy re-derived on a window its images no longer fit ends stale, told on the resent channel',async t=>{
+ const dir=tmp(t),out=tmp(t),W0=first().manifest;
+ const built={odc:'1.7.33',kernels:K,defaultO11:'11.55.95',o11:'11.55.95',image:'img',tag:'t33',sha256:sha('f')};
+ const next=rotateLane(W0,'odc','1.7.33',{now:NOW,images:{image:'img',tag:'t33',kernels:K}});
+ const w={kind:'add',lane:'odc',version:'1.7.33',builts:[built],o11Kernels:K,kernels:{'odc-1.7.33':{odc:'1.7.33',o11:'11.55.95'}},defaultO11:'11.55.95',retiring:next.retiring,retired:next.retired,affected:[],prepare:['odc-1.7.33']};
+ const W1=pinTags(rotateLane(W0,'o11','11.55.96',{now:NOW,images:Object.fromEntries(W0.backends.map(b=>[b.odc,{image:'img',tag:'k'+b.odc,kernels:K96}]))}).manifest);
+ const folder=path.join(out,'odc-1.7.33');fs.mkdirSync(folder);
+ fs.writeFileSync(path.join(folder,'deployment.json'),JSON.stringify({schema:2,id:'odc-1.7.33',attempt:'a1',steps:{},status:'deferred',deferrals:1,firstDeferredAt:new Date().toISOString(),baseline:{...liveOf(W0),hash:'old'}}));
+ let delivered=false;const f=fakeOps({...liveOf(W1),hash:'new'}),send=f.ops.event;f.ops.event=async(n,v)=>delivered?send(n,v):{remote:false,webhook:false};
+ const r=await releaseAutomatically({outDir:out},f.ops,{id:'odc-1.7.33',dir:folder,attempt:'a1',built,manifest:next.manifest,kernel:w.kernels['odc-1.7.33'],bridges:{mode:'server-only'},features:path.join(dir,'f.xml'),bundles:{},window:w});
+ assert.equal(r.status,'stale');assert.equal(r.code,REBUILD_NEEDED);assert.deepEqual(f.calls,[]);
+ // Not delivered: kept, and sent by a later round once a channel takes it.
+ assert.equal(readJournal(path.join(folder,KEPT_NOTICES)).unsent.length,1);
+ delivered=true;assert.equal(await resendKept(f.ops,{outDir:out,id:'odc-1.7.33'}),0);
+ assert.ok(f.events.some(e=>e[0]==='failed'&&e[1]===REBUILD_NEEDED));
+ // A later call stays stale: it never deploys.
+ assert.equal((await releaseAutomatically({outDir:out},f.ops,{id:'odc-1.7.33',dir:folder,attempt:'a1',built,manifest:next.manifest,kernel:{},bridges:{},features:null,bundles:{},window:w})).status,'stale');
+});
+
+test('R4 B3: the notices of a live release are recorded with the live state before they are sent',async t=>{
+ const dir=tmp(t),m=first().manifest,live=liveOf(m);
+ const built={odc:'1.7.33',kernels:K,defaultO11:'11.55.95',o11:'11.55.95',image:'img',tag:'t33',sha256:sha('f')};
+ const next=rotateLane(m,'odc','1.7.33',{now:NOW,images:{image:'img',tag:'t33',kernels:K},tokens});
+ const w={kind:'add',lane:'odc',version:'1.7.33',builts:[built],kernels:{'odc-1.7.33':{odc:'1.7.33',o11:'11.55.95'}},defaultO11:'11.55.95',retiring:next.retiring,retired:next.retired,affected:affectedRecord(next.affected),prepare:['odc-1.7.33']};
+ const f=fakeOps(live),send=f.ops.event;let atLive=null;
+ f.ops.event=async(n,v)=>{if(n==='live')atLive=readJournal(path.join(dir,'deployment.json'));return send(n,v);};
+ assert.equal((await releaseAutomatically({outDir:dir},f.ops,{id:'odc-1.7.33',dir,attempt:'a1',baseline:live,built,manifest:next.manifest,kernel:w.kernels['odc-1.7.33'],bridges:{mode:'server-only'},features:path.join(dir,'f.xml'),bundles:{},window:w})).status,'live');
+ assert.equal(atLive.status,'live');assert.deepEqual(atLive.unsent.map(u=>u.name),['live','window-retiring','window-retired']);
+ assert.equal(readJournal(path.join(dir,'deployment.json')).unsent,undefined);
+});
+
+test('R4 B2: a retirement whose deploy was abandoned runs again after retryHours',()=>{
+ const m=first().manifest,at=new Date(NOW+7*DAY).toISOString(),endedAt=new Date(NOW+7*DAY+3600000).toISOString();
+ const attempts={'retire-odc-1.7.28':{id:'retire-odc-1.7.28',status:'closed',code:'abandoned',inputs:{retireAt:m.retiring.odc.retireAt},at,endedAt}};
+ const d=now=>decideWindow({manifest:m,observed:[],state:{},attempts,inputs:()=>({}),now});
+ assert.equal(d(NOW+7*DAY+2*3600000).action,'idle');
+ const again=d(NOW+7*DAY+14*3600000);assert.equal(again.action,'run');assert.equal(again.kind,'retire');
+});
+
+test('R4 B6: a proposal a newer version of its lane replaced expires, the owner is told, and the newer one is proposed',async t=>{
+ const dir=tmp(t),W0=first().manifest;
+ const {ops}=roundOps(dir,{lane:'odc'}),events=[];ops.event=async(n,v)=>{events.push([n,v.code]);return {remote:true};};
+ await runWindowAttempt(ownerCfg(dir,W0),ops,{id:'odc-1.7.33',kind:'add',lane:'odc',version:'1.7.33',candidate:cand('odc','1.7.33'),inputs:{head:'h',studios:{odc:'1.7.33.1'}},previous:null,skipped:[]},NOW);
+ const d=decideWindow({manifest:W0,observed:[cand('odc','1.7.34')],state:{},attempts:readAttempts(dir),inputs:inputsOf,now:NOW+DAY});
+ assert.deepEqual(d.superseded,[{id:'odc-1.7.33',lane:'odc',version:'1.7.33',by:'1.7.34'}]);
+ const {runWindowVigia}=await import('./window-round.mjs');
+ const r=await runWindowVigia({...ownerCfg(dir,W0),observed:[cand('odc','1.7.34')],head:'h',now:NOW+DAY},ops);
+ assert.equal(r.status,'proposed',JSON.stringify(r));assert.equal(r.id,'odc-1.7.34');
+ const old=readAttempts(dir)['odc-1.7.33'];assert.equal(old.status,'closed');assert.equal(old.code,'superseded');assert.equal(old.superseded.by,'1.7.34');
+ assert.deepEqual(events.filter(e=>e[0]==='superseded'),[['superseded','PROPOSAL_SUPERSEDED']]);
+ // A version the live window already serves (deployed another way) expires its proposal too.
+ const served=decideWindow({manifest:rotateLane(W0,'odc','1.7.34',{now:NOW,images:{image:'i',tag:'t'}}).manifest,observed:[],state:{},attempts:{x:{id:'odc-1.7.33',status:'proposed',round:{kind:'add',lane:'odc',version:'1.7.33'}}},inputs:inputsOf,now:NOW});
+ assert.deepEqual(served.superseded.map(s=>s.id),['odc-1.7.33']);
+});
+
+
+test('R4 M4: the prepare adapter sends kernelOnly for an O11 round only, with its round id; an ODC backend without features fails',async t=>{
+ const dir=tmp(t),{createAutoRuntime}=await import('./auto-runtime.mjs'),{generateKeyPairSync}=await import('node:crypto');
+ const key=generateKeyPairSync('ed25519').privateKey.export({format:'pem',type:'pkcs8'}),sent=[];
+ const base={executionSource:async()=>{},log:()=>{},notify:async()=>{},fullHead:async()=>'commit',archiveDeploy:async(_c,file)=>fs.writeFileSync(file,'archive'),
+  openLease:async()=>{const close=async()=>{};close.assertHeld=()=>{};return close;},
+  async run(cmd,args,{input}={}){
+   if(args.some(x=>String(x).endsWith('read-secrets.ps1')))return {stdout:JSON.stringify({coolifyToken:'memory-only-token',sshPrivateKey:Buffer.from('PRIVATE KEY').toString('base64'),authenticodeThumbprint:'',manifestPrivateKey:key,journalKey:Buffer.alloc(32,1).toString('base64')})};
+   if(cmd.endsWith('icacls.exe'))return {stdout:''};
+   const request=JSON.parse(input);sent.push(request);return {stdout:JSON.stringify({ok:true})};
+  }};
+ const config={workspace:path.resolve(here,'../../..'),tempRoot:dir,outDir:dir,configFile:path.join(dir,'c.json'),domains:{ssam:'mcp.example.test',console:'panel.example.test'},automaticDeployment:{testOnly:true,coolify:{url:'http://127.0.0.1:9',resource:'fixture'},ssh:{host:'fixture',knownHosts:'fixture'},remote:{}}};
+ const adapter=createAutoRuntime(config,base),s=await adapter.secrets(),unlock=await adapter.acquireReleaseLock(s);
+ const m=first().manifest,compose=JSON.stringify(generateCompose(m)),features=path.join(dir,'f.xml');fs.writeFileSync(features,'<Features/>');
+ const one={service:'odc-1.7.29',built:{image:'img',tag:'t',sha256:sha('1')},kernel:{odc:'1.7.29',o11:'11.55.96'},compose,dir};
+ await adapter.prepare(s,{...one,lane:'o11',round:'o11-11.55.96',features:null});
+ assert.equal(sent.at(-1).kernelOnly,true);assert.equal(sent.at(-1).round,'o11-11.55.96');assert.equal(sent.at(-1).features,undefined);
+ await adapter.prepare(s,{...one,lane:'odc',round:'odc-1.7.33',features});
+ assert.equal(sent.at(-1).kernelOnly,undefined);assert.ok(sent.at(-1).features);
+ const before=sent.length;
+ await assert.rejects(adapter.prepare(s,{...one,lane:'odc',round:'odc-1.7.33',features:null}),e=>e.code==='FEATURES_MISSING');
+ await assert.rejects(adapter.prepare(s,{...one,lane:'o11',round:'odc-1.7.33',features:null}),/belongs to an O11 round/);
+ assert.equal(sent.length,before);
+ await unlock();
+});
+
+test('R4 M1: the kernels of an image come from its label; the post-deploy check expects each backend\'s declared set',async()=>{
+ const {labelKernels,builtKernels}=await import('./window.mjs'),{expectedKernelsOf}=await import('./auto-runtime.mjs');
+ assert.deepEqual(labelKernels({'ssam.kernels.o11':'11.55.95,11.55.92, 11.55.93'}),['11.55.92','11.55.93','11.55.95']);
+ for(const bad of [{},{'ssam.kernels.o11':''},{'ssam.kernels.o11':'11.55,11.55.92'},{'ssam.kernels.o11':'11.55.92,11.55.92'}])assert.equal(labelKernels(bad),null);
+ assert.equal(builtKernels({image:'pending'}),null);
+ const m=first().manifest,o11=rotateLane(m,'o11','11.55.96',{now:NOW,images:Object.fromEntries(m.backends.map(b=>[b.odc,{image:'i',tag:'k'+b.odc,kernels:K96}]))}).manifest;
+ assert.deepEqual(expectedKernelsOf(o11)['1.7.29'],K96);
+ // After a compose-only O11 retirement the images still carry the retired kernel: the declared set keeps it.
+ const retired=retireDue(retireDue(pinTags(o11),{now:NOW+7*DAY}).manifest,{now:NOW+7*DAY}).manifest;
+ assert.deepEqual(retired.o11.served,K96.slice(1));assert.deepEqual(expectedKernelsOf(retired)['1.7.29'],K96);
+ assert.equal(expectedKernelsOf({window:3,odc:[],o11:[]}),null);
 });
