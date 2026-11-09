@@ -233,8 +233,12 @@ def dispatch(request):
         # what its kernel changed, kernel-image.mjs resetStaleCaches). Any other prepare needs the features.
         if not re.fullmatch(r"(?:o11-\d+\.\d+\.\d+-)?odc-\d+\.\d+\.\d+", request["id"]):
             raise ValueError("Invalid pair.")
+        # S2 R6 (review B11): a repair (repair true) is the kernel-only write of a retained backend in any window round, so every
+        # backend runs one default O11 kernel: the restore after an O11 round stopped before any change, or the alignment of a
+        # backend an interrupted O11 prepare left on another default.
         kernel_only = request.get("kernelOnly") is True
-        if kernel_only and (request.get("features") or not re.fullmatch(r"o11-\d+\.\d+\.\d+", str(request.get("round", ""))) or not re.fullmatch(r"odc-\d+\.\d+\.\d+", request["id"])):
+        rounds = r"(?:odc|o11)-\d+\.\d+\.\d+|retire-(?:odc|o11)-\d+\.\d+\.\d+" if request.get("repair") is True else r"o11-\d+\.\d+\.\d+"
+        if kernel_only and (request.get("features") or not re.fullmatch(rounds, str(request.get("round", ""))) or not re.fullmatch(r"odc-\d+\.\d+\.\d+", request["id"])):
             raise ValueError("A kernel-only prepare is one backend of an O11 round.")
         if not kernel_only and not request.get("features"):
             raise ValueError("The new backend needs its features.")
@@ -289,7 +293,11 @@ def dispatch(request):
                 check = directory / "server/deploy/kernel-pair-check.mjs"
                 if not check.is_file():
                     raise RuntimeError("No pair checker in the deploy archive.")
-                docker("run", "--rm", "--network", "none", "--entrypoint", "node", "-v", str(check) + ":/c.mjs:ro", "-v", str(kernel) + ":/k.json:ro", image, "/c.mjs", "check", "/k.json")
+                # The pair check runs in the same hardened container as the write (review B11): unprivileged user, no
+                # capabilities, no network, only the two files mounted read-only (readable by that user).
+                os.chmod(check, 0o644)
+                os.chmod(kernel, 0o644)
+                docker("run", *HARDENED, "--network", "none", "--entrypoint", "node", "-v", str(check) + ":/c.mjs:ro", "-v", str(kernel) + ":/k.json:ro", image, "/c.mjs", "check", "/k.json")
                 docker("run", *HARDENED, "--network", "none", "-i", "-v", volume + ":/data/server", "-e", "SSAM_RUNTIME_DIR=" + runtime, image, "sh", "-c",
                        'mkdir -p "$SSAM_RUNTIME_DIR" && cat > "$SSAM_RUNTIME_DIR/kernel.json.next" && mv "$SSAM_RUNTIME_DIR/kernel.json.next" "$SSAM_RUNTIME_DIR/kernel.json"',
                        data=kernel.read_bytes())

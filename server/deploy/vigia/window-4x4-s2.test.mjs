@@ -567,6 +567,9 @@ test('R4 M4: the prepare adapter sends kernelOnly for an O11 round only, with it
  await assert.rejects(adapter.prepare(s,{...one,lane:'odc',round:'odc-1.7.33',features:null}),e=>e.code==='FEATURES_MISSING');
  await assert.rejects(adapter.prepare(s,{...one,lane:'o11',round:'odc-1.7.33',features:null}),/belongs to an O11 round/);
  assert.equal(sent.length,before);
+ // R6 B11: a repair (restore or alignment of a retained backend's default) is a kernel-only write in any window round.
+ for(const round of ['odc-1.7.33','retire-odc-1.7.28','o11-11.55.96']){await adapter.prepare(s,{...one,lane:'o11',repair:true,round,features:null});assert.equal(sent.at(-1).kernelOnly,true);assert.equal(sent.at(-1).repair,true);assert.equal(sent.at(-1).round,round);}
+ await assert.rejects(adapter.prepare(s,{...one,lane:'o11',repair:true,round:'pair-x',features:null}),/belongs to an O11 round/);
  await unlock();
 });
 
@@ -630,4 +633,63 @@ test('R6 B10: kept notices are written durably; an unreadable file is set aside,
  assert.equal(await keepNotice(f.ops,{outDir:out,id:'odc-1.7.33',attempt:'a2'},'stale','odc-1.7.33: kept',REBUILD_NEEDED),0);
  assert.ok(f.events.some(e=>e[2]==='odc-1.7.33: kept'));
  assert.deepEqual(fs.readdirSync(folder).filter(n=>n.endsWith('.next')),[]);
+});
+
+// S2 R6 B11: every backend runs one default O11 kernel. An O11 round stopped mid-way before any change restores the kernel.json it
+// staged; a resumed one writes them all again; any other window round aligns a retained backend left on another default first.
+function o11Round(m,{defaultO11='11.55.95'}={}){
+ const builts=m.backends.map((b,i)=>({odc:b.odc,kernels:[...m.o11.served,'11.55.96'],defaultO11,o11:defaultO11,image:'img',tag:'k'+i,sha256:String(i).repeat(64)}));
+ const next=rotateLane(m,'o11','11.55.96',{now:NOW,images:Object.fromEntries(builts.map(b=>[b.odc,{image:b.image,tag:b.tag}])),tokens});
+ const kernels=Object.fromEntries(m.backends.map(b=>['odc-'+b.odc,{odc:b.odc,o11:defaultO11,odcBridge:'v109'}]));
+ return {builts,next,kernels,w:{kind:'add',lane:'o11',version:'11.55.96',builts,kernels,defaultO11,retiring:next.retiring,retired:next.retired,affected:[],prepare:Object.keys(kernels)}};
+}
+const onDefault=(manifest,o11,other={})=>({...liveOf(manifest),kernels:Object.fromEntries(manifest.backends.map(b=>['odc-'+b.odc,{odc:b.odc,o11:other['odc-'+b.odc]??o11,odcBridge:'v109'}]))});
+function recordPrepares(f,{failAt}={}){
+ const seen=[];let n=0;
+ f.ops.prepare=async(s,r)=>{n++;if(n===failAt)throw Object.assign(Error('ssh lost'),{environmental:true});seen.push([r.service,r.kernel?.o11,!!r.repair,r.built?.tag]);};
+ return seen;
+}
+test('R6 B11: an O11 round that stops mid-prepare before any change restores the kernel.json it staged, with the live images',async t=>{
+ const dir=tmp(t),m=first().manifest,live=onDefault(m,'11.55.94'),{builts,next,kernels,w}=o11Round(m);
+ const f=fakeOps(live),seen=recordPrepares(f,{failAt:3});
+ const r=await releaseAutomatically({outDir:dir},f.ops,{id:'o11-11.55.96',dir,attempt:'a1',baseline:live,built:builts[0],manifest:next.manifest,kernel:kernels['odc-1.7.32'],bridges:{mode:'server-only'},features:null,bundles:{},window:w});
+ assert.equal(r.status,'deferred');assert.ok(!f.calls.includes('compose')&&!f.calls.includes('deploy'));
+ // Two written with the new default, the third lost: the three staged ones go back to the live default in their live image.
+ assert.deepEqual(seen.slice(0,2).map(p=>[p[0],p[1],p[2]]),[['odc-1.7.32','11.55.95',false],['odc-1.7.31','11.55.95',false]]);
+ assert.deepEqual(seen.slice(2).map(p=>[p[0],p[1],p[2],p[3]]),['odc-1.7.32','odc-1.7.31','odc-1.7.30'].map(n=>[n,'11.55.94',true,m.backends.find(b=>'odc-'+b.odc===n).tag]));
+ const state=readJournal(path.join(dir,'deployment.json'));
+ assert.equal(state.kernelStaged,undefined);assert.ok(state.kernelRestored);assert.equal(state.steps.prepared,undefined);
+});
+
+test('R6 B11: a restore that fails is kept for the owner and the next round aligns; a resumed O11 round writes every kernel.json again',async t=>{
+ const dir=tmp(t),out=tmp(t),m=first().manifest,live=onDefault(m,'11.55.94'),{builts,next,kernels,w}=o11Round(m);
+ const f=fakeOps(live);let n=0;f.ops.prepare=async(s,r)=>{n++;if(n>=2)throw Object.assign(Error('ssh lost'),{environmental:true});};
+ await releaseAutomatically({outDir:out},f.ops,{id:'o11-11.55.96',dir,attempt:'a1',baseline:live,built:builts[0],manifest:next.manifest,kernel:kernels['odc-1.7.32'],bridges:{mode:'server-only'},features:null,bundles:{},window:w});
+ assert.deepEqual(readJournal(path.join(dir,'deployment.json')).kernelRestoreFailed,['odc-1.7.32','odc-1.7.31']);
+ assert.ok(f.events.some(e=>e[0]==='kernel-restore-failed'&&e[1]==='KERNEL_RESTORE_FAILED'));
+ // A vigia that stopped in the middle of the prepare: the resumed round writes every backend's kernel.json, then deploys.
+ const dir2=tmp(t);fs.writeFileSync(path.join(dir2,'deployment.json'),JSON.stringify({schema:2,id:'o11-11.55.96',attempt:'a1',steps:{},status:'preparing',kernelStaged:['odc-1.7.32','odc-1.7.31'],baseline:live}));
+ const g=fakeOps(live),seen=recordPrepares(g);
+ const r=await releaseAutomatically({outDir:out},g.ops,{id:'o11-11.55.96',dir:dir2,attempt:'a1',baseline:live,built:builts[0],manifest:next.manifest,kernel:kernels['odc-1.7.32'],bridges:{mode:'server-only'},features:null,bundles:{},window:w});
+ assert.equal(r.status,'live');
+ assert.deepEqual(seen.map(p=>[p[0],p[1]]),Object.keys(kernels).map(k=>[k,'11.55.95']));
+ assert.ok(g.calls.indexOf('compose')>g.calls.lastIndexOf('pin'));
+});
+
+test('R6 B11: an ODC round first aligns a retained backend an interrupted O11 prepare left on another default; its rollback accepts it',async t=>{
+ const dir=tmp(t),m=first().manifest,live=onDefault(m,'11.55.95',{'odc-1.7.30':'11.55.94'});
+ const built={odc:'1.7.33',kernels:m.o11.served,defaultO11:'11.55.95',o11:'11.55.95',image:'img',tag:'t33',sha256:sha('f')};
+ const next=rotateLane(m,'odc','1.7.33',{now:NOW,images:{image:'img',tag:'t33'},tokens});
+ const w={kind:'add',lane:'odc',version:'1.7.33',builts:[built],kernels:{'odc-1.7.33':{odc:'1.7.33',o11:'11.55.95',odcBridge:'v110'}},defaultO11:'11.55.95',retiring:next.retiring,retired:next.retired,affected:[],prepare:['odc-1.7.33']};
+ const f=fakeOps(live,{fail:'checks'}),seen=recordPrepares(f);
+ const order=[];const write=f.ops.writeCompose;f.ops.writeCompose=async(s,c)=>{order.push(seen.length);return write(s,c);};
+ const r=await releaseAutomatically({outDir:dir},f.ops,{id:'odc-1.7.33',dir,attempt:'a1',baseline:live,built,manifest:next.manifest,kernel:w.kernels['odc-1.7.33'],bridges:{mode:'server-only'},features:path.join(dir,'f.xml'),bundles:{},window:w});
+ assert.deepEqual(seen.map(p=>[p[0],p[1],p[2]]),[['odc-1.7.33','11.55.95',false],['odc-1.7.30','11.55.95',true]]);
+ assert.equal(seen[1][3],m.backends.find(b=>b.odc==='1.7.30').tag,'in its live image');
+ assert.deepEqual(order,[2],'aligned before the compose is written');
+ assert.equal(r.status,'rolled-back');assert.equal(f.ops.checked.kernelO11Also,'11.55.95');
+ // One default everywhere: nothing to align.
+ const g=fakeOps(liveOf(m)),again=recordPrepares(g),dir2=tmp(t);
+ await releaseAutomatically({outDir:dir2},g.ops,{id:'odc-1.7.33',dir:dir2,attempt:'a1',baseline:liveOf(m),built,manifest:next.manifest,kernel:w.kernels['odc-1.7.33'],bridges:{mode:'server-only'},features:path.join(dir2,'f.xml'),bundles:{},window:w});
+ assert.deepEqual(again.map(p=>p[0]),['odc-1.7.33']);
 });

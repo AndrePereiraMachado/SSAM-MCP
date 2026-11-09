@@ -177,6 +177,10 @@ class RemoteTests(unittest.TestCase):
         check, write = runs
         self.assertIn("/c.mjs", check[0])
         self.assertIn("check", check[0])
+        # R6 B11: the pair check runs hardened too (unprivileged user, no capabilities, no network, nothing but its two files).
+        for flag in ("--cap-drop", "--user", "--network", "--rm"):
+            self.assertIn(flag, check[0])
+        self.assertEqual([check[0][i + 1].rsplit(":", 2)[-2:] for i, x in enumerate(check[0]) if x == "-v"], [["/c.mjs", "ro"], ["/k.json", "ro"]])
         mounts = [write[0][i + 1] for i, x in enumerate(write[0]) if x == "-v"]
         self.assertEqual(mounts, ["fixture_state:/data/server"])
         for flag in ("--cap-drop", "--user", "--network"):
@@ -195,6 +199,20 @@ class RemoteTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "needs its features"):
             self.prepare_backend("odc-1.7.33", kernel={"odc": "1.7.33", "o11": "11.55.95"})
         self.assertFalse(any(c[0] in ("pull", "create") for c in self.calls))
+
+    # R6 B11: a repair writes the kernel.json of a retained backend in any window round (restore after an O11 round stopped, or
+    # the alignment of one default); without repair, kernel-only stays an O11 round's.
+    def test_s2_a_repair_is_a_kernel_only_write_in_any_window_round(self):
+        kernel = {"odc": "1.7.29", "o11": "11.55.95"}
+        for round in ("odc-1.7.33", "retire-odc-1.7.28", "retire-o11-11.55.92", "o11-11.55.96"):
+            runs = self.stage_runs()
+            self.assertEqual(self.prepare_backend("odc-1.7.29", kernel=kernel, kernelOnly=True, repair=True, round=round), {"ok": True, "kernelOnly": True})
+            self.assertEqual(json.loads(runs[-1][1]), kernel)
+        for bad in ("odc-1.7", "x-odc-1.7.33", ""):
+            with self.assertRaisesRegex(ValueError, "kernel-only prepare"):
+                self.prepare_backend("odc-1.7.29", kernel=kernel, kernelOnly=True, repair=True, round=bad)
+        with self.assertRaisesRegex(ValueError, "kernel-only prepare"):
+            self.prepare_backend("odc-1.7.29", kernel=kernel, kernelOnly=True, round="odc-1.7.33")
 
     def test_s2_a_new_backend_is_refused_when_one_with_its_odc_or_its_name_runs(self):
         # The running fixture backend is labelled odc 1.7.29 and its ssam.o11 is the served list of a backend window.

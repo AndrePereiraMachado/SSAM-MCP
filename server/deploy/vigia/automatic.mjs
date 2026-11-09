@@ -3,7 +3,7 @@
 import fs from 'node:fs';
 import {readJournal,writeJournal} from './journal.mjs';
 import path from 'node:path';
-import {rotateWindow,windowLimit,pinDigest,rotateLane,retireDue,pinDigests,servedOf,windowPolicy,builtKernels,affectedRecord,compareVersion,backendId} from './window.mjs';
+import {rotateWindow,windowLimit,pinDigest,rotateLane,retireDue,pinDigests,servedOf,windowPolicy,builtKernels,affectedRecord,compareVersion,backendId,defaultO11} from './window.mjs';
 import {assertUnserved,assertRetained,assertLaneUnserved,canonicalComposeHash} from './safety.mjs';
 import {withUsage,hotPairName} from '../coolify/gen-compose.mjs';
 export const AUTOMATIC_PLAN=[
@@ -205,7 +205,39 @@ export async function releaseAutomatically(config,ops,release){
  // Capacity (gen-compose sizing): the hot tier goes to the most used pair (heavy calls of 7 days, then active clients of 14
  // days), counted in a live backend with this deploy's baseline; a deploy that happens anyway is the only moment usage moves
  // it. Unreadable counts keep the recorded ones and the owner is told; they never stop the round (review R2 M1').
- let unlock,protectedPhase=false,pinned,hot;
+ let unlock,protectedPhase=false,pinned,hot,stagedCompose;
+ // S2 R6 (review B11): every backend runs ONE default O11 kernel (kernel.json o11). An O11 round stages the kernel.json of the
+ // running backends before its deploy; each one is recorded (state.kernelStaged) before it is written, so a round that stops
+ // before any change restores them from the live baseline's kernels (restoreStaged), and a resumed one writes them all again
+ // (the prepared step runs again). Any other window round first aligns a retained backend that an interrupted O11 prepare
+ // left on another default (alignKernels): a deploy never restarts backends on different defaults.
+ const liveImage=b=>({odc:b.odc,image:b.image,tag:b.tag,sha256:String(b.sha256??'').replace(/^sha256:/,'')});
+ const alignKernels=async compose=>{
+  const o11=w.defaultO11??defaultO11(pinned,{lane:'odc'}),aligned=[];
+  for(const b of pinned.backends){
+   const name=backendId(b.odc),k=baseline.kernels?.[name];
+   if(!k||(w.prepare??[]).includes(name)||k.o11===o11)continue;
+   await ops.prepare(secrets,{id:name,round:id,lane:'o11',repair:true,service:name,built:liveImage(b),kernel:{...k,o11},features:null,bridges,compose,dir});
+   aligned.push(name);
+  }
+  return {ok:true,aligned,o11};
+ };
+ const restoreStaged=async()=>{
+  const left=[];
+  for(const name of state.kernelStaged){
+   const b=baseline.manifest.backends?.find(x=>backendId(x.odc)===name),k=baseline.kernels?.[name];
+   try{
+    if(!b||!k)throw Error('no live kernel');
+    const compose=stagedCompose??await ops.composeFor(secrets,baseline,baseline.manifest,{added:[],retired:[]});
+    await ops.prepare(secrets,{id:name,round:id,lane:'o11',repair:true,service:name,built:liveImage(b),kernel:k,features:null,bridges,compose,dir});
+   }catch{left.push(name);}
+  }
+  delete state.steps.prepared;
+  if(left.length){state.kernelStaged=left;state.kernelRestoreFailed=left;}else{delete state.kernelStaged;delete state.kernelRestoreFailed;state.kernelRestored=new Date().toISOString();}
+  save();
+  if(left.length)await keepNotice(ops,{outDir,id,attempt:state.attempt},'kernel-restore-failed',`${id}: the O11 round stopped before any change to production, but the kernel.json of ${left.join(', ')} was not restored; the next window round aligns every backend on one default O11 before it deploys.`,'KERNEL_RESTORE_FAILED').catch(()=>{});
+  return left;
+ };
  const pinRound=async()=>{
   pinned=w?windowPinned(proposed,w,baseline):withUsage(pinDigest(proposed,built.tag,'sha256:'+built.sha256),baseline.usage);if(!w)assertRetained(baseline,pinned);
   hot={from:baseline.manifest?.sizing?hotPairName(baseline.manifest):null,to:hotPairName(pinned)};
@@ -232,12 +264,13 @@ export async function releaseAutomatically(config,ops,release){
    await once('backup',()=>ops.backup(secrets,id),x=>({ok:!!x.ok,directory:x.directory,volumes:x.volumes}));
   }
   if(state.status!=='rolling-back'){
-   const compose=await ops.composeFor(secrets,baseline,pinned,w?windowChange(w):undefined);
+   const compose=await ops.composeFor(secrets,baseline,pinned,w?windowChange(w):undefined);stagedCompose=compose;
    if(!state.mutationStarted){
     // A window round prepares each backend it built: the new ODC backend (kernel.json and features), or every backend of an
     // O11 round (kernel.json only, the default O11 moved). A retirement prepares nothing.
-    if(w)await once('prepared',async()=>{for(const name of w.prepare??[]){const b=w.builts.find(x=>'odc-'+x.odc===name);await ops.prepare(secrets,{id:name,round:id,lane:w.lane,service:name,built:b,kernel:w.kernels[name],features:w.lane==='odc'?features:null,featuresSha256:w.lane==='odc'?release.featuresProvenance?.sha256??null:null,bridges,compose,dir});}return {ok:true};},()=>({ok:true}));
+    if(w)await once('prepared',async()=>{for(const name of w.prepare??[]){const b=w.builts.find(x=>'odc-'+x.odc===name);if(w.lane==='o11'){state.kernelStaged=[...new Set([...(state.kernelStaged??[]),name])];save();}await ops.prepare(secrets,{id:name,round:id,lane:w.lane,service:name,built:b,kernel:w.kernels[name],features:w.lane==='odc'?features:null,featuresSha256:w.lane==='odc'?release.featuresProvenance?.sha256??null:null,bridges,compose,dir});}return {ok:true};},()=>({ok:true}));
     else await once('prepared',()=>ops.prepare(secrets,{id,built,kernel,features,featuresSha256:release.featuresProvenance?.sha256??null,bridges,compose,dir}),()=>({ok:true}));
+    if(w&&!(w.kind==='add'&&w.lane==='o11'))await once('kernels-aligned',()=>alignKernels(compose),x=>x);
     await ops.pause();await ops.assertLiveUnchanged(secrets,baseline);
     state.composeHash=canonicalComposeHash(compose);state.mutationStarted=true;save();
     await once('compose-written',()=>ops.writeCompose(secrets,compose),()=>({ok:true}));
@@ -258,13 +291,14 @@ export async function releaseAutomatically(config,ops,release){
  }catch(error){
   state.failure={step:state.activeStep??'preflight',code:/^[A-Z_]+$/.test(error.code??'')?error.code:'RELEASE_FAILED'};
   if(!state.mutationStarted){
+   if(w&&state.kernelStaged?.length)await restoreStaged();
    state.status=error.environmental?'deferred':'preparation-failed';
    if(error.environmental){state.deferrals=(state.deferrals??0)+1;state.firstDeferredAt??=new Date().toISOString();}
    save();await event('failed',`${id}: ${state.failure.step} failed before mutation (${state.failure.code}).`,state.failure.code);
    return {status:error.environmental?'deferred':'failed',id,code:state.failure.code};
   }
   state.status='rolling-back';save();let restored=false;
-  try{if(ops.ensureReleaseLock)unlock=await ops.ensureReleaseLock(secrets,unlock);if(ops.assertRollbackSafe)await ops.assertRollbackSafe(secrets,baseline,state.composeHash);await ops.restoreCompose(secrets,baseline);if(state.deploySent){await ops.deploy(secrets);const r=await ops.checks(secrets,{rollback:true,live:baseline,...(w?.kind==='add'&&w.lane==='o11'?{kernelO11Also:w.defaultO11}:{})});if(!r?.ok)throw Error('Rollback checks failed.');}restored=true;}catch{}
+  try{if(ops.ensureReleaseLock)unlock=await ops.ensureReleaseLock(secrets,unlock);if(ops.assertRollbackSafe)await ops.assertRollbackSafe(secrets,baseline,state.composeHash);await ops.restoreCompose(secrets,baseline);if(state.deploySent){await ops.deploy(secrets);const r=await ops.checks(secrets,{rollback:true,live:baseline,...(w?.kind==='add'&&w.lane==='o11'?{kernelO11Also:w.defaultO11}:state.steps['kernels-aligned']?.value?.aligned?.length?{kernelO11Also:state.steps['kernels-aligned'].value.o11}:{})});if(!r?.ok)throw Error('Rollback checks failed.');}restored=true;}catch{}
   state.status=restored?'rolled-back':'rollback-failed';save();
   await event(restored?'failed':'rollback-failed',`${id}: ${state.failure.step} failed (${state.failure.code}); ${restored?'previous live baseline restored':'rollback requires owner attention'}.`,state.failure.code);
   return {status:state.status,id,code:'automatic-deployment-failed',cause:state.failure.code};

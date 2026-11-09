@@ -535,15 +535,17 @@ export function createAutoRuntime(config,runtime) {
    // A window round (r.service): one backend, its own compose service. An O11 round (r.lane o11, round o11-<v>) writes the
    // kernel.json of each rebuilt backend only: no features and nothing else of a running backend (remote-release.py kernelOnly,
    // review M4); an ODC round always sends the new backend's features.
+   // S2 R6 (review B11): r.repair, the kernel-only write of a retained backend in any window round (the restore after an O11
+   // round stopped before any change, or the alignment of one default O11 on every backend).
    if(r.service){
-    const kernelOnly=r.lane==='o11';
-    if(kernelOnly&&!/^o11-\d+\.\d+\.\d+$/.test(String(r.round??'')))throw Error('A kernel-only prepare belongs to an O11 round.');
+    const kernelOnly=r.lane==='o11'||r.repair===true;
+    if(kernelOnly&&!(r.repair===true?/^(?:(?:odc|o11)-\d+\.\d+\.\d+|retire-(?:odc|o11)-\d+\.\d+\.\d+)$/:/^o11-\d+\.\d+\.\d+$/).test(String(r.round??'')))throw Error('A kernel-only prepare belongs to an O11 round.');
     if(!kernelOnly&&!r.features)throw Object.assign(Error('The new ODC backend '+r.service+' has no ODC features; nothing was sent.'),{code:'FEATURES_MISSING'});
     const features=kernelOnly?null:fs.readFileSync(r.features);
     if(features&&r.featuresSha256&&hash(features)!==r.featuresSha256)throw Object.assign(Error('The ODC features changed after they were recorded; nothing was sent.'),{code:'FEATURES_CHANGED'});
     const archive=path.join(r.dir,'deploy.tar.gz');if(!fs.existsSync(archive))await runtime.archiveDeploy(await runtime.fullHead(),archive);
     return ssh(s,{action:'prepare',id:r.service,built:r.built,kernel:r.kernel,compose:backendCompose(r.compose,r.service),
-     archive:fs.readFileSync(archive).toString('base64'),...(kernelOnly?{kernelOnly:true,round:r.round}:{features:features.toString('base64')}),modelPlugins:modelPlugins()});
+     archive:fs.readFileSync(archive).toString('base64'),...(kernelOnly?{kernelOnly:true,round:r.round,...(r.repair===true?{repair:true}:{})}:{features:features.toString('base64')}),modelPlugins:modelPlugins()});
    }
    const features=fs.readFileSync(r.features);
    if(r.featuresSha256&&hash(features)!==r.featuresSha256)throw Object.assign(Error('The ODC features changed after they were recorded; nothing was sent.'),{code:'FEATURES_CHANGED'});
