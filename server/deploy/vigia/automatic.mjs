@@ -78,21 +78,39 @@ export function windowAgain(config,w,baseline,now=Date.now()){
 // <dir>/owner-notices.json before they are sent and until the VPS journal line or the webhook took them; every later round sends
 // them again (vigia.mjs resendKept), like state.unsent of a live release.
 export const KEPT_NOTICES='owner-notices.json';
+// S2 R6 (review B9): every kept notice has its own delivery key (<name>#<n>, n counting in the file), so the key a journal event
+// of the same attempt already took ("failed" before mutation) never swallows it, and a second notice of the same kind is
+// added, never replaces one not delivered yet. Names: dropped (an approved proposal discarded), stale (a deferred deploy whose
+// images no longer fit), resume-failed (the resume loop stopped a release before any change), superseded.
+// Review B10: the file is replaced durably (fsync, rename); an unreadable one is set aside, and the owner told.
+function readKept(file,ops){
+ if(!fs.existsSync(file))return {unsent:[]};
+ try{const kept=readJournal(file);if(!kept||typeof kept!=='object'||!Array.isArray(kept.unsent??[]))throw Error('not a notice list');return kept;}
+ catch(error){
+  const aside=file+'.unreadable-'+new Date().toISOString().replace(/[^0-9TZ]/g,'');
+  try{fs.renameSync(file,aside);}catch{}
+  ops.log?.(`owner notices ${file} unreadable (${error.message}); set aside as ${path.basename(aside)}`);
+  return {unsent:[{name:'notices-unreadable',key:'notices-unreadable#'+path.basename(aside),attempt:'notices',message:`The owner notices of ${path.basename(path.dirname(file))} were unreadable and are set aside in ${path.basename(aside)}; read them there.`,code:'NOTICES_UNREADABLE'}]};
+ }
+}
 export async function keepNotice(ops,{outDir,id,attempt},name,message,code=null){
- const file=path.join(outDir,id,KEPT_NOTICES),kept=fs.existsSync(file)?readJournal(file):{unsent:[]};
- kept.unsent=(kept.unsent??[]).filter(u=>!(u.name===name&&u.attempt===attempt));kept.unsent.push({name,message,attempt,...(code?{code}:{})});
- writeJournal(file,kept);
+ const file=path.join(outDir,id,KEPT_NOTICES),kept=readKept(file,ops);
+ kept.unsent=kept.unsent??[];
+ if(!kept.unsent.some(u=>u.name===name&&u.attempt===attempt&&u.message===message)){
+  kept.seq=(kept.seq??0)+1;kept.unsent.push({name,key:`${name}#${kept.seq}`,message,attempt,...(code?{code}:{})});
+ }
+ writeJournal(file,kept,{durable:true});
  return resendKept(ops,{outDir,id});
 }
 // -> the number of notices still not delivered.
 export async function resendKept(ops,{outDir,id}){
  const file=path.join(outDir,id,KEPT_NOTICES);
  if(!fs.existsSync(file))return 0;
- const kept=readJournal(file);if(!kept.unsent?.length)return 0;
- let secrets;try{secrets=await ops.secrets();}catch{return kept.unsent.length;}
+ const kept=readKept(file,ops);if(!kept.unsent?.length)return 0;
+ let secrets;try{secrets=await ops.secrets();}catch{if(!fs.existsSync(file))writeJournal(file,kept,{durable:true});return kept.unsent.length;}
  const left=[];
- for(const u of kept.unsent){const sent=await releaseEvent(outDir,ops,u.name,id,u.message,secrets,u.attempt,u.code??null).catch(()=>false);if(sent===false)left.push(u);}
- kept.unsent=left;writeJournal(file,kept);return left.length;
+ for(const u of kept.unsent){const sent=await releaseEvent(outDir,ops,u.name,id,u.message,secrets,u.attempt,u.code??null,u.key??u.name).catch(()=>false);if(sent===false)left.push(u);}
+ kept.unsent=left;writeJournal(file,kept,{durable:true});return left.length;
 }
 // Still to do on this live window: the version to add is not served yet, the version to retire still is.
 export function windowStillNeeded(baseline,w){
@@ -110,17 +128,18 @@ export function windowPinned(proposed,w,baseline){
 }
 // The window change of a round, for the served-list check of the compose (safety.mjs servedTransition).
 export const windowChange=w=>({added:w.kind==='add'?[{lane:w.lane,version:w.version}]:[],retired:(w.retired??[]).map(({lane,version})=>({lane,version}))});
-export async function releaseEvent(directory,ops,name,id,message,secrets,attempt='legacy',code=null){
+// key: the delivery key of the event within its attempt (default its name; a kept notice has its own, review B9).
+export async function releaseEvent(directory,ops,name,id,message,secrets,attempt='legacy',code=null,key=name){
  const file=path.join(directory,'release-events.json');let events={};
  if(fs.existsSync(file))events=JSON.parse(fs.readFileSync(file,'utf8'));
- const key=id+':'+attempt+':'+name;
- if(name!=='rollback-failed'&&events[key])return;
+ const recorded=id+':'+attempt+':'+key;
+ if(name!=='rollback-failed'&&events[recorded])return;
  // The key is recorded only once the owner was reached beyond this machine: the VPS journal line (remote logger) or the
  // webhook (ops.event's receipt {remote, webhook}). A local notice alone, a failed send or no receipt leaves it unrecorded,
  // so the next round sends the event again.
  const receipt=await ops.event(name,{id,attempt,message,...(code?{code}:{})},secrets).catch(()=>null);
  if(receipt?.remote!==true&&receipt?.webhook!==true)return false;
- events[key]=new Date().toISOString();atomic(file,events);return true;
+ events[recorded]=new Date().toISOString();atomic(file,events);return true;
 }
 export async function releaseAutomatically(config,ops,release){
  const {id,dir,built,manifest,kernel,bridges,features}=release;let w=release.window??null;
@@ -166,7 +185,7 @@ export async function releaseAutomatically(config,ops,release){
     if(error.code!==REBUILD_NEEDED)throw error;
     // The images no longer fit the live window: never deployed; the attempt is dropped and built again (review M1).
     state.status='stale';state.failure={step:'baseline-refresh',code:REBUILD_NEEDED};save();
-    await keepNotice(ops,{outDir,id,attempt:state.attempt},'failed',`${id}: ${error.message}`,REBUILD_NEEDED);
+    await keepNotice(ops,{outDir,id,attempt:state.attempt},'stale',`${id}: the approved images were not deployed: ${error.message} The next round builds them again and proposes them anew.`,REBUILD_NEEDED);
     return {status:'stale',id,code:REBUILD_NEEDED};
    }
    if(!again){state.status='idle';save();return {status:'idle',id};}

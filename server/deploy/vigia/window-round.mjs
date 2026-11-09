@@ -14,7 +14,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {createHash} from 'node:crypto';
 import {releaseAutomatically,releaseEvent,windowAgain,windowStillNeeded,keepNotice,KEPT_NOTICES} from './automatic.mjs';
-import {readJournal,writeJournal} from './journal.mjs';
+import {readJournal,writeJournal,durableWrite} from './journal.mjs';
 import {LANES,STUDIO_NAME,planWindow,readyCandidates,servedOf,newestServed,windowPolicy,dueRetirement,retireDue,rotateLane,rebuildLane,laneRounds,retireRoundId,defaultO11,backendId,compareFailures,featuresLine,failureText,affectedText,composeText,compareVersion,ownerCommand,affectedRecord} from './window.mjs';
 import {CLIENT_BRIDGE_CODE,bridgeMode,serverOnlyGate,o11Proofs} from './server-only.mjs';
 import {EnvironmentError,readAttempts,writeAttempt,remind,noticeNow,laneChecks,reviewedRelease,clientBridgeError,archive,featuresNotice,wasCut,timedOut,noteWaiting,OWNER_WAITS} from './pipeline.mjs';
@@ -153,7 +153,7 @@ export async function runWindowAttempt(config,ops,decision,now){
  // Owner notices not delivered yet stay with the round when its folder is archived (automatic.mjs keepNotice).
  const keptFile=path.join(dir,KEPT_NOTICES),kept=!waited&&fs.existsSync(keptFile)?fs.readFileSync(keptFile):null;
  if(!waited)archive(dir,decision.previous);fs.mkdirSync(dir,{recursive:true});
- if(kept&&!fs.existsSync(keptFile))fs.writeFileSync(keptFile,kept,{mode:0o600});
+ if(kept&&!fs.existsSync(keptFile))durableWrite(keptFile,kept);
  if(waited)for(const name of ['AGUARDANDO.md','FALHAS.md'])fs.rmSync(path.join(dir,name),{force:true});
  for(const s of decision.skipped??[])log(`${s.id} ${s.why==='deferred'?'waits':s.why}; trying ${id}`);
  const attempt={id,round:{kind,lane,version:v},pair:{lanes:[lane]},inputs:decision.inputs,status:'running',at:new Date(now).toISOString(),baseManifest:base,replayed:[],
@@ -335,7 +335,7 @@ async function dropProposal(config,ops,a,error,{endedAt=new Date().toISOString()
  const code=/^[A-Z_]+$/.test(error.code??'')?error.code:'RELEASE_FAILED',message=String(error.message).split('\n')[0];
  ops.log?.(`release ${a.id} dropped (${code}): ${message}`);
  writeAttempt(config.outDir,{...a,status:'failed',retry:true,code,error:message,dropped:{at:endedAt,code},failedLanes:[a.round?.lane??a.pair?.lanes?.[0]].filter(Boolean),endedAt});
- await keepNotice(ops,{outDir:config.outDir,id:a.id,attempt:a.at},'failed',`${a.id}: the approved images were not deployed (${code}): ${message} The next round builds ${STUDIO_NAME[a.round?.lane]??''} ${a.round?.version??''} again and proposes it anew.`,code).catch(e=>ops.log?.(`the owner notice of ${a.id} is kept: ${e.message}`));
+ await keepNotice(ops,{outDir:config.outDir,id:a.id,attempt:a.at},'dropped',`${a.id}: the approved images were not deployed (${code}): ${message} The next round builds ${STUDIO_NAME[a.round?.lane]??''} ${a.round?.version??''} again and proposes it anew.`,code).catch(e=>ops.log?.(`the owner notice of ${a.id} is kept: ${e.message}`));
  return {status:'failed',id:a.id,dir:path.join(config.outDir,a.id),code,dropped:true};
 }
 

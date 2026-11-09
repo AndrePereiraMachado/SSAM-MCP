@@ -440,7 +440,7 @@ test('R4 M1: an ODC proposal approved after an O11 round went live is never depl
  assert.equal(r.status,'failed',JSON.stringify(r));assert.equal(r.code,REBUILD_NEEDED);assert.equal(r.dropped,true);
  assert.deepEqual(f.calls,[]);
  const a=readAttempts(dir)['odc-1.7.33'];assert.equal(a.status,'failed');assert.equal(a.retry,true);assert.equal(a.dropped.code,REBUILD_NEEDED);
- const told=f.events.find(e=>e[0]==='failed'&&e[1]===REBUILD_NEEDED);assert.ok(told);assert.match(told[2],/11\.55\.96/);
+ const told=f.events.find(e=>e[0]==='dropped'&&e[1]===REBUILD_NEEDED);assert.ok(told);assert.match(told[2],/11\.55\.96/);
  // The next round builds 1.7.33 again (with .96) and proposes it anew.
  const again=decideWindow({manifest:W1,observed:[cand('odc','1.7.33')],state:{},attempts:readAttempts(dir),inputs:inputsOf,now:NOW+7200000});
  assert.equal(again.action,'run');assert.equal(again.id,'odc-1.7.33');
@@ -503,7 +503,7 @@ test('R4 M2: a deferred window deploy re-derived on a window its images no longe
  // Not delivered: kept, and sent by a later round once a channel takes it.
  assert.equal(readJournal(path.join(folder,KEPT_NOTICES)).unsent.length,1);
  delivered=true;assert.equal(await resendKept(f.ops,{outDir:out,id:'odc-1.7.33'}),0);
- assert.ok(f.events.some(e=>e[0]==='failed'&&e[1]===REBUILD_NEEDED));
+ assert.ok(f.events.some(e=>e[0]==='stale'&&e[1]===REBUILD_NEEDED));
  // A later call stays stale: it never deploys.
  assert.equal((await releaseAutomatically({outDir:out},f.ops,{id:'odc-1.7.33',dir:folder,attempt:'a1',built,manifest:next.manifest,kernel:{},bridges:{},features:null,bundles:{},window:w})).status,'stale');
 });
@@ -581,4 +581,53 @@ test('R4 M1: the kernels of an image come from its label; the post-deploy check 
  const retired=retireDue(retireDue(pinTags(o11),{now:NOW+7*DAY}).manifest,{now:NOW+7*DAY}).manifest;
  assert.deepEqual(retired.o11.served,K96.slice(1));assert.deepEqual(expectedKernelsOf(retired)['1.7.29'],K96);
  assert.equal(expectedKernelsOf({window:3,odc:[],o11:[]}),null);
+});
+
+// S2 R6 B9: the stale notice ("the approved images were not deployed ... builds them again") reaches the owner even though a
+// "failed" event of the same attempt (the deferral before it) was already delivered: kept notices have their own names and keys.
+test('R6 B9: the approved-images-discarded notice reaches the owner after a delivered failed event of the same attempt',async t=>{
+ const dir=tmp(t),out=tmp(t),W0=first().manifest;
+ const built={odc:'1.7.33',kernels:K,defaultO11:'11.55.95',o11:'11.55.95',image:'img',tag:'t33',sha256:sha('f')};
+ const next=rotateLane(W0,'odc','1.7.33',{now:NOW,images:{image:'img',tag:'t33',kernels:K}});
+ const w={kind:'add',lane:'odc',version:'1.7.33',builts:[built],o11Kernels:K,kernels:{'odc-1.7.33':{odc:'1.7.33',o11:'11.55.95'}},defaultO11:'11.55.95',retiring:next.retiring,retired:next.retired,affected:[],prepare:['odc-1.7.33']};
+ const W1=pinTags(rotateLane(W0,'o11','11.55.96',{now:NOW,images:Object.fromEntries(W0.backends.map(b=>[b.odc,{image:'img',tag:'k'+b.odc,kernels:K96}]))}).manifest);
+ const folder=path.join(out,'odc-1.7.33');fs.mkdirSync(folder);
+ fs.writeFileSync(path.join(folder,'deployment.json'),JSON.stringify({schema:2,id:'odc-1.7.33',attempt:'a1',steps:{},status:'deferred',deferrals:1,firstDeferredAt:new Date().toISOString(),baseline:{...liveOf(W0),hash:'old'}}));
+ // The deferral's "failed before mutation" event of attempt a1 was delivered.
+ fs.writeFileSync(path.join(out,'release-events.json'),JSON.stringify({'odc-1.7.33:a1:failed':new Date().toISOString()}));
+ const f=fakeOps({...liveOf(W1),hash:'new'});
+ const r=await releaseAutomatically({outDir:out},f.ops,{id:'odc-1.7.33',dir:folder,attempt:'a1',built,manifest:next.manifest,kernel:w.kernels['odc-1.7.33'],bridges:{mode:'server-only'},features:path.join(dir,'f.xml'),bundles:{},window:w});
+ assert.equal(r.status,'stale');
+ const told=f.events.find(e=>e[0]==='stale');assert.ok(told,'sent, not swallowed by the failed key');assert.equal(told[1],REBUILD_NEEDED);
+ assert.match(told[2],/approved images were not deployed.*builds them again/);
+ assert.equal(readJournal(path.join(folder,KEPT_NOTICES)).unsent.length,0);
+ assert.ok(Object.keys(JSON.parse(fs.readFileSync(path.join(out,'release-events.json'),'utf8'))).some(k=>/^odc-1\.7\.33:a1:stale#\d+$/.test(k)));
+});
+
+test('R6 B9: two kept notices of one kind and attempt both reach the owner, once each',async t=>{
+ const out=tmp(t),{keepNotice}=await import('./automatic.mjs');
+ let up=false;const f=fakeOps(liveOf(first().manifest)),send=f.ops.event;f.ops.event=async(n,v)=>up?send(n,v):{remote:false,webhook:false};
+ assert.equal(await keepNotice(f.ops,{outDir:out,id:'o11-11.55.96',attempt:'a1'},'dropped','o11-11.55.96: first','APPROVED_RELEASE_CHANGED'),1);
+ assert.equal(await keepNotice(f.ops,{outDir:out,id:'o11-11.55.96',attempt:'a1'},'dropped','o11-11.55.96: second',REBUILD_NEEDED),2,'added, not replaced');
+ assert.equal(await keepNotice(f.ops,{outDir:out,id:'o11-11.55.96',attempt:'a1'},'dropped','o11-11.55.96: second',REBUILD_NEEDED),2,'the same notice again is not doubled');
+ up=true;assert.equal(await resendKept(f.ops,{outDir:out,id:'o11-11.55.96'}),0);
+ assert.deepEqual(f.events.map(e=>e[2]),['o11-11.55.96: first','o11-11.55.96: second']);
+ assert.equal(await resendKept(f.ops,{outDir:out,id:'o11-11.55.96'}),0);assert.equal(f.events.length,2);
+});
+
+// S2 R6 B10: owner-notices.json is replaced durably (temp, fsync, rename); a truncated one is set aside and the owner told.
+test('R6 B10: kept notices are written durably; an unreadable file is set aside, told, and never stops the round',async t=>{
+ const out=tmp(t),{keepNotice}=await import('./automatic.mjs'),{durableWrite}=await import('./journal.mjs');
+ const f=fakeOps(liveOf(first().manifest)),logs=[];f.ops.log=m=>logs.push(m);
+ const folder=path.join(out,'odc-1.7.33');durableWrite(path.join(folder,KEPT_NOTICES),'{"unsent":[{"name":"stale","mess');
+ assert.ok(!fs.existsSync(path.join(folder,KEPT_NOTICES+'.next')));
+ assert.equal(await resendKept(f.ops,{outDir:out,id:'odc-1.7.33'}),0);
+ const aside=fs.readdirSync(folder).find(n=>n.startsWith(KEPT_NOTICES+'.unreadable-'));assert.ok(aside,'set aside, not lost');
+ assert.equal(fs.readFileSync(path.join(folder,aside),'utf8'),'{"unsent":[{"name":"stale","mess');
+ assert.ok(f.events.some(e=>e[0]==='notices-unreadable'&&e[1]==='NOTICES_UNREADABLE'&&e[2].includes(aside)));
+ assert.match(logs.join('\n'),/unreadable/);
+ fs.writeFileSync(path.join(folder,KEPT_NOTICES),'{');
+ assert.equal(await keepNotice(f.ops,{outDir:out,id:'odc-1.7.33',attempt:'a2'},'stale','odc-1.7.33: kept',REBUILD_NEEDED),0);
+ assert.ok(f.events.some(e=>e[2]==='odc-1.7.33: kept'));
+ assert.deepEqual(fs.readdirSync(folder).filter(n=>n.endsWith('.next')),[]);
 });

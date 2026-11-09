@@ -118,7 +118,7 @@ export async function round(config,runtime,{dryRun=false}={}){
     now.status='preparation-failed';now.failure={step:now.activeStep??'resume',code};writeJournal(journal,now);
     const {writeAttempt}=await import('./pipeline.mjs');
     writeAttempt(config.outDir,{...a,status:'failed',...(a.ownerGate?{retry:true,dropped:{at:endedAt,code}}:{}),code,failedLanes:[release.window.lane],endedAt});
-    await keepNotice(runtime,{outDir:config.outDir,id:a.id,attempt:a.at},'failed',`${a.id}: the release stopped before any change to production (${code}): ${String(error.message).split('\n')[0]}`,code).catch(()=>{});
+    await keepNotice(runtime,{outDir:config.outDir,id:a.id,attempt:a.at},'resume-failed',`${a.id}: the release stopped before any change to production (${code}): ${String(error.message).split('\n')[0]}`,code).catch(()=>{});
     continue;
    }
    if(result.status==='live'){
