@@ -69,6 +69,9 @@ test('Mac workflows: app_version = package.json, enable_updates wired into build
  assert.doesNotMatch(native,/"11\.55\.95"/);
  assert.match(native,/'\["v108","v109"\]'/);
  assert.match(native,/release-manifest\.json/);assert.match(native,/agent\/dist\/latest-mac\.yml/);
+ // Review B4 and B5: an updating build carries package.json's version; the checkout keeps no token.
+ assert.match(native,/if \(version !== own && process\.env\.ENABLE_UPDATES === "true"\) throw Error/);
+ assert.match(native,/- uses: actions\/checkout@v4\n\s+with:\n(?:\s+#.*\n)*\s+persist-credentials: false/);
 });
 // Review M3 of agent/mac-028: the CI SDK is pinned to 10.0.403 or newer, the resolved ILCompiler/runtime packs are checked to be
 // 10.0.14 or newer after the Native AOT publish, and the NuGet audit is never turned off in the workflow.

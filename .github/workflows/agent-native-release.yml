@@ -69,14 +69,20 @@ jobs:
         working-directory: agent
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Review B5 of agent/mac-028: npm install scripts and electron-builder run later; no token in .git/config for them.
+          persist-credentials: false
       - name: Check the app version and the update mode
         run: |
           node --input-type=module -e '
             import fs from "node:fs";
             const version = process.env.APP_VERSION, own = JSON.parse(fs.readFileSync("package.json", "utf8")).version;
             if (!/^\d+\.\d+\.\d+$/.test(version)) throw Error("app_version must be x.y.z: " + version);
-            if (version !== own) console.log("::warning::app_version " + version + " overrides package.json " + own);
             if (process.env.ENABLE_UPDATES === "true" && process.env.SIGNED !== "true") throw Error("enable_updates needs sign_and_notarize: Squirrel.Mac installs only a Developer ID update");
+            // Review B4 of agent/mac-028: an updating build carries exactly the version of package.json (a mistyped higher
+            // version would burn the version line of every Mac, which never goes back down).
+            if (version !== own && process.env.ENABLE_UPDATES === "true") throw Error("enable_updates needs app_version = package.json version " + own + ", not " + version);
+            if (version !== own) console.log("::warning::app_version " + version + " overrides package.json " + own);
             console.log(JSON.stringify({ appVersion: version, packageJson: own, enableUpdates: process.env.ENABLE_UPDATES === "true" }));'
         env:
           SIGNED: ${{ inputs.sign_and_notarize && 'true' || 'false' }}
@@ -215,7 +221,9 @@ jobs:
           else
             test ! -e 'dist/mac-arm64/SSAM Agent.app/Contents/Resources/app-update.yml' && test ! -e dist/latest-mac.yml
           fi
-          shasum -a 256 dist/*.dmg dist/*.zip > dist/SHA256SUMS
+          # Review B6 of agent/mac-028: the blockmap and the feed file too (release-manifest.json is added when it is written).
+          shasum -a 256 dist/*.dmg dist/*.zip dist/*.zip.blockmap > dist/SHA256SUMS
+          if [ -f dist/latest-mac.yml ]; then shasum -a 256 dist/latest-mac.yml >> dist/SHA256SUMS; fi
       - name: Record the hello and the pack of the installed app
         run: |
           # The native core of the packaged app, run from its own resources/pack against the fake hub of the tests
@@ -279,6 +287,7 @@ jobs:
           if (manifest.updates && (!artifacts.some(a => a.name === 'latest-mac.yml') || manifest.feed !== 'https://dist.ssam.pro/u/ssam-agent')) throw new Error('an updating build without its feed files');
           if (!artifacts.some(a => a.kind === 'update') || !artifacts.some(a => a.kind === 'installer')) throw new Error('the dmg or the zip is missing');
           fs.writeFileSync('dist/release-manifest.json', JSON.stringify(manifest, null, 2) + '\n');
+          fs.appendFileSync('dist/SHA256SUMS', createHash('sha256').update(fs.readFileSync('dist/release-manifest.json')).digest('hex') + '  dist/release-manifest.json\n');
           console.log(JSON.stringify(manifest, null, 2));
           EOF
         env:
@@ -290,7 +299,15 @@ jobs:
           # its own Electron; install the matching test binary explicitly too.
           node node_modules/electron/install.js
           PLAYWRIGHT_MODULE="$RUNNER_TEMP/ssam-ui-test/node_modules/playwright" node --test tests/native/electron-smoke.test.mjs
-          SSAM_PACKAGED_APP="$PWD/dist/mac-arm64/SSAM Agent.app/Contents/MacOS/SSAM Agent" PLAYWRIGHT_MODULE="$RUNNER_TEMP/ssam-ui-test/node_modules/playwright" node --test tests/native/electron-smoke.test.mjs
+          # Review B3 of agent/mac-028: an updating app checks the production feed 20 s after it opens and Squirrel.Mac replaces
+          # the bundle it runs from. The smoke runs a ditto copy, so dist/ (checked by Gatekeeper below, then uploaded) stays
+          # the bytes that were built and notarized.
+          smoke="$RUNNER_TEMP/ssam-smoke-app"; rm -rf "$smoke"; mkdir -p "$smoke"
+          ditto 'dist/mac-arm64/SSAM Agent.app' "$smoke/SSAM Agent.app"
+          SSAM_PACKAGED_APP="$smoke/SSAM Agent.app/Contents/MacOS/SSAM Agent" PLAYWRIGHT_MODULE="$RUNNER_TEMP/ssam-ui-test/node_modules/playwright" node --test tests/native/electron-smoke.test.mjs
+          rm -rf "$smoke"
+          # And the built app itself is still the one the build step checked.
+          codesign --verify --deep --strict 'dist/mac-arm64/SSAM Agent.app'
       - name: Exercise all private dialog forms with synthetic data
         env:
           SSAM_TEST_OUTPUT: ${{ github.workspace }}/agent/ci-results
