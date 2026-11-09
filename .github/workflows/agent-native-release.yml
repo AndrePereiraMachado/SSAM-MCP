@@ -126,7 +126,10 @@ jobs:
         with:
           dotnet-version: 10.0.403
       - name: Check the .NET SDK (GHSA-p3jp-9v83-76w9)
-        run: node scripts/check-native-toolchain.mjs --sdk "$(dotnet --version)"
+        # Review B-R2-5: the step passes only on the check's own "ok":true (an entry point that exits 0 without checking fails).
+        run: |
+          out=$(node scripts/check-native-toolchain.mjs --sdk "$(dotnet --version)"); echo "$out"
+          case "$out" in *'"ok":true'*) ;; *) echo '::error::the SDK check did not report ok'; exit 1;; esac
       - name: Download the approved bridge binaries
         env:
           GH_TOKEN: ${{ github.token }}
@@ -166,7 +169,9 @@ jobs:
           dotnet publish native/Ssam.Agent/Ssam.Agent.csproj -c Release -r osx-arm64 --nologo -p:UseSharedCompilation=false
       - name: Check the Native AOT toolchain the core was built with (GHSA-p3jp-9v83-76w9)
         # The ILCompiler and runtime packs the restore resolved: 10.0.14 or newer, or the build stops before any signing.
-        run: node scripts/check-native-toolchain.mjs --assets native/Ssam.Agent/obj/project.assets.json --rid osx-arm64
+        run: |
+          out=$(node scripts/check-native-toolchain.mjs --assets native/Ssam.Agent/obj/project.assets.json --rid osx-arm64); echo "$out"
+          case "$out" in *'"ok":true'*) ;; *) echo '::error::the Native AOT toolchain check did not report ok'; exit 1;; esac
       - name: Qualify the Native AOT executable
         env:
           SSAM_NATIVE_EXE: ${{ github.workspace }}/agent/native/Ssam.Agent/bin/Release/net10.0/osx-arm64/publish/ssam-agent
@@ -303,6 +308,11 @@ jobs:
           const expectedFeed = process.env.UPDATE_FEED === 'staging' ? 'https://dist.ssam.pro/u/ssam-agent-staging' : 'https://dist.ssam.pro/u/ssam-agent';
           if (manifest.updates && (!artifacts.some(a => a.name === 'latest-mac.yml') || manifest.feed !== expectedFeed)) throw new Error('an updating build without its feed files, or another feed than ' + expectedFeed);
           if (!artifacts.some(a => a.kind === 'update') || !artifacts.some(a => a.kind === 'installer')) throw new Error('the dmg or the zip is missing');
+          // Review M4-R2: every DMG/ZIP of a staging build is named -staging-mac-arm64; a production build has none.
+          const staged = process.env.UPDATE_FEED === 'staging' && manifest.updates;
+          for (const a of artifacts.filter(a => a.kind === 'update' || a.kind === 'installer'))
+            if (staged !== a.name.includes('-staging-mac-arm64.')) throw new Error(a.name + (staged ? ' does not name the staging feed' : ' names a staging feed in a production build'));
+          manifest.artifactSuffix = staged ? '-staging' : '';
           fs.writeFileSync('dist/release-manifest.json', JSON.stringify(manifest, null, 2) + '\n');
           fs.appendFileSync('dist/SHA256SUMS', createHash('sha256').update(fs.readFileSync('dist/release-manifest.json')).digest('hex') + '  dist/release-manifest.json\n');
           console.log(JSON.stringify(manifest, null, 2));
@@ -335,7 +345,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: r40-mac-arm64-test-evidence
+          name: r40-mac-arm64-test-evidence${{ inputs.update_feed == 'staging' && '-staging' || '' }}
           if-no-files-found: warn
           path: agent/ci-results/
       - name: Verify Developer ID and Gatekeeper
@@ -351,7 +361,8 @@ jobs:
           spctl --assess --type execute --verbose=2 "$RUNNER_TEMP/ssam-dmg-check/SSAM Agent.app"
       - uses: actions/upload-artifact@v4
         with:
-          name: ssam-agent-mac-arm64-${{ inputs.sign_and_notarize && 'signed' || 'unsigned' }}
+          # Review M4-R2 of agent/mac-028: a staging build never looks like a production one (artifact and file names).
+          name: ssam-agent-mac-arm64-${{ inputs.sign_and_notarize && 'signed' || 'unsigned' }}${{ inputs.update_feed == 'staging' && '-staging' || '' }}
           if-no-files-found: error
           path: |
             agent/dist/*-mac-arm64.dmg

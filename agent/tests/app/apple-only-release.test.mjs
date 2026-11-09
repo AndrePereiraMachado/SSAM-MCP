@@ -1,8 +1,8 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {parse,withoutOffers,builderArgs,feedEntries,checkMacOutput,DEFAULT_UPDATE_URL} from '../../scripts/build.mjs';
+import {parse,withoutOffers,builderArgs,feedEntries,checkMacOutput,DEFAULT_UPDATE_URL,feedLabel} from '../../scripts/build.mjs';
 import {assertBridgeTrust} from '../../scripts/bridge-trust-gate.mjs';
-import {feedPinned,updateTrustProblem} from '../../src/main/core/update-model.mjs';
+import {feedPinned,updateTrustProblem,updateFeedLabel,updateFeedRecordProblem,PRODUCTION_UPDATE_URL} from '../../src/main/core/update-model.mjs';
 import {resolveUpdateUrl} from '../../src/main/core/settings.mjs';
 import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import {createHash} from 'node:crypto';
 const args=['--platform','mac','--native','core','--notarize','--bundled-bridges-only'];
@@ -23,7 +23,7 @@ test('a Mac app that updates itself must be notarized; --no-updates and the unsi
 });
 test('electron-builder arguments: the feed of Windows (generic, dist.ssam.pro, latest), the app version, notarization; none of it offline',()=>{
  const updating=builderArgs(parse([...args,'--app-version','0.2.8']),{nativeMac:true,arch:'arm64',config:'c.json'});
- assert.deepEqual(updating,['--mac','dmg','zip','--arm64','--publish','never','--config','c.json','-c.publish.provider=generic','-c.publish.url=https://dist.ssam.pro/u/ssam-agent','-c.publish.channel=latest','-c.extraMetadata.version=0.2.8','-c.mac.notarize=true']);
+ assert.deepEqual(updating,['--mac','dmg','zip','--arm64','--publish','never','--config','c.json','-c.publish.provider=generic','-c.publish.url=https://dist.ssam.pro/u/ssam-agent','-c.publish.channel=latest','-c.extraMetadata.version=0.2.8','-c.extraMetadata.ssamUpdateFeed=https://dist.ssam.pro/u/ssam-agent','-c.mac.notarize=true']);
  const offline=builderArgs(parse([...args,'--no-updates']),{nativeMac:true,arch:'arm64',config:'c.json'});
  assert.equal(offline.some(a=>a.startsWith('-c.publish')),false);assert.equal(offline.some(a=>a.startsWith('-c.extraMetadata')),false);
  assert.throws(()=>parse([...args,'--app-version','0.2']),/x\.y\.z/);
@@ -71,6 +71,10 @@ test('Mac workflows: app_version = package.json, enable_updates wired into build
  assert.match(native,/feed=https:\/\/dist\.ssam\.pro\/u\/ssam-agent; if \[ "\$UPDATE_FEED" = staging \]; then feed=https:\/\/dist\.ssam\.pro\/u\/ssam-agent-staging; fi/);
  assert.match(native,/version !== own && process\.env\.ENABLE_UPDATES === "true" && feed === "production"\) throw Error/);
  assert.match(native,/manifest\.feed !== expectedFeed/);
+ // Review M4-R2: the artifacts of a staging build are named so (workflow artifact and every DMG/ZIP), a production one never.
+ assert.match(native,/name: ssam-agent-mac-arm64-\$\{\{ inputs\.sign_and_notarize && 'signed' \|\| 'unsigned' \}\}\$\{\{ inputs\.update_feed == 'staging' && '-staging' \|\| '' \}\}\n/);
+ assert.match(native,/name: r40-mac-arm64-test-evidence\$\{\{ inputs\.update_feed == 'staging' && '-staging' \|\| '' \}\}\n/);
+ assert.match(native,/if \(staged !== a\.name\.includes\('-staging-mac-arm64\.'\)\) throw new Error/);
  // Review M2: the three thins of the published Windows 0.2.8, 11.55.94 the default; no 11.55.95 thin.
  assert.match(native,/'\["11\.55\.94","11\.55\.93","11\.55\.92"\]' \|\| hello\.pack\.o11BuiltFor !== '11\.55\.94'/);
  assert.doesNotMatch(native,/"11\.55\.95"/);
@@ -87,6 +91,8 @@ test('Mac workflow: pinned .NET SDK, toolchain checks around the Native AOT publ
  const sdk=/actions\/setup-dotnet@v4\n\s+with:\n\s+dotnet-version: (\S+)/.exec(native)?.[1];
  assert.equal(sdk,'10.0.403');
  assert.match(native,/node scripts\/check-native-toolchain\.mjs --sdk "\$\(dotnet --version\)"/);
+ // Review B-R2-5: both checks pass only on their own "ok":true, never on an exit code alone.
+ assert.equal([...native.matchAll(/out=\$\(node scripts\/check-native-toolchain\.mjs [^\n]+\); echo "\$out"\n\s+case "\$out" in \*'"ok":true'\*\) ;; \*\) echo '::error::[^']+'; exit 1;; esac/g)].length,2);
  const publish=native.indexOf('dotnet publish native/Ssam.Agent/Ssam.Agent.csproj'),check=native.indexOf('node scripts/check-native-toolchain.mjs --assets native/Ssam.Agent/obj/project.assets.json --rid osx-arm64'),sign=native.indexOf('codesign --force');
  assert.ok(publish>0&&check>publish&&check<sign,'the toolchain check runs after the publish and before any signing');
  assert.doesNotMatch(native,/NuGetAudit\s*=\s*false|NuGetAudit=false|WarningsNotAsErrors[^\n]*NU1903|NoWarn[^\n]*NU1903/i);
@@ -100,17 +106,52 @@ test('checkMacOutput: the updater files of a Mac release, and none in an offline
   const sha512=createHash('sha512').update(zip).digest('base64');
   const latest=`version: 0.2.8\nfiles:\n  - url: ssam-agent-app-0.2.8-mac-arm64.zip\n    sha512: ${sha512}\n    size: ${zip.length}\npath: ssam-agent-app-0.2.8-mac-arm64.zip\nsha512: ${sha512}\nreleaseDate: '2026-11-09T00:00:00.000Z'\n`;
   assert.deepEqual(feedEntries(latest),{version:'0.2.8',files:[{url:'ssam-agent-app-0.2.8-mac-arm64.zip',sha512,size:zip.length}]});
-  const options=parse([...args,'--app-version','0.2.8']);const ok=()=>[];
-  assert.throws(()=>checkMacOutput(dist,options,{arch:'arm64',pack:ok}),/app-update\.yml is missing.*latest-mac\.yml is missing/);
+  const options=parse([...args,'--app-version','0.2.8']);const ok=()=>[];const recorded=()=>({ssamUpdateFeed:'https://dist.ssam.pro/u/ssam-agent'});
+  assert.throws(()=>checkMacOutput(dist,options,{arch:'arm64',pack:ok,readAppPackage:recorded}),/app-update\.yml is missing.*latest-mac\.yml is missing/);
   fs.writeFileSync(path.join(resources,'app-update.yml'),'provider: generic\nurl: https://dist.ssam.pro/u/ssam-agent\nchannel: latest\nupdaterCacheDirName: ssam-agent-app-updater\n');
   fs.writeFileSync(path.join(dist,'latest-mac.yml'),latest);
-  checkMacOutput(dist,options,{arch:'arm64',pack:ok});
-  assert.throws(()=>checkMacOutput(dist,options,{arch:'arm64',pack:()=>['o11Builds[1] pins x']}),/Resources\/pack: o11Builds\[1\] pins x/);
-  assert.throws(()=>checkMacOutput(dist,parse([...args,'--app-version','0.2.9']),{arch:'arm64',pack:ok}),/announces 0\.2\.8, not 0\.2\.9/);
+  checkMacOutput(dist,options,{arch:'arm64',pack:ok,readAppPackage:recorded});
+  // Review M4-R2: the app's package.json must record the feed of app-update.yml; a staging name in a production build is refused.
+  assert.throws(()=>checkMacOutput(dist,options,{arch:'arm64',pack:ok,readAppPackage:()=>({ssamUpdateFeed:'https://dist.ssam.pro/u/ssam-agent-staging'})}),/records the update feed https:\/\/dist\.ssam\.pro\/u\/ssam-agent-staging, not https:\/\/dist\.ssam\.pro\/u\/ssam-agent/);
+  assert.throws(()=>checkMacOutput(dist,options,{arch:'arm64',pack:ok,readAppPackage:()=>({})}),/records the update feed none/);
+  assert.throws(()=>checkMacOutput(dist,options,{arch:'arm64',pack:ok,readAppPackage:()=>{throw new Error('no app.asar');}}),/records the update feed unreadable \(no app\.asar\)/);
+  fs.writeFileSync(path.join(dist,'ssam-agent-app-0.2.8-staging-mac-arm64.dmg'),'dmg');
+  assert.throws(()=>checkMacOutput(dist,options,{arch:'arm64',pack:ok,readAppPackage:recorded}),/ssam-agent-app-0\.2\.8-staging-mac-arm64\.dmg names a staging feed/);
+  fs.rmSync(path.join(dist,'ssam-agent-app-0.2.8-staging-mac-arm64.dmg'));
+  assert.throws(()=>checkMacOutput(dist,options,{arch:'arm64',pack:()=>['o11Builds[1] pins x'],readAppPackage:recorded}),/Resources\/pack: o11Builds\[1\] pins x/);
+  assert.throws(()=>checkMacOutput(dist,parse([...args,'--app-version','0.2.9']),{arch:'arm64',pack:ok,readAppPackage:recorded}),/announces 0\.2\.8, not 0\.2\.9/);
   fs.writeFileSync(path.join(dist,'ssam-agent-app-0.2.8-mac-arm64.zip'),'changed');
-  assert.throws(()=>checkMacOutput(dist,options,{arch:'arm64',pack:ok}),/another sha512 or size/);
+  assert.throws(()=>checkMacOutput(dist,options,{arch:'arm64',pack:ok,readAppPackage:recorded}),/another sha512 or size/);
   assert.throws(()=>checkMacOutput(dist,parse([...args,'--no-updates']),{arch:'arm64',pack:ok}),/must not carry Resources\/app-update\.yml.*must not write dist\/latest-mac\.yml/);
   fs.rmSync(path.join(resources,'app-update.yml'));fs.rmSync(path.join(dist,'latest-mac.yml'));
   checkMacOutput(dist,parse([...args,'--no-updates']),{arch:'arm64',pack:ok});
  }finally{fs.rmSync(dist,{recursive:true,force:true});}
+});
+// Review M4-R2 of agent/mac-028: a staging build is told apart from a production one by its file names, the artifact name of the
+// workflow, the feed recorded in the app, and the panel; the production feed keeps the names of before.
+test('staging builds carry the feed in their names; production and offline builds do not',()=>{
+ const staging=parse([...args,'--app-version','0.2.9','--update-url','https://dist.ssam.pro/u/ssam-agent-staging/']);
+ assert.equal(feedLabel(staging),'staging');assert.equal(feedLabel(parse(args)),null);assert.equal(feedLabel(parse([...args,'--no-updates'])),null);
+ assert.equal(feedLabel(parse(['--platform','mac','--native','core','--test-unsigned'])),null);
+ assert.equal(DEFAULT_UPDATE_URL,PRODUCTION_UPDATE_URL);
+ assert.deepEqual(builderArgs(staging,{nativeMac:true,arch:'arm64',config:'c.json'}).filter(a=>a.startsWith('-c.')),['-c.publish.provider=generic','-c.publish.url=https://dist.ssam.pro/u/ssam-agent-staging','-c.publish.channel=latest','-c.extraMetadata.version=0.2.9','-c.extraMetadata.ssamUpdateFeed=https://dist.ssam.pro/u/ssam-agent-staging','-c.mac.notarize=true']);
+ assert.equal(builderArgs(staging,{nativeMac:false,config:'c.json'}).some(a=>a.includes('ssamUpdateFeed')),false,'only the Mac build records it');
+ for(const [url,label] of [[PRODUCTION_UPDATE_URL,'production'],[PRODUCTION_UPDATE_URL+'/','production'],['https://dist.ssam.pro/u/ssam-agent-staging','staging'],['https://dist.ssam.pro/u/ssam-agent-QA_2','qa-2'],['https://updates.example.com/ssam-agent','feed-ssam-agent'],[null,null],['',null]])
+  assert.equal(updateFeedLabel(url),label,String(url));
+ const dist=fs.mkdtempSync(path.join(os.tmpdir(),'ssam-mac-staging-'));try{
+  const resources=path.join(dist,'mac-arm64','SSAM Agent.app','Contents','Resources');fs.mkdirSync(path.join(resources,'pack'),{recursive:true});
+  fs.writeFileSync(path.join(resources,'app-update.yml'),'provider: generic\nurl: https://dist.ssam.pro/u/ssam-agent-staging\nchannel: latest\nupdaterCacheDirName: ssam-agent-app-updater\n');
+  const zipName='ssam-agent-app-0.2.9-staging-mac-arm64.zip',zip=Buffer.from('zip');fs.writeFileSync(path.join(dist,zipName),zip);fs.writeFileSync(path.join(dist,'ssam-agent-app-0.2.9-staging-mac-arm64.dmg'),'dmg');
+  const sha512=createHash('sha512').update(zip).digest('base64');
+  fs.writeFileSync(path.join(dist,'latest-mac.yml'),`version: 0.2.9\nfiles:\n  - url: ${zipName}\n    sha512: ${sha512}\n    size: ${zip.length}\npath: ${zipName}\n`);
+  const ok=()=>[],recorded=()=>({ssamUpdateFeed:'https://dist.ssam.pro/u/ssam-agent-staging'});
+  checkMacOutput(dist,staging,{arch:'arm64',pack:ok,readAppPackage:recorded});
+  fs.writeFileSync(path.join(dist,'ssam-agent-app-0.2.9-mac-arm64.dmg'),'dmg');
+  assert.throws(()=>checkMacOutput(dist,staging,{arch:'arm64',pack:ok,readAppPackage:recorded}),/ssam-agent-app-0\.2\.9-mac-arm64\.dmg does not name the staging feed \(-staging-mac-\)/);
+ }finally{fs.rmSync(dist,{recursive:true,force:true});}
+ // The app at start (index.mjs): the feed recorded by the build against its app-update.yml.
+ assert.equal(updateFeedRecordProblem({recorded:undefined,buildUrl:PRODUCTION_UPDATE_URL}),null);
+ assert.equal(updateFeedRecordProblem({recorded:PRODUCTION_UPDATE_URL,buildUrl:PRODUCTION_UPDATE_URL+'/'}),null);
+ assert.match(updateFeedRecordProblem({recorded:'https://dist.ssam.pro/u/ssam-agent-staging',buildUrl:PRODUCTION_UPDATE_URL}),/built for the update feed https:\/\/dist\.ssam\.pro\/u\/ssam-agent-staging \(staging\), but its app-update\.yml names https:\/\/dist\.ssam\.pro\/u\/ssam-agent \(production\)/);
+ assert.match(updateFeedRecordProblem({recorded:PRODUCTION_UPDATE_URL,buildUrl:null}),/names no feed/);
 });

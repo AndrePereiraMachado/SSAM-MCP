@@ -36,14 +36,24 @@ import { updateUrlProblem } from '../src/main/core/settings.mjs';
 import { stageNativePack } from './native-pack.mjs';
 import { assertBridgeTrust, readTrustPublicKey, spkiBase64 } from './bridge-trust-gate.mjs';
 import { signingOf, signingConfig, testUnsignedConfig, updaterConfigProblems, signNative, signerThumbprint, signerSubject, publisherMatches, signPackExecutables, packExecutables } from './windows-release.mjs';
-import { publisherNames } from '../src/main/core/update-model.mjs';
+import { publisherNames, updateFeedLabel, PRODUCTION_UPDATE_URL } from '../src/main/core/update-model.mjs';
+import { createRequire } from 'node:module';
 import { packProblems } from './pack-pins.mjs';
 import { createHash } from 'node:crypto';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const app = path.resolve(here, '..');
 // The owner's update server (the publish url of electron-builder.yml); --update-url or SSAM_UPDATE_URL replace it.
-export const DEFAULT_UPDATE_URL = 'https://dist.ssam.pro/u/ssam-agent';
+export const DEFAULT_UPDATE_URL = PRODUCTION_UPDATE_URL;
+
+// The feed in the names of a build's files (review M4-R2 of agent/mac-028): null for the production feed and for a build without
+// updates, else its label ('staging' for .../ssam-agent-staging), so ssam-agent-app-0.2.8-staging-mac-arm64.zip can never be
+// taken for the production ZIP.
+export function feedLabel(options) {
+  if (options.noUpdates || options.testUnsigned) return null;
+  const label = updateFeedLabel(options.updateUrl);
+  return label === 'production' ? null : label;
+}
 
 export function parse(argv) {
   const options = { platform: null, pack: null, updateUrl: process.env.SSAM_UPDATE_URL ?? DEFAULT_UPDATE_URL, noUpdates: false, packOnly: false, notarize: false, testUnsigned: false, dryRun: false };
@@ -214,6 +224,9 @@ export function builderArgs(options, { nativeMac = false, arch = process.arch, c
   const args = [...(nativeMac ? ['--mac', 'dmg', 'zip', '--' + arch] : [options.platform === 'win' ? '--win' : '--mac']), '--publish', 'never', '--config', config];
   if (!options.noUpdates) args.push('-c.publish.provider=generic', `-c.publish.url=${options.updateUrl.replace(/\/+$/, '')}`, '-c.publish.channel=latest');
   if (options.appVersion) args.push(`-c.extraMetadata.version=${options.appVersion}`);
+  // Review M4-R2: a Mac build that updates itself records its feed in the app's package.json; the app compares it with its
+  // app-update.yml at every start (core/update-model.mjs updateFeedRecordProblem) and shows the feed in the panel.
+  if (nativeMac && !options.noUpdates) args.push(`-c.extraMetadata.ssamUpdateFeed=${options.updateUrl.replace(/\/+$/, '')}`);
   if (options.notarize) args.push('-c.mac.notarize=true');
   return args;
 }
@@ -235,9 +248,16 @@ export function feedEntries(text) {
 // one of the build: with updates, resources/app-update.yml names the feed (generic, latest) and dist/latest-mac.yml announces
 // this version with the ZIP(s) of dist, whose sha512 and size it states (what electron-updater checks before Squirrel.Mac
 // checks the code signature); without updates, neither file exists. arch: the native core's (mac-arm64 or mac).
-export function checkMacOutput(dist, options, { arch = process.arch, version = options.appVersion ?? appPackageVersion(), pack = packProblems } = {}) {
+// Review M4-R2: the DMG and ZIP of a staging build carry the feed in their names (-staging-mac-), a production one never does, and
+// the app's package.json (in app.asar) records the feed its app-update.yml names.
+export function checkMacOutput(dist, options, { arch = process.arch, version = options.appVersion ?? appPackageVersion(), pack = packProblems, readAppPackage = readAsarPackage } = {}) {
   const resources = path.join(dist, arch === 'arm64' ? 'mac-arm64' : 'mac', 'SSAM Agent.app', 'Contents', 'Resources');
   const problems = pack(path.join(resources, 'pack')).map(problem => 'Resources/pack: ' + problem);
+  const label = feedLabel(options);
+  for (const name of fs.readdirSync(dist).filter(n => /\.(dmg|zip)$/.test(n))) {
+    if (label && !name.includes(`-${label}-mac-`)) problems.push(`${name} does not name the ${label} feed (-${label}-mac-): it could be taken for a production file`);
+    if (!label && /-staging-/.test(name)) problems.push(`${name} names a staging feed, but this build updates from ${options.noUpdates || options.testUnsigned ? 'no feed' : options.updateUrl}`);
+  }
   const yml = path.join(resources, 'app-update.yml');
   const text = fs.existsSync(yml) ? fs.readFileSync(yml, 'utf8') : null;
   const latest = path.join(dist, 'latest-mac.yml');
@@ -246,6 +266,9 @@ export function checkMacOutput(dist, options, { arch = process.arch, version = o
     if (fs.existsSync(latest)) problems.push('a build without updates must not write dist/latest-mac.yml');
   } else {
     problems.push(...updaterConfigProblems(text, { url: options.updateUrl.replace(/\/+$/, '') }));
+    let recorded;
+    try { recorded = readAppPackage(path.join(resources, 'app.asar'))?.ssamUpdateFeed; } catch (error) { recorded = 'unreadable (' + String(error?.message ?? error).slice(0, 120) + ')'; }
+    if (recorded !== options.updateUrl.replace(/\/+$/, '')) problems.push(`the app's package.json records the update feed ${recorded ?? 'none'}, not ${options.updateUrl}`);
     if (text !== null && publisherNames(text).length) problems.push('app-update.yml names a publisherName: on macOS Squirrel.Mac checks the code signature, the name would only confuse');
     if (!fs.existsSync(latest)) problems.push('dist/latest-mac.yml is missing: the feed would have nothing to announce');
     else {
@@ -264,6 +287,10 @@ export function checkMacOutput(dist, options, { arch = process.arch, version = o
   console.log('pack: Resources/pack is whole and every pin matches its file');
   console.log(options.noUpdates || options.testUnsigned ? 'updater: off (no app-update.yml, no latest-mac.yml)'
     : 'updater: app-update.yml names ' + options.updateUrl + '; latest-mac.yml announces ' + version + ' (Squirrel.Mac installs only a Developer ID update of the same team)');
+}
+// The package.json inside an app.asar (@electron/asar, electron-builder's own dependency).
+export function readAsarPackage(asarFile) {
+  return JSON.parse(String(createRequire(import.meta.url)('@electron/asar').extractFile(asarFile, 'package.json')));
 }
 export function appPackageVersion(appDir = app) { return JSON.parse(fs.readFileSync(path.join(appDir, 'package.json'), 'utf8')).version; }
 
@@ -348,6 +375,8 @@ async function main() {
         // The native core is already sealed before its manifest hash is recorded.
         ...(!options.notarize ? { identity: '-', hardenedRuntime: false } : {}),
         ...(options.testUnsigned ? { artifactName: '${name}-${version}-test-unsigned-${os}-${arch}.${ext}' } : {}),
+        // Review M4-R2: ssam-agent-app-0.2.8-staging-mac-arm64.dmg/.zip (latest-mac.yml of the staging feed names this ZIP).
+        ...(feedLabel(options) ? { artifactName: '${name}-${version}-' + feedLabel(options) + '-${os}-${arch}.${ext}' } : {}),
         signIgnore: ['Contents/Resources/pack/native/ssam-agent$'] } } : {}) }));
   }
   // Explicit CLI target names bypass merged YAML target arrays. Otherwise the

@@ -35,6 +35,8 @@ export function UpdatesCard({ update, app, settings }) {
       <h2>App updates</h2>
       <p className="muted">{updateLine(update, app.version, autoInstall)}</p>
       <p className="muted">{autoInstall ? 'Updates install by themselves: no click needed.' : 'Updates wait for you: use "Restart to update" or quit the app.'}</p>
+      {app.updateFeed && app.updateFeed !== 'production' && <p className="error">Update feed: {app.updateFeed} ({app.updateUrl}). This is not the production feed: this app only updates from there. Install the production SSAM Agent to leave it.</p>}
+      {app.updateFeedProblem && <p className="error">Update feed mismatch: {app.updateFeedProblem}</p>}
       <div className="row">
         <button onClick={() => ssam.checkUpdates()} disabled={['off', 'checking', 'downloading', 'verifying'].includes(update.status)}>Check for updates</button>
         {update.status === 'ready' && <button className="primary" onClick={() => ssam.installUpdate()}>Restart to update now</button>}

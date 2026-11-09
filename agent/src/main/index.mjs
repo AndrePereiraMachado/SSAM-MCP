@@ -17,7 +17,7 @@ import { createPanel } from './electron/window.mjs';
 import { createUpdates, buildUpdateUrl, buildUpdateConfig } from './electron/updates.mjs';
 // A build with the pinned update key (app 0.2.8) keeps the feed of its build, as a signed one did (review M2 of F5).
 import { UPDATE_PUBLIC_KEY } from './core/update-trust.mjs';
-import { feedPinned } from './core/update-model.mjs';
+import { feedPinned, updateFeedLabel, updateFeedRecordProblem } from './core/update-model.mjs';
 import { loadSettings, saveSettings, resolveUpdateUrl, updateUrlProblem } from './core/settings.mjs';
 import { defaultRoot, bundledPackDir } from './core/paths.mjs';
 import { resolveDataLocation } from './core/data-location.mjs';
@@ -84,7 +84,14 @@ async function run() {
   const updates = createUpdates({ url: updateUrl.url, hours: settings.updateCheckHours, autoInstall: settings.updateAutoInstall, log, isPackaged: app.isPackaged,
     devConfig: path.join(appDir, 'dev-app-update.yml'), appUpdateYml, currentVersion: appVersion, onChange: state => { updateState = state; push(); }, stopAgent: async () => { if (supervisor) await supervisor.stop(); } });
   updateState = updates.state;
-  log.write('updates', { url: updateUrl.url, source: updateUrl.source, autoInstall: settings.updateAutoInstall });
+  // Review M4-R2 of agent/mac-028: the feed the build recorded (package.json ssamUpdateFeed, scripts/build.mjs) must be the one of
+  // app-update.yml; a mismatch is logged and shown in the panel. The panel also names a feed other than production.
+  let recordedFeed;
+  try { recordedFeed = JSON.parse(fs.readFileSync(path.join(appDir, 'package.json'), 'utf8')).ssamUpdateFeed; } catch { recordedFeed = undefined; }
+  const updateFeedProblem = app.isPackaged ? updateFeedRecordProblem({ recorded: recordedFeed, buildUrl: buildUpdateUrl(process.resourcesPath) }) : null;
+  const updateFeed = updateFeedLabel(updateUrl.url);
+  if (updateFeedProblem) log.write('update-feed-mismatch', { recorded: recordedFeed ?? null, build: buildUpdateUrl(process.resourcesPath), problem: updateFeedProblem });
+  log.write('updates', { url: updateUrl.url, source: updateUrl.source, feed: updateFeed, recordedFeed: recordedFeed ?? null, autoInstall: settings.updateAutoInstall });
 
   function makeSupervisor(target) {
     return createSupervisor({ root: target, packDir, installedPack: true, fork: forkWithUtilityProcess(), env: process.env, log: log.write, onChange: () => push() });
@@ -100,7 +107,7 @@ async function run() {
     const agent = supervisor.snapshot();
     if (!packCheck.ok) agent.view = { status: 'attention', text: 'App needs attention', detail: `The pack bundled with this app is damaged (${packCheck.detail}); install the app again.`, attention: true };
     return { app: { version: appVersion, server: service, platform: process.platform, packaged: app.isPackaged, electron: process.versions.electron, node: process.version,
-      updateUrl: updateUrl.url, updateSource: updateUrl.source, logFile: log.file, settingsFile, defaultRoot: defaultRoot(), bundledPack: packCheck.pack?.id ?? null },
+      updateUrl: updateUrl.url, updateSource: updateUrl.source, updateFeed, updateFeedProblem, logFile: log.file, settingsFile, defaultRoot: defaultRoot(), bundledPack: packCheck.pack?.id ?? null },
       settings, agent, update: updateState, busy };
   }
 

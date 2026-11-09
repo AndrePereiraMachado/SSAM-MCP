@@ -87,6 +87,32 @@ export function feedPinned({ platform, isPackaged, appUpdateYml, updatePublicKey
   return Boolean(isPackaged) && (publisherNames(appUpdateYml).length > 0 || Boolean(updatePublicKey) || platform === 'darwin');
 }
 
+// The owner's production feed (electron-builder.yml publish url; scripts/build.mjs DEFAULT_UPDATE_URL).
+export const PRODUCTION_UPDATE_URL = 'https://dist.ssam.pro/u/ssam-agent';
+const cleanFeed = url => (typeof url === 'string' && url.trim() ? url.trim().replace(/\/+$/, '') : null);
+
+// The short name of an update feed, for the file names of a build and the panel (review M4-R2 of agent/mac-028): 'production'
+// for the owner's feed, 'staging' for .../ssam-agent-staging (any .../ssam-agent-<x> gives <x>), 'feed-<last segment>' for any
+// other; null without a feed.
+export function updateFeedLabel(url) {
+  const clean = cleanFeed(url);
+  if (!clean) return null;
+  if (clean === PRODUCTION_UPDATE_URL) return 'production';
+  const segment = clean.split('/').pop() ?? '';
+  const raw = segment.startsWith('ssam-agent-') ? segment.slice('ssam-agent-'.length) : 'feed-' + segment;
+  return raw.toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'feed';
+}
+
+// Whether the feed of resources/app-update.yml is the one the build recorded in the app's package.json (ssamUpdateFeed,
+// scripts/build.mjs on a Mac build that updates itself): null, or the reason. A build without the record (Windows, offline,
+// older) is not checked. Review M4-R2: a staging app must never pass for a production one, nor the reverse.
+export function updateFeedRecordProblem({ recorded, buildUrl }) {
+  if (recorded === undefined || recorded === null) return null;
+  const want = cleanFeed(String(recorded)); const got = cleanFeed(buildUrl);
+  if (want === got) return null;
+  return `this app was built for the update feed ${want ?? 'none'} (${updateFeedLabel(want) ?? 'none'}), but its app-update.yml names ${got ?? 'no feed'} (${updateFeedLabel(got) ?? 'none'}); install the right SSAM Agent by hand`;
+}
+
 export function updateTrustProblem({ platform, isPackaged, updatePublicKey }) {
   if (platform !== 'win32' || !isPackaged) return null;
   if (!String(updatePublicKey ?? '').trim())
