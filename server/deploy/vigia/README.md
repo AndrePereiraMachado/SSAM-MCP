@@ -18,22 +18,51 @@ In `signed-offers` bridge mode, keep the Authenticode key nonexportable in the d
 
 The latest released Studios come only from OutSystems' public pages, read anonymously each round. Service Studio (version with build, file names and sizes for Windows, Mac Intel and Mac ARM) comes from the outsystems.com/downloads screen service `DataActionGetReleases`. ODC Studio's `X.Y.Z` and "Released on" day D come from the ODC Studio release notes on success.outsystems.com. The screen services' `apiVersion` tokens are re-read from the sites' published scripts every round (one more re-read when a token rotates mid-round). Only versions those pages name are probed: an unannounced version that already sits on releaseshub (11.55.96.65382 on 2026-11-09) is never asked about or offered. `releaseshub/v1/latest` is not used (it echoes the version it is asked about).
 
-The ODC build is decided once, when it is definitive, and the decision is kept in `studio-sources.json` in outDir (a journal, signed in automatic rounds; one that cannot be read or written makes the lane `unavailable` with `STUDIO_SOURCE_STATE`, never a new decision):
+### The ODC build rule
 
-- eligible builds were uploaded (CloudFront Last-Modified) between D-1 00:00Z and the cutoff D+1 16:00Z; the decision is the highest eligible build;
-- definitive: at the cutoff, or earlier once the newest upload (or D 00:00Z, whichever is later) is 28 h old; until then the lane is `pending` and nothing is offered;
-- why these numbers (live uploads of 1.7.27 to 1.7.32, hours after D 00:00Z): the shipped builds were uploaded at 9.1 to 16.7 h and one next-day build at 32.75 h (1.7.28.10873); the first late hotfix came at 48.5 h (1.7.29.10953); the latest release candidate excluded by D-1 came 53 h before D (1.7.32.11059). 40 h is about the midpoint of 32.75 and 48.5. Same-version uploads came up to 23.65 h apart, so a 6 h quiet period would have locked 1.7.28.10850 on its release afternoon; 28 h does not. The day is read as UTC (the notes give no zone): both bounds leave more than half a day either way;
+Every version of the notes above the newest one the window serves (at most 3, and always the highest) is decided on its own, once, and the decision is kept in `studio-sources.json` in outDir:
+
+- eligible builds were uploaded (CloudFront Last-Modified, read from `dxejw4oyledi.cloudfront.net` only) between D-1 00:00Z and the cutoff D+1 16:00Z; the decision is the highest eligible build, taken **only at the cutoff**. Until then the version is `pending` and nothing is offered: a next-day GA can come at any time up to the cutoff, and a decision is permanent;
+- why these numbers (live uploads of 1.7.27 to 1.7.32, hours after D 00:00Z): the shipped builds were uploaded at 9.1 to 16.7 h and one next-day build at 32.75 h (1.7.28.10873); the first late hotfix came at 48.5 h (1.7.29.10953); the latest release candidate excluded by D-1 came 53 h before D (1.7.32.11059). 40 h is about the midpoint of 32.75 and 48.5. The day is read as UTC (the notes give no zone): both bounds leave more than half a day either way;
+- assumption: within a version the GA has the highest build number (true for every version observed); a release candidate uploaded on D-1 with a higher number than the GA would be chosen;
 - each decision records the build's distance to D and to the cutoff, and every upload seen, so drift shows;
-- a decided version whose notes did not change is not probed at all; a pending one is probed only above its last find (100 builds, at most 3 windows); a new version starts from the highest decided build or the last known GA (`ODC_KNOWN`), never from the Studio installed on the watcher machine (it may be a preview);
-- when the notes section of a decided version changes, the builds above the decision are probed once and reported; uploads after the cutoff or after the decision are never offered, and the owner gets `SSAM: later Studio build not offered` once per build.
+- uploads after the cutoff or after the decision are never offered; the owner gets `SSAM: later Studio build not offered` once per build, with the `-Pin` line to serve it instead. When the version was not watched within 6 h before its cutoff (the watcher was stopped, or the file was deleted) and such an upload sits above the eligible build, it may be a re-upload of the GA: nothing is decided (`STUDIO_BUILD_AMBIGUOUS`) and the owner pins the build;
+- versions are offered oldest first: a decided version waits (`queued`) while an older unserved one is pending or offered, so a version that ships one day after another is not skipped. An older version that ends unresolved does not hold the newer one.
 
-Service Studio is checked on releaseshub (redirect to the expected CloudFront path, the page's size) once per answer of the Downloads page; the same answer again needs no probe.
+Load (probes are releaseshub `content` GETs; offline counts in RESULTADO-R3.md):
 
-What the window does with it is judged against the served window (`manifest`), never against the Studio installed on the watcher machine: a release older than the newest served is `older-than-served` (logged, nothing offered); a newer Studio installed on the watcher machine (a preview) changes nothing and gives `SSAM: watcher Studio newer than the public release` once.
+- decided and its notes section unchanged: 0 probes;
+- first search of a version: up to 3 windows of 600 builds (at most 1,803) from the highest decided build or the last known GA (`ODC_KNOWN`), never from the Studio installed on the watcher machine (it may be a preview);
+- pending, with builds found: one window of 100 above the last find per round (101); with nothing found yet: one window of 600 from the floor per round (601);
+- past the cutoff without a decision (`STUDIO_BUILD_NOT_FOUND`, `STUDIO_BUILD_AMBIGUOUS`): one search a day, or at once when the version's notes change; the owner gets a daily notice that says what to run.
+
+### Owner commands and recovery
+
+- `vigia.ps1 -Config <config> -Pin X.Y.Z.B`: decides X.Y.Z as build B (it must exist on releaseshub; one GET and one HEAD), replacing any earlier decision. The version must have been read from the notes by a round. A window that already serves X.Y.Z keeps its image.
+- `vigia.ps1 -Config <config> -Redecide X.Y.Z`: drops the record of X.Y.Z; the next round searches it as never seen (past its cutoff an ambiguous answer then waits for `-Pin`).
+- Both take the watcher lock and write the file back as the same signed journal (an automatic configuration never writes it unsigned).
+- A `studio-sources.json` that cannot be read (tampered, truncated) stops the ODC lane only, with `STUDIO_SOURCE_STATE` and the notice `SSAM: Studio release needs the owner`. It does not heal by itself: rename or delete the file, and the next round decides again from the public pages (a version past its cutoff may then need `-Pin`).
+- Service Studio keeps only a disposable cache (`studio-sources-o11.json`: the version and size last checked on releaseshub, so the same answer needs no probe); an unreadable one is ignored.
+- A dry run reads both and writes nothing; without the journal key it reads the ODC decisions unverified (it acts on nothing).
+
+### What the window does with it
+
+It is judged against the served window (`manifest`), never against the Studio installed on the watcher machine: a release older than the newest served is `older-than-served` (logged, nothing offered); a newer Studio installed on the watcher machine (a preview) changes nothing and gives `SSAM: watcher Studio newer than the public release` once.
+
+### Hosts, limits and errors
 
 Discovery reads `api.outsystems.com`, `dxejw4oyledi.cloudfront.net`, `www.outsystems.com` and `success.outsystems.com` only, https, no redirect followed. A download touches only `api.outsystems.com` and `dxejw4oyledi.cloudfront.net` (`DOWNLOAD_HOSTS`; the other two also host user uploads), each URL and every redirect at the exact path of that release's Windows file (the releaseshub `content` link, then `/repository/<component>/<full version>/<file>`), no query, then size-checked against the source and the custody below. Answers are capped while they stream (8 MiB for scripts, 4 MiB for screen-service JSON). Each request has a 30 s timeout and 3 tries, all inside a 15 min deadline per lane (both lanes stay under 30 min, well inside the 2 h round period).
 
-A source that cannot be read is `unavailable` with `STUDIO_SOURCE_UNREACHABLE` (network, 5xx, the deadline), `STUDIO_SOURCE_BLOCKED` (HTTP 403: a firewall or access rule), `STUDIO_SOURCE_RATE_LIMITED` (HTTP 429 after retries), `STUDIO_SOURCE_CHANGED` (a page changed shape), `STUDIO_SOURCE_UNTRUSTED`, `STUDIO_BUILD_NOT_FOUND` (no eligible build at the cutoff) or `STUDIO_SOURCE_STATE`: that lane keeps its installed Studio for the round, the owner gets `SSAM: Studio release source unreadable` (once a day per lane and code; server text reduced to plain characters) and the next round reads again.
+A source that cannot be read is `unavailable` with one of these codes:
+
+- `STUDIO_SOURCE_UNREACHABLE`: network, 5xx or the deadline;
+- `STUDIO_SOURCE_BLOCKED`: HTTP 403, a firewall or access rule;
+- `STUDIO_SOURCE_RATE_LIMITED`: HTTP 429 after retries;
+- `STUDIO_SOURCE_CHANGED`: a page changed shape;
+- `STUDIO_SOURCE_UNTRUSTED`: an unlisted host (the notice names the host only);
+- `STUDIO_BUILD_NOT_FOUND`, `STUDIO_BUILD_AMBIGUOUS` or `STUDIO_SOURCE_STATE`: see above.
+
+That lane (or version) keeps its installed Studio for the round, and the owner gets a notice once a day per lane, version and code, with server text reduced to plain characters. It is `SSAM: Studio release source unreadable` ("retries next round") for what heals by itself, and `SSAM: Studio release needs the owner` (the command to run) for what does not.
 
 ## Installer and bridge custody
 

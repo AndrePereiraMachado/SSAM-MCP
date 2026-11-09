@@ -4,6 +4,7 @@
 //   --dry-run     reads the versions and prints what a round would do; writes nothing;
 //   --approve <id|lane-version>, --reject <id> --reason <text>, --retry <id>: the owner's commands;
 //   --seed-features <Features.plain.xml>: the owner's one-time seed of an exact ODC features export (features-carry.mjs);
+//   --pin <X.Y.Z.B>, --redecide <X.Y.Z>: the owner's choice of an ODC Studio build, or a new decision (sources.mjs);
 //   --rehearse-current: the real round on the served versions, stopped before anything changes outside this machine (rehearse.mjs).
 import fs from 'node:fs';
 import {readJournal} from './journal.mjs';
@@ -30,12 +31,12 @@ export function parseArgs(argv){
  const args={flags:new Set()};
  for(let i=0;i<argv.length;i++){
   const a=argv[i];
-  if(['--config','--approve','--reject','--reason','--retry','--log','--acknowledge-rollback','--seed-features'].includes(a)){if(argv[i+1]===undefined)throw Error(`${a} needs a value.`);args[a.slice(2)]=argv[++i];}
+  if(['--config','--approve','--reject','--reason','--retry','--log','--acknowledge-rollback','--seed-features','--pin','--redecide'].includes(a)){if(argv[i+1]===undefined)throw Error(`${a} needs a value.`);args[a.slice(2)]=argv[++i];}
   else if(['--dry-run','--round','--no-update','--rehearse-current'].includes(a))args.flags.add(a.slice(2));
-  else throw Error(`Unknown argument ${a}. Usage: vigia.mjs --config <file> [--dry-run | --approve <id> | --reject <id> --reason <text> | --retry <id> | --seed-features <Features.plain.xml>] [--no-update]`);
+  else throw Error(`Unknown argument ${a}. Usage: vigia.mjs --config <file> [--dry-run | --approve <id> | --reject <id> --reason <text> | --retry <id> | --seed-features <Features.plain.xml> | --pin <X.Y.Z.B> | --redecide <X.Y.Z>] [--no-update]`);
  }
- if(args.flags.has('rehearse-current')&&(args.flags.has('dry-run')||args.approve||args.reject||args.retry||args['acknowledge-rollback']||args['seed-features']))throw Error('--rehearse-current runs alone.');
- if(!args.config)throw Error('Usage: vigia.mjs --config <file> [--dry-run | --approve <id> | --reject <id> --reason <text> | --retry <id> | --seed-features <Features.plain.xml>]');
+ if(args.flags.has('rehearse-current')&&(args.flags.has('dry-run')||args.approve||args.reject||args.retry||args['acknowledge-rollback']||args['seed-features']||args.pin||args.redecide))throw Error('--rehearse-current runs alone.');
+ if(!args.config)throw Error('Usage: vigia.mjs --config <file> [--dry-run | --approve <id> | --reject <id> --reason <text> | --retry <id> | --seed-features <Features.plain.xml> | --pin <X.Y.Z.B> | --redecide <X.Y.Z>]');
  return args;
 }
 export function readConfig(file){
@@ -147,6 +148,8 @@ async function owner(args,config,log){
  try{
   if(args.reject)return reject(config,args.reject,args.reason);
   if(args.retry)return retry(config,args.retry);
+  // The ODC build decisions (studio-sources.json), written back as the same signed journal; -Pin reads releaseshub once.
+  if(args.pin||args.redecide){const {pinStudioBuild,redecideStudio}=await import('./auto-runtime.mjs');return args.pin?await pinStudioBuild(config,args.pin):redecideStudio(config,args.redecide);}
   const {createRuntime}=await import('./runtime.mjs');
   // Only the version, the feature count and the sha256 are printed or logged, never a feature.
   if(args['seed-features']){const r=(await createRuntime(config,{log})).seedFeatures(args['seed-features']);return {status:'seeded',version:r.version,count:r.count,sha256:r.sha256,note:`ODC features ${r.version} ${r.already?"already stored":"seeded"}: ${r.count} features, sha256 ${r.sha256}.`};}
@@ -195,7 +198,7 @@ if(process.argv[1]&&path.resolve(process.argv[1])===self){
   try{const result=rehearsal?await rehearseCurrent({...rehearsal,roundDeadline:Date.now()+(config.roundHours??7)*3600000},runtime,{manifest:baseWindow(runtime.manifest(),config.outDir).manifest}):await round(config,runtime);log(`round ${result.status}${result.id?' '+result.id:''}`);console.log(JSON.stringify(result,null,2));if(['failed','rolled-back','rollback-failed'].includes(result.status)||(rehearsal&&result.status!=='rehearsed'))process.exitCode=1;}
   catch(error){log(`round error: ${error.stack??error.message}`);await remind(config.outDir,'error:'+String(error.message).split('\n')[0].slice(0,120),'SSAM watcher error',`${String(error.message).split('\n')[0]} (log ${log.file})`,{...runtime,log}).catch(()=>{});process.exitCode=1;}
  }else{
-  const mode=args.approve?'approve':args.reject?'reject':args.retry?'retry':args['seed-features']?'seed-features':'';
+  const mode=args.approve?'approve':args.reject?'reject':args.retry?'retry':args['seed-features']?'seed-features':args.pin?'pin':args.redecide?'redecide':'';
   const log=createLog(runLogFile(config.outDir,new Date(),mode),{echo:!!mode});
   log(`watcher ${mode||'round'} start (pid ${process.pid})`);
   try{
