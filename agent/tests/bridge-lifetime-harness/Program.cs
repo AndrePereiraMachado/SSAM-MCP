@@ -6,7 +6,7 @@ using Ssam.Agent;
 // The test adapter also compiles against c308892. Optional new APIs are accessed only here by reflection.
 var input = JsonNode.Parse(await Console.In.ReadToEndAsync())!;
 var root = input["root"]!.GetValue<string>();
-BridgeUpdates Store() => new(root, root, input["publicKey"]!.GetValue<string>(), input["thumbprint"]!.GetValue<string>(), (_, _) => Task.CompletedTask,
+BridgeUpdates Store() => new(root, root, input["publicKey"]!.GetValue<string>(), (_, _) => Task.CompletedTask,
     new JsonObject { ["odcBridge"] = "v98", ["odcRuntime"] = "net8.0" });
 var store = Store(); BridgeLease? lease = null; InstalledBridge? selected = null; FileStream? hold = null;
 var results = new JsonArray();

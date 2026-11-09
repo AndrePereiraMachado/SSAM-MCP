@@ -15,8 +15,9 @@ public sealed class AuthenticodeTests
             Assert.True(failure.AttachAttempted); Assert.True(failure.BridgeLoadFailure);
         } finally { host.StandardInput.Close(); await host.WaitForExitAsync(); Directory.Delete(Path.GetDirectoryName(file)!, true); }
     }
+    // 0.4.14-native: the owner class is never accepted by Authenticode (the owner files are proven by the Ed25519 manifest).
     [Theory]
-    [InlineData(true, "owner", "owner", "Microsoft Corporation", true, "root", true)]
+    [InlineData(true, "owner", "owner", "Microsoft Corporation", true, "root", false)]
     [InlineData(true, "owner", "other", "Microsoft Corporation", true, "root", false)]
     [InlineData(true, "microsoft", "other", "Microsoft Corporation", true, "root", true)]
     [InlineData(true, "microsoft", "owner", "Owner", true, "root", false)]
@@ -25,7 +26,7 @@ public sealed class AuthenticodeTests
     [InlineData(true, "microsoft", "other", "Microsoft Corporation", true, "untrusted", false)]
     [InlineData(false, "microsoft", "other", "Microsoft Corporation", true, "root", false)]
     public void SignerPolicyRequiresExactOrganizationEkuAndPinnedRoot(bool valid, string signer, string leaf, string organization, bool eku, string root, bool accepted)
-        => Assert.Equal(accepted, AuthenticodeTrust.Accept(new(valid, leaf, organization, eku, root), signer, "owner", ["root"]));
+        => Assert.Equal(accepted, AuthenticodeTrust.Accept(new(valid, leaf, organization, eku, root), signer, ["root"]));
 
     [Theory]
     [InlineData("Microsoft.Diagnostics.NETCore.Client.dll")]
@@ -35,8 +36,8 @@ public sealed class AuthenticodeTests
     {
         var file = Path.Combine("C:/t/vigia-auto/round2-e2e/v100/bin/Release/net10.0", name);
         var evidence = AuthenticodeTrust.Inspect(file);
-        Assert.True(AuthenticodeTrust.Accept(evidence, "microsoft", "not-the-owner", BridgeTrust.MicrosoftRoots));
-        Assert.False(AuthenticodeTrust.Accept(evidence, "owner", "not-the-owner", BridgeTrust.MicrosoftRoots));
+        Assert.True(AuthenticodeTrust.Accept(evidence, "microsoft", BridgeTrust.MicrosoftRoots));
+        Assert.False(AuthenticodeTrust.Accept(evidence, "owner", BridgeTrust.MicrosoftRoots));
     }
 
     [Fact]

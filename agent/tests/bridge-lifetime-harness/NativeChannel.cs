@@ -3,7 +3,7 @@ using Ssam.Agent;
 
 var input = JsonNode.Parse(await Console.In.ReadToEndAsync())!;
 var root = input["root"]!.GetValue<string>();
-using var updates = new BridgeUpdates(root, root, input["publicKey"]!.GetValue<string>(), input["thumbprint"]!.GetValue<string>(), (_, _) => Task.CompletedTask);
+using var updates = new BridgeUpdates(root, root, input["publicKey"]!.GetValue<string>(), (_, _) => Task.CompletedTask);
 using var channel = new AgentChannel(new Uri(input["server"]!.GetValue<string>()), input["credential"]!.GetValue<string>(), new StateStore(root, false), 4516,
     runtime: root, pack: input["pack"]!.AsObject(), bridgeUpdates: updates, discoverStudios: () => input["installed"]!.DeepClone().AsObject());
 using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(40));

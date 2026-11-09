@@ -46,8 +46,10 @@ win:
     - target: nsis
       arch: [x64]
   icon: build/icon.png
-  # verifyUpdateCodeSignature stays on: a release build (scripts/windows-release.mjs) writes publisherName to app-update.yml and
-  # electron-updater installs only an update signed by that publisher; a build without it never updates itself (update-model.mjs).
+  # App 0.2.8: the Windows release is not Authenticode-signed and carries no publisherName; an update installs only after the
+  # owner's Ed25519 statement (<installer>.ed25519.json) verifies against the key pinned at build time (src/main/core/
+  # update-signature.mjs, update-verify.mjs). A build without that key never updates itself (update-model.mjs). A build
+  # with a certificate (scripts/windows-release.mjs) also writes publisherName, which electron-updater checks on top.
 nsis:
   oneClick: true
   perMachine: false

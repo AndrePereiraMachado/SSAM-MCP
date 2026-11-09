@@ -13,10 +13,9 @@ if (input["verify"] is JsonArray checks)
     return;
 }
 var root = input["root"]!.GetValue<string>();
-var thumb = input["thumbprint"]!.GetValue<string>();
 var accepted = input["authenticode"]?.GetValue<bool>() != false;
 var checksCount = 0;
-using var store = new BridgeUpdates(root, root, key, thumb, (_, _) => { checksCount++; return accepted ? Task.CompletedTask : Task.FromException(new IOException("Test certificate refused")); }, input["pack"] as JsonObject);
+using var store = new BridgeUpdates(root, root, key, (_, _) => { checksCount++; return accepted ? Task.CompletedTask : Task.FromException(new IOException("Test certificate refused")); }, input["pack"] as JsonObject);
 if (input["channel"]?.GetValue<bool>() == true)
 {
     using var channel = new AgentChannel(new Uri(input["server"]!.GetValue<string>()), "bridge-test-token", new StateStore(root, false), 4516,

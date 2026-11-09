@@ -5,10 +5,15 @@
 //   node scripts/build.mjs --platform win|mac --pack <ssam-agent.zip | ssam-agent-mac.tar.gz | folder>
 //                          [--update-url https://...] [--no-updates] [--pack-only]
 //   Without --update-url the build publishes to https://dist.ssam.pro/u/ssam-agent (the owner's update server).
-//   Windows release (app 0.2.0, scripts/windows-release.mjs): --cert-sha1 <thumbprint> --publisher-name <subject CN>
-//   [--timestamp-url <url>] (or SSAM_WIN_CERT_SHA1, SSAM_WIN_PUBLISHER_NAME, SSAM_WIN_TIMESTAMP_URL): the native core and the
-//   installer are signed with that certificate of Cert:\CurrentUser\My, and app-update.yml requires that publisher for every
-//   update. --test-unsigned: the owner's own test app (no signature, no trust anchors, no updates, bridgeOffer false), never
+//   Windows release (app 0.2.8): --trust-public-key <the owner Ed25519 public key PEM> (the vigia vault's manifest key, printed
+//   once by server/deploy/vigia/set-secrets.ps1): the build input of the only trust anchor. The native core must have been
+//   built with the same key (scripts/build-native.mjs --trust-public-key; the gate compares them), and the app's main bundle
+//   pins it for its own updates (update-trust.mjs): no Authenticode signature, an update installs only with the owner's
+//   signed statement next to its installer (scripts/sign-windows-update.ps1, after this build, before publishing).
+//   The legacy Authenticode release (app 0.2.0, scripts/windows-release.mjs) still exists: --cert-sha1 <thumbprint>
+//   --publisher-name <subject CN> [--timestamp-url <url>] (or SSAM_WIN_CERT_SHA1, SSAM_WIN_PUBLISHER_NAME,
+//   SSAM_WIN_TIMESTAMP_URL), on top of --trust-public-key. --test-unsigned: the owner's own test app (no signature, no trust
+//   anchors, no updates, bridgeOffer false), never
 //   published; on macOS too (ad-hoc sealed, never notarized: build/mac-022-native). --dry-run: everything up to
 //   electron-builder, then prints its configuration and arguments.
 //   SSAM_UPDATE_URL in the environment stands for --update-url. --pack-only stops after pack/ is ready.
@@ -22,8 +27,9 @@ import { extractZip } from './zip.mjs';
 import { verifyPack } from '../src/main/core/pack-sync.mjs';
 import { updateUrlProblem } from '../src/main/core/settings.mjs';
 import { stageNativePack } from './native-pack.mjs';
-import { assertBridgeTrust } from './bridge-trust-gate.mjs';
+import { assertBridgeTrust, readTrustPublicKey, spkiBase64 } from './bridge-trust-gate.mjs';
 import { signingOf, signingConfig, testUnsignedConfig, updaterConfigProblems, signNative, signerThumbprint, signerSubject, publisherMatches, signPackExecutables, packExecutables } from './windows-release.mjs';
+import { publisherNames } from '../src/main/core/update-model.mjs';
 import { packProblems } from './pack-pins.mjs';
 import { createHash } from 'node:crypto';
 
@@ -43,13 +49,14 @@ export function parse(argv) {
     if (name === '--dry-run') { options.dryRun = true; continue; }
     // macOS only: notarize with APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD and APPLE_TEAM_ID (electron-builder reads them).
     if (name === '--notarize') { options.notarize = true; continue; }
-    if (!['--platform', '--pack', '--update-url', '--native', '--bridge-public-key', '--cert-sha1', '--publisher-name', '--timestamp-url'].includes(name)) throw new Error('unknown option: ' + name);
+    if (!['--platform', '--pack', '--update-url', '--native', '--trust-public-key', '--bridge-public-key', '--cert-sha1', '--publisher-name', '--timestamp-url'].includes(name)) throw new Error('unknown option: ' + name);
     if (i + 1 >= argv.length) throw new Error('missing the value of ' + name);
     const value = argv[++i];
     if (name === '--platform') options.platform = value;
     if (name === '--pack') options.pack = value;
     if (name === '--native') options.native = value;
-    if (name === '--bridge-public-key') options.bridgePublicKey = value;
+    // --bridge-public-key is the older name of --trust-public-key (one key: the bridges and the Windows updates).
+    if (name === '--bridge-public-key' || name === '--trust-public-key') options.bridgePublicKey = value;
     if (name === '--update-url') options.updateUrl = value;
     if (name === '--cert-sha1') options.certSha1 = value;
     if (name === '--publisher-name') options.publisherName = value;
@@ -69,10 +76,15 @@ export function parse(argv) {
     if (options.notarize) throw new Error('--test-unsigned is never notarized');
     options.noUpdates = true;
   } else if (options.platform === 'win' && !options.packOnly) {
-    // A Windows app that reaches customers is signed, and its updater accepts only updates of the same publisher.
-    const signing = signingOf(options);
-    if (!signing.ok) throw new Error(signing.problem);
-    options.signing = signing;
+    // App 0.2.8: a Windows app that reaches customers is never Authenticode-signed; it pins the owner's Ed25519 key, which
+    // proves its bridges and its updates. The legacy signed release (a certificate given) keeps its publisher check on top.
+    if (!options.bridgePublicKey)
+      throw new Error('A Windows release needs --trust-public-key <the owner Ed25519 public key PEM> (printed by set-secrets.ps1 of the vigia). For the unsigned test app use --test-unsigned.');
+    if (options.certSha1 || options.publisherName || process.env.SSAM_WIN_CERT_SHA1 || process.env.SSAM_WIN_PUBLISHER_NAME) {
+      const signing = signingOf(options);
+      if (!signing.ok) throw new Error(signing.problem);
+      options.signing = signing;
+    } else options.ed25519Release = true;
   }
   if (!options.packOnly && !options.noUpdates) {
     if (!options.updateUrl) throw new Error('give the update server with --update-url https://... (or SSAM_UPDATE_URL), or pass --no-updates for a build that never updates itself');
@@ -160,6 +172,8 @@ export function checkWindowsOutput(dist, options, { thumbprint = signerThumbprin
     if (text !== null) problems.push('a build without updates must not carry resources/app-update.yml');
   } else {
     problems.push(...updaterConfigProblems(text, { url: options.updateUrl.replace(/\/+$/, ''), publisherName: options.signing?.publisherName }));
+    // The unsigned Ed25519 release: a publisherName would make electron-updater refuse every (unsigned) update.
+    if (!options.signing && text !== null && publisherNames(text).length) problems.push('app-update.yml names a publisherName, but this release is not Authenticode-signed: every update would be refused');
     if (!fs.existsSync(path.join(dist, 'latest.yml'))) problems.push('dist/latest.yml is missing: the feed would have nothing to announce');
     if (options.signing) {
       const installers = fs.readdirSync(dist).filter(n => /-setup\.exe$/.test(n)).map(n => path.join(dist, n));
@@ -175,7 +189,20 @@ export function checkWindowsOutput(dist, options, { thumbprint = signerThumbprin
   if (problems.length) throw new Error('the Windows build is not releasable: ' + problems.join('; '));
   console.log('pack: resources/pack is whole and every pin matches its file');
   if (!options.testUnsigned && !options.noUpdates)
-    console.log('updater: app-update.yml names ' + options.updateUrl + ' and requires publisher ' + (options.signing?.publisherName ?? '-'));
+    console.log('updater: app-update.yml names ' + options.updateUrl + (options.signing ? ' and requires publisher ' + options.signing.publisherName : '')
+      + '; every update needs the signed statement next to its installer (scripts/sign-windows-update.ps1 before publishing)');
+}
+
+// The update key the main bundle pins (update-trust.mjs): the build input on a Windows build that updates itself, else none.
+export function updateSpkiFor(options, readKey = readTrustPublicKey) {
+  return options.platform === 'win' && !options.noUpdates && !options.testUnsigned && options.bridgePublicKey ? spkiBase64(readKey(options.bridgePublicKey)) : '';
+}
+// The built main bundle must pin exactly that key (or none): a stale or missing define would ship an app that never updates,
+// or one that trusts another key.
+export function mainBundleKeyProblem(bundleText, spki) {
+  const found = [...new Set(String(bundleText).match(/MCowBQYDK2VwAyEA[A-Za-z0-9+/]{43}=/g) ?? [])];
+  if (spki ? found.length !== 1 || found[0] !== spki : found.length !== 0) return 'out/main pins ' + (found.length ? found.length + ' other key(s)' : 'no update key') + (spki ? ', not the build input' : ', but this build takes none');
+  return null;
 }
 
 async function main() {
@@ -184,6 +211,7 @@ async function main() {
   // app has no anchors: its agent never takes a bridge offer (bridgeOffer false).
   if (options.signing && !options.dryRun) options.native = signNative(options.native, options.signing, path.join(app, '.local/build/native-signed-' + Date.now()));
   if (!options.testUnsigned && !options.bundledBridgesOnly) assertBridgeTrust({ nativeExecutable: options.native, publicKeyFile: options.bridgePublicKey });
+  const updateSpki = updateSpkiFor(options);
   if (options.notarize) {
     if (options.platform !== 'mac' || process.platform !== 'darwin' || !options.native)
       throw new Error('Notarized releases require a native executable and a Mac build host.');
@@ -222,19 +250,24 @@ async function main() {
   // fails later with "No JSON content found in output".
   if (!findOnPath('npm')) throw new Error('electron-builder needs npm on PATH (it lists the production dependencies with npm list); install Node.js with npm');
   // electron-vite first: src/ -> out/ (main, preload, the React panel), what electron-builder packs.
-  const vite = spawnSync(process.execPath, [path.join(app, 'node_modules', 'electron-vite', 'bin', 'electron-vite.js'), 'build'], { cwd: app, stdio: 'inherit' });
+  // The update key goes to this child only, explicitly (empty when the build takes none), never from the parent environment.
+  const vite = spawnSync(process.execPath, [path.join(app, 'node_modules', 'electron-vite', 'bin', 'electron-vite.js'), 'build'], { cwd: app, stdio: 'inherit', env: { ...process.env, SSAM_BUILD_UPDATE_SPKI: updateSpki } });
   if (vite.status !== 0) throw new Error('electron-vite build failed with code ' + vite.status);
+  const bundleProblem = mainBundleKeyProblem(fs.readdirSync(path.join(app, 'out', 'main')).filter(n => /\.m?js$/.test(n)).map(n => fs.readFileSync(path.join(app, 'out', 'main', n), 'utf8')).join('\n'), updateSpki);
+  if (bundleProblem) throw new Error('the main bundle does not pin the update key of the build input: ' + bundleProblem);
   const cli = path.join(app, 'node_modules', 'electron-builder', 'cli.js');
   let config = 'electron-builder.yml';
   const nativeMac = options.platform === 'mac' && pack.nativeCore;
   if (nativeMac && pack.nativeCore.arch !== process.arch) throw new Error('Build the installer on the native core target architecture.');
-  if (options.noUpdates || nativeMac || options.signing || options.testUnsigned) {
+  if (options.noUpdates || nativeMac || options.signing || options.testUnsigned || options.ed25519Release) {
     // The CLI treats -c.publish=null as the string provider "null". A JSON
     // configuration preserves a real null and produces an offline test build.
     config = path.join(app, '.local/build/installer-config.json');
     fs.mkdirSync(path.dirname(config), { recursive: true });
     fs.writeFileSync(config, JSON.stringify({ extends: path.join(app, 'electron-builder.yml'), ...(options.noUpdates ? { publish: null } : {}),
       ...(options.signing ? signingConfig(options.signing, packExecutables(pack)) : {}), ...(options.testUnsigned ? testUnsignedConfig() : {}),
+      // The Ed25519 release: never Authenticode-signed (no publisherName in app-update.yml: electron-updater would refuse it).
+      ...(options.ed25519Release ? { forceCodeSigning: false } : {}),
       ...(options.notarize ? { forceCodeSigning: true, dmg: { sign: true } } : {}),
       ...(nativeMac ? { mac: { target: [{ target: 'dmg', arch: [process.arch] }, { target: 'zip', arch: [process.arch] }],
         // Ad-hoc sealing needs no Apple certificate and keeps ARM64 code valid.

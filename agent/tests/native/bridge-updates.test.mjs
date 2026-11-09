@@ -13,13 +13,13 @@ import { fakeHub } from '../../agent/tests/fixtures/fake-hub.mjs';
 const dll = fileURLToPath(new URL('../bridge-updates-harness/bin/Release/net10.0/NativeProtocol.Tests.dll', import.meta.url));
 const keys = generateKeyPairSync('ed25519');
 const publicKey = keys.publicKey.export({ type: 'spki', format: 'pem' });
-const thumbprint = 'A'.repeat(40);
+// 0.4.14-native: no Authenticode pin; a "thumbprint" input of older tests is ignored by the harness.
 const hash = b => createHash('sha256').update(b).digest('hex');
 const message = Buffer.from('exact signed bytes\n');
 async function run(input) {
   const child = spawn('dotnet', [dll], { windowsHide: true }); let stdout = '', stderr = '';
   child.stdout.on('data', b => { stdout += b; }); child.stderr.on('data', b => { stderr += b; });
-  child.stdin.end(JSON.stringify({ publicKey, thumbprint, ...input }));
+  child.stdin.end(JSON.stringify({ publicKey, ...input }));
   const code = await new Promise((resolve, reject) => { child.once('error', reject); child.once('exit', resolve); });
   assert.equal(code, 0, stderr + stdout);
   return JSON.parse(stdout);
@@ -45,11 +45,13 @@ async function fixture(t) {
   });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   t.after(async () => { await new Promise(resolve => server.close(resolve)); fs.rmSync(root, { recursive: true, force: true }); });
-  function offer(protocol, alter = {}) {
+  // microsoft: a Microsoft dependency in the offer, the only file still sent to the (test) Authenticode check.
+  function offer(protocol, alter = {}, { microsoft = false } = {}) {
     const bytes = Buffer.from('test bridge ' + protocol);
     const manifest = JSON.stringify({ schema: 1, lane: 'odc', studioVersion: '1.7.30', runtime: 'net10.0', protocol, sequence: Number(protocol.slice(1)),
-      createdAt: '2026-10-28T00:00:00Z', authenticodeThumbprint: thumbprint, files: [{ path: 'bridge/ODC3.Bridge.' + protocol + '.dll', size: bytes.length, signer: 'owner', sha256: hash(bytes) },
-        { path: 'client/ODC3.Bridge.Client.dll', size: bytes.length, signer: 'owner', sha256: hash(bytes) }], ...alter });
+      createdAt: '2026-10-28T00:00:00Z', files: [{ path: 'bridge/ODC3.Bridge.' + protocol + '.dll', size: bytes.length, signer: 'owner', sha256: hash(bytes) },
+        { path: 'client/ODC3.Bridge.Client.dll', size: bytes.length, signer: 'owner', sha256: hash(bytes) },
+        ...(microsoft ? [{ path: 'client/Microsoft.Diagnostics.NETCore.Client.dll', size: bytes.length, signer: 'microsoft', sha256: hash(bytes) }] : [])], ...alter });
     files.set('/agent/bridges/odc/1.7.30/' + protocol + '/' + hash(bytes), bytes);
     return { lane: 'odc', studioVersion: '1.7.30', protocol, manifest, signature: sign(null, Buffer.from(manifest), keys.privateKey).toString('base64') };
   }
@@ -83,7 +85,7 @@ test('R3 native refused offers have machine-readable reasons and bounded history
   assert.equal(replay[1].changed, false, 'A signed signer refusal preserves the high-water sequence');
 });
 for (const scenario of ['signature', 'hash', 'certificate', 'interrupt', 'path']) test('native refuses ' + scenario, async t => {
-  const f = await fixture(t); const offer = f.offer('v101');
+  const f = await fixture(t); const offer = f.offer('v101', {}, { microsoft: scenario === 'certificate' });
   if (scenario === 'signature') offer.signature = Buffer.alloc(64).toString('base64');
   if (scenario === 'hash') for (const [key, bytes] of f.files) f.files.set(key, Buffer.alloc(bytes.length));
   if (scenario === 'interrupt') for (const key of f.files.keys()) f.files.set(key, 'interrupt');
@@ -121,7 +123,7 @@ test('native channel reconnects with the installed bridge and retains the origin
   assert.equal((await result).exitCode, 3, JSON.stringify({ hellos: hub.hellos.length, streams: hub.streams, requests: hub.requests }));
 });
 test('R2 native verification cache and locked attach snapshot', async t => {
-  const f = await fixture(t); const offer = f.offer('v101');
+  const f = await fixture(t); const offer = f.offer('v101', {}, { microsoft: true });
   const result = await f.run({ requests: [{ offer }, {}, {}, { prepare: true }] });
   assert.equal(result[1].checks, result[0].checks); assert.equal(result[2].checks, result[0].checks);
   assert.ok(result[3].checks > result[2].checks); assert.equal(result[3].protectedCopy, true);

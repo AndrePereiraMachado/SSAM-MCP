@@ -15,6 +15,8 @@ import { createAppLog } from './electron/app-log.mjs';
 import { createTray } from './electron/tray.mjs';
 import { createPanel } from './electron/window.mjs';
 import { createUpdates, buildUpdateUrl, buildUpdateConfig } from './electron/updates.mjs';
+// A build with the pinned update key (app 0.2.8) keeps the feed of its build, as a signed one did (review M2 of F5).
+import { UPDATE_PUBLIC_KEY } from './core/update-trust.mjs';
 import { publisherNames } from './core/update-model.mjs';
 import { loadSettings, saveSettings, resolveUpdateUrl, updateUrlProblem } from './core/settings.mjs';
 import { defaultRoot, bundledPackDir } from './core/paths.mjs';
@@ -78,7 +80,7 @@ async function run() {
 
   // A signed packaged build (publisherName in app-update.yml) keeps the feed it was built with (review M2 of F5).
   const appUpdateYml = buildUpdateConfig(process.resourcesPath);
-  const updateUrl = resolveUpdateUrl({ env: process.env, settings, build: buildUpdateUrl(process.resourcesPath), pinned: app.isPackaged && publisherNames(appUpdateYml).length > 0 });
+  const updateUrl = resolveUpdateUrl({ env: process.env, settings, build: buildUpdateUrl(process.resourcesPath), pinned: app.isPackaged && (publisherNames(appUpdateYml).length > 0 || Boolean(UPDATE_PUBLIC_KEY)) });
   const updates = createUpdates({ url: updateUrl.url, hours: settings.updateCheckHours, autoInstall: settings.updateAutoInstall, log, isPackaged: app.isPackaged,
     devConfig: path.join(appDir, 'dev-app-update.yml'), appUpdateYml, currentVersion: appVersion, onChange: state => { updateState = state; push(); }, stopAgent: async () => { if (supervisor) await supervisor.stop(); } });
   updateState = updates.state;
