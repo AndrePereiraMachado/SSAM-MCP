@@ -142,5 +142,7 @@ test('M2: the updater never installs on quit before the downloaded installer was
   // Review M1/M2 of 0.2.8: the order, the re-hash and the install on quit are tested by behaviour in updates-flow.test.mjs.
   assert.match(text, /answer = await verifyUpdate\(/);
   assert.match(text, /if \(state\.status !== 'ready' \|\| !verified\) return false;/);
-  assert.match(text, /if \(windows\) \{ autoUpdater\.autoInstallOnAppQuit = false; verifyDownload\(info\); \}/);
+  // Review M1 of agent/mac-028: every platform verifies a download before anything installs it (macOS too).
+  assert.match(text, /autoUpdater\.on\('update-downloaded', info => \{ autoUpdater\.autoInstallOnAppQuit = false; verifyDownload\(info\); \}\);/);
+  assert.doesNotMatch(text, /autoInstallOnAppQuit = true/);
 });

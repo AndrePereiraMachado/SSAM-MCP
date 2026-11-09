@@ -44,7 +44,8 @@ export function updateText(state, appVersion) {
 // downloaded installer must then carry the owner's signed statement (update-signature.mjs), checked before it is installed.
 // A build without the key never updates itself (the sha512 of latest.yml only proves the download matches the feed, not who
 // made it). A publisherName, when a build still has one, is checked by electron-updater on top of the statement.
-// macOS: Squirrel.Mac checks the code signature itself.
+// macOS: no update key; Squirrel.Mac checks the code signature, and core/update-verify.mjs checkMacUpdate checks the version of
+// the app inside the downloaded ZIP before Squirrel sees it (review M1 of agent/mac-028).
 export function publisherNames(appUpdateYml) {
   const lines = String(appUpdateYml ?? '').split(/\r?\n/);
   const at = lines.findIndex(line => /^publisherName:/.test(line));

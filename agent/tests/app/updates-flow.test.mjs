@@ -133,10 +133,15 @@ test('M2: a refused or changed update is not installed on quit', async t => {
   assert.equal(changed.entries.find(e => e.event === 'update-refused')?.code, UPDATE_CODES.STATEMENT_MISMATCH);
 });
 
-test('macOS is unchanged: Squirrel sees autoInstallOnAppQuit true in the same tick; no own quit handler', async t => {
-  const f = fixture(t, { platform: 'darwin', verifyUpdate: async () => { throw new Error('never on macOS'); } });
-  assert.equal(f.fake.downloaded(f.info), true);
-  assert.equal(f.updates.state.status, 'ready');
+// Review M1 of agent/mac-028: macOS no longer hands the download to Squirrel.Mac in the tick of update-downloaded (the full Mac
+// flow is in mac-update.test.mjs).
+test('macOS: MacUpdater sees autoInstallOnAppQuit false in the same tick; a refused download is never handed to Squirrel', async t => {
+  const f = fixture(t, { platform: 'darwin', verifyUpdate: async () => ({ problem: { code: UPDATE_CODES.DOWNGRADE, message: 'UPDATE_DOWNGRADE: older' } }) });
+  f.fake.nativeUpdater = Object.assign(new EventEmitter(), { checks: 0, checkForUpdates() { this.checks++; } });
+  assert.equal(f.fake.downloaded(f.info), false);
+  await wait(10);
+  assert.equal(f.updates.state.status, 'error');
+  assert.equal(f.fake.nativeUpdater.checks, 0);
   assert.equal(f.fake.quitHandlers.length, 0);
 });
 
