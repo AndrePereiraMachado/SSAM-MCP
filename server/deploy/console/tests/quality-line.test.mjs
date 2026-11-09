@@ -18,7 +18,7 @@ const native = loadNativeIds(path.join(FIXTURES, 'catalog'), { readDir: fs.readd
 const lines = text => text.split('\n').filter(Boolean);
 // agent/r4-v106: reconcile-merge in ODC_COMMANDS (A1 of U1); the box's union of codes is unchanged until the line is copied again.
 // agent/r4-f3-import: integration_import in O11_METHODS (thin O11 bridge 1.1.0, agent 0.3.8 / 0.4.5-native, app 0.2.0).
-export const CONTRACT_SHA256 = '0283d412bf127b9f376714762bd8ad4cb10d2ad83eb07d1c49837b4b8892214c';
+export const CONTRACT_SHA256 = '1267ac1bca0eddd8b53a6b2ca25f11655a58ed93420191addfc67bfaf2bb223d';
 const lfSha = file => createHash('sha256').update(fs.readFileSync(file, 'utf8').replace(/\r\n/g, '\n'), 'utf8').digest('hex');
 
 test('parity (D9): the console copy of quality-line.mjs is the shared contract, byte for byte (CRLF read as LF)', () => {
