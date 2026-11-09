@@ -134,13 +134,15 @@ export function servedLists(manifest,{window=windowOf(manifest)}={}){
 // Without "sizing" the compose is exactly as before.
 export const SIZING_TIERS=['hot','other'];
 export const CAPACITY_WINDOW='CAPACITY_WINDOW';
-const TIER_FIELDS=['cpus','memory','cpuShares','buildWorkers','o11WorkersMax','queueMs','o11Readers'];
+const TIER_FIELDS=['cpus','memory','cpuShares','buildWorkers','o11WorkersMax','queueMs','o11Readers','o11ReaderMb'];
 // Window 4x4 (review S1 M2): the resident O11 readers a backend of the window keeps (SSAM_O11_READERS_MAX, reader-residency.mjs),
 // optional per tier; a backend window without it gets other 1 (the one reader of a pair, inside the r45 margin of 969 MiB)
-// and hot 2 (one more inside its 1542 MiB). A pair window only carries it when the tier names it.
+// and hot 2 (one more inside its 1542 MiB). A pair window only carries it when the tier names it. o11ReaderMb (optional,
+// the measured RSS of one O11 reader) is the gate's reserve for a new reader (SSAM_MEMORY_RESERVE_READER_MB; code default 800).
 export const DEFAULT_O11_READERS=Object.freeze({hot:2,other:1});
 const readersOf=(manifest,tier)=>manifest.sizing?.[tier]?.o11Readers??(isBackendManifest(manifest)?DEFAULT_O11_READERS[tier]:undefined);
-const readersEnv=(manifest,tier)=>{const r=readersOf(manifest,tier);return r===undefined?{}:{SSAM_O11_READERS_MAX:String(r)};};
+const readersEnv=(manifest,tier)=>{const r=readersOf(manifest,tier),mb=manifest.sizing?.[tier]?.o11ReaderMb;
+ return {...(r===undefined?{}:{SSAM_O11_READERS_MAX:String(r)}),...(mb===undefined?{}:{SSAM_MEMORY_RESERVE_READER_MB:String(mb)})};};
 // A backend id: a pair (o11-<v>-odc-<v>) or a backend of the 4x4 window (odc-<v>); usage and hotPair are keyed by it.
 const PAIR_NAME=/^(?:o11-\d+\.\d+\.\d+-)?odc-\d+\.\d+\.\d+$/;
 const mib=value=>{const m=/^(\d+)([mg])$/i.exec(String(value));return m?Number(m[1])*(m[2].toLowerCase()==='g'?1024:1):null;};
@@ -172,6 +174,7 @@ export function checkSizing(sizing){
   for(const k of ['buildWorkers','o11WorkersMax'])if(!Number.isInteger(t[k])||t[k]<1||t[k]>16)throw new Error('Invalid sizing.'+tier+'.'+k+'.');
   if(!Number.isInteger(t.queueMs)||t.queueMs<0||t.queueMs>3600000)throw new Error('Invalid sizing.'+tier+'.queueMs.');
   if(t.o11Readers!==undefined&&(!Number.isInteger(t.o11Readers)||t.o11Readers<1||t.o11Readers>8))throw new Error('Invalid sizing.'+tier+'.o11Readers.');
+  if(t.o11ReaderMb!==undefined&&(!Number.isInteger(t.o11ReaderMb)||t.o11ReaderMb<100||t.o11ReaderMb>8192))throw new Error('Invalid sizing.'+tier+'.o11ReaderMb.');
  }
  if(sizing.router!==undefined&&(!isCpus(sizing.router?.cpus)||!mib(sizing.router?.memory)||mib(sizing.router.memory)<256||Object.keys(sizing.router).some(k=>!['cpus','memory'].includes(k))))throw new Error('Invalid sizing.router.');
  if(sizing.host!==undefined&&(!mib(sizing.host?.memory)||!mib(sizing.host?.reserve)||Object.keys(sizing.host).some(k=>!['memory','reserve'].includes(k))))throw new Error('Invalid sizing.host.');

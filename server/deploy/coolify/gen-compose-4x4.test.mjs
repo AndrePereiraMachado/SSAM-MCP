@@ -124,6 +124,10 @@ test('4x4: each backend names its resident O11 readers by tier (other 1, hot 2, 
  const tuned=generateCompose({...manifest,sizing:{...sizing,hot:{...sizing.hot,o11Readers:3}}});
  assert.equal(Object.values(tuned.services).find(s=>s.labels?.['ssam.sizing']==='hot').environment.SSAM_O11_READERS_MAX,'3');
  assert.throws(()=>generateCompose({...manifest,sizing:{...sizing,other:{...sizing.other,o11Readers:0}}}),/o11Readers/);
+ const measured=generateCompose({...manifest,sizing:{...sizing,other:{...sizing.other,o11ReaderMb:650}}});
+ for(const [name,sv] of Object.entries(measured.services).filter(([n])=>n.startsWith('ssam-server-v')))
+  assert.equal(sv.environment.SSAM_MEMORY_RESERVE_READER_MB,sv.labels['ssam.sizing']==='other'?'650':undefined,name);
+ assert.throws(()=>generateCompose({...manifest,sizing:{...sizing,hot:{...sizing.hot,o11ReaderMb:10}}}),/o11ReaderMb/);
  const pairs=generateCompose(live);
  for(const s of Object.values(pairs.services))assert.equal(s.environment?.SSAM_O11_READERS_MAX,undefined,'a pair window is unchanged');
 });
