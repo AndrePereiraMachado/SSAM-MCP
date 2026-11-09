@@ -89,7 +89,8 @@ test('the command lines write the versions.json, the kit plan and the notice; af
  assert.deepEqual(JSON.parse(r.stderr).retiring,[{lane:'odc',version:'1.7.28',retireAt:IN7}]);
  assert.deepEqual(JSON.parse(fs.readFileSync(out,'utf8')).retiring,{odc:{version:'1.7.28',retireAt:IN7}});
  assert.equal(JSON.parse(fs.readFileSync(plan,'utf8')).count,5);
- assert.match(JSON.parse(fs.readFileSync(notice,'utf8'))[0].message,/Acme/);
+ // --notice-out and affected-customers.mjs notice write the same object (review B13).
+ const written=JSON.parse(fs.readFileSync(notice,'utf8'));assert.match(written.message,/Acme/);
  versionBackends(JSON.parse(fs.readFileSync(out,'utf8')));
  const bad=spawnSync(process.execPath,[path.join(here,'first-window.mjs'),'--pairs',pairsFile,'--images',imagesFile],{encoding:'utf8'});
  assert.equal(bad.status,1);assert.match(bad.stderr,/--now is required/);
@@ -97,4 +98,5 @@ test('the command lines write the versions.json, the kit plan and the notice; af
  assert.equal(source.status,0);assert.equal(source.stdout,CAPTURE_SOURCE);
  const told=spawnSync(process.execPath,[path.join(here,'affected-customers.mjs'),'notice','--telemetry',files.join(','),'--lane','odc','--version','1.7.28','--retire-at',IN7],{encoding:'utf8'});
  assert.equal(told.status,0,told.stderr);assert.equal(JSON.parse(told.stdout).affected.length,1);
+ assert.deepEqual(JSON.parse(told.stdout),written,'the same notice, in the same format');
 });

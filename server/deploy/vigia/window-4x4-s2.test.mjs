@@ -693,3 +693,20 @@ test('R6 B11: an ODC round first aligns a retained backend an interrupted O11 pr
  await releaseAutomatically({outDir:dir2},g.ops,{id:'odc-1.7.33',dir:dir2,attempt:'a1',baseline:liveOf(m),built,manifest:next.manifest,kernel:w.kernels['odc-1.7.33'],bridges:{mode:'server-only'},features:path.join(dir2,'f.xml'),bundles:{},window:w});
  assert.deepEqual(again.map(p=>p[0]),['odc-1.7.33']);
 });
+
+// S2 R7 B12 (repro scratchpad\s2\r3-b11.mjs): a retirement keeps the live default O11 kernel; a plain one is compose only, no
+// kernel.json written. Only mixed live defaults make it align (to the window's newest kept, the ODC round's rule).
+test('R7 B12: a plain retirement writes no kernel.json and keeps the live default; mixed defaults are aligned',async t=>{
+ const m=first().manifest,round={id:'retire-odc-1.7.28',kind:'retire',lane:'odc',version:'1.7.28',inputs:{},previous:null,skipped:[]};
+ const retire=async live=>{const dir=tmp(t),f=fakeOps(live),seen=recordPrepares(f);Object.assign(f.ops,{log:()=>{},notify:async()=>{}});
+  const r=await runWindowAttempt({outDir:dir,manifest:m,automatic:true,state:{tokens},liveBaseline:live,referenceGate:{mode:'owner'}},f.ops,round,NOW+7*DAY);
+  return {r,seen,f};};
+ // The live default .94 is not the newest served (.95): before R7 every retained backend was rewritten to .95.
+ const plain=await retire(onDefault(m,'11.55.94'));
+ assert.equal(plain.r.status,'live',JSON.stringify(plain.r));
+ assert.deepEqual(plain.seen,[],'0 repair writes: compose only');
+ assert.ok(plain.f.calls.includes('compose')&&plain.f.calls.includes('deploy'));
+ const mixed=await retire(onDefault(m,'11.55.94',{'odc-1.7.30':'11.55.95'}));
+ assert.equal(mixed.r.status,'live');
+ assert.deepEqual(mixed.seen.map(p=>[p[0],p[1],p[2]]),['odc-1.7.32','odc-1.7.31','odc-1.7.29'].map(n=>[n,'11.55.95',true]));
+});

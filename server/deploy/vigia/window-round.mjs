@@ -170,7 +170,9 @@ export async function runWindowAttempt(config,ops,decision,now){
    if(!next||next.retired[0].version!==v){writeAttempt(outDir,{...attempt,status:'closed',code:'not-due',endedAt:new Date().toISOString()});return {status:'idle',id};}
    writeJson(path.join(dir,'affected.json'),{retired:next.retired,affected:affectedRecord(next.affected)});
    if(ops.capacityPreflight)await ops.capacityPreflight(next.manifest);
-   const window={kind,lane,version:v,builts:[],kernels:null,defaultO11:null,retiring:[],retired:next.retired,affected:affectedRecord(next.affected),notifyAffected:policy.notifyAffected,...(next.hotPinDropped?{hotPinDropped:next.hotPinDropped}:{})};
+   // A retirement keeps the live default O11 kernel, by the ODC round's rule (review B12): it writes no kernel.json unless the
+   // live defaults are mixed (automatic.mjs alignKernels).
+   const window={kind,lane,version:v,builts:[],kernels:null,defaultO11:defaultO11(next.manifest,{lane:'odc',liveDefault:liveDefaultO11(config.liveBaseline)}),retiring:[],retired:next.retired,affected:affectedRecord(next.affected),notifyAffected:policy.notifyAffected,...(next.hotPinDropped?{hotPinDropped:next.hotPinDropped}:{})};
    const release={id,dir,attempt:attempt.at,baseline:config.liveBaseline,built:null,manifest:next.manifest,kernel:null,bridges:null,bridgeMode:null,features:null,featuresProvenance:null,bundles:null,window};
    return await finishRelease(config,ops,{release,attempt,dir,id,smoke:null});
   }

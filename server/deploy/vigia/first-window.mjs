@@ -4,6 +4,7 @@
 //   node deploy/vigia/first-window.mjs --pairs <pair versions.json> --images <images.json> --now <ISO time of the switch>
 //        [--keep-odc 4] [--keep-o11 4] [--grace-days 7] [--telemetry <file>[,<file>...]] [--out <versions.json>]
 //        [--plan-out <kit-plan.json>] [--notice-out <window-retiring.json>]
+// --notice-out: the window-retiring notice {name, code, message, affected}, the same object affected-customers.mjs notice prints.
 //
 // images.json: {"<odc version>": {"image": "...", "tag": "...", "sha256": "<64 hex>", "kernels": ["11.55.92", ...]?}, ...}, the
 // multi-O11 image built for EVERY ODC version of the pair window that stays: the kept ones AND the one that enters its grace
@@ -15,7 +16,8 @@
 // graceDays (window.mjs fromPairs), so ODC 1.7.28 users keep working for 7 days and are told when it leaves (studioRetiring).
 // The usage of the pairs folds into their ODC backends; the generated compose and the served lists are checked before anything
 // is printed. The plan goes to stderr (and --plan-out: what the kit deploys and checks, per backend); the file (or stdout) is
-// the versions.json; --notice-out is the owner's window-retiring notice with the customers seen on the retiring version.
+// the versions.json; --notice-out is the owner's window-retiring notice with the customers seen on the retiring version (one
+// object, as affected-customers.mjs notice prints it).
 import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -83,7 +85,13 @@ if(process.argv[1]&&path.resolve(process.argv[1])===here){
   const r=await firstBackendWindow(read(args.pairs),{images:read(args.images),now:args.now,keep,graceDays:Number(args['grace-days']??DEFAULT_GRACE_DAYS),tokens,notifyAffected:args.names!=='false'});
   console.error(JSON.stringify(r.plan,null,2));
   if(args['plan-out'])fs.writeFileSync(args['plan-out'],JSON.stringify(r.kit,null,2)+'\n');
-  if(args['notice-out']){if(!r.notice)throw Error('--notice-out needs --telemetry and a version that enters its grace.');fs.writeFileSync(args['notice-out'],JSON.stringify(r.notice,null,2)+'\n');}
+  // The same notice object as affected-customers.mjs notice ({name, code, message, affected}; review B13): one version enters
+  // its grace on the first switch (ODC 1.7.28); more than one is refused here (one affected-customers.mjs notice per version).
+  if(args['notice-out']){
+   if(!r.notice)throw Error('--notice-out needs --telemetry and a version that enters its grace.');
+   if(r.notice.length!==1)throw Error(`--notice-out writes one notice; ${r.notice.length} versions enter their grace: run affected-customers.mjs notice for each.`);
+   fs.writeFileSync(args['notice-out'],JSON.stringify(r.notice[0],null,2)+'\n');
+  }
   if(args.out)fs.writeFileSync(args.out,r.text);else process.stdout.write(r.text);
  }catch(e){console.error(`first-window: ${e.message}`);process.exit(1);}
 }

@@ -213,7 +213,9 @@ export async function releaseAutomatically(config,ops,release){
  // left on another default (alignKernels): a deploy never restarts backends on different defaults.
  const liveImage=b=>({odc:b.odc,image:b.image,tag:b.tag,sha256:String(b.sha256??'').replace(/^sha256:/,'')});
  const alignKernels=async compose=>{
-  const o11=w.defaultO11??defaultO11(pinned,{lane:'odc'}),aligned=[];
+  // The window's default, else the live one when it is still served (review B12): never the newest by default.
+  const live=[...new Set(Object.values(baseline.kernels??{}).map(k=>k?.o11).filter(Boolean))];
+  const o11=w.defaultO11??defaultO11(pinned,{lane:'odc',liveDefault:live.length===1?live[0]:null}),aligned=[];
   for(const b of pinned.backends){
    const name=backendId(b.odc),k=baseline.kernels?.[name];
    if(!k||(w.prepare??[]).includes(name)||k.o11===o11)continue;
