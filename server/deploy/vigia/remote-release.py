@@ -78,7 +78,8 @@ PLUGIN_LIST = ("const fs=require('fs'),c=require('crypto');console.log(JSON.stri
 # inside a live backend over the shared server state and prints counts only ({"pairs": {pair: {heavy, active}},
 # "skipped": n}), never a token id. Usage is advisory: whatever fails here (no source, docker, a timeout, bad output) is
 # usage None plus a warning code, never an error of the snapshot, so it can never stop a watcher round (review R2 M1').
-PAIR_NAME = re.compile(r"o11-\d+\.\d+\.\d+-odc-\d+\.\d+\.\d+")
+# Window 4x4 (S2): a backend of a backend window counts as odc-<v> (usage-count.cjs keys it so).
+PAIR_NAME = re.compile(r"(?:o11-\d+\.\d+\.\d+-)?odc-\d+\.\d+\.\d+")
 
 
 def usage_counts(container, source):
@@ -219,8 +220,11 @@ def dispatch(request):
         return {"ok": True, "directory": str(directory), "volumes": len(volumes)}
     if action == "prepare":
         os.umask(0o077)
-        if not re.fullmatch(r"o11-[0-9.]+-odc-[0-9.]+", request["id"]):
+        # Window 4x4 (S2): a backend window prepares one backend at a time (id odc-<v>, its own compose service under the v1
+        # name); kernelOnly (an O11 round) rewrites the kernel.json of a backend that runs, and sends no features.
+        if not re.fullmatch(r"(?:o11-[0-9.]+-)?odc-[0-9.]+", request["id"]):
             raise ValueError("Invalid pair.")
+        kernel_only = request.get("kernelOnly") is True and not request.get("features")
         directory = base / "releases" / request["id"]
         directory.mkdir(parents=True, exist_ok=True)
         with tarfile.open(fileobj=io.BytesIO(base64.b64decode(request["archive"])), mode="r:gz") as archive:
@@ -232,12 +236,13 @@ def dispatch(request):
             archive.extractall(directory, filter="data")
         for live in backends(settings["composeProject"]):
             labels = live["Config"]["Labels"]
-            if live["State"]["Running"] and labels.get("ssam.odc") == request["kernel"].get("odc") and labels.get("ssam.o11") == request["kernel"].get("o11"):
+            if not kernel_only and live["State"]["Running"] and labels.get("ssam.odc") == request["kernel"].get("odc") and labels.get("ssam.o11") == request["kernel"].get("o11"):
                 raise RuntimeError("Refusing to prepare an already running pair.")
         kernel = directory / "kernel.json"
         features = directory / "Features.plain.xml"
         kernel.write_text(json.dumps(request["kernel"]))
-        features.write_bytes(base64.b64decode(request["features"]))
+        if not kernel_only:
+            features.write_bytes(base64.b64decode(request["features"]))
         try:
             compose = request["compose"]
             service = compose["services"]["ssam-server-v1"]
@@ -283,7 +288,8 @@ def dispatch(request):
             ctl = str(directory / "server/deploy/coolify/ssamctl.sh")
             try:
                 command(["sh", ctl, "kernel", "write", str(kernel)], env=env)
-                command(["sh", ctl, "features", "put", str(features)], env=env)
+                if not kernel_only:
+                    command(["sh", ctl, "features", "put", str(features)], env=env)
             finally:
                 docker("rm", name)  # Deliberately no -v: never delete a pair volume.
             return {"ok": True}

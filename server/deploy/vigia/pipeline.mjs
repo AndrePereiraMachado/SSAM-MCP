@@ -6,7 +6,8 @@ import {readJournal,writeJournal} from './journal.mjs';
 import {releaseAutomatically,releaseEvent} from './automatic.mjs';
 import path from 'node:path';
 import {createHash} from 'node:crypto';
-import {LANES,STUDIO_NAME,ownerCommand,missingPack,planWindow,readyCandidates,pairFor,pairId,hasPair,rotateWindow,windowLimit,compareFailures,windowPairs,tfmMajor,proposalText,failureText,composeText,featuresLine} from './window.mjs';
+import {LANES,STUDIO_NAME,ownerCommand,missingPack,planWindow,readyCandidates,pairFor,pairId,hasPair,rotateWindow,windowLimit,compareFailures,windowPairs,tfmMajor,proposalText,failureText,composeText,featuresLine,ROUND_ID,isBackendWindow} from './window.mjs';
+import {runWindowVigia} from './window-round.mjs';
 import {CLIENT_BRIDGE_CODE,bridgeMode,laneGap,serverOnlyGate,offersGate,deferredLanes,gapText,o11Proofs} from './server-only.mjs';
 import {createBridgeStore} from '../../platforms/odc/facade/bridge-store.mjs';
 import {odcBinaryCheck} from './odc-binary.mjs';
@@ -14,13 +15,13 @@ import {generateCompose} from '../coolify/gen-compose.mjs';
 // An environment problem (not a test result): the round waits and retries. lanes: the lanes it concerns (empty = the pair).
 export class EnvironmentError extends Error{constructor(message,code='environment',lanes=[]){super(message);this.environmental=true;this.code=code;this.lanes=lanes;}}
 // Server-only bridge mode: a lane no published agent pack can use waits, with its own notice; nothing is deployed for it.
-const clientBridgeError=(gaps,pair)=>{const lanes=deferredLanes(gaps,pair);return Object.assign(new EnvironmentError(gapText(gaps),CLIENT_BRIDGE_CODE,lanes),{laneCodes:Object.fromEntries(lanes.map(l=>[l,CLIENT_BRIDGE_CODE]))});};
+export const clientBridgeError=(gaps,pair)=>{const lanes=deferredLanes(gaps,pair);return Object.assign(new EnvironmentError(gapText(gaps),CLIENT_BRIDGE_CODE,lanes),{laneCodes:Object.fromEntries(lanes.map(l=>[l,CLIENT_BRIDGE_CODE]))});};
 const writeJson=(file,data)=>{fs.mkdirSync(path.dirname(file),{recursive:true});const temp=file+'.'+process.pid+'.tmp';fs.writeFileSync(temp,JSON.stringify(data,null,2)+'\n');fs.renameSync(temp,file);};
 const readJson=file=>{try{return JSON.parse(fs.readFileSync(file,'utf8'));}catch(e){if(e.code==='ENOENT')return null;throw e;}};
 export const localDay=now=>new Date(now).toLocaleDateString('sv-SE');
 export function readAttempts(outDir){
  let entries=[];try{entries=fs.readdirSync(outDir,{withFileTypes:true});}catch(e){if(e.code!=='ENOENT')throw e;}
- return Object.fromEntries(entries.filter(e=>e.isDirectory()&&/^o11-\d+\.\d+\.\d+-odc-\d+\.\d+\.\d+$/.test(e.name)).map(e=>[e.name,(fs.existsSync(path.join(outDir,e.name,'attempt.json'))?readJournal(path.join(outDir,e.name,'attempt.json')):null)]).filter(([,a])=>a));
+ return Object.fromEntries(entries.filter(e=>e.isDirectory()&&ROUND_ID.test(e.name)).map(e=>[e.name,(fs.existsSync(path.join(outDir,e.name,'attempt.json'))?readJournal(path.join(outDir,e.name,'attempt.json')):null)]).filter(([,a])=>a));
 }
 export function writeAttempt(outDir,attempt){writeJournal(path.join(outDir,attempt.id,'attempt.json'),attempt);return attempt;}
 // At most one notice per key and local day: a pending proposal, a failure or a missing Studio is repeated daily, never
@@ -33,7 +34,7 @@ export async function remind(outDir,key,title,message,ops,{now=Date.now(),link}=
 }
 // The time a notice is given, which decides its "once a day" (a round can wait hours for another dotnet and cross
 // midnight): config.clock in tests, else the round's fixed time in tests (config.now), else the time of the notice itself.
-const noticeNow=config=>config.clock?.()??config.now??Date.now();
+export const noticeNow=config=>config.clock?.()??config.now??Date.now();
 const sameInputs=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
 const hours=(now,at)=>(now-Date.parse(at))/3600000;
 // What a round would do, without side effects (the dry run prints it).
@@ -82,7 +83,7 @@ export function decide({manifest,observed,state,attempts,inputs,now=Date.now(),r
  }
  return {action:'failed',plan,waiting,skipped};
 }
-function archive(dir,previous){
+export function archive(dir,previous){
  if(!previous||!fs.existsSync(dir))return;
  const target=path.join(dir,'previous',String(previous.at).replace(/[:.]/g,'-'));fs.mkdirSync(target,{recursive:true});
  for(const name of fs.readdirSync(dir))if(name!=='previous')fs.renameSync(path.join(dir,name),path.join(target,name));
@@ -90,13 +91,13 @@ function archive(dir,previous){
 // ODC features that are not an exact export of their version (carried or code defaults): a notice at most once a day per
 // version, more insistent after three versions without an exact export. It never holds the round: the candidate tests and
 // the smoke are the gate.
-async function featuresNotice(config,ops,p){
+export async function featuresNotice(config,ops,p){
  const insistent=(p.chain??0)>=3;
  const title=p.mode==='defaults'?'SSAM: ODC features are code defaults only':insistent?`SSAM: ODC features carried for ${p.chain} versions`:'SSAM: ODC features carried';
  const message=`ODC ${p.version}: ${featuresLine(p).replace(/^ODC features: /,'')}. Nothing waits for it. ${insistent||p.mode==='defaults'?'Seed an exact export soon':'To replace it with an exact export'}: ${ownerCommand(config,'-SeedFeatures <Features.plain.xml>')}`;
  await remind(config.outDir,'features:odc-'+p.version,title,message,ops,{now:noticeNow(config)});
 }
-async function noteWaiting(config,ops,waiting,now){
+export async function noteWaiting(config,ops,waiting,now){
  if(!waiting.installers.length&&!waiting.requested.length){
   // Nothing waits any more: the old notice is kept as resolved, so it never reads as current (one rename, once).
   for(const name of ['pending.json','PENDENTE.md'])if(fs.existsSync(path.join(config.outDir,name)))fs.renameSync(path.join(config.outDir,name),path.join(config.outDir,name.replace(/(\.\w+)$/,'.resolved$1')));
@@ -109,6 +110,8 @@ async function noteWaiting(config,ops,waiting,now){
  await remind(config.outDir,'install:'+what,'SSAM: install a newer Studio',`${what}. See ${path.join(config.outDir,'PENDENTE.md')}`,ops,{now:noticeNow(config),link:path.join(config.outDir,'PENDENTE.md')});
 }
 export async function runVigia(config,ops){
+ // S2: a backend window (the 4x4 window) runs its per-lane rounds (window-round.mjs); a pair window runs as before.
+ if(isBackendWindow(config.manifest))return runWindowVigia(config,ops);
  const now=config.now??Date.now(),outDir=config.outDir,log=ops.log??(()=>{});
  const attempts=readAttempts(outDir);
  const head=config.head??null;
@@ -147,7 +150,7 @@ export async function runVigia(config,ops){
 // release) a new Studio whose runtime (its verified installer's runtimeconfig.json) no published pack has a bridge for waits
 // with client-bridge-update-required.
 // offerLanes (ed25519-offers): the lanes whose published-pack gap a signed offer may close (O11); offersGate decides them.
-async function laneChecks(config,ops,pair,runtimes,log,release=null,offerLanes=[]){
+export async function laneChecks(config,ops,pair,runtimes,log,release=null,offerLanes=[]){
  const problems=[];
  for(const c of pair.candidates){
   const missing=[...(c.missing??[]),...(!c.tfm&&!(c.missing??[]).some(m=>/runtimeconfig/i.test(m))?['the tfm of its runtimeconfig.json']:[])];
@@ -172,7 +175,7 @@ async function laneChecks(config,ops,pair,runtimes,log,release=null,offerLanes=[
 }
 // Server-only: the reviewed agent release, or a wait that says what to configure (a missing or unknown pin, a commit not in
 // the clone, a release without its client source). Never a failure: the next round retries once the owner fixes it.
-async function reviewedRelease(ops,pair){
+export async function reviewedRelease(ops,pair){
  try{return await ops.agentRelease();}
  catch(e){
   if(e.environmental&&e.code!=='AGENT_RELEASE_REQUIRED')throw e;
@@ -181,14 +184,15 @@ async function reviewedRelease(ops,pair){
 }
 // A round stopped at its time limit: its running attempt is recorded as deferred, with its notice. That record is final:
 // a command killed by the cut that returns afterwards (a test with no results, a build cut short) never overwrites it.
-const wasCut=(outDir,attempt)=>{const now=readAttempts(outDir)[attempt.id];return now?.status==='deferred'&&now.code==='round-timeout'&&now.at===attempt.at;};
+export const wasCut=(outDir,attempt)=>{const now=readAttempts(outDir)[attempt.id];return now?.status==='deferred'&&now.code==='round-timeout'&&now.at===attempt.at;};
 export function timedOut(config,attempt){
  const dir=path.join(config.outDir,attempt.id);
  fs.writeFileSync(path.join(dir,'AGUARDANDO.md'),failureText({id:attempt.id,error:`The round reached its ${config.roundHours??7} h limit and was stopped.`,environmental:true,dir,retry:config.retryHours??12,config}));
  writeAttempt(config.outDir,{...attempt,status:'deferred',code:'round-timeout',error:'round time limit',deferrals:(attempt.deferrals??0)+1,firstDeferredAt:attempt.firstDeferredAt??attempt.at,endedAt:new Date().toISOString()});
 }
 // The deferrals that wait for the owner, with the bounded code of their release event (remote logger: [A-Z_]{1,40}).
-export const OWNER_WAITS=Object.freeze({[CLIENT_BRIDGE_CODE]:'CLIENT_BRIDGE_UPDATE_REQUIRED','agent-release-required':'AGENT_RELEASE_REQUIRED'});
+// S2: the reference-app gate a lane round needs before its deploy (window-round.mjs referenceGate), when it is not configured.
+export const OWNER_WAITS=Object.freeze({[CLIENT_BRIDGE_CODE]:'CLIENT_BRIDGE_UPDATE_REQUIRED','agent-release-required':'AGENT_RELEASE_REQUIRED','reference-gate-unconfigured':'REFERENCE_GATE_UNCONFIGURED'});
 export async function runAttempt(config,ops,decision,now){
  const {pair,id}=decision,outDir=config.outDir,dir=path.join(outDir,id),log=ops.log??(()=>{}),base=config.manifest;
  // A deferred attempt left no evidence beyond its notice: it is overwritten (and counted), not archived.

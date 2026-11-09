@@ -12,8 +12,8 @@ import {remind} from './pipeline.mjs';
 import {readListingBudget} from './smoke.mjs';
 import {refuseInRehearsal,assertPause,assertTime,canonicalComposeHash,cleanupSsh,cleanupRollback,liveBaseline,composeHash,unchanged,preserveCompose,modelPlugins} from './safety.mjs';
 import {bridgeMode,parseAgentRelease} from './server-only.mjs';
-import {windowPairs,pairId,version as threeOf,ownerCommand} from './window.mjs';
-import {versionPairs,servedLists} from '../coolify/gen-compose.mjs';
+import {windowPairs,pairId,version as threeOf,ownerCommand,servedOf} from './window.mjs';
+import {versionPairs,servedLists,backendsOf,isBackendManifest,versionBackends} from '../coolify/gen-compose.mjs';
 // The codes remote-release.py returns. The VPS state of the moment (memory, disk, the lease, a backend still warming): the
 // round waits and retries. A defect of the release or of the staged plugins volume, a check receipt, the published hello or a
 // changed served list: the attempt fails with its own code (rolled back after a deployment), never retried unseen. Usage
@@ -84,7 +84,35 @@ export function releasedSequence(outDir,identity){
  }}catch{}
  return max;
 }
-export const releasesToVerify=(observed,manifest,rehearsal=false)=>observed.filter(x=>x.url&&(rehearsal||!manifest[x.lane].some(v=>v.version===x.version)));
+export const releasesToVerify=(observed,manifest,rehearsal=false)=>observed.filter(x=>x.url&&(rehearsal||!servedOf(manifest,x.lane).includes(x.version)));
+// Window 4x4 (S2). The bundles of a release, either shape: a pair's {odc, o11}, or a window round's {candidate, o11: [...],
+// odc: {"<v>": bundle}} (each bundle once).
+export const releaseBundles=bundles=>{
+ if(!bundles)return [];
+ const all=bundles.candidate?[bundles.candidate,...(bundles.o11??[]),...Object.values(bundles.odc??{})]:Object.values(bundles);
+ return [...new Map(all.map(b=>[b.lane+'-'+b.version+'-'+b.sha256,b])).values()];
+};
+// The pin as the remote check reads it (remote-release.py zips pinned.o11 with pinned.odc and matches the backend labels
+// ssam.o11 and ssam.odc): a backend window's backend has the served O11 list as its ssam.o11 label (gen-compose.mjs).
+export function pinnedProjection(pinned){
+ if(!isBackendManifest(pinned))return pinned;
+ const backends=versionBackends(pinned);
+ return {odc:backends.map(b=>({version:b.odc,image:b.image,tag:b.tag,sha256:String(b.sha256).replace(/^sha256:/,'')})),o11:backends.map(b=>({version:b.o11.join(','),image:b.image,tag:b.tag,sha256:String(b.sha256).replace(/^sha256:/,'')}))};
+}
+// The served list each running backend must carry after a deployment, keyed by its labels (ssam.o11|ssam.odc).
+export function expectedServedOf(pinned){
+ const lists=servedLists(pinned);
+ if(isBackendManifest(pinned))return Object.fromEntries(versionBackends(pinned).map((b,i)=>[b.o11.join(',')+'|'+b.odc,lists[i]]));
+ const pairs=versionPairs(pinned);return Object.fromEntries(lists.map((text,i)=>[pairs[i].o11+'|'+pairs[i].odc,text]));
+}
+// The compose a remote prepare stages for one backend of a window round: that backend's service under the v1 name the
+// remote prepare reads (its labels, volumes and runtime folder are its own), with the volumes it mounts.
+export function backendCompose(compose,service){
+ const value=JSON.parse(String(compose).replace(/^#[^\n]*\n/,''));
+ const svc=Object.values(value.services??{}).find(x=>x?.labels?.['ssam.backend-name']===service||x?.environment?.SSAM_BACKEND_NAME===service);
+ if(!svc)throw Error('The compose has no backend '+service+'.');
+ return {services:{'ssam-server-v1':svc},volumes:value.volumes??{}};
+}
 // Text that reaches the owner's notice: printable, no markup or control characters, bounded.
 export const noticeText=value=>String(value??'').replace(/[^\w .,:;()/'=+#?-]/g,'').slice(0,300);
 // The text of a source notice, which carries owner command lines: the same, plus the quotes and backslashes of a command
@@ -241,13 +269,13 @@ export function createAutoRuntime(config,runtime) {
   secrets,
   async verifyInput(chain){return verifyInstallerCustody(chain,{privateRoot:priv,verifyPublisher:runtime.verifyPublisher});},
   diskPreflight(){assertDisk(priv,(config.minFreeGb??25)*2**30);},
-  async verifyRelease(release){for(const b of Object.values(release.bundles??{})){verifyBundleCustody(b,config.bundlePins?.[`${b.lane}-${b.version}`]);if(b.provenance)await this.verifyInput(b.provenance);}if(!release.bundles)throw Error('Release provenance is missing.');},
+  async verifyRelease(release){if(release.window?.kind==='retire')return;for(const b of releaseBundles(release.bundles)){verifyBundleCustody(b,config.bundlePins?.[`${b.lane}-${b.version}`]);if(b.provenance)await this.verifyInput(b.provenance);}if(!release.bundles)throw Error('Release provenance is missing.');},
   pause(){assertPause();if(config.pauseFile)assertPause(config.pauseFile);},
   deploymentBudget(){assertTime(config.roundDeadline??Date.now()+(config.roundHours??7)*3600000,Math.max(180,config.deploymentMaxMinutes??180));},
   cleanupSsh(){cleanupSsh(priv);cleanupRollback(priv,config.outDir);cleanupArtifacts({...config,livePairs:readLivePairs(config.outDir)});},
-  capacityPreflight:async manifest=>ssh(await secrets(),{action:'capacity',backendCount:manifest.odc.length}),
+  capacityPreflight:async manifest=>ssh(await secrets(),{action:'capacity',backendCount:backendsOf(manifest).length}),
   async assertRollbackSafe(s,baseline,ownedHash){const live=(await api(s,'GET',resource())).docker_compose_raw;const old=(await load(baseline)).compose;if(![ownedHash,canonicalComposeHash(old)].includes(canonicalComposeHash(live)))throw Error('Rollback refused: another writer changed the compose.');},
-  preflightRemote:(s,pinned)=>ssh(s,{action:'preflight',backendCount:pinned.odc.length}),
+  preflightRemote:(s,pinned)=>ssh(s,{action:'preflight',backendCount:backendsOf(pinned).length}),
   async ensureReleaseLock(s,previous){
    try{activeLease?.assertHeld();if(activeLease){await ssh(s,{action:'fence'});return previous;}}catch{}
    if(previous)await previous();
@@ -364,6 +392,7 @@ export function createAutoRuntime(config,runtime) {
    const live=config.liveBaseline?.kernels??runtime.liveKernels;
    if(live)return Object.values(live);
    const file=JSON.parse(fs.readFileSync(path.join(root,'server/deploy/coolify/r1-kernels.json'),'utf8')),all=Object.values(file);
+   if(manifest&&isBackendManifest(manifest)){const odc=new Set(manifest.backends.map(b=>b.odc)),mine=all.filter(k=>odc.has(k.odc));return mine.length?mine:all;}
    const ids=new Set(manifest?windowPairs(manifest).map(p=>pairId(p)):[]),served=all.filter(k=>ids.has(pairId(k)));
    return served.length?served:all;
   },
@@ -496,9 +525,17 @@ export function createAutoRuntime(config,runtime) {
   },
   async assertCoolifyReadable(s){if(typeof (await api(s,'GET',resource())).docker_compose_raw!=='string')throw Error('Coolify live compose is missing.');},
   async assertLiveUnchanged(s,baseline){unchanged(baseline,(await api(s,'GET',resource())).docker_compose_raw);},
-  async composeFor(s,baseline,pinned){return preserveCompose(await load(baseline),pinned);},
+  async composeFor(s,baseline,pinned,change){return preserveCompose(await load(baseline),pinned,change);},
   backup:(s,id)=>ssh(s,{action:'backup',id}),
   async prepare(s,r){
+   // A window round (r.service): one backend, its own compose service; an O11 round writes its kernel.json only (no features).
+   if(r.service){
+    const features=r.features?fs.readFileSync(r.features):null;
+    if(features&&r.featuresSha256&&hash(features)!==r.featuresSha256)throw Object.assign(Error('The ODC features changed after they were recorded; nothing was sent.'),{code:'FEATURES_CHANGED'});
+    const archive=path.join(r.dir,'deploy.tar.gz');if(!fs.existsSync(archive))await runtime.archiveDeploy(await runtime.fullHead(),archive);
+    return ssh(s,{action:'prepare',id:r.service,built:r.built,kernel:r.kernel,compose:backendCompose(r.compose,r.service),
+     archive:fs.readFileSync(archive).toString('base64'),...(features?{features:features.toString('base64')}:{kernelOnly:true}),modelPlugins:modelPlugins()});
+   }
    const features=fs.readFileSync(r.features);
    if(r.featuresSha256&&hash(features)!==r.featuresSha256)throw Object.assign(Error('The ODC features changed after they were recorded; nothing was sent.'),{code:'FEATURES_CHANGED'});
    const archive=path.join(r.dir,'deploy.tar.gz');await runtime.archiveDeploy(await runtime.fullHead(),archive);
@@ -511,7 +548,7 @@ export function createAutoRuntime(config,runtime) {
   async checks(s,expected){
    const budget=readListingBudget(root);
    const before=expected.rollback?(await load(expected.live)).backends:null;
-   const checkSources=before?Object.fromEntries(before.map(b=>[b.o11+'|'+b.odc,'const expected='+JSON.stringify({budget:b.budget,offers:[],kernel:b.kernel})+';\n'+fs.readFileSync(path.join(here,'check-backend.mjs'),'utf8')])):null;
+   const checkSources=before?Object.fromEntries(before.map(b=>[b.o11+'|'+b.odc,'const expected='+JSON.stringify({budget:b.budget,offers:[],kernel:b.kernel,...(expected.kernelO11Also?{kernelO11Also:expected.kernelO11Also}:{})})+';\n'+fs.readFileSync(path.join(here,'check-backend.mjs'),'utf8')])):null;
    // Server-only: the deployed new pair must accept the published pack's hello too (check-backend.mjs, that pair only).
    const pairKey=expected.kernel?expected.kernel.o11+'|'+expected.kernel.odc:null;
    const hello=!before&&['server-only','ed25519-offers'].includes(expected.bridges?.mode)&&expected.bridges.hello&&pairKey?{[pairKey]:expected.bridges.hello}:null;
@@ -525,14 +562,13 @@ export function createAutoRuntime(config,runtime) {
    // and that exactly one backend presented the published pack's hello.
    const extra=before?{}:{modelPlugins:modelPlugins(),...(Object.keys(o11Proven).length?{o11Proven}:{}),...offered};
    // A deployment: every running backend must run with the pin's served list (a retained one: the list it was deployed with).
-   const pairs=!before&&expected.pinned?versionPairs(expected.pinned):null;
-   const expectedServed=pairs?Object.fromEntries(servedLists(expected.pinned).map((text,i)=>[pairs[i].o11+'|'+pairs[i].odc,text])):null;
+   const expectedServed=!before&&expected.pinned?expectedServedOf(expected.pinned):null;
    // The signed offers belong to the new pair only (A1 of the F1 review): keyed like packHellos, so a retained backend (even one
    // that shares a Service Studio or an ODC Studio with the new pair) is asked none, and the remote verifier requires exactly one
    // backend to have offered and delivered all of them (requireOffers). A rollback checks no offer.
    const own=!before&&pairKey?(expected.bridges?.offers??[]):[];
    const offers=own.length?{[pairKey]:own}:[];
-   return ssh(s,{action:'check',...expected,budget,expectedBackends:before,checkSources,...(before?{}:{modelPlugins:extra.modelPlugins,requirePresented:!!hello,...(own.length?{requireOffers:own.length}:{}),...(expectedServed?{expectedServed}:{})}),checkSource:checkSource(budget,offers,false,hello,extra)});
+   return ssh(s,{action:'check',...expected,...(expected.pinned?{pinned:pinnedProjection(expected.pinned)}:{}),budget,expectedBackends:before,checkSources,...(before?{}:{modelPlugins:extra.modelPlugins,requirePresented:!!hello,...(own.length?{requireOffers:own.length}:{}),...(expectedServed?{expectedServed}:{})}),checkSource:checkSource(budget,offers,false,hello,extra)});
   },
   async event(name,value,s){
    runtime.log(`release ${name}: ${value.id}`);

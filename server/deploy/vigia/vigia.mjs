@@ -14,7 +14,7 @@ import path from 'node:path';
 import {spawn} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {runVigia,readAttempts,remind,timedOut} from './pipeline.mjs';
-import {replayApprovals} from './window.mjs';
+import {replayApprovals,isBackendWindow} from './window.mjs';
 import {approve,reject,retry} from './approve.mjs';
 import {acquireLock,lockHeldBy,registerChild,runLogFile,createLog} from './host.mjs';
 import {automaticPlan,releaseAutomatically,releaseEvent} from './automatic.mjs';
@@ -59,6 +59,9 @@ export function readConfig(file){
 }
 // The window the next proposal starts from: main's versions.json plus the approvals main does not carry yet.
 export function baseWindow(mainManifest,outDir){
+ // A backend window (S2) is deployed by the automatic release only, which plans from the live window: main's versions.json is
+ // the reviewed one, with no approval to replay.
+ if(isBackendWindow(mainManifest))return {manifest:mainManifest,replayed:[],branchBase:null};
  const attempts=Object.values(readAttempts(outDir));
  // An automatic pin precedes deployment. If deployment failed, that local pin
  // is evidence, not the served baseline; plan from its recorded previous window.
@@ -90,8 +93,11 @@ export async function round(config,runtime,{dryRun=false}={}){
   }
   if(state.status==='live'&&a.status!=='approved'){
    const {writeAttempt}=await import('./pipeline.mjs');
-   writeAttempt(config.outDir,{...a,status:'approved',built:release.built,pinCommit:state.pin,approved:{at:new Date().toISOString(),digest:'sha256:'+release.built.sha256,commit:state.pin}});
+   writeAttempt(config.outDir,{...a,status:'approved',built:release.built,pinCommit:state.pin,approved:{at:new Date().toISOString(),digest:release.built?'sha256:'+release.built.sha256:null,commit:state.pin}});
   }
+  // A live release whose notices did not reach the owner (state.unsent: live, window-retiring, window-retired...) sends them
+  // again every round until they are delivered (automatic.mjs notify).
+  if(state.status==='live'&&state.unsent?.length){await releaseAutomatically(config,runtime,release);continue;}
   if(['rolled-back','preparation-failed'].includes(state.status)&&a.status==='running'){
    const {writeAttempt}=await import('./pipeline.mjs');writeAttempt(config.outDir,{...a,status:'failed',built:release.built,rollbackLatch:state.status==='rolled-back',failedLanes:a.pair.lanes,code:state.status});
   }
@@ -100,7 +106,7 @@ export async function round(config,runtime,{dryRun=false}={}){
    const result=await releaseAutomatically(config,runtime,release);
    if(result.status==='live'){
     const {writeAttempt}=await import('./pipeline.mjs');
-    writeAttempt(config.outDir,{...a,status:'approved',built:release.built,pinCommit:result.commit,approved:{at:new Date().toISOString(),digest:'sha256:'+release.built.sha256,commit:result.commit}});
+    writeAttempt(config.outDir,{...a,status:'approved',built:release.built,pinCommit:result.commit,approved:{at:new Date().toISOString(),digest:release.built?'sha256:'+release.built.sha256:null,commit:result.commit}});
    }
    if(['idle','abandoned'].includes(result.status)){const {writeAttempt}=await import('./pipeline.mjs');writeAttempt(config.outDir,{...a,status:'closed',code:result.status,cause:result.status==='abandoned'?result.code??null:null});continue;}
    return result;
