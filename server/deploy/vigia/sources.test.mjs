@@ -612,7 +612,8 @@ test('R4-Q2: without the owner, the newer version is offered when the hold ends 
  assert.deepEqual(q.lines.slice(2),[
   '11-19T16:00 1.7.33:unavailable/STUDIO_BUILD_AMBIGUOUS 1.7.34.11140:queued<1.7.33@11-21T16:00 | 1.7.32',
   '11-21T16:00 1.7.33:unavailable/STUDIO_BUILD_AMBIGUOUS 1.7.34.11140:public!skips 1.7.33 | 1.7.32',
-  '11-21T20:00 1.7.33:unavailable/STUDIO_BUILD_AMBIGUOUS 1.7.34.11140:public!skips 1.7.33 | 1.7.32,1.7.34',
+  '11-21T18:00 1.7.33:skipped/STUDIO_BUILD_AMBIGUOUS 1.7.34.11140:public | 1.7.32',
+  '11-21T20:00 1.7.33:skipped/STUDIO_BUILD_AMBIGUOUS 1.7.34.11140:public | 1.7.32,1.7.34',
   '11-21T22:00 1.7.34.11140:public | 1.7.32,1.7.34']);
  assert.deepEqual(q.state.odc.skipped,{'1.7.33':{by:'1.7.34',at:'2026-11-21T16:00:00.000Z',code:'STUDIO_BUILD_AMBIGUOUS'}});
  const r=await pinOdc(q.state,'1.7.33.11120',{fetcher:q.f.fetcher,retryDelayMs:0,now:at('2026-11-22T09:00Z'),served:q.served});
@@ -629,7 +630,8 @@ test('R4: an older version with no build at all (NOT_FOUND) holds the newer one 
   '11-17T12:00 1.7.33:unavailable/STUDIO_BUILD_NOT_FOUND 1.7.34:pending | 1.7.32',
   '11-17T16:00 1.7.33:unavailable/STUDIO_BUILD_NOT_FOUND 1.7.34.11140:queued<1.7.33@11-19T16:00 | 1.7.32',
   '11-19T16:00 1.7.33:unavailable/STUDIO_BUILD_NOT_FOUND 1.7.34.11140:public!skips 1.7.33 | 1.7.32',
-  '11-20T00:00 1.7.33:unavailable/STUDIO_BUILD_NOT_FOUND 1.7.34.11140:public!skips 1.7.33 | 1.7.32,1.7.34']);
+  '11-19T20:00 1.7.33:skipped/STUDIO_BUILD_NOT_FOUND 1.7.34.11140:public | 1.7.32',
+  '11-20T00:00 1.7.33:skipped/STUDIO_BUILD_NOT_FOUND 1.7.34.11140:public | 1.7.32,1.7.34']);
  assert.equal(q.state.odc.skipped['1.7.33'].code,'STUDIO_BUILD_NOT_FOUND');
 });
 
@@ -685,12 +687,14 @@ test('R4: the owner hears of the hold (both versions, its end, the full -Pin lin
  assert.equal(pinned.status,'pinned-no-effect');assert.match(pinned.note,/THIS HAS NO EFFECT: the window already serves the newer ODC Studio 1\.7\.34 \(1\.7\.33 was skipped for 1\.7\.34\)/);
  // A build uploaded far outside its version's window is pinned with a warning; one near it is not.
  const near=await pinStudioBuild(config,'1.7.33.11110',{fetcher:f.fetcher,now:at('2026-11-22T09:00Z'),served:['1.7.32']});
- assert.equal(near.warnings,undefined,'11110 sits inside the window');assert.equal(near.status,'pinned');
+ // Pinned while 1.7.34 is not served yet: the skip is undone, with the approval-order warning; no "far" warning.
+ assert.deepEqual(near.warnings,['1.7.33 had been skipped for 1.7.34, which may already be proposed: approve 1.7.33 before 1.7.34, or approving 1.7.34 first skips 1.7.33 for good']);assert.equal(near.status,'pinned');
  f.state.hub['ODCStudio/1.7.33.11100/windows']={location:`${CF}1.7.33.11100/ODCStudio-1.7.33.11100.exe`,lastModified:new Date(at('2026-11-05T10:00Z')).toUTCString(),size:287011100};
  const off=await pinStudioBuild(config,'1.7.33.11100',{fetcher:f.fetcher,now:at('2026-11-22T09:00Z'),served:['1.7.32']});
  assert.equal(off.status,'pinned');assert.match(off.note,/WARNING: 1\.7\.33\.11100 was uploaded 2026-11-05T10:00Z, -230 h from the 2026-11-15 release: far outside its window/);
  // Once-only notices are sanitized but keep command lines.
- assert.equal(commandText('-Pin 1.7.33.<build> -Reason "<why>"\r\n<img src=x onerror=1>`$(x)`'),'-Pin 1.7.33.<build> -Reason "<why>"  img src=x onerror=1(x)');
+ // A closed list of placeholders: <build>, <why>, <id>; any other < or > is dropped.
+ assert.equal(commandText('-Pin 1.7.33.<build> -Reason "<why>" -Approve <id>\r\n<img src=x onerror=1><script><b>`$(x)`'),'-Pin 1.7.33.<build> -Reason "<why>" -Approve <id>  img src=x onerror=1scriptb(x)');
  assert.ok(notes.every(([title,message])=>!/[\r\n`$]/.test(title+message)));
  // One owner command per run.
  assert.throws(()=>parseArgs(['--config','c','--pin','1.7.33.11120','--approve','x']),/--approve and --pin cannot be combined/);
@@ -712,4 +716,117 @@ test('R4-B2: unread versions are named to the owner once',async t=>{
  }
  const unread=notes.filter(n=>n[0]==='SSAM: Studio versions waiting to be read');
  assert.equal(unread.length,1);assert.match(unread[0][1],/ODC Studio 1\.7\.35 are newer than the served 1\.7\.32 but beyond the 3 versions/);
+});
+
+// Round 5: the reviewer's hold scenarios (C:\t\r5\sources-fix\review4\queue-r4.mjs) on a pinned clock.
+const Q5={versions:[{version:'1.7.33',releasedOn:'2026-11-15',uploads:{11110:'2026-11-15T09:00Z',11120:'2026-11-17T05:00Z'},announcedAt:'2026-11-14T00:00Z'},{version:'1.7.34',releasedOn:'2026-11-18',uploads:{11140:'2026-11-18T10:00Z'},announcedAt:'2026-11-18T09:00Z'}]};
+
+test('R5-Q5: after a watcher outage past the newer cutoff + 48 h, the hold still runs its whole 48 h from the first round that sees it',async()=>{
+ const q=await queueRun({...Q5,from:'2026-11-22T00:00Z',to:'2026-11-24T08:00Z',step:4*H});
+ assert.deepEqual(q.lines,[
+  '11-22T00:00 1.7.33:unavailable/STUDIO_BUILD_AMBIGUOUS 1.7.34.11140:queued<1.7.33@11-24T00:00 | 1.7.32',
+  '11-24T00:00 1.7.33:unavailable/STUDIO_BUILD_AMBIGUOUS 1.7.34.11140:public!skips 1.7.33 | 1.7.32',
+  '11-24T04:00 1.7.33:skipped/STUDIO_BUILD_AMBIGUOUS 1.7.34.11140:public | 1.7.32',
+  '11-24T08:00 1.7.33:skipped/STUDIO_BUILD_AMBIGUOUS 1.7.34.11140:public | 1.7.32,1.7.34']);
+ // The start of the hold is persisted with the decisions (a restart does not restart or shorten it).
+ const mid=await queueRun({...Q5,from:'2026-11-22T00:00Z',to:'2026-11-22T00:00Z'});
+ assert.deepEqual(mid.state.odc.holds,{'1.7.34<1.7.33':{since:'2026-11-22T00:00:00.000Z',limitedSince:'2026-11-22T00:00:00.000Z'}});
+ const again=await queueRun({...Q5,from:'2026-11-23T12:00Z',to:'2026-11-23T12:00Z',state:mid.state});
+ assert.equal(again.rounds[0].odc.find(s=>s.status==='queued').heldUntil,'2026-11-24T00:00:00.000Z');
+ assert.equal(q.state.odc.holds,undefined,'a hold that ended is dropped');
+});
+
+test('R5-Q6: a version not read this round is never passed over: the newer one waits for it after the hold skips the older ones',async()=>{
+ const v=(n,b,up,d)=>({version:`1.7.${n}`,releasedOn:d,uploads:{[b]:up},announcedAt:d+'T00:00Z'});
+ const q=await queueRun({versions:[v(33,11120,'2026-11-10T10:00Z','2026-11-15'),v(34,11140,'2026-11-11T10:00Z','2026-11-16'),v(35,11160,'2026-11-17T10:00Z','2026-11-17'),v(36,11180,'2026-11-18T10:00Z','2026-11-18')],from:'2026-11-18T00:00Z',to:'2026-11-23T00:00Z',step:4*H});
+ assert.deepEqual(q.lines,[
+  '11-18T00:00 1.7.35:not-read 1.7.33:unavailable/STUDIO_BUILD_NOT_FOUND 1.7.34:unavailable/STUDIO_BUILD_NOT_FOUND 1.7.36:pending | 1.7.32',
+  '11-19T16:00 1.7.35:not-read 1.7.33:unavailable/STUDIO_BUILD_NOT_FOUND 1.7.34:unavailable/STUDIO_BUILD_NOT_FOUND 1.7.36.11180:queued<1.7.33@11-21T16:00 | 1.7.32',
+  '11-21T16:00 1.7.35:not-read 1.7.33:unavailable/STUDIO_BUILD_NOT_FOUND 1.7.34:unavailable/STUDIO_BUILD_NOT_FOUND 1.7.36.11180:queued<1.7.35!skips 1.7.33+1.7.34 | 1.7.32',
+  '11-21T20:00 1.7.33:skipped/STUDIO_BUILD_NOT_FOUND 1.7.34:skipped/STUDIO_BUILD_NOT_FOUND 1.7.35.11160:public 1.7.36.11180:queued<1.7.35 | 1.7.32',
+  '11-22T04:00 1.7.33:skipped/STUDIO_BUILD_NOT_FOUND 1.7.34:skipped/STUDIO_BUILD_NOT_FOUND 1.7.35.11160:public 1.7.36.11180:queued<1.7.35 | 1.7.32,1.7.35',
+  '11-22T08:00 1.7.36.11180:public | 1.7.32,1.7.35',
+  '11-22T16:00 1.7.36.11180:public | 1.7.32,1.7.35,1.7.36']);
+});
+
+test('R5-Q7: a source failure for the older version holds the newer one with no time limit; the queue moves by itself when the source reads again',async()=>{
+ const q=await queueRun({versions:[{version:'1.7.33',releasedOn:'2026-11-15',uploads:{11120:'2026-11-15T10:00Z'},announcedAt:'2026-11-15T11:00Z'},{version:'1.7.34',releasedOn:'2026-11-16',uploads:{11140:'2026-11-16T10:00Z'},announcedAt:'2026-11-16T09:00Z'}],from:'2026-11-15T12:00Z',to:'2026-11-21T00:00Z',step:4*H,
+  fail:(u,now)=>now>=at('2026-11-16T12:00Z')&&now<at('2026-11-20T12:00Z')&&u.hostname==='api.outsystems.com'&&u.pathname.includes('/1.7.33.')?new Response('',{status:403}):null});
+ assert.deepEqual(q.lines,[
+  '11-15T12:00 1.7.33:pending | 1.7.32',
+  '11-16T12:00 1.7.33:unavailable/STUDIO_SOURCE_BLOCKED 1.7.34:pending | 1.7.32',
+  '11-17T16:00 1.7.33:unavailable/STUDIO_SOURCE_BLOCKED 1.7.34.11140:queued<1.7.33 | 1.7.32',
+  '11-20T12:00 1.7.33.11120:public 1.7.34.11140:queued<1.7.33 | 1.7.32',
+  '11-20T20:00 1.7.33.11120:public 1.7.34.11140:queued<1.7.33 | 1.7.32,1.7.33',
+  '11-21T00:00 1.7.34.11140:public | 1.7.32,1.7.33']);
+ const held=q.rounds.find(r=>r.now===at('2026-11-19T16:00Z')).odc.find(s=>s.status==='queued');
+ assert.deepEqual([held.heldBy,held.heldCodes,held.heldUntil],[['1.7.33'],['STUDIO_SOURCE_BLOCKED'],null]);
+ assert.equal(q.state.odc.skipped,undefined,'nothing skipped');
+});
+
+test('R5-Q8: both versions ambiguous after an outage; a -Pin of the newer one first warns about the older one and starts a whole hold',async()=>{
+ const versions=[{version:'1.7.33',releasedOn:'2026-11-15',uploads:{11110:'2026-11-15T09:00Z',11120:'2026-11-17T05:00Z'},announcedAt:'2026-11-14T00:00Z'},{version:'1.7.34',releasedOn:'2026-11-18',uploads:{11130:'2026-11-18T09:00Z',11140:'2026-11-20T05:00Z'},announcedAt:'2026-11-14T00:00Z'}];
+ let pinned;
+ const q=await queueRun({versions,from:'2026-11-23T00:00Z',to:'2026-11-25T08:00Z',step:4*H,
+  hook:async(now,state,f,served)=>{if(now===at('2026-11-23T04:00Z'))pinned=await pinOdc(state,'1.7.34.11140',{fetcher:f.fetcher,retryDelayMs:0,now,served});}});
+ assert.deepEqual(pinned.warnings,['the older 1.7.33 has no decided build (STUDIO_BUILD_AMBIGUOUS): 1.7.34 waits behind it, and 1.7.33 is skipped 48 h after the next round unless it is pinned (-Pin 1.7.33.<build>) or skipped now (-Skip 1.7.33)']);
+ assert.deepEqual(q.lines,[
+  '11-23T00:00 1.7.33:unavailable/STUDIO_BUILD_AMBIGUOUS 1.7.34:unavailable/STUDIO_BUILD_AMBIGUOUS | 1.7.32',
+  '11-23T04:00 1.7.33:unavailable/STUDIO_BUILD_AMBIGUOUS 1.7.34.11140:queued<1.7.33@11-25T04:00 | 1.7.32',
+  '11-25T04:00 1.7.33:unavailable/STUDIO_BUILD_AMBIGUOUS 1.7.34.11140:public!skips 1.7.33 | 1.7.32',
+  '11-25T08:00 1.7.33:skipped/STUDIO_BUILD_AMBIGUOUS 1.7.34.11140:public | 1.7.32']);
+});
+
+test('R5: -Skip releases the queue at once (also behind a failing source); -Pin or -Redecide undoes it; a served version is not skipped',async()=>{
+ const {skipOdc}=await import('./sources.mjs');
+ const block=(u,now)=>now>=at('2026-11-16T12:00Z')&&u.pathname.includes('/1.7.33.')?new Response('',{status:403}):null;
+ const versions=[{version:'1.7.33',releasedOn:'2026-11-15',uploads:{11120:'2026-11-15T10:00Z'},announcedAt:'2026-11-15T11:00Z'},{version:'1.7.34',releasedOn:'2026-11-16',uploads:{11140:'2026-11-16T10:00Z'},announcedAt:'2026-11-16T09:00Z'}];
+ let skipped;
+ const q=await queueRun({versions,from:'2026-11-17T16:00Z',to:'2026-11-18T00:00Z',step:4*H,fail:block,
+  hook:async(now,state,f,served)=>{if(now===at('2026-11-17T20:00Z'))skipped=skipOdc(state,'1.7.33',{now,served});}});
+ assert.deepEqual(q.lines,[
+  '11-17T16:00 1.7.33:unavailable/STUDIO_SOURCE_BLOCKED 1.7.34.11140:queued<1.7.33 | 1.7.32',
+  '11-17T20:00 1.7.33:skipped/OWNER 1.7.34.11140:public | 1.7.32']);
+ assert.deepEqual([skipped.version,skipped.known],['1.7.33',true]);
+ assert.deepEqual(q.state.odc.skipped['1.7.33'],{by:'owner',at:'2026-11-17T20:00:00.000Z',code:'OWNER'});
+ assert.deepEqual(skipOdc(q.state,'1.7.32',{served:['1.7.32']}),{version:'1.7.32',noEffect:{served:'1.7.32'}});
+ assert.throws(()=>skipOdc(q.state,'1.7.33.11120'),/X\.Y\.Z/);
+ assert.equal(redecideOdc(q.state,'1.7.33').unskipped,true);assert.equal(q.state.odc.skipped,undefined);
+});
+
+test('R5: the owner hears of a hold with no limit, of a hold after an outage with its whole 48 h; -Skip and -Pin read the window of the last round',async t=>{
+ const {configureJournals}=await import('./journal.mjs');
+ const {createAutoRuntime,pinStudioBuild,skipStudio}=await import('./auto-runtime.mjs');
+ const {parseArgs}=await import('./vigia.mjs');
+ const dir=tmp(t);configureJournals(dir,Buffer.alloc(32,7).toString('base64'));
+ t.mock.method(globalThis,'fetch',async()=>{throw Error('no network in tests');});
+ const notes=[],f=fakeSites();let clock=0;
+ const runtime={log:()=>{},notify:async(title,message)=>{notes.push([title,message]);},sourceFetcher:f.fetcher};
+ const config={workspace:dir,tempRoot:dir,outDir:dir,installersDir:path.join(dir,'inst'),automatic:true,clock:()=>clock,configFile:'C:/t/vigia/config.json'};
+ Object.assign(runtime,createAutoRuntime(config,runtime));runtime.diskPreflight=()=>{};
+ const observe=async(when,versions,served=['1.7.32'])=>{clock=at(when);worldAt(f,clock,versions);
+  try{await runtime.observe([],{manifest:{odc:served.map(version=>({version})),o11:[{version:'11.55.95'}]}});}catch(e){assert.match(e.message,/no network|download/i);}};
+ // Q5: the first round after an outage tells the owner the whole hold, before anything is skipped.
+ await observe('2026-11-22T00:00Z',Q5.versions);
+ const hold=notes.find(n=>/waits behind/.test(n[1]));
+ assert.match(hold[1],/1\.7\.34\.11140 is decided but waits behind the older 1\.7\.33 \(STUDIO_BUILD_AMBIGUOUS\).*At 2026-11-24T00:00:00\.000Z/);
+ assert.ok(hold[1].includes('-Pin 1.7.33.<build>')&&hold[1].includes('vigia.ps1 -Config C:/t/vigia/config.json -Skip 1.7.33'),hold[1]);
+ assert.ok(!notes.some(n=>n[0]==='SSAM: Studio version skipped'));
+ // -Pin and -Skip judge against the window the last round recorded (the production manifest in an automatic round).
+ const pin=await pinStudioBuild(config,'1.7.33.11120',{fetcher:f.fetcher,now:at('2026-11-22T01:00Z')});
+ assert.match(pin.note,/served window: the window of the last round \(2026-11-22T00:00:00\.000Z\)/);assert.equal(pin.status,'pinned');
+ const skip=skipStudio(config,'1.7.33',{now:at('2026-11-22T02:00Z')});
+ assert.equal(skip.status,'skipped');assert.match(skip.note,/1\.7\.33 is skipped by the owner \(it was decided as build 11120\).*To undo: -Pin 1\.7\.33\.<build> or -Redecide 1\.7\.33/);
+ assert.equal(skipStudio(config,'1.7.31').status,'skip-no-effect');
+ // A source failure for the older version: the daily notice says the hold has no time limit, and how to release it.
+ const versions=[{version:'1.7.35',releasedOn:'2026-11-25',uploads:{11160:'2026-11-25T10:00Z'},announcedAt:'2026-11-25T11:00Z'},{version:'1.7.36',releasedOn:'2026-11-26',uploads:{11180:'2026-11-26T10:00Z'},announcedAt:'2026-11-26T09:00Z'},...Q5.versions];
+ f.state.fail=u=>u.pathname.includes('/1.7.35.')?new Response('',{status:403}):null;
+ await observe('2026-11-28T00:00Z',versions,['1.7.32','1.7.34']);
+ const open=notes.find(n=>/1\.7\.36\.11180 is decided but waits behind/.test(n[1]));
+ assert.match(open[1],/which the source cannot read.*no time limit.*To go on without 1\.7\.35 now: powershell\.exe .*-Skip 1\.7\.35/);
+ // One owner command per run; -Skip is one of them.
+ assert.equal(parseArgs(['--config','c','--skip','1.7.33']).skip,'1.7.33');
+ for(const extra of [['--skip','1.7.33','--pin','1.7.33.1'],['--pin','1.7.33.1','--round'],['--pin','1.7.33.1','--acknowledge-rollback','x'],['--pin','1.7.33.1','--pin','1.7.33.2'],['--skip','1.7.33','--dry-run']])
+  assert.throws(()=>parseArgs(['--config','c',...extra]),/cannot be combined|given twice/,extra.join(' '));
+ assert.match(fs.readFileSync(path.join(path.dirname(new URL(import.meta.url).pathname.slice(1)),'vigia.ps1'),'utf8'),/\[string\]\$Skip,[\s\S]*--skip/);
 });

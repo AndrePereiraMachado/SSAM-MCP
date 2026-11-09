@@ -9,6 +9,7 @@ param(
  [string]$SeedFeatures,
  [string]$Pin,
  [string]$Redecide,
+ [string]$Skip,
  [switch]$NoUpdate,
  [switch]$RehearseCurrent
 )
@@ -36,6 +37,7 @@ if($Retry){$argsList+=@('--retry',$Retry)}
 if($SeedFeatures){$argsList+=@('--seed-features',$SeedFeatures)}
 if($Pin){$argsList+=@('--pin',$Pin)}
 if($Redecide){$argsList+=@('--redecide',$Redecide)}
+if($Skip){$argsList+=@('--skip',$Skip)}
 if($NoUpdate){$argsList+='--no-update'}
 if($RehearseCurrent){$argsList+='--rehearse-current'}
 & $node @argsList

@@ -342,42 +342,61 @@ async function decideOdc(o,lane,noted){
 // pending when the next one ships is decided and served too. At most o.maxVersions: the highest and the OLDEST above the
 // newest served (served first, oldest first); those in between are listed in results.notRead and read once the older
 // ones are served, so none is skipped for being beyond the limit.
-// An older unserved version left without a decision (AMBIGUOUS, NOT_FOUND, a failing source) holds the newer decided ones
-// back (r.heldBehind), so it is never skipped unseen, but only until o.rule.holdHours after each newer one's cutoff. Past
-// that, the newer one is offered with r.skips, and the older is recorded in lane.skipped (once a newer version is served,
-// the older one is no longer read: nothing would serve it).
+// An older unserved version left without a decision holds the newer decided ones back (r.heldBehind), so it is never
+// skipped unseen:
+//  - a source failure for it (UNREACHABLE, BLOCKED, RATE_LIMITED, CHANGED, UNTRUSTED...) holds them with no time limit: it
+//    says nothing about the version, and the queue moves by itself once the source reads again;
+//  - an answer that needs the owner (HOLD_LIMITED: AMBIGUOUS, NOT_FOUND) holds them until o.rule.holdHours after the later
+//    of the newer one's cutoff and the first round that saw that hold (lane.holds['N<E'].limitedSince, persisted), so a
+//    watcher that was stopped, or a -Pin of the newer one, always gives the owner the whole hold. Past it, the newer one
+//    is offered with r.skips and the older is recorded in lane.skipped.
+// A skipped version (by a hold, or by the owner's -Skip) is no longer read, so the versions behind it are read in turn;
+// -Pin or -Redecide of it undoes the skip. lane.served records the window this round judged against (for -Pin, -Skip).
+export const HOLD_LIMITED=Object.freeze(['STUDIO_BUILD_AMBIGUOUS','STUDIO_BUILD_NOT_FOUND']);
 export async function latestOdcAll(o,{state={},served=[]}={}){
  const notes=await readOdcNotes(o);
  const lane=state.odc??={versions:{}};lane.versions??={};
- const newest=[...served].sort(compareVersions).at(-1);
+ const window=[...new Set(served)].sort(compareVersions),newest=window.at(-1);
+ if(window.length&&JSON.stringify(lane.served?.versions)!==JSON.stringify(window))lane.served={versions:window,at:iso(o.now)};
  const byVersion=new Map(notes.map(n=>[n.version,n]));
- const ordered=[...byVersion.values()].sort((a,b)=>compareVersions(b.version,a.version));
+ const skippedNow=[...byVersion.keys()].filter(v=>lane.skipped?.[v]&&!(newest&&compareVersions(v,newest)<=0)).sort(compareVersions);
+ const ordered=[...byVersion.values()].filter(n=>!lane.skipped?.[n.version]).sort((a,b)=>compareVersions(b.version,a.version));
  const above=ordered.slice(1).filter(n=>newest&&compareVersions(n.version,newest)>0).reverse();
- const picked=[ordered[0],...above.slice(0,o.maxVersions-1)];
+ const picked=ordered.length?[ordered[0],...above.slice(0,o.maxVersions-1)]:[];
  const results=[];
  for(const noted of picked){
   try{results.push({version:noted.version,r:await decideOdc(o,lane,noted)});}
   catch(e){if(!(e instanceof SourceError))throw e;results.push({version:noted.version,error:e});}
  }
- const holding=[];
+ const holds=lane.holds??{},seen=new Set(),holding=[];
  for(const x of [...results].sort((a,b)=>compareVersions(a.version,b.version))){
   if(served.includes(x.version)||(newest&&compareVersions(x.version,newest)<0))continue;
   if(x.error){holding.push({version:x.version,code:x.error.code??'STUDIO_SOURCE_UNREACHABLE'});continue;}
-  if(lane.skipped?.[x.version]){delete lane.skipped[x.version];if(!Object.keys(lane.skipped).length)delete lane.skipped;}
   if(x.r.pending||!holding.length)continue;
-  const until=Date.parse(x.r.releasedOn+'T00:00:00Z')+(o.rule.cutoffHours+o.rule.holdHours)*H;
-  if(o.now<until){x.r={...x.r,heldBehind:{versions:holding.map(h=>h.version),codes:holding.map(h=>h.code),until:iso(until)}};continue;}
+  const cutoff=Date.parse(x.r.releasedOn+'T00:00:00Z')+o.rule.cutoffHours*H;
+  let until=-Infinity,open=false;
+  for(const h of holding){
+   const key=`${x.version}<${h.version}`,hold=holds[key]??={since:iso(o.now)};seen.add(key);
+   if(!HOLD_LIMITED.includes(h.code)){open=true;continue;}
+   hold.limitedSince??=iso(o.now);
+   until=Math.max(until,Math.max(cutoff,Date.parse(hold.limitedSince))+o.rule.holdHours*H);
+  }
+  if(open||o.now<until){x.r={...x.r,heldBehind:{versions:holding.map(h=>h.version),codes:holding.map(h=>h.code),until:open?null:iso(until)}};continue;}
   x.r={...x.r,skips:holding.map(h=>({...h}))};
-  for(const h of holding)(lane.skipped??={})[h.version]??={by:x.version,at:iso(o.now),code:h.code};
+  for(const h of holding){(lane.skipped??={})[h.version]??={by:x.version,at:iso(o.now),code:h.code};seen.delete(`${x.version}<${h.version}`);}
   holding.length=0;
  }
+ for(const key of Object.keys(holds))if(!seen.has(key))delete holds[key];
+ if(Object.keys(holds).length)lane.holds=holds;else delete lane.holds;
  const notRead=above.slice(o.maxVersions-1).map(n=>n.version).sort(compareVersions);
  if(notRead.length)results.notRead=notRead;
+ if(skippedNow.length)results.skipped=skippedNow.map(v=>({version:v,...lane.skipped[v]}));
  return results;
 }
 // The highest announced version only (the callers that read one ODC answer).
 export async function latestOdc(o,{state={}}={}){
  const [first]=await latestOdcAll(o,{state});
+ if(!first)throw changed('every ODC Studio version of the release notes is skipped');
  if(first.error)throw first.error;
  return first.r;
 }
@@ -410,17 +429,48 @@ export async function pinOdc(state,fullVersion,opts={}){
  if(hours===undefined)warnings.push(`releaseshub gave no upload time for ${fullVersion}`);
  else if(hours<from-o.rule.pinFarHours||hours>to+o.rule.pinFarHours)warnings.push(`${fullVersion} was uploaded ${iso(h.modified).slice(0,16)}Z, ${hours} h from the ${v.releasedOn} release: far outside its window (${from} h..${to} h); check it is the build of ${version}`);
  if(v.floor&&build<v.floor)warnings.push(`build ${build} is below ${v.floor}, the highest build of an older version`);
- const newest=[...(opts.served??[])].sort(compareVersions).at(-1);
- const noEffect=newest&&compareVersions(version,newest)<0?{served:newest,...(state.odc.skipped?.[version]?{skippedBy:state.odc.skipped[version].by}:{})}:null;
+ const lane=state.odc,servedList=opts.served??[],newest=[...servedList].sort(compareVersions).at(-1);
+ const wasSkipped=lane.skipped?.[version]??null;
+ const noEffect=newest&&compareVersions(version,newest)<0?{served:newest,...(wasSkipped?{skippedBy:wasSkipped.by}:{})}:null;
+ if(!noEffect&&wasSkipped){
+  // The pin undoes the skip: the version is read and offered again, before the newer ones.
+  delete lane.skipped[version];if(!Object.keys(lane.skipped).length)delete lane.skipped;
+  if(wasSkipped.by!=='owner'&&!servedList.includes(wasSkipped.by))warnings.push(`${version} had been skipped for ${wasSkipped.by}, which may already be proposed: approve ${version} before ${wasSkipped.by}, or approving ${wasSkipped.by} first skips ${version} for good`);
+ }
+ // Older versions still without a decision hold this one back; those that need the owner are skipped when the hold ends.
+ if(!noEffect)for(const [k,x] of Object.entries(lane.versions).sort(([a],[b])=>compareVersions(a,b))){
+  if(compareVersions(k,version)>=0||x.decided||!x.unresolved||lane.skipped?.[k]||(newest&&compareVersions(k,newest)<=0))continue;
+  const since=lane.holds?.[`${version}<${k}`]?.limitedSince;
+  const when=since?`at ${iso(Math.max(day+o.rule.cutoffHours*H,Date.parse(since))+o.rule.holdHours*H).slice(0,16)}Z`:`${o.rule.holdHours} h after the next round`;
+  warnings.push(HOLD_LIMITED.includes(x.unresolved.code)
+   ?`the older ${k} has no decided build (${x.unresolved.code}): ${version} waits behind it, and ${k} is skipped ${when} unless it is pinned (-Pin ${k}.<build>) or skipped now (-Skip ${k})`
+   :`the older ${k} could not be read (${x.unresolved.code}): ${version} waits behind it until it is read, or until -Skip ${k}`);
+ }
  return {version,build,previous,size:h.size,...(warnings.length?{warnings}:{}),...(noEffect?{noEffect}:{})};
 }
 // The owner's "decide this version again" (vigia.ps1 -Redecide X.Y.Z): its record is dropped, so the next round searches
 // it as never seen (past its cutoff an ambiguous answer then waits for -Pin).
 export function redecideOdc(state,version){
  if(!/^\d+\.\d+\.\d+$/.test(String(version)))throw Error('Redecide takes an ODC Studio version: X.Y.Z.');
- const v=state.odc?.versions?.[version];if(!v)throw Error(`ODC Studio ${version} has no record to decide again.`);
+ const v=state.odc?.versions?.[version],skip=state.odc?.skipped?.[version];
+ if(!v&&!skip)throw Error(`ODC Studio ${version} has no record to decide again.`);
  delete state.odc.versions[version];
- return {version,previous:v.decided?.build??null};
+ if(skip){delete state.odc.skipped[version];if(!Object.keys(state.odc.skipped).length)delete state.odc.skipped;}
+ return {version,previous:v?.decided?.build??null,...(skip?{unskipped:true}:{})};
+}
+// The owner's "go on without this version" (vigia.ps1 -Skip X.Y.Z): recorded in lane.skipped, so it is no longer read,
+// holds nothing and is never offered; the queue moves to the next version at once. -Pin or -Redecide of it undoes it. A
+// version not above the newest served is not recorded (noEffect): nothing would serve it anyway.
+export function skipOdc(state,version,{now=Date.now(),served=[]}={}){
+ if(!/^\d+\.\d+\.\d+$/.test(String(version)))throw Error('Skip takes an ODC Studio version: X.Y.Z.');
+ const newest=[...served].sort(compareVersions).at(-1);
+ if(newest&&compareVersions(version,newest)<=0)return {version,noEffect:{served:newest}};
+ const lane=state.odc??={versions:{}};
+ const previous=lane.skipped?.[version]??null,v=lane.versions?.[version];
+ (lane.skipped??={})[version]={by:'owner',at:iso(now),code:'OWNER'};
+ for(const key of Object.keys(lane.holds??{}))if(key.endsWith('<'+version))delete lane.holds[key];
+ if(lane.holds&&!Object.keys(lane.holds).length)delete lane.holds;
+ return {version,previous,decided:v?.decided?.build??null,known:!!v};
 }
 const highest=(installed,lane)=>installed.filter(x=>x.lane===lane&&/^\d+\.\d+\.\d+\.\d+$/.test(x.fullVersion??'')).map(x=>x.fullVersion).sort(compareVersions).at(-1);
 const stateError=(lane,e)=>Object.assign(new SourceError(`${lane==='odc'?'ODC Studio decisions (studio-sources.json)':'Service Studio cache'} cannot be used: ${cleanText(e.message,120)}.`,'STUDIO_SOURCE_STATE'),
@@ -430,9 +480,11 @@ const stateError=(lane,e)=>Object.assign(new SourceError(`${lane==='odc'?'ODC St
 //  - public: the release was read (and, for ODC, decided). Offered unless the window already serves it.
 //  - pending: an ODC version is announced but not yet at its cutoff; nothing is offered.
 //  - queued: a decided ODC version waits behind an older unserved one (pending or offered this round): versions are offered
-//    oldest first, so none is skipped. Behind an older one without a decision (heldBy, heldCodes): only until heldUntil
-//    (rule.holdHours after its own cutoff); then it is public with skips (the older versions passed over).
+//    oldest first, so none is skipped; nor behind an older one not read this round. Behind an older one without a
+//    decision (heldBy, heldCodes): until heldUntil for AMBIGUOUS / NOT_FOUND (then it is public with skips, the older
+//    versions passed over), with no limit (heldUntil null) while the source fails for the older one.
 //  - not-read: ODC versions above the newest served beyond maxVersions (versions); they are not read this round.
+//  - skipped: an ODC version passed over (by a hold that ended, or the owner's -Skip); no longer read.
 //  - older-than-served: the source names a version older than the newest the window serves.
 //  - unavailable: a code (and ownerAction when only the owner can end it); the lane keeps the installed Studio.
 // Flags on public: installedAhead (the vigia machine has a newer Studio, maybe a preview: it changes nothing),
@@ -454,14 +506,15 @@ export async function detectSources(installed,opts={}) {
   if(opts.store&&JSON.stringify(state[lane]??null)!==before){
    try{opts.store.write(lane,state[lane]);}catch(e){const err=stateError(lane,e);results=results.map(x=>({version:x.version,error:err}));}
   }
-  per.push({lane,mine,results,ms:Date.now()-started,probes:o.probes,notRead:results.notRead,max:o.maxVersions});
+  per.push({lane,mine,results,ms:Date.now()-started,probes:o.probes,notRead:results.notRead,skipped:results.skipped,max:o.maxVersions});
  }
  const releases=[],sources=[],local=installed.map(x=>({...x}));
- for(const {lane,mine,results,error,ms,probes,notRead,max} of per){
+ for(const {lane,mine,results,error,ms,probes,notRead,skipped,max} of per){
   const top=[...new Set(served[lane]??[])].sort(compareVersions).at(-1);
   const unavailable=(e,version)=>sources.push({lane,...(version?{version}:{}),status:'unavailable',code:e.code??'STUDIO_SOURCE_UNREACHABLE',error:String(e.message).slice(0,300),...(e.action?{ownerAction:e.action}:{}),fallback:'installed Studio',ms});
   if(error){unavailable(error);continue;}
   if(notRead)sources.push({lane,status:'not-read',versions:notRead,max,served:top});
+  for(const k of skipped??[])sources.push({lane,status:'skipped',version:k.version,by:k.by,code:k.code,at:k.at});
   let blocker=null;
   for(const {version,r,error:e} of [...results].sort((a,b)=>compareVersions(a.version??'0',b.version??'0'))){
    if(e){unavailable(e,version);continue;}
@@ -471,7 +524,9 @@ export async function detectSources(installed,opts={}) {
    if(top&&compareVersions(r.version,top)<0){sources.push({lane,status:'older-than-served',version:r.fullVersion,served:top,source:r.source,...extra,...flags});continue;}
    const isServed=(served[lane]??[]).includes(r.version);
    if(!isServed&&r.heldBehind){blocker??=r.heldBehind.versions[0];sources.push({lane,status:'queued',version:r.fullVersion,behind:r.heldBehind.versions[0],heldBy:r.heldBehind.versions,heldCodes:r.heldBehind.codes,heldUntil:r.heldBehind.until,source:r.source,...extra,...flags});continue;}
-   if(!isServed&&blocker){sources.push({lane,status:'queued',version:r.fullVersion,behind:blocker,source:r.source,...extra,...flags});continue;}
+   // Never past an older version not read this round: it is read once the older ones are served or skipped.
+   const unread=notRead?.find(v=>compareVersions(v,r.version)<0);
+   if(!isServed&&(blocker||unread)){sources.push({lane,status:'queued',version:r.fullVersion,behind:blocker??unread,source:r.source,...extra,...flags});continue;}
    if(!isServed)blocker=r.version;
    sources.push({lane,status:'public',version:r.fullVersion,source:r.source,...extra,...flags});
    const same=local.find(x=>x.lane===lane&&x.fullVersion===r.fullVersion);
