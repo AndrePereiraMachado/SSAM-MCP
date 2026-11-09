@@ -165,10 +165,11 @@ test('an ODC build in a pool slot puts its pid on the slot\'s hold while it runs
 const R4 = { reserveMb: 1400, odcReserveMb: 600, waitMs: 400, growMs: 15000, odcWorkerReserveMb: 2150, workerWaitMs: 100, evictTurnMs: 20 };
 test('standing hold: the growth still to come counts against a second consumer; a lone one enters; the hold goes with its process', async () => {
   const rss = new Map([[900, 1500]]);
-  const gate = createMemoryGate({ room: () => 2000, rssOf: pid => rss.get(pid) ?? null, settings: { ...R4, waitMs: 120 } });
+  let room = 2200;
+  const gate = createMemoryGate({ room: () => room, rssOf: pid => rss.get(pid) ?? null, settings: { ...R4, waitMs: 120 } });
   const worker = await gate.admit(2150, { standing: true });
-  assert.equal(worker.timedOut, false, 'the first process of the server always starts');
-  worker.hold.attach(900);
+  assert.equal(worker.timedOut, false, 'real room for its reserve (a standing start never takes the progress rule, M7)');
+  worker.hold.attach(900); room = 2000;
   assert.equal(gate.pendingMb(), 650, 'reserve 2150 minus RSS 1500: its growth to come');
   assert.deepEqual(gate.stats(), { admitted: 1, standing: 1, pendingMb: 650 });
   const lone = await gate.admit(1400);
@@ -259,4 +260,29 @@ test('hosted O11 workers (M6): evictIdle retires the least recently used idle wo
   workers.evictIdle();
   assert.deepEqual(retired.map(r => r[0]), ['c', 'b']);
   assert.equal(workers.evictIdle(), null, 'only a worker in a call and one starting are left');
+});
+
+// Review R4 M7 (probe r4.mjs case 2): room 1200, nothing evictable, nothing admitted. The ODC worker's start (standing 2150)
+// never takes the progress rule: it is refused and its command runs cold (600, a consumer, which really fits); a build next
+// to that cold run is admitted only when it really fits. fits() for a standing request says the same (the 60 s cache).
+test('M7: a standing start never takes the progress rule; the cold run fits; a second consumer only when it really fits', async () => {
+  let room = 1200;
+  const gate = createMemoryGate({ room: () => room, rssOf: () => null, settings: R4 });
+  gate.addEvictor({ rank: 1, name: 'none', evict: async () => null });
+  assert.equal(gate.fits(2150, { standing: true }), false);
+  const w = await gate.admit(2150, { standing: true, waitMs: 100 });
+  assert.equal(w.timedOut, true, 'refused: the worker runs cold instead');
+  assert.deepEqual(gate.stats(), { admitted: 0, pendingMb: 0 }, 'nothing held for it');
+  const cold = await gate.admit(600);
+  assert.equal(cold.timedOut, false, 'the cold run (600) fits in 1200');
+  const build = await gate.admit(1400, { waitMs: 100 });
+  assert.equal(build.timedOut, true, '1200 - 600 to come < 1400: the build waits for real room');
+  room = 2100;
+  const later = await gate.admit(1400, { waitMs: 100 });
+  assert.equal(later.timedOut, false, '2100 - 600 >= 1400: it really fits');
+  later.hold.release(); cold.hold.release();
+  // With real room the standing start is admitted as before.
+  room = 3000;
+  const ok = await gate.admit(2150, { standing: true, waitMs: 100 });
+  assert.equal(ok.timedOut, false); ok.hold.release();
 });

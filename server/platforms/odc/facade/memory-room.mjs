@@ -38,7 +38,9 @@
 //     serves a call is never asked. When a turn found nothing more to evict and no other CONSUMER is admitted (standing holds
 //     are not consumers), the waiter is admitted: the "only admitted process always enters" rule, so an idle cache or a
 //     resident worker's growth still to come never starves a lone delivery. relieve() is the same turn for waits outside
-//     admit (the build pool's own line).
+//     admit (the build pool's own line). Review R4 M7: the rule never admits a STANDING request (a resident worker's start):
+//     that worker has the cold run as its alternative, so it starts only with real room, and a lone consumer entering
+//     after it by the rule can never stack two heavy processes over the limit.
 //   - A hold marked covered (B-R3-2: the build-pool slot whose build runs on its slot's ODC worker, already reserved by that
 //     worker's standing hold) counts nothing until a process of its own attaches (a cold run in the slot).
 import fs from 'node:fs';
@@ -142,14 +144,15 @@ export function createMemoryGate({ room = () => roomMb(), rssOf = pid => process
     return total;
   };
   // null when mb may start now, else the room it would find.
-  const shortOf = mb => {
-    if (!(mb > 0) || holds.size === 0) return null;
+  const shortOf = (mb, { standing = false } = {}) => {
+    // The first process of the server always starts, but never a standing one by that rule (M7): it needs real room.
+    if (!(mb > 0) || (holds.size === 0 && !standing)) return null;
     let r = null; try { r = room(); } catch { r = null; }
     if (!Number.isFinite(r)) return null;
     const left = r - pendingMb();
     if (left >= mb) return null;
     // Progress: nothing evictable is left and no other consumer is admitted: the waiter enters.
-    return consumers() === 0 && exhausted() ? null : left;
+    return !standing && consumers() === 0 && exhausted() ? null : left;
   };
   // One relief turn (at most one per turnMs, shared by every waiter): the first evictor, lowest rank first, that makes one
   // idle cache leave; null when none did (the turn is then "exhausted" for the progress rule).
@@ -181,10 +184,10 @@ export function createMemoryGate({ room = () => roomMb(), rssOf = pid => process
   // holds nothing: {hold: null, waitedMs, timedOut: true, shortMb} and the caller refuses (memoryWaitRefusal).
   async function admit(mb, { waitMs = settings.waitMs, standing = false, kind = 'process' } = {}) {
     const started = now();
-    let step = 50, short = shortOf(mb), timedOut = false;
+    let step = 50, short = shortOf(mb, { standing }), timedOut = false;
     while (short !== null) {
       await relieve({ kind });
-      short = shortOf(mb);
+      short = shortOf(mb, { standing });
       if (short === null) break;
       const left = started + waitMs - now();
       if (left <= 0) { timedOut = true; break; }
@@ -194,13 +197,13 @@ export function createMemoryGate({ room = () => roomMb(), rssOf = pid => process
         timer = setTimeout(done, Math.min(step, left)); bus.on('change', done);
       });
       step = Math.min(step * 2, 500);
-      short = shortOf(mb);
+      short = shortOf(mb, { standing });
     }
     if (timedOut) return { hold: null, waitedMs: now() - started, timedOut, shortMb: short };
     return { hold: hold(mb, { standing }), waitedMs: now() - started, timedOut };
   }
   return {
-    settings, pendingMb, fits: mb => shortOf(mb) === null, hold, admit, relieve,
+    settings, pendingMb, fits: (mb, { standing = false } = {}) => shortOf(mb, { standing }) === null, hold, admit, relieve,
     // evict({kind}) -> Promise<null | {what, ...}>: makes ONE idle cache leave (kind: the waiter's, 'reader' or another).
     addEvictor({ rank = 1, name = 'evictor', evict }) { const e = { rank, name, evict }; evictors.push(e); return () => { const i = evictors.indexOf(e); if (i >= 0) evictors.splice(i, 1); }; },
     hasEvictor: name => evictors.some(e => e.name === name),
