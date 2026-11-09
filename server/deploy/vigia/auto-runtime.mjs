@@ -26,12 +26,16 @@ const q=s=>"'"+String(s).replaceAll("'","'\\''")+"'";
 export const releasesToVerify=(observed,manifest,rehearsal=false)=>observed.filter(x=>x.url&&(rehearsal||!manifest[x.lane].some(v=>v.version===x.version)));
 // Text that reaches the owner's notice: printable, no markup or control characters, bounded.
 export const noticeText=value=>String(value??'').replace(/[^\w .,:;()/'=+#?-]/g,'').slice(0,300);
+// The text of a once-only notice, which carries owner command lines: the same, plus the quotes, backslashes and <word>
+// placeholders of a command; control characters become spaces and any other < or > is dropped. Bounded.
+export const commandText=value=>String(value??'').replace(/[\u0000-\u001f\u007f]/g,' ').replace(/<(?!\w{1,20}>)|(?<!<\w{1,20})>/g,'').replace(/[^\w .,:;()/'"=+#?<>\\-]/g,'').slice(0,1000);
 // A notice given once per key, ever (source-notices.json in outDir): a fact that does not change, unlike the daily ones.
 async function noticeOnce(outDir,key,title,message,ops,now){
  const file=path.join(outDir,'source-notices.json');let data={};
  try{data=JSON.parse(fs.readFileSync(file,'utf8'));}catch(e){if(e.code!=='ENOENT')throw e;}
  if(data[key])return false;
  data[key]=new Date(now).toISOString();fs.mkdirSync(outDir,{recursive:true});fs.writeFileSync(file+'.next',JSON.stringify(data,null,2)+'\n');fs.renameSync(file+'.next',file);
+ title=commandText(title).slice(0,120);message=commandText(message);
  ops.log?.(`notice: ${title}: ${message}`);await ops.notify(title,message);return true;
 }
 // Where discovery keeps its state, per lane, in outDir:
@@ -62,12 +66,21 @@ export function sourceStore(outDir,{dryRun=false}={}){
 // The owner's commands on the ODC decisions (vigia.ps1 -Pin X.Y.Z.B, -Redecide X.Y.Z): read and written back as the same
 // signed journal (an automatic configuration refuses to write it unsigned). -Pin checks the build on releaseshub (one GET,
 // one HEAD); a window that already serves X.Y.Z keeps its image.
-export async function pinStudioBuild(config,fullVersion,{fetcher=fetch,now=Date.now()}={}){
+// The ODC versions the workspace window serves (versions.json); unknown (null) when it cannot be read.
+function servedOdc(config){
+ try{return JSON.parse(fs.readFileSync(path.join(path.resolve(config.workspace),'server/deploy/coolify/versions.json'),'utf8')).odc.map(v=>v.version);}catch{return null;}
+}
+export async function pinStudioBuild(config,fullVersion,{fetcher=fetch,now=Date.now(),served=servedOdc(config)}={}){
  if(config.automatic)requireJournalKey(config.outDir);
  const store=sourceStore(config.outDir),odc=store.read('odc');
  if(!odc)throw Error(`No ODC Studio decisions in ${path.join(config.outDir,SOURCES_FILE)} yet: run a round first.`);
- const state={odc},r=await pinOdc(state,fullVersion,{fetcher,now,retryDelayMs:0});store.write('odc',state.odc);
- return {status:'pinned',...r,note:`ODC Studio ${r.version} is decided as build ${r.build}${r.previous&&r.previous!==r.build?` (was ${r.previous})`:''} by the owner. The next round offers it if the window does not serve ${r.version} yet; an image already serving ${r.version} is not rebuilt by this.`};
+ const state={odc},r=await pinOdc(state,fullVersion,{fetcher,now,retryDelayMs:0,served:served??[]});store.write('odc',state.odc);
+ const head=`ODC Studio ${r.version} is decided as build ${r.build}${r.previous&&r.previous!==r.build?` (was ${r.previous})`:''} by the owner.`;
+ // A version older than the newest served is never offered again (versions are served in order, none goes back).
+ const effect=r.noEffect?`THIS HAS NO EFFECT: the window already serves the newer ODC Studio ${r.noEffect.served}${r.noEffect.skippedBy?` (${r.version} was skipped for ${r.noEffect.skippedBy})`:''}, and an older version is never offered after a newer one is served. The choice is only recorded.`
+  :`The next round offers it if the window does not serve ${r.version} yet; an image already serving ${r.version} is not rebuilt by this.`;
+ const warn=r.warnings?.length?` WARNING: ${r.warnings.join('; ')}.`:'';
+ return {status:r.noEffect?'pinned-no-effect':'pinned',...r,note:`${head} ${effect}${warn}`};
 }
 export function redecideStudio(config,version){
  if(config.automatic)requireJournalKey(config.outDir);
@@ -180,7 +193,25 @@ export function createAutoRuntime(config,runtime) {
    const once=(key,title,message)=>dryRun?null:noticeOnce(config.outDir,key,title,message,runtime,now).catch(e=>runtime.log?.(`source notice not given: ${e.message}`));
    for(const s of result.sources){
     if(s.status==='pending')runtime.log?.(`${s.lane} source: ${studio(s.lane)} ${s.version} (released ${s.releasedOn}) is decided at its cutoff ${s.definitiveAt}${s.build?` (highest eligible build so far ${s.build})`:' (no eligible build yet)'}; nothing is offered yet (${s.probes??0} probes this round)`);
-    if(s.status==='queued')runtime.log?.(`${s.lane} source: ${s.version} waits behind the unserved ${s.behind}: versions are offered oldest first`);
+    if(s.status==='queued')runtime.log?.(`${s.lane} source: ${s.version} waits behind the unserved ${s.behind}: versions are offered oldest first${s.heldUntil?` (until ${s.heldUntil}: ${s.behind} has no decided build)`:''}`);
+    // A decided version held behind older ones without a decision: daily, the owner hears both versions, the end of the
+    // hold and the -Pin that serves the older ones first.
+    if(s.status==='queued'&&s.heldUntil&&!dryRun){
+     const three=s.version.split('.').slice(0,3).join('.'),older=s.heldBy.map((v,i)=>`${v} (${s.heldCodes[i]})`).join(', ');
+     const pins=s.heldBy.map(v=>command(`{{-Pin ${v}.<build>}}`)).join(' ; ');
+     await remind(config.outDir,`source:${s.lane}:${three}:HELD_BEHIND:${s.heldBy.join(',')}`,'SSAM: Studio release needs the owner',`${studio(s.lane)} ${s.version} is decided but waits behind the older ${older}, which has no decided build: versions are offered oldest first. At ${s.heldUntil} ${s.version} is offered anyway and ${s.heldBy.join(', ')} skipped for good (nothing serves an older version after a newer one). To serve ${s.heldBy.join(', ')} first, choose the build now: ${pins}`,runtime,{now}).catch(e=>runtime.log?.(`source notice not given: ${e.message}`));
+    }
+    if(s.skips?.length){
+     const skipped=s.skips.map(x=>`${x.version} (${x.code})`).join(', ');
+     runtime.log?.(`${s.lane} source: ${s.version} is offered past its hold; skipped: ${skipped}`);
+     await once(`skip:${s.lane}:${s.skips.map(x=>x.version).join(',')}:${s.version}`,'SSAM: Studio version skipped',`${studio(s.lane)} ${skipped} still had no decided build when the hold behind it ended: ${s.version} is offered now and ${s.skips.map(x=>x.version).join(', ')} is skipped. Once ${s.version} is served, -Pin of the skipped version has no effect.`);
+    }
+    if(s.laterSearchFailed)runtime.log?.(`${s.lane} source: ${s.version} keeps its decided build; the search for later uploads after its notes changed failed (${s.laterSearchFailed.code}) and runs again next round`);
+    // Beyond the versions read per round: they are read once the older ones are served (oldest first), never skipped.
+    if(s.status==='not-read'){
+     runtime.log?.(`${s.lane} source: ${s.versions.join(', ')} not read this round: more than ${s.max} versions above the served ${s.served}; read once the older ones are served`);
+     await once(`not-read:${s.lane}:${s.versions.join(',')}`,'SSAM: Studio versions waiting to be read',`${studio(s.lane)} ${s.versions.join(', ')} are newer than the served ${s.served??'window'} but beyond the ${s.max} versions the watcher reads per round. The oldest are served first; these are read and offered after them, in order.`);
+    }
     if(s.status==='older-than-served')runtime.log?.(`${s.lane} source: public ${s.version} is older than the newest served ${s.served}; nothing is offered`);
     // A newer Studio on the watcher machine (a preview, typically) never hides a release: the owner hears of it once.
     if(s.installedAhead){

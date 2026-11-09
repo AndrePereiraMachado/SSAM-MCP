@@ -171,13 +171,16 @@ test('A1/M1: a decided build is persisted and never changed; a later build of th
  assert.deepEqual(seen.sources[0].laterBuilds,[11090]);assert.equal(probes(f).length,0);
 });
 
-test('B3: the notes of a decided version count as changed until a search after the change completes',async()=>{
+test('B3/R4-Q3: the notes of a decided version count as changed until a search after the change completes; a failed one keeps the decided build',async()=>{
  const f=fakeSites(),state={};
  await latestStudio('odc',undefined,{fetcher:f.fetcher,...fast,state});
+ const hash=state.odc.versions['1.7.32'].notesHash;
  f.state.hub['ODCStudio/1.7.32.11090/windows']={location:CF+'1.7.32.11090/ODCStudio-1.7.32.11090.exe',lastModified:'Wed, 11 Nov 2026 10:00:00 GMT',size:287900000};
  f.state.content.data.Html=f.state.content.data.Html.replace('<li>(trimmed)</li>','<li>(trimmed)</li><li>Fixed.</li>');
  f.state.fail=u=>u.pathname.includes('/releaseshub/')?new Response('',{status:500}):null;
- await assert.rejects(latestStudio('odc',undefined,{fetcher:f.fetcher,...fast,now:NOW+DAY,state}),e=>e.code==='STUDIO_SOURCE_UNREACHABLE');
+ const kept=await latestStudio('odc',undefined,{fetcher:f.fetcher,...fast,now:NOW+DAY,state});
+ assert.equal(kept.fullVersion,'1.7.32.11065');assert.equal(kept.laterSearchFailed.code,'STUDIO_SOURCE_UNREACHABLE');
+ assert.equal(state.odc.versions['1.7.32'].notesHash,hash,'the change is not taken as seen');
  f.state.fail=null;f.state.calls.length=0;
  const r=await latestStudio('odc',undefined,{fetcher:f.fetcher,...fast,now:NOW+DAY+2*H,state});
  assert.deepEqual([r.fullVersion,r.laterBuilds],['1.7.32.11065',[11090]]);assert.ok(probes(f).length>0);
@@ -439,7 +442,7 @@ test('the build search goes on to the next window (bounded) only while nothing w
 function worldAt(f,now,versions){
  for(const k of Object.keys(f.state.hub))if(k.startsWith('ODCStudio/'))delete f.state.hub[k];
  for(const {version,uploads} of versions)for(const [b,t] of Object.entries(uploads))if(at(t)<=now)f.state.hub[`ODCStudio/${version}.${b}/windows`]={location:`${CF}${version}.${b}/ODCStudio-${version}.${b}.exe`,lastModified:new Date(t).toUTCString(),size:287000000+Number(b)};
- f.state.content.data.Html=versions.filter(v=>!v.announcedAt||at(v.announcedAt)<=now).sort((a,b)=>b.version.localeCompare(a.version,undefined,{numeric:true})).map(v=>notesFor(v.version,v.releasedOn)).join('\r\n\r\n');
+ f.state.content.data.Html=versions.filter(v=>!v.announcedAt||at(v.announcedAt)<=now).sort((a,b)=>b.version.localeCompare(a.version,undefined,{numeric:true})).map(v=>notesFor(v.version,v.releasedOn,v.editedAt&&at(v.editedAt)<=now?'<li>Edited.</li>':'')).join('\r\n\r\n');
  f.state.calls.length=0;
 }
 
@@ -570,4 +573,143 @@ test('B2/B4: the decision reads Last-Modified from the CloudFront repository onl
  assert.ok(!f.state.calls.some(c=>c.startsWith('HEAD https://www.outsystems.com')));
  const g=fakeSites();g.state.hub['ServiceStudio/11.55.95.65352/windows'].location='https://evil.example/x/ServiceStudio.exe?token=abc';
  await assert.rejects(latestStudio('o11',undefined,{fetcher:g.fetcher,...fast}),e=>e.code==='STUDIO_SOURCE_UNTRUSTED'&&/host evil\.example\)/.test(e.message)&&!/token|ServiceStudio\.exe/.test(e.message));
+});
+
+// Round 4: the reviewer's queue scenarios (C:\t\r5\sources-fix\review3\queue.mjs) on a pinned clock. Each round runs
+// detectSources against the world as it stood then; the pipeline serves an offered version serveAfter rounds later.
+async function queueRun({versions,from,to,step=2*H,served:initial=['1.7.32'],serveAfter=2,fail=null,hook=null,state={}}){
+ const f=fakeSites(),served=[...initial],offeredSince={},lines=[],rounds=[];let last='';
+ for(let now=at(from);now<=at(to);now+=step){
+  worldAt(f,now,versions);f.state.fail=fail?u=>fail(u,now):null;
+  if(hook)await hook(now,state,f,served);
+  const r=await detectSources([],{fetcher:f.fetcher,retryDelayMs:0,now,state,served:{odc:served,o11:['11.55.95']}});
+  const odc=r.sources.filter(s=>s.lane==='odc');rounds.push({now,odc,probes:probes(f).length});
+  for(const s of odc.filter(s=>s.status==='public')){const v=s.version.split('.').slice(0,3).join('.');if(!served.includes(v)){offeredSince[v]??=now;if(now-offeredSince[v]>=serveAfter*step)served.push(v);}}
+  const line=odc.map(s=>`${s.version??(s.versions??[]).join('+')}:${s.status}${s.code?'/'+s.code:''}${s.behind?'<'+s.behind:''}${s.heldUntil?'@'+s.heldUntil.slice(5,16):''}${s.skips?'!skips '+s.skips.map(x=>x.version).join('+'):''}`).join(' ')+` | ${served.join(',')}`;
+  if(line!==last){lines.push(`${new Date(now).toISOString().slice(5,16)} ${line}`);last=line;}
+ }
+ return {lines,served,state,rounds,f};
+}
+const Q2={versions:[{version:'1.7.33',releasedOn:'2026-11-15',uploads:{11110:'2026-11-15T09:00Z',11120:'2026-11-17T05:00Z'},announcedAt:'2026-11-14T00:00Z'},{version:'1.7.34',releasedOn:'2026-11-18',uploads:{11140:'2026-11-18T10:00Z'},announcedAt:'2026-11-18T12:00Z'}],from:'2026-11-17T06:00Z'};
+
+test('R4-Q2: an ambiguous older version holds the newer decided one back (48 h past its cutoff); the owner pins it in time and both are served in order',async()=>{
+ const q=await queueRun({...Q2,to:'2026-11-21T08:00Z',hook:async(now,state,f)=>{if(now===at('2026-11-20T08:00Z'))await pinOdc(state,'1.7.33.11120',{fetcher:f.fetcher,retryDelayMs:0,now,served:['1.7.32']});}});
+ assert.deepEqual(q.lines,[
+  '11-17T06:00 1.7.33:unavailable/STUDIO_BUILD_AMBIGUOUS | 1.7.32',
+  '11-18T12:00 1.7.33:unavailable/STUDIO_BUILD_AMBIGUOUS 1.7.34:pending | 1.7.32',
+  '11-19T16:00 1.7.33:unavailable/STUDIO_BUILD_AMBIGUOUS 1.7.34.11140:queued<1.7.33@11-21T16:00 | 1.7.32',
+  '11-20T08:00 1.7.33.11120:public 1.7.34.11140:queued<1.7.33 | 1.7.32',
+  '11-20T12:00 1.7.33.11120:public 1.7.34.11140:queued<1.7.33 | 1.7.32,1.7.33',
+  '11-20T14:00 1.7.34.11140:public | 1.7.32,1.7.33',
+  '11-20T18:00 1.7.34.11140:public | 1.7.32,1.7.33,1.7.34']);
+ const held=q.rounds.find(r=>r.now===at('2026-11-19T16:00Z')).odc.find(s=>s.status==='queued');
+ assert.deepEqual([held.heldBy,held.heldCodes,held.heldUntil],[['1.7.33'],['STUDIO_BUILD_AMBIGUOUS'],'2026-11-21T16:00:00.000Z']);
+ assert.equal(q.state.odc.skipped,undefined,'nothing was skipped');
+});
+
+test('R4-Q2: without the owner, the newer version is offered when the hold ends and the older one is recorded as skipped; a later -Pin of it has no effect',async()=>{
+ const q=await queueRun({...Q2,to:'2026-11-22T08:00Z'});
+ assert.deepEqual(q.lines.slice(2),[
+  '11-19T16:00 1.7.33:unavailable/STUDIO_BUILD_AMBIGUOUS 1.7.34.11140:queued<1.7.33@11-21T16:00 | 1.7.32',
+  '11-21T16:00 1.7.33:unavailable/STUDIO_BUILD_AMBIGUOUS 1.7.34.11140:public!skips 1.7.33 | 1.7.32',
+  '11-21T20:00 1.7.33:unavailable/STUDIO_BUILD_AMBIGUOUS 1.7.34.11140:public!skips 1.7.33 | 1.7.32,1.7.34',
+  '11-21T22:00 1.7.34.11140:public | 1.7.32,1.7.34']);
+ assert.deepEqual(q.state.odc.skipped,{'1.7.33':{by:'1.7.34',at:'2026-11-21T16:00:00.000Z',code:'STUDIO_BUILD_AMBIGUOUS'}});
+ const r=await pinOdc(q.state,'1.7.33.11120',{fetcher:q.f.fetcher,retryDelayMs:0,now:at('2026-11-22T09:00Z'),served:q.served});
+ assert.deepEqual(r.noEffect,{served:'1.7.34',skippedBy:'1.7.34'});
+ // The skipped version is no longer read (older than the newest served): the pin is recorded, nothing is offered.
+ worldAt(q.f,at('2026-11-22T10:00Z'),Q2.versions);
+ const after=await detectSources([],{fetcher:q.f.fetcher,retryDelayMs:0,now:at('2026-11-22T10:00Z'),state:q.state,served:{odc:q.served,o11:['11.55.95']}});
+ assert.deepEqual(after.sources.filter(s=>s.lane==='odc').map(s=>[s.version,s.status]),[['1.7.34.11140','public']]);
+});
+
+test('R4: an older version with no build at all (NOT_FOUND) holds the newer one back the same bounded time',async()=>{
+ const q=await queueRun({versions:[{version:'1.7.33',releasedOn:'2026-11-15',uploads:{},announcedAt:'2026-11-15T11:00Z'},{version:'1.7.34',releasedOn:'2026-11-16',uploads:{11140:'2026-11-16T10:00Z'},announcedAt:'2026-11-16T12:00Z'}],from:'2026-11-17T12:00Z',to:'2026-11-20T00:00Z',step:4*H});
+ assert.deepEqual(q.lines,[
+  '11-17T12:00 1.7.33:unavailable/STUDIO_BUILD_NOT_FOUND 1.7.34:pending | 1.7.32',
+  '11-17T16:00 1.7.33:unavailable/STUDIO_BUILD_NOT_FOUND 1.7.34.11140:queued<1.7.33@11-19T16:00 | 1.7.32',
+  '11-19T16:00 1.7.33:unavailable/STUDIO_BUILD_NOT_FOUND 1.7.34.11140:public!skips 1.7.33 | 1.7.32',
+  '11-20T00:00 1.7.33:unavailable/STUDIO_BUILD_NOT_FOUND 1.7.34.11140:public!skips 1.7.33 | 1.7.32,1.7.34']);
+ assert.equal(q.state.odc.skipped['1.7.33'].code,'STUDIO_BUILD_NOT_FOUND');
+});
+
+test('R4-Q3: a decided older version whose notes change while its search for later builds fails keeps its build; the newer one waits behind it',async()=>{
+ const versions=[{version:'1.7.33',releasedOn:'2026-11-15',uploads:{11120:'2026-11-15T10:00Z'},announcedAt:'2026-11-15T11:00Z',editedAt:'2026-11-17T16:00Z'},{version:'1.7.34',releasedOn:'2026-11-16',uploads:{11140:'2026-11-16T10:00Z'},announcedAt:'2026-11-16T12:00Z'}];
+ const q=await queueRun({versions,from:'2026-11-15T12:00Z',to:'2026-11-18T20:00Z',serveAfter:40,
+  fail:(u,now)=>now===at('2026-11-17T16:00Z')&&u.pathname.includes('/1.7.33.')?new Response('',{status:503}):null});
+ assert.deepEqual(q.lines,[
+  '11-15T12:00 1.7.33:pending | 1.7.32',
+  '11-16T12:00 1.7.33:pending 1.7.34:pending | 1.7.32',
+  '11-16T16:00 1.7.33.11120:public 1.7.34:pending | 1.7.32',
+  '11-17T16:00 1.7.33.11120:public 1.7.34.11140:queued<1.7.33 | 1.7.32']);
+ const failed=q.rounds.find(r=>r.now===at('2026-11-17T16:00Z')).odc[0];
+ assert.equal(failed.laterSearchFailed.code,'STUDIO_SOURCE_UNREACHABLE');
+ // The next round searches again (the change was not taken as seen), then the decided version costs nothing.
+ const next=q.rounds.find(r=>r.now===at('2026-11-17T18:00Z'));
+ assert.ok(next.probes>0&&!next.odc[0].laterSearchFailed);assert.equal(q.rounds.find(r=>r.now===at('2026-11-17T20:00Z')).probes,0);
+ assert.ok(q.rounds.every(r=>!r.odc.some(s=>s.version==='1.7.34.11140'&&s.status==='public')),'1.7.34 is never offered before 1.7.33');
+});
+
+test('R4-B2: more unserved versions than the round reads: the oldest are read first, the rest wait (named) and none is lost',async()=>{
+ const v=(n,b,d)=>({version:`1.7.${n}`,releasedOn:d,uploads:{[b]:d+'T10:00Z'},announcedAt:d+'T11:00Z'});
+ const q=await queueRun({versions:[v(33,11120,'2026-11-15'),v(34,11140,'2026-11-16'),v(35,11160,'2026-11-17'),v(36,11180,'2026-11-18')],from:'2026-11-25T00:00Z',to:'2026-11-26T00:00Z'});
+ assert.equal(q.lines[0],'11-25T00:00 1.7.35:not-read 1.7.33.11120:public 1.7.34.11140:queued<1.7.33 1.7.36.11180:queued<1.7.33 | 1.7.32');
+ assert.deepEqual(q.served,['1.7.32','1.7.33','1.7.34','1.7.35','1.7.36']);
+ const offered=q.rounds.flatMap(r=>r.odc.filter(s=>s.status==='public').map(s=>s.version.slice(0,6)));
+ assert.deepEqual([...new Set(offered)],['1.7.33','1.7.34','1.7.35','1.7.36'],'offered oldest first');
+});
+
+test('R4: the owner hears of the hold (both versions, its end, the full -Pin line) and of the skip once; -Pin says when it has no effect or the build is far off',async t=>{
+ const {configureJournals}=await import('./journal.mjs');
+ const {createAutoRuntime,pinStudioBuild,commandText}=await import('./auto-runtime.mjs');
+ const {parseArgs}=await import('./vigia.mjs');
+ const dir=tmp(t);configureJournals(dir,Buffer.alloc(32,7).toString('base64'));
+ t.mock.method(globalThis,'fetch',async()=>{throw Error('no network in tests');});
+ const notes=[],f=fakeSites();let clock=0;
+ const runtime={log:()=>{},notify:async(title,message)=>{notes.push([title,message]);},sourceFetcher:f.fetcher};
+ const config={workspace:dir,tempRoot:dir,outDir:dir,installersDir:path.join(dir,'inst'),automatic:true,clock:()=>clock,configFile:'C:/t/vigia/config.json'};
+ Object.assign(runtime,createAutoRuntime(config,runtime));runtime.diskPreflight=()=>{};
+ const observe=async(when,served)=>{clock=at(when);worldAt(f,clock,Q2.versions);
+  try{await runtime.observe([],{manifest:{odc:served.map(version=>({version})),o11:[{version:'11.55.95'}]}});}catch(e){assert.match(e.message,/no network|download/i);}};
+ await observe('2026-11-17T06:00Z',['1.7.32']);
+ await observe('2026-11-19T16:00Z',['1.7.32']);
+ const hold=notes.find(n=>/waits behind/.test(n[1]));
+ assert.equal(hold[0],'SSAM: Studio release needs the owner');
+ assert.match(hold[1],/ODC Studio 1\.7\.34\.11140 is decided but waits behind the older 1\.7\.33 \(STUDIO_BUILD_AMBIGUOUS\).*At 2026-11-21T16:00:00\.000Z 1\.7\.34\.11140 is offered anyway and 1\.7\.33 skipped/);
+ assert.ok(hold[1].includes('vigia.ps1 -Config C:/t/vigia/config.json -Pin 1.7.33.<build>'),hold[1]);
+ await observe('2026-11-21T16:00Z',['1.7.32']);await observe('2026-11-21T18:00Z',['1.7.32']);
+ const skips=notes.filter(n=>n[0]==='SSAM: Studio version skipped');
+ assert.equal(skips.length,1,'once');assert.match(skips[0][1],/1\.7\.33 \(STUDIO_BUILD_AMBIGUOUS\) still had no decided build.*1\.7\.34\.11140 is offered now/);
+ // -Pin of the skipped version once 1.7.34 is served: recorded, and it says plainly that it does nothing.
+ const pinned=await pinStudioBuild(config,'1.7.33.11120',{fetcher:f.fetcher,now:at('2026-11-22T09:00Z'),served:['1.7.32','1.7.34']});
+ assert.equal(pinned.status,'pinned-no-effect');assert.match(pinned.note,/THIS HAS NO EFFECT: the window already serves the newer ODC Studio 1\.7\.34 \(1\.7\.33 was skipped for 1\.7\.34\)/);
+ // A build uploaded far outside its version's window is pinned with a warning; one near it is not.
+ const near=await pinStudioBuild(config,'1.7.33.11110',{fetcher:f.fetcher,now:at('2026-11-22T09:00Z'),served:['1.7.32']});
+ assert.equal(near.warnings,undefined,'11110 sits inside the window');assert.equal(near.status,'pinned');
+ f.state.hub['ODCStudio/1.7.33.11100/windows']={location:`${CF}1.7.33.11100/ODCStudio-1.7.33.11100.exe`,lastModified:new Date(at('2026-11-05T10:00Z')).toUTCString(),size:287011100};
+ const off=await pinStudioBuild(config,'1.7.33.11100',{fetcher:f.fetcher,now:at('2026-11-22T09:00Z'),served:['1.7.32']});
+ assert.equal(off.status,'pinned');assert.match(off.note,/WARNING: 1\.7\.33\.11100 was uploaded 2026-11-05T10:00Z, -230 h from the 2026-11-15 release: far outside its window/);
+ // Once-only notices are sanitized but keep command lines.
+ assert.equal(commandText('-Pin 1.7.33.<build> -Reason "<why>"\r\n<img src=x onerror=1>`$(x)`'),'-Pin 1.7.33.<build> -Reason "<why>"  img src=x onerror=1(x)');
+ assert.ok(notes.every(([title,message])=>!/[\r\n`$]/.test(title+message)));
+ // One owner command per run.
+ assert.throws(()=>parseArgs(['--config','c','--pin','1.7.33.11120','--approve','x']),/--approve and --pin cannot be combined/);
+ assert.throws(()=>parseArgs(['--config','c','--redecide','1.7.33','--pin','1.7.33.11120']),/cannot be combined/);
+ assert.throws(()=>parseArgs(['--config','c','--pin','1.7.33.11120','--dry-run']),/cannot be combined with --dry-run/);
+});
+
+test('R4-B2: unread versions are named to the owner once',async t=>{
+ const {createAutoRuntime}=await import('./auto-runtime.mjs');
+ const dir=tmp(t),notes=[],f=fakeSites();
+ t.mock.method(globalThis,'fetch',async()=>{throw Error('no network in tests');});
+ const v=(n,b,d)=>({version:`1.7.${n}`,releasedOn:d,uploads:{[b]:d+'T10:00Z'},announcedAt:d+'T11:00Z'});
+ const runtime={log:()=>{},notify:async(title,message)=>{notes.push([title,message]);},sourceFetcher:f.fetcher};
+ const config={workspace:dir,tempRoot:dir,outDir:dir,installersDir:path.join(dir,'inst'),automatic:false,now:at('2026-11-25T00:00Z')};
+ Object.assign(runtime,createAutoRuntime(config,runtime));runtime.diskPreflight=()=>{};
+ for(let i=0;i<2;i++){
+  worldAt(f,at('2026-11-25T00:00Z'),[v(33,11120,'2026-11-15'),v(34,11140,'2026-11-16'),v(35,11160,'2026-11-17'),v(36,11180,'2026-11-18')]);
+  await runtime.observe([],{manifest:{odc:[{version:'1.7.32'}],o11:[{version:'11.55.95'}]}}).catch(e=>assert.match(e.message,/no network|download/i));
+ }
+ const unread=notes.filter(n=>n[0]==='SSAM: Studio versions waiting to be read');
+ assert.equal(unread.length,1);assert.match(unread[0][1],/ODC Studio 1\.7\.35 are newer than the served 1\.7\.32 but beyond the 3 versions/);
 });

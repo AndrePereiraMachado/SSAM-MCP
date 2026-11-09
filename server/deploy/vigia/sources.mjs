@@ -48,7 +48,7 @@ export const ODC_FOLLOW_WINDOW=100;
 // latest excluded release candidate (1.7.32.11059) 53 h BEFORE D. The cutoff at 40 h is about the midpoint of 32.75 and
 // 48.5 (7.25 h margin to the accepted build, 8.5 h to the held one). Every decision records its distances
 // (studio-sources.json) so drift shows.
-export const ODC_RULE=Object.freeze({earliestDays:1,cutoffHours:40,watchHours:6,retryHours:24});
+export const ODC_RULE=Object.freeze({earliestDays:1,cutoffHours:40,watchHours:6,retryHours:24,holdHours:48,pinFarHours:72});
 const COMPONENT={odc:'ODCStudio',o11:'ServiceStudio'};
 const EXT={windows:'.exe',macosx:'.dmg',macosx_arm64:'_arm64.dmg'};
 const MAX_TEXT=8*1024**2,MAX_JSON=4*1024**2;
@@ -292,12 +292,20 @@ async function decideOdc(o,lane,noted){
   if(o.now<next)throw unresolvedError(v,`at ${iso(next).slice(0,16)}Z or when its notes change`);
  }
  const seen=Object.keys(v.uploads).map(Number),top=seen.length?Math.max(...seen):null;
- const search=top!==null?await probe(o,version,top+1,o.followWindow)
-  :await probe(o,version,v.floor,o.window,{extend:!v.lastSearch});
- for(const f of search.found.sort((a,b)=>a.build-b.build)){
-  const h=await head(o,f.loc);
-  if(!h.modified)throw changed(`no Last-Modified for ODC Studio ${version}.${f.build}`);
-  v.uploads[f.build]={modified:iso(h.modified),size:h.size,seenAt:iso(o.now)};
+ let search;
+ try{
+  search=top!==null?await probe(o,version,top+1,o.followWindow)
+   :await probe(o,version,v.floor,o.window,{extend:!v.lastSearch});
+  for(const f of search.found.sort((a,b)=>a.build-b.build)){
+   const h=await head(o,f.loc);
+   if(!h.modified)throw changed(`no Last-Modified for ODC Studio ${version}.${f.build}`);
+   v.uploads[f.build]={modified:iso(h.modified),size:h.size,seenAt:iso(o.now)};
+  }
+ }catch(e){
+  // A decided version keeps its build whatever the search for later uploads meets (a 503, a changed page): the notes stay
+  // "changed", so the next round looks again, and the decision is offered as it is meanwhile.
+  if(!(e instanceof SourceError)||!v.decided)throw e;
+  return {...answerFor(version,v),laterSearchFailed:{code:e.code,at:iso(o.now)}};
  }
  // Only a search that completed moves the record: a failed one leaves the notes "changed", so the next round probes again.
  v.lastSearch={at:iso(o.now),from:search.lo,to:search.hi};
@@ -330,20 +338,41 @@ async function decideOdc(o,lane,noted){
   hoursAfterRelease:hoursAfter(j.best.modified,j.day),marginToCutoffHours:hoursAfter(j.cutoff,j.best.modified),distances,held:j.held,early:j.early};
  return answerFor(version,v);
 }
-// Every version of the notes the vigia must decide: the highest, and every one above the newest served (at most
-// o.maxVersions, newest first), so a version still pending when the next one ships is decided and served too.
+// Every version of the notes the vigia must decide: the highest, and every one above the newest served, so a version still
+// pending when the next one ships is decided and served too. At most o.maxVersions: the highest and the OLDEST above the
+// newest served (served first, oldest first); those in between are listed in results.notRead and read once the older
+// ones are served, so none is skipped for being beyond the limit.
+// An older unserved version left without a decision (AMBIGUOUS, NOT_FOUND, a failing source) holds the newer decided ones
+// back (r.heldBehind), so it is never skipped unseen, but only until o.rule.holdHours after each newer one's cutoff. Past
+// that, the newer one is offered with r.skips, and the older is recorded in lane.skipped (once a newer version is served,
+// the older one is no longer read: nothing would serve it).
 export async function latestOdcAll(o,{state={},served=[]}={}){
  const notes=await readOdcNotes(o);
  const lane=state.odc??={versions:{}};lane.versions??={};
  const newest=[...served].sort(compareVersions).at(-1);
  const byVersion=new Map(notes.map(n=>[n.version,n]));
  const ordered=[...byVersion.values()].sort((a,b)=>compareVersions(b.version,a.version));
- const picked=[ordered[0],...ordered.slice(1).filter(n=>newest&&compareVersions(n.version,newest)>0)].slice(0,o.maxVersions);
+ const above=ordered.slice(1).filter(n=>newest&&compareVersions(n.version,newest)>0).reverse();
+ const picked=[ordered[0],...above.slice(0,o.maxVersions-1)];
  const results=[];
  for(const noted of picked){
   try{results.push({version:noted.version,r:await decideOdc(o,lane,noted)});}
   catch(e){if(!(e instanceof SourceError))throw e;results.push({version:noted.version,error:e});}
  }
+ const holding=[];
+ for(const x of [...results].sort((a,b)=>compareVersions(a.version,b.version))){
+  if(served.includes(x.version)||(newest&&compareVersions(x.version,newest)<0))continue;
+  if(x.error){holding.push({version:x.version,code:x.error.code??'STUDIO_SOURCE_UNREACHABLE'});continue;}
+  if(lane.skipped?.[x.version]){delete lane.skipped[x.version];if(!Object.keys(lane.skipped).length)delete lane.skipped;}
+  if(x.r.pending||!holding.length)continue;
+  const until=Date.parse(x.r.releasedOn+'T00:00:00Z')+(o.rule.cutoffHours+o.rule.holdHours)*H;
+  if(o.now<until){x.r={...x.r,heldBehind:{versions:holding.map(h=>h.version),codes:holding.map(h=>h.code),until:iso(until)}};continue;}
+  x.r={...x.r,skips:holding.map(h=>({...h}))};
+  for(const h of holding)(lane.skipped??={})[h.version]??={by:x.version,at:iso(o.now),code:h.code};
+  holding.length=0;
+ }
+ const notRead=above.slice(o.maxVersions-1).map(n=>n.version).sort(compareVersions);
+ if(notRead.length)results.notRead=notRead;
  return results;
 }
 // The highest announced version only (the callers that read one ODC answer).
@@ -361,6 +390,9 @@ export async function latestStudio(lane,installed,opts={}){
 }
 // The owner's choice of an ODC build (vigia.ps1 -Pin X.Y.Z.B), applied to the persisted record of an announced version:
 // the build must exist on releaseshub (one read-only GET, one HEAD). It replaces any earlier decision of that version.
+// opts.served (the window's ODC versions): a version older than the newest served is recorded but has no effect (noEffect:
+// nothing serves an older version once a newer one is served). warnings: an upload far outside the version's window
+// (more than rule.pinFarHours before D-1 00:00Z or after the cutoff), no Last-Modified, a build below the version's floor.
 export async function pinOdc(state,fullVersion,opts={}){
  if(!/^\d+\.\d+\.\d+\.\d+$/.test(String(fullVersion)))throw Error('Pin takes a full ODC Studio version: X.Y.Z.B.');
  const o=options(opts),version=threeOf(fullVersion),build=Number(fullVersion.split('.')[3]);
@@ -374,7 +406,13 @@ export async function pinOdc(state,fullVersion,opts={}){
   ...(h.modified?{hoursAfterRelease:hoursAfter(h.modified,day)}:{})};
  delete v.unresolved;
  if(v.laterBuilds){v.laterBuilds=v.laterBuilds.filter(b=>b>build);if(!v.laterBuilds.length)delete v.laterBuilds;}
- return {version,build,previous,size:h.size};
+ const warnings=[],from=-o.rule.earliestDays*24,to=o.rule.cutoffHours,hours=v.decided.hoursAfterRelease;
+ if(hours===undefined)warnings.push(`releaseshub gave no upload time for ${fullVersion}`);
+ else if(hours<from-o.rule.pinFarHours||hours>to+o.rule.pinFarHours)warnings.push(`${fullVersion} was uploaded ${iso(h.modified).slice(0,16)}Z, ${hours} h from the ${v.releasedOn} release: far outside its window (${from} h..${to} h); check it is the build of ${version}`);
+ if(v.floor&&build<v.floor)warnings.push(`build ${build} is below ${v.floor}, the highest build of an older version`);
+ const newest=[...(opts.served??[])].sort(compareVersions).at(-1);
+ const noEffect=newest&&compareVersions(version,newest)<0?{served:newest,...(state.odc.skipped?.[version]?{skippedBy:state.odc.skipped[version].by}:{})}:null;
+ return {version,build,previous,size:h.size,...(warnings.length?{warnings}:{}),...(noEffect?{noEffect}:{})};
 }
 // The owner's "decide this version again" (vigia.ps1 -Redecide X.Y.Z): its record is dropped, so the next round searches
 // it as never seen (past its cutoff an ambiguous answer then waits for -Pin).
@@ -392,7 +430,9 @@ const stateError=(lane,e)=>Object.assign(new SourceError(`${lane==='odc'?'ODC St
 //  - public: the release was read (and, for ODC, decided). Offered unless the window already serves it.
 //  - pending: an ODC version is announced but not yet at its cutoff; nothing is offered.
 //  - queued: a decided ODC version waits behind an older unserved one (pending or offered this round): versions are offered
-//    oldest first, so none is skipped.
+//    oldest first, so none is skipped. Behind an older one without a decision (heldBy, heldCodes): only until heldUntil
+//    (rule.holdHours after its own cutoff); then it is public with skips (the older versions passed over).
+//  - not-read: ODC versions above the newest served beyond maxVersions (versions); they are not read this round.
 //  - older-than-served: the source names a version older than the newest the window serves.
 //  - unavailable: a code (and ownerAction when only the owner can end it); the lane keeps the installed Studio.
 // Flags on public: installedAhead (the vigia machine has a newer Studio, maybe a preview: it changes nothing),
@@ -414,21 +454,23 @@ export async function detectSources(installed,opts={}) {
   if(opts.store&&JSON.stringify(state[lane]??null)!==before){
    try{opts.store.write(lane,state[lane]);}catch(e){const err=stateError(lane,e);results=results.map(x=>({version:x.version,error:err}));}
   }
-  per.push({lane,mine,results,ms:Date.now()-started,probes:o.probes});
+  per.push({lane,mine,results,ms:Date.now()-started,probes:o.probes,notRead:results.notRead,max:o.maxVersions});
  }
  const releases=[],sources=[],local=installed.map(x=>({...x}));
- for(const {lane,mine,results,error,ms,probes} of per){
+ for(const {lane,mine,results,error,ms,probes,notRead,max} of per){
   const top=[...new Set(served[lane]??[])].sort(compareVersions).at(-1);
   const unavailable=(e,version)=>sources.push({lane,...(version?{version}:{}),status:'unavailable',code:e.code??'STUDIO_SOURCE_UNREACHABLE',error:String(e.message).slice(0,300),...(e.action?{ownerAction:e.action}:{}),fallback:'installed Studio',ms});
   if(error){unavailable(error);continue;}
+  if(notRead)sources.push({lane,status:'not-read',versions:notRead,max,served:top});
   let blocker=null;
   for(const {version,r,error:e} of [...results].sort((a,b)=>compareVersions(a.version??'0',b.version??'0'))){
    if(e){unavailable(e,version);continue;}
    const extra={ms,...(lane==='odc'?{probes}:{})};
    if(r.pending){blocker??=r.version;sources.push({lane,status:'pending',version:r.version,releasedOn:r.releasedOn,build:r.pending.build,definitiveAt:r.pending.definitiveAt,source:r.source,...extra});continue;}
-   const flags={...(r.heldBuilds?{heldBuilds:r.heldBuilds}:{}),...(r.laterBuilds?{laterBuilds:r.laterBuilds}:{}),...(r.decided?{decided:r.decided}:{}),...(mine&&compareVersions(mine,r.fullVersion)>0?{installedAhead:mine}:{})};
+   const flags={...(r.heldBuilds?{heldBuilds:r.heldBuilds}:{}),...(r.laterBuilds?{laterBuilds:r.laterBuilds}:{}),...(r.decided?{decided:r.decided}:{}),...(r.skips?{skips:r.skips}:{}),...(r.laterSearchFailed?{laterSearchFailed:r.laterSearchFailed}:{}),...(mine&&compareVersions(mine,r.fullVersion)>0?{installedAhead:mine}:{})};
    if(top&&compareVersions(r.version,top)<0){sources.push({lane,status:'older-than-served',version:r.fullVersion,served:top,source:r.source,...extra,...flags});continue;}
    const isServed=(served[lane]??[]).includes(r.version);
+   if(!isServed&&r.heldBehind){blocker??=r.heldBehind.versions[0];sources.push({lane,status:'queued',version:r.fullVersion,behind:r.heldBehind.versions[0],heldBy:r.heldBehind.versions,heldCodes:r.heldBehind.codes,heldUntil:r.heldBehind.until,source:r.source,...extra,...flags});continue;}
    if(!isServed&&blocker){sources.push({lane,status:'queued',version:r.fullVersion,behind:blocker,source:r.source,...extra,...flags});continue;}
    if(!isServed)blocker=r.version;
    sources.push({lane,status:'public',version:r.fullVersion,source:r.source,...extra,...flags});

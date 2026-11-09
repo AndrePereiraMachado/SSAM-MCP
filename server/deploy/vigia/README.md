@@ -20,14 +20,16 @@ The latest released Studios come only from OutSystems' public pages, read anonym
 
 ### The ODC build rule
 
-Every version of the notes above the newest one the window serves (at most 3, and always the highest) is decided on its own, once, and the decision is kept in `studio-sources.json` in outDir:
+Every version of the notes above the newest one the window serves (at most 3 per round: the highest and the oldest above the newest served; those in between are named once in `SSAM: Studio versions waiting to be read` and read after the older ones are served, so none is lost) is decided on its own, once, and the decision is kept in `studio-sources.json` in outDir:
 
 - eligible builds were uploaded (CloudFront Last-Modified, read from `dxejw4oyledi.cloudfront.net` only) between D-1 00:00Z and the cutoff D+1 16:00Z; the decision is the highest eligible build, taken **only at the cutoff**. Until then the version is `pending` and nothing is offered: a next-day GA can come at any time up to the cutoff, and a decision is permanent;
 - why these numbers (live uploads of 1.7.27 to 1.7.32, hours after D 00:00Z): the shipped builds were uploaded at 9.1 to 16.7 h and one next-day build at 32.75 h (1.7.28.10873); the first late hotfix came at 48.5 h (1.7.29.10953); the latest release candidate excluded by D-1 came 53 h before D (1.7.32.11059). 40 h is about the midpoint of 32.75 and 48.5. The day is read as UTC (the notes give no zone): both bounds leave more than half a day either way;
 - assumption: within a version the GA has the highest build number (true for every version observed); a release candidate uploaded on D-1 with a higher number than the GA would be chosen;
 - each decision records the build's distance to D and to the cutoff, and every upload seen, so drift shows;
 - uploads after the cutoff or after the decision are never offered; the owner gets `SSAM: later Studio build not offered` once per build, with the `-Pin` line to serve it instead. When the version was not watched within 6 h before its cutoff (the watcher was stopped, or the file was deleted) and such an upload sits above the eligible build, it may be a re-upload of the GA: nothing is decided (`STUDIO_BUILD_AMBIGUOUS`) and the owner pins the build;
-- versions are offered oldest first: a decided version waits (`queued`) while an older unserved one is pending or offered, so a version that ships one day after another is not skipped. An older version that ends unresolved does not hold the newer one.
+- versions are offered oldest first: a decided version waits (`queued`) while an older unserved one is pending or offered, so a version that ships one day after another is not skipped;
+- an older unserved version left without a decision (`STUDIO_BUILD_AMBIGUOUS`, `STUDIO_BUILD_NOT_FOUND`, or a source failing for it) holds the newer decided ones back too, but only until 48 h after each newer one's own cutoff (`ODC_RULE.holdHours`). During the hold the owner gets `SSAM: Studio release needs the owner` once a day, naming both versions, the end of the hold and the full `-Pin X.Y.Z.<build>` line of the older one. When the hold ends the newer version is offered, the older one is recorded as skipped (`skipped` in `studio-sources.json`) and the owner gets `SSAM: Studio version skipped` once. Once the newer version is served, the older one is no longer read: nothing ever serves a version older than the newest served;
+- a decided version whose notes section changes is searched again for later uploads; if that search fails (a 503, a deadline), the decided build is still offered as it is and the search runs again the next round (the change is not taken as seen).
 
 Load (probes are releaseshub `content` GETs; offline counts in RESULTADO-R3.md):
 
@@ -38,7 +40,9 @@ Load (probes are releaseshub `content` GETs; offline counts in RESULTADO-R3.md):
 
 ### Owner commands and recovery
 
-- `vigia.ps1 -Config <config> -Pin X.Y.Z.B`: decides X.Y.Z as build B (it must exist on releaseshub; one GET and one HEAD), replacing any earlier decision. The version must have been read from the notes by a round. A window that already serves X.Y.Z keeps its image.
+- `vigia.ps1 -Config <config> -Pin X.Y.Z.B`: decides X.Y.Z as build B (it must exist on releaseshub; one GET and one HEAD), replacing any earlier decision. The version must have been read from the notes by a round. A window that already serves X.Y.Z keeps its image. It warns (and still pins) when B was uploaded more than 72 h before D-1 00:00Z or after the cutoff (`ODC_RULE.pinFarHours`), when releaseshub gives no upload time, or when B is below the highest build of an older version.
+- `-Pin` of a version older than the newest one the window serves (typically one skipped after its hold) **has no effect**: it is recorded, the command answers `pinned-no-effect` and says so plainly, and nothing is offered, because no version older than the newest served is ever served again. To serve such a version, the window itself must change (a reviewed edit of `versions.json`), not the watcher.
+- One owner command per run: `-Approve`, `-Reject`, `-Retry`, `-SeedFeatures`, `-Pin` and `-Redecide` cannot be combined with each other or with `-DryRun`.
 - `vigia.ps1 -Config <config> -Redecide X.Y.Z`: drops the record of X.Y.Z; the next round searches it as never seen (past its cutoff an ambiguous answer then waits for `-Pin`).
 - Both take the watcher lock and write the file back as the same signed journal (an automatic configuration never writes it unsigned).
 - A `studio-sources.json` that cannot be read (tampered, truncated) stops the ODC lane only, with `STUDIO_SOURCE_STATE` and the notice `SSAM: Studio release needs the owner`. It does not heal by itself: rename or delete the file, and the next round decides again from the public pages (a version past its cutoff may then need `-Pin`).

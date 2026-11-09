@@ -35,6 +35,10 @@ export function parseArgs(argv){
   else if(['--dry-run','--round','--no-update','--rehearse-current'].includes(a))args.flags.add(a.slice(2));
   else throw Error(`Unknown argument ${a}. Usage: vigia.mjs --config <file> [--dry-run | --approve <id> | --reject <id> --reason <text> | --retry <id> | --seed-features <Features.plain.xml> | --pin <X.Y.Z.B> | --redecide <X.Y.Z>] [--no-update]`);
  }
+ // One owner command per run: a second one would be dropped unseen (owner() runs only the first it finds).
+ const commands=['approve','reject','retry','seed-features','pin','redecide'].filter(k=>args[k]!==undefined);
+ if(commands.length>1)throw Error(`--${commands.join(' and --')} cannot be combined: run one owner command at a time.`);
+ if(commands.length&&args.flags.has('dry-run'))throw Error(`--${commands[0]} cannot be combined with --dry-run: an owner command is not a round.`);
  if(args.flags.has('rehearse-current')&&(args.flags.has('dry-run')||args.approve||args.reject||args.retry||args['acknowledge-rollback']||args['seed-features']||args.pin||args.redecide))throw Error('--rehearse-current runs alone.');
  if(!args.config)throw Error('Usage: vigia.mjs --config <file> [--dry-run | --approve <id> | --reject <id> --reason <text> | --retry <id> | --seed-features <Features.plain.xml> | --pin <X.Y.Z.B> | --redecide <X.Y.Z>]');
  return args;
