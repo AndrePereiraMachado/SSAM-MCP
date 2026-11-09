@@ -149,14 +149,16 @@ export async function pinStudioBuild(config,fullVersion,{fetcher=fetch,now=Date.
  const warn=r.warnings?.length?` WARNING: ${r.warnings.join('; ')}.`:'';
  return {status:r.noEffect?'pinned-no-effect':'pinned',...r,note:`${head} ${effect}${warn}`};
 }
-export function skipStudio(config,version,{now=Date.now(),served}={}){
+// -Skip of a version no round has read from the notes (a typo, typically) is refused unless force (vigia.ps1 -Force).
+export function skipStudio(config,version,{now=Date.now(),served,force=false}={}){
  if(config.automatic)requireJournalKey(config.outDir);
  const store=sourceStore(config.outDir),odc=store.read('odc')??{versions:{}};
  const window=servedOdc(config,odc,served);
- const state={odc},r=skipOdc(state,version,{now,served:window.versions});
+ const state={odc},r=skipOdc(state,version,{now,served:window.versions,force});
  if(r.noEffect)return {status:'skip-no-effect',...r,note:`ODC Studio ${r.version} is not skipped: THIS HAS NO EFFECT, the window already serves ${r.noEffect.served} (served window: ${window.from}), and an older version is never offered after a newer one.`};
  store.write('odc',state.odc);
- return {status:'skipped',...r,note:`ODC Studio ${r.version} is skipped by the owner${r.decided?` (it was decided as build ${r.decided})`:''}: it is no longer read, holds no newer version and is never offered; the next round offers the next version in order. To undo: -Pin ${r.version}.<build> or -Redecide ${r.version}.`};
+ const warn=r.unread?` WARNING: ${r.version} is not in the release notes any round has read; it is recorded only because of -Force, and it is never read when the notes announce it.`:'';
+ return {status:'skipped',...r,note:`ODC Studio ${r.version} is skipped by the owner${r.decided?` (it was decided as build ${r.decided})`:''}: it is no longer read, holds no newer version and is never offered; the next round offers the next version in order. To undo: -Pin ${r.version}.<build> or -Redecide ${r.version}.${warn}`};
 }
 export function redecideStudio(config,version){
  if(config.automatic)requireJournalKey(config.outDir);
