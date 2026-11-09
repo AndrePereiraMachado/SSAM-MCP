@@ -292,6 +292,67 @@ export function checkMacOutput(dist, options, { arch = process.arch, version = o
 export function readAsarPackage(asarFile) {
   return JSON.parse(String(createRequire(import.meta.url)('@electron/asar').extractFile(asarFile, 'package.json')));
 }
+// The production closure in a packaged app (Windows 0.2.8 shipped an app.asar with electron-updater but without its own
+// dependencies, and died at start with "Cannot find module 'fs-extra'"). Every edge of package-lock.json's production tree
+// (dependencies and optionalDependencies, from the root; never devDependencies), resolved like Node resolves it (the nearest
+// node_modules/<name> going up from where the requirer is), must reach in the app.asar a package of the version the lock
+// pins. electron-builder may place packages elsewhere than the lock (it hoisted electron-updater's semver to
+// node_modules/semver in the Mac build A); only what Node would load counts. A missing optional dependency is allowed.
+// has(key) and versionOf(key) read the packaged tree; keys are like node_modules/a/node_modules/@s/b ('' is the app).
+export function resolvePackage(has, from, name) {
+  for (let at = from; ; at = at.includes('/node_modules/') ? at.slice(0, at.lastIndexOf('/node_modules/')) : '') {
+    const key = (at ? at + '/' : '') + 'node_modules/' + name;
+    if (has(key)) return key;
+    if (!at) return null;
+  }
+}
+export function packagedClosureProblems(lock, { has, versionOf }) {
+  const packages = lock?.packages;
+  if (!packages || !packages['']) return ['package-lock.json has no "packages" (lockfile v2 or v3 needed)'];
+  const problems = []; const seen = new Set();
+  const queue = [{ lockKey: '', placed: '' }];
+  while (queue.length) {
+    const { lockKey, placed } = queue.shift();
+    if (seen.has(placed + '|' + lockKey)) continue;
+    seen.add(placed + '|' + lockKey);
+    const entry = packages[lockKey] ?? {};
+    const edges = [...Object.keys(entry.dependencies ?? {}).map(name => [name, false]), ...Object.keys(entry.optionalDependencies ?? {}).map(name => [name, true])];
+    for (const [name, optional] of edges) {
+      const target = resolvePackage(key => Boolean(packages[key]), lockKey, name);
+      const requirer = lockKey || 'the app';
+      if (!target || packages[target].dev) { if (!optional) problems.push(`package-lock.json gives ${requirer} no ${name}`); continue; }
+      const found = resolvePackage(has, placed, name);
+      if (!found) { if (!optional && !packages[target].optional) problems.push(`${requirer} needs ${name} ${packages[target].version}, which the app.asar does not have where Node looks`); continue; }
+      const version = versionOf(found);
+      if (version !== packages[target].version) { problems.push(`${requirer} gets ${name} ${version ?? '(unreadable)'} at ${found} in the app.asar, not ${packages[target].version}`); continue; }
+      queue.push({ lockKey: target, placed: found });
+    }
+  }
+  return problems;
+}
+// The packaged tree of an app.asar (@electron/asar): has/versionOf over its node_modules/**/package.json.
+export function asarTree(asarFile, asar = createRequire(import.meta.url)('@electron/asar')) {
+  const files = new Set(asar.listPackage(asarFile).map(file => file.replace(/\\/g, '/').replace(/^\//, '')));
+  return {
+    has: key => files.has(key + '/package.json'),
+    versionOf: key => { try { return JSON.parse(String(asar.extractFile(asarFile, (key + '/package.json').split('/').join(path.sep)))).version ?? null; } catch { return null; } },
+  };
+}
+// Every app.asar under dist (the Windows win-unpacked and the macOS .app), each with the whole closure; none found is a problem.
+export function checkPackagedClosure(dist, appDir = app, { tree = asarTree } = {}) {
+  const lock = JSON.parse(fs.readFileSync(path.join(appDir, 'package-lock.json'), 'utf8'));
+  const found = [];
+  const walk = (dir, depth) => { for (const item of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, item.name);
+    if (item.isFile() && item.name === 'app.asar') found.push(full);
+    else if (item.isDirectory() && !item.isSymbolicLink() && depth < 6 && !item.name.endsWith('.asar.unpacked')) walk(full, depth + 1);
+  } };
+  walk(dist, 0);
+  if (!found.length) throw new Error('no app.asar under ' + dist + ': the packaged app cannot be checked for its runtime dependencies');
+  const problems = found.flatMap(file => packagedClosureProblems(lock, tree(file)).map(problem => path.relative(dist, file) + ': ' + problem));
+  if (problems.length) throw new Error('the packaged app lacks runtime dependencies of package-lock.json: ' + problems.join('; '));
+  console.log('app.asar: the production closure of package-lock.json is complete in ' + found.map(file => path.relative(dist, file)).join(', '));
+}
 export function appPackageVersion(appDir = app) { return JSON.parse(fs.readFileSync(path.join(appDir, 'package.json'), 'utf8')).version; }
 
 // The update key the main bundle pins (update-trust.mjs): the build input on a Windows build that updates itself, else none.
@@ -391,6 +452,7 @@ async function main() {
   const dist = path.join(app, 'dist');
   const files = fs.readdirSync(dist).filter(name => /\.(exe|dmg|zip|yml|blockmap)$/.test(name));
   console.log('dist: ' + files.join(', '));
+  checkPackagedClosure(dist);
   if (options.platform === 'win') checkWindowsOutput(dist, options);
   if (options.platform === 'mac') checkMacOutput(dist, options, { arch: pack.nativeCore?.arch ?? process.arch });
 }
