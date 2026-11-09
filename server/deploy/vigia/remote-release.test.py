@@ -52,7 +52,7 @@ class RemoteTests(unittest.TestCase):
         self.usage = {"pairs": {"o11-11.55.93-odc-1.7.29": {"heavy": 2, "active": 1}}, "skipped": 0}
         self.receipt = {"ok": True, "kernel": {"odc": "1.7.29", "o11": "11.55.93"}, "budget": {"tools": 90}, "telemetry": {"tokens": {}}}
 
-    def docker(self, *args, data=None):
+    def docker(self, *args, data=None, timeout=900):
         self.calls.append(args)
         if data:
             self.inputs.append(data.decode())
@@ -74,6 +74,7 @@ class RemoteTests(unittest.TestCase):
         if args[0] == "exec" and args[1] == "postgres-fixture":
             return getattr(self, "dump", b"CREATE TABLE public.schema_migrations (\n);\nCREATE TABLE public.server_tokens (\n);\n")
         if args[0] == "exec" and args[1] == "-i" and data and b"usage-count" in data:
+            self.usage_call = (args, timeout)
             if callable(self.usage):
                 return self.usage(data)
             if isinstance(self.usage, Exception):
@@ -239,7 +240,7 @@ class RemoteTests(unittest.TestCase):
         running = [backend("new", "11.55.95", "1.7.33"), backend("v5", "11.55.95", "1.7.32"), backend("v2", "11.55.93", "1.7.29")]
         receipts = {}
         base = self.docker
-        def docker(*args, data=None):
+        def docker(*args, data=None, timeout=900):
             if args[0] == "exec" and args[1] == "-i":
                 self.calls.append(args)
                 return json.dumps({"ok": True, "presented": args[2] == "new", "offersChecked": receipts[args[2]]}).encode()
@@ -313,6 +314,14 @@ class RemoteTests(unittest.TestCase):
         self.assertEqual(value["usage"], {"o11-11.55.93-odc-1.7.29": {"heavy": 2, "active": 1}})
         self.assertEqual(value["warnings"], [])
         self.assertIn(source, self.inputs)
+        # R3 B2: its own short limit, inside the container (timeout 25 node) and on the client (30 s), not the 900 s default.
+        args, limit = self.usage_call
+        self.assertEqual(limit, 30)
+        self.assertEqual(args[-3:], ("timeout", "25", "node"))
+        self.usage = subprocess.TimeoutExpired("docker", 30)
+        value = self.request("snapshot", checkSource="capture-live", usageSource=source)
+        self.assertTrue(value["ok"])
+        self.assertEqual((value["usage"], value["warnings"]), (None, ["USAGE_UNREADABLE"]))
         P = "o11-11.55.93-odc-1.7.29"
         for bad, usage, warning in (
                 ({"pairs": {"": 1}}, {}, "USAGE_PARTIAL"),

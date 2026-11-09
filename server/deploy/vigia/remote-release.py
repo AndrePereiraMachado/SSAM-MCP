@@ -43,18 +43,23 @@ def assert_fence(token):
         raise RemoteError('LOCK_LOST')
 
 
-def command(args, data=None, env=None):
+def command(args, data=None, env=None, timeout=900):
     if active_fence:
         assert_fence(active_fence)
     result = subprocess.run(args, input=data, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                            env=env, timeout=900)
+                            env=env, timeout=timeout)
     if result.returncode:
         raise RuntimeError("Remote command failed: " + args[0])
     return result.stdout
 
 
-def docker(*args, data=None):
-    return command(["docker", *args], data=data)
+def docker(*args, data=None, timeout=900):
+    return command(["docker", *args], data=data, timeout=timeout)
+
+
+# The usage count is advisory: a node stuck in the container must not hold a watcher round for the 900 s of command()
+# (review R3 B2). The container's own timeout stops node at 25 s; the client gives up at 30 s; either is USAGE_UNREADABLE.
+USAGE_TIMEOUT_S = 30
 
 
 def backends(project):
@@ -80,7 +85,7 @@ def usage_counts(container, source):
     if not container or not isinstance(source, str) or not source:
         return None, 'USAGE_UNREADABLE'
     try:
-        value = json.loads(docker("exec", "-i", container, "node", data=source.encode()))
+        value = json.loads(docker("exec", "-i", container, "timeout", str(USAGE_TIMEOUT_S - 5), "node", data=source.encode(), timeout=USAGE_TIMEOUT_S))
         pairs = value["pairs"]
         if not isinstance(pairs, dict):
             raise ValueError()

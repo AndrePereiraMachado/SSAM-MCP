@@ -17,7 +17,7 @@ import {releaseAutomatically} from './automatic.mjs';
 import {REMOTE_WAITS} from './auto-runtime.mjs';
 const here=path.dirname(fileURLToPath(import.meta.url));
 const sha='a'.repeat(64),image='registry/image';
-const sizing={hot:{cpus:'5',memory:'10g',cpuShares:10463,buildWorkers:6,o11WorkersMax:2,queueMs:240000},other:{cpus:'2',memory:'4g',cpuShares:2598,buildWorkers:2,o11WorkersMax:1,queueMs:240000},
+const sizing={hot:{cpus:'5',memory:'10g',cpuShares:5776,buildWorkers:6,o11WorkersMax:2,queueMs:240000},other:{cpus:'2',memory:'4g',cpuShares:1024,buildWorkers:2,o11WorkersMax:1,queueMs:240000},
  router:{cpus:'1',memory:'512m'},host:{memory:'32089m',reserve:'4g'}};
 const entry=(version,tag)=>({version,tag,image,sha256:sha});
 const u=(heavy,active)=>({heavy,active});

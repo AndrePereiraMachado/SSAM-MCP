@@ -313,7 +313,7 @@
           "volume": {}
         }
       ],
-      "cpu_shares": 2598
+      "cpu_shares": 1024
     },
     "ssam-server-v2": {
       "cap_drop": [
@@ -439,7 +439,7 @@
           "volume": {}
         }
       ],
-      "cpu_shares": 2598
+      "cpu_shares": 1024
     },
     "ssam-server-v3": {
       "cap_drop": [
@@ -565,7 +565,7 @@
           "volume": {}
         }
       ],
-      "cpu_shares": 2598
+      "cpu_shares": 1024
     },
     "ssam-server-v4": {
       "cap_drop": [
@@ -691,7 +691,7 @@
           "volume": {}
         }
       ],
-      "cpu_shares": 10463
+      "cpu_shares": 5776
     },
     "ssam-server-v5": {
       "cap_drop": [
@@ -817,7 +817,7 @@
           "volume": {}
         }
       ],
-      "cpu_shares": 2598
+      "cpu_shares": 1024
     },
     "ssam-router": {
       "cap_drop": [
@@ -899,7 +899,7 @@
         "traefik.http.middlewares.ssam-console-headers.headers.framedeny": "true",
         "traefik.http.middlewares.ssam-console-headers.headers.referrerpolicy": "no-referrer",
         "traefik.http.middlewares.ssam-console-headers.headers.customresponseheaders.Server": "",
-        "ssam.sizing": "{\"hot\":{\"cpus\":\"5\",\"memory\":\"10g\",\"cpuShares\":10463,\"buildWorkers\":6,\"o11WorkersMax\":2,\"queueMs\":240000},\"other\":{\"cpus\":\"2\",\"memory\":\"4g\",\"cpuShares\":2598,\"buildWorkers\":2,\"o11WorkersMax\":1,\"queueMs\":240000},\"router\":{\"cpus\":\"1\",\"memory\":\"512m\"},\"host\":{\"memory\":\"32089m\",\"reserve\":\"4g\"},\"usage\":{\"o11-11.55.93-odc-1.7.29\":{\"heavy\":0,\"active\":1},\"o11-11.55.94-odc-1.7.30\":{\"heavy\":6,\"active\":3},\"o11-11.55.94-odc-1.7.31\":{\"heavy\":1044,\"active\":1},\"o11-11.55.95-odc-1.7.32\":{\"heavy\":0,\"active\":1}},\"hotPair\":\"o11-11.55.94-odc-1.7.31\"}"
+        "ssam.sizing": "{\"hot\":{\"cpus\":\"5\",\"memory\":\"10g\",\"cpuShares\":5776,\"buildWorkers\":6,\"o11WorkersMax\":2,\"queueMs\":240000},\"other\":{\"cpus\":\"2\",\"memory\":\"4g\",\"cpuShares\":1024,\"buildWorkers\":2,\"o11WorkersMax\":1,\"queueMs\":240000},\"router\":{\"cpus\":\"1\",\"memory\":\"512m\"},\"host\":{\"memory\":\"32089m\",\"reserve\":\"4g\"},\"usage\":{\"o11-11.55.93-odc-1.7.29\":{\"heavy\":0,\"active\":1},\"o11-11.55.94-odc-1.7.30\":{\"heavy\":6,\"active\":3},\"o11-11.55.94-odc-1.7.31\":{\"heavy\":1044,\"active\":1},\"o11-11.55.95-odc-1.7.32\":{\"heavy\":0,\"active\":1}}}"
       },
       "logging": {
         "driver": "json-file",

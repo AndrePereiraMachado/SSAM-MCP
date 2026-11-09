@@ -64,8 +64,11 @@ export function servedLists(manifest,{window=manifest.window??3}={}){
 // SSAM_BUILD_WORKERS/SSAM_O11_WORKERS_MAX no longer reach a sized backend. host: the memory limits of the backends, the
 // router and the console must leave host.reserve of host.memory (the VPS MemTotal); a window that does not fit is refused
 // (CAPACITY_WINDOW, environmental: the watcher waits and tells the owner), never shrunk.
-// cpuShares on cgroup v2 (the VPS): docker writes cpu.weight = 1 + (shares-2)*9999/262142, so 2598 is the default weight
-// 100 (the router, the console, Coolify and Postgres keep 100) and 10463 is 400; 1024 would be 39 (review B1').
+// cpuShares on cgroup v2 (the VPS, runc 1.5.1, systemd driver): runc 1.3 and later convert shares to cpu.weight with the
+// quadratic of opencontainers/cgroups (ConvertCPUSharesToCgroupV2Value, cpuWeight below), not the linear 1+(s-2)*9999/262142
+// of older runc: 1024 -> 100 (measured on the VPS 2026-11-09: a container with CpuShares 1024 has cpu.weight 100), 5768..5784
+// -> 400. So the other tier is 1024 (the default 100 of the router, the console, Coolify and Postgres) and the hot one 5776
+// (400, the middle of the range: half a unit of float margin each side of the ceil): hot/other = 4 (review R3 A1).
 // Without "sizing" the compose is exactly as before.
 export const SIZING_TIERS=['hot','other'];
 export const CAPACITY_WINDOW='CAPACITY_WINDOW';
@@ -74,7 +77,8 @@ const PAIR_NAME=/^o11-\d+\.\d+\.\d+-odc-\d+\.\d+\.\d+$/;
 const mib=value=>{const m=/^(\d+)([mg])$/i.exec(String(value));return m?Number(m[1])*(m[2].toLowerCase()==='g'?1024:1):null;};
 const isCpus=value=>/^\d+(?:\.\d+)?$/.test(String(value))&&Number(value)>0&&Number(value)<=64;
 const count=v=>Number.isInteger(v)&&v>=0;
-export const cpuWeight=shares=>1+Math.floor((shares-2)*9999/262142);
+// cpu.weight runc (1.3+) writes for cpu_shares (opencontainers/cgroups ConvertCPUSharesToCgroupV2Value); 0 is unset (100).
+export const cpuWeight=shares=>{if(!shares)return 100;if(shares<=2)return 1;if(shares>=262144)return 10000;const l=Math.log2(shares);return Math.ceil(10**((l*l+125*l)/612-7/34));};
 // The use of a pair as a sort key: heavy calls of 7 days first, then active clients of 14 days.
 const useOf=(usage,name)=>[usage?.[name]?.heavy??0,usage?.[name]?.active??0];
 const more=(a,b)=>a[0]!==b[0]?a[0]>b[0]:a[1]>b[1];

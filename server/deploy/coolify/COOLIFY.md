@@ -465,20 +465,23 @@ O seletor --version aceita odc=1.7.29 e o11=11.55.93; a forma sem faixa também 
 ## 13. Capacity sizing (hot pair)
 
 Measured on the KVM 8 (8 vCPU EPYC 9354P, MemTotal 31.3 GiB) on 2026-11-09: `C:\t\r5\capacity\RESULTADO.md` and
-`RESULTADO-R2.md`. One cold kernel build uses about 1.25 vCPU and 0.4 to 1.3 GB; builds share the CPU cap, so a backend's
+`RESULTADO-R2.md`, `RESULTADO-R3.md`. One cold kernel build uses about 1.25 vCPU and 0.4 to 1.3 GB; builds share the CPU cap, so a backend's
 vCPUs set its build throughput. `versions.json` `sizing` gives ONE backend the "hot" tier and the rest the "other" tier:
 
 | Tier | cpus | memory | cpu_shares (cgroup v2 weight) | SSAM_BUILD_WORKERS | SSAM_O11_WORKERS_MAX | SSAM_BUILD_QUEUE_MS |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| hot (most used pair) | 5 | 10g | 10463 (400) | 6 | 2 | 240000 |
-| other | 2 | 4g | 2598 (100, the default) | 2 | 1 | 240000 |
+| hot (most used pair) | 5 | 10g | 5776 (400) | 6 | 2 | 240000 |
+| other | 2 | 4g | 1024 (100, the default) | 2 | 1 | 240000 |
 | router | 1 | 512m | (100) | | | |
 
-- Hot = the owner's pin `sizing.hotPair` if set, else the pair of most REAL USE (`sizing.usage`): the most heavy calls of
+- Hot = the pair of most REAL USE (`sizing.usage`): the most heavy calls of
   the last 7 days (`studio_deliver`, `o11_deliver`, `ssam_code` in that pair's quality log), then the most clients active in
   the last 14 days (real clients only: no verification, no revoked license); ties and no counts go to the router's default
   pair (the first of the window). The newest pair is "other" until it is the most used. Licenses ever routed
-  (`state/routing.json`) are not use: routes never expire.
+  (`state/routing.json`) are not use: routes never expire. The hot pair therefore MOVES WITH USE: each deploy the watcher
+  makes recounts it and the tier follows the heaviest pair. The owner's pin `sizing.hotPair` exists for an emergency only and
+  is not set in `versions.json`: a pin stays while its pair stays in the window, even after the use there has gone (review
+  R3 M1), so a pin must be removed by hand as soon as it is no longer needed.
 - The watcher counts use (counts only, never a token id or a customer) with `vigia/usage-count.cjs`, run read-only inside a
   live backend by its remote snapshot at each deploy it makes anyway, writes them into `sizing.usage` of the pinned
   manifest, and sends the owner a `hot-pair` event (`HOT_PAIR_CHANGED`) once the deploy is live when the hot pair changed; a
@@ -492,8 +495,11 @@ vCPUs set its build throughput. `versions.json` `sizing` gives ONE backend the "
   deploy keeps the sizing of the live router label. It goes live only with a manual compose apply (the owner's `-Approve`
   path or the deploy kit of the integrator, as in `RESULTADO-R2.md`).
 - The hot tier wins CPU contention through its weight (4x the default 100); the other tiers, the router, the console,
-  Coolify and Postgres keep the default weight, and the other caps stay at 2 vCPU, so no pair regresses. Docker on cgroup v2
-  writes `cpu.weight = 1 + (shares - 2) x 9999 / 262142`: 1024 would have been weight 39.
+  Coolify and Postgres keep the default weight, and the other caps stay at 2 vCPU, so no pair regresses. The VPS runs runc
+  1.5.1 (cgroup v2, systemd driver), which converts shares with the quadratic of opencontainers/cgroups
+  (`gen-compose.mjs` `cpuWeight`): 1024 -> 100 (measured there), 5768..5784 -> 400, 2598 -> 210, 10463 -> 650. The linear
+  `1 + (shares - 2) x 9999 / 262142` of runc before 1.3 is not this host's (review R3 A1). A runc or Docker upgrade can
+  change the mapping again: the deploy check (`env-check.sh`) reads `cpu.weight` back and a mismatch stops the release.
 - Every tier value is literal in the compose (no `${...}`): Coolify 4.4.6 stored the defaults of `${VAR:-default}` of the
   environment sections as resource variables (the rows of 2026-10-20 equal the defaults), so a tier variable could freeze
   or override a tier without any check. A sized backend no longer reads `SSAM_CPUS`, `SSAM_MEMORY`, `SSAM_BUILD_WORKERS` or
@@ -502,7 +508,11 @@ vCPUs set its build throughput. `versions.json` `sizing` gives ONE backend the "
   MemTotal - reserve. Five pairs use 27392 of 27993 MiB. A sixth pair does not fit: the generator and the watcher's
   rotation refuse it with `CAPACITY_WINDOW` (environmental: the round waits and the owner is told) instead of shrinking any
   backend; a pair has to leave, or the owner changes `sizing`.
-- Inside each backend, the memory gate (`platforms/odc/facade/memory-room.mjs`) admits every kernel process (build-pool
-  slot, cold O11/ODC process, a customer's worker start) by the room under the container's cgroup limit, not by the host's
-  MemAvailable: `SSAM_MEMORY_RESERVE_MB` (1400) per O11 process, `SSAM_MEMORY_RESERVE_ODC_MB` (600) per ODC one. A build
-  without that room waits in the pool queue; a cold process waits at most `SSAM_MEMORY_WAIT_MS` (120 s) and then runs.
+- The memory gate (`platforms/odc/facade/memory-room.mjs`) admits every kernel process (build-pool slot, cold O11/ODC
+  process, a customer's worker start) by the room under the container's cgroup limit, not by the host's MemAvailable:
+  `SSAM_MEMORY_RESERVE_MB` (1400) per O11 process, `SSAM_MEMORY_RESERVE_ODC_MB` (600) per ODC one (measured only for the
+  ODC `apply`, ~0.45 GB; not for the other cold ODC paths). A build without that room waits in the pool queue; a cold
+  process waits at most `SSAM_MEMORY_WAIT_MS` (120 s) and is then refused, nothing sent (`BUILD_QUEUE_TIMEOUT`,
+  `waitedFor: memory`). **The gate is server code: it holds only in backends whose image was built from e04cfb7 or later.**
+  A compose-only release keeps the images, and the watcher never rebuilds a retained pair, so a pair whose image predates
+  the gate runs its tier's memory limit WITHOUT admission (review R3 A2): see `RESULTADO-R3.md` for the owner's options.

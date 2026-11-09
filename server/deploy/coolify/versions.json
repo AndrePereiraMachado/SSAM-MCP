@@ -5,7 +5,7 @@
     "hot": {
       "cpus": "5",
       "memory": "10g",
-      "cpuShares": 10463,
+      "cpuShares": 5776,
       "buildWorkers": 6,
       "o11WorkersMax": 2,
       "queueMs": 240000
@@ -13,7 +13,7 @@
     "other": {
       "cpus": "2",
       "memory": "4g",
-      "cpuShares": 2598,
+      "cpuShares": 1024,
       "buildWorkers": 2,
       "o11WorkersMax": 1,
       "queueMs": 240000
@@ -43,8 +43,7 @@
         "heavy": 0,
         "active": 1
       }
-    },
-    "hotPair": "o11-11.55.94-odc-1.7.31"
+    }
   },
   "odc": [
     {
