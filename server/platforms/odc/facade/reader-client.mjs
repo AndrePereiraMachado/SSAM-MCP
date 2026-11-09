@@ -8,7 +8,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { RELEASE, authorityDir, childEnv, dotnetPath, layoutPath, root } from './release-layout.mjs';
 import { memoryGate, memoryWaitRefusal } from './memory-room.mjs';
 import { imageO11Versions, isMultiO11Image, o11KernelPaths } from './o11-kernels.mjs';
-import { readerResidency, makeRoom, writeReaderMeta, touchLastRead } from './reader-residency.mjs';
+import { readerResidency, makeRoom, writeReaderMeta, touchLastRead, DEFAULT_READER_MIN_IDLE_MS } from './reader-residency.mjs';
 
 const readJson = file => JSON.parse(fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, ''));
 // A long-lived MCP client keeps the generation of the module it actually loaded. The release bundle has no source of
@@ -79,14 +79,24 @@ async function liveState(file, generation) {
 // Window 4x4 (reader-residency.mjs): on a multi-O11 image an O11 reader generation that has to start first makes room
 // (idle readers past the SSAM_O11_READERS_MAX ceiling, folders of retired versions) and is admitted by the memory gate;
 // admission (an object) receives {hold, residency}: the caller releases the hold once the first read answered.
-//   - S1 R3, review R2 B-R2-1/B-R2-2: the wait is in turns (READER_WAIT_TURN_MS); after each turn without room one more
-//     idle reader (LRU, not read within minIdleMs) is asked to leave, so a reader never waits out its time for memory an
-//     idle one holds. The ceiling only limits; the gate decides how many fit.
+//   - S1 R4 (review R3 M6, after R2 B-R2-1/B-R2-2): the readers of a platform folder are a cache EVERY waiter of the memory
+//     gate may ask to leave (registerReaderEvictor, rank 0 of the gate's relief turns, memory-room.mjs): one idle reader
+//     (LRU) per turn. A waiting reader spares the readers read within minIdleMs (60 s); any other waiter (a build, a cold
+//     run, a worker start) evicts a reader idle for READER_EVICT_IDLE_MS (5 s). The ceiling only limits; the gate decides
+//     how many fit.
 //   - B-R2-3: a reader outlives any call: it always reserves on its own, also inside an admitted build-pool slot (no path
 //     reads through this client inside a slot today: o11-build-phase and odc-build-phase run only the apply there).
-export const READER_WAIT_TURN_MS = 2000;
+export const READER_EVICT_IDLE_MS = 5000;
 const residentO11 = platform => platform !== 'odc' && isMultiO11Image(process.env);
-// deps (tests): {env, gate, rpc, now, turnMs}.
+export function registerReaderEvictor(gate, platformDir, {rpc = readerRpc, authorization = null, minIdleMs = DEFAULT_READER_MIN_IDLE_MS, now = Date.now} = {}) {
+  const name = 'o11-readers:' + path.resolve(platformDir);
+  if (!gate?.addEvictor || gate.hasEvictor?.(name)) return;
+  gate.addEvictor({rank: 0, name, evict: async ({kind} = {}) => {
+    const room = await makeRoom(platformDir, {keep: null, max: 1, limit: 1, rpc, authorization, minIdleMs: kind === 'reader' ? minIdleMs : READER_EVICT_IDLE_MS, now});
+    return room.evicted.length ? {what: 'o11-reader', generation: room.evicted[0].generation} : null;
+  }});
+}
+// deps (tests): {env, gate, rpc, now}.
 export async function admitReader({dll, runtimeDir, directory, authorization}, admission, deps = {}) {
   const env = deps.env ?? process.env, versions = imageO11Versions(env), now = deps.now ?? Date.now, rpc = deps.rpc ?? readerRpc;
   const settings = readerResidency({env, versions: versions.length});
@@ -95,18 +105,13 @@ export async function admitReader({dll, runtimeDir, directory, authorization}, a
     servedDirs: versions.map(v => o11KernelPaths(v, env)?.studioDir).filter(Boolean)});
   writeReaderMeta(directory, {dll, runtimeDir});
   const gate = deps.gate ?? memoryGate();
-  const waitMs = gate.settings.waitMs, turnMs = deps.turnMs ?? READER_WAIT_TURN_MS, started = now();
-  for (;;) {
-    const left = started + waitMs - now();
-    const admitted = await gate.admit(settings.reserveMb, {waitMs: Math.max(0, Math.min(turnMs, left))});
-    if (!admitted.timedOut) { admission.hold = admitted.hold; return; }
-    if (now() - started >= waitMs) {
-      const refusal = memoryWaitRefusal({waitedMs: now() - started, lane: 'o11', queueMs: waitMs, what: 'read'});
-      throw Object.assign(new Error(refusal.error), {code: refusal.code, refusal});
-    }
-    const more = await makeRoom(platformDir, {keep: directory, max: 1, limit: 1, rpc, authorization, minIdleMs: settings.minIdleMs, now});
-    admission.residency.evicted.push(...more.evicted);
+  registerReaderEvictor(gate, platformDir, {rpc, authorization, minIdleMs: settings.minIdleMs, now});
+  const admitted = await gate.admit(settings.reserveMb, {kind: 'reader'});
+  if (admitted.timedOut) {
+    const refusal = memoryWaitRefusal({waitedMs: admitted.waitedMs, lane: 'o11', queueMs: gate.settings.waitMs, what: 'read'});
+    throw Object.assign(new Error(refusal.error), {code: refusal.code, refusal});
   }
+  admission.hold = admitted.hold;
 }
 // M4 (review R2): the startup deadline runs from the spawn, after the gate admitted the reader; a reader that does not
 // answer in time is killed, so no reader stays resident without the reserve it was admitted with.

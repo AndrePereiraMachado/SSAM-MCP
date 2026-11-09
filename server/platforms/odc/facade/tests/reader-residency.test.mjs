@@ -8,7 +8,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { readerResidency, makeRoom, residentReaders, writeReaderMeta, touchLastRead, DEFAULT_READER_RESERVE_MB, DEFAULT_READER_MIN_IDLE_MS, READER_META } from '../reader-residency.mjs';
-import { admitReader, ensureReader } from '../reader-client.mjs';
+import { admitReader, ensureReader, registerReaderEvictor } from '../reader-client.mjs';
 import { createMemoryGate, MEMORY_WAIT_CODE } from '../memory-room.mjs';
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ssam-reader-residency-'));
@@ -125,7 +125,7 @@ test('admitReader: makes room, records the Studio, and holds the reader reserve 
   inside.hold.release(); slot.release();
 });
 
-test('admitReader (B-R2-1): a reader waiting for memory asks one more idle reader to leave at each turn, and is admitted once it left', async () => {
+test('admitReader (B-R2-1, R4): a reader waiting for memory asks one more idle reader to leave at each relief turn, and is admitted once it left', async () => {
   const studios = fresh(), clis = fresh();
   const env = { SSAM_IMAGE_O11: '11.55.92,11.55.93,11.55.95', SSAM_O11_STUDIO_ROOT: studios, SSAM_O11_CLI_ROOT: clis, SSAM_MEMORY_RESERVE_READER_MB: '700', SSAM_O11_READER_MIN_IDLE_MS: '60000' };
   // Two idle readers of other versions, under the ceiling (3): makeRoom stops nobody; the memory is what is short.
@@ -136,13 +136,30 @@ test('admitReader (B-R2-1): a reader waiting for memory asks one more idle reade
   const directory = path.join(dir, 'gen92'); fs.mkdirSync(directory);
   // The room grows by a reader's 900 MB each time one is shut down.
   const room = () => 300 + 900 * calls.filter(c => c.command === 'shutdown').length;
-  const gate = createMemoryGate({ room, settings: { reserveMb: 1400, odcReserveMb: 600, waitMs: 2000, growMs: 15000 } });
+  const gate = createMemoryGate({ room, settings: { reserveMb: 1400, odcReserveMb: 600, waitMs: 2000, growMs: 15000, evictTurnMs: 50 } });
   const build = gate.hold(0); // another admitted process: the reader is not alone
   const admission = {};
-  await admitReader({ dll: 'x', runtimeDir: path.join(studios, '11.55.92'), directory, authorization: 'k' }, admission, { env, gate, rpc, turnMs: 50 });
+  await admitReader({ dll: 'x', runtimeDir: path.join(studios, '11.55.92'), directory, authorization: 'k' }, admission, { env, gate, rpc });
   assert.ok(admission.hold, 'admitted once the idle reader left, well before the wait ran out');
-  assert.deepEqual(admission.residency.evicted.map(e => e.generation), ['r95'], 'one idle reader, the least recently used, and no more than needed');
+  assert.deepEqual(calls.filter(c => c.command === 'shutdown').map(c => c.port), [42], 'one idle reader, the least recently used, and no more than needed');
   admission.hold.release(); build.release();
+});
+
+// R4 (review R3 M6): the readers are a cache every waiter may ask to leave; a non-reader waiter evicts a reader idle for 5 s,
+// a waiting reader spares the ones read within 60 s; a busy one is never asked.
+test('reader evictor (M6): a build evicts a reader idle 5 s; a waiting reader spares one read within 60 s; a busy one stays', async () => {
+  const now = Date.now();
+  const { dir, rpc, calls } = readers({
+    recent: { port: 51, lastRead: new Date(now - 20000).toISOString() },
+    busy: { port: 52, lastRead: new Date(now - 600000).toISOString(), busy: true },
+  });
+  const gate = createMemoryGate({ room: () => 5000, settings: { reserveMb: 1400, odcReserveMb: 600, waitMs: 100, growMs: 15000, evictTurnMs: 0 } });
+  registerReaderEvictor(gate, dir, { rpc, authorization: 'k', minIdleMs: 60000 });
+  registerReaderEvictor(gate, dir, { rpc, authorization: 'k' });
+  assert.equal(await gate.relieve({ kind: 'reader', force: true }), null, 'a waiting reader spares the reader read 20 s ago, and the busy one');
+  const r = await gate.relieve({ kind: 'build', force: true });
+  assert.equal(r.what, 'o11-reader'); assert.equal(r.generation, 'recent', 'a build evicts the reader idle for 20 s (>= 5 s)');
+  assert.deepEqual(calls.filter(c => c.command === 'shutdown').map(c => c.port), [51], 'registered once; the busy one never asked');
 });
 
 test('ensureReader (M4): the startup deadline runs from the spawn, after a late admission; a reader that does not answer in time is killed and its hold released', async () => {

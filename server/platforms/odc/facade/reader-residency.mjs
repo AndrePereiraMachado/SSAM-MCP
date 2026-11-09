@@ -16,8 +16,9 @@
 //      runs out refuses the read, nothing started (memoryWaitRefusal, waitedFor memory).
 // SSAM_O11_READERS_MAX (>= 1) is a CEILING, not the number that fits (S1 R3, review R2 B-R2-2): the compose sets it per tier
 // (gen-compose sizing o11Readers, default every O11 version of the window); unset, every kernel of the image. What fits is
-// the gate's to decide: a reader that waits for memory asks one more idle reader to leave at each turn of its wait (B-R2-1),
-// least recently used first, until it is admitted or its wait runs out. The capacity model counts ONE resident reader per
+// the gate's to decide: every waiter of the gate (a reader, a build, a cold run, a worker start) asks one more idle reader to
+// leave at each relief turn of the gate (S1 R4, reader-client.mjs registerReaderEvictor, memory-room.mjs), least recently
+// used first, until it is admitted or its wait runs out. The capacity model counts ONE resident reader per
 // backend (S1-KIT-PLANO 0); a second one only lives while there is room. Hysteresis (B-R2-2): a reader read within
 // SSAM_O11_READER_MIN_IDLE_MS (default 60 s) is never asked to leave, so two customers of different versions on a full
 // backend do not stop each other's reader at every read; the cost of a switch is one cold start of the other version's
