@@ -123,6 +123,73 @@ test('agent-pack.ps1 -Platform mac: an IP finding in the tree read back deletes 
   } finally { fs.rmSync(work, { recursive: true, force: true }); }
 });
 
+// Mac app 0.2.8 (F4 of PLANO-AGENTE-AUTO): the macOS pack carries one O11 thin bridge per served Service Studio build, the same
+// layout as Windows (bin/o11/bridge = the newest, bin/o11/bridges/<x.y.z> = the others, pack.json o11Builds without null),
+// and the ODC bridge of the other Studio runtime (<prebuilt>\odc\bridge-net10.0 -> odc/studio/bridge/bin/Release/net10.0).
+const BUILDS = [['11.55.95', '10.0'], ['11.55.94', '10.0'], ['11.55.93', '8.0'], ['11.55.92', '8.0']];
+function withMacBuilds(dir) {
+  for (const [version, tfm] of BUILDS) {
+    write(path.join(dir, 'o11', 'builds', version, 'Anvil.Bridge.dll'), 'thin ' + version);
+    write(path.join(dir, 'o11', 'builds', version, 'Anvil.Bridge.deps.json'), JSON.stringify({ runtimeTarget: { name: '.NETCoreApp,Version=v' + tfm } }));
+  }
+  write(path.join(dir, 'odc', 'bridge-net10.0', 'ODC3.Bridge.v98.dll'), 'odc bridge v98 for net10');
+  write(path.join(dir, 'odc', 'bridge-net10.0', 'ODC3.Bridge.v98.deps.json'), JSON.stringify({ runtimeTarget: { name: '.NETCoreApp,Version=v10.0' } }));
+}
+test('agent-pack.ps1 -Platform mac: one O11 thin per Service Studio build (o11Builds, newest default) and the net10 ODC bridge', { skip: process.platform !== 'win32' }, () => {
+  const work = fs.mkdtempSync(path.join(os.tmpdir(), 'ssam-mac-pack-builds-'));
+  try {
+    fakePrebuilt(path.join(work, 'prebuilt')); withMacBuilds(path.join(work, 'prebuilt'));
+    const out = path.join(work, 'out', 'ssam-agent-mac.tar.gz');
+    const result = pack(['-Out', out, '-Lanes', 'odc,o11', '-NoBuild', '-Prebuilt', path.join(work, 'prebuilt'), '-Platform', 'mac']);
+    assert.equal(result.code, 0, result.out);
+    const files = readTarGz(out).filter(e => e.type === 'file');
+    const data = name => { const e = files.find(x => x.name === name); assert.ok(e, name); return e.data; };
+    const packText = data('pack.json').toString('utf8').replace(/^﻿/, '');
+    assert.equal(/\bnull\b/.test(packText), false, 'no null in pack.json');
+    const manifest = JSON.parse(packText);
+    const thin = 'bin/o11/bridge/Anvil.Bridge.dll';
+    assert.equal(manifest.platform, 'darwin'); assert.equal(manifest.o11BuiltFor, '11.55.95'); assert.equal(manifest.o11Hook, 'dev');
+    assert.equal(data(thin).toString(), 'thin 11.55.95');
+    assert.deepEqual(manifest.o11Bridge, { path: thin, sha256: sha(data(thin)) });
+    assert.deepEqual(manifest.o11Builds, BUILDS.map(([version, tfm], i) => {
+      const file = i === 0 ? thin : `bin/o11/bridges/${version}/Anvil.Bridge.dll`;
+      assert.equal(data(file).toString(), 'thin ' + version);
+      return { version, runtime: 'net' + tfm, path: file, sha256: sha(data(file)) };
+    }));
+    for (const build of manifest.o11Builds) assert.ok(manifest.files.some(f => f.path === build.path && f.sha256 === build.sha256), build.path);
+    for (const [version] of BUILDS.slice(1)) assert.ok(files.some(e => e.name === `bin/o11/bridges/${version}/Anvil.Bridge.deps.json`), version);
+    // Both ODC bridges: the pack's own (pinned as odcBridge) and the net10 one, found by the agent in the file list.
+    assert.equal(manifest.odcBridge, 'v97');
+    assert.equal(data('odc/studio/bridge/bin/Release/net10.0/ODC3.Bridge.v98.dll').toString(), 'odc bridge v98 for net10');
+    assert.ok(manifest.files.some(f => f.path === 'odc/studio/bridge/bin/Release/net10.0/ODC3.Bridge.v98.deps.json'));
+    // Still nothing a Mac pack never carries.
+    for (const e of files) assert.equal(/\.(exe|ps1)$/i.test(e.name) || /^bin\/o11\/connect\/|^odc\/studio\/bridge\/client\//.test(e.name), false, e.name);
+  } finally { fs.rmSync(work, { recursive: true, force: true }); }
+});
+
+test('agent-pack.ps1 -Platform mac: -O11Studios is no longer Windows-only; an extra ODC bridge of the pack runtime, or a second one in the folder, is refused', { skip: process.platform !== 'win32' }, () => {
+  const work = fs.mkdtempSync(path.join(os.tmpdir(), 'ssam-mac-pack-o11s-'));
+  try {
+    const prebuilt = path.join(work, 'prebuilt'); fakePrebuilt(prebuilt);
+    const out = path.join(work, 'out', 'ssam-agent-mac.tar.gz');
+    // The refusal is the -Prebuilt one, not the old "only on Windows" one.
+    const studios = pack(['-Out', out, '-Lanes', 'odc,o11', '-NoBuild', '-Prebuilt', prebuilt, '-Platform', 'mac', '-O11Studios', work]);
+    assert.notEqual(studios.code, 0); assert.match(studios.out, /-O11Studios compila as finas; com -Prebuilt/); assert.doesNotMatch(studios.out, /no Windows/);
+    write(path.join(prebuilt, 'odc', 'bridge-net8.0', 'ODC3.Bridge.v98.dll'), 'x');
+    const same = pack(['-Out', out, '-Lanes', 'odc,o11', '-NoBuild', '-Prebuilt', prebuilt, '-Platform', 'mac']);
+    assert.notEqual(same.code, 0); assert.match(same.out, /do runtime da bridge do pacote/);
+    fs.rmSync(path.join(prebuilt, 'odc', 'bridge-net8.0'), { recursive: true });
+    write(path.join(prebuilt, 'odc', 'bridge-net10.0', 'ODC3.Bridge.v98.dll'), 'x'); write(path.join(prebuilt, 'odc', 'bridge-net10.0', 'ODC3.Bridge.v99.dll'), 'y');
+    const two = pack(['-Out', out, '-Lanes', 'odc,o11', '-NoBuild', '-Prebuilt', prebuilt, '-Platform', 'mac']);
+    assert.notEqual(two.code, 0); assert.match(two.out, /achei 2/);
+    fs.rmSync(path.join(prebuilt, 'odc', 'bridge-net10.0', 'ODC3.Bridge.v99.dll'));
+    write(path.join(prebuilt, 'odc', 'bridge-net10.0', 'ODC3.Bridge.v98.deps.json'), JSON.stringify({ runtimeTarget: { name: '.NETCoreApp,Version=v8.0' } }));
+    const runtime = pack(['-Out', out, '-Lanes', 'odc,o11', '-NoBuild', '-Prebuilt', prebuilt, '-Platform', 'mac']);
+    assert.notEqual(runtime.code, 0); assert.match(runtime.out, /compilada para net8\.0, nao para net10\.0/);
+    assert.equal(fs.existsSync(out), false, 'no archive is left');
+  } finally { fs.rmSync(work, { recursive: true, force: true }); }
+});
+
 // Review B2: the guides of docs/ have no eol attribute, so a checkout with core.autocrlf gives them CRLF and the tar came
 // out different from one checkout to another. The macOS pack writes every text file with LF: a CRLF copy of the box gives
 // the same bytes as an LF one.

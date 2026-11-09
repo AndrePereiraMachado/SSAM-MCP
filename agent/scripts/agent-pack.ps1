@@ -23,7 +23,12 @@
 #        o ServiceStudio.Common.dll referencia). A mais nova vai em bin\o11\bridge (o padrao: o11BuiltFor e o11Bridge, o que o
 #        agente antigo le); as outras em bin\o11\bridges\<x.y.z>. pack.json o11Builds lista todas; o agente escolhe a do Service
 #        Studio que o cliente tem. Com -Prebuilt, o mesmo vem de <pasta>\o11\builds\<x.y.z>\Anvil.Bridge.dll (+ .deps.json).
-#        So com o gancho dev.
+#        So com o gancho dev; vale tambem com -Platform mac (agente Mac 0.2.8: as MESMAS finas do Windows, uma por build; o
+#        nucleo nativo escolhe a do Service Studio instalado no Mac por O11Builds.cs, como no Windows).
+#   -Prebuilt <pasta>\odc\bridge-<tfm>\ODC3.Bridge.v<N>.dll (+ .deps.json), opcional: a bridge ODC de OUTRO runtime do ODC Studio
+#        (ex.: bridge-net10.0 com a v109 ao lado da v108 net8 de <pasta>\odc\bridge), copiada para
+#        odc\studio\bridge\bin\Release\<tfm>\. O .deps.json, quando existe, tem de ser desse runtime. pack.json continua a fixar
+#        so a bridge de <pasta>\odc\bridge (odcBridge, odcRuntime); o agente acha as outras pela lista de arquivos (odcBridges).
 #   -NoBridgeOffer: pack.json bridgeOffer false, o pacote do app de teste sem as ancoras (o agente nunca pede oferta de bridge).
 #   -ExpectO11 <x.y.z> (imagem interina, desenho multiversao O.6.1): a fina sai compilada contra a pasta do Service Studio
 #        daquela versao (ANVIL_STUDIO_DIR, nunca a copia de faixa 'Service Studio 11 - Anvil ...'), ou o script para. O
@@ -46,6 +51,7 @@
 #        docs\AGENTE-MAC.md. O pack.json diz platform darwin e nao tem valores nulos (o install.sh le com plutil). O tar.gz
 #        sai de scripts\tar-gz.mjs (modo 0755 nos .sh), e lido de volta e conferido, e a arvore lida de volta passa pela
 #        mesma varredura de PI (num ZIP temporario, pack-ip-scan.ps1 -Zip sem mudanca). So -Hook dev; -Out termina em .tar.gz.
+#        Com -O11Studios ou <pasta>\o11\builds, o pack.json do macOS tambem lista o11Builds (bin\o11\bridges\<x.y.z>\).
 param(
   [string]$Out,
   [string]$Lanes = 'odc,o11',
@@ -105,7 +111,7 @@ if ($Hook -eq 'h1') {
 if ($NoBuild -and -not $Prebuilt) { throw '-NoBuild exige -Prebuilt <pasta>.' }
 if ($O11Studios) {
   if ($laneList -notcontains 'o11') { throw '-O11Studios e da faixa o11: inclua o11 em -Lanes.' }
-  if ($Hook -ne 'dev' -or $mac) { throw '-O11Studios so vale com o gancho dev no Windows.' }
+  if ($Hook -ne 'dev') { throw '-O11Studios so vale com o gancho dev.' }
   if ($Prebuilt) { throw '-O11Studios compila as finas; com -Prebuilt use <pasta>\o11\builds\<x.y.z>.' }
   if ($ExpectO11) { throw '-O11Studios ja diz as versoes: nao combina com -ExpectO11.' }
 }
@@ -122,7 +128,8 @@ $tree = Join-Path $work 'tree'
 function Test-Forbidden([string]$relative) {
   $r = $relative -replace '/', '\'
   # These are versioned program sources, not runtime credential storage.
-  if ($r -in @('agent\lib\credential-session.mjs','agent\lib\credential-vault.ps1','agent\lib\credential-auth.ps1')) { return $false }
+  # credential-session-lifetime.mjs (c20454c, agent 0.2.7) is one of them: without it here every pack since 0.2.7 was refused.
+  if ($r -in @('agent\lib\credential-session.mjs','agent\lib\credential-session-lifetime.mjs','agent\lib\credential-vault.ps1','agent\lib\credential-auth.ps1')) { return $false }
   if ($r -match '\.(cs|csproj|sln|pdb|key|pfx|snk)$') { return $true }
   if ($r -match '(^|\\)\.local(\\|$)') { return $true }
   if ($r -match '(^|\\)(credential[^\\]*|tokens\.json|[^\\]*\.credentials\.json|config\.json)$') { return $true }
@@ -442,6 +449,30 @@ try {
     }
     if ($OdcRuntime -and $built -and $built -ne $OdcRuntime) { throw "ODC3.Bridge.$odcBridge foi compilada para $built, nao para -OdcRuntime $OdcRuntime." }
     $odcRuntimeOfPack = $(if ($built) { $built } elseif ($signedRuntime) { $signedRuntime } elseif ($OdcRuntime -and -not $Prebuilt) { $OdcRuntime } else { $null })
+    # The bridge of another ODC Studio runtime (-Prebuilt <pasta>\odc\bridge-<tfm>\, e.g. v109 for net10 beside v108 for net8):
+    # exactly one ODC3.Bridge.v<N>.dll, another version and another runtime than the pack's bridge, its .deps.json (when
+    # present) built for that runtime; it goes to odc\studio\bridge\bin\Release\<tfm>\, where the agent finds it (odcBridges).
+    if ($Prebuilt -and (Test-Path -LiteralPath (Join-Path $Prebuilt 'odc') -PathType Container)) {
+      foreach ($extra in @(Get-ChildItem -LiteralPath (Join-Path $Prebuilt 'odc') -Directory | Where-Object { $_.Name -like 'bridge-*' } | Sort-Object Name)) {
+        $tfm = [regex]::Match($extra.Name, '^bridge-(net\d+\.\d+)$').Groups[1].Value
+        if (-not $tfm) { throw "Pasta de bridge ODC extra invalida: $($extra.Name) (use bridge-net<N>.<M>)." }
+        if ($tfm -eq 'net8.0' -or $tfm -eq $odcRuntimeOfPack) { throw "A bridge ODC extra $($extra.Name) e do runtime da bridge do pacote: use outro runtime." }
+        $extraDlls = @(Get-ChildItem -LiteralPath $extra.FullName -Filter 'ODC3.Bridge.v*.dll' -File)
+        if ($extraDlls.Count -ne 1) { throw "Esperava uma bridge ODC3.Bridge.v<N>.dll em $($extra.FullName); achei $($extraDlls.Count)." }
+        $extraVersion = [regex]::Match($extraDlls[0].Name, '^ODC3\.Bridge\.(v\d+)\.dll$').Groups[1].Value
+        if (-not $extraVersion -or $extraVersion -eq $odcBridge) { throw "A bridge ODC extra de $($extra.Name) tem de ter outra versao que $odcBridge." }
+        $extraDeps = Join-Path $extra.FullName "ODC3.Bridge.$extraVersion.deps.json"
+        if (Test-Path -LiteralPath $extraDeps) {
+          $extraBuilt = $null
+          try { $extraBuilt = [regex]::Match([string](Get-Content -LiteralPath $extraDeps -Raw | ConvertFrom-Json).runtimeTarget.name, 'Version=v(\d+\.\d+)').Groups[1].Value } catch { $extraBuilt = $null }
+          if ($extraBuilt -and ('net' + $extraBuilt) -ne $tfm) { throw "ODC3.Bridge.$extraVersion foi compilada para net$extraBuilt, nao para $tfm." }
+        }
+        $extraOut = Join-Path $tree ('odc\studio\bridge\bin\Release\' + $tfm)
+        New-Item -ItemType Directory -Force $extraOut | Out-Null
+        Copy-Item -LiteralPath $extraDlls[0].FullName -Destination $extraOut
+        if (Test-Path -LiteralPath $extraDeps) { Copy-Item -LiteralPath $extraDeps -Destination $extraOut }
+      }
+    }
     # macOS: no attach client (the agent speaks the diagnostic IPC itself).
     if (-not $mac) {
       Copy-Folder $clientFrom (Join-Path $tree 'odc\studio\bridge\client\bin\Release\net10.0')
@@ -481,7 +512,8 @@ try {
       Copy-Folder (Join-Path $staging ('builds\' + $studios[0].Version)) (Join-Path $staging 'bridge')
       $o11BuiltFor = $studios[0].Version
       if ($Hook -eq 'dev') { Invoke-Build 'kernel\tools\Anvil.RuntimeHook\Anvil.RuntimeHook.csproj' (Join-Path $staging 'hook') @('-p:AssemblyName=Anvil.RuntimeHook.Agent') 'hook' }
-      Invoke-Build 'kernel\tools\Anvil.Connect\Anvil.Connect.csproj' (Join-Path $staging 'connect') @() 'connect'
+      # macOS has no Anvil.Connect (the agent speaks the diagnostic IPC itself): nothing to build for it.
+      if (-not $mac) { Invoke-Build 'kernel\tools\Anvil.Connect\Anvil.Connect.csproj' (Join-Path $staging 'connect') @() 'connect' }
       foreach ($part in $parts) { Copy-Folder (Join-Path $staging $part) $(if ($part -eq 'bridge') { $bridgeOut } else { Join-Path $o11Out $part }) }
     } else {
       $ssDir = Get-KernelStudio
@@ -516,7 +548,7 @@ try {
     # o11Builds: the default bridge first, then one folder per other Service Studio version (bin\o11\bridges\<x.y.z>).
     $buildsFrom = $(if ($O11Studios) { Join-Path $work 'o11\builds' } elseif ($Prebuilt -and (Test-Path -LiteralPath (Join-Path $Prebuilt 'o11\builds'))) { Join-Path $Prebuilt 'o11\builds' } else { $null })
     if ($buildsFrom) {
-      if ($Hook -ne 'dev' -or $mac) { throw 'Uma fina por versao (o11\builds) so vale com o gancho dev no Windows.' }
+      if ($Hook -ne 'dev') { throw 'Uma fina por versao (o11\builds) so vale com o gancho dev.' }
       $versions = @(Get-ChildItem -LiteralPath $buildsFrom -Directory | Where-Object { $_.Name -match '^\d+\.\d+\.\d+$' } | Sort-Object { [version]$_.Name } -Descending)
       if ($versions.Count -eq 0) { throw "Nenhuma fina por versao em $buildsFrom" }
       if ($Prebuilt) {
@@ -580,6 +612,8 @@ try {
     if ($odcBridge) { $pack.odcBridge = $odcBridge }
     if ($odcRuntimeOfPack) { $pack.odcRuntime = $odcRuntimeOfPack }
     if ($o11BuiltFor) { $pack.o11BuiltFor = $o11BuiltFor; $pack.o11Hook = $Hook; $pack.o11Bridge = [ordered]@{ path = $o11Bridge.path; sha256 = $o11Bridge.sha256 } }
+    # One thin bridge per Service Studio build, as on Windows (no null in an entry: version, runtime, path and sha256).
+    if ($o11Builds) { $pack.o11Builds = @($o11Builds) }
     $pack.node = $node
     $pack.files = $files
     [IO.File]::WriteAllText((Join-Path $tree 'pack.json'), ($pack | ConvertTo-Json -Depth 5).Replace("`r`n", "`n"), $utf8)
