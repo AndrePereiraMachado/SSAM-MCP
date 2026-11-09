@@ -282,12 +282,39 @@ function launch(target, spawnFn) {
   } finally { fs.closeSync(log); }
 }
 
+// S1 R3 (C:\t\r5\janela-4x4\S1-KIT-PLANO.md 0): the ODC lane worker of a hosted backend is a resident process the r45
+// capacity model never counted (VmRSS 1498, VmHWM 2116 MiB on v5 2026-11-09). Hosted (or with deps.gate), its start is
+// admitted by the memory gate of this server with the worker reserve (memory-room.mjs odcWorkerReserveMb, the measured peak)
+// as a STANDING hold attached to its pid: while it lives, every later admission counts its growth still to come (reserve
+// minus RSS). A worker already up that this process holds nothing for (started before, by a warm-up or another call) is
+// adopted the same way, without a wait: it is in the container's memory already. A start that finds no room within
+// workerWaitMs (default 15 s) launches nothing: {status:null, note, memory} and the caller runs the command cold, in a
+// process admitted with the ODC cold reserve (anvil-cli.mjs) or inside the build-pool slot that reserved it, whose own
+// wait refuses with BUILD_QUEUE_TIMEOUT (outcome not-sent) when even that does not fit. Never an unadmitted start.
+const standingWorkers = new Map(); // port -> standing hold of this process
+const workerGate = (target, deps) => deps.gate !== undefined ? deps.gate : (target.lane === 'odc' && hostedContext() ? memoryGate() : null);
+export function standWorker(gate, port, pid, mb) {
+  if (!gate || !Number.isInteger(pid) || pid <= 0) return null;
+  const held = standingWorkers.get(port);
+  if (held && held.pid === pid && !held.released) return held;
+  held?.release();
+  const hold = gate.hold(mb, { standing: true }); hold.attach(pid); standingWorkers.set(port, hold);
+  return hold;
+}
+export const standingWorkerHold = port => standingWorkers.get(port) ?? null;
+
 // The worker on the target port is up and serves the selected Studio: {status}; else {status:null, note} and the
 // caller runs cold. warning: it serves an older kernel because it is busy. A worker of another installation (C35) or of
 // an older kernel is stopped when idle (stopWorker) and a new one started for the selected installation; when busy, the
 // other installation's worker serves nobody here (cold) and the older kernel serves with the warning.
 // deps: spawnFn, now, and stopWorker's identity/alive/kill/waitMs/exitMs (tests: never a real process).
 export async function ensureWorker(target, deps = {}) {
+  const gate = workerGate(target, deps);
+  const state = await ensureWorkerOnce(target, deps, gate);
+  if (gate && state?.status && !state.started) standWorker(gate, target.port, Number(state.status.pid), gate.settings.odcWorkerReserveMb);
+  return state;
+}
+async function ensureWorkerOnce(target, deps, gate) {
   const { spawnFn = spawn, now = Date.now } = deps;
   const port = target.port;
   const otherStudio = (s, why = 'ran cold') => ({ status: null, note: `the worker on port ${port} serves ${s.studio ?? 'an unknown installation'}, not ${target.selectedStudio}; ${why}` });
@@ -316,13 +343,28 @@ export async function ensureWorker(target, deps = {}) {
       if (s && !s.recycling) return studioMatches(s, target.selectedStudio) ? { status: s } : otherStudio(s);
       if (s) return { status: null, note: `the worker on port ${port} did not finish recycling` };
     } else if (await listening(port)) return { status: null, note: `port ${port} accepts connections but does not answer the worker ping; nothing was stopped; ran cold` };
+    let admitted = null;
+    if (gate) {
+      admitted = await gate.admit(gate.settings.odcWorkerReserveMb, { waitMs: gate.settings.workerWaitMs, standing: true });
+      if (admitted.timedOut) return { status: null, memory: { waitedMs: admitted.waitedMs, reserveMb: gate.settings.odcWorkerReserveMb, shortMb: admitted.shortMb },
+        note: `the ${target.lane} worker needs ${gate.settings.odcWorkerReserveMb} MB of room under this server's memory limit and found ${Math.max(0, Math.round(admitted.shortMb ?? 0))} MB within ${Math.round(admitted.waitedMs / 1000)} s; nothing was started; ran cold` };
+    }
     const launchedMs = now();
-    const child = launch(target, spawnFn);
+    let child;
+    try { child = launch(target, spawnFn); } catch (error) { admitted?.hold?.release(); throw error; }
+    const own = admitted?.hold ?? null;
+    if (own) { own.attach(child.pid); child.once?.('exit', () => own.release()); child.once?.('error', () => own.release()); }
     let exited = null;
     const wake = new Promise(resolve => { child.once?.('exit', code => { exited = code ?? 'signal'; resolve(); }); child.once?.('error', error => { exited = error.message; resolve(); }); });
     await until(async () => { s = await ping(target, 500); return Boolean(s) || exited !== null; }, target.waitMs, { now, wake });
     if (!s && exited !== null) s = await ping(target); // another starter may have won the port
-    if (s) { remember(target, s, launchedMs); return studioMatches(s, target.selectedStudio) ? { status: s, started: true } : otherStudio(s); }
+    if (s) {
+      remember(target, s, launchedMs);
+      // The standing hold follows the worker that answers (another starter may have won the port: its pid, not ours).
+      if (own) { if (Number(s.pid) === child.pid || !Number.isInteger(Number(s.pid))) { standingWorkers.get(port)?.release(); standingWorkers.set(port, own); } else { own.release(); standWorker(gate, port, Number(s.pid), own.mb); } }
+      return studioMatches(s, target.selectedStudio) ? { status: s, started: true } : otherStudio(s);
+    }
+    own?.release();
     return { status: null, note: exited !== null
       ? `worker startup failed (exit ${exited}); see ${path.join(target.local, `worker-${port}-startup.log`)}`
       : `worker did not start within ${Math.round(target.waitMs / 1000)} s` };

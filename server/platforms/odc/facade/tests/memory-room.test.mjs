@@ -30,7 +30,8 @@ test('the room is the container\'s free memory under its limit (page cache credi
   assert.equal(roomMb({ platform: 'win32', readFile: four }), null);
   assert.equal(roomMb({ platform: 'linux', readFile: files({}) }), null);
   assert.equal(processRssMb(42, { platform: 'linux', readFile: files({ '/proc/42/status': 'Name: dotnet\nVmRSS:   1048576 kB\n' }) }), 1024);
-  assert.deepEqual(memorySettings({}), { reserveMb: 1400, odcReserveMb: 600, waitMs: 120000, growMs: 15000 });
+  assert.deepEqual(memorySettings({}), { reserveMb: 1400, odcReserveMb: 600, waitMs: 120000, growMs: 15000, odcWorkerReserveMb: 2150, workerWaitMs: 15000 });
+  assert.equal(memorySettings({ SSAM_MEMORY_RESERVE_ODC_WORKER_MB: '1800', SSAM_MEMORY_WORKER_WAIT_MS: '5000' }).odcWorkerReserveMb, 1800);
   assert.deepEqual(memorySettings({ SSAM_MEMORY_RESERVE_MB: '0', SSAM_MEMORY_WAIT_MS: 'x' }).reserveMb, 0);
 });
 
@@ -156,4 +157,24 @@ test('an ODC build in a pool slot puts its pid on the slot\'s hold while it runs
   // Outside a slot (no hold): nothing attached.
   const bare = slotExec(slot, runner, gate)('dotnet', [], {}); finish({}); await bare;
   hold.release();
+});
+
+// S1 R3: a resident process that outlives its call (the ODC lane worker) keeps a STANDING hold while it lives: its growth
+// still to come (reserve minus RSS) counts in every later decision, a lone build included, and the hold goes with the process.
+test('standing hold: the growth still to come of a resident worker counts while it lives, also against a lone build; it goes with its process', async () => {
+  const rss = new Map([[900, 1500]]);
+  const gate = createMemoryGate({ room: () => 2000, rssOf: pid => rss.get(pid) ?? null, settings: { reserveMb: 1400, odcReserveMb: 600, waitMs: 120, growMs: 15000, odcWorkerReserveMb: 2150, workerWaitMs: 100 } });
+  const worker = await gate.admit(2150, { standing: true });
+  assert.equal(worker.timedOut, false, 'the first process of the server always starts');
+  worker.hold.attach(900);
+  assert.equal(gate.pendingMb(), 650, 'reserve 2150 minus RSS 1500: its growth to come');
+  assert.deepEqual(gate.stats(), { admitted: 1, standing: 1, pendingMb: 650 });
+  const build = await gate.admit(1400);
+  assert.equal(build.timedOut, true, 'room 2000 - 650 to come < 1400: the build waits and is refused, never handed to the OOM');
+  rss.set(900, 2150);
+  const later = await gate.admit(1400);
+  assert.equal(later.timedOut, false, 'at its peak nothing more is to come: room 2000 fits the build'); later.hold.release();
+  rss.delete(900); // the worker exited (idle exit): no resident set any more
+  assert.equal(gate.pendingMb(), 0); assert.deepEqual(gate.stats(), { admitted: 0, pendingMb: 0 }, 'its hold went with it');
+  assert.equal(worker.hold.released, true);
 });

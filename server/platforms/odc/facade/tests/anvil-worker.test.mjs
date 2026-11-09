@@ -299,3 +299,47 @@ test('transport: refused before sending is marked so; a foreign reply and a time
   const silent = await workerRequest({ port: foreign.port, timeoutMs: 200 }, ['apply']);
   assert.deepEqual([silent.sent, silent.code, silent.reply], [true, 'WORKER_TIMEOUT', undefined]);
 });
+
+// S1 R3 (option 3): hosted (here deps.gate), the ODC lane worker starts only when the memory gate admits its reserve (the
+// measured peak), and keeps a standing hold on its pid while it lives; a start without room launches nothing (the caller
+// runs cold, admitted with its own reserve); a worker already up is adopted without a wait.
+test('ODC worker under the memory gate: admitted start with a standing hold, no launch without room, adoption of a running worker', async t => {
+  const { createMemoryGate } = await import('../memory-room.mjs');
+  const { standingWorkerHold } = await import('../anvil-worker.mjs');
+  const s = sandbox(t);
+  const settings = { reserveMb: 1400, odcReserveMb: 600, waitMs: 1000, growMs: 15000, odcWorkerReserveMb: 2150, workerWaitMs: 150 };
+  // No room: another admitted process holds the container (room 1000 < 2150).
+  const port = await freePort();
+  const target = s.odc(port); s.cli(target);
+  const short = createMemoryGate({ room: () => 1000, rssOf: () => 100, settings });
+  const other = short.hold(500);
+  const spawnFn = fakeSpawn();
+  const refused = await ensureWorker(target, { spawnFn, gate: short });
+  assert.equal(refused.status, null); assert.equal(spawnFn.calls.length, 0, 'nothing launched');
+  assert.match(refused.note, /needs 2150 MB of room .*nothing was started; ran cold/);
+  assert.equal(refused.memory.reserveMb, 2150);
+  assert.deepEqual(short.stats().admitted, 1, 'the refused start holds nothing');
+  other.release();
+  // Room: launched, its pid attached to a standing hold that counts its growth to come.
+  let fake = null; t.after(() => fake?.close());
+  const rss = new Map([[777, 1500]]);
+  const gate = createMemoryGate({ room: () => 6000, rssOf: pid => rss.get(pid) ?? null, settings });
+  const busy = gate.hold(0);
+  const spawnOk = fakeSpawn({ delayMs: 150, then: async () => { fake = await fakeWorker({ port, key: 'KEY', status: { instanceId: 'w1', pid: 777 } }); } });
+  const r = await ensureWorker(target, { spawnFn: spawnOk, gate });
+  assert.equal(r.status.instanceId, 'w1'); assert.equal(spawnOk.calls.length, 1);
+  const held = standingWorkerHold(port);
+  assert.equal(held.pid, 777); assert.equal(held.standing, true); assert.equal(held.mb, 2150);
+  assert.equal(gate.pendingMb(), 650, 'its growth to come');
+  // Up already: no second hold for the same worker.
+  await ensureWorker(target, { spawnFn: spawnOk, gate });
+  assert.equal(gate.stats().standing, 1); assert.equal(spawnOk.calls.length, 1);
+  busy.release();
+  // A worker this process holds nothing for (another pid on the port): adopted, no wait, no launch.
+  await fake.close(); fake = await fakeWorker({ port, key: 'KEY', status: { instanceId: 'w2', pid: 778 } });
+  rss.delete(777); rss.set(778, 1900);
+  await ensureWorker(target, { spawnFn: spawnOk, gate });
+  assert.equal(standingWorkerHold(port).pid, 778); assert.equal(held.released, true, 'the old hold went with its process');
+  assert.equal(gate.pendingMb(), 250); assert.equal(spawnOk.calls.length, 1);
+  rss.delete(778); assert.equal(gate.pendingMb(), 0, 'gone with its process');
+});

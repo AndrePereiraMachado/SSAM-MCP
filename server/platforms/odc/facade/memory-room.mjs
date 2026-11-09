@@ -23,6 +23,14 @@
 //   The gate is code of the server image: it holds only in images built from e04cfb7 or later (review R3 A2).
 //   - run(hold, fn): fn and everything it awaits run as admitted (AsyncLocalStorage): a cold process started inside a
 //     build-pool slot attaches its pid to the slot's hold instead of waiting a second time.
+//   - Standing holds (S1 R3, C:\t\r5\janela-4x4\S1-KIT-PLANO.md 0): a resident process that outlives the call that started it
+//     (the ODC lane worker, anvil-worker.mjs) keeps its hold while it lives: admit(mb, {standing: true}) and attach(pid). What
+//     it has not shown yet is its reserve (the measured peak, SSAM_MEMORY_RESERVE_ODC_WORKER_MB, default 2150: VmHWM 2116 MiB
+//     on v5 2026-11-09) minus its resident set, i.e. its growth still to come (~620 MiB from a 1498 MiB RSS), counted in every
+//     later decision; it counts as an admitted process (a lone build no longer passes without the room the worker may still
+//     take). The hold goes when its process does: release() on exit, or the first decision that finds no resident set for it
+//     (its process is gone). SSAM_MEMORY_WORKER_WAIT_MS (default 15 s): how long a resident worker's start waits for room
+//     before its caller runs the command cold instead (a cold process, admitted with its own smaller reserve).
 import fs from 'node:fs';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { EventEmitter } from 'node:events';
@@ -32,6 +40,8 @@ export const DEFAULT_MEMORY_RESERVE_MB = 1400;
 export const DEFAULT_MEMORY_RESERVE_ODC_MB = 600;
 export const DEFAULT_MEMORY_WAIT_MS = 120000;
 export const DEFAULT_MEMORY_GROW_MS = 15000;
+export const DEFAULT_MEMORY_RESERVE_ODC_WORKER_MB = 2150;
+export const DEFAULT_MEMORY_WORKER_WAIT_MS = 15000;
 export const MEMORY_WAIT_CODE = 'BUILD_QUEUE_TIMEOUT';
 export const MEMORY_WAIT_WHY = 'this server stayed short of the memory a kernel process needs past the limit; none of this call ran: the doctor shows the lane, and the same call may be repeated';
 
@@ -86,6 +96,8 @@ export function memorySettings(env = process.env) {
     odcReserveMb: setting(env.SSAM_MEMORY_RESERVE_ODC_MB, DEFAULT_MEMORY_RESERVE_ODC_MB),
     waitMs: setting(env.SSAM_MEMORY_WAIT_MS, DEFAULT_MEMORY_WAIT_MS),
     growMs: setting(env.SSAM_MEMORY_GROW_MS, DEFAULT_MEMORY_GROW_MS),
+    odcWorkerReserveMb: setting(env.SSAM_MEMORY_RESERVE_ODC_WORKER_MB, DEFAULT_MEMORY_RESERVE_ODC_WORKER_MB),
+    workerWaitMs: setting(env.SSAM_MEMORY_WORKER_WAIT_MS, DEFAULT_MEMORY_WORKER_WAIT_MS),
   };
 }
 
@@ -95,13 +107,18 @@ export function createMemoryGate({ room = () => roomMb(), rssOf = pid => process
   const bus = new EventEmitter(); bus.setMaxListeners(0);
   const store = new AsyncLocalStorage();
   const shownLater = h => {
-    if (h.pid) { let rss = null; try { rss = rssOf(h.pid); } catch { rss = null; } return Math.max(0, h.mb - (Number.isFinite(rss) ? rss : 0)); }
+    if (h.pid) {
+      let rss = null; try { rss = rssOf(h.pid); } catch { rss = null; }
+      // A standing hold whose process shows no resident set any more: the process is gone, and so is its hold.
+      if (h.standing && !Number.isFinite(rss)) { h.release(); return 0; }
+      return Math.max(0, h.mb - (Number.isFinite(rss) ? rss : 0));
+    }
     return now() - h.at < settings.growMs ? h.mb : 0;
   };
   // What the admitted processes (and the registered providers) have not shown in memory yet, in MB.
   const pendingMb = ({ others = true } = {}) => {
     let total = 0;
-    for (const h of holds) total += shownLater(h);
+    for (const h of [...holds]) total += shownLater(h);
     if (others) for (const f of extra) { try { const v = f(); if (Number.isFinite(v) && v > 0) total += v; } catch { /* a provider decides nothing */ } }
     return total;
   };
@@ -113,18 +130,18 @@ export function createMemoryGate({ room = () => roomMb(), rssOf = pid => process
     const left = r - pendingMb();
     return left >= mb ? null : left;
   };
-  function hold(mb) {
-    const h = { mb: Math.max(0, mb | 0), at: now(), pid: null,
+  function hold(mb, { standing = false } = {}) {
+    const h = { mb: Math.max(0, mb | 0), at: now(), pid: null, standing: standing === true,
       attach(pid) { if (Number.isInteger(pid) && pid > 0) h.pid = pid; },
       // The process attached ended: its memory is gone, nothing is pending for it until the next one attaches.
       detach() { h.pid = null; h.at = -Infinity; },
-      release() { if (holds.delete(h)) bus.emit('change'); } };
+      release() { h.released = true; if (holds.delete(h)) bus.emit('change'); } };
     holds.add(h);
     return h;
   }
   // Waits for the room mb needs (at most waitMs), then holds it: {hold, waitedMs, timedOut: false}; a wait that runs out
   // holds nothing: {hold: null, waitedMs, timedOut: true, shortMb} and the caller refuses (memoryWaitRefusal).
-  async function admit(mb, { waitMs = settings.waitMs } = {}) {
+  async function admit(mb, { waitMs = settings.waitMs, standing = false } = {}) {
     const started = now();
     let step = 50, short = shortOf(mb), timedOut = false;
     while (short !== null) {
@@ -139,14 +156,14 @@ export function createMemoryGate({ room = () => roomMb(), rssOf = pid => process
       short = shortOf(mb);
     }
     if (timedOut) return { hold: null, waitedMs: now() - started, timedOut, shortMb: short };
-    return { hold: hold(mb), waitedMs: now() - started, timedOut };
+    return { hold: hold(mb, { standing }), waitedMs: now() - started, timedOut };
   }
   return {
     settings, pendingMb, fits: mb => shortOf(mb) === null, hold, admit,
     run: (h, fn) => store.run(h, fn), current: () => store.getStore() ?? null,
     addPending(fn) { extra.add(fn); return () => extra.delete(fn); },
     onChange(fn) { bus.on('change', fn); return () => bus.off('change', fn); },
-    stats: () => ({ admitted: holds.size, pendingMb: pendingMb() }),
+    stats: () => { const pending = pendingMb(), standing = [...holds].filter(h => h.standing).length; return { admitted: holds.size, ...(standing ? { standing } : {}), pendingMb: pending }; },
   };
 }
 
