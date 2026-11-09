@@ -7,6 +7,9 @@
 // Review R4 (M-R4-1, B-R4-1, B-R4-4): only the profile of the real ZIPs passes: extra fields 0x5455 and 0x7875 only, the same in
 // the local header and the central record, flags 0, printable ASCII names. The review's R4 probes (fixtures/review-r4-probes.json,
 // the exact bytes of C:\t\r5\mac-028\review\r4-probes\zips) are checked one by one.
+// Review R5 (B-R5-1, B-R5-2): no setuid, setgid or sticky bit, and each extra field in the exact shape of the real ZIPs. The
+// review's R5 probes (fixtures/review-r5-probes.json) are refused as they are (their base 0x5455 is not the real shape), and
+// the same tricks are made again over the real shape here, each refused for its own reason.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
@@ -28,6 +31,7 @@ const PROBE_ZIP = Buffer.from(
   'UEsFBgAAAAADAAMA0wAAABwBAAAAAA==',
   'base64');
 const R4_PROBES = JSON.parse(fs.readFileSync(new URL('./fixtures/review-r4-probes.json', import.meta.url), 'utf8')).probes;
+const R5_PROBES = JSON.parse(fs.readFileSync(new URL('./fixtures/review-r5-probes.json', import.meta.url), 'utf8')).probes;
 const CRC_TABLE = Array.from({ length: 256 }, (_, n) => { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; return c >>> 0; });
 const crc32 = bytes => { let c = 0xffffffff; for (const b of bytes) c = CRC_TABLE[(c ^ b) & 0xff] ^ (c >>> 8); return (c ^ 0xffffffff) >>> 0; };
 const MODE = { d: 0o040755, '-': 0o100644, l: 0o120755 };
@@ -42,7 +46,7 @@ const UNIX_EXTRA = {
   local: Buffer.concat([field(0x5455, Buffer.from([3, 1, 2, 3, 4, 1, 2, 3, 4])), UX]),
 };
 
-// entries: [{name, type, data, deflate, descriptor, signed, localName, flags, madeBy, extra, localExtra}] (extra defaults to the
+// entries: [{name, type, mode, data, deflate, descriptor, signed, localName, flags, madeBy, extra, localExtra}] (extra defaults to the
 // real ZIPs' fields; localExtra to extra when it is given, else to the real local fields); tweak(parts) may change the pieces
 // (local records, central records) before they are joined.
 function writeZip(entries, { tweak = null, comment = '', prefix = Buffer.alloc(0), trailer = Buffer.alloc(0) } = {}) {
@@ -69,7 +73,7 @@ function writeZip(entries, { tweak = null, comment = '', prefix = Buffer.alloc(0
     const central = Buffer.alloc(46);
     central.writeUInt32LE(0x02014b50, 0); central.writeUInt16LE(e.madeBy ?? 0x031e, 4); central.writeUInt16LE(20, 6); central.writeUInt16LE(flags, 8);
     central.writeUInt16LE(method, 10); central.writeUInt32LE(crc, 16); central.writeUInt32LE(body.length, 20); central.writeUInt32LE(plain.length, 24);
-    central.writeUInt16LE(name.length, 28); central.writeUInt16LE(extra.length, 30); central.writeUInt32LE((MODE[e.type ?? (e.name.endsWith('/') ? 'd' : '-')] << 16) >>> 0, 38);
+    central.writeUInt16LE(name.length, 28); central.writeUInt16LE(extra.length, 30); central.writeUInt32LE(((e.mode ?? MODE[e.type ?? (e.name.endsWith('/') ? 'd' : '-')]) << 16) >>> 0, 38);
     central.writeUInt32LE(e.offset ?? offset, 42);
     locals.push({ entry: e, bytes: record }); centrals.push({ entry: e, bytes: Buffer.concat([central, name, extra]) });
     offset += record.length;
@@ -170,7 +174,7 @@ test('review R4: only the real ZIPs\' profile passes (extra fields 0x5455/0x7875
   }
   // The allowed fields, but not the same ones in the same order in both headers.
   const swapped = Buffer.concat([UX, field(0x5455, Buffer.from([3, 1, 2, 3, 4, 1, 2, 3, 4]))]);
-  for (const localExtra of [swapped, UX, Buffer.alloc(0), Buffer.concat([UNIX_EXTRA.local, UX])])
+  for (const localExtra of [swapped, UX, Buffer.alloc(0)])
     assert.match(String(structureOf(t, at2({ localExtra })).problem), /Info\.plist" has other extra fields in its local header than in its central record/);
   // B-R4-1: any flag, the data descriptor (signed or not, even when it repeats the directory's CRC and sizes) and UTF-8 among them.
   for (const [change, shown] of [[{ descriptor: true }, '8'], [{ descriptor: true, signed: false }, '8'], [{ flags: 0x0800 }, '800'], [{ flags: 0x0002 }, '2'], [{ flags: 0x0040 }, '40'], [{ flags: 0x2000 }, '2000']])
@@ -213,6 +217,41 @@ test('the review R4 probes (exact bytes): the Unicode Path extras, the data desc
     const answer = structureOf(t, bytes);
     if (pattern === null) { assert.equal(answer.problem, undefined, name); assert.equal(gateOf(answer), null, name); }
     else assert.match(String(answer.problem), pattern, name);
+  }
+});
+
+test('review R5: no setuid, setgid or sticky bit (B-R5-1); 0x5455 and 0x7875 only in the real ZIPs\' shapes (B-R5-2)', t => {
+  const at = (i, change) => writeZip(tree().map((e, j) => j === i ? { ...e, ...change } : e));
+  // The modes of the real ZIPs pass (40755, 100644, 100755, 120755); 0o7000 bits fail on files, folders and symlinks.
+  assert.equal(structureOf(t, at(2, { mode: 0o100755 })).problem, undefined);
+  for (const [i, mode] of [[2, 0o104755], [2, 0o102755], [2, 0o101755], [1, 0o041777], [1, 0o042755], [7, 0o124755]])
+    assert.match(String(structureOf(t, at(i, { mode })).problem), new RegExp(`has mode ${mode.toString(8)}: a setuid, setgid or sticky bit`));
+  // The review's R5 tricks over the real shape (make-probes-r5.mjs: X1 a 13-byte local 0x5455, X2/X3/X4 a whole 0x7075 inside
+  // the payload of 0x5455 or 0x7875, X5 an overrun, X6 empty and repeated fields, X7 a ux with an 8-byte uid), on Info.plist.
+  const up = field(0x7075, Buffer.concat([Buffer.from([1, 0, 0, 0, 0]), Buffer.from(ROOT + '/Contents/Resources/app-update.yml')]));
+  const ut = (flags, length) => field(0x5455, Buffer.concat([Buffer.from([flags]), Buffer.alloc(length - 1, 1)]));
+  const localUt = UNIX_EXTRA.local.subarray(0, 13);
+  const cases = [
+    [{ localExtra: Buffer.concat([ut(7, 13), UX]) }, /local header of the entry "SSAM Agent\.app\/Contents\/Info\.plist" has a 0x5455 field of 13 bytes with flags 7 \(the real ZIPs: flags 3, 9 bytes here\)/],
+    [{ localExtra: Buffer.concat([field(0x5455, Buffer.concat([Buffer.from([3, 1, 2, 3, 4, 1, 2, 3, 4]), up])), UX]) }, /local header .* has a 0x5455 field of \d+ bytes with flags 3 /],
+    [{ localExtra: Buffer.concat([localUt, field(0x7875, Buffer.concat([UX.subarray(4), up]))]) }, /local header .* has a 0x7875 field of \d+ bytes that is not version 1/],
+    [{ extra: Buffer.concat([field(0x5455, Buffer.concat([Buffer.from([3, 1, 2, 3, 4]), up])), UX]) }, /central record .* has a 0x5455 field of \d+ bytes with flags 3 \(the real ZIPs: flags 3, 5 bytes here\)/],
+    [{ localExtra: Buffer.concat([UX, ut(3, 9)]).fill(200, 2, 3) }, /local header .* extra fields overrun/],
+    [{ extra: Buffer.concat([field(0x5455, Buffer.alloc(0)), field(0x5455, Buffer.alloc(0)), field(0x7875, Buffer.alloc(0))]) }, /central record .* has a 0x5455 field of 0 bytes with flags none/],
+    [{ extra: Buffer.concat([UNIX_EXTRA.central, UNIX_EXTRA.central]), localExtra: Buffer.concat([UNIX_EXTRA.local, UNIX_EXTRA.local]) }, /central record .* has extra field 0x5455 twice/],
+    [{ localExtra: Buffer.concat([localUt, field(0x7875, Buffer.from('010800000000000000000400000000', 'hex'))]) }, /local header .* has a 0x7875 field of 15 bytes/],
+    [{ localExtra: Buffer.concat([localUt, field(0x7875, Buffer.from('0204f50100000414000000', 'hex'))]) }, /local header .* has a 0x7875 field of 11 bytes that is not version 1/],
+    [{ extra: Buffer.concat([ut(1, 5), UX]), localExtra: Buffer.concat([ut(1, 5), UX]) }, /central record .* has a 0x5455 field of 5 bytes with flags 1 /],
+    [{ extra: Buffer.concat([ut(3, 9), UX]), localExtra: UNIX_EXTRA.local }, /central record .* has a 0x5455 field of 9 bytes with flags 3 \(the real ZIPs: flags 3, 5 bytes here\)/],
+  ];
+  for (const [change, pattern] of cases) assert.match(String(structureOf(t, at(2, change)).problem), pattern);
+  // The review's R5 probes as they are (exact bytes): all refused at the first entry, whose 0x5455 (flags 1) is not the real one.
+  assert.deepEqual(Object.keys(R5_PROBES).sort(), ['r5-0-control.zip', 'r5-X1-ut-longer-local.zip', 'r5-X2-up-inside-ut-local.zip', 'r5-X3-up-inside-ux-local.zip', 'r5-X4-up-inside-ut-both.zip', 'r5-X5-ut-overflow.zip', 'r5-X6-empty-and-repeated.zip', 'r5-X7-ux-odd-sizes.zip']);
+  assert.equal(R5_PROBES['r5-X6-empty-and-repeated.zip'].sha256, '47baf6698d1f5e7745927fba261674a01d296946d1df72d6f67e50a12ab3a737');
+  for (const [name, probe] of Object.entries(R5_PROBES)) {
+    const bytes = Buffer.from(probe.base64, 'base64');
+    assert.equal(crypto.createHash('sha256').update(bytes).digest('hex'), probe.sha256, name);
+    assert.match(String(structureOf(t, bytes).problem), /^the central record of the entry "SSAM Agent\.app\/" has a 0x5455 field of 5 bytes with flags 1 /, name);
   }
 });
 

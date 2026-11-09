@@ -13,6 +13,9 @@
 //     data descriptor, no UTF-8 flag, no encryption), methods stored/deflate, made on Unix (the mode is in the external
 //     attributes), printable ASCII names, and extra fields only 0x5455 (extended timestamp) and 0x7875 (Unix uid/gid), the
 //     same IDs in the same order in the local header and the central record, each list whole.
+// Review R5: each field in the exact shape of the real ZIPs (B-R5-2: a 0x5455 of other sizes passed the gate and made
+// libarchive abort the extraction), and no setuid, setgid or sticky bit in any mode (B-R5-1: the signature does not seal the
+// mode bits; the real ZIPs use only 40755, 100644, 100755 and 120755).
 // Review R4 (M-R4-1, B-R4-1, B-R4-4): an extra field such as the Info-ZIP Unicode Path (0x7075) renames an entry for readers
 // that honour it (libarchive does, per the review; ditto is not proven either way) while unzip shows the plain name; a data
 // descriptor (flag 3) lets local sizes be 0 so a sequential reader looks for the end of the data itself; a non-ASCII name may
@@ -30,17 +33,29 @@ const EXTRAS = new Set([0x5455, 0x7875]);
 const MAX_DIRECTORY = 32 << 20, MAX_LINK = 1024;
 const TYPES = { 0o040000: 'd', 0o100000: '-', 0o120000: 'l' };
 
-// The IDs of a whole extra field list made only of allowed fields, or {problem}.
-function extraIds(buffer, start, length, where) {
+// The shapes of the allowed fields in the real ZIPs (0.2.8 build A, build A R4 and 0.2.5 from CI, every entry, review R5):
+// 0x5455 with flags 3 (modification and access time), 5 bytes in the central record (the modification time only) and 9 in
+// the local header; 0x7875 version 1 with a 4-byte uid and a 4-byte gid, 11 bytes in both.
+function extraShapeProblem(id, payload, central) {
+  if (id === 0x5455) return payload.length === (central ? 5 : 9) && payload[0] === 3 ? null : `a 0x5455 field of ${payload.length} bytes with flags ${payload[0] ?? 'none'} (the real ZIPs: flags 3, ${central ? 5 : 9} bytes here)`;
+  return payload.length === 11 && payload[0] === 1 && payload[1] === 4 && payload[6] === 4 ? null : `a 0x7875 field of ${payload.length} bytes that is not version 1 with a 4-byte uid and gid (the real ZIPs: 11 bytes)`;
+}
+
+// The IDs of a whole extra field list made only of allowed fields, each once and in the real shape, or {problem}.
+function extraIds(buffer, start, length, where, central) {
   const ids = []; let at = start; const end = start + length;
   while (at < end) {
     if (at + 4 > end) return { problem: `the ${where} extra fields are cut` };
     const id = buffer.readUInt16LE(at), size = buffer.readUInt16LE(at + 2);
     if (!EXTRAS.has(id)) return { problem: `the ${where} has extra field 0x${id.toString(16).padStart(4, '0')} (only 0x5455 and 0x7875 are accepted)` };
+    if (at + 4 + size > end) return { problem: `the ${where} extra fields overrun` };
+    if (ids.includes(id)) return { problem: `the ${where} has extra field 0x${id.toString(16)} twice` };
+    const shape = extraShapeProblem(id, buffer.subarray(at + 4, at + 4 + size), central);
+    if (shape) return { problem: `the ${where} has ${shape}` };
     ids.push(id);
     at += 4 + size;
   }
-  return at === end ? { ids } : { problem: `the ${where} extra fields overrun` };
+  return { ids };
 }
 
 const ASCII_NAME = /^[\x20-\x7e]+$/;
@@ -82,15 +97,17 @@ export function zipStructure(file, { open = fs.openSync, read = fs.readSync, clo
       const label = `the entry "${shown(name)}"`;
       if (!ASCII_NAME.test(name)) return { problem: `${label} has a name that is not printable ASCII (byte values shown as \\xNN)` };
       if (compressed === 0xffffffff || plain === 0xffffffff || offset === 0xffffffff || startDisk) return { problem: `${label} needs ZIP64` };
-      const extra = extraIds(directory, at + 46 + nameLength, extraLength, `central record of ${label}`);
+      const extra = extraIds(directory, at + 46 + nameLength, extraLength, `central record of ${label}`, true);
       if (extra.problem) return { problem: extra.problem };
       if (commentLength) return { problem: `${label} has a comment` };
       if (flags !== 0) return { problem: `${label} has flags 0x${flags.toString(16)} (a data descriptor, the UTF-8 flag, encryption or another feature the real update ZIPs do not use)` };
       if (method !== 0 && method !== 8) return { problem: `${label} uses compression method ${method}` };
       if (method === 0 && compressed !== plain) return { problem: `${label} is stored with two sizes` };
       if (madeBy >> 8 !== 3) return { problem: `${label} was not made on Unix (no mode to check)` };
-      const type = TYPES[(external >>> 16) & 0o170000];
+      const mode = external >>> 16;
+      const type = TYPES[mode & 0o170000];
       if (!type) return { problem: `${label} is not a file, a folder or a symlink` };
+      if (mode & 0o7000) return { problem: `${label} has mode ${mode.toString(8)}: a setuid, setgid or sticky bit` };
       if ((type === 'd') !== name.endsWith('/')) return { problem: `${label} has a folder name and a file mode, or the reverse` };
       if (offset !== expected) return { problem: offset > expected ? `the ${offset - expected} bytes before ${label} belong to no listed entry` : `${label} overlaps the entry before it` };
       // The local header: the same entry, at that offset.
@@ -101,7 +118,7 @@ export function zipStructure(file, { open = fs.openSync, read = fs.readSync, clo
       if (localFlags !== flags || localMethod !== method) return { problem: `${label} has other flags or method in its local header` };
       const localNameAndExtra = bytes(offset + 30, localNameLength + localExtraLength);
       if (!localNameAndExtra.subarray(0, localNameLength).equals(nameBytes)) return { problem: `${label} has another name in its local header ("${shown(localNameAndExtra.subarray(0, localNameLength).toString('latin1'))}")` };
-      const localExtra = extraIds(localNameAndExtra, localNameLength, localExtraLength, `local header of ${label}`);
+      const localExtra = extraIds(localNameAndExtra, localNameLength, localExtraLength, `local header of ${label}`, false);
       if (localExtra.problem) return { problem: localExtra.problem };
       if (localExtra.ids.join() !== extra.ids.join()) return { problem: `${label} has other extra fields in its local header than in its central record` };
       if (localCrc !== crc || localCompressed !== compressed || localPlain !== plain) return { problem: `${label} has another CRC or size in its local header` };
