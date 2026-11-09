@@ -520,3 +520,15 @@ for its worst case without admission (server 0.4 GB + a worker in a call 1.7 GB 
   `waitedFor: memory`). **The gate is server code: it holds only in backends whose image was built from e04cfb7 or later.**
   A compose-only release keeps the images, and the watcher never rebuilds a retained pair, so a pair whose image predates
   the gate runs its tier's memory limit WITHOUT admission (review R3 A2): see `RESULTADO-R3.md` for the owner's options.
+- Option (c) (`server/capacity-hot-pair-c`, review R4): the tiers fit the measured worst case WITHOUT the gate (other
+  4240m with 1 build and 1 worker, hot 10g with 4 builds). The model counts the server, the workers and the pool builds;
+  the cold processes (`coldKernel`/`runCold`, one `dotnet` per call with no limit in the r43b/r44 images) are OUTSIDE it:
+  one cold process of the 100-action size (~1268 MiB) next to a full other already passes 4240m, as it passes 6g today
+  (review R4 M2). The read-only `r45/oom-check.sh` runs daily during the first week; any `oom_kill` > 0 is the rollback
+  trigger.
+- The deploy kit is committed in `r45/` and made from ONE commit (`node r45/kit.mjs --option c --pin <main> --out <dir>
+  --reviewed <reviewed kit>`): its generators, `r45-window.sh`, `rollback-check.sh`, `oom-check.sh`, `../vigia/with-release-lock.sh`
+  and the backup scripts are that commit's bytes, and `--reviewed` proves that only PIN, MARK and LABEL moved. The window
+  (`r45-window.sh apply`) leaves one copy of the stored compose, `/root/ssam-r45/coolify-before.json` (0600), for the
+  rollback; `cleanup`, after the owner confirms, deletes it and logs it in `/root/ssam-r45/cleanup.log`. Roll back with
+  `SSAM_LOCK_WAIT=900` (a backup cron may hold the lock).
