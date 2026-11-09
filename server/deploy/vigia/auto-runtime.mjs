@@ -24,6 +24,16 @@ const hash=b=>createHash('sha256').update(b).digest('hex');
 const q=s=>"'"+String(s).replaceAll("'","'\\''")+"'";
 // The official releases this round verifies: those the window does not serve. A rehearsal verifies the served ones too: that is what it rehearses.
 export const releasesToVerify=(observed,manifest,rehearsal=false)=>observed.filter(x=>x.url&&(rehearsal||!manifest[x.lane].some(v=>v.version===x.version)));
+// Text that reaches the owner's notice: printable, no markup or control characters, bounded.
+export const noticeText=value=>String(value??'').replace(/[^\w .,:;()/'=+#?-]/g,'').slice(0,300);
+// A notice given once per key, ever (source-notices.json in outDir): a fact that does not change, unlike the daily ones.
+async function noticeOnce(outDir,key,title,message,ops,now){
+ const file=path.join(outDir,'source-notices.json');let data={};
+ try{data=JSON.parse(fs.readFileSync(file,'utf8'));}catch(e){if(e.code!=='ENOENT')throw e;}
+ if(data[key])return false;
+ data[key]=new Date(now).toISOString();fs.mkdirSync(outDir,{recursive:true});fs.writeFileSync(file+'.next',JSON.stringify(data,null,2)+'\n');fs.renameSync(file+'.next',file);
+ ops.log?.(`notice: ${title}: ${message}`);await ops.notify(title,noticeText(message));return true;
+}
 export function createAutoRuntime(config,runtime) {
  const root=path.resolve(config.workspace),priv=path.resolve(config.tempRoot),settings=config.automaticDeployment??{};
  // The ODC features provenance is a journal too: unsigned records are never written or accepted there.
@@ -118,16 +128,36 @@ export function createAutoRuntime(config,runtime) {
    }catch(e){fs.rmSync(folder,{recursive:true,force:true});throw e;}
   },
   async observe(installed,{dryRun=false,manifest=runtime.manifest()}={}) {
-   const result=await detectSources(installed,runtime.sourceFetcher?{fetcher:runtime.sourceFetcher,retryDelayMs:0}:{});
+   const now=config.clock?.()??config.now??Date.now();
+   // The ODC build decisions persist in outDir (a journal: signed in every automatic round), so a decided build is never
+   // decided again; a dry run reads them and writes nothing.
+   const file=config.outDir?path.join(config.outDir,'studio-sources.json'):null;
+   const store=file&&{read:()=>{if(!fs.existsSync(file))return null;const d=readJournal(file);return dryRun&&d?.journal===1&&d.value?d.value:d;},write:state=>{if(!dryRun)writeJournal(file,state);}};
+   const served=Object.fromEntries(['odc','o11'].map(l=>[l,(manifest?.[l]??[]).map(v=>v.version)]));
+   const result=await detectSources(installed,{...(runtime.sourceFetcher?{fetcher:runtime.sourceFetcher,retryDelayMs:0}:{}),...(runtime.sourceOptions??{}),now,served,store});
    runtime.sourceStatus=result.sources;
+   const studio=l=>l==='odc'?'ODC Studio':'Service Studio';
+   const once=(key,title,message)=>dryRun?null:noticeOnce(config.outDir,key,title,message,runtime,now).catch(e=>runtime.log?.(`source notice not given: ${e.message}`));
    // An unreadable source is not "no update": the lane keeps its installed Studio this round, the owner is told (once a
-   // day per lane and code) and the next round reads the pages again. An older public release keeps the installed one.
+   // day per lane and code) and the next round reads the pages again.
    for(const s of result.sources){
-    if(s.status==='older-than-installed')runtime.log?.(`${s.lane} source: public ${s.version} is older than the installed ${s.installed}; the installed Studio is kept`);
-    if(s.heldBuilds)runtime.log?.(`${s.lane} source: builds ${s.heldBuilds.join(', ')} uploaded after the release day are not offered yet`);
+    if(s.status==='pending')runtime.log?.(`${s.lane} source: ${studio(s.lane)} ${s.version} (released ${s.releasedOn}) is not definitive until ${s.definitiveAt}${s.build?` (highest eligible build so far ${s.build})`:' (no eligible build yet)'}; nothing is offered yet`);
+    if(s.status==='older-than-served')runtime.log?.(`${s.lane} source: public ${s.version} is older than the newest served ${s.served}; nothing is offered`);
+    // A newer Studio on the watcher machine (a preview, typically) never hides a release: the owner hears of it once.
+    if(s.installedAhead){
+     runtime.log?.(`${s.lane} source: the watcher machine has ${s.installedAhead}, newer than the public ${s.version}; the public release and the served window decide`);
+     await once(`installed-ahead:${s.lane}:${s.installedAhead}:${s.version}`,'SSAM: watcher Studio newer than the public release',`The watcher machine has ${studio(s.lane)} ${s.installedAhead} installed, newer than the public release ${s.version} (a preview?). Discovery ignores installed Studios: ${s.version} is offered when the window does not serve it.`);
+    }
+    // Uploads of a decided version after its cutoff or its decision are never offered; the owner hears of each once.
+    for(const b of [...(s.heldBuilds??[]),...(s.laterBuilds??[])]){
+     const three=s.version.split('.').slice(0,3).join('.');
+     runtime.log?.(`${s.lane} source: build ${three}.${b} was uploaded after the decided ${s.version}; it is not offered`);
+     await once(`later-build:${s.lane}:${three}.${b}`,'SSAM: later Studio build not offered',`${studio(s.lane)} ${three} is decided as ${s.version} (${s.decided?.by??'decided'} ${s.decided?.at??''}). Build ${three}.${b} was uploaded later and is NOT offered: the watcher never changes a decided build. Check the release notes; serving it is an owner decision.`);
+    }
     if(s.status!=='unavailable')continue;
-    runtime.log?.(`${s.lane} source unavailable (${s.code}): ${s.error}; the installed Studio stands in this round`);
-    if(!dryRun)await remind(config.outDir,`source:${s.lane}:${s.code}`,'SSAM: Studio release source unreadable',`${s.lane==='odc'?'ODC Studio':'Service Studio'} releases could not be read (${s.code}): ${s.error} The watcher keeps the installed Studio and retries next round.`,runtime,{now:config.clock?.()??config.now??Date.now()}).catch(e=>runtime.log?.(`source notice not given: ${e.message}`));
+    const error=noticeText(s.error);
+    runtime.log?.(`${s.lane} source unavailable (${s.code}): ${error}; the installed Studio stands in this round`);
+    if(!dryRun)await remind(config.outDir,`source:${s.lane}:${s.code}`,'SSAM: Studio release source unreadable',`${studio(s.lane)} releases could not be read (${s.code}): ${error} The watcher keeps the installed Studio and retries next round.`,runtime,{now}).catch(e=>runtime.log?.(`source notice not given: ${e.message}`));
    }
    if(dryRun)return result.observed;
    const verified=[];

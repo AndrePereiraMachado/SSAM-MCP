@@ -101,7 +101,7 @@ test('missing secrets stops before any journal or external write',async t=>{
 test('source detection, local fallback and installer hash never execute an installer',async t=>{
  // The public pages answered from recorded responses (test-fixtures/sources); sources.test.mjs covers discovery itself.
  const dir=tmp(t);const {fetcher,state}=fakeSites();
- const seen=await detectSources([],{fetcher,retryDelayMs:0});assert.deepEqual(seen.observed.map(o=>o.fullVersion),['1.7.32.11065','11.55.95.65352']);
+ const seen=await detectSources([],{fetcher,retryDelayMs:0,now:Date.parse('2026-11-10T00:00:00Z')});assert.deepEqual(seen.observed.map(o=>o.fullVersion),['1.7.32.11065','11.55.95.65352']);
  const downloaded=await downloadInstaller({...seen.observed[0],size:state.installer.length},dir,{fetcher});assert.equal(fs.readFileSync(downloaded.file+'.sha256','utf8').trim(),downloaded.sha256);
  const local=[{lane:'odc',version:'1.7.29',fullVersion:'1.7.29.1'}];
  assert.deepEqual((await detectSources(local,{fetcher:async()=>{throw Error('login');},retryDelayMs:0})).observed,local);
