@@ -8,6 +8,7 @@ import {createPrivateKey,createPublicKey,createHash,sign,randomUUID} from 'node:
 import {fileURLToPath} from 'node:url';
 import {verifyBridge} from '../../platforms/odc/facade/bridge-store.mjs';
 import {detectSources,downloadInstaller} from './sources.mjs';
+import {remind} from './pipeline.mjs';
 import {readListingBudget} from './smoke.mjs';
 import {refuseInRehearsal,assertPause,assertTime,canonicalComposeHash,cleanupSsh,cleanupRollback,liveBaseline,composeHash,unchanged,preserveCompose,modelPlugins} from './safety.mjs';
 import {bridgeMode,parseAgentRelease} from './server-only.mjs';
@@ -117,8 +118,17 @@ export function createAutoRuntime(config,runtime) {
    }catch(e){fs.rmSync(folder,{recursive:true,force:true});throw e;}
   },
   async observe(installed,{dryRun=false,manifest=runtime.manifest()}={}) {
-   const result=await detectSources(installed);
+   const result=await detectSources(installed,runtime.sourceFetcher?{fetcher:runtime.sourceFetcher,retryDelayMs:0}:{});
    runtime.sourceStatus=result.sources;
+   // An unreadable source is not "no update": the lane keeps its installed Studio this round, the owner is told (once a
+   // day per lane and code) and the next round reads the pages again. An older public release keeps the installed one.
+   for(const s of result.sources){
+    if(s.status==='older-than-installed')runtime.log?.(`${s.lane} source: public ${s.version} is older than the installed ${s.installed}; the installed Studio is kept`);
+    if(s.heldBuilds)runtime.log?.(`${s.lane} source: builds ${s.heldBuilds.join(', ')} uploaded after the release day are not offered yet`);
+    if(s.status!=='unavailable')continue;
+    runtime.log?.(`${s.lane} source unavailable (${s.code}): ${s.error}; the installed Studio stands in this round`);
+    if(!dryRun)await remind(config.outDir,`source:${s.lane}:${s.code}`,'SSAM: Studio release source unreadable',`${s.lane==='odc'?'ODC Studio':'Service Studio'} releases could not be read (${s.code}): ${s.error} The watcher keeps the installed Studio and retries next round.`,runtime,{now:config.clock?.()??config.now??Date.now()}).catch(e=>runtime.log?.(`source notice not given: ${e.message}`));
+   }
    if(dryRun)return result.observed;
    const verified=[];
    for(const release of releasesToVerify(result.observed,manifest,!!config.rehearsal)){
