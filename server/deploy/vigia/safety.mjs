@@ -45,14 +45,29 @@ export function liveBaseline(snapshot){
  // The capacity sizing the live compose was generated with (its router label): the rotation carries it to the next window.
  let sizing;try{sizing=sizingOfCompose(compose);}catch(error){fail(error.message,'LIVE_INVALID');}
  if(sizing)result.sizing=sizing;
- // routing: the licenses the router routes to each pair (remote snapshot, counts only), null when the snapshot has none.
- const routing=routingCounts(snapshot.routing);
- versionPairs(result);return {manifest:result,kernels,telemetry:snapshot.telemetry??{},routing,snapshot};
+ // Backends carrying a tier label without the router's sizing: the label was lost (a hand edit, a Coolify rewrite). An
+ // unsized rotation would clone the first backend's limits (maybe the hot tier) into the new pair with no host check, so
+ // nothing is decided from such a compose (review R2 M4.4).
+ else if(ordered.some(s=>s.labels?.['ssam.sizing']!==undefined))fail('Live backends carry capacity tiers but the router carries no ssam.sizing; owner review is required.','LIVE_INVALID');
+ // usage: the real use of each pair (remote snapshot, vigia/usage-count.cjs, counts only). Advisory: an absent, unreadable
+ // or odd value is null plus a warning, never a stop of the round (review R2 M1').
+ const {usage,warning}=usageCounts(snapshot.usage,snapshot.warnings);
+ versionPairs(result);return {manifest:result,kernels,telemetry:snapshot.telemetry??{},usage,...(warning?{usageWarning:warning}:{}),snapshot};
 }
-export function routingCounts(value){
- if(value===undefined||value===null)return null;
- if(typeof value!=='object'||Array.isArray(value)||Object.entries(value).some(([k,v])=>!/^o11-\d+\.\d+\.\d+-odc-\d+\.\d+\.\d+$/.test(k)||!Number.isInteger(v)||v<0))fail('The live routing counts are invalid.','LIVE_INVALID');
- return {...value};
+const PAIR=/^o11-\d+\.\d+\.\d+-odc-\d+\.\d+\.\d+$/;
+// The usage counts of a snapshot: {usage: {pair: {heavy, active}} | null, warning: code | null}. Entries that are not
+// counts of a pair are dropped (USAGE_PARTIAL); a value that is not an object is USAGE_UNREADABLE with usage null; a
+// warning of the remote snapshot (USAGE_*) is kept. Never throws.
+export function usageCounts(value,warnings=[]){
+ const remote=(Array.isArray(warnings)?warnings:[]).find(w=>typeof w==='string'&&/^USAGE_[A-Z_]{1,30}$/.test(w))??null;
+ if(value===undefined||value===null)return {usage:null,warning:remote};
+ if(typeof value!=='object'||Array.isArray(value))return {usage:null,warning:'USAGE_UNREADABLE'};
+ const usage={};let dropped=false;
+ for(const [k,v] of Object.entries(value)){
+  if(PAIR.test(k)&&v&&typeof v==='object'&&Number.isInteger(v.heavy)&&v.heavy>=0&&Number.isInteger(v.active)&&v.active>=0)usage[k]={heavy:v.heavy,active:v.active};
+  else dropped=true;
+ }
+ return {usage,warning:remote??(dropped?'USAGE_PARTIAL':null)};
 }
 // Two SSAM_SERVED_VERSIONS texts hold the same lists, by JSON value as the remote check compares them: spacing and key
 // order are no change, list order is. An unreadable text is never the same.

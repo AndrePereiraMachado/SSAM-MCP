@@ -1,5 +1,8 @@
 """No SSH, Docker or VPS access: exercise the actual remote recipe with fakes."""
 import base64
+import shutil
+import subprocess
+import time
 import importlib.util
 import io
 import json
@@ -46,7 +49,7 @@ class RemoteTests(unittest.TestCase):
         self.listing = [{"name": f["name"], "sha256": f["sha256"]} for f in PINS["files"]]
         self.missing_volume = False
         self.env = ["SSAM_BACKEND_NAME=o11-11.55.93-odc-1.7.29", "SSAM_SERVED_VERSIONS={\"odc\":[\"1.7.29\"],\"o11\":[\"11.55.93\"]}"]
-        self.routing = {"o11-11.55.93-odc-1.7.29": 2}
+        self.usage = {"pairs": {"o11-11.55.93-odc-1.7.29": {"heavy": 2, "active": 1}}, "skipped": 0}
         self.receipt = {"ok": True, "kernel": {"odc": "1.7.29", "o11": "11.55.93"}, "budget": {"tools": 90}, "telemetry": {"tokens": {}}}
 
     def docker(self, *args, data=None):
@@ -70,10 +73,12 @@ class RemoteTests(unittest.TestCase):
             return json.dumps(["image@sha256:" + "a" * 64]).encode()
         if args[0] == "exec" and args[1] == "postgres-fixture":
             return getattr(self, "dump", b"CREATE TABLE public.schema_migrations (\n);\nCREATE TABLE public.server_tokens (\n);\n")
-        if args[0] == "exec" and args[1] == "-i" and data and b"routing.json" in data:
-            if isinstance(self.routing, Exception):
-                raise self.routing
-            return json.dumps(self.routing).encode()
+        if args[0] == "exec" and args[1] == "-i" and data and b"usage-count" in data:
+            if callable(self.usage):
+                return self.usage(data)
+            if isinstance(self.usage, Exception):
+                raise self.usage
+            return self.usage if isinstance(self.usage, bytes) else json.dumps(self.usage).encode()
         if args[0] == "exec" and args[1] == "-i":
             return json.dumps(self.receipt).encode()
         if args[0] == "run":
@@ -272,16 +277,62 @@ class RemoteTests(unittest.TestCase):
         self.assertEqual(value["backends"][0]["kernel"]["odc"], "1.7.29")
         self.assertEqual(value["backends"][0]["reference"], "image:old")
 
-    def test_snapshot_returns_routing_counts_only_and_refuses_unreadable_ones(self):
+    def test_snapshot_returns_usage_counts_only_and_never_fails_on_them(self):
+        # R2 M1': usage is advisory. Good counts come back; anything else is usage None (or the good part) plus a warning, and
+        # the snapshot itself always succeeds, so an odd state file never stops a watcher round.
+        source = "// usage-count fixture"
+        value = self.request("snapshot", checkSource="capture-live", usageSource=source)
+        self.assertEqual(value["usage"], {"o11-11.55.93-odc-1.7.29": {"heavy": 2, "active": 1}})
+        self.assertEqual(value["warnings"], [])
+        self.assertIn(source, self.inputs)
+        P = "o11-11.55.93-odc-1.7.29"
+        for bad, usage, warning in (
+                ({"pairs": {"": 1}}, {}, "USAGE_PARTIAL"),
+                ({"pairs": {"not-a-pair": {"heavy": 1, "active": 1}, P: {"heavy": 3, "active": 0}}}, {P: {"heavy": 3, "active": 0}}, "USAGE_PARTIAL"),
+                ({"pairs": {P: {"heavy": -1, "active": 0}}}, {}, "USAGE_PARTIAL"),
+                ({"pairs": {P: {"heavy": True, "active": 0}}}, {}, "USAGE_PARTIAL"),
+                ({"pairs": {P: {"heavy": 1, "active": 0}}, "skipped": 4}, {P: {"heavy": 1, "active": 0}}, "USAGE_PARTIAL"),
+                ({"pairs": [1]}, None, "USAGE_UNREADABLE"), ({"schema": 2}, None, "USAGE_UNREADABLE"), ([1], None, "USAGE_UNREADABLE"),
+                (b"not json", None, "USAGE_UNREADABLE"), (RuntimeError("Remote command failed: docker"), None, "USAGE_UNREADABLE")):
+            self.usage = bad
+            value = self.request("snapshot", checkSource="capture-live", usageSource=source)
+            self.assertTrue(value["ok"])
+            if isinstance(bad, dict) and isinstance(bad.get("pairs"), dict):
+                self.assertEqual((value["usage"], value["warnings"]), (usage, [warning]), bad)
+            else:
+                self.assertEqual((value["usage"], value["warnings"]), (None, ["USAGE_UNREADABLE"]), bad)
+        # No usage source in the request (an older watcher): no usage, a warning, the snapshot as before.
         value = self.request("snapshot", checkSource="capture-live")
-        self.assertEqual(value["routing"], {"o11-11.55.93-odc-1.7.29": 2})
-        script = next(i for i in self.inputs if "routing.json" in i)
-        self.assertIn("console.log(JSON.stringify(c))", script)
-        self.assertNotIn("writeFileSync", script)
-        for bad in ({"not-a-pair": 1}, {"o11-11.55.93-odc-1.7.29": -1}, [1], RuntimeError("Remote command failed: docker")):
-            self.routing = bad
-            with self.assertRaisesRegex(RuntimeError, "ROUTING_UNREADABLE"):
-                self.request("snapshot", checkSource="capture-live")
+        self.assertEqual((value["usage"], value["warnings"]), (None, ["USAGE_UNREADABLE"]))
+
+    def test_snapshot_runs_the_real_usage_counter_and_returns_counts_only(self):
+        # The real vigia/usage-count.cjs, run by node over a sample server state (R2 B6): what the snapshot returns is what
+        # the script counts, and no token id or customer label leaves it.
+        node = shutil.which("node") or "C:/Program Files/nodejs/node.exe"
+        if not os.path.exists(node) and not shutil.which("node"):
+            self.skipTest("node is not available")
+        root = pathlib.Path(self.temp.name) / "server"
+        P = "o11-11.55.94-odc-1.7.31"
+        (root / "versions" / P / "state").mkdir(parents=True)
+        now = 1794200000000
+        day = time.strftime("%Y%m%d", time.gmtime(now / 1000 - 86400))
+        line = lambda tool: json.dumps({"kind": "call", "time": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now / 1000 - 86400)), "tokenId": "tok_hidden", "customer": "Hidden Customer", "tool": tool})
+        (root / "versions" / P / ("quality-" + day + ".jsonl")).write_text(chr(10).join([line("studio_deliver"), line("ssam_code"), line("ssam_map"), "{broken"]) + chr(10))
+        (root / "versions" / P / "state" / "studio-versions.json").write_text(json.dumps({"schema": 1, "tokens": {"tok_hidden": {"customer": "Hidden Customer", "seen": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now / 1000 - 3600))}}}))
+        script = (pathlib.Path(__file__).parent / "usage-count.cjs").read_text()
+        printed = []
+        def run(data):
+            result = subprocess.run([node], input=data, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=60,
+                                    env={**os.environ, "SSAM_USAGE_ROOT": str(root), "SSAM_USAGE_NOW": str(now)})
+            self.assertEqual(result.returncode, 0, result.stderr)
+            printed.append(result.stdout.decode())
+            return result.stdout
+        self.usage = run
+        value = self.request("snapshot", checkSource="capture-live", usageSource=script)
+        self.assertEqual(value["usage"], {P: {"heavy": 2, "active": 1}})
+        self.assertEqual(value["warnings"], ["USAGE_PARTIAL"])
+        self.assertNotIn("tok_hidden", printed[0])
+        self.assertNotIn("Hidden", printed[0])
 
     def test_rollback_uses_old_ninety_tool_check_not_new_budget(self):
         self.request("check", checkSource="new-92", checkSources={"11.55.93|1.7.29": "old-90"})

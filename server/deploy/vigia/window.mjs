@@ -2,7 +2,7 @@
 // the owner reads. No process, Docker, Git or network here (runtime.mjs does that), so every rule is testable alone.
 import fs from 'node:fs';
 import path from 'node:path';
-import {versionPairs,generateCompose,servedLists,hostBudget} from '../coolify/gen-compose.mjs';
+import {versionPairs,generateCompose,servedLists,hostBudget,withUsage} from '../coolify/gen-compose.mjs';
 export const LANES=['odc','o11'];
 export const STUDIO_NAME={odc:'ODC Studio',o11:'Service Studio'};
 export const version=value=>/^(\d+\.\d+\.\d+)/.exec(String(value??''))?.[1]??null;
@@ -68,8 +68,9 @@ export function rotateWindow(manifest,pair,state={}){
  // Without a configured maxWindow (the replay of approvals), the same default as the round: never below the served window.
  const limit=state.maxWindow??windowLimit(null,manifest);
  if(!Number.isInteger(limit)||limit<3||entries.length>limit)throw Object.assign(Error(limit<window?`maxWindow (${limit}) is below the window the manifest already serves (${window}); raise maxWindow in the watcher configuration.`:'Active clients require a window above the configured limit; owner review is required.'),{code:'WINDOW_LIMIT',environmental:true});
- // The capacity sizing (gen-compose.mjs) rides along. The hot tier goes by use (routed, refreshed from the live routing.json
- // by the automatic deploy: withRouted), so the counts of the pairs that stay are kept and the new pair starts with none.
+ // The capacity sizing (gen-compose.mjs) rides along. The hot tier goes by real use (usage, refreshed from a live backend by
+ // the automatic deploy: withUsage), so the counts of the pairs that stay are kept, a leaving pair's counts go to the new
+ // window's default pair (where the router sends its clients) and the new pair starts with none of its own.
  // The owner's hotPair pin stays while its pair stays; a pin on a leaving pair is dropped (hotPinDropped, and the deploy
  // tells the owner when the hot pair changes).
  const sizing=manifest.sizing?structuredClone(manifest.sizing):null;
@@ -80,7 +81,7 @@ export function rotateWindow(manifest,pair,state={}){
  if(sizing){
   const names=new Set(windowPairs(next).map(pairId));
   if(sizing.hotPair!=null&&!names.has(sizing.hotPair)){hotPinDropped=sizing.hotPair;delete sizing.hotPair;}
-  if(sizing.routed)sizing.routed=Object.fromEntries(Object.entries(sizing.routed).filter(([k])=>names.has(k)));
+  if(sizing.usage)sizing.usage=withUsage(next,sizing.usage).sizing.usage;
   hostBudget(next);
  }
  const leaving={};for(const lane of LANES)leaving[lane]=[...new Set(manifest[lane].map(x=>x.version))].filter(v=>!next[lane].some(x=>x.version===v));

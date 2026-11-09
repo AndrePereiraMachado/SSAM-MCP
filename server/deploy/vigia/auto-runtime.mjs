@@ -13,10 +13,11 @@ import {refuseInRehearsal,assertPause,assertTime,canonicalComposeHash,cleanupSsh
 import {bridgeMode,parseAgentRelease} from './server-only.mjs';
 import {windowPairs,pairId,version as threeOf} from './window.mjs';
 import {versionPairs,servedLists} from '../coolify/gen-compose.mjs';
-// The codes remote-release.py returns. The VPS state of the moment (memory, disk, the lease, a backend still warming, an
-// unreadable routing.json): the round waits and retries. A defect of the release or of the staged plugins volume, a check receipt, the published hello or a
-// changed served list: the attempt fails with its own code (rolled back after a deployment), never retried unseen.
-export const REMOTE_WAITS=Object.freeze(['MEMORY_LOW','DISK_LOW','LOCK_BUSY','LOCK_LOST','NOT_WARM','REMOTE_UNAVAILABLE','ROUTING_UNREADABLE']);
+// The codes remote-release.py returns. The VPS state of the moment (memory, disk, the lease, a backend still warming): the
+// round waits and retries. A defect of the release or of the staged plugins volume, a check receipt, the published hello or a
+// changed served list: the attempt fails with its own code (rolled back after a deployment), never retried unseen. Usage
+// (the capacity hot tier) is never a code here: an unreadable count is a warning of the snapshot (USAGE_*), not a wait.
+export const REMOTE_WAITS=Object.freeze(['MEMORY_LOW','DISK_LOW','LOCK_BUSY','LOCK_LOST','NOT_WARM','REMOTE_UNAVAILABLE']);
 export const REMOTE_DEFECTS=Object.freeze(['REMOTE_FAILED','MODEL_PLUGINS_MISSING','MODEL_PLUGINS_MISMATCH','MODEL_PLUGINS_MOUNT','MODEL_PLUGINS_UNPINNED','CHECK_RECEIPT','PACK_HELLO_NOT_PRESENTED','SERVED_LIST_CHANGED']);
 const here=path.dirname(fileURLToPath(import.meta.url));
 const hash=b=>createHash('sha256').update(b).digest('hex');
@@ -84,6 +85,9 @@ export function createAutoRuntime(config,runtime) {
  async function protect(value){return (await script('protect-value.ps1',['-Mode','Protect'],value)).stdout.trim();}
  async function unprotect(value){return (await script('protect-value.ps1',['-Mode','Unprotect'],value)).stdout;}
  const load=async baseline=>JSON.parse(await unprotect(fs.readFileSync(baseline.file,'utf8')));
+ // The usage counter of the capacity hot tier (runs read-only in a live backend; counts only). Unreadable here: no source, and
+ // the snapshot answers usage null with a warning.
+ const usageSource=()=>{try{return fs.readFileSync(path.join(here,'usage-count.cjs'),'utf8');}catch{return null;}};
  const checkSource=(budget,offers=[],capture=false,packHellos=null,extra={})=>'const expected='+JSON.stringify({budget,offers,capture,...(packHellos?{packHellos}:{}),...extra})+';\n'+fs.readFileSync(path.join(here,'check-backend.mjs'),'utf8');
  return {
   secrets,
@@ -232,12 +236,12 @@ export function createAutoRuntime(config,runtime) {
   async liveBaseline(s){
    const value=await api(s,'GET',resource());
    if(typeof value.docker_compose_raw!=='string'||!value.docker_compose_raw)throw Error('Coolify live compose is missing.');
-   const observed=await ssh(s,{action:'snapshot',checkSource:checkSource(readListingBudget(root),[],true)});
+   const observed=await ssh(s,{action:'snapshot',checkSource:checkSource(readListingBudget(root),[],true),usageSource:usageSource()});
    const snapshot={compose:value.docker_compose_raw,...observed};const baseline=liveBaseline(snapshot);
    runtime.liveKernels=baseline.kernels;recordLivePairs(config.outDir,Object.keys(baseline.kernels));
    const file=path.join(priv,'rollback',randomUUID()+'.dpapi');fs.mkdirSync(path.dirname(file),{recursive:true});
    fs.writeFileSync(file,await protect(JSON.stringify(snapshot)),{mode:0o600});
-   return {file,hash:composeHash(snapshot.compose),manifest:baseline.manifest,kernels:baseline.kernels,telemetry:baseline.telemetry,routing:baseline.routing};
+   return {file,hash:composeHash(snapshot.compose),manifest:baseline.manifest,kernels:baseline.kernels,telemetry:baseline.telemetry,usage:baseline.usage,...(baseline.usageWarning?{usageWarning:baseline.usageWarning}:{})};
   },
   async assertCoolifyReadable(s){if(typeof (await api(s,'GET',resource())).docker_compose_raw!=='string')throw Error('Coolify live compose is missing.');},
   async assertLiveUnchanged(s,baseline){unchanged(baseline,(await api(s,'GET',resource())).docker_compose_raw);},

@@ -69,25 +69,33 @@ MODEL_PLUGINS_TARGET = '/tmp/.local/share/OutSystems/ODC Studio/Plugins'
 READ_ONLY_VOLUMES = {'/data/runtime-css': 'runtime-css', MODEL_PLUGINS_TARGET: 'odc-model-plugins'}
 PLUGIN_LIST = ("const fs=require('fs'),c=require('crypto');console.log(JSON.stringify(fs.readdirSync('/plugins').sort()"
                ".map(n=>({name:n,sha256:c.createHash('sha256').update(fs.readFileSync('/plugins/'+n)).digest('hex')}))))")
-# The capacity hot tier goes by use (gen-compose sizing.routed): the router's state/routing.json (license -> pair) in the
-# shared server state, read inside a live backend. Only the count per pair leaves the container, never a license id; no file
-# yet is no route yet.
-ROUTING_COUNT = ("const fs=require('fs');let s;try{s=JSON.parse(fs.readFileSync('/data/server/state/routing.json','utf8'));}"
-                 "catch(e){if(e.code==='ENOENT'){console.log('{}');process.exit(0);}throw e;}"
-                 "if(s.schema!==1||!s.routes||typeof s.routes!=='object')throw new Error('invalid routing state');"
-                 "const c={};for(const r of Object.values(s.routes)){const b=String(r&&r.backend||'');c[b]=(c[b]||0)+1;}"
-                 "console.log(JSON.stringify(c));")
+# The capacity hot tier goes by real use (gen-compose sizing.usage): the request's usageSource (vigia/usage-count.cjs) runs
+# inside a live backend over the shared server state and prints counts only ({"pairs": {pair: {heavy, active}},
+# "skipped": n}), never a token id. Usage is advisory: whatever fails here (no source, docker, a timeout, bad output) is
+# usage None plus a warning code, never an error of the snapshot, so it can never stop a watcher round (review R2 M1').
 PAIR_NAME = re.compile(r"o11-\d+\.\d+\.\d+-odc-\d+\.\d+\.\d+")
 
 
-def routing_counts(container):
+def usage_counts(container, source):
+    if not container or not isinstance(source, str) or not source:
+        return None, 'USAGE_UNREADABLE'
     try:
-        value = json.loads(docker("exec", "-i", container, "node", data=ROUTING_COUNT.encode()))
-    except (RuntimeError, ValueError):
-        raise RemoteError('ROUTING_UNREADABLE')
-    if not isinstance(value, dict) or any(not PAIR_NAME.fullmatch(k) or not isinstance(v, int) or isinstance(v, bool) or v < 0 for k, v in value.items()):
-        raise RemoteError('ROUTING_UNREADABLE')
-    return value
+        value = json.loads(docker("exec", "-i", container, "node", data=source.encode()))
+        pairs = value["pairs"]
+        if not isinstance(pairs, dict):
+            raise ValueError()
+    except Exception:
+        return None, 'USAGE_UNREADABLE'
+    usage, dropped = {}, False
+    for name, counts in pairs.items():
+        good = PAIR_NAME.fullmatch(str(name)) and isinstance(counts, dict) and all(
+            isinstance(counts.get(k), int) and not isinstance(counts.get(k), bool) and counts.get(k) >= 0 for k in ('heavy', 'active'))
+        if good:
+            usage[name] = {'heavy': counts['heavy'], 'active': counts['active']}
+        else:
+            dropped = True
+    skipped = value.get('skipped') if isinstance(value, dict) else None
+    return usage, ('USAGE_PARTIAL' if dropped or (isinstance(skipped, int) and skipped > 0) else None)
 
 
 def pinned_files(pins):
@@ -160,8 +168,8 @@ def dispatch(request):
             for key, value in measured.get("telemetry", {}).get("tokens", {}).items():
                 if key not in telemetry["tokens"] or telemetry["tokens"][key]["seen"] < value["seen"]:
                     telemetry["tokens"][key] = value
-        routing = routing_counts(live[0]) if live else None
-        return {"ok": True, "backends": rows, "telemetry": telemetry, "routing": routing}
+        usage, warning = usage_counts(live[0] if live else None, request.get("usageSource"))
+        return {"ok": True, "backends": rows, "telemetry": telemetry, "usage": usage, "warnings": [warning] if warning else []}
     if action == "event":
         # The system journal is available even without a console ingestion API.
         code = request.get("code")
