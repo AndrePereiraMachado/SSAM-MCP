@@ -470,8 +470,12 @@ vCPUs set its build throughput. `versions.json` `sizing` gives ONE backend the "
 
 | Tier | cpus | memory | cpu_shares (cgroup v2 weight) | SSAM_BUILD_WORKERS | SSAM_O11_WORKERS_MAX | SSAM_BUILD_QUEUE_MS |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| hot (most used pair) | 5 | 10g | 5776 (400) | 6 | 2 | 240000 |
-| other | 2 | 4g | 1024 (100, the default) | 2 | 1 | 240000 |
+| hot (most used pair) | 5 | 10g | 5776 (400) | 4 | 2 | 240000 |
+| other | 2 | 4240m | 1024 (100, the default) | 1 | 1 | 240000 |
+
+Option (c) of RESULTADO-R3.md (no image rebuild): the backends run images without the memory gate, so each tier is sized
+for its worst case without admission (server 0.4 GB + a worker in a call 1.7 GB each + an O11 build 1.33 GB each): hot
+8698 MiB of 10240, other 3271 MiB of 4240. Budget 10240 + 4 x 4240 + 512 + 256 = 27968 of 27993 MiB.
 | router | 1 | 512m | (100) | | | |
 
 - Hot = the pair of most REAL USE (`sizing.usage`): the most heavy calls of
@@ -505,7 +509,7 @@ vCPUs set its build throughput. `versions.json` `sizing` gives ONE backend the "
   or override a tier without any check. A sized backend no longer reads `SSAM_CPUS`, `SSAM_MEMORY`, `SSAM_BUILD_WORKERS` or
   `SSAM_O11_WORKERS_MAX`; those Coolify variables stay only for an unsized (rolled back) compose.
 - `sizing.host` (`32089m`, the MemTotal; reserve `4g`): hot + (pairs - 1) x other + router + console must fit
-  MemTotal - reserve. Five pairs use 27392 of 27993 MiB. A sixth pair does not fit: the generator and the watcher's
+  MemTotal - reserve. Five pairs use 27968 of 27993 MiB. A sixth pair does not fit: the generator and the watcher's
   rotation refuse it with `CAPACITY_WINDOW` (environmental: the round waits and the owner is told) instead of shrinking any
   backend; a pair has to leave, or the owner changes `sizing`.
 - The memory gate (`platforms/odc/facade/memory-room.mjs`) admits every kernel process (build-pool slot, cold O11/ODC

@@ -6,15 +6,15 @@
       "cpus": "5",
       "memory": "10g",
       "cpuShares": 5776,
-      "buildWorkers": 6,
+      "buildWorkers": 4,
       "o11WorkersMax": 2,
       "queueMs": 240000
     },
     "other": {
       "cpus": "2",
-      "memory": "4g",
+      "memory": "4240m",
       "cpuShares": 1024,
-      "buildWorkers": 2,
+      "buildWorkers": 1,
       "o11WorkersMax": 1,
       "queueMs": 240000
     },
