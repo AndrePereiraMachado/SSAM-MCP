@@ -91,16 +91,31 @@ export const zipNames = text => { const lines = String(text ?? '').split('\n'); 
 // The paths whose type the gate depends on: none may be a symlink (Squirrel and plutil would follow it elsewhere).
 const gatedPaths = root => [root, root + '/Contents', root + '/Contents/Info.plist', root + '/Contents/Resources', root + '/Contents/Resources/app-update.yml'];
 
+// A symlink's target (review B-R3-1): relative, inside the bundle, no "..". Null, or the reason it is refused.
+function linkTargetProblem(name, target, root) {
+  if (typeof target !== 'string' || !target) return `the symlink "${name.slice(0, 120)}" has no readable target`;
+  if (target.length > 1024 || /[\\\r\n\0]/.test(target) || target.startsWith('/')) return `the symlink "${name.slice(0, 120)}" points to an absolute or unusual path`;
+  const parts = target.split('/');
+  if (parts.some(p => p === '..')) return `the symlink "${name.slice(0, 120)}" points out of its folder ("..")`;
+  const resolved = [...name.split('/').slice(0, -1), ...parts.filter(p => p && p !== '.')].join('/');
+  return resolved.startsWith(root + '/') ? null : `the symlink "${name.slice(0, 120)}" points out of ${root}`;
+}
+
 // Whether the ZIP's entries are one `<appName>.app/` tree and nothing else: null, or the reason it is refused. names from
-// `unzip -Z1`, listing from zipListingRows(`unzip -Z`); both must name the same entries, as many as the header counts.
-export function macZipProblem({ names, listing, appName = APP_IDENTITY.productName }) {
+// `unzip -Z1`, listing from zipListingRows(`unzip -Z`), structure from zip-structure.mjs zipStructure (the file's own local
+// headers, every byte accounted for: review M-R3-1); all three must name the same entries in the same order, as many as the
+// header counts, with the same types. Review B-R3-1: no entry below a symlink, and every symlink relative and inside the bundle.
+export function macZipProblem({ names, listing, structure, appName = APP_IDENTITY.productName }) {
   const root = appName + '.app';
   if (!Array.isArray(names) || names.length === 0) return 'the ZIP lists no entries';
   if (!listing || listing.entries !== names.length || listing.rows.length !== names.length) return `the ZIP listing does not add up (${names.length} names, ${listing?.rows?.length ?? 0} rows, header ${listing?.entries})`;
+  if (!structure || structure.problem || !Array.isArray(structure.entries)) return `the ZIP structure is not sound: ${structure?.problem ?? 'not read'}`;
+  if (structure.entries.length !== names.length) return `the ZIP's own headers hold ${structure.entries.length} entries, unzip lists ${names.length}`;
   const seen = new Set(), folded = new Set(), modes = new Map();
   for (let i = 0; i < names.length; i++) {
     const name = names[i];
     if (listing.rows[i].name !== name) return `the ZIP listings disagree at entry ${i + 1}`;
+    if (structure.entries[i].name !== name || structure.entries[i].type !== listing.rows[i].mode[0]) return `the ZIP's own headers and unzip disagree at entry ${i + 1}`;
     if (/[\\\r\n\0]/.test(name) || name.startsWith('/')) return `the ZIP entry "${name.slice(0, 120)}" is not a plain relative path`;
     if (!name.startsWith(root + '/')) return `the ZIP entry "${name.slice(0, 120)}" is outside ${root}/ (one ${root} and nothing else)`;
     const parts = name.replace(/\/$/, '').split('/');
@@ -112,6 +127,11 @@ export function macZipProblem({ names, listing, appName = APP_IDENTITY.productNa
     seen.add(key); folded.add(fold); modes.set(key, listing.rows[i].mode);
   }
   for (const gated of gatedPaths(root)) if (modes.get(gated)?.startsWith('l')) return `the ZIP entry "${gated}" is a symlink`;
+  for (const key of modes.keys()) {
+    const parts = key.split('/');
+    for (let n = 1; n < parts.length; n++) if (modes.get(parts.slice(0, n).join('/'))?.startsWith('l')) return `the ZIP entry "${key.slice(0, 120)}" is below the symlink "${parts.slice(0, n).join('/').slice(0, 120)}"`;
+  }
+  for (const entry of structure.entries) if (entry.type === 'l') { const problem = linkTargetProblem(entry.name, entry.link, root); if (problem) return `the ZIP has a bad symlink: ${problem}`; }
   if (!modes.get(root + '/Contents/Info.plist')?.startsWith('-')) return `the ZIP has no regular file ${root}/Contents/Info.plist`;
   const yml = modes.get(root + '/Contents/Resources/app-update.yml');
   if (yml !== undefined && !yml.startsWith('-')) return `the ZIP entry ${root}/Contents/Resources/app-update.yml is not a regular file`;

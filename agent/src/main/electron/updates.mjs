@@ -31,6 +31,7 @@ import { INITIAL, reduce, canCheck, describeUpdateError, updateTrustProblem } fr
 import { UPDATE_CODES, APP_IDENTITY } from '../core/update-signature.mjs';
 import { checkWindowsUpdate, checkMacUpdate, macZipProblem, zipListingRows, zipNames, appUpdateFeed } from '../core/update-verify.mjs';
 import { UPDATE_PUBLIC_KEY } from '../core/update-trust.mjs';
+import { zipStructure } from '../core/zip-structure.mjs';
 
 const FIRST_CHECK_MS = 20000;
 // The pause between the download and the automatic install: time for a call in flight on the agent to finish.
@@ -70,14 +71,19 @@ export function readInstallerVersion(file) {
 // so the bundle read here is the only one Squirrel.Mac can find in it. Its Info.plist is read only by plutil (CoreFoundation,
 // the reader Squirrel's own NSBundle uses), never by a regex: a key hidden in an XML comment or a binary plist reads the same.
 // Anything unreadable fails closed ({error}): no plutil, plutil refusing the file, a value that is not a string.
+// Review M-R3-1: before any unzip, the file's own structure (core/zip-structure.mjs) must account for every byte, so the local
+// headers a sequential reader (Squirrel.Mac's ditto) would unpack are exactly the entries unzip lists; review B-R3-1: no entry
+// below a symlink and no symlink out of the bundle.
 // feed: the url of the update's own Contents/Resources/app-update.yml (the feed the new app will read; null when it has none).
-export function readMacBundle(file, { exec = execFileSync, appName = APP_IDENTITY.productName } = {}) {
+export function readMacBundle(file, { exec = execFileSync, readStructure = zipStructure, appName = APP_IDENTITY.productName } = {}) {
   if (!file) return { error: 'no file' };
   const root = appName + '.app';
   let temp = null;
   try {
+    const structure = readStructure(file);
+    if (structure?.problem || !structure?.entries) return { error: 'the ZIP structure is not sound: ' + (structure?.problem ?? 'not read') };
     const text = args => String(exec('/usr/bin/unzip', args, { encoding: 'utf8', timeout: 60000, maxBuffer: 64 << 20 }));
-    const problem = macZipProblem({ names: zipNames(text(['-Z1', file])), listing: zipListingRows(text(['-Z', file])), appName });
+    const problem = macZipProblem({ names: zipNames(text(['-Z1', file])), listing: zipListingRows(text(['-Z', file])), structure, appName });
     if (problem) return { error: problem };
     temp = fs.mkdtempSync(path.join(os.tmpdir(), 'ssam-update-plist-'));
     const copy = path.join(temp, 'Info.plist');

@@ -81,8 +81,11 @@ const realTree = () => [
 ];
 const MODES = { d: 'drwxr-xr-x', '-': '-rw-r--r--', l: 'lrwxr-xr-x' };
 const plistJson = (version, extra = {}) => JSON.stringify({ CFBundleIdentifier: 'com.ssam.agent', CFBundleName: 'SSAM Agent', CFBundleShortVersionString: version, CFBundleVersion: version, LSUIElement: true, CFBundleURLTypes: [{ CFBundleURLName: 'nested' }], ...extra });
-function zipTool(entries, { plistText = infoPlist('0.2.9'), plutil = () => plistJson('0.2.9'), yml = `owner: ssam\nurl: ${FEED}\nchannel: latest\nupdaterCacheDirName: ssam-agent-updater\n`, header = null, names = null } = {}) {
+// structure: what core/zip-structure.mjs answers for those entries (review M-R3-1); a symlink points inside its framework
+// (Versions/Current/<name>, as in the real ZIP) unless links says otherwise.
+function zipTool(entries, { plistText = infoPlist('0.2.9'), plutil = () => plistJson('0.2.9'), yml = `owner: ssam\nurl: ${FEED}\nchannel: latest\nupdaterCacheDirName: ssam-agent-updater\n`, header = null, names = null, links = {}, structure = null } = {}) {
   const calls = []; const plutilInputs = [];
+  const own = structure ?? { entries: entries.map(([type, name]) => ({ name: name.replace(/\/$/, type === 'd' ? '/' : ''), type, link: type === 'l' ? (name in links ? links[name] : 'Versions/Current/' + name.split('/').pop()) : null })) };
   const exec = (cmd, args) => {
     calls.push([cmd, ...args]);
     if (cmd === '/usr/bin/unzip' && args[0] === '-Z1') return (names ?? entries.map(e => e[1])).join('\n') + '\n';
@@ -97,18 +100,18 @@ function zipTool(entries, { plistText = infoPlist('0.2.9'), plutil = () => plist
     }
     throw new Error('unexpected ' + cmd + ' ' + args.join(' '));
   };
-  return { exec, calls, plutilInputs };
+  return { exec, calls, plutilInputs, structure: own, readStructure: file => { calls.push(['structure', file]); return own; } };
 }
 
 test('readMacBundle: the real tree is read by plutil (JSON), with its feed; the temp copy is removed', () => {
   const z = zipTool(realTree());
-  assert.deepEqual(readMacBundle('/tmp/update.zip', { exec: z.exec }), bundle('0.2.9'));
-  assert.deepEqual(z.calls.map(c => c.slice(0, 2)), [['/usr/bin/unzip', '-Z1'], ['/usr/bin/unzip', '-Z'], ['/usr/bin/unzip', '-p'], ['/usr/bin/plutil', '-convert'], ['/usr/bin/unzip', '-p']]);
-  assert.deepEqual(z.calls[2], ['/usr/bin/unzip', '-p', '/tmp/update.zip', 'SSAM Agent.app/Contents/Info.plist']);
+  assert.deepEqual(readMacBundle('/tmp/update.zip', { exec: z.exec, readStructure: z.readStructure }), bundle('0.2.9'));
+  assert.deepEqual(z.calls.map(c => c.slice(0, 2)), [['structure', '/tmp/update.zip'], ['/usr/bin/unzip', '-Z1'], ['/usr/bin/unzip', '-Z'], ['/usr/bin/unzip', '-p'], ['/usr/bin/plutil', '-convert'], ['/usr/bin/unzip', '-p']]);
+  assert.deepEqual(z.calls[3], ['/usr/bin/unzip', '-p', '/tmp/update.zip', 'SSAM Agent.app/Contents/Info.plist']);
   assert.equal(z.plutilInputs[0].text, infoPlist('0.2.9'), 'plutil reads the exact bytes of the entry');
   assert.equal(fs.existsSync(z.plutilInputs[0].file), false, 'the temp copy is removed');
   const noYml = zipTool(realTree().filter(e => !e[1].endsWith('app-update.yml')), { yml: null });
-  assert.equal(readMacBundle('/tmp/u.zip', { exec: noYml.exec }).feed, null);
+  assert.equal(readMacBundle('/tmp/u.zip', { exec: noYml.exec, readStructure: noYml.readStructure }).feed, null);
 });
 
 test('readMacBundle refuses the review probes: a second Old.APP, a nested x/SSAM Agent.app, a wrong-case or __MACOSX entry', () => {
@@ -119,9 +122,9 @@ test('readMacBundle refuses the review probes: a second Old.APP, a nested x/SSAM
     [[['d', '__MACOSX/'], ['-', '__MACOSX/SSAM Agent.app/Contents/._Info.plist']], /"__MACOSX\/" is outside/],
   ]) {
     const z = zipTool([...realTree(), ...extra]);
-    const answer = readMacBundle('/tmp/u.zip', { exec: z.exec });
+    const answer = readMacBundle('/tmp/u.zip', { exec: z.exec, readStructure: z.readStructure });
     assert.match(answer.error, pattern);
-    assert.equal(z.calls.length, 2, 'nothing is extracted from a refused ZIP');
+    assert.equal(z.calls.length, 3, 'nothing is extracted from a refused ZIP');
     assert.match(macBundleProblem({ bundle: answer, label: '0.2.9', current: '0.2.8' }).message, /UPDATE_INSTALLER_MISMATCH: the downloaded update has no readable SSAM Agent\.app Info\.plist/);
   }
 });
@@ -129,7 +132,7 @@ test('readMacBundle refuses the review probes: a second Old.APP, a nested x/SSAM
 test('readMacBundle: a plist with the version hidden in an XML comment reads what plutil (CoreFoundation) reads, so 0.2.7 stays 0.2.7', () => {
   const hidden = infoPlist('0.2.7').replace('<dict>', '<dict>\n  <!-- <key>CFBundleShortVersionString</key><string>0.2.9</string><key>CFBundleVersion</key><string>0.2.9</string> -->');
   const z = zipTool(realTree(), { plistText: hidden, plutil: () => plistJson('0.2.7') });
-  const answer = readMacBundle('/tmp/u.zip', { exec: z.exec });
+  const answer = readMacBundle('/tmp/u.zip', { exec: z.exec, readStructure: z.readStructure });
   assert.equal(z.plutilInputs[0].text, hidden, 'the whole plist, comment included, goes to plutil');
   assert.equal(answer.shortVersion, '0.2.7');
   assert.equal(macBundleProblem({ bundle: answer, label: '0.2.9', current: '0.2.8', feed: FEED }).code, UPDATE_CODES.INSTALLER_MISMATCH);
@@ -144,17 +147,18 @@ test('readMacBundle fails closed when plutil is missing, refuses the plist, prin
     [() => '["an array"]', /not a dictionary/],
     [() => plistJson('0.2.9', { CFBundleVersion: 29 }), /CFBundleVersion is not a string/],
   ]) {
-    const answer = readMacBundle('/tmp/u.zip', { exec: zipTool(realTree(), { plutil }).exec });
+    const z = zipTool(realTree(), { plutil });
+    const answer = readMacBundle('/tmp/u.zip', { exec: z.exec, readStructure: z.readStructure });
     assert.match(answer.error, pattern);
     assert.equal(macBundleProblem({ bundle: answer, label: '0.2.9', current: '0.2.8' }).code, UPDATE_CODES.INSTALLER_MISMATCH);
   }
-  assert.match(readMacBundle('/tmp/u.zip', { exec: () => { throw new Error('unzip: cannot find zipfile'); } }).error, /cannot find zipfile/);
+  assert.match(readMacBundle('/tmp/u.zip', { exec: () => { throw new Error('unzip: cannot find zipfile'); }, readStructure: zipTool(realTree()).readStructure }).error, /cannot find zipfile/);
 });
 
 test('macZipProblem refuses duplicates, case and normalization duplicates, "..", absolute paths, backslashes and symlinks on the plist path', () => {
   const check = (entries, options = {}) => {
     const z = zipTool(entries, options);
-    return macZipProblem({ names: zipNames(z.exec('/usr/bin/unzip', ['-Z1', 'u.zip'])), listing: zipListingRows(z.exec('/usr/bin/unzip', ['-Z', 'u.zip'])) });
+    return macZipProblem({ names: zipNames(z.exec('/usr/bin/unzip', ['-Z1', 'u.zip'])), listing: zipListingRows(z.exec('/usr/bin/unzip', ['-Z', 'u.zip'])), structure: z.structure });
   };
   assert.equal(check(realTree()), null);
   const cases = [
@@ -182,6 +186,14 @@ test('macZipProblem refuses duplicates, case and normalization duplicates, "..",
   assert.match(check(realTree(), { names: realTree().map(e => e[1]).reverse() }), /disagree/);
   assert.match(check(realTree(), { names: [...realTree().map(e => e[1]), 'SSAM Agent.app/x'] }), /does not add up/);
   assert.match(macZipProblem({ names: [], listing: zipListingRows('') }), /no entries/);
+  // Review M-R3-1: the file's own headers (zip-structure.mjs) must hold the same entries, with the same types, or nothing passes.
+  const z = zipTool(realTree());
+  const listed = { names: zipNames(z.exec('/usr/bin/unzip', ['-Z1', 'u.zip'])), listing: zipListingRows(z.exec('/usr/bin/unzip', ['-Z', 'u.zip'])) };
+  assert.match(macZipProblem(listed), /structure is not sound: not read/);
+  assert.match(macZipProblem({ ...listed, structure: { problem: 'the ZIP has 91 bytes between its last listed entry and the central directory that no listed entry covers' } }), /structure is not sound: the ZIP has 91 bytes/);
+  assert.match(macZipProblem({ ...listed, structure: { entries: z.structure.entries.slice(1) } }), /own headers hold 12 entries, unzip lists 13/);
+  assert.match(macZipProblem({ ...listed, structure: { entries: z.structure.entries.map((e, i) => i === 4 ? { ...e, name: 'Old.app/x' } : e) } }), /own headers and unzip disagree at entry 5/);
+  assert.match(macZipProblem({ ...listed, structure: { entries: z.structure.entries.map((e, i) => i === 4 ? { ...e, type: 'l', link: 'A' } : e) } }), /own headers and unzip disagree at entry 5/);
   // The symlinks of the frameworks stay allowed: they are not on the way to the plist or the feed.
   assert.equal(realTree().filter(e => e[0] === 'l').length, 2);
 });
@@ -320,4 +332,35 @@ test('Mac flow: a newer download during the hand-off supersedes it', async t => 
   assert.notEqual(f.updates.state.status, 'ready');
   assert.ok(f.entries.some(e => e.event === 'update-verification-superseded'));
   assert.equal(await f.updates.installNow(), false);
+});
+
+// Review B-R3-1: an entry below a symlink would be written wherever the symlink points (ditto follows it), and a symlink may only
+// point inside its own bundle: no absolute target, no "..". The real ZIP (14 symlinks, all like Versions/Current/Resources or A)
+// passes; see zip-structure.test.mjs for the real build A ZIP read end to end.
+test('macZipProblem refuses an entry below a symlink and a symlink that points out of the bundle', () => {
+  const check = (entries, options = {}) => {
+    const z = zipTool(entries, options);
+    return macZipProblem({ names: zipNames(z.exec('/usr/bin/unzip', ['-Z1', 'u.zip'])), listing: zipListingRows(z.exec('/usr/bin/unzip', ['-Z', 'u.zip'])), structure: z.structure });
+  };
+  const link = ROOT + '/Contents/Frameworks/x';
+  assert.equal(check([...realTree(), ['l', link]], { links: { [link]: 'Electron Framework.framework/Versions/A' } }), null);
+  assert.match(check([...realTree(), ['l', link], ['-', link + '/evil.plist']], { links: { [link]: 'Electron Framework.framework' } }), /"SSAM Agent\.app\/Contents\/Frameworks\/x\/evil\.plist" is below the symlink "SSAM Agent\.app\/Contents\/Frameworks\/x"/);
+  assert.match(check([...realTree(), ['l', link], ['d', link + '/deeper/'], ['-', link + '/deeper/evil.plist']], { links: { [link]: 'A' } }), /is below the symlink/);
+  for (const [target, pattern] of [['/Users/me/Library/LaunchAgents', /absolute/], ['../../../../Library/LaunchAgents', /out of its folder \("\.\."\)/], ['A/../../B', /"\.\."/],
+    ['', /no readable target/], [null, /no readable target/], ['a\\b', /unusual/], ['x'.repeat(1025), /unusual/]])
+    assert.match(String(check([...realTree(), ['l', link]], { links: { [link]: target } })), pattern, String(target).slice(0, 40));
+  assert.equal(check(realTree()), null, 'the framework symlinks of the real ZIP stay allowed');
+});
+
+// Review B-R3-2: plutil -convert json fails on <data> and <date>; electron-builder writes extendInfo into Info.plist, so a value
+// of those kinds there would make every Mac refuse every update (closed, but silent). The plist values must stay JSON-able.
+test('the Info.plist values the build adds (electron-builder.yml mac.extendInfo) can all be read by plutil -convert json', async () => {
+  const { default: yaml } = await import('js-yaml');
+  const config = yaml.load(fs.readFileSync(path.resolve(import.meta.dirname, '..', '..', 'electron-builder.yml'), 'utf8'));
+  const plain = value => ['string', 'boolean'].includes(typeof value) || (typeof value === 'number' && Number.isFinite(value))
+    || (Array.isArray(value) && value.every(plain)) || (value && Object.getPrototypeOf(value) === Object.prototype && Object.values(value).every(plain));
+  assert.ok(config.mac.extendInfo && Object.keys(config.mac.extendInfo).length > 0);
+  for (const [key, value] of Object.entries(config.mac.extendInfo)) assert.ok(plain(value), `extendInfo ${key} is not a string, number, boolean, array or dict: plutil -convert json would refuse the plist`);
+  const build = fs.readFileSync(path.resolve(import.meta.dirname, '..', '..', 'scripts', 'build.mjs'), 'utf8');
+  assert.doesNotMatch(build, /extendInfo/, 'build.mjs adds no Info.plist values of its own');
 });
