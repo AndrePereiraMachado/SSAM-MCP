@@ -583,10 +583,15 @@ every Service Studio of the window and one O11 kernel compiled against each:
   - Relief and progress (S1 R4, review R3 M6): every wait of the gate (a build slot, a cold run, an ODC or O11 worker
     start, a reader start) first asks the idle caches to leave, one per 2 s turn (`SSAM_MEMORY_EVICT_TURN_MS`): idle O11
     readers first (a waiting reader spares those read within 60 s; any other waiter evicts a reader idle for 5 s), then
-    idle ODC and O11 workers of this backend with no call in flight (the ODC worker's standing hold is released with it).
-    A worker or reader serving a call is never asked. When nothing more is evictable and no other consumer is admitted
-    (a standing hold is no consumer), the waiter enters: a lone delivery is never refused for an idle cache or for a
-    resident worker's growth still to come. Measured by the review's probe (other: server 400, ODC worker RSS 1498, an
+    idle ODC and O11 workers of this backend with no call in flight. An evicted ODC worker keeps its standing hold,
+    marked leaving, until its process is gone (review R4 B-R4-2); an ODC worker used within 60 s is never asked, as the
+    readers (B-R4-3). A worker or reader serving a call is never asked. The server registers the evictor of its O11
+    reader folder at start, so readers left by a previous server process are evictable too (B-R4-1). When nothing more
+    is evictable and no other consumer is admitted (a standing hold is no consumer), the waiter enters: a lone delivery
+    is never refused for an idle cache or for a resident worker's growth still to come. That rule never admits a
+    STANDING request (S1 R5, review R4 M7): the ODC worker's start has the cold run as its alternative and starts only
+    with real room (the 60 s no-room cache asks the same), so a consumer entering by the rule never stacks on a worker
+    that started without room. Measured by the review's probe (other: server 400, ODC worker RSS 1498, an
     idle reader of 300/600/800 MiB): the O11 delivery (1400) is admitted in every case.
   - Hot: each build slot past the first has its own ODC worker (`base + index*step`, `build-pool.mjs`), so up to 4 W
     on the hot tier (4 builds), each started through the gate with its own standing hold and each an evictable cache
