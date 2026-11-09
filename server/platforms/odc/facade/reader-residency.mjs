@@ -14,13 +14,19 @@
 //   3. is admitted by the memory gate of the process with SSAM_MEMORY_RESERVE_READER_MB (default 800, not measured yet:
 //      the first-deploy kit measures it, S1-KIT-PLANO.md), its pid attached until its first read answered; a wait that
 //      runs out refuses the read, nothing started (memoryWaitRefusal, waitedFor memory).
-// SSAM_O11_READERS_MAX (>= 1): the compose sets it per tier (gen-compose sizing o11Readers, default 1). Unset: 1 under any
-// readable container limit (the r45 tiers have no margin left once the resident ODC lane worker is counted), every kernel
-// of the image without one (a developer machine).
+// SSAM_O11_READERS_MAX (>= 1) is a CEILING, not the number that fits (S1 R3, review R2 B-R2-2): the compose sets it per tier
+// (gen-compose sizing o11Readers, default every O11 version of the window); unset, every kernel of the image. What fits is
+// the gate's to decide: a reader that waits for memory asks one more idle reader to leave at each turn of its wait (B-R2-1),
+// least recently used first, until it is admitted or its wait runs out. The capacity model counts ONE resident reader per
+// backend (S1-KIT-PLANO 0); a second one only lives while there is room. Hysteresis (B-R2-2): a reader read within
+// SSAM_O11_READER_MIN_IDLE_MS (default 60 s) is never asked to leave, so two customers of different versions on a full
+// backend do not stop each other's reader at every read; the cost of a switch is one cold start of the other version's
+// reader (its Service Studio assemblies and the capture: seconds), at most once a minute per version.
 import fs from 'node:fs';
 import path from 'node:path';
 
 export const DEFAULT_READER_RESERVE_MB = 800;
+export const DEFAULT_READER_MIN_IDLE_MS = 60000;
 export const READER_META = 'reader.json';
 export const LAST_READ = 'last-read';
 
@@ -34,11 +40,12 @@ export function containerLimitBytes({ platform = process.platform, readFile = fs
   if (platform !== 'linux') return null;
   try { const max = String(readFile(root + '/memory.max', 'utf8')).trim(); return /^\d+$/.test(max) ? Number(max) : null; } catch { return null; }
 }
-// {max, reserveMb}: how many O11 readers may stay resident on this backend and what a new one reserves in the gate.
-export function readerResidency({ env = process.env, versions = 1, limitBytes = containerLimitBytes() } = {}) {
+// {max, reserveMb, minIdleMs}: the ceiling of resident O11 readers, what a new one reserves in the gate and how long a reader
+// that read is safe from eviction.
+export function readerResidency({ env = process.env, versions = 1 } = {}) {
   const explicit = integer(env.SSAM_O11_READERS_MAX, 1);
-  const max = explicit ?? (Number.isFinite(limitBytes) ? 1 : Math.max(1, versions));
-  return { max, reserveMb: integer(env.SSAM_MEMORY_RESERVE_READER_MB, 0) ?? DEFAULT_READER_RESERVE_MB, source: explicit ? 'env' : Number.isFinite(limitBytes) ? 'limit' : 'image' };
+  return { max: explicit ?? Math.max(1, versions), reserveMb: integer(env.SSAM_MEMORY_RESERVE_READER_MB, 0) ?? DEFAULT_READER_RESERVE_MB,
+    minIdleMs: integer(env.SSAM_O11_READER_MIN_IDLE_MS, 0) ?? DEFAULT_READER_MIN_IDLE_MS, source: explicit ? 'env' : 'image' };
 }
 
 const readJson = file => JSON.parse(fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, ''));
@@ -73,10 +80,11 @@ export async function residentReaders(platformDir, { keep = null, rpc }) {
   return out;
 }
 
-// Before a new reader generation starts in `keep`: evicts idle live readers (least recently used first) until at most max-1
-// stay, and removes the folders of retired versions (a recorded Studio folder not among `servedDirs`, no live reader, no
-// starter). Returns {evicted: [{generation, rssMb}], kept: n, pruned: [generation]}. Never throws.
-export async function makeRoom(platformDir, { keep, max, rpc, authorization, servedDirs = null, remove = dir => fs.rmSync(dir, { recursive: true, force: true }) }) {
+// Before a new reader generation starts in `keep`: evicts idle live readers (least recently used first, none read within
+// minIdleMs, at most `limit` of them) until at most max-1 stay, and removes the folders of retired versions (a recorded
+// Studio folder not among `servedDirs`, no live reader, no starter). Returns {evicted: [{generation, rssMb}], kept: n,
+// pruned: [generation]}. Never throws.
+export async function makeRoom(platformDir, { keep, max, rpc, authorization, servedDirs = null, minIdleMs = 0, limit = Infinity, now = Date.now, remove = dir => fs.rmSync(dir, { recursive: true, force: true }) }) {
   const evicted = [], pruned = [];
   let readers = [];
   try { readers = await residentReaders(platformDir, { keep, rpc }); } catch { return { evicted, kept: 0, pruned }; }
@@ -89,8 +97,8 @@ export async function makeRoom(platformDir, { keep, max, rpc, authorization, ser
   const live = readers.filter(r => r.live).sort((a, b) => a.lastRead - b.lastRead);
   let count = live.length;
   for (const r of live) {
-    if (count <= max - 1) break;
-    if (r.busy) continue;
+    if (count <= max - 1 || evicted.length >= limit) break;
+    if (r.busy || now() - r.lastRead < minIdleMs) continue;
     try { await rpc(r.state, ['shutdown'], authorization, 5000); evicted.push({ generation: path.basename(r.directory), rssMb: r.rssMb }); count--; }
     catch { /* it may have gone already: the gate still decides */ }
   }

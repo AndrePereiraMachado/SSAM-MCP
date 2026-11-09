@@ -7,11 +7,10 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { readerResidency, makeRoom, residentReaders, writeReaderMeta, touchLastRead, DEFAULT_READER_RESERVE_MB, READER_META } from '../reader-residency.mjs';
-import { admitReader } from '../reader-client.mjs';
+import { readerResidency, makeRoom, residentReaders, writeReaderMeta, touchLastRead, DEFAULT_READER_RESERVE_MB, DEFAULT_READER_MIN_IDLE_MS, READER_META } from '../reader-residency.mjs';
+import { admitReader, ensureReader } from '../reader-client.mjs';
 import { createMemoryGate, MEMORY_WAIT_CODE } from '../memory-room.mjs';
 
-const GIB = 1024 * 1024 * 1024;
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ssam-reader-residency-'));
 test.after(() => fs.rmSync(tmp, { recursive: true, force: true }));
 let n = 0;
@@ -39,13 +38,27 @@ function readers(spec) {
   return { dir, rpc, calls };
 }
 
-test('readerResidency: the compose value, else 1 under any container limit, else every kernel', () => {
-  assert.deepEqual(readerResidency({ env: { SSAM_O11_READERS_MAX: '3' }, versions: 4, limitBytes: 4240 * 1024 * 1024 }), { max: 3, reserveMb: DEFAULT_READER_RESERVE_MB, source: 'env' });
-  assert.equal(readerResidency({ env: {}, versions: 4, limitBytes: 4240 * 1024 * 1024 }).max, 1, 'the other tier (4240m)');
-  assert.equal(readerResidency({ env: {}, versions: 4, limitBytes: 10 * GIB }).max, 1, 'the hot tier (10g): no margin once the ODC lane worker is counted');
-  assert.equal(readerResidency({ env: {}, versions: 4, limitBytes: null }).max, 4, 'no readable limit (a developer machine)');
-  assert.equal(readerResidency({ env: { SSAM_O11_READERS_MAX: '0' }, versions: 4, limitBytes: null }).max, 4, 'an invalid value is ignored');
-  assert.equal(readerResidency({ env: { SSAM_MEMORY_RESERVE_READER_MB: '650' }, limitBytes: null }).reserveMb, 650);
+test('readerResidency: the ceiling is the compose value, else every kernel (the gate decides what fits); 60 s of hysteresis', () => {
+  assert.deepEqual(readerResidency({ env: { SSAM_O11_READERS_MAX: '3' }, versions: 4 }), { max: 3, reserveMb: DEFAULT_READER_RESERVE_MB, minIdleMs: DEFAULT_READER_MIN_IDLE_MS, source: 'env' });
+  assert.equal(DEFAULT_READER_MIN_IDLE_MS, 60000);
+  assert.equal(readerResidency({ env: {}, versions: 4 }).max, 4, 'no ceiling named: every kernel of the image');
+  assert.equal(readerResidency({ env: { SSAM_O11_READERS_MAX: '0' }, versions: 4 }).max, 4, 'an invalid value is ignored');
+  assert.equal(readerResidency({ env: { SSAM_MEMORY_RESERVE_READER_MB: '650' } }).reserveMb, 650);
+  assert.equal(readerResidency({ env: { SSAM_O11_READER_MIN_IDLE_MS: '5000' } }).minIdleMs, 5000);
+});
+
+test('makeRoom (B-R2-2): a reader read within minIdleMs is never asked to leave; limit bounds the evictions of one turn', async () => {
+  const t0 = Date.parse('2026-11-09T12:00:00Z');
+  const { dir, rpc } = readers({
+    old: { port: 31, lastRead: '2026-11-09T11:50:00Z' },
+    older: { port: 32, lastRead: '2026-11-09T11:40:00Z' },
+    fresh: { port: 33, lastRead: '2026-11-09T11:59:30Z' },
+  });
+  const room = await makeRoom(dir, { keep: path.join(dir, 'new'), max: 1, rpc, minIdleMs: 60000, limit: 1, now: () => t0 });
+  assert.deepEqual(room.evicted.map(e => e.generation), ['older'], 'one per turn, least recently used first');
+  const next = await makeRoom(dir, { keep: path.join(dir, 'new'), max: 1, rpc, minIdleMs: 60000, now: () => t0 });
+  assert.deepEqual(next.evicted.map(e => e.generation), ['old'], 'the reader read 30 s ago stays');
+  assert.equal(next.kept, 1);
 });
 
 test('makeRoom: idle readers go least recently used first, a busy one is never stopped, the new one makes max', async () => {
@@ -104,7 +117,50 @@ test('admitReader: makes room, records the Studio, and holds the reader reserve 
   const alone = {};
   await admitReader({ dll: 'x', runtimeDir: path.join(studios, '11.55.92'), directory, authorization: 'k' }, alone, { env, gate, rpc });
   assert.ok(alone.hold, 'the only admitted process is always admitted'); alone.hold.release();
-  const inside = {};
-  await gate.run(gate.hold(100), () => admitReader({ dll: 'x', runtimeDir: path.join(studios, '11.55.92'), directory, authorization: 'k' }, inside, { env, gate, rpc }));
-  assert.equal(inside.hold, undefined, 'inside an admitted slot the slot hold covers it');
+  // B-R2-3: a reader outlives the slot it may start in: it reserves on its own there too.
+  room = 5000;
+  const slot = gate.hold(100), inside = {};
+  await gate.run(slot, () => admitReader({ dll: 'x', runtimeDir: path.join(studios, '11.55.92'), directory, authorization: 'k' }, inside, { env, gate, rpc }));
+  assert.ok(inside.hold && inside.hold !== slot, 'its own hold, not the slot\'s'); assert.equal(inside.hold.mb, 700);
+  inside.hold.release(); slot.release();
+});
+
+test('admitReader (B-R2-1): a reader waiting for memory asks one more idle reader to leave at each turn, and is admitted once it left', async () => {
+  const studios = fresh(), clis = fresh();
+  const env = { SSAM_IMAGE_O11: '11.55.92,11.55.93,11.55.95', SSAM_O11_STUDIO_ROOT: studios, SSAM_O11_CLI_ROOT: clis, SSAM_MEMORY_RESERVE_READER_MB: '700', SSAM_O11_READER_MIN_IDLE_MS: '60000' };
+  // Two idle readers of other versions, under the ceiling (3): makeRoom stops nobody; the memory is what is short.
+  const { dir, rpc, calls } = readers({
+    r93: { port: 41, lastRead: '2026-11-09T10:00:00Z', runtimeDir: path.join(studios, '11.55.93'), rss: 900 },
+    r95: { port: 42, lastRead: '2026-11-09T09:00:00Z', runtimeDir: path.join(studios, '11.55.95'), rss: 900 },
+  });
+  const directory = path.join(dir, 'gen92'); fs.mkdirSync(directory);
+  // The room grows by a reader's 900 MB each time one is shut down.
+  const room = () => 300 + 900 * calls.filter(c => c.command === 'shutdown').length;
+  const gate = createMemoryGate({ room, settings: { reserveMb: 1400, odcReserveMb: 600, waitMs: 2000, growMs: 15000 } });
+  const build = gate.hold(0); // another admitted process: the reader is not alone
+  const admission = {};
+  await admitReader({ dll: 'x', runtimeDir: path.join(studios, '11.55.92'), directory, authorization: 'k' }, admission, { env, gate, rpc, turnMs: 50 });
+  assert.ok(admission.hold, 'admitted once the idle reader left, well before the wait ran out');
+  assert.deepEqual(admission.residency.evicted.map(e => e.generation), ['r95'], 'one idle reader, the least recently used, and no more than needed');
+  admission.hold.release(); build.release();
+});
+
+test('ensureReader (M4): the startup deadline runs from the spawn, after a late admission; a reader that does not answer in time is killed and its hold released', async () => {
+  const directory = fresh();
+  fs.mkdirSync(path.join(directory, 'bin'), { recursive: true });
+  let released = false, attached = null, spawnedAt = null;
+  const hold = { mb: 700, attach(pid) { attached = pid; }, release() { released = true; } };
+  const admittedAt = [];
+  const admit = async (_args, admission) => { await new Promise(r => setTimeout(r, 300)); admittedAt.push(Date.now()); admission.hold = hold; };
+  const child = { pid: 424242, exitCode: null, on() {}, unref() {} };
+  const killed = [];
+  const spawnFn = () => { spawnedAt = Date.now(); return child; };
+  const started = Date.now();
+  await assert.rejects(ensureReader({ dll: path.join(directory, 'anvil.dll'), runtimeDir: directory, platform: 'ss4', directory, generation: 'g', authority: directory, authorization: 'k' }, {},
+    { resident: true, admit, spawnFn, startMs: 250, kill: pid => killed.push(pid), live: async () => null }), /startup timed out/);
+  assert.ok(spawnedAt >= admittedAt[0], 'spawned after the admission');
+  assert.ok(Date.now() - spawnedAt >= 240, 'the whole startup time counts from the spawn, not from before the wait');
+  assert.ok(Date.now() - started >= 540);
+  assert.equal(attached, 424242); assert.deepEqual(killed, [424242], 'the late reader is killed'); assert.equal(released, true, 'and its reservation released');
+  assert.equal(fs.existsSync(path.join(directory, 'start.lock')), false);
 });
