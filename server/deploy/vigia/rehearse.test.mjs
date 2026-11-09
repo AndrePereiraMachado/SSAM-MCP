@@ -204,3 +204,46 @@ test('nothing of the rehearsal enters the image: deploy/vigia stays out but for 
  assert.ok(lines.includes('deploy/vigia/*'));
  assert.deepEqual(lines.filter(l=>l.startsWith('!deploy/vigia/')&&l!=='!deploy/vigia/'),['!deploy/vigia/no-provenance.json']);
 });
+// F1 ed25519-offers rehearsal of the five-pair window with the example pack (no 11.55.95 thin bridge): the bridges are built
+// before any test with an Ed25519 manifest only (no thumbprint, no Authenticode), the image must offer them to the published pack's
+// hello and accept it with them installed, and the signed store lands in the rehearsal folder. Nothing changes production.
+function ed25519Bridges(f,extra={}){
+ return async()=>{
+  f.order.push('buildBridges');const stage=path.join(f.config.rehearsal.dir,'bridges','e'),keys=generateKeyPairSync('ed25519'),offers=[];
+  fs.mkdirSync(stage,{recursive:true});fs.writeFileSync(path.join(stage,'public-key.pem'),keys.publicKey.export({type:'spki',format:'pem'}));
+  for(const [lane,v,p,names] of [['odc','1.7.32','v109',[['bridge/ODC3.Bridge.v109.dll','owner'],['client/ODC3.Bridge.Client.dll','owner'],['client/Microsoft.Diagnostics.NETCore.Client.dll','microsoft']]],['o11','11.55.95','d1',[['bridge/Anvil.Bridge.dll','owner'],['hook/Anvil.RuntimeHook.Agent.dll','owner']]]]){
+   const target=path.join(stage,lane,v,p),files=[];
+   for(const [name,signer] of names){fs.mkdirSync(path.dirname(path.join(target,name)),{recursive:true});fs.writeFileSync(path.join(target,name),name);files.push({path:name,sha256:createHash('sha256').update(name).digest('hex'),size:name.length,signer});}
+   const bytes=Buffer.from(JSON.stringify({schema:1,lane,studioVersion:v,runtime:'net10.0',protocol:p,sequence:1,createdAt:new Date().toISOString(),files,...extra}));
+   fs.writeFileSync(path.join(target,'manifest.json'),bytes);fs.writeFileSync(path.join(target,'manifest.sig'),sign(null,bytes,keys.privateKey));
+   offers.push({lane,studioVersion:v,protocol:p,sequence:1});
+  }
+  return {stage,mode:'ed25519-offers',offers,kernel:{}};
+ };
+}
+test('ed25519-offers rehearsal of the five-pair window offers the signed d1 bridge for 11.55.95, never Authenticode-signs, changes nothing',async t=>{
+ const f=await fixture(t,{config:{bridgeMode:'ed25519-offers',agentPack:example.agentPack,agentPackByRuntime:example.agentPackByRuntime,agentReleaseCommit:'c'.repeat(40)},vault:{authenticodeThumbprint:undefined}});
+ f.runtime.agentReleaseFiles=async()=>agentFiles();odcMatches(f);
+ f.runtime.observe=async()=>{f.order.push('observe');return [release('odc','1.7.32','1.7.32.11065'),release('o11','11.55.95','11.55.95.65352')];};
+ f.runtime.buildBridges=ed25519Bridges(f);
+ let seen=null;
+ f.runtime.smoke=async()=>{f.order.push('smoke');seen={hello:f.runtime.packHello,expect:f.runtime.offerExpect,kernel:f.runtime.bridgeKernel};return {ok:true,tools:91,totalBytes:259684,coreBytes:33952,publishedPack:true,offersChecked:2};};
+ const result=await rehearseCurrent(f.config,f.runtime,{manifest:five});
+ assert.equal(result.status,'rehearsed',JSON.stringify(result));assert.equal(result.bridgeMode,'ed25519-offers');assert.equal(result.id,'o11-11.55.95-odc-1.7.32');
+ assert.ok(f.order.indexOf('buildBridges')<f.order.indexOf('test o11 baseline'),f.order.join());
+ assert.deepEqual(result.offers.map(o=>[o.lane,o.studioVersion,o.protocol,o.signers]),[['odc','1.7.32','v109',{owner:2,microsoft:1}],['o11','11.55.95','d1',{owner:2,microsoft:0}]]);
+ assert.deepEqual(result.hello,{odcBridge:'v108',o11BuiltFor:'11.55.94',installed:['o11 d1#1']});assert.deepEqual(result.offerLanes,['o11']);
+ assert.deepEqual(result.legacy,{odc:{ok:true},o11:{ok:true}},'11.55.94 is served in this window: a 0.2.7 agent keeps its default thin bridge on 11.55.95');
+ assert.deepEqual(seen.kernel.o11BridgeAccepted,['d1']);assert.equal(seen.expect.offerHello.capabilities.bridgeOffer,true);
+ assert.ok(fs.existsSync(path.join(f.config.rehearsal.dir,'store','o11','11.55.95','d1','manifest.sig')));
+ assert.ok(!f.ran.some(cmd=>/dotnet|signtool/i.test(cmd)),f.ran.join());assert.deepEqual(f.spied,[]);assert.deepEqual([...new Set(f.ssh)],['capacity']);
+});
+test('ed25519-offers rehearsal refuses a store whose manifest still names an Authenticode thumbprint',async t=>{
+ const f=await fixture(t,{config:{bridgeMode:'ed25519-offers',agentPack:example.agentPack,agentPackByRuntime:example.agentPackByRuntime,agentReleaseCommit:'c'.repeat(40)},vault:{authenticodeThumbprint:undefined}});
+ f.runtime.agentReleaseFiles=async()=>agentFiles();odcMatches(f);
+ f.runtime.observe=async()=>{f.order.push('observe');return [release('odc','1.7.32','1.7.32.11065'),release('o11','11.55.95','11.55.95.65352')];};
+ f.runtime.buildBridges=ed25519Bridges(f,{authenticodeThumbprint:'b'.repeat(40)});
+ f.runtime.smoke=async()=>({ok:true,tools:91,totalBytes:1,coreBytes:1,publishedPack:true,offersChecked:2});
+ const result=await rehearseCurrent(f.config,f.runtime,{manifest:five});
+ assert.equal(result.status,'failed');assert.match(result.error,/names an Authenticode thumbprint/);assert.deepEqual(f.spied,[]);
+});

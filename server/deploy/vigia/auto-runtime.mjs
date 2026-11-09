@@ -37,8 +37,8 @@ export function createAutoRuntime(config,runtime) {
   let s;
   try {
    s=JSON.parse((await script('read-secrets.ps1',config.vault?['-Vault',config.vault]:[])).stdout);
-   // server-only signs no client bridge: the Authenticode thumbprint is optional there (empty = none), still well formed when
-   // present; signed-offers keeps requiring it. Ed25519 and the journal HMAC key stay required in both.
+   // server-only and ed25519-offers sign no client bridge with Authenticode: the thumbprint is optional there (empty = none),
+   // still well formed when present; signed-offers keeps requiring it. Ed25519 and the journal HMAC key stay required in all.
    const signing=bridgeMode(config)==='signed-offers';
    if(['coolifyToken','sshPrivateKey',...(signing?['authenticodeThumbprint']:[]),'manifestPrivateKey','journalKey'].some(k=>!s[k]))throw Error();
    if((signing||s.authenticodeThumbprint)&&!/^[a-f0-9]{40}$/i.test(s.authenticodeThumbprint))throw Error();
@@ -164,8 +164,14 @@ export function createAutoRuntime(config,runtime) {
    const ids=new Set(manifest?windowPairs(manifest).map(p=>pairId(p)):[]),served=all.filter(k=>ids.has(pairId(k)));
    return served.length?served:all;
   },
+  // signed-offers: the owner's files are Authenticode-signed through the vault entry point (odc-runtime-signing.ps1 Artifacts).
+  // ed25519-offers: nothing is signed but the manifest (Ed25519): classify-signers.ps1 only verifies (owner = the TargetPath
+  // outputs; microsoft = restored NuGet bytes with a valid pinned Microsoft signature), the manifest carries no thumbprint, and
+  // the build evidence (it names local NuGet paths) stays in the attempt folder, never in the served stage.
   async buildBridges(pair,bundles,dir){
-   if(bridgeMode(config)!=='signed-offers')throw Error('Client bridges are built and signed only in the signed-offers bridge mode.');
+   const mode=bridgeMode(config);
+   if(!['signed-offers','ed25519-offers'].includes(mode))throw Error('Client bridges are built only in the signed-offers and ed25519-offers bridge modes.');
+   const ed25519=mode==='ed25519-offers';
    await runtime.executionSource();
    for(const b of Object.values(bundles)){verifyBundleCustody(b,config.bundlePins?.[`${b.lane}-${b.version}`]);if(b.provenance)await runtime.verifyInput(b.provenance);}
    const agentSource=await runtime.agentSource();
@@ -196,22 +202,35 @@ export function createAutoRuntime(config,runtime) {
       const builtPath=await runtime.run(config.dotnet??'C:/Program Files/dotnet/dotnet.exe',['msbuild',projectFile,'-getProperty:TargetPath','-p:Configuration=Release','-p:OutputPath='+path.join(target,sub)+path.sep,...properties,...(sub==='hook'?['-p:AssemblyName=Anvil.RuntimeHook.Agent']:[])],{dir});
       outputs.push(builtPath.stdout.trim());assets.push(path.join(path.dirname(projectFile),'obj/project.assets.json'));
     }
-    const evidenceFile=path.join(target,'build-evidence.json');
+    const evidenceFile=ed25519?path.join(dir,'bridge-evidence',`${lane}-${b.version}-${p}.json`):path.join(target,'build-evidence.json');
+    fs.mkdirSync(path.dirname(evidenceFile),{recursive:true});
     fs.writeFileSync(evidenceFile,JSON.stringify(artifactEvidence(target,outputs,assets)));
     const required=lane==='odc'?[`bridge/ODC3.Bridge.${protocol}.dll`,'client/ODC3.Bridge.Client.dll','client/ODC3.Bridge.Client.runtimeconfig.json']:['bridge/Anvil.Bridge.dll','hook/Anvil.RuntimeHook.Agent.dll'];
     if(required.some(name=>!fs.existsSync(path.join(target,name))))throw Error('The compiled client bridge entrypoints are incomplete.');
     if(lane==='odc'&&JSON.parse(fs.readFileSync(path.join(target,'client/ODC3.Bridge.Client.runtimeconfig.json'),'utf8')).runtimeOptions?.tfm!=='net10.0')throw Error('The bridge client is not the net10 client of the packs.');
+    let signatures;
+    if(ed25519){
+     // Verification only: no vault, no certificate, no file changed.
+     const classified=await runtime.run(ps,['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',path.join(here,'classify-signers.ps1'),'-ArtifactDirectory',target,'-BuildEvidence',evidenceFile],{timeoutMs:300000,allowFailure:true});
+     if(String(classified.stdout??'').includes('REVOCATION_UNAVAILABLE'))throw Object.assign(Error('Certificate revocation service is unavailable.'),{code:'REVOCATION_UNAVAILABLE',environmental:true});
+     if(classified.code&&classified.code!==0)throw Error('Bridge signer classification failed: '+(String(classified.stderr??'').split(/\r?\n/).find(x=>x.trim())?.trim().slice(0,300)??'no reason'));
+     try{signatures=JSON.parse(String(classified.stdout).trim().split(/\r?\n/).pop());}catch{throw Error('Bridge signer classification returned no list.');}
+     if(!Array.isArray(signatures)||signatures.some(r=>!['owner','microsoft'].includes(r?.signer)))throw Error('Bridge signer classification is invalid.');
+    }else{
     // The shared signing entry point reads the thumbprint from DPAPI itself.
     const signing=await runtime.run(ps,['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',path.join(root,'server/scripts/odc-runtime-signing.ps1'),'-Mode','Artifacts','-ArtifactDirectory',target,'-BuildEvidence',evidenceFile,'-ConfigPath',config.configFile,...(config.vault?['-Vault',config.vault]:[]),'-TimestampServer',settings.timestampServer??'http://timestamp.digicert.com'],{secret:true,timeoutMs:300000,allowFailure:true});
     if(signing.stdout.includes('REVOCATION_UNAVAILABLE'))throw Object.assign(Error('Certificate revocation service is unavailable.'),{code:'REVOCATION_UNAVAILABLE',environmental:true});
     if(signing.code && signing.code!==0)throw Error('Bridge signing failed.');
-    const signatures=JSON.parse(fs.readFileSync(path.join(target,'authenticode.json'),'utf8'));
+    signatures=JSON.parse(fs.readFileSync(path.join(target,'authenticode.json'),'utf8'));
+    }
     const files=[];
     for(const sub of fs.readdirSync(target)){
      const folder=path.join(target,sub);if(!fs.statSync(folder).isDirectory())continue;
      for(const name of fs.readdirSync(folder)){
       if(!/\.(dll|exe|json)$/.test(name)){fs.rmSync(path.join(folder,name));continue;}
       const bytes=fs.readFileSync(path.join(folder,name));const record=signatures.find(r=>r.path===sub+'/'+name);
+      // ed25519-offers: an executable the classification did not name has no signer and stops here (never shipped unclassified).
+      if(ed25519&&/\.(dll|exe)$/i.test(name)&&!record)throw Error('A bridge executable was not classified: '+sub+'/'+name);
       files.push({path:sub+'/'+name,sha256:hash(bytes),size:bytes.length,...(/\.(dll|exe)$/i.test(name)?{signer:record?.signer}:{})});
      }
     }
@@ -219,7 +238,7 @@ export function createAutoRuntime(config,runtime) {
     const sequenceFile=path.join(staging,'bridge-sequences.json');let sequences={};if(fs.existsSync(sequenceFile))sequences=JSON.parse(fs.readFileSync(sequenceFile,'utf8'));
     const identity=lane+':'+b.version;const sequence=(sequences[identity]??0)+1;sequences[identity]=sequence;
     fs.writeFileSync(sequenceFile+'.next',JSON.stringify(sequences));fs.renameSync(sequenceFile+'.next',sequenceFile);
-    const manifest={schema:1,lane,studioVersion:b.version,runtime:b.tfm,protocol:p,sequence,createdAt:new Date().toISOString(),files,authenticodeThumbprint:s.authenticodeThumbprint};
+    const manifest={schema:1,lane,studioVersion:b.version,runtime:b.tfm,protocol:p,sequence,createdAt:new Date().toISOString(),files,...(ed25519?{}:{authenticodeThumbprint:s.authenticodeThumbprint})};
     const bytes=Buffer.from(JSON.stringify(manifest));
     fs.writeFileSync(path.join(target,'manifest.json'),bytes);fs.writeFileSync(path.join(target,'manifest.sig'),sign(null,bytes,s.manifestPrivateKey));
     offers.push(verifyBridge(target,key).manifest);
@@ -227,7 +246,7 @@ export function createAutoRuntime(config,runtime) {
    runtime.bridgeStage=stage;runtime.bridgeOffers=offers.map(({lane,studioVersion,protocol,sequence})=>({lane,studioVersion,protocol,sequence}));
    const kernels=JSON.parse(fs.readFileSync(path.join(root,'server/deploy/coolify/r1-kernels.json'),'utf8'));
    const known=Object.values(kernels).find(k=>k.odc===pair.odc&&k.o11===pair.o11);
-   return {stage,offers:offers.map(({lane,studioVersion,protocol,sequence})=>({lane,studioVersion,protocol,sequence})),kernel:{o11:pair.o11,odc:pair.odc,odcBridge:protocol,odcBridgeAccepted:[...new Set([protocol,...(known?.odcBridgeAccepted??[])])],o11BridgeAccepted:['d1']}};
+   return {stage,mode,offers:offers.map(({lane,studioVersion,protocol,sequence})=>({lane,studioVersion,protocol,sequence})),kernel:{o11:pair.o11,odc:pair.odc,odcBridge:protocol,odcBridgeAccepted:[...new Set([protocol,...(known?.odcBridgeAccepted??[])])],o11BridgeAccepted:['d1']}};
   },
   async liveBaseline(s){
    const value=await api(s,'GET',resource());
@@ -258,13 +277,17 @@ export function createAutoRuntime(config,runtime) {
    const before=expected.rollback?(await load(expected.live)).backends:null;
    const checkSources=before?Object.fromEntries(before.map(b=>[b.o11+'|'+b.odc,'const expected='+JSON.stringify({budget:b.budget,offers:[],kernel:b.kernel})+';\n'+fs.readFileSync(path.join(here,'check-backend.mjs'),'utf8')])):null;
    // Server-only: the deployed new pair must accept the published pack's hello too (check-backend.mjs, that pair only).
-   const hello=!before&&expected.bridges?.mode==='server-only'&&expected.bridges.hello&&expected.kernel?{[expected.kernel.o11+'|'+expected.kernel.odc]:expected.bridges.hello}:null;
+   const pairKey=expected.kernel?expected.kernel.o11+'|'+expected.kernel.odc:null;
+   const hello=!before&&['server-only','ed25519-offers'].includes(expected.bridges?.mode)&&expected.bridges.hello&&pairKey?{[pairKey]:expected.bridges.hello}:null;
+   // ed25519-offers: the same hello before the install must receive the signed offer of each lane the gate saw offered, and a
+   // hello without bridgeOffer (agent 0.2.7) must receive none (check-backend.mjs).
+   const offered=hello&&expected.bridges.mode==='ed25519-offers'?{offerHellos:{[pairKey]:expected.bridges.offerHello},offerLanes:{[pairKey]:expected.bridges.offerLanes??[]},legacyHellos:{[pairKey]:expected.bridges.legacyHello}}:{};
    // The thin bridge of the proof the round verified for the new pair's Service Studio (server-only o11Proofs, in release.json),
    // never the configuration as written.
    const o11Proven=Object.fromEntries(Object.entries(expected.bridges?.o11Proofs??{}).filter(([v,p])=>p?.studioVersion===v&&/^[a-f0-9]{64}$/.test(p.sha256??'')&&threeOf(p.build)).map(([v,p])=>[v,threeOf(p.build)]));
    // A deployment (never a rollback, which restores what was live) also checks the reviewed ODC model plugins in every backend
    // and that exactly one backend presented the published pack's hello.
-   const extra=before?{}:{modelPlugins:modelPlugins(),...(Object.keys(o11Proven).length?{o11Proven}:{})};
+   const extra=before?{}:{modelPlugins:modelPlugins(),...(Object.keys(o11Proven).length?{o11Proven}:{}),...offered};
    // A deployment: every running backend must run with the pin's served list (a retained one: the list it was deployed with).
    const pairs=!before&&expected.pinned?versionPairs(expected.pinned):null;
    const expectedServed=pairs?Object.fromEntries(servedLists(expected.pinned).map((text,i)=>[pairs[i].o11+'|'+pairs[i].odc,text])):null;

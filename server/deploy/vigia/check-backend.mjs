@@ -24,12 +24,27 @@ try {
  const hello={t:'hello',protocol:'ssam-agent/1',instance:'vigia-verification',agent:{version:'1',odcCommands:['merge','reconcile-merge']},pack:{id:'verification',lanes:['odc','o11'],odcBridge:kernel.odcBridge,o11BuiltFor:kernel.o11,o11Hook:kernel.o11Hook??'dev'},studios:{odc:{installed:{version:kernel.odc,dir:'C:/Verification'}},o11:{installed:{version:kernel.o11,dir:'C:/Verification'}}}};
  const accepted=await post('/agent/v1/hello',issued.agentCredential,hello);
  if(!accepted.data.compatible.odc.ok||!accepted.data.compatible.o11.ok)throw Error('Synthetic hello failed.');
- // Server-only bridge mode: the new pair must accept the hello of the published agent pack (its real bridges and commands).
+ // Server-only and ed25519-offers bridge modes: the new pair must accept the hello of the published agent pack (its real bridges and commands).
  // Its thin bridge is the pack's build of exactly this Service Studio (or the build the owner proved for it, o11Proven); the
  // remote verifier requires exactly one backend to present it (requirePresented), so a kernel that matches no key fails.
- const presented=expected.packHellos?.[kernel.o11+'|'+kernel.odc];
+ const key=kernel.o11+'|'+kernel.odc,presented=expected.packHellos?.[key];
  if(presented){
-  if(presented.pack?.o11BuiltFor!==(expected.o11Proven?.[kernel.o11]??kernel.o11))throw Error('Published agent pack has no thin bridge built for this Service Studio.');
+  // ed25519-offers: the published pack's hello as an agent that accepts Ed25519-only offers sends it (app 0.2.8) must first
+  // receive this pair's signed offer for every lane the gate saw offered; its thin bridge for this Service Studio is then the
+  // installed d1 offer (presented carries it as an installed report), not a pack build.
+  const before=expected.offerHellos?.[key];
+  if(before){
+   const r=await post('/agent/v1/hello',issued.agentCredential,before);
+   for(const lane of expected.offerLanes?.[key]??[]){
+    const want=(expected.offers??[]).find(o=>o.lane===lane&&o.studioVersion===kernel[lane]),got=r.data.compatible[lane]?.bridgeOffer;
+    if(!want||got?.protocol!==want.protocol)throw Error('Published agent pack hello received no signed bridge offer.');
+   }
+  }
+  // A hello without bridgeOffer (agent 0.2.7, empty trust anchor) is never offered a bridge.
+  const legacy=expected.legacyHellos?.[key];
+  if(legacy){const r=await post('/agent/v1/hello',issued.agentCredential,legacy);if(['odc','o11'].some(l=>r.data.compatible[l]?.bridgeOffer))throw Error('A bridge was offered to an agent without bridgeOffer.');}
+  const viaOffer=!!before&&(presented.bridges??[]).some(b=>b?.lane==='o11'&&b.studioVersion===kernel.o11&&b.status==='installed');
+  if(!viaOffer&&presented.pack?.o11BuiltFor!==(expected.o11Proven?.[kernel.o11]??kernel.o11))throw Error('Published agent pack has no thin bridge built for this Service Studio.');
   const r=await post('/agent/v1/hello',issued.agentCredential,presented);if(!r.data.compatible.odc?.ok||!r.data.compatible.o11?.ok)throw Error('Published agent pack hello failed.');
  }
  // The ODC model plugins (coolify/model-plugins.json): mounted read-only at the reviewed target, holding exactly the pinned files.

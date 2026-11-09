@@ -5,6 +5,10 @@ import path from 'node:path';
 import {createHash, verify} from 'node:crypto';
 const sha = b => createHash('sha256').update(b).digest('hex');
 const version = /^\d+\.\d+\.\d+$/;
+// The manifest's authenticodeThumbprint: 40 hex in the signed-offers manifests (an agent before 0.2.8 checks the owner's
+// Authenticode with it); absent or null in the ed25519-offers ones (vigia bridgeMode ed25519-offers), which only an agent that
+// trusts the Ed25519 manifest alone takes (app 0.2.8: agent 0.3.17 / native 0.4.14 ignore the field). Any other value is
+// malformed and refused. Every dll/exe entry still needs its signer class, and the Ed25519 signature always verifies first.
 export function verifyBridge(directory, publicKey) {
   const bytes = fs.readFileSync(path.join(directory, 'manifest.json'));
   if (bytes.length > 256 * 1024) throw Error('Bridge manifest too large.');
@@ -13,7 +17,8 @@ export function verifyBridge(directory, publicKey) {
   const m = JSON.parse(bytes);
   if (m.schema !== 1 || !['odc','o11'].includes(m.lane) || !version.test(m.studioVersion) ||
       !/^(v\d+|d\d+)$/.test(m.protocol) || !Number.isSafeInteger(m.sequence) || m.sequence<1 || !/^net\d+\.\d+$/.test(m.runtime) ||
-      !/^[a-fA-F0-9]{40}$/.test(m.authenticodeThumbprint) || !Array.isArray(m.files) || !m.files.length || m.files.length > 128)
+      !(m.authenticodeThumbprint == null || /^[a-fA-F0-9]{40}$/.test(m.authenticodeThumbprint)) ||
+      !Array.isArray(m.files) || !m.files.length || m.files.length > 128)
     throw Error('Bridge manifest identity is invalid.');
   const files = new Map(), names = new Set();
   for (const f of m.files) {

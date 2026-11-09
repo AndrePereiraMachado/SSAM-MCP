@@ -104,6 +104,23 @@ export function executionSource({workspace,branch,head,main,gitDirectory}){
  if(gitDirectory!==true||path.basename(workspace)!=='vigia-run'||branch!=='server/vigia-run'||head!==main)fail('Signing requires the clean vigia-run execution clone at reviewed main.','UNTRUSTED_SOURCE');
 }
 export function agentReleasePin(commit,ref){if(!/^[a-f0-9]{40}$/.test(commit??'')||!/^agent\/release(?:[/-][\w.-]+)*$/.test(ref??''))fail('Pin a reviewed commit from the agent release line.','AGENT_RELEASE_REQUIRED');}
+// R7 of C:\t\r5\PLANO-AGENTE-AUTO.md (owner decision 6.3.6): agent code is built (client bridges, auto-runtime.mjs agentSource) and,
+// in ed25519-offers, the agent release is read only when agentReleaseCommit AND the tip of agentReleaseRef carry the owner's SSH
+// signature, checked with the same ownerSigningPublicKey as main (git verify-commit). acceptUnsignedMain never waives it. The
+// refusal is not environmental: the round reports what to sign (pipeline.mjs reviewedRelease: agent-release-required).
+// git(args,{allowFailure}) -> {code, stdout}; ownerSigned(commit) -> true only for a valid owner signature.
+export async function verifySignedAgentRelease(config,{git,ownerSigned}){
+ const commit=config.agentReleaseCommit,ref=config.agentReleaseRef;
+ agentReleasePin(commit,ref);
+ const refuse=message=>{throw Object.assign(Error(message),{code:'AGENT_RELEASE_UNSIGNED'});};
+ if(!/^ssh-(ed25519|rsa) [A-Za-z0-9+/=]+(?: [^\r\n]*)?$/.test(config.ownerSigningPublicKey??''))refuse('The agent release must be owner-signed: configure ownerSigningPublicKey (acceptUnsignedMain does not cover agent code).');
+ if((await git(['merge-base','--is-ancestor',commit,ref],{allowFailure:true})).code!==0)throw Error('Agent commit is outside the approved release line.');
+ const tip=(await git(['rev-parse','--verify','--quiet',ref+'^{commit}'],{allowFailure:true})).stdout?.trim();
+ if(!/^[a-f0-9]{40}$/.test(tip??''))throw Error('The agent release line cannot be read.');
+ if(!await ownerSigned(commit))refuse(`agentReleaseCommit ${commit.slice(0,7)} has no valid owner signature; sign the reviewed agent release commit.`);
+ if(tip!==commit&&!await ownerSigned(tip))refuse(`The tip of ${ref} (${tip.slice(0,7)}) has no valid owner signature; the agent release line must end in an owner-signed commit.`);
+ return {commit,tip};
+}
 export function cleanupSsh(root){
  const absolute=path.resolve(root);if(!fs.existsSync(absolute))return;
  for(const entry of fs.readdirSync(absolute,{withFileTypes:true}))if(/^ssh-[0-9a-f-]{36}$/.test(entry.name)){
