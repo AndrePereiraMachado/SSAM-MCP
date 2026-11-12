@@ -1,0 +1,4 @@
+{
+  "_": "Images allowed as a Studio source (gen-dockerfile.mjs fromImage) OUTSIDE coolify/versions.json, taken only with --extra-trust \"<why>\". One entry per image: {lane: o11|odc, version, image, sha256, reason}. Empty on purpose: the pair images of versions.json are the sources.",
+  "entries": []
+}

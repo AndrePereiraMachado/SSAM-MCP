@@ -23,10 +23,18 @@
 # "-dirty" when the work tree has uncommitted changes. Needs docker with buildx, and git for the default tag.
 # SSAM_DOCKERFILE (window 4x4): another Dockerfile to build, relative to server/ or absolute, e.g. the multi-O11 one that
 # deploy/gen-dockerfile.mjs generates (deploy/.generated/Dockerfile.o11k, pinned bundles inside it); default Dockerfile.
+# SSAM_BUILD_CONTEXT (correction image, deploy/window-images/build-window-images.sh --source): the server/ folder of a clean
+# tree of ANOTHER commit to build, instead of this checkout's (the client-name guard, the .dockerignore and every COPY are that
+# tree's); it is no git checkout, so it needs --tag and VCS_REF (the 40-hex commit of that tree) and never reads git.
 # LICENSE: the image carries OutSystems Studio binaries: load it locally or push it to a PRIVATE registry only.
 set -eu
 here=$(cd "$(dirname "$0")" && pwd)
 server=$(cd "$here/.." && pwd)
+context=${SSAM_BUILD_CONTEXT:-}
+if [ -n "$context" ]; then
+  server=$(cd "$context" 2>/dev/null && pwd) || { echo "build: no build context folder $context" >&2; exit 2; }
+  [ -f "$server/Dockerfile" ] && [ -f "$server/.dockerignore" ] || { echo "build: $context is not a server/ folder (no Dockerfile or .dockerignore)" >&2; exit 2; }
+fi
 ENV_FILE=${SSAM_ENV_FILE:-$here/.env}
 DOCKER=${DOCKER:-docker}
 envval() { [ -f "$ENV_FILE" ] && sed -n "s/^$1=//p" "$ENV_FILE" | tail -n 1 | sed 's/^"\(.*\)"$/\1/' || true; }
@@ -43,12 +51,34 @@ while [ $# -gt 0 ]; do
     *) echo "build: unknown argument $1 (extra buildx arguments go after --)" >&2; exit 2 ;;
   esac
 done
+# A named build context replaces the stage of the same name (BuildKit). Only the two placeholder stages of the Dockerfile take
+# one (studio-provenance, client-bridges: the vigia passes them); installers is this script's. Any other name could replace a
+# Studio stage (studio-o11-<v>, studio-odc) and skip its checks while the labels still name the pinned source (trilha G
+# review, D7): refused.
+prev=
+for a in "$@"; do
+  ctx=
+  case "$prev" in --build-context) ctx=$a ;; esac
+  case "$a" in --build-context=*) ctx=${a#--build-context=} ;; esac
+  if [ -n "$ctx" ]; then
+    case "${ctx%%=*}" in
+      studio-provenance|client-bridges) ;;
+      *) echo "build: --build-context ${ctx%%=*} refused: only studio-provenance and client-bridges take a named context (installers is this script's; a Studio stage is never replaced)" >&2; exit 2 ;;
+    esac
+  fi
+  prev=$a
+done
 IMAGE=${IMAGE:-$(setting SSAM_IMAGE)}
 IMAGE=${IMAGE:-ssam-server}
 
 # Version and revision from git (the label org.opencontainers.image.revision is what a rollback checks out).
 ref=unknown
-if [ "${SSAM_AUTOMATIC:-0}" = 1 ]; then
+if [ -n "$context" ]; then
+  [ -n "$TAG" ] && [ -n "${VCS_REF:-}" ] || { echo 'build: SSAM_BUILD_CONTEXT requires --tag and VCS_REF' >&2; exit 2; }
+  case "$VCS_REF" in *[!a-f0-9]*) echo 'build: invalid VCS_REF' >&2; exit 2 ;; esac
+  [ ${#VCS_REF} -eq 40 ] || { echo 'build: VCS_REF is the 40-hex commit of the context' >&2; exit 2; }
+  ref=$VCS_REF
+elif [ "${SSAM_AUTOMATIC:-0}" = 1 ]; then
   [ -n "$TAG" ] && [ -n "${VCS_REF:-}" ] || { echo 'build: automatic mode requires TAG and VCS_REF' >&2; exit 2; }
   case "$VCS_REF" in *[!a-f0-9]*) echo 'build: invalid VCS_REF' >&2; exit 2 ;; esac
   [ ${#VCS_REF} -eq 40 ] || exit 2
